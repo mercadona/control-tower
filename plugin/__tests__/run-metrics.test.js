@@ -885,12 +885,9 @@ describe('la telemetría de un paso real', () => {
     // comparando contra PluginYardstick.FILES.length. Por eso ni el quinto
     // (defects.md, al partir code.md) ni los que llegaron después obligaron a
     // tocar briefVaraCtMeasures.
-    // Uno MENOS que el total: esta tarea no declara ninguna ruta `(create)`,
-    // así que `architecture.md` —que rige los módulos nuevos por su propia
-    // cabecera `Applies to:`— no viaja en su brief. La medida cuenta lo que el
-    // brief LLEVA, que desde el brief por alcance ya no es siempre la lista
-    // entera.
-    expect(f.brief_vara_ct_docs).toBe(PluginYardstick.FILES.length - 1)
+    // Los ocho: la vara de ct ya no se filtra por lo que declare `**Files:**`,
+    // así que el brief lleva la lista entera cree o no cree módulo la tarea.
+    expect(f.brief_vara_ct_docs).toBe(PluginYardstick.FILES.length)
     expect(typeof f.brief_bytes).toBe('number')
     expect(f.brief_bytes).toBeGreaterThan(0)
   })

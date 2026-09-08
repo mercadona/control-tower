@@ -1,0 +1,57 @@
+{
+  "issue": 161,
+  "task": 5,
+  "task_name": "the task judge is told that a diff of the plan is an amendment",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "El objetivo pide que el juez de tarea DICTAMINE si la enmienda estaba justificada, en vez de vetar por reflejo el fichero del plan como ruta fuera de alcance o de ignorarlo. Las dos mitades están en el diff, en el párrafo añadido al ítem 8 de plugin/agents/ct-judge.md (líneas 284-290 del fichero): 'A diff of the plan file inside a task is an AMENDMENT written by the implementer, not a path out of scope' cierra el veto por reflejo, y 'ruling whether it was justified belongs to this item' + 'The question to answer is whether the sentence of the task justifies the route the implementer added' cierra el ignorarlo. Están además las dos frases que el texto de la tarea enumera: que el programa ya rechazó la enmienda que QUITA ruta (lo verifiqué contra `enmiendaSoloAnade` en plugin/scripts/ct-step.mjs:1400, así que la afirmación del párrafo no es falsa) y que el plan se comiteó antes de arrancar la corrida. Nada más y nada menos que lo prometido.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "El **TDD:** nombra `it('el ítem alcance le dice al juez que un diff del plan es una enmienda que tiene que dictaminar')` y fija la aserción: «the text of item 8 contains the word `amendment` and names the plan file as the subject of that item». El test del diff (step-contracts.test.js:342-349) es ese, con ese nombre literal, y asierta exactamente esas dos cosas —`expect(item).toMatch(/\\bamendment\\b/i)` y `expect(item).toMatch(/plan file/i)`— sobre el ítem 8 AISLADO (`item8DeLaRubrica()`), no contra el fichero entero. El input es el correcto (el texto del ítem 8 leído de disco) y el valor esperado es el que el plan escribió. Anoto, sin convertirlo en hallazgo porque el plan es quien redactó la aserción: es un match por palabra y no por la frase distintiva, así que un párrafo reescrito para decir lo contrario conservando 'amendment' y 'plan file' seguiría verde; los tests hermanos de este mismo fichero (p. ej. el del patrón de entrega, que exige 'signature, a constructor or a public contract') sí usan la frase distintiva.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "No aplica: el brief no trae ningún bloque `Contract (path):`, `Current state (path):`, `Call site (path):` ni `Final text`. La tarea es explícita en que no hay código ('No code — the deliverable is the judge's own brief'), y el diff no introduce ninguna firma, tipo, error, constante ni símbolo exportado que comparar.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Las seis filas, una a una. D-2 (el árbitro es el juez de tarea y la enmienda entra en el commit de su tarea; el implementador escribe la línea, el juez dictamina) es justo lo que el párrafo implementa: 'ruling whether it was justified belongs to this item'. D-5 (una enmienda sólo AÑADE) está implementada tal cual: 'so what reaches you only ADDS'. D-1 (sin intervención humana), D-3 (architecture.md siempre), D-4 (la solución más simple, por sustracción) y D-6 (el orden: primero la sustracción) no tienen sujeto en este diff — son de las tareas 1 a 4. Ninguna fila se reabre ni se implementa con otro valor.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Vara: `## 3. Reference patterns` declara `Rules to obey: N/A` (este repo no tiene AGENTS.md, CLAUDE.md, .agent/conventions.md ni docs/conventions/), así que la vara es la de ct, que el brief pega entera (siete documentos) — nunca sin-vara. Los exemplars nombrados (scope.js, ct-step-indice.test.js, ct-step-harness.js) son de las tareas de código y no tienen papel equivalente en este diff; el patrón que sí se imita, y correctamente, es el de los helpers hermanos del propio fichero: `item8DeLaRubrica` es calcado de `item5DeLaRubrica` y `item9DeLaRubrica` (misma regex acotada hasta el siguiente encabezado), y el párrafo se coloca donde la tarea dice, tras el 'Already mechanical'. Ninguna skill que cargar: §3 no nombra ninguna.\n\ndefects.md, sus cuatro reglas: (1) vocabulario cerrado — sin sujeto: el diff no introduce ningún valor que clasifique nada, ni booleano, ni despacho con rama comodín; es prosa Markdown y un helper que devuelve texto. (2) mapa crudo como valor de retorno de la lógica — sin sujeto: `item8DeLaRubrica` devuelve un string, no hay mapa que cruce dos funciones propias. (3) dos campos que tienen que concordar / centinela por ausencia — sin sujeto: no se añade ningún campo ni valor centinela; `m ? m[0] : ''` es el idioma exacto de los dos helpers hermanos y su consumidor es un `toMatch`, no una decisión sobre presencia. (4) error nombrado por dónde ocurre — sin sujeto: el diff no declara ni lanza ningún error.\n\nstyle.md: los identificadores en castellano (`item8DeLaRubrica`) y el comentario que precede al helper caen en la deuda declarada del módulo anfitrión —step-contracts.test.js es preexistente y escribe así sus veinte helpers— y `item8DeLaRubrica` no es un concepto nuevo escondido en un fichero viejo: extiende literalmente lo que ya estaba (items 5 y 9). No es hallazgo. testing.md: la regla de 'una aserción no está terminada hasta que se la ha visto fallar' la aplico leyendo — borrado el párrafo del ítem 8, el test cae, así que puede fallar por el motivo que su nombre da; la matización sobre el match flojo la dejo declarada en `asercion-tdd`, donde el plan fijó la aserción. decisions.md: la frase del párrafo que describe el guard ('The program already refused any amendment that removes a declared route') no es una segunda copia de la decisión sino la descripción de lo mecánico —el mismo idioma que el ítem ya usa en su 'Already mechanical'—, y la regla vive en un solo sitio, `enmiendaSoloAnade` (ct-step.mjs:1400). simplicity.md, domain.md y boundaries.md: sin sujeto en un diff de prosa y un helper de test. Nada que citar como incumplimiento.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "No aplica: el diff es estrictamente aditivo — '2 files changed, 26 insertions(+)', cero borrados, y no hay una sola línea `-` en el diff. Ninguna aserción, caso o test preexistente se retira, relaja ni reescribe.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "No aplica según el propio recorte del ítem: el **Files:** de la tarea entrega un documento (plugin/agents/ct-judge.md, y el texto lo dice: 'No code — the deliverable is the judge's own brief') más el fichero de tests. No hay lado de producción que buscar. Dejo constancia de que, en cualquier caso, no habría teatro: `item8DeLaRubrica()` hace `readFileSync(AGENTE_JUEZ, 'utf8')` sobre el fichero real que se despacha, no sobre una copia ni una constante del test, así que el verde depende del artefacto entregado.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Dentro de los dos ficheros declarados no hay nada que no pida una frase de la tarea: el párrafo de ct-judge.md contiene las cinco frases que el texto enumera y ninguna más, y en step-contracts.test.js sólo entran el helper `item8DeLaRubrica` (necesario para aislar el ítem, igual que los helpers 5 y 9) y el test que el **TDD:** nombra. Ninguna refactorización, renombrado ni arreglo adyacente. Contra `### Out of scope`: no se toca el cruce del ledger, ni los verbos de ct-step, ni run-machine.js, ni el fichero de estado, ni el esquema del veredicto, ni composeSection/composePathSection, ni el paquete de slice, ni judge-bench.mjs. No hay enmienda del plan en este diff. Anoto como observación, no como hallazgo: plugin/prompts/task-implementer.md no recibe la frase espejo de e473c97 sobre la enmienda, pero el **Files:** no lo declara y escribirla ahí sería precisamente lo que este ítem reporta.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "Un test nuevo, step-contracts.test.js:342-349. Determinista: no toca reloj, red, aleatoriedad ni sleep; lee un fichero versionado del propio repo por ruta derivada de `import.meta.url`, así que el mismo código da el mismo resultado hoy y mañana. Aislado: no comparte ni muta estado, no depende del orden dentro del describe, no crea ni deja ficheros, directorios ni puertos. Verifica comportamiento real: la aserción cae sobre el texto del artefacto que se entrega (plugin/agents/ct-judge.md leído de disco) y no sobre andamiaje del test — revertidas las líneas de producción de este diff, el test se pone rojo. Las tres propiedades se cumplen; no reporto nada de la mitad fina (por eso no cargo la skill de TDD), y la única reserva que tenía —que el match es por palabra y no por la frase distintiva— la dejé declarada en `asercion-tdd`, que es donde el plan fijó esa aserción.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "a602dd2a6d6b5d15890e8f352d37d81f1ad37898d82458d6f0c9f38a1cc143ab"
+  }
+}

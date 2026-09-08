@@ -682,18 +682,6 @@ function seccionVaraDelRepo(nombreDelArtefacto) {
   }
 }
 
-// SI LA TAREA ESTRENA MÓDULO, medido en lo que el plan declara y no en lo que
-// el implementador haga después: `**Files:**` reparte cada ruta entre
-// `(create)` y `(modify)`, y `dispatch-check --check-plan` ya comprueba esas
-// marcas contra el commit anterior. Es el único dato de la tarea que la vara
-// de ct necesita para saber qué documentos la alcanzan (`architecture.md` rige
-// los módulos nuevos, y lo dice su propia cabecera `Applies to:`).
-//
-// Una tarea sin **Files:** legibles (`files: []`) NO estrena módulo: pegarle
-// `architecture.md` por si acaso sería exactamente el material que este cambio
-// quita, y el aviso de que el plan no declaró rutas ya lo da `plan-tasks.js`.
-const creaModulo = (t) => (t?.files ?? []).some((f) => f.action === 'create')
-
 function escribirBrief() {
   const brief = join(workDir, `task-${run.task}-brief.md`)
   // Se comprueba antes de llamar a `task-brief` para no dejar en disco un
@@ -705,7 +693,7 @@ function escribirBrief() {
   } catch (e) {
     die(`no se pudo extraer el brief de la tarea ${run.task}: ${String(e.stderr || e.message).trim()}`, EXIT.PRECONDITION)
   }
-  appendFileSync(brief, PluginYardstick.composeSection(PluginYardstick.forTask(deCt, { creates: creaModulo(tarea()) })))
+  appendFileSync(brief, PluginYardstick.composeSection(deCt))
   appendFileSync(brief, seccionVaraDelRepo('el brief'))
   // H9: el consejo del tercer intento, dentro del brief y no en una línea suelta
   // de `next`. El brief es lo que el subagente recibe —lo dice el propio
@@ -797,9 +785,7 @@ function escribirPaquete() {
   // documentos alcanzan a esta tarea y dónde están. La sección va DELANTE del
   // diff por lo mismo que `Señal` en el paquete de slice: detrás de un `-U10`
   // quedaría enterrada.
-  const varaDeCt = PluginYardstick.composePathSection(
-    PluginYardstick.forTask(cargarVaraDeCt(), { creates: creaModulo(tarea()) })
-  )
+  const varaDeCt = PluginYardstick.composePathSection(cargarVaraDeCt())
   writeFileSync(paquete, [
     `# Review package: task ${run.task}/${run.tasksTotal} of issue #${issue} (staged, not yet committed)`,
     // La CABECERA lleva el token: el sha256 de exactamente el diff que va
@@ -1074,16 +1060,23 @@ function medidaDeBrief() {
 // venir de donde se espera.
 const rutaSegura = (p) => p !== '' && !p.startsWith('/') && !p.split('/').includes('..')
 
-// EL PLAN TAMPOCO ES TRABAJO DE LA TAREA. En un run de verdad vive bajo
-// `docs/superpowers/plans/**` y ya lo cubre `esRutaDeLaMaquinaria`, pero la
-// ruta la elige quien despacha y puede estar en cualquier sitio: se nombra
-// aquí desde `planPath`, que es el único sitio donde este programa la sabe.
 const esDelRun = (p) => {
   const suyo = `${relative(repoRoot, workDir)}/`
-  return p === relative(repoRoot, stateFile) ||
-    p === relative(repoRoot, resolve(planPath)) ||
-    p.startsWith(suyo)
+  return p === relative(repoRoot, stateFile) || p.startsWith(suyo)
 }
+
+// EL PLAN SÍ ES TRABAJO DE LA TAREA, DESDE LA ENMIENDA (issue 161). Un plan
+// amendado a media tarea es el implementador diciendo "esto que declaré
+// también cambia", y ese cambio tiene que viajar en el commit de SU tarea, no
+// quedar huérfano hasta que alguien lo comitee aparte. `esDelRun` ya no lo
+// excluye: la ruta la elige quien despacha y puede estar en cualquier sitio,
+// así que se nombra aquí desde `planPath`, el único sitio donde este programa
+// la sabe.
+// Normalizada a `/` en el ORIGEN, no en cada consumidor: las tres
+// comparaciones de esta ruta son contra salida de git, que siempre usa `/`,
+// mientras `relative` daría `\` en Windows. Es el mismo cuidado que
+// `ajenoEnElIndice` documenta, aplicado donde la ruta se construye.
+const rutaDelPlan = () => relative(repoRoot, resolve(planPath)).replace(/\\/g, '/')
 
 //
 // LO QUE MIDE ESTA FUNCIÓN LO CONSUMEN DOS: `report`, que stagea lo medido, y
@@ -1107,10 +1100,15 @@ const entradasDelArbol = () => {
     if (ruta) entradas.push({ estado, ruta })
   }
   const vistas = new Set()
+  // EL PLAN PASA LAS DOS GUARDAS. `esRutaDeLaMaquinaria` lo cubre en un run de
+  // verdad (vive bajo `docs/superpowers/plans/**`), y esa guarda sigue en pie
+  // para todo lo demás; sólo la ruta del plan la atraviesa, porque es la única
+  // pieza de la maquinaria que el implementador legítimamente cambia.
   return entradas.filter(({ ruta }) => {
     if (vistas.has(ruta)) return false
     vistas.add(ruta)
-    return rutaSegura(ruta) && !esDelRun(ruta) && !esRutaDeLaMaquinaria(ruta)
+    return rutaSegura(ruta) && !esDelRun(ruta) &&
+      (ruta === rutaDelPlan() || !esRutaDeLaMaquinaria(ruta))
   })
 }
 
@@ -1210,7 +1208,11 @@ function verboReport() {
   git(['reset', '-q'])
   const rutas = rutasTocadas()
   const soloDeclaradas = report.paths.filter((p) => !rutas.includes(p))
-  const soloMedidas = rutas.filter((p) => !report.paths.includes(p))
+  // El plan no entra en la discrepancia: enmendarlo es una capacidad que el
+  // implementador tiene y que su informe no declara —el informe lista el
+  // TRABAJO—, así que sin esta exención cada enmienda legítima salía avisada
+  // como "tocado y no declarado", etiquetando de defecto lo que se buscaba.
+  const soloMedidas = rutas.filter((p) => !report.paths.includes(p) && p !== rutaDelPlan())
   if (soloDeclaradas.length || soloMedidas.length) {
     err(`aviso: lo que el implementador declara y lo que el árbol dice no coinciden. Se stagea lo MEDIDO.${soloMedidas.length ? ` Tocado y no declarado: ${soloMedidas.join(', ')}.` : ''}${soloDeclaradas.length ? ` Declarado y no tocado: ${soloDeclaradas.join(', ')}.` : ''}`)
   }
@@ -1265,6 +1267,15 @@ function verboControls() {
     resultado = OUTCOMES.FAILED
   }
 
+  // La otra dirección del control de alcance: una enmienda sólo puede AÑADIR
+  // rutas a **Files:**, nunca quitarlas — quitar una desactivaría el control
+  // de arriba desde dentro del propio plan.
+  const enmienda = enmiendaSoloAnade(t)
+  if (enmienda.length) {
+    lineas.push('# enmienda del plan', ...enmienda.map((f) => `- ${f}`), '')
+    resultado = OUTCOMES.FAILED
+  }
+
   // Después los nombres, que también son gratis. La vara de un plan mide que
   // nada se rompió, no que se haya añadido lo prometido — medido en campo: una
   // tarea pidió una función y su test, llegó la función sin el test, y la
@@ -1304,6 +1315,29 @@ function verboControls() {
 // el índice sea lo declarado, y esto lo VERIFICA en vez de suponerlo.
 const stagedPaths = () => (git(['diff', '--cached', '--name-only']) || '').split('\n').map((l) => l.trim()).filter(Boolean)
 
+// LO STAGEADO QUE ES TRABAJO, SIN LA MAQUINARIA. `stagedPaths` responde "qué
+// hay en el índice" y eso es exactamente lo que `ajenoEnElIndice` necesita
+// (pertenencia, no contenido). Pero un plan amendado vive en el índice desde
+// que `report` lo deja pasar, y un control que lo mirara como si fuera código
+// de la tarea contestaría mal: el plan CITA verbatim los nombres de test que
+// la tarea retira, así que un control de nombres vería "sigue estando" para
+// un test que sí se borró (el falso positivo que motiva esta función). Los
+// tres controles que leen contenido —`alcanceDeclarado`, `bloquesDeclarados`,
+// `enElIndice`— filtran el plan y el resto de la maquinaria antes de mirar;
+// `ajenoEnElIndice` sigue leyendo el índice crudo, porque a esa pregunta el
+// plan sí pertenece.
+const rutasDeTrabajoEnElIndice = () =>
+  stagedPaths().filter((p) => p !== rutaDelPlan() && !esRutaDeLaMaquinaria(p))
+
+// Y LA VERSIÓN PARA LOS CONTROLES QUE COMPARAN LISTAS DE RUTAS, que sólo saca
+// el plan. El falso positivo de arriba es de CONTENIDO —el plan cita nombres
+// de test verbatim—, y a una comparación de rutas no le pasa: exentar toda la
+// maquinaria aquí dejaría fuera del control de alcance cualquier ruta de
+// `docs/superpowers/**` que llegue al índice, que es justo el vector que
+// `scope.js` documenta del despacho 1, y la haría viajar dentro del commit de
+// la tarea sin que ningún control la viera.
+const rutasDeObraEnElIndice = () => stagedPaths().filter((p) => p !== rutaDelPlan())
+
 // LO AJENO EN EL ÍNDICE: lo stageado que NO lo puso este programa.
 //
 // Los tres `git commit` de la maquinaria —la tarea, el veredicto del slice y el
@@ -1341,7 +1375,7 @@ const ajenoEnElIndice = (nuestras) => {
 // implementador que tocó de más, y confundirlas cuesta un ciclo entero.
 function alcanceDeclarado(t) {
   const fallos = []
-  const tocadas = stagedPaths()
+  const tocadas = rutasDeObraEnElIndice()
   const declaradas = t.files
 
   for (const ruta of tocadas) {
@@ -1352,7 +1386,7 @@ function alcanceDeclarado(t) {
 
   for (const f of declaradas) {
     if (!tocadas.includes(f.path)) {
-      fallos.push(`el plan declara '${f.path}' en las **Files:** de la tarea ${t.n} y no está entre lo que tocó — dos explicaciones son igual de plausibles y este control no puede arbitrar entre ellas: falta en el CÓDIGO, o sobra en el PLAN`)
+      fallos.push(`el plan declara '${f.path}' en las **Files:** de la tarea ${t.n} y no está entre lo que tocó: escribe el CÓDIGO que la tarea prometió. Si de verdad sobra en el PLAN, QUITARLA NO ES TU SALIDA —una enmienda sólo puede añadir rutas, porque quitarlas desactiva este mismo control— así que dilo en tu informe y deja la ruta en el plan`)
       continue
     }
     if (f.action === null) continue
@@ -1368,6 +1402,58 @@ function alcanceDeclarado(t) {
   return fallos
 }
 
+// La otra dirección del control de alcance (issue 161): una enmienda puede
+// AÑADIR rutas a las **Files:** de su propia tarea — eso es lo que
+// `alcanceDeclarado` ya deja pasar, comparando contra el ÍNDICE de HOY — pero
+// nunca puede QUITAR una que ya declaraba, porque eso desactivaría el control
+// de arriba desde dentro del propio plan: bastaría con borrar del **Files:**
+// la ruta que sobra para que `alcanceDeclarado` dejara de verla.
+//
+// NO SE CONDICIONA AL ÍNDICE, y ésa era la puerta abierta. `t` sale del plan
+// del ÁRBOL, leído al arrancar el proceso; el índice es otra cosa. Con la
+// guarda condicionada a que el plan estuviera stageado, bastaba editarlo
+// DESPUÉS de `report`: la guarda no corría, `t.files` —ya reducido— gobernaba
+// `alcanceDeclarado`, y el commit se llevaba el plan viejo, así que el juez
+// tampoco veía enmienda. Entregar en verde con el plan comiteado
+// contradiciendo al código es exactamente lo que este slice existe para
+// impedir.
+//
+// De ahí el primer invariante, que cubre las dos direcciones de una vez: EL
+// PLAN QUE GOBIERNA LOS CONTROLES TIENE QUE SER EL QUE SE VA A COMITEAR. Se
+// compara el texto del árbol contra el del índice si el plan está stageado, y
+// contra el de HEAD si no lo está.
+//
+// Y FALLA CERRADA, como `allWorkCommittedByCtStep` en state.js: si no se puede
+// leer el plan de HEAD, o su texto no declara la tarea `t.n`, no hay contra
+// qué comparar y eso NO es un permiso — es un control que no ha podido medir,
+// y se dice.
+function enmiendaSoloAnade(t) {
+  const ruta = rutaDelPlan()
+  const anterior = git(['show', `HEAD:${ruta}`], { allowFail: true })
+  if (anterior === null) {
+    return [`no se pudo leer '${ruta}' en HEAD: sin el plan comiteado no hay contra qué comparar el del árbol, y este control no puede medir si la tarea ${t.n} le quitó rutas a sus **Files:**. Comitea el plan —el gate \`plan\` ya lo pide antes de implementar— y vuelve a pedir el paso.`]
+  }
+
+  // Se le PREGUNTA A GIT si el árbol y el índice dicen lo mismo, en vez de
+  // comparar los dos textos a mano: `git diff --quiet` respeta los filtros de
+  // fin de línea (`core.autocrlf`, `.gitattributes`) y una comparación de
+  // cadenas los ignoraría — en un repo que los use, el árbol y el blob
+  // difieren siempre y ESTE control saldría rojo en todos los pasos.
+  if (git(['diff', '--quiet', '--', ruta], { allowFail: true }) === null) {
+    const stageado = stagedPaths().includes(ruta)
+    return [`el plan del árbol no es el que se va a comitear: los controles y el juez miden '${ruta}' del ÁRBOL, y ${stageado ? 'el del ÍNDICE dice otra cosa' : 'no está entre lo stageado, así que el commit se llevaría el de HEAD'}. Vuelve a pasar por \`report\` para que lo medido y lo que se comitea sean el mismo texto.`]
+  }
+
+  const tareaAnterior = extractTasks(anterior).tasks.find((tt) => tt.n === t.n)
+  if (!tareaAnterior) {
+    return [`el plan de HEAD no declara ninguna tarea ${t.n}, así que este control no puede medir si la enmienda le quitó rutas a sus **Files:**. Una enmienda no añade ni quita TAREAS: eso descuadra la cuenta del run.`]
+  }
+
+  return tareaAnterior.files
+    .filter((f) => !t.files.some((tf) => tf.path === f.path))
+    .map((f) => `la tarea ${t.n} enmendó el plan quitando '${f.path}' de sus **Files:** — una enmienda sólo puede AÑADIR rutas: quitar una desactiva desde dentro el control de alcance. Devuelve la ruta al PLAN, o escribe el CÓDIGO que prometía.`)
+}
+
 // Comprueba si `nombre` aparece en el ÍNDICE, acotado a lo stageado (no al
 // índice entero del repo). Un plan prescriptivo CITA el
 // código verbatim y vive comiteado en docs/, así que buscar en todo el índice
@@ -1378,7 +1464,7 @@ function alcanceDeclarado(t) {
 // y eso es un NO. Compartida por `testsDeclarados` y `bloquesDeclarados`:
 // misma pregunta, mismo ámbito, mismo mecanismo.
 function enElIndice(nombre) {
-  const ambito = stagedPaths()
+  const ambito = rutasDeTrabajoEnElIndice()
   if (!ambito.length) return false
   try {
     execFileSync('git', ['grep', '--cached', '--quiet', '-F', '-e', nombre, '--', ...ambito], { cwd: repoRoot, stdio: 'ignore', timeout: 60_000 })
@@ -1415,7 +1501,7 @@ function testsDeclarados(t) {
 // en `alcanceDeclarado`: confundir las dos cuesta un ciclo entero.
 function bloquesDeclarados(t) {
   const fallos = []
-  const tocadas = stagedPaths()
+  const tocadas = rutasDeObraEnElIndice()
 
   for (const { role, path } of t.blockPaths) {
     if (!tocadas.includes(path)) {
@@ -2089,7 +2175,9 @@ function verboAdvice() {
 
 // EL ÁRBOL DE VUELTA AL ÚLTIMO COMMIT (H9). No es una limpieza general: son
 // exactamente las rutas que `entradasDelArbol` mide como trabajo de la tarea, y
-// eso ya excluye el fichero del run, su carpeta, el plan y la maquinaria
+// eso ya excluye el fichero del run, su carpeta y la maquinaria, pero YA NO EL
+// PLAN: una enmienda del implementador se devuelve con el resto del intento
+// vetado, que es la semántica que se quiere —muere con lo que la motivó—
 // (`LOOP_ARTIFACT_PATTERNS`, donde vive la telemetría que viaja en el repo). Un
 // `git checkout -- .` a secas se llevaría por delante el paquete que el
 // consejero acaba de leer y la fila que este mismo verbo acaba de escribir.
