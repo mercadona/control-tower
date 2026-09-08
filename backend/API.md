@@ -14,7 +14,7 @@ Every shape below was read from a running server, not from the source alone. The
 | Port | `CT_API_PORT`, default `8787` |
 | Interface | loopback only (`127.0.0.1`) |
 | Start | `make run-backend` |
-| Endpoints | 5 (`POST` 2, `GET` 3) |
+| Endpoints | 6 (`POST` 2, `GET` 4) |
 
 In development the vite dev server proxies these paths to the backend and strips
 the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
@@ -386,6 +386,71 @@ curl -s http://127.0.0.1:8787/active-plans
 
 ---
 
+## `GET /external-tools`
+
+Whether the five external tools this backend drives have a usable credential
+right now. No parameters. It exists to be asked **before** starting work: until
+now each of these failed at the moment it was used, mid-flow, in the tool's own
+words.
+
+**200 OK**
+
+```json
+{"ready":true,"tools":[
+  {"tool":"gh","installed":true,"session":"ready","fix":null},
+  {"tool":"acli","installed":true,"session":"ready","fix":null},
+  {"tool":"claude","installed":true,"session":"unknown",
+    "fix":"claude, then /login \u2014 not observable from this process"},
+  {"tool":"git","installed":true,"session":"ready","fix":null},
+  {"tool":"bq","installed":true,"session":"ready","fix":null}]}
+```
+
+Five rows, always, in that order. `ready` is the whole verdict: `true` when no
+tool blocks. A tool blocks when it is not installed or its session is `missing`
+— `unknown` never blocks, or `claude` would pin the verdict to `false` forever.
+
+| `session` | Meaning | What the UI can do |
+|---|---|---|
+| `ready` | the credential works | nothing; `fix` is `null` |
+| `missing` | the tool was asked and has no usable credential | show `fix` as the command to run |
+| `unknown` | the credential cannot be observed from this process | show `fix` as guidance, never as a verdict |
+
+`installed` is a `PATH` lookup and the binary is never executed. `fix` is the
+literal repair command, and `null` exactly when the session is `ready`. It
+repairs the **credential**, so it presupposes the binaries are installed —
+which `installed` answers separately.
+
+How each one is asked:
+
+| tool | asked with | `ready` when |
+|---|---|---|
+| `gh` | `gh auth status` | it exited 0 |
+| `acli` | `acli jira auth status` | it exited 0 |
+| `claude` | nothing | never: its login is not observable from another process |
+| `git` | `ssh -T git@github.com` | its stderr says `successfully authenticated`, **whatever the exit code** — it exits 1 on success |
+| `bq` | `gcloud auth list --filter=status:ACTIVE` | it exited 0 and named an account |
+
+**Refusals**
+
+None of its own. A probe that fails is data, not a refusal: that tool reads
+`missing` and the answer is still 200. Only the shared refusals apply — 405 for a
+method other than `GET`, 403 for a foreign `Origin`.
+
+Two costs worth knowing before the UI calls this on a timer, because it should
+not: every probe is a read, so all of them are declared safe to repeat, and they
+run one after another with `git`'s reaching the network. A pathological call is
+minutes, not seconds. It is meant to be asked once, by a person.
+
+`gh` answers `ready` on a token that lacks the `project` scope, so
+`/ct-groom --project` can still fail against a `ready` row: one row per tool
+cannot express a per-capability verdict.
+
+```
+curl -s http://127.0.0.1:8787/external-tools
+```
+
+---
+
 ## Where the frontend consumes each one
 
 | Endpoint | Client | Types |
@@ -395,10 +460,16 @@ curl -s http://127.0.0.1:8787/active-plans
 | `POST /implement-plan` | `frontend/src/app/implement-plan/client.ts` | `ImplementPlan.types.ts` |
 | `GET /implement-progress` | `frontend/src/app/implement-progress/client.ts` | `ImplementProgress.types.ts` |
 | `GET /active-plans` | `frontend/src/app/active-plans/client.ts` | `ActivePlan.types.ts` |
+| `GET /external-tools` | none yet | none yet |
 
 A client validates the wire shape before it reaches a component, and projects
 snake_case to camelCase. Add a field to the validator, or the component never
 sees it.
+
+`GET /external-tools` has no client because nothing renders it yet; the endpoint
+was the deliverable. Its path is already in `API_PATHS`
+(`frontend/vite.config.ts`), so the dev server proxies it instead of answering
+the page's HTML.
 
 ## Where the contract is decided
 
