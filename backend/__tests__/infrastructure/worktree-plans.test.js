@@ -7,6 +7,7 @@ import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
 import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.js'
 import { PlanStoryNotRead, WorkspaceNotRead } from '../../src/domain/exceptions.js'
+import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.js'
 
 class SurveyedCheckout {
   static REPOSITORY = new RepositoryName('owner/repo')
@@ -27,8 +28,16 @@ class SurveyedCheckout {
 }
 
 class SessionsOfCmux {
-  static attending(worktree, ref = 'workspace:20') {
-    return [{ cwd: worktree, cwdKnown: true, ref, title: 'a title nobody parses' }]
+  static PLAN_TITLE = CmuxPlanAgents.nameFor({
+    story: new UserStoryKey('ABC-123'),
+    repository: new RepositoryName('owner/repo'),
+    issueNumber: 33,
+  })
+
+  static DISPATCHED_TITLE = 'owner/repo \u00b7 #33 un slice del dispatcher'
+
+  static attending(worktree, { ref = 'workspace:20', title = SessionsOfCmux.PLAN_TITLE } = {}) {
+    return [{ cwd: worktree, cwdKnown: true, ref, title }]
   }
 
   static none() {
@@ -87,10 +96,11 @@ describe('WorktreePlans', () => {
     expect(await PlansOf.aWorktreeAttendedBy(SessionsOfCmux.none).inFlight()).toEqual([])
   })
 
-  it('a_session_whose_directory_is_unknown_names_no_agent', async () => {
-    const plans = PlansOf.aWorktreeAttendedBy(
-      () => [{ cwd: '/repos/one/.worktrees/33', cwdKnown: false, ref: 'workspace:20', title: '' }]
-    )
+  it('a_session_that_hides_its_directory_does_not_lend_its_agent_while_another_one_shows_its_own', async () => {
+    const plans = PlansOf.aWorktreeAttendedBy(() => [
+      { cwd: '/repos/one/.worktrees/33', cwdKnown: false, ref: 'workspace:20', title: SessionsOfCmux.PLAN_TITLE },
+      ...SessionsOfCmux.attending('/repos/elsewhere/.worktrees/7'),
+    ])
 
     expect(await plans.inFlight()).toEqual([])
   })
@@ -139,5 +149,62 @@ describe('WorktreePlans', () => {
 
     expect(recovered.map((watch) => watch.issue.number)).toEqual([33])
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining('/repos/broken'))
+  })
+
+  it('a_worktree_the_dispatcher_opened_is_not_adopted_as_a_plan_of_this_backend', async () => {
+    const plans = PlansOf.aWorktreeAttendedBy(
+      () => SessionsOfCmux.attending('/repos/one/.worktrees/33', { title: SessionsOfCmux.DISPATCHED_TITLE })
+    )
+
+    expect(await plans.inFlight()).toEqual([])
+  })
+
+  it('a_session_whose_ref_is_not_a_handle_names_no_agent', async () => {
+    const notAHandle = PlansOf.aWorktreeAttendedBy(
+      () => SessionsOfCmux.attending('/repos/one/.worktrees/33', { ref: 'surface:9' })
+    )
+    const noRefAtAll = PlansOf.aWorktreeAttendedBy(
+      () => SessionsOfCmux.attending('/repos/one/.worktrees/33', { ref: null })
+    )
+
+    expect(await notAHandle.inFlight()).toEqual([])
+    expect(await noRefAtAll.inFlight()).toEqual([])
+  })
+
+  it('sessions_that_all_hide_their_directory_is_not_the_same_as_no_plans_in_flight', async () => {
+    const plans = PlansOf.aWorktreeAttendedBy(
+      () => [{ cwd: null, cwdKnown: false, ref: 'workspace:20', title: SessionsOfCmux.PLAN_TITLE }]
+    )
+
+    expect(await plans.inFlight()).toBeNull()
+  })
+
+  it('a_checkout_registry_that_could_not_be_read_is_not_the_same_as_no_checkouts', async () => {
+    const plans = new WorktreePlans({
+      checkouts: { known: () => null },
+      survey: () => SurveyedCheckout.of('/repos/one', [33]),
+      sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
+      planIssues: { storyOf: () => null },
+      stderr: vi.fn(),
+    })
+
+    expect(await plans.inFlight()).toBeNull()
+  })
+
+  it('a_failure_that_is_not_the_ones_this_reader_degrades_travels_out_instead_of_passing_for_nothing', async () => {
+    const surveyBroke = new WorktreePlans({
+      checkouts: { known: () => [new CheckoutRoot('/repos/one')] },
+      survey: () => { throw new TypeError('git-workspace has a bug') },
+      sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
+      planIssues: { storyOf: () => null },
+      stderr: vi.fn(),
+    })
+    const storyBroke = PlansOf.aWorktreeAttendedBy(
+      () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
+      { storyOf: () => { throw new TypeError('gh-plan-issues has a bug') } }
+    )
+
+    await expect(surveyBroke.inFlight()).rejects.toBeInstanceOf(TypeError)
+    await expect(storyBroke.inFlight()).rejects.toBeInstanceOf(TypeError)
   })
 })

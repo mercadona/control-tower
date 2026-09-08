@@ -1,5 +1,5 @@
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { setTimeout as after } from 'node:timers/promises'
 import { homedir, tmpdir } from 'node:os'
@@ -106,9 +106,15 @@ class Disk {
     }
   }
 
-  static writeSync(path, text) {
+  static atomicWriteSync(path, text) {
     mkdirSync(dirname(path), { recursive: true })
-    writeFileSync(path, text)
+    const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`
+    try {
+      writeFileSync(temporary, text)
+      renameSync(temporary, path)
+    } finally {
+      rmSync(temporary, { force: true })
+    }
   }
 
   static async remove(path) {
@@ -283,7 +289,8 @@ class CtApi {
     const checkouts = new DiskCheckoutRegistry({
       read: (path) => readFileSync(path, 'utf8'),
       stat: statSync,
-      write: Disk.writeSync,
+      write: Disk.atomicWriteSync,
+      stderr: (line) => process.stderr.write(line),
       root: asked.stateRoot,
     })
     const planAgents = new CmuxPlanAgents({

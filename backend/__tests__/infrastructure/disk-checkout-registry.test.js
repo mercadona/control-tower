@@ -9,30 +9,30 @@ class StoredCheckouts {
 
   static empty(write = vi.fn()) {
     return new DiskCheckoutRegistry({
-      read: vi.fn(), stat: () => StoredCheckouts.NOT_A_FILE, write, root: '/state',
+      read: vi.fn(), stat: () => StoredCheckouts.NOT_A_FILE, write, stderr: vi.fn(), root: '/state',
     })
   }
 
   static holding(roots, write = vi.fn()) {
+    const stored = `${JSON.stringify({ roots }, null, 2)}\n`
+
     return new DiskCheckoutRegistry({
-      read: () => `${JSON.stringify({ roots })}\n`,
+      read: () => stored,
       stat: () => StoredCheckouts.A_FILE,
       write,
+      stderr: vi.fn(),
       root: '/state',
     })
   }
 
-  static unreadable(printed) {
+  static unreadable(printed, { write = vi.fn(), stderr = vi.fn() } = {}) {
     return new DiskCheckoutRegistry({
       read: () => printed,
       stat: () => StoredCheckouts.A_FILE,
-      write: vi.fn(),
+      write,
+      stderr,
       root: '/state',
     })
-  }
-
-  static contentOf(roots) {
-    return `${JSON.stringify({ roots }, null, 2)}\n`
   }
 }
 
@@ -46,7 +46,10 @@ describe('DiskCheckoutRegistry', () => {
 
     StoredCheckouts.empty(write).remember(new CheckoutRoot('/repos/one'))
 
-    expect(write).toHaveBeenCalledWith('/state/checkouts.json', StoredCheckouts.contentOf(['/repos/one']))
+    expect(write).toHaveBeenCalledWith(
+      '/state/checkouts.json',
+      '{\n  "roots": [\n    "/repos/one"\n  ]\n}\n'
+    )
   })
 
   it('a_second_checkout_joins_the_ones_already_written', () => {
@@ -56,7 +59,7 @@ describe('DiskCheckoutRegistry', () => {
 
     expect(write).toHaveBeenCalledWith(
       '/state/checkouts.json',
-      StoredCheckouts.contentOf(['/repos/one', '/repos/two'])
+      '{\n  "roots": [\n    "/repos/one",\n    "/repos/two"\n  ]\n}\n'
     )
   })
 
@@ -84,9 +87,36 @@ describe('DiskCheckoutRegistry', () => {
     expect(StoredCheckouts.empty().known()).toEqual([])
   })
 
-  it('a_file_that_is_not_the_shape_it_writes_is_no_checkouts_instead_of_a_crash', () => {
-    expect(StoredCheckouts.unreadable('not json at all').known()).toEqual([])
-    expect(StoredCheckouts.unreadable(`${JSON.stringify({ roots: 'not a list' })}\n`).known()).toEqual([])
+  it('a_file_it_cannot_read_is_not_the_same_as_no_checkouts_at_all', () => {
+    expect(StoredCheckouts.unreadable('not json at all').known()).toBeNull()
+    expect(StoredCheckouts.unreadable(`${JSON.stringify({ roots: 'not a list' })}\n`).known()).toBeNull()
+    expect(StoredCheckouts.unreadable('null\n').known()).toBeNull()
+  })
+
+  it('a_registry_it_cannot_read_is_left_alone_instead_of_being_overwritten_with_the_one_checkout_it_knows', () => {
+    const write = vi.fn()
+    const stderr = vi.fn()
+
+    StoredCheckouts.unreadable('not json at all', { write, stderr }).remember(new CheckoutRoot('/repos/one'))
+
+    expect(write).not.toHaveBeenCalled()
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining('/state/checkouts.json'))
+  })
+
+  it('what_it_writes_is_what_it_reads_back_so_the_two_halves_cannot_drift_apart', () => {
+    let stored = null
+    const registry = new DiskCheckoutRegistry({
+      read: () => stored,
+      stat: () => (stored === null ? StoredCheckouts.NOT_A_FILE : StoredCheckouts.A_FILE),
+      write: (path, text) => { stored = text },
+      stderr: vi.fn(),
+      root: '/state',
+    })
+
+    registry.remember(new CheckoutRoot('/repos/one'))
+    registry.remember(new CheckoutRoot('/repos/two'))
+
+    expect(registry.known().map((root) => root.text)).toEqual(['/repos/one', '/repos/two'])
   })
 
   it('one_unusable_entry_does_not_take_the_usable_ones_with_it', () => {

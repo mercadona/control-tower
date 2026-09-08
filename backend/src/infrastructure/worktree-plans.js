@@ -12,41 +12,52 @@ export class WorktreePlans {
     this.stderr = stderr
   }
 
-  static urlOf({ repository, issueNumber }) {
+  static #urlOf({ repository, issueNumber }) {
     return `https://github.com/${repository.text}/issues/${issueNumber}`
   }
 
-  static agentOf(listed, worktree) {
-    const attending = listed.find((entry) =>
-      entry !== null && typeof entry === 'object' && entry.cwdKnown === true &&
-      entry.cwd === worktree && CmuxPlanAgents.isHandle(entry.ref))
+  static #agentOf(knowable, worktree) {
+    const attending = knowable.find((entry) =>
+      entry.cwd === worktree && CmuxPlanAgents.isHandle(entry.ref) &&
+      typeof entry.title === 'string' && entry.title.startsWith(CmuxPlanAgents.NAME_PREFIX))
 
     return attending === undefined ? null : attending.ref
+  }
+
+  static #knowableIn(listed) {
+    const knowable = listed.filter((entry) => entry.cwdKnown === true)
+    if (listed.length > 0 && knowable.length === 0) return null
+
+    return knowable
   }
 
   async inFlight() {
     const listed = this.sessions()
     if (listed === null) return null
+    const knowable = WorktreePlans.#knowableIn(listed)
+    if (knowable === null) return null
+    const roots = this.checkouts.known()
+    if (roots === null) return null
     const watches = []
-    for (const root of this.checkouts.known()) {
-      for (const watch of await this.#of(root, listed)) watches.push(watch)
+    for (const root of roots) {
+      for (const watch of await this.#of(root, knowable)) watches.push(watch)
     }
 
     return watches
   }
 
-  async #of(root, listed) {
+  async #of(root, knowable) {
     const surveyed = await this.#surveyed(root)
     if (surveyed === null) return []
     const watches = []
     for (const prepared of surveyed.prepared) {
-      const agent = WorktreePlans.agentOf(listed, prepared.located.path)
+      const agent = WorktreePlans.#agentOf(knowable, prepared.located.path)
       if (agent === null) continue
       watches.push(new PlanWatch({
         story: await this.#storyOf(prepared.issueNumber, surveyed.repository),
         issue: new PlanIssue({
           number: prepared.issueNumber,
-          url: WorktreePlans.urlOf({ repository: surveyed.repository, issueNumber: prepared.issueNumber }),
+          url: WorktreePlans.#urlOf({ repository: surveyed.repository, issueNumber: prepared.issueNumber }),
         }),
         located: prepared.located,
         repository: surveyed.repository,

@@ -31,10 +31,11 @@ export class CmuxPlanAgents extends PlanAgents {
     this.brief = brief
   }
 
+  static NAME_PREFIX = 'ct-plan-'
   static NO_STORY_PREFIX = 'issue-'
 
   static nameFor({ story, repository, issueNumber }) {
-    return `ct-plan-${repository.text.replace(/\//g, '__')}-${
+    return `${CmuxPlanAgents.NAME_PREFIX}${repository.text.replace(/\//g, '__')}-${
       story === null ? `${CmuxPlanAgents.NO_STORY_PREFIX}${issueNumber}` : story
     }`
   }
