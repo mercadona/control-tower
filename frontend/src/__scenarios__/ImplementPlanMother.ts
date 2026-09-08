@@ -25,6 +25,16 @@ const agentNotResumed = () => ({
   body: '{"code":"plan-agent-not-resumed","detail":"cmux send failed: no such workspace"}',
 })
 
+const noLiveSession = () => ({
+  status: 409,
+  body: '{"code":"no-live-planning-session","detail":"no active plan matches that issue"}',
+})
+
+const implementationUncertain = () => ({
+  status: 409,
+  body: '{"code":"implementation-phase-uncertain","detail":"cannot tell whether implementation already began"}',
+})
+
 const plan = (): StartedPlan => ({
   id: 'ABC-123',
   repo: REPO,
@@ -43,5 +53,7 @@ export const ImplementPlanMother = {
   malformedAgent,
   malformedRepo,
   agentNotResumed,
+  noLiveSession,
+  implementationUncertain,
   plan,
 }

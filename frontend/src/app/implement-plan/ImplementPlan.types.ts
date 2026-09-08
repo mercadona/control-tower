@@ -17,5 +17,7 @@ export type ImplementPlanRefusal = {
 
 export type ImplementPlanOutcome =
   | { kind: 'implementing'; agent: string; issue: number }
-  | { kind: 'refused'; error: string }
+  | { kind: 'refused'; detail: string }
+  | { kind: 'stale-agent'; detail: string }
+  | { kind: 'uncertain'; detail: string }
   | { kind: 'backend-unreachable' }

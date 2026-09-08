@@ -37,7 +37,7 @@ const start = async (submission: StartPlanSubmission): Promise<StartPlanOutcome>
     }
   }
   const refused = (await response.json()) as StartPlanRefusal
-  return { kind: 'refused', error: refused.detail }
+  return { kind: 'refused', code: refused.code, error: refused.detail }
 }
 
 export const StartPlanClient = {

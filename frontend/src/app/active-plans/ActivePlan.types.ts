@@ -6,4 +6,7 @@ export type ActivePlan = {
   plan: StartedPlan
 }
 
-export type ActivePlansOutcome = { kind: 'loaded'; plans: ActivePlan[] } | { kind: 'unavailable' }
+export type ActivePlansOutcome =
+  | { kind: 'loaded'; plans: ActivePlan[] }
+  | { kind: 'unavailable' }
+  | { kind: 'inconclusive' }

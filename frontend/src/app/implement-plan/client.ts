@@ -7,6 +7,8 @@ import {
 
 const PATH = '/implement-plan'
 const ACCEPTED = 202
+const NO_LIVE_PLANNING_SESSION = 'no-live-planning-session'
+const IMPLEMENTATION_PHASE_UNCERTAIN = 'implementation-phase-uncertain'
 
 const implement = async ({ agent, issue, repo }: ImplementPlanRequest): Promise<ImplementPlanOutcome> => {
   let response: Response
@@ -24,7 +26,9 @@ const implement = async ({ agent, issue, repo }: ImplementPlanRequest): Promise<
     return { kind: 'implementing', agent: implementing.agent, issue: implementing.issue }
   }
   const refused = (await response.json()) as ImplementPlanRefusal
-  return { kind: 'refused', error: refused.detail }
+  if (refused.code === NO_LIVE_PLANNING_SESSION) return { kind: 'stale-agent', detail: refused.detail }
+  if (refused.code === IMPLEMENTATION_PHASE_UNCERTAIN) return { kind: 'uncertain', detail: refused.detail }
+  return { kind: 'refused', detail: refused.detail }
 }
 
 export const ImplementPlanClient = {
