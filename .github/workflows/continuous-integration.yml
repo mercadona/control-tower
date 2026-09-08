@@ -32,7 +32,90 @@ concurrency:
 # 15 minutes is not a target. It is the point past which a slow install is a
 # real problem worth failing on, rather than weather.
 jobs:
+  # Which of the three packages a pull request actually touches. The four jobs
+  # below hang off these outputs, so a pull request that only moves backend/
+  # stops paying for the plugin suite — the longest of the four by an order of
+  # magnitude.
+  #
+  # The rule for everything else is deliberately blunt: any changed path that
+  # is not under plugin/, backend/ or frontend/ turns all three on. That is not
+  # laziness, it is the only version of this filter that cannot go quietly
+  # wrong. The plugin suite reads two files from outside its own directory —
+  # frontera-de-distribucion.test.js compares the root LICENSE against
+  # plugin/LICENSE, and task-brief.test.js reads a plan from
+  # docs/superpowers/plans/ — and a filter that enumerated those would silently
+  # skip the check that guards them the day someone adds a third. Enumerating
+  # the exceptions buys shorter runs on documentation-only pull requests and
+  # pays for it with a hole nobody notices until the invariant is already
+  # broken.
+  #
+  # An empty file list also turns all three on. A diff that comes back empty is
+  # either a pull request with nothing in it, where running everything costs
+  # nothing, or a diff that failed to compute — and that second case must never
+  # be the one where every check quietly reports green.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      plugin: ${{ steps.decide.outputs.plugin }}
+      backend: ${{ steps.decide.outputs.backend }}
+      frontend: ${{ steps.decide.outputs.frontend }}
+    steps:
+      # fetch-depth: 0 so both ends of the comparison are in the clone. The
+      # pull_request event checks out the merge commit, and the three-dot diff
+      # below asks for the merge base of the two shas — none of which a depth-1
+      # clone has.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Decide which packages this pull request touches
+        id: decide
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # Three dots, not two: what this pull request changed since it forked
+          # off the base, not everything that separates the two commits.
+          files="$(git diff --name-only "$BASE...$HEAD")"
+
+          plugin=false
+          backend=false
+          frontend=false
+          outside=false
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            case "$file" in
+              plugin/*) plugin=true ;;
+              backend/*) backend=true ;;
+              frontend/*) frontend=true ;;
+              *) outside=true ;;
+            esac
+          done <<< "$files"
+
+          if [ -z "$files" ] || [ "$outside" = true ]; then
+            plugin=true
+            backend=true
+            frontend=true
+          fi
+
+          echo "plugin=$plugin" >> "$GITHUB_OUTPUT"
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
+
+          echo "plugin=$plugin backend=$backend frontend=$frontend"
+          echo "$files" | sed 's/^/  /'
+
   dist:
+    needs: changes
+    if: ${{ needs.changes.outputs.plugin == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -83,6 +166,8 @@ jobs:
           fi
 
   test:
+    needs: changes
+    if: ${{ needs.changes.outputs.plugin == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -121,6 +206,8 @@ jobs:
         run: npm test
 
   backend:
+    needs: changes
+    if: ${{ needs.changes.outputs.backend == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -150,6 +237,8 @@ jobs:
         run: npm test
 
   frontend:
+    needs: changes
+    if: ${{ needs.changes.outputs.frontend == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -191,14 +280,29 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [dist, test, backend, frontend]
+    needs: [changes, dist, test, backend, frontend]
     if: ${{ !cancelled() }}
     permissions:
       contents: read
     steps:
+      # `skipped` is a pass here: a job the filter turned off did not fail, it
+      # was not needed. `changes` is the exception — it is never skipped, and
+      # if it fails the four jobs below it skip for want of their dependency.
+      # Accepting `skipped` without this guard would turn a broken filter into
+      # a green pull request with nothing tested at all.
       - name: Check results
         run: |
-          if [[ "${{ needs.dist.result }}" != "success" || "${{ needs.test.result }}" != "success" || "${{ needs.backend.result }}" != "success" || "${{ needs.frontend.result }}" != "success" ]]; then
-            echo "One or more jobs failed"
+          if [[ "${{ needs.changes.result }}" != "success" ]]; then
+            echo "::error::the job that decides which checks to run did not succeed, so nothing below it ran"
             exit 1
           fi
+          for result in \
+            "${{ needs.dist.result }}" \
+            "${{ needs.test.result }}" \
+            "${{ needs.backend.result }}" \
+            "${{ needs.frontend.result }}"; do
+            if [[ "$result" != "success" && "$result" != "skipped" ]]; then
+              echo "One or more jobs failed"
+              exit 1
+            fi
+          done
