@@ -95,7 +95,7 @@ import {
 // autolink it as an issue number — a --reconcile with the old copy would have
 // rewritten the new format back into the old one, reintroducing the false link
 // on every run).
-import { renderDepsContent, renderAcContent, GATES_HEADING, E2E_HEADING, EPIC_CONTEXT_HEADING, INHERITED_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, SENAL_HEADING } from './groom.js'
+import { renderDepsContent, renderAcContent, GATES_HEADING, E2E_HEADING, EPIC_CONTEXT_HEADING, INHERITED_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, SIGNAL_HEADING } from './groom.js'
 
 // ownedLabelsOnly: the spec is authority over a prefix (`type:`, `area:`,
 // `touches:`) ONLY IF the §9 table carries the column that feeds it
@@ -335,7 +335,7 @@ export function diffIssue(existing, wantedIssue, wantedMilestone, ownedLabelPref
   // EXPERIMENTAL half that five rounds of review decided not to fatten. An old
   // epic without the section only drifts if today's spec declares a signal, and
   // even then a nota:, never a block.
-  const currentSenal = extractSectionContent(body, SENAL_HEADING)
+  const currentSenal = extractSectionContent(body, SIGNAL_HEADING)
   const wantedSenal = wantedIssue.senal ?? null
   let senalDiffers
   if (currentSenal === null && wantedSenal === null) {
@@ -608,7 +608,7 @@ export function formatDrift(diff) {
   // about "the one the judge obeys" exists so that whoever reads the note knows
   // WHY it is not rewritten: at runtime the authority is the dispatch's issue,
   // not today's spec — the same contract as the gates.
-  if (diff.senalDiffers) lines.push(`nota: ${head}: la sección "${SENAL_HEADING}" difiere del spec (no cuenta para el exit code; --reconcile no la reescribe — la señal que obedece el juez de slice es la que el issue tenía al despachar, igual que los gates)`)
+  if (diff.senalDiffers) lines.push(`nota: ${head}: la sección "${SIGNAL_HEADING}" difiere del spec (no cuenta para el exit code; --reconcile no la reescribe — la señal que obedece el juez de slice es la que el issue tenía al despachar, igual que los gates)`)
   // Task 4 deliberately left this note without saying who rewrites the section:
   // in that commit "with --reconcile it is rewritten from the spec" was still
   // false (buildReconcileBody did not touch it). Task 5 made it true.
@@ -682,7 +682,7 @@ export function buildReconcileEditArgs(diff) {
 // AC/Dependencias and the journeys of "## E2E", from the §9 table; the epic's
 // context, from the section of the same name the spec itself carries
 // (groom.js#readEpicContext); and Descripción/Protegido from the
-// Entrega/Protegido columns of that same table (renderDescripcion/
+// Entrega/Protegido columns of that same table (renderDescription/
 // renderProtectedLine, groom.js — see also diffIssue's comment further up, "the
 // spec owns them").
 //

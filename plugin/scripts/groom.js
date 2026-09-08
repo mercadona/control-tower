@@ -1,15 +1,15 @@
 // Pure grooming logic: from Slice[] (T1) to a plan of GitHub operations.
 import { isNoValueCell } from './slices.js'
 import { resolveGates, resolveE2e, gateLabels, renderGatesIssueContent } from './gates.js'
-import { locateSection, unterminatedDelimiter, normalizeToLF, SENAL_HEADING, E2E_HEADING } from './gh-issue-map.js'
+import { locateSection, unterminatedDelimiter, normalizeToLF, SIGNAL_HEADING, E2E_HEADING } from './gh-issue-map.js'
 import { STATUS_LADDER } from './harvest.js'
 
-// SENAL_HEADING (Slice 10) is born in gh-issue-map.js (the lower layer: this
+// SIGNAL_HEADING (Slice 10) is born in gh-issue-map.js (the lower layer: this
 // file already imports from there and mapGhIssue needs it too — here it would
 // create a circular import) and is re-exported so that groom's consumers do
 // not have to know where it was born — the same treatment as its sibling
 // headings GATES_HEADING/EPIC_CONTEXT_HEADING, which were born here.
-export { SENAL_HEADING }
+export { SIGNAL_HEADING }
 
 // GATES_HEADING (F21): the gates section of the issue's body. An exported
 // constant because THREE places name it (this file when writing it,
@@ -398,7 +398,7 @@ export function buildLabels(slice) {
   return labels
 }
 
-// renderDescripcion / renderProtectedLine (F5): extracted from buildIssueBody
+// renderDescription / renderProtectedLine (F5): extracted from buildIssueBody
 // to be the ONLY source of truth for "what each of these two sections should
 // say" — both when CREATING the issue (buildIssueBody, below) and when
 // COMPARING it afterwards against an existing issue
@@ -407,13 +407,13 @@ export function buildLabels(slice) {
 // criterion that could diverge over time — the same reason ADDENDA
 // (kickoff.js) is the single source of truth of KNOWN_TYPES in ct-groom.mjs.
 //
-// renderDescripcion returns `null` (not an empty string) when there is no real
+// renderDescription returns `null` (not an empty string) when there is no real
 // "Entrega": `null` means "the ## Descripción section should not exist at
 // all", which differs from "it exists but it is empty" — an existing issue
 // that DOES have the section when the spec says `null` is a real divergence
 // (the spec stopped asking for a description), not the same as "they agree
 // that there is nothing".
-export function renderDescripcion(slice) {
+export function renderDescription(slice) {
   return (slice.entrega && !isNoValueCell(slice.entrega)) ? slice.entrega : null
 }
 
@@ -430,18 +430,18 @@ export function renderProtectedLine(slice) {
   return (slice.protected && !isNoValueCell(slice.protected)) ? `- 🚫 ${slice.protected}` : '- (ninguno declarado)'
 }
 
-// renderGatesContent (F21): like renderDescripcion/renderProtectedLine/
+// renderGatesContent (F21): like renderDescription/renderProtectedLine/
 // renderSpecLink, the ONLY source of truth for "what the gates section should
 // say" — shared between creating the issue (buildIssueBody) and comparing it
 // afterwards (reconcile.js#diffIssue). It NEVER returns null (unlike
-// renderDescripcion): the section is always emitted, because "this slice
+// renderDescription): the section is always emitted, because "this slice
 // demands no gate" is an assertion a human needs to be able to read in the
 // issue; its absence would only say "nobody thought about it here".
 export function renderGatesContent(slice) {
   return renderGatesIssueContent(gatesOf(slice), slice.type)
 }
 
-// parseSenalCell (Slice 10): THE classifier of the `Señal` cell — a single
+// parseSignalCell (Slice 10): THE classifier of the `Señal` cell — a single
 // one, reused by groom (validation in ct-groom.mjs + render here), by kickoff
 // (the dispatch's conditional line) and, in prose, by the slice judge's rubric.
 // The cell is free text in ONE piece (the comma does not separate, as in
@@ -465,7 +465,7 @@ export function renderGatesContent(slice) {
 // emphasis (the same stance as the `#` column: "**N/A**" is not forgiven its
 // bold); the reason is what is left after removing `N/A` and the leading
 // separators (—/–/-/: and spaces).
-export function parseSenalCell(raw) {
+export function parseSignalCell(raw) {
   const trimmed = (raw ?? '').trim()
   if (!trimmed || isNoValueCell(trimmed)) return { kind: 'ninguna', text: null }
   if (/^n\/a(\b|$)/i.test(trimmed)) {
@@ -476,8 +476,8 @@ export function parseSenalCell(raw) {
   return { kind: 'senal', text: trimmed }
 }
 
-// renderSenalContent (Slice 10): what the `## Señal de observabilidad` section
-// should say — the same single source of truth as renderDescripcion/
+// renderSignalContent (Slice 10): what the `## Señal de observabilidad` section
+// should say — the same single source of truth as renderDescription/
 // renderProtectedLine, shared between creating the issue (buildIssueBody) and
 // comparing it afterwards (reconcile.js#diffIssue). `null` means "the section
 // should not exist": with nothing declared there is nothing to emit (unlike
@@ -486,14 +486,14 @@ export function parseSenalCell(raw) {
 // ignore it). With an exemption that has no reason it also returns `null` —
 // this function is pure and does not throw: the wrapper (ct-groom.mjs) aborts
 // with a hardError BEFORE reaching any render.
-export function renderSenalContent(slice) {
-  const { kind, text } = parseSenalCell(slice.senal)
+export function renderSignalContent(slice) {
+  const { kind, text } = parseSignalCell(slice.senal)
   return (kind === 'senal' || kind === 'exencion') ? text : null
 }
 
 // renderSpecLink (F5 review round 3, importante 5): the spec-link line IS
 // content the spec really owns — it is not bookkeeping like the `ct-order`
-// marker. Extracted for the same reason as renderDescripcion/
+// marker. Extracted for the same reason as renderDescription/
 // renderProtectedLine: a single source of truth for "what it should say",
 // shared between creating the issue (buildIssueBody) and comparing it
 // afterwards (scripts/reconcile.js#diffIssue).
@@ -570,7 +570,7 @@ function inlineCode(text) {
 }
 
 // DEPS_ORDER_NOTE / renderDepsContent / renderAcContent (F6): the CONTENT of
-// the two sections the dispatcher really obeys. Like renderDescripcion/
+// the two sections the dispatcher really obeys. Like renderDescription/
 // renderProtectedLine/renderSpecLink, they are the ONLY source of truth for
 // "what each section should say" — until F6,
 // scripts/reconcile.js#buildReconcileBody had its OWN copy of the format
@@ -604,7 +604,7 @@ export function buildIssueBody(slice, specRef, epicContext = null, frozenDecisio
   // spec link and BEFORE "Acceptance criteria": whoever opens the issue reads
   // first WHAT the slice delivers, and only afterwards its acceptance criteria
   // — the natural reading order (what, then how it is verified).
-  const descripcion = renderDescripcion(slice)
+  const descripcion = renderDescription(slice)
   if (descripcion) {
     lines.push('## Descripción')
     lines.push(descripcion)
@@ -652,9 +652,9 @@ export function buildIssueBody(slice, specRef, epicContext = null, frozenDecisio
   // judge, and a section that came out in every issue of every epic that does
   // not use the column would be the warning-that-always-comes-out that trains
   // people to ignore it.
-  const senal = renderSenalContent(slice)
+  const senal = renderSignalContent(slice)
   if (senal) {
-    lines.push(SENAL_HEADING)
+    lines.push(SIGNAL_HEADING)
     lines.push(senal)
     lines.push('')
   }
@@ -742,13 +742,13 @@ export function groomPlan(slices, { milestone, specRef, epicContext = null, epic
       // it has just generated itself (it avoids two implementations of the
       // same criterion that could diverge).
       ac: s.ac || [],
-      descripcion: renderDescripcion(s),
+      descripcion: renderDescription(s),
       protectedLine: renderProtectedLine(s),
       // Slice 10: the structured signal travels alongside descripcion/
       // protectedLine and for the same reason — reconcile compares against an
       // existing issue without re-parsing the body this plan has just
       // generated.
-      senal: renderSenalContent(s),
+      senal: renderSignalContent(s),
       specLink: renderSpecLink(s, specRef),
       // F21: the RESOLVED gates (not the raw cell) travel in the plan for the
       // same reason as ac/descripcion/protectedLine — reconcile.js and the

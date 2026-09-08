@@ -65,7 +65,7 @@ export function plazo(nombre, defecto) {
 // NOT BEING ABLE TO OPEN IT DOES NOT STOP THE WATCH: losing the trace is worse
 // than not having one, but far less bad than losing the warning that was being
 // waited for.
-export function abrirLog(logPath) {
+export function openLog(logPath) {
   let fd = null
   if (logPath) {
     try {

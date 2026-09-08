@@ -103,7 +103,7 @@ describe('/ct-status', () => {
   it('if the CLOSED ones fail, what is above does not go empty: the IN FLIGHT block is still there', () => {
     // The report came out empty under a footer that said "what is above is
     // only what could be checked"… and above there was nothing, because
-    // `cargarIssues` threw and with it dropped the read of open issues that
+    // `loadIssues` threw and with it dropped the read of open issues that
     // was already entirely in memory. It contradicted the contract this
     // command publishes: "what is known is reported".
     const b = bancada()
@@ -121,7 +121,7 @@ describe('/ct-status', () => {
     // A defect born of the INTERACTION of two fixes, and that is why no task
     // review saw it: the emptying of `worktreesEnDisco` that protects against
     // manufacturing orphans also fed the `hasWorktree` of the in-flight
-    // block. It was unreachable while `cargarIssues` threw (with no issues
+    // block. It was unreachable while `loadIssues` threw (with no issues
     // there was no in-flight block to print); the partial report made it
     // reachable, and the report contradicted itself in two consecutive lines:
     // the warning named `.worktrees/7` and the block said `worktree ✗` about
@@ -165,7 +165,7 @@ describe('/ct-status', () => {
 
   it('if the partial read explains ALL the worktrees, there is no warning — but the exit is still 1', () => {
     // The reason for the read that failed is never lost: it travels
-    // separately, from `cargarIssues`. That no directory is left to warn
+    // separately, from `loadIssues`. That no directory is left to warn
     // about does not turn an incomplete read into a loop at rest.
     const b = bancada({ worktrees: [7] })
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: enProgreso7(), FAKE_GH_TIMELINE_JSON: hace(3 * 3600_000), FAKE_GH_LIST_FAIL_AT: '1' })

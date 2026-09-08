@@ -27,7 +27,7 @@ import {
   planClosureProbe, buildClosureQuery, parseClosureProbe,
   formatSuspectClosureWarnings, formatMergedButOpenWarnings, formatClosureCoverageNote,
 } from './gh-closure.js'
-import { cargarIssues } from './loop-issues.js'
+import { loadIssues } from './loop-issues.js'
 import { detectConventions, formatFindings } from './conventions.js'
 import { readRepoDocs, readAck, ACK_PATH } from './conventions-io.js'
 import { PluginYardstick } from './plugin-yardstick.js'
@@ -1432,7 +1432,7 @@ const gh = (a) => execFileSync('gh', a, { encoding: 'utf8', stdio: ['ignore', 'p
 // and can go stale without warning; `git remote show origin` IS authoritative
 // but does a full fetch of the remote's refs just to read one line of text to
 // parse, slower than a targeted JSON call. ct-next.mjs ALREADY requires the
-// network for `gh` on the real path (loadIssues), so this does not add a new
+// network for `gh` on the real path (readDispatchInput), so this does not add a new
 // dependency.
 //
 // If it cannot be determined (gh down, no network, a repo with no readable
@@ -1639,15 +1639,15 @@ if (typeof baseArg === 'string') {
   warn(`--base ${resolvedBase}: si "${resolvedBase}" NO es la rama por defecto de ${repo}, el \`Closes #<n>\` que el kickoff le pide al agente NO cerrará su issue al mergear el PR — GitHub solo aplica las closing keywords cuando el PR entra en la rama por defecto (verificado contra un repo real, no deducido de la documentación). Con esta base, cerrar cada issue como *completed* al mergear su PR es un paso A MANO (\`gh issue close <n> --repo ${repo} --reason completed\`): si no se hace, el slice retiene sus tokens de \`area:\`/\`touches:\` indefinidamente y ningún dependiente con \`merge-after\` sobre él lo ve satisfecho nunca.`)
 }
 
-function loadIssues() {
+function readDispatchInput() {
   if (fx) return fx
   // The paginated read of open/closed issues lives in scripts/loop-issues.js,
   // shared with other commands: the same two `gh api ... --paginate --slurp`
   // blocks, the same comments, the same normalisation of state_reason.
-  const { abiertos, cerrados, motivos } = cargarIssues({ repo, gh })
+  const { abiertos, cerrados, motivos } = loadIssues({ repo, gh })
   // The same criterion as always, and /ct-next's behaviour does not change: a
   // failed read is NOT degraded to "there are no issues". We abort with the
-  // message that names which read failed. The only thing `cargarIssues`'s new
+  // message that names which read failed. The only thing `loadIssues`'s new
   // contract adds (returning what is partial instead of throwing) is that if
   // BOTH fail, both are said, instead of only the first: this dispatcher is
   // going to mutate things, so any reason is reason enough not to carry on.
@@ -1946,7 +1946,7 @@ function formatBlockedClaimWarnings(issues) {
   return out
 }
 
-const dispatchInput = loadIssues()
+const dispatchInput = readDispatchInput()
 // depStates (F13/H4): the state of the CLOSED issues that do NOT count as
 // merged. It only exists on the real path (buildDispatchInput); the test
 // fixture brings `issues`/`mergedIssues` already mapped, so `|| {}` treats it

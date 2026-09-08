@@ -1,7 +1,7 @@
 // §3.12 of the handoff (docs/prompt-juez-lo-que-queda.md): `reference-paths`
 // proves that what §3 cited EXISTS (it catches invention) — nothing proved that
 // EVERYTHING relevant was cited (the omission). This file protects the sweep
-// that closes that asymmetry: `candidatosDeVara`, `declaradasEn`,
+// that closes that asymmetry: `yardstickCandidates`, `declaredIn`,
 // `pareceEsqueleto` and `formatCandidatos` in scripts/repo-yardstick.js, plus the
 // executable wrapper scripts/detect-yardstick.mjs and its hook in scripts/ct-init.sh.
 //
@@ -18,9 +18,9 @@ import {
   CONVENTIONS_FILE,
   CANDIDATOS_HEADER,
   MAX_CANDIDATOS,
-  MAX_POR_DIRECTORIO,
-  candidatosDeVara,
-  declaradasEn,
+  MAX_PER_DIRECTORY,
+  yardstickCandidates,
+  declaredIn,
   pareceEsqueleto,
   formatCandidatos,
 } from '../scripts/repo-yardstick.js'
@@ -43,11 +43,11 @@ function tmp(prefix = 'vara-cand-') {
 const rutas = (r) => r.candidatos.map((c) => c.ruta)
 
 // ---------------------------------------------------------------------------
-// candidatosDeVara (pure)
+// yardstickCandidates (pure)
 // ---------------------------------------------------------------------------
-describe('candidatosDeVara', () => {
+describe('yardstickCandidates', () => {
   it('proposes the guides at the root and not a namesake under a subdirectory', () => {
-    const r = candidatosDeVara({
+    const r = yardstickCandidates({
       entradas: ['AGENTS.md', 'CLAUDE.md', 'CONTRIBUTING.md', 'CONTRIBUTING', 'docs/', 'docs/AGENTS.md'],
     })
     expect(rutas(r)).toContain('AGENTS.md')
@@ -59,7 +59,7 @@ describe('candidatosDeVara', () => {
   })
 
   it('from a directory matching "convention|rules" it proposes ITS FILES and not the directory', () => {
-    const r = candidatosDeVara({
+    const r = yardstickCandidates({
       entradas: [
         'docs/', 'docs/conventions/', 'docs/conventions/backend.md', 'docs/conventions/frontend.md',
         '.cursor/', '.cursor/rules/', '.cursor/rules/style.md',
@@ -76,14 +76,14 @@ describe('candidatosDeVara', () => {
   })
 
   it('proposes project skills by their SKILL.md', () => {
-    const r = candidatosDeVara({ entradas: ['.claude/', '.claude/skills/', '.claude/skills/oc-review/', '.claude/skills/oc-review/SKILL.md'] })
+    const r = yardstickCandidates({ entradas: ['.claude/', '.claude/skills/', '.claude/skills/oc-review/', '.claude/skills/oc-review/SKILL.md'] })
     expect(rutas(r)).toContain('.claude/skills/oc-review/SKILL.md')
     const m = r.candidatos.find((c) => c.ruta === '.claude/skills/oc-review/SKILL.md').motivo
     expect(m).toContain('Skills')
   })
 
   it('never proposes anything under .agent/ — neither the declaration itself nor the acknowledgement, not even when a subdirectory matches the rules rule', () => {
-    const r = candidatosDeVara({
+    const r = yardstickCandidates({
       entradas: [
         '.agent/', '.agent/conventions.md', '.agent/conventions-ack.md',
         '.agent/rules/', '.agent/rules/x.md',
@@ -93,7 +93,7 @@ describe('candidatosDeVara', () => {
   })
 
   it('filters out the ones already declared', () => {
-    const r = candidatosDeVara({
+    const r = yardstickCandidates({
       entradas: ['AGENTS.md', 'CLAUDE.md'],
       declaradas: new Set(['AGENTS.md']),
     })
@@ -107,26 +107,26 @@ describe('candidatosDeVara', () => {
       'docs/conventions/rules/x.md', 'docs/conventions/b.md',
       '.claude/', '.claude/skills/', '.claude/skills/oc-review/', '.claude/skills/oc-review/SKILL.md',
     ]
-    const a = candidatosDeVara({ entradas })
-    const b = candidatosDeVara({ entradas: [...entradas].reverse() })
+    const a = yardstickCandidates({ entradas })
+    const b = yardstickCandidates({ entradas: [...entradas].reverse() })
     expect(a).toEqual(b)
     // docs/conventions/rules/x.md matches TWO directories that match the rule
     // (docs/conventions/ AND docs/conventions/rules/) — once only in the list.
     expect(rutas(a).filter((x) => x === 'docs/conventions/rules/x.md').length).toBe(1)
   })
 
-  it('omitidos counts what did not fit in MAX_POR_DIRECTORIO, and what is already declared does not count as omitted', () => {
+  it('omitidos counts what did not fit in MAX_PER_DIRECTORY, and what is already declared does not count as omitted', () => {
     const ficheros = Array.from({ length: 15 }, (_, i) => `docs/conventions/f${String(i + 1).padStart(2, '0')}.md`)
     const entradas = ['docs/', 'docs/conventions/', ...ficheros]
-    const sinDeclarar = candidatosDeVara({ entradas })
-    expect(rutas(sinDeclarar).length).toBe(MAX_POR_DIRECTORIO)
-    expect(sinDeclarar.omitidos).toBe(15 - MAX_POR_DIRECTORIO)
+    const sinDeclarar = yardstickCandidates({ entradas })
+    expect(rutas(sinDeclarar).length).toBe(MAX_PER_DIRECTORY)
+    expect(sinDeclarar.omitidos).toBe(15 - MAX_PER_DIRECTORY)
 
-    const conUnoDeclarado = candidatosDeVara({ entradas, declaradas: new Set(['docs/conventions/f01.md']) })
+    const conUnoDeclarado = yardstickCandidates({ entradas, declaradas: new Set(['docs/conventions/f01.md']) })
     expect(rutas(conUnoDeclarado)).not.toContain('docs/conventions/f01.md')
-    expect(rutas(conUnoDeclarado).length).toBe(MAX_POR_DIRECTORIO)
+    expect(rutas(conUnoDeclarado).length).toBe(MAX_PER_DIRECTORY)
     // 14 candidates are left after filtering the declared one; cut to 12 → 2 omitted
-    expect(conUnoDeclarado.omitidos).toBe(14 - MAX_POR_DIRECTORIO)
+    expect(conUnoDeclarado.omitidos).toBe(14 - MAX_PER_DIRECTORY)
   })
 
   it('MAX_CANDIDATOS cuts the global list once grouped, and counts the rest as omitted', () => {
@@ -134,18 +134,18 @@ describe('candidatosDeVara', () => {
       const n = String(i + 1).padStart(2, '0')
       return [`.claude/skills/s${n}/`, `.claude/skills/s${n}/SKILL.md`]
     }).flat()
-    const r = candidatosDeVara({ entradas: ['.claude/', '.claude/skills/', ...skills] })
+    const r = yardstickCandidates({ entradas: ['.claude/', '.claude/skills/', ...skills] })
     expect(r.candidatos.length).toBe(MAX_CANDIDATOS)
     expect(r.omitidos).toBe(50 - MAX_CANDIDATOS)
   })
 })
 
 // ---------------------------------------------------------------------------
-// declaradasEn
+// declaredIn
 // ---------------------------------------------------------------------------
-describe('declaradasEn', () => {
+describe('declaredIn', () => {
   it('extracts the tokens between backticks and normalises "./" and the trailing slash', () => {
-    const s = declaradasEn('- `AGENTS.md`\n- `./docs/CONTRIBUTING.md`\n- `docs/conventions/`\n- ``\n- prosa sin backticks')
+    const s = declaredIn('- `AGENTS.md`\n- `./docs/CONTRIBUTING.md`\n- `docs/conventions/`\n- ``\n- prosa sin backticks')
     expect(s.has('AGENTS.md')).toBe(true)
     expect(s.has('docs/CONTRIBUTING.md')).toBe(true)
     expect(s.has('docs/conventions')).toBe(true)
@@ -156,7 +156,7 @@ describe('declaradasEn', () => {
     const dir = tmp()
     execFileSync('bash', [initScript, dir], { encoding: 'utf8' })
     const contenido = readFileSync(join(dir, CONVENTIONS_FILE), 'utf8')
-    expect(declaradasEn(contenido).size).toBe(0)
+    expect(declaredIn(contenido).size).toBe(0)
   })
 })
 

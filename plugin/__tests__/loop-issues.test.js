@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { cargarIssues } from '../scripts/loop-issues.js'
+import { loadIssues } from '../scripts/loop-issues.js'
 
-describe('cargarIssues', () => {
+describe('loadIssues', () => {
   it('flattens the pages, discards PRs and normalises state_reason to upper case', () => {
     const gh = (args) => {
       const abierto = args.includes('state=open')
@@ -12,7 +12,7 @@ describe('cargarIssues', () => {
         { number: 99, body: 'soy un PR', pull_request: { url: 'x' } },
       ]])
     }
-    const { abiertos, cerrados } = cargarIssues({ repo: 'o/r', gh })
+    const { abiertos, cerrados } = loadIssues({ repo: 'o/r', gh })
     expect(abiertos.map((i) => i.number)).toEqual([1])
     expect(cerrados.map((i) => i.number)).toEqual([2])
     expect(cerrados[0].stateReason).toBe('COMPLETED')
@@ -21,7 +21,7 @@ describe('cargarIssues', () => {
   it('never passes --limit: the pagination is real', () => {
     const vistos = []
     const gh = (args) => { vistos.push(args.join(' ')); return '[[]]' }
-    cargarIssues({ repo: 'o/r', gh })
+    loadIssues({ repo: 'o/r', gh })
     for (const c of vistos) {
       expect(c).toContain('--paginate')
       expect(c).not.toContain('--limit')
@@ -30,7 +30,7 @@ describe('cargarIssues', () => {
 
   it('returns the reason when a read fails, naming which one — it neither throws nor exits the process', () => {
     const gh = (args) => { if (args.includes('state=open')) throw new Error('rate limit'); return '[[]]' }
-    const { motivos } = cargarIssues({ repo: 'o/r', gh })
+    const { motivos } = loadIssues({ repo: 'o/r', gh })
     expect(motivos).toHaveLength(1)
     expect(motivos[0]).toMatch(/abiertos.*rate limit/s)
   })
@@ -43,7 +43,7 @@ describe('cargarIssues', () => {
       if (args.includes('state=closed')) throw new Error('rate limit')
       return JSON.stringify([[{ number: 42, body: '', labels: [] }]])
     }
-    const { abiertos, cerrados, motivos } = cargarIssues({ repo: 'o/r', gh })
+    const { abiertos, cerrados, motivos } = loadIssues({ repo: 'o/r', gh })
     expect(abiertos.map((i) => i.number)).toEqual([42])
     expect(cerrados).toEqual([])
     expect(motivos).toHaveLength(1)
@@ -52,14 +52,14 @@ describe('cargarIssues', () => {
 
   it('when BOTH reads fail both are said, and neither degrades into "there are no issues"', () => {
     const gh = () => { throw new Error('sin red') }
-    const { abiertos, cerrados, motivos } = cargarIssues({ repo: 'o/r', gh })
+    const { abiertos, cerrados, motivos } = loadIssues({ repo: 'o/r', gh })
     expect(abiertos).toEqual([])
     expect(cerrados).toEqual([])
     expect(motivos.map((m) => /abiertos/.test(m) ? 'abiertos' : 'cerrados')).toEqual(['abiertos', 'cerrados'])
   })
 
   it('with both reads good, `motivos` comes back empty', () => {
-    const { motivos } = cargarIssues({ repo: 'o/r', gh: () => '[[]]' })
+    const { motivos } = loadIssues({ repo: 'o/r', gh: () => '[[]]' })
     expect(motivos).toEqual([])
   })
 })

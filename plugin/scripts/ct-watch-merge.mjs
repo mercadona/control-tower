@@ -125,7 +125,7 @@
 import { execFileSync } from 'node:child_process'
 import { buildCmuxSendArgv, buildCmuxSendKeyArgv } from './dispatch.js'
 import { findWorkspaceByCwd } from './cmux.js'
-import { arg, sleep, plazo, abrirLog } from './watch-common.js'
+import { arg, sleep, plazo, openLog } from './watch-common.js'
 
 // A 60-second tick and a 48-hour deadline. The two numbers are different from
 // the ones of the `-OK` watcher (30 s / 8 h) because the event is different:
@@ -149,7 +149,7 @@ if (!issue || !repo || !coordinatorCwd) {
 }
 
 const branch = `feat/${issue}`
-const { log, terminar } = abrirLog(logPath)
+const { log, terminar } = openLog(logPath)
 const pollMs = plazo('CT_WATCH_MERGE_POLL_MS', DEFAULT_POLL_MS)
 const timeoutMs = plazo('CT_WATCH_MERGE_TIMEOUT_MS', DEFAULT_TIMEOUT_MS)
 

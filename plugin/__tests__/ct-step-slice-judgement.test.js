@@ -6,7 +6,7 @@ import { writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { renderState } from '../scripts/state.js'
-import { SENAL_AUSENTE } from '../scripts/kickoff.js'
+import { SIGNAL_ABSENT } from '../scripts/kickoff.js'
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo, sliceRubric } from './fixtures/ct-step-harness.js'
 
@@ -96,7 +96,7 @@ describe('the judgement of the whole slice (§3.7-B)', () => {
   // it from the `senal:` field of SLICE.md (disk, with no agent in between —
   // the doctrine of §3.3) and pastes it into `## Señal`, ahead of the -U10 diff
   // where it would be buried (Task 8: the only thing ahead of it is `## Vara`).
-  // The SENAL_AUSENTE fallback covers a SLICE.md seeded by a plugin older than
+  // The SIGNAL_ABSENT fallback covers a SLICE.md seeded by a plugin older than
   // the column.
   const sembrarSenalEnSliceMd = (senal) => {
     const g = (...a) => execFileSync('git', a, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
@@ -118,14 +118,14 @@ describe('the judgement of the whole slice (§3.7-B)', () => {
     expect(paquete.indexOf('## Señal')).toBeLessThan(paquete.indexOf('## Commits'))
   })
 
-  it('with no senal: field in the SLICE.md, the section declares the absence with SENAL_AUSENTE', () => {
+  it('with no senal: field in the SLICE.md, the section declares the absence with SIGNAL_ABSENT', () => {
     // The montarRepo fixture seeds a SLICE.md WITHOUT a senal field — the case
     // of a plugin older than the column.
     enJuezDeSlice()
     ct('next')
     const paquete = readFileSync(join(repo, '.agent', 'run-7', 'slice-review.diff'), 'utf8')
     expect(paquete).toMatch(/## Señal/)
-    expect(paquete).toContain(SENAL_AUSENTE)
+    expect(paquete).toContain(SIGNAL_ABSENT)
     expect(paquete.indexOf('## Señal')).toBeLessThan(paquete.indexOf('## Commits'))
   })
 

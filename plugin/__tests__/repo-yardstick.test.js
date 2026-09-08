@@ -14,7 +14,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CONVENTIONS_FILE, seccionDeVara } from '../scripts/repo-yardstick.js'
+import { CONVENTIONS_FILE, yardstickSection } from '../scripts/repo-yardstick.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -24,23 +24,23 @@ describe('CONVENTIONS_FILE', () => {
   })
 })
 
-describe('seccionDeVara', () => {
+describe('yardstickSection', () => {
   it('with content, returns a block with the banner and the content verbatim', () => {
-    const seccion = seccionDeVara('# vara\n- `AGENTS.md`\n')
+    const seccion = yardstickSection('# vara\n- `AGENTS.md`\n')
     expect(seccion).toContain('leída directo de `.agent/conventions.md`')
     expect(seccion).toContain('# vara\n- `AGENTS.md`')
   })
 
   it('with null, returns the empty string', () => {
-    expect(seccionDeVara(null)).toBe('')
+    expect(yardstickSection(null)).toBe('')
   })
 
   it('with undefined, returns the empty string', () => {
-    expect(seccionDeVara(undefined)).toBe('')
+    expect(yardstickSection(undefined)).toBe('')
   })
 
   it('with a blank declaration, returns the empty string (empty is not a yardstick)', () => {
-    expect(seccionDeVara('  \n\n')).toBe('')
+    expect(yardstickSection('  \n\n')).toBe('')
   })
 })
 

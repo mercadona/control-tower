@@ -47,9 +47,9 @@
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { cargarIssues } from './loop-issues.js'
+import { loadIssues } from './loop-issues.js'
 import { liveSliceProcesses } from './liveness.js'
-import { construirEstado } from './loop-state.js'
+import { buildState } from './loop-state.js'
 import { mapGhIssue, filterMergedIssues, closedWithLiveStatus } from './gh-issue-map.js'
 import { parseRepoSlug } from './dispatch.js'
 
@@ -144,7 +144,7 @@ const git = (args) => execFileSync('git', args, { encoding: 'utf8', stdio: ['ign
 const motivos = []
 
 // ---------------------------------------------------------------- issues ---
-// `cargarIssues` ALWAYS attempts both reads and returns what went well
+// `loadIssues` ALWAYS attempts both reads and returns what went well
 // together with the reasons for what did not: a shared module does not decide
 // on its caller's behalf, and this caller wants to report what it does know
 // instead of aborting. It used to throw, and throwing when the second read
@@ -158,7 +158,7 @@ const motivos = []
 // behind, and with only the closed ones there is no knowing which one is in
 // flight — in either case, the crossing that decides "orphan" would manufacture
 // findings. What could be read still feeds its own block of the report.
-const { abiertos, cerrados, motivos: motivosIssues } = cargarIssues({ repo, gh })
+const { abiertos, cerrados, motivos: motivosIssues } = loadIssues({ repo, gh })
 const issuesLeidos = motivosIssues.length === 0
 motivos.push(...motivosIssues)
 
@@ -342,7 +342,7 @@ for (const { n } of enProgreso) {
 // contradicted itself in two consecutive lines —the warning named
 // `.worktrees/7` and the block said `worktree ✗` about #7— and it was the same
 // class of false assertion the `?` mark further down came to kill, coming in
-// through another door. It was unreachable while `cargarIssues` threw (with no
+// through another door. It was unreachable while `loadIssues` threw (with no
 // issues there was no in-flight block to print); the partial report made it
 // reachable.
 //
@@ -358,7 +358,7 @@ for (const { n } of enProgreso) {
 // to warn about —and the exit is still 1 all the same, because the reason for
 // the read that failed has been in `motivos` since the issues were read; that
 // is never lost.
-const estado = construirEstado({
+const estado = buildState({
   enProgreso,
   enRevision,
   mergeados,

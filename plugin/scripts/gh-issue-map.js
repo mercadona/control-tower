@@ -623,7 +623,7 @@ export function extractDeps(body) {
   return [...(body || '').matchAll(/merge-after `?#(\d+)/g)].map((m) => parseInt(m[1], 10))
 }
 
-// SENAL_HEADING (Slice 10): the section of the issue body that declares the
+// SIGNAL_HEADING (Slice 10): the section of the issue body that declares the
 // slice's observability signal (or its reasoned exemption `N/A — <reason>`).
 // The constant is BORN here and not in groom.js, even though groom is the one
 // that writes it: this file is the lower layer (groom.js already imports from
@@ -631,16 +631,16 @@ export function extractDeps(body) {
 // in groom.js would create a circular import. groom.js re-exports it so that
 // its consumers do not have to know where it was born, the same treatment as
 // its sister headings.
-export const SENAL_HEADING = '## Señal de observabilidad'
+export const SIGNAL_HEADING = '## Señal de observabilidad'
 
-// extractSenal (Slice 10): section-scoped with extractSectionContent — the
+// extractSignal (Slice 10): section-scoped with extractSectionContent — the
 // first appearance wins, the same stance as extractAc (locateSection always
 // returns the first copy; a duplicate is a badly resolved merge and the first
 // one is the one everybody compares against and obeys). It returns the trimmed
 // content verbatim, or null with no section — mapGhIssue additionally
 // collapses empty content to null (section present but blank = absent).
-export function extractSenal(body) {
-  return extractSectionContent(body, SENAL_HEADING)
+export function extractSignal(body) {
+  return extractSectionContent(body, SIGNAL_HEADING)
 }
 
 // DEPS_HEADING / extractDepsInSection: the SINGLE source of "which deps
@@ -859,8 +859,8 @@ export function mapGhIssue(i) {
     // body's "## Señal de observabilidad" section, first appearance wins (the
     // same stance as extractAc). Empty content = absent: `null` and not '' so
     // that buildStateSeed (kickoff.js) can declare the absence with
-    // SENAL_AUSENTE without telling two forms of "nothing" apart.
-    senal: extractSenal(body) || null,
+    // SIGNAL_ABSENT without telling two forms of "nothing" apart.
+    senal: extractSignal(body) || null,
     // e2eRuns (TASK 9): see extractE2eRuns above. It is what
     // kickoff.js#resolveE2eRunsForAgent consumes to seed the `e2e` field of
     // .agent/SLICE.md and to name the runs in the kickoff.

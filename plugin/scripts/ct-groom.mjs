@@ -17,10 +17,10 @@ import { readFileSync, realpathSync } from 'node:fs'
 import { resolve as resolvePath, relative as relativePath } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { analyzeSlicesTable, isNoValueCell } from './slices.js'
-// parseSenalCell (Slice 10): the SAME classifier with which groom.js decides
+// parseSignalCell (Slice 10): the SAME classifier with which groom.js decides
 // what it renders — here it is used to abort BEFORE any render or mutation when
 // a row declares an exemption with no reason.
-import { groomPlan, readEpicContext, readFrozenDecisions, EPIC_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, analyzeSpecFreeze, HYPOTHESIS_REASONS, parseSenalCell, LOOP_STATUS_LABELS } from './groom.js'
+import { groomPlan, readEpicContext, readFrozenDecisions, EPIC_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, analyzeSpecFreeze, HYPOTHESIS_REASONS, parseSignalCell, LOOP_STATUS_LABELS } from './groom.js'
 // F10: from "the path I was given in argv + --section" to an absolute URL
 // verified against GitHub (or to an honest reference with no link, saying why).
 // See scripts/spec-link.js for the three decisions it takes and why it takes
@@ -337,7 +337,7 @@ if (!report.tableFound) {
   // --dry-run.
   const senalSinRazonRows = []
   for (const s of report.slices) {
-    if (parseSenalCell(s.senal).kind === 'exencion-sin-razon') {
+    if (parseSignalCell(s.senal).kind === 'exencion-sin-razon') {
       senalSinRazonRows.push({ n: s.n, raw: s.senal })
     }
   }

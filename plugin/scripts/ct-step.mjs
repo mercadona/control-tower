@@ -66,7 +66,7 @@ import { extractTasks } from './plan-tasks.js'
 import { BranchReconciliation } from './branch-reconciliation.js'
 import { ReconcileOutcome, DiscardReason } from './reconcile-outcome.js'
 import { LOOP_ARTIFACT_PATTERNS, matchesPattern } from './scope.js'
-import { CONVENTIONS_FILE, seccionDeVara } from './repo-yardstick.js'
+import { CONVENTIONS_FILE, yardstickSection } from './repo-yardstick.js'
 import { PluginYardstick } from './plugin-yardstick.js'
 import { PluginManifest } from './plugin-manifest.js'
 import {
@@ -78,16 +78,16 @@ import {
   REVIEW_TOKEN_LABEL, reviewToken, reviewTokenLine, reviewTokenOf,
   readAdvice, ADVISOR_TOOLS, ADVICE_PACKAGE_SECTIONS,
 } from './step-contracts.js'
-import { metricRow, metricLine, metricsPath, planSha256, verdictMeasures, metricsRepoRelPath, briefVaraCtMeasures } from './run-metrics.js'
+import { metricRow, metricLine, metricsPath, planSha256, verdictMeasures, metricsRepoRelPath, briefCtYardstickMeasures } from './run-metrics.js'
 import { RoleBytes } from './role-bytes.js'
 // Slice 10: parseStateSafe reads the `senal:` field of the SLICE.md (see
 // senalDelSlice, below, for why the `epic:` regex will not do), and
-// SENAL_AUSENTE is the ONE constant with which the two writers of the channel
+// SIGNAL_ABSENT is the ONE constant with which the two writers of the channel
 // (buildStateSeed when seeding, this module when packaging the fallback)
 // declare that there is no signal — imported, not copied, so that they cannot
 // diverge.
 import { parseStateSafe } from './state.js'
-import { SENAL_AUSENTE } from './kickoff.js'
+import { SIGNAL_ABSENT } from './kickoff.js'
 import { SLICE_REL_PATH } from './state-paths.js'
 import { findClosingKeywords } from './closing-keywords.js'
 import { CtStepCommit } from './ct-step-commit.js'
@@ -407,7 +407,7 @@ const epicDelSlice = (() => {
 // slice judge half-finished without anybody seeing it. `parseStateSafe` already
 // exists in state.js and never throws; a SLICE.md without the field (seeded by
 // a plugin older than the column) comes out null and the package declares the
-// absence with SENAL_AUSENTE.
+// absence with SIGNAL_ABSENT.
 const senalDelSlice = (() => {
   const { meta } = parseStateSafe(readFileSync(join(repoRoot, '.agent', 'SLICE.md'), 'utf8'))
   return typeof meta.senal === 'string' && meta.senal.trim() ? meta.senal.trim() : null
@@ -690,7 +690,7 @@ function seccionVaraDelRepo(nombreDelArtefacto) {
   try {
     const ruta = join(repoRoot, CONVENTIONS_FILE)
     if (!existsSync(ruta)) return ''
-    return seccionDeVara(readFileSync(ruta, 'utf8'))
+    return yardstickSection(readFileSync(ruta, 'utf8'))
   } catch (e) {
     err(`aviso: ${CONVENTIONS_FILE} existe y no se ha podido leer (${String(e.message).trim()}): ${nombreDelArtefacto} sale sin la vara del repo.`)
     return ''
@@ -839,14 +839,14 @@ function escribirPaqueteDeSlice() {
   // Slice 10: the signal crosses the funnel HERE, read off disk (the `senal:`
   // field the dispatch seeded into the SLICE.md) and with no agent in between —
   // the same doctrine of §3.3 by which the repo's yardstick travels in the
-  // brief. The SENAL_AUSENTE fallback covers a SLICE.md seeded by a plugin older
+  // brief. The SIGNAL_ABSENT fallback covers a SLICE.md seeded by a plugin older
   // than the column: the absence is declared, not omitted, and its text is
   // exactly what the rubric reads as sin-vara.
   writeFileSync(paquete, [
     `# Slice review package: issue #${issue} — ${run.tasksTotal} tasks committed since ${run.baseSha.slice(0, 7)}`,
     reviewTokenLine(reviewToken(diff)),
     '', `## ${SECCION_VARA}`, `Ábrela con \`Read\`: \`${rutaSimplicity}\``,
-    '', `## ${SECCION_SENAL}`, senalDelSlice ?? SENAL_AUSENTE,
+    '', `## ${SECCION_SENAL}`, senalDelSlice ?? SIGNAL_ABSENT,
     '', `## ${SECCION_COMMITS}`, git(['log', '--reverse', '--format=%h %s', `${run.baseSha}..HEAD`]) || '',
     '', `## ${SECCION_FILES}`, git(['diff', '--stat', run.baseSha, 'HEAD']) || '',
     '', `## ${SECCION_DIFF}`, diff,
@@ -1051,7 +1051,7 @@ function rutaDelBrief() {
 
 function medidaDeBrief() {
   try {
-    return briefVaraCtMeasures(readFileSync(rutaDelBrief(), 'utf8'))
+    return briefCtYardstickMeasures(readFileSync(rutaDelBrief(), 'utf8'))
   } catch {
     return { brief_vara_ct_docs: null, brief_bytes: null }
   }

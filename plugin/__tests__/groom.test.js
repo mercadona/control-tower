@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildIssueTitle, buildLabels, buildIssueBody, groomPlan, renderDepsContent, renderAcContent, DEPS_ORDER_NOTE, parseSenalCell, renderSenalContent, SENAL_HEADING } from '../scripts/groom.js'
+import { buildIssueTitle, buildLabels, buildIssueBody, groomPlan, renderDepsContent, renderAcContent, DEPS_ORDER_NOTE, parseSignalCell, renderSignalContent, SIGNAL_HEADING } from '../scripts/groom.js'
 
 // F3: the issue title comes from `slice.name` (the spec's "Slice" column),
 // not from `slice.entrega` (the "Entrega" column) — buildIssueTitle composed
@@ -197,7 +197,7 @@ describe('pure groom', () => {
   })
 })
 
-// Slice 10 — parseSenalCell is THE classifier of the `Señal` cell: groom
+// Slice 10 — parseSignalCell is THE classifier of the `Señal` cell: groom
 // (validation + render), kickoff (the conditional line) and, in prose, the
 // slice judge's rubric all share it. A single classifier so that "what an
 // exemption is" cannot diverge between whoever validates it and whoever
@@ -205,52 +205,52 @@ describe('pure groom', () => {
 // repo already has for "does not apply, and here is why"); an exemption
 // WITHOUT a reason is an undeclared signal disguised as a decision, and it is
 // told apart by its own kind.
-describe('parseSenalCell / renderSenalContent — the signal and its exemption (Slice 10)', () => {
+describe('parseSignalCell / renderSignalContent — the signal and its exemption (Slice 10)', () => {
   it('a declared signal: kind senal with the text verbatim', () => {
-    expect(parseSenalCell('métrica `backfill_progress` con label `estado`'))
+    expect(parseSignalCell('métrica `backfill_progress` con label `estado`'))
       .toEqual({ kind: 'senal', text: 'métrica `backfill_progress` con label `estado`' })
     // Trim only — the text is neither re-rendered nor normalised.
-    expect(parseSenalCell('  log de arranque  ')).toEqual({ kind: 'senal', text: 'log de arranque' })
+    expect(parseSignalCell('  log de arranque  ')).toEqual({ kind: 'senal', text: 'log de arranque' })
   })
   it('N/A — <razón> is a reasoned exemption; the text travels verbatim', () => {
-    expect(parseSenalCell('N/A — pantalla sin telemetría nueva que prometer'))
+    expect(parseSignalCell('N/A — pantalla sin telemetría nueva que prometer'))
       .toEqual({ kind: 'exencion', text: 'N/A — pantalla sin telemetría nueva que prometer' })
     // Case-insensitive and with the language's other separators: the reason is
     // whatever is left after removing N/A and the leading separators.
-    expect(parseSenalCell('n/a: refactor puro').kind).toBe('exencion')
-    expect(parseSenalCell('N/A - sin efecto observable').kind).toBe('exencion')
+    expect(parseSignalCell('n/a: refactor puro').kind).toBe('exencion')
+    expect(parseSignalCell('N/A - sin efecto observable').kind).toBe('exencion')
     // The text keeps its `N/A —` inside it — the consumer (the judge) tells it
     // apart by the prefix alone, without re-parsing.
-    expect(parseSenalCell('n/a: refactor puro').text).toBe('n/a: refactor puro')
+    expect(parseSignalCell('n/a: refactor puro').text).toBe('n/a: refactor puro')
   })
   it('a bare N/A (or a separator with no reason behind it) is exencion-sin-razon', () => {
-    expect(parseSenalCell('N/A').kind).toBe('exencion-sin-razon')
-    expect(parseSenalCell('n/a').kind).toBe('exencion-sin-razon')
-    expect(parseSenalCell('N/A —').kind).toBe('exencion-sin-razon')
-    expect(parseSenalCell('N/A -').kind).toBe('exencion-sin-razon')
-    expect(parseSenalCell('N/A:').kind).toBe('exencion-sin-razon')
-    expect(parseSenalCell('N/A —  ').kind).toBe('exencion-sin-razon')
+    expect(parseSignalCell('N/A').kind).toBe('exencion-sin-razon')
+    expect(parseSignalCell('n/a').kind).toBe('exencion-sin-razon')
+    expect(parseSignalCell('N/A —').kind).toBe('exencion-sin-razon')
+    expect(parseSignalCell('N/A -').kind).toBe('exencion-sin-razon')
+    expect(parseSignalCell('N/A:').kind).toBe('exencion-sin-razon')
+    expect(parseSignalCell('N/A —  ').kind).toBe('exencion-sin-razon')
   })
   it('an empty cell, dashes and null are ninguna — never an exemption', () => {
-    expect(parseSenalCell(null).kind).toBe('ninguna')
-    expect(parseSenalCell(undefined).kind).toBe('ninguna')
-    expect(parseSenalCell('').kind).toBe('ninguna')
-    expect(parseSenalCell('   ').kind).toBe('ninguna')
+    expect(parseSignalCell(null).kind).toBe('ninguna')
+    expect(parseSignalCell(undefined).kind).toBe('ninguna')
+    expect(parseSignalCell('').kind).toBe('ninguna')
+    expect(parseSignalCell('   ').kind).toBe('ninguna')
     for (const marker of ['-', '–', '—', '―', '−', '--']) {
-      expect(parseSenalCell(marker).kind).toBe('ninguna')
+      expect(parseSignalCell(marker).kind).toBe('ninguna')
     }
     // "N/Algo" is not the N/A family: \b demands the word boundary.
-    expect(parseSenalCell('N/Algo que medir').kind).toBe('senal')
+    expect(parseSignalCell('N/Algo que medir').kind).toBe('senal')
   })
-  it('renderSenalContent: null when nothing is declared; verbatim text with a signal or an exemption', () => {
-    expect(renderSenalContent({ ...SLICE, senal: '' })).toBe(null)
-    expect(renderSenalContent({ ...SLICE, senal: '–' })).toBe(null)
+  it('renderSignalContent: null when nothing is declared; verbatim text with a signal or an exemption', () => {
+    expect(renderSignalContent({ ...SLICE, senal: '' })).toBe(null)
+    expect(renderSignalContent({ ...SLICE, senal: '–' })).toBe(null)
     // An exemption with no reason → null: this function is pure and does not
     // throw — the wrapper (ct-groom.mjs) aborts BEFORE reaching render, with a
     // hardError.
-    expect(renderSenalContent({ ...SLICE, senal: 'N/A' })).toBe(null)
-    expect(renderSenalContent({ ...SLICE, senal: 'métrica x' })).toBe('métrica x')
-    expect(renderSenalContent({ ...SLICE, senal: 'N/A — razón real' })).toBe('N/A — razón real')
+    expect(renderSignalContent({ ...SLICE, senal: 'N/A' })).toBe(null)
+    expect(renderSignalContent({ ...SLICE, senal: 'métrica x' })).toBe('métrica x')
+    expect(renderSignalContent({ ...SLICE, senal: 'N/A — razón real' })).toBe('N/A — razón real')
   })
 })
 
@@ -262,14 +262,14 @@ describe('parseSenalCell / renderSenalContent — the signal and its exemption (
 describe('buildIssueBody — the signal section (Slice 10)', () => {
   it('with a declared signal, "## Señal de observabilidad" goes after the AC and before "## Dependencias"', () => {
     const b = buildIssueBody({ ...SLICE, senal: 'métrica `x` con label `y`' }, SPEC_REF)
-    expect(b).toContain(SENAL_HEADING)
+    expect(b).toContain(SIGNAL_HEADING)
     expect(b).toContain('métrica `x` con label `y`')
-    expect(b.indexOf('## Acceptance criteria')).toBeLessThan(b.indexOf(SENAL_HEADING))
-    expect(b.indexOf(SENAL_HEADING)).toBeLessThan(b.indexOf('## Dependencias'))
+    expect(b.indexOf('## Acceptance criteria')).toBeLessThan(b.indexOf(SIGNAL_HEADING))
+    expect(b.indexOf(SIGNAL_HEADING)).toBeLessThan(b.indexOf('## Dependencias'))
   })
   it('with nothing declared the section is not emitted', () => {
-    expect(buildIssueBody(SLICE, SPEC_REF)).not.toContain(SENAL_HEADING)
-    expect(buildIssueBody({ ...SLICE, senal: '–' }, SPEC_REF)).not.toContain(SENAL_HEADING)
+    expect(buildIssueBody(SLICE, SPEC_REF)).not.toContain(SIGNAL_HEADING)
+    expect(buildIssueBody({ ...SLICE, senal: '–' }, SPEC_REF)).not.toContain(SIGNAL_HEADING)
     // The reasoned exemption IS emitted, verbatim — it is not "nothing declared".
     expect(buildIssueBody({ ...SLICE, senal: 'N/A — sin telemetría nueva' }, SPEC_REF))
       .toContain('N/A — sin telemetría nueva')

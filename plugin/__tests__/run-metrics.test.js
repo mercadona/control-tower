@@ -15,7 +15,7 @@ import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   metricRow, metricLine, metricsPath, planSha256, verdictMeasures, IDENTITY_FIELDS, aggregateVerdictMeasures,
-  metricsRepoRelPath, METRICS_REPO_DIR, briefVaraCtMeasures, aggregateBriefMeasures,
+  metricsRepoRelPath, METRICS_REPO_DIR, briefCtYardstickMeasures, aggregateBriefMeasures,
   aggregateRoleBytesMeasures,
 } from '../scripts/run-metrics.js'
 import { PluginYardstick } from '../scripts/plugin-yardstick.js'
@@ -575,13 +575,13 @@ describe('the aggregate of what the judge left written (§3.4)', () => {
 
 // ---------------------------------------------------------------------------
 // MEASURE 2: whether the yardstick reached the brief, and how much it weighed.
-// `briefVaraCtMeasures` is PURE (it does not read disk: it receives the content
+// `briefCtYardstickMeasures` is PURE (it does not read disk: it receives the content
 // already read) and counts `## Vara de ct: conventions/` headings — exactly what
 // `PluginYardstick.composeSection` (scripts/plugin-yardstick.js) writes per
 // document — instead of comparing against `PluginYardstick.FILES.length`, so
 // that a fifth document tomorrow also counts without touching this function.
 // ---------------------------------------------------------------------------
-describe('briefVaraCtMeasures — how many documents the brief carries and how much it weighs', () => {
+describe('briefCtYardstickMeasures — how many documents the brief carries and how much it weighs', () => {
   const brief = (docs) => [
     '# Task 1',
     '',
@@ -592,21 +592,21 @@ describe('briefVaraCtMeasures — how many documents the brief carries and how m
 
   it('it counts the four headings of today', () => {
     const contenido = brief(['code.md', 'decisions.md', 'architecture.md', 'testing.md'])
-    expect(briefVaraCtMeasures(contenido).brief_vara_ct_docs).toBe(4)
+    expect(briefCtYardstickMeasures(contenido).brief_vara_ct_docs).toBe(4)
   })
 
   it("it does not depend on today's names: a fifth document is counted too", () => {
     const contenido = brief(['code.md', 'decisions.md', 'architecture.md', 'testing.md', 'naming.md'])
-    expect(briefVaraCtMeasures(contenido).brief_vara_ct_docs).toBe(5)
+    expect(briefCtYardstickMeasures(contenido).brief_vara_ct_docs).toBe(5)
   })
 
   it('a brief with no heading at all counts zero, and it is a real zero: it could be measured', () => {
-    expect(briefVaraCtMeasures('# Task 1\n\nsin vara de ct por aquí\n').brief_vara_ct_docs).toBe(0)
+    expect(briefCtYardstickMeasures('# Task 1\n\nsin vara de ct por aquí\n').brief_vara_ct_docs).toBe(0)
   })
 
   it('it weighs the brief in bytes, not in characters — real UTF-8', () => {
     const conAcentos = '## Vara de ct: conventions/code.md\ncondición, año, ñ\n'
-    const { brief_bytes: bytes } = briefVaraCtMeasures(conAcentos)
+    const { brief_bytes: bytes } = briefCtYardstickMeasures(conAcentos)
     expect(bytes).toBe(Buffer.byteLength(conAcentos, 'utf8'))
     expect(bytes).toBeGreaterThan(conAcentos.length) // the accents weigh more than 1 byte
   })
@@ -886,7 +886,7 @@ describe('the telemetry of a real step', () => {
     // The plugin's conventions/ documents, counted by heading and not by
     // comparing against PluginYardstick.FILES.length. That is why neither the
     // fifth (defects.md, when code.md was split) nor the ones that arrived
-    // afterwards forced anyone to touch briefVaraCtMeasures.
+    // afterwards forced anyone to touch briefCtYardstickMeasures.
     // All eight: the ct yardstick is no longer filtered by whatever `**Files:**`
     // declares, so the brief carries the whole list whether or not the task
     // creates a module.

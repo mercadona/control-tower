@@ -1245,7 +1245,7 @@ describe('analyzeSlicesTable — "Acepta": an escaped comma (\\,) does NOT chop 
 // Slice 10 — the `Señal` column: the observability signal the slice promises.
 // Like `Gate`, the parser hands over the RAW cell (trimmed) without resolving
 // anything: telling "a declared signal" apart from "a reasoned exemption
-// N/A — <reason>" and from "not declared" is groom.js#parseSenalCell's business
+// N/A — <reason>" and from "not declared" is groom.js#parseSignalCell's business
 // — this parser knows nothing about signals, just as it knows nothing about
 // gates or labels. Unlike `Gate`, the column's absence DOES go into
 // missingOptionalColumns: its consequence is measurable (the slice judge

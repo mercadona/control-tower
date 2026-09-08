@@ -1,4 +1,4 @@
-// cargarIssues: the paginated read of open and closed issues, extracted out
+// loadIssues: the paginated read of open and closed issues, extracted out
 // of loadIssues (ct-next.mjs) so that a shared module does not end up
 // paginating differently depending on who calls it — that drift is the class
 // of bug this module exists to kill.
@@ -28,7 +28,7 @@
 // report the partial picture uses the arrays all the same.
 import { flattenIssuePages, realIssuesOnly } from './gh-issues.js'
 
-export function cargarIssues({ repo, gh }) {
+export function loadIssues({ repo, gh }) {
   // A failed read leaves its array EMPTY and its reason in the list. Never the
   // other way round: an empty array with no reason would mean "there are no
   // issues", which is the class of silent degradation this whole module

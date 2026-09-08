@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractAc, extractDeps, extractOrder, extractSpecLink, normalizeSpecLink, specTarget, locateSection, countHeadingLines, detectLineEnding, normalizeToLF, mapGhIssue, filterMergedIssues, buildOrderIndex, buildDispatchInput, AC_HEADING_FORMS, NO_MILESTONE_KEY, epicKeyOf, extractDepsInSection, extractStrayDeps, extractE2eRuns, extractSenal, SENAL_HEADING } from '../scripts/gh-issue-map.js'
+import { extractAc, extractDeps, extractOrder, extractSpecLink, normalizeSpecLink, specTarget, locateSection, countHeadingLines, detectLineEnding, normalizeToLF, mapGhIssue, filterMergedIssues, buildOrderIndex, buildDispatchInput, AC_HEADING_FORMS, NO_MILESTONE_KEY, epicKeyOf, extractDepsInSection, extractStrayDeps, extractE2eRuns, extractSignal, SIGNAL_HEADING } from '../scripts/gh-issue-map.js'
 import { selectNext } from '../scripts/dispatch.js'
 import { buildIssueBody } from '../scripts/groom.js'
 
@@ -1487,26 +1487,26 @@ describe('specTarget', () => {
   })
 })
 
-// Slice 10 — extractSenal: the body's "## Señal de observabilidad" section,
+// Slice 10 — extractSignal: the body's "## Señal de observabilidad" section,
 // section-scoped with extractSectionContent and first occurrence wins — the same
 // stance as extractAc. It is the first link of the end-to-end program channel
 // (issue → SLICE.md → the slice judge's package): no agent decides to copy the
 // signal at any point.
-describe('extractSenal — the body\u2019s signal (Slice 10)', () => {
+describe('extractSignal — the body\u2019s signal (Slice 10)', () => {
   it('it reads the content of "## Señal de observabilidad" and returns it verbatim', () => {
     const body = '## Señal de observabilidad\nmétrica `backfill_progress` con label `estado`\n\n## Dependencias\n- merge-after #1'
-    expect(extractSenal(body)).toBe('métrica `backfill_progress` con label `estado`')
+    expect(extractSignal(body)).toBe('métrica `backfill_progress` con label `estado`')
     // The reasoned exemption travels verbatim too — the consumer tells it apart
     // only by its N/A prefix.
-    const exenta = `${SENAL_HEADING}\nN/A — pantalla sin telemetría nueva\n\n## Gates\nx`
-    expect(extractSenal(exenta)).toBe('N/A — pantalla sin telemetría nueva')
+    const exenta = `${SIGNAL_HEADING}\nN/A — pantalla sin telemetría nueva\n\n## Gates\nx`
+    expect(extractSignal(exenta)).toBe('N/A — pantalla sin telemetría nueva')
   })
   it('with no section it returns null; an empty section counts as absent in mapGhIssue', () => {
-    expect(extractSenal('body sin esa sección')).toBe(null)
-    expect(extractSenal('')).toBe(null)
-    // A section that is present but empty: extractSenal returns '' (trimmed
+    expect(extractSignal('body sin esa sección')).toBe(null)
+    expect(extractSignal('')).toBe(null)
+    // A section that is present but empty: extractSignal returns '' (trimmed
     // content) and mapGhIssue collapses it to null — empty content = absent.
-    const vacia = `${SENAL_HEADING}\n\n## Dependencias\n- merge-after #1\n\n<!-- ct-order:7 -->`
+    const vacia = `${SIGNAL_HEADING}\n\n## Dependencias\n- merge-after #1\n\n<!-- ct-order:7 -->`
     const mapped = mapGhIssue({ number: 9, title: '#9 x', labels: [], body: vacia })
     expect(mapped.senal).toBe(null)
   })

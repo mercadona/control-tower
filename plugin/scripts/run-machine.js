@@ -223,7 +223,7 @@ function trasElJuez(run, outcome, budgets) {
       // is asked with the budget in front of it instead of with a typed `2`:
       // whoever raises `judgeRetries` to three moves the adviser to the third
       // veto without touching this line.
-      return esElUltimoReintentoDeVeto(run, budgets)
+      return isTheLastVetoRetry(run, budgets)
         ? abierto(run, { step: STEPS.ADVISE, judgeRetries: run.judgeRetries + 1 })
         : abierto(run, { step: STEPS.IMPLEMENT, judgeRetries: run.judgeRetries + 1 })
     // The difference between a judge that VETOES and a judge that GRUMBLES: a
@@ -346,7 +346,7 @@ function trasReconciliar(run, outcome, budgets) {
 // the veto's message who gets dispatched next, and the table asks it to decide
 // the step. It is ONE decision, and the two halves have to answer the same
 // thing or the verb announces one thing and the machine does another.
-export function esElUltimoReintentoDeVeto(run, budgets = DEFAULT_BUDGETS) {
+export function isTheLastVetoRetry(run, budgets = DEFAULT_BUDGETS) {
   return run.judgeRetries + 1 === budgets.judgeRetries
 }
 

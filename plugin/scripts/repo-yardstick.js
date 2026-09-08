@@ -30,7 +30,7 @@
 // the six files that cite it.
 export const CONVENTIONS_FILE = '.agent/conventions.md'
 
-// seccionDeVara: the section `ct-step.mjs` pastes at the end of every task
+// yardstickSection: the section `ct-step.mjs` pastes at the end of every task
 // brief, or `''` if there is nothing to inject.
 //
 // `contenido` is what is in `.agent/conventions.md` TODAY (or null/undefined if
@@ -40,7 +40,7 @@ export const CONVENTIONS_FILE = '.agent/conventions.md'
 // measured only against ct's yardstick (agents/ct-judge.md, item `patrones`:
 // that item is never `sin-vara`, because ct's travels with the plugin); the
 // repo's, here, adds nothing (F14: absence is measured, not filled in).
-export function seccionDeVara(contenido) {
+export function yardstickSection(contenido) {
   if (contenido == null || contenido.trim() === '') return ''
   const cuerpo = contenido.endsWith('\n') ? contenido : `${contenido}\n`
   return `\n---\n\n> La vara del REPO, leída directo de \`.agent/conventions.md\` por el programa —\n> ningún agente la escribió en este brief y el plan no puede quitarla. Sus\n> documentos de reglas son vara igual que los de §3: si §3 omitió uno, se mide\n> también contra él.\n\n${cuerpo}`
@@ -66,11 +66,11 @@ export function seccionDeVara(contenido) {
 export const CANDIDATOS_HEADER =
   'Candidatos a la vara de este repo (barrido determinista — PROPONE, no declara):'
 export const MAX_CANDIDATOS = 40
-export const MAX_POR_DIRECTORIO = 12
+export const MAX_PER_DIRECTORY = 12
 
 // Repo guides, AT THE ROOT only: a `docs/AGENTS.md` is not the guide tools and
 // humans look for by convention at the repo's root, so it does not match here
-// (candidatosDeVara only applies this rule to paths with no `/`).
+// (yardstickCandidates only applies this rule to paths with no `/`).
 const RAIZ_RE = /^(CLAUDE|AGENTS|CONTRIBUTING|CONVENTIONS)(\.md|\.markdown|\.rst|\.txt)?$/i
 // Applied to the directory's BASENAME (without the trailing slash).
 const DIR_REGLAS_RE = /(conventions?|convenciones|rules|reglas)/i
@@ -84,9 +84,9 @@ const DEL_LOOP_RE = /^\.agent\//
 // Deterministic and independent of the locale of the machine that runs it.
 const orden = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
 
-// candidatosDeVara: takes the flat result of a walk over the repo
+// yardstickCandidates: takes the flat result of a walk over the repo
 // (`entradas`, `repo-walk.js` format: directories with a trailing `/`) and the
-// set of already declared paths (`declaradasEn`), and returns
+// set of already declared paths (`declaredIn`), and returns
 // `{ candidatos: [{ ruta, motivo }], omitidos }`.
 //
 // Three groups, each sorted with `orden` so that the result is deterministic
@@ -96,13 +96,13 @@ const orden = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
 //      "convention(s)|convenciones|rules|reglas" (DIR_REGLAS_RE);
 //   3. `SKILL.md` of project skills (SKILL_PROYECTO_RE).
 //
-// `MAX_POR_DIRECTORIO` caps each directory of group 2 separately —a
+// `MAX_PER_DIRECTORY` caps each directory of group 2 separately —a
 // `docs/conventions/` with a hundred files must not drown the other two
 // groups—, and `MAX_CANDIDATOS` caps the whole list once grouped and sorted.
 // Whatever does not fit under either cap counts in `omitidos`; whatever is
 // discarded for being the loop's or for being declared already does NOT count
 // there: it has not been kept quiet, it was simply not up for proposing.
-export function candidatosDeVara({ entradas = [], declaradas = new Set() } = {}) {
+export function yardstickCandidates({ entradas = [], declaradas = new Set() } = {}) {
   const vistos = new Set()
   let omitidos = 0
 
@@ -134,8 +134,8 @@ export function candidatosDeVara({ entradas = [], declaradas = new Set() } = {})
       .filter((f) => f.startsWith(dir) && TEXTO_RE.test(f))
       .sort(orden)
       .filter((f) => admite(f))
-    const admitidos = candidatosDelDir.slice(0, MAX_POR_DIRECTORIO)
-    omitidos += Math.max(0, candidatosDelDir.length - MAX_POR_DIRECTORIO)
+    const admitidos = candidatosDelDir.slice(0, MAX_PER_DIRECTORY)
+    omitidos += Math.max(0, candidatosDelDir.length - MAX_PER_DIRECTORY)
     for (const ruta of admitidos) {
       marcar(ruta)
       grupoDirectorios.push({ ruta, motivo: `dentro de \`${dir}\`, que casa convention|rules` })
@@ -160,12 +160,12 @@ export function candidatosDeVara({ entradas = [], declaradas = new Set() } = {})
   return { candidatos, omitidos }
 }
 
-// declaradasEn: the set of paths `.agent/conventions.md` ALREADY declares
+// declaredIn: the set of paths `.agent/conventions.md` ALREADY declares
 // today — everything appearing between single backticks, normalised (no leading
 // `./` and no trailing `/`).
 //
 // The seed `ct-init.sh` sows carries no backtick at all, so a freshly
-// bootstrapped repo returns the empty set and `candidatosDeVara` proposes
+// bootstrapped repo returns the empty set and `yardstickCandidates` proposes
 // EVERYTHING it finds — that is the intended behaviour (F14: absence is
 // measured, not filled in; here, "nothing declared" must not be read as
 // "nothing to propose"). And a declared DIRECTORY (e.g. `docs/conventions/`)
@@ -173,7 +173,7 @@ export function candidatosDeVara({ entradas = [], declaradas = new Set() } = {})
 // going on proposing the files inside is the correct thing, not the noise — the
 // human will decide whether that declaration already covers the directory or
 // whether the files need declaring one by one.
-export function declaradasEn(contenido) {
+export function declaredIn(contenido) {
   const out = new Set()
   for (const m of String(contenido ?? '').matchAll(/`([^`\n]+)`/g)) {
     let token = m[1].trim()
@@ -269,7 +269,7 @@ export function pareceEsqueleto(contenido) {
 
 // formatCandidatos: the block of text ready for `ct-init.sh`'s stdout, or `''`
 // if there is nothing to propose (silence = nothing to propose; see the comment
-// on `declaradasEn` about why that is benign).
+// on `declaredIn` about why that is benign).
 //
 // Two-space indentation in the detail, just like `formatFindings` in
 // `conventions.js`. Deliberately WITHOUT the words "aviso", "ATENCIÓN" or

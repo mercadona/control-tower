@@ -9,14 +9,14 @@ import { resolveGatesForAgent, renderGateKickoffLines, resolveE2e } from './gate
 // changes there are no messages left sending the agent to a file that is no
 // longer its own (which is exactly the defect this round fixes).
 import { SLICE_REL_PATH } from './state-paths.js'
-// parseSenalCell (Slice 10): the SAME classifier the groom uses — one single
+// parseSignalCell (Slice 10): the SAME classifier the groom uses — one single
 // discriminator of "declared signal / exemption / nothing" for groom, kickoff
 // and (in prose) the slice judge's rubric, one that cannot diverge between
 // whoever validates the cell and whoever announces the line.
-import { EPIC_CONTEXT_HEADING, INHERITED_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, parseSenalCell } from './groom.js'
+import { EPIC_CONTEXT_HEADING, INHERITED_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, parseSignalCell } from './groom.js'
 import { NO_MILESTONE_KEY } from './gh-issue-map.js'
 
-// SENAL_AUSENTE (Slice 10): the value of the `senal:` field when the issue does
+// SIGNAL_ABSENT (Slice 10): the value of the `senal:` field when the issue does
 // not carry the "## Señal de observabilidad" section — the absence is DECLARED,
 // not omitted (the same criterion as `gates:`/`blocked:`: a field that only
 // exists when there is something is a field nobody writes when they need it).
@@ -25,7 +25,7 @@ import { NO_MILESTONE_KEY } from './gh-issue-map.js'
 // predating the column), so that the two writers cannot diverge. Its opening
 // "(sin señal declarada" is literally what ct-slice-judge's rubric recognises
 // as sin-vara.
-export const SENAL_AUSENTE = '(sin señal declarada — el issue no trae la sección "## Señal de observabilidad"; el juez de slice mide su ítem observabilidad como sin-vara)'
+export const SIGNAL_ABSENT = '(sin señal declarada — el issue no trae la sección "## Señal de observabilidad"; el juez de slice mide su ítem observabilidad como sin-vara)'
 
 // AGENT_BIN — the name of the agent's executable that gets typed into the cmux
 // session. ONE, with no accounts: F35 took away ACCOUNT_MAP and the whole
@@ -234,9 +234,9 @@ export function renderKickoff(slice, { repo, dispatchCheckPath, ctStepPath, conv
     // implementer. Conditional like the gate lines: with a reasoned exemption
     // or with nothing declared, NO line at all (nothing to demand; the silence
     // when there is nothing to say is what keeps the lines that do come out
-    // useful). The discriminator is parseSenalCell, the SAME one the groom uses
+    // useful). The discriminator is parseSignalCell, the SAME one the groom uses
     // — not a second reading of the cell that could diverge.
-    parseSenalCell(slice.senal || '').kind === 'senal'
+    parseSignalCell(slice.senal || '').kind === 'senal'
       ? 'Este slice declara una SEÑAL DE OBSERVABILIDAD (sección "## Señal de observabilidad" del issue): lo que esa señal promete tiene que emitirlo el código de PRODUCCIÓN de este slice, instrumentado como ya instrumenta este repo y con todas sus labels acotadas — el juez del slice entero lo comprueba contra el diff acumulado antes del PR.'
       : '',
     // F32 — the two-level model (§4.3 of the handoff): epic level = CT, slice
@@ -360,10 +360,10 @@ function renderStateGates(gates) {
 // renderStateSenal (Slice 10): the value of the `senal:` field — the text of
 // the issue's section, verbatim (a signal, or an `N/A — <razón>` exemption, as
 // it is: the reader tells the exemption apart by its prefix alone), or
-// SENAL_AUSENTE when the issue declares nothing. Never a gap: the absence is
-// declared, not omitted — see SENAL_AUSENTE's comment.
+// SIGNAL_ABSENT when the issue declares nothing. Never a gap: the absence is
+// declared, not omitted — see SIGNAL_ABSENT's comment.
 function renderStateSenal(senal) {
-  return (senal || '').trim() || SENAL_AUSENTE
+  return (senal || '').trim() || SIGNAL_ABSENT
 }
 
 // #96 — `baseline`: the result of `Baseline.measure` (scripts/baseline.js) over
@@ -418,7 +418,7 @@ export function buildStateSeed(slice, { branch, base, baseSha = '', baseline = B
       // senal (Slice 10) — THE SAME ARGUMENT AS `gates` (F21): what has to
       // survive a re-hydration is a FIELD, not a sentence inside a prompt that
       // is lost with its session's context. It is ALWAYS seeded (the issue's
-      // text verbatim, or SENAL_AUSENTE — the absence is declared, not
+      // text verbatim, or SIGNAL_ABSENT — the absence is declared, not
       // omitted). Its readers: ct-step, which pastes it as the first section of
       // the slice judge's package —read from disk, with no agent in between,
       // §3.3's doctrine— and the agent itself when re-hydrating.

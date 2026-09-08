@@ -393,14 +393,14 @@ export function aggregateVerdictMeasures(texto) {
 // fifth document (`defects.md`, on splitting `code.md`) be counted without
 // touching this function. And so it was verified: it did not have to be
 // touched.
-export function briefVaraCtMeasures(contenidoBrief) {
+export function briefCtYardstickMeasures(contenidoBrief) {
   const texto = String(contenidoBrief ?? '')
   const docs = (texto.match(/^## Vara de ct: conventions\//gm) || []).length
   return { brief_vara_ct_docs: docs, brief_bytes: Buffer.byteLength(texto, 'utf8') }
 }
 
 // ---------------------------------------------------------------------------
-// THE READER OF WHAT `briefVaraCtMeasures` WRITES in the row of the `implement`
+// THE READER OF WHAT `briefCtYardstickMeasures` WRITES in the row of the `implement`
 // step. It is a SIBLING aggregator of `aggregateVerdictMeasures`, not the same
 // one: those rows carry no `ruling` —`ct-step.mjs` writes them in `verboReport`,
 // before any verdict exists— so the verdict aggregator ignores them by design

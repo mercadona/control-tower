@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { renderKickoff, buildStateSeed, ADDENDA, SENAL_AUSENTE } from '../scripts/kickoff.js'
+import { renderKickoff, buildStateSeed, ADDENDA, SIGNAL_ABSENT } from '../scripts/kickoff.js'
 import { BaselineOutcome, BaselineResult } from '../scripts/baseline.js'
 import { parseState } from '../scripts/state.js'
 
@@ -325,7 +325,7 @@ describe('renderKickoff — F32, the two-level model (its own skills, plan first
 })
 
 // Slice 10 — the signal in the dispatch. The `senal:` field is ALWAYS seeded
-// (with the verbatim text of the issue, or with SENAL_AUSENTE — the absence is
+// (with the verbatim text of the issue, or with SIGNAL_ABSENT — the absence is
 // declared, not omitted, the same criterion as gates:/blocked:), because its
 // reader is ct-step, which pastes it as the first section of the slice judge's
 // package with no agent in between. The kickoff's line, by contrast, is
@@ -342,17 +342,17 @@ describe('the signal in the dispatch (Slice 10)', () => {
     expect(meta.senal).toBe('métrica `backfill_progress` con label `estado`')
   })
 
-  it('buildStateSeed declares the absence with SENAL_AUSENTE when the issue carries no section', () => {
+  it('buildStateSeed declares the absence with SIGNAL_ABSENT when the issue carries no section', () => {
     for (const sinSenal of [{ ...SLICE }, { ...SLICE, senal: null }, { ...SLICE, senal: '' }, { ...SLICE, senal: '  ' }]) {
       const { meta } = parseState(buildStateSeed(sinSenal, { branch: 'feat/7', base: 'main' }))
-      expect(meta.senal).toBe(SENAL_AUSENTE)
+      expect(meta.senal).toBe(SIGNAL_ABSENT)
     }
     // The constant opens with "(sin señal declarada" — it is the prefix by
     // which the slice judge's rubric recognises the sin-vara state.
-    expect(SENAL_AUSENTE.startsWith('(sin señal declarada')).toBe(true)
+    expect(SIGNAL_ABSENT.startsWith('(sin señal declarada')).toBe(true)
   })
 
-  it("the opening the slice judge's rubric cites is a real prefix of SENAL_AUSENTE", () => {
+  it("the opening the slice judge's rubric cites is a real prefix of SIGNAL_ABSENT", () => {
     // Low finding of the Slice 10 judge: the cross-check was one-directional —
     // the test above watches the constant, but the agent's CITATION («it opens
     // with `(sin señal declarada`») was not tied to it, so editing that
@@ -363,7 +363,7 @@ describe('the signal in the dispatch (Slice 10)', () => {
       join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-slice-judge.md'), 'utf8')
     const cita = /opens with\s+`([^`]+)`/.exec(agente)
     expect(cita).not.toBeNull()
-    expect(SENAL_AUSENTE.startsWith(cita[1])).toBe(true)
+    expect(SIGNAL_ABSENT.startsWith(cita[1])).toBe(true)
   })
 
   it('the reasoned exemption travels to SLICE.md as it stands (N/A — reason)', () => {

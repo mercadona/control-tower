@@ -11,7 +11,7 @@
 // Three states for "is it alive?", not two: `true`, `false`, and `null` when it
 // could not be checked. Collapsing the third into `false` would turn a missing
 // tool into an accusation of abandonment.
-export function construirEstado(entrada) {
+export function buildState(entrada) {
   const {
     enProgreso, enRevision = [], mergeados, cerradosConStatus,
     worktreesEnDisco, ramasEnDisco,

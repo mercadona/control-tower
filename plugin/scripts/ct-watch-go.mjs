@@ -66,7 +66,7 @@ import { execFileSync } from 'node:child_process'
 import { hasGo, commentIds, failedGoAttempt, GO_FORMAT_REPLY, GO_TOKEN } from './go-response.js'
 import { buildCmuxSendArgv, buildCmuxSendKeyArgv } from './dispatch.js'
 import { findWorkspaceByTitle } from './cmux.js'
-import { arg, sleep, plazo, abrirLog } from './watch-common.js'
+import { arg, sleep, plazo, openLog } from './watch-common.js'
 
 // 30 seconds, the same tick with which agentic-skills polls a person. And an
 // 8 hour deadline, which is its `person_wait_seconds`: the number comes from the
@@ -108,7 +108,7 @@ if (!/^[0-9a-f]{64}$/.test(goHash)) {
   process.exit(2)
 }
 
-const { log, terminar } = abrirLog(logPath)
+const { log, terminar } = openLog(logPath)
 const pollMs = plazo('CT_WATCH_GO_POLL_MS', DEFAULT_POLL_MS)
 const timeoutMs = plazo('CT_WATCH_GO_TIMEOUT_MS', DEFAULT_TIMEOUT_MS)
 

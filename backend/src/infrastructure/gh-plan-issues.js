@@ -4,7 +4,7 @@ import {
   INHERITED_CONTEXT_PLACEHOLDER,
   GATES_HEADING,
   renderAcContent,
-  renderDescripcion,
+  renderDescription,
   renderGatesContent,
   renderProtectedLine,
 } from '../../../plugin/scripts/groom.js'
@@ -445,7 +445,7 @@ export class PlanIssueBody {
       PlanIssueBody.CHANGES_LINE,
       '',
       PlanIssueBody.DESCRIPTION_HEADING,
-      renderDescripcion(row) ??
+      renderDescription(row) ??
         (story === null ? PlanIssueBody.NO_HEADLINE : `_${story.key} no trae resumen en Jira._`),
       '',
       ...(comment === null ? [] : [PlanIssueBody.COMMENT_HEADING, PlanIssueBody.quieted(comment.text), '']),

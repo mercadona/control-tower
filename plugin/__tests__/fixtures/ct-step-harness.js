@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url'
 import { VERDICT_RULES, SLICE_VERDICT_RULES } from '../../scripts/step-contracts.js'
 // Slice 10: renderState seeds the SLICE.md of the signal tests through the same
 // path as buildStateSeed (it folds and quotes long values — the reason ct-step
-// reads `senal:` with parseStateSafe and not with a regex), and SENAL_AUSENTE
+// reads `senal:` with parseStateSafe and not with a regex), and SIGNAL_ABSENT
 // is the single constant the slice judge's package declares absence with.
 import { renderState } from '../../scripts/state.js'
 

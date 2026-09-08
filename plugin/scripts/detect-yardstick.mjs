@@ -29,8 +29,8 @@ import { join } from 'node:path'
 import { walkRepo } from './repo-walk.js'
 import {
   CONVENTIONS_FILE,
-  candidatosDeVara,
-  declaradasEn,
+  yardstickCandidates,
+  declaredIn,
   pareceEsqueleto,
   formatCandidatos,
 } from './repo-yardstick.js'
@@ -64,7 +64,7 @@ try {
 let declaradas = new Set()
 let notaLectura = ''
 try {
-  declaradas = declaradasEn(readFileSync(join(target, CONVENTIONS_FILE), 'utf8'))
+  declaradas = declaredIn(readFileSync(join(target, CONVENTIONS_FILE), 'utf8'))
 } catch (e) {
   if (e.code !== 'ENOENT') {
     notaLectura =
@@ -73,7 +73,7 @@ try {
   }
 }
 
-const { candidatos, omitidos } = candidatosDeVara({ entradas, declaradas })
+const { candidatos, omitidos } = yardstickCandidates({ entradas, declaradas })
 for (const c of candidatos) {
   try {
     c.esqueleto = pareceEsqueleto(readFileSync(join(target, c.ruta), 'utf8'))
