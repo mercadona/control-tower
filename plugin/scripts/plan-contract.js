@@ -1,22 +1,22 @@
 // ============================================================================
-// PLAN-CONTRACT — el contrato del plan prescriptivo de un slice.
+// PLAN-CONTRACT — the contract of a slice's prescriptive plan.
 //
-// El plan que escribe el agente despachado (writing-plans-prescriptive) es el
-// artefacto que cruza la frontera hacia los subagentes por task: si miente
-// —secciones que faltan, código citado de memoria que no existe en el repo,
-// placeholders sin rellenar— los subagentes lo ejecutan igual, porque no
-// tienen contexto para dudar. Este módulo convierte ese contrato de prosa en
-// comprobación, con la misma doctrina que el resto del plugin: una
-// comprobación que solo imprime no es una comprobación.
+// The plan the dispatched agent writes (writing-plans-prescriptive) is the
+// artefact that crosses the boundary towards the per-task subagents: if it lies
+// —missing sections, code quoted from memory that does not exist in the repo,
+// unfilled placeholders— the subagents execute it all the same, because they
+// have no context with which to doubt. This module turns that prose contract
+// into a check, with the same doctrine as the rest of the plugin: a check that
+// only prints is not a check.
 //
-// La pieza que no tiene equivalente en ningún otro sitio del plugin es la
-// LITERALIDAD: cada bloque `Current state (path):` del plan debe existir
-// verbatim en el fichero que cita. Es el detector de código citado de
-// memoria — el modo de fallo número uno de un plan escrito por un agente.
+// The piece that has no equivalent anywhere else in the plugin is LITERALITY:
+// every `Current state (path):` block of the plan must exist verbatim in the
+// file it quotes. It is the detector of code quoted from memory — failure mode
+// number one of a plan written by an agent.
 //
-// Módulo PURO a propósito (misma razón que gates.js/slices.js): toda la
-// lógica es testeable sin harness; el I/O entra por inyección (`readFile`) y
-// quien lo cablea (dispatch-check.mjs) aporta el filesystem real.
+// A PURE module on purpose (same reason as gates.js/slices.js): all the logic is
+// testable with no harness; the I/O comes in by injection (`readFile`) and
+// whoever wires it up (dispatch-check.mjs) supplies the real filesystem.
 // ============================================================================
 
 import { extractTasks } from './plan-tasks.js'
@@ -39,9 +39,9 @@ const SUBSECTIONS = ['### Desired end state', '### Out of scope']
 
 const TASK_MARKERS = ['**Objective:**', '**Files:**', '**TDD:**', '**Tests:**', '**Verification:**']
 
-// Tokens que delatan una decisión abierta o un placeholder. Solo se buscan
-// FUERA de los bloques de código: un plan puede citar legítimamente un
-// fichero cuyo contenido diga cualquiera de estas cosas.
+// Tokens that give away an open decision or a placeholder. They are looked for
+// only OUTSIDE the code blocks: a plan can legitimately quote a file whose
+// content says any of these things.
 const FORBIDDEN = [
   [/\bTBD\b/, 'TBD'],
   [/TODO:/, 'TODO:'],
@@ -56,44 +56,44 @@ const TASK_HEADING = /^### Task (\d+) — /
 const CURRENT_STATE = /^Current state \(([^),]+)(?:,[^)]*)?\):\s*$/
 
 // ============================================================================
-// F-jjponz-4 — LA TAXONOMÍA DE BLOQUES.
+// F-jjponz-4 — THE TAXONOMY OF BLOCKS.
 //
-// La primera versión de la skill ordenaba pegar "the complete final content" de
-// cada fichero. Medido en campo (slice #2 de repo-pulse): 73.868 caracteres de
-// plan, 1.271 líneas de código (65%), publicado partido en DOS comentarios
-// porque no cabía en uno; y de sus 14 commits, CINCO arreglaban defectos que
-// venían pegados en el plan — una fuga de directorio, un `catch` desnudo que se
-// tragaba fallos reales de git, un tipo exportado que filtraba emails, un texto
-// de documentación que afirmaba algo falso y cuatro vectores de test que no
-// pinchaban el umbral que decían pinchar. Un cuerpo escrito a ciegas, sin
-// compilador y sin ejecutar nada, llega con defectos y nadie los ve: el gate
-// humano `plan` que debía cazarlos tenía 74k caracteres que revisar.
+// The first version of the skill ordered pasting "the complete final content" of
+// every file. Measured in the field (slice #2 of repo-pulse): 73,868 characters
+// of plan, 1,271 lines of code (65%), published split across TWO comments
+// because it did not fit in one; and of its 14 commits, FIVE fixed defects that
+// came pasted in the plan — a directory leak, a bare `catch` that swallowed real
+// git failures, an exported type that leaked emails, a documentation text that
+// asserted something false and four test vectors that did not poke the threshold
+// they claimed to poke. A body written blind, with no compiler and without
+// running anything, arrives with defects and nobody sees them: the human `plan`
+// gate that was supposed to catch them had 74k characters to review.
 //
-// Por qué el rol y no un límite de líneas: un tope bruto rechazaría un fichero
-// de tipos legítimo (el mayor medido, 71 líneas) y aceptaría un cuerpo de 25.
-// Lo que se comprueba es QUÉ es cada bloque. Así el rechazo mecánico coincide
-// con el criterio semántico —el plan cierra DECISIONES y deja los CUERPOS al
-// TDD— y de paso el humano lee el plan como un índice de roles.
+// Why the role and not a line limit: a raw cap would reject a legitimate types
+// file (the largest measured, 71 lines) and accept a 25-line body. What gets
+// checked is WHAT each block is. That way the mechanical rejection coincides
+// with the semantic criterion —the plan closes DECISIONS and leaves the BODIES
+// to TDD— and along the way the human reads the plan as an index of roles.
 // ============================================================================
 
-// UN FOLIO A4 POR TAREA: a un espacio y con márgenes normales, una página da
-// unas 50 líneas y ~3.500 caracteres. La unidad es la TAREA, no el plan, y el
-// motivo es una medida de campo (F-jjponz-5).
+// ONE A4 PAGE PER TASK: single-spaced and with normal margins, a page gives
+// about 50 lines and ~3,500 characters. The unit is the TASK, not the plan, and
+// the reason is a field measurement (F-jjponz-5).
 //
-// La primera versión puso el folio al plan entero. Resultado medido sobre los
-// transcripts de las sesiones despachadas: el agente invocó `--check-plan` 24
-// veces en un slice y 14 en otro, y de esas, 14 y 9 fallaron por `size`. O sea
-// que la mayor parte de esas vueltas no fue pensar el slice: fue limar
-// caracteres. Y la salida que el diseño asumía —«si no cabe, el slice son
-// dos»— el agente NO puede accionarla: viene despachado para un issue
-// congelado, así que hizo lo único que podía, colapsar tareas (un slice acabó
-// siendo un commit con cuatro endpoints y cuatro módulos, justo lo que «una
-// tarea = un commit» quiere evitar).
+// The first version put the page on the whole plan. Result, measured over the
+// transcripts of the dispatched sessions: the agent invoked `--check-plan` 24
+// times in one slice and 14 in another, and of those, 14 and 9 failed on `size`.
+// Which is to say that most of those round trips were not thinking about the
+// slice: they were filing characters down. And the way out the design assumed
+// —«if it does not fit, the slice is two»— the agent CANNOT act on: it comes
+// dispatched for a frozen issue, so it did the only thing it could, collapse
+// tasks (one slice ended up being a commit with four endpoints and four modules,
+// exactly what «one task = one commit» is meant to avoid).
 //
-// Una TAREA sí la puede partir el agente. Por eso el techo va donde el remedio
-// es accionable, y no hay ningún tope agregado por plan: un plan de doce
-// tareas es un slice mal cortado, y eso se arregla en la congelación del spec,
-// que es donde hay un humano.
+// A TASK the agent CAN split. That is why the ceiling goes where the remedy is
+// actionable, and there is no aggregate cap per plan: a twelve-task plan is a
+// badly cut slice, and that gets fixed at the spec's freeze, which is where
+// there is a human.
 export const ROLE_BUDGETS = { 'Current state': 12, Contract: 25, 'Call site': 10, 'Final text': 12 }
 export const COMMAND_BUDGET = 8
 export const CODE_BUDGETS = { task: 30, chars: 3500 }
@@ -124,9 +124,8 @@ const NO_CODE = /^No code — .+/
 const ends = (path, list) => list.some((ext) => path.toLowerCase().endsWith(ext))
 const isText = (path) => ends(path, TEXT_EXTENSIONS)
 
-// Si un token entre comillas invertidas de §3 es una ruta del repo que hay que
-// comprobar. Ver el porqué largo junto a la regla `reference-paths`, al final de
-// validatePlan.
+// Whether a backticked token of §3 is a repo path that has to be checked. See
+// the long why next to the `reference-paths` rule, at the end of validatePlan.
 const esRutaCitada = (t) => !t.endsWith('/') && !/\s/.test(t) && (t.includes('/') || isText(t))
 const isTest = (path) => TEST_PATH.test(path)
 const isConfig = (path) =>
@@ -158,9 +157,9 @@ function bodyAtFence(lines, openIdx) {
 
 const langAt = (line) => line.slice(3).trim().toLowerCase()
 
-// Anota cada línea con si es estructural (fuera de fence) — el único parseo
-// de markdown que este contrato necesita. Un fence abre y cierra con una
-// línea que EMPIEZA por tres backticks, como en el resto de parsers del repo.
+// Annotates every line with whether it is structural (outside a fence) — the
+// only markdown parsing this contract needs. A fence opens and closes with a
+// line that STARTS with three backticks, as in the rest of the repo's parsers.
 function annotate(markdown) {
   const out = []
   let inFence = false
@@ -245,43 +244,45 @@ export function validatePlan(markdown, { readFile } = {}) {
     }
   })
 
-  // D-4 — LA VARA DE LA TAREA TIENE QUE SER EJECUTABLE.
+  // D-4 — THE TASK'S YARDSTICK HAS TO BE EXECUTABLE.
   //
-  // Hasta aquí el contrato comprobaba que **Verification:** ESTÁ (es uno de los
-  // cinco TASK_MARKERS), no que diga algo que se pueda correr. La diferencia no
-  // era teórica: medido contra el plan real del slice #5 de repo-pulse, SIETE
-  // de sus ocho tareas verificaban con prosa en línea — "`npm test -w web` →
-  // exit 0. `npm run build && npm run lint` → exit 0." — y el plan validaba sin
-  // una sola queja. Es fiel a plan-template.md, que pedía "{{exact command and
-  // expected output}}" sin decir dónde; el agujero era de la plantilla.
+  // Up to here the contract checked that **Verification:** IS THERE (it is one
+  // of the five TASK_MARKERS), not that it says something that can be run. The
+  // difference was not theoretical: measured against the real plan of slice #5
+  // of repo-pulse, SEVEN of its eight tasks verified with inline prose —
+  // "`npm test -w web` → exit 0. `npm run build && npm run lint` → exit 0." —
+  // and the plan validated without a single complaint. It is faithful to
+  // plan-template.md, which asked for "{{exact command and expected output}}"
+  // without saying where; the hole was the template's.
   //
-  // Un humano lee esa prosa y sabe qué correr. Un programa no: entre los
-  // comandos hay flechas, puntos, "y después:" y paréntesis explicativos con
-  // un `wc -l AGENTS.md` dentro. Separar comando de comentario a base de
-  // heurísticas es adivinar, y adivinar aquí significa dar por verde una tarea
-  // que nadie midió.
+  // A human reads that prose and knows what to run. A program does not: among
+  // the commands there are arrows, full stops, "and then:" and explanatory
+  // parentheses with a `wc -l AGENTS.md` inside. Separating command from comment
+  // by heuristics is guessing, and guessing here means calling green a task
+  // nobody measured.
   //
-  // Por eso los comandos van en el bloque cercado que sigue al párrafo de
-  // **Verification:** — el mismo bloque que las reglas de rol ya eximían por su
-  // etiqueta y al que COMMAND_BUDGET ya le pone tope. La regla no inventa
-  // formato: hace obligatorio el que ya estaba exento.
+  // That is why the commands go in the fenced block that follows the
+  // **Verification:** paragraph — the same block the role rules already exempted
+  // by its label and on which COMMAND_BUDGET already puts a cap. The rule
+  // invents no format: it makes mandatory the one that was already exempt.
   //
-  // El detalle vive en plan-tasks.js, que es quien luego los ejecuta: un
-  // contrato que aceptara planes que su propio ejecutor no sabe leer no sería
-  // un contrato.
-  // Dos reglas, una violación: `verification-block` (la verificación es prosa
-  // que nadie puede ejecutar) y `verification-predicate` (la verificación ES un
-  // comando y su código de salida dice lo contrario de lo que su comentario dice
-  // medir — el control invertido de jjponz/rust-monitoring#10, que atravesó
-  // justamente esta puerta). Las dos salen por `verification` porque para quien
-  // arregla el plan son el mismo trabajo: hacer que la vara mida.
+  // The detail lives in plan-tasks.js, which is what later executes them: a
+  // contract that accepted plans its own executor cannot read would not be a
+  // contract.
+  // Two rules, one violation: `verification-block` (the verification is prose
+  // nobody can execute) and `verification-predicate` (the verification IS a
+  // command and its exit code says the opposite of what its comment says it
+  // measures — the inverted check of jjponz/rust-monitoring#10, which went
+  // through precisely this door). Both come out under `verification` because for
+  // whoever fixes the plan they are the same work: making the yardstick measure.
   //
-  // §3.7-A del handoff añade el mismo par para "## 8. Global verification":
-  // `global-verification-block` (prosa donde nadie ejecuta) y
-  // `global-verification-predicate` (mide al revés). Un contrato que aceptara
-  // un §8 que su propio ejecutor (`ct-step global`, en plan-tasks.js) no sabe
-  // leer no sería un contrato — la misma frase que ya justifica que esta lista
-  // se lea de `extractTasks().problems` en vez de reinventar el parseo aquí.
+  // §3.7-A of the handoff adds the same pair for "## 8. Global verification":
+  // `global-verification-block` (prose where nobody executes) and
+  // `global-verification-predicate` (it measures backwards). A contract that
+  // accepted a §8 its own executor (`ct-step global`, in plan-tasks.js) cannot
+  // read would not be a contract — the same sentence that already justifies
+  // reading this list from `extractTasks().problems` instead of reinventing the
+  // parsing here.
   const VERIFICATION_RULES = [
     'verification-block', 'verification-predicate',
     'global-verification-block', 'global-verification-predicate',
@@ -291,8 +292,8 @@ export function validatePlan(markdown, { readFile } = {}) {
     push('verification', problema.detail)
   }
 
-  // F-jjponz-4, pasada A — los bloques CON rol. Comprueba dónde vive cada uno,
-  // sobre qué fichero, y cuánto ocupa.
+  // F-jjponz-4, pass A — the blocks WITH a role. It checks where each one
+  // lives, over which file, and how much space it takes.
   const taskOf = (i) => tasks.find((t) => i > t.at && i < t.boundary)
   const roleBlocks = []
   lines.forEach((l, i) => {
@@ -302,8 +303,8 @@ export function validatePlan(markdown, { readFile } = {}) {
     const { rol, path } = found
     const body = fenceBodyAfter(lines, i + 1)
     if (body === null) {
-      // Para "Current state" ese aviso ya lo emite la pasada de literalidad,
-      // que es su dueña desde F-jjponz-1: no se duplica.
+      // For "Current state" that warning is already emitted by the literality
+      // pass, which has owned it since F-jjponz-1: it is not duplicated.
       if (rol !== 'Current state') {
         push('roles', `línea ${i + 1}: "${l.line.trim()}" no lleva bloque de código a continuación.`)
       }
@@ -341,10 +342,10 @@ export function validatePlan(markdown, { readFile } = {}) {
     }
   }
 
-  // F-jjponz-4, pasada B — los bloques SIN rol. Es la que mata el idiom
-  // "Final content:"/"Current state: does not exist." que producía los
-  // volcados. Un bloque de comandos queda exento: se delata por su lenguaje o
-  // por venir detrás de **Verification:**.
+  // F-jjponz-4, pass B — the blocks WITHOUT a role. This is the one that kills
+  // the "Final content:"/"Current state: does not exist." idiom that produced
+  // the dumps. A command block is exempt: it gives itself away by its language
+  // or by coming after **Verification:**.
   let menuPendiente = true
   lines.forEach((l, i) => {
     if (!l.fence || !l.opens) return
@@ -356,9 +357,9 @@ export function validatePlan(markdown, { readFile } = {}) {
     const esComando = COMMAND_LANGS.has(lang) || etiqueta.includes('**Verification:**')
     const body = bodyAtFence(lines, i)
     if (!esComando) {
-      // El menú de roles va UNA vez: un plan con veinte volcados producía
-      // veinte copias del mismo párrafo, y un mensaje que no se puede leer no
-      // es un remedio.
+      // The menu of roles goes out ONCE: a plan with twenty dumps produced
+      // twenty copies of the same paragraph, and a message that cannot be read
+      // is not a remedy.
       push('roles', `línea ${i + 1}: bloque de código sin etiqueta de rol${etiqueta ? ` (lo precede "${etiqueta}")` : ''}.${menuPendiente ? ` ${ROLE_MENU}` : ''}`)
       menuPendiente = false
       return
@@ -370,22 +371,22 @@ export function validatePlan(markdown, { readFile } = {}) {
     if (body.length > COMMAND_BUDGET) {
       push('commands', `línea ${i + 1}: el bloque de comandos tiene ${body.length} líneas y su presupuesto son ${COMMAND_BUDGET}. Un bloque de comandos son los comandos y su salida esperada, no un script: si hace falta un script, va al repo y el plan lo invoca.`)
     }
-    // EL TOTAL DE LA SUITE CLAVADO. Medido en el slice #7 de rust-monitoring: el
-    // plan clavaba `52 passed` en cuatro controles, el juez exigió con razón un
-    // test más, y el número caducado hubo que corregirlo en siete sitios del
-    // plan —dos briefs se generaron ya con el valor viejo—. El daño mayor no es
-    // ése: con el total clavado no queda hueco para la aserción que
-    // `conventions/testing.md` manda conducir en rojo, así que dos ramas se
-    // entregaron sin un solo test para que un control siguiera verde. Es la vara
-    // de ct peleando contra un control de ct, y el único sitio donde se puede
-    // impedir es aquí, antes de que el plan exista: el juez ya sólo puede
-    // declarar el choque, y el implementador no puede satisfacer los dos.
+    // THE SUITE TOTAL NAILED DOWN. Measured in slice #7 of rust-monitoring: the
+    // plan nailed `52 passed` into four checks, the judge rightly demanded one
+    // more test, and the expired number had to be corrected in seven places of
+    // the plan —two briefs were generated already carrying the old value—. The
+    // greater damage is not that one: with the total nailed down there is no gap
+    // left for the assertion `conventions/testing.md` mandates driving in red,
+    // so two branches were delivered without a single test so that a check would
+    // stay green. It is ct's yardstick fighting against a ct check, and the only
+    // place it can be prevented is here, before the plan exists: the judge can
+    // by then only declare the clash, and the implementer cannot satisfy both.
     //
-    // Se mide sobre el LITERAL del comando y no sobre su intención: un total de
-    // la suite se escribe con el número pegado a `passed`/`passing`, que es la
-    // forma que imprimen cargo, pytest, jest y mocha. Un recuento acotado al
-    // módulo de la tarea —`grep -c '^test log_timestamp::'`— no la tiene, y es
-    // exactamente la alternativa que el mensaje ofrece.
+    // It is measured over the command's LITERAL and not over its intention: a
+    // suite total is written with the number stuck to `passed`/`passing`, which
+    // is the shape cargo, pytest, jest and mocha print. A count bounded to the
+    // task's module —`grep -c '^test log_timestamp::'`— does not have it, and
+    // that is exactly the alternative the message offers.
     for (const [j, linea] of body.entries()) {
       const total = /\b\d+\s+pass(?:ed|ing)\b/i.exec(linea)
       if (!total) continue
@@ -393,9 +394,9 @@ export function validatePlan(markdown, { readFile } = {}) {
     }
   })
 
-  // F-jjponz-4 — sustituye la regla vieja ("cada tarea contiene al menos un
-  // bloque de código"): con **Verification:** obligatorio y su bloque de
-  // comandos, aquella quedaba satisfecha siempre y no comprobaba nada.
+  // F-jjponz-4 — replaces the old rule ("every task contains at least one code
+  // block"): with **Verification:** mandatory and its command block, that one
+  // was always satisfied and checked nothing.
   for (const t of tasks) {
     if (roleBlocks.some((b) => b.task === t)) continue
     const declara = lines
@@ -448,35 +449,39 @@ export function validatePlan(markdown, { readFile } = {}) {
   })
 
   // ---------------------------------------------------------------------------
-  // §3 ES LA VARA DEL REPO, Y UNA VARA QUE NO EXISTE NO MIDE.
+  // §3 IS THE REPO'S YARDSTICK, AND A YARDSTICK THAT DOES NOT EXIST DOES NOT
+  // MEASURE.
   //
-  // `## 3. Reference patterns` dejó de ser sólo "ficheros a los que parecerse":
-  // es lo único del plan que le dice al implementador cómo se escribe en este
-  // repo y al juez contra qué bloquear. Y lo escribe un AGENTE, así que puede
-  // citar `docs/conventions/domain.md` porque le suena a que un repo así lo
-  // tendría. Entonces el implementador no lo abre (no está), el juez no lo abre
-  // (no está), y los dos siguen adelante como si hubieran medido.
+  // `## 3. Reference patterns` stopped being only "files to look like": it is
+  // the only thing in the plan that tells the implementer how one writes in this
+  // repo and tells the judge what to block against. And it is written by an
+  // AGENT, so it can quote `docs/conventions/domain.md` because it sounds to it
+  // like a repo of this kind would have one. Then the implementer does not open
+  // it (it is not there), the judge does not open it (it is not there), and both
+  // carry on as if they had measured.
   //
-  // Es la MISMA regla que la literalidad de `Current state`, aplicada a la otra
-  // clase de cita del plan: allí se comprueba que el texto citado existe verbatim
-  // en el fichero, aquí que el fichero citado existe. Tercera de la serie —
-  // `5b97fdd` cerró "la vara es prosa", `verification-predicate` cerró "la vara
-  // mide al revés", y ésta cierra "la vara no existe".
+  // It is the SAME rule as `Current state`'s literality, applied to the plan's
+  // other class of citation: there it is checked that the quoted text exists
+  // verbatim in the file, here that the quoted file exists. Third of the series —
+  // `5b97fdd` closed "the yardstick is prose", `verification-predicate` closed
+  // "the yardstick measures backwards", and this one closes "the yardstick does
+  // not exist".
   //
-  // ACOTADA A §3 a propósito: en el resto del plan hay rutas que la slice va a
-  // CREAR, y exigir que existan ahí vetaría todos los planes.
+  // BOUNDED TO §3 on purpose: in the rest of the plan there are paths the slice
+  // is going to CREATE, and demanding that they exist there would veto every
+  // plan.
   //
-  // QUÉ SE TRATA COMO RUTA. Un token entre comillas invertidas, sólo si no lleva
-  // espacios y (lleva una barra o acaba en una extensión de texto). Así
-  // `docs/conventions/infra.md` y `AGENTS.md` se comprueban, mientras que
-  // `test(...)`, `describe` y la skill `backend-engineering:backend-best-practices`
-  // no se miran — una skill no es un fichero del repo y su existencia no se
-  // comprueba en disco.
+  // WHAT GETS TREATED AS A PATH. A backticked token, only if it carries no
+  // spaces and (carries a slash or ends in a text extension). That way
+  // `docs/conventions/infra.md` and `AGENTS.md` get checked, while
+  // `test(...)`, `describe` and the skill `backend-engineering:backend-best-practices`
+  // are not looked at — a skill is not a file of the repo and its existence is
+  // not checked on disk.
   //
-  // Y un token que acaba en `/` se salta: es un directorio, y el único puerto de
-  // lectura que este módulo recibe es de ficheros. Comprobar directorios pedía
-  // una costura de IO nueva por todo el camino de `checkPlans`, y el agujero que
-  // deja (un directorio inventado pasa) es más pequeño que la costura.
+  // And a token that ends in `/` is skipped: it is a directory, and the only
+  // read port this module receives is one of files. Checking directories asked
+  // for a new IO seam all the way along `checkPlans`, and the hole it leaves (an
+  // invented directory gets through) is smaller than the seam.
   // ---------------------------------------------------------------------------
   if (readFile) {
     const desde = lines.findIndex((l) => l.structural && l.line.startsWith('## 3. Reference patterns'))
@@ -508,20 +513,20 @@ export function planFilesForIssue(issue, paths) {
   )
 }
 
-// checkPlans: la decisión entera del gate, pura. `candidates` es la lista de
-// rutas donde buscar el plan (en --release, los ficheros que la rama
-// INTRODUCE; en --check-plan, el contenido del directorio de planes). El
-// mensaje devuelto es prosa terminada, con remedio — quien lo recibe solo lo
-// imprime por stderr y sale con `code`.
+// checkPlans: the gate's whole decision, pure. `candidates` is the list of
+// paths in which to look for the plan (in --release, the files the branch
+// INTRODUCES; in --check-plan, the contents of the plans directory). The
+// message returned is finished prose, with a remedy — whoever receives it just
+// prints it on stderr and exits with `code`.
 //
-// F-jjponz-3 — DOS lecturas distintas, y confundirlas hacía el gate
-// insatisfacible. El PLAN se lee siempre donde está ahora (`readFile`): lo
-// introduce esta rama, así que en la base no existe. Los ficheros que el plan
-// CITA se leen con `readCitedFile`, que en --release apunta a la base de la
-// rama: para entonces las tareas ya reescribieron esos ficheros, y compararlos
-// con el árbol solo demostraría que el slice hizo su trabajo. Por defecto es
-// el mismo lector, que es lo correcto en --check-plan (el plan se escribe
-// antes de implementar y cita el árbol tal y como está).
+// F-jjponz-3 — TWO different reads, and confusing them made the gate
+// unsatisfiable. The PLAN is always read where it is now (`readFile`): this
+// branch introduces it, so it does not exist in the base. The files the plan
+// QUOTES are read with `readCitedFile`, which in --release points at the
+// branch's base: by then the tasks have already rewritten those files, and
+// comparing them against the tree would only prove that the slice did its job.
+// By default it is the same reader, which is the right thing in --check-plan
+// (the plan is written before implementing and quotes the tree as it stands).
 export function checkPlans({ issue, candidates, readFile, readCitedFile }) {
   const files = planFilesForIssue(issue, candidates)
   if (!files.length) {

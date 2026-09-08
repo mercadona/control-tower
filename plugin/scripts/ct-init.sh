@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
-# ct-init: bootstrap de un repo para el loop Control Tower. Idempotente.
+# ct-init: bootstrap of a repo for the Control Tower loop. Idempotent.
 set -euo pipefail
 TARGET="${1:?uso: ct-init.sh <dir-repo> [--update-slices-contract] [--force]}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 shift || true
 
-# F6, menor 6: hasta ahora, cualquier corrección del contrato de el contrato de slices se
-# quedaba en el plugin — `ct-init` detecta la sección entre sus marcadores y
-# no la toca (correcto por defecto: puede tener ediciones a mano del
-# usuario), así que ningún repo ya bootstrapeado la recibía jamás salvo
-# copiando y pegando. `--update-slices-contract` es la vía explícita:
-#   - NUNCA por defecto (una corrida normal solo AVISA de que la sección es
-#     de una versión anterior, y de cómo actualizarla).
-#   - Nunca destructiva a ciegas: solo reemplaza la sección si su contenido
-#     coincide, byte a byte, con alguna versión que este propio script haya
-#     generado (SLICES_PRISTINE_HASHES). Lo que no reconoce NO se pisa: hace
-#     falta `--force`, y se avisa al hacerlo.
-#     F9: "no lo reconozco" NO es lo mismo que "lo has editado a mano", y el
-#     script ya no lo dice como si lo fuera. Un bloque que no está en la lista
-#     puede ser una edición del usuario o una versión del contrato cuyo hash
-#     este ct-init no lleva registrado, y desde aquí no hay forma de
-#     distinguirlas — así que el mensaje ofrece las dos lecturas en vez de
-#     elegir la que culpa al usuario. Y "no se ha podido calcular el hash"
-#     (máquina sin `shasum` ni `sha256sum`) es un tercer estado con su propio
-#     mensaje: ahí no se ha comparado nada.
+# F6, minor 6: until now, any correction of the slices contract stayed inside
+# the plugin — `ct-init` detects the section between its markers and does not
+# touch it (correct by default: it may carry the user's hand edits), so no
+# already bootstrapped repo ever received it except by copying and pasting.
+# `--update-slices-contract` is the explicit route:
+#   - NEVER by default (a normal run only WARNS that the section is of an
+#     earlier version, and how to update it).
+#   - Never destructive blindly: it only replaces the section if its content
+#     matches, byte for byte, some version this very script has generated
+#     (SLICES_PRISTINE_HASHES). What it does not recognise is NOT overwritten:
+#     `--force` is needed, and it warns when doing it.
+#     F9: "I do not recognise it" is NOT the same as "you have edited it by
+#     hand", and the script no longer says it as if it were. A block that is
+#     not in the list may be a user edit or a version of the contract whose
+#     hash this ct-init does not carry on record, and from here there is no way
+#     to tell them apart — so the message offers both readings instead of
+#     picking the one that blames the user. And "the hash could not be
+#     computed" (a machine with neither `shasum` nor `sha256sum`) is a third
+#     state with a message of its own: nothing was compared there.
 UPDATE_SLICES_CONTRACT=0
 FORCE=0
 for opt in "$@"; do
@@ -41,24 +41,25 @@ if [ ! -f "$TARGET/.agent/STATE.md" ]; then
 elif grep -qE '^[[:space:]]*blocked[[:space:]]*:' "$TARGET/.agent/STATE.md"; then
   echo "STATE.md ya existe, no se pisa"
 else
-  # F7: un STATE.md anterior al campo `blocked` sigue funcionando (el hook lo
-  # lee como NO bloqueado, que es la lectura correcta por defecto), pero quien
-  # lo tenga no se enterará nunca de que ahora hay una forma de decir "esto no
-  # puede continuar" que no sea escribir prosa en `next_action` — el mismo
-  # error que originó todo esto. Se dice UNA vez, aquí, donde se está mirando
-  # el repo a propósito. No se toca el fichero: reescribir el STATE.md de un
-  # repo vivo desde un scaffolder sería peor que el problema.
+  # F7: a STATE.md from before the `blocked` field still works (the hook reads
+  # it as NOT blocked, which is the correct default reading), but whoever has
+  # one will never find out that there is now a way to say "this cannot go on"
+  # other than writing prose in `next_action` — the very mistake that started
+  # all of this. It is said ONCE, here, where the repo is being looked at on
+  # purpose. The file is not touched: rewriting the STATE.md of a live repo
+  # from a scaffolder would be worse than the problem.
   echo "STATE.md ya existe, no se pisa — pero no declara el campo \`blocked\`, así que se lee como NO bloqueado. Si el trabajo de este repo se queda alguna vez bloqueado, añádelo a mano al frontmatter en vez de explicarlo dentro de \`next_action\`: blocked: {reason: \"por qué no se puede continuar\", unblock: \"qué haría falta\"} — el hook de SessionStart lo anuncia y suspende el next_action en toda sesión nueva."
 fi
 
-# .agent/conventions.md (§3.3, docs/prompt-juez-lo-que-queda.md): las
-# convenciones son una propiedad del REPO, no del epic — antes se re-derivaban
-# en el §3 de cada plan de slice, y nada garantizaba que el slice 14 citara las
-# mismas rutas que el slice 3. Se siembra aquí, una única vez por repo, con el
-# mismo idiom que STATE.md arriba: crea si no existe, no se pisa si existe. La
-# confirmación humana es el momento en que alguien corre `/ct-init` —no se
-# añade una cuarta puerta a las tres del producto— y `ct-step` la lee directo
-# de este fichero en cada task brief, sin ningún agente en medio.
+# .agent/conventions.md (§3.3, docs/prompt-juez-lo-que-queda.md): the
+# conventions are a property of the REPO, not of the epic — before, they were
+# re-derived in the §3 of every slice plan, and nothing guaranteed that slice 14
+# cited the same paths as slice 3. It is seeded here, once and only once per
+# repo, with the same idiom as STATE.md above: create it if it does not exist,
+# do not overwrite it if it does. The human confirmation is the moment somebody
+# runs `/ct-init` —no fourth gate is added to the product's three— and `ct-step`
+# reads it straight from this file in every task brief, with no agent in
+# between.
 CONVENTIONS_MD="$TARGET/.agent/conventions.md"
 if [ ! -f "$CONVENTIONS_MD" ]; then
   cat > "$CONVENTIONS_MD" <<'EOF'
@@ -84,20 +85,20 @@ else
   echo "conventions.md ya existe, no se pisa"
 fi
 
-# La plantilla del execution spec. El flujo tras este bootstrap es
-# brainstorming -> design doc -> execution spec, y skills/brainstorming/SKILL.md
-# manda escribir el spec «from the repo's `_TEMPLATE-execution-spec.md`»: sin
-# esto, ese paso se queda sin fuente y el spec hay que escribirlo adivinando sus
-# secciones.
+# The execution spec's template. The flow after this bootstrap is
+# brainstorming -> design doc -> execution spec, and skills/brainstorming/SKILL.md
+# orders the spec to be written «from the repo's `_TEMPLATE-execution-spec.md`»:
+# without this, that step is left with no source and the spec has to be written
+# guessing at its sections.
 #
-# Destino `docs/superpowers/specs/` porque es la carpeta que el plugin YA
-# declara como casa del spec en codigo que corre — LOOP_ARTIFACT_PATTERNS
-# (scripts/scope.js) exime `docs/superpowers/specs/**` justamente porque «el
-# skill de brainstorming escribe aqui el design doc y el execution spec». Es
-# tambien la ruta que documenta docs/loop/README.md.
+# The destination is `docs/superpowers/specs/` because it is the folder the
+# plugin ALREADY declares as the spec's home in code that runs —
+# LOOP_ARTIFACT_PATTERNS (scripts/scope.js) exempts `docs/superpowers/specs/**`
+# precisely because «the brainstorming skill writes the design doc and the
+# execution spec here». It is also the path docs/loop/README.md documents.
 #
-# NO se anade al .gitignore, a diferencia de .agent/SLICE.md: la plantilla es
-# un artefacto del repo que la skill lee, y se commitea.
+# It is NOT added to the .gitignore, unlike .agent/SLICE.md: the template is an
+# artefact of the repo that the skill reads, and it gets committed.
 SPEC_TEMPLATE_DIR="$TARGET/docs/superpowers/specs"
 SPEC_TEMPLATE="$SPEC_TEMPLATE_DIR/_TEMPLATE-execution-spec.md"
 if [ ! -f "$SPEC_TEMPLATE" ]; then
@@ -105,35 +106,35 @@ if [ ! -f "$SPEC_TEMPLATE" ]; then
   cp "$HERE/templates/_TEMPLATE-execution-spec.md" "$SPEC_TEMPLATE"
   echo "creado $SPEC_TEMPLATE"
 else
-  # Misma doctrina que STATE.md y que la seccion del contrato en AGENTS.md: una
-  # plantilla ya presente puede llevar ediciones del repo (secciones propias,
-  # invariantes suyos) y un scaffolder no las pisa por su cuenta.
+  # Same doctrine as STATE.md and as the contract section in AGENTS.md: a
+  # template that is already present may carry the repo's edits (sections of its
+  # own, invariants of its own) and a scaffolder does not overwrite them on its
+  # own initiative.
   echo "_TEMPLATE-execution-spec.md ya existe, no se pisa"
 fi
 
 GITIGNORE="$TARGET/.gitignore"
 touch "$GITIGNORE"
-# Normaliza un salto de línea final ANTES de tocar nada más: si el fichero ya
-# tiene contenido pero no termina en `\n` (p.ej.
-# `printf 'node_modules/' > .gitignore`, sin salto final), un `>>` de bash
-# concatena la línea nueva en la MISMA línea que la última — corrompe la
-# regla previa del usuario (`node_modules/` deja de ignorarse, ¡en SU repo,
-# no en el nuestro!) y además `.worktrees/` tampoco queda ignorado de verdad,
-# que es justo lo que la línea de abajo viene a garantizar. `tail -c1 |
-# wc -l` es el idiom robusto para detectar "termina en \n": mirar
-# directamente `$(tail -c1 ...)` no sirve porque la sustitución de comandos
-# siempre recorta los saltos de línea finales, así que un fichero que SÍ
-# termina en \n sería indistinguible de uno vacío.
+# It normalises a trailing newline BEFORE touching anything else: if the file
+# already has content but does not end in `\n` (e.g.
+# `printf 'node_modules/' > .gitignore`, with no trailing newline), a bash `>>`
+# concatenates the new line onto the SAME line as the last one — it corrupts the
+# user's previous rule (`node_modules/` stops being ignored, in THEIR repo, not
+# in ours!) and, on top of that, `.worktrees/` does not really end up ignored
+# either, which is precisely what the line below comes to guarantee. `tail -c1 |
+# wc -l` is the robust idiom for detecting "it ends in \n": looking directly at
+# `$(tail -c1 ...)` does not work, because command substitution always trims
+# trailing newlines, so a file that DOES end in \n would be indistinguishable
+# from an empty one.
 if [ -s "$GITIGNORE" ] && [ "$(tail -c1 "$GITIGNORE" | wc -l)" -eq 0 ]; then
   echo >> "$GITIGNORE"
 fi
-# .worktrees/: ct-next.mjs escribe cada
-# worktree de slice en <repoRoot>/.worktrees/<n>, dentro del propio checkout.
-# Si el repo destino no lo ignora, un `git add -A` en el checkout principal
-# se traga un working tree anidado entero, y un `git clean -fdx` destruye
-# worktrees vivos. Idempotente: solo añade la línea si no está ya (grep
-# exacto de línea completa), igual que el resto de este script no pisa lo
-# que ya existe.
+# .worktrees/: ct-next.mjs writes every slice worktree into
+# <repoRoot>/.worktrees/<n>, inside the checkout itself. If the target repo does
+# not ignore it, a `git add -A` in the main checkout swallows a whole nested
+# working tree, and a `git clean -fdx` destroys live worktrees. Idempotent: it
+# only adds the line if it is not there already (an exact whole-line grep), just
+# as the rest of this script does not overwrite what already exists.
 if ! grep -qxF '.worktrees/' "$GITIGNORE"; then
   echo '.worktrees/' >> "$GITIGNORE"
   echo "añadido .worktrees/ a $GITIGNORE"
@@ -141,18 +142,18 @@ else
   echo ".worktrees/ ya está en $GITIGNORE, no se duplica"
 fi
 
-# .agent/SLICE.md (F22): /ct-next siembra el estado del slice ahí, dentro del
-# worktree. Ese fichero es estado VIVO Y LOCAL de una sesión despachada, nunca
-# producto: si git lo ve, un `git add -A` del agente lo mete en su PR y el
-# squash deja main con el estado de un slice —y cualquier sesión nueva del repo
-# se hidrata creyendo que ES ese agente—. Pasó tres veces en un periodo de 9
-# slices antes de existir esta línea.
+# .agent/SLICE.md (F22): /ct-next seeds the slice's state there, inside the
+# worktree. That file is LIVE, LOCAL state of a dispatched session, never a
+# product: if git sees it, an agent's `git add -A` puts it into their PR and the
+# squash leaves main with a slice's state —and any new session of the repo
+# hydrates believing it IS that agent—. It happened three times over a period of
+# 9 slices before this line existed.
 #
-# /ct-next escribe además la misma regla en .git/info/exclude en cada dispatch,
-# para cubrir los repos que no re-corran ct-init. Esta es la vía larga: se
-# commitea, la ve quien clone, y explica por qué está.
+# /ct-next also writes the same rule into .git/info/exclude on every dispatch,
+# to cover the repos that do not re-run ct-init. This is the long route: it gets
+# committed, whoever clones sees it, and it explains why it is there.
 #
-# Idempotente por línea exacta, igual que el bloque de .worktrees/ de arriba.
+# Idempotent by exact line, just like the .worktrees/ block above.
 if ! grep -qxF '.agent/SLICE.md' "$GITIGNORE"; then
   echo '.agent/SLICE.md' >> "$GITIGNORE"
   echo "añadido .agent/SLICE.md a $GITIGNORE"
@@ -160,14 +161,14 @@ else
   echo ".agent/SLICE.md ya está en $GITIGNORE, no se duplica"
 fi
 
-# D-4 — el estado del run de ct-step, y su carpeta de trabajo (briefs, logs de
-# los controles, paquetes de revisión). Mismo motivo que la línea de arriba y
-# uno más: estos ficheros son el bucle INTERNO de una slice dentro de su
-# worktree y viven menos que el worktree. Lo que vive en GitHub es el estado del
-# SLICE, y durante todo el run el issue no cambia de estado.
+# D-4 — ct-step's run state, and its working folder (briefs, logs of the
+# checks, review packages). Same reason as the line above and one more: these
+# files are the INTERNAL loop of a slice inside its worktree and they live less
+# long than the worktree does. What lives on GitHub is the SLICE's status, and
+# throughout the whole run the issue does not change status.
 #
-# La carpeta lleva además los diffs de cada tarea, que son el mismo contenido
-# que el commit: verlos aparecer como ficheros nuevos en la PR es ruido puro.
+# The folder also carries each task's diffs, which are the same content as the
+# commit: seeing them show up as new files in the PR is pure noise.
 for regla in '.agent/run-*.json' '.agent/run-*/'; do
   if ! grep -qxF "$regla" "$GITIGNORE"; then
     echo "$regla" >> "$GITIGNORE"
@@ -199,323 +200,336 @@ else
   echo "AGENTS.md ya existe, no se pisa"
 fi
 
-# Sección "Formato de la tabla de slices" (F2 — el contrato con /ct-groom): hasta
-# ahora ese contrato (qué columnas exige, qué marcadores de "sin valor"
-# acepta, qué genera cada una) solo vivía en commands/ct-groom.md — un
-# fichero que lee quien EJECUTA groom, nunca quien ESCRIBE el spec, casi
-# siempre en otra sesión y otro repo. Se siembra aquí, en el AGENTS.md del
-# repo destino, que sí lee quien redacta specs.
+# The "Formato de la tabla de slices" section (F2 — the contract with
+# /ct-groom): until now that contract (which columns it requires, which "no
+# value" markers it accepts, what each one generates) lived only in
+# commands/ct-groom.md — a file read by whoever RUNS groom, never by whoever
+# WRITES the spec, almost always in another session and another repo. It is
+# seeded here, in the target repo's AGENTS.md, which whoever drafts specs does
+# read.
 #
-# MISMO bloque para los dos casos (fichero recién creado arriba, o ya
-# existente sin la sección) — un único `if`, sin duplicar la plantilla en dos
-# sitios que puedan divergir con el tiempo. Detección: un comentario HTML
-# greppable (`<!-- ct-init:slices-contract -->`), el mismo idiom que
-# `<!-- ct-order:N -->` en groom.js — no se renderiza, no colisiona con
-# encabezados de usuario. `grep -qxF` (línea completa, no substring) en vez
-# de `grep -qF`: reduce (que no elimina del todo — un fence de código con la
-# línea pegada tal cual seguiría dando falso positivo, caso rebuscado que no
-# merece más esfuerzo) el riesgo de que el marcador citado dentro de un
-# bloque de código ajeno (indentado, o parte de una línea más larga) cuente
-# como "ya está".
+# The SAME block for both cases (a file just created above, or one that already
+# existed without the section) — a single `if`, without duplicating the template
+# in two places that could diverge over time. Detection: a greppable HTML
+# comment (`<!-- ct-init:slices-contract -->`), the same idiom as
+# `<!-- ct-order:N -->` in groom.js — it does not render, it does not collide
+# with the user's headings. `grep -qxF` (whole line, not a substring) instead of
+# `grep -qF`: it reduces (though it does not eliminate altogether — a code fence
+# with the line pasted in verbatim would still give a false positive, a far-
+# fetched case that does not deserve more effort) the risk that the marker
+# quoted inside somebody else's code block (indented, or part of a longer line)
+# counts as "it is already there".
 #
-# Review de F2, punto 2: comprobar SOLO el marcador de apertura no basta —
-# si alguien borra el de apertura pero deja el heading/cuerpo/cierre (o
-# viceversa), `grep -qF` del que falta no encuentra nada, el script cree que
-# la sección no está, y AÑADE UNA SEGUNDA COPIA ENTERA en silencio: dos
-# headings, un marcador huérfano, exit 0. Se comprueban los TRES rastros
-# (apertura, cierre, heading) por separado:
-#   - apertura Y cierre presentes → sección completa, no se toca (caso normal).
-#   - CUALQUIER rastro parcial (uno o dos de los tres, pero no los tres) →
-#     no es seguro decidir por el usuario qué pasó aquí; se avisa por stderr
-#     y no se añade nada — mejor un AGENTS.md que el usuario entiende y tiene
-#     que arreglar a mano que una sección duplicada en silencio.
-#   - ningún rastro → se añade la sección completa (caso "no existe todavía").
+# F2 review, point 2: checking ONLY the opening marker is not enough — if
+# somebody deletes the opening one but leaves the heading/body/closing one (or
+# the other way round), the `grep -qF` of the missing one finds nothing, the
+# script believes the section is not there, and ADDS A WHOLE SECOND COPY in
+# silence: two headings, an orphan marker, exit 0. The THREE traces (opening,
+# closing, heading) are checked separately:
+#   - opening AND closing present → a complete section, it is not touched (the
+#     normal case).
+#   - ANY partial trace (one or two of the three, but not all three) → it is not
+#     safe to decide for the user what happened here; a warning goes to stderr
+#     and nothing is added — better an AGENTS.md the user understands and has to
+#     fix by hand than a section duplicated in silence.
+#   - no trace at all → the complete section is added (the "it does not exist
+#     yet" case).
 SLICES_MARKER_OPEN='<!-- ct-init:slices-contract -->'
 SLICES_MARKER_CLOSE='<!-- /ct-init:slices-contract -->'
 SLICES_HEADING='## Formato de la tabla de slices (contrato con /ct-groom)'
-# F30 — el heading VIEJO se sigue reconociendo, y nunca se emite.
+# F30 — the OLD heading is still recognised, and it is never emitted.
 #
-# Hasta la v15 la sección se llamaba «tabla de slices». El número era un fósil: nunca
-# localizó nada (`/ct-groom` encuentra la tabla por sus columnas `Slice`+`Dep`,
-# y el flag `--section N` está obsoleto y se ignora), y arrastraba la idea
-# falsa de que la tabla es el apartado noveno de un documento grande.
+# Up to v15 the section was called «tabla de slices». The number was a fossil: it
+# never located anything (`/ct-groom` finds the table by its `Slice`+`Dep`
+# columns,
+# and the `--section N` flag is obsolete and ignored), and it dragged along the
+# false idea that the table is the ninth item of a big document.
 #
-# Cambiar el heading a secas tendría un filo: la detección de una sección
-# COMPLETA sólo mira los dos marcadores, así que ahí no pasa nada — pero la
-# rama de "restos parciales" sí mira el heading, y un AGENTS.md con el heading
-# viejo y sin marcadores dejaría de reconocerse y recibiría una SEGUNDA copia
-# entera de la sección. Es exactamente el fallo que la review de F2 documentó
-# y cerró. Mismo remedio que ya usan SLICES_PRISTINE_HASHES (se añade, nunca
-# se reemplaza) y las dos formas literales de `## Acceptance criteria` en
-# reconcile.js: un conjunto CERRADO de headings reconocidos, uno solo emitido.
+# Changing the heading and nothing else would have an edge to it: the detection
+# of a COMPLETE section only looks at the two markers, so nothing happens there
+# — but the "partial remains" branch does look at the heading, and an AGENTS.md
+# with the old heading and no markers would stop being recognised and would
+# receive a WHOLE SECOND copy of the section. It is exactly the failure the F2
+# review documented and closed. Same remedy as the one SLICES_PRISTINE_HASHES
+# already uses (an entry is added, never replaced) and as the two literal forms
+# of `## Acceptance criteria` in reconcile.js: a CLOSED set of recognised
+# headings, only one of them emitted.
 SLICES_HEADING_LEGACY='## Formato de la tabla §9 (contrato con /ct-groom)'
-# SLICES_CONTRACT_VERSION (F6): versión del CONTENIDO del bloque. Viaja en una
-# línea propia justo detrás del marcador de apertura, no dentro de él: el
-# marcador de apertura se mantiene idéntico al de siempre para que un repo
-# bootstrapeado antes de F6 (sin línea de versión, "v1") siga reconociéndose
-# con los mismos `grep -qxF` de siempre, sin ninguna migración.
-# F10 sube de 3 a 4. El número NO mide el tamaño del cambio: mide "¿el texto
-# que tiene este repo es el que shippea este plugin?", y es la ÚNICA palanca
-# que hace que un contrato corregido llegue a un repo ya bootstrapeado.
-# Comprobado ejecutándolo antes de decidir: con un repo sembrado por el v3 de
-# F11 (bloque intacto, hash registrado), dejar el número en 3 hace que TANTO la
-# corrida normal COMO `--update-slices-contract` respondan "contrato v3, al
-# día" — `found_version -eq SLICES_CONTRACT_VERSION` y `block_status=pristine`,
-# así que ni siquiera entra en la rama de "el contenido no es el mío". No hay
-# NINGÚN camino por el que ese repo reciba el texto nuevo: se queda para
-# siempre diciendo que `--section` alimenta el ancla del enlace (un flag que
-# ahora se ignora) y sin la línea de "empuja el spec antes de groomear", que es
-# lo que decide si sus issues nacen con enlace o sin él. Con 4, ese mismo repo
-# recibe el aviso de desactualizado y `--update-slices-contract` lo reemplaza
-# limpiamente, sin `--force` y sin acusar a nadie — que es exactamente el
-# mecanismo que F9 construyó.
+# SLICES_CONTRACT_VERSION (F6): the version of the block's CONTENT. It travels
+# on a line of its own right behind the opening marker, not inside it: the
+# opening marker is kept identical to the one it has always been so that a repo
+# bootstrapped before F6 (with no version line, "v1") goes on being recognised
+# by the same old `grep -qxF`, with no migration at all.
+# F10 raises it from 3 to 4. The number does NOT measure the size of the change:
+# it measures "is the text this repo has the one this plugin ships?", and it is
+# the ONLY lever that makes a corrected contract reach an already bootstrapped
+# repo. Checked by running it before deciding: with a repo seeded by F11's v3
+# (an intact block, a registered hash), leaving the number at 3 makes BOTH the
+# normal run AND `--update-slices-contract` answer "contrato v3, al día" —
+# `found_version -eq SLICES_CONTRACT_VERSION` and `block_status=pristine`, so it
+# does not even enter the "the content is not mine" branch. There is NO path at
+# all by which that repo receives the new text: it stays for ever saying that
+# `--section` feeds the link's anchor (a flag that is now ignored) and without
+# the line about "push the spec before grooming", which is what decides whether
+# its issues are born with a link or without one. With 4, that same repo gets
+# the out-of-date warning and `--update-slices-contract` replaces it cleanly,
+# with no `--force` and without accusing anybody — which is exactly the
+# mechanism F9 built.
 #
-# F18 sube de 7 a 8. Lo que cambia no es redacción: el v7 DABA POR IMPOSIBLE
-# algo que ocurre solo, y CALLABA dos estados en los que el loop se atasca sin
-# decir nada. Un repo bootstrapeado con el v7 no puede deducir ninguna:
-#   - el v7 decía que cerrar un issue como *completed* sin haber mergeado nada
-#     "no se detecta — haría falta cruzar el grafo de PRs" y que era "un caso
-#     que requiere una acción errónea deliberada". Las dos mitades eran falsas
-#     y las dos están medidas, no supuestas: GitHub aplica las closing keywords
-#     de CUALQUIER mensaje de commit que llegue a la rama por defecto (un
-#     commit de DOCUMENTACIÓN que solo MENCIONABA `Closes #451`, entrecomillado,
-#     cerró ese issue en un repo de producción), y una sola query GraphQL con
-#     alias resuelve 97 issues en 2,8 s. Un repo con el v7 sigue creyendo que
-#     hace falta mala intención, que es justo lo que impide sospechar del
-#     accidente cuando ocurre;
-#   - el v7 no decía en ninguna parte que un issue CERRADO que conserva su
-#     label `status:` desaparece del dispatcher (solo barre abiertos). La tasa
-#     medida es 10 de 99 cerrados. Sin esto, la reacción natural a "mi slice ya
-#     no sale" es buscar el fallo en el dispatcher;
-#   - ni que un agente que se declara BLOQUEADO deja su claim puesto para
-#     siempre, sin ninguna transición del loop que lo suelte. Es un deadlock
-#     con nombre propio y el v7 lo dejaba sin nombrar;
-#   - y una cuarta, encontrada aplicando al resto del texto la misma lente que
-#     falsificó la primera: el v7 decía que la causa "al PR le faltaba el
-#     `Closes #N`" "solo aparece con PRs abiertos a mano, o si alguien edita
-#     el cuerpo después", porque el kickoff lo pide. El kickoff es un PROMPT,
-#     no un gate — el propio v7 lo admite dos párrafos más abajo ("lo que el
-#     kickoff no puede garantizar es que el agente obedezca"). La causa más
-#     probable faltaba de la lista, y era justo la que un diagnóstico honesto
-#     tiene que mirar primero.
+# F18 raises it from 7 to 8. What changes is not the wording: the v7 TOOK AS
+# IMPOSSIBLE something that happens on its own, and KEPT QUIET about two states
+# in which the loop gets stuck without saying anything. A repo bootstrapped with
+# the v7 cannot deduce any of them:
+#   - the v7 said that closing an issue as *completed* without having merged
+#     anything "no se detecta — haría falta cruzar el grafo de PRs" and that it
+#     was "un caso que requiere una acción errónea deliberada". Both halves were
+#     false and both are measured, not assumed: GitHub applies the closing
+#     keywords of ANY commit message that reaches the default branch (a
+#     DOCUMENTATION commit that only MENTIONED `Closes #451`, in quotes, closed
+#     that issue in a production repo), and a single GraphQL query with aliases
+#     resolves 97 issues in 2.8 s. A repo with the v7 goes on believing that ill
+#     intent is required, which is precisely what stops anyone from suspecting
+#     the accident when it happens;
+#   - the v7 said nowhere that a CLOSED issue that keeps its `status:` label
+#     disappears from the dispatcher (which only sweeps open ones). The measured
+#     rate is 10 out of 99 closed. Without this, the natural reaction to "my
+#     slice no longer comes up" is to look for the failure in the dispatcher;
+#   - nor that an agent that declares itself BLOCKED leaves its claim in place
+#     for ever, with no transition of the loop that releases it. It is a
+#     deadlock with a name of its own and the v7 left it unnamed;
+#   - and a fourth one, found by applying to the rest of the text the same lens
+#     that falsified the first: the v7 said that the cause "al PR le faltaba el
+#     `Closes #N`" "solo aparece con PRs abiertos a mano, o si alguien edita el
+#     cuerpo después", because the kickoff asks for it. The kickoff is a PROMPT,
+#     not a gate — the v7 itself admits it two paragraphs further down ("lo que
+#     el kickoff no puede garantizar es que el agente obedezca"). The most
+#     likely cause was missing from the list, and it was precisely the one an
+#     honest diagnosis has to look at first.
 #
-# F17 sube de 6 a 7. Las dos cosas que cambian son hechos nuevos sobre el
-# CIERRE del issue, y un repo bootstrapeado con el v6 no puede deducir ninguna:
-#   - el kickoff ahora exige `Closes #N` en el cuerpo del PR (antes no pedía
-#     nada, y por eso el estado "PR mergeado, issue abierto" era el resultado
-#     NORMAL de un slice bien hecho: tokens retenidos para siempre y ningún
-#     dependiente desbloqueado). La enumeración de "qué recibe el agente
-#     despachado" se lo callaba, así que describía un kickoff que ya no existe;
-#   - el v6 atribuía ese estado a UNA sola causa ("al PR le faltaba `Closes
-#     #N`"). Hay una segunda, verificada contra un repo real: un PR que SÍ
-#     lleva su `Closes #N` pero se mergea en una rama que no es la por defecto
-#     tampoco cierra el issue. Es la que engaña — miras el PR, ves el `Closes`,
-#     y descartas el diagnóstico bueno. Con `--base <otra-rama>`, cerrar el
-#     issue al mergear es un paso a mano SIEMPRE.
+# F17 raises it from 6 to 7. The two things that change are new facts about the
+# CLOSING of the issue, and a repo bootstrapped with the v6 cannot deduce either:
+#   - the kickoff now requires `Closes #N` in the body of the PR (before it
+#     asked for nothing, and that is why the state "PR merged, issue open" was
+#     the NORMAL outcome of a well-done slice: tokens held for ever and not a
+#     single dependent unblocked). The enumeration of "what the dispatched agent
+#     receives" kept quiet about it, so it described a kickoff that no longer
+#     exists;
+#   - the v6 attributed that state to ONE single cause ("al PR le faltaba
+#     `Closes #N`"). There is a second one, verified against a real repo: a PR
+#     that DOES carry its `Closes #N` but is merged into a branch that is not
+#     the default one does not close the issue either. That is the one that
+#     deceives — you look at the PR, you see the `Closes`, and you discard the
+#     good diagnosis. With `--base <another-branch>`, closing the issue on
+#     merging is ALWAYS a manual step.
 #
-# F15 sube de 5 a 6, y por el mismo motivo que F13: el texto v5 DESCRIBE MAL
-# dos cosas que un repo bootstrapeado no puede corregir por su cuenta.
-#   - decía que `--reopen` deja el slice en `status:ready` ("vuelve a ser
-#     despachable"). Ya no: lo deja en `status:in-progress`, porque `ready` no
-#     retiene tokens y ese trabajo sigue sin mergear. Un repo con el v5 seguiría
-#     esperando que /ct-next lo despachara solo, y encima creyendo que su área
-#     quedó libre;
-#   - no decía NADA sobre en qué orden /ct-groom valida y muta. Dos lecturas
-#     independientes del v5 dedujeron —correctamente, entonces— que un abort
-#     podía dejar milestone y labels a medias. Eso YA no es cierto (se arregló
-#     el orden), pero el silencio hacía que la deducción correcta fuera la que
-#     asusta, y ahora la garantía existe y hay que decirla.
+# F15 raises it from 5 to 6, and for the same reason as F13: the v5 text
+# DESCRIBES BADLY two things a bootstrapped repo cannot correct on its own.
+#   - it said that `--reopen` leaves the slice in `status:ready` ("it becomes
+#     dispatchable again"). Not any more: it leaves it in `status:in-progress`,
+#     because `ready` does not hold tokens and that work is still unmerged. A
+#     repo with the v5 would go on waiting for /ct-next to dispatch it by
+#     itself, and believing on top of that that its area had been freed;
+#   - it said NOTHING about the order in which /ct-groom validates and mutates.
+#     Two independent readings of the v5 deduced —correctly, back then— that an
+#     abort could leave milestone and labels half done. That is NO longer true
+#     (the order was fixed), but the silence made the correct deduction be the
+#     frightening one, and now the guarantee exists and it has to be said.
 #
-# F13 subió de 4 a 5, y el bump era OBLIGATORIO allí más que en ninguna ronda
-# anterior: lo que cambia no es redacción, es que el texto v4 PROMETÍA
-# garantías que el código no da. Decía que migration/ci/pbxproj serializan "en
-# todo el repo" (el código solo mira issues de este repo con status:
-# in-progress/in-review — todo lo que va por fuera del flujo de issues es
-# invisible), que "merge-after significa MERGEADO" (el código mira cómo se
-# cerró el issue, que no es lo mismo en ninguna de las dos direcciones), y no
-# decía en absoluto que un PR rechazado dejaba su slice fuera del loop para
-# siempre. Un repo bootstrapeado con el v4 se queda con esas tres cosas hasta
-# que este número suba; es la única palanca que existe para llegar hasta él.
+# F13 raised it from 4 to 5, and the bump was MANDATORY there more than in any
+# earlier round: what changes is not the wording, it is that the v4 text
+# PROMISED guarantees the code does not give. It said that
+# migration/ci/pbxproj serialise "across the whole repo" (the code only looks at
+# issues of this repo with status: in-progress/in-review — everything that goes
+# outside the issue flow is invisible), that "merge-after means MERGED" (the
+# code looks at how the issue was closed, which is not the same thing in either
+# direction), and it said nothing at all about a rejected PR leaving its slice
+# outside the loop for ever. A repo bootstrapped with the v4 is stuck with those
+# three things until this number goes up; it is the only lever that exists for
+# reaching it.
 #
-# F22 sube de 10 a 11 por la MISMA razón que F13, y con el mismo agravante: el
-# v10 no describía mal el flujo, describía mal DÓNDE escribe el agente. Decía
-# que el estado del slice vive en el `.agent/STATE.md` de su worktree y que
-# `/ct-next` lo lee de ahí. Las dos mitades son falsas desde F22: la semilla va
-# a `.agent/SLICE.md` (ignorado) y el dispatcher se NIEGA a leer el STATE.md
-# del worktree, porque ése es el de la coordinadora congelado en la base. Y
-# esto no es un comentario obsoleto: es una INSTRUCCIÓN a un agente. Un slice
-# que siga el AGENTS.md de su repo en vez de su kickoff escribiría su
-# `blocked:` en el fichero que nadie lee —el claim se queda colgado para
-# siempre, que es justo el fallo F18 que este loop ya arregló una vez— y, si
-# llega a commitearlo, la puerta de `--release` lo rechaza con exit 5. Un repo
-# bootstrapeado con el v10 se queda con esa instrucción falsa hasta que este
-# número suba.
+# F22 raises it from 10 to 11 for the SAME reason as F13, and with the same
+# aggravating factor: the v10 did not describe the flow badly, it described
+# badly WHERE the agent writes. It said that the slice's state lives in its
+# worktree's `.agent/STATE.md` and that `/ct-next` reads it from there. Both
+# halves are false as of F22: the seed goes to `.agent/SLICE.md` (ignored) and
+# the dispatcher REFUSES to read the worktree's STATE.md, because that one is
+# the coordinator's, frozen at the base. And this is not an obsolete comment: it
+# is an INSTRUCTION to an agent. A slice that follows its repo's AGENTS.md
+# instead of its kickoff would write its `blocked:` into the file nobody reads
+# —the claim stays hanging for ever, which is precisely the F18 failure this
+# loop already fixed once— and, if it goes as far as committing it, the
+# `--release` gate rejects it with exit 5. A repo bootstrapped with the v10 is
+# stuck with that false instruction until this number goes up.
 #
-# F23 sube de 11 a 12 por la MISMA razón que F13 y F22: el v11 no describía
-# mal el flujo, PROMETÍA una comparación que el código ya no puede hacer.
-# Decía que re-groomear compara "título, enlace al spec, milestone, labels…"
-# contra la tabla de hoy. Desde que el emparejado por `ct-order` está acotado
-# al milestone de la corrida, un issue emparejado tiene siempre ese milestone
-# por construcción: la divergencia de milestone es inalcanzable desde
-# /ct-groom. Quien leyera el v11 deducía "si muevo un issue de milestone y
-# vuelvo a correr, me lo reporta", y lo que obtiene hoy es o un exit 1 de una
-# de las dos puertas, o un issue nuevo (un epic duplicado, si el enlace al
-# spec tampoco casa). Un repo bootstrapeado con el v11 se queda con esa
-# promesa falsa hasta que este número suba.
+# F23 raises it from 11 to 12 for the SAME reason as F13 and F22: the v11 did
+# not describe the flow badly, it PROMISED a comparison the code can no longer
+# make. It said that re-grooming compares "title, link to the spec, milestone,
+# labels…" against today's table. Ever since the matching by `ct-order` is
+# bounded to the run's milestone, a matched issue always has that milestone by
+# construction: a milestone divergence is unreachable from /ct-groom. Whoever
+# read the v11 deduced "if I move an issue to another milestone and run again,
+# it reports it to me", and what they get today is either an exit 1 from one of
+# the two gates, or a new issue (a duplicated epic, if the link to the spec does
+# not match either). A repo bootstrapped with the v11 is stuck with that false
+# promise until this number goes up.
 #
-# F27 sube de 12 a 13, y por el mismo criterio de siempre: el v12 no describe mal
-# el flujo, CALLA dos cosas que ahora existen. (a) No dice que las comprobaciones
-# previas al merge tienen que ser puertas — la regla más útil del periodo de
-# campo, que salió de un merge que entró con la comprobación imprimiendo `1`.
-# (b) Dice «cuidado con escribir esas keywords en cualquier commit» como si nada
-# protegiera, cuando el plugin ya bloquea el caso mayoritario, y no dice cuáles
-# son los cuatro que se le escapan. Un repo con el v12 no puede deducir ninguna
-# de las dos, y la segunda es peor que el silencio: lee «vigila tú» donde ya hay
-# una puerta, y no sabe dónde NO la hay.
+# F27 raises it from 12 to 13, and by the same criterion as ever: the v12 does
+# not describe the flow badly, it KEEPS QUIET about two things that now exist.
+# (a) It does not say that the pre-merge checks have to be gates — the most
+# useful rule of the field period, which came out of a merge that went in with
+# the check printing `1`. (b) It says «watch out for writing those keywords in
+# any commit» as if nothing protected you, when the plugin already blocks the
+# majority case, and it does not say which are the four that escape it. A repo
+# with the v12 cannot deduce either of the two, and the second is worse than
+# silence: it reads «watch out yourself» where there already is a gate, and it
+# does not know where there is NOT one.
 #
-# F27 sube de 13 a 14 por el mismo criterio, sobre su propio texto: el v13
-# PROMETÍA una cobertura que el código no da, y CALLABA dos puntos ciegos
-# reales. Decía que el plugin bloquea el commit «en un repo que tenga esta
-# sección en su AGENTS.md», como si bastara con el repo. Falso: la puerta la
-# trae la SESIÓN de Claude (el hook lo pone el plugin cargado, no el repo), y
-# un agente despachado arranca con su propia cuenta (`CLAUDE_CONFIG_DIR`) —
-# si esa cuenta no tiene el plugin instalado, no hay puerta, aunque el repo
-# lleve la sección entera. Un repo con el v13 lee «con esta sección basta» y
-# no tiene forma de sospechar que la cobertura depende de dónde arrancó el
-# agente. Y el v13 enumeraba cuatro puntos ciegos —sin `-m`, `-F`, `--amend
-# --no-edit`, fuera de Claude— pero no los otros dos, medidos con el mismo
-# parser: un commit que **apunta a otro repo** (`git -C <ruta> commit`,
-# `cd <ruta> && git commit`, que la puerta comprueba contra el repo de la
-# SESIÓN y no contra `<ruta>`) y una invocación **envuelta** (`sudo git
-# commit`, `env FOO=1 git commit`, `command git commit`, donde `git` deja de
-# ser el primer token y el parser no reconoce el commit). Un repo con el v13
-# se queda creyendo que esos dos casos SÍ están cubiertos, hasta que este
-# número suba.
+# F27 raises it from 13 to 14 by the same criterion, over its own text: the v13
+# PROMISED a coverage the code does not give, and KEPT QUIET about two real
+# blind spots. It said that the plugin blocks the commit «in a repo that has
+# this section in its AGENTS.md», as if the repo were enough. False: the gate is
+# brought by Claude's SESSION (the hook is installed by the loaded plugin, not
+# by the repo), and a dispatched agent starts up with an account of its own
+# (`CLAUDE_CONFIG_DIR`) — if that account does not have the plugin installed,
+# there is no gate, even though the repo carries the whole section. A repo with
+# the v13 reads «this section is enough» and has no way of suspecting that the
+# coverage depends on where the agent started up. And the v13 enumerated four
+# blind spots —with no `-m`, `-F`, `--amend --no-edit`, outside Claude— but not
+# the other two, measured with the same parser: a commit that **points at
+# another repo** (`git -C <path> commit`, `cd <path> && git commit`, which the
+# gate checks against the SESSION's repo and not against `<path>`) and a
+# **wrapped** invocation (`sudo git commit`, `env FOO=1 git commit`, `command
+# git commit`, where `git` stops being the first token and the parser does not
+# recognise the commit). A repo with the v13 is left believing that those two
+# cases ARE covered, until this number goes up.
 #
-# El contrato sube de 18 a 20 de una sola vez, porque DOS columnas distintas
-# entraron en paralelo y las dos reclamaban el v19: la `Señal` (rama
-# juez-lo-que-queda, ya en main) y la `E2E` (rama e2e-al-cierre-del-slice).
-# El v19 quedó publicado con el bloque de la `Señal`; este bloque trae las
-# dos, así que necesita un número propio. Los dos motivos siguen vigentes y
-# se conservan enteros — documentan defectos distintos:
+# The contract goes from 18 to 20 in a single move, because TWO different
+# columns landed in parallel and both of them claimed the v19: the `Señal`
+# (the juez-lo-que-queda branch, already in main) and the `E2E` (the
+# e2e-al-cierre-del-slice branch). The v19 ended up published with the `Señal`
+# block; this block brings both, so it needs a number of its own. Both reasons
+# still hold and are kept whole — they document different defects:
 #
-# Slice 10 (juez-lo-que-queda), el v19: el v18 no puede deducir que la
-# columna `Señal` existe (la señal de observabilidad que el slice promete, y
-# que el juez de slice mide contra el diff acumulado con su ítem
-# `observabilidad`), ni que una exención se escribe `N/A — <razón>` (y que sin
-# razón el groom aborta), ni que una celda sin valor se mide como `sin-vara`
-# en la telemetría del epic. Un repo con el v18 declararía señales en prosa
-# del spec —invisibles para el agente y para el juez— o no las declararía
-# nunca, sin saber que la cuenta de sin-vara lo está midiendo.
+# Slice 10 (juez-lo-que-queda), the v19: the v18 cannot deduce that the `Señal`
+# column exists (the observability signal the slice promises, and which the
+# slice judge measures against the accumulated diff with its `observabilidad`
+# item), nor that an exemption is written `N/A — <razón>` (and that with no
+# reason the groom aborts), nor that a cell with no value is measured as
+# `sin-vara` in the epic's telemetry. A repo with the v18 would declare signals
+# in the spec's prose —invisible to the agent and to the judge— or would never
+# declare them at all, without knowing that the sin-vara count is measuring it.
 #
-# Tarea 5 de "e2e al cierre del slice", el v20: el gate `e2e`
-# (gates.js#GATES) y la columna `E2E` que lo deriva (gates.js#resolveE2e,
-# slices.js#iE2e) llevaban ya en el código de rondas anteriores de esa misma
-# feature, pero ni el v18 ni el v19 los nombraban: un repo bootstrapeado con
-# cualquiera de los dos no podía deducir que existe una columna `E2E`
-# opcional, que si la tabla la trae CADA fila tiene que decidir (un guion no
-# basta — significa "sin declarar", y con la columna presente eso aborta),
-# que el token para "nada que atravesar" es `no`, ni que el gate `e2e` no se
-# escribe a mano en `Gate`: se DERIVA de que `E2E` traiga algún recorrido.
-# El v20 dice las cuatro cosas. La misma tarea siembra además, fuera de este
-# bloque, la sección `## Cómo se atraviesa este repo (e2e)` de AGENTS.md: el
-# kickoff del gate `e2e` (gates.js) manda al agente a esa sección exacta para
-# saber CÓMO se levanta este repo, y sin ella no hay ninguna.
+# Task 5 of "e2e al cierre del slice", the v20: the `e2e` gate (gates.js#GATES)
+# and the `E2E` column that derives it (gates.js#resolveE2e, slices.js#iE2e) had
+# been in the code since earlier rounds of that same feature, but neither the
+# v18 nor the v19 named them: a repo bootstrapped with either of the two could
+# not deduce that there is an optional `E2E` column, that if the table brings it
+# EVERY row has to decide (a dash is not enough — it means "not declared", and
+# with the column present that aborts), that the token for "nothing to traverse"
+# is `no`, nor that the `e2e` gate is not written by hand in `Gate`: it is
+# DERIVED from `E2E` bringing some journey. The v20 says all four things. The
+# same task also seeds, outside this block, the `## Cómo se atraviesa este repo
+# (e2e)` section of AGENTS.md: the kickoff of the `e2e` gate (gates.js) sends
+# the agent to that exact section in order to know HOW this repo is brought up,
+# and without it there is none.
 #
-# El contrato sube de 20 a 21 por una aclaración de texto, no por una
-# funcionalidad nueva: el bullet `E2E` nombra ahora los DOS tokens que valen
-# como "no aplica" (`no` y `n/a`, los que acepta E2E_NONE_TOKENS), donde antes
-# solo nombraba uno. Un pase anterior aplicó ese cambio dentro del bloque
-# sembrado pero registró un SEGUNDO hash de v20 en vez de subir el número,
-# razonando que una aclaración de texto no es un cambio de contrato. Esa
-# razón queda contradicha por la doctrina de este mismo comentario más
-# arriba: el número no mide el tamaño del cambio, mide si el texto que tiene
-# el repo es el que shippea el plugin, y es la ÚNICA palanca que hace que un
-# contrato corregido llegue a un repo ya bootstrapeado. Con el número parado
-# en 20, un repo sembrado con el primer bloque v20 tiene `found_version -eq
-# SLICES_CONTRACT_VERSION` y `block_status=pristine`: la corrida normal
-# imprime "contrato v20, al día" y ni `--update-slices-contract` entra en la
-# rama de "el contenido no es el mío". No hay ningún camino por el que ese
-# repo reciba la aclaración del segundo token.
+# The contract goes from 20 to 21 because of a clarification of the text, not
+# because of a new piece of functionality: the `E2E` bullet now names the TWO
+# tokens that count as "not applicable" (`no` and `n/a`, the ones
+# E2E_NONE_TOKENS accepts), where before it named only one. An earlier pass
+# applied that change inside the seeded block but registered a SECOND v20 hash
+# instead of raising the number, reasoning that a clarification of the text is
+# not a change of contract. That reason is contradicted by the doctrine of this
+# very comment further up: the number does not measure the size of the change,
+# it measures whether the text the repo has is the one the plugin ships, and it
+# is the ONLY lever that makes a corrected contract reach an already
+# bootstrapped repo. With the number stuck at 20, a repo seeded with the first
+# v20 block has `found_version -eq SLICES_CONTRACT_VERSION` and
+# `block_status=pristine`: the normal run prints "contrato v20, al día" and not
+# even `--update-slices-contract` enters the "the content is not mine" branch.
+# There is no path at all by which that repo receives the clarification of the
+# second token.
 #
-# El contrato sube de 21 a 22 por la SEGUNDA carrera de este ledger, calcada
-# de la de los dos v19: el Slice 4 de "apuntes de Capde" (PR #36) subió su
-# propio v20 —el v19 de la `Señal` más el párrafo "la señal no es un
-# criterio de aceptación más"— mientras main, en paralelo, publicaba OTRO
-# v20 (el merge de `Señal`+`E2E`) y después el v21. Aquel v20 de la rama
-# nunca se publicó en main, pero su commit es alcanzable en la historia del
-# merge y su ref fue instalable, así que su hash se queda en el ledger
-# (misma doctrina que el segundo v19); su párrafo se re-sienta sobre el
-# bloque v21 con número propio. El motivo de fondo no cambia: el v21
-# describe la columna `Señal` pero no dice cuándo vale algo. Un repo con el
-# v21 puede declarar como señal una paráfrasis de un criterio de aceptación
-# —el modo de fallo observado en una corrida real— y entonces el ítem
-# `observabilidad` del juez de slice mide lo que `estado-final` ya midió: la
-# columna se rellena, el juez la puntúa, y nadie aprende nada de lo que va a
-# pasar en producción. El v22 lo dice: la señal no es un criterio de
-# aceptación más.
+# The contract goes from 21 to 22 because of the SECOND race of this ledger, a
+# carbon copy of the one between the two v19s: Slice 4 of "apuntes de Capde"
+# (PR #36) raised its own v20 —the `Señal` v19 plus the paragraph "la señal no
+# es un criterio de aceptación más"— while main, in parallel, was publishing
+# ANOTHER v20 (the merge of `Señal`+`E2E`) and then the v21. That v20 of the
+# branch was never published in main, but its commit is reachable in the merge's
+# history and its ref was installable, so its hash stays in the ledger (the same
+# doctrine as the second v19); its paragraph is re-seated on top of the v21
+# block with a number of its own. The underlying reason does not change: the v21
+# describes the `Señal` column but does not say when it is worth anything. A
+# repo with the v21 can declare as its signal a paraphrase of an acceptance
+# criterion —the failure mode observed in a real run— and then the slice judge's
+# `observabilidad` item measures what `estado-final` already measured: the
+# column gets filled in, the judge scores it, and nobody learns anything about
+# what is going to happen in production. The v22 says it: the signal is not one
+# more acceptance criterion.
 #
-# El contrato sube de 22 a 23 por dos cosas que un repo con el v22 no puede
-# deducir, y por el mismo criterio de siempre: el número no mide el tamaño del
-# cambio, mide si el texto que tiene el repo es el que shippea el plugin.
-#   - el v22 dice que él mismo es «esta sección» de `AGENTS.md`. Ya no lo es:
-#     desde #93 el contrato vive en `docs/superpowers/CONTRATO-SLICES.md` y en
-#     `AGENTS.md` queda una sección corta que enlaza a él. Un repo con el v22
-#     manda a quien escribe un spec al fichero equivocado, y su nota de pie
-#     describe una actualización que ya no ocurre donde dice;
-#   - el v22 remite tres veces a `commands/ct-groom.md` y `commands/ct-next.md`
-#     «en el plugin» para el detalle. Esos dos ficheros se quedaron con la
-#     invocación y su tabla de códigos de salida: la referencia larga está en
-#     `docs/loop/ct-groom.md` y `docs/loop/ct-next.md` del repo del plugin. Las
-#     tres citas del v22 apuntan hoy a un fichero que ya no contiene lo que
-#     promete, que es la peor forma de una referencia: parece viva.
+# The contract goes from 22 to 23 because of two things a repo with the v22
+# cannot deduce, and by the same criterion as ever: the number does not measure
+# the size of the change, it measures whether the text the repo has is the one
+# the plugin ships.
+#   - the v22 says that it is itself «this section» of `AGENTS.md`. It is not
+#     any more: since #93 the contract lives in
+#     `docs/superpowers/CONTRATO-SLICES.md` and what is left in `AGENTS.md` is a
+#     short section that links to it. A repo with the v22 sends whoever writes a
+#     spec to the wrong file, and its footnote describes an update that no
+#     longer happens where it says;
+#   - the v22 refers three times to `commands/ct-groom.md` and
+#     `commands/ct-next.md` «in the plugin» for the detail. Those two files were
+#     left with the invocation and their table of exit codes: the long reference
+#     is in `docs/loop/ct-groom.md` and `docs/loop/ct-next.md` of the plugin's
+#     repo. The v22's three citations point today at a file that no longer
+#     contains what it promises, which is the worst form of a reference: it
+#     looks alive.
 SLICES_CONTRACT_VERSION=23
 SLICES_VERSION_LINE_RE='<!-- ct-init:slices-contract-version: [0-9]\{1,\} -->'
-# SLICES_PRISTINE_HASHES: sha256 del bloque COMPLETO (marcador de apertura a
-# marcador de cierre, ambos incluidos) tal cual lo emitió cada versión de este
-# script. Es lo que permite distinguir "sin tocar pero desactualizada" de
-# "editada a mano" sin guardar el texto histórico entero: si el bloque que hay
-# en el AGENTS.md coincide con alguno de estos, nadie lo ha tocado y se puede
-# reemplazar sin perder nada.
+# SLICES_PRISTINE_HASHES: the sha256 of the COMPLETE block (opening marker to
+# closing marker, both included) exactly as each version of this script emitted
+# it. It is what makes it possible to tell "untouched but out of date" apart
+# from "edited by hand" without keeping the whole historical text: if the block
+# in the AGENTS.md matches one of these, nobody has touched it and it can be
+# replaced without losing anything.
 #
-# F9: hasta ahora aquí había DOS hashes — el del bloque actual y el de la
-# última variante anterior. Pero el contenido del bloque cambió NUEVE veces
-# distintas siendo nominalmente "v1" (la línea de versión no existía hasta
-# F6), así que ocho de esas nueve variantes eran irreconocibles: un repo
-# bootstrapeado con el plugin 0.5.1, con el bloque intacto byte a byte, recibía
-# un "la has editado a mano" y `--update-slices-contract` se negaba a
-# actualizarlo. Se registran TODAS.
+# F9: until now there were TWO hashes here — the current block's and the last
+# previous variant's. But the block's content changed NINE different times while
+# nominally being "v1" (the version line did not exist until F6), so eight of
+# those nine variants were unrecognisable: a repo bootstrapped with plugin
+# 0.5.1, with the block intact byte for byte, received a "you have edited it by
+# hand" and `--update-slices-contract` refused to update it. ALL of them are
+# registered.
 #
-# Criterio (F9): un hash por cada bloque DISTINTO que haya emitido cualquier
-# commit alcanzable desde `main`, no solo los que coinciden con un bump de
-# versión del plugin. Dos razones, ambas comprobadas en este repo:
-#   - el repo no tiene tags: un plugin de Claude Code se instala clonando un
-#     ref de git, así que cualquier commit de main pudo ser el HEAD que
-#     alguien instaló — "solo las versiones publicadas" no describe nada real
-#     aquí;
-#   - de todas formas no bastaría: CINCO bloques distintos convivieron bajo el
-#     mismo `plugin.json` 0.6.0, y dos commits (9c6c8cf y d4a5ca8) emiten el
-#     MISMO bloque bajo versiones distintas. La correspondencia
-#     versión-publicada ↔ contenido del bloque no existe.
-# La lista se deriva del historial (ver el test "todo bloque que ct-init emitió
-# alguna vez en la historia está registrado"), no de memoria.
+# The criterion (F9): one hash for every DIFFERENT block any commit reachable
+# from `main` has emitted, not only the ones that coincide with a version bump
+# of the plugin. Two reasons, both checked in this repo:
+#   - the repo has no tags: a Claude Code plugin is installed by cloning a git
+#     ref, so any commit of main could have been the HEAD somebody installed —
+#     "only the published versions" describes nothing real here;
+#   - and it would not be enough anyway: FIVE different blocks coexisted under
+#     the same `plugin.json` 0.6.0, and two commits (9c6c8cf and d4a5ca8) emit
+#     the SAME block under different versions. The correspondence
+#     published-version ↔ block content does not exist.
+# The list is derived from the history (see the test "every block ct-init ever
+# emitted in the history is registered"), not from memory.
 #
-# Un bloque puede existir de verdad y NO estar en la historia de main, porque su
-# PR aterrizó como squash — el caso del v17, contado en su propia línea más
-# abajo. Los bloques en esa situación viven byte a byte como fixture en
-# __tests__/fixtures/ y se declaran en SQUASHED_BLOCK_FIXTURES
-# (__tests__/ct-init.test.js), que es lo que los tests de autovigilancia unen al
-# historial de git. Y no basta con contarlo aquí: un comentario se cree, no se
-# comprueba. Lo que sostiene esa entrada son TRES tests sobre el fixture —que
-# hashea al hash registrado, que no hay fixtures fuera de la lista, y que el
-# hash entró en este fichero en un commit que todavía no traía el fixture (su
-# procedencia, o sea que no lo inventó quien añadió el fichero).
+# A block can really exist and NOT be in main's history, because its PR landed
+# as a squash — the case of the v17, told on its own line further down. Blocks
+# in that situation live byte for byte as a fixture in __tests__/fixtures/ and
+# are declared in SQUASHED_BLOCK_FIXTURES (__tests__/ct-init.test.js), which is
+# what the self-watch tests join to git's history. And telling it here is not
+# enough: a comment is believed, not checked. What holds that entry up are THREE
+# tests over the fixture —that it hashes to the registered hash, that there are
+# no fixtures outside the list, and that the hash went into this file in a
+# commit that did not yet bring the fixture (its provenance, that is, that
+# whoever added the file did not invent it).
 #
-# Formato: un hash por línea, seguido de la procedencia (solo el primer campo
-# se compara). Al cambiar el bloque hay que AÑADIR el hash nuevo — nunca
-# sustituir uno viejo: sin él, los repos sembrados con esa variante vuelven a
-# ser irreconocibles. Los dos tests de autovigilancia del final de
-# __tests__/ct-init.test.js fallan si se olvida cualquiera de las dos cosas.
+# Format: one hash per line, followed by the provenance (only the first field is
+# compared). When the block changes, the new hash has to be ADDED — never to
+# replace an old one: without it, the repos seeded with that variant become
+# unrecognisable again. The two self-watch tests at the end of
+# __tests__/ct-init.test.js fail if either of the two things is forgotten.
 SLICES_PRISTINE_HASHES='
 fcbc6afa3d90780dd05f9b3c62d8512ad8a0dda98bd2b6087a293088fcdb87b4  v1, 47 líneas — 9c6c8cf/d4a5ca8 (plugin 0.3.0–0.4.0)
 7170dd1d5fedbe5482dd74ebe4ed8fdf989e7fd44eed65e7ffdb6614e7b2662a  v1, 57 líneas — 2faa2a8 (plugin 0.5.0)
@@ -552,8 +566,8 @@ b0eb79ab8fd89f83ce7159e9c2a9c32812ee35b76ad6f4c78c2829c9d9891c0b  v20, 585 líne
 6b7ec30ff95a331542932b199b3b5d2f171e197c61efee0fce0c36fd5def2b6c  v23, 600 líneas — #93 (el contrato deja de ser una sección de AGENTS.md y pasa a docs/superpowers/CONTRATO-SLICES.md; sus tres referencias al detalle apuntan a docs/loop/, no a commands/)
 '
 
-# emit_slices_contract: el bloque, en un solo sitio (lo usan tanto el camino
-# de "no existe, se añade" como el de "--update-slices-contract").
+# emit_slices_contract: the block, in a single place (both the "it does not
+# exist, it gets added" path and the "--update-slices-contract" one use it).
 emit_slices_contract() {
   cat <<'EOF'
 <!-- ct-init:slices-contract -->
@@ -1159,10 +1173,10 @@ para adoptarla: `bash <plugin>/scripts/ct-init.sh <dir-repo>
 EOF
 }
 
-# emit_e2e_howto: el cuerpo de la sección de travesía, en un solo sitio —
-# mismo motivo que emit_slices_contract de arriba. Sin versión ni hash
-# pristine (ver el comentario junto a E2E_MARKER_OPEN, más abajo, donde se
-# usa): esto es una PLANTILLA, no un contrato del plugin.
+# emit_e2e_howto: the body of the traversal section, in a single place — same
+# reason as emit_slices_contract above. With no version and no pristine hash
+# (see the comment next to E2E_MARKER_OPEN, further down, where it is used):
+# this is a TEMPLATE, not a contract of the plugin's.
 emit_e2e_howto() {
   cat <<'EOF'
 <!-- ct-init:e2e-howto -->
@@ -1183,31 +1197,31 @@ emit_e2e_howto() {
 EOF
 }
 
-# sha256_of: hash del fichero, con el binario que haya (macOS trae `shasum`,
-# la mayoría de Linux `sha256sum`). Si no hay ninguno, devuelve vacío y quien
-# llama trata el bloque como "no verificable" — nunca como "intacto".
+# sha256_of: the file's hash, with whichever binary is there (macOS brings
+# `shasum`, most Linuxes `sha256sum`). If there is neither, it returns empty and
+# the caller treats the block as "unverifiable" — never as "intact".
 sha256_of() {
   if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
   elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
   else echo ''; fi
 }
 
-# F9, caso que no estaba contemplado: un AGENTS.md con saltos de línea CRLF
-# (repo editado en Windows, fichero pasado por una herramienta que los
-# convierte, `core.autocrlf`…) llevaba un `\r` pegado al final de CADA línea,
-# incluidos los marcadores. `grep -qxF '<!-- ct-init:slices-contract -->'` no
-# encontraba NI el marcador de apertura, NI el de cierre, NI el heading, así
-# que el script concluía "esta sección no existe todavía" y AÑADÍA una segunda
-# copia entera de las 134 líneas al final del fichero — en silencio, exit 0, y
-# saltándose de paso el guardián de rastro parcial de d4a5ca8, que existe
-# justo para que eso no pueda pasar. Todas las comparaciones de línea de aquí
-# en adelante ignoran un `\r` final.
+# F9, a case that was not accounted for: an AGENTS.md with CRLF line endings (a
+# repo edited on Windows, a file put through a tool that converts them,
+# `core.autocrlf`…) carried a `\r` stuck to the end of EVERY line, the markers
+# included. `grep -qxF '<!-- ct-init:slices-contract -->'` found NEITHER the
+# opening marker, NOR the closing one, NOR the heading, so the script concluded
+# "this section does not exist yet" and ADDED a whole second copy of the 134
+# lines at the end of the file — in silence, exit 0, and skipping on the way the
+# partial-trace guard of d4a5ca8, which exists precisely so that that cannot
+# happen. Every line comparison from here on ignores a trailing `\r`.
 #
-# has_line: ¿está esa línea EXACTA en el fichero, con o sin `\r` al final?
-# Con awk y no con `grep -qE '…\r?$'` porque el texto buscado es literal y
-# alguno lleva paréntesis (el heading), que en una ERE significarían otra cosa;
-# y no con `tr -d '\r' | grep -qxF` para no meter una dependencia nueva: si
-# faltara `tr`, esto respondería "no está" y volveríamos a duplicar la sección.
+# has_line: is that EXACT line in the file, with or without a trailing `\r`?
+# With awk and not with `grep -qE '…\r?$'` because the text looked for is
+# literal and some of it carries parentheses (the heading), which in an ERE
+# would mean something else; and not with `tr -d '\r' | grep -qxF` so as not to
+# bring in a new dependency: if `tr` were missing, this would answer "it is not
+# there" and we would be duplicating the section all over again.
 has_line() {
   awk -v want="$1" '
     { line = $0; sub(/\r$/, "", line) }
@@ -1216,11 +1230,12 @@ has_line() {
   ' "$2"
 }
 
-# extract_slices_block: el bloque tal cual está HOY en el AGENTS.md, del
-# marcador de apertura al de cierre, ambos incluidos. Se imprime NORMALIZADO
-# (sin `\r`): así el hash de un bloque intacto pero con saltos CRLF coincide
-# con el registrado — que es la verdad ("nadie ha tocado este texto") en vez de
-# un "no lo reconozco" motivado por los saltos de línea.
+# extract_slices_block: the block exactly as it is TODAY in the AGENTS.md, from
+# the opening marker to the closing one, both included. It is printed NORMALISED
+# (with no `\r`): that way the hash of a block that is intact but has CRLF line
+# endings matches the registered one — which is the truth ("nobody has touched
+# this text") instead of an "I do not recognise it" caused by the line
+# endings.
 extract_slices_block() {
   awk -v om="$SLICES_MARKER_OPEN" -v cm="$SLICES_MARKER_CLOSE" '
     { line = $0; sub(/\r$/, "", line) }
@@ -1230,9 +1245,9 @@ extract_slices_block() {
   ' "$1"
 }
 
-# slices_block_is_crlf: ¿el bloque presente usa CRLF? Decide con qué saltos se
-# reescribe, para no dejar un fichero con la mitad de las líneas en un formato
-# y la mitad en otro.
+# slices_block_is_crlf: does the block that is there use CRLF? It decides with
+# which line endings it gets rewritten, so as not to leave a file with half its
+# lines in one format and half in another.
 slices_block_is_crlf() {
   awk -v om="$SLICES_MARKER_OPEN" -v cm="$SLICES_MARKER_CLOSE" '
     { line = $0; sub(/\r$/, "", line) }
@@ -1243,13 +1258,13 @@ slices_block_is_crlf() {
   ' "$1"
 }
 
-# file_is_crlf: mismo criterio que slices_block_is_crlf pero sobre el fichero
-# ENTERO en vez de un bloque acotado por marcadores — lo usa la siembra de la
-# sección e2e (que no tiene bloque previo del que partir: la primera vez que
-# se añade no hay nada que leer entre sus propios marcadores todavía). Basta
-# con la primera línea con `\r`: un AGENTS.md no mezcla estilos de salto de
-# línea a medio fichero salvo que algo ya lo haya corrompido, caso que este
-# script no pretende arreglar.
+# file_is_crlf: same criterion as slices_block_is_crlf but over the WHOLE file
+# instead of a block bounded by markers — the seeding of the e2e section uses it
+# (it has no previous block to start from: the first time it is added there is
+# nothing to read between its own markers yet). The first line with a `\r` is
+# enough: an AGENTS.md does not mix line-ending styles halfway through the file
+# unless something has already corrupted it, a case this script does not claim
+# to fix.
 file_is_crlf() {
   awk '
     { line = $0; sub(/\r$/, "", line) }
@@ -1258,13 +1273,13 @@ file_is_crlf() {
   ' "$1"
 }
 
-# replace_slices_block: sustituye el bloque entero (marcadores incluidos) por
-# la versión actual, dejando intacto TODO lo que haya antes y después — el
-# AGENTS.md del usuario no se regenera, solo se empalma esta sección.
-# Recibe el fichero como parámetro (#93): el contrato vive ahora en su propio
-# fichero del repo gobernado, y esta misma función es la que sustituye, dentro
-# de un AGENTS.md bootstrapeado antes, el bloque viejo por la sección corta.
-# `$2` es el nombre de la función que emite el texto de sustitución.
+# replace_slices_block: it replaces the whole block (markers included) with the
+# current version, leaving EVERYTHING before and after it intact — the user's
+# AGENTS.md is not regenerated, only this section is spliced in.
+# It takes the file as a parameter (#93): the contract now lives in its own file
+# of the governed repo, and this very function is the one that replaces, inside
+# an AGENTS.md bootstrapped earlier, the old block with the short section.
+# `$2` is the name of the function that emits the replacement text.
 replace_slices_block() {
   local target emitter newblock outfile
   target="$1"; emitter="${2:-emit_slices_contract}"
@@ -1285,10 +1300,11 @@ replace_slices_block() {
   rm -f "$newblock"
 }
 
-# slices_block_hash: sha256 del bloque presente, o vacío si esta máquina no
-# tiene con qué calcularlo. Se guarda en una global porque los mensajes lo
-# citan: un hash que no reconocemos es justo el dato que hace falta para
-# registrarlo (y para que quien lo reporte no tenga que explicar nada más).
+# slices_block_hash: the sha256 of the block that is there, or empty if this
+# machine has nothing with which to compute it. It is kept in a global because
+# the messages cite it: a hash we do not recognise is precisely the datum needed
+# in order to register it (and so that whoever reports it does not have to
+# explain anything else).
 SLICES_BLOCK_HASH=''
 compute_slices_block_hash() {
   local blockfile
@@ -1298,17 +1314,17 @@ compute_slices_block_hash() {
   rm -f "$blockfile"
 }
 
-# slices_block_status: `pristine` | `unknown` | `unverifiable`. Tres estados,
-# no dos (F9): "no coincide con ningún hash conocido" y "no se ha podido
-# calcular el hash" son cosas distintas, y colapsarlas en un solo `return 1`
-# era lo que hacía que una máquina sin `shasum` ni `sha256sum` acusara al
-# usuario de haber editado una sección que estaba intacta.
-# Lee SLICES_BLOCK_HASH; hay que llamar antes a compute_slices_block_hash
-# desde el shell padre (esta se usa dentro de `$(...)`, y lo que asignara ahí
-# se quedaría en la subshell).
+# slices_block_status: `pristine` | `unknown` | `unverifiable`. Three states,
+# not two (F9): "it matches no known hash" and "the hash could not be computed"
+# are different things, and collapsing them into a single `return 1` was what
+# made a machine with neither `shasum` nor `sha256sum` accuse the user of having
+# edited a section that was intact.
+# It reads SLICES_BLOCK_HASH; compute_slices_block_hash has to be called first
+# from the parent shell (this one is used inside `$(...)`, and whatever it
+# assigned there would stay in the subshell).
 slices_block_status() {
   if [ -z "$SLICES_BLOCK_HASH" ]; then echo unverifiable; return; fi
-  # Un hash por línea, con la procedencia detrás: solo se compara el campo 1.
+  # One hash per line, with the provenance behind it: only field 1 is compared.
   if printf '%s\n' "$SLICES_PRISTINE_HASHES" |
      awk -v h="$SLICES_BLOCK_HASH" '$1 == h { found = 1 } END { exit !found }'; then
     echo pristine
@@ -1318,39 +1334,40 @@ slices_block_status() {
 }
 
 # ---------------------------------------------------------------------------
-# #93 — EL CONTRATO SALE DE AGENTS.md Y PASA A TENER FICHERO PROPIO.
+# #93 — THE CONTRACT COMES OUT OF AGENTS.md AND GETS A FILE OF ITS OWN.
 #
-# El bloque son ~39 KB de los ~40 KB que pesaba el AGENTS.md sembrado, y lo lee
-# quien ESCRIBE un spec: una vez por epic, deliberadamente. El AGENTS.md, en
-# cambio, lo lee cada agente al hidratarse, cada sesión, todo el rato — y ahí
-# esos 39 KB compiten por la atención con las veinte líneas que sí gobiernan lo
-# que ese agente va a hacer. Se parte en dos:
+# The block is ~39 KB of the ~40 KB the seeded AGENTS.md weighed, and it is read
+# by whoever WRITES a spec: once per epic, deliberately. The AGENTS.md, on the
+# other hand, is read by every agent as it hydrates, every session, all the time
+# — and there those 39 KB compete for attention with the twenty lines that do
+# govern what that agent is going to do. It is split in two:
 #
-#   - `docs/superpowers/CONTRATO-SLICES.md`: el bloque, byte a byte el mismo que
-#     antes se insertaba en AGENTS.md —marcadores, línea de versión y cuerpo—,
-#     con la MISMA maquinaria de versión, hashes pristine,
-#     `--update-slices-contract` y `--force`. Que sea idéntico no es comodidad:
-#     es lo que hace que el ledger de hashes históricos siga reconociendo un
-#     bloque sembrado por cualquier versión anterior, y que la poda de
-#     `conventions.js` y el descuento de `vara.js` lo sigan viendo por sus
-#     marcadores sin una regla nueva. El fichero ES el bloque y nada más.
-#   - `AGENTS.md`: una sección corta (`<!-- ct-init:loop -->`) con lo que un
-#     agente necesita —los comandos del repo, dónde está la vara, que el estado
-#     de un slice es `.agent/SLICE.md`— y un enlace al contrato.
+#   - `docs/superpowers/CONTRATO-SLICES.md`: the block, byte for byte the same
+#     one that used to be inserted into AGENTS.md —markers, version line and
+#     body—, with the SAME machinery of version, pristine hashes,
+#     `--update-slices-contract` and `--force`. Its being identical is not
+#     convenience: it is what makes the ledger of historical hashes go on
+#     recognising a block seeded by any earlier version, and what keeps
+#     `conventions.js`'s pruning and `vara.js`'s discount seeing it by its
+#     markers with no new rule. The file IS the block and nothing else.
+#   - `AGENTS.md`: a short section (`<!-- ct-init:loop -->`) with what an agent
+#     needs —the repo's commands, where the yardstick is, that a slice's state
+#     is `.agent/SLICE.md`— and a link to the contract.
 #
-# Migración de un repo bootstrapeado antes: su AGENTS.md lleva el contrato
-# dentro. No se le toca por defecto (puede llevar ediciones suyas, misma
-# doctrina de siempre); se AVISA, y `--update-slices-contract` sustituye el
-# bloque por la sección corta si estaba sin editar.
+# The migration of a repo bootstrapped earlier: its AGENTS.md carries the
+# contract inside. It is not touched by default (it may carry edits of its own,
+# the same doctrine as ever); it is WARNED about, and
+# `--update-slices-contract` replaces the block with the short section if it was
+# unedited.
 CONTRATO_DIR="$TARGET/docs/superpowers"
 CONTRATO_MD="$CONTRATO_DIR/CONTRATO-SLICES.md"
 LOOP_MARKER_OPEN='<!-- ct-init:loop -->'
 LOOP_MARKER_CLOSE='<!-- /ct-init:loop -->'
 
-# emit_loop_section: las ~20 líneas del loop que sí lee un agente. Sin versión
-# ni hash pristine, por el mismo motivo que la sección de travesía e2e: trae
-# huecos que el repo TIENE que rellenar (los comandos), así que detectar "el
-# texto cambió" detectaría el uso correcto.
+# emit_loop_section: the ~20 lines of the loop an agent does read. With no
+# version and no pristine hash, for the same reason as the e2e traversal
+# section: it brings gaps the repo HAS to fill in (the commands), so detecting
+# "the text changed" would be detecting correct use.
 emit_loop_section() {
   cat <<'EOF'
 <!-- ct-init:loop -->
@@ -1382,7 +1399,7 @@ Este repo lo gobierna el loop Control Tower: **un issue = un slice = una sesión
 EOF
 }
 
-# --- El contrato, en su fichero ---------------------------------------------
+# --- The contract, in its own file -----------------------------------------
 mkdir -p "$CONTRATO_DIR"
 if [ ! -f "$CONTRATO_MD" ]; then
   emit_slices_contract > "$CONTRATO_MD"
@@ -1440,22 +1457,24 @@ else
   fi
 fi
 
-# --- AGENTS.md: la sección corta, y la migración del contrato viejo ---------
+# --- AGENTS.md: the short section, and the migration of the old contract ---
 has_open=0; has_line "$SLICES_MARKER_OPEN" "$AGENTS_MD" && has_open=1 || true
 has_close=0; has_line "$SLICES_MARKER_CLOSE" "$AGENTS_MD" && has_close=1 || true
 has_heading=0
 has_line "$SLICES_HEADING" "$AGENTS_MD" && has_heading=1 || true
-# F30: el heading viejo cuenta como rastro. Si no, un AGENTS.md con la sección
-# de antes del renombrado y sin marcadores dejaría de reconocerse y recibiría
-# una segunda copia entera (el fallo que cerró la review de F2).
+# F30: the old heading counts as a trace. Otherwise, an AGENTS.md with the
+# section as it was before the renaming and with no markers would stop being
+# recognised and would receive a whole second copy (the failure the F2 review
+# closed).
 has_line "$SLICES_HEADING_LEGACY" "$AGENTS_MD" && has_heading=1 || true
 if [ "$has_open" -eq 1 ] && [ "$has_close" -eq 1 ]; then
-  # Un AGENTS.md bootstrapeado ANTES de #93: lleva el contrato entero dentro.
-  # No se le toca por defecto —puede llevar ediciones suyas, la doctrina de
-  # siempre— pero tampoco se calla: son ~39 KB que cada agente de este repo
-  # relee en cada sesión y que ya están, íntegros, en su fichero propio.
+  # An AGENTS.md bootstrapped BEFORE #93: it carries the whole contract inside.
+  # It is not touched by default —it may carry edits of its own, the same
+  # doctrine as ever— but neither is it kept quiet about: it is ~39 KB that
+  # every agent of this repo re-reads on every session and that are already
+  # there, whole, in their own file.
   found_version="$(extract_slices_block "$AGENTS_MD" | grep -o "$SLICES_VERSION_LINE_RE" | head -n1 | grep -o '[0-9]\{1,\}' || true)"
-  [ -z "$found_version" ] && found_version=1 # sin línea de versión = el contrato original (pre-F6)
+  [ -z "$found_version" ] && found_version=1 # no version line = the original contract (pre-F6)
   compute_slices_block_hash "$AGENTS_MD"
   block_status="$(slices_block_status)"
   hash_note="hash del bloque presente: ${SLICES_BLOCK_HASH:-no calculable en esta máquina}"
@@ -1483,15 +1502,16 @@ elif [ "$has_open" -eq 1 ] || [ "$has_close" -eq 1 ] || [ "$has_heading" -eq 1 ]
   echo "aviso: $AGENTS_MD parece tener restos parciales de la sección del contrato de slices (contrato /ct-groom) — falta el marcador de apertura, el de cierre, o ambos no acompañan al heading; no se añade nada para no duplicar contenido. Revisa $AGENTS_MD a mano: si la sección sigue siendo válida, complétala con '$SLICES_MARKER_OPEN' antes del heading y '$SLICES_MARKER_CLOSE' al final." >&2
 fi
 
-# La sección corta del loop. Se añade si falta, con el mismo idiom que el resto
-# de siembras de este script (salto de línea final asegurado antes del `>>`,
-# CRLF si el fichero ya es CRLF). No se añade cuando el AGENTS.md todavía lleva
-# el contrato entero dentro: ahí la sección corta sería una segunda copia de la
-# misma información, y ese caso ya tiene su aviso arriba con su remedio.
+# The loop's short section. It is added if it is missing, with the same idiom as
+# the rest of this script's seedings (a trailing newline made sure of before the
+# `>>`, CRLF if the file is already CRLF). It is not added when the AGENTS.md
+# still carries the whole contract inside: there the short section would be a
+# second copy of the same information, and that case already has its warning
+# above, with its remedy.
 if has_line "$LOOP_MARKER_OPEN" "$AGENTS_MD"; then
   echo "sección del loop ya está en $AGENTS_MD, no se duplica"
 elif has_line "$SLICES_MARKER_OPEN" "$AGENTS_MD"; then
-  : # el contrato viejo sigue dentro; el aviso de arriba dice cómo salir de ahí
+  : # the old contract is still inside; the warning above says how to get out of there
 else
   loop_crlf=0
   if [ -s "$AGENTS_MD" ] && file_is_crlf "$AGENTS_MD"; then loop_crlf=1; fi
@@ -1507,42 +1527,42 @@ else
   echo "añadida sección del loop (enlaza al contrato de slices) a $AGENTS_MD"
 fi
 
-# Sección "Cómo se atraviesa este repo (e2e)" — tarea 5 de "e2e al cierre del
-# slice". El gate `e2e` (gates.js) manda al agente despachado a leer AQUÍ,
-# por su heading exacto, cómo se levanta este repo: el plugin gobierna repos
-# ajenos y no tiene forma de saberlo (en una librería Rust puede ser `cargo
-# run --example` y un puerto; en una app con staging, un navegador y unas
-# flags). Lo declara el dueño del repo, igual que ya declara build/test/lint
-# en las secciones de arriba — por eso se siembra VACÍA, como plantilla.
+# The "Cómo se atraviesa este repo (e2e)" section — task 5 of "e2e al cierre
+# del slice". The `e2e` gate (gates.js) sends the dispatched agent to read HERE,
+# by its exact heading, how this repo is brought up: the plugin governs other
+# people's repos and has no way of knowing (in a Rust library it may be `cargo
+# run --example` and a port; in an app with staging, a browser and a few flags).
+# The repo's owner declares it, just as they already declare build/test/lint in
+# the sections above — which is why it is seeded EMPTY, as a template.
 #
-# Reutiliza el idiom del bloque del contrato de arriba (marcador HTML
-# greppable, `has_line` tolerante a CRLF) pero, A PROPÓSITO, NO lleva ni
-# número de versión ni hash en SLICES_PRISTINE_HASHES. Esos dos existen para
-# resolver la misma pregunta en el bloque de arriba: "¿ha tocado el usuario
-# algo que se supone que no debía tocar?" — y ahí un hash que no coincide es
-# la señal correcta de alarma. Aquí la pregunta no tiene sentido: esta
-# sección es una PLANTILLA que el usuario TIENE que rellenar, así que
-# detectar "el texto cambió" detectaría el uso correcto y lo trataría como
-# manipulación — el plugin dejaría de reconocerla justo cuando está bien
-# usada. Mismo mecanismo, propósito opuesto: aquí basta la regla simple de
-# "si el marcador de apertura ya está, no se toca nada", sin versión que
-# subir ni contenido que comparar.
+# It reuses the idiom of the contract block above (a greppable HTML marker, a
+# `has_line` tolerant of CRLF) but, ON PURPOSE, it carries neither a version
+# number nor a hash in SLICES_PRISTINE_HASHES. Those two exist in order to
+# resolve the same question in the block above: "has the user touched something
+# they were not supposed to touch?" — and there a hash that does not match is
+# the correct alarm signal. Here the question makes no sense: this section is a
+# TEMPLATE the user HAS to fill in, so detecting "the text changed" would be
+# detecting correct use and treating it as tampering — the plugin would stop
+# recognising it precisely when it is being used properly. Same mechanism,
+# opposite purpose: here the simple rule "if the opening marker is already
+# there, nothing is touched" is enough, with no version to raise and no content
+# to compare.
 E2E_MARKER_OPEN='<!-- ct-init:e2e-howto -->'
 E2E_MARKER_CLOSE='<!-- /ct-init:e2e-howto -->'
 
 if has_line "$E2E_MARKER_OPEN" "$AGENTS_MD"; then
   echo "sección de travesía e2e ya está en $AGENTS_MD, no se duplica"
 else
-  # Igual que replace_slices_block: si el AGENTS.md ya es CRLF, TODO lo que se
-  # añade (el salto de más, la línea en blanco, y el bloque) se escribe con
-  # los mismos saltos — nada de dejar el fichero con la mitad en un formato y
-  # la mitad en otro.
+  # Just like replace_slices_block: if the AGENTS.md is already CRLF,
+  # EVERYTHING that gets added (the extra newline, the blank line, and the
+  # block) is written with the same line endings — no leaving the file with half
+  # of it in one format and half in another.
   e2e_crlf=0
   if [ -s "$AGENTS_MD" ] && file_is_crlf "$AGENTS_MD"; then e2e_crlf=1; fi
   newline() { if [ "$e2e_crlf" -eq 1 ]; then printf '\r\n' >> "$AGENTS_MD"; else echo >> "$AGENTS_MD"; fi; }
-  # Mismo idiom que las dos siembras de arriba: asegurar el salto de línea
-  # final ANTES de `>>`, para no fusionar esta sección con la última línea de
-  # lo que el usuario (o la siembra anterior de esta misma corrida) ya tenía.
+  # Same idiom as the two seedings above: make sure of the trailing newline
+  # BEFORE the `>>`, so as not to merge this section with the last line of what
+  # the user (or the previous seeding of this very run) already had.
   if [ -s "$AGENTS_MD" ] && [ "$(tail -c1 "$AGENTS_MD" | wc -l)" -eq 0 ]; then
     newline
   fi
@@ -1555,16 +1575,16 @@ else
   echo "añadida sección de travesía e2e a $AGENTS_MD"
 fi
 
-# §3.12 (docs/prompt-juez-lo-que-queda.md): `reference-paths` prueba que lo que
-# §3 citó EXISTE, pero nada probaba que se citara TODO lo relevante — un
-# `docs/conventions/` que sí está en el repo pasaba el validador limpio por
-# omisión. Este barrido es determinista y offline y su único producto es una
-# LISTA: no escribe en .agent/conventions.md, no declara nada y no añade
-# ninguna puerta humana — la confirmación es la que ya existe, la persona que
-# está corriendo /ct-init. Va por STDOUT y no por stderr a propósito: no es una
-# alarma sobre un conflicto, es material para una decisión, igual que las
-# líneas de "creado ...". (Y hay un test que exige que la segunda corrida no
-# escriba ningún "aviso" por stderr.)
+# §3.12 (docs/prompt-juez-lo-que-queda.md): `reference-paths` proves that what
+# §3 cited EXISTS, but nothing proved that EVERYTHING relevant was cited — a
+# `docs/conventions/` that is indeed in the repo passed the validator clean by
+# omission. This sweep is deterministic and offline and its only product is a
+# LIST: it does not write in .agent/conventions.md, it declares nothing and it
+# adds no human gate — the confirmation is the one that already exists, the
+# person who is running /ct-init. It goes over STDOUT and not over stderr on
+# purpose: it is not an alarm about a conflict, it is material for a decision,
+# just like the "creado ..." lines. (And there is a test that requires the
+# second run not to write a single "aviso" over stderr.)
 VARA_STATUS=0
 VARA_OUT=''
 if command -v node >/dev/null 2>&1; then
@@ -1578,25 +1598,27 @@ elif [ -n "$VARA_OUT" ]; then
   printf '%s\n' "$VARA_OUT"
 fi
 
-# F11, parte B: hasta ahora ct-init bootstrapeaba ENCIMA de las convenciones
-# que el repo ya tuviera, sin enterarse. El caso real (menoplus): el repo ya
-# traía `scripts/dispatch-check.sh` con su línea en AGENTS.md mandando
-# ejecutarlo, y una convención `git worktree add .claude/worktrees/<slug>` con
-# un hook que la vigila. El plugin trae SU PROPIO dispatch-check.mjs y usa
-# `.worktrees/<n>`/`feat/<n>`, y esta sección se escribió al lado de la que ya
-# había: el AGENTS.md acabó contradiciéndose en dos sitios, y dos protocolos de
-# claim quedaron operando sobre el mismo espacio de labels sin nadie que
-# arbitre. Eso no puede volver a pasar EN SILENCIO.
+# F11, part B: until now ct-init bootstrapped ON TOP OF whatever conventions
+# the repo already had, without finding out. The real case (menoplus): the repo
+# already brought `scripts/dispatch-check.sh` with its line in AGENTS.md
+# ordering it to be run, and a `git worktree add .claude/worktrees/<slug>`
+# convention with a hook watching over it. The plugin brings ITS OWN
+# dispatch-check.mjs and uses `.worktrees/<n>`/`feat/<n>`, and this section was
+# written right beside the one that was already there: the AGENTS.md ended up
+# contradicting itself in two places, and two claim protocols were left
+# operating over the same label space with nobody arbitrating. That cannot
+# happen IN SILENCE again.
 #
-# Se AVISA, no se aborta ni se cambia nada: la decisión (cuál de los dos manda)
-# es del usuario y no hay ninguna que ct-init pueda tomar por él sin romper algo.
-# Por eso también sigue saliendo 0 — el bootstrap ha hecho su trabajo.
+# It WARNS; it does not abort and it changes nothing: the decision (which of the
+# two rules) is the user's and there is none ct-init can take for them without
+# breaking something. That is also why it goes on exiting 0 — the bootstrap has
+# done its job.
 #
-# La detección vive en node (scripts/conventions.js, lógica pura + tests) y no
-# aquí, para que ct-next.mjs pueda usar EXACTAMENTE la misma y los dos avisos no
-# puedan divergir. Si node no está, o el escaneo falla, se dice: un silencio
-# aquí sería indistinguible de "repo limpio", y ese es justo el falso negativo
-# que cuesta un deadlock.
+# The detection lives in node (scripts/conventions.js, pure logic + tests) and
+# not here, so that ct-next.mjs can use EXACTLY the same one and the two
+# warnings cannot diverge. If node is not there, or the scan fails, it is said:
+# a silence here would be indistinguishable from "a clean repo", and that is
+# precisely the false negative that costs a deadlock.
 CONV_STATUS=0
 CONV_OUT=''
 if command -v node >/dev/null 2>&1; then

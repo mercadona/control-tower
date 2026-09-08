@@ -327,7 +327,7 @@ export const E2E_REQUIRED_BY_VERDICT = Object.freeze({
   'no-verificado': Object.freeze(['reason', 'unblock']),
 })
 
-// E2E_SCHEMA: what is asked of the agent that walks the run through.
+// E2E_SCHEMA: what is asked of the agent that walks the journeys through.
 // Declarative and exported for the same reason as VERDICT_SCHEMA: the prompt
 // cites it, and two hand-made copies of the same shape diverge (it happened
 // with JUDGE_TOOLS).
@@ -786,52 +786,53 @@ export function readReport(structured) {
   const { paths, summary } = structured
   if (!Array.isArray(paths) || !paths.every(esTexto)) return { why: 'el informe no trae la lista de rutas tocadas' }
   if (!esTexto(summary)) return { why: 'el informe no trae resumen' }
-  // Una ruta absoluta o que sube de directorio no se stagea: el programa hace
-  // `git add` de lo que diga esta lista, así que la lista es una superficie de
-  // ataque, no un dato de confianza.
+  // An absolute path, or one that climbs out of the directory, does not get
+  // staged: the program runs `git add` on whatever this list says, so the list
+  // is an attack surface, not trusted data.
   const fuera = paths.filter((p) => p.startsWith('/') || p.split('/').includes('..'))
   if (fuera.length) return { why: `el informe declara rutas fuera del worktree: ${fuera.join(', ')}` }
-  // La misma ruta dos veces YA NO DESCARTA. Descartaba cuando esta lista era
-  // la fuente de lo que se stagea: dos declaraciones de la misma ruta no se
-  // podían arbitrar. Desde que las rutas las MIDE el programa contra el árbol
-  // previo a la tarea, la lista es una comprobación cruzada, y en una
-  // comprobación un duplicado no deja nada indecidible: dice lo mismo dos
-  // veces. Descartar el informe entero —y gastar uno de los seis descartes que
-  // matan el run— por una repetición que no cambia nada era el precio más caro
-  // por el defecto más barato.
+  // The same path twice NO LONGER DISCARDS. It used to discard when this list
+  // was the source of what gets staged: two declarations of the same path
+  // could not be arbitrated. Ever since the program MEASURES the paths against
+  // the tree as it stood before the task, the list is a cross-check, and in a
+  // cross-check a duplicate leaves nothing undecidable: it says the same thing
+  // twice. Discarding the whole report —and spending one of the six discards
+  // that kill the run— over a repetition that changes nothing was the dearest
+  // price for the cheapest defect.
   return { report: { paths: [...new Set(paths)], summary } }
 }
 
-// readE2eReport: el informe -> un OUTCOME. Validación a mano y no con una
-// librería de esquemas, igual que readVerdict y por lo mismo: el spec exige
-// cero dependencias nuevas y lo que hay que comprobar cabe aquí.
+// readE2eReport: the report -> an OUTCOME. Validated by hand and not with a
+// schema library, just like readVerdict and for the same reason: the spec
+// demands zero new dependencies and what has to be checked fits here.
 //
-// LA COMPARACIÓN DE `run` ES IDÉNTICA, sólo colapsando espacios. El recorrido
-// llega al agente verbatim desde la celda del spec precisamente para que esto
-// sea posible; normalizar más (minúsculas, quitar puntuación) haría pasar por
-// "el mismo recorrido" dos textos que un humano escribió distintos, y ese
-// título es la única prueba de que se atravesó lo que se pidió y no otra cosa.
+// THE COMPARISON OF `run` IS IDENTICAL, collapsing whitespace and nothing
+// else. The run reaches the agent verbatim from the spec's cell precisely so
+// that this is possible; normalising any further (lowercasing, stripping
+// punctuation) would let two texts a human wrote differently pass as "the same
+// run", and that title is the only proof that what was asked for was walked
+// through and not something else.
 //
-// LO QUE NO COMPRUEBA: que la salida sea real. Ver la cabecera del test.
+// WHAT IT DOES NOT CHECK: that the output is real. See the test's header.
 const colapsa = (s) => String(s || '').replace(/\s+/g, ' ').trim()
 
-// nombraCampo: el nombre del campo tal cual va en el JSON, con la aclaración
-// que hace falta cuando el nombre solo no basta. `evidence` es el único caso:
-// una lista vacía —o con pares a los que les falta el comando o la salida— es
-// tan insuficiente como no ponerla, y decir sólo "falta `evidence`" mandaría a
-// un agente que YA la puso a mirar dónde no está el problema.
+// nombraCampo: the field's name exactly as it travels in the JSON, plus the
+// clarification needed when the name alone is not enough. `evidence` is the
+// only such case: an empty list —or one with pairs missing the command or the
+// output— is as insufficient as leaving it out, and saying only "`evidence` is
+// missing" would send an agent that ALREADY put it there to look where the
+// problem is not.
 const nombraCampo = (campo) => (campo === 'evidence' ? '`evidence` (al menos un par comando/salida, los dos con texto)' : `\`${campo}\``)
 const tieneEvidencia = (e) => (Array.isArray(e.evidence) ? e.evidence.filter((x) => x && esTexto(x.command) && esTexto(x.output)) : []).length > 0
 
 export function readE2eReport(structured, declaredRuns) {
-  // Los recorridos declarados se DEDUPLICAN. Dos celdas idénticas son el mismo
-  // recorrido, y sin esto el informe no tenía ninguna forma correcta de
-  // escribirse: `find` devolvía la MISMA entrada para las dos, `buenos` la
-  // duplicaba (y con ella el apartado en docs/superpowers/e2e/<issue>.md),
-  // mientras que mandar dos entradas iguales hacía que la segunda cayera en
-  // "una entrada que esta slice no declara". Un recorrido repetido no es una
-  // contradicción que haya que rechazar —es una redundancia—, así que se
-  // colapsa en vez de abortar el paso.
+  // The declared runs are DEDUPLICATED. Two identical cells are the same run,
+  // and without this the report had no correct way of being written: `find`
+  // returned the SAME entry for both, `buenos` duplicated it (and with it the
+  // section in docs/superpowers/e2e/<issue>.md), while sending two equal
+  // entries made the second one fall into "an entry this slice does not
+  // declare". A repeated run is not a contradiction that has to be rejected
+  // —it is a redundancy—, so it collapses instead of aborting the step.
   const declared = [...new Set((declaredRuns || []).map(colapsa).filter(Boolean))]
   if (!structured || typeof structured !== 'object' || Array.isArray(structured)) {
     return { outcome: OUTCOMES.DISCARDED, why: 'el agente no devolvió structured_output' }
@@ -850,20 +851,21 @@ export function readE2eReport(structured, declaredRuns) {
       problemas.push(`el recorrido "${run}" trae un veredicto desconocido: ${JSON.stringify(e.verdict)}`)
       continue
     }
-    // Los tres veredictos se validan contra UNA tabla (E2E_REQUIRED_BY_VERDICT,
-    // arriba), no contra tres ramas escritas a mano — es la misma tabla que
-    // `ct-step next` le enseña al agente antes de escribir el informe, así que
-    // no pueden divergir. Sin ella divergieron: `next` anunciaba `run y
-    // verdict` y aquí se exigía además la evidencia, el motivo o los cuatro
-    // campos del rojo.
+    // The three verdicts are validated against ONE table
+    // (E2E_REQUIRED_BY_VERDICT, above), not against three branches written by
+    // hand — it is the same table `ct-step next` shows the agent before it
+    // writes the report, so they cannot diverge. Without it they did diverge:
+    // `next` announced `run and verdict` while here the evidence, the reason
+    // or the four fields of the red one were demanded on top.
     //
-    // Por qué cada veredicto exige lo suyo: un verde sin evidencia (ni cómo se
-    // levantó) es una afirmación sin nada detrás; un no-verificado sin `reason`
-    // y `unblock` es un encogimiento de hombros que libera el slice sin dejar a
-    // nadie sabiendo qué arreglar; y un rojo a medias colaba "undefined"
-    // literal en `docs/superpowers/e2e/<issue>.md` —un artefacto de la pull
-    // request— porque `escribirInformeE2e` (ct-step.mjs) confía en que lo que
-    // llega aquí ya está validado y no vuelve a comprobar nada.
+    // Why each verdict demands what it demands: a green with no evidence (not
+    // even how it was brought up) is a claim with nothing behind it; a
+    // not-verified with no `reason` and no `unblock` is a shrug that releases
+    // the slice without leaving anyone knowing what to fix; and a half-written
+    // red slipped a literal "undefined" into
+    // `docs/superpowers/e2e/<issue>.md` —an artefact of the pull request—
+    // because `escribirInformeE2e` (ct-step.mjs) trusts that whatever reaches
+    // it here is already validated and checks nothing again.
     const faltan = E2E_REQUIRED_BY_VERDICT[e.verdict].filter((campo) => (campo === 'evidence' ? !tieneEvidencia(e) : !esTexto(e[campo])))
     if (faltan.length) {
       problemas.push(`el recorrido "${run}" se declara ${e.verdict} sin ${faltan.map(nombraCampo).join(', ')}: ese veredicto no se sostiene sin eso. Añádelo al informe y vuelve a cerrar el paso con "ct-step e2e"`)
@@ -874,13 +876,14 @@ export function readE2eReport(structured, declaredRuns) {
   for (const e of structured.runs) {
     if (!vistos.has(e)) problemas.push(`el informe trae una entrada que esta slice no declara: "${colapsa(e && e.run)}"`)
   }
-  // EL ROJO GANA AL MAL FORMADO: ver el test homónimo.
+  // RED BEATS MALFORMED: see the test of the same name.
   //
-  // `why` se OMITE aquí cuando no hay problemas — no se pone a `null` — para
-  // no divergir de `readVerdict`/`readReport`, que en su camino feliz tampoco
-  // llevan la clave `why`. Poner `null` explícito habría sido un tercer valor
-  // sin motivo: el llamante (`ct-step.mjs#verboE2e`) ya normaliza con
-  // `why || null`, así que omitirla no cambia ningún comportamiento.
+  // `why` is OMITTED here when there are no problems — it is not set to `null`
+  // — so as not to diverge from `readVerdict`/`readReport`, which do not carry
+  // the `why` key on their happy path either. An explicit `null` would have
+  // been a third value for no reason: the caller (`ct-step.mjs#verboE2e`)
+  // already normalises with `why || null`, so omitting it changes no
+  // behaviour.
   if (buenos.some((e) => e.verdict === 'rojo')) {
     return problemas.length
       ? { outcome: OUTCOMES.FAILED, runs: buenos, why: problemas.join('; ') }
@@ -891,17 +894,17 @@ export function readE2eReport(structured, declaredRuns) {
 }
 
 // ============================================================================
-// LO QUE EL PROGRAMA ESCRIBE
+// WHAT THE PROGRAM WRITES
 //
-// EL IMPLEMENTADOR NO COMITEA: COMITEA EL PROGRAMA. Es lo que hace que un veto
-// no deje rastro que deshacer, y aquí encaja sin fricción porque en Control
-// Tower una tarea ya es un commit.
+// THE IMPLEMENTER DOES NOT COMMIT: THE PROGRAM COMMITS. That is what makes a
+// veto leave no trail to undo, and it fits here without friction because in
+// Control Tower a task is already a commit.
 //
-// Y por eso este módulo valida su propio mensaje: el hook `commit-keyword-guard`
-// es un PreToolUse sobre la herramienta Bash de una SESIÓN, así que un
-// `git commit` lanzado por un programa no pasa por esa puerta. Si el programa no
-// se mira el mensaje, la barandilla que el repo construyó en F27 no cubre este
-// camino.
+// And that is why this module validates its own message: the
+// `commit-keyword-guard` hook is a PreToolUse over the Bash tool of a SESSION,
+// so a `git commit` launched by a program does not go through that door. If
+// the program does not look at its own message, the guardrail the repo built
+// in F27 does not cover this path.
 // ============================================================================
 export function commitMessage({ issue, task, tasksTotal, name }) {
   const titulo = `${sanear(name)} (#${issue}, tarea ${task}/${tasksTotal})`
@@ -909,12 +912,12 @@ export function commitMessage({ issue, task, tasksTotal, name }) {
     '',
     `Tarea ${task} de ${tasksTotal} del plan del slice, implementada y juzgada paso a paso con ct-step.`,
     '',
-    // #95/H5: la marca por la que el hook `Stop` reconoce que este commit lo
-    // hizo el PROGRAMA y no el agente — y entonces actualiza `last_commit` él
-    // mismo en vez de bloquear el turno pidiendo que se copie un sha que ya
-    // tiene. Es un trailer y no una frase del cuerpo porque git lo parsea él
-    // (`%(trailers:key=…)`), así que ningún mensaje puede hacerse pasar por
-    // uno de éstos por casualidad.
+    // #95/H5: the marker by which the `Stop` hook recognises that this commit
+    // was made by the PROGRAM and not by the agent — and then updates
+    // `last_commit` itself instead of blocking the turn asking for a sha to be
+    // copied that it already has. It is a trailer and not a sentence of the
+    // body because git parses it itself (`%(trailers:key=…)`), so no message
+    // can pass itself off as one of these by accident.
     CtStepCommit.TRAILER_LINE,
     'Co-Authored-By: Claude <noreply@anthropic.com>',
   ].join('\n')
@@ -926,20 +929,20 @@ export function commitMessage({ issue, task, tasksTotal, name }) {
   return mensaje
 }
 
-// El nombre de la tarea viene del plan, o sea de un agente. "fixes #12" en el
-// título de una tarea es exactamente el accidente de F27, así que la keyword se
-// desactiva rompiendo la referencia, no borrando la palabra: el título sigue
-// leyéndose igual.
+// The task's name comes from the plan, that is, from an agent. "fixes #12" in
+// the title of a task is exactly the F27 accident, so the keyword is defused
+// by breaking the reference, not by deleting the word: the title still reads
+// the same.
 function sanear(name) {
   return String(name || 'tarea sin nombre').replace(/#(\d+)/g, 'issue $1').trim()
 }
 
-// El veredicto de SLICE no tiene tarea de la que colgar: el de tarea viaja
-// DENTRO del commit de su tarea, y el del slice entero se comitea después de
-// la última — así que estrena su propio commit, con el mismo precedente
-// exacto que el resto de este módulo ya obedece: comitea el PROGRAMA, y el
-// programa se mira su propio mensaje porque `commit-keyword-guard` no ve un
-// `git commit` que no lanzó una sesión.
+// The SLICE verdict has no task to hang off: a task's verdict travels INSIDE
+// the commit of its own task, and the whole slice's is committed after the
+// last one — so it gets a commit of its own, following the exact same
+// precedent the rest of this module already obeys: the PROGRAM commits, and
+// the program looks at its own message because `commit-keyword-guard` never
+// sees a `git commit` that no session launched.
 export function sliceVerdictCommitMessage({ issue, tasksTotal }) {
   const titulo = `Veredicto del slice entero (#${issue})`
   const cuerpo = [

@@ -41,7 +41,7 @@ function run(dir, stopActive = false) {
 }
 
 describe('stop hook', () => {
-  it('bloquea si HEAD avanzó respecto a STATE.last_commit', () => {
+  it('it blocks if HEAD moved on with respect to STATE.last_commit', () => {
     const dir = initRepo()
     const viejo = head(dir)
     commit(dir, 'b.txt')
@@ -51,24 +51,24 @@ describe('stop hook', () => {
     expect(out.reason).toMatch(/STATE\.md/)
     rmSync(dir, { recursive: true, force: true })
   })
-  it('no bloquea si STATE.last_commit == HEAD', () => {
+  it('it does not block if STATE.last_commit == HEAD', () => {
     const dir = initRepo()
     writeState(dir, head(dir))
     expect(run(dir)).toBe('')
     rmSync(dir, { recursive: true, force: true })
   })
-  it('no bloquea con stop_hook_active (anti-bucle)', () => {
+  it('it does not block with stop_hook_active (anti-loop)', () => {
     const dir = initRepo()
     writeState(dir, 'sha_viejo')
     expect(run(dir, true)).toBe('')
     rmSync(dir, { recursive: true, force: true })
   })
-  it('stdin malformado → salida vacía, exit 0 (no crash)', () => {
+  it('malformed stdin → empty output, exit 0 (no crash)', () => {
     const r = spawnSync('node', [hook], { input: 'no-json{', encoding: 'utf8' })
     expect(r.status).toBe(0)
     expect((r.stdout || '').trim()).toBe('')
   })
-  it('no ejecuta comandos inyectados vía last_commit (bloquea, sin efectos)', () => {
+  it('it does not run commands injected through last_commit (it blocks, with no effects)', () => {
     const dir = initRepo()
     writeState(dir, '$(touch pwned)')
     const out = JSON.parse(run(dir))
@@ -76,9 +76,9 @@ describe('stop hook', () => {
     expect(existsSync(join(dir, 'pwned'))).toBe(false)
     rmSync(dir, { recursive: true, force: true })
   })
-  // F7: el hook recuerda qué campos actualizar antes de cerrar; el sitio donde
-  // se registra un bloqueo es ese momento, y `blocked` no estaba en la lista.
-  it('el aviso nombra el campo `blocked` como la forma de decir que el trabajo no puede continuar', () => {
+  // F7: the hook reminds which fields to update before closing; the place where
+  // a block is recorded is that very moment, and `blocked` was not in the list.
+  it('the warning names the `blocked` field as the way to say the work cannot go on', () => {
     const dir = initRepo()
     const viejo = head(dir)
     commit(dir, 'b.txt')
@@ -89,10 +89,10 @@ describe('stop hook', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // F7: `parseState` LANZA con un frontmatter roto y aquí se llamaba sin red —
-  // el hook reventaba con un stack trace por stderr en CADA cierre de turno de
-  // ese repo, sin decir nunca que el problema era el fichero.
-  it('STATE.md con el frontmatter roto → no crashea ni escupe stack trace; lo dice y pide arreglarlo', () => {
+  // F7: `parseState` THROWS on a broken frontmatter and here it was called with
+  // no net — the hook blew up with a stack trace on stderr at EVERY turn
+  // closure of that repo, without ever saying the problem was the file.
+  it('STATE.md with a broken frontmatter → it neither crashes nor spits a stack trace; it says so and asks for a fix', () => {
     const dir = initRepo()
     mkdirSync(join(dir, '.agent'), { recursive: true })
     writeFileSync(join(dir, '.agent', 'STATE.md'), '---\ntask: "sin cerrar\n  ]: [\n---\nx')
@@ -106,7 +106,7 @@ describe('stop hook', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('frontmatter roto + stop_hook_active → no bloquea (anti-bucle)', () => {
+  it('broken frontmatter + stop_hook_active → it does not block (anti-loop)', () => {
     const dir = initRepo()
     mkdirSync(join(dir, '.agent'), { recursive: true })
     writeFileSync(join(dir, '.agent', 'STATE.md'), '---\ntask: "sin cerrar\n  ]: [\n---\nx')
@@ -114,7 +114,7 @@ describe('stop hook', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('sin fuga de stderr cuando cwd no es un repo git', () => {
+  it('no stderr leak when cwd is not a git repo', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     writeState(dir, 'sha_viejo')
     const r = spawnSync('node', [hook], { input: JSON.stringify({ cwd: dir, hook_event_name: 'Stop' }), encoding: 'utf8' })
@@ -124,13 +124,13 @@ describe('stop hook', () => {
 })
 
 // ===========================================================================
-// F12: el guard comparaba `last_commit` con HEAD por IGUALDAD y, al fallar,
-// afirmaba «Hay commits más nuevos» — una relación de ancestría que no
-// comprobaba nunca. En un repo con dos líneas de trabajo vivas eso era falso
-// Y un muro: el bloqueo solo se satisfacía borrando el handoff de la otra.
+// F12: the guard compared `last_commit` with HEAD by EQUALITY and, on failing,
+// asserted «Hay commits más nuevos» — an ancestry relation it never checked. In
+// a repo with two live lines of work that was false AND a wall: the block could
+// only be satisfied by deleting the other line's handoff.
 // ===========================================================================
-describe('stop hook — relación entre last_commit y HEAD', () => {
-  it('ancestro de HEAD: bloquea, y ahora CUENTA los commits en vez de suponerlos', () => {
+describe('stop hook — the relation between last_commit and HEAD', () => {
+  it('ancestor of HEAD: it blocks, and now it COUNTS the commits instead of assuming them', () => {
     const dir = initRepo()
     const viejo = head(dir)
     commit(dir, 'b.txt')
@@ -144,11 +144,11 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // EL CASO REAL. Dos ramas divergentes; el STATE.md de la raíz apunta a un
-  // commit de la que NO está en el checkout. Ese SHA resuelve (mismo object
-  // store) pero jamás será igual a HEAD: antes bloqueaba en CADA turno
-  // acusando de commits «más nuevos» que no existían.
-  it('ramas divergentes: NO bloquea, no dice "más nuevos", y nombra la rama donde vive el commit', () => {
+  // THE REAL CASE. Two divergent branches; the root's STATE.md points at a
+  // commit of the one that is NOT in the checkout. That SHA resolves (same
+  // object store) but will never be equal to HEAD: before, it blocked on EVERY
+  // turn accusing of «más nuevos» commits that did not exist.
+  it('divergent branches: it does NOT block, does not say "más nuevos", and names the branch where the commit lives', () => {
     const dir = initRepo()
     git(dir, 'checkout', '-qb', 'polish-v2-geometria')
     const otro = commit(dir, 'b.txt')
@@ -164,17 +164,18 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Un guard que no se puede satisfacer es un muro: el mismo estado, turno
-  // tras turno, no puede seguir bloqueando eternamente.
-  it('ramas divergentes: el cierre no es un callejón sin salida (dos turnos seguidos, ninguno bloquea)', () => {
+  // A guard that cannot be satisfied is a wall: the same state, turn after
+  // turn, cannot keep blocking for ever.
+  it('divergent branches: the closure is not a dead end (two turns in a row, neither blocks)', () => {
     const dir = initRepo()
     git(dir, 'checkout', '-qb', 'otra')
     const otro = commit(dir, 'b.txt')
     git(dir, 'checkout', '-q', 'main')
     commit(dir, 'c.txt')
     writeState(dir, otro)
-    // #95: el segundo turno ya no repite el aviso (sale vacío), y eso también
-    // es "no bloquea" — lo que este test protege es que no hay `decision`.
+    // #95: the second turn no longer repeats the warning (it comes out empty),
+    // and that is also "it does not block" — what this test protects is that
+    // there is no `decision`.
     for (const _ of [1, 2]) {
       const salida = run(dir)
       expect(salida ? JSON.parse(salida).decision : undefined).toBeUndefined()
@@ -182,7 +183,7 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el estado va POR DELANTE de HEAD: no bloquea y desaconseja explícitamente reapuntar last_commit', () => {
+  it('the state is AHEAD of HEAD: it does not block and explicitly advises against repointing last_commit', () => {
     const dir = initRepo()
     const base = head(dir)
     git(dir, 'checkout', '-qb', 'adelantada')
@@ -198,7 +199,7 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('divergente + stop_hook_active: ni bloqueo ni aviso (anti-bucle)', () => {
+  it('divergent + stop_hook_active: neither block nor warning (anti-loop)', () => {
     const dir = initRepo()
     git(dir, 'checkout', '-qb', 'otra')
     const otro = commit(dir, 'b.txt')
@@ -209,8 +210,8 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // El caso real vino de OTRO WORKTREE escribiendo en el STATE.md de la raíz.
-  it('worktree: el commit de otro worktree resuelve y se trata como divergente, no como "más nuevo"', () => {
+  // The real case came from ANOTHER WORKTREE writing into the root's STATE.md.
+  it('worktree: another worktree\'s commit resolves and is treated as divergent, not as "más nuevo"', () => {
     const dir = initRepo()
     const wt = join(dir, '..', `wt-${Math.random().toString(36).slice(2)}`)
     git(dir, 'worktree', 'add', '-q', '-b', 'rama-worktree', wt)
@@ -225,7 +226,7 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('SHA que no resuelve: bloquea diciendo que no es un commit de este repo, sin afirmar antigüedad', () => {
+  it('a SHA that does not resolve: it blocks saying it is not a commit of this repo, without asserting age', () => {
     const dir = initRepo()
     writeState(dir, 'sha_viejo')
     const out = JSON.parse(run(dir))
@@ -236,7 +237,7 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('last_commit vacío o nulo: no bloquea (nada que comparar)', () => {
+  it('an empty or null last_commit: it does not block (nothing to compare)', () => {
     for (const linea of ['last_commit:', "last_commit: ''", 'last_commit: "   "']) {
       const dir = initRepo()
       mkdirSync(join(dir, '.agent'), { recursive: true })
@@ -246,7 +247,7 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     }
   })
 
-  it('last_commit con pinta de opción de git: se rechaza antes de llegar a git, sin ejecutarla', () => {
+  it('a last_commit that looks like a git option: it is rejected before reaching git, without running it', () => {
     const dir = initRepo()
     writeState(dir, '--output=pwned')
     const r = spawnSync('node', [hook], { input: JSON.stringify({ cwd: dir, hook_event_name: 'Stop' }), encoding: 'utf8' })
@@ -257,7 +258,7 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('repo sin ningún commit: sale en silencio, sin stack trace', () => {
+  it('a repo with no commit at all: it exits in silence, with no stack trace', () => {
     const dir = bareRepo()
     writeState(dir, 'sha_viejo')
     const r = spawnSync('node', [hook], { input: JSON.stringify({ cwd: dir, hook_event_name: 'Stop' }), encoding: 'utf8' })
@@ -267,7 +268,7 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('HEAD desprendido: no se inventa una rama, lo dice', () => {
+  it('detached HEAD: it does not invent a branch, it says so', () => {
     const dir = initRepo()
     const viejo = head(dir)
     commit(dir, 'b.txt')
@@ -280,10 +281,10 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // El aviso sale en CADA turno mientras dure la anomalía (a propósito: es la
-  // presión visible sobre un problema estructural que alguien tiene que
-  // resolver). Ese precio se paga siendo corto.
-  it('el aviso de divergencia es breve: solo lo que cambia una decisión', () => {
+  // The warning comes out on EVERY turn while the anomaly lasts (on purpose: it
+  // is the visible pressure on a structural problem someone has to solve). That
+  // price is paid by being short.
+  it('the divergence warning is brief: only what changes a decision', () => {
     const dir = initRepo()
     git(dir, 'checkout', '-qb', 'polish-v2-geometria')
     const otro = commit(dir, 'b.txt')
@@ -292,18 +293,18 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     writeState(dir, otro)
     const msg = JSON.parse(run(dir)).systemMessage
     expect(msg.length).toBeLessThan(340)
-    // Lo que tiene que seguir estando: dónde vive, que divergen, y el precio
-    // de la acción obvia.
+    // What has to keep being there: where it lives, that they diverge, and the
+    // price of the obvious action.
     expect(msg).toMatch(/polish-v2-geometria/)
     expect(msg).toMatch(/divergentes/)
     expect(msg).toMatch(/sustituyes el de la otra/)
-    // Lo que sobra: explicar por qué el guard no bloquea, en cada turno.
+    // What is superfluous: explaining why the guard does not block, every turn.
     expect(msg).not.toMatch(/pisándose por turnos/)
     expect(msg).not.toMatch(/NO se bloquea el cierre/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el aviso de "va por delante" también es breve', () => {
+  it('the "va por delante" warning is brief too', () => {
     const dir = initRepo()
     git(dir, 'checkout', '-qb', 'adelantada')
     const delante = commit(dir, 'b.txt')
@@ -316,9 +317,9 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // `reset --hard` que se lleva por delante el commit que el STATE.md
-  // describe: el estado apunta a trabajo que ya no existe en ningún ref.
-  it('commit huérfano tras reset --hard: aviso propio, distinto del de "va por delante", y NO bloquea', () => {
+  // A `reset --hard` that takes out the commit the STATE.md describes: the state
+  // points at work that no longer exists under any ref.
+  it('orphan commit after reset --hard: its own warning, distinct from the "va por delante" one, and it does NOT block', () => {
     const dir = initRepo()
     const huerfano = commit(dir, 'b.txt')
     git(dir, 'reset', '-q', '--hard', 'HEAD~1')
@@ -328,13 +329,13 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     expect(out.systemMessage).toMatch(/huérfano/)
     expect(out.systemMessage).toMatch(/ni local ni remota/)
     expect(out.systemMessage).toMatch(/git gc/)
-    // No es el mensaje de `ahead`: aquí no hay ningún handoff que proteger.
+    // It is not the `ahead` message: here there is no handoff to protect.
     expect(out.systemMessage).not.toMatch(/va por delante/)
     expect(out.systemMessage).not.toMatch(/hacia atrás/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('rama divergente borrada: el commit queda huérfano y cae en ese aviso, no en el de divergencia', () => {
+  it('deleted divergent branch: the commit is left orphan and falls into that warning, not the divergence one', () => {
     const dir = initRepo()
     git(dir, 'checkout', '-qb', 'efimera')
     const huerfano = commit(dir, 'b.txt')
@@ -349,8 +350,8 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // «Vive en `origin/polish-v2`» es mucho más útil que «no sé dónde está».
-  it('sin rama local que lo contenga, se mira en las remotas y se nombra origin/…', () => {
+  // «Vive en `origin/polish-v2`» is far more useful than «no sé dónde está».
+  it('with no local branch containing it, the remote ones are looked at and origin/… is named', () => {
     const origen = initRepo()
     git(origen, 'checkout', '-qb', 'polish-v2')
     const otro = commit(origen, 'b.txt')
@@ -361,7 +362,7 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     execFileSync('git', ['config', 'user.email', 't@t'], { cwd: clon })
     execFileSync('git', ['config', 'user.name', 't'], { cwd: clon })
     commit(clon, 'c.txt')
-    // En el clon no hay ninguna rama LOCAL que contenga ese commit.
+    // In the clone there is no LOCAL branch containing that commit.
     expect(git(clon, 'branch', '--contains', otro, '--format=%(refname:short)')).toBe('')
     writeState(clon, otro)
 
@@ -374,7 +375,7 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     rmSync(origen, { recursive: true, force: true })
   })
 
-  it('con rama local que lo contenga, no se cuela el ruido de origin/*', () => {
+  it('with a local branch containing it, the noise of origin/* does not creep in', () => {
     const origen = initRepo()
     const clon = mkdtempSync(join(tmpdir(), 'ct-clon-'))
     execFileSync('git', ['clone', '-q', origen, clon], { encoding: 'utf8' })
@@ -393,7 +394,7 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
     rmSync(origen, { recursive: true, force: true })
   })
 
-  it('un tag o una rama como last_commit resuelve a su commit (no se trata como ilegible)', () => {
+  it('a tag or a branch as last_commit resolves to its commit (it is not treated as unreadable)', () => {
     const dir = initRepo()
     git(dir, 'tag', 'v1')
     writeState(dir, 'v1')
@@ -403,17 +404,17 @@ describe('stop hook — relación entre last_commit y HEAD', () => {
 })
 
 // ============================================================================
-// F15/H4 — EL CHEQUEO DE FRESCURA ERA INSATISFACIBLE POR CONSTRUCCIÓN.
+// F15/H4 — THE FRESHNESS CHECK WAS UNSATISFIABLE BY CONSTRUCTION.
 //
-// El commit que actualiza STATE.md incluye a STATE.md, así que obedecer el
-// guard crea el commit que lo vuelve a invalidar. Reproducido contra el
-// dist/stop.js de dac5326, dos vueltas seguidas:
+// The commit that updates STATE.md includes STATE.md, so obeying the guard
+// creates the very commit that invalidates it again. Reproduced against
+// dac5326's dist/stop.js, two rounds in a row:
 //   HEAD=2926a17 last_commit=192baa2 → block "hay 1 commit … por encima"
 //   HEAD=3346b8e last_commit=2926a17 → block "hay 1 commit … por encima"
 // ============================================================================
 
-// commitState: escribe last_commit y COMMITEA ese cambio — es decir, hace
-// exactamente lo que el guard pide, incluido el commit que lo reintroducía.
+// commitState: writes last_commit and COMMITS that change — that is, it does
+// exactly what the guard asks for, including the commit that reintroduced it.
 function commitState(dir, sha) {
   writeState(dir, sha)
   execFileSync('git', ['add', '-A'], { cwd: dir })
@@ -421,8 +422,8 @@ function commitState(dir, sha) {
   return head(dir)
 }
 
-describe('F15/H4 — obedecer el guard de frescura tiene que dejarlo verde', () => {
-  it('actualizar y commitear STATE.md deja el guard EN SILENCIO (antes: block, infinitamente)', () => {
+describe('F15/H4 — obeying the freshness guard has to leave it green', () => {
+  it('updating and committing STATE.md leaves the guard IN SILENCE (before: block, for ever)', () => {
     const dir = initRepo()
     commit(dir, 'b.txt')
     commitState(dir, head(dir))
@@ -430,17 +431,17 @@ describe('F15/H4 — obedecer el guard de frescura tiene que dejarlo verde', () 
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('y la segunda vuelta también: no hay regresión que se reintroduzca sola', () => {
+  it('and the second round too: there is no regression that reintroduces itself', () => {
     const dir = initRepo()
     commit(dir, 'b.txt')
     commitState(dir, head(dir))
-    commitState(dir, head(dir)) // dos apuntes seguidos, sin trabajo por medio
+    commitState(dir, head(dir)) // two entries in a row, with no work in between
     expect(run(dir)).toBe('')
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // LO QUE NO SE PUEDE PERDER (1): trabajo real sin registrar sigue bloqueando.
-  it('un commit de CÓDIGO sin actualizar STATE.md sigue bloqueando, con su conteo', () => {
+  // WHAT CANNOT BE LOST (1): real unrecorded work still blocks.
+  it('a CODE commit without updating STATE.md still blocks, with its count', () => {
     const dir = initRepo()
     commitState(dir, head(dir))
     commit(dir, 'c.txt')
@@ -450,13 +451,13 @@ describe('F15/H4 — obedecer el guard de frescura tiene que dejarlo verde', () 
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el conteo separa trabajo de apuntes en vez de mezclarlos', () => {
+  it('the count separates work from entries instead of mixing them', () => {
     const dir = initRepo()
     const base = head(dir)
-    commitState(dir, base)      // apunte (no cuenta)
-    commit(dir, 'c.txt')        // trabajo
-    commit(dir, 'd.txt')        // trabajo
-    writeState(dir, base)       // el estado se queda en el commit base
+    commitState(dir, base)      // entry (does not count)
+    commit(dir, 'c.txt')        // work
+    commit(dir, 'd.txt')        // work
+    writeState(dir, base)       // the state stays at the base commit
     const out = JSON.parse(run(dir))
     expect(out.decision).toBe('block')
     expect(out.reason).toMatch(/2 commits de trabajo/)
@@ -464,10 +465,10 @@ describe('F15/H4 — obedecer el guard de frescura tiene que dejarlo verde', () 
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // LO QUE NO SE PUEDE PERDER (2): el agujero obvio del arreglo. Si bastara
-  // con que el commit TOQUE STATE.md, se colaría trabajo real sin registrar
-  // metiéndolo en el mismo commit que el apunte.
-  it('un commit que toca STATE.md Y ADEMÁS código SÍ cuenta como trabajo', () => {
+  // WHAT CANNOT BE LOST (2): the obvious hole in the fix. If it were enough for
+  // the commit to TOUCH STATE.md, real unrecorded work would slip through by
+  // being put in the same commit as the entry.
+  it('a commit that touches STATE.md AND ALSO code DOES count as work', () => {
     const dir = initRepo()
     const base = head(dir)
     mkdirSync(join(dir, '.agent'), { recursive: true })
@@ -481,9 +482,9 @@ describe('F15/H4 — obedecer el guard de frescura tiene que dejarlo verde', () 
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // FAIL CLOSED: un merge no lista ficheros en `git log --name-only`, y puede
-  // traer trabajo de verdad. Cuenta como trabajo, no como apunte.
-  it('un merge (sin ficheros listados) cuenta como trabajo, no como apunte', () => {
+  // FAIL CLOSED: a merge lists no files in `git log --name-only`, and it can
+  // bring real work along. It counts as work, not as an entry.
+  it('a merge (with no files listed) counts as work, not as an entry', () => {
     const dir = initRepo()
     const base = head(dir)
     git(dir, 'checkout', '-q', '-b', 'side')
@@ -496,10 +497,10 @@ describe('F15/H4 — obedecer el guard de frescura tiene que dejarlo verde', () 
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // El hermano que arrastraba el mismo defecto: `unresolvable` bloquea y su
-  // remedio ("pon el SHA real") terminaba, antes de F15, en el mismo bucle en
-  // cuanto commiteabas el arreglo.
-  it('el remedio de `unresolvable` (poner el SHA real y commitearlo) ahora TERMINA', () => {
+  // The sibling that dragged the same defect along: `unresolvable` blocks and
+  // its remedy ("put the real SHA in") ended, before F15, in the same loop as
+  // soon as you committed the fix.
+  it('the `unresolvable` remedy (put the real SHA in and commit it) now TERMINATES', () => {
     const dir = initRepo()
     writeState(dir, 'relleno-que-no-es-un-sha')
     const bloqueado = JSON.parse(run(dir))
@@ -512,14 +513,14 @@ describe('F15/H4 — obedecer el guard de frescura tiene que dejarlo verde', () 
 })
 
 // ===========================================================================
-// #95/H5 — EL AGENTE NO COMITEÓ, PERO HEAD AVANZÓ: EL PROGRAMA SABE EL SHA.
+// #95/H5 — THE AGENT DID NOT COMMIT, BUT HEAD MOVED ON: THE PROGRAM KNOWS THE SHA.
 //
-// En el camino `ct-step`, quien comitea es el PROGRAMA. El agente no tocó
-// `last_commit` porque no hizo ningún commit, y el guard le bloqueaba el turno
-// pidiéndole que copiase un valor que el propio hook ya tiene en la mano
-// (`headSha`). Cuando los commits por encima llevan el trailer que `ct-step`
-// escribe, el hook los reconoce como suyos, actualiza el fichero de estado él
-// mismo y deja cerrar. Lo que no puede atribuir sigue bloqueando.
+// On the `ct-step` path, the one who commits is the PROGRAM. The agent did not
+// touch `last_commit` because it made no commit at all, and the guard blocked
+// its turn asking it to copy a value the hook itself already has in hand
+// (`headSha`). When the commits above carry the trailer `ct-step` writes, the
+// hook recognises them as its own, updates the state file itself and lets the
+// turn close. What it cannot attribute still blocks.
 // ===========================================================================
 function ctStepCommit(dir, name) {
   writeFileSync(join(dir, name), name)
@@ -531,8 +532,8 @@ function lastCommitOf(dir, rel = '.agent/STATE.md') {
   return /^last_commit:\s*(.*)$/m.exec(readFileSync(join(dir, rel), 'utf8'))[1].trim()
 }
 
-describe('#95 — los commits que hizo ct-step no bloquean el cierre del turno', () => {
-  it('tras un ct-step commit el cierre NO bloquea y el fichero de estado queda con el sha de HEAD', () => {
+describe('#95 — the commits ct-step made do not block the turn closure', () => {
+  it("after a ct-step commit the closure does NOT block and the state file is left with HEAD's sha", () => {
     const dir = initRepo()
     const base = head(dir)
     writeState(dir, base)
@@ -543,7 +544,7 @@ describe('#95 — los commits que hizo ct-step no bloquean el cierre del turno',
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('varios commits seguidos de ct-step se atribuyen todos y el estado salta al último', () => {
+  it('several ct-step commits in a row are all attributed and the state jumps to the last one', () => {
     const dir = initRepo()
     writeState(dir, head(dir))
     ctStepCommit(dir, 'b.txt')
@@ -553,9 +554,9 @@ describe('#95 — los commits que hizo ct-step no bloquean el cierre del turno',
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // LO QUE NO SE PUEDE PERDER: un commit que ct-step NO hizo sigue bloqueando,
-  // aunque venga acompañado de otros que sí.
-  it('un commit sin el trailer entre los de ct-step devuelve el bloqueo y NO toca el fichero', () => {
+  // WHAT CANNOT BE LOST: a commit ct-step did NOT make still blocks, even when
+  // it comes accompanied by others that it did.
+  it('a commit without the trailer among ct-step\'s brings the block back and does NOT touch the file', () => {
     const dir = initRepo()
     const base = head(dir)
     writeState(dir, base)
@@ -567,7 +568,7 @@ describe('#95 — los commits que hizo ct-step no bloquean el cierre del turno',
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('un commit hecho a mano, sin ningún trailer, sigue bloqueando igual que antes', () => {
+  it('a commit made by hand, with no trailer at all, still blocks just as before', () => {
     const dir = initRepo()
     const base = head(dir)
     writeState(dir, base)
@@ -577,10 +578,10 @@ describe('#95 — los commits que hizo ct-step no bloquean el cierre del turno',
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // La precedencia de state-paths: en un worktree de slice el fichero que se
-  // escribe es SLICE.md, que es el que el hook leyó — nunca el STATE.md
-  // trackeado de la coordinadora.
-  it('en un worktree de slice se escribe SLICE.md, y el STATE.md de la coordinadora no se toca', () => {
+  // The precedence of state-paths: in a slice worktree the file that gets
+  // written is SLICE.md, which is the one the hook read — never the
+  // coordinator's tracked STATE.md.
+  it("in a slice worktree SLICE.md is written, and the coordinator's STATE.md is not touched", () => {
     const dir = initRepo()
     const base = head(dir)
     mkdirSync(join(dir, '.agent'), { recursive: true })
@@ -593,9 +594,10 @@ describe('#95 — los commits que hizo ct-step no bloquean el cierre del turno',
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // El resto del fichero es del agente: comentarios, campos que este hook no
-  // conoce y el cuerpo en prosa. Se reescribe UNA línea, no se re-serializa.
-  it('solo cambia la línea de last_commit: los comentarios, los campos ajenos y el cuerpo quedan intactos', () => {
+  // The rest of the file belongs to the agent: comments, fields this hook does
+  // not know about and the prose body. ONE line is rewritten, nothing is
+  // re-serialised.
+  it('only the last_commit line changes: the comments, the foreign fields and the body are left intact', () => {
     const dir = initRepo()
     const base = head(dir)
     mkdirSync(join(dir, '.agent'), { recursive: true })
@@ -618,9 +620,9 @@ describe('#95 — los commits que hizo ct-step no bloquean el cierre del turno',
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // El valor entrecomillado es la forma que escribe `buildStateSeed`: se
-  // reescribe el VALOR, no la línea entera, y las comillas siguen ahí.
-  it('un last_commit entrecomillado conserva sus comillas al actualizarse', () => {
+  // The quoted value is the shape `buildStateSeed` writes: the VALUE is
+  // rewritten, not the whole line, and the quotes are still there.
+  it('a quoted last_commit keeps its quotes when it is updated', () => {
     const dir = initRepo()
     const base = head(dir)
     mkdirSync(join(dir, '.agent'), { recursive: true })
@@ -631,7 +633,7 @@ describe('#95 — los commits que hizo ct-step no bloquean el cierre del turno',
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('con stop_hook_active no se escribe nada (anti-bucle)', () => {
+  it('with stop_hook_active nothing is written (anti-loop)', () => {
     const dir = initRepo()
     const base = head(dir)
     writeState(dir, base)
@@ -643,8 +645,9 @@ describe('#95 — los commits que hizo ct-step no bloquean el cierre del turno',
 })
 
 // ===========================================================================
-// #95/H8 — el aviso no bloqueante salía en CADA turno mientras durase la
-// anomalía. Sale en el primero, cuando la relación cambia, y cada N turnos.
+// #95/H8 — the non-blocking warning came out on EVERY turn while the anomaly
+// lasted. It comes out on the first, when the relation changes, and every N
+// turns.
 // ===========================================================================
 function repoAdelantado() {
   const dir = initRepo()
@@ -663,8 +666,8 @@ const avisosEn = (dir, turnos) => {
   return out.filter(Boolean)
 }
 
-describe('#95 — el aviso no bloqueante deja de salir en cada turno', () => {
-  it('cinco turnos seguidos en `ahead` dan UN solo aviso, no cinco', () => {
+describe('#95 — the non-blocking warning stops coming out on every turn', () => {
+  it('five turns in a row in `ahead` give ONE single warning, not five', () => {
     const dir = repoAdelantado()
     const avisos = avisosEn(dir, 5)
     expect(avisos).toHaveLength(1)
@@ -672,17 +675,17 @@ describe('#95 — el aviso no bloqueante deja de salir en cada turno', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el aviso vuelve a salir al cumplirse el periodo, para que la anomalía no se haga invisible', () => {
+  it('the warning comes out again once the period is up, so the anomaly does not become invisible', () => {
     const dir = repoAdelantado()
     expect(avisosEn(dir, NOTICE_REPEAT_EVERY_TURNS * 2)).toHaveLength(2)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('si la relación cambia, el aviso nuevo sale sin esperar al periodo', () => {
+  it('if the relation changes, the new warning comes out without waiting for the period', () => {
     const dir = repoAdelantado()
     expect(avisosEn(dir, 1)).toHaveLength(1)
     expect(avisosEn(dir, 1)).toHaveLength(0)
-    // La misma sesión pasa de `ahead` a `diverged`: es otra anomalía.
+    // The same session goes from `ahead` to `diverged`: it is another anomaly.
     commit(dir, 'c.txt')
     const avisos = avisosEn(dir, 1)
     expect(avisos).toHaveLength(1)
@@ -690,8 +693,8 @@ describe('#95 — el aviso no bloqueante deja de salir en cada turno', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // El marcador es bookkeeping del hook: no puede acabar dentro de un PR.
-  it('el marcador vive en .agent/ y git no lo ve', () => {
+  // The marker is the hook's bookkeeping: it cannot end up inside a PR.
+  it('the marker lives in .agent/ and git does not see it', () => {
     const dir = repoAdelantado()
     avisosEn(dir, 1)
     expect(existsSync(join(dir, '.agent', STOP_NOTICE_REL_NAME))).toBe(true)
@@ -699,9 +702,9 @@ describe('#95 — el aviso no bloqueante deja de salir en cada turno', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Un aviso callado por error es peor que uno repetido: si el marcador no se
-  // puede leer o no se puede excluir de git, se avisa igual.
-  it('un marcador corrupto no silencia el aviso', () => {
+  // A warning silenced by mistake is worse than a repeated one: if the marker
+  // cannot be read or cannot be kept out of git, the warning goes out anyway.
+  it('a corrupt marker does not silence the warning', () => {
     const dir = repoAdelantado()
     avisosEn(dir, 1)
     writeFileSync(join(dir, '.agent', STOP_NOTICE_REL_NAME), 'esto no es json')
@@ -709,7 +712,7 @@ describe('#95 — el aviso no bloqueante deja de salir en cada turno', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el bloqueo de `behind` no pasa por el marcador: sale siempre', () => {
+  it('the `behind` block does not go through the marker: it always comes out', () => {
     const dir = initRepo()
     const viejo = head(dir)
     commit(dir, 'b.txt')

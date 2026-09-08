@@ -246,30 +246,32 @@ describe('the go attempt that starts nothing', () => {
   })
 })
 
-describe('el texto con el que se contesta al intento', () => {
-  // Este texto se publica en el issue y el agente LEE el issue, así que el
-  // nonce es lo único que no puede decir. Asertar `not.toContain(NONCE)` sobre
-  // la constante no valdría: la constante no tiene el nonce en su alcance, así
-  // que esa aserción no puede fallar nunca por el motivo que su nombre da — es
-  // el defecto que conventions/testing.md manda cazar mutando, y mutando salió.
-  // Lo que SÍ puede pasar es que alguien escriba un ejemplo («por ejemplo `-OK
-  // 3f9a1c2b`»), y eso es lo que esto caza: ningún token con forma de nonce.
-  // Quien comprueba lo otro —que el vigilante publique el texto y no otra cosa
-  // con el nonce interpolado— es ct-watch-go.test.js, que sí lo tiene en la mano.
-  it('no lleva ningún token con forma de nonce, ni de ejemplo', () => {
+describe('the text the attempt is answered with', () => {
+  // This text is published on the issue and the agent READS the issue, so the
+  // nonce is the one thing it cannot say. Asserting `not.toContain(NONCE)`
+  // against the constant would be worthless: the constant does not have the
+  // nonce in its scope, so that assertion can never fail for the reason its
+  // name gives — it is the defect conventions/testing.md orders to be hunted
+  // by mutating, and mutating is how it turned up. What CAN happen is that
+  // somebody writes an example ("for instance `-OK 3f9a1c2b`"), and that is
+  // what this hunts: no token shaped like a nonce. The one that checks the
+  // other thing —that the watcher publishes the text and not something else
+  // with the nonce interpolated— is ct-watch-go.test.js, which does have it in
+  // hand.
+  it('carries no token shaped like a nonce, not even as an example', () => {
     expect(GO_FORMAT_REPLY).not.toMatch(/\b(?=[0-9a-f]{4,64}\b)[0-9a-f]*\d[0-9a-f]*\b/i)
   })
 
-  it('dice el formato exacto, con el token en su caja', () => {
+  it('states the exact format, with the token in its case', () => {
     expect(GO_FORMAT_REPLY).toContain(`\`${GO_TOKEN} <nonce>\``)
   })
 
-  it('dice de dónde sale el nonce y cómo se recupera si se perdió', () => {
+  it('says where the nonce comes from and how to recover it if it was lost', () => {
     expect(GO_FORMAT_REPLY).toContain('/ct-next')
     expect(GO_FORMAT_REPLY).toContain('scripts/ct-go.mjs')
   })
 
-  it('dice que el silencio es deliberado, para que no se lea como una avería', () => {
+  it('says the silence is deliberate, so that it does not read as a breakage', () => {
     expect(GO_FORMAT_REPLY).toContain('deliberado')
   })
 })

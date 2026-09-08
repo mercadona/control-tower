@@ -1,70 +1,72 @@
-# frontend/ — el front de la torre de control
+# frontend/ — the control tower's front end
 
-La interfaz web que consume la API de `backend/`. Nace en este repo — repo
-único, sin subtree: la decisión de 2026-09-01 que registra la nota de
-divergencia en `docs/superpowers/specs/2026-08-31-fusion-con-app-companion-design.md`.
-El diseño del front, endpoint a endpoint, está en
-`docs/superpowers/specs/2026-09-02-frontend-primer-endpoint-design.md` (el
-arranque), `docs/superpowers/specs/2026-09-02-frontend-plan-events-design.md`
-(el progreso) y `docs/superpowers/specs/2026-09-03-frontend-implement-plan-design.md`
-(la implementación).
+The web interface that consumes `backend/`'s API. It is born in this repo — one
+single repo, no subtree: the 2026-09-01 decision recorded in the divergence note
+in `docs/superpowers/specs/2026-08-31-fusion-con-app-companion-design.md`.
+The front end's design, endpoint by endpoint, is in
+`docs/superpowers/specs/2026-09-02-frontend-primer-endpoint-design.md` (the
+start-up), `docs/superpowers/specs/2026-09-02-frontend-plan-events-design.md`
+(the progress) and `docs/superpowers/specs/2026-09-03-frontend-implement-plan-design.md`
+(the implementation).
 
-Vite + React 19 + TypeScript. Hoy una pantalla sobre tres endpoints: la clave
-del ticket y el repositorio, un botón que llama a `POST /start-plan`, el
-progreso del plan que llega por `GET /plan-events/:issue` (Server-Sent Events)
-y, cuando el plan está listo, un botón que llama a `POST /implement-plan`.
+Vite + React 19 + TypeScript. Today one screen over three endpoints: the ticket
+key and the repository, a button that calls `POST /start-plan`, the plan's
+progress arriving over `GET /plan-events/:issue` (Server-Sent Events) and, once
+the plan is ready, a button that calls `POST /implement-plan`.
 
-## Lo que ya está decidido
+## What is already decided
 
-- **Nunca se distribuye con el plugin.** El `source` del marketplace es
-  `./plugin` y este directorio queda fuera de toda instalación; aquí las
-  dependencias npm son legítimas.
-- **Lo sirve `backend/`, en el mismo origen.** `ct-api.mjs` sirve `dist/` en
-  `/` cuando existe, así que página y API comparten `http://127.0.0.1:<puerto>`.
-  La API rechaza con `403` cualquier `Origin` que no sea el suyo propio, con
-  `Host` de loopback: una página ajena no puede llamar a `POST /start-plan`, y
-  la nuestra sí, sin CORS ni preflight.
-- **El cliente es `fetch` sin envoltorio** (`src/app/start-plan/client.ts`,
-  `src/app/implement-plan/client.ts`) y `EventSource` nativo para el flujo de
-  eventos (`src/app/plan-events/client.ts`).
-  Las librerías de la casa esperan a que CI tenga acceso al registry privado.
+- **It is never shipped with the plugin.** The marketplace's `source` is
+  `./plugin` and this directory falls outside every installation; npm
+  dependencies are legitimate here.
+- **`backend/` serves it, from the same origin.** `ct-api.mjs` serves `dist/` at
+  `/` when it exists, so page and API share `http://127.0.0.1:<port>`.
+  The API rejects with `403` any `Origin` that is not its own, with a loopback
+  `Host`: a foreign page cannot call `POST /start-plan`, and ours can, with no
+  CORS and no preflight.
+- **The client is `fetch` with no wrapper** (`src/app/start-plan/client.ts`,
+  `src/app/implement-plan/client.ts`) and native `EventSource` for the event
+  stream (`src/app/plan-events/client.ts`).
+  The in-house libraries are waiting for CI to have access to the private
+  registry.
 
-## El aspecto: design system de logística
+## The look: the logistics design system
 
-La pantalla sigue el design system de logística (`mercadona/mo.staff-design`).
-El paquete real vive en el Verdaccio privado y CI no lo alcanza, así que hasta
-que el repo se mude a la organización:
+The screen follows the logistics design system (`mercadona/mo.staff-design`).
+The real package lives in the private Verdaccio and CI cannot reach it, so until
+the repo moves to the organisation:
 
-- `src/system-ui/theme/` es una **copia literal** del tema del paquete (tokens,
-  Open Sans, clases `lg-*`). No se edita; `VENDORED.md` dice cómo refrescarlo.
-- `src/system-ui/{button,input,form-field,banner,top-bar,panel}` son
-  **espejos** de los componentes de `logistics-ui`, con sus mismos tokens y un
-  subconjunto de sus props. El día que entre el paquete, cambia el import.
-- Los tokens viven bajo `[data-ds='logistics']`; el `<html>` lleva ese
-  atributo y `data-theme`, que `Theme.followSystemPreference()` fija desde la
-  preferencia del sistema (claro u oscuro) y sigue si cambia.
+- `src/system-ui/theme/` is a **literal copy** of the package's theme (tokens,
+  Open Sans, `lg-*` classes). It is not edited; `VENDORED.md` says how to
+  refresh it.
+- `src/system-ui/{button,input,form-field,banner,top-bar,panel}` are **mirrors**
+  of `logistics-ui`'s components, with the same tokens and a subset of their
+  props. The day the package arrives, the import changes.
+- The tokens live under `[data-ds='logistics']`; the `<html>` carries that
+  attribute and `data-theme`, which `Theme.followSystemPreference()` sets from
+  the system preference (light or dark) and keeps following if it changes.
 
-## Desarrollo
+## Development
 
 ```bash
-make run-frontend        # desde la raíz: instala, construye dist/ y arranca el backend sirviéndolo
-make dev-frontend        # vite en el 5173 con proxy a la API (arranca antes `make run-backend`)
+make run-frontend        # from the root: installs, builds dist/ and starts the backend serving it
+make dev-frontend        # vite on 5173 proxying to the API (run `make run-backend` first)
 make test-frontend
 ```
 
-O dentro de `frontend/`: `npm ci`, `npm test`, `npm run build`, `npm run dev`.
+Or inside `frontend/`: `npm ci`, `npm test`, `npm run build`, `npm run dev`.
 
-El proxy de `vite.config.ts` reenvía `/start-plan`, `/plan-events` e
-`/implement-plan` y quita
-la cabecera `Origin` de lo que reenvía: sin ella el backend trata la petición
-como cliente no-navegador. Es una
-excepción de desarrollo; en producción la página sale del propio backend.
+`vite.config.ts`'s proxy forwards `/start-plan`, `/plan-events` and
+`/implement-plan` and strips
+the `Origin` header from what it forwards: without it the backend treats the
+request as a non-browser client. It is a
+development exception; in production the page comes out of the backend itself.
 
-## Convenciones
+## Conventions
 
-Las de la skill `frontend-engineering` (sin punto y coma, exports con nombre,
-imports absolutos desde `src/`, un componente por fichero, BEM) más la vara
-que `__tests__/yardstick.test.ts` mide en cada fichero: nombres en inglés,
-cero prosa en comentarios, ningún `export default` salvo el que Vite exige en
-su config, y ningún import que trepe con `../`. Las etiquetas de la interfaz
-van en castellano; todo lo demás, en inglés.
+Those of the `frontend-engineering` skill (no semicolons, named exports,
+absolute imports from `src/`, one component per file, BEM) plus the yardstick
+that `__tests__/yardstick.test.ts` measures on every file: names in English,
+zero prose in comments, no `export default` other than the one Vite demands in
+its config, and no import that climbs with `../`. The interface's labels are in
+Spanish; everything else, in English.

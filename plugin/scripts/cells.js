@@ -1,113 +1,110 @@
-// cells.js — los primitivos de CELDA de la tabla §9 ("Desglose en slices"),
-// separados del parser completo (slices.js). Existe como fichero propio para
-// que gates.js pueda trocear una celda (splitEscapedCommas) y reconocer un
-// marcador de "sin valor" (NO_VALUE_MARKERS/isNoValueCell) SIN importar
-// slices.js — el parser entero, que kickoff.js no depende de él hoy y no
-// debe empezar a hacerlo (kickoff.js importa gates.js). Por eso este módulo
-// no importa nada: cualquier import aquí sería justo lo que gates.js necesita
-// no arrastrar.
+// cells.js — the CELL primitives of the §9 table ("Desglose en slices"),
+// separated from the full parser (slices.js). It exists as a file of its own
+// so that gates.js can split a cell (splitEscapedCommas) and recognise a "no
+// value" marker (NO_VALUE_MARKERS/isNoValueCell) WITHOUT importing slices.js
+// — the whole parser, which kickoff.js does not depend on today and must not
+// start depending on (kickoff.js imports gates.js). That is why this module
+// imports nothing: any import here would be exactly what gates.js needs not
+// to drag along.
 //
-// isNoValueCell arrastra consigo cleanEmphasis/stripPairedUnderscore/sus dos
-// regexes: son su implementación, no primitivos aparte, y no se pueden
-// separar de la función que los usa. stripPairedUnderscore se reexporta
-// porque slices.js también lo usa por su cuenta (Área/Toca), fuera de
-// isNoValueCell.
+// isNoValueCell drags along with it cleanEmphasis/stripPairedUnderscore/their
+// two regexes: they are its implementation, not separate primitives, and they
+// cannot be separated from the function that uses them. stripPairedUnderscore
+// is re-exported because slices.js also uses it on its own (Área/Toca),
+// outside isNoValueCell.
 
-// NO_VALUE_MARKERS: valores de celda que significan "vacío"/"sin valor" —
-// guion (-), en dash (–, U+2013) y em dash (—, U+2014) son variantes
-// tipográficas razonables de la misma intención que un editor de texto
-// (Word, Notion, un móvil con autocorrección…) puede sustituir sin que el
-// autor lo note. CRITICAL de la review de F1: la tabla REAL que originó
-// esta feature usa DELIBERADAMENTE un em dash en la fila S1 para "sin
-// dependencias" — reconocer solo "–"/"-" significa que arreglar la columna
-// "#" (como pide nuestro propio mensaje de error) hace que esa misma celda,
-// que siempre significó "sin dependencias" correctamente, dispare el abort
-// de "Dep malformado" pidiéndole al autor que escriba "#N" para una celda
-// que no necesita ninguna referencia. Un solo criterio de "vacío",
-// compartido entre Dep/Acepta/Área/Toca (antes cada campo repetía su propia
-// comparación `!== '–' && !== '-'`, con el mismo hueco cuatro veces).
-// NBSP alrededor del carácter (p.ej. copiado de un editor que lo inserta
-// automáticamente) ya lo elimina `String#trim()` de forma nativa —
-// verificado (`' — '.trim() === '—'`) — así que no hace falta
-// tratarlo aparte aquí.
+// NO_VALUE_MARKERS: cell values that mean "empty"/"no value" — hyphen (-),
+// en dash (–, U+2013) and em dash (—, U+2014) are reasonable typographic
+// variants of the same intention that a text editor (Word, Notion, a phone
+// with autocorrect…) can substitute without the author noticing. CRITICAL
+// from the F1 review: the REAL table that gave rise to this feature
+// DELIBERATELY uses an em dash in row S1 for "no dependencies" — recognising
+// only "–"/"-" means that fixing the "#" column (as our own error message
+// asks) makes that same cell, which always correctly meant "no dependencies",
+// fire the "Dep malformado" abort, asking the author to write "#N" for a cell
+// that needs no reference at all. A single criterion of "empty", shared
+// between Dep/Acepta/Área/Toca (each field used to repeat its own comparison
+// `!== '–' && !== '-'`, with the same gap four times over). An NBSP around the
+// character (e.g. copied from an editor that inserts it automatically) is
+// already removed natively by `String#trim()` — verified
+// (`' — '.trim() === '—'`) — so it does not need separate handling here.
 export const NO_VALUE_MARKERS = new Set(['-', '–', '—', '―', '−', '--'])
-// isNoValueCell corre `cleanEmphasis` ANTES de comparar (review round 2,
-// punto c): envolver el marcador en marcado inline ("`–`", "**–**") es la
-// MISMA forma que el CRITICAL del em dash — un autor que ya demostró
-// envolver valores en negrita/backticks (F1: "**S1**") envuelve igual de
-// fácil el marcador de "nada". Sin este strip, `isNoValueCell` comparaba la
-// celda cruda contra el Set y "`–`"/"**–**" no matcheaban nada, así que el
-// autor recibía "si no hay dependencias, escribe –" por haber escrito
-// exactamente eso, solo que envuelto. También se amplía el propio conjunto:
-// el signo menos matemático (−, U+2212) y el doble-guion ("--") son
-// salidas plausibles de autocorrección, igual que el em dash.
-// Exportada (además de usarse internamente arriba): groom.js#buildIssueBody
-// la necesita para tratar "Protegido" con el mismo criterio de "sin valor"
-// que ya usan Dep/Acepta/Área/Toca — ver el fix correspondiente en groom.js.
+// isNoValueCell runs `cleanEmphasis` BEFORE comparing (review round 2, point
+// c): wrapping the marker in inline markup ("`–`", "**–**") is the SAME shape
+// as the em dash CRITICAL — an author who has already been shown to wrap
+// values in bold/backticks (F1: "**S1**") wraps the "nothing" marker just as
+// easily. Without this strip, `isNoValueCell` compared the raw cell against
+// the Set and "`–`"/"**–**" matched nothing, so the author got "si no hay
+// dependencias, escribe –" for having written exactly that, only wrapped. The
+// set itself is widened too: the mathematical minus sign (−, U+2212) and the
+// double hyphen ("--") are plausible autocorrect outputs, just like the em
+// dash.
+// Exported (besides being used internally above): groom.js#buildIssueBody
+// needs it to treat "Protegido" with the same "no value" criterion
+// Dep/Acepta/Área/Toca already use — see the corresponding fix in groom.js.
 export function isNoValueCell(trimmedCell) {
   return NO_VALUE_MARKERS.has(cleanEmphasis(trimmedCell))
 }
 
-// EMPHASIS_CHARS_RE / PAIRED_UNDERSCORE_RE / cleanEmphasis (review round 4
-// — segunda mitad del rediseño de la round 3, no un parche encima): la
-// round 3 ya invirtió el enfoque de backtick/asterisco (quitarlos siempre,
-// sin intentar detectar "pares que envuelven"), pero para guion bajo
-// conservó `^_+`/`_+$` — una eliminación ASIMÉTRICA que no distingue un PAR
-// de énfasis real (`_x_`, `__x__`, el cierre es la MISMA cadena que la
-// apertura) de un guion bajo inicial o final SIN pareja. Y eso es
-// exactamente cómo empiezan "_layout.tsx"/"_app.tsx" (Expo Router, Next.js)
-// o "__init__.py" (Python), y cómo puede terminar "trailing_" — nombres de
-// fichero de lo más normales en una columna "Toca". El token ES la clave de
-// colisión de claim.js#tokensOf (comparación exacta): corromper
-// "_layout.tsx" en "layout.tsx" produce colisiones falsas entre slices que
-// no colisionan de verdad.
+// EMPHASIS_CHARS_RE / PAIRED_UNDERSCORE_RE / cleanEmphasis (review round 4 —
+// the second half of round 3's redesign, not a patch on top of it): round 3
+// already inverted the approach for backtick/asterisk (strip them always,
+// with no attempt to detect "pairs that wrap"), but for the underscore it
+// kept `^_+`/`_+$` — an ASYMMETRIC removal that does not tell a real emphasis
+// PAIR (`_x_`, `__x__`, where the closing is the SAME string as the opening)
+// apart from a leading or trailing underscore with NO partner. And that is
+// exactly how "_layout.tsx"/"_app.tsx" (Expo Router, Next.js) or
+// "__init__.py" (Python) start, and how "trailing_" can end — perfectly
+// ordinary file names in a "Toca" column. The token IS the collision key of
+// claim.js#tokensOf (exact comparison): corrupting "_layout.tsx" into
+// "layout.tsx" produces false collisions between slices that do not really
+// collide.
 //
-// PAIRED_UNDERSCORE_RE exige que el cierre sea la MISMA cadena que la
-// apertura (backreference `\1`) — verificado explícitamente carácter por
-// carácter contra la matriz completa antes de escribir el fix:
-// "_layout.tsx"/"_app.tsx"/"__init__.py"/"trailing_" NO matchean (no
-// terminan en guion bajo, o no tienen pareja simétrica) y quedan intactos;
-// "_x_"/"__x__" SÍ matchean y se reducen a "x".
+// PAIRED_UNDERSCORE_RE demands that the closing be the SAME string as the
+// opening (backreference `\1`) — verified explicitly character by character
+// against the complete matrix before writing the fix:
+// "_layout.tsx"/"_app.tsx"/"__init__.py"/"trailing_" do NOT match (they do
+// not end in an underscore, or they have no symmetric partner) and are left
+// intact; "_x_"/"__x__" DO match and are reduced to "x".
 const PAIRED_UNDERSCORE_RE = /^(_{1,3})(.+?)\1$/
 export function stripPairedUnderscore(s) {
   const m = PAIRED_UNDERSCORE_RE.exec(s)
   return m ? m[2] : s
 }
-// EMPHASIS_CHARS_RE: backtick/asterisco no tienen ningún significado
-// legítimo dentro de un token de label — se quitan sin condición.
+// EMPHASIS_CHARS_RE: backtick/asterisk have no legitimate meaning inside a
+// label token — they are stripped unconditionally.
 const EMPHASIS_CHARS_RE = /[`*]/g
-// cleanEmphasis: limpieza para valores de UNA SOLA celda sin estructura de
-// lista (Dep/Acepta/Entrega, vía isNoValueCell) — no hay split por comas de
-// por medio, así que quitar backtick/asterisco de toda la celda y el par
-// de guion bajo (si lo hay) es seguro y no corrompe nada.
+// cleanEmphasis: cleanup for the values of a SINGLE cell with no list
+// structure (Dep/Acepta/Entrega, via isNoValueCell) — there is no comma split
+// in between, so stripping backtick/asterisk from the whole cell and the
+// underscore pair (if there is one) is safe and corrupts nothing.
 function cleanEmphasis(raw) {
   const trimmed = raw.trim()
   const withoutPairedUnderscore = stripPairedUnderscore(trimmed)
   return withoutPairedUnderscore.replace(EMPHASIS_CHARS_RE, '').trim()
 }
 
-// splitEscapedCommas (F6, importante 3): divide una celda por comas que NO
-// vengan escapadas con una barra invertida (`\,`), y devuelve cada trozo con
-// esos escapes ya resueltos a una coma literal.
+// splitEscapedCommas (F6, important 3): splits a cell on commas that are NOT
+// escaped with a backslash (`\,`), and returns each piece with those escapes
+// already resolved to a literal comma.
 //
-// El problema que cierra: "Acepta" se troceaba con un `String#split(',')` a
-// secas, así que una coma DENTRO de un criterio lo partía en dos en silencio
-// — y la cabecera que este mismo pipeline genera para esa sección es
-// literalmente "Acceptance criteria (EARS, 1:1 con tests)": la forma EARS
-// ("Cuando <disparador>, el sistema debe <respuesta>") lleva coma casi
-// siempre. No era un caso raro: era la forma natural de rellenar la columna,
-// y el autor solo lo descubría leyendo el issue ya creado.
+// The problem it closes: "Acepta" was split with a bare `String#split(',')`,
+// so a comma INSIDE a criterion silently broke it in two — and the heading
+// this very pipeline generates for that section is literally "Acceptance
+// criteria (EARS, 1:1 con tests)": the EARS form ("Cuando <disparador>, el
+// sistema debe <respuesta>") carries a comma nearly always. It was not a rare
+// case: it was the natural way to fill in the column, and the author only
+// discovered it by reading the issue once created.
 //
-// Se aplica SOLO a "Acepta" (comprobado columna por columna): "Protegido" no
-// se trocea por comas en absoluto, "Dep" extrae sus referencias con una regex
-// `#N` (una coma dentro no cambia nada), y "Área"/"Toca" sí se trocean pero
-// sus valores son tokens de label de los que `normalizeToken` descarta la
-// coma igualmente — un escape ahí prometería algo que la normalización
-// deshace acto seguido.
+// It is applied ONLY to "Acepta" (checked column by column): "Protegido" is
+// not split on commas at all, "Dep" extracts its references with a `#N` regex
+// (a comma inside changes nothing), and "Área"/"Toca" are split but their
+// values are label tokens from which `normalizeToken` discards the comma
+// anyway — an escape there would promise something the normalisation undoes
+// immediately afterwards.
 //
-// Una barra invertida que NO precede a una coma se conserva tal cual (p.ej.
-// una ruta de Windows en un criterio): solo la secuencia exacta `\,` es un
-// escape.
+// A backslash that does NOT precede a comma is kept as-is (e.g. a Windows
+// path in a criterion): only the exact sequence `\,` is an escape.
 export function splitEscapedCommas(cell) {
   const parts = []
   let current = ''

@@ -5,40 +5,41 @@
 The content, in full:
 
 ```yaml
-# Gate de conformidad de alcance — Control Tower loop
+# Scope conformance gate — Control Tower loop
 #
-# QUÉ HACE: falla el PR si toca ficheros FUERA del alcance que su epic declaró
-# en la línea `Alcance:` de `## Contexto del epic`.
+# WHAT IT DOES: fails the PR if it touches files OUTSIDE the scope its epic
+# declared in the `Alcance:` line of `## Contexto del epic`.
 #
-# POR QUÉ VIVE AQUÍ Y NO EN EL PLUGIN: el agente despachado corre con las
-# credenciales de GitHub del operador, así que puede fabricar cualquier
-# artefacto de GitHub — una review, una aprobación, un comentario de
-# autorización. Su registro es prosa que nadie contrasta. Lo que NO puede
-# falsificar sin que se vea es qué ficheros tocó. Este check juzga ese hecho.
+# WHY IT LIVES HERE AND NOT IN THE PLUGIN: the dispatched agent runs with the
+# operator's GitHub credentials, so it can fabricate any GitHub artefact — a
+# review, an approval, an authorisation comment. Its record is prose nobody
+# cross-checks. What it CANNOT falsify without it showing is which files it
+# touched. This check judges that fact.
 #
-# POR QUÉ NO EN `dispatch-check --release`: ese lo invoca el propio agente. Un
-# guard que ejecuta el sospechoso no es un guard.
+# WHY NOT IN `dispatch-check --release`: that one is invoked by the agent
+# itself. A guard the suspect runs is not a guard.
 #
-# CÓMO SE INSTALA:
-#   1. Copia este fichero a `.github/workflows/ct-scope-gate.yml`.
-#   2. Copia el bundle `dist/scope-check.js` del plugin a `.github/ct/scope-check.js`
-#      (es autocontenido: no necesita el plugin ni node_modules en CI).
-#   3. Añade `ct-scope-gate` como REQUIRED CHECK en la protección de la rama por
-#      defecto. Sin ese paso el check se ve rojo pero deja mergear — y depender
-#      de que un humano mire es justo el fallo que este gate viene a cerrar.
+# HOW IT IS INSTALLED:
+#   1. Copy this file to `.github/workflows/ct-scope-gate.yml`.
+#   2. Copy the plugin's `dist/scope-check.js` bundle to `.github/ct/scope-check.js`
+#      (it is self-contained: it needs neither the plugin nor node_modules in CI).
+#   3. Add `ct-scope-gate` as a REQUIRED CHECK in the default branch's
+#      protection. Without that step the check shows red but still lets the merge
+#      through — and relying on a human to look is exactly the failure this gate
+#      comes to close.
 #
-# AJUSTA `--exempt` a la contabilidad propia de tu repo (un ledger, una
-# bitácora): ficheros que TUS convenciones obligan a tocar en cada slice. Las
-# exenciones del propio loop (`docs/superpowers/plans/**` y
-# `docs/superpowers/specs/**`) ya vienen de serie y no hay que repetirlas.
+# TUNE `--exempt` to your repo's own bookkeeping (a ledger, a logbook): files
+# YOUR conventions force every slice to touch. The loop's own exemptions
+# (`docs/superpowers/plans/**` and `docs/superpowers/specs/**`) already come as
+# standard and do not have to be repeated.
 name: ct-scope-gate
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
 
-# Solo lectura: este workflow no escribe nada en el repo ni en el PR. Su único
-# producto es su propio estado (verde/rojo).
+# Read only: this workflow writes nothing to the repo or to the PR. Its only
+# product is its own status (green/red).
 permissions:
   contents: read
   pull-requests: read
@@ -51,10 +52,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Comprobar que el PR cabe en el alcance de su epic
+      - name: Check that the PR fits inside its epic's scope
         env:
-          # `gh` usa este token. Con `permissions` de solo lectura, el propio
-          # workflow no puede ampliarse los permisos desde el PR.
+          # `gh` uses this token. With read-only `permissions`, the workflow
+          # itself cannot widen its own permissions from the PR.
           GH_TOKEN: ${{ github.token }}
         run: |
           node .github/ct/scope-check.js \

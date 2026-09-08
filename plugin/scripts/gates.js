@@ -112,7 +112,7 @@ export const GATES = {
     // from the spec, but HOW this repo is brought up is not something the
     // plugin can know — the target repo declares it. Without that section, the
     // outcome is "could not be checked", never a red and never an improvised
-    // traversal.
+    // journey.
     kickoff: 'GATE HUMANO `e2e` (lo pide el spec para ESTE slice, en la columna `E2E` de su fila): antes de abrir el PR, atraviesa los recorridos que trae la sección `## E2E` de tu issue — ésos y sólo ésos, no añadas ni quites ninguno. Cómo se levanta este repo lo dice la sección `## Cómo se atraviesa este repo (e2e)` de `AGENTS.md`: si no está rellenada, el veredicto es `no-verificado` con ese motivo, NUNCA rojo y nunca inventarse cómo arrancarlo. Escribe el informe en `docs/superpowers/e2e/<issue>.md` con el comando literal y su salida real por cada recorrido, commitéalo, y pégalo como comentario del PR. Si algún recorrido sale ROJO, PARA sin liberar. No lo cierras tú: lo cierra quien revisa.',
     issue: '**`e2e`** — este slice declara recorridos en la columna `E2E` de su fila: el PR debe traer el informe de haberlos atravesado (`docs/superpowers/e2e/<issue>.md`, commiteado y pegado como comentario) con el comando y su salida por cada uno. Un recorrido en rojo impide el `--release`; uno que no se pudo comprobar libera, pero lo dice. El agente no puede darlo por cumplido.',
   },

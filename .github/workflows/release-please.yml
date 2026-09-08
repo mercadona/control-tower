@@ -1,44 +1,46 @@
 name: Release Please
 
-# El changelog no se escribe a mano: lo deriva release-please de los mensajes
-# de commit, que este repo ya escribe en Conventional Commits con el paquete
-# como scope (`feat(plugin):`, `fix(backend):`). Un CHANGELOG.md a mano es un
-# fichero que se actualiza cuando alguien se acuerda; éste no puede divergir
-# del historial porque ES el historial.
+# The changelog is not written by hand: release-please derives it from the
+# commit messages, which this repo already writes in Conventional Commits with
+# the package as the scope (`feat(plugin):`, `fix(backend):`). A CHANGELOG.md
+# written by hand is a file that gets updated whenever somebody remembers; this
+# one cannot diverge from the history because it IS the history.
 #
-# CÓMO FUNCIONA, en dos actos. Cada push a `main` recalcula qué versión tocaría
-# a cada paquete y deja UNA pull request abierta con los tres CHANGELOG.md y
-# los tres `package.json` ya subidos. Esa pull request se queda ahí, y se
-# actualiza sola con cada push, hasta que una persona la mergea: ese merge es
-# el que crea los tags y las releases de GitHub. Publicar sigue siendo una
-# decisión humana, como las otras tres puertas del loop.
+# HOW IT WORKS, in two acts. Every push to `main` recomputes which version each
+# package would be due and leaves ONE pull request open with the three
+# CHANGELOG.md and the three `package.json` already bumped. That pull request
+# stays there, and updates itself with every push, until a person merges it:
+# that merge is the one that creates the tags and the GitHub releases.
+# Publishing is still a human decision, like the loop's other three gates.
 #
-# TRES PAQUETES, TRES VERSIONES. `plugin/` es lo único que se distribuye y su
-# versión viaja en la telemetría de cada run (`plugin_version`), así que no
-# puede moverse porque alguien toque el front. `backend/` y `frontend/` llevan
-# la suya. release-please reparte cada commit por los FICHEROS que toca, no por
-# el scope del mensaje, así que un commit que cruza dos paquetes sale en los dos
-# changelogs, que es lo correcto: cambió los dos.
+# THREE PACKAGES, THREE VERSIONS. `plugin/` is the only thing that gets
+# distributed and its version travels in the telemetry of every run
+# (`plugin_version`), so it cannot move because somebody touched the frontend.
+# `backend/` and `frontend/` carry their own. release-please sorts every commit
+# by the FILES it touches, not by the scope of the message, so a commit that
+# crosses two packages comes out in both changelogs, which is the correct
+# thing: it changed both.
 #
-# UNA SOLA PULL REQUEST para los tres (`separate-pull-requests: false`), y tres
-# releases al mergearla, una por paquete que haya cambiado. Con una pull request
-# por paquete la cola de release competiría con la cola de trabajo.
+# ONE SINGLE PULL REQUEST for the three of them
+# (`separate-pull-requests: false`), and three releases when it is merged, one
+# per package that has changed. With one pull request per package the release
+# queue would compete with the work queue.
 #
-# POR QUÉ ESTA PULL REQUEST NO TRAE CHECKS. Los eventos que crea el
-# `GITHUB_TOKEN` por defecto no disparan otros workflows —GitHub lo impide para
-# que un workflow no se llame a sí mismo en bucle—, así que la CI no corre sobre
-# la pull request de release. Es asumible: sólo toca versiones y changelogs, y
-# la CI ya corrió sobre cada commit que la compone. Si algún día se quiere lo
-# contrario, se crea un PAT con `contents: write` y `pull-requests: write`, se
-# guarda como secreto y se añade `token: ${{ secrets.RELEASE_PLEASE_TOKEN }}`
-# al paso de abajo. No hace falta tocar nada más.
+# WHY THIS PULL REQUEST BRINGS NO CHECKS. The events the default `GITHUB_TOKEN`
+# creates do not trigger other workflows —GitHub forbids it so that a workflow
+# cannot call itself in a loop—, so CI does not run over the release pull
+# request. It is acceptable: it only touches versions and changelogs, and CI
+# already ran over every commit that makes it up. If one day the opposite is
+# wanted, create a PAT with `contents: write` and `pull-requests: write`, keep
+# it as a secret and add `token: ${{ secrets.RELEASE_PLEASE_TOKEN }}` to the
+# step below. Nothing else needs touching.
 
 on:
   push:
     branches: [main]
 
-# Sin permisos por defecto: los pide el job que los necesita, y sólo ésos. Mismo
-# criterio que continuous-integration.yml.
+# No permissions by default: the job that needs them asks for them, and only
+# those. Same criterion as continuous-integration.yml.
 permissions: {}
 
 concurrency:
@@ -53,8 +55,8 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      # Pinneada por SHA y con la versión al lado, como las cuatro acciones de
-      # continuous-integration.yml: un tag se puede mover, un SHA no.
+      # Pinned by SHA and with the version beside it, like the four actions of
+      # continuous-integration.yml: a tag can be moved, a SHA cannot.
       - name: Release Please
         uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
         with:

@@ -3,25 +3,26 @@ import { STATE_REL_PATH as COORD_REL_PATH, SLICE_REL_PATH } from './state-paths.
 import { CtStepCommit } from './ct-step-commit.js'
 
 // ===========================================================================
-// F22 — `stateRel`: QUÉ FICHERO NOMBRAN LOS MENSAJES DE ESTE MÓDULO.
+// F22 — `stateRel`: WHICH FILE THIS MODULE'S MESSAGES NAME.
 //
-// Este módulo no lee ficheros: recibe el texto ya leído. Hasta F22 eso no
-// importaba, porque el fichero era siempre `.agent/STATE.md` y la constante
-// escrita a mano dentro de cada frase acertaba siempre. Desde F22 hay DOS
-// (ver scripts/state-paths.js) y quien lee ya aplica la precedencia — así que
-// una constante dentro del mensaje ya no describe nada: AFIRMA. En el worktree
-// de un slice afirmaba `.agent/STATE.md`, que es el fichero TRACKEADO de la
-// coordinadora, y el motivo de bloqueo del hook `Stop` sale en cada turno.
+// This module does not read files: it receives the text already read. Until
+// F22 that did not matter, because the file was always `.agent/STATE.md` and
+// the constant written by hand inside every sentence was always right. Since
+// F22 there are TWO (see scripts/state-paths.js) and whoever reads already
+// applies the precedence — so a constant inside the message no longer
+// describes anything: it CLAIMS. In a slice's worktree it claimed
+// `.agent/STATE.md`, which is the coordinator's TRACKED file, and the `Stop`
+// hook's blocking reason comes out on every single turn.
 //
-// El mecanismo es una opción `stateRel` con valor por defecto, no un
-// parámetro obligatorio: los llamantes que no distinguen (y los tests que
-// ejercitan las funciones sueltas) siguen viendo exactamente el texto de
-// antes. La ruta es RELATIVA a propósito — quien lee el mensaje está dentro
-// de ese directorio.
+// The mechanism is a `stateRel` option with a default value, not a mandatory
+// parameter: the callers that do not tell the two apart (and the tests that
+// exercise the functions on their own) go on seeing exactly the text of
+// before. The path is RELATIVE on purpose — whoever reads the message is
+// inside that directory.
 //
-// El default es el fichero de la COORDINADORA porque es el único caso en que
-// "no me han dicho cuál" tiene una respuesta correcta: un slice SIEMPRE llega
-// por el hook, que sí sabe cuál leyó.
+// The default is the COORDINATOR's file because it is the only case in which
+// "nobody told me which" has a right answer: a slice ALWAYS arrives through
+// the hook, which does know which one it read.
 // ===========================================================================
 
 const FM = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/
@@ -33,16 +34,17 @@ export function parseState(md) {
   return { meta: parse(m[1]) ?? {}, body: m[2].trim() }
 }
 
-// parseStateSafe: `parseState` LANZA si el frontmatter no es YAML válido (lo
-// hace `yaml.parse`, y así se queda: quien pida el frontmatter tipado tiene
-// derecho a enterarse de que no lo es). Pero los dos hooks corren en el
-// arranque/cierre de CADA sesión de un repo bootstrapeado: ahí una excepción
-// no es un error informativo, es un hook que revienta con un stack trace por
-// stderr en cada turno, del que nadie deduce que el problema es su fichero de
-// estado. Esta variante nunca lanza y devuelve el error como DATO, para que quien
-// hidrata pueda DECIRLO en vez de callarlo (ver composeHydration: un
-// frontmatter ilegible es el único caso en que de verdad "no se sabe" si el
-// trabajo está bloqueado, y se anuncia como tal).
+// parseStateSafe: `parseState` THROWS if the frontmatter is not valid YAML
+// (`yaml.parse` does, and it stays that way: whoever asks for the typed
+// frontmatter has a right to find out that it is not). But the two hooks run
+// at the start-up/closure of EVERY session of a bootstrapped repo: there an
+// exception is not an informative error, it is a hook that blows up with a
+// stack trace on stderr every turn, from which nobody deduces that the problem
+// is their state file. This variant never throws and returns the error as a
+// DATUM, so that whoever hydrates can SAY it instead of keeping quiet about it
+// (see composeHydration: an unreadable frontmatter is the only case in which
+// it really "is not known" whether the work is blocked, and it is announced as
+// such).
 export function parseStateSafe(md) {
   try {
     return { ...parseState(md), error: null }
@@ -57,72 +59,73 @@ export function renderState({ meta, body }) {
 }
 
 // ===========================================================================
-// `blocked` — el campo que distingue "esto es lo siguiente" de "esto no se
-// puede hacer", en un dato que lee un programa y no en prosa dentro de otro
-// campo.
+// `blocked` — the field that tells "this is what comes next" apart from "this
+// cannot be done", in a datum a program reads and not in prose inside another
+// field.
 //
-// EL AGUJERO QUE TAPA (caso real): un repo tenía
-// `next_action: "Lanzar la corrida REAL de /ct-groom…"`. Después se descubrió
-// que esa corrida escribiría datos falsos y quedó bloqueada. El hook de
-// SessionStart inyecta el STATE.md entero en TODA sesión nueva de ese repo (y
-// de cualquier worktree suyo), y una sesión fresca lee `next_action` como la
-// orden vigente: durante un rato, cualquier sesión nueva habría lanzado el
-// groom sin saber nada. La mitigación fue reescribir el campo a mano con la
-// palabra "BLOQUEADO" y las razones en prosa — es decir, confiar en que quien
-// lo lea interprete bien un texto libre. Eso no es un mecanismo.
+// THE HOLE IT COVERS (a real case): a repo had
+// `next_action: "Lanzar la corrida REAL de /ct-groom…"`. It was found out
+// afterwards that that run would write false data, and it was left blocked.
+// The SessionStart hook injects the whole STATE.md into EVERY new session of
+// that repo (and of any worktree of it), and a fresh session reads
+// `next_action` as the standing order: for a while, any new session would have
+// launched the groom knowing nothing. The mitigation was to rewrite the field
+// by hand with the word "BLOQUEADO" and the reasons in prose — that is, to
+// trust whoever reads it to interpret free text correctly. That is not a
+// mechanism.
 //
-// POR QUÉ UN CAMPO PROPIO Y NO `status: blocked`:
-//   - `status` es el eje de PROGRESO (`not_started` → `in_progress` → …), lo
-//     siembra `buildStateSeed` y lo mueve el trabajo. "Bloqueado" es un eje
-//     ORTOGONAL: se puede estar bloqueado a medias de un `in_progress`.
-//     Fundirlos obliga a destruir el progreso al bloquear y a acordarse de
-//     restaurar el valor anterior al desbloquear — un round-trip que nadie
-//     hace bien a mano.
-//   - un enum no tiene sitio para lo único que hace accionable un bloqueo:
-//     POR QUÉ y QUÉ HARÍA FALTA para levantarlo. `blocked` es un mapa
-//     (`reason`/`since`/`unblock`) justamente para que esas dos cosas sean
-//     campos, no prosa que el lector tenga que adivinar.
+// WHY A FIELD OF ITS OWN AND NOT `status: blocked`:
+//   - `status` is the PROGRESS axis (`not_started` → `in_progress` → …), it is
+//     seeded by `buildStateSeed` and moved by the work. "Blocked" is an
+//     ORTHOGONAL axis: one can be blocked halfway through an `in_progress`.
+//     Fusing them forces you to destroy the progress in order to block and to
+//     remember to restore the previous value on unblocking — a round trip
+//     nobody does right by hand.
+//   - an enum has no room for the only thing that makes a block actionable:
+//     WHY and WHAT WOULD BE NEEDED to lift it. `blocked` is a map
+//     (`reason`/`since`/`unblock`) precisely so that those two things are
+//     fields, not prose the reader has to guess at.
 //
-// SILENCIO = NO BLOQUEADO (decisión deliberada). Un STATE.md sin el campo se
-// lee como no bloqueado, no como "no se sabe":
-//   - TODOS los STATE.md que existen hoy son anteriores al campo. Con
-//     "silencio = no se sabe", cada hidratación de cada repo abriría con un
-//     aviso — y un aviso que sale siempre es un aviso que nadie lee (el aviso
-//     en prosa de `commands/ct-init.md` ya demostró que la prosa que siempre
-//     está se ignora).
-//   - el fallo que arreglamos es un POSITIVO CADUCADO (un `next_action` que no
-//     debe ejecutarse), no un negativo ausente.
-//   - el caso en que de verdad NO SE SABE sí existe y sí grita: un
-//     frontmatter que no se puede parsear (ver `parseStateSafe` y
+// SILENCE = NOT BLOCKED (a deliberate decision). A STATE.md with no such field
+// reads as not blocked, not as "it is not known":
+//   - EVERY STATE.md that exists today predates the field. With "silence = it
+//     is not known", every hydration of every repo would open with a warning —
+//     and a warning that always comes out is a warning nobody reads (the prose
+//     warning of `commands/ct-init.md` already proved that prose that is
+//     always there gets ignored).
+//   - the failure we are fixing is a STALE POSITIVE (a `next_action` that must
+//     not be executed), not an absent negative.
+//   - the case in which it really IS NOT KNOWN does exist and does shout: a
+//     frontmatter that cannot be parsed (see `parseStateSafe` and
 //     `composeHydration`).
 // ===========================================================================
 
-// Valores que un humano escribe queriendo decir "no bloqueado" y que un
-// truthy-check ingenuo leería como bloqueo. Comparación exacta (trim +
-// minúsculas) sobre la cadena ENTERA, nunca por prefijo: `blocked: "no puedo
-// seguir hasta que…"` empieza por "no" y es un bloqueo de verdad. Los guiones
-// son los mismos marcadores de "sin valor" que ya acepta el contrato de la
-// tabla §9 (ct-init.sh), por coherencia de vocabulario.
+// Values a human writes meaning "not blocked" and that a naive truthy-check
+// would read as a block. Exact comparison (trim + lower case) over the WHOLE
+// string, never by prefix: `blocked: "no puedo seguir hasta que…"` begins with
+// "no" and is a real block. The dashes are the same "no value" markers the §9
+// table's contract already accepts (ct-init.sh), for consistency of
+// vocabulary.
 const NOT_BLOCKED_WORDS = new Set([
   'no', 'false', 'none', 'null', 'nil', 'n', 'ninguno', 'ninguna', 'nada', 'n/a', 'na',
   '-', '–', '—', '―', '−', '--',
 ])
 
-// Las claves del mapa `blocked` que se leen. Cualquier otra se ANUNCIA con su
-// valor (ver readBlocked): un `blocked: {razon: "…"}` no puede acabar
-// presentado como "bloqueado y no dice por qué" mientras el fichero sí lo
-// dice.
+// The keys of the `blocked` map that get read. Any other one is ANNOUNCED with
+// its value (see readBlocked): a `blocked: {razon: "…"}` cannot end up
+// presented as "blocked and does not say why" while the file does say it.
 const BLOCK_KEYS = ['reason', 'since', 'unblock']
 
-// `status: blocked` — el error de escritura más probable, y el que NO puede
-// salir gratis. Decidir que el bloqueo vive en un campo propio (y no en
-// `status`) crea justo esta categoría de rechazados: alguien que quiere
-// bloquear escribe lo primero que suena razonable, `status: blocked`, y con
-// una lectura estricta se quedaría sin ningún efecto — un bloqueo escrito de
-// buena fe y tragado en silencio, que es peor que el problema original.
-// Se resuelve en la dirección segura: se trata como BLOQUEADO igual, y se
-// dice que el campo canónico es otro (y por qué importa: `status` no tiene
-// dónde poner el motivo ni el desbloqueo).
+// `status: blocked` — the most likely writing mistake, and the one that CANNOT
+// come out free. Deciding that the block lives in a field of its own (and not
+// in `status`) creates exactly this category of the rejected: somebody who
+// wants to block writes the first thing that sounds reasonable,
+// `status: blocked`, and under a strict reading it would have no effect at all
+// — a block written in good faith and swallowed in silence, which is worse
+// than the original problem. It is resolved in the safe direction: it is
+// treated as BLOCKED all the same, and it is said that the canonical field is
+// another one (and why that matters: `status` has nowhere to put the reason or
+// the unblocking).
 const STATUS_BLOCKED_WORDS = new Set([
   'blocked', 'blocked_on', 'bloqueado', 'bloqueada', 'on_hold', 'on-hold', 'parado', 'parada',
 ])
@@ -130,13 +133,13 @@ const STATUS_BLOCKED_WORDS = new Set([
 const str = (v) => (v == null ? '' : String(v).trim())
 
 /**
- * Lee el campo `blocked` de un frontmatter ya parseado.
- * Devuelve uno de:
- *   { state: 'none' }                       → no bloqueado
+ * Reads the `blocked` field of an already parsed frontmatter.
+ * Returns one of:
+ *   { state: 'none' }                       → not blocked
  *   { state: 'blocked', reason, since, unblock, notes[] }
- *   { state: 'unreadable', why }            → el frontmatter no es un mapa
- * En la duda se elige SIEMPRE 'blocked': un falso positivo cuesta una
- * pregunta; un falso negativo es exactamente el incidente que originó esto.
+ *   { state: 'unreadable', why }            → the frontmatter is not a map
+ * In case of doubt 'blocked' is ALWAYS chosen: a false positive costs a
+ * question; a false negative is exactly the incident that gave rise to this.
  */
 export function readBlocked(meta, { stateRel = COORD_REL_PATH } = {}) {
   if (meta == null || typeof meta !== 'object' || Array.isArray(meta)) {
@@ -146,9 +149,9 @@ export function readBlocked(meta, { stateRel = COORD_REL_PATH } = {}) {
   const statusSaysBlocked = STATUS_BLOCKED_WORDS.has(statusWord)
   const declared = Object.prototype.hasOwnProperty.call(meta, 'blocked')
 
-  // `blocked` ausente o explícitamente vacío. Es el camino de TODOS los
-  // STATE.md anteriores a este campo: silencio = no bloqueado (ver la cabecera
-  // de esta sección). La única excepción es que `status` diga lo contrario.
+  // `blocked` absent or explicitly empty. It is the road of EVERY STATE.md
+  // that predates this field: silence = not blocked (see this section's
+  // header). The only exception is `status` saying otherwise.
   const v = declared ? meta.blocked : null
   if (!declared || v == null || v === false || v === 0 || (typeof v === 'string' && (!v.trim() || NOT_BLOCKED_WORDS.has(v.trim().toLowerCase())))) {
     if (!statusSaysBlocked) return { state: 'none' }
@@ -163,10 +166,10 @@ export function readBlocked(meta, { stateRel = COORD_REL_PATH } = {}) {
     }
   }
 
-  // Cadena no vacía y que no es una negación (las dos cosas ya filtradas
-  // arriba): se toma como el MOTIVO. Es lo que escribe quien bloquea con
-  // prisa, y rechazarla por "forma incorrecta" tiraría justo la información
-  // que hace accionable el bloqueo.
+  // A non-empty string that is not a negation (both things already filtered
+  // above): it is taken as the REASON. It is what whoever blocks in a hurry
+  // writes, and rejecting it for "the wrong shape" would throw away exactly
+  // the information that makes the block actionable.
   if (typeof v === 'string') return { state: 'blocked', reason: v.trim(), since: '', unblock: '', notes: [] }
 
   if (v === true) {
@@ -186,9 +189,9 @@ export function readBlocked(meta, { stateRel = COORD_REL_PATH } = {}) {
     return { state: 'blocked', reason: str(v.reason), since: str(v.since), unblock: str(v.unblock), notes }
   }
 
-  // Array, número no-cero, o cualquier otra forma: se trata como BLOQUEADO
-  // (dirección segura) y se dice que la forma no se reconoce, con el valor
-  // crudo delante para que no se pierda nada.
+  // An array, a non-zero number, or any other shape: it is treated as BLOCKED
+  // (the safe direction) and it is said that the shape is not recognised, with
+  // the raw value up front so that nothing is lost.
   return {
     state: 'blocked',
     reason: '',
@@ -198,10 +201,10 @@ export function readBlocked(meta, { stateRel = COORD_REL_PATH } = {}) {
   }
 }
 
-// Recorte defensivo del `next_action` que se cita dentro del aviso: ahí se
-// cita para NEUTRALIZARLO (el texto íntegro sigue estando más abajo, en el
-// estado inyectado tal cual). Un next_action kilométrico no debe empujar el
-// resto del aviso fuera de la vista.
+// Defensive trimming of the `next_action` quoted inside the warning: there it
+// is quoted in order to NEUTRALISE it (the text in full is still further down,
+// in the state injected as it stands). A mile-long next_action must not push
+// the rest of the warning out of sight.
 function quoteForNotice(s, max = 300) {
   const one = String(s).replace(/\s+/g, ' ').trim()
   return one.length > max ? `${one.slice(0, max)}…` : one
@@ -211,10 +214,10 @@ const NOTICE_TOP = '=========== TRABAJO BLOQUEADO — LEE ESTO ANTES DE HACER NA
 const NOTICE_BOTTOM = '=========== fin del aviso de bloqueo ==========='
 
 /**
- * El aviso que el hook de SessionStart pone ANTES del estado, para que la
- * sesión no pueda leer `next_action` como una orden vigente. `stateRel` es el
- * fichero que ese hook leyó de verdad (F22): en un worktree de slice, el aviso
- * que manda a `.agent/STATE.md` manda al fichero de la coordinadora.
+ * The warning the SessionStart hook puts BEFORE the state, so that the session
+ * cannot read `next_action` as a standing order. `stateRel` is the file that
+ * hook really read (F22): in a slice's worktree, the warning that sends you to
+ * `.agent/STATE.md` sends you to the coordinator's file.
  */
 export function blockNotice(blocked, { nextAction = '', stateRel = COORD_REL_PATH } = {}) {
   if (!blocked || blocked.state !== 'blocked') return ''
@@ -223,9 +226,9 @@ export function blockNotice(blocked, { nextAction = '', stateRel = COORD_REL_PAT
   lines.push('')
   lines.push(blocked.reason
     ? `Motivo: ${blocked.reason}`
-    // "el bloqueo está declarado", no "`blocked` está puesto": este mismo
-    // aviso lo dispara también un `status: blocked` sin campo `blocked`, y
-    // decir que el campo está puesto sería falso justo en ese caso.
+    // "el bloqueo está declarado", not "`blocked` está puesto": this very
+    // warning is also fired by a `status: blocked` with no `blocked` field,
+    // and saying that the field is set would be false in exactly that case.
     : 'Motivo: NO CONSTA — el bloqueo está declarado pero sin `reason`. No supongas cuál es ni lo deduzcas del resto del estado: pregunta antes de tocar nada.')
   if (blocked.since) lines.push(`Bloqueado desde: ${blocked.since}`)
   lines.push(blocked.unblock
@@ -244,8 +247,9 @@ export function blockNotice(blocked, { nextAction = '', stateRel = COORD_REL_PAT
 }
 
 /**
- * El aviso para el único caso en que de verdad NO SE SABE si hay bloqueo: el
- * frontmatter no se puede leer. Un estado ilegible no es "no bloqueado".
+ * The warning for the only case in which it really IS NOT KNOWN whether there
+ * is a block: the frontmatter cannot be read. An unreadable state is not "not
+ * blocked".
  */
 export function unreadableNotice(why, { stateRel = COORD_REL_PATH } = {}) {
   return [
@@ -258,16 +262,16 @@ export function unreadableNotice(why, { stateRel = COORD_REL_PATH } = {}) {
   ].join('\n')
 }
 
-// Guía de lectura de los campos que se leen mal en frío. Solo se emiten las
-// líneas que APLICAN (campo no vacío): una guía que sale siempre es ruido que
-// se aprende a saltar.
+// A reading guide for the fields that get read wrong cold. Only the lines
+// that APPLY are emitted (a non-empty field): a guide that always comes out is
+// noise one learns to skip.
 //
-// El caso de `verify` es real y del mismo incidente: decía «`gh issue list …
-// --milestone 'Plan vs Propuestas'` devuelve 6 issues» cuando no había ni
-// milestone ni issues. Estaba escrito como la comprobación PARA DESPUÉS, pero
-// leído en frío es indistinguible de la afirmación de un hecho. El campo no
-// puede llevar el tiempo verbal dentro (es texto libre que escribe cada
-// sesión), así que lo pone quien lo presenta.
+// The `verify` case is real and from the same incident: it said «`gh issue
+// list … --milestone 'Plan vs Propuestas'` devuelve 6 issues» when there was
+// neither a milestone nor any issues. It was written as the check FOR
+// AFTERWARDS, but read cold it is indistinguishable from the assertion of a
+// fact. The field cannot carry the verb tense inside it (it is free text every
+// session writes), so it is whoever presents it that puts it there.
 export function fieldReadingGuide(meta, { blocked = false } = {}) {
   if (meta == null || typeof meta !== 'object' || Array.isArray(meta)) return ''
   const lines = []
@@ -281,12 +285,12 @@ export function fieldReadingGuide(meta, { blocked = false } = {}) {
   return `## Cómo leer estos campos\n${lines.join('\n')}`
 }
 
-// #95/H10 — los comentarios `#` del frontmatter no viajan en la hidratación.
-// La plantilla trae ~1.200 B de comentarios que explican los campos a quien
-// EDITA el fichero; a quien se hidrata se lo explica `fieldReadingGuide`, y
-// solo cuando aplica. Se filtra por LÍNEA y solo dentro del frontmatter: un `#`
-// dentro de un valor no empieza la línea, y los encabezados markdown del cuerpo
-// quedan fuera del bloque.
+// #95/H10 — the frontmatter's `#` comments do not travel in the hydration.
+// The template carries ~1,200 B of comments that explain the fields to whoever
+// EDITS the file; whoever gets hydrated has them explained by
+// `fieldReadingGuide`, and only when they apply. The filter is by LINE and
+// only inside the frontmatter: a `#` inside a value does not begin the line,
+// and the body's markdown headings fall outside the block.
 const YAML_COMMENT_LINE = /^\s*#/
 
 function stripFrontmatterComments(stateText) {
@@ -306,11 +310,11 @@ export function composeHydration(stateText, gitLog, { stateRel = COORD_REL_PATH 
   if (blocked.state === 'unreadable') parts.push(unreadableNotice(error || blocked.why, { stateRel }))
   else if (blocked.state === 'blocked') parts.push(blockNotice(blocked, { nextAction: meta?.next_action, stateRel }))
 
-  // F22: la cabecera se deriva de `stateRel`, que es el fichero que quien
-  // llama acaba de resolver. Decía "Estado del slice" SIEMPRE, así que la
-  // sesión coordinadora —cuyo `.agent/STATE.md` habla del epic, no de ningún
-  // slice— abría cada hidratación con una etiqueta falsa: exactamente la
-  // confusión de fichero que esta ronda arregla, en el otro sentido.
+  // F22: the header is derived from `stateRel`, which is the file the caller
+  // has just resolved. It said "Estado del slice" ALWAYS, so the coordinator
+  // session —whose `.agent/STATE.md` talks about the epic and not about any
+  // slice— opened every hydration with a false label: exactly the confusion of
+  // files this round fixes, the other way round.
   const titulo = stateRel === SLICE_REL_PATH ? 'Estado del slice' : 'Estado del repo'
   parts.push(`# ${titulo} (hidratación automática)\n\n${stripFrontmatterComments(stateText).trim()}`)
 
@@ -323,61 +327,68 @@ export function composeHydration(stateText, gitLog, { stateRel = COORD_REL_PATH 
 }
 
 // ===========================================================================
-// El guard de cierre de turno: `last_commit` vs `HEAD`.
+// The turn-closing guard: `last_commit` vs `HEAD`.
 //
-// LO QUE HACÍA (y por qué era mentira): comparaba los dos SHA por igualdad
-// estricta y, si no coincidían, bloqueaba el cierre diciendo «Hay commits más
-// nuevos que el `last_commit` de .agent/STATE.md». "Más nuevos" es una
-// afirmación de ANCESTRÍA, y la igualdad no la comprueba en ningún momento.
+// WHAT IT USED TO DO (and why it was a lie): it compared the two SHAs by
+// strict equality and, if they did not match, it blocked the closure saying
+// «Hay commits más nuevos que el `last_commit` de .agent/STATE.md». "Newer" is
+// an assertion of ANCESTRY, and equality does not check it at any point.
 //
-// EL CASO REAL: un repo con dos líneas de trabajo vivas. Una sesión en la rama
-// `polish-v2-geometria` (en otro worktree) escribió en el STATE.md de la raíz
-// un `last_commit` de esa rama. Ese SHA RESUELVE desde el checkout principal
-// —los worktrees comparten el object store— pero nunca va a ser igual al HEAD
-// de `main`. Resultado: el bloqueo saltaba en cada turno acusando de commits
-// más nuevos que no existían, y la única forma de callarlo era reapuntar
-// `last_commit` a `main`, borrando el handoff de la otra sesión — que lo
-// reapuntaba de vuelta al turno siguiente. Un guard que solo se satisface
-// destruyendo información no es un guard, es un muro.
+// THE REAL CASE: a repo with two live lines of work. A session on the
+// `polish-v2-geometria` branch (in another worktree) wrote a `last_commit` of
+// that branch into the root's STATE.md. That SHA DOES RESOLVE from the main
+// checkout —worktrees share the object store— but it is never going to be
+// equal to `main`'s HEAD. Result: the block fired on every turn accusing of
+// newer commits that did not exist, and the only way to shut it up was to
+// repoint `last_commit` at `main`, deleting the other session's handoff —
+// which repointed it back on the following turn. A guard that can only be
+// satisfied by destroying information is not a guard, it is a wall.
 //
-// LO QUE HACE AHORA: preguntarle a git la relación que el mensaje afirmaba, y
-// decir la verdad de cada caso por separado. Solo se BLOQUEA cuando el guard
-// puede demostrar lo que dice y la acción que pide es constructiva:
+// WHAT IT DOES NOW: ask git for the relation the message was asserting, and
+// tell the truth of each case separately. It only BLOCKS when the guard can
+// prove what it says and the action it asks for is constructive:
 //
-//   behind       `last_commit` es ancestro de HEAD → sí hay commits más nuevos,
-//                y son contables. Es el caso para el que se diseñó. BLOQUEA.
-//   unresolvable el valor no es ningún commit de este repo (relleno, SHA de
-//                otro repo, commit que ya no existe). El estado no se puede
-//                contrastar con nada. BLOQUEA (se arregla poniendo un SHA).
-//   same         nada que decir.
-//   unset        sin `last_commit` no hay nada que comparar (igual que antes).
-//   ahead        HEAD es ancestro de `last_commit` → el estado va POR DELANTE.
-//                NO BLOQUEA: todo lo que hay en HEAD está recogido en ese
-//                commit, así que esta sesión no dejó nada sin registrar, y la
-//                única acción que "cumpliría" el bloqueo (reapuntar a HEAD)
-//                movería el handoff hacia atrás.
-//   diverged     no hay ancestría → dos líneas de trabajo distintas. NO
-//                BLOQUEA: comparar los dos SHA no dice si esta sesión dejó
-//                algo sin registrar, y la salida del bloqueo sería pisar el
-//                handoff ajeno. Es el caso real de arriba.
-//   orphan       `ahead` o `diverged` Y no lo contiene NINGUNA rama, ni local
-//                ni remota → el commit no es alcanzable desde ningún ref. No
-//                es "el estado va por delante": es que el estado apunta a
-//                trabajo que dejó de existir (un `reset --hard`, casi
-//                siempre). Mismo defecto de familia que todo esto —el estado
-//                afirma algo que dejó de ser cierto— pero NO BLOQUEA: un
-//                bloqueo no devuelve a la vida un commit huérfano, sería otro
-//                guard insatisfacible. Se dice, y punto.
-//   unknown      git no pudo responder. NO BLOQUEA: no se puede afirmar nada.
+//   behind       `last_commit` is an ancestor of HEAD → there really are newer
+//                commits, and they are countable. It is the case it was
+//                designed for. BLOCKS.
+//   unresolvable the value is no commit of this repo at all (filler, a SHA
+//                from another repo, a commit that no longer exists). The state
+//                cannot be contrasted with anything. BLOCKS (it is fixed by
+//                putting a SHA in).
+//   same         nothing to say.
+//   unset        with no `last_commit` there is nothing to compare (as
+//                before).
+//   ahead        HEAD is an ancestor of `last_commit` → the state is AHEAD. It
+//                DOES NOT BLOCK: everything there is in HEAD is gathered into
+//                that commit, so this session left nothing unrecorded, and the
+//                only action that would "satisfy" the block (repointing at
+//                HEAD) would move the handoff backwards.
+//   diverged     there is no ancestry → two different lines of work. It DOES
+//                NOT BLOCK: comparing the two SHAs does not say whether this
+//                session left anything unrecorded, and the way out of the
+//                block would be trampling somebody else's handoff. It is the
+//                real case above.
+//   orphan       `ahead` or `diverged` AND contained by NO branch, neither
+//                local nor remote → the commit is not reachable from any ref.
+//                It is not "the state is ahead": it is that the state points
+//                at work that stopped existing (a `reset --hard`, almost
+//                always). The same family of defect as all of this —the state
+//                asserts something that stopped being true— but it DOES NOT
+//                BLOCK: a block does not bring an orphaned commit back to
+//                life, it would be another unsatisfiable guard. It is said,
+//                and that is that.
+//   unknown      git could not answer. It DOES NOT BLOCK: nothing can be
+//                asserted.
 //
-// Los cuatro casos que dejan de bloquear NO se quedan mudos: salen por
-// `systemMessage` (campo común de la salida JSON de los hooks, no bloqueante,
-// se le muestra al usuario). Dejar de bloquear no es dejar de hablar; lo que
-// se retira es la ORDEN, no el AVISO.
+// The four cases that stop blocking DO NOT go mute: they come out through
+// `systemMessage` (a field common to the hooks' JSON output, non-blocking,
+// shown to the user). Ceasing to block is not ceasing to speak; what is
+// withdrawn is the ORDER, not the WARNING.
 // ===========================================================================
 
-// Recordatorio de F7, común a todos los bloqueos: el cierre de turno es el
-// momento en que se registra un bloqueo, y `blocked` es el campo donde va.
+// A reminder of F7, common to every block: the closing of the turn is the
+// moment at which a block gets recorded, and `blocked` is the field it goes
+// in.
 const STOP_TAIL =
   'Y si el trabajo NO puede continuar (bloqueado por una decisión, un dato falso, una dependencia externa…), ' +
   'no lo escribas en prosa dentro de next_action: ponlo en el campo `blocked` (`blocked: {reason: "…", unblock: "…"}`), ' +
@@ -385,34 +396,36 @@ const STOP_TAIL =
 
 const shortSha = (s) => (typeof s === 'string' && /^[0-9a-f]{7,40}$/i.test(s) ? s.slice(0, 12) : String(s ?? ''))
 
-// Un `last_commit` que empieza por `-` sería leído por git como una OPCIÓN, no
-// como una revisión; y uno con espacios/saltos no es un rev en ningún caso. Se
-// rechazan antes de llegar a git en vez de confiar en que git los rechace.
+// A `last_commit` beginning with `-` would be read by git as an OPTION, not
+// as a revision; and one with spaces or newlines is not a rev in any case.
+// They are rejected before reaching git instead of trusting git to reject
+// them.
 const REV_SHAPE = /^[^\s-][^\s]*$/
 
 /**
- * Le pregunta a git qué relación hay entre `HEAD` y el `last_commit` del
- * estado. No decide nada: solo describe.
+ * Asks git what relation there is between `HEAD` and the state's
+ * `last_commit`. It decides nothing: it only describes.
  *
- * @param headSha    SHA de HEAD (ya resuelto por quien llama).
- * @param lastCommit valor crudo del frontmatter (puede ser cualquier cosa).
- * @param git        runner `(args) => { status, stdout }` que NUNCA lanza.
- * @param branch     rama del checkout ('' si HEAD está desprendido).
+ * @param headSha    HEAD's SHA (already resolved by the caller).
+ * @param lastCommit the frontmatter's raw value (it can be anything).
+ * @param git        runner `(args) => { status, stdout }` that NEVER throws.
+ * @param branch     the checkout's branch ('' if HEAD is detached).
  */
-// Las ramas que contienen un commit, LOCALES primero y remotas solo si ninguna
-// local lo contiene. El orden importa: `origin/*` es ruido cuando ya tienes una
-// rama local que responde a la pregunta, y es la única respuesta posible cuando
-// no la tienes. `containersKnown: false` significa que git no contestó — que no
-// es lo mismo que "ninguna rama lo contiene", y de esa diferencia depende que
-// el commit se declare huérfano o no.
+// The branches that contain a commit, LOCAL ones first and remote ones only
+// if no local one contains it. The order matters: `origin/*` is noise when you
+// already have a local branch that answers the question, and it is the only
+// possible answer when you do not. `containersKnown: false` means git did not
+// answer — which is not the same as "no branch contains it", and whether the
+// commit gets declared orphaned depends on that difference.
 function branchesContaining(git, stateSha, currentBranch) {
   const ask = (args) => {
     const r = git(args)
     if (r.status !== 0) return null
     return String(r.stdout || '')
       .split('\n').map((s) => s.trim()).filter(Boolean)
-      // `git branch -r` lista también el symref `origin/HEAD`, que no es una
-      // rama donde viva nada: es un alias de otra que ya sale en la lista.
+      // `git branch -r` also lists the `origin/HEAD` symref, which is not a
+      // branch where anything lives: it is an alias of another that already
+      // shows up in the list.
       .filter((b) => b !== currentBranch && !b.endsWith('/HEAD') && !b.includes(' -> '))
   }
   const local = ask(['branch', '--contains', stateSha, '--format=%(refname:short)'])
@@ -424,90 +437,94 @@ function branchesContaining(git, stateSha, currentBranch) {
 }
 
 // ===========================================================================
-// F15/H4 — EL GUARD DE FRESCURA ERA INSATISFACIBLE POR CONSTRUCCIÓN.
+// F15/H4 — THE FRESHNESS GUARD WAS UNSATISFIABLE BY CONSTRUCTION.
 //
-// `behind` bloqueaba el cierre de turno cuando `last_commit` se había quedado
-// por debajo de HEAD. Pero el commit que actualiza `STATE.md` INCLUYE a
-// `STATE.md`: escribes `last_commit: <HEAD>`, lo commiteas, y el acto de
-// commitearlo crea un SHA nuevo — así que el fichero vuelve a estar "1 commit
-// por detrás" en el instante exacto en que lo arreglas. Volver a commitear
-// genera el commit que lo vuelve a invalidar. Regresión infinita.
+// `behind` blocked the closing of the turn when `last_commit` had fallen below
+// HEAD. But the commit that updates `STATE.md` INCLUDES `STATE.md`: you write
+// `last_commit: <HEAD>`, you commit it, and the act of committing it creates a
+// new SHA — so the file is "1 commit behind" again at the exact instant you
+// fix it. Committing again generates the commit that invalidates it again.
+// Infinite regression.
 //
-// Reproducido contra el `dist/stop.js` de dac5326, dos vueltas seguidas:
+// Reproduced against dac5326's `dist/stop.js`, two rounds in a row:
 //   HEAD=2926a17 last_commit=192baa2 → block "hay 1 commit … por encima"
 //   HEAD=3346b8e last_commit=2926a17 → block "hay 1 commit … por encima"
-// Es el hermano del caso que F12 arregló (`diverged`): allí el bloqueo era
-// insatisfacible porque la única salida era pisar el handoff de otra sesión;
-// aquí lo es porque el propio acto de obedecerlo lo reintroduce. F12 cubrió
-// `diverged`, `ahead`, `orphan` y `unresolvable`, y dejó `behind` bloqueando
-// siempre — correcto para trabajo de verdad, y justo lo que falla aquí.
+// It is the brother of the case F12 fixed (`diverged`): there the block was
+// unsatisfiable because the only way out was to trample another session's
+// handoff; here it is because the very act of obeying it reintroduces it. F12
+// covered `diverged`, `ahead`, `orphan` and `unresolvable`, and left `behind`
+// blocking always — correct for real work, and exactly what fails here.
 //
-// EL ARREGLO: `last_commit` se entiende como el último commit DE TRABAJO del
-// slice, no el del apunte. Un commit que toca EXCLUSIVAMENTE
-// `.agent/STATE.md` no cuenta para el conteo de "te has quedado atrás".
+// THE FIX: `last_commit` is understood as the slice's last WORK commit, not
+// the entry's. A commit that touches EXCLUSIVELY `.agent/STATE.md` does not
+// count towards the count of "you have fallen behind".
 //
-// POR QUÉ ASÍ Y NO "no bloquear si el desfase es 1": el desfase de 1 es un
-// síntoma, no la condición. Un slice puede acumular dos apuntes seguidos (se
-// corrige el `next_action` y se vuelve a commitear) y seguir sin nada de
-// trabajo pendiente de registrar; y al revés, UN solo commit de código sin
-// registrar tiene que bloquear igual. Lo que distingue los dos casos es QUÉ
-// tocan los commits, no cuántos son.
+// WHY THIS WAY AND NOT "do not block if the gap is 1": a gap of 1 is a
+// symptom, not the condition. A slice can accumulate two entries in a row (the
+// `next_action` is corrected and committed again) and still have nothing of
+// its work pending registration; and the other way round, ONE single code
+// commit left unregistered has to block all the same. What tells the two cases
+// apart is WHAT the commits touch, not how many they are.
 //
-// FAIL CLOSED, TRES VECES. Cada duda se resuelve BLOQUEANDO, porque el fallo
-// caro aquí es dejar pasar trabajo real sin registrar:
-//   1. un commit que toca `.agent/STATE.md` Y ADEMÁS cualquier otra cosa
-//      cuenta como trabajo — si no, bastaría con colar el código dentro del
-//      commit del apunte para saltarse el guard entero;
-//   2. un commit del que git no lista NINGÚN fichero (un merge, un commit
-//      vacío) cuenta como trabajo. `git log --name-only` no lista ficheros
-//      para un merge, y un merge sí puede traer trabajo de verdad;
-//   3. si la consulta a git falla, se usa el conteo total de siempre y se
-//      bloquea igual que antes de este cambio.
-// Solo `.agent/STATE.md`, no `.agent/` entero: `conventions-ack.md` es un
-// registro de decisiones, no bookkeeping, y merece bloquear si no se registra.
+// FAIL CLOSED, THREE TIMES. Every doubt is resolved by BLOCKING, because the
+// expensive failure here is letting real work through unregistered:
+//   1. a commit that touches `.agent/STATE.md` AND ALSO anything else counts
+//      as work — otherwise it would be enough to slip the code inside the
+//      entry's commit to skip the whole guard;
+//   2. a commit of which git lists NO file at all (a merge, an empty commit)
+//      counts as work. `git log --name-only` lists no files for a merge, and a
+//      merge can indeed bring real work;
+//   3. if the query to git fails, the total count of always is used and it
+//      blocks just as it did before this change.
+// Only `.agent/STATE.md`, not the whole of `.agent/`: `conventions-ack.md` is
+// a record of decisions, not bookkeeping, and it deserves to block if it is
+// not registered.
 //
-// F22 — ESTA CONSTANTE NO SE PARAMETRIZA, Y NO ES UN DESCUIDO. Todo lo demás
-// de este módulo pasó a nombrar el fichero que de verdad se leyó (ver
-// `stateRel`, arriba), y esto NO, porque aquí no se compone un mensaje: se
-// miden COMMITS. El único fichero de estado que llega a commitearse es el de
-// la coordinadora — `.agent/SLICE.md` está fuera de git por construcción (el
-// dispatcher escribe la regla de ignore y aborta el despacho si git sigue
-// viéndolo), así que NINGÚN commit lo toca jamás y no hay nada que eximir.
-// Cambiar esto por la ruta resuelta dejaría a los apuntes de la coordinadora
-// sin su exención, y devolvería justo la regresión infinita de arriba.
+// F22 — THIS CONSTANT IS NOT PARAMETERISED, AND THAT IS NOT AN OVERSIGHT.
+// Everything else in this module moved on to naming the file that was really
+// read (see `stateRel`, above), and this did NOT, because here no message is
+// composed: what is measured are COMMITS. The only state file that ever gets
+// committed is the coordinator's — `.agent/SLICE.md` is outside git by
+// construction (the dispatcher writes the ignore rule and aborts the dispatch
+// if git still sees it), so NO commit ever touches it and there is nothing to
+// exempt. Changing this for the resolved path would leave the coordinator's
+// entries without their exemption, and would bring back exactly the infinite
+// regression above.
 // ===========================================================================
 const STATE_REL_PATH = '.agent/STATE.md'
 
-// countWorkCommits: de los commits de `stateSha..headSha`, cuántos tocan algo
-// que no sea el propio STATE.md. `known: false` = git no contestó, y quien
-// llama vuelve al conteo total (bloquear).
-// Tope del análisis detallado. El runner de git de hooks/stop.js usa
-// `spawnSync` sin `maxBuffer`, o sea el default de Node (1 MiB): un rango con
-// cientos de commits y muchos ficheros lo desborda, y entonces el runner
-// devuelve status -1 y caemos al conteo total igualmente. El tope solo hace
-// DETERMINISTA ese límite en vez de dejarlo al tamaño del output — y por
-// encima de él "te has quedado muy atrás" es cierto de todas formas.
+// countWorkCommits: of the commits in `stateSha..headSha`, how many touch
+// something other than STATE.md itself. `known: false` = git did not answer,
+// and the caller falls back to the total count (blocking).
+// The cap on the detailed analysis. The git runner of hooks/stop.js uses
+// `spawnSync` with no `maxBuffer`, that is, Node's default (1 MiB): a range
+// with hundreds of commits and many files overflows it, and then the runner
+// returns status -1 and we fall back to the total count anyway. The cap only
+// makes that limit DETERMINISTIC instead of leaving it to the size of the
+// output — and above it "you have fallen a long way behind" is true either
+// way.
 const WORK_SCAN_MAX = 200
 
 // ===========================================================================
-// #95/H5 — QUIÉN HIZO LOS COMMITS QUE HAY POR ENCIMA.
+// #95/H5 — WHO MADE THE COMMITS THAT SIT ABOVE.
 //
-// En el camino `ct-step` comitea el PROGRAMA, no el agente. El agente no tocó
-// `last_commit` porque no hizo ningún commit, y el guard le bloqueaba el turno
-// pidiéndole que copiase a mano un valor que el hook ya tiene resuelto
-// (`headSha`) — el mismo defecto de familia que F15 arregló para los apuntes:
-// una orden al modelo donde cabía un mecanismo del programa.
+// On the `ct-step` road it is the PROGRAM that commits, not the agent. The
+// agent did not touch `last_commit` because it made no commit, and the guard
+// blocked its turn asking it to copy by hand a value the hook already has
+// resolved (`headSha`) — the same family of defect F15 fixed for the entries:
+// an order to the model where a mechanism of the program's would fit.
 //
-// SE PREGUNTA POR EL TRAILER, NO POR EL MENSAJE. `%(trailers:key=…)` es un
-// campo que git parsea él mismo, así que ni hay que trocear el cuerpo del
-// commit ni un mensaje que contenga la frase por casualidad puede hacerse
-// pasar por uno de ct-step. La marca la declara `ct-step-commit.js`, que es
-// también quien la ESCRIBE (step-contracts.js la compone desde ahí): una sola
-// fuente para las dos mitades.
+// THE TRAILER IS WHAT GETS ASKED ABOUT, NOT THE MESSAGE. `%(trailers:key=…)`
+// is a field git parses itself, so there is no need to slice up the commit's
+// body and no message that happens to contain the phrase can pass itself off
+// as one of ct-step's. The mark is declared by `ct-step-commit.js`, which is
+// also the one that WRITES it (step-contracts.js composes it from there): a
+// single source for the two halves.
 //
-// FAIL CLOSED, igual que el conteo de trabajo: si git no contesta, o si UN
-// solo commit del rango no lleva la marca, no se atribuye nada y el bloqueo se
-// mantiene entero. Atribuir de más sería dejar pasar trabajo sin registrar.
+// FAIL CLOSED, the same as the work count: if git does not answer, or if ONE
+// single commit of the range does not carry the mark, nothing is attributed
+// and the block is kept whole. Attributing too much would be letting work
+// through unregistered.
 // ===========================================================================
 function allWorkCommittedByCtStep(git, stateSha, headSha) {
   const r = git(['log', `--format=%H ${CtStepCommit.TRAILER_FORMAT}`, '--no-merges', `${stateSha}..${headSha}`])
@@ -516,15 +533,15 @@ function allWorkCommittedByCtStep(git, stateSha, headSha) {
   return CtStepCommit.wroteAllOf(lines.map((l) => l.slice(l.indexOf(' ') + 1)))
 }
 
-// La línea `last_commit` del frontmatter, reescrita en su sitio. NO se
-// re-serializa el YAML (`parseState` + `renderState`) a propósito: eso se
-// llevaría por delante los comentarios del fichero, el orden de las claves y
-// cualquier campo que este módulo no conozca — y hay otro trabajo en vuelo
-// añadiendo campos nuevos al frontmatter. Se toca UNA línea y el resto del
-// fichero sale byte a byte igual que entró.
+// The frontmatter's `last_commit` line, rewritten in place. The YAML is NOT
+// re-serialised (`parseState` + `renderState`) on purpose: that would sweep
+// away the file's comments, the order of the keys and any field this module
+// does not know about — and there is other work in flight adding new fields to
+// the frontmatter. ONE line is touched and the rest of the file comes out byte
+// for byte as it went in.
 //
-// `updated: false` cuando no hay línea que reescribir: quien llama mantiene el
-// bloqueo en vez de inventarse dónde va el campo.
+// `updated: false` when there is no line to rewrite: the caller keeps the
+// block instead of inventing where the field goes.
 const LAST_COMMIT_LINE = /^([ \t]*last_commit[ \t]*:[ \t]*)(['"]?)([^'"\r\n]*)(\2)([ \t]*)$/m
 
 export function withLastCommit(stateText, sha) {
@@ -539,18 +556,19 @@ export function withLastCommit(stateText, sha) {
 
 function countWorkCommits(git, stateSha, headSha, total) {
   if (!(total > 0) || total > WORK_SCAN_MAX) return { work: total, bookkeeping: 0, known: false }
-  // Sentinela propio (`commit:<sha>`) en vez de fiarse del formato por
-  // defecto: `--name-only` sin `--format` intercala el mensaje del commit, y
-  // un mensaje que contuviera una línea con pinta de ruta rompería el parseo.
-  // Con `--format=commit:%H` lo único que se imprime es el sha y los ficheros.
+  // A sentinel of its own (`commit:<sha>`) instead of trusting the default
+  // format: `--name-only` with no `--format` interleaves the commit's message,
+  // and a message that contained a line looking like a path would break the
+  // parsing. With `--format=commit:%H` the only things printed are the sha and
+  // the files.
   const r = git(['log', '--format=commit:%H', '--name-only', '--no-renames', `${stateSha}..${headSha}`])
   if (r.status !== 0) return { work: total, bookkeeping: 0, known: false }
   let work = 0
   let bookkeeping = 0
-  let files = null // null = todavía no hemos visto ningún commit
+  let files = null // null = we have not seen any commit yet
   const cerrar = () => {
     if (files === null) return
-    // Sin ficheros listados (merge, commit vacío) → cuenta como trabajo.
+    // With no files listed (a merge, an empty commit) → it counts as work.
     if (files.length > 0 && files.every((f) => f === STATE_REL_PATH)) bookkeeping++
     else work++
   }
@@ -560,8 +578,8 @@ function countWorkCommits(git, stateSha, headSha, total) {
     if (f && files !== null) files.push(f)
   }
   cerrar()
-  // Control de sanidad: si el parseo no vio los mismos commits que
-  // `rev-list --count`, no nos fiamos de él.
+  // Sanity check: if the parsing did not see the same commits as
+  // `rev-list --count`, we do not trust it.
   if (work + bookkeeping !== total) return { work: total, bookkeeping: 0, known: false }
   return { work, bookkeeping, known: true }
 }
@@ -579,8 +597,8 @@ export function describeStopRelation({ headSha, lastCommit, git, branch = '' }) 
   const out = { ...base, stateSha }
   if (stateSha === headSha) return { ...out, kind: 'same' }
 
-  // `merge-base --is-ancestor` responde por código de salida: 0 sí, 1 no,
-  // cualquier otro es un fallo de git (y entonces no se sabe).
+  // `merge-base --is-ancestor` answers through its exit code: 0 yes, 1 no,
+  // anything else is a failure of git (and then it is not known).
   const stateIsAncestor = git(['merge-base', '--is-ancestor', stateSha, headSha]).status
   if (stateIsAncestor !== 0 && stateIsAncestor !== 1) return { ...out, kind: 'unknown' }
 
@@ -588,14 +606,15 @@ export function describeStopRelation({ headSha, lastCommit, git, branch = '' }) 
     const c = git(['rev-list', '--count', `${stateSha}..${headSha}`])
     const n = c.status === 0 ? Number.parseInt(String(c.stdout || '').trim(), 10) : NaN
     const total = Number.isFinite(n) ? n : 0
-    // F15/H4: de esos commits, cuántos son TRABAJO y cuántos son el propio
-    // apunte del estado. Ver countWorkCommits para el porqué.
+    // F15/H4: of those commits, how many are WORK and how many are the
+    // state's own entry. See countWorkCommits for the why.
     const { work, bookkeeping, known } = countWorkCommits(git, stateSha, headSha, total)
     if (known && work === 0 && bookkeeping > 0) {
       return { ...out, kind: 'behind-bookkeeping', count: 0, bookkeeping, total }
     }
-    // #95/H5: hay trabajo por encima, y lo comiteó el programa. El sha que el
-    // guard pide ya está resuelto, así que no hay nada que ordenarle a nadie.
+    // #95/H5: there is work above, and the program committed it. The sha the
+    // guard asks for is already resolved, so there is nothing to order anybody
+    // to do.
     if (allWorkCommittedByCtStep(git, stateSha, headSha)) {
       return { ...out, kind: 'behind-ct-step', count: known ? work : total, bookkeeping: known ? bookkeeping : 0, total }
     }
@@ -605,16 +624,17 @@ export function describeStopRelation({ headSha, lastCommit, git, branch = '' }) 
   const headIsAncestor = git(['merge-base', '--is-ancestor', headSha, stateSha]).status
   if (headIsAncestor !== 0 && headIsAncestor !== 1) return { ...out, kind: 'unknown' }
 
-  // Las ramas que SÍ contienen ese commit: es lo que convierte «no está en tu
-  // historia» en «está en `polish-v2-geometria`».
+  // The branches that DO contain that commit: it is what turns "it is not in
+  // your history" into "it is on `polish-v2-geometria`".
   const { containers, containersKnown } = branchesContaining(git, stateSha, branch)
 
-  // Ni `ahead` ni `diverged` son alcanzables desde HEAD (en los dos casos HEAD
-  // NO es descendiente del commit), así que si además no lo contiene ninguna
-  // rama —ni local ni remota— no hay ningún ref estable que lo alcance: es un
-  // commit HUÉRFANO. Es otra cosa que "el estado va por delante": el estado
-  // apunta a trabajo que dejó de existir. Solo se declara si git contestó a las
-  // dos preguntas; un fallo de git no es una respuesta negativa.
+  // Neither `ahead` nor `diverged` is reachable from HEAD (in both cases HEAD
+  // is NOT a descendant of the commit), so if on top of that no branch
+  // contains it —neither local nor remote— there is no stable ref that reaches
+  // it: it is an ORPHANED commit. It is a different thing from "the state is
+  // ahead": the state points at work that stopped existing. It is only
+  // declared if git answered both questions; a failure of git is not a
+  // negative answer.
   if (containersKnown && containers.length === 0) {
     return { ...out, kind: 'orphan', containers, containersKnown, fromKind: headIsAncestor === 0 ? 'ahead' : 'diverged' }
   }
@@ -626,27 +646,28 @@ export function describeStopRelation({ headSha, lastCommit, git, branch = '' }) 
 }
 
 // ===========================================================================
-// #95/H8 — UN AVISO QUE SALE SIEMPRE ES UN AVISO QUE NADIE LEE.
+// #95/H8 — A WARNING THAT ALWAYS COMES OUT IS A WARNING NOBODY READS.
 //
-// Los cuatro avisos no bloqueantes (`ahead`, `diverged`, `orphan`, `unknown`)
-// salían en CADA cierre de turno mientras durase la anomalía. La insistencia
-// era deliberada —una condición estructural que alguien tiene que resolver— y
-// el precio se pagaba en brevedad. Pero la sentencia que la desmonta ya estaba
-// escrita en este mismo módulo, en la cabecera de `blocked`: la prosa que
-// siempre está se ignora, así que el turno 40 de una divergencia no informa de
-// nada, sólo cuesta.
+// The four non-blocking warnings (`ahead`, `diverged`, `orphan`, `unknown`)
+// came out at EVERY closing of a turn for as long as the anomaly lasted. The
+// insistence was deliberate —a structural condition somebody has to resolve—
+// and the price was paid in brevity. But the sentence that dismantles it was
+// already written in this very module, in `blocked`'s header: prose that is
+// always there gets ignored, so a divergence's fortieth turn informs of
+// nothing, it only costs.
 //
-// LO QUE SE CONSERVA: la anomalía no se hace invisible. El aviso vuelve al
-// cumplirse el periodo, y CUALQUIER cambio de la relación lo saca de nuevo sin
-// esperar — porque entonces es otra cosa lo que hay que contar.
+// WHAT IS PRESERVED: the anomaly is not made invisible. The warning comes back
+// once the period is up, and ANY change of the relation brings it out again
+// without waiting — because then it is something else that has to be told.
 //
-// LA RELACIÓN ES EL PAR (tipo, commit del estado), no el tipo a secas: pasar de
-// divergir contra una rama a divergir contra otra es una anomalía distinta
-// aunque las dos se llamen `diverged`.
+// THE RELATION IS THE PAIR (kind, the state's commit), not the kind on its
+// own: going from diverging against one branch to diverging against another is
+// a different anomaly even though both are called `diverged`.
 //
-// FAIL OPEN, al revés que el guard de frescura, y la asimetría es a propósito:
-// aquí el fallo caro es CALLAR. Un marcador que no se puede leer, que trae otra
-// forma o que no se ha podido escribir se resuelve avisando.
+// FAIL OPEN, the other way round from the freshness guard, and the asymmetry
+// is on purpose: here the expensive failure is KEEPING QUIET. A marker that
+// cannot be read, that brings another shape or that could not be written is
+// resolved by warning.
 // ===========================================================================
 export const NOTICE_REPEAT_EVERY_TURNS = 10
 
@@ -671,35 +692,37 @@ const whereAmI = (rel) => (rel.branch ? `la rama \`${rel.branch}\`` : `HEAD (des
 const livesIn = (rel) => (rel.containers?.length ? rel.containers.map((b) => `\`${b}\``).join(', ') : '')
 
 /**
- * Decide, a partir de la relación, si se bloquea el cierre y qué se dice.
+ * Decides, from the relation, whether the closure is blocked and what is said.
  * @returns { block, kind, reason, systemMessage }
  */
 export function classifyStopState({ relation, stopHookActive, stateRel = COORD_REL_PATH }) {
   const none = { block: false, kind: relation?.kind || 'unset', reason: '', systemMessage: '' }
   if (!relation) return none
-  // `stop_hook_active`: ya estamos dentro de una continuación provocada por un
-  // hook de cierre. Ni bloqueo ni aviso — el aviso ya salió en la vuelta previa
-  // y repetirlo solo añade ruido a un turno que ya está en marcha.
+  // `stop_hook_active`: we are already inside a continuation caused by a
+  // closing hook. Neither a block nor a warning — the warning already came out
+  // on the previous round and repeating it only adds noise to a turn that is
+  // already under way.
   if (stopHookActive) return none
   const rel = relation
 
   if (rel.kind === 'unset' || rel.kind === 'same') return none
 
-  // F15/H4: el estado solo va por detrás de commits de APUNTE (los que tocan
-  // exclusivamente `.agent/STATE.md`). No hay nada de trabajo sin registrar, y
-  // es el estado NORMAL en que queda cualquier turno de la COORDINADORA que
-  // actualice y commitee su STATE.md: el commit que lo arregla lo deja, por
-  // construcción, un commit por detrás. (Un slice no pasa nunca por aquí — su
-  // estado está fuera de git y ningún commit lo toca.)
-  // Ni bloquea ni avisa — un aviso en cada cierre de turno sería
-  // ruido puro, y `last_commit` apuntando al último commit de TRABAJO es
-  // además la lectura más útil de ese campo, no una degradación.
+  // F15/H4: the state is only behind ENTRY commits (the ones that touch
+  // exclusively `.agent/STATE.md`). There is no work left unregistered, and it
+  // is the NORMAL state in which any COORDINATOR turn that updates and commits
+  // its STATE.md is left: the commit that fixes it leaves it, by construction,
+  // one commit behind. (A slice never comes through here — its state is
+  // outside git and no commit touches it.)
+  // It neither blocks nor warns — a warning at every closing of a turn would
+  // be pure noise, and `last_commit` pointing at the last WORK commit is
+  // besides the most useful reading of that field, not a degradation.
   if (rel.kind === 'behind-bookkeeping') return { ...none, kind: 'behind-bookkeeping' }
 
-  // #95/H5: todo el trabajo por encima lo comiteó ct-step. Ni bloqueo ni aviso:
-  // el hook actualiza `last_commit` él mismo con el sha que ya tiene. Va como
-  // un campo de la decisión, y no como una escritura aquí dentro, porque este
-  // módulo no toca ficheros — quien resolvió la ruta es quien escribe.
+  // #95/H5: all the work above was committed by ct-step. Neither a block nor
+  // a warning: the hook updates `last_commit` itself with the sha it already
+  // has. It goes as a field of the decision, and not as a write in here,
+  // because this module does not touch files — whoever resolved the path is
+  // the one that writes.
   if (rel.kind === 'behind-ct-step') {
     return { ...none, kind: 'behind-ct-step', updateLastCommitTo: rel.headSha }
   }
@@ -707,24 +730,25 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
   if (rel.kind === 'behind') {
     const n = rel.count
     const cuantos = n === 1 ? '1 commit' : n > 1 ? `${n} commits` : 'commits'
-    // Si además hay apuntes por medio, se dice: si no, el conteo no cuadra con
-    // lo que `git log` enseña y parece un error del guard.
+    // If there are entries in between as well, it is said: otherwise the
+    // count does not square with what `git log` shows and it looks like a
+    // failure of the guard.
     const b = rel.bookkeeping || 0
-    // Esta nota NO se parametriza, y no es un olvido: habla de COMMITS, y el
-    // path que `countWorkCommits` exime es literalmente `.agent/STATE.md` (ver
-    // la constante de ese bloque). Sustituirlo por la ruta resuelta describiría
-    // una exención que no existe.
+    // This note is NOT parameterised, and that is not an oversight: it talks
+    // about COMMITS, and the path `countWorkCommits` exempts is literally
+    // `.agent/STATE.md` (see that block's constant). Replacing it with the
+    // resolved path would describe an exemption that does not exist.
     const nota = b > 0
       ? ` (más ${b === 1 ? '1 commit que solo toca' : `${b} commits que solo tocan`} \`.agent/STATE.md\`, que no cuenta${b === 1 ? '' : 'n'}: un apunte no es trabajo sin registrar)`
       : ''
-    // Misma razón, y por eso la frase es CONDICIONAL en vez de interpolada: la
-    // regresión que tranquiliza (commiteas el apunte y vuelves a estar atrás)
-    // solo le puede pasar al fichero que se commitea. El estado de un slice
-    // está fuera de git —el dispatcher lo excluye ANTES de sembrarlo y aborta
-    // el despacho si git sigue viéndolo—, así que ahí no hay commit de apunte
-    // que exista ni, por tanto, que esté exento. Interpolar `stateRel` en la
-    // frase de arriba habría dicho dos mentiras en una: que ese commit existe y
-    // que no cuenta.
+    // Same reason, and that is why the sentence is CONDITIONAL instead of
+    // interpolated: the regression that reassures (you commit the entry and
+    // you are behind again) can only happen to the file that gets committed. A
+    // slice's state is outside git —the dispatcher excludes it BEFORE seeding
+    // it and aborts the dispatch if git still sees it—, so there no entry
+    // commit exists and therefore none is exempt. Interpolating `stateRel`
+    // into the sentence above would have told two lies in one: that that
+    // commit exists and that it does not count.
     const apunte = stateRel === COORD_REL_PATH
       ? 'Commitear ese cambio NO te vuelve a dejar atrás: un commit que solo toca `.agent/STATE.md` no cuenta. '
       : `No lo commitees: \`${stateRel}\` está fuera de git a propósito y no entra en el PR de este slice; basta con dejarlo al día en disco. `
@@ -756,13 +780,14 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
     }
   }
 
-  // Los avisos no bloqueantes salen en CADA turno mientras dure la anomalía, y
-  // esa insistencia es deliberada: un solo estado para dos líneas de trabajo es
-  // una condición estructural que alguien tiene que resolver, y callarla con un
-  // marcador persistente la volvería invisible en vez de resuelta. Por eso el
-  // precio se paga en la otra moneda: lo más CORTO posible. Solo entra lo que
-  // puede cambiar una decisión de quien lo lee — la explicación de por qué el
-  // guard se comporta así vive en el comentario de arriba, no en el aviso.
+  // The non-blocking warnings come out on EVERY turn for as long as the
+  // anomaly lasts, and that insistence is deliberate: a single state for two
+  // lines of work is a structural condition somebody has to resolve, and
+  // silencing it with a persistent marker would make it invisible instead of
+  // resolved. That is why the price is paid in the other currency: as SHORT as
+  // possible. Only what can change a decision of whoever reads it goes in —
+  // the explanation of why the guard behaves this way lives in the comment
+  // above, not in the warning.
   if (rel.kind === 'ahead') {
     return {
       block: false,
@@ -789,10 +814,10 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
     }
   }
 
-  // El estado apunta a trabajo que ya no existe en ningún ref. Es la misma
-  // familia de siempre —el estado afirma algo que dejó de ser cierto— pero
-  // bloquear el cierre no recupera un commit huérfano: sería otro guard
-  // insatisfacible.
+  // The state points at work that no longer exists in any ref. It is the same
+  // family as always —the state asserts something that stopped being true—
+  // but blocking the closure does not recover an orphaned commit: it would be
+  // another unsatisfiable guard.
   if (rel.kind === 'orphan') {
     return {
       block: false,

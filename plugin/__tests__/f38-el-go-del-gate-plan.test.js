@@ -210,8 +210,8 @@ describe('door 9: the `plan` gate does not close by itself', () => {
   // -------------------------------------------------------------------------
   // THE ORDER OF THE LADDER. The door of the go goes LAST on purpose: with the
   // run half done, asking about the go is noise over a slice that has not
-  // finished yet. With everything green, a missing go is no longer a «todavía
-  // no».
+  // finished yet. With everything green, a missing go is no longer a «not
+  // yet».
   // -------------------------------------------------------------------------
   it('it goes AFTER the door of the run: with no delivered run the 7 wins, not the 9', () => {
     const dir = worktree()

@@ -99,7 +99,7 @@ describe('the happy path', () => {
 // ---------------------------------------------------------------------------
 // THE WHOLE QUEUE WITH JOURNEYS. No file walked it: this one never put `e2e`
 // in the SLICE.md (so the last task's commit closed on the branch with no
-// traversal) and __tests__/e2e-ct-step.test.js seeds the run already stopped
+// journey) and __tests__/e2e-ct-step.test.js seeds the run already stopped
 // at `e2e` with exactly `tasksTotal` commits, without going through
 // `slice-verdict`. The defect fitted in the gap between the two: the slice
 // verdict gets a commit of its own, the next process re-reads the file and the

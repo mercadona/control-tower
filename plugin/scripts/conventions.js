@@ -1,64 +1,67 @@
-// Detección de convenciones PROPIAS del repo destino en el terreno que ocupa
-// el loop (claim, worktrees, estado). Lógica pura: sin IO, sin subprocesos —
-// quien lee el disco es scripts/conventions-io.js (usado por
-// scripts/detect-conventions.mjs y por ct-next.mjs).
+// Detection of the target repo's OWN conventions on the ground the loop
+// occupies (claim, worktrees, state). Pure logic: no IO, no subprocesses —
+// the one that reads the disk is scripts/conventions-io.js (used by
+// scripts/detect-conventions.mjs and by ct-next.mjs).
 //
-// EL CASO REAL (F11, parte B). En un repo ya bootstrapeado (menoplus),
-// ANTES de que llegara el plugin ya existían:
-//   - `scripts/dispatch-check.sh`, un script de claim propio del repo, y una
-//     línea en AGENTS.md que ordena ejecutarlo antes de implementar y con
-//     `--release` al abrir PR;
-//   - una convención de worktrees `git worktree add .claude/worktrees/<slug>`,
-//     con un hook que la vigila.
-// El plugin trae SU PROPIO `dispatch-check.mjs` y usa `.worktrees/<n>` +
-// `feat/<n>`, y `ct-init` escribió su bloque de contrato al lado del que ya
-// había sin mirar. Resultado: un AGENTS.md que se contradice consigo mismo, y
-// DOS protocolos de claim operando sobre el mismo espacio de labels sin nadie
-// que arbitre.
+// THE REAL CASE (F11, part B). In an already bootstrapped repo (menoplus),
+// BEFORE the plugin arrived there already were:
+//   - `scripts/dispatch-check.sh`, a claim script of the repo's own, and a
+//     line in AGENTS.md ordering it to be run before implementing and with
+//     `--release` when opening a PR;
+//   - a worktree convention `git worktree add .claude/worktrees/<slug>`, with
+//     a hook watching over it.
+// The plugin brings ITS OWN `dispatch-check.mjs` and uses `.worktrees/<n>` +
+// `feat/<n>`, and `ct-init` wrote its contract block right beside the one that
+// was already there, without looking. Result: an AGENTS.md that contradicts
+// itself, and TWO claim protocols operating over the same label space with
+// nobody arbitrating.
 //
-// CRITERIO DE DISEÑO — F14 CORRIGE EL DE F11. F11 se construyó con un único
-// criterio: «es más valioso avisar de una sospecha que callar». Salió un
-// detector sensible... y un guard QUE NO SE PODÍA SATISFACER. Verificado en
-// campo contra el repo real: el repo siguió el consejo del propio detector
-// (decidió que manda el claim del plugin y reescribió sus guías para decirlo)
-// y el detector siguió marcándolo, porque buscaba subcadenas y casaba contra
-//   - la línea de `scripts/` de un árbol de directorios en un bloque de código;
-//   - las frases NUEVAS que explican que el claim ya no lo hace el agente;
-//   - la documentación deliberada del uso manual del script fuera del loop;
-//   - las descripciones factuales de los hooks en una tabla de inventario.
-// La única forma de ponerlo verde era borrar documentación correcta. Un guard
-// que solo se satisface destruyendo trabajo no es un guard, es un muro: quien
-// lo obedece acaba peor, y quien no, se acostumbra a ignorar el aviso.
+// DESIGN CRITERION — F14 CORRECTS F11'S. F11 was built on a single criterion:
+// «warning about a suspicion is worth more than keeping quiet». Out came a
+// sensitive detector... and a guard THAT COULD NOT BE SATISFIED. Verified in
+// the field against the real repo: the repo followed the detector's own advice
+// (it decided the plugin's claim rules and rewrote its guides to say so) and
+// the detector went on flagging it, because it searched for substrings and
+// matched against
+//   - the `scripts/` line of a directory tree inside a code block;
+//   - the NEW sentences explaining that the agent no longer does the claim;
+//   - the deliberate documentation of the script's manual use outside the loop;
+//   - the factual descriptions of the hooks in an inventory table.
+// The only way to make it green was to delete correct documentation. A guard
+// that can only be satisfied by destroying work is not a guard, it is a wall:
+// whoever obeys it ends up worse off, and whoever does not gets used to
+// ignoring the warning.
 //
-// La propiedad que este fichero sostiene ahora es: **desde cualquier estado que
-// el detector señale existe un camino que lo deja verde sin empeorar el repo.**
-// Se sostiene en DOS piezas, y el reparto entre ellas es deliberado:
+// The property this file holds now is: **from any state the detector flags
+// there is a path that leaves it green without making the repo worse.**
+// It rests on TWO pieces, and the split between them is deliberate:
 //
-//  1. ACUSE EXPLÍCITO (`.agent/conventions-ack.md`) — la garantía. Determinista,
-//     por señal (`claim` / `worktrees` / `estado`), con fecha y motivo. Quien ya
-//     tomó la decisión la escribe UNA vez y esa señal —solo esa— deja de avisar.
-//     La garantía NO puede depender de heurísticas de texto: por eso la sostiene
-//     esto, que es un fichero que o está o no está.
-//  2. MANDATO vs MENCIÓN — la ergonomía. Reglas ESTRUCTURALES (¿esto es una
-//     invocación de comando o el nombre de un fichero en una lista?) más un
-//     conjunto ESTRECHO de marcas de ámbito («fuera del loop», «no lo corras»,
-//     «lo hace /ct-next») evaluadas sobre la línea y sobre los bullets/encabezado
-//     que la contienen. Baja el ruido; no se le confía la garantía, porque una
-//     heurística de texto siempre se puede equivocar.
+//  1. EXPLICIT ACKNOWLEDGEMENT (`.agent/conventions-ack.md`) — the guarantee.
+//     Deterministic, per signal (`claim` / `worktrees` / `estado`), with a date
+//     and a reason. Whoever already took the decision writes it ONCE and that
+//     signal —only that one— stops warning. The guarantee CANNOT depend on text
+//     heuristics: that is why what holds it up is this, a file that either is
+//     there or is not.
+//  2. MANDATE vs MENTION — the ergonomics. STRUCTURAL rules (is this a command
+//     invocation or the name of a file in a list?) plus a NARROW set of scope
+//     marks («fuera del loop», «no lo corras», «lo hace /ct-next») evaluated
+//     over the line and over the bullets/heading that contain it. It brings the
+//     noise down; the guarantee is not entrusted to it, because a text
+//     heuristic can always be wrong.
 //
-// El coste de (2) son falsos negativos, y está medido, no supuesto: ver el
-// informe de F14. La regla que los acota es que las marcas de ámbito son pocas
-// y NO ambiguas — «a mano» a secas NO silencia (una guía puede perfectamente
-// mandar «reclama a mano con tu script», y eso es el deadlock), solo silencian
-// las que sacan explícitamente la orden del loop o la prohíben.
+// The cost of (2) is false negatives, and it is measured, not assumed: see the
+// F14 report. The rule that bounds them is that the scope marks are few and NOT
+// ambiguous — «a mano» on its own does NOT silence (a guide can perfectly well
+// order «reclama a mano con tu script», and that is the deadlock); only the ones
+// that explicitly take the order out of the loop, or forbid it, do.
 
 export const CONTRACT_MARKER_OPEN = '<!-- ct-init:slices-contract -->'
 export const CONTRACT_MARKER_CLOSE = '<!-- /ct-init:slices-contract -->'
-// #93 — la sección corta que el contrato dejó en su sitio dentro de AGENTS.md.
-// Se poda por el mismo motivo que el contrato: es texto del PLUGIN, y habla del
-// terreno que este escáner vigila (el claim, `.worktrees/<n>`, el fichero de
-// estado). Sin podarla, `/ct-init` y `/ct-next` se denunciarían a sí mismos en
-// cada corrida de un repo recién bootstrapeado.
+// #93 — the short section the contract left in place inside AGENTS.md. It is
+// pruned for the same reason as the contract: it is PLUGIN text, and it talks
+// about the ground this scanner watches over (the claim, `.worktrees/<n>`, the
+// state file). Without pruning it, `/ct-init` and `/ct-next` would denounce
+// themselves on every run of a freshly bootstrapped repo.
 export const LOOP_MARKER_OPEN = '<!-- ct-init:loop -->'
 export const LOOP_MARKER_CLOSE = '<!-- /ct-init:loop -->'
 const BLOQUES_PROPIOS = [
@@ -66,71 +69,77 @@ const BLOQUES_PROPIOS = [
   [LOOP_MARKER_OPEN, LOOP_MARKER_CLOSE],
 ]
 
-// Rutas y nombres que el dispatcher del plugin ocupa. Se citan en los mensajes
-// para que la decisión que hay que tomar sea concreta, no "revisa tu setup".
+// Paths and names the plugin's dispatcher occupies. They are cited in the
+// messages so that the decision to be taken is concrete, not "review your
+// setup".
 export const LOOP_WORKTREE_DIR = '.worktrees'
 export const LOOP_BRANCH_PREFIX = 'feat/'
 
-// Dónde se escribe el acuse. Relativo a la raíz del repo destino. Vive bajo
-// `.agent/` (el espacio que el loop ya ocupa) y no dentro de AGENTS.md, por dos
-// razones: es UNA ruta conocida que los dos consumidores leen sin escanear, y
-// una señal cuya evidencia es un FICHERO (`scripts/dispatch-check.sh`) no tiene
-// ninguna línea de AGENTS.md al lado de la que ponerla.
+// Where the acknowledgement is written. Relative to the target repo's root. It
+// lives under `.agent/` (the space the loop already occupies) and not inside
+// AGENTS.md, for two reasons: it is ONE known path that both consumers read
+// without scanning, and a signal whose evidence is a FILE
+// (`scripts/dispatch-check.sh`) has no line of AGENTS.md beside which to put
+// it.
 export const ACK_PATH = '.agent/conventions-ack.md'
 
 // ============================================================================
-// F19/H2 — UN ACUSE QUE NO SILENCIA UNA SEÑAL, SINO UNOS CASOS CONCRETOS.
+// F19/H2 — AN ACKNOWLEDGEMENT THAT SILENCES NOT A SIGNAL, BUT A FEW CONCRETE
+// CASES.
 //
-// EL PROBLEMA QUE CIERRA. F18 añadió un aviso agregado de issues CERRADOS que
-// conservan una label `status:` viva. La forma es la correcta —un párrafo, no
-// diez líneas, agrupado por estado— y aun así se lo va a saltar cualquiera a
-// partir de la tercera corrida, y no por cómo está escrito: porque es
-// ESTÁTICO. Esos diez casos no cambian solos, así que el aviso imprime el
-// mismo párrafo en cada corrida hasta que alguien limpie. Un aviso que no
-// cambia deja de leerse — y entonces el día que aparezca uno nuevo en la
-// lista, no se ve. Es una tercera forma de que un aviso deje de servir,
-// distinta del muro insatisfacible (F14) y del ruido por volumen (F16): la
-// REPETICIÓN SIN NOVEDAD.
+// THE PROBLEM IT CLOSES. F18 added an aggregate warning about CLOSED issues
+// that keep a live `status:` label. The shape is the right one —one paragraph,
+// not ten lines, grouped by status— and even so anybody is going to skip it
+// from the third run on, and not because of how it is written: because it is
+// STATIC. Those ten cases do not change on their own, so the warning prints the
+// same paragraph on every run until somebody cleans up. A warning that does not
+// change stops being read — and then, the day a new one shows up in the list,
+// it is not seen. It is a third way for a warning to stop being of use,
+// distinct from the unsatisfiable wall (F14) and from noise by volume (F16):
+// REPETITION WITH NO NOVELTY.
 //
-// `residuo-status` es la misma herramienta de F14 —un fichero que o está o no
-// está, determinista, con fecha y motivo— aplicada un nivel más fino: en vez
-// de callar una SEÑAL entera, calla unos NÚMEROS concretos y sigue avisando de
-// los que no estén en la lista. Es literalmente la frase "esto lo he visto y
-// decidido, cállate sobre estos números y sigue avisando de los nuevos".
+// `residuo-status` is F14's very same tool —a file that either is there or is
+// not, deterministic, with a date and a reason— applied one level finer:
+// instead of keeping quiet about a whole SIGNAL, it keeps quiet about a few
+// concrete NUMBERS and goes on warning about the ones that are not in the list.
+// It is literally the sentence "I have seen and decided this, shut up about
+// these numbers and go on warning me about the new ones".
 //
-// DOS DIFERENCIAS de comportamiento con los acuses de señal, y las dos son
-// deliberadas:
+// TWO DIFFERENCES in behaviour from the per-signal acknowledgements, and both
+// are deliberate:
 //
-//   1. ACUMULA entre líneas (`ACK_SET_IDS`). Para una señal, dos líneas con el
-//      mismo id son una redundancia y se reportan como tal. Para un acuse por
-//      caso NO: el uso natural es añadir una línea nueva cada vez que se
-//      revisa un lote ("2026-07-01 — #101", "2026-07-28 — #102"), y obligar a
-//      editar la línea vieja convertiría el mecanismo en un incordio que nadie
-//      usaría. Se unen los conjuntos y se conserva la fecha de la ÚLTIMA.
-//   2. Un acuse SIN números no silencia nada y se REPORTA como problema. Es el
-//      mismo criterio que rige todo este parser: el modo de fallo que no nos
-//      podemos permitir es que alguien crea que ha callado algo y no lo haya
-//      hecho. No hay comodín para "todos" a propósito — un comodín devolvería
-//      exactamente el silencio estático que este acuse viene a romper.
+//   1. It ACCUMULATES across lines (`ACK_SET_IDS`). For a signal, two lines
+//      with the same id are a redundancy and are reported as such. For a
+//      per-case acknowledgement NOT so: the natural use is to add a new line
+//      every time a batch is reviewed ("2026-07-01 — #101", "2026-07-28 —
+//      #102"), and forcing the old line to be edited would turn the mechanism
+//      into a nuisance nobody would use. The sets are unioned and the date of
+//      the LAST one is kept.
+//   2. An acknowledgement WITH NO numbers silences nothing and is REPORTED as a
+//      problem. It is the same criterion that governs this whole parser: the
+//      failure mode we cannot afford is somebody believing they have kept
+//      something quiet when they have not. There is no wildcard for "all", on
+//      purpose — a wildcard would give back exactly the static silence this
+//      acknowledgement comes to break.
 export const ACK_IDS = ['claim', 'worktrees', 'estado', 'residuo-status']
-// Ids cuyo acuse es un CONJUNTO de casos (números de issue) en vez de un
-// interruptor por señal.
+// Ids whose acknowledgement is a SET of cases (issue numbers) instead of a
+// per-signal switch.
 export const ACK_SET_IDS = ['residuo-status']
 // ============================================================================
 
-// El bloque que el PROPIO ct-init siembra se PODA antes de escanear
-// (`docLines`, abajo). Imprescindible desde F11: ese bloque habla de
-// `dispatch-check`, de `.worktrees/<n>`, de `status:in-progress` y de `cmux` —
-// sin la poda, la SEGUNDA corrida de ct-init sobre cualquier repo se
-// denunciaría a sí misma y el aviso moriría de ruido. Tolera CRLF (mismo
-// motivo que ct-init.sh: un AGENTS.md editado en Windows lleva `\r` pegado a
-// cada marcador y ninguna comparación de línea completa lo encontraba).
+// The block ct-init ITSELF seeds is PRUNED before scanning (`docLines`,
+// below). Indispensable since F11: that block talks about `dispatch-check`,
+// about `.worktrees/<n>`, about `status:in-progress` and about `cmux` — without
+// the pruning, the SECOND run of ct-init over any repo would denounce itself
+// and the warning would die of noise. It tolerates CRLF (same reason as
+// ct-init.sh: an AGENTS.md edited on Windows carries a `\r` stuck to every
+// marker and no whole-line comparison found it).
 
-// shape: la forma MARKDOWN de una línea — nivel de anidamiento, si es bullet,
-// si es encabezado. Se calcula tras quitar los marcadores de cita (`> `),
-// porque una política escrita dentro de un blockquote sigue siendo una política
-// (caso real: el bloque «🛑 Política de aislamiento de ramas» del CLAUDE.md de
-// menoplus manda su `git worktree add` desde dentro de una cita).
+// shape: the MARKDOWN form of a line — nesting level, whether it is a bullet,
+// whether it is a heading. It is computed after removing the quote markers
+// (`> `), because a policy written inside a blockquote is still a policy (real
+// case: the «🛑 Política de aislamiento de ramas» block of menoplus's CLAUDE.md
+// orders its `git worktree add` from inside a quote).
 function shape(raw) {
   let t = raw
   const quote = t.match(/^(\s*(?:>\s?)+)/)
@@ -141,10 +150,10 @@ function shape(raw) {
   return { indent, isList, isHeading }
 }
 
-// docLines: líneas numeradas (1-based) de un documento, ya sin el bloque
-// propio y sin `\r`. La numeración es la del fichero ORIGINAL — el que el
-// humano va a abrir — no la del texto podado: citar "AGENTS.md:84" y que no
-// sea la línea 84 sería peor que no citar nada.
+// docLines: numbered lines (1-based) of a document, already without the own
+// block and without `\r`. The numbering is the ORIGINAL file's — the one the
+// human is going to open — not that of the pruned text: citing "AGENTS.md:84"
+// and it not being line 84 would be worse than citing nothing at all.
 export function docLines(content) {
   const original = String(content ?? '').split('\n')
   const stripped = new Set()
@@ -164,30 +173,30 @@ export function docLines(content) {
     const text = raw.replace(/\r$/, '')
     return { n: i + 1, text, ...shape(text) }
   }
-  // Bloque ABIERTO y nunca cerrado (alguien borró el marcador de cierre — un
-  // caso real: ct-init tiene un guardián dedicado a los rastros parciales).
-  // Podar "desde la apertura hasta el final" tiraría por la borda TODO lo que
-  // hubiera debajo, incluidas las convenciones propias del repo, y el aviso se
-  // callaría por un marcador huérfano. Ante la duda no se poda nada: como mucho
-  // el propio bloque se autodenuncia, y eso cuesta una línea de lectura.
+  // A block OPENED and never closed (somebody deleted the closing marker — a
+  // real case: ct-init has a guard dedicated to partial traces). Pruning "from
+  // the opening to the end" would throw overboard EVERYTHING underneath, the
+  // repo's own conventions included, and the warning would keep quiet because
+  // of an orphan marker. When in doubt nothing is pruned: at worst the block
+  // denounces itself, and that costs one line of reading.
   if (inside) return original.map(build)
   return original.map(build).filter((_, i) => !stripped.has(i))
 }
 
-// --- MANDATO vs MENCIÓN, pieza 1: qué trozo de la línea es "comando" --------
+// --- MANDATE vs MENTION, piece 1: which chunk of the line is "command" ------
 //
-// `commandCandidates` parte una línea de markdown en los trozos donde puede
-// vivir una ORDEN ejecutable:
-//   - el contenido de cada span de código (`` `...` ``), y
-//   - la prosa que queda al quitar esos spans.
-// Los dos, no uno: mirar solo los spans pierde `corre ./x.sh <n> y luego `git
-// commit`` (la orden está en la prosa), y mirar solo la línea entera es lo que
-// hacía F11 — por eso `bloquea \`git worktree add\` con dirty tree` (una
-// descripción de un hook en una tabla de inventario) contaba como si el repo
-// mandara crear worktrees ahí.
-// Una línea SIN backticks (típica dentro de un bloque ```…```, como el árbol de
-// directorios o el ejemplo de comando del blockquote) da un único candidato:
-// ella misma, sin el `>` de cita ni el guion de bullet.
+// `commandCandidates` splits a markdown line into the chunks where an
+// executable ORDER can live:
+//   - the content of each code span (`` `...` ``), and
+//   - the prose that is left once those spans are removed.
+// Both, not one: looking only at the spans loses `corre ./x.sh <n> y luego `git
+// commit`` (the order is in the prose), and looking only at the whole line is
+// what F11 did — that is why `bloquea \`git worktree add\` con dirty tree` (a
+// description of a hook in an inventory table) counted as if the repo ordered
+// worktrees to be created there.
+// A line WITHOUT backticks (typical inside a ```…``` block, like the directory
+// tree or the blockquote's command example) gives a single candidate: itself,
+// without the `>` of the quote nor the bullet's dash.
 export function commandCandidates(text) {
   const bare = String(text ?? '')
     .replace(/^(\s*(?:>\s?)+)/, '')
@@ -199,23 +208,24 @@ export function commandCandidates(text) {
   return [...spans, prose]
 }
 
-// stripMarkup: para las preguntas SEMÁNTICAS (¿esta línea saca la orden del
-// loop?) el énfasis estorba. Caso real: AGENTS.md dice «trabajar un issue
-// **fuera** del loop» — con los asteriscos dentro, ninguna expresión que
-// buscara "fuera del loop" lo encontraba.
+// stripMarkup: for the SEMANTIC questions (does this line take the order out of
+// the loop?) the emphasis gets in the way. Real case: AGENTS.md says «trabajar
+// un issue **fuera** del loop» — with the asterisks inside, no expression
+// looking for "fuera del loop" found it.
 function stripMarkup(text) {
   return String(text ?? '').replace(/[*_`]/g, '').replace(/\s+/g, ' ')
 }
 
-// --- MANDATO vs MENCIÓN, pieza 2: marcas de ÁMBITO -------------------------
+// --- MANDATE vs MENTION, piece 2: SCOPE marks ------------------------------
 //
-// Lista corta y deliberadamente NO ambigua. Cada entrada tiene que significar
-// «esto no es una orden para el agente del loop», no solo «aquí se habla de
-// otra cosa». Lo que NO está aquí, y es la omisión importante: «a mano» /
-// «manualmente» a secas. Una guía puede perfectamente decir «reclama el issue a
-// mano con ./scripts/dispatch-check.sh» — eso es exactamente el deadlock, y
-// silenciarlo sería el falso negativo caro. Solo cuenta cuando la frase saca la
-// orden del loop («a mano, FUERA DEL LOOP») o la prohíbe.
+// A short and deliberately NON-ambiguous list. Every entry has to mean «this is
+// not an order for the loop's agent», not merely «something else is being
+// talked about here». What is NOT here, and it is the important omission: «a
+// mano» / «manualmente» on their own. A guide can perfectly well say «reclama
+// el issue a mano con ./scripts/dispatch-check.sh» — that is exactly the
+// deadlock, and silencing it would be the expensive false negative. It only
+// counts when the sentence takes the order out of the loop («a mano, FUERA DEL
+// LOOP») or forbids it.
 const SCOPE_OUT_RES = [
   /fuera del loop/i,
   /outside (?:the )?(?:loop|control tower)/i,
@@ -224,15 +234,15 @@ const SCOPE_OUT_RES = [
   /no (?:lo |la |los |las )?(?:corras|ejecutes|reclames|invoques|uses|lances)\b/i,
   /nunca (?:lo |la )?(?:corras|ejecutes|reclames|invoques)\b/i,
   /do ?n[o']?t run|do not run|never run/i,
-  // «ya no ES» a secas queda FUERA a propósito: «ya no es opcional: corre
-  // ./scripts/dispatch-check.sh» es una frase perfectamente normal y silenciarla
-  // sería exactamente el falso negativo caro. Solo las formas que dicen que la
-  // cosa dejó de hacerse.
+  // «ya no ES» on its own is left OUT on purpose: «ya no es opcional: corre
+  // ./scripts/dispatch-check.sh» is a perfectly normal sentence and silencing
+  // it would be exactly the expensive false negative. Only the forms that say
+  // the thing has stopped being done.
   /ya no (?:se usa|se usan|se corre|lo hace|lo hacen|aplica|aplican|hace falta|es necesario|es obligatorio)/i,
   /no longer/i,
   /deprecad|obsolet/i,
-  // «el claim lo hace /ct-next, no tú» y variantes: la frase con la que un repo
-  // declara que la orden vieja dejó de dirigirse al agente.
+  // «el claim lo hace /ct-next, no tú» and variants: the sentence with which a
+  // repo declares that the old order has stopped being addressed to the agent.
   /(?:lo hace|lo pone|lo hará) (?:el |la )?(?:dispatcher|\/ct-next|ct-next)/i,
   /el agente no (?:reclama|lo reclama|hace el claim)/i,
   /no (?:lo )?reclames? (?:nada |el issue )?a mano/i,
@@ -243,17 +253,17 @@ function scopedOut(text) {
   return SCOPE_OUT_RES.some((re) => re.test(t))
 }
 
-// ancestorTexts: los bullets que CONTIENEN a esta línea (subiendo por
-// anidamiento) más el encabezado más cercano. El ámbito de una orden casi nunca
-// está en su propia línea. Caso real, `docs/agentic-workflow.md`:
+// ancestorTexts: the bullets that CONTAIN this line (going up by nesting) plus
+// the nearest heading. The scope of an order is almost never on its own line.
+// Real case, `docs/agentic-workflow.md`:
 //
-//     - **A mano, fuera del loop:** entonces sí, lo aplicas tú con `…`      ← ámbito
-//       - **Claim:** `./scripts/dispatch-check.sh <issue#>` → …            ← la orden
+//     - **A mano, fuera del loop:** entonces sí, lo aplicas tú con `…`      ← scope
+//       - **Claim:** `./scripts/dispatch-check.sh <issue#>` → …            ← the order
 //
-// La línea de la orden, leída sola, es indistinguible de la versión VIEJA que
-// sí mandaba al agente reclamar. Lo que las separa está un nivel arriba.
-// Ventana acotada (40 líneas, 4 ancestros): un documento largo no puede hacer
-// que una orden herede el ámbito de algo que quedó a media página.
+// The order's line, read on its own, is indistinguishable from the OLD version
+// that did order the agent to claim. What separates them sits one level up.
+// Bounded window (40 lines, 4 ancestors): a long document cannot make an order
+// inherit the scope of something that was left half a page back.
 function ancestorTexts(lines, i) {
   const out = []
   let need = lines[i].indent
@@ -266,10 +276,10 @@ function ancestorTexts(lines, i) {
   return out
 }
 
-// evidenceFromDocs: recorre los documentos y aplica `predicate(candidatos,
-// línea)`. Antes de aceptar una línea comprueba el ámbito: si la propia línea o
-// alguno de sus ancestros la saca del loop, no es una orden que el agente
-// despachado vaya a obedecer.
+// evidenceFromDocs: walks the documents and applies `predicate(candidates,
+// line)`. Before accepting a line it checks the scope: if the line itself or
+// one of its ancestors takes it out of the loop, it is not an order the
+// dispatched agent is going to obey.
 function evidenceFromDocs(docs, predicate) {
   const out = []
   for (const doc of docs || []) {
@@ -284,60 +294,62 @@ function evidenceFromDocs(docs, predicate) {
   return out
 }
 
-// normalizePath: separadores a `/` y sin `./` inicial, para que las reglas de
-// ruta no dependan de cómo las haya construido quien llame.
+// normalizePath: separators to `/` and with no leading `./`, so that the path
+// rules do not depend on how the caller happened to build them.
 function normalizePath(p) {
   return String(p ?? '').replace(/\\/g, '/').replace(/^\.\//, '')
 }
 
-// `files` mezcla ficheros y directorios; los directorios llevan `/` al final
-// (así los emite detect-conventions.mjs). Un directorio llamado `worktrees` es
-// una señal por sí mismo — no hace falta que tenga nada dentro, y de hecho no
-// se desciende a él.
+// `files` mixes files and directories; the directories carry a trailing `/`
+// (that is how detect-conventions.mjs emits them). A directory called
+// `worktrees` is a signal in itself — it does not need to have anything inside,
+// and in fact it is not descended into.
 const isDir = (p) => p.endsWith('/')
 
-// Rutas que no son convenciones VIVAS del repo: lo archivado y lo que es el
-// test de otra cosa. Caso real: el detector marcaba
-// `docs/archive/planning-gsd/STATE.md` (un estado histórico, explícitamente
-// archivado) y `scripts/tests/dispatch-check.test.sh` (el test del script, no
-// un segundo protocolo). Ninguno de los dos se puede "resolver": borrar un
-// archivo histórico o el test de un script es exactamente el "empeorar el repo"
-// que este fichero ya no puede pedir.
+// Paths that are not LIVE conventions of the repo: what is archived and what is
+// the test of something else. Real case: the detector flagged
+// `docs/archive/planning-gsd/STATE.md` (a historical state, explicitly
+// archived) and `scripts/tests/dispatch-check.test.sh` (the script's test, not
+// a second protocol). Neither of the two can be "resolved": deleting a
+// historical archive or a script's test is exactly the "making the repo worse"
+// this file can no longer ask for.
 const ARCHIVED_PATH_RE = /(^|\/)(archive|archives|archived|archivo|historico|historicos|histórico|históricos|old|deprecated|attic|backup|backups|\.trash)\//i
 const TEST_PATH_RE = /(^|\/)(tests?|__tests__|spec|specs)\/|(^|\/)[^/]*[._-](test|spec)\.[^/]*$/i
 const isLivePath = (p) => !ARCHIVED_PATH_RE.test(p) && !TEST_PATH_RE.test(p)
 
-// --- Regla 1: CLAIM -------------------------------------------------------
-// Un `dispatch-check` que no es el del plugin (un fichero propio del repo), o
-// una INSTRUCCIÓN en la documentación del repo que manda ejecutarlo. Cualquiera
-// de las dos basta: el fichero sin la instrucción sigue siendo un protocolo
-// vivo que alguien puede invocar, y la instrucción sin el fichero sigue siendo
-// una orden que el agente despachado leerá y obedecerá.
+// --- Rule 1: CLAIM --------------------------------------------------------
+// A `dispatch-check` that is not the plugin's (a file of the repo's own), or an
+// INSTRUCTION in the repo's documentation ordering it to be run. Either of the
+// two is enough: the file without the instruction is still a live protocol
+// somebody can invoke, and the instruction without the file is still an order
+// the dispatched agent will read and obey.
 const CLAIM_FILE_RE = /(^|\/)dispatch-check[^/]*$/i
 
-// isClaimInvocation: la parte estructural del arreglo. `dispatch-check` aparece
-// como COMANDO cuando (a) se ejecuta explícitamente — `./x`, `bash x`, `node x`
-// — o (b) lleva un argumento pegado detrás (`x <issue#>`, `x 42`, `x --release`).
-// Lo que ya NO cuenta, y era la mitad de los falsos positivos del repo real:
-//   `scripts/       dispatch-check.sh, dependabot-*, sentry-*`   ← árbol de dirs
-//   `` `scripts/dispatch-check.sh` sigue en el repo para… ``     ← mención
-//   `` `scripts/dispatch-check.sh` (anti-colisión por area…) ``  ← mención
+// isClaimInvocation: the structural part of the fix. `dispatch-check` shows up
+// as a COMMAND when (a) it is explicitly executed — `./x`, `bash x`, `node x` —
+// or (b) it carries an argument stuck behind it (`x <issue#>`, `x 42`,
+// `x --release`). What NO LONGER counts, and was half the false positives of
+// the real repo:
+//   `scripts/       dispatch-check.sh, dependabot-*, sentry-*`   ← dir tree
+//   `` `scripts/dispatch-check.sh` sigue en el repo para… ``     ← mention
+//   `` `scripts/dispatch-check.sh` (anti-colisión por area…) ``  ← mention
 const CLAIM_ARG_RE = /^(--?[\w-]|<[^\s]|\d|#\d|\$)/
-// Además del intérprete, los verbos con los que una guía manda ejecutar algo.
-// Sin ellos se escapaba «antes de implementar, corre dispatch-check.sh» (sin
-// `./` y sin argumento), que es una orden como una casa. Un verbo NO convierte
-// una mención en orden por sí solo: tiene que ir pegado delante del token.
+// Besides the interpreter, the verbs with which a guide orders something to be
+// run. Without them «antes de implementar, corre dispatch-check.sh» (with no
+// `./` and no argument) escaped, and that is an order if ever there was one. A
+// verb does NOT turn a mention into an order on its own: it has to sit stuck in
+// front of the token.
 const CLAIM_RUNNER_RE =
   /^(bash|sh|zsh|dash|node|python3?|source|exec|\.|\$|>|corre|corres|ejecuta|ejecutas|lanza|lanzas|invoca|invocas|usa|usas|run|runs|execute|call)$/i
-// Tercera vía, medida y añadida DESPUÉS del barrido de falsos negativos: una
-// línea que NO tiene forma de comando pero declara una OBLIGACIÓN sobre el
-// script («el claim se gestiona con `scripts/dispatch-check.sh`, que es
-// obligatorio», «primer paso del agente») sigue siendo una orden que el agente
-// va a obedecer, y sin esto se escapaba. Se evalúa sobre la línea entera, no
-// sobre el token, porque es el contexto el que obliga. No reintroduce ninguno de
-// los falsos positivos del repo real: ninguna de sus cuatro líneas problemáticas
-// contiene una marca de obligación (y las que la contuvieran caerían igual por
-// `scopedOut`, que se comprueba después).
+// A third route, measured and added AFTER the sweep of false negatives: a line
+// that does NOT have the shape of a command but declares an OBLIGATION about
+// the script («el claim se gestiona con `scripts/dispatch-check.sh`, que es
+// obligatorio», «primer paso del agente») is still an order the agent is going
+// to obey, and without this it escaped. It is evaluated over the whole line,
+// not over the token, because it is the context that obliges. It reintroduces
+// none of the false positives of the real repo: not one of its four problematic
+// lines contains an obligation mark (and the ones that did would fall out just
+// the same through `scopedOut`, which is checked afterwards).
 const CLAIM_DUTY_RE =
   /\b(obligatori|imprescindible|debes\b|deberás|tienes que|hay que|primer paso|antes de implementar|antes de empezar|is required|must run|mandatory)/i
 
@@ -347,8 +359,8 @@ function isClaimInvocation(cand, line = '') {
   for (let i = 0; i < toks.length; i++) {
     if (!/dispatch-check/i.test(toks[i])) continue
     const tok = toks[i]
-    // Un elemento de lista (`dispatch-check.sh,` / `dispatch-check.sh;`) nunca
-    // es una invocación: es una enumeración.
+    // A list element (`dispatch-check.sh,` / `dispatch-check.sh;`) is never an
+    // invocation: it is an enumeration.
     if (/[,;]$/.test(tok)) continue
     if (/^(\.{1,2})?\//.test(tok)) return true // ./x, ../x, /abs/x
     if (CLAIM_RUNNER_RE.test(toks[i - 1] || '')) return true
@@ -358,16 +370,18 @@ function isClaimInvocation(cand, line = '') {
   return false
 }
 
-// --- Regla 2: WORKTREES ---------------------------------------------------
-// Un `git worktree add` documentado que NO apunta a `.worktrees/`; un
-// directorio de worktrees propio; o un hook cuyo nombre delata que vigila
-// ramas/worktrees (es quien puede tumbar cada despacho del loop).
+// --- Rule 2: WORKTREES ----------------------------------------------------
+// A documented `git worktree add` that does NOT point at `.worktrees/`; a
+// worktree directory of the repo's own; or a hook whose name gives away that it
+// watches over branches/worktrees (it is the one that can knock down every
+// dispatch of the loop).
 //
-// La regla NO intenta extraer la ruta por posición — `add <path> -b <rama>` y
-// `add -b <rama> <path>` son ambos válidos y un capturador posicional se
-// equivoca de token en la mitad de los casos. Salta banderas y se queda con el
-// primer operando; si NO hay operando, esto no es un comando sino una mención,
-// y esa distinción es la que mata los dos falsos positivos del repo real:
+// The rule does NOT try to extract the path by position — `add <path> -b
+// <branch>` and `add -b <branch> <path>` are both valid and a positional
+// capturer picks the wrong token in half the cases. It skips flags and keeps
+// the first operand; if there is NO operand, this is not a command but a
+// mention, and that distinction is the one that kills the two false positives
+// of the real repo:
 //   `` …; empuja a `git worktree add`. Permite: `main`, restore… ``
 //   `` `menoplus-worktree-guard.sh` (bloquea `git worktree add` con dirty tree) ``
 const LOOP_WORKTREE_MENTION_RE = /(^|[^\w.])\.worktrees\//
@@ -377,9 +391,10 @@ function foreignWorktreeAdd(cand) {
   if (!m) return false
   const rest = m[1].trim()
   if (!rest) return false
-  // Comando partido en varias líneas (`git worktree add \` + la ruta debajo):
-  // no se ve el operando, así que NO se puede descartar que apunte a otro sitio.
-  // Ante "no lo sé" se avisa — para eso está el acuse, que es la salida.
+  // Command split across several lines (`git worktree add \` + the path
+  // underneath): the operand is not visible, so it CANNOT be ruled out that it
+  // points somewhere else. Faced with "I do not know" it warns — that is what
+  // the acknowledgement is there for, and it is the way out.
   if (rest === '\\') return true
   const toks = rest.split(/\s+/).filter(Boolean)
   let operand = null
@@ -389,17 +404,18 @@ function foreignWorktreeAdd(cand) {
     operand = t
     break
   }
-  // Sin operando, o con un operando que no parece una ruta (puntuación de
-  // prosa: `add`. Permite: …), no hay comando que contradiga nada.
+  // With no operand, or with an operand that does not look like a path (prose
+  // punctuation: `add`. Permite: …), there is no command contradicting
+  // anything.
   if (!operand || !/[\w~$]/.test(operand) || /^[.,;:!?)]+$/.test(operand)) return false
   return !LOOP_WORKTREE_MENTION_RE.test(rest)
 }
 
-// --- Regla 3: ESTADO ------------------------------------------------------
-// Un fichero de estado que no es `.agent/STATE.md`. El loop entero (hook de
-// SessionStart, seed de `/ct-next`, `blocked`) está atado a esa ruta: si el
-// repo ya llevaba el suyo en otro sitio, van a convivir dos y nadie sabrá cuál
-// es el vigente.
+// --- Rule 3: STATE (the `estado` signal) ----------------------------------
+// A state file that is not `.agent/STATE.md`. The whole loop (the SessionStart
+// hook, `/ct-next`'s seed, `blocked`) is tied to that path: if the repo already
+// carried its own somewhere else, two of them are going to coexist and nobody
+// will know which one is current.
 const STATE_FILE_RE = /(^|\/)(STATE|STATUS)\.md$/i
 
 export function detectConventions({ docs = [], files = [], acks = null } = {}) {
@@ -413,10 +429,10 @@ export function detectConventions({ docs = [], files = [], acks = null } = {}) {
     findings.push({
       id: 'claim',
       title: 'este repo ya tiene su PROPIO protocolo de claim',
-      // Las líneas de la documentación van PRIMERO, antes que los ficheros:
-      // son la orden que el agente despachado va a leer y obedecer, así que son
-      // la evidencia que decide. (La lista se trunca al imprimir; que lo que
-      // sobreviva al corte sea lo importante no es un detalle cosmético.)
+      // The documentation lines go FIRST, ahead of the files: they are the
+      // order the dispatched agent is going to read and obey, so they are the
+      // evidence that decides. (The list is truncated when printing; that what
+      // survives the cut be the important part is not a cosmetic detail.)
       evidence: [
         ...claimDocs,
         ...claimFiles.map((p) => ({ path: p, line: null, text: 'script de claim propio del repo' })),
@@ -484,9 +500,10 @@ export function detectConventions({ docs = [], files = [], acks = null } = {}) {
     })
   }
 
-  // El acuse no BORRA el finding: lo marca. Quien imprime decide (formatFindings
-  // lo baja a una nota de una línea). Devolverlo marcado y no desaparecido es lo
-  // que permite que ct-next filtre por id y siga sabiendo que estaba silenciado.
+  // The acknowledgement does not DELETE the finding: it marks it. Whoever
+  // prints decides (formatFindings brings it down to a one-line note).
+  // Returning it marked instead of vanished is what lets ct-next filter by id
+  // and still know it was silenced.
   if (acks) {
     for (const f of findings) {
       const ack = acks.get ? acks.get(f.id) : acks[f.id]
@@ -497,21 +514,22 @@ export function detectConventions({ docs = [], files = [], acks = null } = {}) {
   return findings
 }
 
-// --- ENLACES QUE LA PROPIA GUÍA DECLARA AUTORIZADOS -------------------------
+// --- LINKS THE GUIDE ITSELF DECLARES AUTHORISED -----------------------------
 //
-// Segundo defecto de F11: se escaneaban SOLO `AGENTS.md` y `CLAUDE.md`. En el
-// repo real las dos guías apuntaban a `docs/agentic-workflow.md` como
-// «referencia completa», y ahí seguía viva la orden vieja en imperativo directo
-// al agente (`Claim (primer paso del agente): ./scripts/dispatch-check.sh
-// <issue#>`). Se limpiaron los dos ficheros que el detector miraba y la orden
-// quedó a un clic, en el que no miraba. Un agente que lee AGENTS.md y sigue el
-// enlace que ese fichero llama autorizado la encuentra igual.
+// Second defect of F11: ONLY `AGENTS.md` and `CLAUDE.md` were scanned. In the
+// real repo both guides pointed at `docs/agentic-workflow.md` as the «complete
+// reference», and the old order was still alive there, in the imperative and
+// addressed straight at the agent (`Claim (primer paso del agente):
+// ./scripts/dispatch-check.sh <issue#>`). The two files the detector looked at
+// were cleaned up and the order was left one click away, in the one it did not
+// look at. An agent that reads AGENTS.md and follows the link that file calls
+// authorised finds it all the same.
 //
-// ALCANCE: UN SALTO, desde los documentos raíz. Ni cero (el agujero de arriba)
-// ni transitivo (una madriguera: `agentic-workflow.md` ya enlaza a un spec de
-// 2026-05 que enlaza a otros). El criterio es que AGENTS.md/CLAUDE.md son la
-// puerta de entrada del agente, y un documento que ELLOS declaran canónico es,
-// a efectos de lo que el agente obedecerá, parte de ellos. El nieto ya no.
+// SCOPE: ONE HOP, from the root documents. Neither zero (the hole above) nor
+// transitive (a rabbit hole: `agentic-workflow.md` already links to a spec of
+// 2026-05 that links to others). The criterion is that AGENTS.md/CLAUDE.md are
+// the agent's front door, and a document THEY declare canonical is, as far as
+// what the agent will obey goes, part of them. The grandchild is not.
 export function linkedDocPaths(docs) {
   const out = []
   const seen = new Set()
@@ -519,14 +537,15 @@ export function linkedDocPaths(docs) {
     let p = String(raw).trim().replace(/^<|>$/g, '')
     if (!p || !/\.md$/i.test(p)) return
     if (/^[a-z][\w+.-]*:/i.test(p)) return // http:, https:, mailto:…
-    if (p.startsWith('/') || p.startsWith('~')) return // fuera del repo
-    if (/[<>{}*?|"']/.test(p)) return // plantillas: `.worktrees/<n>/…`, `apps/{a,b}/…`
+    if (p.startsWith('/') || p.startsWith('~')) return // outside the repo
+    if (/[<>{}*?|"']/.test(p)) return // templates: `.worktrees/<n>/…`, `apps/{a,b}/…`
     p = normalizePath(p)
-    // `..` no se resuelve aquí (esto es lógica pura): se rechaza. Salir del repo
-    // es justo lo que no queremos, y quien lee el disco lo vuelve a comprobar.
+    // `..` is not resolved here (this is pure logic): it is rejected. Leaving
+    // the repo is precisely what we do not want, and whoever reads the disk
+    // checks it again.
     if (p.split('/').includes('..')) return
     const first = p.split('/')[0]
-    // Territorio del propio loop y ruido conocido: no son documentación del repo.
+    // The loop's own territory and known noise: not the repo's documentation.
     if (['.worktrees', '.agent', 'node_modules', '.git'].includes(first)) return
     if (seen.has(p)) return
     seen.add(p)
@@ -542,54 +561,58 @@ export function linkedDocPaths(docs) {
   return out
 }
 
-// --- ACUSE EXPLÍCITO --------------------------------------------------------
+// --- EXPLICIT ACKNOWLEDGEMENT -----------------------------------------------
 //
-// Formato, una línea por señal:
+// Format, one line per signal:
 //     claim: 2026-07-28 — manda el claim del plugin; el script del repo se
 //     queda solo para trabajo a mano fuera del loop
-// Se exigen las TRES cosas (qué señal, cuándo, por qué) porque un acuse sin
-// fecha ni motivo es indistinguible de un `# TODO` que alguien dejó y nadie
-// recuerda — y esto silencia un aviso de verdad.
+// The THREE things are required (which signal, when, why) because an
+// acknowledgement with no date and no reason is indistinguishable from a
+// `# TODO` somebody left behind and nobody remembers — and this one silences a
+// real warning.
 //
-// F15/H3 — EL FICHERO DEL PORQUÉ NO ADMITÍA UN PORQUÉ.
+// F15/H3 — THE FILE OF THE WHY DID NOT ADMIT A WHY.
 //
-// La versión de F14 era línea a línea y solo sabía saltar líneas en blanco,
-// encabezados `#`, bloques de código y una línea suelta que empezara por
-// `<!--`. TODO lo demás tenía que parsear como acuse o se reportaba. Medido
-// por construcción contra esa versión, antes de tocar nada: un preámbulo en
-// prosa de tres líneas produce 3 avisos de "no silencia nada"; meter ese mismo
-// preámbulo entre `<!--` y `-->` produce 4 (las tres líneas de dentro MÁS la
-// del `-->`, porque solo la de apertura se saltaba). O sea: un fichero cuya
-// única razón de existir es dejar constancia de POR QUÉ se tomó una decisión
-// no admitía escribir el porqué en ninguna parte, ni siquiera comentado.
+// F14's version went line by line and only knew how to skip blank lines, `#`
+// headings, code blocks and a stray line starting with `<!--`. EVERYTHING else
+// had to parse as an acknowledgement or it was reported. Measured by
+// construction against that version, before touching anything: a three-line
+// prose preamble produces 3 warnings of "silences nothing"; putting that same
+// preamble between `<!--` and `-->` produces 4 (the three lines inside PLUS the
+// one with the `-->`, because only the opening one was skipped). That is: a
+// file whose only reason to exist is to put on record WHY a decision was taken
+// did not admit writing the why anywhere, not even commented out.
 //
-// LA PROPIEDAD QUE NO SE PUEDE PERDER. El fallo inaceptable no es "se me cuela
-// prosa": es que alguien crea que ha silenciado una señal y no lo haya hecho.
-// Así que la pregunta no es "¿esto parsea?" sino "¿esto PRETENDÍA ser un
-// acuse?" — y solo lo que lo pretendía y no parsea se reporta.
+// THE PROPERTY THAT CANNOT BE LOST. The unacceptable failure is not "prose
+// sneaks in on me": it is somebody believing they have silenced a signal when
+// they have not. So the question is not "does this parse?" but "did this MEAN
+// to be an acknowledgement?" — and only what meant to be one and does not parse
+// is reported.
 //
-// CÓMO SE DISTINGUE PROSA DE ACUSE MAL ESCRITO (`looksLikeAck`, abajo). Dos
-// huellas, cualquiera de las dos basta:
-//   (a) el primer token de la línea ES una señal conocida, o está a distancia
-//       de edición 1 de una (`clim:`, `worktree:`, `estado`). Cubre el acuse
-//       cuya sintaxis se rompió del todo — sin colon, con guion, sin fecha;
-//   (b) la línea tiene la forma `<palabra>: <YYYY-MM-DD>`. Cubre el acuse con
-//       la sintaxis bien y el NOMBRE de señal mal, que (a) no alcanza.
-// Una frase de prosa normal ("Contexto de la decisión, julio de 2026.") no
-// tiene ninguna de las dos y se ignora sin ruido.
+// HOW PROSE IS TOLD APART FROM A BADLY WRITTEN ACKNOWLEDGEMENT (`looksLikeAck`,
+// below). Two fingerprints, either of the two is enough:
+//   (a) the line's first token IS a known signal, or is at edit distance 1 from
+//       one (`clim:`, `worktree:`, `estado`). It covers the acknowledgement
+//       whose syntax broke completely — no colon, with a dash, no date;
+//   (b) the line has the shape `<word>: <YYYY-MM-DD>`. It covers the
+//       acknowledgement with the syntax right and the signal NAME wrong, which
+//       (a) does not reach.
+// An ordinary prose sentence ("Contexto de la decisión, julio de 2026.") has
+// neither of the two and is ignored with no noise.
 //
-// EL SESGO ES DELIBERADO: ante la duda, se REPORTA. Una línea de prosa que
-// empiece por la palabra "claim" se llevará un aviso — molesto, y con remedio
-// obvio (comentarla, o reescribirla); un acuse silenciado por error no tiene
-// remedio, porque nadie se entera. Y para el caso en que TODO el fichero se
-// leyó como prosa —el que de verdad engaña— hay una voz propia: ver
-// `formatFindings` y el campo `prosaSinAcuses` que se devuelve aquí.
+// THE BIAS IS DELIBERATE: when in doubt, it REPORTS. A prose line starting with
+// the word "claim" will take a warning — annoying, and with an obvious remedy
+// (comment it out, or rewrite it); an acknowledgement silenced by mistake has
+// no remedy, because nobody finds out. And for the case in which the WHOLE file
+// was read as prose —the one that really does deceive— there is a voice of its
+// own: see `formatFindings` and the `prosaSinAcuses` field returned here.
 const ACK_ID_HEAD_RE = /^(?:[-*+]\s+)?[`"'*_]*([A-Za-zÁ-Úá-ú][\w-]*)/
 
-// editDistanceAtMost1: ¿se llega de `a` a `b` con UNA sola inserción, borrado
-// o sustitución? No es un Levenshtein general a propósito — con umbral 1 basta
-// una pasada lineal, y subir el umbral empezaría a tragarse prosa ("estado" y
-// "estada" son vecinos; "estado" y "estamos" ya no deben serlo).
+// editDistanceAtMost1: can you get from `a` to `b` with ONE single insertion,
+// deletion or substitution? Deliberately not a general Levenshtein — with a
+// threshold of 1 a single linear pass is enough, and raising the threshold
+// would start swallowing prose ("estado" and "estada" are neighbours; "estado"
+// and "estamos" must no longer be).
 function editDistanceAtMost1(a, b) {
   if (a === b) return true
   if (Math.abs(a.length - b.length) > 1) return false
@@ -605,10 +628,10 @@ function editDistanceAtMost1(a, b) {
   return true
 }
 
-// looksLikeAck: ¿esta línea PRETENDÍA silenciar una señal? Exportada porque es
-// exactamente el criterio que hay que poder probar aparte: es la frontera
-// entre "no se dice nada" y "se avisa", y una frontera que solo existe dentro
-// de un bucle no se puede atacar de forma directa.
+// looksLikeAck: did this line MEAN to silence a signal? Exported because it is
+// exactly the criterion that has to be testable on its own: it is the boundary
+// between "nothing is said" and "a warning is given", and a boundary that only
+// exists inside a loop cannot be attacked head on.
 export function looksLikeAck(text) {
   const t = String(text ?? '').trim()
   if (!t) return false
@@ -617,31 +640,32 @@ export function looksLikeAck(text) {
     const id = head[1].toLowerCase()
     if (ACK_IDS.some((known) => editDistanceAtMost1(id, known))) return true
   }
-  // Huella (b): fecha ISO pegada a los dos puntos. Es la forma del acuse, no
-  // la de ninguna frase.
+  // Fingerprint (b): an ISO date stuck to the colon. It is the shape of the
+  // acknowledgement, not that of any sentence.
   return /^(?:[-*+]\s+)?[`"'*_]*[A-Za-zÁ-Úá-ú][\w-]*[`"'*_]*\s*:\s*\d{4}-\d{2}-\d{2}\b/.test(t)
 }
 
-// Todo lo que PRETENDA ser un acuse (ver `looksLikeAck`) TIENE que parsear.
-// Una línea así que no se entiende se REPORTA, nunca se ignora: el modo de
-// fallo que no nos podemos permitir es que alguien crea que ha silenciado algo
-// y no lo haya hecho (vuelve a ver el aviso y concluye que el acuse no sirve)
-// o al revés. Lo que no lo pretende es prosa, y la prosa es el motivo por el
-// que este fichero existe.
+// Everything that MEANS to be an acknowledgement (see `looksLikeAck`) HAS to
+// parse. Such a line, when it is not understood, is REPORTED, never ignored:
+// the failure mode we cannot afford is somebody believing they have silenced
+// something when they have not (they see the warning again and conclude the
+// acknowledgement is no good) or the other way round. What does not mean to be
+// one is prose, and prose is the reason this file exists.
 //
-// Devuelve `{ acks, problems, prosaSinAcuses }`. El tercer campo es cierto
-// solo cuando el fichero traía contenido de verdad (algo más que blancos,
-// encabezados y comentarios) y NO produjo ni un acuse ni un problema — el
-// único estado en el que el silencio de este parser puede engañar a alguien.
+// Returns `{ acks, problems, prosaSinAcuses }`. The third field is true only
+// when the file did bring real content (something more than blanks, headings
+// and comments) and produced NEITHER an acknowledgement NOR a problem — the
+// only state in which this parser's silence can deceive anybody.
 export function parseAcks(content) {
   const acks = new Map()
   const problems = []
-  const raw = String(content ?? '').replace(/^﻿/, '') // BOM: editores de Windows
+  const raw = String(content ?? '').replace(/^﻿/, '') // BOM: Windows editors
   let fenced = false
-  // Estado del comentario HTML MULTI-LÍNEA. Antes solo se saltaba la línea que
-  // EMPEZABA por `<!--`, así que el cuerpo del comentario y su `-->` de cierre
-  // se parseaban como si fueran acuses. Un `<!-- ... -->` que abre y cierra en
-  // la misma línea no entra en el estado (de ahí el `&& !t.includes('-->')`).
+  // State of the MULTI-LINE HTML comment. Before, only the line that STARTED
+  // with `<!--` was skipped, so the comment's body and its closing `-->` were
+  // parsed as if they were acknowledgements. A `<!-- ... -->` that opens and
+  // closes on the same line does not enter the state (hence the
+  // `&& !t.includes('-->')`).
   let inComment = false
   let sawProse = false
   raw.split('\n').forEach((rawLine, i) => {
@@ -653,12 +677,13 @@ export function parseAcks(content) {
       return
     }
     if (/^(```|~~~)/.test(t)) { fenced = !fenced; return }
-    // Atacando esta misma implementación: un acuse DENTRO de un bloque de
-    // código (o de un fence que alguien abrió y no cerró, que se traga todo
-    // lo que venga detrás) se ignoraba, y como no era "prosa" tampoco
-    // disparaba el aviso de `prosaSinAcuses` — silencio total sobre un
-    // fichero que el humano cree que silencia algo. Cuenta como contenido: no
-    // se parsea (un fence es un fence), pero deja de ser invisible.
+    // Attacking this very implementation: an acknowledgement INSIDE a code
+    // block (or inside a fence somebody opened and did not close, which
+    // swallows everything that comes behind it) was ignored, and since it was
+    // not "prose" it did not fire the `prosaSinAcuses` warning either — total
+    // silence about a file the human believes silences something. It counts as
+    // content: it is not parsed (a fence is a fence), but it stops being
+    // invisible.
     if (fenced) { if (t) sawProse = true; return }
     if (!t || t.startsWith('#')) return
     if (t.startsWith('<!--')) {
@@ -667,8 +692,9 @@ export function parseAcks(content) {
       return
     }
     const n = i + 1
-    // PROSA: no pretendía ser un acuse. Se ignora, que es justo lo que este
-    // fichero necesitaba para poder llevar la explicación humana.
+    // PROSE: it did not mean to be an acknowledgement. It is ignored, which is
+    // exactly what this file needed in order to be able to carry the human
+    // explanation.
     if (!looksLikeAck(t)) { sawProse = true; return }
     const m = /^(?:[-*+]\s+)?([A-Za-zÁ-Úá-ú][\w-]*)\s*:\s*(.*)$/.exec(t)
     if (!m) {
@@ -691,10 +717,10 @@ export function parseAcks(content) {
       problems.push({ line: n, text: t, why: 'falta el motivo: qué se decidió y por qué' })
       return
     }
-    // F19/H2: los acuses POR CASO (`ACK_SET_IDS`) llevan dentro del motivo los
-    // números que callan, y se ACUMULAN entre líneas en vez de chocar. Ver el
-    // bloque de comentarios de ACK_SET_IDS, arriba, para el porqué de las dos
-    // diferencias.
+    // F19/H2: the PER-CASE acknowledgements (`ACK_SET_IDS`) carry the numbers
+    // they keep quiet about inside the reason, and they ACCUMULATE across lines
+    // instead of clashing. See the ACK_SET_IDS comment block, above, for the
+    // why of the two differences.
     if (ACK_SET_IDS.includes(id)) {
       const refs = [...reason.matchAll(/#(\d+)\b/g)].map((m) => Number(m[1])).filter((x) => Number.isInteger(x) && x > 0)
       if (!refs.length) {
@@ -712,20 +738,21 @@ export function parseAcks(content) {
     }
     acks.set(id, { id, date: d[1], reason, line: n })
   })
-  // La única forma de que el nuevo silencio engañe: el humano escribió algo,
-  // no era ni un acuse ni algo parecido a uno, y el fichero no silencia nada.
+  // The only way for the new silence to deceive: the human wrote something, it
+  // was neither an acknowledgement nor anything resembling one, and the file
+  // silences nothing.
   return { acks, problems, prosaSinAcuses: sawProse && acks.size === 0 && problems.length === 0 }
 }
 
-// formatFindings: el aviso, ya listo para stderr. Una función y no dos
-// (ct-init y ct-next lo imprimen igual) para que el texto no pueda divergir
-// entre el bootstrap y el despacho.
+// formatFindings: the warning, ready for stderr. One function and not two
+// (ct-init and ct-next print it the same way) so that the text cannot diverge
+// between the bootstrap and the dispatch.
 //
-// Tres bloques, en este orden: los avisos VIVOS, las señales silenciadas (una
-// línea cada una — se dice que se han callado, porque «no se ha encontrado
-// nada» y «se decidió no mirar esto» no son lo mismo y confundirlos es la
-// mentira que este fichero lleva desde F11 intentando no contar), y los
-// problemas del propio fichero de acuse.
+// Three blocks, in this order: the LIVE warnings, the silenced signals (one
+// line each — it is said that they have been kept quiet, because «nothing was
+// found» and «it was decided not to look at this» are not the same thing and
+// confusing them is the lie this file has been trying not to tell since F11),
+// and the problems of the acknowledgement file itself.
 export function formatFindings(findings, { where = 'este repo', ackProblems = [], ackUnreadable = null, ackProsaSinAcuses = false } = {}) {
   const live = (findings || []).filter((f) => !f.silenced)
   const silenced = (findings || []).filter((f) => f.silenced)
@@ -745,9 +772,10 @@ export function formatFindings(findings, { where = 'este repo', ackProblems = []
       if (f.evidence.length > 6) out.push(`      (+${f.evidence.length - 6} más)`)
       out.push(`      decisión: ${f.decision}`)
     }
-    // LA SALIDA. Va con los avisos vivos y no en un README, porque el momento en
-    // que hace falta es este. Sin ella el aviso vuelve a ser un muro: el repo
-    // real ya había tomado la decisión correcta y el detector seguía marcándola.
+    // THE WAY OUT. It goes with the live warnings and not in a README, because
+    // the moment it is needed is this one. Without it the warning becomes a
+    // wall again: the real repo had already taken the correct decision and the
+    // detector went on flagging it.
     out.push(
       `  Si una de estas señales YA está decidida y no la vas a cambiar, escríbelo en \`${ACK_PATH}\` — una ` +
         'línea por señal, con la fecha y el motivo:'
@@ -757,9 +785,9 @@ export function formatFindings(findings, { where = 'este repo', ackProblems = []
       '  Esa señal —y solo esa— deja de avisar; las demás siguen. No hace falta borrar documentación ' +
         'correcta para callar el aviso: si lo que documentas es el uso manual fuera del loop, acúsalo y ya.'
     )
-    // F15/H3: el resto del fichero es tuyo. Se dice AQUÍ, junto al ejemplo,
-    // porque es donde alguien decide qué va a escribir — enterarse después de
-    // haber peleado con el parser llega tarde.
+    // F15/H3: the rest of the file is yours. It is said HERE, next to the
+    // example, because that is where somebody decides what they are going to
+    // write — finding out after having fought the parser comes too late.
     out.push(
       `  El resto de \`${ACK_PATH}\` es prosa libre: escribe el razonamiento largo que haga falta alrededor ` +
         'de esas líneas. Solo se leen como acuse las líneas que lo parecen, y una que lo parezca y esté mal ' +
@@ -782,15 +810,15 @@ export function formatFindings(findings, { where = 'este repo', ackProblems = []
   for (const p of ackProblems || []) {
     out.push(`  aviso: ${ACK_PATH}:${p.line} no silencia nada — ${p.why}: «${p.text}»`)
   }
-  // F15/H3 — la voz del silencio nuevo. Desde que la prosa se ignora, un
-  // fichero ENTERO de prosa no produce ni acuses ni avisos: exactamente el
-  // estado en que alguien cree haber silenciado algo y no lo ha hecho, que es
-  // el fallo que este parser no se puede permitir. Se dice.
+  // F15/H3 — the voice of the new silence. Ever since prose is ignored, a
+  // WHOLE file of prose produces neither acknowledgements nor warnings:
+  // exactly the state in which somebody believes they have silenced something
+  // and has not, which is the failure this parser cannot afford. It is said.
   //
-  // Solo cuando hay avisos VIVOS: si no hay ninguna señal que silenciar, que
-  // el fichero no silencie nada da igual, y decirlo en cada despacho sería
-  // ruido en un repo que no tiene ningún problema. La condición que importa
-  // es "podrías creer que has callado ESTO, y no lo has hecho".
+  // Only when there ARE live warnings: if there is no signal to silence, that
+  // the file silences nothing does not matter, and saying it on every dispatch
+  // would be noise in a repo that has no problem at all. The condition that
+  // matters is "you might believe you have kept THIS quiet, and you have not".
   if (ackProsaSinAcuses && live.length) {
     out.push(
       `  aviso: \`${ACK_PATH}\` existe y tiene contenido, pero NO silencia ninguna señal — todo lo que hay ` +

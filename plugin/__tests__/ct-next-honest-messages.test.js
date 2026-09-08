@@ -1,12 +1,12 @@
-// D5 — "mensajes que afirman lo contrario de lo ocurrido".
+// D5 — "messages that assert the opposite of what happened".
 //
-// Todos los casos de este fichero se REPRODUJERON primero contra el código
-// sin arreglar (main @ ab2d697) antes de tocar nada, y cada test se comprobó
-// EN ROJO contra ese mismo código: si no falla ahí, no prueba nada. El
-// detalle de cada reproducción está en el informe de la tarea.
+// Every case of this file was REPRODUCED first against the unfixed code
+// (main @ ab2d697) before touching anything, and every test was checked RED
+// against that same code: if it does not fail there, it proves nothing. The
+// detail of each reproduction is in the task's report.
 //
-// Familia común: algo diverge de lo que el usuario cree y el sistema informa
-// de éxito, o el mensaje afirma algo que no es cierto.
+// Common family: something diverges from what the user believes and the system
+// reports success, or the message asserts something that is not true.
 import { describe, it, expect, afterEach } from 'vitest'
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync } from 'node:fs'
@@ -59,16 +59,16 @@ function baseEnv(repoRoot, issues = [openIssue90]) {
 const readOrEmpty = (p) => (existsSync(p) ? readFileSync(p, 'utf8') : '')
 
 // ---------------------------------------------------------------------------
-// Hallazgo B — un campo de esquema no reconocido no puede degradar a
+// Finding B — an unrecognised schema field cannot degrade into
 // "verificado que está mal"
 // ---------------------------------------------------------------------------
-describe('D5/B — cmux renombra SOLO `current_directory`', () => {
-  // Reproducido contra el código sin arreglar con este mismo fixture: la
-  // salida decía `está en "null" en su lugar` (un falso 'wrong-cwd' en CADA
-  // lanzamiento correcto) y la corrida salía con EXIT=3 en vez de 0. La
-  // guarda de esquema anterior solo cubría `custom_title`, que aquí se sigue
-  // reconociendo, así que no salvaba nada.
-  it('no lo trata como cwd equivocado: la sesión existe, el directorio es lo único que no se pudo comprobar', () => {
+describe('D5/B — cmux renames ONLY `current_directory`', () => {
+  // Reproduced against the unfixed code with this very fixture: the output
+  // said `está en "null" en su lugar` (a false 'wrong-cwd' on EVERY correct
+  // launch) and the run exited with EXIT=3 instead of 0. The previous schema
+  // guard only covered `custom_title`, which is still recognised here, so it
+  // saved nothing.
+  it('it does not treat it as a wrong cwd: the session exists, the directory is the only thing that could not be checked', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       ...baseEnv(repoRoot),
@@ -77,16 +77,17 @@ describe('D5/B — cmux renombra SOLO `current_directory`', () => {
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/lanzados 1\/1 slice\(s\) seleccionados de esta tanda/)
     expect(r.out).toMatch(/la sesión de cmux con el título esperado EXISTE, pero cmux no expuso un directorio legible/)
-    // Nunca la falsa alarma, ni el "verificado" que tampoco se puede afirmar.
+    // Never the false alarm, nor the "verificado" that cannot be asserted
+    // either.
     expect(r.out).not.toMatch(/la sesión NO está en/)
     expect(r.out).not.toMatch(/NO se cuenta como lanzado con éxito/)
     expect(r.out).not.toMatch(/verificado: la sesión cmux está corriendo/)
     expect(r.out).not.toMatch(/LANZADOS SIN VERIFICAR/)
   })
 
-  it('con un cwd REALMENTE distinto (campo presente y legible) sí se sigue detectando el wrong-cwd', () => {
-    // Control del test anterior: el arreglo relaja SOLO el caso de esquema
-    // desconocido; la detección real no puede haberse perdido por el camino.
+  it('with a REALLY different cwd (field present and readable) the wrong-cwd is still detected', () => {
+    // Control for the previous test: the fix relaxes ONLY the unknown-schema
+    // case; the real detection cannot have been lost along the way.
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       ...baseEnv(repoRoot),
@@ -98,19 +99,19 @@ describe('D5/B — cmux renombra SOLO `current_directory`', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Hallazgo A — el exit 3 significaba dos cosas y su mensaje solo describía una
+// Finding A — exit 3 meant two things and its message described only one
 // ---------------------------------------------------------------------------
-describe('D5/A — exit 3 solo cuando de verdad no quedó nada a medias', () => {
-  // Reproducido sin arreglar: con TODOS los candidatos saltados al reclamar
-  // el exit ya era 3, y el mensaje ("Nada quedó a medias ni bloqueado") era
-  // cierto. Este test fija ese caso para que el estrechamiento del exit 3 no
-  // se lo lleve por delante.
-  it('todos los candidatos colisionan al reclamar → exit 3, y el mensaje puede afirmar que no hay nada que limpiar', () => {
+describe('D5/A — exit 3 only when nothing really was left half-done', () => {
+  // Reproduced unfixed: with ALL the candidates skipped when claiming, the
+  // exit was already 3, and the message ("Nada quedó a medias ni bloqueado")
+  // was true. This test pins that case down so that the narrowing of exit 3
+  // does not take it down with it.
+  it('every candidate collides when claiming → exit 3, and the message can assert there is nothing to clean up', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       ...baseEnv(repoRoot),
-      // El collision-check de dispatch-check ve otro issue en vuelo con el
-      // mismo token → colisión, exit 1 ('skip'), sin escribir nada.
+      // dispatch-check's collision check sees another issue in flight with
+      // the same token → collision, exit 1 ('skip'), writing nothing.
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:zzz']),
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([
         [openIssue90],
@@ -122,36 +123,37 @@ describe('D5/A — exit 3 solo cuando de verdad no quedó nada a medias', () => 
     expect(r.out).toMatch(/lanzados 0\/1 slice\(s\) seleccionados de esta tanda/)
     expect(r.out).toMatch(/Ningún claim quedó escrito, ninguna rama ni worktree se creó, y no hay nada que limpiar a mano/)
     expect(r.out).not.toMatch(/LANZADOS SIN VERIFICAR/)
-    // Y de verdad no quedó nada: ni claim escrito ni worktree creado.
+    // And nothing really was left behind: no claim written, no worktree
+    // created.
     expect(readOrEmpty(join(repoRoot, 'gh-argv'))).not.toMatch(/issue edit 90 .*--add-label status:in-progress/)
     expect(readOrEmpty(join(repoRoot, 'git-log'))).not.toMatch(/worktree add/)
   })
 })
 
 // ---------------------------------------------------------------------------
-// Hallazgo D — nuestro propio timeout no puede presentarse como una
-// interrupción ajena
+// Finding D — our own timeout cannot present itself as somebody else's
+// interruption
 // ---------------------------------------------------------------------------
-describe('D5/D — SIGKILL propio por CT_NEXT_CHILD_TIMEOUT_MS sobre dispatch-check', () => {
-  // Reproducido sin arreglar: "dispatch-check para #90 terminó por la señal
-  // SIGKILL mientras intentaba reclamar" + "antes de esta interrupción", sin
-  // nombrar ni el límite ni la variable — culpando de una interrupción a
-  // quien no interrumpió nada.
-  it('nombra el límite, la variable, y dice explícitamente que no fue una interrupción del usuario', () => {
+describe('D5/D — our own SIGKILL through CT_NEXT_CHILD_TIMEOUT_MS over dispatch-check', () => {
+  // Reproduced unfixed: "dispatch-check para #90 terminó por la señal SIGKILL
+  // mientras intentaba reclamar" + "antes de esta interrupción", naming
+  // neither the cap nor the variable — blaming an interruption on somebody who
+  // interrupted nothing.
+  it("it names the cap, the variable, and says explicitly that it was not the user's interruption", () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       ...baseEnv(repoRoot),
-      FAKE_GH_EDIT_DELAY_MS: '5000', // dispatch-check se queda dentro de su `gh issue edit`
+      FAKE_GH_EDIT_DELAY_MS: '5000', // dispatch-check stays inside its `gh issue edit`
       CT_NEXT_CHILD_TIMEOUT_MS: '1000',
-      // F8 — misma corrección que en ct-next-signal-interrupt.test.js: la
-      // cota corta se aplica SOLO al hijo que este test bloquea a propósito.
-      // Con la cota global, los 1000ms se aplicaban también a los `gh api
-      // .../issues` y `git rev-parse` legítimos que ct-next hace ANTES de
-      // llegar a dispatch-check, y bajo carga cualquiera de ellos podía
-      // agotarlos primero: el mensaje que este test comprueba nunca llegaría
-      // a imprimirse. Aquí el resultado es determinista por construcción —
-      // dispatch-check se queda 5000ms dentro de su `gh issue edit`, o sea
-      // cinco veces la cota, pase lo que pase con la máquina.
+      // F8 — same correction as in ct-next-signal-interrupt.test.js: the short
+      // cap applies ONLY to the child this test blocks on purpose. With the
+      // global cap, the 1000ms applied to the legitimate `gh api .../issues`
+      // and `git rev-parse` that ct-next makes BEFORE reaching dispatch-check
+      // too, and under load any of them could exhaust it first: the message
+      // this test checks would never get printed. Here the result is
+      // deterministic by construction — dispatch-check stays 5000ms inside its
+      // `gh issue edit`, that is, five times the cap, whatever happens to the
+      // machine.
       CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE: 'dispatch-check',
     })
     expect(r.code).toBe(1)
@@ -159,20 +161,19 @@ describe('D5/D — SIGKILL propio por CT_NEXT_CHILD_TIMEOUT_MS sobre dispatch-ch
     expect(r.out).toMatch(/lo matamos NOSOTROS con SIGKILL — no fue una interrupción tuya/)
     expect(r.out).toMatch(/sube CT_NEXT_CHILD_TIMEOUT_MS/)
     expect(r.out).toMatch(/gh issue edit 90 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
-    // El texto ya no llama "interrupción" a lo que hicimos nosotros.
+    // The text no longer calls what WE did an "interrupción".
     expect(r.out).not.toMatch(/antes de esta interrupción/)
   })
 })
 
 // ---------------------------------------------------------------------------
-// Hallazgo G — hooks de test validados, y red para CUALQUIER excepción en la
-// ventana peligrosa
+// Finding G — validated test hooks, and a net for ANY exception in the
+// dangerous window
 // ---------------------------------------------------------------------------
-describe('D5/G — la ventana entre el claim y el worktree ya no deja huérfanos por una excepción', () => {
-  // Reproducido sin arreglar: `claimed #90 → in-progress` en la salida,
-  // ERR_UNKNOWN_SIGNAL en ct-next.mjs, NINGÚN revert en el log de gh, issue
-  // huérfano.
-  it('un valor inválido en CT_NEXT_TEST_SELF_SIGINT_AFTER_CLAIM aborta con exit 2 ANTES de tocar gh', () => {
+describe('D5/G — the window between the claim and the worktree no longer leaves orphans because of an exception', () => {
+  // Reproduced unfixed: `claimed #90 → in-progress` in the output,
+  // ERR_UNKNOWN_SIGNAL in ct-next.mjs, NO revert in gh's log, orphan issue.
+  it('an invalid value in CT_NEXT_TEST_SELF_SIGINT_AFTER_CLAIM aborts with exit 2 BEFORE touching gh', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       ...baseEnv(repoRoot),
@@ -181,28 +182,29 @@ describe('D5/G — la ventana entre el claim y el worktree ya no deja huérfanos
     expect(r.code).toBe(2)
     expect(r.out).toMatch(/CT_NEXT_TEST_SELF_SIGINT_AFTER_CLAIM inválido: "pepe"/)
     expect(r.out).toMatch(/SIGINT, SIGTERM/)
-    // Ni un solo comando de gh: se aborta antes de leer nada.
+    // Not a single gh command: it aborts before reading anything.
     expect(readOrEmpty(join(repoRoot, 'gh-argv'))).toBe('')
-    // El mensaje NOMBRA ERR_UNKNOWN_SIGNAL para explicar por qué se valida,
-    // pero no puede haber una traza de que se haya llegado a lanzar.
+    // The message NAMES ERR_UNKNOWN_SIGNAL in order to explain why it
+    // validates, but there cannot be a stack trace showing it was ever
+    // thrown.
     expect(r.out).not.toMatch(/at process\.kill/)
     expect(r.out).not.toMatch(/TypeError \[ERR_UNKNOWN_SIGNAL\]/)
     expect(r.out).not.toMatch(/claimed #90/)
   })
 
-  it('lo mismo para el hook del checkpoint idle', () => {
+  it('the same for the idle checkpoint hook', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       ...baseEnv(repoRoot),
-      CT_NEXT_TEST_SELF_SIGINT_BEFORE_IDLE_CHECKPOINT: 'SIGKILL', // válida para el SO, pero SIN manejador aquí
+      CT_NEXT_TEST_SELF_SIGINT_BEFORE_IDLE_CHECKPOINT: 'SIGKILL', // valid for the OS, but with NO handler here
     })
     expect(r.code).toBe(2)
     expect(r.out).toMatch(/CT_NEXT_TEST_SELF_SIGINT_BEFORE_IDLE_CHECKPOINT inválido: "SIGKILL"/)
   })
 
-  // La parte de RAÍZ: validar el hook no arregla el agujero, solo un caso.
-  // CUALQUIER throw en esa ventana dejaba el issue huérfano.
-  it('una excepción cualquiera tras el claim revierte el claim, lo dice, e imprime la traza completa', () => {
+  // The ROOT part: validating the hook does not fix the hole, only one case.
+  // ANY throw in that window left the issue orphaned.
+  it('any exception after the claim reverts the claim, says so, and prints the full stack trace', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       ...baseEnv(repoRoot),
@@ -211,18 +213,19 @@ describe('D5/G — la ventana entre el claim y el worktree ya no deja huérfanos
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/excepción no capturada en ct-next\.mjs — esto es un bug/)
     expect(r.out).toMatch(/boom-de-prueba/)
-    expect(r.out).toMatch(/at file:/) // la traza no se esconde
+    expect(r.out).toMatch(/at file:/) // the stack trace is not hidden
     expect(r.out).toMatch(/#90 tenía un claim \(status:in-progress\) sin worktree completado/)
     expect(r.out).toMatch(/claim de #90 revertido automáticamente a status:ready/)
     const argv = readOrEmpty(join(repoRoot, 'gh-argv'))
-    // EXACTAMENTE un claim y EXACTAMENTE un revert — ni cero (el bug), ni dos.
+    // EXACTLY one claim and EXACTLY one revert — neither zero (the bug), nor
+    // two.
     expect((argv.match(/issue edit 90 --repo o\/r --add-label status:in-progress/g) || []).length).toBe(1)
     expect((argv.match(/issue edit 90 --repo o\/r --add-label status:ready/g) || []).length).toBe(1)
-    // El worktree nunca llegó a crearse.
+    // The worktree never got created.
     expect(readOrEmpty(join(repoRoot, 'git-log'))).not.toMatch(/worktree add/)
   })
 
-  it('si el revert de emergencia TAMBIÉN falla, lo dice con el comando manual en vez de callarlo', () => {
+  it('if the emergency revert ALSO fails, it says so with the manual command instead of keeping quiet about it', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       ...baseEnv(repoRoot),
@@ -236,20 +239,21 @@ describe('D5/G — la ventana entre el claim y el worktree ya no deja huérfanos
 })
 
 // ---------------------------------------------------------------------------
-// Hallazgo F (colateral, el más grave fuera del encargo) — un writeSync que
-// falla no puede convertir un claim EXITOSO en "fallo inesperado"
+// Finding F (collateral, the most serious one outside the assignment) — a
+// writeSync that fails cannot turn a SUCCESSFUL claim into an "unexpected
+// failure"
 // ---------------------------------------------------------------------------
-describe('D5/F — el reenvío de la salida de dispatch-check no decide el resultado del claim', () => {
-  // Reproducido sin arreglar, con el extremo de LECTURA de stdout cerrado
-  // (el caso real de `ct-next | head`, o un caller que dejó de leer): el
-  // claim de #90 SÍ se escribió (aparece en el log de gh, con su readback
-  // detrás), pero el `writeSync(1, out)` posterior lanzaba EPIPE DENTRO del
-  // try de attemptClaim, el catch lo leía como el fallo del subproceso
-  // (`e.status` undefined) y ct-next imprimía "dispatch-check devolvió un
-  // fallo inesperado […] probablemente es un bug o una mala configuración",
-  // abortaba la tanda con exit 1 y NO revertía: issue huérfano por no haber
-  // podido imprimir una línea.
-  it('con stdout cerrado, un claim con éxito NO se reporta como fallo inesperado ni aborta la tanda', async () => {
+describe("D5/F — forwarding dispatch-check's output does not decide the result of the claim", () => {
+  // Reproduced unfixed, with the READING end of stdout closed (the real case
+  // of `ct-next | head`, or a caller that stopped reading): the claim of #90
+  // WAS written (it shows up in gh's log, with its readback behind it), but
+  // the later `writeSync(1, out)` threw EPIPE INSIDE attemptClaim's try, the
+  // catch read it as the subprocess's failure (`e.status` undefined) and
+  // ct-next printed "dispatch-check devolvió un fallo inesperado […]
+  // probablemente es un bug o una mala configuración", aborted the batch with
+  // exit 1 and did NOT revert: an orphan issue for not having been able to
+  // print one line.
+  it('with stdout closed, a successful claim is NOT reported as an unexpected failure nor does it abort the batch', async () => {
     const repoRoot = makeRepoRoot()
     const child = spawn(process.execPath, [script, '--repo', 'o/r', '--cap', '1'], {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -257,7 +261,7 @@ describe('D5/F — el reenvío de la salida de dispatch-check no decide el resul
     })
     let err = ''
     child.stderr.on('data', (d) => { err += d.toString() })
-    child.stdout.destroy() // cierra el extremo de lectura: todo write a fd 1 da EPIPE
+    child.stdout.destroy() // closes the reading end: every write to fd 1 gives EPIPE
     const code = await new Promise((resolve) => child.on('exit', (c) => resolve(c)))
 
     expect(err).not.toMatch(/fallo inesperado/)
@@ -265,25 +269,25 @@ describe('D5/F — el reenvío de la salida de dispatch-check no decide el resul
     expect(err).not.toMatch(/Abortando toda la tanda/)
     expect(code).toBe(0)
     const argv = readOrEmpty(join(repoRoot, 'gh-argv'))
-    // El claim se escribió UNA vez y NO se revirtió: el slice se despachó de
-    // verdad, que es lo que de verdad ocurrió.
+    // The claim was written ONCE and was NOT reverted: the slice really was
+    // dispatched, which is what really happened.
     expect((argv.match(/issue edit 90 --repo o\/r --add-label status:in-progress/g) || []).length).toBe(1)
     expect(argv).not.toMatch(/issue edit 90 --repo o\/r --add-label status:ready/)
     expect(readOrEmpty(join(repoRoot, 'git-log'))).toMatch(/worktree add -b feat\/90/)
   })
 
-  // Hermano del anterior, en dispatch-check.mjs, y peor: ct-next captura la
-  // salida de dispatch-check por una tubería que SÍ lee, pero el kickoff que
-  // reciben los agentes trae el comando literal para ejecutarlo a mano, y un
-  // humano lo pasa por `| head` sin pensarlo.
+  // Brother of the previous one, in dispatch-check.mjs, and worse: ct-next
+  // captures dispatch-check's output through a pipe it DOES read, but the
+  // kickoff the agents receive brings the literal command so it can be run by
+  // hand, and a human puts it through `| head` without thinking twice.
   //
-  // Reproducido contra el código sin arreglar: el claim de #90 se escribió
-  // CON ÉXITO (`issue edit 90 --add-label status:in-progress` + su readback
-  // en el log de gh) y el proceso murió con una traza de EPIPE en el
-  // `outLine` final, saliendo con 1 — que en el contrato de ESTE fichero es
-  // 'skip': "colisión o carrera perdida, nada mutado". Un claim conseguido
-  // leído como un claim que nunca ocurrió.
-  it('dispatch-check con stdout cerrado: el exit code sigue describiendo el protocolo, no la tubería', async () => {
+  // Reproduced against the unfixed code: the claim of #90 was written
+  // SUCCESSFULLY (`issue edit 90 --add-label status:in-progress` + its
+  // readback in gh's log) and the process died with an EPIPE stack trace in
+  // the final `outLine`, exiting with 1 — which in THIS file's contract is
+  // 'skip': "a collision or a lost race, nothing mutated". A claim obtained
+  // read as a claim that never happened.
+  it('dispatch-check with stdout closed: the exit code still describes the protocol, not the pipe', async () => {
     const repoRoot = makeRepoRoot()
     const dcScript = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'dispatch-check.mjs')
     const argvLog = join(repoRoot, 'gh-argv')
@@ -303,7 +307,7 @@ describe('D5/F — el reenvío de la salida de dispatch-check no decide el resul
     child.stdout.destroy()
     const code = await new Promise((resolve) => child.on('exit', (c) => resolve(c)))
 
-    // 0 = claim confirmado, que es exactamente lo que pasó.
+    // 0 = claim confirmed, which is exactly what happened.
     expect(code).toBe(0)
     expect(err).not.toMatch(/EPIPE/)
     expect((readOrEmpty(argvLog).match(/issue edit 90 --repo o\/r --add-label status:in-progress/g) || []).length).toBe(1)
@@ -311,10 +315,10 @@ describe('D5/F — el reenvío de la salida de dispatch-check no decide el resul
 })
 
 // ---------------------------------------------------------------------------
-// Hallazgo H — el dry-run enseña la tanda entera de una vez
+// Finding H — the dry-run shows the whole batch in one go
 // ---------------------------------------------------------------------------
-describe('D5/H — --dry-run con destinos ocupados', () => {
-  it('con --cap 3 y dos destinos ocupados: informa de los DOS, enseña el plan de los TRES, dice cuál rompería primero, y sale 1', () => {
+describe('D5/H — --dry-run with taken destinations', () => {
+  it('with --cap 3 and two destinations taken: it reports BOTH, shows the plan of all THREE, says which one would break first, and exits 1', () => {
     const repoRoot = makeRepoRoot()
     const issues = [
       { number: 91, title: '#91 a', labels: [{ name: 'status:ready' }], body: '' },
@@ -326,32 +330,33 @@ describe('D5/H — --dry-run con destinos ocupados', () => {
       FAKE_GIT_STALE_BRANCH_EXISTS: '92,93',
     })
     expect(r.code).toBe(1)
-    // Los dos problemas, no solo el primero.
+    // Both problems, not only the first one.
     expect(r.out).toMatch(/precondiciones NO cumplidas \(2\)/)
     expect(r.out).toMatch(/la rama feat\/92 ya existe/)
     expect(r.out).toMatch(/la rama feat\/93 ya existe/)
-    // El plan de los TRES slices, incluido el sano — antes no se imprimía
-    // ninguno.
+    // The plan of all THREE slices, the healthy one included — before, not
+    // one was printed.
     expect(r.out).toMatch(/=== slice #91 /)
     expect(r.out).toMatch(/=== slice #92 /)
     expect(r.out).toMatch(/=== slice #93 /)
-    // El problema de cada slice, en SU bloque.
+    // Each slice's problem, in ITS own block.
     expect(r.out).toMatch(/=== slice #92 \(b\) ===\nPRECONDICIÓN NO CUMPLIDA \(1\) para este slice/)
-    // Y "destino libre" solo donde es cierto.
+    // And "destino libre" only where it is true.
     expect(r.out).toMatch(/destino libre: .*\.worktrees\/91 no existe y la rama feat\/91 tampoco/)
     expect(r.out).toMatch(/destino: .*\.worktrees\/92 \/ rama feat\/92 — NO LIBRE/)
     expect(r.out).not.toMatch(/destino libre: .*\.worktrees\/92/)
-    // Conteos y "cuál rompería primero", sin ambigüedad.
+    // Counts and "which one would break first", with no ambiguity.
     expect(r.out).toMatch(/De los 3 slice\(s\) seleccionados, 2 tienen precondiciones sin cumplir \(#92, #93\); 1 sin problemas propios \(#91\)\. En una corrida real, el primero que rompería es #92/)
     expect(r.out).toMatch(/NO es luz verde/)
-    // Un dry-run no toca nada, pase lo que pase.
+    // A dry-run touches nothing, whatever happens.
     expect(readOrEmpty(join(repoRoot, 'gh-argv'))).not.toMatch(/issue edit/)
     expect(readOrEmpty(join(repoRoot, 'git-log'))).not.toMatch(/worktree add/)
   })
 
-  it('la corrida REAL sigue abortando antes de escribir ningún claim, y con el mismo resumen', () => {
-    // La asimetría es deliberada y acotada: las dos comprueban lo mismo y
-    // las dos fallan; solo cambia cuánto se imprime DESPUÉS de fallar.
+  it('the REAL run still aborts before writing any claim, and with the same summary', () => {
+    // The asymmetry is deliberate and bounded: the two of them check the same
+    // thing and the two of them fail; all that changes is how much gets
+    // printed AFTER failing.
     const repoRoot = makeRepoRoot()
     const issues = [
       { number: 91, title: '#91 a', labels: [{ name: 'status:ready' }], body: '' },
@@ -364,38 +369,38 @@ describe('D5/H — --dry-run con destinos ocupados', () => {
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/ni un solo claim escrito: se comprueba antes de tocar GitHub/)
     expect(r.out).toMatch(/el primero que rompería es #92/)
-    expect(r.out).not.toMatch(/=== slice #91 /) // el plan es cosa del dry-run
+    expect(r.out).not.toMatch(/=== slice #91 /) // the plan is the dry-run's business
     expect(readOrEmpty(join(repoRoot, 'gh-argv'))).not.toMatch(/issue edit/)
   })
 })
 
 // ---------------------------------------------------------------------------
-// Hallazgo propio (repaso de D5) — "NO COMPROBADOS (modo fixture)" en un
-// dry-run que no es de fixture
+// A finding of our own (D5 review) — "NO COMPROBADOS (modo fixture)" in a
+// dry-run that is not a fixture one
 // ---------------------------------------------------------------------------
-describe('D5 (revisión propia) — el dry-run no puede llamar "modo fixture" a una consulta que falló', () => {
-  // Reproducido contra el código sin arreglar: un --dry-run REAL (sin
-  // CT_NEXT_FIXTURE) cuya consulta de rama falla caía en el mismo booleano
-  // `false` que el modo fixture, e imprimía "NO COMPROBADOS (modo fixture:
-  // repoRoot sintético, no se toca git). En una corrida real sí se
-  // comprueban antes de reclamar" — tres afirmaciones falsas seguidas: no
-  // era fixture, el repoRoot era real, git SÍ se tocó, y la corrida real
-  // hará esta misma comprobación fallida.
-  it('distingue "no se miró" (fixture) de "se miró y falló"', () => {
+describe('D5 (self-review) — the dry-run cannot call a query that failed "modo fixture"', () => {
+  // Reproduced against the unfixed code: a REAL --dry-run (with no
+  // CT_NEXT_FIXTURE) whose branch query fails fell into the same `false`
+  // boolean as fixture mode, and printed "NO COMPROBADOS (modo fixture:
+  // repoRoot sintético, no se toca git). En una corrida real sí se comprueban
+  // antes de reclamar" — three false assertions in a row: it was not a
+  // fixture, the repoRoot was real, git WAS touched, and the real run will
+  // make this very same failed check.
+  it('it tells "it was not looked at" (fixture) apart from "it was looked at and it failed"', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1', '--dry-run'], {
       ...baseEnv(repoRoot),
-      FAKE_GIT_REV_PARSE_BROKEN: '1', // la consulta de rama sale con 128, no con 1
+      FAKE_GIT_REV_PARSE_BROKEN: '1', // the branch query exits with 128, not with 1
     })
-    expect(r.code).toBe(0) // 'unknown' es aviso, nunca fallo duro: no sabemos que esté ocupado
+    expect(r.code).toBe(0) // 'unknown' is a warning, never a hard failure: we do not know it is taken
     expect(r.out).toMatch(/SIN CONFIRMAR: la consulta a git se intentó y FALLÓ/)
     expect(r.out).toMatch(/Esto NO es modo fixture/)
     expect(r.out).not.toMatch(/NO COMPROBADOS \(modo fixture/)
-    // Y tampoco puede afirmar que el destino esté libre.
+    // And it cannot assert that the destination is free either.
     expect(r.out).not.toMatch(/destino libre/)
   })
 
-  it('en modo fixture SÍ dice modo fixture (el mensaje correcto no se pierde por el camino)', () => {
+  it('in fixture mode it DOES say "modo fixture" (the correct message is not lost along the way)', () => {
     const r = runReal(['--repo', 'o/r', '--cap', '1', '--dry-run'], {
       CT_NEXT_FIXTURE: JSON.stringify({
         issues: [{ n: 90, order: 1, status: 'ready', deps: [], touches: ['a'], name: 'algo', type: 'backend' }],
@@ -409,15 +414,15 @@ describe('D5 (revisión propia) — el dry-run no puede llamar "modo fixture" a 
 })
 
 // ---------------------------------------------------------------------------
-// Hallazgo C — un Ctrl-C nunca se descarta en silencio
+// Finding C — a Ctrl-C is never discarded in silence
 // ---------------------------------------------------------------------------
-describe('D5/C — SIGINT que llega con el trabajo ya hecho', () => {
-  // Reproducido sin arreglar con exactamente este montaje (--cap 1, señal
-  // enviada SOLO al proceso node mientras está bloqueado dentro de `git
-  // worktree add`): EXIT=0, "lanzados 1/1", y NI RASTRO de que se hubiera
-  // pulsado nada. El manejador solo corre cuando el event loop recupera el
-  // control, y con cap 1 no quedaba ningún `await` por delante.
-  it('--cap 1: la señal se reconoce, se sale con 130, y no se deshace nada de lo ya hecho', async () => {
+describe('D5/C — a SIGINT that arrives with the work already done', () => {
+  // Reproduced unfixed with exactly this setup (--cap 1, the signal sent ONLY
+  // to the node process while it is blocked inside `git worktree add`):
+  // EXIT=0, "lanzados 1/1", and NOT A TRACE that anything had been pressed.
+  // The handler only runs when the event loop gets control back, and with cap
+  // 1 there was no `await` left ahead.
+  it('--cap 1: the signal is acknowledged, it exits with 130, and nothing already done is undone', async () => {
     const repoRoot = makeRepoRoot()
     const gitLog = join(repoRoot, 'git-log')
     const child = spawn(process.execPath, [script, '--repo', 'o/r', '--cap', '1'], {
@@ -425,64 +430,64 @@ describe('D5/C — SIGINT que llega con el trabajo ya hecho', () => {
         ...process.env,
                 PATH: fakePath,
         ...baseEnv(repoRoot),
-        // F8 — handshake en vez de ventana. Antes esto era
-        // FAKE_GIT_WORKTREE_ADD_DELAY_MS: '2000', o sea "git worktree add
-        // tarda 2s y confiamos en que este proceso reaccione dentro de esos
-        // 2s". Reaccionar a tiempo dependía de que el planificador del SO nos
-        // diera CPU, no del código bajo prueba. Ahora `git worktree add` se
-        // queda PARADO hasta que este test lo suelte: la llamada bloqueante
-        // real posterior al segundo checkpoint (donde el hallazgo dice que la
-        // señal se perdía) sigue siendo exactamente la misma, pero su duración
-        // ya no es una apuesta.
+        // F8 — a handshake instead of a window. Before, this was
+        // FAKE_GIT_WORKTREE_ADD_DELAY_MS: '2000', that is, "git worktree add
+        // takes 2s and we trust this process to react within those 2s".
+        // Reacting in time depended on the OS scheduler giving us CPU, not on
+        // the code under test. Now `git worktree add` stays STOPPED until this
+        // test releases it: the real blocking call after the second checkpoint
+        // (where the finding says the signal was being lost) is still exactly
+        // the same one, but its duration is no longer a bet.
         FAKE_GIT_WORKTREE_ADD_WAIT_FILE: join(repoRoot, 'release-worktree-add'),
       },
     })
     let out = ''
     child.stdout.on('data', (d) => { out += d.toString() })
     child.stderr.on('data', (d) => { out += d.toString() })
-    // El listener de 'exit' se registra YA, antes de esperar a nada: si se
-    // registrara después de la espera y el proceso hubiera terminado
-    // mientras tanto, el evento se habría perdido y el test colgaría hasta
-    // su propio timeout — un fallo del arnés disfrazado de fallo del código.
+    // The 'exit' listener is registered NOW, before waiting for anything: if
+    // it were registered after the wait and the process had finished in the
+    // meantime, the event would have been lost and the test would hang until
+    // its own timeout — a harness failure disguised as a code failure.
     const exited = new Promise((resolve) => child.on('exit', (c, s) => resolve({ code: c, sig: s })))
 
-    // La señal se envía cuando `git worktree add` YA ARRANCÓ — fake-git
-    // escribe su argv en el log ANTES de pararse, así que el log es el
-    // marcador fiable de "estamos dentro de la llamada bloqueante". Y como el
-    // stub no vuelve hasta que lo soltamos NOSOTROS (línea de abajo), no hay
-    // ninguna ventana que se nos pueda cerrar antes de llegar.
+    // The signal is sent when `git worktree add` HAS ALREADY STARTED —
+    // fake-git writes its argv into the log BEFORE stopping, so the log is the
+    // reliable marker of "we are inside the blocking call". And since the stub
+    // does not return until WE release it (the line below), there is no window
+    // that can close on us before we get there.
     await new Promise((resolve) => {
       const t = setInterval(() => {
         if (/worktree add/.test(readOrEmpty(gitLog))) { clearInterval(t); resolve() }
       }, 5)
     })
-    child.kill('SIGINT') // solo al proceso node, nunca al hijo `git`
-    // Soltar DESPUÉS del kill: `child.kill` es síncrono a nivel de syscall, así
-    // que al volver la señal ya está pendiente para el proceso destino.
+    child.kill('SIGINT') // only to the node process, never to the `git` child
+    // Release AFTER the kill: `child.kill` is synchronous at the syscall level,
+    // so on returning the signal is already pending for the target process.
     writeFileSync(join(repoRoot, 'release-worktree-add'), '')
     const { code, sig } = await exited
 
-    expect(sig).toBeNull() // salió por su propio process.exit(), no matado por el SO
+    expect(sig).toBeNull() // it left through its own process.exit(), not killed by the OS
     expect(code).toBe(130)
-    // El trabajo ya hecho se conserva y se informa: el resumen sale ANTES
-    // del acuse de la señal.
+    // The work already done is kept and reported: the summary comes out
+    // BEFORE the acknowledgement of the signal.
     expect(out).toMatch(/lanzados 1\/1 slice\(s\) seleccionados de esta tanda/)
     expect(readOrEmpty(gitLog)).toMatch(/worktree add -b feat\/90/)
-    // Y la señal se reconoce, con el matiz correcto: no interrumpió nada.
+    // And the signal is acknowledged, with the right nuance: it interrupted
+    // nothing.
     expect(out).toMatch(/SIGINT recibido, pero la tanda YA había terminado de procesarse cuando llegó/)
     expect(out).toMatch(/no se interrumpe ni se deshace nada de lo ya hecho/)
-    // NO se revierte el claim de un slice que se lanzó bien.
+    // The claim of a slice that launched fine is NOT reverted.
     expect(readOrEmpty(join(repoRoot, 'gh-argv'))).not.toMatch(/issue edit 90 --repo o\/r --add-label status:ready/)
     expect(out).toMatch(/no había ningún claim propio pendiente de revertir/)
   })
 
-  // NOTA sobre lo que NO se testea aquí, y por qué: el mismo punto de cesión
-  // final cubre también el camino de --dry-run (es literalmente la misma
-  // línea, fuera del `if (!dryRun)`), pero no hay forma honesta de
-  // ejercitarlo con una señal EXTERNA: en --dry-run, TODO lo que ocurre
-  // después de instalar los manejadores es instantáneo (el bucle no hace ni
-  // una llamada a subproceso; imprime y sigue), así que el proceso puede
-  // terminar antes de que el SO entregue la señal. Un test así mediría el
-  // scheduler, no el código — el mismo error de temporización que la ronda
-  // anterior ya documentó para sus propios intentos con señales externas.
+  // A NOTE about what is NOT tested here, and why: the same final yield point
+  // also covers the --dry-run path (it is literally the same line, outside the
+  // `if (!dryRun)`), but there is no honest way to exercise it with an
+  // EXTERNAL signal: in --dry-run, EVERYTHING that happens after installing
+  // the handlers is instantaneous (the loop does not make a single subprocess
+  // call; it prints and moves on), so the process can finish before the OS
+  // delivers the signal. A test like that would measure the scheduler, not the
+  // code — the same timing mistake the previous round already documented for
+  // its own attempts with external signals.
 })

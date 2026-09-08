@@ -18,31 +18,31 @@ tasks:
 Login works, refresh a medias.`
 
 describe('parseState', () => {
-  it('extrae frontmatter tipado', () => {
+  it('extracts the typed frontmatter', () => {
     const { meta } = parseState(SAMPLE)
     expect(meta.status).toBe('in_progress')
     expect(meta.github_issue).toBe(482)
     expect(meta.tasks[1].done).toBe(false)
   })
-  it('extrae el cuerpo en prosa', () => {
+  it('extracts the body in prose', () => {
     expect(parseState(SAMPLE).body).toContain('Login works')
   })
-  it('sin frontmatter → meta vacío, body entero', () => {
+  it('with no frontmatter → an empty meta, the whole body', () => {
     const { meta, body } = parseState('solo prosa')
     expect(meta).toEqual({})
     expect(body).toBe('solo prosa')
   })
-  it('tolera BOM inicial y aún extrae el frontmatter', () => {
+  it('tolerates a leading BOM and still extracts the frontmatter', () => {
     const withBom = '﻿' + SAMPLE
     expect(parseState(withBom).meta.status).toBe('in_progress')
   })
-  it('tolera líneas en blanco iniciales', () => {
+  it('tolerates leading blank lines', () => {
     expect(parseState('\n\n' + SAMPLE).meta.github_issue).toBe(482)
   })
 })
 
 describe('renderState', () => {
-  it('roundtrip conserva campos', () => {
+  it('a roundtrip preserves the fields', () => {
     const again = parseState(renderState(parseState(SAMPLE)))
     expect(again.meta.task).toBe('OAuth login')
     expect(again.meta.tasks[0].id).toBe('T001')
@@ -50,59 +50,59 @@ describe('renderState', () => {
 })
 
 describe('composeHydration', () => {
-  it('incluye estado y commits', () => {
+  it('includes the state and the commits', () => {
     const out = composeHydration('ESTADO', 'abc log')
     expect(out).toContain('ESTADO')
     expect(out).toContain('abc log')
   })
-  it('sin estado → cadena vacía (no inyecta ruido)', () => {
+  it('with no state → an empty string (it injects no noise)', () => {
     expect(composeHydration('', 'x')).toBe('')
   })
 })
 
-// F22 — la cabecera decía "Estado del slice" SIEMPRE, también en la sesión
-// coordinadora, cuyo `.agent/STATE.md` no habla de ningún slice. Ahora sale de
-// `stateRel`, que es el fichero que el hook acaba de resolver.
-describe('composeHydration: la cabecera nombra lo que el fichero ES', () => {
-  it('con el STATE.md de la coordinadora (por defecto) NO dice "del slice"', () => {
+// F22 — the header said "Estado del slice" ALWAYS, in the coordinator session
+// too, whose `.agent/STATE.md` talks about no slice at all. Now it comes out
+// of `stateRel`, which is the file the hook has just resolved.
+describe('composeHydration: the header names what the file IS', () => {
+  it('with the coordinator STATE.md (the default) it does NOT say "del slice"', () => {
     const out = composeHydration('ESTADO', '')
     expect(out).toContain('# Estado del repo (hidratación automática)')
     expect(out).not.toContain('Estado del slice')
   })
-  it('con el SLICE.md de un worktree despachado sí dice "del slice"', () => {
+  it('with the SLICE.md of a dispatched worktree it does say "del slice"', () => {
     const out = composeHydration('ESTADO', '', { stateRel: SLICE_REL_PATH })
     expect(out).toContain('# Estado del slice (hidratación automática)')
   })
 })
 
 describe('parseState CRLF', () => {
-  it('tolera frontmatter con CRLF', () => {
+  it('tolerates a frontmatter with CRLF', () => {
     const crlf = SAMPLE.replace(/\n/g, '\r\n')
     expect(parseState(crlf).meta.status).toBe('in_progress')
   })
 })
 
-describe('composeHydration sin commits', () => {
-  it('omite la sección de commits si gitLog está vacío', () => {
+describe('composeHydration with no commits', () => {
+  it('omits the commits section if gitLog is empty', () => {
     const out = composeHydration('ESTADO', '')
     expect(out).toContain('ESTADO')
     expect(out).not.toContain('Últimos commits')
   })
-  it('incluye la sección si hay commits', () => {
+  it('includes the section if there are commits', () => {
     expect(composeHydration('ESTADO', 'abc log')).toContain('Últimos commits')
   })
 })
 
 // ===========================================================================
-// F7 — `blocked`: que el STATE.md pueda decir "esto no se puede hacer" en un
-// dato, y que el hook lo transmita como tal.
+// F7 — `blocked`: so that the STATE.md can say "this cannot be done" in a
+// datum, and so that the hook transmits it as such.
 //
-// EL INCIDENTE (real): `next_action: "Lanzar la corrida REAL de /ct-groom…"`.
-// La corrida se descubrió que escribiría datos falsos y quedó bloqueada, pero
-// el campo seguía ahí y el hook de SessionStart lo inyecta en TODA sesión
-// nueva del repo — cualquiera de ellas lo habría ejecutado. La mitigación fue
-// reescribir el campo con la palabra "BLOQUEADO" en prosa: exactamente lo que
-// estos tests existen para no volver a necesitar.
+// THE INCIDENT (real): `next_action: "Lanzar la corrida REAL de /ct-groom…"`.
+// The run was found to be about to write false data and was left blocked, but
+// the field was still there and the SessionStart hook injects it into EVERY
+// new session of the repo — any of them would have executed it. The mitigation
+// was to rewrite the field with the word "BLOQUEADO" in prose: exactly what
+// these tests exist so as never to need again.
 // ===========================================================================
 const STATE_BLOQUEADO = `---
 task: "Plan vs Propuestas"
@@ -118,7 +118,7 @@ verify: "\`gh issue list --milestone 'Plan vs Propuestas'\` devuelve 6 issues"
 Groom preparado, sin ejecutar.`
 
 describe('readBlocked', () => {
-  it('mapa con reason/since/unblock → bloqueado, con los tres campos', () => {
+  it('a map with reason/since/unblock → blocked, with the three fields', () => {
     const b = readBlocked(parseState(STATE_BLOQUEADO).meta)
     expect(b.state).toBe('blocked')
     expect(b.reason).toMatch(/datos falsos/)
@@ -126,95 +126,97 @@ describe('readBlocked', () => {
     expect(b.unblock).toMatch(/corregir la §9/)
   })
 
-  it('campo ausente → NO bloqueado (todo STATE.md anterior a esto lo es)', () => {
+  it('an absent field → NOT blocked (every STATE.md older than this one is)', () => {
     expect(readBlocked(parseState(SAMPLE).meta).state).toBe('none')
   })
 
-  it('null / false / cadena vacía → NO bloqueado', () => {
+  it('null / false / an empty string → NOT blocked', () => {
     for (const v of [null, false, '', '   ']) {
       expect(readBlocked({ blocked: v }).state).toBe('none')
     }
   })
 
-  // `blocked: no` lo parsea YAML 1.2 como la CADENA "no", no como false: un
-  // truthy-check ingenuo la leería como un bloqueo con motivo "no".
-  it('palabras que un humano escribe queriendo decir "no bloqueado" (no/none/-/n/a) → NO bloqueado', () => {
+  // YAML 1.2 parses `blocked: no` as the STRING "no", not as false: a naive
+  // truthy-check would read it as a block with the reason "no".
+  it('words a human writes meaning "not blocked" (no/none/-/n/a) → NOT blocked', () => {
     for (const v of ['no', 'No', 'FALSE', 'none', 'ninguno', 'nada', 'n/a', '-', '–', '--']) {
       expect(readBlocked({ blocked: v }).state, `blocked: ${v}`).toBe('none')
     }
   })
 
-  // El simétrico, y el que importa: la comparación es de la cadena ENTERA,
-  // nunca por prefijo. Un motivo real que EMPIECE por "no" es un bloqueo.
-  it('un motivo que empieza por "no" sigue siendo un bloqueo (no se compara por prefijo)', () => {
+  // The symmetric one, and the one that matters: the comparison is of the
+  // WHOLE string, never by prefix. A real reason that BEGINS with "no" is a
+  // block.
+  it('a reason that begins with "no" is still a block (it is not compared by prefix)', () => {
     const b = readBlocked({ blocked: 'no se puede hasta que Legal responda' })
     expect(b.state).toBe('blocked')
     expect(b.reason).toBe('no se puede hasta que Legal responda')
   })
 
-  it('cadena suelta → bloqueado, y la cadena se conserva como motivo', () => {
+  it('a bare string → blocked, and the string is preserved as the reason', () => {
     expect(readBlocked({ blocked: 'la API de pagos está caída' })).toMatchObject({ state: 'blocked', reason: 'la API de pagos está caída' })
   })
 
-  it('blocked: true → bloqueado SIN motivo (y eso se distingue de tener motivo)', () => {
+  it('blocked: true → blocked WITH NO reason (and that is told apart from having one)', () => {
     expect(readBlocked({ blocked: true })).toMatchObject({ state: 'blocked', reason: '' })
   })
 
-  // Estrechar lo que se acepta crea una categoría nueva de rechazados: quien
-  // escribe `razon:` en español tendría un STATE.md que dice el motivo y un
-  // aviso que dice "no consta". Esa categoría tiene que tener voz, y no puede
-  // perder el contenido.
-  it('mapa con claves no reconocidas → bloqueado, y las anuncia CON su contenido', () => {
+  // Narrowing what is accepted creates a new category of the rejected:
+  // somebody who writes `razon:` in Spanish would have a STATE.md that states
+  // the reason and a warning that says "no consta". That category has to have
+  // a voice, and it cannot lose the content.
+  it('a map with unrecognised keys → blocked, and it announces them WITH their content', () => {
     const b = readBlocked({ blocked: { razon: 'datos falsos', motivo: 'x' } })
     expect(b.state).toBe('blocked')
     expect(b.notes.join(' ')).toMatch(/razon/)
-    expect(b.notes.join(' ')).toMatch(/datos falsos/) // el contenido no se traga
-    expect(b.notes.join(' ')).toMatch(/`reason`/) // y dice cuál es la clave buena
+    expect(b.notes.join(' ')).toMatch(/datos falsos/) // the content is not swallowed
+    expect(b.notes.join(' ')).toMatch(/`reason`/) // and it says which is the right key
   })
 
-  it('forma no reconocida (lista) → bloqueado por seguridad, diciendo que no se reconoce', () => {
+  it('an unrecognised shape (a list) → blocked for safety, saying that it is not recognised', () => {
     const b = readBlocked({ blocked: ['a', 'b'] })
     expect(b.state).toBe('blocked')
     expect(b.notes.join(' ')).toMatch(/no se reconoce/i)
     expect(b.notes.join(' ')).toMatch(/\["a","b"\]/)
   })
 
-  // Poner el bloqueo en un campo propio (y no en `status`) crea una categoría
-  // nueva de rechazados: quien quiere bloquear y escribe lo primero que suena
-  // razonable, `status: blocked`. Tragarlo en silencio sería un bloqueo
-  // escrito de buena fe que no bloquea nada — peor que el fallo original.
-  it('`status: blocked` sin campo `blocked` → BLOQUEADO igual, diciendo cuál es el campo bueno', () => {
+  // Putting the block in a field of its own (and not in `status`) creates a
+  // new category of the rejected: whoever wants to block and writes the first
+  // thing that sounds reasonable, `status: blocked`. Swallowing it in silence
+  // would be a block written in good faith that blocks nothing — worse than
+  // the original failure.
+  it('`status: blocked` with no `blocked` field → BLOCKED all the same, saying which is the right field', () => {
     const b = readBlocked({ status: 'blocked', next_action: 'seguir' })
     expect(b.state).toBe('blocked')
-    expect(b.notes.join(' ')).toMatch(/`blocked: \{reason:/) // dice el campo bueno Y su forma
+    expect(b.notes.join(' ')).toMatch(/`blocked: \{reason:/) // it says the right field AND its shape
     expect(b.notes.join(' ')).toMatch(/PROGRESO/)
   })
 
-  it('variantes de "parado" en `status` (bloqueado, on_hold…) también', () => {
+  it('variants of "stopped" in `status` (bloqueado, on_hold…) too', () => {
     for (const s of ['bloqueado', 'BLOCKED', 'on_hold', 'on-hold', 'parado']) {
       expect(readBlocked({ status: s }).state, `status: ${s}`).toBe('blocked')
     }
   })
 
-  it('control: los `status` normales NO bloquean nada', () => {
+  it('control: the normal `status` values block NOTHING', () => {
     for (const s of ['not_started', 'in_progress', 'in_review', 'done', '']) {
       expect(readBlocked({ status: s }).state, `status: ${s}`).toBe('none')
     }
   })
 
-  it('`status: blocked` + `blocked: null` (contradicción) → BLOQUEADO por seguridad, y se dice que es una contradicción', () => {
+  it('`status: blocked` + `blocked: null` (a contradiction) → BLOCKED for safety, and it is said to be a contradiction', () => {
     const b = readBlocked({ status: 'blocked', blocked: null })
     expect(b.state).toBe('blocked')
     expect(b.notes.join(' ')).toMatch(/contradicción/i)
   })
 
-  it('`blocked` con motivo manda sobre `status` (no se pierde el motivo ni se duplica el aviso)', () => {
+  it('`blocked` with a reason rules over `status` (neither the reason is lost nor the warning duplicated)', () => {
     const b = readBlocked({ status: 'blocked', blocked: { reason: 'la API está caída' } })
     expect(b.reason).toBe('la API está caída')
     expect(b.notes).toEqual([])
   })
 
-  it('frontmatter que no es un mapa → "no se sabe", nunca "no bloqueado"', () => {
+  it('a frontmatter that is not a map → "it is not known", never "not blocked"', () => {
     expect(readBlocked('solo texto').state).toBe('unreadable')
     expect(readBlocked(['a']).state).toBe('unreadable')
     expect(readBlocked(null).state).toBe('unreadable')
@@ -222,116 +224,116 @@ describe('readBlocked', () => {
 })
 
 describe('parseStateSafe', () => {
-  it('frontmatter YAML roto → error como dato, sin lanzar', () => {
+  it('a broken YAML frontmatter → the error as a datum, without throwing', () => {
     const roto = '---\ntask: "sin cerrar\n  ]: [\n---\ncuerpo'
-    expect(() => parseState(roto)).toThrow() // control: el parser estricto SÍ lanza
+    expect(() => parseState(roto)).toThrow() // control: the strict parser DOES throw
     const r = parseStateSafe(roto)
     expect(r.error).toBeTruthy()
     expect(r.meta).toEqual({})
   })
-  it('frontmatter bueno → error null y el mismo meta que parseState', () => {
+  it('a good frontmatter → error null and the same meta as parseState', () => {
     const r = parseStateSafe(SAMPLE)
     expect(r.error).toBe(null)
     expect(r.meta.status).toBe('in_progress')
   })
 })
 
-describe('composeHydration con trabajo BLOQUEADO', () => {
+describe('composeHydration with BLOCKED work', () => {
   const out = composeHydration(STATE_BLOQUEADO, 'abc log')
 
-  it('el aviso de bloqueo va PRIMERO, antes del estado (se lee de arriba abajo)', () => {
+  it('the blocking warning goes FIRST, before the state (it is read from the top down)', () => {
     expect(out.split('\n')[0]).toMatch(/TRABAJO BLOQUEADO/) // la PRIMERA línea
-    // La cabecera es la del checkout principal (`composeHydration` sin
-    // `stateRel` = `.agent/STATE.md`): "del repo", no "del slice" — F22.
+    // The header is the main checkout's (`composeHydration` with no
+    // `stateRel` = `.agent/STATE.md`): "del repo", not "del slice" — F22.
     expect(out.indexOf('TRABAJO BLOQUEADO')).toBeLessThan(out.indexOf('# Estado del repo'))
   })
 
-  it('declara el next_action SUSPENDIDO y lo cita, para que no se lea como orden vigente', () => {
+  it('declares the next_action SUSPENDED and quotes it, so that it is not read as a standing order', () => {
     expect(out).toMatch(/SUSPENDIDO/)
     expect(out).toMatch(/Lanzar la corrida REAL/)
     expect(out).toMatch(/No lo ejecutes/i)
   })
 
-  it('dice el motivo y qué haría falta para desbloquear', () => {
+  it('says the reason and what it would take to unblock', () => {
     expect(out).toMatch(/datos falsos/)
     expect(out).toMatch(/corregir la §9/)
     expect(out).toMatch(/2026-07-25/)
   })
 
-  it('dice cómo se levanta el bloqueo, y que no lo levante la propia sesión', () => {
+  it('says how the block is lifted, and that the session itself must not lift it', () => {
     expect(out).toMatch(/borra el campo `blocked`/)
     expect(out).toMatch(/no lo levantes por tu cuenta/i)
   })
 
-  it('sigue inyectando el estado entero y los commits (no se pierde contexto)', () => {
+  it('goes on injecting the whole state and the commits (no context is lost)', () => {
     expect(out).toContain('Groom preparado, sin ejecutar.')
     expect(out).toContain('Últimos commits')
   })
 
-  it('bloqueado sin reason ni unblock → lo dice como NO CONSTA, sin inventarlos', () => {
+  it('blocked with neither reason nor unblock → it says so as NO CONSTA, without inventing them', () => {
     const o = composeHydration('---\nnext_action: "x"\nblocked: true\n---\ncuerpo', '')
     expect(o).toMatch(/Motivo: NO CONSTA/)
     expect(o).toMatch(/Para desbloquear: NO CONSTA/)
   })
 
-  it('un next_action kilométrico se recorta en el aviso (pero sigue entero en el estado)', () => {
+  it('a mile-long next_action is trimmed in the warning (but stays whole in the state)', () => {
     const largo = 'x'.repeat(900)
     const o = composeHydration(`---\nnext_action: "${largo}"\nblocked: "porque sí"\n---\ncuerpo`, '')
     const aviso = o.slice(0, o.indexOf('# Estado del repo'))
     expect(aviso).toContain('…')
     expect(aviso.length).toBeLessThan(2000)
-    expect(o).toContain(largo) // el texto íntegro sigue estando, abajo
+    expect(o).toContain(largo) // the text in full is still there, further down
   })
 })
 
-describe('composeHydration sin bloqueo (compatibilidad hacia atrás)', () => {
-  it('un STATE.md sin el campo `blocked` no dispara ningún aviso de bloqueo', () => {
+describe('composeHydration with no block (backwards compatibility)', () => {
+  it('a STATE.md with no `blocked` field fires no blocking warning at all', () => {
     const out = composeHydration(SAMPLE, 'abc log')
     expect(out).not.toMatch(/TRABAJO BLOQUEADO/)
     expect(out).not.toMatch(/SUSPENDIDO/)
     expect(out.startsWith('# Estado del repo')).toBe(true)
   })
-  it('`blocked: null` (lo que siembra ct-next) tampoco', () => {
+  it('`blocked: null` (what ct-next seeds) does not either', () => {
     expect(composeHydration('---\ntask: "x"\nblocked: null\n---\ncuerpo', '')).not.toMatch(/TRABAJO BLOQUEADO/)
   })
 })
 
-describe('composeHydration con un STATE.md ilegible', () => {
+describe('composeHydration with an unreadable STATE.md', () => {
   const out = composeHydration('---\ntask: "sin cerrar\n  ]: [\n---\ncuerpo', '')
 
-  it('no revienta y avisa de que NO SE PUEDE SABER si está bloqueado', () => {
+  it('does not blow up and warns that IT CANNOT BE KNOWN whether it is blocked', () => {
     expect(out).toMatch(/NO SE PUDO LEER/)
     expect(out).toMatch(/no se puede saber si el trabajo está BLOQUEADO/i)
     expect(out).toMatch(/posiblemente bloqueado/i)
   })
-  it('sigue inyectando el texto crudo del estado (es lo único que queda)', () => {
+  it('goes on injecting the raw text of the state (it is the only thing left)', () => {
     expect(out).toContain('cuerpo')
   })
 })
 
-// El segundo síntoma del mismo agujero: `verify` decía «`gh issue list …`
-// devuelve 6 issues» cuando no había ni milestone ni issues. Estaba escrito
-// como la comprobación PARA DESPUÉS, pero en frío es indistinguible de la
-// afirmación de un hecho.
-describe('fieldReadingGuide — hecho comprobado vs. comprobación pendiente', () => {
-  it('con `verify` no vacío, dice que es PENDIENTE y no un hecho', () => {
+// The second symptom of the same hole: `verify` said «`gh issue list …`
+// devuelve 6 issues» when there was neither a milestone nor any issues. It was
+// written as the check FOR AFTERWARDS, but read cold it is indistinguishable
+// from the assertion of a fact.
+describe('fieldReadingGuide — a checked fact vs. a pending check', () => {
+  it('with a non-empty `verify`, it says that it is PENDING and not a fact', () => {
     const g = fieldReadingGuide({ verify: '`gh issue list …` devuelve 6 issues' })
     expect(g).toMatch(/PENDIENTE/)
     expect(g).toMatch(/no un hecho ya comprobado/i)
   })
-  it('con `next_action` no vacío, avisa de que puede haber caducado', () => {
+  it('with a non-empty `next_action`, it warns that it may have gone stale', () => {
     expect(fieldReadingGuide({ next_action: 'seguir por el AC-2' })).toMatch(/caducad/i)
   })
-  it('campos vacíos → ninguna guía (una guía que sale siempre es ruido)', () => {
+  it('empty fields → no guide at all (a guide that always comes out is noise)', () => {
     expect(fieldReadingGuide({ verify: '', next_action: '' })).toBe('')
     expect(fieldReadingGuide({})).toBe('')
   })
-  it('bloqueado → no repite la coletilla de next_action (el aviso de bloqueo ya dice más)', () => {
+  it('blocked → it does not repeat the next_action tag line (the blocking warning already says more)', () => {
     const g = fieldReadingGuide({ next_action: 'x', verify: 'y' }, { blocked: true })
     expect(g).toMatch(/`verify`/)
     expect(g).not.toMatch(/`next_action`/)
   })
-  it('la guía llega a la hidratación de un STATE.md normal', () => {
+  it('the guide reaches the hydration of a normal STATE.md', () => {
     const out = composeHydration('---\nverify: "el test T7 pasa"\nnext_action: "seguir"\n---\ncuerpo', '')
     expect(out).toMatch(/Cómo leer estos campos/)
     expect(out).toMatch(/PENDIENTE/)
@@ -339,28 +341,28 @@ describe('fieldReadingGuide — hecho comprobado vs. comprobación pendiente', (
 })
 
 describe('blockNotice', () => {
-  it('sin bloqueo → cadena vacía', () => {
+  it('with no block → an empty string', () => {
     expect(blockNotice({ state: 'none' })).toBe('')
     expect(blockNotice(null)).toBe('')
   })
-  it('sin next_action que suspender, no se inventa uno', () => {
+  it('with no next_action to suspend, it does not invent one', () => {
     const n = blockNotice({ state: 'blocked', reason: 'r' }, { nextAction: '' })
     expect(n).toMatch(/no dice nada/)
     expect(n).not.toMatch(/SUSPENDIDO/)
   })
 })
 
-// F12: `shouldBlockStop` comparaba los dos SHA por igualdad y quien lo usaba
-// afirmaba «hay commits más nuevos» — una ancestría que la igualdad no
-// comprueba. Lo sustituyen `describeStopRelation` (le pregunta a git) y
-// `classifyStopState` (decide y redacta).
+// F12: `shouldBlockStop` compared the two SHAs by equality and whoever used
+// it claimed «hay commits más nuevos» — an ancestry equality does not check.
+// It is replaced by `describeStopRelation` (which asks git) and
+// `classifyStopState` (which decides and writes).
 const HEAD = 'a'.repeat(40)
 const OTHER = 'b'.repeat(40)
 
-// Runner de mentira: `plan` mapea cada consulta a su respuesta, para poder
-// probar cada rama sin montar un repo. Claves: `rev-parse`, `rev-list`,
-// `merge-base`, `is-ancestor:<a>:<b>`, `branch` (ramas locales) y `branch-r`
-// (remotas). Los tests de integración contra git de verdad están en
+// A fake runner: `plan` maps each query to its answer, so that every branch
+// can be tested without setting up a repo. Keys: `rev-parse`, `rev-list`,
+// `merge-base`, `is-ancestor:<a>:<b>`, `branch` (local branches) and
+// `branch-r` (remote ones). The integration tests against real git are in
 // __tests__/stop.test.js.
 function fakeGit(plan, log) {
   return (args) => {
@@ -378,18 +380,18 @@ describe('describeStopRelation', () => {
   const rel = (lastCommit, plan, branch = 'main') =>
     describeStopRelation({ headSha: HEAD, lastCommit, git: fakeGit(plan), branch })
 
-  it('sin last_commit → unset', () => {
+  it('with no last_commit → unset', () => {
     expect(rel(null, {}).kind).toBe('unset')
     expect(rel('', {}).kind).toBe('unset')
     expect(rel('   ', {}).kind).toBe('unset')
   })
-  it('un valor que git no resuelve → unresolvable (y no se inventa un SHA)', () => {
+  it('a value git does not resolve → unresolvable (and no SHA is invented)', () => {
     const r = rel('sha_viejo', { 'rev-parse': 1 })
     expect(r.kind).toBe('unresolvable')
     expect(r.stateSha).toBe('')
     expect(r.raw).toBe('sha_viejo')
   })
-  it('un valor con pinta de opción de git ni siquiera llega a git', () => {
+  it('a value that looks like a git option does not even reach git', () => {
     let llamado = false
     const r = describeStopRelation({
       headSha: HEAD, lastCommit: '--output=pwned', branch: 'main',
@@ -398,15 +400,15 @@ describe('describeStopRelation', () => {
     expect(r.kind).toBe('unresolvable')
     expect(llamado).toBe(false)
   })
-  it('mismo commit → same', () => {
+  it('the same commit → same', () => {
     expect(rel(HEAD, { 'rev-parse': HEAD }).kind).toBe('same')
   })
-  it('ancestro de HEAD → behind, con el número de commits contado por git', () => {
+  it('an ancestor of HEAD → behind, with the number of commits counted by git', () => {
     const r = rel(OTHER, { 'rev-parse': OTHER, [`is-ancestor:${OTHER}:${HEAD}`]: 0, 'rev-list': '3\n' })
     expect(r.kind).toBe('behind')
     expect(r.count).toBe(3)
   })
-  it('HEAD es ancestro del state → ahead', () => {
+  it('HEAD is an ancestor of the state → ahead', () => {
     const r = rel(OTHER, {
       'rev-parse': OTHER,
       [`is-ancestor:${OTHER}:${HEAD}`]: 1,
@@ -416,7 +418,7 @@ describe('describeStopRelation', () => {
     expect(r.kind).toBe('ahead')
     expect(r.containers).toEqual(['otra'])
   })
-  it('sin ancestría en ninguna dirección → diverged, con merge-base y rama que lo contiene', () => {
+  it('no ancestry in either direction → diverged, with a merge-base and the branch that contains it', () => {
     const r = rel(OTHER, {
       'rev-parse': OTHER,
       [`is-ancestor:${OTHER}:${HEAD}`]: 1,
@@ -428,23 +430,24 @@ describe('describeStopRelation', () => {
     expect(r.containers).toEqual(['polish-v2-geometria'])
     expect(r.mergeBase).toBe('c'.repeat(40))
   })
-  // Preferencia local → remota: `origin/*` es ruido cuando ya hay una rama
-  // local que responde, y la única respuesta posible cuando no la hay.
+  // Local preferred over remote: `origin/*` is noise when there is already a
+  // local branch that answers, and the only possible answer when there is
+  // not.
   const noAncestro = { 'rev-parse': OTHER, [`is-ancestor:${OTHER}:${HEAD}`]: 1, [`is-ancestor:${HEAD}:${OTHER}`]: 1, 'merge-base': 'c'.repeat(40) }
 
-  it('con rama local que lo contiene, ni se pregunta por las remotas', () => {
+  it('with a local branch that contains it, the remote ones are not even asked about', () => {
     const log = []
     const r = describeStopRelation({ headSha: HEAD, lastCommit: OTHER, branch: 'main', git: fakeGit({ ...noAncestro, branch: 'local-viva\n', 'branch-r': 'origin/local-viva\n' }, log) })
     expect(r.containers).toEqual(['local-viva'])
     expect(log.some((a) => a[0] === 'branch' && a[1] === '-r')).toBe(false)
   })
-  it('sin rama local, se cae a las remotas y se nombra origin/…', () => {
+  it('with no local branch, it falls back to the remote ones and names origin/…', () => {
     const r = rel(OTHER, { ...noAncestro, branch: '', 'branch-r': 'origin/polish-v2\norigin/HEAD\n' })
     expect(r.kind).toBe('diverged')
     expect(r.containers).toEqual(['origin/polish-v2'])
     expect(r.containersKnown).toBe(true)
   })
-  it('ni local ni remota lo contienen → orphan (venga de ahead o de diverged)', () => {
+  it('neither local nor remote contains it → orphan (whether it comes from ahead or from diverged)', () => {
     const desdeDiverged = rel(OTHER, { ...noAncestro, branch: '', 'branch-r': '' })
     expect(desdeDiverged.kind).toBe('orphan')
     expect(desdeDiverged.fromKind).toBe('diverged')
@@ -452,15 +455,15 @@ describe('describeStopRelation', () => {
     expect(desdeAhead.kind).toBe('orphan')
     expect(desdeAhead.fromKind).toBe('ahead')
   })
-  // "git no ha contestado" no es "ninguna rama lo contiene": declarar huérfano
-  // un commit porque `git branch` falló sería inventarse la respuesta.
-  it('si git falla al listar ramas NO se declara huérfano', () => {
+  // "git has not answered" is not "no branch contains it": declaring a commit
+  // orphaned because `git branch` failed would be inventing the answer.
+  it('if git fails while listing branches it is NOT declared orphaned', () => {
     const r = rel(OTHER, { ...noAncestro, branch: -1 })
     expect(r.kind).toBe('diverged')
     expect(r.containersKnown).toBe(false)
     expect(r.containers).toEqual([])
   })
-  it('git falla al responder la ancestría (código != 0/1) → unknown, no se supone nada', () => {
+  it('git fails to answer about ancestry (a code != 0/1) → unknown, nothing is assumed', () => {
     const r = rel(OTHER, { 'rev-parse': OTHER, [`is-ancestor:${OTHER}:${HEAD}`]: -1 })
     expect(r.kind).toBe('unknown')
   })
@@ -470,47 +473,47 @@ describe('classifyStopState', () => {
   const verdict = (kind, extra = {}) =>
     classifyStopState({ relation: { kind, headSha: HEAD, stateSha: OTHER, branch: 'main', count: 0, containers: [], raw: '', ...extra }, stopHookActive: false })
 
-  it('behind bloquea y dice cuántos commits hay, porque los ha contado', () => {
+  it('behind blocks and says how many commits there are, because it has counted them', () => {
     const v = verdict('behind', { count: 2 })
     expect(v.block).toBe(true)
     expect(v.reason).toMatch(/2 commits/)
     expect(v.reason).toMatch(/`blocked`/)
   })
-  it('behind con un solo commit no dice "1 commits"', () => {
-    // F15/H4: el conteo es ahora de commits DE TRABAJO (los que solo tocan
-    // .agent/STATE.md no cuentan), y el texto lo dice.
+  it('behind with a single commit does not say "1 commits"', () => {
+    // F15/H4: the count is now of WORK commits (the ones that only touch
+    // .agent/STATE.md do not count), and the text says so.
     expect(verdict('behind', { count: 1 }).reason).toMatch(/hay 1 commit de trabajo en/)
   })
-  it('behind con apuntes por medio los nombra aparte, para que el conteo cuadre con git log', () => {
+  it('behind with entries in between names them separately, so that the count squares with git log', () => {
     const v = verdict('behind', { count: 1, bookkeeping: 2 })
     expect(v.reason).toMatch(/1 commit de trabajo/)
     expect(v.reason).toMatch(/2 commits que solo tocan/)
   })
-  it('behind-bookkeeping ni bloquea ni avisa: es el estado normal de un turno registrado', () => {
+  it('behind-bookkeeping neither blocks nor warns: it is the normal state of a registered turn', () => {
     const v = verdict('behind-bookkeeping', { count: 0, bookkeeping: 1 })
     expect(v.block).toBe(false)
     expect(v.systemMessage).toBe('')
     expect(v.kind).toBe('behind-bookkeeping')
   })
-  it('unresolvable bloquea, cita el valor y NO afirma que sea más viejo', () => {
+  it('unresolvable blocks, quotes the value and does NOT claim that it is older', () => {
     const v = verdict('unresolvable', { raw: 'sha_viejo', stateSha: '' })
     expect(v.block).toBe(true)
     expect(v.reason).toMatch(/sha_viejo/)
     expect(v.reason).not.toMatch(/más nuevos|más viejo/)
     expect(v.reason).toMatch(/`blocked`/)
   })
-  it('same y unset no dicen nada', () => {
+  it('same and unset say nothing', () => {
     for (const k of ['same', 'unset']) {
       expect(verdict(k)).toMatchObject({ block: false, reason: '', systemMessage: '' })
     }
   })
-  it('ahead no bloquea pero avisa, y desaconseja reapuntar last_commit', () => {
+  it('ahead does not block but warns, and advises against repointing last_commit', () => {
     const v = verdict('ahead', { containers: ['adelantada'] })
     expect(v.block).toBe(false)
     expect(v.systemMessage).toMatch(/descendiente de HEAD/)
     expect(v.systemMessage).toMatch(/hacia atrás/)
   })
-  it('diverged no bloquea, explica por qué, y nombra la salida (un STATE.md por worktree)', () => {
+  it('diverged does not block, explains why, and names the way out (one STATE.md per worktree)', () => {
     const v = verdict('diverged', { containers: ['polish-v2-geometria'], mergeBase: 'c'.repeat(40) })
     expect(v.block).toBe(false)
     expect(v.systemMessage).toMatch(/divergentes/)
@@ -518,23 +521,23 @@ describe('classifyStopState', () => {
     expect(v.systemMessage).toMatch(/ct-next/)
     expect(v.systemMessage).not.toMatch(/más nuevos/)
   })
-  // Los avisos salen en CADA turno mientras dure la anomalía. Esa insistencia
-  // es deliberada, y el precio se paga en brevedad: si vuelven a engordar,
-  // esto se pone rojo.
-  it('los avisos que se repiten cada turno se mantienen cortos', () => {
+  // The warnings come out on EVERY turn for as long as the anomaly lasts.
+  // That insistence is deliberate, and the price is paid in brevity: if they
+  // put on weight again, this goes red.
+  it('the warnings that repeat every turn stay short', () => {
     expect(verdict('diverged', { containers: ['polish-v2-geometria'], mergeBase: 'c'.repeat(40) }).systemMessage.length).toBeLessThan(340)
     expect(verdict('ahead', { containers: ['adelantada'] }).systemMessage.length).toBeLessThan(280)
     expect(verdict('orphan').systemMessage.length).toBeLessThan(340)
   })
-  it('sin ninguna rama conocida (git calló) la frase no se queda coja', () => {
+  it('with no known branch at all (git kept quiet) the sentence is not left lame', () => {
     const v = verdict('diverged', { containers: [], containersKnown: false, mergeBase: 'c'.repeat(40) })
     expect(v.systemMessage).toMatch(/no está en la historia de la rama `main`/)
     expect(v.systemMessage).not.toMatch(/vive en ,|vive en :/)
     expect(verdict('ahead', { containers: [] }).systemMessage).not.toMatch(/vive en /)
   })
-  // Un `last_commit` que no alcanza ningún ref no es "el estado va por
-  // delante": es el estado apuntando a trabajo que dejó de existir.
-  it('orphan no bloquea (un bloqueo no resucita un commit) y no se confunde con ahead', () => {
+  // A `last_commit` that reaches no ref is not "the state is ahead": it is
+  // the state pointing at work that stopped existing.
+  it('orphan does not block (a block does not resurrect a commit) and is not confused with ahead', () => {
     const v = verdict('orphan', { fromKind: 'ahead' })
     expect(v.block).toBe(false)
     expect(v.systemMessage).toMatch(/huérfano/)
@@ -542,18 +545,18 @@ describe('classifyStopState', () => {
     expect(v.systemMessage).toMatch(/git gc/)
     expect(v.systemMessage).not.toMatch(/va por delante|hacia atrás|divergentes/)
   })
-  it('unknown no bloquea y admite que no sabe', () => {
+  it('unknown does not block and admits that it does not know', () => {
     const v = verdict('unknown')
     expect(v.block).toBe(false)
     expect(v.systemMessage).toMatch(/no ha podido determinar/)
   })
-  it('anti-bucle: con stop_hook_active no bloquea NI avisa, sea cual sea el caso', () => {
+  it('anti-loop: with stop_hook_active it neither blocks NOR warns, whatever the case', () => {
     for (const kind of ['behind', 'unresolvable', 'diverged', 'ahead', 'orphan', 'unknown']) {
       const v = classifyStopState({ relation: { kind, headSha: HEAD, stateSha: OTHER, count: 9 }, stopHookActive: true })
       expect(v).toMatchObject({ block: false, reason: '', systemMessage: '' })
     }
   })
-  it('HEAD desprendido: no se inventa una rama', () => {
+  it('a detached HEAD: it does not invent a branch', () => {
     const v = verdict('behind', { count: 1, branch: '' })
     expect(v.reason).toMatch(/desprendido/)
     expect(v.reason).not.toMatch(/rama `/)
@@ -561,12 +564,12 @@ describe('classifyStopState', () => {
 })
 
 // ===========================================================================
-// #95/H10 — la hidratación inyectaba el frontmatter ENTERO, comentarios
-// incluidos: unos 1.200 B de `#` de la plantilla que el modelo pagaba en cada
-// startup|resume|clear|compact sin que le dijeran nada que `fieldReadingGuide`
-// no diga ya cuando aplica.
+// #95/H10 — the hydration injected the WHOLE frontmatter, comments included:
+// some 1,200 B of `#` from the template that the model paid for on every
+// startup|resume|clear|compact without being told anything `fieldReadingGuide`
+// does not already say when it applies.
 // ===========================================================================
-describe('composeHydration: los comentarios del frontmatter no viajan', () => {
+describe('composeHydration: the frontmatter comments do not travel', () => {
   const CON_COMENTARIOS = [
     '---',
     'task: "X"',
@@ -580,12 +583,12 @@ describe('composeHydration: los comentarios del frontmatter no viajan', () => {
     'voy por T7',
   ].join('\n')
 
-  it('las líneas que empiezan por # dentro del frontmatter desaparecen', () => {
+  it('the lines that begin with # inside the frontmatter disappear', () => {
     const out = composeHydration(CON_COMENTARIOS, '')
     expect(out).not.toContain('quién eres en el loop')
     expect(out).not.toContain('CHECKOUT PRINCIPAL')
   })
-  it('los campos del frontmatter y el cuerpo siguen enteros, incluido un # dentro de un valor y un encabezado del cuerpo', () => {
+  it('the frontmatter fields and the body stay whole, including a # inside a value and a heading of the body', () => {
     const out = composeHydration(CON_COMENTARIOS, '')
     expect(out).toContain('task: "X"')
     expect(out).toContain('role: "coordinador"')
@@ -593,7 +596,7 @@ describe('composeHydration: los comentarios del frontmatter no viajan', () => {
     expect(out).toContain('# esto es un encabezado del cuerpo, no un comentario')
     expect(out).toContain('voy por T7')
   })
-  it('la plantilla vacía hidrata en menos de 1.000 bytes', () => {
+  it('the empty template hydrates in less than 1,000 bytes', () => {
     const tpl = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'skills', 'state-template', 'STATE.template.md'), 'utf8')
     expect(Buffer.byteLength(tpl, 'utf8')).toBeGreaterThan(1000)
     expect(Buffer.byteLength(composeHydration(tpl, ''), 'utf8')).toBeLessThan(1000)
@@ -601,19 +604,20 @@ describe('composeHydration: los comentarios del frontmatter no viajan', () => {
 })
 
 // ===========================================================================
-// #95/H8 — el aviso no bloqueante salía en CADA turno mientras durase la
-// anomalía. La insistencia era deliberada, pero el propio proyecto ya tiene
-// escrita la sentencia que la desmonta: «un aviso que sale siempre es un aviso
-// que nadie lee» (la cabecera de `blocked`, en este mismo módulo).
+// #95/H8 — the non-blocking warning came out on EVERY turn for as long as the
+// anomaly lasted. The insistence was deliberate, but the project itself
+// already has in writing the sentence that dismantles it: «a warning that
+// always comes out is a warning nobody reads» (`blocked`'s header, in this
+// very module).
 // ===========================================================================
-describe('noticeDecision: el aviso sale la primera vez, cuando cambia, y cada N turnos', () => {
+describe('noticeDecision: the warning comes out the first time, when it changes, and every N turns', () => {
   const rel = { kind: 'ahead', stateSha: OTHER }
 
-  it('el primer turno de la anomalía siempre avisa', () => {
+  it('the first turn of the anomaly always warns', () => {
     expect(noticeDecision({ relation: rel, previous: null }).emit).toBe(true)
   })
 
-  it('los turnos siguientes callan hasta que se cumple el periodo', () => {
+  it('the following turns keep quiet until the period is up', () => {
     let previous = null
     const emitidos = []
     for (let turno = 1; turno <= 5; turno++) {
@@ -624,7 +628,7 @@ describe('noticeDecision: el aviso sale la primera vez, cuando cambia, y cada N 
     expect(emitidos).toEqual([1])
   })
 
-  it('a los N turnos vuelve a salir, y el periodo empieza de nuevo', () => {
+  it('after N turns it comes out again, and the period starts over', () => {
     let previous = null
     const emitidos = []
     for (let turno = 1; turno <= NOTICE_REPEAT_EVERY_TURNS * 2; turno++) {
@@ -635,19 +639,19 @@ describe('noticeDecision: el aviso sale la primera vez, cuando cambia, y cada N 
     expect(emitidos).toEqual([1, NOTICE_REPEAT_EVERY_TURNS + 1])
   })
 
-  it('cambiar de relación avisa aunque el periodo no se haya cumplido: es otra anomalía', () => {
+  it('changing relation warns even if the period is not up: it is another anomaly', () => {
     const primera = noticeDecision({ relation: rel, previous: null })
     const segunda = noticeDecision({ relation: { kind: 'diverged', stateSha: OTHER }, previous: primera.next })
     expect(segunda.emit).toBe(true)
   })
 
-  it('el mismo tipo apuntando a OTRO commit también es otra anomalía', () => {
+  it('the same kind pointing at ANOTHER commit is another anomaly too', () => {
     const primera = noticeDecision({ relation: rel, previous: null })
     const segunda = noticeDecision({ relation: { kind: 'ahead', stateSha: HEAD }, previous: primera.next })
     expect(segunda.emit).toBe(true)
   })
 
-  it('un marcador ilegible o de otra forma no silencia nada: se avisa', () => {
+  it('a marker that is unreadable or of another shape silences nothing: it warns', () => {
     for (const previous of ['no es json', 42, {}, { kind: 'ahead' }]) {
       expect(noticeDecision({ relation: rel, previous }).emit).toBe(true)
     }

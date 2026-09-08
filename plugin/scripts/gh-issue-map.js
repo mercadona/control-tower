@@ -993,71 +993,72 @@ export function closedWithLiveStatus(closedIssues) {
 }
 // ============================================================================
 
-// NO_MILESTONE_KEY / epicKeyOf (D1 finding 1): /ct-groom numera slices 1..N
-// POR EPIC (una invocación = un `--milestone` = un epic — ver
-// groom.js#groomPlan) y escribe ESE número en `<!-- ct-order:N -->`. El
-// número de orden por tanto NO es único en el repo — solo dentro de su
-// propio epic. `epicKeyOf` deriva el ALCANCE del epic del número de
-// milestone real que GitHub ya asigna a cada issue (abierto o cerrado)
-// desde que ct-groom.mjs existe: coste de compatibilidad CERO para
-// cualquier issue ya groomeado — no hace falta tocar ni un solo marcador
-// `ct-order` existente, el milestone ya viaja en el JSON crudo de `gh api
-// repos/<o>/<r>/issues`. Se descarta codificar el identificador de epic
-// DENTRO del propio marcador (la otra opción que se consideró): sería la
-// MISMA información que el milestone ya provee, pero exigiría reescribir
-// issues ya groomeados o mantener dos formatos de marcador en paralelo
-// indefinidamente para lo que el campo `milestone` resuelve gratis.
+// NO_MILESTONE_KEY / epicKeyOf (D1 finding 1): /ct-groom numbers slices 1..N
+// PER EPIC (one invocation = one `--milestone` = one epic — see
+// groom.js#groomPlan) and writes THAT number into `<!-- ct-order:N -->`. The
+// order number is therefore NOT unique across the repo — only inside its own
+// epic. `epicKeyOf` derives the epic's SCOPE from the real milestone number
+// GitHub already assigns to every issue (open or closed) ever since
+// ct-groom.mjs exists: ZERO compatibility cost for any issue already groomed
+// — not a single existing `ct-order` marker has to be touched, the milestone
+// already travels in the raw JSON of `gh api repos/<o>/<r>/issues`. Encoding
+// the epic identifier INSIDE the marker itself is discarded (the other option
+// that was considered): it would be the SAME information the milestone
+// already provides, but it would demand rewriting issues already groomed, or
+// keeping two marker formats in parallel indefinitely, for what the
+// `milestone` field resolves for free.
 //
-// Un issue sin milestone (creado a mano, o de un repo de antes de que
-// ct-groom empezara a asignarlo) cae en el bucket compartido
-// `NO_MILESTONE_KEY` — mejor que reventar, pero ese bucket puede volver a
-// colisionar si dos epics sin milestone reutilizan números de orden; la
-// detección de colisión de buildOrderIndex (más abajo) cubre justo ese
-// caso, así que el bucket compartido nunca falla en SILENCIO — como mucho,
-// los issues implicados quedan excluidos de la selección con un aviso
-// claro (ver buildDispatchInput/ct-next.mjs), nunca resueltos a ciegas.
+// An issue with no milestone (created by hand, or from a repo that predates
+// ct-groom starting to assign one) falls into the shared `NO_MILESTONE_KEY`
+// bucket — better than blowing up, but that bucket can collide again if two
+// epics with no milestone reuse order numbers; buildOrderIndex's collision
+// detection (further down) covers exactly that case, so the shared bucket
+// never fails SILENTLY — at worst, the issues involved are left out of the
+// selection with a clear warning (see buildDispatchInput/ct-next.mjs), never
+// resolved blind.
 export const NO_MILESTONE_KEY = '(sin milestone)'
 export function epicKeyOf(rawIssue) {
   const ms = rawIssue?.milestone
   return (ms && Number.isFinite(ms.number)) ? String(ms.number) : NO_MILESTONE_KEY
 }
 
-// buildOrderIndex: Map(epicKey -> Map(orden -> número de issue)), construido
-// a partir de TODOS los issues (abiertos + cerrados) de la enumeración cruda
-// de gh. Tiene que incluir los cerrados: la dependencia típica que queremos
-// reconocer como satisfecha es precisamente la de un issue YA MERGEADO (por
-// tanto cerrado), y su marcador ct-order (y su milestone) solo viven en su
-// propio body/metadata — si solo indexáramos los abiertos, toda dependencia
-// sobre un issue ya cerrado desaparecería del índice en cuanto se mergeara.
+// buildOrderIndex: Map(epicKey -> Map(order -> issue number)), built out of
+// ALL the issues (open + closed) of gh's raw enumeration. It has to include
+// the closed ones: the typical dependency we want to recognise as satisfied
+// is precisely that of an issue ALREADY MERGED (and therefore closed), and
+// its ct-order marker (and its milestone) live only in its own body/metadata
+// — if we indexed only the open ones, every dependency on an already closed
+// issue would vanish from the index the moment it was merged.
 //
-// D1 finding 1 — DETECCIÓN: antes de este fix, el índice era un único Map
-// GLOBAL AL REPO y `index.set` se quedaba con el ÚLTIMO issue visto para un
-// orden repetido — con `[...open, ...closed]`, un issue YA MERGEADO de OTRO
-// epic ganaba en silencio el slot que un `merge-after` de un epic en curso
-// necesitaba resolver contra su propio hermano. El escaneo por epic (arriba)
-// cierra la INMENSA mayoría de esos casos (epics distintos = milestones
-// distintos = mapas distintos), pero una colisión DENTRO del mismo epic
-// sigue siendo posible (dos epics que comparten milestone por error — p.ej.
-// ambos con el título por defecto "Epic" sin que nadie pasara `--milestone`
-// — o un re-groom accidental que dejó dos issues con el mismo marcador). Esa
-// colisión NUNCA se resuelve en silencio quedándose con "el último" (ni con
-// "el primero"): se acumula en `collisions` para que buildDispatchInput
-// excluya el epic afectado de la selección (ver su propio comentario) en
-// vez de arriesgarse a despachar contra la dependencia equivocada —
-// exactamente el bug que este finding describe.
+// D1 finding 1 — DETECTION: before this fix, the index was a single Map
+// GLOBAL TO THE REPO and `index.set` kept the LAST issue seen for a repeated
+// order — with `[...open, ...closed]`, an ALREADY MERGED issue from ANOTHER
+// epic silently won the slot that a `merge-after` of an epic in progress
+// needed to resolve against its own sibling. The per-epic scan (above) closes
+// the VAST majority of those cases (different epics = different milestones =
+// different maps), but a collision WITHIN the same epic is still possible
+// (two epics sharing a milestone by mistake — e.g. both with the default
+// title "Epic" because nobody passed `--milestone` — or an accidental
+// re-groom that left two issues with the same marker). That collision is
+// NEVER resolved silently by keeping "the last one" (nor "the first one"): it
+// accumulates in `collisions` so that buildDispatchInput leaves the affected
+// epic out of the selection (see its own comment) instead of risking a
+// dispatch against the wrong dependency — exactly the bug this finding
+// describes.
 //
-// Cada hueco (epicKey, orden) acumula TODOS los números de issue distintos
-// vistos para él (no solo "el primero" y "el que choca") — review de D1:
-// con tres issues en el mismo hueco, comparar solo contra "el primero visto"
-// producía DOS entradas de colisión solapadas ([primero,segundo] y
-// [primero,tercero]), repitiendo el primero y sin dejar ver de un vistazo
-// que son TRES los que compiten por el mismo hueco, no dos pares distintos.
-// Una única entrada por hueco, con la lista completa de issues implicados,
-// es más fácil de leer y de actuar.
+// Every slot (epicKey, order) accumulates ALL the distinct issue numbers seen
+// for it (not just "the first one" and "the one that clashes") — D1 review:
+// with three issues in the same slot, comparing only against "the first one
+// seen" produced TWO overlapping collision entries ([first,second] and
+// [first,third]), repeating the first one and never letting you see at a
+// glance that THREE of them compete for the same slot, not two distinct
+// pairs. A single entry per slot, with the complete list of issues involved,
+// is easier to read and to act on.
 export function buildOrderIndex(rawIssues) {
-  // seen: epicKey -> Map(orden -> [números de issue, en el orden en que se
-  // vieron, sin duplicados]) — se acumula TODO antes de decidir qué es
-  // colisión, para poder emitir una sola entrada por hueco al final.
+  // seen: epicKey -> Map(order -> [issue numbers, in the order they were
+  // seen, without duplicates]) — EVERYTHING accumulates before deciding what
+  // counts as a collision, so that a single entry per slot can be emitted at
+  // the end.
   const seen = new Map()
   for (const i of (rawIssues || [])) {
     const order = extractOrder(i.body)
@@ -1074,7 +1075,7 @@ export function buildOrderIndex(rawIssues) {
   for (const [epicKey, orderMap] of seen) {
     const outOrderMap = new Map()
     for (const [order, issuesHere] of orderMap) {
-      outOrderMap.set(order, issuesHere[0]) // el primero visto conserva el slot; ver comentario de arriba sobre por qué el valor exacto ya no importa cuando hay colisión.
+      outOrderMap.set(order, issuesHere[0]) // the first one seen keeps the slot; see the comment above on why the exact value no longer matters once there is a collision.
       if (issuesHere.length > 1) {
         collisions.push({ epicKey, order, issues: [...issuesHere].sort((a, b) => a - b) })
       }
@@ -1084,38 +1085,36 @@ export function buildOrderIndex(rawIssues) {
   return { perEpic, collisions }
 }
 
-// buildDispatchInput: compone mapGhIssue + filterMergedIssues + la
-// traducción orden→issue de `deps` (ya con alcance por epic, ver
-// buildOrderIndex) en un único punto, para que ct-next.mjs nunca tenga que
-// decidir en qué espacio de IDs está comparando. Root cause del bug
-// encontrado en T10: `deps` sale de mapGhIssue en espacio de ORDEN
-// (groom.js escribe `merge-after #<orden>`), pero `mergedIssues` son números
-// de ISSUE reales (filterMergedIssues lee `i.number`) — comparar uno contra
-// otro sin traducir deja bloqueado para siempre cualquier slice con
-// dependencias, salvo que orden e issue coincidan por casualidad. Una
-// dependencia cuyo orden no aparece en el epic del propio issue (ni abierto
-// ni cerrado) se traduce a `null`: `mergedIssues` (números de issue) nunca
-// contiene `null`, así que esa dependencia queda permanentemente sin
-// satisfacer en vez de lanzar o, peor, colapsar por casualidad con un número
-// de issue real.
+// buildDispatchInput: composes mapGhIssue + filterMergedIssues + the
+// order→issue translation of `deps` (already scoped per epic, see
+// buildOrderIndex) in a single place, so that ct-next.mjs never has to decide
+// which ID space it is comparing in. Root cause of the bug found in T10:
+// `deps` comes out of mapGhIssue in ORDER space (groom.js writes
+// `merge-after #<order>`), but `mergedIssues` are real ISSUE numbers
+// (filterMergedIssues reads `i.number`) — comparing one against the other
+// without translating leaves any slice with dependencies blocked forever,
+// unless order and issue coincide by accident. A dependency whose order does
+// not appear in the issue's own epic (neither open nor closed) translates to
+// `null`: `mergedIssues` (issue numbers) never contains `null`, so that
+// dependency stays permanently unsatisfied instead of throwing or, worse,
+// colliding by accident with a real issue number.
 //
-// `orderCollisions` (D1 finding 1) viaja tal cual desde buildOrderIndex —
-// ct-next.mjs lo usa SOLO para avisar (nunca para abortar nada, ver más
-// abajo). `issues` YA EXCLUYE, aquí mismo, cualquier issue abierto cuyo
-// PROPIO epicKey esté implicado en una colisión (review de D1, finding 4):
-// el "refuse" original abortaba el BATCH ENTERO — con el orden indexado
-// también sobre issues cerrados, una colisión que viviera solo entre
-// issues mergeados hace tiempo (un epic ya terminado, sin relación con
-// nada de lo que hay abierto hoy) ladrillaba el repo COMPLETO para
-// siempre, sin más remedio que editar GitHub a mano. Seguir rehusando a
-// resolver en silencio sigue siendo la dirección correcta — lo que cambia
-// es el RADIO: solo el/los epic(s) cuyo propio orden colisiona quedan
-// fuera de `issues` (ni se seleccionan ni cuentan en vuelo, porque su
-// propia traducción orden→issue no es de fiar), un epic sin relación
-// (epicKey distinto, sin colisión) se ve con total normalidad. Excluir
-// tanto de la selección COMO del cómputo de en-vuelo es deliberado: no hay
-// forma segura de confiar en NINGÚN dato de un epic cuyo propio índice de
-// orden está corrompido, ni siquiera "está en progreso".
+// `orderCollisions` (D1 finding 1) travels through from buildOrderIndex
+// unchanged — ct-next.mjs uses it ONLY to warn (never to abort anything, see
+// below). `issues` ALREADY EXCLUDES, right here, any open issue whose OWN
+// epicKey is involved in a collision (D1 review, finding 4): the original
+// "refuse" aborted the WHOLE BATCH — with the order indexed over closed
+// issues too, a collision that lived only among issues merged long ago (an
+// epic already finished, unrelated to anything open today) bricked the
+// COMPLETE repo for ever, with no remedy but editing GitHub by hand. Going on
+// refusing to resolve it silently is still the right direction — what changes
+// is the RADIUS: only the epic(s) whose own order collides are left out of
+// `issues` (they are neither selected nor counted as in flight, because their
+// own order→issue translation cannot be trusted), while an unrelated epic
+// (different epicKey, no collision) is seen entirely normally. Leaving them
+// out of the selection AS WELL AS out of the in-flight count is deliberate:
+// there is no safe way to trust ANY datum of an epic whose own order index is
+// corrupted, not even "it is in progress".
 export function buildDispatchInput(rawOpenIssues, rawClosedIssues) {
   const allRaw = [...(rawOpenIssues || []), ...(rawClosedIssues || [])]
   const { perEpic, collisions } = buildOrderIndex(allRaw)
@@ -1127,25 +1126,27 @@ export function buildDispatchInput(rawOpenIssues, rawClosedIssues) {
       const orderMap = perEpic.get(epicKeyOf(raw))
       return {
         ...issue,
-        // D-4 — el epic viaja con el issue porque aquí ya está calculado. En
-        // Control Tower el epic ES el milestone (ver la cabecera de
-        // `epicKeyOf`, arriba), y `/ct-next` ya lo deriva para detectar
-        // colisiones del marcador `ct-order`. Sembrarlo en el despacho evita
-        // que cada run de `ct-step` le pregunte a `gh` por un dato que el
-        // dispatcher tenía en la mano — o sea, red en el camino crítico.
+        // D-4 — the epic travels with the issue because it is already
+        // computed here. In Control Tower the epic IS the milestone (see the
+        // header of `epicKeyOf`, above), and `/ct-next` already derives it to
+        // detect collisions of the `ct-order` marker. Seeding it into the
+        // dispatch keeps every run of `ct-step` from asking `gh` for a datum
+        // the dispatcher already had in hand — that is, network on the
+        // critical path.
         epic: epicKeyOf(raw),
         deps: (issue.deps || []).map((d) => (orderMap && orderMap.has(d) ? orderMap.get(d) : null)),
       }
     })
   const mergedIssues = filterMergedIssues(rawClosedIssues)
-  // depStates (F13/H4): el estado de los issues CERRADOS que NO cuentan como
-  // mergeados, para que quien no pueda salir pueda saber POR QUÉ. Viaja junto
-  // a `mergedIssues` (y no se recalcula en ct-next.mjs) porque las dos cosas
-  // se derivan de la MISMA lista de issues cerrados: separarlas invitaría a
-  // que una se filtrara y la otra no.
-  // closedStatusResidue (F18/H2): viaja aquí por el mismo motivo que
-  // `depStates` — se deriva de la MISMA lista de issues cerrados, y separarlo
-  // invitaría a que una de las dos derivaciones se filtrara y la otra no.
+  // depStates (F13/H4): the state of the CLOSED issues that do NOT count as
+  // merged, so that whoever cannot get out can know WHY. It travels alongside
+  // `mergedIssues` (and is not recomputed in ct-next.mjs) because both things
+  // are derived from the SAME list of closed issues: separating them would
+  // invite one of them to be filtered and the other not.
+  // closedStatusResidue (F18/H2): it travels here for the same reason as
+  // `depStates` — it is derived from the SAME list of closed issues, and
+  // separating it would invite one of the two derivations to be filtered and
+  // the other not.
   return {
     issues,
     mergedIssues,

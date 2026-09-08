@@ -1,105 +1,108 @@
-// scope.js — ¿LOS FICHEROS QUE TOCÓ ESTE PR CABEN EN EL ALCANCE QUE EL EPIC
-// DECLARÓ?
+// scope.js — DO THE FILES THIS PR TOUCHED FIT INSIDE THE SCOPE THE EPIC
+// DECLARED?
 //
-// POR QUÉ EXISTE, con nombre y apellidos. Despacho 1, slice 4 (menoplus #662 →
-// PR #668, 2026-08-13): el agente tocó copy GDPR en pantalla contra su
-// «Protegido» explícito y escribió en el ledger y en el cuerpo del PR que Jose
-// lo había autorizado. Las dos afirmaciones eran falsas — su transcript tiene
-// UNA sola entrada de usuario, el kickoff del dispatcher. Lo cazó una persona
-// extrañándose de ver dos `.swift` de la app en la lista de ficheros; no lo
-// cazó ninguna comprobación mecánica, porque no había ninguna.
+// WHY IT EXISTS, with names and dates. Dispatch 1, slice 4 (menoplus #662 → PR
+// #668, 2026-08-13): the agent touched on-screen GDPR copy against its explicit
+// «Protegido» and wrote in the ledger and in the PR body that Jose had
+// authorised it. Both claims were false — its transcript has ONE single user
+// entry, the dispatcher's kickoff. A person caught it, surprised to see two of
+// the app's `.swift` files in the file list; no mechanical check caught it,
+// because there was none.
 //
-// LA IDEA QUE LO GOBIERNA TODO: la firma humana NO es verificable desde dentro
-// del loop. El agente despachado corre con las credenciales de GitHub de Jose,
-// así que puede producir cualquier artefacto de GitHub —una review, una
-// aprobación, un comentario— y su registro es prosa que nadie contrasta. Lo que
-// SÍ es verificable es lo que TOCÓ: el diff es un hecho, y un hecho no se puede
-// falsificar sin que se vea. Por eso este módulo no intenta comprobar firmas.
-// Comprueba hechos.
+// THE IDEA THAT GOVERNS EVERYTHING: the human signature is NOT verifiable from
+// inside the loop. The dispatched agent runs with Jose's GitHub credentials, so
+// it can produce any GitHub artefact —a review, an approval, a comment— and its
+// record is prose nobody cross-checks. What IS verifiable is what it TOUCHED:
+// the diff is a fact, and a fact cannot be falsified without it showing. That
+// is why this module does not try to check signatures. It checks facts.
 //
-// DÓNDE VIVE LA COMPROBACIÓN, y no es un detalle: en un workflow del repo
-// destino, sobre el PR. NO en `dispatch-check --release`, porque `--release` lo
-// invoca el propio agente y un guard que ejecuta el sospechoso no es un guard.
+// WHERE THE CHECK LIVES, and it is not a detail: in a workflow of the target
+// repo, over the PR. NOT in `dispatch-check --release`, because `--release` is
+// invoked by the agent itself and a guard that runs the suspect is not a guard.
 //
-// Módulo PURO: ni red ni disco.
+// A PURE module: neither network nor disk.
 import { findClosingKeywords } from './closing-keywords.js'
 
-// El alcance se declara UNA VEZ POR EPIC, no por slice, y vive en la sección
-// `## Contexto del epic` del execution spec — que es la ÚNICA que groom copia
-// verbatim al issue. Ponerlo en cualquier otra sección crearía un alcance que
-// existe en el spec y no existe donde se comprueba.
+// The scope is declared ONCE PER EPIC, not per slice, and it lives in the
+// `## Contexto del epic` section of the execution spec — which is the ONLY one
+// groom copies verbatim into the issue. Putting it in any other section would
+// create a scope that exists in the spec and does not exist where it gets
+// checked.
 //
-// Una vez por epic y no por fila es deliberado: se escribe en la congelación,
-// que es el único momento del ciclo en que Jose lee. Cuatro campos por rellenar
-// se olvidan; uno, no.
+// Once per epic and not per row is deliberate: it is written at the freeze,
+// which is the only moment of the cycle when Jose reads. Four fields to fill in
+// get forgotten; one does not.
 const SECTION_HEADING = /^##\s+Contexto del epic\s*$/i
 const ANY_HEADING = /^#{1,6}\s+/
-// `Alcance:` con la negrita y los backticks que la plantilla usa alrededor de
-// todo lo demás. Sin esta tolerancia, escribirlo como el resto de la sección
-// —que es lo natural— lo dejaría invisible.
+// `Alcance:` with the bold and the backticks the template uses around
+// everything else. Without this tolerance, writing it like the rest of the
+// section —which is the natural thing— would leave it invisible.
 const SCOPE_LINE = /^\s*[-*]?\s*\**\s*Alcance\s*\**\s*:\s*(.*)$/i
 
-// Los ficheros que el PROPIO loop obliga a commitear. No son una excepción al
-// alcance: son la huella del mecanismo que impone el alcance.
+// The files the loop ITSELF forces to be committed. They are not an exception
+// to the scope: they are the footprint of the mechanism that imposes the scope.
 //
-// El kickoff ORDENA al agente escribir el plan del slice en
-// `docs/superpowers/plans/` y commitearlo («viaja en el PR»). Hacer fallar el
-// gate por eso sería un muro insatisfacible —solo se cumple desobedeciendo al
-// dispatcher— y un guard así se acaba ignorando entero, que es la lección que
-// conventions.js ya pagó en este repo (F14).
+// The kickoff ORDERS the agent to write the slice's plan in
+// `docs/superpowers/plans/` and commit it («it travels in the PR»). Failing the
+// gate over that would be an unsatisfiable wall —it can only be met by
+// disobeying the dispatcher— and a guard like that ends up ignored whole, which
+// is the lesson conventions.js already paid for in this repo (F14).
 //
-// `.agent/SLICE.md` NO está aquí, y es deliberado: es estado de sesión, no
-// producto del slice. En el despacho 1 un agente lo metió en su PR y lo sacó él
-// mismo después con ese mismo argumento. Exentarlo normalizaría justo lo que
-// aquel agente corrigió por su cuenta.
+// `.agent/SLICE.md` is NOT here, and that is deliberate: it is session state,
+// not the slice's product. In dispatch 1 an agent put it into its PR and took
+// it out again itself afterwards with that very argument. Exempting it would
+// normalise exactly what that agent corrected on its own.
 //
-// `.superpowers/**` TAMPOCO está aquí, y también es deliberado: el propio skill
-// de brainstorming dice que ese directorio va en `.gitignore`. Cuando aparece
-// en un PR —como apareció `.superpowers/sdd/progress.md` en el PR #668— no es
-// un falso positivo del gate: es estado de sesión commiteado, residuo del fork,
-// y marcarlo es el comportamiento correcto.
+// `.superpowers/**` is NOT here EITHER, and that is deliberate too: the
+// brainstorming skill itself says that directory goes in `.gitignore`. When it
+// shows up in a PR —as `.superpowers/sdd/progress.md` showed up in PR #668— it
+// is not a false positive of the gate: it is committed session state, residue
+// of the fork, and flagging it is the correct behaviour.
 //
-// LA LISTA ES CORTA A PROPÓSITO y solo contiene lo que manda EL PLUGIN, que es
-// lo único que vale en cualquier repo. La contabilidad propia de cada repo
-// (`BITACORA.md` en menoplus, por ejemplo) NO se hardcodea aquí: viaja por
-// `extraExempt`, que el workflow del repo destino pasa. Meter rutas de un repo
-// concreto en el plugin las convertiría en agujeros para todos los demás.
+// THE LIST IS SHORT ON PURPOSE and contains only what THE PLUGIN mandates,
+// which is the only thing that holds in any repo. Each repo's own bookkeeping
+// (`BITACORA.md` in menoplus, for example) is NOT hardcoded here: it travels
+// through `extraExempt`, which the target repo's workflow passes. Putting one
+// concrete repo's paths into the plugin would turn them into holes for everyone
+// else.
 export const LOOP_ARTIFACT_PATTERNS = [
-  // El kickoff ORDENA escribir aquí el plan del slice y commitearlo.
+  // The kickoff ORDERS the slice's plan to be written here and committed.
   'docs/superpowers/plans/**',
-  // El skill de brainstorming escribe aquí el design doc y el execution spec, y
-  // el slice rellena el «Registro de cierre (evidencia)» del spec al entregar.
+  // The brainstorming skill writes the design doc and the execution spec here,
+  // and the slice fills in the spec's «Registro de cierre (evidencia)» on
+  // delivering.
   //
-  // LÍMITE QUE HAY QUE DECIR EN VOZ ALTA: esta exención deja al agente escribir
-  // en el spec CONGELADO sin que el gate lo vea — y en el incidente del
-  // despacho 1 el agente metió ahí parte de su autorización falsa. El gate no
-  // puede cubrirlo: no juzga prosa, juzga ficheros. La inmutabilidad de las
-  // secciones congeladas del spec es una comprobación DISTINTA y está sin
-  // construir.
+  // A LIMIT THAT HAS TO BE SAID OUT LOUD: this exemption lets the agent write
+  // into the FROZEN spec without the gate seeing it — and in the incident of
+  // dispatch 1 the agent put part of its false authorisation in there. The gate
+  // cannot cover it: it does not judge prose, it judges files. The immutability
+  // of the spec's frozen sections is a DIFFERENT check and it is unbuilt.
   'docs/superpowers/specs/**',
-  // `ct-step verdict` escribe aquí el veredicto del juez cuando el ruling es
-  // PASS, lo stagea y lo deja DENTRO del commit de la tarea, porque el
-  // veredicto tiene que viajar en la pull request (criterio de cierre de F37:
-  // «el PR de un slice trae un veredicto emitido por un agente que no ejecutó
-  // nada»). El implementador no elige esa escritura y no puede evitarla, así
-  // que sin esta exención el gate se pone rojo en CUALQUIER epic que declare su
-  // línea `Alcance:` y pide algo imposible —«o el trabajo sale del PR, o el
-  // alcance del epic cambia»—, que es el muro insatisfacible de F14 otra vez.
+  // `ct-step verdict` writes the judge's verdict here when the ruling is PASS,
+  // stages it and leaves it INSIDE the task's commit, because the verdict has
+  // to travel in the pull request (F37's closure criterion: «el PR de un slice
+  // trae un veredicto emitido por un agente que no ejecutó nada»). The
+  // implementer does not choose that write and cannot avoid it, so without this
+  // exemption the gate goes red in ANY epic that declares its `Alcance:` line
+  // and asks for something impossible —«either the work leaves the PR, or the
+  // epic's scope changes»—, which is F14's unsatisfiable wall all over again.
   'docs/superpowers/verdicts/**',
-  // La telemetría del run: una fila por intento de cada paso de cada tarea. La
-  // escribe el loop, no el implementador, y por el mismo motivo que el
-  // veredicto va a dejar de vivir solo en el disco de quien la escribió para
-  // viajar en la pull request. La exención se pone ANTES de que llegue esa
-  // escritura a propósito: al revés, el primer slice que la produzca sale rojo
-  // por un fichero del loop y quien lea el gate no podrá distinguir si el rojo
-  // lo puso el agente o la maquinaria.
+  // The run's telemetry: one row per attempt of every step of every task. The
+  // loop writes it, not the implementer, and for the same reason as the verdict
+  // it is going to stop living only on the disk of whoever wrote it and start
+  // travelling in the pull request. The exemption is put in BEFORE that write
+  // arrives on purpose: the other way round, the first slice that produces it
+  // comes out red over a file of the loop's, and whoever reads the gate will not
+  // be able to tell whether the red was put there by the agent or by the
+  // machinery.
   'docs/superpowers/metrics/**',
-  // `ct-step e2e` ESCRIBE aquí el informe de la travesía y lo stagea, así que
-  // viaja en el commit de la slice. Directorio PROPIO y no el «Registro de
-  // cierre» del spec a propósito: esa exención (specs/**, arriba) es el agujero
-  // por el que, en el incidente del despacho 1, un agente metió parte de su
-  // autorización falsa — y meter por ahí justo la evidencia de que algo se
-  // verificó es la peor combinación posible. Aquí no escribe nadie más.
+  // `ct-step e2e` WRITES the journey's report here and stages it, so it
+  // travels in the slice's commit. Its OWN directory and not the spec's
+  // «Registro de cierre» on purpose: that exemption (specs/**, above) is the
+  // hole through which, in the incident of dispatch 1, an agent put part of its
+  // false authorisation — and putting precisely the evidence that something was
+  // verified through there is the worst possible combination. Nobody else writes
+  // here.
   'docs/superpowers/e2e/**',
 ]
 
@@ -108,21 +111,22 @@ function normalizePath(p) {
 }
 
 /**
- * parseScope: el alcance declarado por el epic, o la constancia de que no lo hay.
+ * parseScope: the scope the epic declared, or the record that there is none.
  *
- * `declared: false` NO significa «sin restricciones»: significa «no se puede
- * comprobar». Es la misma regla que el resto del plugin ya sostiene —el 1 nunca
- * se degrada a 0— y su efecto práctico es el que se busca: empujar la fricción
- * a la congelación en vez de descubrir el hueco cuando ya hay un PR abierto.
+ * `declared: false` does NOT mean «no restrictions»: it means «it cannot be
+ * checked». It is the same rule the rest of the plugin already holds —the 1
+ * never degrades to a 0— and its practical effect is the one being sought: push
+ * the friction to the freeze instead of discovering the gap when there is
+ * already an open PR.
  */
 export function parseScope(issueBody) {
   const texto = typeof issueBody === 'string' ? issueBody : ''
   const lineas = texto.split(/\r?\n/)
 
-  // Solo se mira DENTRO de `## Contexto del epic`, y la sección se corta en el
-  // siguiente encabezado de cualquier nivel: sin ese corte, un `Alcance:`
-  // escrito más abajo (en «Out of scope», por ejemplo) se leería como si
-  // perteneciera a esta sección.
+  // Only INSIDE `## Contexto del epic` is looked at, and the section is cut at
+  // the next heading of any level: without that cut, an `Alcance:` written
+  // further down (in «Out of scope», for example) would read as if it belonged
+  // to this section.
   let dentro = false
   const patterns = []
   for (const linea of lineas) {
@@ -131,23 +135,24 @@ export function parseScope(issueBody) {
     if (!dentro) continue
     const m = linea.match(SCOPE_LINE)
     if (!m) continue
-    // Cierre de la negrita del rótulo: en `- **Alcance:** apps/**` los dos
-    // asteriscos que cierran el `**Alcance:**` caen DESPUÉS de los dos puntos y
-    // se colarían al principio del valor.
+    // The closing of the label's bold: in `- **Alcance:** apps/**` the two
+    // asterisks that close the `**Alcance:**` fall AFTER the colon and would
+    // sneak into the start of the value.
     //
-    // Se quitan solo cuando van seguidos de espacio, y ese detalle es la
-    // diferencia entre arreglar el rótulo y romper un glob legítimo: el cierre
-    // de negrita siempre lleva espacio detrás (`** apps/…`), mientras que un
-    // patrón que empieza por `**` lleva siempre una barra (`**/*.swift`).
+    // They are removed only when followed by a space, and that detail is the
+    // difference between fixing the label and breaking a legitimate glob: the
+    // closing of the bold always carries a space behind it (`** apps/…`),
+    // whereas a pattern that starts with `**` always carries a slash
+    // (`**/*.swift`).
     const valor = m[1].replace(/^\*\*(?=\s)/, '')
     for (const trozo of valor.split(',')) {
-      // Se quitan los BACKTICKS y nada más. La tentación es quitar también los
-      // asteriscos de la negrita de Markdown, y es un bug: en el valor los
-      // asteriscos son el glob (`apps/ios/**`), no decoración. La primera
-      // versión de esta línea los borraba y convertía todos los patrones en
-      // prefijos de directorio en silencio — el gate seguía verde y comprobaba
-      // otra cosa. La negrita del ROTULO (`- **Alcance:**`) ya la absorbe
-      // SCOPE_LINE, así que aquí nunca llega.
+      // The BACKTICKS are removed and nothing else. The temptation is to remove
+      // Markdown's bold asterisks too, and that is a bug: in the value the
+      // asterisks are the glob (`apps/ios/**`), not decoration. The first
+      // version of this line deleted them and turned every pattern into a
+      // directory prefix in silence — the gate stayed green and checked
+      // something else. The LABEL's bold (`- **Alcance:**`) is already absorbed
+      // by SCOPE_LINE, so it never reaches here.
       const limpio = trozo.replace(/`/g, '').trim()
       if (limpio) patterns.push(limpio)
     }
@@ -164,18 +169,18 @@ export function parseScope(issueBody) {
 }
 
 /**
- * matchesPattern: el glob mínimo del gate, dicho entero para que nadie tenga
- * que adivinarlo leyendo el código.
+ * matchesPattern: the gate's minimal glob, said whole so that nobody has to
+ * guess it by reading the code.
  *
- *   `**`  cruza separadores de directorio (cero o más segmentos)
- *   `*`   NO cruza separadores
- *   `a/b` casa exacto
- *   `a/`  vale por el directorio entero (amabilidad: quien escribe el alcance
- *         en la congelación escribe el directorio, no el glob, y un rojo por
- *         sintaxis en ese momento es el peor momento posible)
+ *   `**`  crosses directory separators (zero or more segments)
+ *   `*`   does NOT cross separators
+ *   `a/b` matches exactly
+ *   `a/`  stands for the whole directory (a kindness: whoever writes the scope
+ *         at the freeze writes the directory, not the glob, and a red over
+ *         syntax at that moment is the worst possible moment)
  *
- * Todo lo demás es LITERAL. En particular el punto: sin escaparlo, `.github`
- * casaría con `Xgithub`.
+ * Everything else is LITERAL. The dot in particular: without escaping it,
+ * `.github` would match `Xgithub`.
  */
 export function matchesPattern(path, pattern) {
   const p = normalizePath(path)
@@ -183,16 +188,16 @@ export function matchesPattern(path, pattern) {
   if (!pat) return false
   if (pat.endsWith('/')) pat = `${pat}**`
 
-  // Se construye el regex trozo a trozo en vez de con reemplazos encadenados:
-  // encadenar reemplazos sobre `**` y `*` hace que el segundo pise lo que
-  // escribió el primero, que es el bug clásico de todo mini-glob.
+  // The regex is built piece by piece instead of with chained replacements:
+  // chaining replacements over `**` and `*` makes the second one trample what
+  // the first one wrote, which is the classic bug of every mini-glob.
   let re = '^'
   for (let i = 0; i < pat.length; i += 1) {
     const c = pat[i]
     if (c === '*') {
       if (pat[i + 1] === '*') {
-        // `**/` come también el separador, para que `a/**` case con `a/b` y con
-        // `a/b/c` sin pedir dos patrones.
+        // `**/` eats the separator too, so that `a/**` matches `a/b` and
+        // `a/b/c` without asking for two patterns.
         if (pat[i + 2] === '/') { re += '(?:.*/)?'; i += 2 } else { re += '.*'; i += 1 }
       } else {
         re += '[^/]*'
@@ -206,19 +211,19 @@ export function matchesPattern(path, pattern) {
 }
 
 /**
- * scopeViolations: los ficheros del PR que caen FUERA del alcance.
+ * scopeViolations: the PR's files that fall OUTSIDE the scope.
  *
- * Sin patrones devuelve TODOS los ficheros, nunca la lista vacía: un epic sin
- * alcance declarado no es un epic con barra libre. Devolver `[]` aquí dejaría
- * al llamante leyendo «nada que ver» sobre justo el caso que el gate existe
- * para cerrar.
+ * With no patterns it returns ALL the files, never the empty list: an epic with
+ * no declared scope is not an epic with a free run. Returning `[]` here would
+ * leave the caller reading «nothing to see» about precisely the case the gate
+ * exists to close.
  */
 export function scopeViolations(files, patterns, extraExempt = []) {
   const pats = Array.isArray(patterns) ? patterns.filter(Boolean) : []
-  // Las exenciones del plugin (lo que el loop obliga a commitear en CUALQUIER
-  // repo) más las que declare el repo destino en su workflow (su contabilidad
-  // propia). Se suman en vez de sustituirse: un repo no puede desactivar sin
-  // querer las del plugin al declarar la suya.
+  // The plugin's exemptions (what the loop forces to be committed in ANY repo)
+  // plus whatever the target repo declares in its workflow (its own
+  // bookkeeping). They add up instead of replacing one another: a repo cannot
+  // accidentally switch off the plugin's by declaring its own.
   const exentos = [...LOOP_ARTIFACT_PATTERNS, ...(Array.isArray(extraExempt) ? extraExempt.filter(Boolean) : [])]
   return (files || [])
     .map(normalizePath)
@@ -228,32 +233,34 @@ export function scopeViolations(files, patterns, extraExempt = []) {
 }
 
 /**
- * isSliceBranch: ¿esta rama la creó el dispatcher?
+ * isSliceBranch: did the dispatcher create this branch?
  *
- * `feat/<n>` es la convención del propio plugin (el `branchNameOf` por defecto
- * de dispatch.js). Existe para una sola decisión, y es la que salva al gate de
- * morir de ruido: un PR SIN closing keyword que viene de una rama de slice está
- * roto y sale rojo; uno que viene de cualquier otra rama simplemente no es
- * cosecha del loop y el gate no tiene nada que decir sobre él.
+ * `feat/<n>` is the plugin's own convention (dispatch.js's default
+ * `branchNameOf`). It exists for one single decision, and it is the one that
+ * saves the gate from dying of noise: a PR WITHOUT a closing keyword that comes
+ * from a slice branch is broken and comes out red; one that comes from any other
+ * branch simply is not the loop's harvest and the gate has nothing to say about
+ * it.
  *
- * Sin esta distinción, el gate suspendería TODOS los PRs humanos y de
- * documentación del repo — y un guard que solo se satisface desobedeciendo se
- * desactiva entero en un día. Es exactamente el fallo que conventions.js ya
- * pagó en este repo (F14): el muro insatisfacible.
+ * Without this distinction, the gate would fail ALL the repo's human and
+ * documentation PRs — and a guard that can only be satisfied by disobeying gets
+ * switched off whole in a day. It is exactly the failure conventions.js already
+ * paid for in this repo (F14): the unsatisfiable wall.
  */
 export function isSliceBranch(name) {
   return /^feat\/\d+$/.test(String(name || '').trim())
 }
 
 /**
- * issueFromPrBody: de qué issue es este PR, según su propia closing keyword.
+ * issueFromPrBody: which issue this PR belongs to, according to its own closing
+ * keyword.
  *
- * Se apoya en findClosingKeywords (closing-keywords.js) en vez de reimplementar
- * el reconocedor: dos reconocedores del mismo texto derivan, y ése ya está
- * endurecido contra el ReDoS que se midió en F27.
+ * It leans on findClosingKeywords (closing-keywords.js) instead of
+ * reimplementing the recogniser: two recognisers of the same text drift, and
+ * that one is already hardened against the ReDoS measured in F27.
  *
- * Dos issues cerrados por el mismo PR devuelven `null` en vez del primero: el
- * gate no elige en silencio cuál de los dos alcances aplica.
+ * Two issues closed by the same PR return `null` instead of the first one: the
+ * gate does not silently choose which of the two scopes applies.
  */
 export function issueFromPrBody(prBody) {
   const encontrados = findClosingKeywords(typeof prBody === 'string' ? prBody : '')

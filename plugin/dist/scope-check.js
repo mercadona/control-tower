@@ -32,41 +32,43 @@ var SECTION_HEADING = /^##\s+Contexto del epic\s*$/i;
 var ANY_HEADING = /^#{1,6}\s+/;
 var SCOPE_LINE = /^\s*[-*]?\s*\**\s*Alcance\s*\**\s*:\s*(.*)$/i;
 var LOOP_ARTIFACT_PATTERNS = [
-  // El kickoff ORDENA escribir aquí el plan del slice y commitearlo.
+  // The kickoff ORDERS the slice's plan to be written here and committed.
   "docs/superpowers/plans/**",
-  // El skill de brainstorming escribe aquí el design doc y el execution spec, y
-  // el slice rellena el «Registro de cierre (evidencia)» del spec al entregar.
+  // The brainstorming skill writes the design doc and the execution spec here,
+  // and the slice fills in the spec's «Registro de cierre (evidencia)» on
+  // delivering.
   //
-  // LÍMITE QUE HAY QUE DECIR EN VOZ ALTA: esta exención deja al agente escribir
-  // en el spec CONGELADO sin que el gate lo vea — y en el incidente del
-  // despacho 1 el agente metió ahí parte de su autorización falsa. El gate no
-  // puede cubrirlo: no juzga prosa, juzga ficheros. La inmutabilidad de las
-  // secciones congeladas del spec es una comprobación DISTINTA y está sin
-  // construir.
+  // A LIMIT THAT HAS TO BE SAID OUT LOUD: this exemption lets the agent write
+  // into the FROZEN spec without the gate seeing it — and in the incident of
+  // dispatch 1 the agent put part of its false authorisation in there. The gate
+  // cannot cover it: it does not judge prose, it judges files. The immutability
+  // of the spec's frozen sections is a DIFFERENT check and it is unbuilt.
   "docs/superpowers/specs/**",
-  // `ct-step verdict` escribe aquí el veredicto del juez cuando el ruling es
-  // PASS, lo stagea y lo deja DENTRO del commit de la tarea, porque el
-  // veredicto tiene que viajar en la pull request (criterio de cierre de F37:
-  // «el PR de un slice trae un veredicto emitido por un agente que no ejecutó
-  // nada»). El implementador no elige esa escritura y no puede evitarla, así
-  // que sin esta exención el gate se pone rojo en CUALQUIER epic que declare su
-  // línea `Alcance:` y pide algo imposible —«o el trabajo sale del PR, o el
-  // alcance del epic cambia»—, que es el muro insatisfacible de F14 otra vez.
+  // `ct-step verdict` writes the judge's verdict here when the ruling is PASS,
+  // stages it and leaves it INSIDE the task's commit, because the verdict has
+  // to travel in the pull request (F37's closure criterion: «el PR de un slice
+  // trae un veredicto emitido por un agente que no ejecutó nada»). The
+  // implementer does not choose that write and cannot avoid it, so without this
+  // exemption the gate goes red in ANY epic that declares its `Alcance:` line
+  // and asks for something impossible —«either the work leaves the PR, or the
+  // epic's scope changes»—, which is F14's unsatisfiable wall all over again.
   "docs/superpowers/verdicts/**",
-  // La telemetría del run: una fila por intento de cada paso de cada tarea. La
-  // escribe el loop, no el implementador, y por el mismo motivo que el
-  // veredicto va a dejar de vivir solo en el disco de quien la escribió para
-  // viajar en la pull request. La exención se pone ANTES de que llegue esa
-  // escritura a propósito: al revés, el primer slice que la produzca sale rojo
-  // por un fichero del loop y quien lea el gate no podrá distinguir si el rojo
-  // lo puso el agente o la maquinaria.
+  // The run's telemetry: one row per attempt of every step of every task. The
+  // loop writes it, not the implementer, and for the same reason as the verdict
+  // it is going to stop living only on the disk of whoever wrote it and start
+  // travelling in the pull request. The exemption is put in BEFORE that write
+  // arrives on purpose: the other way round, the first slice that produces it
+  // comes out red over a file of the loop's, and whoever reads the gate will not
+  // be able to tell whether the red was put there by the agent or by the
+  // machinery.
   "docs/superpowers/metrics/**",
-  // `ct-step e2e` ESCRIBE aquí el informe de la travesía y lo stagea, así que
-  // viaja en el commit de la slice. Directorio PROPIO y no el «Registro de
-  // cierre» del spec a propósito: esa exención (specs/**, arriba) es el agujero
-  // por el que, en el incidente del despacho 1, un agente metió parte de su
-  // autorización falsa — y meter por ahí justo la evidencia de que algo se
-  // verificó es la peor combinación posible. Aquí no escribe nadie más.
+  // `ct-step e2e` WRITES the journey's report here and stages it, so it
+  // travels in the slice's commit. Its OWN directory and not the spec's
+  // «Registro de cierre» on purpose: that exemption (specs/**, above) is the
+  // hole through which, in the incident of dispatch 1, an agent put part of its
+  // false authorisation — and putting precisely the evidence that something was
+  // verified through there is the worst possible combination. Nobody else writes
+  // here.
   "docs/superpowers/e2e/**"
 ];
 function normalizePath(p) {

@@ -493,7 +493,7 @@ export function analyzeSlicesTable(specMd) {
       // job is to deliver reliable cells.
       senal: (cells[iSenal] || '').trim(),
       // e2e: the RAW cell, unresolved — the same contract as `gate`, and for
-      // the same reason. The three states of this cell (traversals / the `no`
+      // the same reason. The three states of this cell (journeys / the `no`
       // token / not declared) are resolved by gates.js#resolveE2e; this parser
       // knows nothing about e2e just as it knows nothing about gates.
       e2e: (cells[iE2e] || '').trim(),

@@ -121,7 +121,7 @@ describe('F17/H1 — the kickoff asks for `Closes #N` in the body of the PR', ()
 // the agent obeys: the PR opened against the wrong branch.
 //
 // `gh pr create` with no `--base` points at the repo's default branch. But
-// ct-next.mjs accepts `--base <rama>` and creates the worktree with `git
+// ct-next.mjs accepts `--base <branch>` and creates the worktree with `git
 // worktree add -b feat/<n> <wt> <resolvedBase>`: if that base is NOT the
 // default branch, the agent would open the PR against the default branch — a
 // diff that is not its own. The kickoff did not tell it the base anywhere.
@@ -166,7 +166,7 @@ describe('F17/H1 — the kickoff names the base branch the PR is opened against'
 //   - PR #34, `Closes #32` in the body, merged with base `main` (the default
 //     branch) → issue #32 was left {"state":"CLOSED","stateReason":"COMPLETED"}.
 // That is: the closing keywords ONLY close the issue when the PR is merged into
-// the repo's DEFAULT branch. With `--base <otra-rama>`, an agent that obeys the
+// the repo's DEFAULT branch. With `--base <another-branch>`, an agent that obeys the
 // kickoff to the letter still leaves the issue open and the lane blocked — and
 // whoever reads the dispatcher's remedy ("al PR le faltaba el Closes #N") will
 // look at the PR, see the `Closes #N`, and dismiss the diagnosis.
@@ -245,7 +245,7 @@ describe('F17/H2 — the block reason is PRODUCT: stdout, in dry-run and for rea
     // If somebody moves the line to stderr without touching the criterion, this
     // test catches it: the code and its criterion cannot diverge in silence.
     const src = readFileSync(join(root, 'scripts', 'ct-next.mjs'), 'utf8')
-    expect(src).toMatch(/STDOUT = el PRODUCTO[\s\S]{0,400}motivo de bloqueo/)
+    expect(src).toMatch(/STDOUT = the PRODUCT[\s\S]{0,400}block reason/)
     expect(src).toMatch(/console\.log\(formatBlockReason\(/)
   })
 })

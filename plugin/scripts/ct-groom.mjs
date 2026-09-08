@@ -326,14 +326,15 @@ if (!report.tableFound) {
   }
 
   // ==========================================================================
-  // Slice 10 — LA COLUMNA `Señal`: la exención sin razón aborta FUERTE, por el
-  // precedente exacto del Gate desconocido — lo que no se puede leer no puede
-  // colar en silencio. Una exención `N/A` a secas no es "no declaro nada" (para
-  // eso está la celda vacía o el "–"): es una DECISIÓN de eximir al slice de
-  // prometer señal, y una decisión sin razón legible es una señal sin declarar
-  // disfrazada de decisión — el humano que groomea no puede aprobarla y el juez
-  // de slice no puede citarla como no-aplica. Va en `hardErrors`, es decir
-  // ANTES de la primera mutación y también bajo --dry-run.
+  // Slice 10 — THE `Señal` COLUMN: an exemption with no reason aborts HARD, by
+  // the exact precedent of the unknown Gate — what cannot be read cannot slip
+  // through in silence. A bare `N/A` exemption is not "I declare nothing" (the
+  // empty cell or the "–" is there for that): it is a DECISION to exempt the
+  // slice from promising a signal, and a decision with no legible reason is an
+  // undeclared signal dressed up as a decision — the human who grooms cannot
+  // approve it and the slice judge cannot cite it as not-applicable. It goes
+  // into `hardErrors`, that is, BEFORE the first mutation and also under
+  // --dry-run.
   const senalSinRazonRows = []
   for (const s of report.slices) {
     if (parseSenalCell(s.senal).kind === 'exencion-sin-razon') {
@@ -345,36 +346,37 @@ if (!report.tableFound) {
     hardErrors.push(`${senalSinRazonRows.length} fila(s) de la tabla de slices declaran en "Señal" una exención sin razón (ejemplo, slice #${first.n}: "${first.raw}") — una exención de señal se escribe "N/A — <razón>": la razón es lo que un humano aprueba en el groom y lo que el juez de slice cita como no-aplica. Si lo que quieres es no declarar nada, deja la celda vacía o con "–"; corrige esas filas y vuelve a intentarlo`)
   }
 
-  // Las CINCO condiciones de abort de la columna E2E. Todas comparten forma
-  // con las dos de `Gate` (arriba) y con el mismo criterio: /ct-groom valida
-  // TODO antes de escribir nada, y --dry-run comprueba exactamente lo mismo.
+  // The FIVE abort conditions of the E2E column. All of them share their shape
+  // with the two of `Gate` (above) and with the same criterion: /ct-groom
+  // validates EVERYTHING before writing anything, and --dry-run checks exactly
+  // the same.
   //
-  // La quinta (`e2eWaivedWithRunsRows`) llegó con la review final de rama, y
-  // corrige un juicio anterior de esa misma review que era FALSO. Se había
-  // dado por bueno que `Gate: !e2e` sobre una fila con recorridos era una
-  // configuración legítima que bastaba con avisar en voz alta
-  // (`e2eWaivedAdvisory`, ya borrado) porque "renunciaba al trabajo".
-  // Ejecutada la cadena entera con esa celda, no renuncia a NADA mecánico: la
-  // sección `## E2E` se sigue emitiendo en el issue (groom.js#buildIssueBody
-  // mira los recorridos, no los gates), el kickoff los sigue nombrando,
-  // /ct-next los sigue sembrando en `.agent/SLICE.md`, `ct-step` sigue
-  // entrando en `STEPS.E2E` y `--release` sigue exigiendo la
-  // correspondencia. Lo ÚNICO que se pierde es la label — o sea, la señal
-  // para el humano.
+  // The fifth one (`e2eWaivedWithRunsRows`) arrived with the final branch
+  // review, and corrects an earlier judgement of that same review that was
+  // FALSE. It had been accepted that `Gate: !e2e` over a row with runs was a
+  // legitimate configuration that it was enough to warn about out loud
+  // (`e2eWaivedAdvisory`, already deleted) because it "gave up the work".
+  // With the whole chain run against that cell, it gives up NOTHING
+  // mechanical: the `## E2E` section is still emitted into the issue
+  // (groom.js#buildIssueBody looks at the runs, not at the gates), the kickoff
+  // still names them, /ct-next still seeds them into `.agent/SLICE.md`,
+  // `ct-step` still enters `STEPS.E2E` and `--release` still demands the
+  // correspondence. The ONLY thing that is lost is the label — that is, the
+  // signal for the human.
   //
-  // Una renuncia que no renuncia a nada es una contradicción entre dos celdas
-  // de la misma fila, que es exactamente lo que las otras cuatro se niegan a
-  // resolver en silencio. Y no deja al autor sin salida: la forma de decir
-  // "este slice no tiene e2e" YA EXISTE y es la celda — se escribe `no`. Así
-  // que `!e2e` es redundante en el mejor caso y falso en el peor.
+  // A waiver that waives nothing is a contradiction between two cells of the
+  // same row, which is exactly what the other four refuse to resolve in
+  // silence. And it does not leave the author without a way out: the way to
+  // say "this slice has no e2e" ALREADY EXISTS and it is the cell — you write
+  // `no`. So `!e2e` is redundant at best and false at worst.
   //
-  // Review round 2 (finding 2): las tres primeras versiones de estos mensajes
-  // sólo nombraban la fila ("slice #N"), nunca lo que había escrito en la
-  // celda — a diferencia de las dos de `Gate` de arriba, que sí citan el
-  // token literal. "slice #5 tiene un problema" manda al autor a buscarlo;
-  // citar la celda se lo pone delante. `quoteCell` normaliza el caso vacío
-  // (nunca imprimir "" a secas) porque una celda vacía y una con espacios en
-  // blanco son indistinguibles a simple vista sin decirlo explícitamente.
+  // Review round 2 (finding 2): the first three versions of these messages
+  // only named the row ("slice #N"), never what had been written in the cell —
+  // unlike the two of `Gate` above, which do cite the literal token. "slice #5
+  // has a problem" sends the author off to look for it; citing the cell puts
+  // it in front of them. `quoteCell` normalises the empty case (never printing
+  // a bare "") because an empty cell and one with whitespace in it are
+  // indistinguishable at a glance unless you say so explicitly.
   const quoteCell = (raw) => {
     const trimmed = String(raw ?? '').trim()
     return trimmed ? `"${trimmed}"` : '(vacía)'
@@ -385,10 +387,10 @@ if (!report.tableFound) {
   const e2eWaivedWithRunsRows = []
   for (const s of report.slices) {
     const r = resolveE2e(s.e2e)
-    // Sólo se exige decisión si la COLUMNA existe: un spec anterior a esta
-    // ronda no la tiene, y ahí "no declarado" es el estado correcto de todas
-    // sus filas. La columna presente es el compromiso; ausente, no hay nada
-    // que reprochar.
+    // A decision is only demanded if the COLUMN exists: a spec older than this
+    // round does not have it, and there "not declared" is the correct state of
+    // all of its rows. The column being present is the commitment; absent,
+    // there is nothing to reproach.
     if (report.e2eColumnPresent && !r.declared) e2eUndeclaredRows.push({ n: s.n, cell: s.e2e })
     if (r.contradiction) e2eContradictoryRows.push({ n: s.n, cell: s.e2e })
     if (parseGateCell(s.gate).add.includes('e2e') && r.runs.length === 0) e2eGateWithoutRunsRows.push({ n: s.n, none: r.none, gateCell: s.gate, e2eCell: s.e2e })
@@ -425,88 +427,88 @@ if (hardErrors.length) {
   process.exit(2)
 }
 
-// Columnas opcionales ausentes (Tipo/Acepta/Protegido/Área/Toca): degradan el
-// issue creado (sin label type:, sin AC, sin Protegido explícito, o con la
-// maquinaria de colisión/serialización inerte para estos slices) pero no
-// impiden crear issues razonables — se avisa por stderr y se continúa, no se
-// aborta.
+// Absent optional columns (Tipo/Acepta/Protegido/Área/Toca): they degrade the
+// issue that gets created (with no type: label, no AC, no explicit Protegido,
+// or with the collision/serialisation machinery inert for these slices) but
+// they do not prevent creating reasonable issues — a warning goes to stderr
+// and it carries on, it does not abort.
 const OPTIONAL_COLUMN_CONSEQUENCE = {
   Tipo: 'los issues se crearán sin label "type:"',
-  // F3: "Entrega" se une a esta lista — ya no es obligatoria (el título
-  // sale de "Slice"), así que su ausencia degrada en vez de abortar, igual
-  // que Tipo/Acepta/Protegido/Área/Toca.
+  // F3: "Entrega" joins this list — it is no longer mandatory (the title
+  // comes out of "Slice"), so its absence degrades instead of aborting, just
+  // like Tipo/Acepta/Protegido/Área/Toca.
   Entrega: 'los issues se crearán sin sección "Descripción" en el cuerpo',
   Acepta: 'los issues se crearán sin criterios de aceptación',
   Protegido: 'los issues se crearán sin sección "Protegido" explícita',
   'Área': 'la maquinaria de colisión (claim.js#tokensOf) queda inerte para todos los slices de este epic',
   Toca: 'la serialización de touches (dispatch.js#SERIALIZING_TOUCHES) queda inerte para todos los slices de este epic',
-  // Slice 10: a diferencia de `Gate` (cuya ausencia no degrada nada y por eso
-  // NO entra en esta lista), la ausencia de `Señal` degrada algo medible — el
-  // tercer ítem del juez de slice sale sin-vara en todo el epic, y esa cuenta
-  // viaja en la telemetría (rubric_sin_vara).
+  // Slice 10: unlike `Gate` (whose absence degrades nothing, which is why it
+  // is NOT on this list), the absence of `Señal` degrades something
+  // measurable — the slice judge's third item comes out sin-vara across the
+  // whole epic, and that count travels in the telemetry (rubric_sin_vara).
   'Señal': 'los issues se crearán sin sección "## Señal de observabilidad" — el juez de slice medirá su ítem observabilidad como sin-vara en todos los slices de este epic',
 }
 for (const col of report.missingOptionalColumns) {
   console.error(`aviso: la tabla §9 no tiene columna "${col}" — ${OPTIONAL_COLUMN_CONSEQUENCE[col] || 'se omite esa información en los issues'}`)
 }
 
-// F5 (review, punto 2): el spec es autoridad de un prefijo de label
-// (`type:`/`area:`/`touches:`) SOLO si la tabla §9 trae la columna que lo
-// alimenta (Tipo/Área/Toca) — sin la columna, el spec no tiene NINGUNA
-// opinión sobre ese prefijo, y reclamarla igual reportaría como "sobra" una
-// label que un humano puso a mano por su cuenta (ruido que entrena a
-// ignorar el resto del reporte de divergencia, ver reconcile.js). Se deriva
-// de `report.missingOptionalColumns` (ya calculado arriba para el aviso de
-// columna ausente) en vez de mantener una segunda comprobación — una sola
-// fuente de verdad de "qué columnas trae esta tabla".
+// F5 (review, point 2): the spec is authoritative over a label prefix
+// (`type:`/`area:`/`touches:`) ONLY if the §9 table carries the column that
+// feeds it (Tipo/Área/Toca) — without the column, the spec has NO opinion at
+// all about that prefix, and claiming one anyway would report as "left over" a
+// label a human put on by hand on their own account (noise that trains you to
+// ignore the rest of the divergence report, see reconcile.js). It is derived
+// from `report.missingOptionalColumns` (already computed above for the absent
+// column warning) instead of keeping a second check — a single source of truth
+// for "which columns this table carries".
 const ownedLabelPrefixes = []
 if (!report.missingOptionalColumns.includes('Tipo')) ownedLabelPrefixes.push('type:')
 if (!report.missingOptionalColumns.includes('Área')) ownedLabelPrefixes.push('area:')
 if (!report.missingOptionalColumns.includes('Toca')) ownedLabelPrefixes.push('touches:')
-// F21 — `gate:` sigue la misma regla, con una fuente doble: el spec tiene una
-// opinión sobre los gates de un slice si trae la columna `Gate` (declaración
-// explícita) O si trae la columna `Tipo` (los gates que el tipo implica —
-// gates.js#TYPE_GATES). Sin ninguna de las dos, el spec no produce ninguna
-// label `gate:` y no debe reclamar autoridad sobre una que un humano haya
-// puesto a mano. Con cualquiera de las dos sí: un issue que conserva un
-// `gate:visual` que el spec ya no produce es una divergencia real, y de las
-// que importan — es un gate humano que alguien va a esperar y nadie va a
-// pedir (o al revés).
+// F21 — `gate:` follows the same rule, with a double source: the spec has an
+// opinion about a slice's gates if it carries the `Gate` column (an explicit
+// declaration) OR if it carries the `Tipo` column (the gates the type implies —
+// gates.js#TYPE_GATES). With neither of the two, the spec produces no `gate:`
+// label at all and must not claim authority over one a human put on by hand.
+// With either of the two it does: an issue that keeps a `gate:visual` the spec
+// no longer produces is a real divergence, and one of the ones that matter — it
+// is a human gate somebody is going to expect and nobody is going to ask for
+// (or the other way round).
 if (report.gateColumnPresent || !report.missingOptionalColumns.includes('Tipo')) ownedLabelPrefixes.push('gate:')
-// F3: "Tipo" decide, además de la label "type:<valor>", qué addendum recibe
-// el agente despachado — kickoff.js#renderKickoff hace
-// `ADDENDA[slice.type] || ''` en silencio, así que un valor que no sea
-// ninguna key de ADDENDA (p.ej. "ios"/"swift" para un slice de UI real, en
-// vez de "ui") deja al agente SIN el addendum correspondiente — grave en
-// concreto para "ui", cuyo addendum impone el gate de screenshot
-// obligatorio — sin que nada lo señale. Se avisa, no se aborta: el valor
-// sigue siendo una label "type:" legítima aunque no tenga addendum (p.ej.
-// un tipo nuevo que aún no se ha añadido a ADDENDA a propósito).
+// F3: "Tipo" decides, on top of the "type:<value>" label, which addendum the
+// dispatched agent receives — kickoff.js#renderKickoff does
+// `ADDENDA[slice.type] || ''` silently, so a value that is not a key of
+// ADDENDA (e.g. "ios"/"swift" for what is really a UI slice, instead of "ui")
+// leaves the agent WITHOUT the corresponding addendum — serious in particular
+// for "ui", whose addendum imposes the mandatory screenshot gate — with
+// nothing at all flagging it. It warns, it does not abort: the value is still
+// a legitimate "type:" label even with no addendum (e.g. a new type that has
+// deliberately not been added to ADDENDA yet).
 //
-// KNOWN_TYPES se deriva de `Object.keys(ADDENDA)` (kickoff.js) en vez de
-// mantener una segunda lista hardcodeada aquí: ADDENDA sigue siendo la
-// ÚNICA fuente de verdad de qué tipos tienen addendum — añadir uno nuevo
-// ahí (o corregir el nombre de uno existente) se refleja en este aviso sin
-// tocar este fichero, así las dos listas no pueden divergir.
+// KNOWN_TYPES is derived from `Object.keys(ADDENDA)` (kickoff.js) instead of
+// keeping a second hardcoded list here: ADDENDA remains the ONLY source of
+// truth for which types have an addendum — adding a new one there (or
+// correcting the name of an existing one) shows up in this warning without
+// touching this file, so the two lists cannot diverge.
 const KNOWN_TYPES = Object.keys(ADDENDA)
 for (const s of report.slices) {
-  // Review de F3, finding 1: un marcador de "sin valor" en "Tipo" ("–", "-",
-  // "—", etc. — isNoValueCell, el MISMO criterio que ya usan Dep/Acepta/
-  // Protegido/Área/Toca) significa "sin tipo", no un valor desconocido. Sin
-  // este chequeo, este aviso acusaba de error tipográfico a un autor que
-  // escribió exactamente el marcador que el propio contrato enseña a usar
-  // en todas las demás columnas ("revisa si es un error tipográfico" sobre
-  // un "–" es ruido, no señal). buildLabels (groom.js) ya trata este mismo
-  // marcador como "sin type:" — coherente con eso.
+  // F3 review, finding 1: a "no value" marker in "Tipo" ("–", "-", "—", etc.
+  // — isNoValueCell, the SAME criterion Dep/Acepta/Protegido/Área/Toca already
+  // use) means "no type", not an unknown value. Without this check, this
+  // warning accused of a typo an author who wrote exactly the marker the
+  // contract itself teaches you to use in every other column ("check whether
+  // it is a typo" over a "–" is noise, not signal). buildLabels (groom.js)
+  // already treats this same marker as "no type:" — coherent with that.
   if (s.type && !isNoValueCell(s.type) && !KNOWN_TYPES.includes(s.type)) {
-    // F21: este aviso nombra ahora la SEGUNDA consecuencia, que hasta esta
-    // ronda no existía y es más grave que la primera. Un `Tipo` con una errata
-    // (`UI` en vez de `ui`, `ios` en vez de `ui`) no solo se queda sin
-    // addendum: se queda además sin los GATES que ese tipo implicaría — la
-    // comparación es exacta también en gates.js#TYPE_GATES. Callar la mitad
-    // "gate" de la consecuencia sería reintroducir en este aviso el mismo
-    // problema que la columna `Gate` viene a cerrar. Se dice cuál sería el
-    // gate perdido cuando el valor se parece a un tipo que sí implica alguno.
+    // F21: this warning now names the SECOND consequence, which did not exist
+    // until this round and is worse than the first. A `Tipo` with a typo in it
+    // (`UI` instead of `ui`, `ios` instead of `ui`) is not only left without
+    // an addendum: it is also left without the GATES that type would imply —
+    // the comparison is exact in gates.js#TYPE_GATES too. Keeping quiet about
+    // the "gate" half of the consequence would reintroduce into this warning
+    // the very problem the `Gate` column comes to close. It says which gate
+    // would be the lost one when the value resembles a type that does imply
+    // some.
     const gateNote = Object.keys(TYPE_GATES).length
       ? ` — y tampoco los gates humanos que un Tipo reconocido implicaría (${Object.entries(TYPE_GATES).map(([t, gs]) => `${t}→${gs.join('/')}`).join(', ')}): si este slice necesita alguno, decláralo en la columna "Gate"`
       : ''
@@ -514,67 +516,67 @@ for (const s of report.slices) {
   }
 }
 // ============================================================================
-// F21 — LOS GATES, DICHOS EN VOZ ALTA. El encargo no era solo "que se pueda
-// declarar un gate": era que el sistema lo DIGA. Quien groomea tiene que ver,
-// sin ir a buscarlo, que un slice lleva un gate que no viene de su `Tipo` —y
-// sobre todo que a un slice le han QUITADO uno—, porque las dos cosas son
-// decisiones sobre qué se comprueba antes de mergear y ninguna de las dos debe
-// poder colarse en un diff de spec sin que nadie la lea.
+// F21 — THE GATES, SAID OUT LOUD. The remit was not just "that a gate can be
+// declared": it was that the system SAY IT. Whoever grooms has to see, without
+// going looking for it, that a slice carries a gate that does not come from its
+// `Tipo` —and above all that a slice has had one TAKEN AWAY—, because both
+// things are decisions about what gets checked before merging and neither of
+// them must be able to slip through a spec diff without anyone reading it.
 //
-// Los cuatro avisos van por stderr y NO abortan: los cuatro describen
-// configuraciones legítimas (o inocuas), a diferencia de los dos hardErrors de
-// más arriba. Solo se habla cuando hay algo que decir — un slice cuyos gates
-// salen tal cual de su `Tipo` (el caso masivamente mayoritario) no imprime
-// nada, que es lo que mantiene útiles a los que sí salen.
+// The four warnings go to stderr and do NOT abort: all four describe legitimate
+// (or harmless) configurations, unlike the two hardErrors further up. It only
+// speaks when there is something to say — a slice whose gates come straight out
+// of its `Tipo` (the massively most common case) prints nothing, which is what
+// keeps the ones that do come out useful.
 // ============================================================================
-// e2eAddedAdvisory (task "e2e al cierre del slice", adición 2): el mensaje
-// genérico de `g.added` dice "es deliberado (para eso está la columna
-// "Gate")" — FALSO para `e2e`, que no se declara ahí: se DERIVA de que la fila
-// traiga recorridos en la columna "E2E", y escribirlo a mano en "Gate" es uno
-// de los cuatro aborts que la columna E2E ya construyó (ver
-// e2eGateWithoutRunsRows, arriba). Un aviso que manda al autor a la columna
-// equivocada es peor que ningún aviso, así que este texto nombra "E2E" y
-// nunca "Gate".
+// e2eAddedAdvisory (task "e2e at the close of the slice", addition 2): the
+// generic message of `g.added` says "it is deliberate (that is what the "Gate"
+// column is for)" — FALSE for `e2e`, which is not declared there: it is DERIVED
+// from the row carrying runs in the "E2E" column, and writing it by hand in
+// "Gate" is one of the four aborts the E2E column already built (see
+// e2eGateWithoutRunsRows, above). A warning that sends the author to the wrong
+// column is worse than no warning, so this text names "E2E" and never "Gate".
 //
-// Por qué vive en una función y se llama desde DOS sitios: `e2e` nunca lo
-// implica ningún `Tipo` (no vive en TYPE_GATES), así que `resolveGates` lo
-// clasifica como "implied" (silencioso, igual que un gate de Tipo) en vez de
-// "added" en el caso normal (fila con recorridos, sin nada escrito a mano en
-// "Gate") — y por tanto el bucle de `g.added`, de abajo, nunca lo ve en ese
-// caso, que es el único que ocurre en la práctica (el otro, "Gate: e2e" a
-// mano, ya aborta antes de llegar aquí). Sin el segundo disparador, pasar
-// `s.e2e` a `resolveGates` (adición 1) no cambiaría nada visible: el gate
-// seguiría llegando al issue por las labels y el reporte de groom seguiría sin
-// mencionarlo — exactamente la fuga que F21 cerró para "Gate", reabierta para
-// "E2E".
+// Why it lives in a function and is called from TWO places: `e2e` is never
+// implied by any `Tipo` (it does not live in TYPE_GATES), so `resolveGates`
+// classifies it as "implied" (silent, just like a Tipo gate) instead of
+// "added" in the normal case (a row with runs, with nothing written by hand in
+// "Gate") — and therefore the `g.added` loop, below, never sees it in that
+// case, which is the only one that occurs in practice (the other, "Gate: e2e"
+// by hand, already aborts before getting here). Without the second trigger,
+// passing `s.e2e` to `resolveGates` (addition 1) would change nothing visible:
+// the gate would still reach the issue through the labels and the groom report
+// would still not mention it — exactly the leak F21 closed for "Gate",
+// reopened for "E2E".
 function e2eAddedAdvisory(n) {
   return `aviso: el slice #${n} lleva el gate "e2e" porque su fila declara recorridos en la columna "E2E" (no en "Gate": ese gate no se declara ahí, se DERIVA) — se dice en voz alta porque cambia lo que hay que comprobar antes de mergear: el issue llevará la label "gate:e2e", el agente despachado recibirá la instrucción, y quien revise el PR tiene que cerrarlo`
 }
 
-// e2eRedundantAdvisory / e2eInertWaiverAdvisory (review de la adición 2,
-// finding 1 y 2): los mismos "es deliberado (para eso está la columna Gate)" /
-// "su Tipo no implica ese gate" son FALSOS para `e2e` en
-// `redundant`/`inertWaivers`, exactamente por el motivo que ya cerró `added` —
-// y en el caso de `redundant`, la review encontró que una fila con `Gate: e2e`
-// MÁS recorridos reales imprime a la vez `e2eAddedAdvisory` (correcta) y el
-// mensaje genérico de `redundant` (que dice "su Tipo ya implica" el gate): dos
-// afirmaciones contradictorias sobre el MISMO gate, tres líneas de stderr
-// aparte. Ninguna de las dos clasificaciones depende del `Tipo` para `e2e` —
-// dependen de si la fila declara recorridos en "E2E", así que los dos textos
-// nombran esa columna.
+// e2eRedundantAdvisory / e2eInertWaiverAdvisory (review of addition 2,
+// findings 1 and 2): the same "it is deliberate (that is what the Gate column
+// is for)" / "its Tipo does not imply that gate" are FALSE for `e2e` in
+// `redundant`/`inertWaivers`, for exactly the reason that already closed
+// `added` — and in the case of `redundant`, the review found that a row with
+// `Gate: e2e` PLUS real runs prints both `e2eAddedAdvisory` (correct) and the
+// generic `redundant` message (which says "its Tipo already implies" the
+// gate): two contradictory claims about the SAME gate, three lines of stderr
+// apart. Neither of the two classifications depends on the `Tipo` for `e2e` —
+// they depend on whether the row declares runs in "E2E", so both texts name
+// that column.
 //
-// Había un tercero, `e2eWaivedAdvisory`, para `g.waived`. Se borró con el
-// quinto abort (arriba): `waived` sólo contiene `e2e` cuando la fila declara
-// recorridos —es la definición de `waived`: renuncia a algo IMPLICADO, y `e2e`
-// sólo se implica con recorridos— y ese caso ya no llega hasta aquí, porque
-// aborta. Aparte de inalcanzable, su texto afirmaba dos cosas falsas ("esos
-// recorridos NO se le pedirán al agente" y "nadie los atravesará antes de
-// mergear"): la renuncia no quitaba el trabajo, sólo la label.
+// There was a third one, `e2eWaivedAdvisory`, for `g.waived`. It was deleted
+// along with the fifth abort (above): `waived` only contains `e2e` when the row
+// declares runs —that is the definition of `waived`: waiving something IMPLIED,
+// and `e2e` is only implied by runs— and that case no longer gets here, because
+// it aborts. Besides being unreachable, its text claimed two false things
+// ("those runs will NOT be asked of the agent" and "nobody will walk through
+// them before merging"): the waiver did not remove the work, only the label.
 //
-// `e2eInertWaiverAdvisory` SÍ sobrevive, y no por inercia: `inertWaivers` es
-// la renuncia a un gate NO implicado, o sea `!e2e` sobre una fila SIN
-// recorridos (celda "no", o columna ausente). Eso no aborta —no hay ninguna
-// contradicción: no había e2e que quitar— y su texto ya decía exactamente eso.
+// `e2eInertWaiverAdvisory` DOES survive, and not out of inertia:
+// `inertWaivers` is the waiving of a gate that is NOT implied, that is, `!e2e`
+// over a row WITHOUT runs (cell "no", or the column absent). That does not
+// abort —there is no contradiction: there was no e2e to remove— and its text
+// already said exactly that.
 function e2eRedundantAdvisory(n, gateCell) {
   return `aviso: el slice #${n} declara el gate "e2e" (celda "Gate": "${gateCell}"), pero su fila YA lo lleva porque declara recorridos en la columna "E2E" — es redundante, no un error: el resultado es el mismo con la celda "Gate" vacía`
 }
@@ -589,16 +591,16 @@ for (const s of report.slices) {
     if (gate === 'e2e') { console.error(e2eAddedAdvisory(s.n)); continue }
     console.error(`aviso: el slice #${s.n} declara el gate "${gate}", que su Tipo ${typeRef} no implica — es deliberado (para eso está la columna "Gate"), y se dice en voz alta porque cambia lo que hay que comprobar antes de mergear: el issue llevará la label "gate:${gate}", el agente despachado recibirá la instrucción, y quien revise el PR tiene que cerrarlo`)
   }
-  // El caso REAL (ver el comentario de `e2eAddedAdvisory`): con recorridos y
-  // sin nada escrito a mano en "Gate", `e2e` sale en `implied`, no en
-  // `added`. `g.added.includes('e2e')` es inalcanzable en una corrida que
-  // pase de los hardErrors (ver arriba), pero se comprueba igual para no
-  // anunciar el mismo gate dos veces si alguna vez dejara de serlo.
+  // The REAL case (see the comment of `e2eAddedAdvisory`): with runs and with
+  // nothing written by hand in "Gate", `e2e` comes out in `implied`, not in
+  // `added`. `g.added.includes('e2e')` is unreachable in a run that gets past
+  // the hardErrors (see above), but it is checked anyway so as not to announce
+  // the same gate twice if it ever stopped being unreachable.
   if (g.implied.includes('e2e') && !g.added.includes('e2e')) console.error(e2eAddedAdvisory(s.n))
-  // `e2e` no puede aparecer aquí: `waived` implica recorridos declarados, y esa
-  // fila aborta antes de llegar (quinto abort). Sin rama especial, entonces —
-  // el mensaje genérico habla del `Tipo`, y para `e2e` sería falso, pero no hay
-  // ninguna corrida que lo alcance.
+  // `e2e` cannot appear here: `waived` implies declared runs, and that row
+  // aborts before getting here (the fifth abort). No special branch, then — the
+  // generic message talks about the `Tipo`, and for `e2e` it would be false,
+  // but there is no run that reaches it.
   for (const gate of g.waived) {
     console.error(`aviso: el slice #${s.n} RENUNCIA al gate "${gate}" que implica su Tipo ${typeRef} (celda "Gate": "${s.gate}") — ese gate NO se le pedirá al agente, no aparecerá como label del issue y nadie lo comprobará antes de mergear. Si no era eso lo que querías, quita el "!" de esa celda`)
   }
@@ -612,44 +614,45 @@ for (const s of report.slices) {
   }
 }
 
-// Valores de Área/Toca con el prefijo de LA OTRA columna (p.ej. "area:x"
-// dentro de Toca): se toleró el valor (no se descartó), pero probablemente
-// sea un despiste de columna — se avisa para que el autor pueda revisar.
+// Values of Área/Toca carrying THE OTHER column's prefix (e.g. "area:x"
+// inside Toca): the value was tolerated (it was not discarded), but it is
+// probably a column slip — a warning goes out so the author can check.
 for (const w of report.prefixWarnings) {
   console.error(`aviso: valor "${w.raw}" en columna ${w.column} (slice #${w.n}) trae el prefijo "${w.otherPrefix}:" de la otra columna — se ha usado el valor igualmente, revisa si está en la columna correcta`)
 }
-// Punto 6 de la review de F1: un valor de Área/Toca que, tras quitar
-// prefijo/marcado y normalizar, queda vacío (p.ej. "area:" sin nada detrás,
-// o "???" sin ningún carácter label-safe) se descartaba sin avisar — la
-// misma inercia de colisión/serialización que el aviso de columna ausente
-// de arriba, pero por celda. Coherente con ese mismo estándar: se avisa,
-// no se aborta (el resto del slice sigue siendo válido).
+// Point 6 of the F1 review: a value of Área/Toca that, once the
+// prefix/markup is stripped and it is normalised, comes out empty (e.g.
+// "area:" with nothing behind it, or "???" with no label-safe character at
+// all) used to be discarded without warning — the same collision/serialisation
+// inertia as the absent-column warning above, but per cell. Coherent with that
+// same standard: it warns, it does not abort (the rest of the slice is still
+// valid).
 for (const w of report.emptyTokenWarnings) {
   const labelPrefix = w.column === 'Área' ? 'area:' : 'touches:'
   console.error(`aviso: valor "${w.raw}" en columna ${w.column} (slice #${w.n}) queda vacío tras normalizar — no se genera ninguna label "${labelPrefix}" para ese valor, la maquinaria de colisión/serialización queda inerte para ese slice`)
 }
 
-// F10 — el enlace al spec. Se resuelve AQUÍ, una sola vez por corrida (la
-// ruta y la sección son las mismas para todos los slices), y ANTES de la rama
-// de --dry-run: el preview tiene que enseñar el MISMO body que escribiría la
-// corrida real, incluidos sus avisos. Es la misma regla que F1 fijó para la
-// validación de la tabla y F5 para la detección de divergencia — un dry-run
-// que informa de menos que la corrida real es una trampa.
+// F10 — the link to the spec. It is resolved HERE, once per run (the path and
+// the section are the same for every slice), and BEFORE the --dry-run branch:
+// the preview has to show the SAME body the real run would write, its warnings
+// included. It is the same rule F1 fixed for the validation of the table and F5
+// for the detection of divergence — a dry-run that reports less than the real
+// run is a trap.
 //
-// `runForSpecLink` mantiene stderr en 'pipe' (no 'inherit', a diferencia de
-// `gh()` más abajo): TODOS los fallos de aquí son casos previstos que este
-// script traduce a un aviso propio y legible (el spec no está en un repo, no
-// tiene remoto, no está empujado…), así que dejar salir además el error crudo
-// de git/gh solo añadiría ruido a algo que ya se está explicando.
+// `runForSpecLink` keeps stderr at 'pipe' (not 'inherit', unlike `gh()`
+// further down): ALL of the failures here are foreseen cases this script
+// translates into a legible warning of its own (the spec is not in a repo, it
+// has no remote, it has not been pushed…), so also letting git/gh's raw error
+// out would only add noise to something that is already being explained.
 const SPEC_LINK_MAX_BUFFER = 20 * 1024 * 1024
 const runForSpecLink = (cmd, args) =>
   execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: SPEC_LINK_MAX_BUFFER }).trim()
-// realpathSync: `git -C <dir> rev-parse --show-toplevel` devuelve la raíz ya
-// resuelta de enlaces simbólicos, así que sin resolver también el spec la
-// resta de rutas daría "fuera del repo" para cualquiera que trabaje bajo un
-// symlink (en macOS, /tmp -> /private/tmp lo hace saltar a diario). Si el
-// realpath falla (fichero borrado entre el readFileSync de arriba y esto),
-// se sigue con la ruta absoluta a secas: resolveSpecRef degrada sola.
+// realpathSync: `git -C <dir> rev-parse --show-toplevel` returns the root with
+// symbolic links already resolved, so without resolving the spec too the
+// subtraction of paths would say "outside the repo" for anyone working under a
+// symlink (on macOS, /tmp -> /private/tmp makes it fire daily). If the realpath
+// fails (the file deleted between the readFileSync above and this), it carries
+// on with the bare absolute path: resolveSpecRef degrades on its own.
 let specAbsPath
 try { specAbsPath = realpathSync(resolvePath(specFile)) } catch { specAbsPath = resolvePath(specFile) }
 const { ref: specRef, warnings: specLinkWarnings } = resolveSpecRef({
@@ -661,26 +664,27 @@ const { ref: specRef, warnings: specLinkWarnings } = resolveSpecRef({
 })
 for (const w of specLinkWarnings) console.error(w)
 
-// El contexto común del epic: una sección del spec, fuera de la tabla de
-// slices, cuyo texto viaja idéntico al cuerpo de cada issue. Sus avisos se
-// imprimen aquí, junto a los del enlace al spec, y NUNCA abortan: un spec sin
-// esa sección es un spec válido, y bloquear un groom entero por una sección
-// opcional malformada sería desproporcionado. El remedio va dentro del aviso.
+// The epic's shared context: a section of the spec, outside the slices table,
+// whose text travels identically into the body of every issue. Its warnings are
+// printed here, alongside those of the link to the spec, and they NEVER abort:
+// a spec without that section is a valid spec, and blocking a whole groom over
+// a malformed optional section would be disproportionate. The remedy travels
+// inside the warning.
 const { content: epicContext, reason: epicContextReason, warnings: epicContextWarnings } = readEpicContext(specMd)
 for (const w of epicContextWarnings) console.error(w)
 
-// Decisiones congeladas: mismo tratamiento que el contexto del epic — se lee
-// del spec por su cabecera y sus avisos se imprimen aquí, sin abortar nunca (un
-// spec sin la sección es válido; el remedio va dentro del aviso).
+// Frozen decisions: the same treatment as the epic context — it is read from
+// the spec by its heading and its warnings are printed here, never aborting (a
+// spec without the section is valid; the remedy travels inside the warning).
 const { content: frozenDecisions, reason: frozenDecisionsReason, warnings: frozenDecisionsWarnings } = readFrozenDecisions(specMd)
 for (const w of frozenDecisionsWarnings) console.error(w)
 
 const slices = report.slices
-// groomPlan lanza si hay órdenes de slice duplicados en la tabla §9 (T14/W-A):
-// se captura aquí y se reporta con la misma convención que el resto de errores
-// de validación de este wrapper (spec inexistente, --milestone/--project/
-// --repo inválidos) — mensaje limpio por console.error + exit(2), nunca el
-// stack trace crudo de una excepción sin capturar.
+// groomPlan throws if there are duplicated slice orders in the §9 table
+// (T14/W-A): it is caught here and reported with the same convention as the
+// rest of this wrapper's validation errors (a non-existent spec, an invalid
+// --milestone/--project/--repo) — a clean message on console.error + exit(2),
+// never the raw stack trace of an uncaught exception.
 let plan
 try {
   plan = groomPlan(slices, { milestone, specRef, epicContext, epicContextReason, frozenDecisions, frozenDecisionsReason })
@@ -689,42 +693,43 @@ try {
   process.exit(2)
 }
 
-// maxBuffer explícito (finding 7 de la review final): el default de Node para
-// execFileSync es 1 MiB. El listado de más abajo (GraphQL, SOLO issues y SOLO
-// los campos que se usan — ver GROOM_ISSUES_QUERY) pagina sobre todos los issues
-// del repo y aun así cabe holgado aquí: al no traer PRs ni el objeto REST
-// completo, el payload es una fracción del de antes. Antes este listado era el
-// REST `repos/<repo>/issues` con TODOS los PRs y bodies completos, y en un repo
-// grande y activo (miles de issues+PRs) desbordaba los 20 MiB → ENOBUFS y el
-// groom moría antes de crear nada. 20 MiB sigue siendo generoso sin ser "sin
-// límite" de verdad (un runaway real seguiría abortando).
+// An explicit maxBuffer (finding 7 of the final review): Node's default for
+// execFileSync is 1 MiB. The listing further down (GraphQL, ONLY issues and
+// ONLY the fields that get used — see GROOM_ISSUES_QUERY) paginates over every
+// issue in the repo and still fits in here comfortably: by not bringing PRs nor
+// the complete REST object, the payload is a fraction of what it was. This
+// listing used to be the REST `repos/<repo>/issues` with ALL the PRs and
+// complete bodies, and in a large, active repo (thousands of issues+PRs) it
+// overflowed 20 MiB → ENOBUFS and the groom died before creating anything.
+// 20 MiB is still generous without being truly "unlimited" (a real runaway
+// would still abort).
 //
-// GH_MAX_BUFFER es un LÍMITE DE SEGURIDAD compartido por todas las llamadas
-// gh(), no una feature. El riesgo de desborde no desaparece: se MUEVE de
-// "PRs + bodies de issues" a "bodies de issues solos a gran escala". Si algún
-// día los bodies legítimos de los issues de un repo superan 20 MiB, eso es un
-// problema de diseño aparte (paginar y procesar por páginas sin acumular), no
-// algo que se tape subiendo este número.
+// GH_MAX_BUFFER is a SAFETY LIMIT shared by every gh() call, not a feature. The
+// risk of overflow does not disappear: it MOVES from "PRs + issue bodies" to
+// "issue bodies alone at scale". If one day the legitimate bodies of a repo's
+// issues exceed 20 MiB, that is a separate design problem (paginate and process
+// page by page without accumulating), not something to be papered over by
+// raising this number.
 const GH_MAX_BUFFER = 20 * 1024 * 1024
 const gh = (args) => execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: GH_MAX_BUFFER }).trim()
 
-// F5 — detección de divergencia (existence-only → contenido real). Hasta
-// ahora, todo lo de aquí abajo vivía DESPUÉS de la salida de --dry-run: un
-// dry-run nunca llegaba siquiera a mirar si los issues ya existentes seguían
-// coincidiendo con lo que el plan produce hoy. Eso es exactamente la misma
-// trampa que F1 ya cerró para la validación de la tabla ("un dry-run que
-// valida menos que la corrida real es una trampa") — aquí aplica igual: el
-// fetch de issues (lectura, sin mutar nada) se adelanta a ANTES de la rama de
-// --dry-run, para que el reporte de divergencia sea idéntico se ejecute o no
-// de verdad. Solo se intenta si hay un `--repo` real (string): en dry-run sin
-// --repo no hay contra qué comparar, así que se preserva el comportamiento de
-// siempre (solo imprime el plan, nunca toca `gh`).
-// fieldDriftCategories: las categorías que viajan por FLAGS de `gh issue edit`
-// (buildReconcileEditArgs) — título/milestone/labels. No tienen rama de
-// rendición: si divergen, se aplican. Descripción/Protegido/Gates a propósito
-// NO aparecen aquí ni abajo: --reconcile nunca las toca (ver
-// buildReconcileBody en scripts/reconcile.js), así que no pertenecen a "lo que
-// se ha escrito".
+// F5 — divergence detection (existence-only → real content). Until now,
+// everything below here lived AFTER the --dry-run exit: a dry-run never even
+// got as far as looking at whether the issues that already exist still matched
+// what the plan produces today. That is exactly the same trap F1 already closed
+// for the validation of the table ("a dry-run that validates less than the real
+// run is a trap") — it applies just the same here: the issue fetch (a read,
+// mutating nothing) moves up to BEFORE the --dry-run branch, so that the
+// divergence report is identical whether or not it really runs. It is only
+// attempted if there is a real `--repo` (a string): in a dry-run with no
+// --repo there is nothing to compare against, so the long-standing behaviour is
+// preserved (it only prints the plan, it never touches `gh`).
+// fieldDriftCategories: the categories that travel through `gh issue edit`
+// FLAGS (buildReconcileEditArgs) — title/milestone/labels. They have no
+// giving-up branch: if they diverge, they get applied. Descripción/Protegido/
+// Gates deliberately do NOT appear here or below: --reconcile never touches
+// them (see buildReconcileBody in scripts/reconcile.js), so they do not belong
+// to "what has been written".
 function fieldDriftCategories(diff) {
   const cats = []
   if (diff.title) cats.push('título')
@@ -733,40 +738,40 @@ function fieldDriftCategories(diff) {
   return cats
 }
 
-// appliedCategories: qué se ha ESCRITO de verdad en este issue — flags +
-// cuerpo. Es la única lista que puede aparecer en la línea de "reconciliado",
-// que va por stdout, el canal que este script reserva para lo que ha pasado.
+// appliedCategories: what has really been WRITTEN into this issue — flags +
+// body. It is the only list that may appear in the "reconciliado" line, which
+// goes to stdout, the channel this script reserves for what has happened.
 //
-// Segunda oleada de la review final de rama: esa línea usaba "lo que DIVERGE"
-// (título/milestone/enlace/labels/deps/ac/contexto del epic, sin mirar ninguna
-// rendición), así que anunciaba por stdout la reescritura de una sección que
-// el código acababa de negarse a tocar y que stderr reportaba como no
-// reescrita en la misma corrida. El preview de --dry-run ya usaba
-// `bodyDriftCategories`; ahora las dos rutas responden la misma pregunta.
+// Second wave of the final branch review: that line used "what DIVERGES"
+// (title/milestone/link/labels/deps/ac/epic context, without looking at any
+// giving-up), so it announced on stdout the rewriting of a section the code had
+// just refused to touch and that stderr reported as not rewritten in the same
+// run. The --dry-run preview already used `bodyDriftCategories`; now both
+// routes answer the same question.
 //
-// El contexto del epic SÍ puede aparecer (--reconcile lo reescribe) aunque NO
-// cuente para el exit code: son dos preguntas distintas, y confundirlas es lo
-// que dejaba esta línea terminando en un dos-puntos pelado cuando esa era la
-// única categoría.
+// The epic context CAN appear (--reconcile rewrites it) even though it does NOT
+// count towards the exit code: they are two different questions, and confusing
+// them is what left this line ending in a bare colon when that was the only
+// category.
 //
-// Sólo para mensajes dirigidos a un humano — nunca para decidir qué llamar de
-// verdad; eso lo deciden buildReconcileEditArgs/buildReconcileBody.
+// Only for messages aimed at a human — never for deciding what to really call;
+// buildReconcileEditArgs/buildReconcileBody decide that.
 function appliedCategories(diff, bodyResult) {
   return [...fieldDriftCategories(diff), ...bodyDriftCategories(diff, bodyResult)]
 }
 
-// bodyDriftCategories: de las categorías que viajan por `--body` (las que
-// buildReconcileBody splicea: enlace al spec, AC, dependencias y contexto del
-// epic), cuáles se han APLICADO de verdad en este body — no cuáles divergen.
-// La diferencia importa porque el preview de --dry-run nombra esta lista: una
-// categoría que diverge pero cuya sección no se pudo localizar (unresolvedAc/
-// unresolvedDeps/unresolvedEpicContext) no está en el body nuevo, y nombrarla
-// sería anunciar una escritura que no ocurre. Antes, el preview escribía una
-// lista FIJA ("dependencias/criterios de aceptación") que era falsa en cuanto
-// lo que cambiaba era otra cosa.
+// bodyDriftCategories: of the categories that travel through `--body` (the
+// ones buildReconcileBody splices: link to the spec, AC, dependencies and epic
+// context), which ones have really been APPLIED into this body — not which
+// ones diverge. The difference matters because the --dry-run preview names this
+// list: a category that diverges but whose section could not be located
+// (unresolvedAc/unresolvedDeps/unresolvedEpicContext) is not in the new body,
+// and naming it would be announcing a write that does not happen. Before, the
+// preview wrote a FIXED list ("dependencias/criterios de aceptación") that was
+// false the moment what changed was something else.
 //
-// El enlace al spec no tiene rama de rendición: si la línea no existe,
-// buildReconcileBody la antepone al principio del body.
+// The link to the spec has no giving-up branch: if the line does not exist,
+// buildReconcileBody prepends it at the top of the body.
 function bodyDriftCategories(diff, bodyResult) {
   const cats = []
   if (diff.specLink) cats.push('enlace al spec')
@@ -778,12 +783,13 @@ function bodyDriftCategories(diff, bodyResult) {
   return cats
 }
 
-// EPIC_CONTEXT_SURRENDERS: por qué buildReconcileBody no pudo reescribir
-// "## Contexto del epic", en las palabras que le sirven a quien lee el
-// informe. Se reporta como `nota:` y NUNCA mueve el exit code (§4.4 del
-// diseño): esta sección no puede producir un 3 ni divergiendo, ni duplicada,
-// ni rindiéndose. Que se rindiera en SILENCIO era lo único indefendible —
-// AC y Dependencias se rinden en voz alta desde la review round 4.
+// EPIC_CONTEXT_SURRENDERS: why buildReconcileBody could not rewrite
+// "## Contexto del epic", in the words that are of use to whoever reads the
+// report. It is reported as a `nota:` and it NEVER moves the exit code (§4.4 of
+// the design): this section cannot produce a 3, not by diverging, not
+// duplicated, not by giving up. That it gave up in SILENCE was the only
+// indefensible part — AC and Dependencias have been giving up out loud since
+// review round 4.
 const EPIC_CONTEXT_SURRENDERS = {
   'sin-ancla': 'no existe la sección en el issue, y tampoco ninguna de las dos cabeceras que sirven de ancla para ponerla en su sitio ("## Contexto heredado" o, en su defecto, "## Acceptance criteria"); añade a mano una de ellas y vuelve a correr',
   'ancla-duplicada': 'no existe la sección en el issue y su ancla ("## Acceptance criteria") aparece más de una vez, así que insertarla ahí podría escribir dentro de texto ajeno; deja una sola copia del ancla y vuelve a correr',
@@ -791,17 +797,18 @@ const EPIC_CONTEXT_SURRENDERS = {
   'seccion-sin-cerrar': 'la sección del issue tiene una valla de código (```) o un comentario HTML (<!--) SIN CERRAR, así que no se sabe dónde termina: reescribirla se llevaría por delante todo lo que venga detrás en el cuerpo (contexto heredado, criterios, gates, protegido y el marcador ct-order). Cierra el delimitador en el issue y vuelve a correr',
   'texto-sin-cerrar': 'el texto que trae el spec tiene una valla de código (```) o un comentario HTML (<!--) SIN CERRAR, y escribirlo en el cuerpo dejaría el issue en ese mismo estado. Ciérralo en el spec y vuelve a correr',
   'en-heredado': 'el spec ya no trae contexto del epic, y la única copia de esta sección en el body queda por detrás de la cabecera "## Contexto heredado", dentro de la zona que pertenece a la sesión coordinadora y que no se toca nunca. No se retira nada; si esa copia sobra, quítala tú',
-  // Aquí NO se afirma de quién es el texto, a diferencia de 'en-heredado':
-  // sin "## Acceptance criteria" localizable no hay forma de saber dónde acaba
-  // la zona de la sesión coordinadora, así que tampoco de saber si esa copia
-  // cae dentro. Lo único que se sabe es que no se puede tocar con seguridad.
+  // Here NOTHING is claimed about whose the text is, unlike 'en-heredado':
+  // without a locatable "## Acceptance criteria" there is no way of knowing
+  // where the coordinator session's zone ends, and therefore no way of knowing
+  // whether that copy falls inside it. All that is known is that it cannot be
+  // touched safely.
   'zona-sin-fin': 'no se puede saber dónde termina "## Contexto heredado" en este body: su cabecera está, pero "## Acceptance criteria" —la cabecera que la sigue siempre, y que marca el final de esa zona— no aparece exactamente una vez. Sin ese límite no se distingue qué hay por detrás que sea del issue y qué escribió la sesión coordinadora, así que esta sección no se reescribe ni se retira. Restaura (o desduplica) "## Acceptance criteria" y vuelve a correr',
 }
 
-// FROZEN_DECISIONS_SURRENDERS: por qué buildReconcileBody no pudo reescribir
-// "## Decisiones congeladas". Espejo de EPIC_CONTEXT_SURRENDERS, con las mismas
-// anclas ("## Contexto heredado" o, en su defecto, "## Acceptance criteria").
-// Se reporta como nota: y NUNCA mueve el exit code.
+// FROZEN_DECISIONS_SURRENDERS: why buildReconcileBody could not rewrite
+// "## Decisiones congeladas". A mirror of EPIC_CONTEXT_SURRENDERS, with the
+// same anchors ("## Contexto heredado" or, failing that, "## Acceptance
+// criteria"). It is reported as a nota: and it NEVER moves the exit code.
 const FROZEN_DECISIONS_SURRENDERS = {
   'sin-ancla': 'no existe la sección en el issue, y tampoco ninguna de las dos cabeceras que sirven de ancla para ponerla en su sitio ("## Contexto heredado" o, en su defecto, "## Acceptance criteria"); añade a mano una de ellas y vuelve a correr',
   'ancla-duplicada': 'no existe la sección en el issue y su ancla ("## Acceptance criteria") aparece más de una vez, así que insertarla ahí podría escribir dentro de texto ajeno; deja una sola copia del ancla y vuelve a correr',
@@ -812,22 +819,23 @@ const FROZEN_DECISIONS_SURRENDERS = {
   'zona-sin-fin': 'no se puede saber dónde termina "## Contexto heredado" en este body: su cabecera está, pero "## Acceptance criteria" —la cabecera que la sigue siempre— no aparece exactamente una vez. Sin ese límite esta sección no se reescribe ni se retira. Restaura (o desduplica) "## Acceptance criteria" y vuelve a correr',
 }
 
-// describeGaps (review round 3, Critical 2): nombra qué categorías, DE LAS
-// QUE REALMENTE DIVERGEN, --reconcile no pudo (o no podrá) aplicar —
-// nunca "solo prosa" cuando en realidad es AC/deps sin sección localizable:
-// ese era exactamente el bug que hacía salir 0 sobre una divergencia de
-// máquina real. `gaps.duplicates` (review round 5, Importante 3): una
-// sección "machine" duplicada — --reconcile no decide cuál copia es la
-// correcta, así que tampoco puede aplicar nada ahí; sin nombrarlo aquí,
-// esta misma divergencia salía 0 en silencio bajo --reconcile.
+// describeGaps (review round 3, Critical 2): it names which categories, OF THE
+// ONES THAT REALLY DIVERGE, --reconcile could not (or will not be able to)
+// apply — never "prose only" when what it really is is AC/deps with no locatable
+// section: that was exactly the bug that made it exit 0 over a real machine
+// divergence. `gaps.duplicates` (review round 5, Important 3): a duplicated
+// "machine" section — --reconcile does not decide which copy is the right one,
+// so it cannot apply anything there either; without naming it here, this very
+// divergence exited 0 in silence under --reconcile.
 //
-// GAP_REASONS (review final de rama, C2): el motivo exacto lo decide
-// buildReconcileBody (`unresolvedReasons`/`unresolvedE2e`), no este fichero. Antes había una
-// sola frase por categoría —"no se encontró la sección"— que era cierta para
-// el caso original y dejó de serlo en cuanto aparecieron los otros dos: una
-// sección DUPLICADA sí se encuentra (el problema es que hay dos y ninguna se
-// puede señalar como la del plugin), y una inserción sin ancla no habla de la
-// sección que falta sino de la que tendría que servir de referencia.
+// GAP_REASONS (final branch review, C2): the exact reason is decided by
+// buildReconcileBody (`unresolvedReasons`/`unresolvedE2e`), not by this file.
+// There used to be a single sentence per category —"the section was not
+// found"— that was true for the original case and stopped being true the
+// moment the other two appeared: a DUPLICATED section is found all right (the
+// problem is that there are two and neither can be pointed at as the plugin's),
+// and an insertion with no anchor does not talk about the missing section but
+// about the one that ought to serve as the reference.
 const GAP_REASONS = {
   ac: {
     'sin-seccion': 'no se encontró la sección "## Acceptance criteria" en el body',
@@ -842,12 +850,12 @@ const GAP_REASONS = {
     'ancla-en-heredado': 'no existe la sección "## Dependencias" y la única "## Out of scope / Protected" del body está DENTRO de "## Contexto heredado", así que anclar la inserción ahí escribiría dentro del texto de la sesión coordinadora',
     'zona-sin-fin': 'no se puede saber dónde termina "## Contexto heredado" en este body: su cabecera está, pero "## Acceptance criteria" —la cabecera que la sigue siempre, y que marca el final de esa zona— no aparece exactamente una vez. Sin ese límite no se distingue qué hay por detrás que sea del issue y qué escribió la sesión coordinadora, así que no se escribe nada ahí. Restaura (o desduplica) "## Acceptance criteria" y vuelve a correr',
   },
-  // La sección "## E2E" se rinde por las mismas causas que "## Dependencias"
-  // (mismo ancla de inserción, misma zona prohibida), así que el vocabulario de
-  // motivos es el mismo. Lo que cambia es la CONSECUENCIA que se nombra: de
-  // esta sección salen los recorridos que /ct-next siembra y los que --release
-  // exige, así que "no se pudo escribir" significa que el slice va a atravesar
-  // otra cosa (o nada), no un desajuste cosmético.
+  // The "## E2E" section gives up for the same causes as "## Dependencias"
+  // (the same insertion anchor, the same forbidden zone), so the vocabulary of
+  // reasons is the same. What changes is the CONSEQUENCE that gets named: out
+  // of this section come the runs /ct-next seeds and the ones --release
+  // demands, so "it could not be written" means the slice is going to walk
+  // through something else (or nothing), not a cosmetic mismatch.
   e2e: {
     'sin-seccion': 'no se encontró la sección "## E2E" en el body y tampoco "## Out of scope / Protected", que es el único ancla seguro para insertarla',
     duplicada: 'la sección "## E2E" aparece más de una vez y no hay forma de saber cuál copia es la del plugin — puede ser texto pegado dentro de "## Contexto heredado"',
@@ -869,64 +877,64 @@ function describeGaps(gaps, bodyResult) {
 }
 
 let existingIssues = null
-// inEpic (F23): los issues del epic de ESTA corrida — los del milestone cuyo
-// título es el argumento `--milestone`. Es la lista contra la que se emparejan
-// los marcadores `ct-order` y se detectan huérfanos. Vive como variable de
-// módulo (y no dentro del bloque de lectura donde se calcula) por UNA sola
-// razón, y conviene decirla con honestidad: el bucle de creación, mucho más
-// abajo y fuera de ese bloque, sigue registrando ahí cada issue recién
-// creado. Ese registro no protege hoy de nada — ver el comentario junto al
-// `push` más abajo, que explica por qué no tiene lectores.
+// inEpic (F23): the issues of THIS run's epic — those of the milestone whose
+// title is the `--milestone` argument. It is the list the `ct-order` markers
+// are paired against and orphans are detected against. It lives as a module
+// variable (and not inside the reading block where it is computed) for ONE
+// reason only, and it is worth saying it honestly: the creation loop, much
+// further down and outside that block, still registers every freshly created
+// issue there. That registration protects nothing today — see the comment
+// beside the `push` further down, which explains why it has no readers.
 //
-// Por qué el emparejado se acota (§2 del feedback de campo, medido en
-// producción): /ct-groom numera los slices 1..N POR EPIC y escribe ese número
-// en `<!-- ct-order:N -->`, así que el marcador NO es único en el repo — el
-// contrato §9 lo promete explícitamente ("únicos dentro de su milestone, no
-// del repo"). Buscarlo por todo el repo hacía dos cosas, las dos falsas:
-// emparejaba una tabla §9 nueva empezando en 1,2,3 con los issues de un epic
-// anterior y CERRADO (reportando su milestone distinto como "divergencia", y
-// con --reconcile los habría arrastrado al milestone nuevo), y declaraba
-// huérfanos a los issues de cualquier otro epic del repo.
+// Why the pairing is scoped (§2 of the field feedback, measured in
+// production): /ct-groom numbers the slices 1..N PER EPIC and writes that
+// number into `<!-- ct-order:N -->`, so the marker is NOT unique across the
+// repo — the §9 contract promises so explicitly ("unique within their
+// milestone, not within the repo"). Looking for it across the whole repo did
+// two things, both of them false: it paired a new §9 table starting at 1,2,3
+// with the issues of an earlier, CLOSED epic (reporting their different
+// milestone as "divergence", and with --reconcile it would have dragged them
+// into the new milestone), and it declared orphans the issues of any other
+// epic in the repo.
 let inEpic = null
-let reconcileEntries = [] // [{ iss, found, diff, bodyResult, gaps }] — found/diff/bodyResult/gaps son null si el issue todavía no existe
+let reconcileEntries = [] // [{ iss, found, diff, bodyResult, gaps }] — found/diff/bodyResult/gaps are null if the issue does not exist yet
 let anyUnresolvedDrift = false
-// anyReconcileGapRemains (review round 3, Critical 2): true si CUALQUIER
-// entrada tiene una divergencia real de AC/Dependencias que --reconcile no
-// pudo aplicar (sección no localizable — ver reconcile.js#reconcileGaps).
-// title/milestone/labels/enlace-al-spec NUNCA producen un gap: siempre se
-// resuelven vía flags o un splice de una sola línea, sin depender de
-// localizar ninguna sección. Se usa para el código de salida de la corrida
-// real CON --reconcile (más abajo) — sin --reconcile, `anyUnresolvedDrift`
-// ya basta.
+// anyReconcileGapRemains (review round 3, Critical 2): true if ANY entry has a
+// real AC/Dependencias divergence that --reconcile could not apply (a section
+// that cannot be located — see reconcile.js#reconcileGaps).
+// title/milestone/labels/link-to-the-spec NEVER produce a gap: they always
+// resolve via flags or a single-line splice, without depending on locating any
+// section. It is used for the exit code of the real run WITH --reconcile
+// (further down) — without --reconcile, `anyUnresolvedDrift` is enough on its
+// own.
 let anyReconcileGapRemains = false
-// anyOrphans (F5, importante 4): un issue con marcador ct-order:N cuyo
-// slice N ya no está en la tabla §9 actual — antes no se mencionaba jamás
-// (reconcileEntries se construye recorriendo plan.issues, que solo conoce
-// los slices ACTUALES), exit 0, silencio total. Se detecta por separado,
-// recorriendo TODOS los issues existentes (no solo los que matchean algún
-// slice de hoy) y comparando su orden contra los órdenes que la tabla §9
-// todavía declara.
+// anyOrphans (F5, important 4): an issue with a ct-order:N marker whose slice
+// N is no longer in the current §9 table — before, it was never mentioned at
+// all (reconcileEntries is built by walking plan.issues, which only knows
+// today's slices), exit 0, total silence. It is detected separately, by walking
+// ALL the existing issues (not only the ones that match some slice of today's)
+// and comparing their order against the orders the §9 table still declares.
 let anyOrphans = false
-// existingLabelNames (F6, menor 5): las labels que el repo YA tiene. Dos
-// motivos, ninguno cosmético:
-//   1. El contrato pide "reutiliza el vocabulario de labels que ya exista en
-//      este repo, no inventes uno nuevo por spec" — y hasta ahora nadie podía
-//      comprobar cuál era ese vocabulario ni ver, después, qué se había
-//      acabado inventando: `gh label create --force` no distingue crear de
-//      actualizar, y no imprimía nada.
-//   2. `--force` sobre una label que YA existe la REESCRIBE (color y
-//      descripción incluidos, con los que gh asigna por defecto). Creando
-//      solo las que faltan, una label que el repo ya tenía cuidada deja de
-//      cambiar de color en cada groom.
+// existingLabelNames (F6, minor 5): the labels the repo ALREADY has. Two
+// reasons, neither of them cosmetic:
+//   1. The contract asks you to "reuse the label vocabulary that already exists
+//      in this repo, do not invent a new one per spec" — and until now nobody
+//      could check what that vocabulary was, nor see afterwards what had ended
+//      up being invented: `gh label create --force` does not tell creating
+//      apart from updating, and printed nothing.
+//   2. `--force` over a label that ALREADY exists REWRITES it (colour and
+//      description included, with the ones gh assigns by default). By creating
+//      only the ones that are missing, a label the repo had already looked
+//      after stops changing colour on every groom.
 let existingLabelNames = null
 if (typeof repo === 'string') {
   try {
-    // Listado por GraphQL (solo issues, nunca PRs; solo los campos que se usan)
-    // — ver GROOM_ISSUES_QUERY. Sustituye al REST `repos/<repo>/issues` que
-    // traía TODOS los PRs del repo con body completo y desbordaba el buffer en
-    // repos grandes (ENOBUFS). Mismo conjunto de issues que producía
-    // `realIssuesOnly` sobre el REST; realIssuesOnly se mantiene como red de
-    // seguridad (inocua: GraphQL no devuelve PRs).
+    // Listing via GraphQL (only issues, never PRs; only the fields that get
+    // used) — see GROOM_ISSUES_QUERY. It replaces the REST
+    // `repos/<repo>/issues` that brought ALL the repo's PRs with their complete
+    // bodies and overflowed the buffer in large repos (ENOBUFS). The same set
+    // of issues `realIssuesOnly` produced over REST; realIssuesOnly is kept as
+    // a safety net (harmless: GraphQL does not return PRs).
     const [owner, name] = repo.split('/')
     const pages = JSON.parse(gh(['api', 'graphql', '--paginate', '--slurp', '-f', `query=${GROOM_ISSUES_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`]))
     existingIssues = realIssuesOnly(normalizeGraphqlIssues(pages))
@@ -938,10 +946,10 @@ if (typeof repo === 'string') {
     const rawLabels = JSON.parse(gh(['api', `repos/${repo}/labels`, '--method', 'GET', '--paginate', '--slurp']))
     existingLabelNames = new Set(flattenPages(rawLabels).map((l) => l && l.name).filter(Boolean))
   } catch (e) {
-    // Mismo criterio que el listado de issues/milestones: un fallo de lectura
-    // NO se degrada a "el repo no tiene ninguna label" — eso llevaría a
-    // reescribir con --force labels existentes y a informar de labels
-    // "nuevas" que sí existían. Se aborta con mensaje claro.
+    // The same criterion as the issue/milestone listing: a read failure is NOT
+    // degraded into "the repo has no labels at all" — that would lead to
+    // rewriting existing labels with --force and to reporting as "new" labels
+    // that did exist. It aborts with a clear message.
     console.error(`no se pudieron listar las labels de ${repo}: ${e.message}`)
     process.exit(1)
   }
@@ -949,31 +957,31 @@ if (typeof repo === 'string') {
   const partition = partitionByEpic(existingIssues, milestone)
   inEpic = partition.inEpic
 
-  // F23 — las puertas del alcance por epic. Van AQUÍ, entre el listado de
-  // issues y todo lo demás, porque este punto está por delante de la primera
-  // mutación del script (la creación del milestone, mucho más abajo): una
-  // comprobación que no puede detener la acción siguiente es decoración, y
-  // una que aborta después de crear el milestone deja basura en GitHub — el
-  // mismo motivo por el que el listado se colocó donde está.
+  // F23 — the gates of the per-epic scope. They go HERE, between the issue
+  // listing and everything else, because this point is ahead of the script's
+  // first mutation (the creation of the milestone, much further down): a check
+  // that cannot stop the next action is decoration, and one that aborts after
+  // creating the milestone leaves rubbish in GitHub — the same reason the
+  // listing was placed where it is.
   //
-  // Las dos puertas se calculan ENTERAS y se reportan JUNTAS antes de un
-  // único exit: nombrar sólo el primer bloqueante dice "quita ése y sale", y
-  // es falso cuando hay más de uno.
+  // Both gates are computed IN FULL and reported TOGETHER before a single
+  // exit: naming only the first blocker says "remove that one and it goes
+  // through", and that is false when there is more than one.
   //
-  // Código de salida 1, por precedente de este mismo fichero: 1 es "leí un
-  // estado inconsistente, NO continúo" (ver el abort del listado de items del
-  // project); 2 es error de validación de argv/spec; 3 es "hubo divergencia
-  // pero el trabajo se hizo", y aquí no se hace nada.
+  // Exit code 1, by the precedent of this very file: 1 is "I read an
+  // inconsistent state, I am NOT carrying on" (see the abort of the project's
+  // item listing); 2 is an argv/spec validation error; 3 is "there was
+  // divergence but the work got done", and here nothing gets done.
   const bloqueos = []
   const repoRefBloqueo = typeof repo === 'string' ? repo : '<owner/repo>'
 
-  // Puerta A — issues SIN milestone. No se les puede atribuir un epic, así
-  // que las dos lecturas posibles hacen daño: emparejarlo reescribiría un
-  // issue ajeno; ignorarlo crearía un duplicado del slice que sí es nuestro.
-  // Sólo bloquea si su orden COLISIONA con la tabla §9 de hoy — un marcador
-  // que no compite con nada no impide nada, pero tampoco se calla (mismo
-  // criterio que NO_MILESTONE_KEY en gh-issue-map.js: cubo compartido con
-  // aviso, nunca invisible).
+  // Gate A — issues with NO milestone. No epic can be attributed to them, so
+  // both possible readings do damage: pairing one would rewrite somebody
+  // else's issue; ignoring it would create a duplicate of the slice that is
+  // ours. It only blocks if its order COLLIDES with today's §9 table — a
+  // marker that competes with nothing prevents nothing, but it does not keep
+  // quiet either (the same criterion as NO_MILESTONE_KEY in gh-issue-map.js: a
+  // shared bucket with a warning, never invisible).
   const sinMilestoneBloqueantes = []
   for (const i of partition.sinMilestone) {
     const order = extractOrder(i.body)
@@ -992,41 +1000,40 @@ if (typeof repo === 'string') {
     })
   }
 
-  // Puerta B — el MISMO epic bajo OTRO título. Riesgo que introduce el propio
-  // acotado por epic, no uno que ya existiera: mientras el emparejado era
-  // global, un `--milestone` con una errata (o un epic renombrado en GitHub)
-  // seguía encontrando sus issues por marcador y a lo sumo reportaba
-  // divergencia. Acotado, esa misma corrida ve CERO issues en su epic y
-  // recrea el epic entero duplicado en un milestone nuevo, con exit 0 — un
-  // comando que no da error y no hace lo que parece.
+  // Gate B — the SAME epic under ANOTHER title. A risk the per-epic scoping
+  // itself introduces, not one that already existed: while the pairing was
+  // global, a `--milestone` with a typo in it (or an epic renamed in GitHub)
+  // still found its issues by marker and at worst reported divergence. Scoped,
+  // that very same run sees ZERO issues in its epic and recreates the whole
+  // epic duplicated under a new milestone, with exit 0 — a command that gives
+  // no error and does not do what it looks like it does.
   //
-  // La señal que lo distingue de un epic distinto reusando números es el
-  // enlace al spec, que todo issue groomeado lleva en el body
-  // (groom.js#renderSpecLink). Mismo orden + MISMO documento = el mismo epic
-  // con otro nombre. Documento distinto = dos epics legítimos compartiendo el
-  // número de orden, que es EXACTAMENTE lo que F23 viene a habilitar: no
-  // dispara.
+  // The signal that tells it apart from a different epic reusing numbers is
+  // the link to the spec, which every groomed issue carries in its body
+  // (groom.js#renderSpecLink). The same order + the SAME document = the same
+  // epic under another name. A different document = two legitimate epics
+  // sharing the order number, which is EXACTLY what F23 comes to enable: it
+  // does not fire.
   //
-  // Se compara el DESTINO del enlace (specTarget), no la línea entera: la
-  // línea empieza por "> Slice `#N` del epic. " y ese prefijo cambió de
-  // formato en F6, así que comparar entero fallaría contra cualquier issue
-  // anterior.
+  // The link's TARGET is compared (specTarget), not the whole line: the line
+  // starts with "> Slice `#N` del epic. " and that prefix changed format in
+  // F6, so comparing the whole thing would fail against any earlier issue.
   //
-  // Cuando el destino falta en cualquiera de los dos lados, o difiere, la
-  // puerta NO dispara — falla en ABIERTO. El precio hay que decirlo entero,
-  // porque no es el statu quo: si el epic estaba renombrado y sus issues
-  // llevan el enlace en otra forma (groomeados antes de F10, o con la forma
-  // degradada "— sin enlace: <motivo>"), `inEpic` sale vacío y esta corrida
-  // recrea el epic ENTERO duplicado con exit 0. Antes de F23, el emparejado
-  // global los encontraba por marcador y reportaba divergencia con exit 3,
-  // sin crear nada: el falso negativo no devuelve nada, abre un agujero que
-  // antes no existía. Se acepta a cambio de no ladrillar el caso normal —
-  // un falso positivo pararía en seco dos epics distintos reusando números
-  // de orden, que es justo lo que F23 viene a habilitar. Lo que sí se hace
-  // es no callarlo: todo descarte de este cubo que pueda acabar en un epic
-  // duplicado —o sea, el de un slice que todavía no tiene issue en este
-  // epic— emite un aviso por stderr (más abajo, en el propio `continue`),
-  // no bloqueante.
+  // When the target is missing on either side, or differs, the gate does NOT
+  // fire — it fails OPEN. The price has to be stated in full, because it is
+  // not the status quo: if the epic had been renamed and its issues carry the
+  // link in another shape (groomed before F10, or with the degraded shape
+  // "— sin enlace: <motivo>"), `inEpic` comes out empty and this run recreates
+  // the WHOLE epic duplicated with exit 0. Before F23, the global pairing
+  // found them by marker and reported divergence with exit 3, creating
+  // nothing: the false negative gives nothing back, it opens a hole that did
+  // not exist before. It is accepted in exchange for not bricking the normal
+  // case — a false positive would stop dead two different epics reusing order
+  // numbers, which is exactly what F23 comes to enable. What is done is not to
+  // keep quiet about it: every discard from this bucket that could end in a
+  // duplicated epic —that is, one of a slice that does not yet have an issue
+  // in this epic— emits a warning on stderr (further down, in the `continue`
+  // itself), non-blocking.
   const specTargetPorOrden = new Map(plan.issues.map((i) => [i.order, specTarget(i.specLink)]))
   const otroEpicBloqueantes = []
   const otroEpicAvisos = []
@@ -1036,36 +1043,35 @@ if (typeof repo === 'string') {
     const suyo = specTarget(extractSpecLink(i.body))
     const nuestro = specTargetPorOrden.get(order)
     if (suyo === null || nuestro === null || suyo !== nuestro) {
-      // El aviso del fallo en abierto. Cierra la asimetría con la puerta A,
-      // que sí nombra por stderr los issues sin milestone que NO bloquean:
-      // este cubo es exactamente del que sale un epic duplicado con exit 0
-      // (ver el comentario de arriba), así que descartarlo en silencio es lo
-      // único que no se puede hacer. No bloquea, no cambia el código de
-      // salida, y no altera cuándo dispara la puerta.
+      // The warning of the fail-open. It closes the asymmetry with gate A,
+      // which does name on stderr the milestone-less issues that do NOT block:
+      // this bucket is exactly the one a duplicated epic with exit 0 comes out
+      // of (see the comment above), so discarding it in silence is the one
+      // thing that cannot be done. It does not block, it does not change the
+      // exit code, and it does not alter when the gate fires.
       //
-      // Acotado a los slices que NO tienen ya issue en ESTE epic, con el
-      // mismo predicado que usa el emparejado de más abajo
-      // (`findByMarker(inEpic, marker)`): la duplicación sólo puede ocurrir
-      // si el slice se va a crear, y si ya tiene issue aquí el emparejado lo
-      // encuentra y la creación se salta — no hay nada que duplicar, así que
-      // el aviso saldría en cada corrida sin describir ninguna pérdida y sin
-      // nada que el humano pueda hacer para callarlo. Mismo criterio, en este
-      // mismo fichero, que el filtro de issues cerrados de
-      // `backlogPendingCount`: un aviso que no se puede satisfacer es un
-      // aviso que enseña a ignorar los demás. El acotado no pierde ningún
-      // caso peligroso — cubre exactamente el conjunto en el que la
-      // duplicación es posible.
+      // Scoped to the slices that do NOT already have an issue in THIS epic,
+      // with the same predicate the pairing further down uses
+      // (`findByMarker(inEpic, marker)`): duplication can only occur if the
+      // slice is going to be created, and if it already has an issue here the
+      // pairing finds it and the creation is skipped — there is nothing to
+      // duplicate, so the warning would come out on every run without
+      // describing any loss and with nothing the human could do to silence it.
+      // The same criterion, in this very file, as the closed-issue filter of
+      // `backlogPendingCount`: a warning that cannot be satisfied is a warning
+      // that teaches you to ignore the rest. The scoping loses no dangerous
+      // case — it covers exactly the set in which duplication is possible.
       if (findByMarker(inEpic, `<!-- ct-order:${order} -->`)) continue
       const motivo = suyo === null
         ? 'pero su body no lleva ninguna línea de enlace al spec con la que compararlo'
         : (nuestro === null
           ? 'pero este spec no ha producido ningún enlace con el que compararlo'
           : 'pero su enlace al spec no coincide con el de este spec')
-      // Se acumula en vez de imprimirse aquí: los avisos se emiten DESPUÉS
-      // del exit de los bloqueos (más abajo), porque cada uno afirma que este
-      // groom va a crear ese slice — y en una corrida que se para en seco no
-      // se crea nada. Nada se pierde: la corrida siguiente, ya sin bloqueo,
-      // los vuelve a calcular igual.
+      // It accumulates instead of being printed here: the warnings are emitted
+      // AFTER the exit of the blockers (further down), because each of them
+      // claims this groom is going to create that slice — and in a run that
+      // stops dead nothing gets created. Nothing is lost: the next run, now
+      // unblocked, computes them all over again just the same.
       otroEpicAvisos.push(`aviso: el slice #${order} de este spec tiene un issue en otro milestone con el mismo ct-order (#${i.number}, "${epicTitleOf(i)}"), ${motivo} — así que lo trato como otro epic y ${dryRun ? 'crearía' : 'crearé'} un issue nuevo para el slice #${order} en "${milestone}". Si en realidad es el mismo epic renombrado, esto va a duplicarlo: compruébalo antes de seguir.`)
       continue
     }
@@ -1101,44 +1107,46 @@ if (typeof repo === 'string') {
     const marker = `<!-- ct-order:${iss.order} -->`
     const found = findByMarker(inEpic, marker)
     if (!found) return { iss, found: null, diff: null, bodyResult: null, gaps: null }
-    // F23: `diff.milestone` es INALCANZABLE desde aquí desde que el
-    // emparejado está acotado por epic — `found` sale de `inEpic`, y a
-    // `inEpic` sólo entran issues cuyo milestone es exactamente el que se le
-    // pasa a diffIssue como `wantedMilestone` (`partitionByEpic` los reparte
-    // por título EXACTO contra `milestone`, y `plan.milestone` es ese mismo
-    // valor — ver groomPlan en groom.js). Con ello desaparece POR
-    // CONSTRUCCIÓN el peligro que el §2 del feedback señalaba en mayúsculas:
-    // un --reconcile que, además de reescribir el body, arrastrase un issue
-    // cerrado de otro epic al milestone nuevo. La comparación NO se borra de
-    // reconcile.js: ese módulo es puro, compartido y testeado, y sigue siendo
-    // la reparación correcta para cualquier caller que le pase un issue de
-    // otro alcance. Lo que ya no puede ocurrir es que ESTE call-site lo haga.
+    // F23: `diff.milestone` is UNREACHABLE from here ever since the pairing is
+    // scoped per epic — `found` comes out of `inEpic`, and only issues whose
+    // milestone is exactly the one passed to diffIssue as `wantedMilestone`
+    // enter `inEpic` (`partitionByEpic` sorts them by EXACT title against
+    // `milestone`, and `plan.milestone` is that same value — see groomPlan in
+    // groom.js). With that, the danger the field feedback's §2 flagged in
+    // capitals disappears BY CONSTRUCTION: a --reconcile that, on top of
+    // rewriting the body, dragged a closed issue from another epic into the new
+    // milestone. The comparison is NOT deleted from reconcile.js: that module
+    // is pure, shared and tested, and it is still the right repair for any
+    // caller that hands it an issue from another scope. What can no longer
+    // happen is THIS call-site doing it.
     const diff = diffIssue(found, iss, plan.milestone, ownedLabelPrefixes)
-    // bodyResult es puro (no toca `gh`, no muta nada) — seguro de calcular
-    // siempre, con o sin --reconcile, con o sin --dry-run: es la única forma
-    // de saber, ANTES de que nadie pida aplicar nada, si una divergencia de
-    // AC/Dependencias sería siquiera aplicable (Critical 2) — y, desde la
-    // review final de rama, si hay algo que escribir en el body aunque nada
-    // de lo divergente cuente para el exit code (C1: el contexto del epic).
+    // bodyResult is pure (it does not touch `gh`, it mutates nothing) — safe
+    // to compute always, with or without --reconcile, with or without
+    // --dry-run: it is the only way of knowing, BEFORE anyone asks for anything
+    // to be applied, whether an AC/Dependencias divergence would even be
+    // applicable (Critical 2) — and, since the final branch review, whether
+    // there is anything to write into the body even when none of what diverges
+    // counts towards the exit code (C1: the epic context).
     const bodyResult = buildReconcileBody(found.body, iss)
     const gaps = reconcileGaps(diff, bodyResult)
     return { iss, found, diff, bodyResult, gaps }
   })
-  // El reporte de divergencia se imprime SIEMPRE por stderr (mismo canal que
-  // el resto de "aviso:" de este script) en cuanto se conoce — antes de la
-  // rama de --dry-run, para que sea IDÉNTICO en preview y en corrida real.
-  // Silencio aquí significa "spec e issues están de acuerdo": formatDrift
-  // devuelve [] cuando no hay nada que reportar (ver scripts/reconcile.js).
+  // The divergence report is ALWAYS printed on stderr (the same channel as the
+  // rest of this script's "aviso:") as soon as it is known — before the
+  // --dry-run branch, so that it is IDENTICAL in the preview and in the real
+  // run. Silence here means "the spec and the issues agree": formatDrift
+  // returns [] when there is nothing to report (see scripts/reconcile.js).
   for (const { found, diff, bodyResult, gaps } of reconcileEntries) {
     if (!found) continue
     for (const line of formatDrift(diff)) console.error(line)
     if (hasReconcileGap(gaps)) {
       console.error(`aviso: slice #${diff.order} (issue #${found.number}) — --reconcile no puede aplicar del todo esta divergencia: ${describeGaps(gaps, bodyResult)}; revísala a mano en GitHub`)
     }
-    // La rendición del contexto del epic va por separado y como `nota:`: no
-    // entra en `reconcileGaps` porque esta sección nunca cuenta para el exit
-    // code (§4.4), pero callar que no se aplicó sería afirmar por omisión que
-    // sí. Solo se dice cuando de verdad había algo que escribir.
+    // The epic context giving up travels separately and as a `nota:`: it does
+    // not enter `reconcileGaps` because this section never counts towards the
+    // exit code (§4.4), but keeping quiet about it not having been applied
+    // would be claiming by omission that it was. It is only said when there
+    // really was something to write.
     if (bodyResult.unresolvedEpicContext && diff.epicContextDiffers) {
       console.error(`nota: slice #${diff.order} (issue #${found.number}) — --reconcile NO ha reescrito la sección "${EPIC_CONTEXT_HEADING}": ${EPIC_CONTEXT_SURRENDERS[bodyResult.unresolvedEpicContext]} (no cuenta para el exit code)`)
     }
@@ -1148,21 +1156,22 @@ if (typeof repo === 'string') {
     if (hasDrift(diff)) anyUnresolvedDrift = true
     if (hasReconcileGap(gaps)) anyReconcileGapRemains = true
   }
-  // --reconcile bajo --dry-run: NUNCA muta (ni aquí ni en la rama real de más
-  // abajo) — solo hace explícito qué aplicaría una corrida real con
-  // --reconcile, para que el preview no calle información que sí actuaría.
-  // El --body reconciliado (si diverge algo que viaje por él) NO se imprime entero — sería
-  // un bloque de texto largo — se nombra por categoría, igual que el resto
-  // de mensajes dirigidos a un humano de este bloque. El aviso de "gap" (si
-  // lo hay) ya se imprimió arriba — no se repite aquí.
+  // --reconcile under --dry-run: it NEVER mutates (neither here nor in the
+  // real branch further down) — it only makes explicit what a real run with
+  // --reconcile would apply, so that the preview does not keep quiet about
+  // information that would act. The reconciled --body (if something that
+  // travels through it diverges) is NOT printed in full — it would be a long
+  // block of text — it is named by category, like the rest of this block's
+  // messages aimed at a human. The "gap" warning (if there is one) was already
+  // printed above — it is not repeated here.
   if (reconcileFlag && dryRun) {
     for (const { found, diff, bodyResult } of reconcileEntries) {
-      // "¿hay algo que escribir?" NO es "¿esto cuenta para el exit code?".
-      // `hasDrift` responde la segunda (excluye a propósito el contexto del
-      // epic, §4.4 del diseño), y gatear la escritura con ella hacía que el
-      // escenario primario de F26 —el autor edita la sección del spec y
-      // vuelve a correr— calculase el body nuevo y lo tirase. La primera
-      // pregunta la responde `bodyResult.body !== null`.
+      // "is there anything to write?" is NOT "does this count towards the exit
+      // code?". `hasDrift` answers the second (it deliberately excludes the
+      // epic context, §4.4 of the design), and gating the write with it made
+      // F26's primary scenario —the author edits the section of the spec and
+      // runs again— compute the new body and throw it away. The first question
+      // is answered by `bodyResult.body !== null`.
       if (!found || !(hasDrift(diff) || bodyResult.body !== null)) continue
       const fieldArgs = buildReconcileEditArgs(diff)
       if (fieldArgs.length || bodyResult.body !== null) {
@@ -1174,50 +1183,51 @@ if (typeof repo === 'string') {
   }
 }
 
-// F6, menor 5 — labels: qué se reutiliza y qué se inventa. Se calcula ANTES
-// de la rama de --dry-run (misma información en preview y en corrida real,
-// igual que el reporte de divergencia). `newLabels` cae a "todas" cuando no
-// hay --repo con el que consultar: sin repo no se puede afirmar que ninguna
-// exista.
-// Las labels que este repo tiene que TENER: las que los issues llevan, más el
-// vocabulario `status:` completo (LOOP_STATUS_LABELS). Lo segundo no es un
-// añadido cosmético: un issue nace en `status:backlog` y las otras tres del
-// vocabulario se escriben más tarde con `gh issue edit --add-label`, que NO
-// puede crearlas (resuelve nombre -> id; un nombre ausente resuelve a null y
-// falla). Sin esto, en un repo recién bootstrapeado el primer paso posterior al
-// groom —la promoción humana a `status:ready`— reventaba, y el claim detrás
-// moría con exit 3 diciendo «reintenta más tarde». Ver groom.js#LOOP_STATUS_LABELS.
+// F6, minor 5 — labels: what gets reused and what gets invented. It is
+// computed BEFORE the --dry-run branch (the same information in the preview
+// and in the real run, just like the divergence report). `newLabels` falls back
+// to "all of them" when there is no --repo to consult: with no repo it cannot
+// be claimed that any of them exists.
+// The labels this repo has to HAVE: the ones the issues carry, plus the
+// complete `status:` vocabulary (LOOP_STATUS_LABELS). The second is not a
+// cosmetic addition: an issue is born in `status:backlog` and the other three
+// of the vocabulary are written later with `gh issue edit --add-label`, which
+// CANNOT create them (it resolves name -> id; an absent name resolves to null
+// and fails). Without this, in a freshly bootstrapped repo the first step after
+// the groom —the human promotion to `status:ready`— blew up, and the claim
+// behind it died with exit 3 saying «reintenta más tarde». See
+// groom.js#LOOP_STATUS_LABELS.
 const wantedLabels = [...new Set([...plan.issues.flatMap((i) => i.labels), ...LOOP_STATUS_LABELS])]
 const reusedLabels = existingLabelNames ? wantedLabels.filter((l) => existingLabelNames.has(l)) : []
 const newLabels = existingLabelNames ? wantedLabels.filter((l) => !existingLabelNames.has(l)) : wantedLabels
 const LABEL_VOCAB_HINT = `revisa si alguna es un sinónimo de una que ya existe (\`gh label list --repo ${typeof repo === 'string' ? repo : '<owner/repo>'}\`): la detección de colisión (area:/touches:) solo funciona si todos los specs del repo usan el MISMO vocabulario`
-// Se habla SOLO cuando hay algo que revisar — inventar vocabulario nuevo. Si
-// el plan no crea ninguna label, no hay nada que distinguir y el silencio
-// sigue significando lo que significaba (mismo criterio que el reporte de
-// divergencia de F5: silencio = nada que decidir). Sin --repo no se puede
-// afirmar nada sobre qué existe, así que tampoco se dice nada.
+// It speaks ONLY when there is something to check — inventing new vocabulary.
+// If the plan creates no label at all, there is nothing to tell apart and the
+// silence goes on meaning what it meant (the same criterion as F5's divergence
+// report: silence = nothing to decide). With no --repo nothing can be claimed
+// about what exists, so nothing is said either.
 function labelReportLine(verb) {
   if (!existingLabelNames || !newLabels.length) return null
   const reusedPart = reusedLabels.length ? ` (las demás ya existían y se reutilizan tal cual, sin tocarlas: ${reusedLabels.join(', ')})` : ''
   return `labels ${verb} nuevas en ${repo}: ${newLabels.join(', ')}${reusedPart} — ${LABEL_VOCAB_HINT}`
 }
-// F6, grave 2 — el groom crea issues en `status:backlog` (groom.js#buildLabels)
-// y el dispatcher solo mira `status:ready`: correr /ct-groom y acto seguido
-// /ct-next producía "no hay slices despachables" sobre issues recién creados,
-// sin que nada explicara por qué. El recordatorio se ancla al ESTADO REAL de
-// los issues (resolveStatus, el mismo criterio del dispatcher), no a "acabo
-// de crear algo": un epic ya promovido entero no genera ningún ruido, y un
-// epic cuyos issues siguen en backlog lo dice aunque esta corrida no haya
-// creado nada.
+// F6, serious 2 — the groom creates issues in `status:backlog`
+// (groom.js#buildLabels) and the dispatcher only looks at `status:ready`:
+// running /ct-groom and then /ct-next straight away produced "no hay slices
+// despachables" over freshly created issues, with nothing explaining why. The
+// reminder is anchored to the REAL STATE of the issues (resolveStatus, the
+// dispatcher's own criterion), not to "I have just created something": an epic
+// already promoted in full generates no noise at all, and an epic whose issues
+// are still in backlog says so even when this run created nothing.
 function backlogPendingCount() {
-  if (!reconcileEntries.length) return plan.issues.length // sin --repo no hay issues que consultar: todos se crearían en backlog
+  if (!reconcileEntries.length) return plan.issues.length // with no --repo there are no issues to consult: all of them would be created in backlog
   return reconcileEntries.filter(({ found }) => {
-    if (!found) return true // se creará en esta corrida, y buildLabels le pone status:backlog
-    // Un issue CERRADO no está pendiente de promoción: está hecho. Sin este
-    // filtro, un epic terminado (issues cerrados a los que nadie devolvió el
-    // label de estado) arrastraría el recordatorio para siempre en cada
-    // re-groom — un aviso que no se puede satisfacer es un aviso que enseña
-    // a ignorar los demás.
+    if (!found) return true // it will be created in this run, and buildLabels puts status:backlog on it
+    // A CLOSED issue is not pending promotion: it is done. Without this
+    // filter, a finished epic (closed issues nobody gave the status label back
+    // to) would drag the reminder along for ever on every re-groom — a warning
+    // that cannot be satisfied is a warning that teaches you to ignore the
+    // rest.
     if (found.state === 'closed') return false
     const names = (found.labels || []).map((l) => (typeof l === 'string' ? l : l.name))
     return resolveStatus(names).status === 'backlog'
@@ -1231,44 +1241,44 @@ function printBacklogReminder() {
 }
 
 if (dryRun) {
-  // Los dos mensajes de F6 van por stderr, ANTES del plan: stdout tiene que
-  // seguir siendo JSON puro y parseable (varios tests, y cualquier tubería
-  // real, dependen de eso).
+  // F6's two messages go to stderr, BEFORE the plan: stdout has to go on being
+  // pure, parseable JSON (several tests, and any real pipeline, depend on
+  // that).
   const labelLine = labelReportLine('que se crearían')
   if (labelLine) console.error(labelLine)
   printBacklogReminder()
   console.log(JSON.stringify({ ...plan, repo: typeof repo === 'string' ? repo : null, project: projectNum }, null, 2))
-  // Código de salida (F5): 3 para "divergencia detectada, no reconciliada" —
-  // deliberadamente DISTINTO de 0 (spec e issues de acuerdo: silencio real,
-  // nada que decidir) y de 2 (error de validación: la tabla §9 en sí es
-  // inusable, nada que reportar tiene sentido). Un exit no-cero aquí sería
-  // tan malo como el silencio que esta feature corrige, pero en la dirección
-  // opuesta: entrenaría a cualquier script que solo mire "¿salió 2, aborta
-  // todo?" a tratar una divergencia meramente informativa como si la tabla
-  // §9 estuviera rota. 3 deja claro, para quien lea el código de salida en
-  // vez del texto, que "no hay error, pero hay algo que revisar" es un
-  // tercer estado, no una variante de "todo bien" ni de "todo roto".
+  // Exit code (F5): 3 for "divergence detected, not reconciled" —
+  // deliberately DIFFERENT from 0 (the spec and the issues agree: real
+  // silence, nothing to decide) and from 2 (a validation error: the §9 table
+  // itself is unusable, and reporting anything makes no sense). A non-zero exit
+  // here would be as bad as the silence this feature corrects, but in the
+  // opposite direction: it would train any script that only looks at "did it
+  // exit 2, abort everything?" to treat a merely informative divergence as if
+  // the §9 table were broken. 3 makes it clear, for whoever reads the exit code
+  // instead of the text, that "there is no error, but there is something to
+  // check" is a third state, not a variant of "all fine" nor of "all broken".
   //
-  // Bajo --dry-run esto vale SIEMPRE (con o sin --reconcile): dry-run nunca
-  // resuelve nada de verdad, así que cualquier divergencia detectada sigue
-  // sin resolver al terminar — 3 es la lectura honesta, no una consecuencia
-  // accidental. --dry-run y la corrida real SIN --reconcile comparten el
-  // mismo 3 ante la misma divergencia POR PARIDAD (misma condición, misma
-  // señal) — NO porque encadenar `groom --dry-run && groom` deba seguir
-  // funcionando: con `&&`, un 3 corta la cadena justo cuando hay divergencia
-  // que --reconcile podría aplicar, así que ese encadenamiento nunca
-  // llegaría a ejecutar la corrida real. Quien quiera "revisa, y si hay algo
-  // que arreglar, aplícalo" tiene que comprobar el código de salida
-  // explícitamente (`; if [ $? -eq 3 ]; then …`), no depender de `&&`.
+  // Under --dry-run this holds ALWAYS (with or without --reconcile): a dry-run
+  // never really resolves anything, so any detected divergence is still
+  // unresolved when it finishes — 3 is the honest reading, not an accidental
+  // consequence. --dry-run and the real run WITHOUT --reconcile share the same
+  // 3 over the same divergence FOR PARITY (the same condition, the same
+  // signal) — NOT because chaining `groom --dry-run && groom` should go on
+  // working: with `&&`, a 3 cuts the chain exactly when there is divergence
+  // --reconcile could apply, so that chaining would never get as far as running
+  // the real run. Whoever wants "check, and if there is something to fix, apply
+  // it" has to check the exit code explicitly (`; if [ $? -eq 3 ]; then …`),
+  // not depend on `&&`.
   process.exit((anyUnresolvedDrift || anyOrphans) ? 3 : 0)
 }
 
 if (!repo) { console.error('--repo requerido fuera de --dry-run'); process.exit(2) }
 
-// Project v2 + Sprint (T9): introspección en runtime, no se hardcodean IDs.
-// Cada llamada de abajo se probó a mano contra un Project v2 real (sandbox)
-// antes de cablearla aquí; ver task-9-report.md para las queries/mutaciones
-// verificadas y sus respuestas reales.
+// Project v2 + Sprint (T9): introspection at runtime, no IDs are hardcoded.
+// Every call below was tried by hand against a real Project v2 (a sandbox)
+// before being wired in here; see task-9-report.md for the verified
+// queries/mutations and their real responses.
 const PROJECT_FIELDS_QUERY = `
 query($id: ID!) {
   node(id: $id) {
@@ -1301,18 +1311,18 @@ mutation($project: ID!, $item: ID!, $field: ID!, $iteration: String!) {
   }
 }`
 
-// Se resuelve una sola vez por ejecución (no por issue): el owner/projectId/
-// fieldId/iterationId vigente son los mismos para todos los slices de esta
-// tanda. Si el fetch falla, o el project no tiene un campo de iteración
-// llamado "Sprint", o ninguna iteración cubre la fecha de hoy, abortamos —
-// mismo criterio que milestones/issues más arriba: no hay caso benigno que
-// tratar como "seguir sin Sprint".
+// It is resolved once per execution (not per issue): the current
+// owner/projectId/fieldId/iterationId are the same for every slice of this
+// batch. If the fetch fails, or the project has no iteration field called
+// "Sprint", or no iteration covers today's date, we abort — the same criterion
+// as milestones/issues further up: there is no benign case to be treated as
+// "carry on without a Sprint".
 let projectMeta = null
 function ensureProjectMeta() {
   if (projectMeta) return projectMeta
-  // TODO: asume que el Project v2 vive bajo el mismo owner que --repo. Un
-  // project de organización sobre un repo de otro owner (o viceversa)
-  // necesitaría un --project-owner explícito; no cubierto todavía.
+  // TODO: it assumes the Project v2 lives under the same owner as --repo. An
+  // organisation project over a repo belonging to another owner (or the other
+  // way round) would need an explicit --project-owner; not covered yet.
   const owner = repo.split('/')[0]
   let view
   try {
@@ -1333,11 +1343,12 @@ function ensureProjectMeta() {
   const nodes = fieldsRaw?.data?.node?.fields?.nodes || []
   const sprintField = nodes.find((n) => n && n.name === 'Sprint')
   if (!sprintField) {
-    // F18/H6 — "no vino en la respuesta" NO es "no existe". `fields(first: 50)`
-    // es una lectura ACOTADA: un project con más de 50 campos puede tener su
-    // campo Sprint fuera de la primera página, y el mensaje de siempre
-    // afirmaría, con total aplomo, que el project no lo tiene. `totalCount`
-    // (pedido en la misma query, coste cero) distingue las dos cosas.
+    // F18/H6 — "it did not come back in the response" is NOT "it does not
+    // exist". `fields(first: 50)` is a BOUNDED read: a project with more than
+    // 50 fields may have its Sprint field outside the first page, and the
+    // long-standing message would claim, with total composure, that the project
+    // does not have it. `totalCount` (asked for in the same query, at zero
+    // cost) tells the two things apart.
     const totalFields = fieldsRaw?.data?.node?.fields?.totalCount
     if (Number.isInteger(totalFields) && totalFields > nodes.length) {
       console.error(`no se ha podido comprobar si el project ${project} tiene un campo de iteración "Sprint": la consulta solo trajo ${nodes.length} de sus ${totalFields} campos (lectura acotada a 50 por página). NO se afirma que no exista — no se ha visto entero. Reduce el número de campos del project, o repórtalo para que la consulta pagine.`)
@@ -1356,14 +1367,14 @@ function ensureProjectMeta() {
   return projectMeta
 }
 
-// añade un issue (nuevo o preexistente, identificado por su URL) al Project
-// v2 y fija su Sprint a la iteración vigente. Se llama tanto para issues
-// creados en esta corrida como, más abajo, para issues preexistentes a los
-// que les falte el item de project (ver hasProjectItem): el alta del issue y
-// el alta en el project son dos llamadas de red desacopladas (a diferencia
-// de las labels, que van dentro de `gh issue create` y no pueden quedar a
-// medias), así que una interrupción entre ambas dejaría el issue fuera del
-// project para siempre si no se re-comprobara en cada corrida.
+// it adds an issue (new or pre-existing, identified by its URL) to the Project
+// v2 and pins its Sprint to the current iteration. It is called both for issues
+// created in this run and, further down, for pre-existing issues that are
+// missing their project item (see hasProjectItem): registering the issue and
+// registering it in the project are two decoupled network calls (unlike the
+// labels, which travel inside `gh issue create` and cannot be left half-done),
+// so an interruption between the two would leave the issue outside the project
+// for ever if it were not re-checked on every run.
 function addToProjectWithSprint(issueUrl, order) {
   const meta = ensureProjectMeta()
   let item
@@ -1385,63 +1396,65 @@ function addToProjectWithSprint(issueUrl, order) {
 }
 
 // ============================================================================
-// F15/H2 — TODA LA VALIDACIÓN DEL PROJECT, ANTES DE LA PRIMERA MUTACIÓN.
+// F15/H2 — ALL OF THE PROJECT VALIDATION, BEFORE THE FIRST MUTATION.
 //
-// `ensureProjectMeta()` es perezosa: se resolvía en la PRIMERA llamada a
-// `addToProjectWithSprint`, o en el listado de items de más abajo. Con el
-// listado colocado después del milestone y de las labels, un abort por "el
-// project no tiene un campo Sprint" o "ninguna iteración cubre hoy" ocurría
-// con el milestone YA CREADO y las labels YA CREADAS. Verificado por
-// construcción contra el código sin arreglar, con un stub de `gh` que registra
-// el argv de cada llamada: el log salía
-//   api .../milestones --method GET …   (listado)
-//   api .../milestones -f title=Epic    (CREACIÓN)
-//   label create type:backend …         (CREACIÓN ×4)
-//   project view 5 --owner o …          (aquí falla y aborta)
-// y el stdout ya decía "milestone creado: Epic (#1)". O sea: la basura a
-// medias que la documentación ni prometía ni desmentía era REAL.
+// `ensureProjectMeta()` is lazy: it used to be resolved on the FIRST call to
+// `addToProjectWithSprint`, or in the item listing further down. With the
+// listing placed after the milestone and the labels, an abort over "the project
+// has no Sprint field" or "no iteration covers today" happened with the
+// milestone ALREADY CREATED and the labels ALREADY CREATED. Verified by
+// construction against the unfixed code, with a `gh` stub that records the argv
+// of every call: the log came out as
+//   api .../milestones --method GET …   (listing)
+//   api .../milestones -f title=Epic    (CREATION)
+//   label create type:backend …         (CREATION ×4)
+//   project view 5 --owner o …          (this is where it fails and aborts)
+// and stdout already said "milestone creado: Epic (#1)". That is: the half-done
+// rubbish the documentation neither promised nor denied was REAL.
 //
-// Se adelanta ENTERO el bloque de project (validación + listado de items) por
-// delante del milestone. Los dos son lecturas, y las dos abortan con exit 1:
-// dejarlas donde estaban significaba que cualquier fallo de project —incluido
-// un rate limit al listar items— pagaba el mismo precio.
+// The project block (validation + item listing) is moved up WHOLE, ahead of the
+// milestone. Both are reads, and both abort with exit 1: leaving them where
+// they were meant that any project failure —a rate limit while listing items
+// included— paid the same price.
 //
-// LA GARANTÍA QUE ESTO CREA, y que ahora sí se puede escribir en el contrato:
-// todo lo que /ct-groom LEE ocurre antes de todo lo que /ct-groom ESCRIBE. Si
-// aborta por validación (tabla §9, spec, repo, milestone ilegible, project sin
-// Sprint, iteración vencida), no ha creado nada. Lo que NO se promete: una vez
-// empieza a escribir no hay transacción — un fallo a mitad deja lo ya creado,
-// y de eso se sale volviendo a correr, que es idempotente por construcción
-// (milestone por título, labels solo las que faltan, issues por marcador
-// `ct-order`).
+// THE GUARANTEE THIS CREATES, and which can now genuinely be written into the
+// contract: everything /ct-groom READS happens before everything /ct-groom
+// WRITES. If it aborts over validation (the §9 table, the spec, the repo, an
+// illegible milestone, a project with no Sprint, an expired iteration), it has
+// created nothing. What is NOT promised: once it starts writing there is no
+// transaction — a failure halfway through leaves what has already been created,
+// and the way out of that is running again, which is idempotent by
+// construction (the milestone by title, only the labels that are missing, the
+// issues by their `ct-order` marker).
 // ============================================================================
-// Items ya presentes en el Project v2 — se listan una sola vez por corrida
-// (igual que milestones/existingIssues abajo) para poder detectar issues
-// preexistentes a los que, por una interrupción previa, les falte el item
-// de project (ver hasProjectItem en project-fields.js).
+// Items already present in the Project v2 — they are listed once per run (just
+// like milestones/existingIssues below) so as to be able to detect
+// pre-existing issues that, because of an earlier interruption, are missing
+// their project item (see hasProjectItem in project-fields.js).
 //
-// F18/H6 — ESTE ERA EL ÚLTIMO TOPE FIJO SIN DETECCIÓN DE TRUNCADO DEL PLUGIN,
-// Y LA LECCIÓN YA ESTABA ESCRITA AL LADO. `ct-next.mjs#loadIssues` explica que
-// no se usa `gh issue list --limit N` porque "un `--limit` fijo deja fuera
-// justo los issues VIEJOS", y unas líneas más abajo, en este mismo fichero, la
-// enumeración de issues dice que un tope fijo "reintroduciría el mismo fallo
-// por truncado". Aquí, en cambio, el tope se había SUBIDO de 30 a 200 —
-// alejando la trampa en vez de quitarla— y `existingProjectItems` se trataba
-// como completo pasara lo que pasara.
+// F18/H6 — THIS WAS THE PLUGIN'S LAST FIXED CAP WITH NO TRUNCATION DETECTION,
+// AND THE LESSON WAS ALREADY WRITTEN RIGHT NEXT TO IT. `ct-next.mjs#loadIssues`
+// explains that `gh issue list --limit N` is not used because "a fixed `--limit`
+// leaves out exactly the OLD issues", and a few lines further down, in this very
+// file, the issue enumeration says that a fixed cap "would reintroduce the same
+// failure through truncation". Here, by contrast, the cap had been RAISED from
+// 30 to 200 —moving the trap further away instead of removing it— and
+// `existingProjectItems` was treated as complete whatever happened.
 //
-// La consecuencia no es un mensaje pobre: `hasProjectItem` (project-fields.js)
-// devuelve `false` para items que SÍ existen, así que /ct-groom vuelve a
-// añadirlos y el Project acaba con DUPLICADOS, en silencio.
+// The consequence is not a poor message: `hasProjectItem` (project-fields.js)
+// returns `false` for items that DO exist, so /ct-groom adds them again and the
+// Project ends up with DUPLICATES, in silence.
 //
-// Se arregla sin paginar y sin llamadas de más en el caso normal: `gh project
-// item-list --format json` devuelve `{items, totalCount}` (verificado contra
-// gh 2.86 sobre un project real: `--limit 2` sobre 3 items devolvió
-// `items.length = 2, totalCount = 3`). Si el tope recortó, se repite la
-// consulta pidiendo exactamente lo que el propio GitHub dice que hay. Si aun
-// así viene corta, se ABORTA: seguir significaría duplicar items, y ése es
-// justo el daño que este bloque existe para evitar. Y si `totalCount` no
-// viene (una versión de gh que no lo exponga), se avisa de que el truncado no
-// se ha podido descartar — nunca se da por bueno en silencio.
+// It is fixed without paginating and without extra calls in the normal case:
+// `gh project item-list --format json` returns `{items, totalCount}` (verified
+// against gh 2.86 over a real project: `--limit 2` over 3 items returned
+// `items.length = 2, totalCount = 3`). If the cap trimmed, the query is repeated
+// asking for exactly what GitHub itself says is there. If it still comes back
+// short, it ABORTS: carrying on would mean duplicating items, and that is
+// exactly the damage this block exists to prevent. And if `totalCount` does not
+// come back (a version of gh that does not expose it), a warning goes out
+// saying that truncation could not be ruled out — it is never accepted in
+// silence.
 const PROJECT_ITEMS_PAGE = 200
 let existingProjectItems = []
 if (projectNum) {
@@ -1467,13 +1480,13 @@ if (projectNum) {
   }
 }
 
-// milestone idempotente — el filtrado por título se hace en JS, no dentro de un
-// filtro jq: un título con `"` o `\` rompería el programa jq si se interpolara
-// ahí. Traemos la lista completa (paginada, todos los estados: el endpoint
-// filtra a "open" por defecto y un milestone cerrado con el mismo título
-// causaría un duplicado) y comparamos en memoria. Si el fetch falla (auth,
-// red, rate limit) abortamos — NO lo tratamos como "no existe", o
-// terminaríamos creando un milestone duplicado.
+// an idempotent milestone — the filtering by title is done in JS, not inside a
+// jq filter: a title with a `"` or a `\` in it would break the jq program if it
+// were interpolated there. We bring back the complete list (paginated, all
+// states: the endpoint filters to "open" by default and a closed milestone with
+// the same title would cause a duplicate) and compare in memory. If the fetch
+// fails (auth, network, rate limit) we abort — we do NOT treat it as "it does
+// not exist", or we would end up creating a duplicate milestone.
 let allMilestones
 try {
   allMilestones = JSON.parse(gh(['api', `repos/${repo}/milestones`, '--method', 'GET', '-f', 'state=all', '--paginate']))
@@ -1488,86 +1501,88 @@ if (!msNumber) {
   console.log(`milestone creado: ${milestone} (#${msNumber})`)
 } else console.log(`milestone ya existe: ${milestone} (#${msNumber})`)
 
-// labels que falten. Cualquier fallo de gh aquí es real (auth, red, rate
-// limit) y debe abortar el script en vez de dejar issues sin sus labels.
+// the labels that are missing. Any gh failure here is real (auth, network,
+// rate limit) and must abort the script instead of leaving issues without their
+// labels.
 //
-// F6 (menor 5): solo se crean las que el repo NO tiene ya (`newLabels`,
-// calculado arriba contra el listado real de labels). Antes se llamaba a `gh
-// label create --force` para TODAS en cada corrida — y `--force` sobre una
-// label existente la reescribe con el color/descripción por defecto de gh, así
-// que un groom podía cambiarle el color a labels del repo que nadie le pidió
-// tocar. Se conserva `--force` en la creación por si otra corrida la creó
-// entre el listado y esta llamada (carrera benigna): con --force eso no es un
-// error, sin él abortaría la corrida entera.
+// F6 (minor 5): only the ones the repo does NOT already have get created
+// (`newLabels`, computed above against the real label listing). Before, `gh
+// label create --force` was called for ALL of them on every run — and `--force`
+// over an existing label rewrites it with gh's default colour/description, so a
+// groom could change the colour of the repo's labels nobody asked it to touch.
+// `--force` is kept in the creation in case another run created it between the
+// listing and this call (a benign race): with --force that is not an error,
+// without it the whole run would abort.
 for (const l of newLabels) {
   gh(['label', 'create', l, '--repo', repo, '--force'])
 }
 {
-  // El reporte va DESPUÉS de crearlas: decir "creadas" antes de que `gh` las
-  // haya creado de verdad sería afirmar algo que un fallo posterior
-  // desmentiría.
+  // The report goes AFTER creating them: saying "creadas" before `gh` has
+  // really created them would be claiming something a later failure would
+  // contradict.
   const line = labelReportLine('creadas')
   if (line) console.error(line)
 }
 
-// issues idempotentes por marcador ct-order. NO usamos `gh issue list --search`:
-// la búsqueda de GitHub tokeniza por espacios y trata un `-` inicial como
-// cualificador de exclusión, así que el marcador `<!-- ct-order:N -->` no hace
-// matching de substring fiable, y el índice de búsqueda tiene latencia para
-// issues recién creados (falso negativo → duplicado; falso positivo → un
-// slice que debía crearse se salta en silencio). En su lugar, enumeramos TODOS
-// los issues, con paginación real (`--paginate`, sin tope de `--limit`) sobre
-// el endpoint REST — un `--limit` fijo dejaría fuera issues antiguos con
-// marcador en un repo grande, reintroduciendo el mismo fallo por truncado en
-// vez de por latencia. Ese endpoint también devuelve pull requests y, sin
-// `--slurp`, `--paginate` concatenaría varios documentos JSON sueltos que
-// romperían el `JSON.parse`; ver scripts/gh-issues.js para el detalle y los
-// tests puros de ese filtrado/aplanado. Comparamos el marcador como substring
-// literal del body en JS — mismo patrón que el fix de milestones. Un fallo
-// del fetch aborta. F5: este fetch (y el cómputo de `reconcileEntries`) ya se
-// hizo MÁS ARRIBA, antes de la rama de --dry-run — no se repite aquí, solo se
-// reutiliza `existingIssues`/`reconcileEntries`.
+// issues idempotent by their ct-order marker. We do NOT use `gh issue list
+// --search`: GitHub's search tokenises on spaces and treats a leading `-` as an
+// exclusion qualifier, so the marker `<!-- ct-order:N -->` does no reliable
+// substring matching, and the search index has latency for freshly created
+// issues (a false negative → a duplicate; a false positive → a slice that
+// should have been created gets skipped in silence). Instead, we enumerate ALL
+// the issues, with real pagination (`--paginate`, with no `--limit` cap) over
+// the REST endpoint — a fixed `--limit` would leave out old issues carrying a
+// marker in a large repo, reintroducing the same failure through truncation
+// instead of through latency. That endpoint also returns pull requests and,
+// without `--slurp`, `--paginate` would concatenate several loose JSON
+// documents that would break the `JSON.parse`; see scripts/gh-issues.js for the
+// detail and the pure tests of that filtering/flattening. We compare the marker
+// as a literal substring of the body in JS — the same pattern as the milestone
+// fix. A fetch failure aborts. F5: this fetch (and the computation of
+// `reconcileEntries`) already happened FURTHER UP, before the --dry-run branch
+// — it is not repeated here, `existingIssues`/`reconcileEntries` are just
+// reused.
 
 for (const { iss, found, diff, bodyResult } of reconcileEntries) {
   if (found) {
     console.log(`issue orden #${iss.order} ya existe (#${found.number}), no se duplica`)
-    // F5: la detección de divergencia (y su reporte por stderr, incluido el
-    // aviso de "gap" si --reconcile no puede aplicar algo) ya ocurrió ANTES
-    // de la rama de --dry-run, así que es idéntica en preview y en corrida
-    // real — aquí solo queda, opcionalmente, APLICAR lo que sí se puede.
-    // Mismo criterio que el preview de --dry-run, y por el mismo motivo: la
-    // pregunta "¿hay algo que escribir?" (`bodyResult.body !== null`) es
-    // distinta de "¿esto cuenta para el exit code?" (`hasDrift`, que excluye
-    // el contexto del epic a propósito — §4.4). Con una sola de las dos, una
-    // corrida cuya única divergencia era esa sección calculaba el body nuevo,
-    // lo tiraba, salía 0 y aun así informaba de que se había reescrito.
+    // F5: the divergence detection (and its report on stderr, the "gap"
+    // warning included if --reconcile cannot apply something) already happened
+    // BEFORE the --dry-run branch, so it is identical in the preview and in the
+    // real run — all that is left here is, optionally, to APPLY what can be
+    // applied. The same criterion as the --dry-run preview, and for the same
+    // reason: the question "is there anything to write?"
+    // (`bodyResult.body !== null`) is different from "does this count towards
+    // the exit code?" (`hasDrift`, which deliberately excludes the epic context
+    // — §4.4). With only one of the two, a run whose only divergence was that
+    // section computed the new body, threw it away, exited 0 and still reported
+    // that it had been rewritten.
     if (reconcileFlag && (hasDrift(diff) || bodyResult.body !== null)) {
-      const fieldArgs = buildReconcileEditArgs(diff) // título/milestone/labels, vía flags (el enlace al spec vive en bodyResult.body, ver abajo — es un splice de una línea, no un flag)
+      const fieldArgs = buildReconcileEditArgs(diff) // title/milestone/labels, via flags (the link to the spec lives in bodyResult.body, see below — it is a one-line splice, not a flag)
       const allArgs = bodyResult.body !== null ? [...fieldArgs, '--body', bodyResult.body] : fieldArgs
-      // allArgs solo puede quedar vacío aquí si no hay body nuevo que escribir
-      // y NADA de lo divergente se pudo traducir a una mutación real — hoy,
-      // únicamente cuando la ÚNICA divergencia es de AC/Dependencias y su
-      // sección no se pudo localizar (gaps.ac/gaps.deps, ver el aviso ya
-      // impreso arriba). No hay ninguna llamada a `gh` que hacer en ese caso.
+      // allArgs can only come out empty here if there is no new body to write
+      // and NOTHING that diverges could be translated into a real mutation —
+      // today, only when the ONLY divergence is of AC/Dependencias and its
+      // section could not be located (gaps.ac/gaps.deps, see the warning
+      // already printed above). There is no `gh` call to make in that case.
       if (allArgs.length > 0) {
-        // Mismo criterio que el resto de mutaciones de este fichero (labels,
-        // milestone, project): un fallo de `gh` aquí NUNCA es benigno — auth,
-        // red, rate limit, o el issue cerrado rechazando el edit por alguna
-        // razón que no podemos anticipar. Abortamos con mensaje claro en vez
-        // de seguir a ciegas con el resto de slices, que podría dejar
-        // reconciliados solo ALGUNOS issues sin que quede constancia clara de
-        // cuáles.
+        // The same criterion as the rest of this file's mutations (labels,
+        // milestone, project): a `gh` failure here is NEVER benign — auth,
+        // network, rate limit, or the closed issue rejecting the edit for some
+        // reason we cannot anticipate. We abort with a clear message instead of
+        // carrying on blind with the rest of the slices, which could leave only
+        // SOME issues reconciled with no clear record of which.
         try {
           gh(['issue', 'edit', String(found.number), '--repo', repo, ...allArgs])
         } catch (e) {
           console.error(`no se pudo reconciliar el issue #${found.number} (orden #${iss.order}): ${e.message}`)
           process.exit(1)
         }
-        // El --body reconciliado no se imprime entero (puede ser un bloque de
-        // texto largo) — se nombra por categoría, igual que el preview de
-        // --dry-run, y con la MISMA lista: lo que se ha escrito, no lo que
-        // diverge. Una categoría cuya sección no se pudo localizar ya se
-        // reporta como `nota:` por stderr; nombrarla aquí sería contradecirse.
+        // The reconciled --body is not printed in full (it can be a long block
+        // of text) — it is named by category, just like the --dry-run preview,
+        // and with the SAME list: what has been written, not what diverges. A
+        // category whose section could not be located is already reported as a
+        // `nota:` on stderr; naming it here would be contradicting ourselves.
         console.log(`issue #${found.number} reconciliado (orden #${iss.order}): ${appliedCategories(diff, bodyResult).join(', ')}`)
       }
     }
@@ -1580,34 +1595,34 @@ for (const { iss, found, diff, bodyResult } of reconcileEntries) {
   const num = gh(['issue', 'create', '--repo', repo, '--title', iss.title, '--body', iss.body,
     '--milestone', milestone, ...iss.labels.flatMap((l) => ['--label', l])])
   console.log(`issue creado orden #${iss.order}: ${num}`)
-  // F23: se empuja a `inEpic` porque es la lista contra la que empareja el
-  // marcador. Hoy este registro NO tiene lectores: `findByMarker` se invoca
-  // una sola vez (arriba), dentro del `plan.issues.map` que construye
-  // `reconcileEntries` de una vez, mucho antes de este bucle. Se conserva por
-  // coherencia con esa lista, no porque proteja de nada: un orden duplicado en
-  // la tabla §9 ya lo corta groom.js#findDuplicateOrders antes de llegar aquí.
+  // F23: it is pushed into `inEpic` because that is the list the marker is
+  // paired against. Today this registration has NO readers: `findByMarker` is
+  // invoked once (above), inside the `plan.issues.map` that builds
+  // `reconcileEntries` in one go, long before this loop. It is kept for
+  // coherence with that list, not because it protects against anything: a
+  // duplicated order in the §9 table is already cut off by
+  // groom.js#findDuplicateOrders before getting here.
   inEpic.push({ number: null, body: iss.body })
   if (projectNum) addToProjectWithSprint(num, iss.order)
 }
 
-// F6, grave 2: lo último que se lee tras una corrida real es qué falta para
-// que esto sea despachable — ver printBacklogReminder más arriba.
+// F6, serious 2: the last thing that gets read after a real run is what is
+// missing for this to be dispatchable — see printBacklogReminder further up.
 printBacklogReminder()
 
-// F5: código de salida de la corrida real — mismo criterio de 3 estados que
-// bajo --dry-run (ver el comentario junto al `process.exit` de esa rama):
-// - sin --reconcile: 3 si `anyUnresolvedDrift` (cualquier categoría) o
-//   `anyOrphans` seguía en pie, 0 si no.
-// - con --reconcile: cualquier fallo de `gh issue edit` ya abortó con
-//   exit(1) más arriba (nunca se sigue a ciegas), así que llegar hasta aquí
-//   significa que título/milestone/enlace-al-spec/labels/deps/ac se
-//   aplicaron con éxito donde divergían Y donde se pudieron localizar. Lo
-//   único que puede seguir sin resolver es: (a) un gap real de AC/deps
-//   (`anyReconcileGapRemains` — Critical 2, el aviso de arriba ya explicó
-//   por qué) o (b) un issue huérfano (`anyOrphans` — --reconcile no los
-//   toca, no hay "spec" con el que reconciliarlos). Descripción/Protegido
-//   NUNCA aparecen aquí (ver hasDrift/reconcileGaps): anclar el exit code a
-//   prosa que se edita de forma rutinaria dejaría el proceso en 3 para
-//   siempre sin ningún --reconcile capaz de resolverlo (review round 3,
-//   punto 6).
+// F5: exit code of the real run — the same three-state criterion as under
+// --dry-run (see the comment beside that branch's `process.exit`):
+// - without --reconcile: 3 if `anyUnresolvedDrift` (any category) or
+//   `anyOrphans` was still standing, 0 if not.
+// - with --reconcile: any `gh issue edit` failure already aborted with exit(1)
+//   further up (it never carries on blind), so getting this far means that
+//   title/milestone/link-to-the-spec/labels/deps/ac were applied successfully
+//   wherever they diverged AND wherever they could be located. The only things
+//   that can still be unresolved are: (a) a real AC/deps gap
+//   (`anyReconcileGapRemains` — Critical 2, the warning above already explained
+//   why) or (b) an orphan issue (`anyOrphans` — --reconcile does not touch
+//   them, there is no "spec" to reconcile them against). Descripción/Protegido
+//   NEVER appear here (see hasDrift/reconcileGaps): anchoring the exit code to
+//   prose that gets edited routinely would leave the process at 3 for ever with
+//   no --reconcile able to resolve it (review round 3, point 6).
 process.exit(((reconcileFlag ? anyReconcileGapRemains : anyUnresolvedDrift) || anyOrphans) ? 3 : 0)
