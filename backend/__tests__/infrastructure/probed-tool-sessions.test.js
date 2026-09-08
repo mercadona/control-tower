@@ -145,4 +145,43 @@ describe('ProbedToolSessions', () => {
     expect(gh.state).toBe(SessionState.READY)
     expect(gh.fix).toBeNull()
   })
+
+  it('gh_that_is_not_logged_in_is_missing_and_says_how_to_log_in', async () => {
+    const clients = ClientsDouble.allHappy().saying('gh', new ProcessOutput({
+      code: 1, stdout: '',
+      stderr: 'You are not logged into any GitHub hosts. To log in, run: gh auth login',
+    }))
+
+    const sessions = await clients.sessions().all()
+
+    const gh = sessions.find((session) => session.tool === 'gh')
+    expect(gh.state).toBe(SessionState.MISSING)
+    expect(gh.fix).toBe('gh auth login')
+  })
+
+  it('acli_that_is_not_authenticated_is_missing_and_says_how_to_authenticate', async () => {
+    const clients = ClientsDouble.allHappy().saying('acli', new ProcessOutput({
+      code: 1, stdout: '',
+      stderr: "✗ Error: unauthorized: use 'acli jira auth login' to authenticate",
+    }))
+
+    const sessions = await clients.sessions().all()
+
+    const acli = sessions.find((session) => session.tool === 'acli')
+    expect(acli.state).toBe(SessionState.MISSING)
+    expect(acli.fix).toBe('acli jira auth login')
+  })
+
+  it('git_whose_key_github_refuses_is_missing_and_says_to_add_one_even_though_it_exits_255', async () => {
+    const clients = ClientsDouble.allHappy().saying('ssh', new ProcessOutput({
+      code: 255, stdout: '',
+      stderr: 'git@github.com: Permission denied (publickey).',
+    }))
+
+    const sessions = await clients.sessions().all()
+
+    const git = sessions.find((session) => session.tool === 'git')
+    expect(git.state).toBe(SessionState.MISSING)
+    expect(git.fix).toBe('add an SSH key to your GitHub account')
+  })
 })
