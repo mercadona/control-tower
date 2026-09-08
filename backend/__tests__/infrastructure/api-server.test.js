@@ -161,6 +161,18 @@ class ProgressSpy {
   }
 }
 
+class ExternalToolsSpy {
+  constructor() {
+    this.asked = 0
+  }
+
+  async execute() {
+    this.asked += 1
+
+    return { ready: true, sessions: [] }
+  }
+}
+
 class FrontendFixture {
   static INDEX = '<!doctype html><title>control tower</title>'
 
@@ -202,6 +214,7 @@ class RunningApi {
       planEvents: ProgressSpy.events(PlanState.WRITING).planEvents,
       sessions,
       activePlans,
+      externalTools: options.externalTools ?? new ExternalToolsSpy(),
       frontendRoot: FrontendFixture.missing(),
       ...options,
     })
