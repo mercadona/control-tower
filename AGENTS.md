@@ -1,0 +1,110 @@
+<!-- Durable guide for this repository (≤150 lines). Procedures → Skills. -->
+
+# This repository is written in English
+
+Everything. Code, tests, documentation, commit messages, branch names, issues and
+pull requests. There is one exemption and it is named below; if what you are
+writing is not that exemption, it is English.
+
+This document and `CLAUDE.md` carry the same text on purpose, so that no agent
+reaches this repository through one of them and misses the rule.
+
+## The rule, surface by surface
+
+| Surface | Language |
+|---|---|
+| File and module names, types, functions, methods, variables, parameters, constants | English |
+| Test names — `describe`, `it`, `test` | English |
+| Error messages, log lines, diagnostics, anything a program prints | English |
+| Comments and docstrings, where the yardstick allows any at all | English |
+| Documentation, `README.md`, `Makefile`, CI workflow comments | English |
+| Commit messages and branch names | English |
+| GitHub issues and pull requests — title, body and comments | English |
+| Agent prompts, skills, slash commands, seeded templates | English |
+| **Frontend product copy** | **Spanish** |
+| Values fixed by an external contract | Whatever that contract spells |
+
+## The one exemption: what a person reads in the product
+
+`plugin/conventions/style.md` already draws this line and this repository keeps
+it exactly where it is:
+
+> This does not cover text an end user reads. Product copy, labels, and any
+> message surfaced in a user-facing interface are not this document's business:
+> their language is the product's decision, not this rule's.
+
+Control Tower's interface is read by Spanish-speaking engineers. The strings in
+`frontend/src/` that reach the screen — field labels, banners, progress text,
+error copy — stay in Spanish until the product decides otherwise. That decision
+is not a style decision and no agent takes it while translating.
+
+The exemption is narrow. It covers **what renders**, not the code around it: the
+component's name, its props, its test names, its `__scenarios__` mothers and any
+message that only ever reaches a log are all English.
+
+## The second exemption: values fixed by a contract
+
+A string that an external system decides keeps that system's spelling. The GitHub
+labels of the loop's ladder (`status:backlog`, `status:ready`,
+`status:in-progress`, `status:in-review`, `status:blocked`, `status:rejected`,
+`gate:none`) are already English and do not move. Neither do the block markers
+`ct-init` writes into governed repositories (`<!-- ct-init:slices-contract -->`),
+the YAML keys of `.agent/STATE.md`, or the paths that code validates against —
+`docs/superpowers/plans` is checked by `plan-contract-progress.js` and read by
+`task-brief.test.js`; it is a contract, not a name you are free to translate.
+
+## This repository does not take the declared-debt exemption for language
+
+`plugin/conventions/style.md` grants one exemption in the whole travelling
+yardstick: a module that was already there and does not conform is the
+repository's **declared debt**, and what you add to it may follow the style of
+its host — *"half a migration reads worse than none."*
+
+That clause exists for the repositories Control Tower governs, which arrive with
+their own history. **It does not shelter this one.** The precedent is
+`backend/conventions/this-repository.md`, which already refuses the same
+exemption for `backend/`; this document extends the refusal to the whole
+repository and to the language rule specifically.
+
+The yardstick's other two rules — no prose in the code, and no free function at
+module level — keep their exemption here. They are a different piece of work.
+
+While Spanish modules remain, they are debt being paid down, not licence: a diff
+that touches one leaves it in English, and a new module is born in English with
+no exemption to claim.
+
+## The vocabulary is decided, not improvised
+
+`docs/glossary.md` maps every Spanish domain term this repository still carries to
+the English term already in use somewhere in the tree. It is extraction, not
+invention: the English vocabulary is established in
+`backend/conventions/this-repository.md`, in the eight English documents of
+`plugin/conventions/`, and in the script filenames that already carry it —
+`plugin-yardstick.js`, `harvest.js`, `dispatch.js`, `reconcile.js`, `scope.js`,
+`claim.js`, `step-contracts.js`.
+
+Read it before you rename anything. A term translated two ways is worse than a
+term left in Spanish, because the second is visibly debt and the first looks
+finished.
+
+## The historical record is not translated
+
+`docs/superpowers/plans/` and `docs/superpowers/specs/` hold dated plans and
+design documents, and `docs/prompt-*.md` holds the prompts of sessions that
+already happened. They are the minutes of decisions already taken. Translating
+them would rewrite what was actually written at the time, so they stay in
+Spanish and keep their filenames.
+
+**New** plans, specs and documents are written in English. The rule binds
+forward, and the same applies to git history: past commit messages stay as they
+were written and nothing here rewrites them.
+
+## What to do when you are unsure
+
+- **Is this string read by a person using the product?** If yes, Spanish. If it
+  only ever reaches a log, a test name or another program, English.
+- **Is this value decided by GitHub, git, the filesystem or a seeded contract?**
+  If yes, leave the spelling alone.
+- **Is there already an English word for this in the tree?** Use that one. Check
+  `docs/glossary.md` first, then grep `plugin/conventions/`.
+- **Anything else:** English.
