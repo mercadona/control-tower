@@ -118,3 +118,43 @@ describe('el plan enmendado viaja dentro del commit de su tarea', () => {
     expect(existsSync(join(repo, 'extra.txt'))).toBe(false)
   })
 })
+
+function quitarUnoDeLasFiles() {
+  const ruta = join(repo, 'plan.md')
+  const original = readFileSync(ruta, 'utf8')
+  const enmendado = original.replace(
+    '**Files:** `uno.txt` (create).',
+    '**Files:** `dos.txt` (create).',
+  )
+  expect(enmendado).not.toBe(original)
+  writeFileSync(ruta, enmendado)
+}
+
+describe('una enmienda sólo puede AÑADIR rutas', () => {
+  it('una enmienda que quita una ruta declarada se rechaza y el paso sale en rojo', () => {
+    quitarUnoDeLasFiles()
+    ct('report', informe(['uno.txt']))
+    const r = ct('controls')
+
+    expect(r.stdout).toMatch(/controles: failed/)
+    const log = readFileSync(estado().lastControlsLog, 'utf8')
+    expect(log).toMatch(/tarea 1 enmendó el plan quitando 'uno\.txt'.*sólo puede AÑADIR rutas/)
+  })
+
+  it('una enmienda que sólo añade rutas pasa el control', () => {
+    enmendar()
+    ct('report', informe(['uno.txt', 'extra.txt']))
+    const r = ct('controls')
+
+    expect(r.stdout).toMatch(/controles: done/)
+  })
+
+  it('tras el rechazo, el plan de HEAD sigue declarando la ruta que la enmienda quitó', () => {
+    quitarUnoDeLasFiles()
+    ct('report', informe(['uno.txt']))
+    ct('controls')
+
+    const enHead = execFileSync('git', ['show', 'HEAD:plan.md'], { cwd: repo, encoding: 'utf8' })
+    expect(enHead).toContain('**Files:** `uno.txt` (create).')
+  })
+})

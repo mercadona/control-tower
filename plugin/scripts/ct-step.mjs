@@ -1259,6 +1259,15 @@ function verboControls() {
     resultado = OUTCOMES.FAILED
   }
 
+  // La otra dirección del control de alcance: una enmienda sólo puede AÑADIR
+  // rutas a **Files:**, nunca quitarlas — quitar una desactivaría el control
+  // de arriba desde dentro del propio plan.
+  const enmienda = enmiendaSoloAnade(t)
+  if (enmienda.length) {
+    lineas.push('# enmienda del plan', ...enmienda.map((f) => `- ${f}`), '')
+    resultado = OUTCOMES.FAILED
+  }
+
   // Después los nombres, que también son gratis. La vara de un plan mide que
   // nada se rompió, no que se haya añadido lo prometido — medido en campo: una
   // tarea pidió una función y su test, llegó la función sin el test, y la
@@ -1374,6 +1383,29 @@ function alcanceDeclarado(t) {
   }
 
   return fallos
+}
+
+// La otra dirección del control de alcance (issue 161): una enmienda puede
+// AÑADIR rutas a las **Files:** de su propia tarea — eso es lo que
+// `alcanceDeclarado` ya deja pasar, comparando contra el ÍNDICE de HOY — pero
+// nunca puede QUITAR una que ya declaraba, porque eso desactivaría el control
+// de arriba desde dentro del propio plan: bastaría con borrar del **Files:**
+// la ruta que sobra para que `alcanceDeclarado` dejara de verla.
+//
+// La comparación es contra el PLAN DE HEAD, no contra ningún estado propio: si
+// el plan no está entre lo stageado, si `git show HEAD:<rutaDelPlan()>` no se
+// puede leer (primer commit del repo, por ejemplo) o si ese texto no declara
+// la tarea `t.n` (una tarea que no existía todavía en el plan de HEAD), no hay
+// nada contra qué comparar y esta comprobación no se lo inventa: devuelve [].
+function enmiendaSoloAnade(t) {
+  if (!stagedPaths().includes(rutaDelPlan())) return []
+  const anterior = git(['show', `HEAD:${rutaDelPlan()}`], { allowFail: true })
+  if (anterior === null) return []
+  const tareaAnterior = extractTasks(anterior).tasks.find((tt) => tt.n === t.n)
+  if (!tareaAnterior) return []
+  return tareaAnterior.files
+    .filter((f) => !t.files.some((tf) => tf.path === f.path))
+    .map((f) => `la tarea ${t.n} enmendó el plan quitando '${f.path}' de sus **Files:** — una enmienda sólo puede AÑADIR rutas: quitar una desactiva desde dentro el control de alcance. Devuelve la ruta al PLAN, o escribe el CÓDIGO que prometía.`)
 }
 
 // Comprueba si `nombre` aparece en el ÍNDICE, acotado a lo stageado (no al
