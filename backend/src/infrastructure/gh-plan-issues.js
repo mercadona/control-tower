@@ -248,7 +248,7 @@ export class GhPlanIssues extends PlanIssues {
         `${Gh.BIN} issue view --json title,body printed something that is not json for #${issueNumber}: ${JSON.stringify(printed)}`
       )
     }
-    if (view === null || typeof view !== 'object' || Array.isArray(view) || typeof view.title !== 'string') {
+    if (view === null || typeof view.title !== 'string') {
       throw new PlanStoryNotUnderstood(
         `${Gh.BIN} issue view --json title,body printed no title for #${issueNumber}: ${JSON.stringify(printed)}`
       )

@@ -52,12 +52,12 @@ class SessionsOfCmux {
 class PlansOf {
   static ONE_CHECKOUT = '/repos/one'
 
-  static aWorktreeAttendedBy(sessions, { storyOf = () => new UserStoryKey('ABC-123'), stderr = vi.fn() } = {}) {
+  static aWorktreeAttendedBy(sessions, { story = () => new UserStoryKey('ABC-123'), stderr = vi.fn() } = {}) {
     return new WorktreePlans({
       checkouts: { known: () => [new CheckoutRoot(PlansOf.ONE_CHECKOUT)] },
       survey: () => SurveyedCheckout.of(PlansOf.ONE_CHECKOUT, [33]),
       sessions,
-      planIssues: { storyOf },
+      story,
       stderr,
     })
   }
@@ -121,7 +121,7 @@ describe('WorktreePlans', () => {
     const stderr = vi.fn()
     const plans = PlansOf.aWorktreeAttendedBy(
       () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
-      { storyOf: () => { throw new PlanStoryNotRead('gh: not authenticated') }, stderr }
+      { story: () => { throw new PlanStoryNotRead('gh: not authenticated') }, stderr }
     )
 
     const [watch] = await plans.inFlight()
@@ -141,7 +141,7 @@ describe('WorktreePlans', () => {
         return SurveyedCheckout.of('/repos/one', [33])
       },
       sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
-      planIssues: { storyOf: () => null },
+      story: () => null,
       stderr,
     })
 
@@ -184,7 +184,7 @@ describe('WorktreePlans', () => {
       checkouts: { known: () => null },
       survey: () => SurveyedCheckout.of('/repos/one', [33]),
       sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
-      planIssues: { storyOf: () => null },
+      story: () => null,
       stderr: vi.fn(),
     })
 
@@ -196,12 +196,12 @@ describe('WorktreePlans', () => {
       checkouts: { known: () => [new CheckoutRoot('/repos/one')] },
       survey: () => { throw new TypeError('git-workspace has a bug') },
       sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
-      planIssues: { storyOf: () => null },
+      story: () => null,
       stderr: vi.fn(),
     })
     const storyBroke = PlansOf.aWorktreeAttendedBy(
       () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
-      { storyOf: () => { throw new TypeError('gh-plan-issues has a bug') } }
+      { story: () => { throw new TypeError('gh-plan-issues has a bug') } }
     )
 
     await expect(surveyBroke.inFlight()).rejects.toBeInstanceOf(TypeError)

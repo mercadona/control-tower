@@ -35,6 +35,7 @@ import { ReadFixesAsked, ReadFixesAskedParams } from '../application/queries/rea
 import { ReviewPlan, ReviewPlanParams } from '../application/actions/review-plan.js'
 import { RequestFixes, RequestFixesParams } from '../application/actions/request-fixes.js'
 import { SurveyWorkspaces, SurveyWorkspacesParams } from '../application/queries/survey-workspaces.js'
+import { ReadPlanStory, ReadPlanStoryParams } from '../application/queries/read-plan-story.js'
 import { HarvestDelivery, HarvestDeliveryParams } from '../application/actions/harvest-delivery.js'
 import { ToolRunner } from './tool-runner.js'
 import { Gh } from './gh.js'
@@ -338,13 +339,14 @@ class CtApi {
     })
     const pullRequestReviews = CtApi.#pullRequestReviews(pullRequests, planIssues, planAgents, workbench)
     const runFileProgress = new RunFileProgress({ read: Disk.read, exists: Disk.exists })
+    const readPlanStory = new ReadPlanStory({ planIssues })
     const recovery = new ActivePlanRecovery({
       plans: new WorktreePlans({
         checkouts,
         survey: async (root) => (await new SurveyWorkspaces({ workspace })
           .execute(new SurveyWorkspacesParams({ root }))).survey,
         sessions: () => listCmuxWorkspaces({ requireComplete: true }),
-        planIssues,
+        story: async (asked) => (await readPlanStory.execute(new ReadPlanStoryParams(asked))).story,
         stderr: (line) => process.stderr.write(line),
       }),
       implementationStarts,

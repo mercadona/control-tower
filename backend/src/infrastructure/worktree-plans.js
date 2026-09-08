@@ -4,11 +4,11 @@ import { PlanWatch } from '../domain/value-objects/plan-watch.js'
 import { PlanFailure } from '../domain/exceptions.js'
 
 export class WorktreePlans {
-  constructor({ checkouts, survey, sessions, planIssues, stderr }) {
+  constructor({ checkouts, survey, sessions, story, stderr }) {
     this.checkouts = checkouts
     this.survey = survey
     this.sessions = sessions
-    this.planIssues = planIssues
+    this.story = story
     this.stderr = stderr
   }
 
@@ -83,7 +83,7 @@ export class WorktreePlans {
 
   async #storyOf(issueNumber, repository) {
     try {
-      return await this.planIssues.storyOf({ issueNumber, repository })
+      return await this.story({ issueNumber, repository })
     } catch (failure) {
       if (!(failure instanceof PlanFailure)) throw failure
       this.stderr(`plans in flight: #${issueNumber} is recovered without its user story: ${failure.message}\n`)

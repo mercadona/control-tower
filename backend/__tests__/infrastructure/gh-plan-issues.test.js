@@ -145,7 +145,7 @@ class GhDouble {
   }
 
   static titled(title, body = '## Descripción\n\nlo que sea\n') {
-    return GhDouble.created(`${JSON.stringify({ title, body })}\n`)
+    return GhDouble.printing(`${JSON.stringify({ title, body })}\n`)
   }
 
   async storyFor(issue = GhDouble.OPENED) {
@@ -702,9 +702,13 @@ describe('GhPlanIssues asking which user story a plan came from', () => {
   })
 
   it('an_answer_that_is_not_the_shape_gh_declares_travels_out_as_not_understood', async () => {
-    expect(await GhDouble.created('this is not json\n').storyRefusalFor())
-      .toBeInstanceOf(PlanStoryNotUnderstood)
-    expect(await GhDouble.created(`${JSON.stringify({ body: 'no title here' })}\n`).storyRefusalFor())
-      .toBeInstanceOf(PlanStoryNotUnderstood)
+    const notJson = await GhDouble.printing('this is not json\n').storyRefusalFor()
+    const noTitle = await GhDouble.printing(`${JSON.stringify({ body: 'no title here' })}\n`).storyRefusalFor()
+    const printedNull = await GhDouble.printing('null\n').storyRefusalFor()
+
+    expect(notJson).toBeInstanceOf(PlanStoryNotUnderstood)
+    expect(noTitle).toBeInstanceOf(PlanStoryNotUnderstood)
+    expect(printedNull).toBeInstanceOf(PlanStoryNotUnderstood)
+    expect(notJson).not.toBeInstanceOf(PlanStoryNotRead)
   })
 })
