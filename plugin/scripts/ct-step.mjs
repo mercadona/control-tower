@@ -1060,16 +1060,19 @@ function medidaDeBrief() {
 // venir de donde se espera.
 const rutaSegura = (p) => p !== '' && !p.startsWith('/') && !p.split('/').includes('..')
 
-// EL PLAN TAMPOCO ES TRABAJO DE LA TAREA. En un run de verdad vive bajo
-// `docs/superpowers/plans/**` y ya lo cubre `esRutaDeLaMaquinaria`, pero la
-// ruta la elige quien despacha y puede estar en cualquier sitio: se nombra
-// aquí desde `planPath`, que es el único sitio donde este programa la sabe.
 const esDelRun = (p) => {
   const suyo = `${relative(repoRoot, workDir)}/`
-  return p === relative(repoRoot, stateFile) ||
-    p === relative(repoRoot, resolve(planPath)) ||
-    p.startsWith(suyo)
+  return p === relative(repoRoot, stateFile) || p.startsWith(suyo)
 }
+
+// EL PLAN SÍ ES TRABAJO DE LA TAREA, DESDE LA ENMIENDA (issue 161). Un plan
+// amendado a media tarea es el implementador diciendo "esto que declaré
+// también cambia", y ese cambio tiene que viajar en el commit de SU tarea, no
+// quedar huérfano hasta que alguien lo comitee aparte. `esDelRun` ya no lo
+// excluye: la ruta la elige quien despacha y puede estar en cualquier sitio,
+// así que se nombra aquí desde `planPath`, el único sitio donde este programa
+// la sabe.
+const rutaDelPlan = () => relative(repoRoot, resolve(planPath))
 
 //
 // LO QUE MIDE ESTA FUNCIÓN LO CONSUMEN DOS: `report`, que stagea lo medido, y
@@ -1093,10 +1096,15 @@ const entradasDelArbol = () => {
     if (ruta) entradas.push({ estado, ruta })
   }
   const vistas = new Set()
+  // EL PLAN PASA LAS DOS GUARDAS. `esRutaDeLaMaquinaria` lo cubre en un run de
+  // verdad (vive bajo `docs/superpowers/plans/**`), y esa guarda sigue en pie
+  // para todo lo demás; sólo la ruta del plan la atraviesa, porque es la única
+  // pieza de la maquinaria que el implementador legítimamente cambia.
   return entradas.filter(({ ruta }) => {
     if (vistas.has(ruta)) return false
     vistas.add(ruta)
-    return rutaSegura(ruta) && !esDelRun(ruta) && !esRutaDeLaMaquinaria(ruta)
+    return rutaSegura(ruta) && !esDelRun(ruta) &&
+      (ruta === rutaDelPlan() || !esRutaDeLaMaquinaria(ruta))
   })
 }
 
@@ -1290,6 +1298,20 @@ function verboControls() {
 // el índice sea lo declarado, y esto lo VERIFICA en vez de suponerlo.
 const stagedPaths = () => (git(['diff', '--cached', '--name-only']) || '').split('\n').map((l) => l.trim()).filter(Boolean)
 
+// LO STAGEADO QUE ES TRABAJO, SIN LA MAQUINARIA. `stagedPaths` responde "qué
+// hay en el índice" y eso es exactamente lo que `ajenoEnElIndice` necesita
+// (pertenencia, no contenido). Pero un plan amendado vive en el índice desde
+// que `report` lo deja pasar, y un control que lo mirara como si fuera código
+// de la tarea contestaría mal: el plan CITA verbatim los nombres de test que
+// la tarea retira, así que un control de nombres vería "sigue estando" para
+// un test que sí se borró (el falso positivo que motiva esta función). Los
+// tres controles que leen contenido —`alcanceDeclarado`, `bloquesDeclarados`,
+// `enElIndice`— filtran el plan y el resto de la maquinaria antes de mirar;
+// `ajenoEnElIndice` sigue leyendo el índice crudo, porque a esa pregunta el
+// plan sí pertenece.
+const rutasDeTrabajoEnElIndice = () =>
+  stagedPaths().filter((p) => p !== rutaDelPlan() && !esRutaDeLaMaquinaria(p))
+
 // LO AJENO EN EL ÍNDICE: lo stageado que NO lo puso este programa.
 //
 // Los tres `git commit` de la maquinaria —la tarea, el veredicto del slice y el
@@ -1327,7 +1349,7 @@ const ajenoEnElIndice = (nuestras) => {
 // implementador que tocó de más, y confundirlas cuesta un ciclo entero.
 function alcanceDeclarado(t) {
   const fallos = []
-  const tocadas = stagedPaths()
+  const tocadas = rutasDeTrabajoEnElIndice()
   const declaradas = t.files
 
   for (const ruta of tocadas) {
@@ -1364,7 +1386,7 @@ function alcanceDeclarado(t) {
 // y eso es un NO. Compartida por `testsDeclarados` y `bloquesDeclarados`:
 // misma pregunta, mismo ámbito, mismo mecanismo.
 function enElIndice(nombre) {
-  const ambito = stagedPaths()
+  const ambito = rutasDeTrabajoEnElIndice()
   if (!ambito.length) return false
   try {
     execFileSync('git', ['grep', '--cached', '--quiet', '-F', '-e', nombre, '--', ...ambito], { cwd: repoRoot, stdio: 'ignore', timeout: 60_000 })
@@ -1401,7 +1423,7 @@ function testsDeclarados(t) {
 // en `alcanceDeclarado`: confundir las dos cuesta un ciclo entero.
 function bloquesDeclarados(t) {
   const fallos = []
-  const tocadas = stagedPaths()
+  const tocadas = rutasDeTrabajoEnElIndice()
 
   for (const { role, path } of t.blockPaths) {
     if (!tocadas.includes(path)) {
