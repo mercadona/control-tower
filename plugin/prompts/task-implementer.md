@@ -59,8 +59,8 @@ this prompt or in the files it names.
    open them exactly as you open the ones §3 names.
 
    **And the brief closes with ct's own yardstick**, pasted there by the program
-   from the plugin's `conventions/` directory — only the documents whose scope
-   reaches this task, which is why the list varies in length. They are in front
+   from the plugin's `conventions/` directory — all eight of them, every time:
+   nothing is filtered by what your task declares. They are in front
    of you already, and the judge that reads your diff is handed the same ones,
    so a rule you skimmed is a round trip you paid for.
 
@@ -129,12 +129,26 @@ spends the context you still need.
 
 ## Where this task ends
 
-- **`ct-step` stages and commits.** It stages exactly the paths you report and
-  commits after it has measured the task itself. Leave the working tree dirty;
-  that is expected and correct.
+- **`ct-step` stages and commits.** It stages exactly the paths you report —
+  plus the plan file when you amended it: your report lists work, so the plan
+  stays out of it. It commits after it has measured the task itself. Leave the
+  working tree dirty; that is expected and correct.
 - **The `**Files:**` line of the brief is the boundary**, and the files it names
-  are the ones you touch. If the task needs something outside that line, say so
-  in your report and leave it there — the report is the channel for it.
+  are the ones you touch. When you need a path outside it, the first question
+  is whether the task really needs it: bringing the code back inside the line
+  is the cheap answer and usually the right one.
+- **When the task is impossible inside that line, amend it.** When the task
+  truly needs a path the plan left out, add that path to the `**Files:**` line
+  of YOUR task, in the plan file the brief was extracted from, and keep
+  working. The amendment rides inside your task's own commit, and the judge
+  rules on whether the sentence of the task justified it — so say in your
+  report which path you added and what made it necessary. Three limits, and
+  the program enforces the first two: **additions only**, because a route you
+  take away disarms the control that measures your scope; **your own task's
+  `**Files:**` line only**, so other tasks and the plan's decisions, tests and
+  verification stay exactly as they are; and a path you add as `(create)` is a
+  new module, so its architecture rules apply to it. Any other defect of the
+  plan belongs in your report, and the plan keeps it.
 - **The controls and the judge are the evidence.** They mark this task green:
   the controls run, and then a judge reads the diff. Saying "all tests pass"
   when they do not costs a round trip and buys nothing, so let your report say

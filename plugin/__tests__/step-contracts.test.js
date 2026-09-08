@@ -348,6 +348,27 @@ describe('quién puede qué', () => {
     expect(item).toMatch(/plan file/i)
   })
 
+  it('el ítem alcance NO le promete al juez que sólo le llegan añadidos', () => {
+    // Revisión de la PR: el texto afirmaba «what reaches you only ADDS», y es
+    // falso — la guarda del programa sólo mira el **Files:** de LA tarea, así
+    // que una enmienda que reescriba su Verification o borre sus Tests llega
+    // sin comprobar. Prometerle lo contrario le baja la guardia justo donde
+    // no hay red.
+    const item = item8DeLaRubrica()
+    expect(item).not.toMatch(/only ADDS/)
+    expect(item).toMatch(/\*\*Verification:\*\*/)
+    expect(item).toMatch(/unchecked/i)
+  })
+
+  it('el juez ya no lee que el programa filtre la vara por el alcance de cada documento', () => {
+    // Tarea 1 borró el filtro: los ocho documentos alcanzan a toda tarea. Dos
+    // sitios del fichero seguían afirmando lo contrario, y uno de ellos está
+    // tres líneas por encima de la cabecera que dice que nada se filtra.
+    const texto = readFileSync(AGENTE_JUEZ, 'utf8')
+    expect(texto).not.toMatch(/picked them by the scope each one/)
+    expect(texto).toMatch(/all eight/i)
+  })
+
   it('test-desiderata es el noveno ítem, y va detrás de alcance', () => {
     // El §3.6 lo cerró como ítem PROPIO (a diferencia de boundaries y rollout,
     // absorbidos en patrones): sujeto nuevo (los tests que la tarea acaba de

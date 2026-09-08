@@ -392,3 +392,25 @@ describe('costura 6 — el implementador de ct-step carga la skill del fork, no 
     expect(p).not.toMatch(/superpowers/i)
   })
 })
+// Issue 161, revisión — el hallazgo que dejaba el slice sin entregar: el
+// mecanismo de la enmienda existía y NADIE se lo decía al único que puede
+// usarlo. Un implementador obediente seguía chocando con el bloqueo.
+describe('el prompt del implementador le dice que puede enmendar el **Files:** de su tarea', () => {
+  const prompt = () => readFileSync(join(ROOT, 'prompts', 'task-implementer.md'), 'utf8')
+
+  it('nombra la enmienda, y con sus tres límites', () => {
+    const texto = prompt()
+    expect(texto).toMatch(/amend/i)
+    expect(texto).toMatch(/additions only/i)
+    expect(texto).toMatch(/stay\s+exactly as they are/i)
+    expect(texto).toMatch(/rides\s+inside your task/i)
+  })
+
+  it('ya no le dice que lo de fuera de la línea sólo se declara y se deja', () => {
+    expect(prompt()).not.toMatch(/say so\s+in your report and leave it there/)
+  })
+
+  it('ya no le dice que la vara varía de longitud según el alcance', () => {
+    expect(prompt()).not.toMatch(/which is why the list varies in length/)
+  })
+})

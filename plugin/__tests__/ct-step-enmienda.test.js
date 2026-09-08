@@ -10,8 +10,8 @@
 // si fuera código de la tarea.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { writeFileSync, readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { crearHelpers, montarRepo } from './fixtures/ct-step-harness.js'
@@ -156,5 +156,72 @@ describe('una enmienda sólo puede AÑADIR rutas', () => {
 
     const enHead = execFileSync('git', ['show', 'HEAD:plan.md'], { cwd: repo, encoding: 'utf8' })
     expect(enHead).toContain('**Files:** `uno.txt` (create).')
+  })
+})
+
+// Issue 161, revisión — los cuatro agujeros que la revisión de la PR encontró.
+// El primero es el que abría la puerta que el slice viene a cerrar: la guarda
+// se condicionaba al ÍNDICE mientras todo lo demás medía el ÁRBOL.
+describe('el plan que gobierna los controles es el que se va a comitear', () => {
+  const log = () => readFileSync(estado().lastControlsLog, 'utf8')
+
+  it('editar el plan DESPUÉS de report deja árbol e índice en desacuerdo, y el control lo rechaza', () => {
+    ct('report', informe(['uno.txt']))
+    enmendar()
+    const r = ct('controls')
+
+    expect(r.stdout).toMatch(/controles: failed/)
+    expect(log()).toMatch(/el plan del árbol no es el que se va a comitear/)
+    expect(log()).toMatch(/no está entre lo stageado/)
+  })
+
+  it('una segunda edición tras report, con el plan ya stageado, también se rechaza', () => {
+    enmendar()
+    ct('report', informe(['uno.txt', 'extra.txt']))
+    const ruta = join(repo, 'plan.md')
+    const otra = readFileSync(ruta, 'utf8')
+      .replace('`extra.txt` (create).', '`extra.txt` (create), `otra.txt` (create).')
+    expect(otra).not.toBe(readFileSync(ruta, 'utf8'))
+    writeFileSync(ruta, otra)
+    const r = ct('controls')
+
+    expect(r.stdout).toMatch(/controles: failed/)
+    expect(log()).toMatch(/el del ÍNDICE dice otra cosa/)
+  })
+})
+
+describe('el control de alcance no exime a la maquinaria que llega al índice', () => {
+  it('una ruta de docs/superpowers stageada a mano la señala el control de alcance', () => {
+    ct('report', informe(['uno.txt']))
+    const colado = join(repo, 'docs', 'superpowers', 'specs', 'colado.md')
+    mkdirSync(dirname(colado), { recursive: true })
+    writeFileSync(colado, 'colado\n')
+    execFileSync('git', ['add', '--', 'docs/superpowers/specs/colado.md'], { cwd: repo })
+    const r = ct('controls')
+
+    expect(r.stdout).toMatch(/controles: failed/)
+    expect(readFileSync(estado().lastControlsLog, 'utf8'))
+      .toMatch(/tocó 'docs\/superpowers\/specs\/colado\.md'/)
+  })
+})
+
+describe('los dos mensajes del control de alcance no se contradicen', () => {
+  it('la ruta declarada y no tocada ya no ofrece quitarla del PLAN', () => {
+    ct('report', informe(['otro.txt']))
+    const r = ct('controls')
+
+    expect(r.stdout).toMatch(/controles: failed/)
+    const texto = readFileSync(estado().lastControlsLog, 'utf8')
+    expect(texto).toMatch(/QUITARLA NO ES TU SALIDA/)
+    expect(texto).not.toMatch(/o sobra en el PLAN/)
+  })
+})
+
+describe('enmendar el plan no se lee como un defecto del informe', () => {
+  it('el aviso de discrepancia de report no nombra la ruta del plan', () => {
+    enmendar()
+    const r = ct('report', informe(['uno.txt', 'extra.txt']))
+
+    expect(String(r.stderr ?? '')).not.toMatch(/Tocado y no declarado:.*plan\.md/)
   })
 })
