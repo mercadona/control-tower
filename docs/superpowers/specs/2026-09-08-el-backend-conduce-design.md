@@ -251,10 +251,22 @@ registro nuevo: es **dejar de reconstruirlo mal**.
 | Planificando o implementando | El go, **que ya está en disco** (`disk-go-registry`, `disk-implementation-start-registry`): hay go → implementando | Lectura local |
 | La lista de checkouts | El único fichero nuevo — hoy es un `Map` que se pierde al reiniciar | Un adaptador |
 
-**Desaparecen** los tres mapas de `ActivePlans`, `rememberImplementing` /
-`rememberUncertain`, `ActivePlanRecovery`, `CmuxActivePlan` y el 503 de
-recuperación no concluyente: cuando derivas no hay nada que reconstruir, o hay
-worktree o no lo hay.
+**Desaparece** `CmuxActivePlan` con sus tres expresiones regulares, y con él que
+la **identidad** del run venga de un título de ventana.
+
+**Lo que NO desaparece, corregido tras leer el código el 2026-09-08:** la
+recuperación se queda **como concepto**. `ActivePlanRecovery.recover()` no solo
+rellena mapas — también **arranca los dos `ReviewWatch`** (`startRecovered`), los
+bucles que sondean el issue buscando cambios pedidos en el plan y en la pull
+request, y arrancan en modo recuperado para establecer una **línea base** y no
+volver a atender lo ya atendido. Ese `attended` es memoria genuina: no se deriva
+de nada. Así que lo que la fase 1 cambia es **la fuente** de la recuperación, no
+su existencia.
+
+**Y el 503 sobrevive a la fase 1, no se va con ella.** Mientras el `agent` venga
+de cmux, la consulta puede ser **no concluyente** (`listCmuxWorkspaces` devuelve
+`null`, que no es `[]`), y ese es el caso que el 503 reporta con razón. Se cae en
+la fase 4, cuando no haya ventana que consultar.
 
 Dos matices:
 
@@ -282,16 +294,37 @@ plugin.**
 
 ### 6.1 Fase 1 — el backend recuerda solo lo que es suyo
 
-**Qué entra:** `disk-checkout-registry.js`, y `/active-plans` derivado según §5.
-Se retiran `CmuxActivePlan`, `ActivePlanRecovery` y los tres mapas.
+**Qué entra:** `disk-checkout-registry.js`, un lector que deriva los planes en
+vuelo de `git worktree list` (§5), la clave de Jira leída del **título del
+issue**, y la recuperación cableada a eso en vez de a los títulos de ventana. Se
+retira `CmuxActivePlan`.
 
-**Precisión:** cmux deja de ser la fuente de la **identidad** del run, pero
-sigue siendo la de la **prueba de vida** hasta la fase 4.
+**Precisión:** cmux deja de ser la fuente de la **identidad** del run, pero sigue
+siendo la del `agent` y la de la **prueba de vida** hasta la fase 4. Por eso el
+503 sigue vivo en esta fase.
+
+**El dato que no está en git: la historia de usuario.** Hoy se saca del título de
+la ventana, y no siempre existe (un plan pedido a mano no la tiene). Decidido el
+2026-09-08: **se lee del título del issue**, que es `KEY summary` cuando viene de
+una historia, y el cuerpo declara explícitamente cuándo no la hay
+(`PlanIssueBody.NO_STORY_LINE`), así que no hay heurística. Es el dato
+autoritativo, no añade estado, y **sobrevive a las fases 2 y 4** — las otras
+salidas (persistirla en el worktree, seguir sacándola del título de cmux,
+perderla) vuelven a estar sobre la mesa en la fase 2, cuando no haya ventana.
+Si `gh` falla al recuperar, el run **se recupera sin story** en vez de no
+recuperarse: la identidad viene de git, que es local.
 
 **Criterio de cierre:** con un plan en vuelo, matar el backend, arrancarlo, y que
-`/active-plans` devuelva lo mismo y que el barrido de cosecha siga barriendo su
-checkout. Más un test que vigile que no queda ninguna expresión regular sobre
-títulos de cmux.
+`/active-plans` devuelva **lo mismo que antes, campo por campo, story incluida**,
+y que el barrido de cosecha siga barriendo su checkout. Más un test que vigile
+que no queda ninguna expresión regular sobre títulos de cmux.
+
+**Lo que esta fase NO cambia, a propósito:** un plan cuya ventana murió sigue
+**sin aparecer** en el listado, igual que hoy. Derivando de git aparecería, con
+`agent: null` — más honesto, porque el worktree y el trabajo están ahí — pero
+sería un cambio visible en el front, y esta fase no cambia lo que el front ve.
+Es la fase 4 la que lo resuelve, cuando «vivo» deje de significar «tiene
+ventana».
 
 ### 6.2 Fase 2 — el plan se escribe headless, y se mide
 
@@ -382,7 +415,9 @@ convención reescrita.
   backend, porque es `resume` quien abre la ventana. Es contrato con el front, no
   detalle de implementación.
 - **`/active-plans` deja de poder responder 503** por recuperación no
-  concluyente (fase 1). La forma de la respuesta no cambia.
+  concluyente — **en la fase 4, no en la 1**: mientras el `agent` venga de cmux,
+  «no se pudo saber» sigue siendo un resultado posible y el 503 lo reporta con
+  razón. La forma de la respuesta no cambia en ninguna fase.
 - **`backend/conventions/this-repository.md`** cambia de regla (fase 5).
 
 ---
