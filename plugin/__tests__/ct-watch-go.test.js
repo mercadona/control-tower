@@ -275,7 +275,7 @@ describe('the arguments and the deadlines', () => {
       r = { status: e.status, stderr: String(e.stderr || '') }
     }
     expect(r.status).toBe(2)
-    expect(r.stderr).toMatch(/uso:/)
+    expect(r.stderr).toMatch(/usage:/)
   })
 
   it('a deadline that cannot be understood aborts instead of falling back to the default in silence', () => {

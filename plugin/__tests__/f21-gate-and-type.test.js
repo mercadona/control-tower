@@ -294,7 +294,7 @@ describe('F21 — the gate reaches GitHub, not just the kickoff', () => {
 
   it('a WAIVER is written into the issue body, with the Tipo that implied it', () => {
     const body = buildIssueBody({ ...uiSlice, gate: '!visual' }, {})
-    expect(body.toLowerCase()).toMatch(/renuncia/)
+    expect(body.toLowerCase()).toMatch(/waiver/)
     expect(body).toContain('visual')
     expect(body).toContain('`ui`')
   })

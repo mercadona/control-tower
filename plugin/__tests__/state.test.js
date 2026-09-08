@@ -510,13 +510,13 @@ describe('classifyStopState', () => {
   it('ahead does not block but warns, and advises against repointing last_commit', () => {
     const v = verdict('ahead', { containers: ['adelantada'] })
     expect(v.block).toBe(false)
-    expect(v.systemMessage).toMatch(/descendiente de HEAD/)
-    expect(v.systemMessage).toMatch(/hacia atrás/)
+    expect(v.systemMessage).toMatch(/descendant of HEAD/)
+    expect(v.systemMessage).toMatch(/backwards/)
   })
   it('diverged does not block, explains why, and names the way out (one STATE.md per worktree)', () => {
     const v = verdict('diverged', { containers: ['polish-v2-geometria'], mergeBase: 'c'.repeat(40) })
     expect(v.block).toBe(false)
-    expect(v.systemMessage).toMatch(/divergentes/)
+    expect(v.systemMessage).toMatch(/diverging/)
     expect(v.systemMessage).toMatch(/polish-v2-geometria/)
     expect(v.systemMessage).toMatch(/ct-next/)
     expect(v.systemMessage).not.toMatch(/más nuevos/)
@@ -531,24 +531,24 @@ describe('classifyStopState', () => {
   })
   it('with no known branch at all (git kept quiet) the sentence is not left lame', () => {
     const v = verdict('diverged', { containers: [], containersKnown: false, mergeBase: 'c'.repeat(40) })
-    expect(v.systemMessage).toMatch(/no está en la historia de la rama `main`/)
-    expect(v.systemMessage).not.toMatch(/vive en ,|vive en :/)
-    expect(verdict('ahead', { containers: [] }).systemMessage).not.toMatch(/vive en /)
+    expect(v.systemMessage).toMatch(/is not in the history of the branch `main`/)
+    expect(v.systemMessage).not.toMatch(/lives in ,|lives in :/)
+    expect(verdict('ahead', { containers: [] }).systemMessage).not.toMatch(/lives in /)
   })
   // A `last_commit` that reaches no ref is not "the state is ahead": it is
   // the state pointing at work that stopped existing.
   it('orphan does not block (a block does not resurrect a commit) and is not confused with ahead', () => {
     const v = verdict('orphan', { fromKind: 'ahead' })
     expect(v.block).toBe(false)
-    expect(v.systemMessage).toMatch(/huérfano/)
-    expect(v.systemMessage).toMatch(/ni local ni remota/)
+    expect(v.systemMessage).toMatch(/orphaned/)
+    expect(v.systemMessage).toMatch(/neither local nor remote/)
     expect(v.systemMessage).toMatch(/git gc/)
-    expect(v.systemMessage).not.toMatch(/va por delante|hacia atrás|divergentes/)
+    expect(v.systemMessage).not.toMatch(/is ahead of|backwards|diverging/)
   })
   it('unknown does not block and admits that it does not know', () => {
     const v = verdict('unknown')
     expect(v.block).toBe(false)
-    expect(v.systemMessage).toMatch(/no ha podido determinar/)
+    expect(v.systemMessage).toMatch(/could not determine/)
   })
   it('anti-loop: with stop_hook_active it neither blocks NOR warns, whatever the case', () => {
     for (const kind of ['behind', 'unresolvable', 'diverged', 'ahead', 'orphan', 'unknown']) {
@@ -558,8 +558,8 @@ describe('classifyStopState', () => {
   })
   it('a detached HEAD: it does not invent a branch', () => {
     const v = verdict('behind', { count: 1, branch: '' })
-    expect(v.reason).toMatch(/desprendido/)
-    expect(v.reason).not.toMatch(/rama `/)
+    expect(v.reason).toMatch(/detached/)
+    expect(v.reason).not.toMatch(/branch `/)
   })
 })
 

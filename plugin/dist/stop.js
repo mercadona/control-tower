@@ -7391,7 +7391,7 @@ function noticeDecision({ relation: relation2, previous }) {
   if (turns > NOTICE_REPEAT_EVERY_TURNS) return { emit: true, next: next(1) };
   return { emit: false, next: next(turns) };
 }
-var whereAmI = (rel) => rel.branch ? `la rama \`${rel.branch}\`` : `HEAD (desprendido en ${shortSha(rel.headSha)})`;
+var whereAmI = (rel) => rel.branch ? `the branch \`${rel.branch}\`` : `HEAD (detached at ${shortSha(rel.headSha)})`;
 var livesIn = (rel) => rel.containers?.length ? rel.containers.map((b) => `\`${b}\``).join(", ") : "";
 function classifyStopState({ relation: relation2, stopHookActive, stateRel: stateRel2 = STATE_REL_PATH }) {
   const none = { block: false, kind: relation2?.kind || "unset", reason: "", systemMessage: "" };
@@ -7429,7 +7429,7 @@ function classifyStopState({ relation: relation2, stopHookActive, stateRel: stat
       block: false,
       kind: "ahead",
       reason: "",
-      systemMessage: `Guard de cierre: el \`last_commit\` de \`${stateRel2}\` (${shortSha(rel.stateSha)}) es un descendiente de HEAD (${shortSha(rel.headSha)})${livesIn(rel) ? ` y vive en ${livesIn(rel)}` : ""}: el estado va por delante de ${whereAmI(rel)}, no por detr\xE1s. No lo reapuntes a HEAD \u2014 mover\xEDa el handoff hacia atr\xE1s.`
+      systemMessage: `Closing guard: the \`last_commit\` of \`${stateRel2}\` (${shortSha(rel.stateSha)}) is a descendant of HEAD (${shortSha(rel.headSha)})${livesIn(rel) ? ` and lives in ${livesIn(rel)}` : ""}: the state is ahead of ${whereAmI(rel)}, not behind. Do not repoint it at HEAD \u2014 that would move the handoff backwards.`
     };
   }
   if (rel.kind === "diverged") {
@@ -7437,7 +7437,7 @@ function classifyStopState({ relation: relation2, stopHookActive, stateRel: stat
       block: false,
       kind: "diverged",
       reason: "",
-      systemMessage: `Guard de cierre: el \`last_commit\` de \`${stateRel2}\` (${shortSha(rel.stateSha)}) ${livesIn(rel) ? `vive en ${livesIn(rel)}, no en` : "no est\xE1 en"} la historia de ${whereAmI(rel)}: dos l\xEDneas de trabajo divergentes${rel.mergeBase ? ` desde ${shortSha(rel.mergeBase)}` : ""}. Uno solo no puede ser el handoff de las dos (cada worktree de \`/ct-next\` lleva el suyo); si lo reapuntas a HEAD, sustituyes el de la otra.`
+      systemMessage: `Closing guard: the \`last_commit\` of \`${stateRel2}\` (${shortSha(rel.stateSha)}) ${livesIn(rel) ? `lives in ${livesIn(rel)}, not in` : "is not in"} the history of ${whereAmI(rel)}: two diverging lines of work${rel.mergeBase ? ` since ${shortSha(rel.mergeBase)}` : ""}. One alone cannot be the handoff of both (every \`/ct-next\` worktree carries its own); if you repoint it at HEAD, you replace the other one.`
     };
   }
   if (rel.kind === "orphan") {
@@ -7445,14 +7445,14 @@ function classifyStopState({ relation: relation2, stopHookActive, stateRel: stat
       block: false,
       kind: "orphan",
       reason: "",
-      systemMessage: `Guard de cierre: al \`last_commit\` de \`${stateRel2}\` (${shortSha(rel.stateSha)}) no llega ninguna rama, ni local ni remota: es un commit hu\xE9rfano (lo t\xEDpico, un \`reset --hard\` que se lo llev\xF3 por delante). El handoff que describe puede haber dejado de existir: compru\xE9balo antes de fiarte, porque \`git gc\` puede borrar el commit para siempre.`
+      systemMessage: `Closing guard: no branch reaches the \`last_commit\` of \`${stateRel2}\` (${shortSha(rel.stateSha)}), neither local nor remote: it is an orphaned commit (typically, a \`reset --hard\` that carried it off). The handoff it describes may have ceased to exist: check it before trusting it, because \`git gc\` can delete the commit for good.`
     };
   }
   return {
     block: false,
     kind: "unknown",
     reason: "",
-    systemMessage: `Guard de cierre: git no ha podido determinar la relaci\xF3n entre HEAD (${shortSha(rel.headSha)}) y el \`last_commit\` de \`${stateRel2}\` (${shortSha(rel.stateSha)}). No se bloquea el cierre porque no hay nada que se pueda afirmar; comprueba a mano si el estado est\xE1 al d\xEDa antes de fiarte de \xE9l.`
+    systemMessage: `Closing guard: git could not determine the relation between HEAD (${shortSha(rel.headSha)}) and the \`last_commit\` of \`${stateRel2}\` (${shortSha(rel.stateSha)}). The closure is not blocked because there is nothing that can be asserted; check by hand whether the state is up to date before trusting it.`
   };
 }
 

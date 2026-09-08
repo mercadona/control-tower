@@ -189,7 +189,7 @@ describe('ct-groom — it says that what it has just created is NOT dispatchable
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[existing]]),
       FAKE_GH_LABELS_LIST: JSON.stringify([[]]),
     })
-    expect(res.stderr).not.toMatch(/recordatorio/)
+    expect(res.stderr).not.toMatch(/reminder/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -208,7 +208,7 @@ describe('ct-groom — it says that what it has just created is NOT dispatchable
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[existing]]),
       FAKE_GH_LABELS_LIST: JSON.stringify([[]]),
     })
-    expect(res.stderr).toMatch(/recordatorio/)
+    expect(res.stderr).toMatch(/reminder/)
     expect(res.stderr).toMatch(/status:ready/)
     rmSync(dir, { recursive: true, force: true })
   })

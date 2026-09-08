@@ -144,7 +144,7 @@ const repo = arg(process.argv, '--repo')
 const coordinatorCwd = arg(process.argv, '--coordinator-cwd')
 const logPath = arg(process.argv, '--log')
 if (!issue || !repo || !coordinatorCwd) {
-  process.stderr.write('uso: ct-watch-merge.mjs --issue N --repo owner/name --coordinator-cwd <ruta del checkout principal> [--log <ruta>]\n')
+  process.stderr.write('usage: ct-watch-merge.mjs --issue N --repo owner/name --coordinator-cwd <ruta del checkout principal> [--log <ruta>]\n')
   process.exit(2)
 }
 
@@ -181,7 +181,7 @@ function readMergedPr() {
     // expires and is renewed, GitHub returns a 502. What cannot happen is that a
     // transient failure gets read as "it is not merged" permanently — the watcher
     // would shut down with the work delivered and the harvest uncollected.
-    log(`aviso: no se pudo consultar el PR de ${branch} (${String(e.message).trim()}) — se reintenta en el próximo tick`)
+    log(`warning: no se pudo consultar el PR de ${branch} (${String(e.message).trim()}) — se reintenta en el próximo tick`)
     return undefined
   }
 }
@@ -202,7 +202,7 @@ function readMergedPr() {
 // it routes the schema change through the right one of the paths already there.
 const consultarCoordinadora = () => {
   const r = findWorkspaceByCwd(coordinatorCwd, { timeoutMs: CMUX_TIMEOUT_MS })
-  if (!r.consultado) log('aviso: no se pudo consultar cmux (o su respuesta no trae el campo del directorio que este plugin sabe leer)')
+  if (!r.consultado) log('warning: no se pudo consultar cmux (o su respuesta no trae el campo del directorio que este plugin sabe leer)')
   return r
 }
 

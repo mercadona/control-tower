@@ -114,7 +114,7 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
     const argvLog = join(dir, 'argv.log')
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], { ...baseEnv(spec), FAKE_GH_ARGV_LOG_FILE: argvLog })
     expect(res.status).toBe(3)
-    expect(res.stderr).toMatch(/divergencia.*slice #1.*issue #501/)
+    expect(res.stderr).toMatch(/drift.*slice #1.*issue #501/)
     expect(res.stderr).toMatch(/t.tulo difiere/i)
     expect(res.stderr).toMatch(/"#1 iniciar sesión"/)
     expect(res.stderr).toMatch(/"#1 login"/)
@@ -127,14 +127,14 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
     // legitimately, on another line of stderr: the one of the `status:`
     // vocabulary /ct-groom creates so that the claim can write it later
     // (groom.js#LOOP_STATUS_LABELS).
-    expect(res.stderr).not.toMatch(/divergencia.*status:in-progress/)
+    expect(res.stderr).not.toMatch(/drift.*status:in-progress/)
     expect(res.stdout).toMatch(/ya existe \(#501\), no se duplica/) // the usual idempotence message is still there
     const log = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
     expect(log).not.toMatch(/issue edit/) // with no --reconcile, the issue is never mutated
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('with no divergence at all (the existing issue already matches) → exit 0, with no "divergencia" lines', () => {
+  it('with no divergence at all (the existing issue already matches) → exit 0, with no "drift" lines', () => {
     const { dir, spec } = writeSpec(ONE_SLICE_SPEC)
     const MATCHING_ISSUE = {
       number: 501,
@@ -149,7 +149,7 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[MATCHING_ISSUE]]),
     })
     expect(res.status).toBe(0)
-    expect(res.stderr).not.toMatch(/divergencia/)
+    expect(res.stderr).not.toMatch(/drift/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -182,9 +182,9 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
 
   // I3.8: the decisions section does NOT move the exit code. The spec brings
   // "## Decisiones congeladas" and the existing issue (matchingBody, without
-  // the section) diverges ONLY in that → it is reported as a nota:, exit 0,
+  // the section) diverges ONLY in that → it is reported as a note:, exit 0,
   // not 3.
-  it('the spec brings ## Decisiones congeladas and the issue does not → nota:, exit 0 (it does not move the exit code)', () => {
+  it('the spec brings ## Decisiones congeladas and the issue does not → note:, exit 0 (it does not move the exit code)', () => {
     const SPEC_DEC = ONE_SLICE_SPEC.replace('## 9. Slices', '## Decisiones congeladas\n- **D-1 · versión** — iOS 17. *(Procedencia: hablada.)*\n\n## 9. Slices')
     const { dir, spec } = writeSpec(SPEC_DEC)
     const MATCHING_ISSUE = {
@@ -201,8 +201,8 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
     })
     expect(res.status).toBe(0) // NOT 3: the section is a note, not a machine divergence
     expect(res.stderr).toContain(FROZEN_DECISIONS_HEADING)
-    expect(res.stderr).toMatch(/nota:/)
-    expect(res.stderr).not.toMatch(/divergencia/)
+    expect(res.stderr).toMatch(/note:/)
+    expect(res.stderr).not.toMatch(/drift/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -435,7 +435,7 @@ describe('ct-groom (real run) — divergent AC/Dependencias: they are detected a
       FAKE_GH_ARGV_LOG_FILE: argvLog,
     })
     expect(res.status).toBe(3) // NOT 0 — a real gap was left unapplied
-    expect(res.stderr).toMatch(/no puede aplicar del todo esta divergencia/)
+    expect(res.stderr).toMatch(/no puede aplicar del todo esta drift/)
     expect(res.stderr).toMatch(/criterios de aceptación/)
     expect(res.stderr).not.toMatch(/solo en prosa/i) // NEVER this lie (Critical 2)
     // deps COULD be applied (a domain independent of AC's) — the --body that is
@@ -513,11 +513,11 @@ describe('ct-groom (real run) — labels: the spec is only the authority over a 
 
 // Review round 3, point 6: a divergence --reconcile can NEVER resolve
 // (Descripción/Protegido, prose) must not anchor the exit code forever — it is
-// reported (as a nota:), but the process exits 0. The PREVIOUS behaviour (a
+// reported (as a note:), but the process exits 0. The PREVIOUS behaviour (a
 // perpetual exit 3) was the same noise problem that was already closed for the
 // labels, in the opposite direction.
 describe('ct-groom (real run) — a divergence of prose ONLY (Descripción/Protegido): it is reported, but it NO LONGER anchors the exit code (review round 3, point 6)', () => {
-  it('a divergent Descripción, everything else matching: it is reported as a "nota:", exit 0 (with or without --reconcile)', () => {
+  it('a divergent Descripción, everything else matching: it is reported as a "note:", exit 0 (with or without --reconcile)', () => {
     const { dir, spec } = writeSpec(ONE_SLICE_SPEC)
     const PROSE_DRIFT = {
       number: 501,
@@ -540,8 +540,8 @@ describe('ct-groom (real run) — a divergence of prose ONLY (Descripción/Prote
     }
     const resDefault = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], envBase)
     expect(resDefault.status).toBe(0) // point 6: it is NO LONGER anchored at 3
-    expect(resDefault.stderr).toMatch(/^nota:.*Descripción/m)
-    expect(resDefault.stderr).not.toMatch(/^divergencia:/m) // nothing counts as a real divergence
+    expect(resDefault.stderr).toMatch(/^note:.*Descripción/m)
+    expect(resDefault.stderr).not.toMatch(/^drift:/m) // nothing counts as a real divergence
 
     const resReconcile = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--reconcile'], { ...envBase, FAKE_GH_ARGV_LOG_FILE: argvLog })
     expect(resReconcile.status).toBe(0) // not with --reconcile either
@@ -742,7 +742,7 @@ describe('ct-groom (real run) — a duplicated "## Dependencias"/"## Acceptance 
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[issue1WithDuplicateDeps, issue2Matching]]),
     })
     expect(res.status).toBe(3) // before this round, this exited 0 (it was only a note)
-    expect(res.stderr).toMatch(/divergencia.*Dependencias.*aparece más de una vez/is)
+    expect(res.stderr).toMatch(/drift.*Dependencias.*aparece más de una vez/is)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -787,8 +787,8 @@ describe('ct-groom (real run) — a duplicated "## Dependencias"/"## Acceptance 
       FAKE_GH_ARGV_LOG_FILE: argvLog,
     })
     expect(res.status).toBe(3) // before this fix, this exited 0 — it also broke the parity with --dry-run --reconcile over the same body
-    expect(res.stderr).toMatch(/divergencia.*Dependencias.*aparece más de una vez/is)
-    expect(res.stderr).toMatch(/--reconcile no puede aplicar del todo esta divergencia.*secciones duplicadas/is)
+    expect(res.stderr).toMatch(/drift.*Dependencias.*aparece más de una vez/is)
+    expect(res.stderr).toMatch(/--reconcile no puede aplicar del todo esta drift.*secciones duplicadas/is)
     const log = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
     expect(log).not.toMatch(/issue edit 501/) // nothing really to apply: ac/deps already matched, all that is left over is one copy
     rmSync(dir, { recursive: true, force: true })

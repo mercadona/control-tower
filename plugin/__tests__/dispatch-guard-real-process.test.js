@@ -150,7 +150,7 @@ describe('DispatchGuard, run as the process the harness launches', () => {
 
     expect(status).toBe(0)
     expect(decision.hookSpecificOutput.permissionDecision).toBe('deny')
-    expect(decision.hookSpecificOutput.permissionDecisionReason).toContain('el paquete de revisión de la tarea')
+    expect(decision.hookSpecificOutput.permissionDecisionReason).toContain("the task's review package")
   })
 
   it('the_command_it_prints_is_the_ct_step_of_the_plugin_it_runs_from', () => {

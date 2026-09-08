@@ -140,7 +140,7 @@ describe('ct-next — --dry-run shows the claim without executing it (W-C, point
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(new RegExp(`node ${escapeRegExp(realDispatchCheckPath)} 2 --repo menoplus-app/menoplus`))
-    expect(r.out).toMatch(/no se ejecuta/i)
+    expect(r.out).toMatch(/it is not run/i)
   })
 
   // Fix round 1, minor: the test above only checks the SHAPE of the printed
@@ -208,7 +208,7 @@ describe('ct-next — a failed claim (exit 1) skips the slice and carries on wit
     })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/COLLISION|colisión/i) // dispatch-check's own message, surfaced as it is
-    expect(r.out).toMatch(/saltando #42/)
+    expect(r.out).toMatch(/skipping #42/)
     expect(r.out).toMatch(/lanzado #43/)
     const gitLogTxt = readFileSync(gitLog, 'utf8')
     expect(gitLogTxt).toMatch(/worktree add -b feat\/43/)
@@ -230,14 +230,14 @@ describe('ct-next — an unexpected failure of dispatch-check (not exit 0/1) abo
       CT_CLAIM_PRECLAIM_DELAY_MS: 'not-a-number',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/fallo inesperado/i)
+    expect(r.out).toMatch(/unexpected failure/i)
     expect(r.out).toMatch(/exit 2/)
     expect(r.out).toMatch(/abort/i)
     // Fix round 1, minor: the abort can fire AFTER some earlier slice of the
     // same batch has been launched successfully (cap > 1) — just as
     // cleanupOrphanedWorktree already does, the abort message has to make
     // explicit that those slices go on running untouched.
-    expect(r.out).toMatch(/ya lanzados.*siguen corriendo.*no se han tocado/is)
+    expect(r.out).toMatch(/already launched successfully.*carry on running.*have not been touched/is)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/) // neither #42 nor #43 got as far as creating a worktree
   })
@@ -286,11 +286,11 @@ describe('ct-next — dispatch-check.mjs absent (W-C, fix round 1, finding 2)', 
       })
       const out = (r.stdout || '') + (r.stderr || '')
       expect(r.status).toBe(1)
-      expect(out).toMatch(/no se encontró dispatch-check\.mjs/i)
+      expect(out).toMatch(/dispatch-check\.mjs was not found/i)
       expect(out).toContain(expectedMissingPath)
       // It must never be read as a "collision" nor try to skip the slice: the
       // start-up guard has to cut in BEFORE getting there.
-      expect(out).not.toMatch(/saltando #42/)
+      expect(out).not.toMatch(/skipping #42/)
       expect(out).not.toMatch(/COLLISION/)
     } finally {
       rmSync(copyDir, { recursive: true, force: true })
@@ -378,9 +378,9 @@ describe("ct-next — an explicit maxBuffer when capturing dispatch-check's outp
       // NEVER "fallo inesperado" (which is how a child killed by overflowing
       // Node's default maxBuffer looks) — a candidate that collides, however
       // large the message, is still a NORMAL skip of the protocol.
-      expect(out).not.toMatch(/fallo inesperado/i)
+      expect(out).not.toMatch(/unexpected failure/i)
       expect(out).toContain('COLLISION: #42 choca con')
-      expect(out).toMatch(/saltando #42/)
+      expect(out).toMatch(/skipping #42/)
       // A single candidate, it collides, zero launched → the same exit 3 as finding 1.
       expect(r.status).toBe(3)
     } finally {
@@ -406,9 +406,9 @@ describe("ct-next — the batch's selection is printed up front on the real path
       FAKE_GH_COUNTER_FILE: counterFile,
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/seleccion.*#42/i)
+    expect(r.out).toMatch(/selected.*#42/i)
     // And it appears BEFORE the claim is really attempted.
-    const selIdx = r.out.search(/seleccion.*#42/i)
+    const selIdx = r.out.search(/selected.*#42/i)
     const claimIdx = r.out.indexOf('claimed #42')
     expect(selIdx).toBeGreaterThan(-1)
     expect(claimIdx).toBeGreaterThan(-1)
@@ -473,11 +473,11 @@ describe('ct-next — EVERY selected slice is skipped at claim time → not sile
     // An explicit terminal count of how many out of how many were launched.
     expect(r.out).toMatch(/lanzad[oa]s? 0.*2/i)
     // #41 (not the last one) still says it carries on with the rest.
-    expect(r.out).toMatch(/saltando #41:.*sigo con el resto/i)
+    expect(r.out).toMatch(/skipping #41:.*carrying on with the rest/i)
     // #42 (the LAST candidate) NO LONGER promises "sigo con el resto" — there
     // is nothing left to carry on with.
-    expect(r.out).toMatch(/saltando #42:.*no quedan más candidatos/i)
-    expect(r.out).not.toMatch(/saltando #42:.*sigo con el resto/i)
+    expect(r.out).toMatch(/skipping #42:.*no candidates are left/i)
+    expect(r.out).not.toMatch(/skipping #42:.*carrying on with the rest/i)
     // Exit code PINNED to 3 (D2 review, minor 2): before it was checked with
     // `not.toBe(0)`/`not.toBe(2)`, which a future change collapsing this case
     // into 1 ("something broke") would still pass green — the very contract
@@ -535,19 +535,19 @@ describe("ct-next — dispatch-check's exit 1 is NOT always a normal outcome of 
     // Exit code PINNED to 1 (not `not.toBe(0)`): 'stuck' is the only cause that
     // must still land here after the fix of minor 3.
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATENCIÓN.*bloqueado en status:in-progress/is)
+    expect(r.out).toMatch(/ATTENTION.*bloqueado en status:in-progress/is)
     // It is NEVER reported as if it were the normal collision/race skip.
-    expect(r.out).not.toMatch(/sigo con el resto de esta tanda/i)
+    expect(r.out).not.toMatch(/carrying on with the rest of this batch/i)
     expect(r.out).not.toMatch(/lanzado #42/)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
-    // D2 review, major 1: dispatch-check's ATENCIÓN line (the manual command
+    // D2 review, major 1: dispatch-check's ATTENTION line (the manual command
     // included) must appear ONCE, not twice — it is checked with the EXACT text
-    // dispatch-check.mjs emits (not the bare word "ATENCIÓN": ct-next's own
+    // dispatch-check.mjs emits (not the bare word "ATTENTION": ct-next's own
     // message for 'stuck', a little further down in the code, MENTIONS the word
-    // "ATENCIÓN" when pointing at that line — that is deliberate and a distinct
+    // "ATTENTION" when pointing at that line — that is deliberate and a distinct
     // occurrence, not a duplication).
-    expect(countOccurrences(r.out, 'ATENCIÓN: #42 puede haber quedado bloqueado en status:in-progress')).toBe(1)
+    expect(countOccurrences(r.out, 'ATTENTION: #42 puede haber quedado bloqueado en status:in-progress')).toBe(1)
     expect(countOccurrences(r.out, 'Libéralo a mano con: gh issue edit 42')).toBe(1)
   })
 
@@ -571,8 +571,8 @@ describe("ct-next — dispatch-check's exit 1 is NOT always a normal outcome of 
     // there are no further candidates anyway; what matters is that the control
     // flow no longer tells this apart from a skip — see the next test with
     // cap=2, where there IS one more candidate and it does get reached).
-    expect(r.out).toMatch(/fallo de infraestructura/i)
-    expect(r.out).not.toMatch(/abortando toda la tanda/i)
+    expect(r.out).toMatch(/infrastructure failure/i)
+    expect(r.out).not.toMatch(/aborting the whole batch/i)
     expect(r.out).not.toMatch(/lanzado #42/)
     expect(countOccurrences(r.out, 'no se pudo leer el estado de #42')).toBe(1)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
@@ -602,11 +602,11 @@ describe("ct-next — dispatch-check's exit 1 is NOT always a normal outcome of 
     })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/no se pudo leer el estado de #41/i)
-    expect(r.out).toMatch(/fallo de infraestructura/i)
+    expect(r.out).toMatch(/infrastructure failure/i)
     // The batch WENT ON: #42 was claimed and launched, despite #41's hiccup.
     expect(r.out).toMatch(/claimed #42/)
     expect(r.out).toMatch(/lanzado #42/)
-    expect(r.out).not.toMatch(/abortando toda la tanda/i)
+    expect(r.out).not.toMatch(/aborting the whole batch/i)
     const gitLogTxt = readFileSync(gitLog, 'utf8')
     expect(gitLogTxt).toMatch(/worktree add -b feat\/42/)
     expect(gitLogTxt).not.toMatch(/worktree add -b feat\/41/)
@@ -632,7 +632,7 @@ describe("ct-next — dispatch-check's exit 1 is NOT always a normal outcome of 
       FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready --remove-label status:in-progress',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATENCIÓN.*bloqueado en status:in-progress/is)
+    expect(r.out).toMatch(/ATTENTION.*bloqueado en status:in-progress/is)
     expect(r.out).not.toMatch(/lanzado #/)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
@@ -661,15 +661,15 @@ describe('ct-next — dispatch fails after a successful claim → it reverts the
       FAKE_GIT_WORKTREE_ADD_AS_FILE: '1',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no se pudo sembrar \.agent\/SLICE\.md/)
+    expect(r.out).toMatch(/could not seed \.agent\/SLICE\.md/)
     expect(r.out).toMatch(/limpiados automáticamente/)
-    expect(r.out).not.toMatch(/ATENCIÓN/)
+    expect(r.out).not.toMatch(/ATTENTION/)
     const argv = readFileSync(argvLog, 'utf8')
     expect(argv).toMatch(/issue edit 42 --repo o\/r --add-label status:in-progress --remove-label status:ready/)
     expect(argv).toMatch(/issue edit 42 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
   })
 
-  it("the SLICE.md seed fails AND the claim's revert fails too → ATENCIÓN with the exact manual command", () => {
+  it("the SLICE.md seed fails AND the claim's revert fails too → ATTENTION with the exact manual command", () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
@@ -680,7 +680,7 @@ describe('ct-next — dispatch fails after a successful claim → it reverts the
       FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready', // the revert fails; the initial claim (status:in-progress) does not
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATENCIÓN.*no se pudo limpiar automáticamente.*claim/is)
+    expect(r.out).toMatch(/ATTENTION.*claim.*could not be cleaned up automatically/is)
     expect(r.out).toMatch(/gh issue edit 42 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
   })
 
@@ -696,7 +696,7 @@ describe('ct-next — dispatch fails after a successful claim → it reverts the
       FAKE_CMUX_FAIL: '1',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no se pudo lanzar cmux/)
+    expect(r.out).toMatch(/could not launch cmux/)
     expect(r.out).toMatch(/limpiados automáticamente/)
     const argv = readFileSync(argvLog, 'utf8')
     expect(argv).toMatch(/issue edit 42 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
@@ -716,12 +716,12 @@ describe('ct-next — dispatch fails after a successful claim → it reverts the
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/no se pudo crear el worktree/)
     expect(r.out).toMatch(/revertido/i)
-    expect(r.out).not.toMatch(/ATENCIÓN/)
+    expect(r.out).not.toMatch(/ATTENTION/)
     const argv = readFileSync(argvLog, 'utf8')
     expect(argv).toMatch(/issue edit 42 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
   })
 
-  it("git worktree add fails AND the claim's revert fails too → ATENCIÓN with the exact manual command", () => {
+  it("git worktree add fails AND the claim's revert fails too → ATTENTION with the exact manual command", () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
@@ -732,7 +732,7 @@ describe('ct-next — dispatch fails after a successful claim → it reverts the
       FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATENCIÓN.*no se pudo revertir.*claim/is)
+    expect(r.out).toMatch(/ATTENTION.*no se pudo revertir.*claim/is)
     expect(r.out).toMatch(/gh issue edit 42 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
   })
 })

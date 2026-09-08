@@ -105,7 +105,7 @@ If `/ct-init` warns that the repo **already came with its own conventions** —a
 | **`/ct-next`** | Chooses the next dispatchable slice (order, merged dependencies, no token collision, with a `--cap` gap available), claims it, creates worktree and branch, seeds the state and launches the agent **verifying that it really started**. | GitHub + disk |
 | **`/ct-status`** | Answers in one go: what is in flight, what has been delivered and what is residue. **It does not write a single time** — there is a test that checks it by looking at the real `argv` `gh` was called with. | nothing |
 
-The four share a channel convention: **stdout is the product** (the plan, the selection, the report, the blocking reason) and **stderr is the diagnosis** (`aviso:`, `ATENCIÓN:`, and every abort). And a grammar of exit codes with three states: done, could not be checked, something is still pending. They are all tabulated in [the complete reference](https://github.com/mercadona/control-tower/blob/main/docs/loop/control-tower-loop.pdf).
+The four share a channel convention: **stdout is the product** (the plan, the selection, the report, the blocking reason) and **stderr is the diagnosis** (`warning:`, `ATTENTION:`, and every abort). And a grammar of exit codes with three states: done, could not be checked, something is still pending. They are all tabulated in [the complete reference](https://github.com/mercadona/control-tower/blob/main/docs/loop/control-tower-loop.pdf).
 
 Always start dry:
 

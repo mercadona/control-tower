@@ -108,7 +108,7 @@ describe('ct-groom --dry-run', () => {
       // the rest of this wrapper's validation errors (non-existent spec,
       // invalid --milestone/--project/--repo).
       expect(e.status).toBe(2)
-      expect(e.stderr.toString()).toMatch(/duplicad/)
+      expect(e.stderr.toString()).toMatch(/duplicate/)
       expect(e.stderr.toString()).toMatch(/1/)
       // the wrapper's convention: console.error + process.exit, NEVER a Node
       // stack trace dumped by an uncaught exception.
@@ -591,7 +591,7 @@ describe('ct-groom — "Tipo" with a value that is no key of ADDENDA warns, it d
     // test's spec does not carry "## Contexto del epic" either, so since T3 the
     // stderr ALSO carries that warning — orthogonal to what is checked here.
     // It is anchored to the Tipo column (the only source of the warning this
-    // test watches), not to a bare "aviso:".
+    // test watches), not to a bare "warning:".
     expect(res.stderr).not.toMatch(/columna Tipo/)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -612,7 +612,7 @@ describe('ct-groom — "Tipo" with a value that is no key of ADDENDA warns, it d
     // test's spec does not carry "## Contexto del epic" either, so since T3 the
     // stderr ALSO carries that warning — orthogonal to what is checked here.
     // It is anchored to the Tipo column (the only source of the warning this
-    // test watches), not to a bare "aviso:".
+    // test watches), not to a bare "warning:".
     expect(res.stderr).not.toMatch(/columna Tipo/)
     const plan = JSON.parse(res.stdout)
     expect(plan.issues[0].labels.some((l) => l.startsWith('type:'))).toBe(false)
@@ -645,7 +645,7 @@ describe('ct-groom — "Tipo" with a value that is no key of ADDENDA warns, it d
     // test's spec does not carry "## Contexto del epic" either, so since T3 the
     // stderr ALSO carries that warning — orthogonal to what is checked here.
     // It is anchored to the Tipo column (the only source of the warning this
-    // test watches), not to a bare "aviso:".
+    // test watches), not to a bare "warning:".
     expect(res.stderr).not.toMatch(/columna Tipo/)
     const plan = JSON.parse(res.stdout)
     expect(plan.issues[0].labels.some((l) => l.startsWith('type:'))).toBe(false)
@@ -1147,7 +1147,7 @@ describe('ct-groom — markup normalisation in a single pass closes the whole cl
     // (F6: stderr is no longer empty — it carries the new labels and the
     // status:backlog reminder. F26: nor is it empty because "## Contexto del
     // epic" is absent — orthogonal to what this test watches, so it is anchored
-    // to the Área/Toca columns instead of a bare "aviso:").
+    // to the Área/Toca columns instead of a bare "warning:").
     expect(res.stderr).not.toMatch(/en columna (Área|Toca)/)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -1316,7 +1316,7 @@ describe('ct-groom --dry-run — it detects the divergence of an issue that alre
       // legitimately, in the line about the `status:` vocabulary /ct-groom
       // creates so that the claim can write it later
       // (groom.js#LOOP_STATUS_LABELS).
-      expect(err).not.toMatch(/divergencia.*status:in-progress/)
+      expect(err).not.toMatch(/drift.*status:in-progress/)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
@@ -1675,7 +1675,7 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
     expect(res.status).toBe(0)
     // What it did before: it matched #451/#452/#453 and reported the different
     // milestone as a divergence, creating nothing.
-    expect(res.stderr).not.toMatch(/divergencia/)
+    expect(res.stderr).not.toMatch(/drift/)
     // And it also declared #454/#455/#456 orphans in the SAME run.
     expect(res.stderr).not.toMatch(/hu.rfano/)
     // #451/#452/#453 ARE named now, but only as gate B's non-blocking
@@ -1684,7 +1684,7 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
     // relaxed — what matters is that none of those mentions is a match, a
     // divergence or an orphan.
     for (const line of res.stderr.split('\n').filter((l) => /#45[1-6]/.test(l))) {
-      expect(line.startsWith('aviso: ')).toBe(true)
+      expect(line.startsWith('warning: ')).toBe(true)
     }
     const plan = JSON.parse(res.stdout)
     expect(plan.issues.map((i) => i.order)).toEqual([1, 2, 3])
@@ -1719,7 +1719,7 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
     // six numbers may come out over stdout.
     expect(res.stdout).not.toMatch(/issue orden #\d+ ya existe/)
     expect(res.stdout).not.toMatch(/#45[1-6]/)
-    expect(res.stderr).not.toMatch(/divergencia/)
+    expect(res.stderr).not.toMatch(/drift/)
     expect(res.stderr).not.toMatch(/hu.rfano/)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -1757,7 +1757,7 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
     // of a link that does not match — so the assertion is sharpened to the
     // orphan line rather than to "the number does not appear".)
     for (const line of res.stderr.split('\n').filter((l) => /#45[1-6]/.test(l))) {
-      expect(line.startsWith('aviso: ')).toBe(true)
+      expect(line.startsWith('warning: ')).toBe(true)
       expect(line).not.toMatch(/hu.rfano/)
     }
     rmSync(dir, { recursive: true, force: true })
@@ -1783,8 +1783,8 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
     // And since slice #1 ALREADY has an issue in this epic, gate B's warning
     // does not talk about it: no creation is possible, hence no duplication is
     // possible. Slices 2 and 3, which would be created, are warned about.
-    expect(res.stderr).not.toMatch(/aviso: el slice #1 de este spec/)
-    expect(res.stderr).toMatch(/aviso: el slice #2 de este spec/)
+    expect(res.stderr).not.toMatch(/warning: el slice #1 de este spec/)
+    expect(res.stderr).toMatch(/warning: el slice #2 de este spec/)
     rmSync(dir, { recursive: true, force: true })
   })
 })
@@ -1892,7 +1892,7 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     // "It does not fire" means it does not BLOCK, not that it keeps quiet: the
     // three orders that are in today's table come out as a warning (see the
     // warning's tests further down).
-    expect(res.stderr).toMatch(/aviso: el slice #1 de este spec/)
+    expect(res.stderr).toMatch(/warning: el slice #1 de este spec/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1918,7 +1918,7 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[PREVIOUS_EPIC[1]]]]) }) })
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/^aviso: el slice #2 de este spec tiene un issue en otro milestone con el mismo ct-order \(#452, "Epic anterior"\)/m)
+    expect(res.stderr).toMatch(/^warning: el slice #2 de este spec tiene un issue en otro milestone con el mismo ct-order \(#452, "Epic anterior"\)/m)
     expect(res.stderr).toMatch(/su enlace al spec no coincide con el de este spec/)
     // Under --dry-run the verb is conditional: nothing is created here (the
     // same criterion as the status:backlog reminder,
@@ -1949,7 +1949,7 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[NO_LINK]]]) }) })
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/aviso:.*#470, "Epic anterior"/)
+    expect(res.stderr).toMatch(/warning:.*#470, "Epic anterior"/)
     expect(res.stderr).toMatch(/no lleva ninguna línea de enlace al spec/)
     expect(res.stderr).not.toMatch(/no se ha creado ni modificado nada/)
     rmSync(dir, { recursive: true, force: true })
@@ -1979,11 +1979,11 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     expect(res.status).toBe(0)
     // #451 carries ct-order:1, just like the issue this epic already has:
     // nothing to duplicate, no warning that names it.
-    expect(res.stderr).not.toMatch(/aviso: el slice #1 de este spec/)
+    expect(res.stderr).not.toMatch(/warning: el slice #1 de este spec/)
     expect(res.stderr).not.toMatch(/#451/)
     // #452/#453 do: slices 2 and 3 would still be created.
-    expect(res.stderr).toMatch(/aviso: el slice #2 de este spec.*#452/)
-    expect(res.stderr).toMatch(/aviso: el slice #3 de este spec.*#453/)
+    expect(res.stderr).toMatch(/warning: el slice #2 de este spec.*#452/)
+    expect(res.stderr).toMatch(/warning: el slice #3 de este spec.*#453/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1993,7 +1993,7 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[PREVIOUS_EPIC]]) }) })
     expect(res.status).toBe(0)
-    expect(res.stderr).not.toMatch(/aviso: el slice/)
+    expect(res.stderr).not.toMatch(/warning: el slice/)
     expect(res.stderr).not.toMatch(/#45[1-6]/)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -2012,7 +2012,7 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     expect(res.stderr).toMatch(/#452\s+ct-order:2/) // the block does come out
     expect(res.stderr).toMatch(/no se ha creado ni modificado nada/)
     // #451 (ct-order:1, another spec) would have warned in a run that carried on.
-    expect(res.stderr).not.toMatch(/aviso: el slice/)
+    expect(res.stderr).not.toMatch(/warning: el slice/)
     expect(res.stderr).not.toMatch(/#451/)
     rmSync(dir, { recursive: true, force: true })
   })

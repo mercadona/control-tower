@@ -114,11 +114,11 @@ export function renderedHtmlHasAnchor(html, anchor) {
 // that issue does not exist — that is, it not autolinking today does not mean
 // it will not do so tomorrow).
 export const SPEC_REF_REASONS = {
-  notInRepo: 'el spec no está dentro de un repositorio git',
-  outsideRepo: 'el spec queda fuera del árbol del repositorio git',
-  noRemote: 'el repositorio del spec no tiene remoto "origin"',
-  unparsableRemote: 'el remoto "origin" del repositorio del spec no es una URL de GitHub reconocible',
-  noDefaultBranch: 'no se pudo resolver la rama por defecto del repositorio del spec',
+  notInRepo: 'the spec is not inside a git repository',
+  outsideRepo: 'the spec falls outside the tree of the git repository',
+  noRemote: 'the repository of the spec has no "origin" remote',
+  unparsableRemote: 'the "origin" remote of the spec repository is not a recognisable GitHub URL',
+  noDefaultBranch: 'the default branch of the spec repository could not be resolved',
   notPublished: 'el spec no está publicado en la rama por defecto del repositorio',
 }
 
@@ -153,7 +153,7 @@ export function resolveSpecRef({ specFile, displayPath, heading, run, relativize
   const degraded = (reason, path = (displayPath || specFile)) => ({
     ref: { path, heading: headingText, url: null, reason },
     warnings: [
-      `aviso: el enlace al spec de cada issue se queda SIN enlace — ${reason}. Los issues nacerán con una referencia de texto (ruta + sección) en vez de un enlace pinchable, y /ct-groom NO lo corrige en corridas posteriores sin --reconcile (marcado EXPERIMENTAL): si quieres el enlace, arregla esto y vuelve a correr ANTES de la corrida real.`,
+      `warning: the spec link of every issue is left WITHOUT a link — ${reason}. The issues will be born with a text reference (path + section) instead of a clickable link, and /ct-groom does NOT fix it on later runs without --reconcile (marked EXPERIMENTAL): if you want the link, fix this and run again BEFORE the real run.`,
     ],
   })
 
@@ -199,8 +199,8 @@ export function resolveSpecRef({ specFile, displayPath, heading, run, relativize
   const url = buildBlobUrl({ ...remote, ref: branch, path: relPath, anchor })
   if (!anchor) {
     warnings.push(headingText === null
-      ? `aviso: la tabla §9 no vive bajo ningún encabezado del spec — el enlace de cada issue apunta al fichero entero, no a la sección; pon la tabla bajo un encabezado ("## 9. Slices") para que el enlace aterrice donde toca.`
-      : `aviso: el encabezado "${headingText}" no produce ningún ancla en GitHub (se queda vacío al quitarle la puntuación) — el enlace de cada issue apunta al fichero entero, no a la sección.`)
+      ? `warning: the §9 table does not live under any heading of the spec — the link of every issue points at the whole file, not at the section; put the table under a heading ("## 9. Slices") so the link lands where it should.`
+      : `warning: the heading "${headingText}" produces no anchor on GitHub (it comes out empty once the punctuation is stripped) — the link of every issue points at the whole file, not at the section.`)
     return { ref: { path: relPath, heading: headingText, url, reason: null }, warnings }
   }
   if (!renderedHtmlHasAnchor(html, anchor)) {
@@ -208,7 +208,7 @@ export function resolveSpecRef({ specFile, displayPath, heading, run, relativize
     // PUBLISHED copy. If they do not match, it is because the published one is
     // another (spec edited and not pushed, typically) — linking to the anchor
     // anyway would be inventing.
-    warnings.push(`aviso: el ancla "${anchor}" (del encabezado "${headingText}") no existe en la copia de ${relPath} publicada en ${slug}@${branch} — el enlace de cada issue apunta al fichero entero, no a la sección; empuja la versión actual del spec y vuelve a correr.`)
+    warnings.push(`warning: the anchor "${anchor}" (from the heading "${headingText}") does not exist in the copy of ${relPath} published at ${slug}@${branch} — the link of every issue points at the whole file, not at the section; push the current version of the spec and run again.`)
     return { ref: { path: relPath, heading: headingText, url: buildBlobUrl({ ...remote, ref: branch, path: relPath, anchor: null }), reason: null }, warnings }
   }
   return { ref: { path: relPath, heading: headingText, url, reason: null }, warnings }

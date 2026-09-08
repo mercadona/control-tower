@@ -1188,7 +1188,7 @@ describe('mapGhIssue — deps scoped to the "## Dependencias" section, and detec
 
   // An adversarial attack on my OWN "bulletLines" heuristic (the same spirit as
   // F5's review rounds on locateSection): a human sub-list of elaboration,
-  // indented UNDER a real dependency ("- merge-after #1\n  - nota: esto es
+  // indented UNDER a real dependency ("- merge-after #1\n  - note: esto es
   // importante") is a legitimate and frequent edit — buildIssueBody never nests
   // bullets, so counting ANY line beginning with "-" (indented ones included)
   // as a "dependency bullet" would falsely mark this as `malformed`, even
@@ -1196,7 +1196,7 @@ describe('mapGhIssue — deps scoped to the "## Dependencias" section, and detec
   // counts only TOP-LEVEL bullets ("- " unindented, exactly as buildIssueBody
   // emits them) — an indented sub-list does not count.
   it('a human sub-list indented under a real dependency does NOT count as a dependency bullet — it does not falsely fire malformed', () => {
-    const body = '## Dependencias\n- merge-after #1\n  - nota: esto lo negociamos con pagos, no tocar\n\n<!-- ct-order:2 -->'
+    const body = '## Dependencias\n- merge-after #1\n  - note: esto lo negociamos con pagos, no tocar\n\n<!-- ct-order:2 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([1])
     expect(mapped.depsMalformed).toBe(false)
@@ -1330,7 +1330,7 @@ describe('mapGhIssue — extractDepsInSection: the right signal is the uncapture
   })
 
   it('struck-through deps ("~~merge-after #1~~ ya no aplica") + a note with no number → still not malformed (regression: do not reintroduce the false positive)', () => {
-    const body = '## Dependencias\n- ~~merge-after #1~~ ya no aplica\n- nota: pendiente de decidir con pagos\n\n<!-- ct-order:2 -->'
+    const body = '## Dependencias\n- ~~merge-after #1~~ ya no aplica\n- note: pendiente de decidir con pagos\n\n<!-- ct-order:2 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([1])
     expect(mapped.depsMalformed).toBe(false)

@@ -121,7 +121,7 @@ describe('D5/A — exit 3 only when nothing really was left half-done', () => {
     })
     expect(r.code).toBe(3)
     expect(r.out).toMatch(/lanzados 0\/1 slice\(s\) seleccionados de esta tanda/)
-    expect(r.out).toMatch(/Ningún claim quedó escrito, ninguna rama ni worktree se creó, y no hay nada que limpiar a mano/)
+    expect(r.out).toMatch(/No claim was written, no branch and no worktree was created, and there is nothing to clean up by hand/)
     expect(r.out).not.toMatch(/LANZADOS SIN VERIFICAR/)
     // And nothing really was left behind: no claim written, no worktree
     // created.
@@ -157,12 +157,12 @@ describe('D5/D — our own SIGKILL through CT_NEXT_CHILD_TIMEOUT_MS over dispatc
       CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE: 'dispatch-check',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no terminó dentro del límite de 1000ms \(CT_NEXT_CHILD_TIMEOUT_MS\)/)
-    expect(r.out).toMatch(/lo matamos NOSOTROS con SIGKILL — no fue una interrupción tuya/)
-    expect(r.out).toMatch(/sube CT_NEXT_CHILD_TIMEOUT_MS/)
+    expect(r.out).toMatch(/did not finish within the bound of 1000ms \(CT_NEXT_CHILD_TIMEOUT_MS\)/)
+    expect(r.out).toMatch(/WE killed it with SIGKILL — it was not an interruption of yours/)
+    expect(r.out).toMatch(/raise CT_NEXT_CHILD_TIMEOUT_MS/)
     expect(r.out).toMatch(/gh issue edit 90 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
     // The text no longer calls what WE did an "interrupción".
-    expect(r.out).not.toMatch(/antes de esta interrupción/)
+    expect(r.out).not.toMatch(/before this interruption/)
   })
 })
 
@@ -180,7 +180,7 @@ describe('D5/G — the window between the claim and the worktree no longer leave
       CT_NEXT_TEST_SELF_SIGINT_AFTER_CLAIM: 'pepe',
     })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/CT_NEXT_TEST_SELF_SIGINT_AFTER_CLAIM inválido: "pepe"/)
+    expect(r.out).toMatch(/CT_NEXT_TEST_SELF_SIGINT_AFTER_CLAIM invalid: "pepe"/)
     expect(r.out).toMatch(/SIGINT, SIGTERM/)
     // Not a single gh command: it aborts before reading anything.
     expect(readOrEmpty(join(repoRoot, 'gh-argv'))).toBe('')
@@ -199,7 +199,7 @@ describe('D5/G — the window between the claim and the worktree no longer leave
       CT_NEXT_TEST_SELF_SIGINT_BEFORE_IDLE_CHECKPOINT: 'SIGKILL', // valid for the OS, but with NO handler here
     })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/CT_NEXT_TEST_SELF_SIGINT_BEFORE_IDLE_CHECKPOINT inválido: "SIGKILL"/)
+    expect(r.out).toMatch(/CT_NEXT_TEST_SELF_SIGINT_BEFORE_IDLE_CHECKPOINT invalid: "SIGKILL"/)
   })
 
   // The ROOT part: validating the hook does not fix the hole, only one case.
@@ -211,10 +211,10 @@ describe('D5/G — the window between the claim and the worktree no longer leave
       CT_NEXT_TEST_THROW_AFTER_CLAIM: 'boom-de-prueba',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/excepción no capturada en ct-next\.mjs — esto es un bug/)
+    expect(r.out).toMatch(/uncaught exception in ct-next\.mjs — this is a bug/)
     expect(r.out).toMatch(/boom-de-prueba/)
     expect(r.out).toMatch(/at file:/) // the stack trace is not hidden
-    expect(r.out).toMatch(/#90 tenía un claim \(status:in-progress\) sin worktree completado/)
+    expect(r.out).toMatch(/#90 had a claim \(status:in-progress\) with no completed worktree/)
     expect(r.out).toMatch(/claim de #90 revertido automáticamente a status:ready/)
     const argv = readOrEmpty(join(repoRoot, 'gh-argv'))
     // EXACTLY one claim and EXACTLY one revert — neither zero (the bug), nor
@@ -233,7 +233,7 @@ describe('D5/G — the window between the claim and the worktree no longer leave
       FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready --remove-label status:in-progress',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATENCIÓN: no se pudo revertir automáticamente el claim de #90/)
+    expect(r.out).toMatch(/ATTENTION: no se pudo revertir automáticamente el claim de #90/)
     expect(r.out).toMatch(/gh issue edit 90 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
   })
 })
@@ -265,8 +265,8 @@ describe("D5/F — forwarding dispatch-check's output does not decide the result
     const code = await new Promise((resolve) => child.on('exit', (c) => resolve(c)))
 
     expect(err).not.toMatch(/fallo inesperado/)
-    expect(err).not.toMatch(/probablemente es un bug o una mala configuración/)
-    expect(err).not.toMatch(/Abortando toda la tanda/)
+    expect(err).not.toMatch(/it is probably a bug or a misconfiguration/)
+    expect(err).not.toMatch(/Aborting the whole batch/)
     expect(code).toBe(0)
     const argv = readOrEmpty(join(repoRoot, 'gh-argv'))
     // The claim was written ONCE and was NOT reverted: the slice really was
@@ -331,23 +331,23 @@ describe('D5/H — --dry-run with taken destinations', () => {
     })
     expect(r.code).toBe(1)
     // Both problems, not only the first one.
-    expect(r.out).toMatch(/precondiciones NO cumplidas \(2\)/)
-    expect(r.out).toMatch(/la rama feat\/92 ya existe/)
-    expect(r.out).toMatch(/la rama feat\/93 ya existe/)
+    expect(r.out).toMatch(/preconditions NOT met \(2\)/)
+    expect(r.out).toMatch(/the branch feat\/92 already exists/)
+    expect(r.out).toMatch(/the branch feat\/93 already exists/)
     // The plan of all THREE slices, the healthy one included — before, not
     // one was printed.
     expect(r.out).toMatch(/=== slice #91 /)
     expect(r.out).toMatch(/=== slice #92 /)
     expect(r.out).toMatch(/=== slice #93 /)
     // Each slice's problem, in ITS own block.
-    expect(r.out).toMatch(/=== slice #92 \(b\) ===\nPRECONDICIÓN NO CUMPLIDA \(1\) para este slice/)
+    expect(r.out).toMatch(/=== slice #92 \(b\) ===\nPRECONDITION NOT MET \(1\) for this slice/)
     // And "destino libre" only where it is true.
-    expect(r.out).toMatch(/destino libre: .*\.worktrees\/91 no existe y la rama feat\/91 tampoco/)
-    expect(r.out).toMatch(/destino: .*\.worktrees\/92 \/ rama feat\/92 — NO LIBRE/)
-    expect(r.out).not.toMatch(/destino libre: .*\.worktrees\/92/)
+    expect(r.out).toMatch(/destination free: .*\.worktrees\/91 does not exist and neither does the branch feat\/91/)
+    expect(r.out).toMatch(/destination: .*\.worktrees\/92 \/ branch feat\/92 — NOT FREE/)
+    expect(r.out).not.toMatch(/destination free: .*\.worktrees\/92/)
     // Counts and "which one would break first", with no ambiguity.
-    expect(r.out).toMatch(/De los 3 slice\(s\) seleccionados, 2 tienen precondiciones sin cumplir \(#92, #93\); 1 sin problemas propios \(#91\)\. En una corrida real, el primero que rompería es #92/)
-    expect(r.out).toMatch(/NO es luz verde/)
+    expect(r.out).toMatch(/Of the 3 selected slice\(s\), 2 have preconditions not met \(#92, #93\); 1 with no problems of its own \(#91\)\. On a real run, the first one that would break is #92/)
+    expect(r.out).toMatch(/is NOT a green light/)
     // A dry-run touches nothing, whatever happens.
     expect(readOrEmpty(join(repoRoot, 'gh-argv'))).not.toMatch(/issue edit/)
     expect(readOrEmpty(join(repoRoot, 'git-log'))).not.toMatch(/worktree add/)
@@ -367,8 +367,8 @@ describe('D5/H — --dry-run with taken destinations', () => {
       FAKE_GIT_STALE_BRANCH_EXISTS: '92',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ni un solo claim escrito: se comprueba antes de tocar GitHub/)
-    expect(r.out).toMatch(/el primero que rompería es #92/)
+    expect(r.out).toMatch(/not a single claim written: it is checked before touching GitHub/)
+    expect(r.out).toMatch(/the first one that would break is #92/)
     expect(r.out).not.toMatch(/=== slice #91 /) // the plan is the dry-run's business
     expect(readOrEmpty(join(repoRoot, 'gh-argv'))).not.toMatch(/issue edit/)
   })
@@ -393,11 +393,11 @@ describe('D5 (self-review) — the dry-run cannot call a query that failed "modo
       FAKE_GIT_REV_PARSE_BROKEN: '1', // the branch query exits with 128, not with 1
     })
     expect(r.code).toBe(0) // 'unknown' is a warning, never a hard failure: we do not know it is taken
-    expect(r.out).toMatch(/SIN CONFIRMAR: la consulta a git se intentó y FALLÓ/)
-    expect(r.out).toMatch(/Esto NO es modo fixture/)
-    expect(r.out).not.toMatch(/NO COMPROBADOS \(modo fixture/)
+    expect(r.out).toMatch(/UNCONFIRMED: the query to git was attempted and it FAILED/)
+    expect(r.out).toMatch(/This is NOT fixture mode/)
+    expect(r.out).not.toMatch(/NOT CHECKED \(fixture mode/)
     // And it cannot assert that the destination is free either.
-    expect(r.out).not.toMatch(/destino libre/)
+    expect(r.out).not.toMatch(/destination free/)
   })
 
   it('in fixture mode it DOES say "modo fixture" (the correct message is not lost along the way)', () => {
@@ -408,7 +408,7 @@ describe('D5 (self-review) — the dry-run cannot call a query that failed "modo
       }),
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/NO COMPROBADOS \(modo fixture/)
+    expect(r.out).toMatch(/NOT CHECKED \(fixture mode/)
     expect(r.out).not.toMatch(/SIN CONFIRMAR/)
   })
 })

@@ -156,7 +156,7 @@ var arg = (f) => {
   const v = process.argv[i + 1];
   return typeof v === "string" && !v.startsWith("--") ? v : true;
 };
-var usage = "uso: scope-check --repo <owner/repo> --pr <n\xFAmero> [--exempt <patr\xF3n,patr\xF3n>]";
+var usage = "usage: scope-check --repo <owner/repo> --pr <n\xFAmero> [--exempt <patr\xF3n,patr\xF3n>]";
 var repo = arg("--repo");
 var pr = arg("--pr");
 var exemptRaw = arg("--exempt");

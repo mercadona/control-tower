@@ -759,7 +759,7 @@ export function formatFindings(findings, { where = 'este repo', ackProblems = []
   const out = []
   if (live.length) {
     out.push(
-      `ATENCIÓN: ${where} ya tenía convenciones propias en el terreno que ocupa el loop de Control Tower. ` +
+      `ATTENTION: ${where} ya tenía convenciones propias en el terreno que ocupa el loop de Control Tower. ` +
         'No se ha cambiado nada por ti — pero esto NO se resuelve solo, y dejarlo así es como se llega a ' +
         'un AGENTS.md que se contradice consigo mismo y a dos protocolos de claim sobre las mismas labels.'
     )
@@ -783,7 +783,7 @@ export function formatFindings(findings, { where = 'este repo', ackProblems = []
     out.push(`      ${live[0].id}: 2026-01-31 — <qué se decidió y por qué>`)
     out.push(
       '  Esa señal —y solo esa— deja de avisar; las demás siguen. No hace falta borrar documentación ' +
-        'correcta para callar el aviso: si lo que documentas es el uso manual fuera del loop, acúsalo y ya.'
+        'correcta para callar el warning: si lo que documentas es el uso manual fuera del loop, acúsalo y ya.'
     )
     // F15/H3: the rest of the file is yours. It is said HERE, next to the
     // example, because that is where somebody decides what they are going to
@@ -797,18 +797,18 @@ export function formatFindings(findings, { where = 'este repo', ackProblems = []
   for (const f of silenced) {
     const n = f.evidence.length
     out.push(
-      `  nota: [${f.id}] silenciado por ${ACK_PATH} (${f.silenced.date}: ${f.silenced.reason}) — ` +
+      `  note: [${f.id}] silenciado por ${ACK_PATH} (${f.silenced.date}: ${f.silenced.reason}) — ` +
         `${n} señal${n === 1 ? '' : 'es'} sin revisar.`
     )
   }
   if (ackUnreadable) {
     out.push(
-      `  aviso: existe \`${ACK_PATH}\` pero no se ha podido leer (${ackUnreadable}). Ningún acuse está ` +
+      `  warning: existe \`${ACK_PATH}\` pero no se ha podido leer (${ackUnreadable}). Ningún acuse está ` +
         'aplicándose: lo que veas arriba puede ser algo que ya habías decidido.'
     )
   }
   for (const p of ackProblems || []) {
-    out.push(`  aviso: ${ACK_PATH}:${p.line} no silencia nada — ${p.why}: «${p.text}»`)
+    out.push(`  warning: ${ACK_PATH}:${p.line} no silencia nada — ${p.why}: «${p.text}»`)
   }
   // F15/H3 — the voice of the new silence. Ever since prose is ignored, a
   // WHOLE file of prose produces neither acknowledgements nor warnings:
@@ -821,7 +821,7 @@ export function formatFindings(findings, { where = 'este repo', ackProblems = []
   // matters is "you might believe you have kept THIS quiet, and you have not".
   if (ackProsaSinAcuses && live.length) {
     out.push(
-      `  aviso: \`${ACK_PATH}\` existe y tiene contenido, pero NO silencia ninguna señal — todo lo que hay ` +
+      `  warning: \`${ACK_PATH}\` existe y tiene contenido, pero NO silencia ninguna señal — todo lo que hay ` +
         'dentro se ha leído como prosa. Un acuse es una línea que empieza por el nombre de la señal: ' +
         `\`${ACK_IDS[0]}: 2026-01-31 — <motivo>\` (señales válidas: ${ACK_IDS.join(', ')}).`
     )

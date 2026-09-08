@@ -122,7 +122,7 @@ export function yardstickCandidates({ entradas: entries = [], declaradas: declar
     .filter((f) => !f.includes('/') && ROOT_RE.test(f))
     .sort(order)
     .filter((f) => admits(f))
-    .map((path) => (mark(path), { ruta: path, motivo: 'guía del repo en la raíz' }))
+    .map((path) => (mark(path), { ruta: path, motivo: 'repo guide at the root' }))
 
   // Group 2 — text files inside directories that match "rules".
   const directoryGroup = []
@@ -138,7 +138,7 @@ export function yardstickCandidates({ entradas: entries = [], declaradas: declar
     omitted += Math.max(0, dirCandidates.length - MAX_PER_DIRECTORY)
     for (const path of admitted) {
       mark(path)
-      directoryGroup.push({ ruta: path, motivo: `dentro de \`${dir}\`, que casa convention|rules` })
+      directoryGroup.push({ ruta: path, motivo: `inside \`${dir}\`, which matches convention|rules` })
     }
   }
 
@@ -149,7 +149,7 @@ export function yardstickCandidates({ entradas: entries = [], declaradas: declar
     .filter((f) => admits(f))
     .map((path) => (mark(path), {
       ruta: path,
-      motivo: 'skill de proyecto (también se puede declarar por nombre en la lista `Skills`)',
+      motivo: 'project skill (it can also be declared by name in the `Skills` list)',
     }))
 
   let candidates = [...rootGroup, ...directoryGroup, ...skillGroup]
@@ -272,39 +272,39 @@ export function pareceEsqueleto(content) {
 // on `declaredIn` about why that is benign).
 //
 // Two-space indentation in the detail, just like `formatFindings` in
-// `conventions.js`. Deliberately WITHOUT the words "aviso", "ATENCIÓN" or
+// `conventions.js`. Deliberately WITHOUT the words "warning", "ATTENTION" or
 // "unblock": this is not an alarm about a conflict (that is
 // `detect-conventions.mjs`), it is material for a decision — and
 // `__tests__/ct-init.test.js` demands that the second run of a bootstrapped
-// repo carry no word "aviso" on stderr, a run in which this block DOES have a
+// repo carry no word "warning" on stderr, a run in which this block DOES have a
 // candidate (the `AGENTS.md` `ct-init` has just created).
 export function formatCandidatos(candidates, { omitidos: omitted = 0, truncated = false } = {}) {
   if (!candidates || candidates.length === 0) return ''
   const out = [CANDIDATOS_HEADER]
   let hasSkeleton = false
   for (const c of candidates) {
-    const mark = c.esqueleto ? ' [esqueleto: sólo encabezados]' : ''
+    const mark = c.esqueleto ? ' [skeleton: headings only]' : ''
     if (c.esqueleto) hasSkeleton = true
     out.push(`  · \`${c.ruta}\` — ${c.motivo}${mark}`)
   }
   out.push(
-    '  Nada de esto se ha escrito por ti: el barrido PROPONE y el humano DECLARA. ' +
-      `Enséñaselos al usuario y escribe en \`${CONVENTIONS_FILE}\` SOLO los que confirme.`
+    '  None of this has been written for you: the sweep PROPOSES and the human DECLARES. ' +
+      `Show them to the user and write into \`${CONVENTIONS_FILE}\` ONLY the ones they confirm.`
   )
   if (hasSkeleton) {
     out.push(
-      '  Los marcados `[esqueleto: sólo encabezados]` no traen reglas todavía: declararlos hoy ' +
-        'es peor que no declararlos, porque le da al juez un documento vacío que SÍ cuenta como ' +
-        'vara del repo, en vez de dejar que el diff se mida sólo contra la de ct.'
+      '  The ones marked `[skeleton: headings only]` carry no rules yet: declaring them today ' +
+        'is worse than not declaring them, because it hands the judge an empty document that DOES ' +
+        "count as the repo's yardstick, instead of letting the diff be measured only against ct's."
     )
   }
   if (omitted > 0) {
-    out.push(`  (+${omitted} candidatos más, no listados: la lista es para que la filtre una persona.)`)
+    out.push(`  (+${omitted} more candidates, not listed: the list is there for a person to filter.)`)
   }
   if (truncated) {
     out.push(
-      '  nota: el recorrido del repo se cortó por sus cotas, así que puede haber candidatos que no ' +
-        'se hayan mirado. Ausencia aquí no es prueba de ausencia.'
+      '  note: the walk over the repo was cut short by its bounds, so there may be candidates that ' +
+        'were not looked at. Absence here is not proof of absence.'
     )
   }
   return out.join('\n')

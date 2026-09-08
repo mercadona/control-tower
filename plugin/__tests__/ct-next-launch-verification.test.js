@@ -62,7 +62,7 @@ describe('ct-next — cmux launch verification (finding 3)', () => {
     expect(r.out).toMatch(/lanzado #90 en .*\.worktrees\/90.*verificado: la sesión cmux está corriendo en ese directorio/)
   })
 
-  it('cmux accepts the launch but the session ends up in ANOTHER directory (non-existent cwd tolerated) → ATENCIÓN, never a bare "lanzado"', () => {
+  it('cmux accepts the launch but the session ends up in ANOTHER directory (non-existent cwd tolerated) → ATTENTION, never a bare "lanzado"', () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
@@ -86,7 +86,7 @@ describe('ct-next — cmux launch verification (finding 3)', () => {
     // correct semantics, and the message now enumerates what has to be cleaned
     // up.
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATENCIÓN: cmux aceptó el lanzamiento de #90 \(exit 0\), pero la sesión NO está en/)
+    expect(r.out).toMatch(/ATTENTION: cmux aceptó el lanzamiento de #90 \(exit 0\), pero la sesión NO está en/)
     expect(r.out).toMatch(/está en "\/Users\/fake\/\.config\/ghostty-default-shell-dir" en su lugar/)
     expect(r.out).toMatch(/NO se cuenta como lanzado con éxito/)
     // The final summary must NOT say "nada quedó a medias" nor "reintenta más
@@ -95,16 +95,16 @@ describe('ct-next — cmux launch verification (finding 3)', () => {
     expect(r.out).toMatch(/la rama feat\/90 y el worktree .*\.worktrees\/90/)
     expect(r.out).toMatch(/gh issue edit 90 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
     expect(r.out).not.toMatch(/Nada quedó a medias/)
-    expect(r.out).not.toMatch(/no hay nada que limpiar a mano/)
+    expect(r.out).not.toMatch(/there is nothing to clean up by hand/)
     // The text may indeed NAME "reintenta más tarde" in order to deny it, but
     // it can never recommend it as a way out.
     expect(r.out).toMatch(/no es "reintenta más tarde"/)
-    expect(r.out).not.toMatch(/reintenta más tarde, o en la próxima vuelta del \/loop/)
+    expect(r.out).not.toMatch(/retry later, or on the next turn of the \/loop/)
     // It must never read as a confirmed launch with no qualification.
     expect(r.out).not.toMatch(/lanzado #90 en .*verificado/)
   })
 
-  it('cmux accepts the launch but the session does not show up in the query at all → "no se encontró" ATENCIÓN, and it does NOT count as progress (exit 1)', () => {
+  it('cmux accepts the launch but the session does not show up in the query at all → "no se encontró" ATTENTION, and it does NOT count as progress (exit 1)', () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
@@ -119,7 +119,7 @@ describe('ct-next — cmux launch verification (finding 3)', () => {
     // D5, finding A: and for the same reason as 'wrong-cwd', the code goes from
     // 3 to 1 — here too a claim, a branch and a worktree are left behind.
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATENCIÓN: cmux devolvió éxito \(exit 0\) al lanzar #90, pero no se encontró ninguna sesión/)
+    expect(r.out).toMatch(/ATTENTION: cmux devolvió éxito \(exit 0\) al lanzar #90, pero no se encontró ninguna sesión/)
     expect(r.out).toMatch(/NO se cuenta como lanzado con éxito/)
     expect(r.out).toMatch(/quedaron LANZADOS SIN VERIFICAR/)
     expect(r.out).not.toMatch(/Nada quedó a medias/)
@@ -152,7 +152,7 @@ describe('ct-next — cmux launch verification (finding 3)', () => {
       // #90 ends up in the wrong cwd; #91 launches clean.
       FAKE_CMUX_WRONG_CWD_SUBSTR: '#90',
     })
-    expect(r.out).toMatch(/ATENCIÓN: cmux aceptó el lanzamiento de #90 \(exit 0\), pero la sesión NO está en/)
+    expect(r.out).toMatch(/ATTENTION: cmux aceptó el lanzamiento de #90 \(exit 0\), pero la sesión NO está en/)
     expect(r.out).toMatch(/lanzado #91 en .*\.worktrees\/91.*verificado: la sesión cmux está corriendo en ese directorio/)
     // D5, finding A (the MIXED case, which the commission did not name and
     // which was the hardest to see): with one confirmed and one unconfirmed,

@@ -20,7 +20,7 @@ class ExitCode {
 }
 
 class BenchArguments {
-  static USAGE = 'uso: judge-bench.mjs --agent <ruta al .md del agente> [--runs N] [--case <nombre>] [--dry-run] [--budget-usd <n>] [--cases <dir>]'
+  static USAGE = 'usage: judge-bench.mjs --agent <ruta al .md del agente> [--runs N] [--case <nombre>] [--dry-run] [--budget-usd <n>] [--cases <dir>]'
   static DEFAULT_RUNS = 5
   static DEFAULT_BUDGET_USD = 3
   static PLUGIN_ROOT = dirname(dirname(fileURLToPath(import.meta.url)))

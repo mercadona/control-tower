@@ -30,7 +30,7 @@ const arg = (f) => {
   return (typeof v === 'string' && !v.startsWith('--')) ? v : true
 }
 
-const usage = 'uso: scope-check --repo <owner/repo> --pr <número> [--exempt <patrón,patrón>]'
+const usage = 'usage: scope-check --repo <owner/repo> --pr <número> [--exempt <patrón,patrón>]'
 const repo = arg('--repo')
 const pr = arg('--pr')
 // Exemptions OF THE TARGET REPO: its own bookkeeping (a ledger, a logbook)

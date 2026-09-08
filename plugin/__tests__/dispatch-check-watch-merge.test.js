@@ -235,7 +235,7 @@ describe('--release launches the merge watcher', () => {
       const r = release(dir, { env: { CT_WATCH_MERGE_BIN: join(dir, 'no-existe', 'ni-de-broma.mjs') } })
       expect(r.status).toBe(0)
       expect(r.stdout).toMatch(/released #9/)
-      expect(r.stderr).toMatch(/aviso:/)
+      expect(r.stderr).toMatch(/warning:/)
       expect(r.stderr).toMatch(/a mano/)
       expect(r.stdout).not.toMatch(/vigilante del merge de #9 lanzado \(pid/)
       expect(await waitForArgv(r.watchLog, 600)).toBe(null)

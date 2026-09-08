@@ -166,9 +166,9 @@ describe('H2 (CLI) — the slice that fell off the queue stops disappearing in s
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue], closedIssues]),
     })
     expect(r.code).toBe(0)
-    // Only the emissions AT THE MOMENT (`aviso: …`) are counted, not the recap
+    // Only the emissions AT THE MOMENT (`warning: …`) are counted, not the recap
     // at the end, which by design repeats every accumulated warning.
-    const lines = r.err.split('\n').filter((l) => /^aviso: \d+ issue\(s\) CERRADOS/.test(l))
+    const lines = r.err.split('\n').filter((l) => /^warning: \d+ issue\(s\) CERRADOS/.test(l))
     expect(lines.length).toBe(1)
     // F19/H2 CHANGES THIS NUMBER ON PURPOSE: it was 6 when `blocked` counted as
     // an anomaly alongside `ready` and `in-progress`. A closed one with
@@ -178,7 +178,7 @@ describe('H2 (CLI) — the slice that fell off the queue stops disappearing in s
     // teaches a reader to discount the whole headline. Now the headline counts
     // 5 (3 ready + 2 in-progress) and the `blocked` one comes out in its own
     // count, just like the `in-review` ones.
-    expect(lines[0]).toMatch(/^aviso: 5 issue\(s\) CERRADOS/)
+    expect(lines[0]).toMatch(/^warning: 5 issue\(s\) CERRADOS/)
     expect(lines[0]).toMatch(/Otros 4 cerrados conservan status:in-review/)
     expect(lines[0]).toMatch(/Otros 1 cerrados conservan status:blocked/)
   })
@@ -212,12 +212,12 @@ describe('H3 (CLI) — a claim whose SLICE.md declares itself BLOCKED', () => {
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[inProgress, ready], []]),
     })
     expect(r.err).toMatch(/#41/)
-    expect(r.err).toMatch(/se declara BLOQUEADO/)
+    expect(r.err).toMatch(/declares itself BLOCKED/)
     expect(r.err).toMatch(/la API de pagos del sandbox está caída/)
     expect(r.err).toMatch(/--requeue/)
     expect(r.err).toMatch(/--release/)
     // And it does not claim that anyone is moving it forward.
-    expect(r.err).toMatch(/ningún agente avanzándolo/)
+    expect(r.err).toMatch(/no agent moving it forward/)
   })
 
   it('with no `blocked` in the SLICE.md it says nothing (negative control: the normal case)', () => {
@@ -228,7 +228,7 @@ describe('H3 (CLI) — a claim whose SLICE.md declares itself BLOCKED', () => {
       FAKE_GIT_TOPLEVEL: repoRoot,
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[inProgress, ready], []]),
     })
-    expect(r.out).not.toMatch(/se declara BLOQUEADO/)
+    expect(r.out).not.toMatch(/declares itself BLOCKED/)
   })
 
   it('`status: blocked` (the most likely way of writing it wrong) also counts', () => {
@@ -239,7 +239,7 @@ describe('H3 (CLI) — a claim whose SLICE.md declares itself BLOCKED', () => {
       FAKE_GIT_TOPLEVEL: repoRoot,
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[inProgress, ready], []]),
     })
-    expect(r.err).toMatch(/se declara BLOQUEADO/)
+    expect(r.err).toMatch(/declares itself BLOCKED/)
   })
 })
 
@@ -351,7 +351,7 @@ describe('H1/H4 (CLI) — the check enters the real run', () => {
       FAKE_GH_CLOSURE_FAIL: '1',
     })
     expect(r.code).toBe(0)
-    expect(r.err).toMatch(/no se ha podido comprobar/i)
+    expect(r.err).toMatch(/it could not be checked/i)
     // The dispatch runs its course: #42 is selected all the same.
     expect(r.stdout).toMatch(/#42/)
   })

@@ -23,7 +23,7 @@ It answers in one go the question the coordinator used to answer by hand every t
 |---|---|---|
 | `0` | nothing to review: nothing in flight without signs of life, no residue, no half-done read | nothing |
 | `3` | there is something to review: residue, a claim with no live process, orphaned labels, deliveries left unharvested | read the blocks of the report (below) |
-| `1` | **it could not be checked**: a read of `gh`, of the processes or of the disk failed | look at the `aviso:` lines on stderr, fix the cause and run it again — the report that has been printed is only what is known |
+| `1` | **it could not be checked**: a read of `gh`, of the processes or of the disk failed | look at the `warning:` lines on stderr, fix the cause and run it again — the report that has been printed is only what is known |
 
 The same three-state convention as `/ct-groom`, so there is no new vocabulary to learn.
 

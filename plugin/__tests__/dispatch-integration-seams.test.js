@@ -15,7 +15,7 @@
 //   exit 1: the collision never aborts the batch, it only narrows it).
 //   Seam C — an issue with a "merge-after" outside "## Dependencias" (D1, it
 //   warns but dispatches) ends up orphaned in status:in-progress when claiming
-//   (D2, 'stuck') → exit 1 with the warning AND the ATENCIÓN present at the same
+//   (D2, 'stuck') → exit 1 with the warning AND the ATTENTION present at the same
 //   time, with neither contradicting the other.
 //   Seam D — in a single batch: an epic excluded by collision (D1), an issue
 //   with malformed deps in ANOTHER epic (D1, it blocks ONLY that issue) and an
@@ -101,12 +101,12 @@ describe('Seam A — an epic excluded by an order collision (D1) + the only rema
     })
 
     // D1: the collision warning is ALWAYS printed, never in silence.
-    expect(r.out).toMatch(/aviso: colisión de orden.*#10.*#11|aviso: colisión de orden.*#11.*#10/)
+    expect(r.out).toMatch(/warning: colisión de orden.*#10.*#11|warning: colisión de orden.*#11.*#10/)
     expect(r.out).toMatch(/EXCLUIDO de esta tanda/)
     // Only #20 was selected (epic 100's never competed).
-    expect(r.out).toMatch(/seleccionados para esta tanda.*#20/)
+    expect(r.out).toMatch(/selected for this batch.*#20/)
     // #20 collides live with #99 → it is skipped, zero launched.
-    expect(r.out).toMatch(/saltando #20/)
+    expect(r.out).toMatch(/skipping #20/)
     expect(r.out).toMatch(/lanzad[oa]s? 0.*1/i)
     // Exit 3 — the same "retry later" as D2, NOT 0 (that would claim real
     // progress that never happened) nor 1 (nothing broke: the exclusion is not
@@ -135,9 +135,9 @@ describe('Seam B — the order collision is the ONLY source of work in the repo 
       FAKE_GIT_LOG_FILE: gitLog,
     })
 
-    expect(r.out).toMatch(/aviso: colisión de orden/)
+    expect(r.out).toMatch(/warning: colisión de orden/)
     // planDispatch selected nothing — no dispatch-check is ever opened.
-    expect(r.out).toMatch(/No hay ningún issue en status:ready/)
+    expect(r.out).toMatch(/There is no issue at status:ready/)
     // exit 0: "nothing to do, and it has already been explained why" — the
     // collision NEVER aborts the batch (D1's round 2), not even when it leaves
     // the repo with nothing to dispatch.
@@ -150,7 +150,7 @@ describe('Seam B — the order collision is the ONLY source of work in the repo 
 })
 
 describe('Seam C — a stray dep outside the section (D1, it warns and dispatches) that ends up orphaned in status:in-progress (D2, stuck) → exit 1 with both messages', () => {
-  it('the stray dep warning and the orphan ATENCIÓN live together without contradicting each other', () => {
+  it('the stray dep warning and the orphan ATTENTION live together without contradicting each other', () => {
     const repoRoot = makeRepoRoot()
     const gitLog = join(repoRoot, 'git-log')
     const counterFile = join(repoRoot, 'gh-list-count')
@@ -182,14 +182,14 @@ describe('Seam C — a stray dep outside the section (D1, it warns and dispatche
 
     // D1: the stray dep warning is printed — the narrowing of the deps domain
     // is correct, but never in silence.
-    expect(r.out).toMatch(/aviso: #50 tiene "merge-after #7" fuera de la sección/)
+    expect(r.out).toMatch(/warning: #50 tiene "merge-after #7" fuera de la sección/)
     // D2: 'stuck' aborts the WHOLE batch — the issue is left orphaned.
-    expect(r.out).toMatch(/ATENCIÓN.*bloqueado en status:in-progress/is)
+    expect(r.out).toMatch(/ATTENTION.*bloqueado en status:in-progress/is)
     expect(r.out).not.toMatch(/lanzado #50/)
     // Neither of the two messages steps on the other: the stray dep warning
-    // does not say the dispatch completed, and the ATENCIÓN does not say the
+    // does not say the dispatch completed, and the ATTENTION does not say the
     // dependency blocked anything.
-    expect(r.out).not.toMatch(/aviso: #50 tiene "merge-after #7"[^\n]*bloquead/i)
+    expect(r.out).not.toMatch(/warning: #50 tiene "merge-after #7"[^\n]*bloquead/i)
     expect(r.code).toBe(1)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
@@ -237,8 +237,8 @@ describe('Seam D — an order collision + malformed deps in another epic + a str
     })
 
     // D1: the three warnings about broken/narrowed data live together.
-    expect(r.out).toMatch(/aviso: colisión de orden.*#10.*#11|aviso: colisión de orden.*#11.*#10/)
-    expect(r.out).toMatch(/aviso: #30 tiene "merge-after #9" fuera de la sección/)
+    expect(r.out).toMatch(/warning: colisión de orden.*#10.*#11|warning: colisión de orden.*#11.*#10/)
+    expect(r.out).toMatch(/warning: #30 tiene "merge-after #9" fuera de la sección/)
     // #20 (malformed) NEVER appears as selected nor launched — but it neither
     // aborts nor contaminates #30's result either: since #30 IS selected,
     // planDispatch never invokes explainNoSelection (it is only used when
@@ -246,10 +246,10 @@ describe('Seam D — an order collision + malformed deps in another epic + a str
     // this run — it stays out in functional silence, without aborting anything
     // or preventing #30's progress (behaviour verified here on purpose, not
     // assumed).
-    expect(r.out).not.toMatch(/seleccionados para esta tanda.*#20/)
+    expect(r.out).not.toMatch(/selected for this batch.*#20/)
     expect(r.out).not.toMatch(/lanzado #20/)
     // #30 was indeed selected, claimed and launched successfully.
-    expect(r.out).toMatch(/seleccionados para esta tanda.*#30/)
+    expect(r.out).toMatch(/selected for this batch.*#30/)
     expect(r.out).toMatch(/lanzado #30/)
     expect(r.out).toMatch(/lanzad[oa]s? 1.*1/i)
     expect(r.code).toBe(0)

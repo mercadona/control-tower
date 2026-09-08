@@ -50,10 +50,10 @@ describe('/ct-status', () => {
     const b = bench()
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: NO_ISSUES })
     expect(res.status).toBe(0)
-    expect(res.stdout).not.toMatch(/EN VUELO/)
-    expect(res.stdout).not.toMatch(/ENTREGADO/)
-    expect(res.stdout).not.toMatch(/RESIDUO/)
-    expect(res.stdout).not.toMatch(/\(ninguno\)/)
+    expect(res.stdout).not.toMatch(/IN FLIGHT/)
+    expect(res.stdout).not.toMatch(/DELIVERED/)
+    expect(res.stdout).not.toMatch(/RESIDUE/)
+    expect(res.stdout).not.toMatch(/\(none\)/)
     cleanUp(b)
   })
 
@@ -61,10 +61,10 @@ describe('/ct-status', () => {
     const b = bench()
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: inProgress7(), FAKE_GH_TIMELINE_JSON: ago(3 * 3600_000) })
     expect(res.status).toBe(3)
-    expect(res.stdout).toMatch(/EN VUELO/)
+    expect(res.stdout).toMatch(/IN FLIGHT/)
     expect(res.stdout).toMatch(/#7/)
-    expect(res.stdout).toMatch(/SIN SE.AL DE VIDA/)
-    expect(res.stdout).toMatch(/claim puesto hace 3 h/)
+    expect(res.stdout).toMatch(/NO SIGN OF LIFE/)
+    expect(res.stdout).toMatch(/claim put on 3 h ago/)
     cleanUp(b)
   })
 
@@ -72,8 +72,8 @@ describe('/ct-status', () => {
     const b = bench()
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: inProgress7(), FAKE_GH_TIMELINE_JSON: ago(1000) })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/arrancando/i)
-    expect(res.stdout).not.toMatch(/SIN SE.AL DE VIDA/)
+    expect(res.stdout).toMatch(/starting up/i)
+    expect(res.stdout).not.toMatch(/NO SIGN OF LIFE/)
     cleanUp(b)
   })
 
@@ -81,7 +81,7 @@ describe('/ct-status', () => {
     const b = bench()
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: inProgress7(), FAKE_GH_TIMELINE_FAIL: '1' })
     expect(res.status).toBe(1)
-    expect(res.stdout).not.toMatch(/SIN SE.AL DE VIDA/)
+    expect(res.stdout).not.toMatch(/NO SIGN OF LIFE/)
     expect(res.stderr).toMatch(/timeline/)
     // The reason is said ONCE: the composer knows the age is missing, but
     // only the CLI knows why, so its generic message is replaced rather than
@@ -95,8 +95,8 @@ describe('/ct-status', () => {
     const b = bench()
     const res = run(b, { FAKE_GH_LIST_FAIL_AT: '0' })
     expect(res.status).toBe(1)
-    expect(res.stdout + res.stderr).not.toMatch(/limpio/i)
-    expect(res.stdout + res.stderr).not.toMatch(/reposo/i)
+    expect(res.stdout + res.stderr).not.toMatch(/\bclean\b/i)
+    expect(res.stdout + res.stderr).not.toMatch(/at rest/i)
     cleanUp(b)
   })
 
@@ -109,11 +109,11 @@ describe('/ct-status', () => {
     const b = bench()
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: inProgress7(), FAKE_GH_TIMELINE_JSON: ago(3 * 3600_000), FAKE_GH_LIST_FAIL_AT: '1' })
     expect(res.status).toBe(1)
-    expect(res.stdout).toMatch(/EN VUELO \(1\)/)
+    expect(res.stdout).toMatch(/IN FLIGHT \(1\)/)
     expect(res.stdout).toMatch(/#7\s+refresh/)
     expect(res.stderr).toMatch(/no se pudieron listar issues cerrados/)
     // And only ONE of the two reads has been lost, not both.
-    expect(res.stdout).toMatch(/exit 1 — 1 aviso\(s\)/)
+    expect(res.stdout).toMatch(/exit 1 — 1 warning\(s\)/)
     cleanUp(b)
   })
 
@@ -139,9 +139,9 @@ describe('/ct-status', () => {
     expect(res.stdout).not.toMatch(/worktree ✗/)
     // And the warning does NOT name the 7: the report has just explained it.
     // See the test below, which is the one that ties down that half.
-    expect(res.stderr).not.toMatch(/en \.worktrees\//)
+    expect(res.stderr).not.toMatch(/in \.worktrees\//)
     // Unable to attribute, nobody is accused of being an orphan either.
-    expect(res.stdout).not.toMatch(/RESIDUO/)
+    expect(res.stdout).not.toMatch(/RESIDUE/)
     cleanUp(b)
   })
 
@@ -156,9 +156,9 @@ describe('/ct-status', () => {
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: inProgress7(), FAKE_GH_TIMELINE_JSON: ago(3 * 3600_000), FAKE_GH_LIST_FAIL_AT: '1' })
     expect(res.status).toBe(1)
     expect(res.stdout).toMatch(/worktree ✓/) // the 7, explained by #7 in flight
-    const warning = res.stderr.split('\n').find((l) => /en \.worktrees\//.test(l))
+    const warning = res.stderr.split('\n').find((l) => /in \.worktrees\//.test(l))
     expect(warning).toBeDefined()
-    const named = /en \.worktrees\/ \(([^)]*)\)/.exec(warning)[1].split(', ')
+    const named = /in \.worktrees\/ \(([^)]*)\)/.exec(warning)[1].split(', ')
     expect(named).toEqual(['8'])
     cleanUp(b)
   })
@@ -170,10 +170,10 @@ describe('/ct-status', () => {
     const b = bench({ worktrees: [7] })
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: inProgress7(), FAKE_GH_TIMELINE_JSON: ago(3 * 3600_000), FAKE_GH_LIST_FAIL_AT: '1' })
     expect(res.status).toBe(1)
-    expect(res.stderr).not.toMatch(/en \.worktrees\//)
+    expect(res.stderr).not.toMatch(/in \.worktrees\//)
     expect(res.stderr).toMatch(/no se pudieron listar issues cerrados/)
-    expect(res.stdout).toMatch(/exit 1 — 1 aviso\(s\)/)
-    expect(res.stdout).not.toMatch(/reposo/i)
+    expect(res.stdout).toMatch(/exit 1 — 1 warning\(s\)/)
+    expect(res.stdout).not.toMatch(/at rest/i)
     cleanUp(b)
   })
 
@@ -185,8 +185,8 @@ describe('/ct-status', () => {
     const seq = JSON.stringify([[], [{ number: 5, body: '', labels: [], state_reason: 'completed' }]])
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: seq, FAKE_GH_LIST_FAIL_AT: '0' })
     expect(res.status).toBe(1)
-    expect(res.stdout).toMatch(/ENTREGADO, SIN COSECHAR \(1\)/)
-    expect(res.stdout).toMatch(/#5\s+cerrado como completado, y todavía queda en disco: worktree \.worktrees\/5/)
+    expect(res.stdout).toMatch(/DELIVERED, NOT HARVESTED \(1\)/)
+    expect(res.stdout).toMatch(/#5\s+closed as completed, and still left on disk: worktree \.worktrees\/5/)
     cleanUp(b)
   })
 
@@ -194,7 +194,7 @@ describe('/ct-status', () => {
     const b = bench({ worktrees: [7] })
     const res = run(b, { FAKE_GH_LIST_FAIL_AT: '0' })
     expect(res.status).toBe(1)
-    expect(res.stdout).not.toMatch(/RESIDUO/)
+    expect(res.stdout).not.toMatch(/RESIDUE/)
     expect(res.stderr).toMatch(/\.worktrees/)
     cleanUp(b)
   })
@@ -209,15 +209,15 @@ describe('/ct-status', () => {
     try {
       const res = run(b, { FAKE_GH_LIST_SEQUENCE: inProgress7(), FAKE_GH_TIMELINE_JSON: ago(3 * 3600_000) })
       expect(res.status).toBe(1)
-      expect(res.stderr).toMatch(/no se pudo listar .*\.worktrees/)
+      expect(res.stderr).toMatch(/could not list .*\.worktrees/)
       expect(res.stdout).toMatch(/worktree \?/)
       expect(res.stdout).not.toMatch(/worktree ✗/)
       // And never the assertion of cleanliness about the read that was not done.
-      expect(res.stdout).not.toMatch(/RESIDUO/)
-      expect(res.stdout).not.toMatch(/reposo/i)
+      expect(res.stdout).not.toMatch(/RESIDUE/)
+      expect(res.stdout).not.toMatch(/at rest/i)
       // The branch COULD be read, so that one is asserted: the doubt does
       // not spread to the signal next to it.
-      expect(res.stdout).toMatch(/rama ✗/)
+      expect(res.stdout).toMatch(/branch ✗/)
     } finally {
       chmodSync(join(b.repo, '.worktrees'), 0o755)
       cleanUp(b)
@@ -228,9 +228,9 @@ describe('/ct-status', () => {
     const b = bench({ worktrees: [9] })
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue(9, 'ready', 'plan')], []]) })
     expect(res.status).toBe(3)
-    expect(res.stdout).toMatch(/RESIDUO/)
+    expect(res.stdout).toMatch(/RESIDUE/)
     expect(res.stdout).toMatch(/\.worktrees\/9/)
-    expect(res.stdout).toMatch(/#9 sigue abierto/)
+    expect(res.stdout).toMatch(/#9 is still open/)
     expect(res.stdout).toMatch(/status:ready/)
     // The phrase §6 of the spec proposed would be FALSE here: issue #9 is
     // open, that is, alive.
@@ -243,7 +243,7 @@ describe('/ct-status', () => {
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: NO_ISSUES })
     expect(res.status).toBe(3)
     expect(res.stdout).toMatch(/\.worktrees\/11/)
-    expect(res.stdout).toMatch(/ning.n issue lo reclama/)
+    expect(res.stdout).toMatch(/no issue claims it/)
     cleanUp(b)
   })
 
@@ -251,7 +251,7 @@ describe('/ct-status', () => {
     const b = bench({ worktrees: [7] })
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: inProgress7(), FAKE_GH_TIMELINE_JSON: ago(1000) })
     expect(res.status).toBe(0)
-    expect(res.stdout).not.toMatch(/RESIDUO/)
+    expect(res.stdout).not.toMatch(/RESIDUE/)
     expect(res.stdout).toMatch(/worktree ✓/)
     cleanUp(b)
   })
@@ -260,8 +260,8 @@ describe('/ct-status', () => {
     const b = bench()
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: JSON.stringify([[], [{ number: 3, body: '', labels: [{ name: 'status:in-review' }], state_reason: 'completed' }]]) })
     expect(res.status).toBe(3)
-    expect(res.stdout).toMatch(/RESIDUO \(1\)/)
-    expect(res.stdout).toMatch(/#3\s+cerrado, pero conserva status:in-review/)
+    expect(res.stdout).toMatch(/RESIDUE \(1\)/)
+    expect(res.stdout).toMatch(/#3\s+closed, but it still keeps status:in-review/)
     // With no orphaned worktrees, the note about worktrees has no business here.
     expect(res.stdout).not.toMatch(/\.worktrees/)
     cleanUp(b)
@@ -292,8 +292,8 @@ describe('/ct-status', () => {
       },
     })
     expect(res.status).toBe(1)
-    expect(res.stdout).toMatch(/proceso \?/)
-    expect(res.stdout).not.toMatch(/SIN SE.AL DE VIDA/)
+    expect(res.stdout).toMatch(/process \?/)
+    expect(res.stdout).not.toMatch(/NO SIGN OF LIFE/)
     expect(res.stderr).toMatch(/no se pudo listar procesos con ps/)
     cleanUp(b)
   })
@@ -328,7 +328,7 @@ describe('/ct-status', () => {
     const b = bench()
     const res = run(b, {}, ['--repo'])
     expect(res.status).toBe(2)
-    expect(res.stderr).toMatch(/sin valor/)
+    expect(res.stderr).toMatch(/no value/)
     expect(argvOf(b)).toBe('')
     cleanUp(b)
   })
@@ -346,7 +346,7 @@ describe('/ct-status', () => {
     const b = bench()
     const res = run(b, {}, [])
     expect(res.status).toBe(2)
-    expect(res.stderr).toMatch(/uso: ct-status\.mjs/)
+    expect(res.stderr).toMatch(/usage: ct-status\.mjs/)
     cleanUp(b)
   })
 })
@@ -362,9 +362,9 @@ describe("/ct-status — the checkout's identity", () => {
     const b = bench({ worktrees: [7, 8, 9] })
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: inProgress7(), FAKE_GH_TIMELINE_JSON: ago(3 * 3600_000) }, ['--repo', 'otro/repo'])
     expect(res.status).toBe(1)
-    expect(res.stderr).toMatch(/es el checkout de o\/r, no de otro\/repo/)
-    expect(res.stdout).not.toMatch(/RESIDUO/)
-    expect(res.stdout).not.toMatch(/SIN SE.AL DE VIDA/)
+    expect(res.stderr).toMatch(/is the checkout of o\/r, not of otro\/repo/)
+    expect(res.stdout).not.toMatch(/RESIDUE/)
+    expect(res.stdout).not.toMatch(/NO SIGN OF LIFE/)
     expect(res.stdout).not.toMatch(/worktree ✗/)
     expect(res.stdout).toMatch(/worktree \?/)
     cleanUp(b)
@@ -374,8 +374,8 @@ describe("/ct-status — the checkout's identity", () => {
     const b = bench({ worktrees: [9], origin: null })
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: NO_ISSUES })
     expect(res.status).toBe(1)
-    expect(res.stderr).toMatch(/no tiene remote "origin"/)
-    expect(res.stdout).not.toMatch(/RESIDUO/)
+    expect(res.stderr).toMatch(/no "origin" remote/)
+    expect(res.stdout).not.toMatch(/RESIDUE/)
     cleanUp(b)
   })
 
@@ -390,7 +390,7 @@ describe("/ct-status — the checkout's identity", () => {
     b.cwd = join(b.repo, '.worktrees', '7')
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: inProgress7(), FAKE_GH_TIMELINE_JSON: ago(1000) })
     expect(res.stdout).toMatch(/worktree ✓/)
-    expect(res.stdout).toMatch(/rama ✓/)
+    expect(res.stdout).toMatch(/branch ✓/)
     expect(res.status).toBe(0)
     cleanUp(b)
   })
@@ -406,9 +406,9 @@ describe('/ct-status — delivered, waiting for the merge', () => {
     // coordinator learns to ignore the exit code, and a watcher that gates on
     // it becomes useless.
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/ENTREGADO, ESPERANDO MERGE \(3\)/)
+    expect(res.stdout).toMatch(/DELIVERED, WAITING FOR MERGE \(3\)/)
     expect(res.stdout).toMatch(/#11\s+refresh de tokens — status:in-review/)
-    expect(res.stdout).not.toMatch(/RESIDUO/)
+    expect(res.stdout).not.toMatch(/RESIDUE/)
     cleanUp(b)
   })
 
@@ -418,9 +418,9 @@ describe('/ct-status — delivered, waiting for the merge', () => {
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue(11, 'in-review')], [{ number: 5, body: '', labels: [], state_reason: 'completed' }]]),
     })
     expect(res.status).toBe(3) // what is merged and unharvested IS a finding
-    expect(res.stdout).toMatch(/ENTREGADO, ESPERANDO MERGE \(1\)/)
-    expect(res.stdout).toMatch(/ENTREGADO, SIN COSECHAR \(1\)/)
-    expect(res.stdout).not.toMatch(/RESIDUO/)
+    expect(res.stdout).toMatch(/DELIVERED, WAITING FOR MERGE \(1\)/)
+    expect(res.stdout).toMatch(/DELIVERED, NOT HARVESTED \(1\)/)
+    expect(res.stdout).not.toMatch(/RESIDUE/)
     cleanUp(b)
   })
 })
@@ -478,13 +478,13 @@ describe('/ct-status — the sign of life in the residue block', () => {
       // THE assertion that cannot be made without looking: the first version
       // printed "nobody is working on it now" without consulting
       // `procesos.porSlice`, which was already in memory.
-      expect(res.stdout).not.toMatch(/no hay ning.n proceso trabajando dentro/)
+      expect(res.stdout).not.toMatch(/no process working inside/)
       // The positive branch is only demanded if the process check could
       // really be done on this machine: if `lsof` is missing, the command
       // stays quiet, and that is exactly what the assertion above already
       // protects.
       if (!/no se pudo (listar procesos|leer el directorio)/.test(res.stderr)) {
-        expect(res.stdout).toMatch(new RegExp(`OJO: hay un proceso trabajando dentro ahora mismo \\(pid ${child.pid}\\)`))
+        expect(res.stdout).toMatch(new RegExp(`CAREFUL: there is a process working inside right now \\(pid ${child.pid}\\)`))
       }
     } finally {
       child.kill('SIGKILL')
@@ -505,8 +505,8 @@ describe('/ct-status — the sign of life in the residue block', () => {
     })
     expect(res.status).toBe(1)
     expect(res.stdout).toMatch(/\.worktrees\/9/)
-    expect(res.stdout).not.toMatch(/no hay ning.n proceso trabajando dentro/)
-    expect(res.stdout).not.toMatch(/OJO: hay un proceso/)
+    expect(res.stdout).not.toMatch(/no process working inside/)
+    expect(res.stdout).not.toMatch(/CAREFUL: there is a process/)
     cleanUp(b)
   })
 })
@@ -525,7 +525,7 @@ describe('/ct-status — the whole report reaches the other side of the pipe', (
     expect(res.status).toBe(3)
     expect(res.stdout.length).toBeGreaterThan(65536)
     const last = res.stdout.trimEnd().split('\n').pop()
-    expect(last).toMatch(/^exit 3 — hay 2000 cosa\(s\) que revisar$/)
+    expect(last).toMatch(/^exit 3 — 2000 thing\(s\) to review$/)
     cleanUp(b)
   })
 })

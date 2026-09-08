@@ -49,7 +49,7 @@ describe('readEpicContext — the section of the spec and its guardrail', () => 
     const r = readEpicContext(withSection(''))
     expect(r.content).toBeNull()
     expect(r.warnings).toHaveLength(1)
-    expect(r.warnings[0]).toContain('sin contenido')
+    expect(r.warnings[0]).toContain('no content')
   })
 
   it('a section with a heading inside: it is not emitted, and the warning names the line', () => {
@@ -294,10 +294,10 @@ describe('diffIssue — the epic context is compared; the inherited one never is
     expect(hasDrift(d2)).toBe(false)
   })
 
-  it('is reported as nota:, never as divergencia:', () => {
+  it('is reported as note:, never as drift:', () => {
     const d = diffIssue(existingWith(bodyWith('- regla VIEJA', null)), WANTED, 'E1', [])
     const line = formatDrift(d).find((l) => l.includes(EPIC_CONTEXT_HEADING))
-    expect(line).toMatch(/^nota:/)
+    expect(line).toMatch(/^note:/)
   })
 
   // The inherited section is the literal request of §4: the plugin holds no
@@ -539,8 +539,8 @@ describe('C1 — the epic context as the ONLY drift does get written', () => {
   it('with no --reconcile nothing is written, and the exit is still 0 (never 3 because of this section)', () => {
     const res = invoke(specWithContext('- regla NUEVA'), [issueWith('- regla VIEJA')], [])
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/^nota:.*Contexto del epic/m)
-    expect(res.stderr).not.toMatch(/^divergencia:.*Contexto del epic/m)
+    expect(res.stderr).toMatch(/^note:.*Contexto del epic/m)
+    expect(res.stderr).not.toMatch(/^drift:.*Contexto del epic/m)
   })
 
   it('with no drift at all (the context already matches) `gh issue edit` is not called', () => {
@@ -582,10 +582,10 @@ describe('giving up on the epic context is said out loud, and it still does not 
   const spec = [EPIC_CONTEXT_HEADING, '- regla', '', '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices', NO_ANCHOR_TABLE, ''].join('\n')
   const issue = { number: 501, title: '#1 login', state: 'open', milestone: { title: 'Epic' }, labels: LABELS_1, body: NO_ANCHOR_BODY }
 
-  it('says it as nota:, names the anchor that is missing, and writes nothing', () => {
+  it('says it as note:, names the anchor that is missing, and writes nothing', () => {
     const res = invoke(spec, [issue], ['--dry-run', '--reconcile'])
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/nota:.*NO ha reescrito la sección "## Contexto del epic"/)
+    expect(res.stderr).toMatch(/note:.*NO ha reescrito la sección "## Contexto del epic"/)
     expect(res.stderr).toMatch(/ancla.*Contexto heredado.*Acceptance criteria/) // it names the TWO that would do
     expect(res.stderr).not.toMatch(/aplicaría/) // there is no new body: no write is announced
   })
@@ -593,7 +593,7 @@ describe('giving up on the epic context is said out loud, and it still does not 
   it('the inherited section is neither compared nor inserted', () => {
     const res = invoke(spec, [issue], ['--reconcile'])
     expect(res.status).toBe(0)
-    expect(res.stderr).not.toMatch(new RegExp(`divergencia.*${INHERITED_CONTEXT_HEADING}`))
+    expect(res.stderr).not.toMatch(new RegExp(`drift.*${INHERITED_CONTEXT_HEADING}`))
   })
 })
 
@@ -743,7 +743,7 @@ describe('C3 — an unclosed delimiter inside the section of the spec', () => {
     const r = readEpicContext(specWith('- regla A\n```js\nconst x = 1'))
     expect(r.content).toBeNull()
     expect(r.warnings).toHaveLength(1)
-    expect(r.warnings[0]).toMatch(/valla|```/)
+    expect(r.warnings[0]).toMatch(/fence|```/)
     expect(r.warnings[0]).toContain(EPIC_CONTEXT_HEADING)
   })
 
@@ -751,7 +751,7 @@ describe('C3 — an unclosed delimiter inside the section of the spec', () => {
     const r = readEpicContext(specWith('- regla A\n<!-- ojo con esto'))
     expect(r.content).toBeNull()
     expect(r.warnings).toHaveLength(1)
-    expect(r.warnings[0]).toMatch(/comentario/)
+    expect(r.warnings[0]).toMatch(/comment/)
   })
 
   it('the slices table NEVER ends up inside the epic context', () => {
@@ -831,7 +831,7 @@ describe('I1 — "I have no valid text" is not "the epic has no context"', () =>
 
   it('the warning of a malformed section says that what is already in the issues is NOT erased', () => {
     const w = withReason(`# Spec\n\n${EPIC_CONTEXT_HEADING}\ntexto\n\n### dentro\nmás\n\n## 9. Slices`).warnings[0]
-    expect(w).toMatch(/no se (borra|toca|retira)/i)
+    expect(w).toMatch(/neither touched nor deleted/i)
   })
 
   it('a malformed spec does NOT withdraw the section from the body of the issues', () => {
@@ -859,7 +859,7 @@ describe('I1 — "I have no valid text" is not "the epic has no context"', () =>
 // that reaches a body (the cells of the table all go through `trim`, so this
 // exposure is new in this branch). A spec in CRLF put `\r` inside the body,
 // and since diffIssue/buildReconcileBody compare text already normalised to LF
-// against a value carrying `\r`, they could NEVER match: a `nota:` on every
+// against a value carrying `\r`, they could NEVER match: a `note:` on every
 // run, for ever, and a write on every run, for ever.
 // ============================================================================
 describe('I2 — a spec in CRLF does not put \\r into the body of the issues', () => {
@@ -937,12 +937,12 @@ describe('§4.4 — the epic context cannot produce an exit 3, whatever happens'
       .replace(INHERITED_CONTEXT_HEADING, `${EPIC_CONTEXT_HEADING}\n- una copia pegada\n\n${INHERITED_CONTEXT_HEADING}`),
   }
   for (const [name, body] of Object.entries(cases)) {
-    it(`${name}: exit 0, and no "divergencia:" line at all because of this section`, () => {
+    it(`${name}: exit 0, and no "drift:" line at all because of this section`, () => {
       const issue = { number: 501, title: '#1 login', state: 'open', milestone: { title: 'Epic' }, labels: LABELS_1, body }
       for (const args of [[], ['--reconcile'], ['--dry-run', '--reconcile']]) {
         const res = invoke(specWithContext('- regla NUEVA'), [issue], args)
         expect(res.status, `${name} con ${args.join(' ') || '(sin flags)'}`).toBe(0)
-        expect(res.stderr).not.toMatch(new RegExp(`divergencia:.*${EPIC_CONTEXT_HEADING}`))
+        expect(res.stderr).not.toMatch(new RegExp(`drift:.*${EPIC_CONTEXT_HEADING}`))
       }
     })
   }
@@ -953,16 +953,16 @@ describe('§4.4 — the epic context cannot produce an exit 3, whatever happens'
   // from the scanner, so "## Acceptance criteria" stops existing for whoever
   // reads the body and the criteria come out as real drift. The body really is
   // broken; the 3 is correct and it does not come from the epic context, which
-  // still produces not one "divergencia:" line.
+  // still produces not one "drift:" line.
   it('with the fence left open the 3 is produced by AC (which stops being readable), never by this section', () => {
     const body = buildIssueBody(SLICE_1, SPEC_REF_E2E, '- regla VIEJA\n```js')
     const issue = { number: 501, title: '#1 login', state: 'open', milestone: { title: 'Epic' }, labels: LABELS_1, body }
     const res = invoke(specWithContext('- regla NUEVA'), [issue], ['--reconcile'])
     expect(res.status).toBe(3)
-    expect(res.stderr).toMatch(/divergencia:.*criterio de aceptación/)
-    expect(res.stderr).not.toMatch(new RegExp(`divergencia:.*${EPIC_CONTEXT_HEADING}`))
+    expect(res.stderr).toMatch(/drift:.*criterio de aceptación/)
+    expect(res.stderr).not.toMatch(new RegExp(`drift:.*${EPIC_CONTEXT_HEADING}`))
     // And nothing has been written in the epic section: why has been said.
-    expect(res.stderr).toMatch(/nota:.*NO ha reescrito la sección "## Contexto del epic".*SIN CERRAR/s)
+    expect(res.stderr).toMatch(/note:.*NO ha reescrito la sección "## Contexto del epic".*SIN CERRAR/s)
   })
 })
 
@@ -985,7 +985,7 @@ describe('the "reconciliado" line names what was written, not what drifts', () =
     }
     const res = invoke(specWithContext('- regla NUEVA'), [issue], ['--reconcile'])
     // stderr was already telling the truth: it has not been rewritten.
-    expect(res.stderr).toMatch(/nota:.*NO ha reescrito la sección "## Contexto del epic"/)
+    expect(res.stderr).toMatch(/note:.*NO ha reescrito la sección "## Contexto del epic"/)
     // stdout cannot say the opposite in the same run.
     expect(res.stdout).toMatch(/issue #501 reconciliado \(orden #1\): título/)
     expect(res.stdout).not.toMatch(/reconciliado \(orden #1\):.*contexto del epic/)

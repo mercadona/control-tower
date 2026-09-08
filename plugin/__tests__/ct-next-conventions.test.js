@@ -120,7 +120,7 @@ describe('ct-next — warns when the repo AGENTS.md contradicts the kickoff', ()
       FAKE_GIT_LOG_FILE: join(repoRoot, 'git-log'),
     })
     expect(r.code).toBe(0)
-    expect(r.out).not.toMatch(/ATENCIÓN: el repo/)
+    expect(r.out).not.toMatch(/ATTENTION: el repo/)
     expect(r.out).not.toMatch(/no se ha podido leer la documentación/)
   })
 

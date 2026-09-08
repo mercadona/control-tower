@@ -38,7 +38,7 @@ const arg = (name) => {
   return i === -1 ? null : process.argv[i + 1] ?? null
 }
 
-const usage = 'uso: ct-go.mjs --issue N --repo owner/name'
+const usage = 'usage: ct-go.mjs --issue N --repo owner/name'
 const issueRaw = arg('--issue')
 const repo = arg('--repo')
 const issue = parseStrictInt(String(issueRaw ?? ''))

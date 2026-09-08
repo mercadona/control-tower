@@ -409,7 +409,7 @@ describe('ct-next — `git worktree add` genuinely hung, with the signal never r
         // `dispatch-check` (a node that starts three more nodes) in under
         // 800ms. Reproduced: with another vitest suite running at the same
         // time, 2 out of 6 runs against main failed here with
-        //   expected 'aviso: ningún patrón de ACCOUNT_MAP c…'
+        //   expected 'warning: ningún patrón de ACCOUNT_MAP c…'
         //   to match /no se pudo crear el worktree/
         // because the cap had fired on dispatch-check, not on `git worktree
         // add`. The right answer is not a wider window (the failure would come
@@ -437,7 +437,7 @@ describe('ct-next — `git worktree add` genuinely hung, with the signal never r
     // have left a half-created worktree/branch behind.
     expect(out).toMatch(/se agotó el límite de 800ms \(CT_NEXT_CHILD_TIMEOUT_MS\)/)
     expect(out).toMatch(/puede haber quedado un directorio y\/o una rama a MEDIO crear/)
-    expect(out).toMatch(/revertido automáticamente a status:ready|ATENCIÓN: no se pudo revertir/)
+    expect(out).toMatch(/revertido automáticamente a status:ready|ATTENTION: no se pudo revertir/)
     const argv = readFileSync(argvLog, 'utf8')
     // the initial claim was indeed written (dispatch-check did get to complete
     // before the hang, which happens AFTERWARDS, in git worktree add)...

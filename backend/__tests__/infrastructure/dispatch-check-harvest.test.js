@@ -22,7 +22,7 @@ class HarvestDouble {
   static KEPT_LINE =
     `kept #7: el worktree ${HarvestDouble.WORKTREE} tiene cambios sin commitear — no se ha borrado nada\n`
   static PARTIAL_LINE =
-    `ATENCIÓN: cosecha a medias de #7: borrado el worktree ${HarvestDouble.WORKTREE}, borrada la rama feat/7. Falló: cmux close-workspace --workspace workspace:0 failed with exit code 1: cmux: close-workspace failed. Pendiente a mano — ejecuta cada comando por separado: cmux close-workspace --workspace workspace:0\n`
+    `ATTENTION: cosecha a medias de #7: borrado el worktree ${HarvestDouble.WORKTREE}, borrada la rama feat/7. Falló: cmux close-workspace --workspace workspace:0 failed with exit code 1: cmux: close-workspace failed. Pendiente a mano — ejecuta cada comando por separado: cmux close-workspace --workspace workspace:0\n`
   static NOT_READ_LINES = [
     'gh: could not connect to api.github.com',
     'no se pudo leer el estado de #7: gh pr list falló (exit code 1: Command failed: gh pr list --repo owner/name --head feat/7 --state all --json number,state,headRefOid --limit 10) — no se ha tocado nada, el siguiente barrido reintenta.',

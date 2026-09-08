@@ -174,7 +174,7 @@ describe('--release: correspondence between the run and the issue', () => {
     try {
       const r = release(dir, { body: issueBody([]) })
       expect(r.status).toBe(0)
-      expect(r.stderr).toMatch(/aviso:/)
+      expect(r.stderr).toMatch(/warning:/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
@@ -186,7 +186,7 @@ describe('--release: correspondence between the run and the issue', () => {
     try {
       const r = release(dir, { body: issueBody([]), labels: ['status:in-progress', 'gate:plan'] })
       expect(r.status).toBe(0)
-      expect(r.stderr).not.toMatch(/aviso:/)
+      expect(r.stderr).not.toMatch(/warning:/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
@@ -213,7 +213,7 @@ describe('--release: correspondence between the run and the issue', () => {
       const r = release(dir, { body: issueBody([A]) })
       expect(r.status).toBe(0)
       expect(r.stdout).toMatch(/released #9/)
-      expect(r.stderr).toMatch(/aviso:/)
+      expect(r.stderr).toMatch(/warning:/)
       expect(r.stderr).toContain(A)
       expect(r.stderr).toContain('el docker de staging no arranca en esta máquina')
       expect(r.stderr).toMatch(/NO se pudieron comprobar/)

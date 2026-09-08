@@ -5,7 +5,7 @@
 //
 //   STDOUT = the PRODUCT. Here: the plan's JSON under --dry-run, and the record
 //            of what was really created/reconciled (milestone, issues, project).
-//   STDERR = the DIAGNOSIS. `aviso:`, `recordatorio:`, the drift report, and
+//   STDERR = the DIAGNOSIS. `warning:`, `reminder:`, the drift report, and
 //            every abort.
 //
 // This file ALREADY met the criterion (it is the one that served as the
@@ -75,7 +75,7 @@ const arg = (f, d) => {
 const has = (flag) => process.argv.includes(flag)
 
 const specFile = process.argv[2]
-if (!specFile || specFile.startsWith('--')) { console.error('uso: ct-groom.mjs <spec> --repo <o/r> [--milestone t] [--project n] [--dry-run]'); process.exit(2) }
+if (!specFile || specFile.startsWith('--')) { console.error('usage: ct-groom.mjs <spec> --repo <o/r> [--milestone t] [--project n] [--dry-run]'); process.exit(2) }
 const repo = arg('--repo')
 const milestone = arg('--milestone', 'Epic')
 const project = arg('--project')
@@ -99,7 +99,7 @@ const reconcileFlag = has('--reconcile')
 // mutating anything) — and it NEVER appears without the flag: the default
 // behaviour (detect, report, exit 3) neither changes nor gains new warnings.
 if (reconcileFlag) {
-  console.error('aviso: --reconcile es EXPERIMENTAL — en las pruebas de esta feature ha corrompido bodies de issues reales de cuatro formas distintas ya encontradas y arregladas (vallas de código con el carácter/longitud de cierre equivocados, comentarios HTML multilínea, encabezados que no son "## " literal, secciones duplicadas que no se pueden resolver solas) — revisa el diff del issue en GitHub después de cada corrida, no confíes en el mensaje "reconciliado" a ciegas.')
+  console.error('warning: --reconcile es EXPERIMENTAL — en las pruebas de esta feature ha corrompido bodies de issues reales de cuatro formas distintas ya encontradas y arregladas (vallas de código con el carácter/longitud de cierre equivocados, comentarios HTML multilínea, encabezados que no son "## " literal, secciones duplicadas que no se pueden resolver solas) — revisa el diff del issue en GitHub después de cada corrida, no confíes en el mensaje "reconciliado" a ciegas.')
 }
 
 // Explicit validation: with the hardened `arg()` above, a dangling
@@ -130,7 +130,7 @@ if (milestone === true || typeof milestone !== 'string' || milestone.length === 
 // carried it) does not see their invocation break all at once, but neither are
 // they left believing it still decides anything.
 if (process.argv.includes('--section')) {
-  console.error('aviso: --section está obsoleto y se IGNORA — el ancla del enlace al spec sale ahora del encabezado real bajo el que vive la tabla (p.ej. "## 9. Slices" → "#9-slices"), y la tabla se localiza, como siempre, por su cabecera de columnas ("Slice" + "Dep"), no por ningún número de sección. Puedes quitarlo de la invocación.')
+  console.error('warning: --section está obsoleto y se IGNORA — el ancla del enlace al spec sale ahora del encabezado real bajo el que vive la tabla (p.ej. "## 9. Slices" → "#9-slices"), y la tabla se localiza, como siempre, por su cabecera de columnas ("Slice" + "Dep"), no por ningún número de sección. Puedes quitarlo de la invocación.')
 }
 // Same criterion for --project: if the flag was passed but with no real numeric
 // value, we abort instead of letting `Number(true) === 1` decide silently which
@@ -449,7 +449,7 @@ const OPTIONAL_COLUMN_CONSEQUENCE = {
   'Señal': 'los issues se crearán sin sección "## Señal de observabilidad" — el juez de slice medirá su ítem observabilidad como sin-vara en todos los slices de este epic',
 }
 for (const col of report.missingOptionalColumns) {
-  console.error(`aviso: la tabla §9 no tiene columna "${col}" — ${OPTIONAL_COLUMN_CONSEQUENCE[col] || 'se omite esa información en los issues'}`)
+  console.error(`warning: la tabla §9 no tiene columna "${col}" — ${OPTIONAL_COLUMN_CONSEQUENCE[col] || 'se omite esa información en los issues'}`)
 }
 
 // F5 (review, point 2): the spec is authoritative over a label prefix
@@ -512,7 +512,7 @@ for (const s of report.slices) {
     const gateNote = Object.keys(TYPE_GATES).length
       ? ` — y tampoco los gates humanos que un Tipo reconocido implicaría (${Object.entries(TYPE_GATES).map(([t, gs]) => `${t}→${gs.join('/')}`).join(', ')}): si este slice necesita alguno, decláralo en la columna "Gate"`
       : ''
-    console.error(`aviso: valor "${s.type}" en columna Tipo (slice #${s.n}) no es ninguno de los tipos reconocidos por el dispatcher (${KNOWN_TYPES.join(', ')}) — el agente despachado para este slice no recibirá ningún addendum de tipo (ver scripts/kickoff.js#ADDENDA)${gateNote}; revisa si es un error tipográfico o si falta añadir su addendum`)
+    console.error(`warning: valor "${s.type}" en columna Tipo (slice #${s.n}) no es ninguno de los tipos reconocidos por el dispatcher (${KNOWN_TYPES.join(', ')}) — el agente despachado para este slice no recibirá ningún addendum de tipo (ver scripts/kickoff.js#ADDENDA)${gateNote}; revisa si es un error tipográfico o si falta añadir su addendum`)
   }
 }
 // ============================================================================
@@ -549,7 +549,7 @@ for (const s of report.slices) {
 // would still not mention it — exactly the leak F21 closed for "Gate",
 // reopened for "E2E".
 function e2eAddedAdvisory(n) {
-  return `aviso: el slice #${n} lleva el gate "e2e" porque su fila declara recorridos en la columna "E2E" (no en "Gate": ese gate no se declara ahí, se DERIVA) — se dice en voz alta porque cambia lo que hay que comprobar antes de mergear: el issue llevará la label "gate:e2e", el agente despachado recibirá la instrucción, y quien revise el PR tiene que cerrarlo`
+  return `warning: el slice #${n} lleva el gate "e2e" porque su fila declara recorridos en la columna "E2E" (no en "Gate": ese gate no se declara ahí, se DERIVA) — se dice en voz alta porque cambia lo que hay que comprobar antes de mergear: el issue llevará la label "gate:e2e", el agente despachado recibirá la instrucción, y quien revise el PR tiene que cerrarlo`
 }
 
 // e2eRedundantAdvisory / e2eInertWaiverAdvisory (review of addition 2,
@@ -578,10 +578,10 @@ function e2eAddedAdvisory(n) {
 // abort —there is no contradiction: there was no e2e to remove— and its text
 // already said exactly that.
 function e2eRedundantAdvisory(n, gateCell) {
-  return `aviso: el slice #${n} declara el gate "e2e" (celda "Gate": "${gateCell}"), pero su fila YA lo lleva porque declara recorridos en la columna "E2E" — es redundante, no un error: el resultado es el mismo con la celda "Gate" vacía`
+  return `warning: el slice #${n} declara el gate "e2e" (celda "Gate": "${gateCell}"), pero su fila YA lo lleva porque declara recorridos en la columna "E2E" — es redundante, no un error: el resultado es el mismo con la celda "Gate" vacía`
 }
 function e2eInertWaiverAdvisory(n) {
-  return `aviso: el slice #${n} renuncia al gate "e2e" con "!e2e" en la columna "Gate", pero su fila no declara recorridos en la columna "E2E": la renuncia no hace nada (no había nada que quitar). Se dice para que no te quedes con la idea de haber retirado un gate que nunca estuvo`
+  return `warning: el slice #${n} renuncia al gate "e2e" con "!e2e" en la columna "Gate", pero su fila no declara recorridos en la columna "E2E": la renuncia no hace nada (no había nada que quitar). Se dice para que no te quedes con la idea de haber retirado un gate que nunca estuvo`
 }
 
 for (const s of report.slices) {
@@ -589,7 +589,7 @@ for (const s of report.slices) {
   const typeRef = s.type && !isNoValueCell(s.type) ? `"${s.type}"` : '(sin Tipo)'
   for (const gate of g.added) {
     if (gate === 'e2e') { console.error(e2eAddedAdvisory(s.n)); continue }
-    console.error(`aviso: el slice #${s.n} declara el gate "${gate}", que su Tipo ${typeRef} no implica — es deliberado (para eso está la columna "Gate"), y se dice en voz alta porque cambia lo que hay que comprobar antes de mergear: el issue llevará la label "gate:${gate}", el agente despachado recibirá la instrucción, y quien revise el PR tiene que cerrarlo`)
+    console.error(`warning: el slice #${s.n} declara el gate "${gate}", que su Tipo ${typeRef} no implica — es deliberado (para eso está la columna "Gate"), y se dice en voz alta porque cambia lo que hay que comprobar antes de mergear: el issue llevará la label "gate:${gate}", el agente despachado recibirá la instrucción, y quien revise el PR tiene que cerrarlo`)
   }
   // The REAL case (see the comment of `e2eAddedAdvisory`): with runs and with
   // nothing written by hand in "Gate", `e2e` comes out in `implied`, not in
@@ -602,15 +602,15 @@ for (const s of report.slices) {
   // generic message talks about the `Tipo`, and for `e2e` it would be false,
   // but there is no run that reaches it.
   for (const gate of g.waived) {
-    console.error(`aviso: el slice #${s.n} RENUNCIA al gate "${gate}" que implica su Tipo ${typeRef} (celda "Gate": "${s.gate}") — ese gate NO se le pedirá al agente, no aparecerá como label del issue y nadie lo comprobará antes de mergear. Si no era eso lo que querías, quita el "!" de esa celda`)
+    console.error(`warning: el slice #${s.n} RENUNCIA al gate "${gate}" que implica su Tipo ${typeRef} (celda "Gate": "${s.gate}") — ese gate NO se le pedirá al agente, no aparecerá como label del issue y nadie lo comprobará antes de mergear. Si no era eso lo que querías, quita el "!" de esa celda`)
   }
   for (const gate of g.inertWaivers) {
     if (gate === 'e2e') { console.error(e2eInertWaiverAdvisory(s.n)); continue }
-    console.error(`aviso: el slice #${s.n} renuncia al gate "${gate}", pero su Tipo ${typeRef} no implica ese gate: la renuncia no hace nada (no había nada que quitar). Se dice para que no te quedes con la idea de haber retirado un gate que nunca estuvo`)
+    console.error(`warning: el slice #${s.n} renuncia al gate "${gate}", pero su Tipo ${typeRef} no implica ese gate: la renuncia no hace nada (no había nada que quitar). Se dice para que no te quedes con la idea de haber retirado un gate que nunca estuvo`)
   }
   for (const gate of g.redundant) {
     if (gate === 'e2e') { console.error(e2eRedundantAdvisory(s.n, s.gate)); continue }
-    console.error(`aviso: el slice #${s.n} declara el gate "${gate}", que su Tipo ${typeRef} ya implica — es redundante, no un error: el resultado es el mismo con la celda "Gate" vacía`)
+    console.error(`warning: el slice #${s.n} declara el gate "${gate}", que su Tipo ${typeRef} ya implica — es redundante, no un error: el resultado es el mismo con la celda "Gate" vacía`)
   }
 }
 
@@ -618,7 +618,7 @@ for (const s of report.slices) {
 // inside Toca): the value was tolerated (it was not discarded), but it is
 // probably a column slip — a warning goes out so the author can check.
 for (const w of report.prefixWarnings) {
-  console.error(`aviso: valor "${w.raw}" en columna ${w.column} (slice #${w.n}) trae el prefijo "${w.otherPrefix}:" de la otra columna — se ha usado el valor igualmente, revisa si está en la columna correcta`)
+  console.error(`warning: valor "${w.raw}" en columna ${w.column} (slice #${w.n}) trae el prefijo "${w.otherPrefix}:" de la otra columna — se ha usado el valor igualmente, revisa si está en la columna correcta`)
 }
 // Point 6 of the F1 review: a value of Área/Toca that, once the
 // prefix/markup is stripped and it is normalised, comes out empty (e.g.
@@ -629,7 +629,7 @@ for (const w of report.prefixWarnings) {
 // valid).
 for (const w of report.emptyTokenWarnings) {
   const labelPrefix = w.column === 'Área' ? 'area:' : 'touches:'
-  console.error(`aviso: valor "${w.raw}" en columna ${w.column} (slice #${w.n}) queda vacío tras normalizar — no se genera ninguna label "${labelPrefix}" para ese valor, la maquinaria de colisión/serialización queda inerte para ese slice`)
+  console.error(`warning: valor "${w.raw}" en columna ${w.column} (slice #${w.n}) queda vacío tras normalizar — no se genera ninguna label "${labelPrefix}" para ese valor, la maquinaria de colisión/serialización queda inerte para ese slice`)
 }
 
 // F10 — the link to the spec. It is resolved HERE, once per run (the path and
@@ -785,7 +785,7 @@ function bodyDriftCategories(diff, bodyResult) {
 
 // EPIC_CONTEXT_SURRENDERS: why buildReconcileBody could not rewrite
 // "## Contexto del epic", in the words that are of use to whoever reads the
-// report. It is reported as a `nota:` and it NEVER moves the exit code (§4.4 of
+// report. It is reported as a `note:` and it NEVER moves the exit code (§4.4 of
 // the design): this section cannot produce a 3, not by diverging, not
 // duplicated, not by giving up. That it gave up in SILENCE was the only
 // indefensible part — AC and Dependencias have been giving up out loud since
@@ -808,7 +808,7 @@ const EPIC_CONTEXT_SURRENDERS = {
 // FROZEN_DECISIONS_SURRENDERS: why buildReconcileBody could not rewrite
 // "## Decisiones congeladas". A mirror of EPIC_CONTEXT_SURRENDERS, with the
 // same anchors ("## Contexto heredado" or, failing that, "## Acceptance
-// criteria"). It is reported as a nota: and it NEVER moves the exit code.
+// criteria"). It is reported as a note: and it NEVER moves the exit code.
 const FROZEN_DECISIONS_SURRENDERS = {
   'sin-ancla': 'no existe la sección en el issue, y tampoco ninguna de las dos cabeceras que sirven de ancla para ponerla en su sitio ("## Contexto heredado" o, en su defecto, "## Acceptance criteria"); añade a mano una de ellas y vuelve a correr',
   'ancla-duplicada': 'no existe la sección en el issue y su ancla ("## Acceptance criteria") aparece más de una vez, así que insertarla ahí podría escribir dentro de texto ajeno; deja una sola copia del ancla y vuelve a correr',
@@ -989,7 +989,7 @@ if (typeof repo === 'string') {
     if (knownOrders.has(order)) {
       withoutMilestoneBlockers.push(`  #${i.number}  ct-order:${order}`)
     } else {
-      console.error(`aviso: issue #${i.number} lleva el marcador ct-order:${order} y no tiene milestone — no puedo decidir a qué epic pertenece, así que queda fuera de este groom. No colisiona con la tabla §9 de este spec, por eso no bloquea; asígnale su milestone para que deje de aparecer: gh issue edit ${i.number} --repo ${blockerRepoRef} --milestone "<el suyo>"`)
+      console.error(`warning: issue #${i.number} lleva el marcador ct-order:${order} y no tiene milestone — no puedo decidir a qué epic pertenece, así que queda fuera de este groom. No colisiona con la tabla §9 de este spec, por eso no bloquea; asígnale su milestone para que deje de aparecer: gh issue edit ${i.number} --repo ${blockerRepoRef} --milestone "<el suyo>"`)
     }
   }
   if (withoutMilestoneBlockers.length) {
@@ -1072,7 +1072,7 @@ if (typeof repo === 'string') {
       // claims this groom is going to create that slice — and in a run that
       // stops dead nothing gets created. Nothing is lost: the next run, now
       // unblocked, computes them all over again just the same.
-      otherEpicWarnings.push(`aviso: el slice #${order} de este spec tiene un issue en otro milestone con el mismo ct-order (#${i.number}, "${epicTitleOf(i)}"), ${reason} — así que lo trato como otro epic y ${dryRun ? 'crearía' : 'crearé'} un issue nuevo para el slice #${order} en "${milestone}". Si en realidad es el mismo epic renombrado, esto va a duplicarlo: compruébalo antes de seguir.`)
+      otherEpicWarnings.push(`warning: el slice #${order} de este spec tiene un issue en otro milestone con el mismo ct-order (#${i.number}, "${epicTitleOf(i)}"), ${reason} — así que lo trato como otro epic y ${dryRun ? 'crearía' : 'crearé'} un issue nuevo para el slice #${order} en "${milestone}". Si en realidad es el mismo epic renombrado, esto va a duplicarlo: compruébalo antes de seguir.`)
       continue
     }
     otherEpicBlockers.push(`  #${i.number}  ct-order:${order}  milestone: "${epicTitleOf(i)}"`)
@@ -1099,7 +1099,7 @@ if (typeof repo === 'string') {
   for (const i of inEpic) {
     const order = extractOrder(i.body)
     if (order != null && !knownOrders.has(order)) {
-      console.error(`aviso: issue #${i.number} lleva el marcador ct-order:${order}, pero el slice #${order} ya no está en la tabla §9 del spec — issue huérfano del epic "${milestone}" (¿se eliminó el slice sin cerrar/renumerar su issue?); revísalo a mano`)
+      console.error(`warning: issue #${i.number} lleva el marcador ct-order:${order}, pero el slice #${order} ya no está en la tabla §9 del spec — issue huérfano del epic "${milestone}" (¿se eliminó el slice sin cerrar/renumerar su issue?); revísalo a mano`)
       anyOrphans = true
     }
   }
@@ -1132,7 +1132,7 @@ if (typeof repo === 'string') {
     return { iss, found, diff, bodyResult, gaps }
   })
   // The divergence report is ALWAYS printed on stderr (the same channel as the
-  // rest of this script's "aviso:") as soon as it is known — before the
+  // rest of this script's "warning:") as soon as it is known — before the
   // --dry-run branch, so that it is IDENTICAL in the preview and in the real
   // run. Silence here means "the spec and the issues agree": formatDrift
   // returns [] when there is nothing to report (see scripts/reconcile.js).
@@ -1140,18 +1140,18 @@ if (typeof repo === 'string') {
     if (!found) continue
     for (const line of formatDrift(diff)) console.error(line)
     if (hasReconcileGap(gaps)) {
-      console.error(`aviso: slice #${diff.order} (issue #${found.number}) — --reconcile no puede aplicar del todo esta divergencia: ${describeGaps(gaps, bodyResult)}; revísala a mano en GitHub`)
+      console.error(`warning: slice #${diff.order} (issue #${found.number}) — --reconcile no puede aplicar del todo esta drift: ${describeGaps(gaps, bodyResult)}; revísala a mano en GitHub`)
     }
-    // The epic context giving up travels separately and as a `nota:`: it does
+    // The epic context giving up travels separately and as a `note:`: it does
     // not enter `reconcileGaps` because this section never counts towards the
     // exit code (§4.4), but keeping quiet about it not having been applied
     // would be claiming by omission that it was. It is only said when there
     // really was something to write.
     if (bodyResult.unresolvedEpicContext && diff.epicContextDiffers) {
-      console.error(`nota: slice #${diff.order} (issue #${found.number}) — --reconcile NO ha reescrito la sección "${EPIC_CONTEXT_HEADING}": ${EPIC_CONTEXT_SURRENDERS[bodyResult.unresolvedEpicContext]} (no cuenta para el exit code)`)
+      console.error(`note: slice #${diff.order} (issue #${found.number}) — --reconcile NO ha reescrito la sección "${EPIC_CONTEXT_HEADING}": ${EPIC_CONTEXT_SURRENDERS[bodyResult.unresolvedEpicContext]} (no cuenta para el exit code)`)
     }
     if (bodyResult.unresolvedFrozenDecisions && diff.frozenDecisionsDiffers) {
-      console.error(`nota: slice #${diff.order} (issue #${found.number}) — --reconcile NO ha reescrito la sección "${FROZEN_DECISIONS_HEADING}": ${FROZEN_DECISIONS_SURRENDERS[bodyResult.unresolvedFrozenDecisions]} (no cuenta para el exit code)`)
+      console.error(`note: slice #${diff.order} (issue #${found.number}) — --reconcile NO ha reescrito la sección "${FROZEN_DECISIONS_HEADING}": ${FROZEN_DECISIONS_SURRENDERS[bodyResult.unresolvedFrozenDecisions]} (no cuenta para el exit code)`)
     }
     if (hasDrift(diff)) anyUnresolvedDrift = true
     if (hasReconcileGap(gaps)) anyReconcileGapRemains = true
@@ -1237,7 +1237,7 @@ function printBacklogReminder() {
   const pending = backlogPendingCount()
   if (!pending) return
   const repoRef = typeof repo === 'string' ? repo : '<owner/repo>'
-  console.error(`recordatorio: ${pending} issue(s) de este epic ${dryRun ? 'quedarían' : 'quedan'} en status:backlog — /ct-next NO despacha nada que no lleve status:ready. Promoverlos es un paso humano deliberado (es el gate del loop: decides tú qué entra en vuelo): gh issue edit <n> --repo ${repoRef} --add-label status:ready --remove-label status:backlog`)
+  console.error(`reminder: ${pending} issue(s) de este epic ${dryRun ? 'quedarían' : 'quedan'} en status:backlog — /ct-next NO despacha nada que no lleve status:ready. Promoverlos es un paso humano deliberado (es el gate del loop: decides tú qué entra en vuelo): gh issue edit <n> --repo ${repoRef} --add-label status:ready --remove-label status:backlog`)
 }
 
 if (dryRun) {
@@ -1471,7 +1471,7 @@ if (projectNum) {
         process.exit(1)
       }
     } else if (!Number.isInteger(total)) {
-      console.error(`aviso: esta versión de \`gh project item-list\` no devuelve \`totalCount\`, así que NO se ha podido descartar que la lista de items del project ${project} venga truncada en ${PROJECT_ITEMS_PAGE}. Si el project tiene más items que eso, los que falten se tratarán como inexistentes y se añadirán otra vez (duplicados).`)
+      console.error(`warning: esta versión de \`gh project item-list\` no devuelve \`totalCount\`, así que NO se ha podido descartar que la lista de items del project ${project} venga truncada en ${PROJECT_ITEMS_PAGE}. Si el project tiene más items que eso, los que falten se tratarán como inexistentes y se añadirán otra vez (duplicados).`)
     }
     existingProjectItems = itemsRaw.items || []
   } catch (e) {
@@ -1582,7 +1582,7 @@ for (const { iss, found, diff, bodyResult } of reconcileEntries) {
         // of text) — it is named by category, just like the --dry-run preview,
         // and with the SAME list: what has been written, not what diverges. A
         // category whose section could not be located is already reported as a
-        // `nota:` on stderr; naming it here would be contradicting ourselves.
+        // `note:` on stderr; naming it here would be contradicting ourselves.
         console.log(`issue #${found.number} reconciliado (orden #${iss.order}): ${appliedCategories(diff, bodyResult).join(', ')}`)
       }
     }

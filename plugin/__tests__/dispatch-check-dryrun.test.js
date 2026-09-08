@@ -220,7 +220,7 @@ describe('dispatch-check --dry-run', () => {
     } catch (e) {
       threw = true
       expect(e.status).toBe(2)
-      expect((e.stdout || '') + (e.stderr || '')).toMatch(/uso:/)
+      expect((e.stdout || '') + (e.stderr || '')).toMatch(/usage:/)
     }
     expect(threw).toBe(true)
   })
@@ -346,7 +346,7 @@ describe('dispatch-check — fix review round 1 (Minor 1: flag validation)', () 
     } catch (e) {
       threw = true
       expect(e.status).toBe(2)
-      expect((e.stdout || '') + (e.stderr || '')).toMatch(/uso:/)
+      expect((e.stdout || '') + (e.stderr || '')).toMatch(/usage:/)
     }
     expect(threw).toBe(true)
   })
@@ -414,7 +414,7 @@ describe('dispatch-check — fix review round 1 (Critical 2: gh() failures leave
     rmSync(dir, { recursive: true, force: true })
     expect(r.code).toBe(4)
     expect(r.out).toMatch(/carrera perdida/i)
-    expect(r.out).toMatch(/ATENCIÓN.*#17.*bloqueado/is)
+    expect(r.out).toMatch(/ATTENTION.*#17.*bloqueado/is)
     expect(r.out).toMatch(/gh issue edit 17 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
   })
 

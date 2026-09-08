@@ -164,7 +164,7 @@ function describeValue(v) {
   try {
     return String(v);
   } catch {
-    return "<no se pudo describir>";
+    return "<could not be described>";
   }
 }
 function isRepoRoot(dir) {
@@ -178,18 +178,18 @@ function isRepoRoot(dir) {
 }
 function probeGovernedRepo(cwd) {
   if (typeof cwd !== "string" || cwd.length === 0) {
-    return { error: `cwd invalido: se esperaba una cadena no vacia y llego ${typeof cwd} (${describeValue(cwd)})` };
+    return { error: `invalid cwd: a non-empty string was expected and ${typeof cwd} arrived (${describeValue(cwd)})` };
   }
   let dir;
   try {
     dir = resolve(cwd);
   } catch (e) {
-    return { error: `cwd invalido: ${e.message}` };
+    return { error: `invalid cwd: ${e.message}` };
   }
   try {
     statSync(dir);
   } catch (e) {
-    return { error: `no se ha podido leer el directorio de trabajo (${e.code || e.message})` };
+    return { error: `the working directory could not be read (${e.code || e.message})` };
   }
   try {
     for (; ; ) {
@@ -199,7 +199,7 @@ function probeGovernedRepo(cwd) {
           text = readFileSync(join(dir, AGENTS), "utf8");
         } catch (e) {
           if (e && (e.code === "ENOENT" || e.code === "ENOTDIR")) return { governed: false };
-          return { error: `no se ha podido leer ${AGENTS} (${e.code || e.message})` };
+          return { error: `${AGENTS} could not be read (${e.code || e.message})` };
         }
         return { governed: GOVERNED_MARKERS.some((m) => text.includes(m)) };
       }
@@ -208,7 +208,7 @@ function probeGovernedRepo(cwd) {
       dir = parent;
     }
   } catch (e) {
-    return { error: `no se ha podido determinar la raiz del repo (${e.code || e.message})` };
+    return { error: `the repo root could not be determined (${e.code || e.message})` };
   }
 }
 

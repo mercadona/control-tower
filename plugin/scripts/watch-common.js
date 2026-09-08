@@ -72,7 +72,7 @@ export function openLog(logPath) {
       mkdirSync(dirname(logPath), { recursive: true })
       fd = openSync(logPath, 'a')
     } catch (e) {
-      process.stderr.write(`aviso: no se pudo abrir el log ${logPath} (${e.message}) — se vigila igual, sin rastro en disco\n`)
+      process.stderr.write(`warning: no se pudo abrir el log ${logPath} (${e.message}) — se vigila igual, sin rastro en disco\n`)
     }
   }
   const log = (msg) => {

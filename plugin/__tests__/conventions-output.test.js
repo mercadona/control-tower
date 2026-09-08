@@ -196,8 +196,8 @@ describe('F14/B — the explicit acknowledgement gives a way out for ONE signal,
   it('what is silenced is said in ONE line: «se decidió no mirar esto» is not «no hay nada»', () => {
     const { acks } = parseAcks('claim: 2026-07-28 — manda el del plugin\nworktrees: 2026-07-28 — el hook admite feat/\nestado: 2026-07-28 — el otro es histórico\n')
     const text = formatFindings(detectConventions({ ...noisy, acks }))
-    expect(text).not.toMatch(/ATENCIÓN/)
-    expect(text).toMatch(/nota: \[claim\] silenciado por \.agent\/conventions-ack\.md \(2026-07-28: manda el del plugin\)/)
+    expect(text).not.toMatch(/ATTENTION/)
+    expect(text).toMatch(/note: \[claim\] silenciado por \.agent\/conventions-ack\.md \(2026-07-28: manda el del plugin\)/)
     expect(text.split('\n')).toHaveLength(3)
   })
 
@@ -289,8 +289,8 @@ describe('F14/B — the explicit acknowledgement gives a way out for ONE signal,
     )
     const after = spawnSync('node', [detectScript, root], { encoding: 'utf8' })
     expect(after.status).toBe(0)
-    expect(after.stdout).not.toMatch(/ATENCIÓN/)
-    expect(after.stdout).toMatch(/nota: \[claim\] silenciado/)
+    expect(after.stdout).not.toMatch(/ATTENTION/)
+    expect(after.stdout).toMatch(/note: \[claim\] silenciado/)
     // And the documentation is exactly the same: nobody has had to delete anything.
     expect(spawnSync('cat', [join(root, 'AGENTS.md')], { encoding: 'utf8' }).stdout).toBe(docsBefore)
   })
@@ -316,8 +316,8 @@ describe('F14/B — the explicit acknowledgement gives a way out for ONE signal,
     writeFileSync(join(root, ACK_PATH), 'claim: 2026-07-28 — decidido: manda el del plugin\n')
     const r = spawnSync('bash', [initScript, root], { encoding: 'utf8' })
     expect(r.status).toBe(0)
-    expect(r.stderr).not.toMatch(/ATENCIÓN: este repo ya tenía convenciones/)
-    expect(r.stderr).toMatch(/nota: \[claim\] silenciado/)
+    expect(r.stderr).not.toMatch(/ATTENTION: este repo ya tenía convenciones/)
+    expect(r.stderr).toMatch(/note: \[claim\] silenciado/)
   })
 })
 

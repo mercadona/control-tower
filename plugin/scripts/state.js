@@ -688,7 +688,7 @@ export function noticeDecision({ relation, previous }) {
   return { emit: false, next: next(turns) }
 }
 
-const whereAmI = (rel) => (rel.branch ? `la rama \`${rel.branch}\`` : `HEAD (desprendido en ${shortSha(rel.headSha)})`)
+const whereAmI = (rel) => (rel.branch ? `the branch \`${rel.branch}\`` : `HEAD (detached at ${shortSha(rel.headSha)})`)
 const livesIn = (rel) => (rel.containers?.length ? rel.containers.map((b) => `\`${b}\``).join(', ') : '')
 
 /**
@@ -794,9 +794,9 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
       kind: 'ahead',
       reason: '',
       systemMessage:
-        `Guard de cierre: el \`last_commit\` de \`${stateRel}\` (${shortSha(rel.stateSha)}) es un descendiente de HEAD ` +
-        `(${shortSha(rel.headSha)})${livesIn(rel) ? ` y vive en ${livesIn(rel)}` : ''}: el estado va por delante de ${whereAmI(rel)}, no por detrás. ` +
-        'No lo reapuntes a HEAD — movería el handoff hacia atrás.',
+        `Closing guard: the \`last_commit\` of \`${stateRel}\` (${shortSha(rel.stateSha)}) is a descendant of HEAD ` +
+        `(${shortSha(rel.headSha)})${livesIn(rel) ? ` and lives in ${livesIn(rel)}` : ''}: the state is ahead of ${whereAmI(rel)}, not behind. ` +
+        'Do not repoint it at HEAD — that would move the handoff backwards.',
     }
   }
 
@@ -806,11 +806,11 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
       kind: 'diverged',
       reason: '',
       systemMessage:
-        `Guard de cierre: el \`last_commit\` de \`${stateRel}\` (${shortSha(rel.stateSha)}) ` +
-        `${livesIn(rel) ? `vive en ${livesIn(rel)}, no en` : 'no está en'} la historia de ${whereAmI(rel)}: dos líneas de trabajo divergentes` +
-        `${rel.mergeBase ? ` desde ${shortSha(rel.mergeBase)}` : ''}. ` +
-        'Uno solo no puede ser el handoff de las dos (cada worktree de `/ct-next` lleva el suyo); ' +
-        'si lo reapuntas a HEAD, sustituyes el de la otra.',
+        `Closing guard: the \`last_commit\` of \`${stateRel}\` (${shortSha(rel.stateSha)}) ` +
+        `${livesIn(rel) ? `lives in ${livesIn(rel)}, not in` : 'is not in'} the history of ${whereAmI(rel)}: two diverging lines of work` +
+        `${rel.mergeBase ? ` since ${shortSha(rel.mergeBase)}` : ''}. ` +
+        'One alone cannot be the handoff of both (every `/ct-next` worktree carries its own); ' +
+        'if you repoint it at HEAD, you replace the other one.',
     }
   }
 
@@ -824,9 +824,9 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
       kind: 'orphan',
       reason: '',
       systemMessage:
-        `Guard de cierre: al \`last_commit\` de \`${stateRel}\` (${shortSha(rel.stateSha)}) no llega ninguna rama, ni local ni remota: ` +
-        'es un commit huérfano (lo típico, un `reset --hard` que se lo llevó por delante). ' +
-        'El handoff que describe puede haber dejado de existir: compruébalo antes de fiarte, porque `git gc` puede borrar el commit para siempre.',
+        `Closing guard: no branch reaches the \`last_commit\` of \`${stateRel}\` (${shortSha(rel.stateSha)}), neither local nor remote: ` +
+        'it is an orphaned commit (typically, a `reset --hard` that carried it off). ' +
+        'The handoff it describes may have ceased to exist: check it before trusting it, because `git gc` can delete the commit for good.',
     }
   }
 
@@ -835,8 +835,8 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
     kind: 'unknown',
     reason: '',
     systemMessage:
-      `Guard de cierre: git no ha podido determinar la relación entre HEAD (${shortSha(rel.headSha)}) y el \`last_commit\` de ` +
-      `\`${stateRel}\` (${shortSha(rel.stateSha)}). No se bloquea el cierre porque no hay nada que se pueda afirmar; ` +
-      'comprueba a mano si el estado está al día antes de fiarte de él.',
+      `Closing guard: git could not determine the relation between HEAD (${shortSha(rel.headSha)}) and the \`last_commit\` of ` +
+      `\`${stateRel}\` (${shortSha(rel.stateSha)}). The closure is not blocked because there is nothing that can be asserted; ` +
+      'check by hand whether the state is up to date before trusting it.',
   }
 }

@@ -140,7 +140,7 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
     expect(out.decision).toBe('block')
     expect(out.reason).toMatch(/2 commits/)
     expect(out.reason).toMatch(/ancestro de HEAD/)
-    expect(out.reason).toMatch(/rama `main`/)
+    expect(out.reason).toMatch(/branch `main`/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -158,7 +158,7 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
 
     const out = JSON.parse(run(dir))
     expect(out.decision).toBeUndefined()
-    expect(out.systemMessage).toMatch(/divergentes/)
+    expect(out.systemMessage).toMatch(/diverging/)
     expect(out.systemMessage).toMatch(/polish-v2-geometria/)
     expect(out.systemMessage).not.toMatch(/más nuevos/)
     rmSync(dir, { recursive: true, force: true })
@@ -194,8 +194,8 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
 
     const out = JSON.parse(run(dir))
     expect(out.decision).toBeUndefined()
-    expect(out.systemMessage).toMatch(/descendiente de HEAD/)
-    expect(out.systemMessage).toMatch(/hacia atrás/)
+    expect(out.systemMessage).toMatch(/descendant of HEAD/)
+    expect(out.systemMessage).toMatch(/backwards/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -220,7 +220,7 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
     writeState(dir, other)
     const out = JSON.parse(run(dir))
     expect(out.decision).toBeUndefined()
-    expect(out.systemMessage).toMatch(/divergentes/)
+    expect(out.systemMessage).toMatch(/diverging/)
     expect(out.systemMessage).toMatch(/rama-worktree/)
     git(dir, 'worktree', 'remove', '--force', wt)
     rmSync(dir, { recursive: true, force: true })
@@ -276,8 +276,8 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
     writeState(dir, old)
     const out = JSON.parse(run(dir))
     expect(out.decision).toBe('block')
-    expect(out.reason).toMatch(/desprendido/)
-    expect(out.reason).not.toMatch(/rama `/)
+    expect(out.reason).toMatch(/detached/)
+    expect(out.reason).not.toMatch(/branch `/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -296,15 +296,15 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
     // What has to keep being there: where it lives, that they diverge, and the
     // price of the obvious action.
     expect(msg).toMatch(/polish-v2-geometria/)
-    expect(msg).toMatch(/divergentes/)
-    expect(msg).toMatch(/sustituyes el de la otra/)
+    expect(msg).toMatch(/diverging/)
+    expect(msg).toMatch(/you replace the other one/)
     // What is superfluous: explaining why the guard does not block, every turn.
     expect(msg).not.toMatch(/pisándose por turnos/)
-    expect(msg).not.toMatch(/NO se bloquea el cierre/)
+    expect(msg).not.toMatch(/closure is not blocked/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('the "va por delante" warning is brief too', () => {
+  it('the "is ahead" warning is brief too', () => {
     const dir = initRepo()
     git(dir, 'checkout', '-qb', 'adelantada')
     const aheadSha = commit(dir, 'b.txt')
@@ -312,26 +312,26 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
     writeState(dir, aheadSha)
     const msg = JSON.parse(run(dir)).systemMessage
     expect(msg.length).toBeLessThan(280)
-    expect(msg).toMatch(/hacia atrás/)
-    expect(msg).not.toMatch(/No se bloquea el cierre/)
+    expect(msg).toMatch(/backwards/)
+    expect(msg).not.toMatch(/closure is not blocked/)
     rmSync(dir, { recursive: true, force: true })
   })
 
   // A `reset --hard` that takes out the commit the STATE.md describes: the state
   // points at work that no longer exists under any ref.
-  it('orphan commit after reset --hard: its own warning, distinct from the "va por delante" one, and it does NOT block', () => {
+  it('orphan commit after reset --hard: its own warning, distinct from the "is ahead" one, and it does NOT block', () => {
     const dir = initRepo()
     const orphan = commit(dir, 'b.txt')
     git(dir, 'reset', '-q', '--hard', 'HEAD~1')
     writeState(dir, orphan)
     const out = JSON.parse(run(dir))
     expect(out.decision).toBeUndefined()
-    expect(out.systemMessage).toMatch(/huérfano/)
-    expect(out.systemMessage).toMatch(/ni local ni remota/)
+    expect(out.systemMessage).toMatch(/orphaned/)
+    expect(out.systemMessage).toMatch(/neither local nor remote/)
     expect(out.systemMessage).toMatch(/git gc/)
     // It is not the `ahead` message: here there is no handoff to protect.
-    expect(out.systemMessage).not.toMatch(/va por delante/)
-    expect(out.systemMessage).not.toMatch(/hacia atrás/)
+    expect(out.systemMessage).not.toMatch(/is ahead of/)
+    expect(out.systemMessage).not.toMatch(/backwards/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -345,8 +345,8 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
     writeState(dir, orphan)
     const out = JSON.parse(run(dir))
     expect(out.decision).toBeUndefined()
-    expect(out.systemMessage).toMatch(/huérfano/)
-    expect(out.systemMessage).not.toMatch(/divergentes/)
+    expect(out.systemMessage).toMatch(/orphaned/)
+    expect(out.systemMessage).not.toMatch(/diverging/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -369,8 +369,8 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
     const out = JSON.parse(run(clone))
     expect(out.decision).toBeUndefined()
     expect(out.systemMessage).toMatch(/`origin\/polish-v2`/)
-    expect(out.systemMessage).toMatch(/divergentes/)
-    expect(out.systemMessage).not.toMatch(/huérfano/)
+    expect(out.systemMessage).toMatch(/diverging/)
+    expect(out.systemMessage).not.toMatch(/orphaned/)
     rmSync(clone, { recursive: true, force: true })
     rmSync(origin, { recursive: true, force: true })
   })
@@ -671,7 +671,7 @@ describe('#95 — the non-blocking warning stops coming out on every turn', () =
     const dir = aheadRepo()
     const warnings = warningsIn(dir, 5)
     expect(warnings).toHaveLength(1)
-    expect(warnings[0]).toMatch(/descendiente de HEAD/)
+    expect(warnings[0]).toMatch(/descendant of HEAD/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -689,7 +689,7 @@ describe('#95 — the non-blocking warning stops coming out on every turn', () =
     commit(dir, 'c.txt')
     const warnings = warningsIn(dir, 1)
     expect(warnings).toHaveLength(1)
-    expect(warnings[0]).toMatch(/divergentes/)
+    expect(warnings[0]).toMatch(/diverging/)
     rmSync(dir, { recursive: true, force: true })
   })
 

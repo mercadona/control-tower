@@ -100,7 +100,7 @@ const logPath = arg(process.argv, '--log')
 // that starts with the old door is noticed by nobody.
 const goHash = (arg(process.argv, '--go-hash') || '').trim().toLowerCase()
 if (!issue || !repo || !session) {
-  process.stderr.write('uso: ct-watch-go.mjs --issue N --repo owner/name --session "<título de la workspace>" --go-hash <sha256 del go> [--log <ruta>]\n')
+  process.stderr.write('usage: ct-watch-go.mjs --issue N --repo owner/name --session "<título de la workspace>" --go-hash <sha256 del go> [--log <ruta>]\n')
   process.exit(2)
 }
 if (!/^[0-9a-f]{64}$/.test(goHash)) {
@@ -124,7 +124,7 @@ function readComments() {
     // token expires and is renewed, GitHub returns a 502. What cannot happen is
     // for a transient failure to be read as "there is no go" permanently, so it
     // gets noted down and tried again on the next tick.
-    log(`aviso: no se pudo leer el issue (${String(e.message).trim()}) — se reintenta en el próximo tick`)
+    log(`warning: no se pudo leer el issue (${String(e.message).trim()}) — se reintenta en el próximo tick`)
     return null
   }
 }
@@ -153,7 +153,7 @@ function readComments() {
 // do not recognise degrades to NOT CONCLUSIVE, never to "verified not there".
 function querySession() {
   const r = findWorkspaceByTitle(session, { timeoutMs: CMUX_TIMEOUT_MS })
-  if (!r.consultado) log('aviso: no se pudo consultar cmux (o su respuesta no trae el campo del título que este plugin sabe leer)')
+  if (!r.consultado) log('warning: no se pudo consultar cmux (o su respuesta no trae el campo del título que este plugin sabe leer)')
   return r
 }
 
@@ -203,7 +203,7 @@ function explainTheFormat(attemptId) {
     // It is neither retried nor marked as answered: the next tick sees it again
     // and tries again. Failing to publish an explanation cannot cost the watch,
     // which is the only thing this process exists to do.
-    log(`aviso: se vio un intento de go (${attemptId}) y no se pudo publicar el formato (${String(e.message).trim()}) — se reintenta en el próximo tick`)
+    log(`warning: se vio un intento de go (${attemptId}) y no se pudo publicar el formato (${String(e.message).trim()}) — se reintenta en el próximo tick`)
   }
 }
 
