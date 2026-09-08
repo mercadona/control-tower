@@ -1,0 +1,57 @@
+{
+  "issue": 161,
+  "task": 2,
+  "task_name": "the prose that stopped being true",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "El objetivo pide que ningun texto entregado a un agente siga diciendo que architecture.md esta filtrado por la marca (create). El diff lo produce en las cuatro piezas que la tarea enumera: architecture.md linea 3 pasa a 'Applies to: **every diff**.'; kickoff.js pierde entera la entrada que decia 'architecture.md rige los MODULOS NUEVOS ... al repartir **Files:** entre (create) y (modify)' (verificado en el fichero: el array de entradas queda coherente, la entrada anterior sobre el directorio de convenciones y la CABECERA se mantiene); task-implementer.md pasa a 'applies to **every diff**, with one bend for a module that was already there' conservando la frase sobre las marcas, que la tarea declara todavia cierta; ct-judge.md item dos pasa a 'both exempt it and both reach every task; each one says the exemption in its own text'. Busque en plugin/ si quedaba algun otro texto con la afirmacion retirada: la cabecera de plugin-yardstick.js ya la habia retirado la tarea 1, y lo unico que queda es un comentario de codigo en plugin/scripts/run-metrics.js:215, fichero que ni esta en **Files:** ni es texto entregado a un agente. Observacion sin hallazgo: task-implementer.md:62-63 y ct-judge.md:144-145 siguen diciendo que el programa entrega solo los documentos cuyo alcance llega a la tarea, afirmacion generica que ya no nombra architecture.md ni la marca (create) y que la tarea no manda tocar.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "El **TDD:** nombra it('no reparte la arquitectura entre las dos marcas: architecture.md alcanza a toda tarea') en plugin/__tests__/kickoff.test.js y fija que el kickoff de renderKickoff(SLICE, OPTS_CON_VARA) no contenga ni 'MODULOS NUEVOS' ni la frase que reparte el trabajo entre las dos marcas. El test del diff (kickoff.test.js:443-447) hace exactamente eso: mismo input renderKickoff(SLICE, OPTS_CON_VARA), expect(k).not.toContain('MODULOS NUEVOS') y expect(k).not.toMatch(/reparti[a-ze]* .*entre .*\\(create\\).* y .*\\(modify\\)/i). Comprobe que la segunda expresion casaba con el texto retirado ('al repartir `**Files:**` entre `(create)` y `(modify)`'), asi que las dos aserciones estaban rojas antes del borrado y vuelven a rojo si se restaura la linea.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "El unico bloque de contrato de la tarea es Current state / Final text sobre plugin/conventions/architecture.md linea 3. El diff sustituye 'Applies to: **new modules**.' por 'Applies to: **every diff**.' y no toca ninguna otra linea del documento: la exencion de deuda declarada y el agujero que cierra en el mismo aliento siguen palabra por palabra, como el brief exige. No hay firmas, tipos, errores ni constantes en esta tarea.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "D-3 ('architecture.md applies always. The (create) filter is deleted whole') es la fila que este diff toca y la implementa con ese valor, no con otro: el alcance declarado pasa a every diff y la prosa que repartia por marcas se retira entera en vez de matizarse. D-6 (la sustraccion va primero) se respeta: la tarea 1 ya habia quitado el filtro en codigo y esta solo retira la prosa. D-1, D-2, D-4 y D-5 hablan de la enmienda del plan y de su arbitro, y ninguna linea de este diff las toca.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Vara del repo: el plan declara 'Rules to obey: N/A' y confirme que el repositorio no declara convenciones propias (no hay AGENTS.md, CLAUDE.md ni .agent/conventions.md), asi que la unica vara es la de ct. Ejemplares (scope.js, ct-step-indice.test.js, ct-step-harness.js): son precedentes de las tareas de ct-step; este diff no escribe nada que juegue ese papel (prosa mas un test de render puro), asi que no hay idioma que contrastar contra ellos. El paquete de revision me llego con siete documentos por ruta y sin architecture.md, que es justo lo que este slice esta corrigiendo; lo digo aqui porque una vara llego incompleta, y no es hallazgo: el paquete lo compone el programa. defects.md, regla a regla: (1) vocabulario cerrado — el unico valor que clasifica algo es la entrada 'architecture.md': 'every diff' del mapa ALCANCES, cadena suelta preexistente que el test compara literalmente contra la cabecera del documento en disco; el diff no anade ningun despacho ni rama catch-all, no introduce el defecto; (2) mapa crudo como retorno de logica — no hay sujeto: el diff no devuelve mapas, solo edita markdown, borra una entrada de un array de cadenas y anade un test; (3) dos campos que tienen que concordar / valor centinela — no hay sujeto: ningun campo nuevo, ningun centinela; el diff mas bien reduce duplicidad al borrar una de las copias de la regla; (4) error nombrado por donde ocurre — no hay sujeto: el diff no crea ni renombra errores. style.md: los tres ficheros de codigo tocados son modulos que ya estaban y llevan prosa en castellano; lo anadido (el comentario de kickoff.test.js:439-442 y el nombre del test en castellano) sigue el idioma de su anfitrion, que es exactamente la exencion que el documento concede. simplicity.md: el diff es sustraccion mas un test, no anade campo, rama ni simbolo publico. decisions.md: el alcance de architecture.md se enuncia en la cabecera del propio documento y lo reflejan el prompt del implementador y el mapa ALCANCES; el diff no anade una copia nueva —retira una— y el test de ALCANCES es precisamente la comparacion contra el original que el documento pide para una copia inevitable. domain.md y boundaries.md: sin sujeto, no hay puertos, adaptadores ni bordes en este diff. Patron de entrega: ningun documento de la vara prescribe una forma de entrega para un cambio de prosa.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "La unica linea '-' en fichero de test es plugin/__tests__/conventions-vara.test.js:31, 'architecture.md': 'new modules' -> 'every diff'. Es dato del mapa que genera los tests de alcance y el brief lo pide con esas palabras ('In plugin/__tests__/conventions-vara.test.js the ALCANCES entry for architecture.md becomes every diff'). No relaja nada: el test generado sigue exigiendo que la cabecera del documento en disco contenga 'Applies to:' y el alcance declarado, y falla si el documento y el mapa divergen. Ninguna otra asercion, caso o test preexistente se toca.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "El comportamiento prometido lo producen ficheros reales de produccion: la cabecera de conventions/architecture.md, la entrada borrada de scripts/kickoff.js y la prosa de prompts/task-implementer.md y agents/ct-judge.md. El test nuevo lee el kickoff real via renderKickoff, sin dobles ni fixtures que fabriquen el resultado, y el test de alcance lee el documento del disco con readFileSync. No hay valor esperado hardcodeado que sustituya a la produccion.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Dentro de los seis ficheros declarados, cada cambio traza a una frase de la tarea: la cabecera de architecture.md al bloque Final text; los tres retiros de prosa a 'In prose, three retirements of the same false claim'; la entrada de ALCANCES a la ultima frase de ese parrafo; el test nuevo al **TDD:**. No hay refactor, renombrado ni helper extra, y nada de la lista '### Out of scope' aparece tocado: composeSection, composePathSection, judge-bench, los verbos de ct-step, run-machine.js y el fichero de estado siguen intactos.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "Un unico test nuevo, kickoff.test.js:443-447. Determinista: renderKickoff sobre constantes del fichero, sin reloj, red, aleatoriedad ni disco. Aislado: no lee ni deja estado compartido; SLICE y OPTS_CON_VARA son constantes de solo lectura del describe y no depende del orden. Verifica comportamiento real: sus dos aserciones caen si se restaura la linea borrada de scripts/kickoff.js, asi que no pasaria con la produccion de este diff revertida. No reporto nada mas alla de esas tres propiedades.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "761d43d6eb644bc9717114eada4be6684de4ea84d57754bf684a0926c2cf6c49"
+  }
+}

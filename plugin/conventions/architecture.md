@@ -1,6 +1,6 @@
 # Where each thing lives
 
-Applies to: **new modules**.
+Applies to: **every diff**.
 
 A module that was already there and does not conform is the repository's
 **declared debt**: what you add to it follows the style of its host, and that is

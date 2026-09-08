@@ -162,8 +162,8 @@ diff the implementer could have written. The defect is in the plan, and the plan
 elsewhere.
 
 **Two — a module that was already there complies by following the style of its host.** `style.md`
-and `architecture.md` both exempt it, each one says so in its own scope line, and the block above
-the list says which documents that leaves reaching this task. What the diff adds to such a module
+and `architecture.md` both exempt it and both reach every task; each one says the exemption in its
+own text. What the diff adds to such a module
 follows the idiom it found there, **and that is the item complying**. The hole both documents close
 in the same breath is the one to watch:
 a new concept placed inside an old file to inherit the exemption **is** a finding.

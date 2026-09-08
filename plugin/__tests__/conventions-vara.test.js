@@ -28,7 +28,7 @@ const ALCANCES = {
   'simplicity.md': 'every diff',
   'decisions.md': 'every diff',
   'testing.md': 'every diff',
-  'architecture.md': 'new modules',
+  'architecture.md': 'every diff',
   'domain.md': 'every diff',
   'boundaries.md': 'every diff',
 }

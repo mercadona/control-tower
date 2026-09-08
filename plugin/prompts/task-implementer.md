@@ -82,10 +82,10 @@ this prompt or in the files it names.
    bend for a module that was already there and departs from its three rules: no
    prose, the language of identifiers, every function hanging off a type. What
    you add there follows the style of that host, and that is the rule being
-   satisfied. `architecture.md` applies to **new modules**: a module that was
-   already there and departs from it is this repository's declared debt, so what
-   you add to it follows the style of its host and that too is the rule being
-   satisfied. Both documents close the same hole the same way: an old file
+   satisfied. `architecture.md` applies to **every diff**, with one bend for a
+   module that was already there and departs from it: this repository's declared
+   debt, so what you add to it follows the style of its host and that too is the
+   rule being satisfied. Both documents close the same hole the same way: an old file
    shelters what genuinely extends what was already there, and
    **a new concept is a new module and is born conforming.** And `defects.md`
    binds on every diff, old module and new alike: both exemptions stop at it.
