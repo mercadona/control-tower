@@ -1,5 +1,5 @@
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { readFileSync, realpathSync, statSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { setTimeout as after } from 'node:timers/promises'
 import { homedir, tmpdir } from 'node:os'
@@ -10,7 +10,7 @@ import { CmuxPlanAgents } from './cmux-plan-agents.js'
 import { AcliUserStories } from './acli-user-stories.js'
 import { GhPlanIssues } from './gh-plan-issues.js'
 import { GitWorkspace } from './git-workspace.js'
-import { MemoryCheckoutRegistry } from './memory-checkout-registry.js'
+import { DiskCheckoutRegistry } from './disk-checkout-registry.js'
 import { DiskGoRegistry } from './disk-go-registry.js'
 import { DispatchCheckHarvest } from './dispatch-check-harvest.js'
 import { HarvestClock } from './harvest-clock.js'
@@ -103,6 +103,11 @@ class Disk {
       if (failure.code === 'ENOENT') return null
       throw failure
     }
+  }
+
+  static writeSync(path, text) {
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, text)
   }
 
   static async remove(path) {
@@ -274,7 +279,12 @@ class CtApi {
       stderr: (line) => process.stderr.write(line),
       baseline: CtApi.#baseline(),
     })
-    const checkouts = new MemoryCheckoutRegistry()
+    const checkouts = new DiskCheckoutRegistry({
+      read: (path) => readFileSync(path, 'utf8'),
+      stat: statSync,
+      write: Disk.writeSync,
+      root: asked.stateRoot,
+    })
     const planAgents = new CmuxPlanAgents({
       run: CtApi.#tool(CmuxPlanAgents.BIN),
       write: Disk.write,
