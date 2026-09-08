@@ -13,7 +13,7 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.j
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
 import {
   PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed, PlanGoNotAnswered, PlanIssueFailure,
-  PlanChangesNotRead, PlanChangesNotUnderstood,
+  PlanChangesNotRead, PlanChangesNotUnderstood, PlanStoryNotRead, PlanStoryNotUnderstood,
 } from '../../src/domain/exceptions.js'
 
 class GhDouble {
@@ -142,6 +142,18 @@ class GhDouble {
 
   async statusFor(issue = GhDouble.OPENED) {
     return this.issues().statusOf({ issueNumber: issue.number, repository: GhDouble.REPOSITORY })
+  }
+
+  static titled(title, body = '## Descripción\n\nlo que sea\n') {
+    return GhDouble.created(`${JSON.stringify({ title, body })}\n`)
+  }
+
+  async storyFor(issue = GhDouble.OPENED) {
+    return this.issues().storyOf({ issueNumber: issue.number, repository: GhDouble.REPOSITORY })
+  }
+
+  async storyRefusalFor(issue = GhDouble.OPENED) {
+    return this.storyFor(issue).catch((cause) => cause)
   }
 
   get commands() {
@@ -660,5 +672,39 @@ describe('GhPlanIssues reading the changes asked for on the issue', () => {
 
     expect(refusal).toBeInstanceOf(PlanChangesNotUnderstood)
     expect(refusal).not.toBeInstanceOf(PlanChangesNotRead)
+  })
+})
+
+describe('GhPlanIssues asking which user story a plan came from', () => {
+  it('asking_which_story_a_plan_came_from_reads_the_title_and_the_body_of_its_issue', async () => {
+    const gh = GhDouble.titled('MO_SHOP-42 El buscador acepta acentos')
+
+    await gh.storyFor()
+
+    expect(gh.calls).toEqual([[
+      'issue', 'view', '7', '--repo', 'josemerca/ct-loop-sandbox', '--json', 'title,body',
+    ]])
+  })
+
+  it('the_story_of_a_plan_that_came_from_jira_is_the_key_its_title_opens_with', async () => {
+    const story = await GhDouble.titled('MO_SHOP-42 El buscador acepta acentos').storyFor()
+
+    expect(story.text).toBe('MO_SHOP-42')
+  })
+
+  it('a_title_that_does_not_open_with_a_key_is_no_story_instead_of_a_made_up_one', async () => {
+    expect(await GhDouble.titled('arreglar el login que va lento').storyFor()).toBeNull()
+  })
+
+  it('a_command_that_failed_travels_out_as_not_read', async () => {
+    expect(await GhDouble.refusing('gh: issue not found\n').storyRefusalFor())
+      .toBeInstanceOf(PlanStoryNotRead)
+  })
+
+  it('an_answer_that_is_not_the_shape_gh_declares_travels_out_as_not_understood', async () => {
+    expect(await GhDouble.created('this is not json\n').storyRefusalFor())
+      .toBeInstanceOf(PlanStoryNotUnderstood)
+    expect(await GhDouble.created(`${JSON.stringify({ body: 'no title here' })}\n`).storyRefusalFor())
+      .toBeInstanceOf(PlanStoryNotUnderstood)
   })
 })

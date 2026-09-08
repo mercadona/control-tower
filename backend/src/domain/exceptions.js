@@ -19,6 +19,12 @@ export class PlanIssueNotNamed extends PlanIssueFailure {}
 
 export class PlanIssueNotClaimed extends PlanIssueFailure {}
 
+export class PlanStoryFailure extends PlanFailure {}
+
+export class PlanStoryNotRead extends PlanStoryFailure {}
+
+export class PlanStoryNotUnderstood extends PlanStoryFailure {}
+
 export class PlanGoNotAnswered extends PlanIssueFailure {}
 
 export class PlanAgentFailure extends PlanFailure {}

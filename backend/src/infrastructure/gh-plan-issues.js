@@ -15,9 +15,10 @@ import { PlanIssues } from '../domain/ports/plan-issues.js'
 import { PlanIssue } from '../domain/value-objects/plan-issue.js'
 import { PlanIssueStatus } from '../domain/value-objects/plan-issue-status.js'
 import { ChangeAsked } from '../domain/value-objects/change-asked.js'
+import { UserStoryKey } from '../domain/value-objects/user-story-key.js'
 import {
   PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed, PlanGoNotAnswered,
-  PlanChangesNotRead, PlanChangesNotUnderstood,
+  PlanChangesNotRead, PlanChangesNotUnderstood, PlanStoryNotRead, PlanStoryNotUnderstood,
 } from '../domain/exceptions.js'
 import { Gh } from './gh.js'
 
@@ -221,6 +222,41 @@ export class GhPlanIssues extends PlanIssues {
     }
   }
 
+  static storyArgvFor({ issueNumber, repository }) {
+    return ['issue', 'view', String(issueNumber), '--repo', repository.text, '--json', 'title,body']
+  }
+
+  async storyOf({ issueNumber, repository }) {
+    const outcome = await this.gh.run(
+      GhPlanIssues.storyArgvFor({ issueNumber, repository }), { safeToRepeat: true }
+    )
+    if (outcome.failed) {
+      throw new PlanStoryNotRead(
+        `${Gh.BIN} issue view --json title,body failed: ${outcome.stderr.trim()}`
+      )
+    }
+
+    return PlanIssueBody.storyIn(GhPlanIssues.#viewIn(outcome.stdout, issueNumber))
+  }
+
+  static #viewIn(printed, issueNumber) {
+    let view
+    try {
+      view = JSON.parse(printed)
+    } catch {
+      throw new PlanStoryNotUnderstood(
+        `${Gh.BIN} issue view --json title,body printed something that is not json for #${issueNumber}: ${JSON.stringify(printed)}`
+      )
+    }
+    if (view === null || typeof view !== 'object' || Array.isArray(view) || typeof view.title !== 'string') {
+      throw new PlanStoryNotUnderstood(
+        `${Gh.BIN} issue view --json title,body printed no title for #${issueNumber}: ${JSON.stringify(printed)}`
+      )
+    }
+
+    return view
+  }
+
   async statusOf({ issueNumber, repository }) {
     const outcome = await this.gh.run(
       GhPlanIssues.labelsArgvFor({ issueNumber, repository }), { safeToRepeat: true }
@@ -293,6 +329,13 @@ export class PlanIssueBody {
 
   static labels({ story, comment }) {
     return [...gateLabels(gatesOf(PlanIssueBody.rowFor({ story, comment })).gates), GhPlanIssues.READY_LABEL]
+  }
+
+  static storyIn({ title, body }) {
+    if (typeof body === 'string' && body.includes(PlanIssueBody.NO_STORY_LINE)) return null
+    const opening = title.trim().split(/\s+/)[0]
+
+    return UserStoryKey.isWellFormed(opening) ? new UserStoryKey(opening) : null
   }
 
   static titleFor({ story, comment }) {

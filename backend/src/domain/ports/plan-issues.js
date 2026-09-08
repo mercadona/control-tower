@@ -29,6 +29,12 @@ export class PlanIssues {
     )
   }
 
+  async storyOf({ issueNumber, repository }) {
+    throw new Error(
+      `${this.constructor.name} must implement storyOf({ issueNumber, repository }), asked for ${issueNumber} in ${repository}`
+    )
+  }
+
   async statusOf({ issueNumber, repository }) {
     throw new Error(
       `${this.constructor.name} must implement statusOf({ issueNumber, repository }), asked for ${issueNumber} in ${repository}`
