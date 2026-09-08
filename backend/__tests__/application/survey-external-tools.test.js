@@ -97,11 +97,15 @@ describe('SurveyExternalTools', () => {
 
     const result = await toolSessions.asked()
 
-    expect(result.sessions).toEqual([gh, acli, bq])
+    expect(result.sessions.map((session) => session.tool)).toEqual(['gh', 'acli', 'bq'])
   })
 
   it('a_state_outside_the_vocabulary_cannot_be_constructed', () => {
     expect(() => new ToolSession({ tool: 'gh', installed: true, state: 'expired', fix: null }))
-      .toThrow(/expired/)
+      .toThrow(/"expired"/)
+  })
+
+  it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
+    await expect(new ToolSessions().all()).rejects.toThrow(/must implement all/)
   })
 })
