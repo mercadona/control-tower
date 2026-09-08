@@ -191,9 +191,7 @@ class CtApi {
   }
 
   static #toolSessions(environment) {
-    const probes = [...new Set(
-      ProbedToolSessions.PROBES.map((row) => row.probe).filter((probe) => probe !== null)
-    )]
+    const probes = ProbedToolSessions.PROBES.map((row) => row.probe).filter((probe) => probe !== null)
     const clients = Object.fromEntries(probes.map((bin) => [bin, CtApi.#talkingTo(bin, ExternalTool)]))
 
     return new ProbedToolSessions({

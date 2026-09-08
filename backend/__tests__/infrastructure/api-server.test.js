@@ -20,6 +20,7 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.js'
 import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.js'
+import { SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.js'
 
 class StartPlanSpy {
   static AGENT = 'workspace:4'
@@ -162,14 +163,8 @@ class ProgressSpy {
 }
 
 class ExternalToolsSpy {
-  constructor() {
-    this.asked = 0
-  }
-
   async execute() {
-    this.asked += 1
-
-    return { ready: true, sessions: [] }
+    return new SurveyExternalToolsResult({ sessions: [] })
   }
 }
 

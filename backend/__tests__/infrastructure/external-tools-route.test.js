@@ -11,14 +11,14 @@ class SurveySpy {
   static GH_READY = new ToolSession({ tool: 'gh', installed: true, state: SessionState.READY, fix: null })
   static BQ_MISSING = new ToolSession({
     tool: 'bq', installed: true, state: SessionState.MISSING,
-    fix: 'gcloud auth login && gcloud auth application-default login',
+    fix: 'fixture-fix-bq-do-not-copy-into-production',
   })
   static CLAUDE_UNKNOWN = new ToolSession({
-    tool: 'claude', installed: true, state: SessionState.UNKNOWN, fix: 'claude, then /login',
+    tool: 'claude', installed: true, state: SessionState.UNKNOWN, fix: 'fixture-fix-claude-do-not-copy-into-production',
   })
   static GIT_NOT_INSTALLED = new ToolSession({
     tool: 'git', installed: false, state: SessionState.MISSING,
-    fix: 'add an SSH key to your GitHub account',
+    fix: 'fixture-fix-git-do-not-copy-into-production',
   })
 
   constructor(sessions) {
@@ -89,6 +89,15 @@ class RunningApi {
 
     return { response, spy }
   }
+
+  static async askingFromOrigin(spy, origin) {
+    const port = await RunningApi.listening(spy)
+    const response = await fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`, {
+      headers: { Origin: origin },
+    })
+
+    return { response, spy }
+  }
 }
 
 afterEach(async () => {
@@ -106,7 +115,7 @@ describe('ExternalToolsRoute', () => {
         { tool: 'gh', installed: true, session: 'ready', fix: null },
         {
           tool: 'bq', installed: true, session: 'missing',
-          fix: 'gcloud auth login && gcloud auth application-default login',
+          fix: 'fixture-fix-bq-do-not-copy-into-production',
         },
       ],
     }))
@@ -118,6 +127,7 @@ describe('ExternalToolsRoute', () => {
     const body = await response.json()
 
     expect(body.tools[0].fix).toBe(null)
+    expect(body.ready).toBe(true)
   })
 
   it('the_verdict_is_false_when_one_tool_blocks', async () => {
@@ -135,6 +145,16 @@ describe('ExternalToolsRoute', () => {
     expect(response.status).toBe(405)
     expect(response.headers.get('allow')).toBe('GET')
     expect(await response.json()).toEqual({ code: 'method-not-allowed', detail: 'method not allowed' })
+    expect(spy.asked).toBe(0)
+  })
+
+  it('a_request_from_a_foreign_page_is_refused_with_403_and_the_use_case_is_never_asked', async () => {
+    const { response, spy } = await RunningApi.askingFromOrigin(
+      SurveySpy.answeringOnlyAReadyTool(), 'https://evil.example'
+    )
+
+    expect(response.status).toBe(403)
+    expect(await response.text()).toBe('{"code":"foreign-origin","detail":"this api only serves the page it hosts"}')
     expect(spy.asked).toBe(0)
   })
 })

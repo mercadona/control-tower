@@ -17,9 +17,9 @@ class ClientsDouble {
       .saying('acli', new ProcessOutput({ code: 0, stdout: '', stderr: '' }))
       .saying('ssh', new ProcessOutput({
         code: 1, stdout: '',
-        stderr: "Hi jjponz! You've successfully authenticated, but GitHub does not provide shell access.",
+        stderr: "Hi jjponz! You've successfully authenticated, but GitHub does not provide shell access.\n",
       }))
-      .saying('gcloud', new ProcessOutput({ code: 0, stdout: 'jponzvan@mercadona.es', stderr: '' }))
+      .saying('gcloud', new ProcessOutput({ code: 0, stdout: 'jponzvan@mercadona.es\n', stderr: '' }))
   }
 
   saying(bin, output) {
@@ -113,7 +113,7 @@ describe('ProbedToolSessions', () => {
   })
 
   it('bq_is_missing_when_gcloud_lists_no_active_account', async () => {
-    const clients = ClientsDouble.allHappy().saying('gcloud', new ProcessOutput({ code: 0, stdout: '', stderr: '' }))
+    const clients = ClientsDouble.allHappy().saying('gcloud', new ProcessOutput({ code: 0, stdout: '\n', stderr: '' }))
 
     const sessions = await clients.sessions().all()
 
@@ -155,9 +155,9 @@ describe('ProbedToolSessions', () => {
       .saying('acli', new ProcessOutput({ code: 0, stdout: '', stderr: '' }))
       .saying('ssh', new ProcessOutput({
         code: 1, stdout: '',
-        stderr: "Hi jjponz! You've successfully authenticated, but GitHub does not provide shell access.",
+        stderr: "Hi jjponz! You've successfully authenticated, but GitHub does not provide shell access.\n",
       }))
-      .saying('gcloud', new ProcessOutput({ code: 0, stdout: 'jponzvan@mercadona.es', stderr: '' }))
+      .saying('gcloud', new ProcessOutput({ code: 0, stdout: 'jponzvan@mercadona.es\n', stderr: '' }))
 
     const sessions = await clients.sessions(LookUpDouble.missing('gh')).all()
 
@@ -204,7 +204,7 @@ describe('ProbedToolSessions', () => {
   it('git_whose_key_github_refuses_is_missing_and_says_to_add_one_even_though_it_exits_255', async () => {
     const clients = ClientsDouble.allHappy().saying('ssh', new ProcessOutput({
       code: 255, stdout: '',
-      stderr: 'git@github.com: Permission denied (publickey).',
+      stderr: 'git@github.com: Permission denied (publickey).\n',
     }))
 
     const sessions = await clients.sessions().all()

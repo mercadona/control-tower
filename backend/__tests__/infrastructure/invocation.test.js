@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -161,6 +161,14 @@ class PathFixture {
     return path
   }
 
+  static executableDirectory(dir, name) {
+    const path = join(dir, name)
+    mkdirSync(path)
+    chmodSync(path, 0o755)
+
+    return path
+  }
+
   static cleanUp() {
     PathFixture.#created.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true }))
   }
@@ -187,6 +195,13 @@ describe('Invocation looking a binary up in PATH without executing it', () => {
   it('a_file_that_exists_but_cannot_be_executed_is_not_a_match', () => {
     const dir = PathFixture.directory()
     PathFixture.nonExecutable(dir, 'ct-probe-fixture')
+
+    expect(Invocation.lookUp('ct-probe-fixture', { PATH: dir })).toBe(null)
+  })
+
+  it('an_executable_directory_sharing_the_binarys_name_is_not_a_match', () => {
+    const dir = PathFixture.directory()
+    PathFixture.executableDirectory(dir, 'ct-probe-fixture')
 
     expect(Invocation.lookUp('ct-probe-fixture', { PATH: dir })).toBe(null)
   })

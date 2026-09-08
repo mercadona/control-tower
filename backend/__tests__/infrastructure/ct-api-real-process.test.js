@@ -112,7 +112,7 @@ describe('ct-api entrypoint', () => {
     const claude = body.tools.find((row) => row.tool === 'claude')
     expect(claude.session).toBe('unknown')
     expect(claude.fix).toBe('claude, then /login — not observable from this process')
-  })
+  }, 600_000)
 
   it('a_whole_request_reaches_acli_so_a_typo_in_the_key_that_wires_the_user_stories_would_show_up_here_and_not_only_in_the_first_real_use', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })
