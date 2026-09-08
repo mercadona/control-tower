@@ -1,61 +1,22 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ActivePlanRecovery, CmuxActivePlan } from '../../src/infrastructure/active-plan-recovery.js'
+import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.js'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.js'
 import { PlanSessions } from '../../src/infrastructure/plan-events-route.js'
-import { MemoryCheckoutRegistry } from '../../src/infrastructure/memory-checkout-registry.js'
 import { DiskImplementationStartRegistry } from '../../src/infrastructure/disk-implementation-start-registry.js'
 import { ImplementationState, ImplementationStep } from '../../src/domain/value-objects/implementation-state.js'
 import { ImplementationProgressNotRead } from '../../src/domain/exceptions.js'
+import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
+import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
 
-const CURRENT = Object.freeze({
-  title: 'ct-plan-jjponz__repo-pulse-ABC-123',
-  cwd: '/repo/.worktrees/45',
-  cwdKnown: true,
-  ref: 'workspace:9',
-})
-
-describe('CmuxActivePlan', () => {
-  it('parses_the_current_control_tower_workspace_contract', () => {
-    const watch = CmuxActivePlan.parse(CURRENT)
-
-    expect(watch.story.text).toBe('ABC-123')
-    expect(watch.repository.text).toBe('jjponz/repo-pulse')
-    expect(watch.issue.number).toBe(45)
-    expect(watch.issue.url).toBe('https://github.com/jjponz/repo-pulse/issues/45')
-    expect(watch.located).toEqual({ root: '/repo', path: '/repo/.worktrees/45', branch: 'feat/45' })
-    expect(watch.agent).toBe('workspace:9')
-  })
-
-  it.each([
-    null,
-    { ...CURRENT, title: 'another-workspace' },
-    { ...CURRENT, title: 'ct-plan-jjponz__repo-pulse-not-a-story' },
-    { ...CURRENT, title: 'ct-plan-jjponz__repo-pulse-issue-0' },
-    { ...CURRENT, title: 'ct-plan-not-a-repository-ABC-123' },
-    { ...CURRENT, cwd: '/repo' },
-    { ...CURRENT, cwd: 'repo/.worktrees/45' },
-    { ...CURRENT, cwd: '/repo/.worktrees/0' },
-    { ...CURRENT, cwdKnown: false },
-    { ...CURRENT, ref: null },
-    { ...CURRENT, ref: 'surface:9' },
-  ])('ignores_a_malformed_or_unknown_entry %#', (entry) => {
-    expect(CmuxActivePlan.parse(entry)).toBe(null)
-  })
-
-  it('a_tab_named_after_its_issue_comes_back_as_a_plan_with_no_user_story', () => {
-    const entry = { ...CURRENT, title: 'ct-plan-jjponz__repo-pulse-issue-45' }
-
-    const watch = CmuxActivePlan.parse(entry)
-
-    expect(watch.storyText()).toBe(null)
-    expect(watch.issue.number).toBe(45)
-  })
-
-  it('a_tab_whose_tail_is_neither_a_story_key_nor_an_issue_number_is_still_ignored', () => {
-    const entry = { ...CURRENT, title: 'ct-plan-jjponz__repo-pulse-review-3' }
-
-    expect(CmuxActivePlan.parse(entry)).toBe(null)
-  })
+const IN_FLIGHT = new PlanWatch({
+  story: new UserStoryKey('ABC-123'),
+  issue: new PlanIssue({ number: 45, url: 'https://github.com/jjponz/repo-pulse/issues/45' }),
+  located: new WorkspaceLocation({ root: '/repo', path: '/repo/.worktrees/45', branch: 'feat/45' }),
+  repository: new RepositoryName('jjponz/repo-pulse'),
+  agent: 'workspace:9',
 })
 
 describe('ActivePlanRecovery', () => {
@@ -65,7 +26,7 @@ describe('ActivePlanRecovery', () => {
   })
 
   function fixture({
-    entries = [CURRENT], marker = null, go = false, regular = true, readFailure = null,
+    watches = [IN_FLIGHT], marker = null, go = false, regular = true, readFailure = null,
     implementationProgress = { of: vi.fn(async () => {
       throw new ImplementationProgressNotRead('no run file was recorded for this plan')
     }) },
@@ -74,7 +35,6 @@ describe('ActivePlanRecovery', () => {
     const activePlans = new ActivePlans({ sessions })
     const reviews = { startRecovered: vi.fn() }
     const pullRequestReviews = { startRecovered: vi.fn() }
-    const checkouts = new MemoryCheckoutRegistry()
     const implementationStarts = new DiskImplementationStartRegistry({
       read: vi.fn(() => {
         if (readFailure !== null) throw readFailure
@@ -88,7 +48,7 @@ describe('ActivePlanRecovery', () => {
       root: '/state',
     })
     const recovery = new ActivePlanRecovery({
-      list: vi.fn(() => entries),
+      plans: { inFlight: vi.fn(async () => watches) },
       implementationStarts,
       goRegistry: { matches: vi.fn(() => go) },
       implementationProgress,
@@ -96,10 +56,9 @@ describe('ActivePlanRecovery', () => {
       reviews,
       pullRequestReviews,
       activePlans,
-      checkouts,
     })
 
-    return { recovery, sessions, activePlans, reviews, pullRequestReviews, checkouts }
+    return { recovery, sessions, activePlans, reviews, pullRequestReviews }
   }
 
   it('a_plan_with_no_go_and_no_implementation_marker_recovers_as_planning', async () => {
@@ -120,7 +79,6 @@ describe('ActivePlanRecovery', () => {
     expect(recovered.sessions.known()).toEqual([])
     expect(recovered.reviews.startRecovered).not.toHaveBeenCalled()
     expect(recovered.activePlans.known()[0].phase).toBe('uncertain')
-    expect(recovered.checkouts.known().map((root) => root.text)).toEqual(['/repo'])
   })
 
   it('a_go_that_predates_the_implementation_marker_registry_recovers_as_implementing_when_the_run_file_shows_work_underway', async () => {
@@ -178,7 +136,6 @@ describe('ActivePlanRecovery', () => {
     expect(recovered.sessions.known()).toEqual([])
     expect(recovered.reviews.startRecovered).not.toHaveBeenCalled()
     expect(recovered.activePlans.known()[0].phase).toBe('implementing')
-    expect(recovered.checkouts.known().map((root) => root.text)).toEqual(['/repo'])
   })
 
   it('a_plan_that_was_already_implementing_gets_its_pull_request_watched_again', async () => {
@@ -187,7 +144,7 @@ describe('ActivePlanRecovery', () => {
     await recovered.recovery.recover()
 
     expect(recovered.pullRequestReviews.startRecovered).toHaveBeenCalledOnce()
-    expect(recovered.pullRequestReviews.startRecovered).toHaveBeenCalledWith(CmuxActivePlan.parse(CURRENT))
+    expect(recovered.pullRequestReviews.startRecovered).toHaveBeenCalledWith(IN_FLIGHT)
   })
 
   it('a_go_whose_run_file_shows_work_underway_gets_its_pull_request_watched_too', async () => {
@@ -198,7 +155,7 @@ describe('ActivePlanRecovery', () => {
 
     await recovered.recovery.recover()
 
-    expect(recovered.pullRequestReviews.startRecovered).toHaveBeenCalledWith(CmuxActivePlan.parse(CURRENT))
+    expect(recovered.pullRequestReviews.startRecovered).toHaveBeenCalledWith(IN_FLIGHT)
   })
 
   it('a_plan_that_never_started_implementing_gets_no_pull_request_watch', async () => {
@@ -247,15 +204,6 @@ describe('ActivePlanRecovery', () => {
     expect(recovered.activePlans.known()[0].phase).toBe('planning')
   })
 
-  it('deduplicates_cmux_entries_for_the_same_repository_and_issue', async () => {
-    const recovered = fixture({ entries: [CURRENT, { ...CURRENT, ref: 'workspace:10' }] })
-
-    await recovered.recovery.recover()
-
-    expect(recovered.sessions.known()).toHaveLength(1)
-    expect(recovered.reviews.startRecovered).toHaveBeenCalledOnce()
-  })
-
   it('does_not_start_a_second_review_when_recovery_is_repeated', async () => {
     const recovered = fixture()
 
@@ -266,16 +214,8 @@ describe('ActivePlanRecovery', () => {
     expect(recovered.reviews.startRecovered).toHaveBeenCalledOnce()
   })
 
-  it('restores_the_checkout_root_for_a_recovered_planning_session', async () => {
-    const recovered = fixture()
-
-    await recovered.recovery.recover()
-
-    expect(recovered.checkouts.known().map((root) => root.text)).toEqual(['/repo'])
-  })
-
-  it('recovers_nothing_when_the_cmux_query_is_not_conclusive', async () => {
-    const recovered = fixture({ entries: null })
+  it('recovers_nothing_when_the_plans_in_flight_could_not_be_listed', async () => {
+    const recovered = fixture({ watches: null })
 
     expect(await recovered.recovery.recover()).toBe(false)
     expect(recovered.activePlans.known()).toEqual([])

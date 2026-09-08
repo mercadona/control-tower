@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DiskCheckoutRegistry } from '../../src/infrastructure/disk-checkout-registry.js'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.js'
+import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.js'
 
 class StoredCheckouts {
   static A_FILE = { isFile: () => true }
@@ -36,6 +37,10 @@ class StoredCheckouts {
 }
 
 describe('DiskCheckoutRegistry', () => {
+  it('it_is_the_registry_the_use_case_asks_for_and_not_a_lookalike', () => {
+    expect(StoredCheckouts.empty()).toBeInstanceOf(CheckoutRegistry)
+  })
+
   it('the_first_checkout_it_is_asked_to_remember_is_written_as_the_whole_list', () => {
     const write = vi.fn()
 

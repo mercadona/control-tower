@@ -11,6 +11,7 @@ import { AcliUserStories } from './acli-user-stories.js'
 import { GhPlanIssues } from './gh-plan-issues.js'
 import { GitWorkspace } from './git-workspace.js'
 import { DiskCheckoutRegistry } from './disk-checkout-registry.js'
+import { WorktreePlans } from './worktree-plans.js'
 import { DiskGoRegistry } from './disk-go-registry.js'
 import { DispatchCheckHarvest } from './dispatch-check-harvest.js'
 import { HarvestClock } from './harvest-clock.js'
@@ -331,7 +332,14 @@ class CtApi {
     const pullRequestReviews = CtApi.#pullRequestReviews(pullRequests, planIssues, planAgents, workbench)
     const runFileProgress = new RunFileProgress({ read: Disk.read, exists: Disk.exists })
     const recovery = new ActivePlanRecovery({
-      list: () => listCmuxWorkspaces({ requireComplete: true }),
+      plans: new WorktreePlans({
+        checkouts,
+        survey: async (root) => (await new SurveyWorkspaces({ workspace })
+          .execute(new SurveyWorkspacesParams({ root }))).survey,
+        sessions: () => listCmuxWorkspaces({ requireComplete: true }),
+        planIssues,
+        stderr: (line) => process.stderr.write(line),
+      }),
       implementationStarts,
       goRegistry,
       implementationProgress: runFileProgress,
@@ -339,7 +347,6 @@ class CtApi {
       reviews,
       pullRequestReviews,
       activePlans,
-      checkouts,
     })
     await recovery.recover()
     const server = new ApiServer({
