@@ -34,5 +34,5 @@ export type StartPlanRefusal = {
 
 export type StartPlanOutcome =
   | { kind: 'started'; plan: StartedPlan }
-  | { kind: 'refused'; error: string }
+  | { kind: 'refused'; code: string; error: string }
   | { kind: 'backend-unreachable' }

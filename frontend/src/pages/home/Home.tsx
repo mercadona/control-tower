@@ -14,7 +14,7 @@ import { WorkflowStep, WorkflowStepStatus } from 'system-ui/workflow-step'
 import './Home.css'
 
 type WorkflowStepName = 'request' | 'plan' | 'implementation'
-type Reconciliation = 'not-required' | 'checking' | 'confirmed' | 'stale' | 'unavailable' | 'uncertain' | 'uncertain-start'
+type Reconciliation = 'not-required' | 'checking' | 'confirmed' | 'stale' | 'unavailable' | 'inconclusive' | 'uncertain' | 'uncertain-start'
 
 const isSameWorkflow = (workflow: WorkflowSnapshot, active: ActivePlan) =>
   workflow.request.id === active.request.id &&
@@ -81,6 +81,10 @@ const Home = () => {
         setReconciliation('unavailable')
         return
       }
+      if (outcome.kind === 'inconclusive') {
+        setReconciliation('inconclusive')
+        return
+      }
 
       const active = outcome.plans.find((candidate) => isSameWorkflow(current, candidate))
       if (active === undefined) {
@@ -111,6 +115,10 @@ const Home = () => {
         setReconciliation('unavailable')
         return
       }
+      if (outcome.kind === 'inconclusive') {
+        setReconciliation('inconclusive')
+        return
+      }
       const active = outcome.plans.find((candidate) => isSameRequest(submittedRequest, candidate))
       if (active === undefined) {
         setReconciliation('uncertain-start')
@@ -119,7 +127,10 @@ const Home = () => {
       selectActivePlan(active)
       return
     }
-    if (outcome.kind === 'unavailable') return
+    if (outcome.kind !== 'loaded') {
+      setReconciliation(outcome.kind)
+      return
+    }
     if (outcome.plans.length === 1) {
       selectActivePlan(outcome.plans[0])
     } else if (outcome.plans.length > 1) {
@@ -201,7 +212,8 @@ const Home = () => {
     void reconcile(uncertainRequest ?? undefined)
   }
 
-  const restoredNeedsRecovery = restoredRef.current && (reconciliation === 'stale' || reconciliation === 'unavailable' || reconciliation === 'uncertain')
+  const hasDiscardableState = restoredRef.current || uncertainRequest !== null
+  const restoredNeedsRecovery = restoredRef.current && (reconciliation === 'stale' || reconciliation === 'unavailable' || reconciliation === 'inconclusive' || reconciliation === 'uncertain')
   const restoredIsConfirmed = !restoredRef.current || reconciliation === 'confirmed'
   const showRestoredDiscard = restoredRef.current && workflow?.phase !== 'implementing' && !restoredNeedsRecovery
 
@@ -278,7 +290,25 @@ const Home = () => {
             />
             <div className="home__recovery-actions">
               <Button onClick={retryReconciliation}>Reintentar</Button>
-              <Button variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
+              {hasDiscardableState && (
+                <Button variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
+              )}
+            </div>
+          </div>
+        )}
+        {reconciliation === 'inconclusive' && (
+          <div className="home__recovery">
+            <Banner
+              type="warning"
+              role="alert"
+              title={restoredRef.current ? 'No se puede confirmar el plan guardado' : 'No se puede saber qué hay en marcha'}
+              description="El backend contestó, pero no pudo preguntar a cmux. No puede saber qué planes hay activos. No se harán acciones hasta que se confirme el estado."
+            />
+            <div className="home__recovery-actions">
+              <Button onClick={retryReconciliation}>Reintentar</Button>
+              {hasDiscardableState && (
+                <Button variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
+              )}
             </div>
           </div>
         )}
