@@ -56,6 +56,6 @@ describe('ShellBaselineRunner', () => {
 
     expect(result.outcome).toBe(BaselineOutcome.UNVERIFIED)
     expect(result.command).toBe('sleep 30')
-    expect(result.summary).toMatch(/^no terminó · .*ETIMEDOUT/)
+    expect(result.summary).toMatch(/^did not finish · .*ETIMEDOUT/)
   })
 })

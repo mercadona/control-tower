@@ -79,8 +79,8 @@ export function readRepoDocs(root, { follow = true } = {}) {
     try {
       const r = readDoc(root, name)
       if (!r) continue // it does not exist: that is no signal of anything
-      if (r.notFile) { failures.push(`${name}: existe pero no es un fichero`); continue }
-      if (r.oversize) { failures.push(`${name}: ${Math.round(r.size / 1024)} KB, por encima del límite de lectura`); continue }
+      if (r.notFile) { failures.push(`${name}: it exists but it is not a file`); continue }
+      if (r.oversize) { failures.push(`${name}: ${Math.round(r.size / 1024)} KB, over the read limit`); continue }
       docs.push({ path: name, content: r.content })
     } catch (e) {
       failures.push(`${name}: ${e.message}`)
@@ -104,7 +104,7 @@ export function readRepoDocs(root, { follow = true } = {}) {
       // repository) says nothing about the repository's conventions: it is
       // skipped in silence, it is not our business.
       if (!r || r.notFile) continue
-      if (r.oversize) { failures.push(`${path}: ${Math.round(r.size / 1024)} KB, por encima del límite de lectura`); continue }
+      if (r.oversize) { failures.push(`${path}: ${Math.round(r.size / 1024)} KB, over the read limit`); continue }
       docs.push({ path, content: r.content, via })
     } catch (e) {
       failures.push(`${path} (enlazado desde ${via}): ${e.message}`)

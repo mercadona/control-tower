@@ -67,7 +67,7 @@ export function goDir(opts = {}) {
 // 9 into a «no se ha podido comprobar».
 function requireAbsolutePath(dir) {
   if (!isAbsolute(dir)) {
-    throw new Error(`el directorio del registro del go no resuelve a una ruta absoluta ("${dir}") — con CLAUDE_CONFIG_DIR y HOME sin valor no se sabe DÓNDE vive el estado de la coordinadora, y escribirlo en el cwd lo dejaría donde nadie lo lee`)
+    throw new Error(`the go registry directory does not resolve to an absolute path ("${dir}") — with CLAUDE_CONFIG_DIR and HOME both empty there is no knowing WHERE the coordinator's state lives, and writing it into the cwd would leave it where nobody reads it`)
   }
   return dir
 }
@@ -119,11 +119,11 @@ export function readGoCommitment({ repo, issue, configDir = null, home = null } 
   try {
     parsed = JSON.parse(raw)
   } catch (e) {
-    return { error: `no es JSON legible (${e.message})`, path }
+    return { error: `it is not readable JSON (${e.message})`, path }
   }
   const commitment = typeof parsed?.commitment === 'string' ? parsed.commitment.trim().toLowerCase() : ''
   if (!/^[0-9a-f]{64}$/.test(commitment)) {
-    return { error: 'el campo `commitment` no es un sha256 hex de 64 caracteres', path }
+    return { error: 'the `commitment` field is not a 64-character hex sha256', path }
   }
   return { commitment, path }
 }

@@ -99,8 +99,8 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(ninguno\) \| — \|/)
-    expect(res.stdout).toMatch(/`—` en `alta\/media\/baja`: ningún veredicto de ese slice traía las severidades/)
+    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(none\) \| — \|/)
+    expect(res.stdout).toMatch(/`—` in `alta\/media\/baja`: no verdict of that slice carried the/)
     cleanup(b)
   })
 
@@ -111,7 +111,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(ninguno\) \| 0\/0\/0 \|/)
+    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(none\) \| 0\/0\/0 \|/)
     cleanup(b)
   })
 
@@ -122,7 +122,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 2 \(2 vetos, 1 sin columna\) \|/)
+    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 2 \(2 vetoes, 1 sin columna\) \|/)
     cleanup(b)
   })
 
@@ -138,7 +138,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 2 \(2 vetos\) \| 0 \| patrones 3 \| — \| 9 docs · 2 hallazgos \|/)
+    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 2 \(2 vetoes\) \| 0 \| patrones 3 \| — \| 9 docs · 2 hallazgos \|/)
     cleanup(b)
   })
 
@@ -150,7 +150,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \(1 veto\) \| 0 \| patrones 2 \| — \| — \|/)
-    expect(res.stdout).toMatch(/`—` en `vara ct`: ningún veredicto de ese slice traía las columnas/)
+    expect(res.stdout).toMatch(/`—` in `vara ct`: no verdict of that slice carried the/)
     cleanup(b)
   })
 
@@ -178,7 +178,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(ninguno\) \| — \| — \| 8 docs · 1020B \|/)
+    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(none\) \| — \| — \| 8 docs · 1020B \|/)
     cleanup(b)
   })
 
@@ -189,7 +189,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(ninguno\) \| — \| — \| — \|/)
+    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(none\) \| — \| — \| — \|/)
     cleanup(b)
   })
 
@@ -201,8 +201,8 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(ninguno\) \| — \| — \| — \|/)
-    expect(res.stdout).toMatch(/`—` en `brief`: ningún intento de `implement` de ese slice traía `brief_vara_ct_docs`\/`brief_bytes`/)
+    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(none\) \| — \| — \| — \|/)
+    expect(res.stdout).toMatch(/`—` in `brief`: no `implement` attempt of that slice carried `brief_vara_ct_docs`\/`brief_bytes`/)
     cleanup(b)
   })
 
@@ -232,7 +232,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/\| agente 10000B · skills 36000B · paquete 2000B \|/)
+    expect(res.stdout).toMatch(/\| agent 10000B · skills 36000B · package 2000B \|/)
     cleanup(b)
   })
 
@@ -243,7 +243,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/`—` en `bytes por papel`: ningún papel despachado de ese slice traía `agent_bytes`\/`skill_bytes`\/`package_bytes`/)
+    expect(res.stdout).toMatch(/`—` in `bytes por papel`: no dispatched role of that slice carried `agent_bytes`\/`skill_bytes`\/`package_bytes`/)
     cleanup(b)
   })
 
@@ -255,7 +255,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #13 \| Slice 2 \| — \| — \| \(sin telemetría\) \|/)
-    expect(res.stdout).toMatch(/Nadie midió — no es un cero/)
+    expect(res.stdout).toMatch(/Nobody measured — it is not a zero/)
     cleanup(b)
   })
 
@@ -270,7 +270,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\(1 sin columna\)/)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \(1 sin columna\) \| — \|/)
-    expect(res.stdout).toMatch(/telemetría anterior a `rubric_sin_vara`/)
+    expect(res.stdout).toMatch(/telemetry older than `rubric_sin_vara`/)
     cleanup(b)
   })
 
@@ -281,7 +281,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     // 1422c67.
     const res = run(b, {})
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/no se pudo listar/)
+    expect(res.stdout).toMatch(/could not list/)
     expect(res.stdout).not.toMatch(/\| Veredictos \|/)
     cleanup(b)
   })
@@ -302,7 +302,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/l.nea\(s\) ilegibles/)
+    expect(res.stdout).toMatch(/unreadable line\(s\)/)
     cleanup(b)
   })
 

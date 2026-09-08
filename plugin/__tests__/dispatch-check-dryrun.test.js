@@ -190,7 +190,7 @@ describe('dispatch-check --dry-run', () => {
     } catch (e) {
       threw = true
       expect(e.status).toBe(7)
-      expect((e.stdout || '') + (e.stderr || '')).toMatch(/no existe .agent\/run-9\.json/)
+      expect((e.stdout || '') + (e.stderr || '')).toMatch(/\.agent\/run-9\.json does not exist/)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

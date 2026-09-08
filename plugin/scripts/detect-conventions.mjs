@@ -38,7 +38,7 @@ try {
   files = r.entradas
   truncated = r.truncated
 } catch (e) {
-  console.error(`no se ha podido escanear ${target}: ${e.message}`)
+  console.error(`could not scan ${target}: ${e.message}`)
   process.exit(1)
 }
 
@@ -77,7 +77,7 @@ if (linksTruncated) {
 }
 if (truncated) {
   console.log(
-    `  note: el escaneo se cortó a los ${MAX_ENTRIES} ficheros (o ${MAX_DEPTH} niveles de profundidad), ` +
-      'así que puede haber convenciones propias que no se hayan mirado. Ausencia de aviso aquí no es prueba de ausencia.'
+    `  note: the scan was cut short at ${MAX_ENTRIES} files (or ${MAX_DEPTH} levels deep), ` +
+      'so there may be conventions of its own that were not looked at. Absence of a warning here is not proof of absence.'
   )
 }

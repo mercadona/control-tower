@@ -100,11 +100,11 @@ const logPath = arg(process.argv, '--log')
 // that starts with the old door is noticed by nobody.
 const goHash = (arg(process.argv, '--go-hash') || '').trim().toLowerCase()
 if (!issue || !repo || !session) {
-  process.stderr.write('usage: ct-watch-go.mjs --issue N --repo owner/name --session "<título de la workspace>" --go-hash <sha256 del go> [--log <ruta>]\n')
+  process.stderr.write('usage: ct-watch-go.mjs --issue N --repo owner/name --session "<title of the workspace>" --go-hash <sha256 of the go> [--log <path>]\n')
   process.exit(2)
 }
 if (!/^[0-9a-f]{64}$/.test(goHash)) {
-  process.stderr.write(`--go-hash inválido o ausente${goHash ? `: "${goHash}"` : ''} — debe ser el sha256 hex (64 caracteres) del go de ESTE despacho, el que /ct-next registró al lanzar. Sin él este vigilante no sabría qué reconocer, y NO cae al \`${GO_TOKEN}\` sin nonce a propósito: esa puerta la abriría el propio agente.\n`)
+  process.stderr.write(`--go-hash invalid or absent${goHash ? `: "${goHash}"` : ''} — it has to be the hex sha256 (64 characters) of THIS dispatch's go, the one /ct-next registered on launching. Without it this watcher would not know what to recognise, and it does NOT fall back to the nonce-less \`${GO_TOKEN}\` on purpose: that door would be opened by the agent itself.\n`)
   process.exit(2)
 }
 
@@ -161,7 +161,7 @@ function querySession() {
 // it has to be sent separately, measured in F20/H1.
 const LINE = `El humano ha respondido ${GO_TOKEN} en el issue #${issue}: el gate \`plan\` queda cerrado. Continúa con ct-step next.`
 
-log(`vigilando el ${GO_TOKEN} de ${repo}#${issue} para la sesión "${session}" — tick ${pollMs} ms, plazo ${timeoutMs} ms, go ${goHash.slice(0, 12)}…`)
+log(`watching for the ${GO_TOKEN} of ${repo}#${issue} for the session "${session}" — tick ${pollMs} ms, deadline ${timeoutMs} ms, go ${goHash.slice(0, 12)}…`)
 
 // ---------------------------------------------------------------------------
 // THE INITIAL SNAPSHOT. The window is the comments that were ALREADY THERE (see
@@ -218,7 +218,7 @@ for (;;) {
           stdio: ['ignore', 'ignore', 'pipe'], timeout: CMUX_TIMEOUT_MS, killSignal: 'SIGKILL',
         })
       } catch (e) {
-        log(`ERROR: el go se vio y el texto no se pudo escribir en "${session}" (${ref}): ${String(e.message).trim()}. Empuja la sesión a mano.`)
+        log(`ERROR: the go was seen and the text could not be written into "${session}" (${ref}): ${String(e.message).trim()}. Push the session by hand.`)
         terminar(1)
       }
       try {
@@ -231,7 +231,7 @@ for (;;) {
         // not "it could not be typed": whoever reads it is going to find the
         // line written in the window and has to know all it is missing is the
         // Enter.
-        log(`ERROR: el texto quedó escrito en la línea de edición de "${session}" (${ref}) pero el Enter falló: ${String(e.message).trim()}. Ve a esa ventana y pulsa Enter, o empuja la sesión a mano.`)
+        log(`ERROR: the text was left written on the edit line of "${session}" (${ref}) but the Enter failed: ${String(e.message).trim()}. Go to that window and press Enter, or push the session by hand.`)
         terminar(1)
       }
       // What is known is this and no more: the two commands returned 0. There is
@@ -241,7 +241,7 @@ for (;;) {
       terminar(0)
     }
     if (consultado) {
-      log(`ERROR: el go se vio, pero cmux dice que no existe ninguna sesión "${session}", así que no hay a quién entregárselo. Empuja la sesión a mano.`)
+      log(`ERROR: the go was seen, but cmux says there is no session "${session}" at all, so there is nobody to deliver it to. Push the session by hand.`)
       terminar(1)
     }
     // The session could not be ASKED about. Nothing follows from that, least of

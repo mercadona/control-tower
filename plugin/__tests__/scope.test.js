@@ -56,7 +56,7 @@ describe('parseScope — the scope of the epic, declared ONCE and machine readab
     const s = parseScope('## Contexto del epic\n- Cosas en prosa, ningún alcance.\n')
     expect(s.declared).toBe(false)
     expect(s.patterns).toEqual([])
-    expect(s.reason).toMatch(/no declara/i)
+    expect(s.reason).toMatch(/does not declare/i)
   })
 
   it('`Alcance:` present but empty does not count as declared either', () => {

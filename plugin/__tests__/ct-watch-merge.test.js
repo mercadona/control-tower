@@ -271,6 +271,6 @@ describe('the arguments and the deadlines', () => {
     // want to discover that two days later.
     const r = run({ CT_WATCH_MERGE_POLL_MS: 'un rato' })
     expect(r.status).toBe(2)
-    expect(r.stderr).toMatch(/CT_WATCH_MERGE_POLL_MS inválido/)
+    expect(r.stderr).toMatch(/CT_WATCH_MERGE_POLL_MS invalid/)
   })
 })

@@ -375,7 +375,7 @@ export function outcomeOfReconcile(reconcileOutcome) {
     case ReconcileOutcome.ROUND_DISCARDED:
       return OUTCOMES.DISCARDED
     default:
-      throw new Error(`desenlace de reconciliación sin proyectar: "${reconcileOutcome}"`)
+      throw new Error(`reconciliation outcome with no projection: "${reconcileOutcome}"`)
   }
 }
 
@@ -467,14 +467,14 @@ function afterE2e(run, outcome) {
 // ============================================================================
 export function deliveredRun(raw, issue) {
   if (raw === null) {
-    return { ok: false, why: `no existe .agent/run-${issue}.json: la implementación no la condujo ct-step (o el run se borró). El kickoff manda conducir con ct-step, y este gate es lo que convierte esa orden en mecanismo.` }
+    return { ok: false, why: `.agent/run-${issue}.json does not exist: ct-step did not conduct the implementation (or the run was deleted). The kickoff orders conducting with ct-step, and this gate is what turns that order into mechanism.` }
   }
   let run
   try { run = JSON.parse(raw) } catch (e) {
-    return { ok: false, why: `.agent/run-${issue}.json no es JSON válido (${e.message}): no se puede afirmar que el run esté entregado.` }
+    return { ok: false, why: `.agent/run-${issue}.json is not valid JSON (${e.message}): the run cannot be asserted to be delivered.` }
   }
   if (Number(run.issue) !== Number(issue)) {
-    return { ok: false, why: `.agent/run-${issue}.json dice issue ${run.issue}, no ${issue}: ese run es de otro slice.` }
+    return { ok: false, why: `.agent/run-${issue}.json says issue ${run.issue}, not ${issue}: that run belongs to another slice.` }
   }
   if (run.closed !== RUN_STATES.DELIVERED) {
     return { ok: false, why: `el run del issue ${issue} no está entregado (closed: ${run.closed ?? '(ausente)'}, tarea ${run.task}/${run.tasksTotal}, paso ${run.step}): termina el run con ct-step hasta "run delivered" y reintenta.` }

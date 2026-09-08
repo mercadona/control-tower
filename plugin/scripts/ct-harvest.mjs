@@ -248,7 +248,7 @@ if (asJson) {
   console.log('## Judge telemetry — only what the repo brings written')
   console.log('')
   if (telemetryDir.status === 'no-leido') {
-    console.log(`no se pudo listar \`${METRICS_REPO_DIR}\` en ${repo} (${telemetryDir.why}). Puede que este repo no tenga telemetría del juez o que la lectura fallara: **no se cuenta nada**, y el hueco NO es un cero.`)
+    console.log(`could not list \`${METRICS_REPO_DIR}\` in ${repo} (${telemetryDir.why}). This repo may have no judge telemetry, or the read may have failed: **nothing is counted**, and the gap is NOT a zero.`)
   } else {
     console.log('| Issue | Slice | Veredictos | sin-vara | Hallazgos por regla | alta/media/baja | vara ct | brief | bytes por papel |')
     console.log('|---|---|---|---|---|---|---|---|---|')
@@ -291,14 +291,14 @@ if (asJson) {
       // without adding a question.
       let severities = '—'
       if (t.status === 'sin-fichero') byRule = '(sin telemetría)'
-      else if (t.status === 'no-leido') byRule = '(no se pudo leer)'
+      else if (t.status === 'no-leido') byRule = '(could not be read)'
       else {
         // The cell's two notes fit together, separated by a comma: how many of
         // those verdicts were a VETO, and how many come from old telemetry.
         // They are only noted if there is something to note — a clean slice is
         // read at a glance, which is what the column is for.
         const notes = []
-        if (t.fails > 0) notes.push(`${t.fails} ${t.fails === 1 ? 'veto' : 'vetos'}`)
+        if (t.fails > 0) notes.push(`${t.fails} ${t.fails === 1 ? 'veto' : 'vetoes'}`)
         if (t.legacy > 0) notes.push(`${t.legacy} sin columna`)
         verdicts = notes.length ? `${t.verdicts} (${notes.join(', ')})` : String(t.verdicts)
         // Same rule as everything else in this table: measuredSeverities === 0
@@ -313,7 +313,7 @@ if (asJson) {
         // taken.
         withoutYardstick = t.measured > 0 ? String(t.rubricSinVara) : '—'
         const entries = Object.entries(t.findingsByRule).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        byRule = t.verdicts === 0 ? '(sin veredictos)' : (entries.length ? entries.map(([r, n]) => `${r} ${n}`).join(' · ') : '(ninguno)')
+        byRule = t.verdicts === 0 ? '(no verdicts)' : (entries.length ? entries.map(([r, n]) => `${r} ${n}`).join(' · ') : '(none)')
         // Same rule as `sin-vara`: measured* === 0 prints «—», never «0» — no
         // verdict of this slice carried the column. BOTH measures are required
         // to print the cell: half a cell with the other half blank would invite
@@ -333,7 +333,7 @@ if (asJson) {
         // And the same one again: roleMeasured === 0 prints «—» and never
         // three zeros, which would assert dispatched roles with no material.
         if (t.roleMeasured > 0) {
-          bytesPerRole = `agente ${t.agentBytes}B · skills ${t.skillBytes}B · paquete ${t.packageBytes}B`
+          bytesPerRole = `agent ${t.agentBytes}B · skills ${t.skillBytes}B · package ${t.packageBytes}B`
           if (t.roleLegacy > 0) bytesPerRole += ` (${t.roleLegacy} sin columna)`
         }
       }
@@ -341,25 +341,25 @@ if (asJson) {
     }
     console.log('')
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.verdicts > 0 && f.telemetry.measured === 0)) {
-      console.log('`—` en `sin-vara`: ningún veredicto de ese slice traía la columna (telemetría anterior a `rubric_sin_vara`). No es un cero.')
+      console.log('`—` in `sin-vara`: no verdict of that slice carried the column (telemetry older than `rubric_sin_vara`). It is not a zero.')
     }
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.verdicts > 0 && f.telemetry.measuredSeverities === 0)) {
-      console.log('`—` en `alta/media/baja`: ningún veredicto de ese slice traía las severidades `findings_high`/`findings_medium`/`findings_low` (telemetría anterior a esta medida). No es un cero.')
+      console.log('`—` in `alta/media/baja`: no verdict of that slice carried the `findings_high`/`findings_medium`/`findings_low` severities (telemetry older than this measure). It is not a zero.')
     }
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.verdicts > 0 && (f.telemetry.measuredVaraCtDocs === 0 || f.telemetry.measuredFindingsVaraCt === 0))) {
-      console.log('`—` en `vara ct`: ningún veredicto de ese slice traía las columnas `rubric_vara_ct_docs`/`findings_vara_ct` (telemetría anterior a esta medida, o de la columna `findings_patrones_vara_ct` que sustituyeron). No es un cero.')
+      console.log('`—` in `vara ct`: no verdict of that slice carried the `rubric_vara_ct_docs`/`findings_vara_ct` columns (telemetry older than this measure, or from the `findings_patrones_vara_ct` column they replaced). It is not a zero.')
     }
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.briefAttempts > 0 && f.telemetry.briefMeasured === 0)) {
-      console.log('`—` en `brief`: ningún intento de `implement` de ese slice traía `brief_vara_ct_docs`/`brief_bytes` (telemetría anterior a esta medida, o el brief no se pudo leer en su momento). No es un cero.')
+      console.log('`—` in `brief`: no `implement` attempt of that slice carried `brief_vara_ct_docs`/`brief_bytes` (telemetry older than this measure, or the brief could not be read at the time). It is not a zero.')
     }
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.roleAttempts > 0 && f.telemetry.roleMeasured === 0)) {
-      console.log('`—` en `bytes por papel`: ningún papel despachado de ese slice traía `agent_bytes`/`skill_bytes`/`package_bytes` (telemetría anterior a esta medida). No es un cero.')
+      console.log('`—` in `bytes por papel`: no dispatched role of that slice carried `agent_bytes`/`skill_bytes`/`package_bytes` (telemetry older than this measure). It is not a zero.')
     }
     if (rows.some((f) => f.telemetry.status === 'sin-fichero')) {
-      console.log(`\`(sin telemetría)\`: el repo no trae \`${METRICS_REPO_DIR}/issue-<n>.jsonl\` para ese slice. Nadie midió — no es un cero.`)
+      console.log(`\`(sin telemetría)\`: the repo does not bring \`${METRICS_REPO_DIR}/issue-<n>.jsonl\` for that slice. Nobody measured — it is not a zero.`)
     }
     for (const f of rows.filter((x) => x.telemetry.status === 'ok' && x.telemetry.malformed > 0)) {
-      console.log(`\`${f.telemetry.path}\`: ${f.telemetry.malformed} línea(s) ilegibles, no se cuentan (el resto sí).`)
+      console.log(`\`${f.telemetry.path}\`: ${f.telemetry.malformed} unreadable line(s), not counted (the rest are).`)
     }
   }
 }

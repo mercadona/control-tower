@@ -589,9 +589,9 @@ describe('F22 — the dispatcher does not mistake the coordinator blocked for th
     })
 
     // The note comes out (otherwise the test would be testing nothing)…
-    expect(r.stderr).toContain('contradicción en')
+    expect(r.stderr).toContain('contradiction in')
     // …and it names the file the dispatcher really read.
-    expect(r.stderr).toContain(`contradicción en ${SLICE_REL_PATH}`)
+    expect(r.stderr).toContain(`contradiction in ${SLICE_REL_PATH}`)
     // Not a single mention of the coordinator's file in the WHOLE warning.
     expect(r.stderr).not.toContain(STATE_REL_PATH)
     expect(r.stdout).not.toContain(STATE_REL_PATH)

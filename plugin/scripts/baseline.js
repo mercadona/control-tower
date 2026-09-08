@@ -128,7 +128,7 @@ export class Baseline {
       .filter((line) => line.length > 0)
       .slice(-Baseline.SUMMARY_LINES)
       .join(' | ')
-    const head = Number.isInteger(code) ? `exit ${code}` : 'no terminó'
+    const head = Number.isInteger(code) ? `exit ${code}` : 'did not finish'
 
     return Baseline.#capped(tail.length === 0 ? head : `${head} · ${tail}`)
   }

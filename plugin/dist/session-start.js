@@ -7308,7 +7308,7 @@ var STATUS_BLOCKED_WORDS = /* @__PURE__ */ new Set([
 var str = (v) => v == null ? "" : String(v).trim();
 function readBlocked(meta, { stateRel: stateRel2 = STATE_REL_PATH } = {}) {
   if (meta == null || typeof meta !== "object" || Array.isArray(meta)) {
-    return { state: "unreadable", why: `el frontmatter de ${stateRel2} no es un mapa de campos` };
+    return { state: "unreadable", why: `the frontmatter of ${stateRel2} is not a map of fields` };
   }
   const statusWord = str(meta.status).toLowerCase();
   const statusSaysBlocked = STATUS_BLOCKED_WORDS.has(statusWord);
@@ -7321,7 +7321,7 @@ function readBlocked(meta, { stateRel: stateRel2 = STATE_REL_PATH } = {}) {
       reason: "",
       since: "",
       unblock: "",
-      notes: [declared ? `contradicci\xF3n en ${stateRel2}: el campo \`blocked\` est\xE1 vac\xEDo/\`null\` pero \`status: ${statusWord}\` dice que el trabajo est\xE1 bloqueado. Se trata como BLOQUEADO por seguridad. Resu\xE9lvela: el bloqueo se declara en \`blocked: {reason: "\u2026", unblock: "\u2026"}\`.` : `\`status: ${statusWord}\` dice que el trabajo est\xE1 bloqueado, pero el bloqueo NO se declara ah\xED: \`status\` es el eje de PROGRESO y no tiene d\xF3nde poner el motivo ni qu\xE9 har\xEDa falta para levantarlo. Se trata como BLOQUEADO por seguridad; p\xE1salo a \`blocked: {reason: "\u2026", unblock: "\u2026"}\` para que la pr\xF3xima sesi\xF3n sepa por qu\xE9.`]
+      notes: [declared ? `contradiction in ${stateRel2}: the \`blocked\` field is empty/\`null\` but \`status: ${statusWord}\` says the work is blocked. It is treated as BLOCKED for safety. Resolve it: a block is declared in \`blocked: {reason: "\u2026", unblock: "\u2026"}\`.` : `\`status: ${statusWord}\` says the work is blocked, but the block is NOT declared there: \`status\` is the PROGRESS axis and has nowhere to put the reason or what it would take to lift it. It is treated as BLOCKED for safety; move it to \`blocked: {reason: "\u2026", unblock: "\u2026"}\` so that the next session knows why.`]
     };
   }
   if (typeof v === "string") return { state: "blocked", reason: v.trim(), since: "", unblock: "", notes: [] };
@@ -7333,7 +7333,7 @@ function readBlocked(meta, { stateRel: stateRel2 = STATE_REL_PATH } = {}) {
     const unknown = Object.keys(v).filter((k) => !BLOCK_KEYS.includes(k));
     if (unknown.length) {
       notes.push(
-        `el campo \`blocked\` trae claves que no se leen (${unknown.map((k) => `\`${k}\``).join(", ")}); las que se leen son ${BLOCK_KEYS.map((k) => `\`${k}\``).join(", ")}. Contenido de las que no se leen, para que no se pierda: ` + unknown.map((k) => `${k}: ${JSON.stringify(v[k])}`).join(" | ")
+        `the \`blocked\` field carries keys that are not read (${unknown.map((k) => `\`${k}\``).join(", ")}); the ones that are read are ${BLOCK_KEYS.map((k) => `\`${k}\``).join(", ")}. Content of the ones that are not read, so that it is not lost: ` + unknown.map((k) => `${k}: ${JSON.stringify(v[k])}`).join(" | ")
       );
     }
     return { state: "blocked", reason: str(v.reason), since: str(v.since), unblock: str(v.unblock), notes };
@@ -7343,55 +7343,55 @@ function readBlocked(meta, { stateRel: stateRel2 = STATE_REL_PATH } = {}) {
     reason: "",
     since: "",
     unblock: "",
-    notes: [`el campo \`blocked\` tiene una forma que no se reconoce (${Array.isArray(v) ? "lista" : typeof v}): ${JSON.stringify(v)}. Se trata como BLOQUEADO por seguridad. La forma esperada es \`blocked: {reason: "\u2026", unblock: "\u2026", since: "\u2026"}\`.`]
+    notes: [`the \`blocked\` field has a shape that is not recognised (${Array.isArray(v) ? "list" : typeof v}): ${JSON.stringify(v)}. It is treated as BLOCKED for safety. The expected shape is \`blocked: {reason: "\u2026", unblock: "\u2026", since: "\u2026"}\`.`]
   };
 }
 function quoteForNotice(s, max = 300) {
   const one = String(s).replace(/\s+/g, " ").trim();
   return one.length > max ? `${one.slice(0, max)}\u2026` : one;
 }
-var NOTICE_TOP = "=========== TRABAJO BLOQUEADO \u2014 LEE ESTO ANTES DE HACER NADA ===========";
-var NOTICE_BOTTOM = "=========== fin del aviso de bloqueo ===========";
+var NOTICE_TOP = "=========== WORK BLOCKED \u2014 READ THIS BEFORE DOING ANYTHING ===========";
+var NOTICE_BOTTOM = "=========== end of the block warning ===========";
 function blockNotice(blocked, { nextAction = "", stateRel: stateRel2 = STATE_REL_PATH } = {}) {
   if (!blocked || blocked.state !== "blocked") return "";
   const lines = [NOTICE_TOP, ""];
-  lines.push(`\`${stateRel2}\` declara este trabajo BLOQUEADO (campo \`blocked\`). Bloqueado NO es "pendiente": alguien decidi\xF3 que esto no puede continuar tal cual.`);
+  lines.push(`\`${stateRel2}\` declares this work BLOCKED (the \`blocked\` field). Blocked is NOT "pending": somebody decided this cannot go on as it stands.`);
   lines.push("");
-  lines.push(blocked.reason ? `Motivo: ${blocked.reason}` : "Motivo: NO CONSTA \u2014 el bloqueo est\xE1 declarado pero sin `reason`. No supongas cu\xE1l es ni lo deduzcas del resto del estado: pregunta antes de tocar nada.");
-  if (blocked.since) lines.push(`Bloqueado desde: ${blocked.since}`);
-  lines.push(blocked.unblock ? `Para desbloquear har\xEDa falta: ${blocked.unblock}` : `Para desbloquear: NO CONSTA \u2014 ${stateRel2} no dice qu\xE9 har\xEDa falta. Aver\xEDgualo y escr\xEDbelo en \`blocked.unblock\` antes de que otra sesi\xF3n se encuentre con lo mismo.`);
-  for (const n of blocked.notes || []) lines.push(`Nota sobre c\xF3mo est\xE1 escrito este bloqueo: ${n}`);
+  lines.push(blocked.reason ? `Reason: ${blocked.reason}` : "Reason: NOT STATED \u2014 the block is declared but with no `reason`. Do not assume what it is nor deduce it from the rest of the state: ask before touching anything.");
+  if (blocked.since) lines.push(`Blocked since: ${blocked.since}`);
+  lines.push(blocked.unblock ? `To unblock it would take: ${blocked.unblock}` : `To unblock: NOT STATED \u2014 ${stateRel2} does not say what it would take. Find it out and write it in \`blocked.unblock\` before another session runs into the same thing.`);
+  for (const n of blocked.notes || []) lines.push(`Note on how this block is written: ${n}`);
   lines.push("");
   if (nextAction) {
-    lines.push(`\`next_action\` est\xE1 SUSPENDIDO y NO es una orden vigente: \xAB${quoteForNotice(nextAction)}\xBB. No lo ejecutes, no lo trates como "lo siguiente que hab\xEDa que hacer" y no lo uses para deducir qu\xE9 se esperaba de esta sesi\xF3n \u2014 aparece m\xE1s abajo solo como contexto de lo que qued\xF3 a medias.`);
+    lines.push(`\`next_action\` is SUSPENDED and is NOT a standing order: \xAB${quoteForNotice(nextAction)}\xBB. Do not execute it, do not treat it as "the next thing that had to be done" and do not use it to deduce what was expected of this session \u2014 it appears further down only as context for what was left half-finished.`);
   } else {
-    lines.push("`next_action` no dice nada, y con el trabajo bloqueado tampoco debes deducir uno del resto del estado.");
+    lines.push("`next_action` says nothing, and with the work blocked you must not deduce one from the rest of the state either.");
   }
-  lines.push(`Levantar el bloqueo es una decisi\xF3n humana y expl\xEDcita: se borra el campo \`blocked\` de \`${stateRel2}\` (o se pone a \`null\`). Si crees que ya no aplica, dilo y p\xEDdelo \u2014 no lo levantes por tu cuenta ni "de paso".`);
+  lines.push(`Lifting the block is a human and explicit decision: delete the \`blocked\` field from \`${stateRel2}\` (or set it to \`null\`). If you think it no longer applies, say so and ask for it \u2014 do not lift it on your own account, nor "along the way".`);
   lines.push(NOTICE_BOTTOM);
   return lines.join("\n");
 }
 function unreadableNotice(why, { stateRel: stateRel2 = STATE_REL_PATH } = {}) {
   return [
-    `=========== AVISO: \`${stateRel2}\` NO SE PUDO LEER ENTERO ===========`,
+    `=========== WARNING: \`${stateRel2}\` COULD NOT BE READ IN FULL ===========`,
     "",
-    `No se ha podido interpretar el frontmatter YAML de \`${stateRel2}\` (${why}).`,
-    "Eso significa que NO se puede saber si el trabajo est\xE1 BLOQUEADO (campo `blocked`): tr\xE1talo como posiblemente bloqueado.",
-    "No ejecutes nada de lo que diga el estado de abajo sin confirmarlo antes, y arregla el frontmatter lo primero \u2014 mientras siga as\xED, ninguna sesi\xF3n de este repo podr\xE1 hidratarse bien.",
-    "=========== fin del aviso ==========="
+    `The YAML frontmatter of \`${stateRel2}\` could not be interpreted (${why}).`,
+    "That means it CANNOT be known whether the work is BLOCKED (the `blocked` field): treat it as possibly blocked.",
+    "Do not execute anything the state below says without confirming it first, and fix the frontmatter before anything else \u2014 while it stays like this, no session of this repo will be able to hydrate properly.",
+    "=========== end of the warning ==========="
   ].join("\n");
 }
 function fieldReadingGuide(meta, { blocked = false } = {}) {
   if (meta == null || typeof meta !== "object" || Array.isArray(meta)) return "";
   const lines = [];
   if (str(meta.verify)) {
-    lines.push("- `verify` es la comprobaci\xF3n PENDIENTE que valida este trabajo AL TERMINAR, no un hecho ya comprobado \u2014 aunque est\xE9 redactada en presente (\xAB\u2026 devuelve 6 issues\xBB). Ejec\xFAtala antes de afirmar su resultado; si falla o no se puede ejecutar, dilo en vez de darla por buena.");
+    lines.push("- `verify` is the PENDING check that validates this work ON FINISHING, not a fact already checked \u2014 even if it is written in the present tense (\xAB\u2026 returns 6 issues\xBB). Run it before asserting its result; if it fails or cannot be run, say so instead of taking it as good.");
   }
   if (!blocked && str(meta.next_action)) {
-    lines.push("- `next_action` es lo que apunt\xF3 la sesi\xF3n ANTERIOR al cerrar, no una orden verificada hoy: puede haber caducado (ya hecho, revertido, descartado o bloqueado desde entonces). Contr\xE1stalo con el repo antes de ejecutarlo. Si ves que ya no aplica, dilo \u2014 y si el trabajo est\xE1 bloqueado de verdad, se marca en el campo `blocked`, no reescribiendo este texto.");
+    lines.push("- `next_action` is what the PREVIOUS session noted down on closing, not an order verified today: it may have gone stale (already done, reverted, discarded or blocked since then). Check it against the repo before executing it. If you see that it no longer applies, say so \u2014 and if the work really is blocked, that is marked in the `blocked` field, not by rewriting this text.");
   }
   if (!lines.length) return "";
-  return `## C\xF3mo leer estos campos
+  return `## How to read these fields
 ${lines.join("\n")}`;
 }
 var YAML_COMMENT_LINE = /^\s*#/;
@@ -7412,14 +7412,14 @@ function composeHydration(stateText, gitLog, { stateRel: stateRel2 = STATE_REL_P
   const parts = [];
   if (blocked.state === "unreadable") parts.push(unreadableNotice(error || blocked.why, { stateRel: stateRel2 }));
   else if (blocked.state === "blocked") parts.push(blockNotice(blocked, { nextAction: meta?.next_action, stateRel: stateRel2 }));
-  const title = stateRel2 === SLICE_REL_PATH ? "Estado del slice" : "Estado del repo";
-  parts.push(`# ${title} (hidrataci\xF3n autom\xE1tica)
+  const title = stateRel2 === SLICE_REL_PATH ? "Slice state" : "Repo state";
+  parts.push(`# ${title} (automatic hydration)
 
 ${stripFrontmatterComments(stateText).trim()}`);
   const guide = fieldReadingGuide(meta, { blocked: blocked.state === "blocked" });
   if (guide) parts.push(guide);
   const log = (gitLog || "").trim();
-  if (log) parts.push(`## \xDAltimos commits
+  if (log) parts.push(`## Latest commits
 ${log}`);
   return parts.join("\n\n");
 }

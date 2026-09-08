@@ -128,7 +128,7 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
     // vocabulary /ct-groom creates so that the claim can write it later
     // (groom.js#LOOP_STATUS_LABELS).
     expect(res.stderr).not.toMatch(/drift.*status:in-progress/)
-    expect(res.stdout).toMatch(/ya existe \(#501\), no se duplica/) // the usual idempotence message is still there
+    expect(res.stdout).toMatch(/already exists \(#501\), not duplicated/) // the usual idempotence message is still there
     const log = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
     expect(log).not.toMatch(/issue edit/) // with no --reconcile, the issue is never mutated
     rmSync(dir, { recursive: true, force: true })
@@ -176,7 +176,7 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
       FAKE_GH_GRAPHQL_PAGE_SIZE: '1', // forces 2 pages: OTHER on page 1, #501 on page 2
     })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/ya existe \(#501\), no se duplica/) // it saw page 2
+    expect(res.stdout).toMatch(/already exists \(#501\), not duplicated/) // it saw page 2
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -245,7 +245,7 @@ describe('ct-groom (real run) --reconcile — it applies what was detected throu
     const argvLog = join(dir, 'argv.log')
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--reconcile'], { ...baseEnv(spec), FAKE_GH_ARGV_LOG_FILE: argvLog })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/reconciliado/)
+    expect(res.stdout).toMatch(/reconciled/)
     const log = readFileSync(argvLog, 'utf8')
     const editLine = log.split('\n').find((l) => l.startsWith('issue edit 501'))
     expect(editLine).toBeTruthy()
@@ -311,8 +311,8 @@ describe('ct-groom (real run) --reconcile — it applies what was detected throu
     const { dir, spec } = writeSpec(ONE_SLICE_SPEC)
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--reconcile'], { ...baseEnv(spec), FAKE_GH_EDIT_FAIL_SUBSTR: 'issue edit 501' })
     expect(res.status).toBe(1)
-    expect(res.stderr).toMatch(/no se pudo reconciliar el issue #501/)
-    expect(res.stdout).not.toMatch(/reconciliado/) // success is never reported after the failure
+    expect(res.stderr).toMatch(/could not reconcile issue #501/)
+    expect(res.stdout).not.toMatch(/reconciled/) // success is never reported after the failure
     rmSync(dir, { recursive: true, force: true })
   })
 })
@@ -435,8 +435,8 @@ describe('ct-groom (real run) — divergent AC/Dependencias: they are detected a
       FAKE_GH_ARGV_LOG_FILE: argvLog,
     })
     expect(res.status).toBe(3) // NOT 0 — a real gap was left unapplied
-    expect(res.stderr).toMatch(/no puede aplicar del todo esta drift/)
-    expect(res.stderr).toMatch(/criterios de aceptación/)
+    expect(res.stderr).toMatch(/cannot fully apply this drift/)
+    expect(res.stderr).toMatch(/acceptance criteria/)
     expect(res.stderr).not.toMatch(/solo en prosa/i) // NEVER this lie (Critical 2)
     // deps COULD be applied (a domain independent of AC's) — the --body that is
     // sent (it embeds newlines of its own, which is why it is checked over the
@@ -468,7 +468,7 @@ describe('ct-groom (real run) — divergent AC/Dependencias: they are detected a
       FAKE_GH_ARGV_LOG_FILE: argvLog,
     })
     expect(res.status).toBe(3)
-    expect(res.stderr).toMatch(/no se puede saber dónde termina "## Contexto heredado"/)
+    expect(res.stderr).toMatch(/there is no telling where "## Contexto heredado" ends/)
     expect(res.stderr).not.toMatch(/solo en prosa/i)
     const log = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
     expect(log).not.toMatch(/issue edit 501/) // nothing is written: there was nothing applicable
@@ -580,7 +580,7 @@ describe('ct-groom (real run) — orphan issues: a slice deleted from the §9 ta
     expect(res.status).toBe(3)
     expect(res.stderr).toMatch(/issue #999/)
     expect(res.stderr).toMatch(/ct-order:9/)
-    expect(res.stderr).toMatch(/huérfano/)
+    expect(res.stderr).toMatch(/orphaned/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -599,7 +599,7 @@ describe('ct-groom (real run) — orphan issues: a slice deleted from the §9 ta
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[matchingSlice1]]),
     })
     expect(res.status).toBe(0)
-    expect(res.stderr).not.toMatch(/huérfano/)
+    expect(res.stderr).not.toMatch(/orphaned/)
     rmSync(dir, { recursive: true, force: true })
   })
 })
@@ -788,7 +788,7 @@ describe('ct-groom (real run) — a duplicated "## Dependencias"/"## Acceptance 
     })
     expect(res.status).toBe(3) // before this fix, this exited 0 — it also broke the parity with --dry-run --reconcile over the same body
     expect(res.stderr).toMatch(/drift.*Dependencias.*aparece más de una vez/is)
-    expect(res.stderr).toMatch(/--reconcile no puede aplicar del todo esta drift.*secciones duplicadas/is)
+    expect(res.stderr).toMatch(/--reconcile cannot fully apply this drift.*duplicated sections/is)
     const log = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
     expect(log).not.toMatch(/issue edit 501/) // nothing really to apply: ac/deps already matched, all that is left over is one copy
     rmSync(dir, { recursive: true, force: true })
@@ -799,11 +799,11 @@ describe('ct-groom (real run) — a duplicated "## Dependencias"/"## Acceptance 
 // EXPERIMENTAL — the warning is printed over stderr as soon as the flag is
 // present, BEFORE any validation or mutation, and it NEVER appears without the
 // flag (the default behaviour does not gain new warnings).
-describe('ct-groom — the "--reconcile es EXPERIMENTAL" warning (review round 5, a product decision)', () => {
+describe('ct-groom — the "--reconcile is EXPERIMENTAL" warning (review round 5, a product decision)', () => {
   it('with --reconcile → the warning shows up over stderr', () => {
     const { dir, spec } = writeSpec(ONE_SLICE_SPEC)
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--reconcile'], baseEnv(spec))
-    expect(res.stderr).toMatch(/--reconcile es EXPERIMENTAL/)
+    expect(res.stderr).toMatch(/--reconcile is EXPERIMENTAL/)
     rmSync(dir, { recursive: true, force: true })
   })
   it('WITHOUT --reconcile → the warning NEVER shows up (the default behaviour does not gain new warnings)', () => {

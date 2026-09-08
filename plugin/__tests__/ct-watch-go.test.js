@@ -161,8 +161,8 @@ describe('what cannot knock down the watch', () => {
     writeFileSync(stateFile, JSON.stringify([]))
     const r = run(withGo())
     expect(r.status).toBe(1)
-    expect(r.stdout).toMatch(/cmux dice que no existe/)
-    expect(r.stdout).toMatch(/a mano/)
+    expect(r.stdout).toMatch(/cmux says there is no session/)
+    expect(r.stdout).toMatch(/by hand/)
   })
 
   // -------------------------------------------------------------------------
@@ -241,7 +241,7 @@ describe('what cannot knock down the watch', () => {
   it('if the typing fails it says so and dies: the go was seen and could not be delivered', () => {
     const r = run(withGo({ FAKE_CMUX_SEND_FAIL: '1' }))
     expect(r.status).toBe(1)
-    expect(r.stdout).toMatch(/no se pudo escribir/)
+    expect(r.stdout).toMatch(/could not be written/)
   })
 })
 
@@ -284,7 +284,7 @@ describe('the arguments and the deadlines', () => {
     // eight hours later.
     const r = run({ CT_WATCH_GO_POLL_MS: 'un rato' })
     expect(r.status).toBe(2)
-    expect(r.stderr).toMatch(/CT_WATCH_GO_POLL_MS inválido/)
+    expect(r.stderr).toMatch(/CT_WATCH_GO_POLL_MS invalid/)
   })
 })
 

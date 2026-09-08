@@ -172,7 +172,7 @@ export function liveSliceProcesses(repoRoot, { run = runCommand } = {}) {
   // partial read of `lsof` further down safe, so it degrades here instead of
   // taking the risk.
   if (typeof process.getuid !== 'function') {
-    return { porSlice: new Map(), comprobado: false, motivo: 'no se pudo determinar el usuario actual: process.getuid no está disponible en esta plataforma' }
+    return { porSlice: new Map(), comprobado: false, motivo: 'could not determine the current user: process.getuid is not available on this platform' }
   }
   const uid = process.getuid()
 
@@ -222,7 +222,7 @@ export function liveSliceProcesses(repoRoot, { run = runCommand } = {}) {
     if (e && e.status === 1 && typeof e.stdout === 'string') {
       output = e.stdout
     } else {
-      return { porSlice: new Map(), comprobado: false, motivo: `no se pudo leer el directorio de trabajo de los procesos con lsof: ${e && e.message}` }
+      return { porSlice: new Map(), comprobado: false, motivo: `could not read the working directory of the processes with lsof: ${e && e.message}` }
     }
   }
 

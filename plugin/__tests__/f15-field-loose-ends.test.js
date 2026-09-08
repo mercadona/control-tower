@@ -241,22 +241,22 @@ describe('F15/H2 — if /ct-groom aborts while validating the Project, it has cr
   //     api repos/o/r/milestones -f title=Epic      ← milestone CREATED
   //     label create type:backend …                 ← 4 labels CREATED
   //     project view 5 --owner o --format json      ← and it aborted HERE
-  // with "milestone creado: Epic (#1)" already printed on stdout. The
+  // with "milestone created: Epic (#1)" already printed on stdout. The
   // "half-made junk" the documentation did not deny was real.
   it('with no Sprint field: it aborts without creating the milestone or any label', () => {
     const r = groomRun({ FAKE_GH_PROJECT_FIELDS: '[]' })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no tiene un campo de iteración llamado "Sprint"/)
+    expect(r.out).toMatch(/has no iteration field called "Sprint"/)
     expect(r.log).not.toMatch(/milestones -f title=/)   // no creation at all
     expect(r.log).not.toMatch(/label create/)
-    expect(r.out).not.toMatch(/milestone creado/)
+    expect(r.out).not.toMatch(/milestone created/)
   })
 
   it('with no current iteration: it aborts without creating the milestone or any label', () => {
     const old = JSON.stringify([{ id: 'F', name: 'Sprint', configuration: { iterations: [{ id: 'I', title: 'Sprint 1', startDate: '2020-01-06', duration: 14 }] } }])
     const r = groomRun({ FAKE_GH_PROJECT_FIELDS: old })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no tiene una iteración vigente/)
+    expect(r.out).toMatch(/has no iteration current for today/)
     expect(r.log).not.toMatch(/milestones -f title=/)
     expect(r.log).not.toMatch(/label create/)
   })
@@ -264,7 +264,7 @@ describe('F15/H2 — if /ct-groom aborts while validating the Project, it has cr
   it('if the project cannot even be read: it creates nothing either', () => {
     const r = groomRun({ FAKE_GH_PROJECT_VIEW_FAIL: '1' })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no se pudo leer el project/)
+    expect(r.out).toMatch(/could not read project/)
     expect(r.log).not.toMatch(/milestones -f title=/)
     expect(r.log).not.toMatch(/label create/)
   })
@@ -293,7 +293,7 @@ describe('F15/H2 — if /ct-groom aborts while validating the Project, it has cr
     const r = groomRun({ FAKE_GH_MILESTONES_LIST: JSON.stringify([{ title: 'Epic', number: 7 }]) })
     expect(r.code).toBe(0)
     expect(r.log).not.toMatch(/milestones -f title=/)
-    expect(r.out).toMatch(/milestone ya existe/)
+    expect(r.out).toMatch(/milestone already exists/)
   })
 })
 

@@ -587,8 +587,8 @@ export function formatFinishedResidueWarning(residue, { repo } = {}) {
   const lines = residue.map((r) => {
     const parts = []
     if (r.hasWorktree) parts.push(`worktree ${r.worktree}`)
-    if (r.hasBranch) parts.push(`rama ${r.branch}`)
-    if (r.cmuxTitle) parts.push(`sesión de cmux "${r.cmuxTitle}" todavía abierta`)
+    if (r.hasBranch) parts.push(`branch ${r.branch}`)
+    if (r.cmuxTitle) parts.push(`cmux session "${r.cmuxTitle}" still open`)
     return `  #${r.n}: ${parts.join(', ')}`
   })
   const commands = residue.map((r) => {
@@ -598,7 +598,7 @@ export function formatFinishedResidueWarning(residue, { repo } = {}) {
     return `  ${cmds.join(' && ')}`
   })
   const sessions = withSession.length
-    ? `\n${withSession.length} de ${withSession.length === 1 ? 'ellos tiene' : 'ellos tienen'} además su sesión de cmux abierta: ese \`claude\` sigue vivo con el trabajo YA entregado (en el caso que originó esto llevaba trece horas). Ciérralas a mano cuando compruebes que no hay nada dentro — el loop crea agentes y hasta ahora no enterraba a ninguno.`
+    ? `\n${withSession.length} of ${withSession.length === 1 ? 'them has' : 'them have'} its cmux session open as well: that \`claude\` is still alive with the work ALREADY delivered (in the case that gave rise to this it had been alive for thirteen hours). Close them by hand once you have checked there is nothing inside — the loop creates agents and until now it buried none of them.`
     : ''
   return `cosecha pendiente: ${residue.length} slice(s) de ${repo || 'este repo'} con el trabajo YA mergeado siguen dejando residuo en este checkout:\n${lines.join('\n')}\nNo se borra solo, y es deliberado: un worktree puede tener cambios sin pushear, y borrarlo es irreversible (el mismo criterio por el que \`--requeue\` se niega a actuar mientras existan). Compruébalo y límpialo tú:\n${commands.join('\n')}\nO deja que lo compruebe la guarda por ti: \`node <plugin>/scripts/dispatch-check.mjs <n> --repo ${repo || '<o/r>'} --collect\` cierra la sesión de cmux y borra worktree y rama SOLO si la PR de ese slice está mergeada, el árbol está limpio y la punta local es el commit que aterrizó; si no, se niega y dice cuál de las tres falla (con \`--dry-run\` solo lo cuenta).\nMientras siga ahí, \`/ct-next\` se NEGARÁ a redespachar cualquiera de esos números: el worktree existente es una precondición que corta el despacho.${sessions}`
 }

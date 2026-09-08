@@ -12,7 +12,7 @@
 //      `hasProjectItem` returns `false` for items that DO exist and /ct-groom
 //      adds them again. DUPLICATES in the Project, in silence.
 //   2. `fields(first: 50)`: with more than 50 fields, a project that DOES have
-//      its Sprint field gets a "este project no tiene un campo de iteración
+//      its Sprint field gets a "project N has no iteration field
 //      llamado Sprint" — a false claim about something that has not been seen.
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
@@ -93,8 +93,8 @@ describe('H6 — a truncated `gh project item-list` no longer produces duplicate
       FAKE_GH_PROJECT_ITEMS_NO_TOTALCOUNT: '1',
       FAKE_GH_ARGV_LOG_FILE: argvLog,
     })
-    expect(res.stderr).toMatch(/no devuelve `totalCount`/)
-    expect(res.stderr).toMatch(/NO se ha podido descartar que la lista de items/)
+    expect(res.stderr).toMatch(/does not return `totalCount`/)
+    expect(res.stderr).toMatch(/could NOT be ruled out that the list of items/)
   })
 
   it('negative check: with few items there is no second query', () => {
@@ -123,9 +123,9 @@ describe('H6 — `fields(first: 50)`: "I have not seen it" stops being said as "
       FAKE_GH_PROJECT_FIELDS_TOTALCOUNT: '87',
     })
     expect(res.status).toBe(1)
-    expect(res.stderr).toMatch(/no se ha podido comprobar si el project/i)
-    expect(res.stderr).toMatch(/1 de sus 87 campos/)
-    expect(res.stderr).not.toMatch(/no tiene un campo de iteración llamado "Sprint" —/)
+    expect(res.stderr).toMatch(/could not be checked whether project/i)
+    expect(res.stderr).toMatch(/1 of its 87 fields/)
+    expect(res.stderr).not.toMatch(/has no iteration field called "Sprint" —/)
   })
 
   it('negative check: if all the fields really were seen and there is no Sprint, it is still said just as it was', () => {
@@ -136,7 +136,7 @@ describe('H6 — `fields(first: 50)`: "I have not seen it" stops being said as "
       FAKE_GH_PROJECT_FIELDS: JSON.stringify([{ id: 'F1', name: 'Estado' }]),
     })
     expect(res.status).toBe(1)
-    expect(res.stderr).toMatch(/no tiene un campo de iteración llamado "Sprint"/)
+    expect(res.stderr).toMatch(/has no iteration field called "Sprint"/)
   })
 })
 

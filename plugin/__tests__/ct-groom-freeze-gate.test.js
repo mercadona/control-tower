@@ -93,20 +93,20 @@ describe('ct-groom — the freeze gate (exit 2, before touching anything, under 
     expect(r.status).toBe(2)
     expect(r.stderr).toContain('## Hipótesis')
     // the message says where work with no bet goes: outside the epic cycle
-    expect(r.stderr).toMatch(/issue suelto|sin apuesta/i)
+    expect(r.stderr).toMatch(/loose issues|falsifiable bet/i)
   })
 
   it('empty «## Hipótesis» → exit 2 (presence with no content is not presence)', () => {
     const r = runGroom('## Hipótesis\n\n\n' + TABLE)
     expect(r.status).toBe(2)
-    expect(r.stderr).toContain('vacía')
+    expect(r.stderr).toContain('is empty')
   })
 
   it('pending [NEEDS CLARIFICATION → exit 2, naming how many and where', () => {
     const r = runGroom(HYPOTHESIS + TABLE + '\n[NEEDS CLARIFICATION: ¿tabla o lista?]\n')
     expect(r.status).toBe(2)
     expect(r.stderr).toContain('[NEEDS CLARIFICATION')
-    expect(r.stderr).toMatch(/línea \d+/)
+    expect(r.stderr).toMatch(/line \d+/)
   })
 
   it('both faults at once → both messages, a single exit 2 (no fix-one-run-again merry-go-round)', () => {
@@ -120,7 +120,7 @@ describe('ct-groom — the freeze gate (exit 2, before touching anything, under 
     const r = runGroom('nada de tabla aquí\n')
     expect(r.status).toBe(2)
     expect(r.stderr).toContain('## Hipótesis')
-    expect(r.stderr).toContain('tabla')
+    expect(r.stderr).toContain('table')
   })
 
   it('freezable spec → the gate does not fire and the dry-run prints its plan (exit 0)', () => {

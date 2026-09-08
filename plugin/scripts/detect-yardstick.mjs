@@ -53,7 +53,7 @@ try {
   entries = r.entradas
   truncated = r.truncated
 } catch (e) {
-  console.error(`no se ha podido barrer ${target}: ${e.message}`)
+  console.error(`could not sweep ${target}: ${e.message}`)
   process.exit(1)
 }
 

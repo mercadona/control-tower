@@ -63,14 +63,14 @@ describe('session-start hook', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     writeState(dir, INCIDENT)
     const ctx = JSON.parse(runHook(dir)).hookSpecificOutput.additionalContext
-    expect(ctx.split('\n')[0]).toMatch(/TRABAJO BLOQUEADO/)
-    expect(ctx).toMatch(/SUSPENDIDO/)
-    expect(ctx).toMatch(/No lo ejecutes/i)
+    expect(ctx.split('\n')[0]).toMatch(/WORK BLOCKED/)
+    expect(ctx).toMatch(/SUSPENDED/)
+    expect(ctx).toMatch(/Do not execute it/i)
     expect(ctx).toMatch(/escribiría datos falsos/)
     expect(ctx).toMatch(/corregir la §9 del spec/)
     // And the warning goes BEFORE the raw next_action: whoever reads top to
     // bottom meets the neutralisation first.
-    expect(ctx.indexOf('TRABAJO BLOQUEADO')).toBeLessThan(ctx.indexOf('Lanzar la corrida REAL'))
+    expect(ctx.indexOf('WORK BLOCKED')).toBeLessThan(ctx.indexOf('Lanzar la corrida REAL'))
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -80,7 +80,7 @@ describe('session-start hook', () => {
     expect(withoutBlocked).not.toContain('blocked:') // control: the field really was removed
     writeState(dir, withoutBlocked)
     const ctx = JSON.parse(runHook(dir)).hookSpecificOutput.additionalContext
-    expect(ctx).not.toMatch(/TRABAJO BLOQUEADO/)
+    expect(ctx).not.toMatch(/WORK BLOCKED/)
     expect(ctx).toMatch(/Lanzar la corrida REAL/) // it still hydrates just as always
     rmSync(dir, { recursive: true, force: true })
   })
@@ -89,8 +89,8 @@ describe('session-start hook', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     writeState(dir, '---\nstatus: blocked\nnext_action: "Lanzar la corrida REAL de /ct-groom"\n---\n## Current State\nx')
     const ctx = JSON.parse(runHook(dir)).hookSpecificOutput.additionalContext
-    expect(ctx.split('\n')[0]).toMatch(/TRABAJO BLOQUEADO/)
-    expect(ctx).toMatch(/SUSPENDIDO/)
+    expect(ctx.split('\n')[0]).toMatch(/WORK BLOCKED/)
+    expect(ctx).toMatch(/SUSPENDED/)
     expect(ctx).toMatch(/`blocked: \{reason:/)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -102,8 +102,8 @@ describe('session-start hook', () => {
     expect(r.status).toBe(0)
     expect(r.stderr).toBe('')
     const ctx = JSON.parse(r.stdout).hookSpecificOutput.additionalContext
-    expect(ctx).toMatch(/NO SE PUDO LEER/)
-    expect(ctx).toMatch(/posiblemente bloqueado/i)
+    expect(ctx).toMatch(/COULD NOT BE READ/)
+    expect(ctx).toMatch(/possibly blocked/i)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -111,8 +111,8 @@ describe('session-start hook', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     writeState(dir, '---\nverify: "`gh issue list` devuelve 6 issues"\n---\n## Current State\nx')
     const ctx = JSON.parse(runHook(dir)).hookSpecificOutput.additionalContext
-    expect(ctx).toMatch(/PENDIENTE/)
-    expect(ctx).toMatch(/no un hecho ya comprobado/i)
+    expect(ctx).toMatch(/PENDING/)
+    expect(ctx).toMatch(/not a fact already checked/i)
     rmSync(dir, { recursive: true, force: true })
   })
 

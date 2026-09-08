@@ -428,14 +428,14 @@ export function detectConventions({ docs = [], files = [], acks = null } = {}) {
   if (claimFiles.length || claimDocs.length) {
     findings.push({
       id: 'claim',
-      title: 'este repo ya tiene su PROPIO protocolo de claim',
+      title: 'this repo already has its OWN claim protocol',
       // The documentation lines go FIRST, ahead of the files: they are the
       // order the dispatched agent is going to read and obey, so they are the
       // evidence that decides. (The list is truncated when printing; that what
       // survives the cut be the important part is not a cosmetic detail.)
       evidence: [
         ...claimDocs,
-        ...claimFiles.map((p) => ({ path: p, line: null, text: 'script de claim propio del repo' })),
+        ...claimFiles.map((p) => ({ path: p, line: null, text: 'a claim script belonging to this repo' })),
       ],
       decision:
         'El plugin trae su propio `dispatch-check.mjs` y `/ct-next` lo invoca EN CÓDIGO ' +
@@ -463,20 +463,20 @@ export function detectConventions({ docs = [], files = [], acks = null } = {}) {
   if (foreignAdds.length || foreignWorktreeDirs.length || guardHooks.length) {
     findings.push({
       id: 'worktrees',
-      title: 'este repo ya tiene una convención de worktrees/ramas propia',
+      title: 'this repo already has a worktrees/branches convention of its own',
       evidence: [
         ...foreignAdds,
-        ...foreignWorktreeDirs.map((d) => ({ path: `${d}/`, line: null, text: 'directorio de worktrees propio del repo' })),
-        ...guardHooks.map((p) => ({ path: p, line: null, text: 'hook que vigila ramas/worktrees' })),
+        ...foreignWorktreeDirs.map((d) => ({ path: `${d}/`, line: null, text: 'a worktrees directory belonging to this repo' })),
+        ...guardHooks.map((p) => ({ path: p, line: null, text: 'a hook watching over branches/worktrees' })),
       ],
       decision:
-        `/ct-next crea cada slice en \`${LOOP_WORKTREE_DIR}/<n>\` sobre la rama ` +
-        `\`${LOOP_BRANCH_PREFIX}<n>\` (\`<n>\` = número de ISSUE), y esas dos rutas están fijadas en ` +
-        'el dispatcher: no son configurables. Si un hook del repo exige otra ruta o otro nombre de ' +
-        'rama, tumbará cada despacho DESPUÉS de que el claim ya esté escrito. Decide: ensancha el ' +
-        `hook para admitir \`${LOOP_WORKTREE_DIR}/\` y \`${LOOP_BRANCH_PREFIX}\`, o no uses /ct-next ` +
-        'en este repo. Y quita de AGENTS.md/CLAUDE.md la instrucción que mande la otra ruta: el ' +
-        'agente despachado la va a leer.',
+        `/ct-next creates every slice in \`${LOOP_WORKTREE_DIR}/<n>\` on the branch ` +
+        `\`${LOOP_BRANCH_PREFIX}<n>\` (\`<n>\` = the ISSUE number), and those two paths are fixed in ` +
+        'the dispatcher: they are not configurable. If a hook of this repo demands another path or ' +
+        'another branch name, it will knock down every dispatch AFTER the claim is already written. ' +
+        `Decide: widen the hook to admit \`${LOOP_WORKTREE_DIR}/\` and \`${LOOP_BRANCH_PREFIX}\`, or do ` +
+        'not use /ct-next in this repo. And take out of AGENTS.md/CLAUDE.md the instruction that ' +
+        'orders the other path: the dispatched agent is going to read it.',
     })
   }
 
@@ -487,16 +487,16 @@ export function detectConventions({ docs = [], files = [], acks = null } = {}) {
   if (foreignState.length) {
     findings.push({
       id: 'estado',
-      title: 'este repo ya tiene un fichero de estado fuera de `.agent/STATE.md`',
-      evidence: foreignState.map((p) => ({ path: p, line: null, text: 'fichero de estado propio del repo' })),
+      title: 'this repo already has a state file outside `.agent/STATE.md`',
+      evidence: foreignState.map((p) => ({ path: p, line: null, text: 'a state file belonging to this repo' })),
       decision:
-        'El loop entero está atado a DOS rutas fijas, con papeles distintos: `.agent/STATE.md` es ' +
-        'el estado de la sesión coordinadora del checkout principal (trackeado), y ' +
-        '`.agent/SLICE.md` el del slice despachado, que /ct-next siembra dentro de cada worktree ' +
-        '(ignorado, nunca commiteado). El hook de SessionStart hidrata del SLICE.md si existe y ' +
-        'del STATE.md si no, y el campo `blocked` solo se lee de esos dos. Un tercer fichero de ' +
-        'estado no lo mira nadie, y con dos a la vez nadie sabrá cuál es el vigente. Decide cuál ' +
-        'es la fuente de verdad y deja el otro como histórico (o bórralo).',
+        'The whole loop is tied to TWO fixed paths, with different roles: `.agent/STATE.md` is ' +
+        'the state of the coordinating session of the main checkout (tracked), and ' +
+        '`.agent/SLICE.md` that of the dispatched slice, which /ct-next seeds inside each worktree ' +
+        '(ignored, never committed). The SessionStart hook hydrates from SLICE.md if it exists and ' +
+        'from STATE.md if not, and the `blocked` field is only read from those two. A third state ' +
+        'file is looked at by nobody, and with two at once nobody will know which one is current. ' +
+        'Decide which one is the source of truth and leave the other as historical (or delete it).',
     })
   }
 
@@ -777,10 +777,10 @@ export function formatFindings(findings, { where = 'este repo', ackProblems = []
     // wall again: the real repo had already taken the correct decision and the
     // detector went on flagging it.
     out.push(
-      `  Si una de estas señales YA está decidida y no la vas a cambiar, escríbelo en \`${ACK_PATH}\` — una ` +
-        'línea por señal, con la fecha y el motivo:'
+      '  If one of these signals is ALREADY decided and you are not going to change it, write it down ' +
+        `in \`${ACK_PATH}\` — one line per signal, with the date and the reason:`
     )
-    out.push(`      ${live[0].id}: 2026-01-31 — <qué se decidió y por qué>`)
+    out.push(`      ${live[0].id}: 2026-01-31 — <what was decided and why>`)
     out.push(
       '  Esa señal —y solo esa— deja de avisar; las demás siguen. No hace falta borrar documentación ' +
         'correcta para callar el warning: si lo que documentas es el uso manual fuera del loop, acúsalo y ya.'

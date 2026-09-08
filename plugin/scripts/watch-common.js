@@ -47,7 +47,7 @@ export function plazo(name, fallback) {
   if (raw == null || raw === '') return fallback
   const v = parseStrictInt(raw)
   if (v == null || v <= 0) {
-    process.stderr.write(`${name} inválido: "${raw}" — debe ser un número de milisegundos mayor que 0.\n`)
+    process.stderr.write(`${name} invalid: "${raw}" — it must be a number of milliseconds greater than 0.\n`)
     process.exit(2)
   }
   return v
@@ -72,7 +72,7 @@ export function openLog(logPath) {
       mkdirSync(dirname(logPath), { recursive: true })
       fd = openSync(logPath, 'a')
     } catch (e) {
-      process.stderr.write(`warning: no se pudo abrir el log ${logPath} (${e.message}) — se vigila igual, sin rastro en disco\n`)
+      process.stderr.write(`warning: could not open the log ${logPath} (${e.message}) — the watch goes on anyway, with no trace on disk\n`)
     }
   }
   const log = (msg) => {

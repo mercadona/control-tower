@@ -216,7 +216,7 @@ const consultarCoordinadora = () => {
 // exactly what F20 refused to assume.
 const line = (pr) => `El PR #${pr} del slice #${issue} está mergeado: la cosecha del #${issue} está pendiente. \`.worktrees/${issue}\` y la rama \`${branch}\` siguen en disco. Comprueba que no queda trabajo sin pushear y recógelos.`
 
-log(`vigilando el merge de ${repo} ${branch} (slice #${issue}) para la coordinadora en ${coordinatorCwd} — tick ${pollMs} ms, plazo ${timeoutMs} ms`)
+log(`watching the merge of ${repo} ${branch} (slice #${issue}) for the coordinator in ${coordinatorCwd} — tick ${pollMs} ms, deadline ${timeoutMs} ms`)
 
 // There is no initial snapshot to take, and that asymmetry with ct-watch-go is
 // real, not an oversight. There the window exists because an `-OK` inherited
@@ -231,7 +231,7 @@ const deadline = Date.now() + timeoutMs
 for (;;) {
   const pr = readMergedPr()
   if (pr) {
-    log(`${branch} mergeado en el PR #${pr.number}${pr.mergedAt ? ` (${pr.mergedAt})` : ''}`)
+    log(`${branch} merged in PR #${pr.number}${pr.mergedAt ? ` (${pr.mergedAt})` : ''}`)
     const { consultado, ref } = consultarCoordinadora()
     if (ref) {
       try {
