@@ -471,9 +471,15 @@ node --input-type=module -e 'import {readFileSync} from "node:fs"; const b=JSON.
    `gh auth status` reports `Git operations protocol: ssh` on this machine. A repo reached over
    HTTPS, or a git remote that is not GitHub, would read `missing` while working fine.
    *Provenance: own call, from the tree and the machine.*
-5. **The probe of `git` costs a network round trip** to `github.com` on every request, bounded by
-   `ConnectTimeout=10` and the runner's 30 s budget. Accepted because the endpoint is asked once,
-   by a human, before starting work. *Provenance: own call.*
+5. **The probes cost a network round trip and run sequentially.** `git`'s reaches `github.com` on
+   every request. The bound is not one budget: the four probes run one after another, each client
+   carrying the entrypoint's 30 s cap and up to 3 retries at 2 s, so a pathological request is
+   minutes, not seconds — a blip is what the retry policy is for, and a hang is what the cap is
+   for, but they compose. Accepted because the endpoint is asked once, by a human, before starting
+   work; the number to revisit first if that ever stops being true is the retry count, since a
+   readiness probe has less use for one than a plan-starting call does. *Provenance: own call,
+   corrected by the final whole-branch review, which did the arithmetic the first version of this
+   assumption did not.*
 6. **`unknown` does not block.** Otherwise `claude` would make `ready` permanently `false` and the
    verdict would carry no information. The repo already refuses that collapse in `ct-next.mjs`,
    which warns about the agent binary instead of failing. *Provenance: repo convention.*
@@ -483,5 +489,23 @@ node --input-type=module -e 'import {readFileSync} from "node:fs"; const b=JSON.
    consumer, which `plugin/conventions/simplicity.md` refuses. The Result stays, because it
    carries the `ready` rule. *Provenance: own call, against the habit, on a rule.*
 8. **The README row stays in Spanish.** That document is Spanish; only the endpoint is added, so
-   the rest of the line is byte-identical. The two rows added to `domain.md` are English, like
-   every other row of that table. *Provenance: own call.*
+   the rest of the line is byte-identical. The two rows added to the conventions document are
+   English, like every other row of that table. *Provenance: own call.*
+9. **A `fix` presupposes the binaries.** Two states carry a login command that cannot run as
+   written: a tool absent from `PATH` (`installed: false`, and the `fix` still names its login),
+   and a tool whose *probe* binary is absent — `bq` present with no `gcloud` reads
+   `{ installed: true, session: 'missing', fix: 'gcloud auth login && …' }`, because `ToolRunner`
+   turns an ENOENT into an exit code like any other failure. The row is still true about the
+   credential, and `installed` answers the other half; declared on the `Tool session` row of
+   `backend/conventions/this-repository.md`. The alternative — reading `unknown` when the probe
+   binary cannot be found, since `unknown` is exactly "we could not look" and does not block — is
+   the better answer and was left out of this slice deliberately: it is a behaviour change arriving
+   after the branch was reviewed. *Provenance: final whole-branch review; deferred by own call.*
+10. **The reading of a probe dispatches on the probe binary's name with a fall-through.**
+   `gh` and `acli` fall through to "exit 0 ⇒ ready", and only `ssh` and `gcloud` are named.
+   `plugin/conventions/defects.md` calls a catch-all over a closed vocabulary an antipattern, and
+   this backend owns a `Projection` built so an unmapped member raises. A sixth row would inherit
+   the exit-code reading silently. Carried, not fixed: §7 closed this shape on purpose ("not
+   derivable from the table"), and a reader per row is a design change worth its own slice rather
+   than a late edit to a reviewed branch. *Provenance: final whole-branch review; carried by own
+   call.*
