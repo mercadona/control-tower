@@ -6,6 +6,7 @@ import { openHome, startPlan, streamFrame } from './helpers'
 
 const IMPLEMENT_BUTTON = { name: 'Implementar plan' }
 const NO_ACTIVE_PLANS = { status: 200, body: '{"plans":[]}' }
+const EXTERNAL_TOOLS_READY = { status: 200, body: '{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}' }
 const IMPLEMENTING = { status: 202, body: '{"status":"implementing","agent":"workspace:4","issue":7}' }
 
 const responseFor = (answer: { status: number; body: string }) => new Response(answer.body, { status: answer.status })
@@ -25,7 +26,10 @@ const activePlanImplementing = (root?: string) => ({
 })
 
 const stubFetchByPath = (byPath: (url: string) => { status: number; body: string }) => {
-  const fetching = vi.fn(async (input: string | URL | Request) => responseFor(byPath(String(input))))
+  const fetching = vi.fn(async (input: string | URL | Request) => {
+    if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
+    return responseFor(byPath(String(input)))
+  })
   vi.stubGlobal('fetch', fetching)
 
   return fetching
@@ -87,6 +91,8 @@ describe('Home · implement progress', () => {
 
     expect(await screen.findByText(/Tarea 3 de 7/)).toBeInTheDocument()
     expect(screen.getByText(/el lector del plan/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Implementación' })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Flujo del plan' }).querySelector('[aria-current="step"]')).toHaveTextContent('Implementación')
   })
 
   it('should not claim the agent is implementing once the review is the real step', async () => {
@@ -117,7 +123,7 @@ describe('Home · implement progress', () => {
 
     expect(await screen.findByText(/Tarea 3 de 7/)).toBeInTheDocument()
     expect(screen.getByText('Agente asignado')).toBeInTheDocument()
-    expect(screen.getByText(StartPlanMother.AGENT)).toBeInTheDocument()
+    expect(screen.getAllByText(StartPlanMother.AGENT)).not.toHaveLength(0)
   })
 
   it('should stop polling once the page is left', async () => {

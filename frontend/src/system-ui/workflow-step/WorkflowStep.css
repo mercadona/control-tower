@@ -1,4 +1,5 @@
 .workflow-step {
+  container-type: inline-size;
   box-sizing: border-box;
   width: 100%;
   overflow: hidden;
@@ -55,6 +56,12 @@
   overflow-wrap: anywhere;
 }
 
+.workflow-step__subtitle {
+  display: block;
+  color: var(--foreground-secondary);
+  font-weight: 400;
+}
+
 .workflow-step__status {
   color: var(--foreground-secondary);
 }
@@ -104,7 +111,7 @@
   border-color: var(--border-secondary);
 }
 
-@media (width <= 480px) {
+@container (width < 768px) {
   .workflow-step__header {
     grid-template-columns: var(--size-icon-md) minmax(0, 1fr) var(--size-icon-sm);
   }

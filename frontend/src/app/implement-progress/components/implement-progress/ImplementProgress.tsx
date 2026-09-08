@@ -31,6 +31,11 @@ type ImplementProgressProps = {
 
 const ImplementProgress = ({ issue, root, repo }: ImplementProgressProps) => {
   const progress = useImplementProgress(issue, root, repo)
+  const taskProgress = progress.phase === 'progress' && progress.task !== null
+    ? progress.totalTasks === null
+      ? `Tarea ${progress.task}`
+      : `Tarea ${progress.task} de ${progress.totalTasks}`
+    : null
 
   return (
     <section className="implement-progress" aria-label="Progreso de la implementación">
@@ -41,17 +46,30 @@ const ImplementProgress = ({ issue, root, repo }: ImplementProgressProps) => {
         <p className="implement-progress__state" role="status">{WAITING_MESSAGE}</p>
       )}
       {progress.phase === 'progress' && (
-        <p className="implement-progress__state" role="status" aria-live="polite">
-          {STEP_LABELS[progress.step]}
-          {progress.task !== null && progress.totalTasks !== null && ` · Tarea ${progress.task} de ${progress.totalTasks}`}
-          {progress.name !== null && ` · ${progress.name}`}
-          {progress.attempt !== null && ` · Intento ${progress.attempt}`}
-          {progress.discards !== null && ` · Descartes: ${progress.discards}`}
-        </p>
+        <div className="implement-progress__hierarchy">
+          <p className="implement-progress__stage lg-body-medium" role="status" aria-live="polite">
+            {STEP_LABELS[progress.step]}
+          </p>
+          {taskProgress !== null && <p className="implement-progress__task">{taskProgress}</p>}
+          {progress.totalTasks !== null && progress.task === null && (
+            <p className="implement-progress__task">{progress.totalTasks} tareas previstas</p>
+          )}
+          {progress.name !== null && <p className="implement-progress__task-name">{progress.name}</p>}
+          {progress.attempt !== null && (
+            <p className="implement-progress__diagnostics">
+              {'Intento '}{progress.attempt}
+            </p>
+          )}
+          {progress.discards !== null && (
+            <p className="implement-progress__diagnostics">
+              Diagnóstico: descartes {progress.discards}
+            </p>
+          )}
+        </div>
       )}
       {progress.phase === 'progress' && progress.pullRequest !== null && (
-        <p className="implement-progress__facts">
-          Pull request{' '}
+        <p className="implement-progress__facts implement-progress__facts--pr lg-body-medium">
+          Pull request abierta: {' '}
           <a href={progress.pullRequest.url} target="_blank" rel="noreferrer">
             #{progress.pullRequest.number}
           </a>

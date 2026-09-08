@@ -11,3 +11,22 @@
 .implement-progress__facts {
   margin: 0;
 }
+
+.implement-progress__hierarchy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.implement-progress__hierarchy p {
+  margin: 0;
+}
+
+.implement-progress__stage,
+.implement-progress__facts--pr {
+  color: var(--foreground-primary);
+}
+
+.implement-progress__diagnostics {
+  color: var(--foreground-secondary);
+}

@@ -16,10 +16,9 @@ describe('ImplementProgress', () => {
 
     renderProgress()
 
-    const status = await screen.findByText(/Tarea 3 de 7/)
-    expect(status).toHaveAttribute('role', 'status')
-    expect(status).toHaveTextContent('el lector del plan')
-    expect(status).toHaveTextContent('Intento 2')
+    expect(await screen.findByText(/Tarea 3 de 7/)).toBeInTheDocument()
+    expect(screen.getByText('el lector del plan')).toBeInTheDocument()
+    expect(screen.getByText('Intento 2')).toBeInTheDocument()
   })
 
   it('should show a task without a name instead of the word null', async () => {
@@ -29,6 +28,27 @@ describe('ImplementProgress', () => {
 
     const status = await screen.findByText(/Tarea 1 de 8/)
     expect(status).not.toHaveTextContent('null')
+  })
+
+  it('shows independently supplied progress fields without an empty diagnostic', async () => {
+    answerWith({
+      status: 200,
+      body: JSON.stringify({
+        step: 'implement',
+        task: null,
+        total_tasks: 4,
+        name: 'Preparar cambios',
+        attempt: 2,
+        discards: null,
+      }),
+    })
+
+    renderProgress()
+
+    expect(await screen.findByText('4 tareas previstas')).toBeInTheDocument()
+    expect(screen.getByText('Preparar cambios')).toBeInTheDocument()
+    expect(screen.getByText('Intento 2')).toBeInTheDocument()
+    expect(screen.queryByText(/^Diagnóstico:/)).toBeNull()
   })
 
   it('should show a worktree without a run yet as a wait, not an error', async () => {

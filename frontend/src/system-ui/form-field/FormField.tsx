@@ -1,11 +1,11 @@
 import classNames from 'classnames'
 import { cloneElement, HTMLAttributes, ReactElement, ReactNode, useId } from 'react'
-import { InputProps, InputSize } from 'system-ui/input'
+import { InputSize } from 'system-ui/input'
 import './FormField.css'
 
 interface FormFieldProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
   label: ReactNode
-  children: ReactElement<InputProps>
+  children: ReactElement<{ id?: string; size?: InputSize; invalid?: boolean; success?: boolean; required?: boolean; 'aria-describedby'?: string }>
   message?: ReactNode
   error?: boolean
   success?: boolean

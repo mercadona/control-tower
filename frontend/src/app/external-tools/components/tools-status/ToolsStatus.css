@@ -1,0 +1,61 @@
+.tools-status {
+  position: relative;
+  max-width: min(520px, 50vw);
+}
+
+.tools-status__summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tools-status__summary strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tools-status__summary > button {
+  flex-shrink: 0;
+}
+
+.tools-status__dot {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: var(--foreground-disabled);
+}
+
+.tools-status__dot--ready {
+  background: var(--foreground-success);
+}
+
+.tools-status__dot--attention,
+.tools-status__dot--unknown {
+  background: var(--foreground-danger);
+}
+
+.tools-status__details {
+  position: absolute;
+  inset-block-start: calc(100% + 16px);
+  inset-inline-end: 0;
+  z-index: var(--z-dropdown);
+  box-sizing: border-box;
+  width: min(360px, calc(100vw - 32px));
+  max-height: calc(100dvh - 104px);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: 16px;
+  color: var(--foreground-secondary);
+  background: var(--background-elevated);
+  border: var(--borderwidth-sm) solid var(--border-secondary);
+  border-radius: var(--shape-button-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.tools-status__details p,
+.tools-status__details ul {
+  margin: 0 0 12px;
+}

@@ -19,13 +19,14 @@ describe('Home · start plan', () => {
     vi.unstubAllGlobals()
   })
 
-  it('should keep the active request expanded when its header is clicked', async () => {
-    const { user } = openHome()
+  it('shows the request as the current first stage', () => {
+    openHome()
 
-    await user.click(screen.getByRole('button', { name: /Solicitud Activo/ }))
-
-    expect(screen.getByRole('button', { name: /Solicitud Activo/ })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('button', { name: /Solicitud Activo/ })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('heading', { name: 'Solicitud' })).toBeInTheDocument()
+    const current = screen.getByRole('navigation', { name: 'Flujo del plan' }).querySelector('[aria-current="step"]')
+    expect(current).toHaveTextContent('1')
+    expect(current).toHaveTextContent('Solicitud')
+    expect(current).toHaveTextContent('En curso')
   })
 
   it('should show the plan the backend started with a link to its issue', async () => {
@@ -75,8 +76,8 @@ describe('Home · start plan', () => {
 
     await screen.findByRole('alert')
     expect(screen.getByLabelText('Clave del ticket')).toBeEnabled()
-    expect(screen.getByLabelText('Repositorio')).toBeEnabled()
-    expect(screen.getByLabelText('Ruta local')).toBeEnabled()
+    expect(screen.getByLabelText(/Repositorio/)).toBeEnabled()
+    expect(screen.getByLabelText(/Ruta local/)).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeEnabled()
   })
 
@@ -116,7 +117,7 @@ describe('Home · start plan', () => {
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ plans: [active] }), { status: 200 }))
-    vi.stubGlobal('fetch', fetching)
+    vi.stubGlobal('fetch', (input: string | URL | Request) => input === '/external-tools' ? new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}') : fetching(input))
     const { user } = openHome()
     await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
 
@@ -134,7 +135,7 @@ describe('Home · start plan', () => {
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(new Response('', { status: 503 }))
-    vi.stubGlobal('fetch', fetching)
+    vi.stubGlobal('fetch', (input: string | URL | Request) => input === '/external-tools' ? new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}') : fetching(input))
     const { user } = openHome()
     await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
 
@@ -150,7 +151,7 @@ describe('Home · start plan', () => {
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-    vi.stubGlobal('fetch', fetching)
+    vi.stubGlobal('fetch', (input: string | URL | Request) => input === '/external-tools' ? new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}') : fetching(input))
     const { user } = openHome()
     await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
 
@@ -168,7 +169,7 @@ describe('Home · start plan', () => {
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-    vi.stubGlobal('fetch', fetching)
+    vi.stubGlobal('fetch', (input: string | URL | Request) => input === '/external-tools' ? new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}') : fetching(input))
     const { user } = openHome()
     await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
 
@@ -187,7 +188,7 @@ describe('Home · start plan', () => {
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-    vi.stubGlobal('fetch', fetching)
+    vi.stubGlobal('fetch', (input: string | URL | Request) => input === '/external-tools' ? new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}') : fetching(input))
     const { user } = openHome()
     await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
 
@@ -198,8 +199,8 @@ describe('Home · start plan', () => {
     expect(screen.queryByRole('alert')).toBeNull()
     expect(screen.getByLabelText('Clave del ticket')).toBeEnabled()
     expect(screen.getByLabelText('Clave del ticket')).toHaveValue('')
-    expect(screen.getByLabelText('Repositorio')).toHaveValue('')
-    expect(screen.getByLabelText('Ruta local')).toHaveValue('')
+    expect(screen.getByLabelText(/Repositorio/)).toHaveValue('')
+    expect(screen.getByLabelText(/Ruta local/)).toHaveValue('')
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
   })
 
@@ -226,7 +227,7 @@ describe('Home · start plan', () => {
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
     await typeRepository(user, 'name')
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
-    await user.clear(screen.getByLabelText('Repositorio'))
+    await user.clear(screen.getByLabelText(/Repositorio/))
     await typeRepository(user, 'owner/name')
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeEnabled()
   })
@@ -240,7 +241,7 @@ describe('Home · start plan', () => {
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
     await typePath(user, '   ')
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
-    await user.clear(screen.getByLabelText('Ruta local'))
+    await user.clear(screen.getByLabelText(/Ruta local/))
     await typePath(user, StartPlanMother.PATH)
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeEnabled()
   })
@@ -259,6 +260,7 @@ describe('Home · start plan', () => {
     expect(init.body).toBe(StartPlanMother.REQUEST_BODY)
     expect(WorkflowSnapshotStorage.load()?.request).toEqual({
       id: StartPlanMother.TICKET,
+      userComment: null,
       repo: StartPlanMother.REPO,
       path: StartPlanMother.PATH,
     })
@@ -342,8 +344,8 @@ describe('Home · start plan', () => {
 
     await user.dblClick(screen.getByRole('button', { name: 'Arrancar plan' }))
 
-    expect(fetch).toHaveBeenCalledTimes(2)
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(backend.fetching.mock.calls.filter(([input]) => input === '/start-plan')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: /Enviando solicitud/ })).toBeDisabled()
     await backend.answerWith(StartPlanMother.started())
   })
 
@@ -408,7 +410,7 @@ describe('Home · start plan', () => {
     await screen.findByRole('status')
     await user.click(screen.getByRole('button', { name: /Solicitud Completado/ }))
     expect(screen.queryByText('Ticket')).toBeNull()
-    expect(screen.getByText('Comentario').parentElement).toHaveTextContent(StartPlanMother.COMMENT)
+    expect(screen.getByText('Qué quieres planificar').parentElement).toHaveTextContent(StartPlanMother.COMMENT)
 
     const stored = WorkflowSnapshotStorage.load() as WorkflowSnapshot
     expect(stored.request.id).toBeNull()

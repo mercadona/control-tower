@@ -6,6 +6,7 @@ type WorkflowStepStatus = 'completed' | 'active' | 'pending'
 
 interface WorkflowStepProps extends Omit<HTMLAttributes<HTMLElement>, 'title'> {
   title: ReactNode
+  subtitle?: ReactNode
   status: WorkflowStepStatus
   children: ReactNode
   isExpanded: boolean
@@ -29,6 +30,7 @@ const STATUS_LABEL: Record<WorkflowStepStatus, string> = {
 
 const WorkflowStep = ({
   title,
+  subtitle,
   status,
   children,
   isExpanded,
@@ -67,6 +69,7 @@ const WorkflowStep = ({
         </span>
         <span id={titleId} className="workflow-step__title lg-body-medium">
           {title}
+          {subtitle !== undefined && <span className="workflow-step__subtitle lg-caption1-regular">{subtitle}</span>}
         </span>
         <span className="workflow-step__status lg-caption1-regular">{STATUS_LABEL[status]}</span>
         <svg viewBox="0 0 16 16" className="workflow-step__chevron" aria-hidden="true" focusable="false">

@@ -53,13 +53,29 @@ describe('Home · implement plan', () => {
     expect(screen.getByRole('button', IMPLEMENT_BUTTON)).toBeEnabled()
   })
 
-  it('should close active implementation when reopening the completed plan', async () => {
+  it('keeps a ready plan in review with its issue link until implementation succeeds', async () => {
+    await planStarted()
+    await streamFrame(PlanEventsMother.ready())
+
+    const current = screen.getByRole('navigation', { name: 'Flujo del plan' }).querySelector('[aria-current="step"]')
+    expect(current).toHaveTextContent('Revisar plan')
+    expect(screen.getByRole('link', { name: 'Abrir el plan en GitHub' })).toHaveAttribute('href', StartPlanMother.ISSUE.url)
+    expect(screen.getByRole('button', IMPLEMENT_BUTTON)).toBeEnabled()
+    expect(screen.queryByRole('heading', { name: 'Implementación' })).toBeNull()
+  })
+
+  it('keeps implementation current when reopening the completed review summary with the keyboard', async () => {
     const { user } = await planReady()
+    backendAnswering(ImplementPlanMother.implementing())
+    await pressImplement(user)
+    await screen.findByText('Agente asignado')
 
-    await user.click(screen.getByRole('button', { name: /Plan Completado/ }))
+    const reviewSummary = screen.getByRole('button', { name: /Revisar plan.*Completado/ })
+    reviewSummary.focus()
+    await user.keyboard('{Enter}')
 
-    expect(screen.getByRole('button', { name: /Plan Completado/ })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('button', { name: /Implementación Activo/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(reviewSummary).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('navigation', { name: 'Flujo del plan' }).querySelector('[aria-current="step"]')).toHaveTextContent('Implementación')
   })
 
   it('should send exactly the payload the backend contract declares', async () => {
@@ -88,7 +104,7 @@ describe('Home · implement plan', () => {
     expect(status).not.toBeNull()
     expect(status).toHaveTextContent(ImplementPlanMother.AGENT)
     expect(screen.queryByRole('button', IMPLEMENT_BUTTON)).toBeNull()
-    expect(screen.getByRole('button', { name: /Implementación Activo/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('navigation', { name: 'Flujo del plan' }).querySelector('[aria-current="step"]')).toHaveTextContent('Implementación')
   })
 
   it('should show the backend refusal text as it came and keep offering the button', async () => {
@@ -145,8 +161,8 @@ describe('Home · implement plan', () => {
     expect(oldStream.closes).toBe(1)
     expect(localStorage).toHaveLength(0)
     expect(screen.getByLabelText('Clave del ticket')).toHaveValue('')
-    expect(screen.getByLabelText('Repositorio')).toHaveValue('')
-    expect(screen.getByLabelText('Ruta local')).toHaveValue('')
+    expect(screen.getByLabelText(/Repositorio/)).toHaveValue('')
+    expect(screen.getByLabelText(/Ruta local/)).toHaveValue('')
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
     expect(fetching).not.toHaveBeenCalled()
 

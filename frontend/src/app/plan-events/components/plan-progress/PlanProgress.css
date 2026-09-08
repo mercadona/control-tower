@@ -12,7 +12,35 @@
   margin: 0;
 }
 
-.plan-progress__facts code {
+.plan-progress__facts code,
+.plan-progress__details code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   overflow-wrap: break-word;
+}
+
+.plan-progress__details {
+  margin-top: 8px;
+}
+
+.plan-progress__details summary {
+  cursor: pointer;
+}
+
+.plan-progress__details dl {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.plan-progress__details dt {
+  color: var(--foreground-secondary);
+}
+
+.plan-progress__details dd {
+  margin: 2px 0 0;
+}
+
+.plan-progress__copy-result {
+  margin: 0;
+  color: var(--foreground-secondary);
 }
