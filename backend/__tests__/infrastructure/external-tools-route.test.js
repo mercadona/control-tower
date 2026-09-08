@@ -16,6 +16,10 @@ class SurveySpy {
   static CLAUDE_UNKNOWN = new ToolSession({
     tool: 'claude', installed: true, state: SessionState.UNKNOWN, fix: 'claude, then /login',
   })
+  static GIT_NOT_INSTALLED = new ToolSession({
+    tool: 'git', installed: false, state: SessionState.MISSING,
+    fix: 'add an SSH key to your GitHub account',
+  })
 
   constructor(sessions) {
     this.asked = 0
@@ -30,8 +34,8 @@ class SurveySpy {
     return new SurveySpy([SurveySpy.GH_READY])
   }
 
-  static answeringAnUnknownAndAMissingTool() {
-    return new SurveySpy([SurveySpy.CLAUDE_UNKNOWN, SurveySpy.BQ_MISSING])
+  static answeringAnUnknownAndAnUninstalledTool() {
+    return new SurveySpy([SurveySpy.CLAUDE_UNKNOWN, SurveySpy.GIT_NOT_INSTALLED])
   }
 
   async execute() {
@@ -117,11 +121,12 @@ describe('ExternalToolsRoute', () => {
   })
 
   it('the_verdict_is_false_when_one_tool_blocks', async () => {
-    const { response } = await RunningApi.asking(SurveySpy.answeringAnUnknownAndAMissingTool())
+    const { response } = await RunningApi.asking(SurveySpy.answeringAnUnknownAndAnUninstalledTool())
 
     const body = await response.json()
 
     expect(body.ready).toBe(false)
+    expect(body.tools.find((row) => row.tool === 'git').installed).toBe(false)
   })
 
   it('a_post_is_refused_with_405_and_allow_get_without_asking_the_use_case', async () => {

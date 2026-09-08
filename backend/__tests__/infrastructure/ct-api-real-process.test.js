@@ -100,6 +100,20 @@ describe('ct-api entrypoint', () => {
     expect(port).toBeGreaterThan(0)
   })
 
+  it('a_whole_request_to_external_tools_reaches_every_probe_client_the_entrypoint_wired_up', async () => {
+    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+
+    const response = await fetch(`http://127.0.0.1:${port}/external-tools`)
+
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.tools.map((row) => row.tool)).toEqual(['gh', 'acli', 'claude', 'git', 'bq'])
+    expect(body.tools.every((row) => ['ready', 'missing', 'unknown'].includes(row.session))).toBe(true)
+    const claude = body.tools.find((row) => row.tool === 'claude')
+    expect(claude.session).toBe('unknown')
+    expect(claude.fix).toBe('claude, then /login — not observable from this process')
+  })
+
   it('a_whole_request_reaches_acli_so_a_typo_in_the_key_that_wires_the_user_stories_would_show_up_here_and_not_only_in_the_first_real_use', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })
 
