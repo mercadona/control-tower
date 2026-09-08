@@ -20,3 +20,7 @@ plugin/scripts/experiments/*-results/
 # ensucia `git status` en cada sesión — dos de ellas convivían sin trackear a la
 # vez que se escribía esto.
 .DS_Store
+.worktrees/
+.agent/SLICE.md
+.agent/run-*.json
+.agent/run-*/
