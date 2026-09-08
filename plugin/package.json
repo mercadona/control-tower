@@ -1,6 +1,7 @@
 {
   "name": "control-tower-loop",
   "version": "0.57.0",
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=24"
