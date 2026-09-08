@@ -63,18 +63,32 @@ export const CMUX_QUERY_TIMEOUT_MS = 5000
 // un array vacío — indistinguible, antes de esta guarda, de "cmux respondió y de
 // verdad no hay ninguna sesión". Eso degradaba CADA staleness-check a un falso
 // "abandonado" y CADA verificación de lanzamiento a un falso "not-found", ambos
-// ruidosos. `sawAnyWorkspaceEntry`/`sawAnyRecognizedTitle` distinguen las dos
+// ruidosos. `sawAnyWorkspaceEntry`/`sawAnyKnownTitleField` distinguen las dos
 // causas de "cero resultados": si hubo entradas de verdad (`parsed.workspaces`
-// no vacío) pero NINGUNA tenía el campo esperado, es mucho más probable un
+// no vacío) pero en NINGUNA se reconocía el campo, es mucho más probable un
 // cambio de esquema que "cero sesiones de verdad" — se trata como NO
 // CONCLUYENTE. Si nunca hubo ninguna entrada en ninguna ventana (el caso normal
 // y esperado de "no hay nada abierto"), sigue siendo un `[]` con toda confianza.
+//
+// LO QUE "RECONOCER EL CAMPO" NO PUEDE SIGNIFICAR. La primera versión de esta
+// guarda exigía una CADENA, y con eso se comió el caso más común que existe:
+// una terminal de cmux sin título puesto trae `custom_title: null` (con su
+// `has_custom_title: false` al lado). O sea que cualquiera con una terminal
+// abierta y ningún plan en marcha —el arranque normal, incluido el de quien
+// lanza el backend DESDE cmux— caía en "hubo entradas y ninguna con título" y
+// se llevaba un NO CONCLUYENTE: `GET /active-plans` respondía 503
+// `active-plans-recovery-inconclusive` y el front plantaba "No se puede saber
+// qué hay en marcha" antes de poder hacer nada. La guarda contra la falsa
+// certeza se había convertido en una falsa incertidumbre PERMANENTE, que es el
+// mismo pecado por el otro lado. La línea correcta no es cadena-vs-resto, es
+// campo PRESENTE (cadena o `null`: cmux ha contestado) vs campo AUSENTE
+// (`undefined`: no sabemos si nos entendemos con este esquema).
 //
 // D5, hallazgo B — la guarda de arriba cubría `custom_title` y NADA MÁS:
 // `current_directory` se leía a pelo (`ws.current_directory ?? null`) y luego se
 // comparaba con igualdad ESTRICTA contra el worktree esperado. Si cmux
 // renombrara SOLO ese campo (el título seguiría reconociéndose, así que
-// `sawAnyRecognizedTitle` no salvaría nada), cada `cwd` sería `null`,
+// `sawAnyKnownTitleField` no salvaría nada), cada `cwd` sería `null`,
 // `null !== <worktree>` y CADA lanzamiento correcto se clasificaría como
 // 'wrong-cwd' — es decir, exactamente la falsa alarma que la guarda de
 // `custom_title` existe para evitar, y además con consecuencia de exit code:
@@ -96,7 +110,7 @@ export function listCmuxWorkspaces({
     const windows = JSON.parse(run(['list-windows', '--json'], timeoutMs))
     const out = []
     let sawAnyWorkspaceEntry = false
-    let sawAnyRecognizedTitle = false
+    let sawAnyKnownTitleField = false
     for (const w of (Array.isArray(windows) ? windows : [])) {
       if (!w || !w.id) continue
       try {
@@ -104,8 +118,15 @@ export function listCmuxWorkspaces({
         const workspaces = Array.isArray(parsed.workspaces) ? parsed.workspaces : []
         for (const ws of workspaces) {
           sawAnyWorkspaceEntry = true
+          // El campo se da por CONOCIDO tanto si trae una cadena como si trae
+          // `null`: `null` es cmux diciendo "esta workspace no tiene título
+          // puesto" (lo corrobora su `has_custom_title: false`), y eso es una
+          // respuesta, no una laguna. El rename que esta guarda vigila deja el
+          // campo AUSENTE (`undefined`), y sólo eso sigue siendo no concluyente.
+          if (ws && (typeof ws.custom_title === 'string' || ws.custom_title === null)) {
+            sawAnyKnownTitleField = true
+          }
           if (ws && typeof ws.custom_title === 'string') {
-            sawAnyRecognizedTitle = true
             const cwdKnown = typeof ws.current_directory === 'string'
             // F20/H1: `ref` (p.ej. "workspace:97") es el handle que acepta
             // `cmux send --workspace`. Se degrada a `null` con el MISMO
@@ -124,7 +145,7 @@ export function listCmuxWorkspaces({
         if (requireComplete) return null
       }
     }
-    if (sawAnyWorkspaceEntry && !sawAnyRecognizedTitle) return null
+    if (sawAnyWorkspaceEntry && !sawAnyKnownTitleField) return null
     return out
   } catch {
     return null // cmux no instalado, daemon caído, o timeout: no concluyente.
