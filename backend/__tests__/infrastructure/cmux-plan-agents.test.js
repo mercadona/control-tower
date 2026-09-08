@@ -278,7 +278,7 @@ describe('CmuxPlanAgents', () => {
 
     expect(cmux.written).toEqual([[CmuxDouble.LAUNCHER, buildLauncherScript({
       sentinelPath: CmuxDouble.SENTINEL,
-      agentCommand: `${CmuxPlanAgents.AGENT} ${shQuote(CmuxDouble.ERRAND)}`,
+      agentCommand: `${CmuxPlanAgents.AGENT} --model ${CmuxPlanAgents.MODEL} ${shQuote(CmuxDouble.ERRAND)}`,
       agentBin: CmuxPlanAgents.AGENT,
       issue: 42,
       worktree: CmuxDouble.WORKTREE,
@@ -302,7 +302,16 @@ describe('CmuxPlanAgents', () => {
     expect(cmux.brief.asked).toEqual([
       { issue: CmuxDouble.ISSUE, repository: CmuxDouble.REPOSITORY },
     ])
-    expect(cmux.written[0][1]).toContain(`claude ${shQuote(CmuxDouble.ERRAND)}`)
+    expect(cmux.written[0][1]).toContain(`claude --model opus ${shQuote(CmuxDouble.ERRAND)}`)
+  })
+
+  it('the_session_it_opens_names_the_model_so_the_plan_never_rides_on_whatever_the_person_had_selected', async () => {
+    const cmux = CmuxDouble.launched()
+
+    await cmux.launch()
+
+    expect(CmuxPlanAgents.MODEL).toBe('opus')
+    expect(cmux.written[0][1]).toContain(`${CmuxPlanAgents.AGENT} --model opus `)
   })
 
   it('the_handle_cmux_prints_is_what_comes_back_so_the_caller_can_reach_the_agent_later', async () => {

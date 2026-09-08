@@ -14,6 +14,7 @@ import { PlanAgentNotLaunched, PlanAgentNotNamed, PlanAgentNotResumed } from '..
 export class CmuxPlanAgents extends PlanAgents {
   static BIN = 'cmux'
   static AGENT = 'claude'
+  static MODEL = 'opus'
   static #REF = /^OK\s+(workspace:\d+)\s*$/m
   static NO_MOVE = 'no move declared for launch step'
 
@@ -66,7 +67,7 @@ export class CmuxPlanAgents extends PlanAgents {
   static scriptFor({ sentinelPath, errand, bin, issue, worktree }) {
     return buildLauncherScript({
       sentinelPath,
-      agentCommand: `${bin} ${shQuote(errand)}`,
+      agentCommand: `${bin} --model ${CmuxPlanAgents.MODEL} ${shQuote(errand)}`,
       agentBin: bin,
       issue,
       worktree,
