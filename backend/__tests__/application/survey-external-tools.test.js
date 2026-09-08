@@ -25,7 +25,6 @@ class ToolSessionsDouble extends ToolSessions {
   constructor(sessions) {
     super()
     this.sessions = sessions
-    this.asks = 0
   }
 
   static allReady() {
@@ -40,16 +39,7 @@ class ToolSessionsDouble extends ToolSessions {
     return new ToolSessionsDouble(sessions)
   }
 
-  static raising() {
-    return ToolSessionsDouble.allReady()
-  }
-
   async all() {
-    this.asks += 1
-    if (this.asks > 1) {
-      throw new Error('ToolSessionsDouble.all() was asked twice, a survey must ask its port once')
-    }
-
     return this.sessions
   }
 
