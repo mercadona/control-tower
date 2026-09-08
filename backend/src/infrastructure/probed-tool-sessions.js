@@ -41,7 +41,9 @@ export class ProbedToolSessions extends ToolSessions {
 
   async #sessionFor(row) {
     const installed = this.lookUp(row.bin) !== null
-    const state = installed ? await this.#stateFor(row) : SessionState.MISSING
+    const state = row.probe === null
+      ? SessionState.UNKNOWN
+      : installed ? await this.#stateFor(row) : SessionState.MISSING
 
     return new ToolSession({
       tool: row.tool,
@@ -52,8 +54,6 @@ export class ProbedToolSessions extends ToolSessions {
   }
 
   async #stateFor(row) {
-    if (row.probe === null) return SessionState.UNKNOWN
-
     const output = await this.clients[row.probe].run(row.argv, { safeToRepeat: true })
 
     return ProbedToolSessions.#isReady(row, output) ? SessionState.READY : SessionState.MISSING

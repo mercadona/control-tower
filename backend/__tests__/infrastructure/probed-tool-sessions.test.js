@@ -54,11 +54,22 @@ class ClientsDouble {
 
 class LookUpDouble {
   static installedEverywhere() {
-    return (bin) => `/usr/local/bin/${bin}`
+    return LookUpDouble.#recording(() => true)
   }
 
   static missing(bin) {
-    return (candidate) => (candidate === bin ? null : `/usr/local/bin/${candidate}`)
+    return LookUpDouble.#recording((candidate) => candidate !== bin)
+  }
+
+  static #recording(isInstalled) {
+    const calls = []
+    const lookUp = (bin) => {
+      calls.push(bin)
+      return isInstalled(bin) ? `/usr/local/bin/${bin}` : null
+    }
+    lookUp.calls = calls
+
+    return lookUp
   }
 }
 
@@ -82,6 +93,14 @@ describe('ProbedToolSessions', () => {
         options: { safeToRepeat: true },
       },
     ])
+  })
+
+  it('every_rows_bin_is_looked_up_against_PATH_in_table_order', async () => {
+    const lookUp = LookUpDouble.installedEverywhere()
+
+    await ClientsDouble.allHappy().sessions(lookUp).all()
+
+    expect(lookUp.calls).toEqual(['gh', 'acli', 'claude', 'git', 'bq'])
   })
 
   it('git_is_ready_when_ssh_says_it_authenticated_even_though_it_exits_1', async () => {
@@ -117,6 +136,16 @@ describe('ProbedToolSessions', () => {
 
     const claude = sessions.find((session) => session.tool === 'claude')
 
+    expect(claude.state).toBe(SessionState.UNKNOWN)
+    expect(claude.fix).toBe('claude, then /login — not observable from this process')
+  })
+
+  it('claude_is_unknown_even_when_its_binary_is_missing_because_its_login_is_never_observable', async () => {
+    const sessions = await ClientsDouble.allHappy().sessions(LookUpDouble.missing('claude')).all()
+
+    const claude = sessions.find((session) => session.tool === 'claude')
+
+    expect(claude.installed).toBe(false)
     expect(claude.state).toBe(SessionState.UNKNOWN)
     expect(claude.fix).toBe('claude, then /login — not observable from this process')
   })
