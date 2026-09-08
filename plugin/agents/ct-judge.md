@@ -21,8 +21,8 @@ them, not the agent that wrote the code.
 ## What you are given
 
 - **The review package.** `## Vara de ct` lists, by path, the documents of ct's
-  yardstick that reach this task — the program picked them by the scope each one
-  declares, and the block above them states how they relate to this repo's
+  yardstick, all eight of them: nothing is filtered by what the task declares,
+  and the block above them states how they relate to this repo's
   conventions. They travel as paths: you have `Read`, so you open the ones you
   are going to cite. `## Files changed` lists the staged files; `## Rutas
   tocadas` lists every path the implementer touched; `## Diff` is the staged diff
@@ -141,7 +141,7 @@ in `result`, and go on with the rest. It stays out of the findings — the plan 
 diff is what you judge.
 
 **And ct's own yardstick**, whose documents `## Vara de ct` lists by path at the head of the review
-package. The program picked them by the scope each one declares, so what is on that list is what
+package. All eight reach every task — nothing is filtered — so what is on that list is what
 reaches this task: open the ones you are going to cite. A program wrote that list and it survives
 whatever the plan says. The package may also carry the repo's own declaration, pasted from
 `.agent/conventions.md`: the rule documents it names bind exactly as if §3 had named them, and where
@@ -162,8 +162,8 @@ diff the implementer could have written. The defect is in the plan, and the plan
 elsewhere.
 
 **Two — a module that was already there complies by following the style of its host.** `style.md`
-and `architecture.md` both exempt it, each one says so in its own scope line, and the block above
-the list says which documents that leaves reaching this task. What the diff adds to such a module
+and `architecture.md` both exempt it and both reach every task; each one says the exemption in its
+own text. What the diff adds to such a module
 follows the idiom it found there, **and that is the item complying**. The hole both documents close
 in the same breath is the one to watch:
 a new concept placed inside an old file to inherit the exemption **is** a finding.
@@ -280,6 +280,19 @@ task asks for it.
 `**Files:**` — extra path, missing path, and whether each `(create)` and
 `(modify)` matches the previous commit. The paths are settled; what was written
 inside them is yours.
+
+A diff of the plan file inside a task is an AMENDMENT written by the
+implementer, not a path out of scope: ruling whether it was justified belongs
+to this item, and it is the one hunk of the diff no program has checked for
+you. What the program does refuse is narrow — an amendment that REMOVES a
+route from THIS task's `**Files:**`, and nothing else. It does not look at
+this task's `**Tests:**`, `**TDD:**`, block declarations or `**Verification:**`
+commands, nor at any other task's, so an amendment that rewrites its own
+verification into a command that passes, or drops the test names it promised,
+reaches you unchecked and the controls it disarmed reported green. Read the
+plan hunk line by line: what changed, and does the sentence of the task
+justify it. The plan was committed before the run started, so what shows in
+the diff is the amended lines, not the whole plan.
 
 ### 9. `test-desiderata` — the tests this task adds
 

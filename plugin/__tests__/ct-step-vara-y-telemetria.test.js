@@ -221,35 +221,21 @@ describe('la vara de ct viaja en el brief, y va delante de la del repo', () => {
     expect(brief.indexOf('La vara de ct')).toBeLessThan(brief.indexOf('leída directo de `.agent/conventions.md`'))
   })
 
-  // EL ALCANCE DE CADA DOCUMENTO decide si viaja. `architecture.md` rige los
-  // MÓDULOS NUEVOS —lo dice su propia cabecera `Applies to:`— así que a una
-  // tarea que sólo modifica lo que ya estaba no le llega: son unos 8,6 KB que
-  // el implementador lee en cada tarea sin que ninguno de sus párrafos pueda
-  // medir su diff.
+  // EL ALCANCE YA NO FILTRA POR `**Files:**`: los ocho documentos alcanzan a
+  // todo diff, cree o no cree módulo la tarea. `architecture.md` viajaba antes
+  // sólo cuando el plan declaraba una ruta `(create)`; ahora viaja siempre.
   const conLaUnoModificando = () => {
     const plan = readFileSync(join(repo, 'plan.md'), 'utf8').replace('`uno.txt` (create)', '`uno.txt` (modify)')
     writeFileSync(join(repo, 'plan.md'), plan)
   }
 
-  it('una tarea que no estrena módulo no se lleva architecture.md, y sí el resto de la vara', () => {
+  it('una tarea que no estrena módulo se lleva la vara entera, architecture.md incluido', () => {
     conLaUnoModificando()
     ct('next')
     const brief = briefDeLaUno()
-    expect(brief).not.toContain('## Vara de ct: conventions/architecture.md')
-    for (const nombre of PluginYardstick.FILES.filter((f) => f !== 'architecture.md')) {
-      expect(brief, `${nombre} tendría que seguir viajando`).toContain(`## Vara de ct: conventions/${nombre}`)
+    for (const nombre of PluginYardstick.FILES) {
+      expect(brief, `${nombre} tendría que viajar`).toContain(`## Vara de ct: conventions/${nombre}`)
     }
-  })
-
-  it('una tarea que estrena módulo sí se lleva architecture.md', () => {
-    ct('next')
-    expect(briefDeLaUno()).toContain('## Vara de ct: conventions/architecture.md')
-  })
-
-  it('la cabecera dice por qué architecture.md puede no estar, para que su ausencia no se lea como un olvido', () => {
-    conLaUnoModificando()
-    ct('next')
-    expect(briefDeLaUno()).toMatch(/MÓDULOS NUEVOS/)
   })
 
   it('sin declaración del repo, la de ct viaja igual: son dos varas independientes', () => {

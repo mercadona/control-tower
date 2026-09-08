@@ -44,19 +44,6 @@ describe('el paquete de revisión da la vara de ct por ruta, no pegada', () => {
     const style = readFileSync(join(PLUGIN_ROOT_TEST, 'conventions', 'style.md'), 'utf8')
     expect(paquete()).not.toContain(style.trim())
   })
-
-  // Sin `(create)` en sus **Files:** — aquí sin acción declarada, que es lo
-  // que este fixture puede escribir sin que el control de alcance vete la
-  // tarea: el fichero se crea de verdad, así que declararlo `(modify)` sería
-  // un plan que miente.
-  it('la tarea que no estrena módulo tampoco recibe la ruta de architecture.md', () => {
-    const plan = readFileSync(join(repo, 'plan.md'), 'utf8').replace('`uno.txt` (create)', '`uno.txt`')
-    writeFileSync(join(repo, 'plan.md'), plan)
-    ct('report', informe(['uno.txt']))
-    ct('controls')
-    ct('next')
-    expect(paquete()).not.toContain(join(PLUGIN_ROOT_TEST, 'conventions', 'architecture.md'))
-  })
 })
 
 // Slice 6 de los apuntes de Capde — el hallazgo ALTO del review de la PR #36,

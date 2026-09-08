@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { describe, it, expect, afterEach } from 'vitest'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { Invocation, InvocationOutcome } from '../../src/infrastructure/invocation.js'
 
@@ -131,6 +132,116 @@ describe('Invocation', () => {
 
     expect(Object.keys(composed)).toEqual([Invocation.CHILD_TIMEOUT_VARIABLE])
     expect(composed[Invocation.CHILD_TIMEOUT_VARIABLE]).toBe('60000')
+  })
+})
+
+class PathFixture {
+  static #created = []
+
+  static directory() {
+    const dir = mkdtempSync(join(tmpdir(), 'ct-lookup-'))
+    PathFixture.#created.push(dir)
+
+    return dir
+  }
+
+  static executable(dir, name) {
+    const path = join(dir, name)
+    writeFileSync(path, '#!/bin/sh\nexit 1\n')
+    chmodSync(path, 0o755)
+
+    return path
+  }
+
+  static nonExecutable(dir, name) {
+    const path = join(dir, name)
+    writeFileSync(path, '#!/bin/sh\nexit 1\n')
+    chmodSync(path, 0o644)
+
+    return path
+  }
+
+  static executableDirectory(dir, name) {
+    const path = join(dir, name)
+    mkdirSync(path)
+    chmodSync(path, 0o755)
+
+    return path
+  }
+
+  static cleanUp() {
+    PathFixture.#created.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true }))
+  }
+}
+
+afterEach(() => {
+  PathFixture.cleanUp()
+})
+
+describe('Invocation looking a binary up in PATH without executing it', () => {
+  it('a_binary_present_in_a_directory_of_the_path_is_found_there', () => {
+    const dir = PathFixture.directory()
+    const path = PathFixture.executable(dir, 'ct-probe-fixture')
+
+    expect(Invocation.lookUp('ct-probe-fixture', { PATH: dir })).toBe(path)
+  })
+
+  it('a_name_absent_from_every_directory_of_the_path_answers_null', () => {
+    const dir = PathFixture.directory()
+
+    expect(Invocation.lookUp('ct-probe-fixture', { PATH: dir })).toBe(null)
+  })
+
+  it('a_file_that_exists_but_cannot_be_executed_is_not_a_match', () => {
+    const dir = PathFixture.directory()
+    PathFixture.nonExecutable(dir, 'ct-probe-fixture')
+
+    expect(Invocation.lookUp('ct-probe-fixture', { PATH: dir })).toBe(null)
+  })
+
+  it('an_executable_directory_sharing_the_binarys_name_is_not_a_match', () => {
+    const dir = PathFixture.directory()
+    PathFixture.executableDirectory(dir, 'ct-probe-fixture')
+
+    expect(Invocation.lookUp('ct-probe-fixture', { PATH: dir })).toBe(null)
+  })
+
+  it('the_second_directory_of_the_path_is_reached_when_the_first_does_not_have_it', () => {
+    const empty = PathFixture.directory()
+    const holding = PathFixture.directory()
+    const path = PathFixture.executable(holding, 'ct-probe-fixture')
+
+    expect(Invocation.lookUp('ct-probe-fixture', { PATH: `${empty}:${holding}` })).toBe(path)
+  })
+
+  it('an_empty_segment_of_the_path_is_skipped_so_it_never_reads_the_current_working_directory', () => {
+    const originalCwd = process.cwd()
+    const cwdDecoyDir = PathFixture.directory()
+    const elsewhere = PathFixture.directory()
+    const decoy = 'ct-probe-cwd-decoy'
+    PathFixture.executable(cwdDecoyDir, decoy)
+    process.chdir(cwdDecoyDir)
+    try {
+      expect(Invocation.lookUp(decoy, { PATH: `:${elsewhere}` })).toBe(null)
+    } finally {
+      process.chdir(originalCwd)
+    }
+  })
+
+  it('an_absent_PATH_variable_is_treated_as_empty_instead_of_throwing', () => {
+    expect(Invocation.lookUp('ct-probe-fixture', {})).toBe(null)
+  })
+
+  it('the_binary_is_never_actually_run_while_being_looked_up', () => {
+    const dir = PathFixture.directory()
+    const marker = join(dir, 'ran.marker')
+    const script = join(dir, 'ct-probe-fixture')
+    writeFileSync(script, `#!/bin/sh\necho ran > ${marker}\n`)
+    chmodSync(script, 0o755)
+
+    Invocation.lookUp('ct-probe-fixture', { PATH: dir })
+
+    expect(existsSync(marker)).toBe(false)
   })
 })
 

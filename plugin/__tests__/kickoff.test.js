@@ -435,6 +435,16 @@ describe('el primer acto nombra la vara de ct', () => {
     expect(k).not.toMatch(/no por tema/i)
     expect(k).not.toMatch(/obliga entera/i)
   })
+
+  // `architecture.md` deja de estar filtrado por `(create)`/`(modify)`: alcanza
+  // a toda tarea (conventions/architecture.md, "Applies to: **every diff**").
+  // El kickoff ya no puede decirle al planificador que reparta el trabajo
+  // entre los dos marcadores para decidir a qué lado de esa regla cae cada cosa.
+  it('no reparte la arquitectura entre las dos marcas: architecture.md alcanza a toda tarea', () => {
+    const k = renderKickoff(SLICE, OPTS_CON_VARA)
+    expect(k).not.toContain('MÓDULOS NUEVOS')
+    expect(k).not.toMatch(/reparti[a-zé]* .*entre .*\(create\).* y .*\(modify\)/i)
+  })
 })
 
 // #96 — el baseline lo mide el programa (scripts/baseline.js) al preparar el

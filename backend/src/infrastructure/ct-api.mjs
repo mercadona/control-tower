@@ -36,7 +36,9 @@ import { ReviewPlan, ReviewPlanParams } from '../application/actions/review-plan
 import { RequestFixes, RequestFixesParams } from '../application/actions/request-fixes.js'
 import { SurveyWorkspaces, SurveyWorkspacesParams } from '../application/queries/survey-workspaces.js'
 import { ReadPlanStory, ReadPlanStoryParams } from '../application/queries/read-plan-story.js'
+import { SurveyExternalTools } from '../application/queries/survey-external-tools.js'
 import { HarvestDelivery, HarvestDeliveryParams } from '../application/actions/harvest-delivery.js'
+import { ProbedToolSessions } from './probed-tool-sessions.js'
 import { ToolRunner } from './tool-runner.js'
 import { Gh } from './gh.js'
 import { ExternalTool } from './external-tool.js'
@@ -198,6 +200,16 @@ class CtApi {
       workspace,
       planAgents,
       checkouts,
+    })
+  }
+
+  static #toolSessions(environment) {
+    const probes = ProbedToolSessions.PROBES.map((row) => row.probe).filter((probe) => probe !== null)
+    const clients = Object.fromEntries(probes.map((bin) => [bin, CtApi.#talkingTo(bin, ExternalTool)]))
+
+    return new ProbedToolSessions({
+      clients,
+      lookUp: (bin) => Invocation.lookUp(bin, environment),
     })
   }
 
@@ -376,6 +388,7 @@ class CtApi {
       planEvents: CtApi.#planEvents(git),
       sessions,
       activePlans,
+      externalTools: new SurveyExternalTools({ toolSessions: CtApi.#toolSessions(environment) }),
       implementationStarts,
       recovery,
       stderr: (line) => process.stderr.write(line),

@@ -1,0 +1,66 @@
+{
+  "issue": 161,
+  "task": 4,
+  "task_name": "an amendment may only ADD routes",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "El objetivo promete una cosa: que una enmienda que QUITA una ruta de las **Files:** de la tarea en curso sea rechazada por `ct-step controls`, para que la otra direccion del control de alcance no se pueda apagar desde dentro del plan. Las dos mitades estan en el diff: `enmiendaSoloAnade(t)` (ct-step.mjs:1400-1409) compara las **Files:** de la tarea t.n en el plan de HEAD contra `t.files` y devuelve un fallo por cada ruta desaparecida, y `verboControls` (ct-step.mjs:1265-1269) lo llama con peso fatal (`resultado = OUTCOMES.FAILED`), que es el estado que el mapa de salidas traduce a `EXIT.CONTROLS_RED`. Nada mas en el diff hace nada que el objetivo no nombre.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "El **TDD:** nombra `it('una enmienda que quita una ruta declarada se rechaza y el paso sale en rojo')` y fija la asercion: el implementador escribe `uno.txt`, enmienda `plan.md` para que la tarea 1 declare solo `dos.txt`, y `ct-step controls` sale en rojo con un log que lleva la frase `solo puede ANADIR rutas` junto a la ruta retirada `uno.txt`. El cuerpo (test file:134-142) hace exactamente eso: `quitarUnoDeLasFiles()` sustituye '**Files:** `uno.txt` (create).' por '**Files:** `dos.txt` (create).', `informe(['uno.txt'])` escribe uno.txt, y las dos aserciones son `expect(r.stdout).toMatch(/controles: failed/)` y `expect(log).toMatch(/tarea 1 enmendo el plan quitando 'uno\\.txt'.*solo puede ANADIR rutas/)` — el rojo y la frase con la ruta retirada, sobre la misma entrada que el plan describe. El rojo se mide por la palabra que imprime `verboControls` en vez de por el codigo de salida; es el mismo hecho, porque ese valor (`OUTCOMES.FAILED`) es el que la maquina traduce a `EXIT.CONTROLS_RED`.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "Nombre a nombre contra el bloque Contract (plugin/scripts/ct-step.mjs): firma `function enmiendaSoloAnade(t)` devolviendo `string[]` (ct-step.mjs:1400); llamada desde `verboControls` justo despues de `alcanceDeclarado` (1256-1269), mismo peso fatal, cabecera propia '# enmienda del plan' literal (1267). Las tres salidas vacias que el contrato exige estan y en ese orden: plan fuera de `stagedPaths()` (1401), `git show HEAD:<rutaDelPlan()>` ilegible via `allowFail` -> null (1402-1403), y el texto de HEAD sin la tarea t.n (1404-1405). El mensaje es identico caracter a caracter al del contrato, incluidas la interpolacion `${t.n}`, las comillas simples alrededor de la ruta y la frase final 'Devuelve la ruta al PLAN, o escribe el CODIGO que prometia.' El texto de HEAD se parsea con el mismo `extractTasks` ya importado de `plan-tasks.js` (linea 62), la comparacion es solo por `path` (`!t.files.some((tf) => tf.path === f.path)`) y `action` no se compara, tal y como pide el parrafo que sigue al bloque.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Fila a fila: D-5 ('una enmienda solo ANADE') es justo lo que el diff implementa, y con el valor cerrado — quitar una ruta es fallo, anadir no. D-4 ('la solucion mas simple, y por sustraccion'; rechazados un fichero de enmiendas aparte, un verbo `amend-plan`, un contador `planAmendments` en el estado y un disparo en el segundo reintento): el diff no anade verbo, ni campo de estado, ni fichero, ni contador — diez lineas de funcion y cinco en `verboControls`, comparando contra el plan de HEAD y no contra estado propio. D-2 (la enmienda entra en el commit de su tarea, el arbitro es el juez) no se reabre: este control no comitea ni restaura nada. D-1, D-3 y D-6 no tienen sujeto en este diff (ninguna linea toca el filtro `(create)` de architecture.md ni el orden de las tareas del slice).",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "EXEMPLARES. `plugin/scripts/scope.js`: el precedente es un modulo que explica en bloque POR QUE existe la comprobacion con el caso medido delante; el comentario de `enmiendaSoloAnade` (1388-1399) tiene esa misma forma y ese mismo registro (por que existe, contra que compara, que hace cuando no hay contra que comparar). `plugin/__tests__/ct-step-indice.test.js` y `fixtures/ct-step-harness.js`: los tests nuevos montan el repo real con `montarRepo()`/`crearHelpers` y conducen el script de verdad con `ct(...)`, sin doblar git — la forma exacta del exemplar. RULES: la seccion 3 declara N/A (este repo no tiene fichero de convenciones propio), asi que la vara es la de ct.\n\ndefects.md, regla a regla: (1) VOCABULARIO CERRADO — no hay clasificacion nueva sostenida en un string ni en un booleano: la funcion devuelve DIAGNOSTICOS, y quien clasifica es `OUTCOMES.FAILED`, vocabulario cerrado ya existente; no hay dispatch nuevo ni rama catch-all. (2) MAPA CRUDO COMO RETORNO DE LOGICA — no hay: el retorno es `string[]`, igual que sus tres hermanas (`alcanceDeclarado`, `testsDeclarados`, `bloquesDeclarados`), y `tareaAnterior.files` es la estructura que ya devuelve `plan-tasks.js`, no un mapa que este diff invente. (3) DOS CAMPOS QUE TIENEN QUE CONCORDAR — no hay: ni bandera nueva ni centinela; el `null` de `git(..., {allowFail:true})` es el canal de fallo del sistema externo que el propio contrato prescribe y que `boundaries.md` pide ('the failure of the external system is data'), no un valor centinela ocupando el sitio de un contenido. (4) ERROR NOMBRADO POR DONDE PASA — no hay tipo de error nuevo; los mensajes se nombran por lo que ocurre ('enmendo el plan quitando X') y dicen que se arregla, como los de `alcanceDeclarado`.\n\nstyle.md: `ct-step.mjs` y `ct-step-enmienda.test.js` son modulos que ya estaban y no conforman (castellano, prosa, funciones sueltas). Lo anadido sigue el estilo del anfitrion, que es la deuda declarada, y no es hallazgo; `enmiendaSoloAnade` no es un concepto nuevo colado en fichero viejo para heredar la exencion: es la otra direccion del control que ya vivia ahi, y el **Files:** del plan la sitúa (modify). simplicity.md: la guarda responde a una llamada que existe (D-1/D-5) y es alcanzable — sus tests la ponen roja. decisions.md: la regla 'una enmienda solo anade' se escribe una sola vez, en un solo sitio. domain.md/boundaries.md: sin puertos ni modelos de frontera nuevos; el trato con git sigue el idioma del anfitrion.\n\ntesting.md, dos choques declarados y no contados: (a) 'A test that launches a real subprocess is marked as such' — los tres tests nuevos lanzan `node` de verdad y no llevan marcador, pero en este repo el marcador es una convencion de NOMBRE DE FICHERO (`*-real-process.test.js`) y el **Files:** de la tarea fija `plugin/__tests__/ct-step-enmienda.test.js` (modify), que ademas es el fichero que nombra el comando de **Verification:**; renombrarlo dejaria el control en rojo y estaria fuera de alcance, asi que el choque es del plan y no del implementador. (b) la regla 'una asercion no esta terminada hasta que se le ha visto fallar por la razon que da su nombre' alcanza al tercer test nuevo; ese defecto se reporta UNA vez, bajo `test-desiderata`, y no se cuenta aqui.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "No aplica: el diff no tiene ni una linea `-` (72 inserciones, 0 borrados segun el propio recuento de `## Files changed`, y los dos hunks solo anaden). Ninguna asercion, caso o test preexistente se retira, se relaja ni se reescribe; los cinco `it` que ya vivian en `ct-step-enmienda.test.js` quedan intactos.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "El comportamiento prometido lo produce codigo de produccion, no el andamiaje. La frase que el test busca en el log ('tarea 1 enmendo el plan quitando ...') solo la puede escribir `enmiendaSoloAnade` en ct-step.mjs: el fixture no la escribe en ningun sitio, y el log lo produce `verboControls` corriendo el script de verdad en un repo git de verdad (`spawnSync('node', [SCRIPT, ...])`). Revertidas las lineas de produccion de este diff, esa asercion cae. Nada esta doblado: ni git, ni el plan, ni el informe.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Dentro de los dos ficheros declarados no hay nada que la tarea no pida: en ct-step.mjs, la funcion nueva y su llamada, sin refactor, sin renombrado y sin tocar `alcanceDeclarado`, `rutasDeTrabajoEnElIndice` ni `esDelRun`; en el fichero de test, el helper `quitarUnoDeLasFiles` (que es el arrange que el **TDD:** describe) y los tres `it` que el **Tests:** enumera, ni uno mas. Contra `### Out of scope`, punto por punto: no hay verbo nuevo, no hay transicion nueva en `run-machine.js`, no hay campo ni contador nuevo en el fichero de estado, no se toca el esquema del veredicto, ni `composeSection`/`composePathSection`, ni `judge-bench.mjs`, ni el gate humano; la otra direccion del control de alcance y la comprobacion de la marca `(create)` siguen intactas y fatales; el codigo no escribe prosa del plan.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "Tres tests nuevos. DETERMINISTAS: ninguno mira el reloj, la fecha, la red ni el azar, no hay sleep, y todo el disco que tocan cuelga de `mkdtempSync(join(tmpdir(), 'ct-step-'))`. AISLADOS: `beforeEach` monta un repo nuevo y `afterEach` lo borra; no comparten estado mutable, no dependen del orden dentro del fichero ni de puerto, fichero o directorio fijo. COMPORTAMIENTO REAL: los dos primeros afirman sobre lo que produce el script de produccion (el log con el mensaje de la guarda, y `controles: done` cuando la enmienda solo anade); el tercero, no — 'tras el rechazo, el plan de HEAD sigue declarando la ruta que la enmienda quito' afirma sobre `git show HEAD:plan.md`, que ningun camino de `controls` puede modificar, asi que pasa igual con las lineas de produccion de este diff revertidas. Su asercion es sobre estado real del sistema (no sobre un mock, un stub ni una constante que el test acabe de definir), por eso no es una de las tres que bloquean: queda como hallazgo `low`, citado contra la skill de TDD que el implementador tenia delante. Nada mas que remarcar: nombres que dicen la conducta, un comportamiento por test, sin setup de dobles.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "test-desiderata",
+        "severity": "low",
+        "what": "El tercer test nuevo mide una propiedad que se cumple sola. Con el fixture que usa (la tarea 1 declara `dos.txt` tras la enmienda y el implementador escribio `uno.txt`), quitar `enmiendaSoloAnade` no cambia el resultado: `alcanceDeclarado` ya pone el paso en rojo por su cuenta, y aunque saliera verde `controls` no comitea nada, asi que `HEAD:plan.md` sigue diciendo `uno.txt` pase lo que pase. El test pasa con las lineas de produccion de este diff revertidas, es decir, no puede fallar por la razon que da su nombre. Habia una version fuerte al alcance de la mano y dentro de los mismos ficheros: declarar `dos.txt` en el informe (con lo que solo dispara la guarda nueva) y llevar el caso hasta `commit`; sin la guarda, ahi HEAD si acabaria declarando `dos.txt` y la asercion caeria. Se queda en `low` porque el **Tests:** del plan nombra ese test y el control de nombres lo hace obligatorio: la parte que no era del implementador es haberlo tenido que escribir, no como lo escribio.",
+        "path": "plugin/__tests__/ct-step-enmienda.test.js",
+        "line": 158,
+        "evidence": "Skill control-tower-loop:test-driven-development, seccion 'Verify RED - Watch It Fail': \"**Test passes?** You're testing existing behavior. Fix test.\" — la asercion en cuestion es `expect(enHead).toContain('**Files:** `uno.txt` (create).')`, verde tambien sin la guarda."
+      }
+    ],
+    "review_token": "1c129021c989b671e041045026e74d5b811cd6f6102276eba1eb7d0e88879a37"
+  }
+}

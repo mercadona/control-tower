@@ -1,4 +1,5 @@
-import { isAbsolute, join } from 'node:path'
+import { accessSync, constants as fsConstants, statSync } from 'node:fs'
+import { delimiter as pathDelimiter, isAbsolute, join } from 'node:path'
 
 export const InvocationOutcome = Object.freeze({
   READY: 'ready',
@@ -60,6 +61,23 @@ export class Invocation {
     if (!Invocation.#WHOLE_NUMBER.test(given) || Number(given) > Invocation.#MAX_PORT) return null
 
     return Number(given)
+  }
+
+  static lookUp(name, environment) {
+    const raw = environment.PATH ?? ''
+    for (const dir of raw.split(pathDelimiter)) {
+      if (!dir) continue
+      const candidate = join(dir, name)
+      try {
+        if (!statSync(candidate).isFile()) continue
+        accessSync(candidate, fsConstants.X_OK)
+        return candidate
+      } catch {
+        continue
+      }
+    }
+
+    return null
   }
 
   static harvestEnvironment(environment, { ghTimeoutMs }) {

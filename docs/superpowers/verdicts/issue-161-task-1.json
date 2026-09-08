@@ -1,0 +1,57 @@
+{
+  "issue": 161,
+  "task": 1,
+  "task_name": "the `(create)` filter goes",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "El objetivo promete dos cosas: que todo documento de conventions/ llegue al brief y que llegue al paquete del juez, de TODA tarea. Ambas están en el diff. En ct-step.mjs, escribirBrief pasa a `appendFileSync(brief, PluginYardstick.composeSection(deCt))` con `deCt = cargarVaraDeCt()`, que construye los ocho de `PluginYardstick.FILES` sin filtro alguno; escribirPaquete pasa a `const varaDeCt = PluginYardstick.composePathSection(cargarVaraDeCt())`. El filtro `PluginYardstick.forTask(..., { creates: creaModulo(tarea()) })` desaparece de los dos sitios, y con él `creaModulo` y su comentario. No veo nada en el diff que vaya más allá de eso.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "La línea **TDD:** pide, en ct-step-vara-y-telemetria.test.js y reusando `conLaUnoModificando()`, `it('una tarea que no estrena módulo se lleva la vara entera, architecture.md incluido')`, con el brief llevando `## Vara de ct: conventions/<name>` para cada uno de los ocho `PluginYardstick.FILES`. El test añadido es literalmente ese nombre, llama a `conLaUnoModificando()` (que reescribe el plan de `(create)` a `(modify)`), corre `ct('next')` y recorre `for (const nombre of PluginYardstick.FILES) expect(brief, ...).toContain('## Vara de ct: conventions/' + nombre)`. Entrada, aserción y valor esperado coinciden con la frase escrita; y contra el código anterior sólo podía fallar en architecture.md, como dice el plan.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "Dos bloques `Current state`. (1) plugin-yardstick.js líneas 11-15: las cinco líneas de la cabecera se convierten exactamente en dos ('> quitarla. Los ocho documentos alcanzan a todo diff: nada se filtra por' / '> lo que declare `**Files:**`.'), y el resto de #PRECEDENCE_HEADER —la regla de precedencia y el caso frontera— queda intacto, como pide el plan. (2) ct-step.mjs:695: `const creaModulo = ...` y su comentario de diez líneas desaparecen, y los dos call sites quedan en `PluginYardstick.composeSection(deCt)` y `PluginYardstick.composePathSection(cargarVaraDeCt())`, literalmente lo que el plan escribe. La superficie pública de PluginYardstick pierde `scopeOf`, `appliesToTask` y `forTask` (y la privada `#SCOPE_LINE`/`#NEW_MODULES`), tal como declara §5 del plan; `FILES`, `missingDocuments`, `composeSection`, `composePathSection`, `precedenceHeader` y `PATH_SECTION` no cambian de firma. Grep en todo el árbol: no queda ningún llamante de los símbolos retirados fuera de los documentos de plan y diseño.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "D-3 ('architecture.md applies always. The (create) filter is deleted whole') es la fila que este diff toca, y la implementa con ese valor: el filtro se borra entero, no se parametriza ni se deja un flag. D-6 ('the subtraction goes first') se cumple: esta tarea 1 es sólo resta. D-4 (la solución más simple, por sustracción) también: no aparece fichero nuevo, ni verbo, ni contador. D-1, D-2 y D-5 hablan de la enmienda del plan, que ninguna línea de este diff toca. Ninguna fila queda implementada con otro valor.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Ejemplares del §3: `plugin/scripts/scope.js`, `plugin/__tests__/ct-step-indice.test.js` y `plugin/__tests__/fixtures/ct-step-harness.js`. El diff no estrena ningún papel comparable con scope.js (es resta dentro de dos módulos existentes); el test añadido sí sigue el idioma del harness nombrado —repo temporal por `montarRepo()` en `beforeEach`, `ct('next')` contra el script real, lectura del brief de disco—, que es exactamente el patrón de ct-step-indice.test.js. §3 declara `Rules to obey: N/A` porque el repo no declara vara propia, así que la vara que mide aquí es la de ct (siete documentos me llegan por ruta; architecture.md no viene en el paquete porque el programa que lo generó es todavía el de antes del cambio, y este diff no crea módulo, así que no hay sujeto para ese documento).\nstyle.md: los comentarios en castellano que el diff añade (en ct-step-vara-y-telemetria.test.js y run-metrics.test.js) y los que quedan en ct-step.mjs son deuda declarada del módulo anfitrión —ficheros preexistentes plagados de prosa en castellano—, y no hay concepto nuevo colocado dentro de un fichero viejo: no es hallazgo. simplicity.md: el diff sólo resta; no añade campo, rama, símbolo público ni observabilidad. decisions.md: el 'ocho' de la nueva cabecera vive en el MISMO fichero que `FILES`, así que añadir un noveno documento toca un solo fichero; no es decisión repartida. testing.md: el test nuevo asserta el efecto observable (el texto del brief que el proceso real escribió en disco), no un doble.\ndefects.md, regla a regla: (1) vocabulario cerrado — el diff no introduce ninguna clasificación por string ni boolean; al contrario, RETIRA `scopeOf` (un string suelto leído de la cabecera `Applies to:`) y el `#NEW_MODULES` comparado a mano contra él, que era justo esa forma. (2) mapa crudo devuelto por lógica — no hay sujeto nuevo: `cargarVaraDeCt()` ya devolvía la lista de `{name, path, content}` antes del diff y sigue igual; lo único que cambia es que ya no se filtra en medio, con lo que hay una capa MENOS de lógica leyendo esa estructura. (3) dos campos que tienen que concordar — no se añade ninguno; se elimina el `{ creates }` derivado de `**Files:**`, que era precisamente un segundo dato que tenía que concordar con lo que el plan declaraba. (4) error nombrado por dónde ocurre — no hay error nuevo; los mensajes de `#refuse` y de `cargarVaraDeCt` no se tocan.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Trece tests desaparecen y todos están nombrados uno a uno en la lista `Removed:` del **Tests:** de la tarea: los cuatro en castellano (ct-step-vara-y-telemetria.test.js y ct-step-paquete.test.js) y los nueve en inglés de plugin-yardstick.test.js. El cambio de run-metrics.test.js, `expect(f.brief_vara_ct_docs).toBe(PluginYardstick.FILES.length - 1)` -> `.toBe(PluginYardstick.FILES.length)`, está previsto por la frase 'Kept by name: ... now expecting FILES.length' y no relaja nada: sigue siendo una igualdad exacta. Las demás líneas `-` son las madres `withScopes` y `theRealOnesOnDisk`, que ningún test superviviente usa (grep en el fichero: sin referencias), y comentarios reemplazados. Ninguna aserción preexistente queda asertando menos sin una frase del brief que lo pida.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "El comportamiento prometido lo produce código de producción, no el andamiaje. La prueba: el test nuevo lee el brief que el proceso real de `ct-step` escribió en disco tras `ct('next')`, y ese contenido sale de `escribirBrief()` en plugin/scripts/ct-step.mjs, que ahora compone `PluginYardstick.composeSection(deCt)` sobre los ocho documentos leídos de `PLUGIN_ROOT/conventions` por `cargarVaraDeCt()`. Si se revirtieran las líneas de producción (volviendo a `forTask(deCt, { creates: creaModulo(tarea()) })`), el test caería en architecture.md. Ninguna aserción se apoya en un mock, un stub ni un valor precocinado en el test.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Todo lo escrito dentro de los seis ficheros declarados sirve a una frase de la tarea: el borrado del filtro y de la cabecera (los dos bloques `Current state`), los dos call sites, el test nuevo (la línea **TDD:**), los trece tests retirados y el ajuste de run-metrics (la línea **Tests:**). El único añadido no nombrado literalmente son las dos madres borradas de plugin-yardstick.test.js, que sólo alimentaban tests que la tarea manda quitar. La lista `### Out of scope` no se toca: no hay verbo nuevo, ni transición, ni campo de estado, ni cambio en el esquema del veredicto, ni en composeSection/composePathSection ni en el paquete de slice; la prosa de kickoff.js, task-implementer.md, ct-judge.md y architecture.md se deja intacta, que es lo correcto porque es la Tarea 2.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "Un solo test nuevo: 'una tarea que no estrena módulo se lleva la vara entera, architecture.md incluido'. Determinista: no toca reloj, red, azar ni sleeps; el plan que reescribe sale del propio repo temporal y el recorrido es un `ct('next')` síncrono. Aislado: `beforeEach(() => { repo = montarRepo() })` monta un repo nuevo con `mkdtempSync(join(tmpdir(), 'ct-step-'))` y `afterEach` lo borra; no depende de orden ni de estado de otro test, y su mutación del plan queda dentro de ese directorio. Verifica comportamiento real: la aserción es sobre el brief que el script de producción dejó en disco, y caería si se revirtieran las líneas de producción de este diff. No reporto nada de la mitad fina, así que no cargo la skill de TDD.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "c860d9a4a69efed45115ce8b038822a69fb845872c75ad0b6028f6d1ddaf4d57"
+  }
+}

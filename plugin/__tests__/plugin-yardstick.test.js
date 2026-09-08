@@ -57,79 +57,7 @@ class YardstickDocumentMother {
   static withLeadingNullEntry() {
     return [null, { name: 'style.md', content: 'x' }]
   }
-
-  static withScopes(scopes) {
-    return Object.entries(scopes).map(([name, scope]) => ({
-      name,
-      content: scope === null
-        ? `# ${name}\n\nUna regla sin cabecera de alcance.\n`
-        : `# ${name}\n\nApplies to: **${scope}**.\n\nUna regla.\n`,
-    }))
-  }
-
-  static theRealOnesOnDisk() {
-    return PluginYardstick.FILES.map((name) => ({
-      name,
-      content: readFileSync(join(root, PluginYardstick.DIRECTORY, name), 'utf8'),
-    }))
-  }
 }
-
-describe('PluginYardstick.scopeOf reads the document its own header declares', () => {
-  it('reads_the_scope_line_of_the_document', () => {
-    const [documento] = YardstickDocumentMother.withScopes({ 'architecture.md': 'new modules' })
-    expect(PluginYardstick.scopeOf(documento.content)).toBe('new modules')
-  })
-
-  it('a_document_that_declares_no_scope_has_none', () => {
-    const [documento] = YardstickDocumentMother.withScopes({ 'style.md': null })
-    expect(PluginYardstick.scopeOf(documento.content)).toBeNull()
-  })
-})
-
-describe('PluginYardstick.forTask pastes only the documents whose scope reaches the task', () => {
-  const nombres = (documentos) => documentos.map((d) => d.name)
-
-  it('a_task_that_creates_no_module_does_not_carry_the_new_modules_document', () => {
-    const documentos = YardstickDocumentMother.withScopes({
-      'style.md': 'every diff',
-      'architecture.md': 'new modules',
-    })
-    expect(nombres(PluginYardstick.forTask(documentos, { creates: false }))).toEqual(['style.md'])
-  })
-
-  it('a_task_that_creates_a_module_carries_the_new_modules_document', () => {
-    const documentos = YardstickDocumentMother.withScopes({
-      'style.md': 'every diff',
-      'architecture.md': 'new modules',
-    })
-    expect(nombres(PluginYardstick.forTask(documentos, { creates: true }))).toEqual(['style.md', 'architecture.md'])
-  })
-
-  it('the_three_new_documents_reach_a_task_that_creates_no_path_and_architecture_does_not', () => {
-    const documentos = ['simplicity.md', 'domain.md', 'boundaries.md', 'architecture.md'].map((name) => ({
-      name,
-      content: readFileSync(join(root, 'conventions', name), 'utf8'),
-    }))
-    const alcanzan = PluginYardstick.forTask(documentos, { creates: false }).map((d) => d.name)
-    expect(alcanzan).toEqual(['simplicity.md', 'domain.md', 'boundaries.md'])
-  })
-
-  it('a_document_that_declares_no_scope_travels_with_every_task', () => {
-    const documentos = YardstickDocumentMother.withScopes({ 'naming.md': null })
-    expect(nombres(PluginYardstick.forTask(documentos, { creates: false }))).toEqual(['naming.md'])
-  })
-
-  it('on_the_documents_that_are_really_on_disk_only_architecture_is_left_out_of_a_task_that_creates_nothing', () => {
-    const documentos = PluginYardstick.forTask(YardstickDocumentMother.theRealOnesOnDisk(), { creates: false })
-    expect(nombres(documentos)).toEqual(['defects.md', 'style.md', 'simplicity.md', 'decisions.md', 'domain.md', 'boundaries.md', 'testing.md'])
-  })
-
-  it('on_the_documents_that_are_really_on_disk_a_task_that_creates_carries_all_eight', () => {
-    const documentos = PluginYardstick.forTask(YardstickDocumentMother.theRealOnesOnDisk(), { creates: true })
-    expect(nombres(documentos)).toEqual([...PluginYardstick.FILES])
-  })
-})
 
 describe('PluginYardstick.FILES', () => {
   it('lists_the_eight_yardstick_documents_in_paste_order', () => {
@@ -224,15 +152,6 @@ describe('PluginYardstick.composeSection', () => {
     const positions = PluginYardstick.FILES.map((name) => section.indexOf(`## Vara de ct: conventions/${name}`))
     expect(positions.every((at) => at >= 0)).toBe(true)
     expect(positions).toEqual([...positions].sort((a, b) => a - b))
-  })
-})
-
-describe('PluginYardstick.composeSection composes the documents it is handed, however many', () => {
-  it('composes_the_documents_of_a_task_that_creates_no_module', () => {
-    const documentos = PluginYardstick.forTask(YardstickDocumentMother.theRealOnesOnDisk(), { creates: false })
-    const section = PluginYardstick.composeSection(documentos)
-    expect(section).toContain('## Vara de ct: conventions/style.md')
-    expect(section).not.toContain('## Vara de ct: conventions/architecture.md')
   })
 })
 

@@ -20,6 +20,7 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.js'
 import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.js'
+import { SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.js'
 
 class StartPlanSpy {
   static AGENT = 'workspace:4'
@@ -161,6 +162,12 @@ class ProgressSpy {
   }
 }
 
+class ExternalToolsSpy {
+  async execute() {
+    return new SurveyExternalToolsResult({ sessions: [] })
+  }
+}
+
 class FrontendFixture {
   static INDEX = '<!doctype html><title>control tower</title>'
 
@@ -202,6 +209,7 @@ class RunningApi {
       planEvents: ProgressSpy.events(PlanState.WRITING).planEvents,
       sessions,
       activePlans,
+      externalTools: options.externalTools ?? new ExternalToolsSpy(),
       frontendRoot: FrontendFixture.missing(),
       ...options,
     })
