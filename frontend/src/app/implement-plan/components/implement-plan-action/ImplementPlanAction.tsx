@@ -47,10 +47,26 @@ const ImplementPlanAction = ({ plan, onImplementationStarted, isImplementationSt
 
   return (
     <div className="implement-plan-action">
-      <Button onClick={implementPlan} disabled={isSending}>
+      <Button onClick={implementPlan} disabled={isSending || outcome?.kind === 'uncertain'}>
         Implementar plan
       </Button>
-      {outcome?.kind === 'refused' && <Banner type="error" role="alert" title={outcome.error} />}
+      {outcome?.kind === 'refused' && <Banner type="error" role="alert" title={outcome.detail} />}
+      {outcome?.kind === 'stale-agent' && (
+        <Banner
+          type="error"
+          role="alert"
+          title="El agente que recordaba esta página ya no vale"
+          description="El backend ya no reconoce esa sesión de planificación. Coge el agente actual desde los planes activos e inténtalo de nuevo."
+        />
+      )}
+      {outcome?.kind === 'uncertain' && (
+        <Banner
+          type="error"
+          role="alert"
+          title="No se puede saber si la implementación ya empezó"
+          description="Una persona tiene que comprobarlo antes de reintentar."
+        />
+      )}
       {outcome?.kind === 'backend-unreachable' && <Banner type="error" role="alert" title={UNREACHABLE_MESSAGE} />}
     </div>
   )

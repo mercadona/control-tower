@@ -57,6 +57,32 @@ describe('ImplementPlanAction', () => {
     expect(onImplementationStarted).not.toHaveBeenCalled()
   })
 
+  it('should tell the person to get a fresh agent when the remembered one is stale', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(ImplementPlanMother.noLiveSession().body, { status: 409 })))
+    const onImplementationStarted = vi.fn()
+    const user = userEvent.setup()
+    render(<ImplementPlanAction plan={ImplementPlanMother.plan()} onImplementationStarted={onImplementationStarted} />)
+
+    await user.click(screen.getByRole('button', IMPLEMENT_BUTTON))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('planes activos')
+    expect(screen.getByRole('button', IMPLEMENT_BUTTON)).toBeEnabled()
+    expect(onImplementationStarted).not.toHaveBeenCalled()
+  })
+
+  it('should refuse an automatic retry when implementation phase is uncertain', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(ImplementPlanMother.implementationUncertain().body, { status: 409 })))
+    const onImplementationStarted = vi.fn()
+    const user = userEvent.setup()
+    render(<ImplementPlanAction plan={ImplementPlanMother.plan()} onImplementationStarted={onImplementationStarted} />)
+
+    await user.click(screen.getByRole('button', IMPLEMENT_BUTTON))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Una persona tiene que comprobarlo')
+    expect(screen.getByRole('button', IMPLEMENT_BUTTON)).toBeDisabled()
+    expect(onImplementationStarted).not.toHaveBeenCalled()
+  })
+
   it('should not notify its parent when the backend is unreachable', async () => {
     vi.stubGlobal(
       'fetch',

@@ -85,4 +85,34 @@ describe('ActivePlansClient', () => {
 
     expect(await ActivePlansClient.get()).toEqual({ kind: 'unavailable' })
   })
+
+  it('should report recovery as inconclusive when the backend says cmux could not be asked', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            '{"code":"active-plans-recovery-inconclusive","detail":"cmux could not be asked"}',
+            { status: 503 },
+          ),
+      ),
+    )
+
+    expect(await ActivePlansClient.get()).toEqual({ kind: 'inconclusive' })
+  })
+
+  it('should report unavailable, not inconclusive, when the backend cannot be reached at all', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch') }))
+
+    expect(await ActivePlansClient.get()).toEqual({ kind: 'unavailable' })
+  })
+
+  it('should report unavailable for a 503 with a different code', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{"code":"foreign-origin","detail":"not this page"}', { status: 503 })),
+    )
+
+    expect(await ActivePlansClient.get()).toEqual({ kind: 'unavailable' })
+  })
 })

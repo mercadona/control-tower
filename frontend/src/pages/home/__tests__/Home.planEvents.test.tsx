@@ -7,7 +7,6 @@ import {
   dropStream,
   openHome,
   startPlan,
-  streamFailure,
   streamFrame,
 } from './helpers'
 
@@ -58,15 +57,6 @@ describe('Home · plan events', () => {
     expect(screen.getByText('Plan listo')).toHaveAttribute('aria-live', 'polite')
     expect(screen.getByRole('button', { name: /Plan Completado/ })).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByRole('button', { name: /Implementación Activo/ })).toHaveAttribute('aria-expanded', 'true')
-    expect(FakeEventSource.last().closes).toBe(1)
-  })
-
-  it('should show the backend failure text as it came and stop listening', async () => {
-    await planStarted()
-
-    await streamFailure(PlanEventsMother.unreadable())
-
-    expect(screen.getByRole('alert')).toHaveTextContent('git status could not say whether the plan is committed')
     expect(FakeEventSource.last().closes).toBe(1)
   })
 

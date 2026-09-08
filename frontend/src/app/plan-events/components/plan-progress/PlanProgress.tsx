@@ -5,6 +5,7 @@ import { Banner } from 'system-ui/banner'
 import './PlanProgress.css'
 
 const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
+const REFUSED_MESSAGE = 'El backend no reconoce esta sesión de plan, puede haberse reiniciado'
 
 type PlanProgressProps = {
   plan: StartedPlan
@@ -34,7 +35,8 @@ const PlanProgress = ({ plan, onReady }: PlanProgressProps) => {
       {progress.phase === 'connecting' && <p className="plan-progress__state" role="status">Plan arrancado</p>}
       {progress.phase === 'writing' && <p className="plan-progress__state" role="status">Escribiendo el plan…</p>}
       {progress.phase === 'ready' && <p className="plan-progress__state" role="status" aria-live="polite">Plan listo</p>}
-      {progress.phase === 'failed' && <Banner type="error" role="alert" title={progress.error} />}
+      {progress.phase === 'failed' && <Banner type="error" role="alert" title={progress.detail} />}
+      {progress.phase === 'refused' && <Banner type="error" role="alert" title={REFUSED_MESSAGE} />}
       {progress.phase === 'unreachable' && <Banner type="error" role="alert" title={UNREACHABLE_MESSAGE} />}
       <p className="plan-progress__facts">{facts}</p>
     </section>

@@ -34,6 +34,18 @@ describe('StartPlanClient', () => {
     })
   })
 
+  it('should carry the refusal code alongside its detail', async () => {
+    answerWith(StartPlanMother.malformedRepo())
+
+    const outcome = await StartPlanClient.start(request())
+
+    expect(outcome).toEqual({
+      kind: 'refused',
+      code: 'malformed-repo',
+      error: 'repo must be a repository such as owner/name',
+    })
+  })
+
   it('should keep a root that differs from the path the person typed', async () => {
     answerWith(StartPlanMother.startedFromNonCanonicalPath())
 

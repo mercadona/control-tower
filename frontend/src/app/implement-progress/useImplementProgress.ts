@@ -11,6 +11,9 @@ type ImplementProgress =
 
 const CONNECTING: ImplementProgress = { phase: 'connecting' }
 const POLL_INTERVAL_MS = 3000
+const AWAITING_REVIEWER_POLL_INTERVAL_MS = 15000
+
+const DELIVERY_STEPS: readonly ImplementationStep[] = [ImplementationStep.DELIVERED, ImplementationStep.IN_REVIEW, ImplementationStep.FIXING]
 
 const toProgress = (outcome: ImplementProgressOutcome): ImplementProgress => {
   if (outcome.kind === 'read') return { phase: 'progress', ...outcome.state }
@@ -19,8 +22,10 @@ const toProgress = (outcome: ImplementProgressOutcome): ImplementProgress => {
   return { phase: 'unreachable' }
 }
 
-const isFinal = (progress: ImplementProgress): boolean =>
-  progress.phase === 'failed' || (progress.phase === 'progress' && progress.step === ImplementationStep.DELIVERED)
+const isAwaitingReviewer = (progress: ImplementProgress): boolean =>
+  progress.phase === 'progress' && DELIVERY_STEPS.includes(progress.step)
+
+const isFinal = (progress: ImplementProgress): boolean => progress.phase === 'failed'
 
 const useImplementProgress = (issue: number, root: string, repo: string): ImplementProgress => {
   const [progress, setProgress] = useState<ImplementProgress>(CONNECTING)
@@ -36,7 +41,7 @@ const useImplementProgress = (issue: number, root: string, repo: string): Implem
 
       const next = toProgress(outcome)
       setProgress(next)
-      if (!isFinal(next)) timer = window.setTimeout(poll, POLL_INTERVAL_MS)
+      if (!isFinal(next)) timer = window.setTimeout(poll, isAwaitingReviewer(next) ? AWAITING_REVIEWER_POLL_INTERVAL_MS : POLL_INTERVAL_MS)
     }
 
     timer = window.setTimeout(poll, 0)

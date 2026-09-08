@@ -6,7 +6,6 @@ import { WorkflowSnapshot, WORKFLOW_SNAPSHOT_KEY, WorkflowSnapshotStorage } from
 import {
   backendAnswering,
   backendRecovering,
-  backendUnreachable,
   openHome,
   pressStart,
   startPlan,
@@ -334,13 +333,46 @@ describe('Home · restore workflow', () => {
     expect(fetching.mock.calls.filter(([input]) => input === '/start-plan')).toHaveLength(1)
   })
 
-  it('should keep the form when the recovery endpoint is unreachable', async () => {
-    const fetching = backendUnreachable()
+  it('should show it cannot tell what is running, and offer a retry, when the backend cannot be reached', async () => {
+    const fetching = vi.fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(new Response(activePlansAnswer().body, { status: 200 }))
+    vi.stubGlobal('fetch', fetching)
+    const { user } = openHome()
 
-    openHome()
-
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('No se pudo comprobar el estado del plan')
     expect(screen.getByLabelText('Clave del ticket')).toBeEnabled()
-    await waitFor(() => expect(fetching).toHaveBeenCalledWith('/active-plans'))
+    expect(screen.queryByRole('button', { name: 'Descartar estado' })).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+    expect(await screen.findByLabelText('Clave del ticket')).toBeEnabled()
+    expect(fetching).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('should show it cannot tell what is running, and offer a retry, on a fresh 503', async () => {
+    const inconclusiveAnswer = {
+      status: 503,
+      body: '{"code":"active-plans-recovery-inconclusive","detail":"cmux could not be asked"}',
+    }
+    const fetching = vi.fn()
+      .mockResolvedValueOnce(new Response(inconclusiveAnswer.body, { status: inconclusiveAnswer.status }))
+      .mockResolvedValueOnce(new Response(activePlansAnswer().body, { status: 200 }))
+    vi.stubGlobal('fetch', fetching)
+    const { user } = openHome()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('No se puede saber qué hay en marcha')
+    expect(alert).not.toHaveTextContent('No se pudo contactar con el backend')
+    expect(screen.getByLabelText('Clave del ticket')).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Descartar estado' })).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+    expect(await screen.findByLabelText('Clave del ticket')).toBeEnabled()
+    expect(fetching).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('alert')).toBeNull()
   })
 })
