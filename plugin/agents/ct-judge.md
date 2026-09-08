@@ -281,6 +281,14 @@ task asks for it.
 `(modify)` matches the previous commit. The paths are settled; what was written
 inside them is yours.
 
+A diff of the plan file inside a task is an AMENDMENT written by the
+implementer, not a path out of scope: ruling whether it was justified belongs
+to this item. The program already refused any amendment that removes a
+declared route, so what reaches you only ADDS. The question to answer is
+whether the sentence of the task justifies the route the implementer added.
+The plan was committed before the run started, so what shows in the diff is
+the amended lines, not the whole plan.
+
 ### 9. `test-desiderata` — the tests this task adds
 
 **Where to look:** the `+` lines of the diff in its test files — the tests this

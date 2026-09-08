@@ -128,6 +128,15 @@ const item5DeLaRubrica = () => {
 // `seccionesDelPaquete` usa por el mismo motivo.
 const item5Normalizado = () => item5DeLaRubrica().replace(/\s+/g, ' ')
 
+// El ítem `alcance`, aislado hasta el siguiente encabezado, con el mismo
+// recorte que `item5DeLaRubrica`: es el único sitio donde se le dice al juez
+// que un diff del fichero del plan dentro de una tarea es una enmienda que
+// tiene que dictaminar, no una ruta fuera de alcance.
+const item8DeLaRubrica = () => {
+  const m = /^### 8\. `alcance`[\s\S]*?(?=^### |^## )/m.exec(readFileSync(AGENTE_JUEZ, 'utf8'))
+  return m ? m[0] : ''
+}
+
 // El ítem `test-desiderata`, aislado hasta el siguiente encabezado, con el
 // mismo recorte que `item5DeLaRubrica`: es el único sitio donde se le dice al
 // juez qué mira en los tests que la tarea ACABA de escribir.
@@ -328,6 +337,15 @@ describe('quién puede qué', () => {
     const punto3 = punto3DelImplementador().replace(/\s+/g, ' ')
     expect(punto3).toMatch(/how a change of this kind must reach production/i)
     expect(punto3).toMatch(/expand-contract/)
+  })
+
+  it('el ítem alcance le dice al juez que un diff del plan es una enmienda que tiene que dictaminar', () => {
+    // Tarea 5: el ítem `alcance` ya no veta por reflejo, ni ignora, un diff del
+    // fichero del plan dentro de una tarea — es una ENMIENDA escrita por el
+    // implementador y a este ítem le toca dictaminar si estaba justificada.
+    const item = item8DeLaRubrica()
+    expect(item).toMatch(/\bamendment\b/i)
+    expect(item).toMatch(/plan file/i)
   })
 
   it('test-desiderata es el noveno ítem, y va detrás de alcance', () => {
