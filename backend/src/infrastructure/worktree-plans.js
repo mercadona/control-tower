@@ -1,14 +1,18 @@
 import { CmuxPlanAgents } from './cmux-plan-agents.js'
+import { CheckoutRoot } from '../domain/value-objects/checkout-root.js'
 import { PlanIssue } from '../domain/value-objects/plan-issue.js'
 import { PlanWatch } from '../domain/value-objects/plan-watch.js'
 import { PlanFailure } from '../domain/exceptions.js'
 
 export class WorktreePlans {
-  constructor({ checkouts, survey, sessions, story, stderr }) {
+  static #UNDER_A_CHECKOUT = /^(.+)\/\.worktrees\/[1-9]\d*$/
+
+  constructor({ checkouts, survey, sessions, story, realpathOf, stderr }) {
     this.checkouts = checkouts
     this.survey = survey
     this.sessions = sessions
     this.story = story
+    this.realpathOf = realpathOf
     this.stderr = stderr
   }
 
@@ -16,12 +20,37 @@ export class WorktreePlans {
     return `https://github.com/${repository.text}/issues/${issueNumber}`
   }
 
-  static #agentOf(knowable, worktree) {
+  static #opensAPlan(entry) {
+    return CmuxPlanAgents.isHandle(entry.ref) &&
+      typeof entry.title === 'string' && entry.title.startsWith(CmuxPlanAgents.NAME_PREFIX)
+  }
+
+  #agentOf(knowable, worktree) {
     const attending = knowable.find((entry) =>
-      entry.cwd === worktree && CmuxPlanAgents.isHandle(entry.ref) &&
-      typeof entry.title === 'string' && entry.title.startsWith(CmuxPlanAgents.NAME_PREFIX))
+      WorktreePlans.#opensAPlan(entry) && this.#sameDirectory(entry.cwd, worktree))
 
     return attending === undefined ? null : attending.ref
+  }
+
+  #sameDirectory(said, worktree) {
+    if (said === worktree) return true
+    const canonical = this.realpathOf(worktree)
+
+    return canonical !== null && said === canonical
+  }
+
+  #toSurvey(knowable) {
+    const registered = this.checkouts.known()
+    if (registered === null) return null
+    const roots = new Map(registered.map((root) => [root.text, root]))
+    for (const entry of knowable) {
+      if (!WorktreePlans.#opensAPlan(entry)) continue
+      const found = entry.cwd.match(WorktreePlans.#UNDER_A_CHECKOUT)
+      if (found === null || roots.has(found[1]) || !CheckoutRoot.isWellFormed(found[1])) continue
+      roots.set(found[1], new CheckoutRoot(found[1]))
+    }
+
+    return [...roots.values()]
   }
 
   static #knowableIn(listed) {
@@ -36,7 +65,7 @@ export class WorktreePlans {
     if (listed === null) return null
     const knowable = WorktreePlans.#knowableIn(listed)
     if (knowable === null) return null
-    const roots = this.checkouts.known()
+    const roots = this.#toSurvey(knowable)
     if (roots === null) return null
     const watches = []
     for (const root of roots) {
@@ -51,7 +80,7 @@ export class WorktreePlans {
     if (surveyed === null) return []
     const watches = []
     for (const prepared of surveyed.prepared) {
-      const agent = WorktreePlans.#agentOf(knowable, prepared.located.path)
+      const agent = this.#agentOf(knowable, prepared.located.path)
       if (agent === null) continue
       watches.push(new PlanWatch({
         story: await this.#storyOf(prepared.issueNumber, surveyed.repository),

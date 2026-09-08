@@ -346,7 +346,8 @@ class CtApi {
         survey: async (root) => (await new SurveyWorkspaces({ workspace })
           .execute(new SurveyWorkspacesParams({ root }))).survey,
         sessions: () => listCmuxWorkspaces({ requireComplete: true }),
-        story: async (asked) => (await readPlanStory.execute(new ReadPlanStoryParams(asked))).story,
+        realpathOf: Disk.realpathOf,
+        story: async (subject) => (await readPlanStory.execute(new ReadPlanStoryParams(subject))).story,
         stderr: (line) => process.stderr.write(line),
       }),
       implementationStarts,
@@ -357,7 +358,6 @@ class CtApi {
       pullRequestReviews,
       activePlans,
     })
-    await recovery.recover()
     const server = new ApiServer({
       port: asked.port,
       startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts),

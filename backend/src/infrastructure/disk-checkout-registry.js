@@ -32,8 +32,14 @@ export class DiskCheckoutRegistry extends CheckoutRegistry {
       return
     }
     if (known.some((seen) => seen.text === root.text)) return
-
-    this.write(DiskCheckoutRegistry.#pathFor(this.root), DiskCheckoutRegistry.#contentFor([...known, root]))
+    const path = DiskCheckoutRegistry.#pathFor(this.root)
+    try {
+      this.write(path, DiskCheckoutRegistry.#contentFor([...known, root]))
+    } catch (failure) {
+      this.stderr(
+        `checkout registry: ${root.text} could not be written to ${path}, so the sweep will not survey it until it is: ${failure.message}\n`
+      )
+    }
   }
 
   known() {

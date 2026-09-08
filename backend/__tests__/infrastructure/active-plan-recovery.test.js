@@ -176,7 +176,6 @@ describe('ActivePlanRecovery', () => {
     ['mismatched repository', VALID_MARKER.replace('jjponz/repo-pulse', 'other/repo')],
     ['mismatched issue', VALID_MARKER.replace('"issue":45', '"issue":44')],
     ['mismatched agent', VALID_MARKER.replace('workspace:9', 'workspace:10')],
-    ['mismatched story', VALID_MARKER.replace('ABC-123', 'ABC-124')],
     ['mismatched root', VALID_MARKER.replace('"/repo"', '"/other"')],
     ['mismatched branch', VALID_MARKER.replace('feat/45', 'feat/44')],
     ['mismatched worktree', VALID_MARKER.replace('/repo/.worktrees/45', '/repo/.worktrees/44')],
@@ -187,6 +186,14 @@ describe('ActivePlanRecovery', () => {
 
     expect(recovered.activePlans.known()[0].phase).toBe('planning')
     expect(recovered.reviews.startRecovered).toHaveBeenCalledOnce()
+  })
+
+  it('a_marker_whose_story_differs_is_still_this_plan_because_the_title_of_an_issue_can_be_renamed', async () => {
+    const recovered = fixture({ marker: VALID_MARKER.replace('ABC-123', 'ABC-124') })
+
+    await recovered.recovery.recover()
+
+    expect(recovered.activePlans.known()[0].phase).toBe('implementing')
   })
 
   it('keeps_a_plan_with_a_marker_path_that_is_a_directory_in_planning', async () => {

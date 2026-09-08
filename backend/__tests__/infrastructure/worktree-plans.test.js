@@ -52,12 +52,15 @@ class SessionsOfCmux {
 class PlansOf {
   static ONE_CHECKOUT = '/repos/one'
 
-  static aWorktreeAttendedBy(sessions, { story = () => new UserStoryKey('ABC-123'), stderr = vi.fn() } = {}) {
+  static aWorktreeAttendedBy(sessions, {
+    story = () => new UserStoryKey('ABC-123'), stderr = vi.fn(), realpathOf = (path) => path,
+  } = {}) {
     return new WorktreePlans({
       checkouts: { known: () => [new CheckoutRoot(PlansOf.ONE_CHECKOUT)] },
       survey: () => SurveyedCheckout.of(PlansOf.ONE_CHECKOUT, [33]),
       sessions,
       story,
+      realpathOf,
       stderr,
     })
   }
@@ -142,6 +145,7 @@ describe('WorktreePlans', () => {
       },
       sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
       story: () => null,
+      realpathOf: (path) => path,
       stderr,
     })
 
@@ -179,16 +183,65 @@ describe('WorktreePlans', () => {
     expect(await plans.inFlight()).toBeNull()
   })
 
+  it('a_plan_in_flight_is_recovered_even_when_the_registry_has_never_been_written', async () => {
+    const plans = new WorktreePlans({
+      checkouts: { known: () => [] },
+      survey: () => SurveyedCheckout.of('/repos/one', [33]),
+      sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
+      story: () => null,
+      realpathOf: (path) => path,
+      stderr: vi.fn(),
+    })
+
+    const [watch] = await plans.inFlight()
+
+    expect(watch.issue.number).toBe(33)
+    expect(watch.located.root).toBe('/repos/one')
+  })
+
+  it('a_session_the_dispatcher_opened_does_not_put_its_checkout_on_the_list_to_survey', async () => {
+    const surveyed = []
+    const plans = new WorktreePlans({
+      checkouts: { known: () => [] },
+      survey: (root) => {
+        surveyed.push(root.text)
+
+        return SurveyedCheckout.of(root.text, [])
+      },
+      sessions: () => SessionsOfCmux.attending(
+        '/repos/dispatched/.worktrees/41', { title: SessionsOfCmux.DISPATCHED_TITLE }
+      ),
+      story: () => null,
+      realpathOf: (path) => path,
+      stderr: vi.fn(),
+    })
+
+    expect(await plans.inFlight()).toEqual([])
+    expect(surveyed).toEqual([])
+  })
+
   it('a_checkout_registry_that_could_not_be_read_is_not_the_same_as_no_checkouts', async () => {
     const plans = new WorktreePlans({
       checkouts: { known: () => null },
       survey: () => SurveyedCheckout.of('/repos/one', [33]),
       sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
       story: () => null,
+      realpathOf: (path) => path,
       stderr: vi.fn(),
     })
 
     expect(await plans.inFlight()).toBeNull()
+  })
+
+  it('a_session_sitting_in_the_same_place_through_a_symlink_still_names_its_agent', async () => {
+    const plans = PlansOf.aWorktreeAttendedBy(
+      () => SessionsOfCmux.attending('/private/repos/one/.worktrees/33'),
+      { realpathOf: (path) => path.replace('/repos/one', '/private/repos/one') }
+    )
+
+    const [watch] = await plans.inFlight()
+
+    expect(watch.agent).toBe('workspace:20')
   })
 
   it('a_failure_that_is_not_the_ones_this_reader_degrades_travels_out_instead_of_passing_for_nothing', async () => {
@@ -197,6 +250,7 @@ describe('WorktreePlans', () => {
       survey: () => { throw new TypeError('git-workspace has a bug') },
       sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
       story: () => null,
+      realpathOf: (path) => path,
       stderr: vi.fn(),
     })
     const storyBroke = PlansOf.aWorktreeAttendedBy(

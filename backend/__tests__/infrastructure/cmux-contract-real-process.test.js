@@ -73,6 +73,7 @@ class TheSameQuestion {
       }),
       sessions: () => listCmuxWorkspaces({ requireComplete: true }),
       story: () => null,
+      realpathOf: (path) => path,
       stderr: vi.fn(),
     }).inFlight()
   }

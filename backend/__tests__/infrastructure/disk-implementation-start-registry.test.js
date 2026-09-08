@@ -85,4 +85,29 @@ describe('DiskImplementationStartRegistry', () => {
 
     expect(registry.matches(WATCH_WITHOUT_A_STORY)).toBe(true)
   })
+  it('a_plan_whose_issue_was_renamed_still_matches_its_own_marker', () => {
+    const registry = new DiskImplementationStartRegistry({
+      read: () => `${JSON.stringify({
+        repo: 'owner/repo',
+        issue: 33,
+        agent: 'workspace:20',
+        story: 'ABC-123',
+        root: '/repo',
+        branch: 'feat/33',
+        worktree: '/repo/.worktrees/33',
+      })}\n`,
+      stat: () => ({ isFile: () => true }),
+      write: vi.fn(),
+      root: '/state',
+    })
+    const renamed = new PlanWatch({
+      story: new UserStoryKey('ABC-999'),
+      issue: new PlanIssue({ number: 33, url: 'https://github.com/owner/repo/issues/33' }),
+      located: new WorkspaceLocation({ root: '/repo', path: '/repo/.worktrees/33', branch: 'feat/33' }),
+      repository: new RepositoryName('owner/repo'),
+      agent: 'workspace:20',
+    })
+
+    expect(registry.matches(renamed)).toBe(true)
+  })
 })

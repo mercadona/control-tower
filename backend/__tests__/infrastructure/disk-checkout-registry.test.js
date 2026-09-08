@@ -103,6 +103,20 @@ describe('DiskCheckoutRegistry', () => {
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining('/state/checkouts.json'))
   })
 
+  it('a_registry_it_cannot_write_does_not_bring_down_the_plan_that_was_already_launched', () => {
+    const stderr = vi.fn()
+    const registry = new DiskCheckoutRegistry({
+      read: vi.fn(),
+      stat: () => StoredCheckouts.NOT_A_FILE,
+      write: () => { throw Object.assign(new Error('permission denied'), { code: 'EACCES' }) },
+      stderr,
+      root: '/state',
+    })
+
+    expect(() => registry.remember(new CheckoutRoot('/repos/one'))).not.toThrow()
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining('permission denied'))
+  })
+
   it('what_it_writes_is_what_it_reads_back_so_the_two_halves_cannot_drift_apart', () => {
     let stored = null
     const registry = new DiskCheckoutRegistry({

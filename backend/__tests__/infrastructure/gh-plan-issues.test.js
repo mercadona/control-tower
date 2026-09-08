@@ -705,10 +705,12 @@ describe('GhPlanIssues asking which user story a plan came from', () => {
     const notJson = await GhDouble.printing('this is not json\n').storyRefusalFor()
     const noTitle = await GhDouble.printing(`${JSON.stringify({ body: 'no title here' })}\n`).storyRefusalFor()
     const printedNull = await GhDouble.printing('null\n').storyRefusalFor()
+    const noBody = await GhDouble.printing(`${JSON.stringify({ title: 'MO_SHOP-42 lo que sea' })}\n`).storyRefusalFor()
 
     expect(notJson).toBeInstanceOf(PlanStoryNotUnderstood)
     expect(noTitle).toBeInstanceOf(PlanStoryNotUnderstood)
     expect(printedNull).toBeInstanceOf(PlanStoryNotUnderstood)
+    expect(noBody).toBeInstanceOf(PlanStoryNotUnderstood)
     expect(notJson).not.toBeInstanceOf(PlanStoryNotRead)
   })
 })

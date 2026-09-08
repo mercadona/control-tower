@@ -2,6 +2,7 @@ import { join } from 'node:path'
 
 export class DiskImplementationStartRegistry {
   static DIRECTORY = 'implementation-starts'
+  static IDENTITY = ['repo', 'issue', 'agent', 'root', 'branch', 'worktree']
 
   constructor({ read, stat, write, root }) {
     this.read = read
@@ -48,7 +49,7 @@ export class DiskImplementationStartRegistry {
       const expected = DiskImplementationStartRegistry.recordFor(watch)
 
       return record !== null && typeof record === 'object' && !Array.isArray(record) &&
-        Object.keys(expected).every((field) => record[field] === expected[field])
+        DiskImplementationStartRegistry.IDENTITY.every((field) => record[field] === expected[field])
     } catch {
       return false
     }
