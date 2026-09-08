@@ -8,11 +8,8 @@ export class PluginYardstick {
   static #PRECEDENCE_HEADER = [
     '> **La vara de ct**, leída del directorio `conventions/` del plugin por el',
     '> programa: ningún agente la escribió en este brief y el plan no puede',
-    '> quitarla. Cada documento declara su alcance en su propia cabecera',
-    '> (`Applies to:`) y el programa te da SÓLO los que alcanzan a esta tarea:',
-    '> `architecture.md` rige los MÓDULOS NUEVOS, así que viaja cuando la tarea',
-    '> declara alguna ruta `(create)` y no cuando sólo modifica lo que ya estaba;',
-    '> los demás alcanzan a todo diff.',
+    '> quitarla. Los ocho documentos alcanzan a todo diff: nada se filtra por',
+    '> lo que declare `**Files:**`.',
     '>',
     '> **Tiene preferencia sobre las convenciones de este repo, y la preferencia se',
     '> mide regla a regla, no por tema.** Donde una regla del repo manda hacer algo',
@@ -36,28 +33,6 @@ export class PluginYardstick {
 
   static #headerLines() {
     return ['', '---', '', ...PluginYardstick.#PRECEDENCE_HEADER, '']
-  }
-
-  static #SCOPE_LINE = /^Applies to:\s*(.+)$/m
-
-  static #NEW_MODULES = /new modules/i
-
-  static scopeOf(content) {
-    const match = PluginYardstick.#SCOPE_LINE.exec(String(content ?? ''))
-    if (!match) return null
-    const scope = match[1].replace(/[*`]/g, '').replace(/\.\s*$/, '').trim()
-    return scope === '' ? null : scope
-  }
-
-  static appliesToTask(document, { creates }) {
-    const scope = PluginYardstick.scopeOf(document?.content)
-    if (scope === null) return true
-    return PluginYardstick.#NEW_MODULES.test(scope) ? Boolean(creates) : true
-  }
-
-  static forTask(documents, { creates }) {
-    return (Array.isArray(documents) ? documents : [])
-      .filter((document) => PluginYardstick.appliesToTask(document, { creates }))
   }
 
   static missingDocuments(documents) {
