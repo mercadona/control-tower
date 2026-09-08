@@ -14,10 +14,10 @@ beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
 
 describe('a veto leaves no trace to undo', () => {
-  const veta = () => judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }]))
+  const veto = () => judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }]))
   // The adviser of the second veto, down the happy path: what this describe
   // measures is the veto, not the advice (that is in ct-step-advice.test.js).
-  const aconsejar = () => {
+  const advise = () => {
     ct('next')
     const p = join(repo, 'advice.json')
     writeFileSync(p, JSON.stringify({ approach: 'por otro camino', files_to_reconsider: [] }))
@@ -30,19 +30,19 @@ describe('a veto leaves no trace to undo', () => {
     for (let i = 0; i < 3; i++) {
       ct('report', writeReport(['uno.txt']))
       ct('controls')
-      var r = veta()
-      if (runState().step === 'advise') aconsejar()
+      var r = veto()
+      if (runState().step === 'advise') advise()
     }
     expect(r.status).toBe(1)
     expect(commits()).toBe(1)
   })
 
   it('a PASS with medium findings corrects and then delivers all the same', () => {
-    const queja = () => judgeTask(writeVerdict('PASS', [{ severity: 'medium', what: 'falta un caso', path: 'uno.txt', line: 1 }]))
+    const complaint = () => judgeTask(writeVerdict('PASS', [{ severity: 'medium', what: 'falta un caso', path: 'uno.txt', line: 1 }]))
     for (let i = 0; i < 3; i++) {
       ct('report', writeReport(['uno.txt']))
       ct('controls')
-      queja()
+      complaint()
     }
     expect(runState().step).toBe('commit')     // budget exhausted: it delivers
     expect(ct('commit').status).toBe(0)
@@ -51,10 +51,10 @@ describe('a veto leaves no trace to undo', () => {
 })
 
 describe('a verdict that cannot be read is not a verdict', () => {
-  const preparar = () => { ct('report', writeReport(['uno.txt'])); ct('controls') }
+  const prepare = () => { ct('report', writeReport(['uno.txt'])); ct('controls') }
 
   it('a JSON that does not parse is a DISCARD, not a usage error', () => {
-    preparar()
+    prepare()
     const r = judgeTask(writeRaw('esto no es json'))
     expect(r.stdout).toMatch(/veredicto descartado/)
     expect(runState().discards).toBe(1)
@@ -62,18 +62,18 @@ describe('a verdict that cannot be read is not a verdict', () => {
   })
 
   it('a made-up ruling is discarded', () => {
-    preparar()
+    prepare()
     expect(judgeTask(writeVerdict('QUIZÁS')).stdout).toMatch(/ruling desconocido/)
   })
 
   it('a PASS with a serious finding is discarded: it contradicts itself', () => {
-    preparar()
+    prepare()
     const r = judgeTask(writeVerdict('PASS', [{ severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }]))
     expect(r.stdout).toMatch(/contradice la rúbrica/)
   })
 
   it('discarding without stopping is cut off with 3 instead of going on asking', () => {
-    preparar()
+    prepare()
     let r
     for (let i = 0; i < 7; i++) r = judgeTask(writeRaw('nada'))
     expect(r.status).toBe(3)
@@ -111,22 +111,22 @@ describe('a verdict issued with no review package is not a verdict', () => {
     // RESERVATION 3 of the review: the ROW of the discard, not only the
     // discard. Telemetry is the layer that let the gap be seen (a judge row
     // naming a .diff that does not exist), so it is the one that has to fix it.
-    const filas = readFileSync(join(repo, '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
+    const rows = readFileSync(join(repo, '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
       .trim().split('\n').map((l) => JSON.parse(l))
-    const juez = filas.filter((f) => f.step === 'judge')
-    expect(juez).toHaveLength(1)
-    expect(juez[0].outcome).toBe('discarded')
-    expect(juez[0].why).toMatch(/paquete de revisión no existe/)
+    const judge = rows.filter((f) => f.step === 'judge')
+    expect(judge).toHaveLength(1)
+    expect(judge[0].outcome).toBe('discarded')
+    expect(judge[0].why).toMatch(/paquete de revisión no existe/)
     // A discard is NOT a verdict: with no `ruling`, aggregateVerdictMeasures
     // does not count it as one (run-metrics.js), and with no `review_package`
     // the row does not assert a file that does not exist.
-    expect(juez[0].ruling).toBeUndefined()
-    expect(juez[0].review_package).toBeUndefined()
+    expect(judge[0].ruling).toBeUndefined()
+    expect(judge[0].review_package).toBeUndefined()
   })
 
   it('slice-verdict with no slice-review.diff on disk discards, does not advance the step, and measures it as discarded', () => {
     // The two tasks committed and the Global verification green, but without
-    // going back to `next`: `escribirPaqueteDeSlice` has never run.
+    // going back to `next`: `writeSliceReviewPackage` has never run.
     taskOk('uno.txt')
     taskOk('dos.txt')
     ct('reconcile')
@@ -143,12 +143,12 @@ describe('a verdict issued with no review package is not a verdict', () => {
     expect(commits()).toBe(3)                    // 1 base + 2 tasks: no verdict commit at all
     expect(existsSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-slice.json'))).toBe(false)
 
-    const filas = readFileSync(join(repo, '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
+    const rows = readFileSync(join(repo, '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
       .trim().split('\n').map((l) => JSON.parse(l))
-    const juez = filas.filter((f) => f.step === 'slice-judge')
-    expect(juez).toHaveLength(1)
-    expect(juez[0].outcome).toBe('discarded')
-    expect(juez[0].why).toMatch(/paquete de revisión del slice no existe/)
-    expect(juez[0].ruling).toBeUndefined()
+    const judge = rows.filter((f) => f.step === 'slice-judge')
+    expect(judge).toHaveLength(1)
+    expect(judge[0].outcome).toBe('discarded')
+    expect(judge[0].why).toMatch(/paquete de revisión del slice no existe/)
+    expect(judge[0].ruling).toBeUndefined()
   })
 })

@@ -33,17 +33,17 @@ export const CONVENTIONS_FILE = '.agent/conventions.md'
 // yardstickSection: the section `ct-step.mjs` pastes at the end of every task
 // brief, or `''` if there is nothing to inject.
 //
-// `contenido` is what is in `.agent/conventions.md` TODAY (or null/undefined if
+// `content` is what is in `.agent/conventions.md` TODAY (or null/undefined if
 // the caller never got to read it). A blank declaration (empty file or only
 // whitespace) is not a yardstick — it is the same state as "the file does not
 // exist": the caller writes nothing to the brief in that case, and the diff is
 // measured only against ct's yardstick (agents/ct-judge.md, item `patrones`:
 // that item is never `sin-vara`, because ct's travels with the plugin); the
 // repo's, here, adds nothing (F14: absence is measured, not filled in).
-export function yardstickSection(contenido) {
-  if (contenido == null || contenido.trim() === '') return ''
-  const cuerpo = contenido.endsWith('\n') ? contenido : `${contenido}\n`
-  return `\n---\n\n> La vara del REPO, leída directo de \`.agent/conventions.md\` por el programa —\n> ningún agente la escribió en este brief y el plan no puede quitarla. Sus\n> documentos de reglas son vara igual que los de §3: si §3 omitió uno, se mide\n> también contra él.\n\n${cuerpo}`
+export function yardstickSection(content) {
+  if (content == null || content.trim() === '') return ''
+  const body = content.endsWith('\n') ? content : `${content}\n`
+  return `\n---\n\n> La vara del REPO, leída directo de \`.agent/conventions.md\` por el programa —\n> ningún agente la escribió en este brief y el plan no puede quitarla. Sus\n> documentos de reglas son vara igual que los de §3: si §3 omitió uno, se mide\n> también contra él.\n\n${body}`
 }
 
 // ============================================================================
@@ -71,30 +71,30 @@ export const MAX_PER_DIRECTORY = 12
 // Repo guides, AT THE ROOT only: a `docs/AGENTS.md` is not the guide tools and
 // humans look for by convention at the repo's root, so it does not match here
 // (yardstickCandidates only applies this rule to paths with no `/`).
-const RAIZ_RE = /^(CLAUDE|AGENTS|CONTRIBUTING|CONVENTIONS)(\.md|\.markdown|\.rst|\.txt)?$/i
+const ROOT_RE = /^(CLAUDE|AGENTS|CONTRIBUTING|CONVENTIONS)(\.md|\.markdown|\.rst|\.txt)?$/i
 // Applied to the directory's BASENAME (without the trailing slash).
-const DIR_REGLAS_RE = /(conventions?|convenciones|rules|reglas)/i
-const SKILL_PROYECTO_RE = /^\.claude\/skills\/[^/]+\/SKILL\.md$/
-const TEXTO_RE = /\.(md|markdown|mdc|rst|txt)$/i
+const DIR_RULES_RE = /(conventions?|convenciones|rules|reglas)/i
+const PROJECT_SKILL_RE = /^\.claude\/skills\/[^/]+\/SKILL\.md$/
+const TEXT_RE = /\.(md|markdown|mdc|rst|txt)$/i
 // Nothing living under `.agent/` is a candidate: it is the loop's OWN ground
 // (the declaration itself, `conventions.md`, and another subject's
 // acknowledgement, `conventions-ack.md`) — proposing it would be the sweep
 // citing itself.
-const DEL_LOOP_RE = /^\.agent\//
+const LOOP_OWN_RE = /^\.agent\//
 // Deterministic and independent of the locale of the machine that runs it.
-const orden = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
+const order = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
 
 // yardstickCandidates: takes the flat result of a walk over the repo
 // (`entradas`, `repo-walk.js` format: directories with a trailing `/`) and the
 // set of already declared paths (`declaredIn`), and returns
 // `{ candidatos: [{ ruta, motivo }], omitidos }`.
 //
-// Three groups, each sorted with `orden` so that the result is deterministic
+// Three groups, each sorted with `order` so that the result is deterministic
 // whatever happens to the order of the walk:
-//   1. root guides (RAIZ_RE);
+//   1. root guides (ROOT_RE);
 //   2. text files inside a directory whose name matches
-//      "convention(s)|convenciones|rules|reglas" (DIR_REGLAS_RE);
-//   3. `SKILL.md` of project skills (SKILL_PROYECTO_RE).
+//      "convention(s)|convenciones|rules|reglas" (DIR_RULES_RE);
+//   3. `SKILL.md` of project skills (PROJECT_SKILL_RE).
 //
 // `MAX_PER_DIRECTORY` caps each directory of group 2 separately —a
 // `docs/conventions/` with a hundred files must not drown the other two
@@ -102,62 +102,62 @@ const orden = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
 // Whatever does not fit under either cap counts in `omitidos`; whatever is
 // discarded for being the loop's or for being declared already does NOT count
 // there: it has not been kept quiet, it was simply not up for proposing.
-export function yardstickCandidates({ entradas = [], declaradas = new Set() } = {}) {
-  const vistos = new Set()
-  let omitidos = 0
+export function yardstickCandidates({ entradas: entries = [], declaradas: declared = new Set() } = {}) {
+  const seen = new Set()
+  let omitted = 0
 
-  const admite = (ruta) => {
-    if (DEL_LOOP_RE.test(ruta)) return false
-    if (declaradas.has(ruta)) return false
-    if (vistos.has(ruta)) return false
+  const admits = (path) => {
+    if (LOOP_OWN_RE.test(path)) return false
+    if (declared.has(path)) return false
+    if (seen.has(path)) return false
     return true
   }
-  const marcar = (ruta) => vistos.add(ruta)
+  const mark = (path) => seen.add(path)
 
-  const ficheros = entradas.filter((e) => !e.endsWith('/'))
-  const directorios = entradas.filter((e) => e.endsWith('/'))
+  const files = entries.filter((e) => !e.endsWith('/'))
+  const directories = entries.filter((e) => e.endsWith('/'))
 
   // Group 1 — root guides.
-  const grupoRaiz = ficheros
-    .filter((f) => !f.includes('/') && RAIZ_RE.test(f))
-    .sort(orden)
-    .filter((f) => admite(f))
-    .map((ruta) => (marcar(ruta), { ruta, motivo: 'guía del repo en la raíz' }))
+  const rootGroup = files
+    .filter((f) => !f.includes('/') && ROOT_RE.test(f))
+    .sort(order)
+    .filter((f) => admits(f))
+    .map((path) => (mark(path), { ruta: path, motivo: 'guía del repo en la raíz' }))
 
   // Group 2 — text files inside directories that match "rules".
-  const grupoDirectorios = []
-  const dirsQueCasan = directorios
-    .filter((d) => DIR_REGLAS_RE.test(d.slice(0, -1).split('/').pop()))
-    .sort(orden)
-  for (const dir of dirsQueCasan) {
-    const candidatosDelDir = ficheros
-      .filter((f) => f.startsWith(dir) && TEXTO_RE.test(f))
-      .sort(orden)
-      .filter((f) => admite(f))
-    const admitidos = candidatosDelDir.slice(0, MAX_PER_DIRECTORY)
-    omitidos += Math.max(0, candidatosDelDir.length - MAX_PER_DIRECTORY)
-    for (const ruta of admitidos) {
-      marcar(ruta)
-      grupoDirectorios.push({ ruta, motivo: `dentro de \`${dir}\`, que casa convention|rules` })
+  const directoryGroup = []
+  const matchingDirs = directories
+    .filter((d) => DIR_RULES_RE.test(d.slice(0, -1).split('/').pop()))
+    .sort(order)
+  for (const dir of matchingDirs) {
+    const dirCandidates = files
+      .filter((f) => f.startsWith(dir) && TEXT_RE.test(f))
+      .sort(order)
+      .filter((f) => admits(f))
+    const admitted = dirCandidates.slice(0, MAX_PER_DIRECTORY)
+    omitted += Math.max(0, dirCandidates.length - MAX_PER_DIRECTORY)
+    for (const path of admitted) {
+      mark(path)
+      directoryGroup.push({ ruta: path, motivo: `dentro de \`${dir}\`, que casa convention|rules` })
     }
   }
 
   // Group 3 — project skills.
-  const grupoSkills = ficheros
-    .filter((f) => SKILL_PROYECTO_RE.test(f))
-    .sort(orden)
-    .filter((f) => admite(f))
-    .map((ruta) => (marcar(ruta), {
-      ruta,
+  const skillGroup = files
+    .filter((f) => PROJECT_SKILL_RE.test(f))
+    .sort(order)
+    .filter((f) => admits(f))
+    .map((path) => (mark(path), {
+      ruta: path,
       motivo: 'skill de proyecto (también se puede declarar por nombre en la lista `Skills`)',
     }))
 
-  let candidatos = [...grupoRaiz, ...grupoDirectorios, ...grupoSkills]
-  if (candidatos.length > MAX_CANDIDATOS) {
-    omitidos += candidatos.length - MAX_CANDIDATOS
-    candidatos = candidatos.slice(0, MAX_CANDIDATOS)
+  let candidates = [...rootGroup, ...directoryGroup, ...skillGroup]
+  if (candidates.length > MAX_CANDIDATOS) {
+    omitted += candidates.length - MAX_CANDIDATOS
+    candidates = candidates.slice(0, MAX_CANDIDATOS)
   }
-  return { candidatos, omitidos }
+  return { candidatos: candidates, omitidos: omitted }
 }
 
 // declaredIn: the set of paths `.agent/conventions.md` ALREADY declares
@@ -173,9 +173,9 @@ export function yardstickCandidates({ entradas = [], declaradas = new Set() } = 
 // going on proposing the files inside is the correct thing, not the noise — the
 // human will decide whether that declaration already covers the directory or
 // whether the files need declaring one by one.
-export function declaredIn(contenido) {
+export function declaredIn(content) {
   const out = new Set()
-  for (const m of String(contenido ?? '').matchAll(/`([^`\n]+)`/g)) {
+  for (const m of String(content ?? '').matchAll(/`([^`\n]+)`/g)) {
     let token = m[1].trim()
     if (!token) continue
     if (token.startsWith('./')) token = token.slice(2)
@@ -223,19 +223,19 @@ const CT_INIT_BLOCKS = [
   ['<!-- ct-init:loop -->', '<!-- /ct-init:loop -->'],
 ]
 
-function sinBloquesDeCtInit(contenido) {
-  const lineas = String(contenido ?? '').split('\n')
+function withoutCtInitBlocks(content) {
+  const lines = String(content ?? '').split('\n')
   const out = []
-  let cierreEsperado = null
-  for (const raw of lineas) {
-    const linea = raw.replace(/\r$/, '')
-    if (cierreEsperado === null) {
-      const bloque = CT_INIT_BLOCKS.find(([abre]) => linea === abre)
-      if (bloque) { cierreEsperado = bloque[1]; continue }
+  let expectedClosing = null
+  for (const raw of lines) {
+    const line = raw.replace(/\r$/, '')
+    if (expectedClosing === null) {
+      const block = CT_INIT_BLOCKS.find(([opening]) => line === opening)
+      if (block) { expectedClosing = block[1]; continue }
       out.push(raw)
       continue
     }
-    if (linea === cierreEsperado) cierreEsperado = null
+    if (line === expectedClosing) expectedClosing = null
   }
   return out.join('\n')
 }
@@ -254,17 +254,17 @@ function sinBloquesDeCtInit(contenido) {
 // it is F14's impossible guard under another name. A multiline HTML comment
 // counts on the inside (its inner lines neither start with `<!--` nor end with
 // `-->`) — accepted: this is an approximation, not a formal proof.
-export function pareceEsqueleto(contenido) {
-  const lineas = sinBloquesDeCtInit(contenido).split('\n')
-  let sustancia = 0
-  for (const linea of lineas) {
-    const t = linea.trim()
+export function pareceEsqueleto(content) {
+  const lines = withoutCtInitBlocks(content).split('\n')
+  let substance = 0
+  for (const line of lines) {
+    const t = line.trim()
     if (!t) continue
     if (t.startsWith('#')) continue
     if (t.startsWith('<!--') || t.endsWith('-->')) continue
-    sustancia++
+    substance++
   }
-  return sustancia < 3
+  return substance < 3
 }
 
 // formatCandidatos: the block of text ready for `ct-init.sh`'s stdout, or `''`
@@ -278,28 +278,28 @@ export function pareceEsqueleto(contenido) {
 // `__tests__/ct-init.test.js` demands that the second run of a bootstrapped
 // repo carry no word "aviso" on stderr, a run in which this block DOES have a
 // candidate (the `AGENTS.md` `ct-init` has just created).
-export function formatCandidatos(candidatos, { omitidos = 0, truncated = false } = {}) {
-  if (!candidatos || candidatos.length === 0) return ''
+export function formatCandidatos(candidates, { omitidos: omitted = 0, truncated = false } = {}) {
+  if (!candidates || candidates.length === 0) return ''
   const out = [CANDIDATOS_HEADER]
-  let hayEsqueleto = false
-  for (const c of candidatos) {
-    const marca = c.esqueleto ? ' [esqueleto: sólo encabezados]' : ''
-    if (c.esqueleto) hayEsqueleto = true
-    out.push(`  · \`${c.ruta}\` — ${c.motivo}${marca}`)
+  let hasSkeleton = false
+  for (const c of candidates) {
+    const mark = c.esqueleto ? ' [esqueleto: sólo encabezados]' : ''
+    if (c.esqueleto) hasSkeleton = true
+    out.push(`  · \`${c.ruta}\` — ${c.motivo}${mark}`)
   }
   out.push(
     '  Nada de esto se ha escrito por ti: el barrido PROPONE y el humano DECLARA. ' +
       `Enséñaselos al usuario y escribe en \`${CONVENTIONS_FILE}\` SOLO los que confirme.`
   )
-  if (hayEsqueleto) {
+  if (hasSkeleton) {
     out.push(
       '  Los marcados `[esqueleto: sólo encabezados]` no traen reglas todavía: declararlos hoy ' +
         'es peor que no declararlos, porque le da al juez un documento vacío que SÍ cuenta como ' +
         'vara del repo, en vez de dejar que el diff se mida sólo contra la de ct.'
     )
   }
-  if (omitidos > 0) {
-    out.push(`  (+${omitidos} candidatos más, no listados: la lista es para que la filtre una persona.)`)
+  if (omitted > 0) {
+    out.push(`  (+${omitted} candidatos más, no listados: la lista es para que la filtre una persona.)`)
   }
   if (truncated) {
     out.push(

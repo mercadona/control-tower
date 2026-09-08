@@ -275,10 +275,10 @@ describe('buildIssueBody — the signal section (Slice 10)', () => {
       .toContain('N/A — sin telemetría nueva')
   })
   it('groomPlan carries a structured senal on every issue', () => {
-    const conSenal = { ...SLICE, n: 1, senal: 'métrica x' }
-    const sinSenal = { ...SLICE, n: 2, senal: '' }
-    const exenta = { ...SLICE, n: 3, senal: 'N/A — razón' }
-    const plan = groomPlan([conSenal, sinSenal, exenta], { milestone: 'Epic', specRef: SPEC_REF })
+    const withSignal = { ...SLICE, n: 1, senal: 'métrica x' }
+    const withoutSignal = { ...SLICE, n: 2, senal: '' }
+    const exempt = { ...SLICE, n: 3, senal: 'N/A — razón' }
+    const plan = groomPlan([withSignal, withoutSignal, exempt], { milestone: 'Epic', specRef: SPEC_REF })
     // Alongside descripcion/protectedLine and for the same reason: reconcile
     // compares without re-parsing the body this very plan has just generated.
     expect(plan.issues[0].senal).toBe('métrica x')

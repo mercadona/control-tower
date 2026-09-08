@@ -136,17 +136,17 @@ export function newRun({ plan, issue, baseSha, tasksTotal, e2eRuns }) {
 }
 
 const freeze = (run) => Object.freeze({ ...run })
-const con = (run, cambios) => freeze({ ...run, ...cambios })
+const withChanges = (run, changes) => freeze({ ...run, ...changes })
 
-const abierto = (run, cambios) => ({ run: con(run, cambios), state: RUN_STATES.OPEN })
-const cerrado = (run, state) => ({ run: freeze(run), state })
+const open = (run, changes) => ({ run: withChanges(run, changes), state: RUN_STATES.OPEN })
+const closed = (run, state) => ({ run: freeze(run), state })
 
 // The pair the table does not describe THROWS. It does not fall into a generic
 // branch and it is not read as "well, carry on where you were": it is the
 // original's `_impossible` property, and it is what makes a new outcome —or a
 // step reached by a path nobody thought of— a noisy error and not a silent
 // decision taken by omission.
-function imposible(run, outcome) {
+function impossible(run, outcome) {
   throw new Error(`transición imposible: el paso "${run.step}" no sabe qué hacer con el resultado "${outcome}"`)
 }
 
@@ -163,69 +163,69 @@ function imposible(run, outcome) {
 export function after(run, outcome, budgets = DEFAULT_BUDGETS) {
   // The money cuts above everything else. It does not matter which step the
   // run is on: if the cap is spent, the next call is not launched.
-  if (outcome === OUTCOMES.OVER_BUDGET) return cerrado(run, RUN_STATES.ABORTED_BUDGET)
+  if (outcome === OUTCOMES.OVER_BUDGET) return closed(run, RUN_STATES.ABORTED_BUDGET)
 
   switch (run.step) {
-    case STEPS.IMPLEMENT: return trasImplementar(run, outcome)
-    case STEPS.CONTROLS: return trasLosControles(run, outcome, budgets)
-    case STEPS.JUDGE: return trasElJuez(run, outcome, budgets)
-    case STEPS.ADVISE: return trasElConsejo(run, outcome)
-    case STEPS.COMMIT: return trasElCommit(run, outcome)
-    case STEPS.RECONCILE: return trasReconciliar(run, outcome, budgets)
-    case STEPS.GLOBAL: return trasLaGlobal(run, outcome)
-    case STEPS.SLICE_JUDGE: return trasElJuezDeSlice(run, outcome)
-    case STEPS.E2E: return trasElE2e(run, outcome)
-    default: return imposible(run, outcome)
+    case STEPS.IMPLEMENT: return afterImplement(run, outcome)
+    case STEPS.CONTROLS: return afterControls(run, outcome, budgets)
+    case STEPS.JUDGE: return afterJudge(run, outcome, budgets)
+    case STEPS.ADVISE: return afterAdvice(run, outcome)
+    case STEPS.COMMIT: return afterCommit(run, outcome)
+    case STEPS.RECONCILE: return afterReconcile(run, outcome, budgets)
+    case STEPS.GLOBAL: return afterGlobal(run, outcome)
+    case STEPS.SLICE_JUDGE: return afterSliceJudge(run, outcome)
+    case STEPS.E2E: return afterE2e(run, outcome)
+    default: return impossible(run, outcome)
   }
 }
 
-function trasImplementar(run, outcome) {
+function afterImplement(run, outcome) {
   switch (outcome) {
     case OUTCOMES.DONE:
-      return abierto(run, { step: STEPS.CONTROLS })
+      return open(run, { step: STEPS.CONTROLS })
     // The implementer's report that cannot be read. It does not spend a retry
     // because the code was not touched: the only thing backing this path is
     // the cap in money.
     case OUTCOMES.DISCARDED:
-      return abierto(run, { step: STEPS.IMPLEMENT, discards: run.discards + 1 })
+      return open(run, { step: STEPS.IMPLEMENT, discards: run.discards + 1 })
     default:
-      return imposible(run, outcome)
+      return impossible(run, outcome)
   }
 }
 
-function trasLosControles(run, outcome, budgets) {
+function afterControls(run, outcome, budgets) {
   switch (outcome) {
     case OUTCOMES.DONE:
-      return abierto(run, { step: STEPS.JUDGE })
+      return open(run, { step: STEPS.JUDGE })
     case OUTCOMES.FAILED:
       return run.controlRetries < budgets.controlRetries
-        ? abierto(run, { step: STEPS.IMPLEMENT, controlRetries: run.controlRetries + 1 })
-        : cerrado(run, RUN_STATES.BLOCKED_CONTROLS)
+        ? open(run, { step: STEPS.IMPLEMENT, controlRetries: run.controlRetries + 1 })
+        : closed(run, RUN_STATES.BLOCKED_CONTROLS)
     // It could not be MEASURED: the command does not exist, or it hung and the
     // time cap fired. Retrying blindly repeats the cost without changing
     // anything, so it closes on the first go instead of spending both
     // attempts.
     case OUTCOMES.INDETERMINATE:
-      return cerrado(run, RUN_STATES.BLOCKED_CONTROLS)
+      return closed(run, RUN_STATES.BLOCKED_CONTROLS)
     default:
-      return imposible(run, outcome)
+      return impossible(run, outcome)
   }
 }
 
-function trasElJuez(run, outcome, budgets) {
+function afterJudge(run, outcome, budgets) {
   switch (outcome) {
     case OUTCOMES.DONE:
-      return abierto(run, { step: STEPS.COMMIT })
+      return open(run, { step: STEPS.COMMIT })
     case OUTCOMES.FAILED:
-      if (run.judgeRetries >= budgets.judgeRetries) return cerrado(run, RUN_STATES.BLOCKED_JUDGE)
+      if (run.judgeRetries >= budgets.judgeRetries) return closed(run, RUN_STATES.BLOCKED_JUDGE)
       // THE LAST RETRY IS NOT GRANTED BLINDLY. Whether the one being granted
       // is the last is the only question that separates the two paths, and it
       // is asked with the budget in front of it instead of with a typed `2`:
       // whoever raises `judgeRetries` to three moves the adviser to the third
       // veto without touching this line.
       return isTheLastVetoRetry(run, budgets)
-        ? abierto(run, { step: STEPS.ADVISE, judgeRetries: run.judgeRetries + 1 })
-        : abierto(run, { step: STEPS.IMPLEMENT, judgeRetries: run.judgeRetries + 1 })
+        ? open(run, { step: STEPS.ADVISE, judgeRetries: run.judgeRetries + 1 })
+        : open(run, { step: STEPS.IMPLEMENT, judgeRetries: run.judgeRetries + 1 })
     // The difference between a judge that VETOES and a judge that GRUMBLES: a
     // PASS with findings that are not of low severity goes back to the
     // implementer with a budget of its own, and spending it DELIVERS ALL THE
@@ -233,14 +233,14 @@ function trasElJuez(run, outcome, budgets) {
     // and three minor complaints would block a task the judge had approved.
     case OUTCOMES.CORRECTIONS_ORDERED:
       return run.correctionRetries < budgets.correctionRetries
-        ? abierto(run, { step: STEPS.IMPLEMENT, correctionRetries: run.correctionRetries + 1 })
-        : abierto(run, { step: STEPS.COMMIT })
+        ? open(run, { step: STEPS.IMPLEMENT, correctionRetries: run.correctionRetries + 1 })
+        : open(run, { step: STEPS.COMMIT })
     // The verdict that breaks the schema. Like the implementer's discard: the
     // code was not touched, so it does not spend a retry.
     case OUTCOMES.DISCARDED:
-      return abierto(run, { step: STEPS.JUDGE, discards: run.discards + 1 })
+      return open(run, { step: STEPS.JUDGE, discards: run.discards + 1 })
     default:
-      return imposible(run, outcome)
+      return impossible(run, outcome)
   }
 }
 
@@ -255,24 +255,24 @@ function trasElJuez(run, outcome, budgets) {
 // self-loop is the slice's discard cap, not a budget of its own; and unlike
 // `reconcile`, no half-made state is left here that would make the next round
 // discard for the same reason again.
-function trasElConsejo(run, outcome) {
+function afterAdvice(run, outcome) {
   switch (outcome) {
     case OUTCOMES.DONE:
-      return abierto(run, { step: STEPS.IMPLEMENT })
+      return open(run, { step: STEPS.IMPLEMENT })
     case OUTCOMES.DISCARDED:
-      return abierto(run, { step: STEPS.ADVISE, discards: run.discards + 1 })
+      return open(run, { step: STEPS.ADVISE, discards: run.discards + 1 })
     default:
-      return imposible(run, outcome)
+      return impossible(run, outcome)
   }
 }
 
-function trasElCommit(run, outcome) {
+function afterCommit(run, outcome) {
   switch (outcome) {
     case OUTCOMES.DONE:
       // Each task starts its retry count afresh. The discards and the money do
       // not: those belong to the whole slice.
       return run.task < run.tasksTotal
-        ? abierto(run, {
+        ? open(run, {
             task: run.task + 1,
             step: STEPS.IMPLEMENT,
             controlRetries: 0,
@@ -291,27 +291,27 @@ function trasElCommit(run, outcome) {
         // E2E): they are steps of the SLICE, not of a sixth task that does not
         // exist. (Careful: that breaks the `commits === task - 1` invariant
         // ct-step checks when loading the state — see Task 8.)
-        : abierto(run, { step: STEPS.RECONCILE, controlRetries: 0, judgeRetries: 0, correctionRetries: 0 })
+        : open(run, { step: STEPS.RECONCILE, controlRetries: 0, judgeRetries: 0, correctionRetries: 0 })
     // A commit that fails is not retried: if git says no, it is the index or
     // the message, and neither of those gets fixed by implementing again.
     case OUTCOMES.FAILED:
-      return cerrado(run, RUN_STATES.BLOCKED_COMMIT)
+      return closed(run, RUN_STATES.BLOCKED_COMMIT)
     default:
-      return imposible(run, outcome)
+      return impossible(run, outcome)
   }
 }
 
 // THE RECONCILIATION (Phase B). The policy lives here, not in the verb that
 // will do the `git merge`/`git rebase`: which step comes after each outcome
 // and what counts as spent is a decision of this table.
-function trasReconciliar(run, outcome, budgets) {
+function afterReconcile(run, outcome, budgets) {
   switch (outcome) {
     case OUTCOMES.DONE:
-      return abierto(run, { step: STEPS.GLOBAL })
+      return open(run, { step: STEPS.GLOBAL })
     case OUTCOMES.FAILED:
       return reconcileBudgetSpent(run, budgets)
-        ? cerrado(run, RUN_STATES.BLOCKED_RECONCILE)
-        : abierto(run, { step: STEPS.RECONCILE, reconcileRetries: run.reconcileRetries + 1 })
+        ? closed(run, RUN_STATES.BLOCKED_RECONCILE)
+        : open(run, { step: STEPS.RECONCILE, reconcileRetries: run.reconcileRetries + 1 })
     // The discarded round DOES spend a retry, and this is where this step
     // parts company with implement and with the judge. There a discard means
     // "the answer could not be read" and the tree stayed as it was, so the
@@ -325,14 +325,14 @@ function trasReconciliar(run, outcome, budgets) {
     // dispatch of ct-reconciler.
     case OUTCOMES.DISCARDED:
       return reconcileBudgetSpent(run, budgets)
-        ? cerrado(run, RUN_STATES.BLOCKED_RECONCILE)
-        : abierto(run, {
+        ? closed(run, RUN_STATES.BLOCKED_RECONCILE)
+        : open(run, {
             step: STEPS.RECONCILE,
             reconcileRetries: run.reconcileRetries + 1,
             discards: run.discards + 1,
           })
     default:
-      return imposible(run, outcome)
+      return impossible(run, outcome)
   }
 }
 
@@ -384,17 +384,17 @@ export function outcomeOfReconcile(reconcileOutcome) {
 // code rules, `unmeasured` is a different class of red. With no retry of its
 // own: everything is committed, so retrying measures the same tree and repeats
 // the cost without changing anything — the same argument that already closes
-// `indeterminate` on the first go in `trasLosControles`.
-function trasLaGlobal(run, outcome) {
+// `indeterminate` on the first go in `afterControls`.
+function afterGlobal(run, outcome) {
   switch (outcome) {
     case OUTCOMES.DONE:
-      return abierto(run, { step: STEPS.SLICE_JUDGE })
+      return open(run, { step: STEPS.SLICE_JUDGE })
     case OUTCOMES.FAILED:
-      return cerrado(run, RUN_STATES.BLOCKED_GLOBAL)
+      return closed(run, RUN_STATES.BLOCKED_GLOBAL)
     case OUTCOMES.INDETERMINATE:
-      return cerrado(run, RUN_STATES.BLOCKED_GLOBAL)
+      return closed(run, RUN_STATES.BLOCKED_GLOBAL)
     default:
-      return imposible(run, outcome)
+      return impossible(run, outcome)
   }
 }
 
@@ -408,7 +408,7 @@ function trasLaGlobal(run, outcome) {
 // same, travelling in the verdict for whoever reviews the PR. `discarded` does
 // ask again without spending a retry, just like the task judge: an illegible
 // verdict is not a veto.
-function trasElJuezDeSlice(run, outcome) {
+function afterSliceJudge(run, outcome) {
   switch (outcome) {
     // With the slice judged, all that is left is walking through it — and only
     // if the spec declared runs. The e2e goes AFTER the judge, and not before,
@@ -419,21 +419,21 @@ function trasElJuezDeSlice(run, outcome) {
     // report. With no runs, the judge closes the run as it did until now.
     case OUTCOMES.DONE:
       return (run.e2eRuns || []).length
-        ? abierto(run, { step: STEPS.E2E })
-        : cerrado(run, RUN_STATES.DELIVERED)
+        ? open(run, { step: STEPS.E2E })
+        : closed(run, RUN_STATES.DELIVERED)
     case OUTCOMES.FAILED:
-      return cerrado(run, RUN_STATES.BLOCKED_SLICE_JUDGE)
+      return closed(run, RUN_STATES.BLOCKED_SLICE_JUDGE)
     case OUTCOMES.DISCARDED:
-      return abierto(run, { step: STEPS.SLICE_JUDGE, discards: run.discards + 1 })
+      return open(run, { step: STEPS.SLICE_JUDGE, discards: run.discards + 1 })
     default:
-      return imposible(run, outcome)
+      return impossible(run, outcome)
   }
 }
 
-function trasElE2e(run, outcome) {
+function afterE2e(run, outcome) {
   switch (outcome) {
     case OUTCOMES.DONE:
-      return cerrado(run, RUN_STATES.DELIVERED)
+      return closed(run, RUN_STATES.DELIVERED)
     // The unverified DELIVERS. It is not indulgence: if it held the run back, a
     // docker that does not start or an expired credential would leave the slice
     // in status:in-progress occupying `area:`/`touches:` and a `--cap` slot
@@ -441,16 +441,16 @@ function trasElE2e(run, outcome) {
     // removing. What never happens is that green gets asserted: the reason
     // travels in the report and `--release` prints it.
     case OUTCOMES.INDETERMINATE:
-      return cerrado(run, RUN_STATES.DELIVERED)
+      return closed(run, RUN_STATES.DELIVERED)
     case OUTCOMES.FAILED:
-      return cerrado(run, RUN_STATES.BLOCKED_E2E)
+      return closed(run, RUN_STATES.BLOCKED_E2E)
     // A report that cannot be read does not spend a retry: neither the code nor
     // the environment was touched. Same treatment as in `implement`, and with
     // the same backing — the slice's discard cap.
     case OUTCOMES.DISCARDED:
-      return abierto(run, { step: STEPS.E2E, discards: run.discards + 1 })
+      return open(run, { step: STEPS.E2E, discards: run.discards + 1 })
     default:
-      return imposible(run, outcome)
+      return impossible(run, outcome)
   }
 }
 

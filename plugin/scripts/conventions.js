@@ -64,7 +64,7 @@ export const CONTRACT_MARKER_CLOSE = '<!-- /ct-init:slices-contract -->'
 // themselves on every run of a freshly bootstrapped repo.
 export const LOOP_MARKER_OPEN = '<!-- ct-init:loop -->'
 export const LOOP_MARKER_CLOSE = '<!-- /ct-init:loop -->'
-const BLOQUES_PROPIOS = [
+const OWN_BLOCKS = [
   [CONTRACT_MARKER_OPEN, CONTRACT_MARKER_CLOSE],
   [LOOP_MARKER_OPEN, LOOP_MARKER_CLOSE],
 ]
@@ -157,18 +157,18 @@ function shape(raw) {
 export function docLines(content) {
   const original = String(content ?? '').split('\n')
   const stripped = new Set()
-  let cierreEsperado = null
+  let expectedClosing = null
   original.forEach((raw, i) => {
     const line = raw.replace(/\r$/, '')
-    if (cierreEsperado === null) {
-      const bloque = BLOQUES_PROPIOS.find(([abre]) => line === abre)
-      if (bloque) { cierreEsperado = bloque[1]; stripped.add(i) }
+    if (expectedClosing === null) {
+      const block = OWN_BLOCKS.find(([opening]) => line === opening)
+      if (block) { expectedClosing = block[1]; stripped.add(i) }
       return
     }
     stripped.add(i)
-    if (line === cierreEsperado) cierreEsperado = null
+    if (line === expectedClosing) expectedClosing = null
   })
-  const inside = cierreEsperado !== null
+  const inside = expectedClosing !== null
   const build = (raw, i) => {
     const text = raw.replace(/\r$/, '')
     return { n: i + 1, text, ...shape(text) }

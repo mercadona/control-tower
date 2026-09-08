@@ -325,7 +325,7 @@ describe('F14/B — the explicit acknowledgement gives a way out for ONE signal,
 // C. ONE HOP from the guide. The hole through which the old order slipped in.
 // ============================================================================
 describe('F14/C — the detector follows the trail the guide itself declares authorised', () => {
-  function repoConReferencia() {
+  function repoWithReference() {
     const root = tmp()
     mkdirSync(join(root, 'docs'), { recursive: true })
     writeFileSync(
@@ -349,7 +349,7 @@ describe('F14/C — the detector follows the trail the guide itself declares aut
   }
 
   it('the old order living in the document AGENTS.md calls «referencia completa» IS DETECTED and cited', () => {
-    const root = repoConReferencia()
+    const root = repoWithReference()
     const { docs } = readRepoDocs(root)
     expect(docs.map((d) => d.path)).toContain('docs/agentic-workflow.md')
     const r = detectConventions({ docs, files: [] })
@@ -359,7 +359,7 @@ describe('F14/C — the detector follows the trail the guide itself declares aut
   })
 
   it('the same order also comes out in the DISPATCH, not only in the bootstrap', () => {
-    const root = repoConReferencia()
+    const root = repoWithReference()
     const r = spawnSync('node', [detectScript, root], { encoding: 'utf8' })
     expect(r.stdout).toContain('docs/agentic-workflow.md:4')
   })

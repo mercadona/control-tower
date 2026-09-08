@@ -65,7 +65,7 @@ export function goDir(opts = {}) {
 // stuck slice with nothing having failed. Better not to register and to say so:
 // the caller turns that into a warning carrying the remedy (`ct-go`), and gate
 // 9 into a «no se ha podido comprobar».
-function exigirRutaAbsoluta(dir) {
+function requireAbsolutePath(dir) {
   if (!isAbsolute(dir)) {
     throw new Error(`el directorio del registro del go no resuelve a una ruta absoluta ("${dir}") — con CLAUDE_CONFIG_DIR y HOME sin valor no se sabe DÓNDE vive el estado de la coordinadora, y escribirlo en el cwd lo dejaría donde nadie lo lee`)
   }
@@ -83,12 +83,12 @@ export function goPath({ repo, issue, configDir = null, home = null } = {}) {
 // `flag: 'w'` on purpose: rewriting is the NORMAL case (redispatching a slice
 // draws a new nonce, and the old one has to stop being valid in the same act).
 export function writeGoCommitment({ repo, issue, commitment, configDir = null, home = null }) {
-  const dir = exigirRutaAbsoluta(goDir({ configDir, home }))
-  const ruta = goPath({ repo, issue, configDir, home })
+  const dir = requireAbsolutePath(goDir({ configDir, home }))
+  const path = goPath({ repo, issue, configDir, home })
   mkdirSync(dir, { recursive: true, mode: 0o700 })
-  const cuerpo = JSON.stringify({ repo: String(repo ?? ''), issue: Number(issue), commitment: String(commitment) }, null, 2)
-  writeFileSync(ruta, `${cuerpo}\n`, { encoding: 'utf8', mode: 0o600, flag: 'w' })
-  return ruta
+  const body = JSON.stringify({ repo: String(repo ?? ''), issue: Number(issue), commitment: String(commitment) }, null, 2)
+  writeFileSync(path, `${body}\n`, { encoding: 'utf8', mode: 0o600, flag: 'w' })
+  return path
 }
 
 // THE READ, with THREE answers and not two. `{ commitment }` is "there is a go
@@ -99,31 +99,31 @@ export function writeGoCommitment({ repo, issue, commitment, configDir = null, h
 // things to the human — one is fixed with `ct-go`, the other with a `chmod` or
 // a `cat`.
 export function readGoCommitment({ repo, issue, configDir = null, home = null } = {}) {
-  const ruta = goPath({ repo, issue, configDir, home })
+  const path = goPath({ repo, issue, configDir, home })
   try {
-    exigirRutaAbsoluta(goDir({ configDir, home }))
+    requireAbsolutePath(goDir({ configDir, home }))
   } catch (e) {
     // "It could not be checked", never "there is no go": a relative path points
     // at a different place depending on where it is invoked from, so its absence
     // says nothing.
-    return { error: e.message, path: ruta }
+    return { error: e.message, path }
   }
   let raw
   try {
-    raw = readFileSync(ruta, 'utf8')
+    raw = readFileSync(path, 'utf8')
   } catch (e) {
-    if (e && e.code === 'ENOENT') return { missing: true, path: ruta }
-    return { error: e.message, path: ruta }
+    if (e && e.code === 'ENOENT') return { missing: true, path }
+    return { error: e.message, path }
   }
-  let dato
+  let parsed
   try {
-    dato = JSON.parse(raw)
+    parsed = JSON.parse(raw)
   } catch (e) {
-    return { error: `no es JSON legible (${e.message})`, path: ruta }
+    return { error: `no es JSON legible (${e.message})`, path }
   }
-  const commitment = typeof dato?.commitment === 'string' ? dato.commitment.trim().toLowerCase() : ''
+  const commitment = typeof parsed?.commitment === 'string' ? parsed.commitment.trim().toLowerCase() : ''
   if (!/^[0-9a-f]{64}$/.test(commitment)) {
-    return { error: 'el campo `commitment` no es un sha256 hex de 64 caracteres', path: ruta }
+    return { error: 'el campo `commitment` no es un sha256 hex de 64 caracteres', path }
   }
-  return { commitment, path: ruta }
+  return { commitment, path }
 }

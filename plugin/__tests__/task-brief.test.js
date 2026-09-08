@@ -68,30 +68,30 @@ describe('task-brief', () => {
     const r = run(['--with-plan-context', PLAN, TASK, out])
     expect(r.status).toBe(0)
 
-    const texto = readFileSync(out, 'utf8')
-    expect(texto).toContain('### Desired end state')
-    expect(texto).toContain('### Out of scope')
-    expect(texto).toContain('## 2. Closed decisions')
-    expect(texto).toContain('## 3. Reference patterns')
-    expect(texto).toMatch(/vara/i)
-    expect(texto).toMatch(/ganan/i)
+    const text = readFileSync(out, 'utf8')
+    expect(text).toContain('### Desired end state')
+    expect(text).toContain('### Out of scope')
+    expect(text).toContain('## 2. Closed decisions')
+    expect(text).toContain('## 3. Reference patterns')
+    expect(text).toMatch(/vara/i)
+    expect(text).toMatch(/ganan/i)
 
     // The four sections go ahead of the task, in the plan's order, and the
     // task is still whole.
-    const idxDesired = texto.indexOf('### Desired end state')
-    const idxOutOfScope = texto.indexOf('### Out of scope')
-    const idxClosed = texto.indexOf('## 2. Closed decisions')
-    const idxReference = texto.indexOf('## 3. Reference patterns')
-    const idxTask = texto.indexOf('### Task 7')
+    const idxDesired = text.indexOf('### Desired end state')
+    const idxOutOfScope = text.indexOf('### Out of scope')
+    const idxClosed = text.indexOf('## 2. Closed decisions')
+    const idxReference = text.indexOf('## 3. Reference patterns')
+    const idxTask = text.indexOf('### Task 7')
     expect(idxDesired).toBeGreaterThanOrEqual(0)
     expect(idxOutOfScope).toBeGreaterThan(idxDesired)
     expect(idxClosed).toBeGreaterThan(idxOutOfScope)
     expect(idxReference).toBeGreaterThan(idxClosed)
     expect(idxTask).toBeGreaterThan(idxReference)
-    expect(texto).toContain('el brief lleva la vara, detrás de un flag')
+    expect(text).toContain('el brief lleva la vara, detrás de un flag')
 
     // Each section is cut before the next one; it does not swallow the whole plan.
-    expect(texto).not.toContain('## 4. Inventory')
+    expect(text).not.toContain('## 4. Inventory')
   })
 
   // -------------------------------------------------------------------------
@@ -107,17 +107,17 @@ describe('task-brief', () => {
     const out = join(dir, 'autoridades.md')
     expect(run(['--with-plan-context', PLAN, TASK, out]).status).toBe(0)
 
-    const texto = readFileSync(out, 'utf8')
-    const idxDesired = texto.indexOf('### Desired end state')
-    const cabecera = texto.slice(0, idxDesired)
+    const text = readFileSync(out, 'utf8')
+    const idxDesired = text.indexOf('### Desired end state')
+    const header = text.slice(0, idxDesired)
 
     // The line preceding the slice's end unmarks it as yardstick.
-    expect(cabecera).toMatch(/no amplía/i)
-    expect(cabecera).toMatch(/\*\*Files:\*\*/)
+    expect(header).toMatch(/no amplía/i)
+    expect(header).toMatch(/\*\*Files:\*\*/)
     // And the "they win" line does NOT cover the slice's end: it comes after,
     // with the three that are yardstick.
-    expect(cabecera).not.toMatch(/ganan/i)
-    expect(texto.indexOf('ganan')).toBeGreaterThan(idxDesired)
+    expect(header).not.toMatch(/ganan/i)
+    expect(text.indexOf('ganan')).toBeGreaterThan(idxDesired)
   })
 
   it('when the plan is missing a yardstick section, it says so instead of leaving a mute gap', () => {
@@ -125,8 +125,8 @@ describe('task-brief', () => {
     // with its "## 2. Closed decisions"): the two absent ones have to be
     // declared, not leave two blank lines indistinguishable from an empty
     // section.
-    const planIncompleto = join(dir, 'plan-incompleto.md')
-    writeFileSync(planIncompleto, [
+    const incompletePlan = join(dir, 'plan-incompleto.md')
+    writeFileSync(incompletePlan, [
       '# Plan de prueba',
       '',
       '## 7. Tasks',
@@ -139,14 +139,14 @@ describe('task-brief', () => {
     ].join('\n'))
 
     const out = join(dir, 'plan-incompleto-brief.md')
-    const r = run(['--with-plan-context', planIncompleto, '1', out])
+    const r = run(['--with-plan-context', incompletePlan, '1', out])
     expect(r.status).toBe(0)
 
-    const texto = readFileSync(out, 'utf8')
-    expect(texto).toMatch(/### Out of scope.*no encontrada en el plan/)
-    expect(texto).toMatch(/## 3\. Reference patterns.*no encontrada en el plan/)
+    const text = readFileSync(out, 'utf8')
+    expect(text).toMatch(/### Out of scope.*no encontrada en el plan/)
+    expect(text).toMatch(/## 3\. Reference patterns.*no encontrada en el plan/)
     // The line that says they are the yardstick is still printed all the same.
-    expect(texto).toMatch(/vara/i)
+    expect(text).toMatch(/vara/i)
   })
 
   it('an unknown flag exits with 2', () => {

@@ -144,9 +144,9 @@ describe('kickoff — frozen decisions (B1)', () => {
     expect(renderKickoff(slice, OPTS)).toContain(FROZEN_DECISIONS_HEADING)
   })
   it('lists it as an input of the plan (same phrase as AC/Protegido)', () => {
-    const entradaLine = renderKickoff(slice, OPTS).split('\n').find((l) => l.includes('entrada que la skill pide'))
-    expect(entradaLine).toBeDefined()
-    expect(entradaLine).toContain(FROZEN_DECISIONS_HEADING)
+    const inputLine = renderKickoff(slice, OPTS).split('\n').find((l) => l.includes('entrada que la skill pide'))
+    expect(inputLine).toBeDefined()
+    expect(inputLine).toContain(FROZEN_DECISIONS_HEADING)
   })
   it('names the destination ## 2. Closed decisions', () => {
     expect(renderKickoff(slice, OPTS)).toContain('## 2. Closed decisions')

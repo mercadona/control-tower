@@ -25,9 +25,9 @@ import { cmuxSessionName } from '../scripts/dispatch.js'
 import { GO_TOKEN, goCommitment } from '../scripts/go-response.js'
 import { goPath } from '../scripts/go-registry.js'
 
-const AQUI = dirname(fileURLToPath(import.meta.url))
-const script = join(AQUI, '..', 'scripts', 'ct-next.mjs')
-const fixturesDir = join(AQUI, 'fixtures')
+const HERE = dirname(fileURLToPath(import.meta.url))
+const script = join(HERE, '..', 'scripts', 'ct-next.mjs')
+const fixturesDir = join(HERE, 'fixtures')
 const RECORDER = join(fixturesDir, 'fake-watch-go-bin', 'recorder.mjs')
 
 const fakePath = [
@@ -43,7 +43,7 @@ const dirs = []
 afterEach(() => {
   for (const d of dirs.splice(0)) rmSyncBestEffort(d)
 })
-function repoRootNuevo() {
+function newRepoRoot() {
   const d = mkdtempSync(join(tmpdir(), 'ct-next-watch-go-'))
   dirs.push(d)
   return d
@@ -60,28 +60,28 @@ function repoRootNuevo() {
 // in CI and not locally because it depends on how the load falls. The line is
 // only taken as good once the newline that closes it is already written AND it
 // parses.
-function argvCompleto(ruta) {
-  if (!existsSync(ruta)) return null
-  const crudo = readFileSync(ruta, 'utf8')
-  if (!crudo.endsWith('\n')) return null
+function completeArgv(path) {
+  if (!existsSync(path)) return null
+  const raw = readFileSync(path, 'utf8')
+  if (!raw.endsWith('\n')) return null
   try {
-    return crudo.trim().split('\n').map((l) => JSON.parse(l))
+    return raw.trim().split('\n').map((l) => JSON.parse(l))
   } catch {
     return null
   }
 }
 
-async function esperarArgv(ruta, ms = 5000) {
-  const fin = Date.now() + ms
-  while (Date.now() < fin) {
-    const llamadas = argvCompleto(ruta)
-    if (llamadas) return llamadas
+async function waitForArgv(path, ms = 5000) {
+  const deadline = Date.now() + ms
+  while (Date.now() < deadline) {
+    const calls = completeArgv(path)
+    if (calls) return calls
     await new Promise((r) => setTimeout(r, 25))
   }
   return null
 }
 
-function despachar(repoRoot, issue, envExtra = {}) {
+function dispatch(repoRoot, issue, envExtra = {}) {
   const r = spawnSync('node', [script, '--repo', 'o/r', '--cap', '1'], {
     encoding: 'utf8',
     env: {
@@ -103,22 +103,22 @@ function despachar(repoRoot, issue, envExtra = {}) {
   return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }
 }
 
-const issueCon = (labels) => ({ number: 90, title: '#90 el cliente tipado', labels, body: '' })
+const issueWith = (labels) => ({ number: 90, title: '#90 el cliente tipado', labels, body: '' })
 
 describe('the coordinator launches the -OK watcher', () => {
   it('launches it when dispatching, with the issue, the repo and the exact title of the session', async () => {
-    const repoRoot = repoRootNuevo()
+    const repoRoot = newRepoRoot()
     // With no `gate:` label at all, resolveGatesForAgent falls back to the Tipo
     // — and the `plan` gate is implied in EVERY slice (gates.js#gatesForType).
     // Which means the default case DOES stop to wait, and therefore DOES bring a
     // watcher into play.
-    const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]))
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]))
     expect(r.code).toBe(0)
     expect(r.out).toContain(`vigilante del ${GO_TOKEN} de #90 lanzado`)
 
-    const llamadas = await esperarArgv(join(repoRoot, 'watch-go-argv.log'))
-    expect(llamadas).toHaveLength(1)
-    const argv = llamadas[0]
+    const calls = await waitForArgv(join(repoRoot, 'watch-go-argv.log'))
+    expect(calls).toHaveLength(1)
+    const argv = calls[0]
     expect(argv).toContain('--issue')
     expect(argv[argv.indexOf('--issue') + 1]).toBe('90')
     expect(argv[argv.indexOf('--repo') + 1]).toBe('o/r')
@@ -140,21 +140,21 @@ describe('the coordinator launches the -OK watcher', () => {
   })
 
   it('says where the log is, because a process that runs when you are not looking and leaves no trace is undebuggable', () => {
-    const repoRoot = repoRootNuevo()
-    const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]))
+    const repoRoot = newRepoRoot()
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]))
     expect(r.out).toMatch(/Log: .*watch-go-90\.log/)
   })
 
   it('does NOT launch it if the slice has no `plan` gate: there is nothing to watch', async () => {
-    const repoRoot = repoRootNuevo()
+    const repoRoot = newRepoRoot()
     // `gate:none` is an explicit declaration of "no gate at all" (gates.js: it
     // exists precisely to tell it apart from "this issue is old"). A slice like
     // that does not stop to wait for anyone, and a process polling GitHub for
     // eight hours for nothing is worse than its absence.
-    const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }, { name: 'gate:none' }]))
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }, { name: 'gate:none' }]))
     expect(r.code).toBe(0)
     expect(r.out).not.toContain('vigilante del')
-    expect(await esperarArgv(join(repoRoot, 'watch-go-argv.log'), 600)).toBe(null)
+    expect(await waitForArgv(join(repoRoot, 'watch-go-argv.log'), 600)).toBe(null)
   })
 })
 
@@ -173,8 +173,8 @@ describe('the watcher cannot bring the dispatch down', () => {
   // checked would be that `node` exists.
   // -------------------------------------------------------------------------
   it('a watcher program that does not exist is warned about, and is NOT announced as launched', async () => {
-    const repoRoot = repoRootNuevo()
-    const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]), {
+    const repoRoot = newRepoRoot()
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]), {
       CT_WATCH_GO_BIN: join(repoRoot, 'no-existe', 'ni-de-broma.mjs'),
     })
     expect(r.code).toBe(0)
@@ -183,7 +183,7 @@ describe('the watcher cannot bring the dispatch down', () => {
     expect(r.out).toMatch(/no existe/)
     expect(r.out).not.toMatch(/vigilante del .* lanzado \(pid/)
     expect(r.out).toMatch(/a mano/)
-    expect(await esperarArgv(join(repoRoot, 'watch-go-argv.log'), 600)).toBe(null)
+    expect(await waitForArgv(join(repoRoot, 'watch-go-argv.log'), 600)).toBe(null)
   })
 
   it('if where the coordinator state lives is not known, it warns and the slice stays launched', () => {
@@ -200,8 +200,8 @@ describe('the watcher cannot bring the dispatch down', () => {
     // code, so it would have stayed green with the warning talking about
     // something else — which is exactly what happened while building this
     // round.
-    const repoRoot = repoRootNuevo()
-    const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]), {
+    const repoRoot = newRepoRoot()
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]), {
       CLAUDE_CONFIG_DIR: '',
       HOME: '',
     })
@@ -225,13 +225,13 @@ describe('the watcher cannot bring the dispatch down', () => {
   // of message (ct-next-honest-messages.test.js).
   // -------------------------------------------------------------------------
   it('is NOT launched when cmux cannot find the session that has just been created', async () => {
-    const repoRoot = repoRootNuevo()
-    const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]), {
+    const repoRoot = newRepoRoot()
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]), {
       FAKE_CMUX_SKIP_STATE_SUBSTR: '#90',
     })
     expect(r.out).toMatch(/no se encontró ninguna sesión con el nombre/)
     expect(r.out).not.toMatch(/la sesión arranca sola/)
-    expect(await esperarArgv(join(repoRoot, 'watch-go-argv.log'), 600)).toBe(null)
+    expect(await waitForArgv(join(repoRoot, 'watch-go-argv.log'), 600)).toBe(null)
   })
 })
 
@@ -247,18 +247,18 @@ describe('the watcher cannot bring the dispatch down', () => {
 // NOT.
 // ---------------------------------------------------------------------------
 describe('the go nonce: where it shows up and where it does not', () => {
-  const nonceDe = (out) => (out.match(/-OK ([0-9a-f]{8})/) || [])[1]
+  const nonceOf = (out) => (out.match(/-OK ([0-9a-f]{8})/) || [])[1]
 
   it('it is dictated on the screen, and only its sha256 reaches the watcher', async () => {
-    const repoRoot = repoRootNuevo()
-    const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]))
+    const repoRoot = newRepoRoot()
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]))
     expect(r.code).toBe(0)
 
-    const nonce = nonceDe(r.out)
+    const nonce = nonceOf(r.out)
     expect(nonce).toMatch(/^[0-9a-f]{8}$/)
     expect(r.out).toContain(`GO de #90: contesta exactamente \`${GO_TOKEN} ${nonce}\``)
 
-    const argv = (await esperarArgv(join(repoRoot, 'watch-go-argv.log')))[0]
+    const argv = (await waitForArgv(join(repoRoot, 'watch-go-argv.log')))[0]
     const hash = argv[argv.indexOf('--go-hash') + 1]
     // The hash is THE one of the dictated nonce: if they diverged, the person
     // would type the right permission and nothing would start.
@@ -268,25 +268,25 @@ describe('the go nonce: where it shows up and where it does not', () => {
   })
 
   it('the commitment is registered outside the repo, and without the nonce inside', () => {
-    const repoRoot = repoRootNuevo()
+    const repoRoot = newRepoRoot()
     const configDir = join(repoRoot, 'claude-config')
-    const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]))
-    const nonce = nonceDe(r.out)
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]))
+    const nonce = nonceOf(r.out)
 
-    const ruta = goPath({ repo: 'o/r', issue: 90, configDir })
+    const path = goPath({ repo: 'o/r', issue: 90, configDir })
     // Outside the repo on purpose: on GitHub everything is written by the agent,
     // which has `gh`; a commitment in a label would turn it into a one-move
     // game.
-    expect(ruta.startsWith(configDir)).toBe(true)
-    const dato = JSON.parse(readFileSync(ruta, 'utf8'))
-    expect(dato.commitment).toBe(goCommitment(nonce))
-    expect(readFileSync(ruta, 'utf8')).not.toContain(nonce)
+    expect(path.startsWith(configDir)).toBe(true)
+    const datum = JSON.parse(readFileSync(path, 'utf8'))
+    expect(datum.commitment).toBe(goCommitment(nonce))
+    expect(readFileSync(path, 'utf8')).not.toContain(nonce)
   })
 
   it('with CT_GO_CHANNEL=notify the nonce does not pass through stdout: it enters NO agent context', () => {
-    const repoRoot = repoRootNuevo()
+    const repoRoot = newRepoRoot()
     const log = join(repoRoot, 'osascript.log')
-    const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]), {
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]), {
       CT_GO_CHANNEL: 'notify',
       FAKE_OSASCRIPT_LOG: log,
     })
@@ -296,13 +296,13 @@ describe('the go nonce: where it shows up and where it does not', () => {
     // The go does travel in the notification, and in a SEPARATE ARGUMENT:
     // nothing is interpolated inside the AppleScript, so there is nothing to
     // escape.
-    const llamada = JSON.parse(readFileSync(log, 'utf8').trim().split('\n')[0])
-    expect(llamada[llamada.length - 1]).toMatch(new RegExp(`^\\${GO_TOKEN} [0-9a-f]{8}$`))
+    const call = JSON.parse(readFileSync(log, 'utf8').trim().split('\n')[0])
+    expect(call[call.length - 1]).toMatch(new RegExp(`^\\${GO_TOKEN} [0-9a-f]{8}$`))
   })
 
   it('if the notification fails, it falls back to the screen SAYING SO — staying quiet would leave the gate with no go', () => {
-    const repoRoot = repoRootNuevo()
-    const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]), {
+    const repoRoot = newRepoRoot()
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]), {
       CT_GO_CHANNEL: 'notify',
       FAKE_OSASCRIPT_FAIL: '1',
     })
@@ -315,9 +315,9 @@ describe('the go nonce: where it shows up and where it does not', () => {
   })
 
   it('with no `plan` gate no go is registered: there is nothing to authorise', () => {
-    const repoRoot = repoRootNuevo()
+    const repoRoot = newRepoRoot()
     const configDir = join(repoRoot, 'claude-config')
-    const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }, { name: 'gate:none' }]))
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }, { name: 'gate:none' }]))
     expect(r.code).toBe(0)
     expect(r.out).not.toMatch(/GO de #90/)
     expect(existsSync(goPath({ repo: 'o/r', issue: 90, configDir }))).toBe(false)

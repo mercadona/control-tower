@@ -48,11 +48,11 @@ describe("the task's scope is decided by the plan", () => {
 
 describe("what the plan's blocks promise has to be there", () => {
   it('a file that a block names and the task did not touch is red', () => {
-    const conBloque = PLAN.replace(
+    const withBlock = PLAN.replace(
       '**Files:** `uno.txt` (create).\n**TDD:** No TDD — fixture.',
       ['**Files:** `uno.txt` (create).', '', 'Contract (falta.txt):', '', F + 'ts', 'function foo(): void', F, '', '**TDD:** No TDD — fixture.'].join('\n'),
     )
-    writeFileSync(join(repo, 'plan.md'), conBloque)
+    writeFileSync(join(repo, 'plan.md'), withBlock)
     ct('report', writeReport(['uno.txt']))
     const r = ct('controls')
     expect(r.stdout).toMatch(/controles: failed/)
@@ -71,11 +71,11 @@ describe("what the plan's blocks promise has to be there", () => {
   })
 
   it('the Final text text has to appear verbatim', () => {
-    const conFinalText = PLAN.replace(
+    const withFinalText = PLAN.replace(
       '**Files:** `uno.txt` (create).\n**TDD:** No TDD — fixture.',
       ['**Files:** `uno.txt` (create), `doc.md` (create).', '', 'Final text (doc.md):', '', F + 'md', 'línea uno', 'línea dos', F, '', '**TDD:** No TDD — fixture.'].join('\n'),
     )
-    writeFileSync(join(repo, 'plan.md'), conFinalText)
+    writeFileSync(join(repo, 'plan.md'), withFinalText)
     // The implementer stages doc.md with one of the two lines changed.
     writeFileSync(join(repo, 'doc.md'), 'línea uno\nlínea distinta\n')
     ct('report', writeReport(['uno.txt', 'doc.md']))
@@ -92,11 +92,11 @@ describe("what the plan's blocks promise has to be there", () => {
   // verbatim there from before, would pass it even though the task never
   // touched it. What closes the gap is that every `Final text (path):` block
   // ALSO goes into `blockPaths`, and that loop does require membership of
-  // `run.lastPaths` (see the note about `bloquesDeclarados` in ct-step.mjs).
+  // `run.lastPaths` (see the note about `declaredBlocks` in ct-step.mjs).
   // The guarantee is real but implicit: nothing pinned it until this test, so
   // simplifying that loop for looking redundant with `finalTexts` would
   // silently reintroduce the failure this test exists to catch — the same kind
-  // of false negative `testsDeclarados` already suffered (see `planComiteado`
+  // of false negative `declaredTests` already suffered (see `commitPlan`
   // below): the plan lives committed in `docs/`, so searching the repo is
   // searching the plan.
   // ==========================================================================
@@ -105,11 +105,11 @@ describe("what the plan's blocks promise has to be there", () => {
     execFileSync('git', ['add', 'ya-existe.md'], { cwd: repo, stdio: 'ignore' })
     execFileSync('git', ['commit', '-q', '-m', 'ya existía con el texto'], { cwd: repo, stdio: 'ignore' })
 
-    const conFinalText = PLAN.replace(
+    const withFinalText = PLAN.replace(
       '**Files:** `uno.txt` (create).\n**TDD:** No TDD — fixture.',
       ['**Files:** `uno.txt` (create).', '', 'Final text (ya-existe.md):', '', F + 'md', 'línea uno', 'línea dos', F, '', '**TDD:** No TDD — fixture.'].join('\n'),
     )
-    writeFileSync(join(repo, 'plan.md'), conFinalText)
+    writeFileSync(join(repo, 'plan.md'), withFinalText)
     execFileSync('git', ['add', 'plan.md'], { cwd: repo, stdio: 'ignore' })
     execFileSync('git', ['commit', '-q', '-m', 'el plan del slice'], { cwd: repo, stdio: 'ignore' })
 
@@ -161,20 +161,20 @@ describe('the checks are measured by the program, not by the implementer', () =>
   // the plan of these two is committed: without that, the test passes with the
   // bug in place.
   // ==========================================================================
-  const planComiteado = (texto) => {
-    writeFileSync(join(repo, 'plan.md'), texto)
+  const commitPlan = (text) => {
+    writeFileSync(join(repo, 'plan.md'), text)
     execFileSync('git', ['add', 'plan.md'], { cwd: repo, stdio: 'ignore' })
     execFileSync('git', ['commit', '-q', '-m', 'el plan del slice'], { cwd: repo, stdio: 'ignore' })
   }
-  const conLineaDeTests = (linea) => PLAN.replace(
+  const withTestsLine = (line) => PLAN.replace(
     '**Tests:** N/A — fixture.\n**Verification:** the file is there.',
-    `**Tests:** ${linea}\n**Verification:** the file is there.`,
+    `**Tests:** ${line}\n**Verification:** the file is there.`,
   )
 
   it('a WITHDRAWN test that is still named in the committed plan is not a test that is still there', () => {
     // The false positive: the work done properly and the checks in the red, so
     // the task could not be closed however much the implementer insisted.
-    planComiteado(conLineaDeTests("retira `'uno pinta uno'`."))
+    commitPlan(withTestsLine("retira `'uno pinta uno'`."))
     ct('report', writeReport(['uno.txt']))
     expect(ct('controls').stdout).toMatch(/controles: done/)
   })
@@ -183,7 +183,7 @@ describe('the checks are measured by the program, not by the implementer', () =>
     // The false negative, which is the serious one: without bounding the
     // scope, this check passes a task that promised a test and did not write
     // it —exactly the failure it exists for— because the name is in the plan.
-    planComiteado(conLineaDeTests("añade `'uno pinta uno'`."))
+    commitPlan(withTestsLine("añade `'uno pinta uno'`."))
     ct('report', writeReport(['uno.txt']))
     expect(ct('controls').stdout).toMatch(/controles: failed/)
     expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/dijo que añadía el test 'uno pinta uno'/)

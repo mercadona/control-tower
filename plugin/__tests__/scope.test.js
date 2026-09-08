@@ -20,14 +20,14 @@ import { parseScope, matchesPattern, scopeViolations, issueFromPrBody, isSliceBr
 // inside the loop —the agent runs with the credentials of Jose, so it can
 // forge any GitHub artefact—, but WHAT IT TOUCHED is. The fact cannot be
 // forged without it showing.
-const FICHEROS_DEL_PR_668 = [
+const PR_FILES_668 = [
   'apps/ios/MenoPlusTests/Infrastructure/SpanishStringsLintTests.swift',
   'apps/ios/MenoPlus/Presentation/Profile/DeletionConfirmView.swift',
   'apps/ios/MenoPlus/Presentation/Chat/ErrorBubbleView.swift',
   'docs/superpowers/plans/2026-08-13-guardarrailes-slice-4-plan.md',
 ]
 
-const CUERPO_ISSUE_662 = `## Acceptance criteria
+const ISSUE_BODY_662 = `## Acceptance criteria
 - La detección no depende de la lista de 68 palabras
 
 ## Contexto del epic
@@ -42,7 +42,7 @@ const CUERPO_ISSUE_662 = `## Acceptance criteria
 
 describe('parseScope — the scope of the epic, declared ONCE and machine readable', () => {
   it('it reads the `Alcance:` line from inside `## Contexto del epic`', () => {
-    const s = parseScope(CUERPO_ISSUE_662)
+    const s = parseScope(ISSUE_BODY_662)
     expect(s.declared).toBe(true)
     expect(s.patterns).toEqual(['apps/ios/MenoPlusTests/**', '.github/workflows/ci.yml'])
   })
@@ -134,15 +134,15 @@ describe('matchesPattern — the minimal glob, said in full so that nobody has t
 
 describe('scopeViolations — the fact, which is what cannot be forged', () => {
   it('THE INCIDENT: the two .swift of the app come out as a violation, the test and the plan do not', () => {
-    const { patterns } = parseScope(CUERPO_ISSUE_662)
-    expect(scopeViolations(FICHEROS_DEL_PR_668, patterns)).toEqual([
+    const { patterns } = parseScope(ISSUE_BODY_662)
+    expect(scopeViolations(PR_FILES_668, patterns)).toEqual([
       'apps/ios/MenoPlus/Presentation/Profile/DeletionConfirmView.swift',
       'apps/ios/MenoPlus/Presentation/Chat/ErrorBubbleView.swift',
     ])
   })
 
   it('a PR entirely within the scope produces no violation at all', () => {
-    const { patterns } = parseScope(CUERPO_ISSUE_662)
+    const { patterns } = parseScope(ISSUE_BODY_662)
     expect(scopeViolations(['apps/ios/MenoPlusTests/Infrastructure/SpanishStringsLintTests.swift'], patterns)).toEqual([])
   })
 

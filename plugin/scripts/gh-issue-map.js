@@ -216,7 +216,7 @@ function scanLines(body, predicate) {
 // function TERMINATES the section at the first ATX heading (F5's hardening,
 // round 5), so the heading somebody pastes inside is precisely the one that
 // closes the range and ends up OUTSIDE it. The caller decides where the zone
-// ends — see `zonaHeredada` in reconcile.js, which takes it as far as "##
+// ends — see `inheritedZone` in reconcile.js, which takes it as far as "##
 // Acceptance criteria" precisely so that pasted headings do fall inside. This
 // helper has no opinion about that: it only applies the interval it
 // receives.

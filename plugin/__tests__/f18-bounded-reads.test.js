@@ -49,13 +49,13 @@ const MILESTONE_ENV = { FAKE_GH_MILESTONES_LIST: JSON.stringify([{ title: 'Epic'
 // An issue that ALREADY exists (order 1, marker ct-order:1) so that /ct-groom
 // creates nothing and only has to decide whether it is missing its project
 // item.
-const existente = { number: 501, title: '#1 login', milestone: { title: 'Epic' }, body: '<!-- ct-order:1 -->', labels: [{ name: 'status:backlog' }] }
+const existing = { number: 501, title: '#1 login', milestone: { title: 'Epic' }, body: '<!-- ct-order:1 -->', labels: [{ name: 'status:backlog' }] }
 
 // 200 filler items + the one for issue 501 at position 201: inside the
 // project, but OUTSIDE the first page of `--limit 200`.
-function itemsConElNuestroAlFinal() {
-  const relleno = Array.from({ length: 200 }, (_, i) => ({ id: `PVTI_${i}`, content: { repository: 'o/r', number: 9000 + i, type: 'Issue' } }))
-  return [...relleno, { id: 'PVTI_ours', content: { repository: 'o/r', number: 501, type: 'Issue' } }]
+function itemsWithOursLast() {
+  const filler = Array.from({ length: 200 }, (_, i) => ({ id: `PVTI_${i}`, content: { repository: 'o/r', number: 9000 + i, type: 'Issue' } }))
+  return [...filler, { id: 'PVTI_ours', content: { repository: 'o/r', number: 501, type: 'Issue' } }]
 }
 
 describe('H6 — a truncated `gh project item-list` no longer produces duplicates in silence', () => {
@@ -64,8 +64,8 @@ describe('H6 — a truncated `gh project item-list` no longer produces duplicate
     const argvLog = join(dir, 'argv.log')
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--project', '3'], {
       ...MILESTONE_ENV,
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[existente]]),
-      FAKE_GH_PROJECT_ITEMS: JSON.stringify(itemsConElNuestroAlFinal()),
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[existing]]),
+      FAKE_GH_PROJECT_ITEMS: JSON.stringify(itemsWithOursLast()),
       FAKE_GH_ARGV_LOG_FILE: argvLog,
     })
     // exit 3 = divergences detected against the spec (the fixture issue is
@@ -88,8 +88,8 @@ describe('H6 — a truncated `gh project item-list` no longer produces duplicate
     const argvLog = join(dir, 'argv.log')
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--project', '3'], {
       ...MILESTONE_ENV,
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[existente]]),
-      FAKE_GH_PROJECT_ITEMS: JSON.stringify(itemsConElNuestroAlFinal()),
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[existing]]),
+      FAKE_GH_PROJECT_ITEMS: JSON.stringify(itemsWithOursLast()),
       FAKE_GH_PROJECT_ITEMS_NO_TOTALCOUNT: '1',
       FAKE_GH_ARGV_LOG_FILE: argvLog,
     })
@@ -102,7 +102,7 @@ describe('H6 — a truncated `gh project item-list` no longer produces duplicate
     const argvLog = join(dir, 'argv.log')
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--project', '3'], {
       ...MILESTONE_ENV,
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[existente]]),
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[existing]]),
       FAKE_GH_PROJECT_ITEMS: JSON.stringify([{ id: 'PVTI_ours', content: { repository: 'o/r', number: 501, type: 'Issue' } }]),
       FAKE_GH_ARGV_LOG_FILE: argvLog,
     })
@@ -118,7 +118,7 @@ describe('H6 — `fields(first: 50)`: "I have not seen it" stops being said as "
     const { spec } = writeSpec()
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--project', '3'], {
       ...MILESTONE_ENV,
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[existente]]),
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[existing]]),
       FAKE_GH_PROJECT_FIELDS: JSON.stringify([{ id: 'F1', name: 'Estado' }]),
       FAKE_GH_PROJECT_FIELDS_TOTALCOUNT: '87',
     })
@@ -132,7 +132,7 @@ describe('H6 — `fields(first: 50)`: "I have not seen it" stops being said as "
     const { spec } = writeSpec()
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--project', '3'], {
       ...MILESTONE_ENV,
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[existente]]),
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[existing]]),
       FAKE_GH_PROJECT_FIELDS: JSON.stringify([{ id: 'F1', name: 'Estado' }]),
     })
     expect(res.status).toBe(1)
@@ -149,8 +149,8 @@ describe('H6 — sweep: no enumeration in the plugin uses a fixed cap', () => {
   it('the issue enumerations (the three executables) go with --paginate and without --limit', () => {
     for (const s of scripts) {
       const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', s), 'utf8')
-      const lineas = src.split('\n').filter((l) => l.includes("'issues'") && l.includes('gh(['))
-      for (const l of lineas) {
+      const lines = src.split('\n').filter((l) => l.includes("'issues'") && l.includes('gh(['))
+      for (const l of lines) {
         expect(l, `${s}: ${l.trim()}`).toMatch(/--paginate/)
         expect(l, `${s}: ${l.trim()}`).not.toMatch(/--limit/)
       }

@@ -720,13 +720,13 @@ function verifyCmuxLaunch(expectedTitle, expectedCwd) {
 // the watcher is launched with the right arguments without putting a real
 // process to poll GitHub for eight hours.
 // ============================================================================
-function lanzarVigilanteDelGo(slice, sessionName) {
+function launchGoWatcher(slice, sessionName) {
   // The gates come out of the slice exactly as the issue mapped it:
   // `resolveGatesForAgent` only looks at `gatesDeclared`/`gates`/`type`, and
   // the normalisation `sliceForKickoff` does is of `ac`/`issue`/`epic`. This
   // way it does not force the `plans` object to be widened.
   if (!resolveGatesForAgent(slice).includes('plan')) return
-  const aviso = (por) => console.error(`  aviso: no se ha lanzado el vigilante del ${GO_TOKEN} de #${slice.n} (${por}) — el slice está lanzado y el gate sigue en pie, pero tendrás que empujar su sesión a mano tras dar el go.`)
+  const warnNotLaunched = (why) => console.error(`  aviso: no se ha lanzado el vigilante del ${GO_TOKEN} de #${slice.n} (${why}) — el slice está lanzado y el gate sigue en pie, pero tendrás que empujar su sesión a mano tras dar el go.`)
   try {
     const bin = process.env.CT_WATCH_GO_BIN || ctWatchGoPath
     // `spawn(process.execPath, [bin, …])` with a `bin` that does not exist
@@ -736,7 +736,7 @@ function lanzarVigilanteDelGo(slice, sessionName) {
     // same class of defect F19/H1 closed in the dispatch —«cmux returned 0» is
     // not «the command ran»— with even weaker evidence: here the only thing
     // checked would be that `node` exists.
-    if (!existsSync(bin)) return aviso(`el programa del vigilante no existe: ${bin}`)
+    if (!existsSync(bin)) return warnNotLaunched(`el programa del vigilante no existe: ${bin}`)
     // THE NONCE IS DRAWN HERE AND NOWHERE ELSE (F38). This is the only process
     // of the loop that runs in the session of whoever dispatches, so it is the
     // only one that can hand them the nonce without writing it somewhere the
@@ -750,18 +750,18 @@ function lanzarVigilanteDelGo(slice, sessionName) {
     try {
       writeGoCommitment({ repo, issue: slice.n, commitment: goHash, ...ctHome })
     } catch (e) {
-      return aviso(`no se ha podido registrar el go de este despacho (${e.message}) — sin registro, \`dispatch-check --release\` se negará (exit 9) porque no podrá comprobar el go. Registra uno con \`node <plugin>/scripts/ct-go.mjs --issue ${slice.n} --repo ${repo} --session ${JSON.stringify(sessionName)}\` y dale el go que imprima`)
+      return warnNotLaunched(`no se ha podido registrar el go de este despacho (${e.message}) — sin registro, \`dispatch-check --release\` se negará (exit 9) porque no podrá comprobar el go. Registra uno con \`node <plugin>/scripts/ct-go.mjs --issue ${slice.n} --repo ${repo} --session ${JSON.stringify(sessionName)}\` y dale el go que imprima`)
     }
     const logPath = join(controlTowerLogDir({ configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() }), `watch-go-${slice.n}.log`)
-    const hijo = spawn(process.execPath, [
+    const child = spawn(process.execPath, [
       bin, '--issue', String(slice.n), '--repo', repo, '--session', sessionName, '--go-hash', goHash, '--log', logPath,
     ], { detached: true, stdio: 'ignore' })
-    hijo.on('error', (e) => aviso(`fallo al arrancarlo: ${e.message}`))
-    hijo.unref()
-    console.log(`  vigilante del ${GO_TOKEN} de #${slice.n} lanzado (pid ${hijo.pid}) — cuando contestes el go en el issue, la sesión arranca sola. Log: ${logPath}`)
+    child.on('error', (e) => warnNotLaunched(`fallo al arrancarlo: ${e.message}`))
+    child.unref()
+    console.log(`  vigilante del ${GO_TOKEN} de #${slice.n} lanzado (pid ${child.pid}) — cuando contestes el go en el issue, la sesión arranca sola. Log: ${logPath}`)
     emitGoNonce(slice.n, nonce)
   } catch (e) {
-    aviso(e.message)
+    warnNotLaunched(e.message)
   }
 }
 
@@ -874,12 +874,12 @@ async function awaitLaunchSentinelWithRetypes({ sentinelPath, expectedCwd, title
 // eating what is typed at it, and that is exactly the fact that stopped
 // existing when the problem became recoverable.
 function retypeNote(retypes, retypeProblem) {
-  const partes = []
+  const parts = []
   if (retypes > 0) {
-    partes.push(`hizo falta REENVIAR la línea ${retypes} ${retypes === 1 ? 'vez' : 'veces'} a esa sesión: el primer tecleo de cmux no llegó a ejecutarse (el arranque del shell de login se come caracteres — un prompt de oh-my-zsh, un \`read\` en el rc). El agente se lanzó una sola vez: el script de arranque no relanza nada si su centinela ya existe.`)
+    parts.push(`hizo falta REENVIAR la línea ${retypes} ${retypes === 1 ? 'vez' : 'veces'} a esa sesión: el primer tecleo de cmux no llegó a ejecutarse (el arranque del shell de login se come caracteres — un prompt de oh-my-zsh, un \`read\` en el rc). El agente se lanzó una sola vez: el script de arranque no relanza nada si su centinela ya existe.`)
   }
-  if (retypeProblem) partes.push(`Además, ${retypeProblem}.`)
-  return partes.length ? ` ${partes.join(' ')}` : ''
+  if (retypeProblem) parts.push(`Además, ${retypeProblem}.`)
+  return parts.length ? ` ${parts.join(' ')}` : ''
 }
 
 // stateReasonLabel (F13/H4): what the closure reason GitHub returns is called
@@ -909,11 +909,11 @@ function stateReasonLabel(sr) {
 // issues listed are not actionable either. When the list grows, what is needed
 // in order to DECIDE is the count (is it a wall or a pebble?), not the forty
 // names — so a sample is listed and the total is NEVER kept quiet.
-const MAX_BLOQUEANTES_LISTADOS = 8
+const MAX_BLOCKERS_LISTED = 8
 
 // refsAcotadas: "#1, #2, #3" or "#1, …, #8 y 22 más". The total always comes out.
-function refsAcotadas(ns) {
-  const shown = ns.slice(0, MAX_BLOQUEANTES_LISTADOS).map((n) => `#${n}`)
+function boundedRefs(ns) {
+  const shown = ns.slice(0, MAX_BLOCKERS_LISTED).map((n) => `#${n}`)
   const rest = ns.length - shown.length
   return rest > 0 ? `${shown.join(', ')} y ${rest} más` : shown.join(', ')
 }
@@ -924,9 +924,9 @@ function refsAcotadas(ns) {
 // wall that pushed the very message explaining the block off the screen. The
 // count goes in the line's own label, so trimming the enumeration does not
 // hide the size of the problem.
-function detalleDeHolders(holders) {
+function holdersDetail(holders) {
   const shown = holders
-    .slice(0, MAX_BLOQUEANTES_LISTADOS)
+    .slice(0, MAX_BLOCKERS_LISTED)
     .map((i) => `#${i.n} [${((i.touches || []).length ? i.touches.map((t) => `touches:${t}`).join(', ') : 'sin touches')}]`)
   const rest = holders.length - shown.length
   return rest > 0 ? `${shown.join(', ')} … y ${rest} más` : shown.join(', ')
@@ -941,16 +941,16 @@ function detalleDeHolders(holders) {
 // note — not stuck to every line. Repeated five times (the real case that gave
 // rise to this) it pushes off the screen the only thing that has to be read:
 // the numbers and the count.
-function motivoDeBloqueante(b, candN) {
-  const partes = []
+function blockerReason(b, candN) {
+  const parts = []
   if (b.sharedTokens.length) {
-    partes.push(`retiene ${b.sharedTokens.map((t) => `'${t}'`).join(', ')}, que #${candN} también toca`)
+    parts.push(`retiene ${b.sharedTokens.map((t) => `'${t}'`).join(', ')}, que #${candN} también toca`)
   }
   if (b.laneTokens.length) {
-    partes.push(`ocupa el carril serializante con ${b.laneTokens.map((t) => `touches:${t}`).join(', ')}`)
+    parts.push(`ocupa el carril serializante con ${b.laneTokens.map((t) => `touches:${t}`).join(', ')}`)
   }
-  const estado = b.status ? `status:${b.status}` : 'estado desconocido'
-  return `  - #${b.n} (${estado}) — ${partes.join('; y además ')}`
+  const statusText = b.status ? `status:${b.status}` : 'estado desconocido'
+  return `  - #${b.n} (${statusText}) — ${parts.join('; y además ')}`
 }
 
 // formatColisionMultiple: the message when TWO OR MORE block. It is not the
@@ -965,28 +965,28 @@ function motivoDeBloqueante(b, candN) {
 // cleared by waiting (and there the stale-claim note does make sense). A lane
 // with four in-review and one in-progress needs BOTH instructions, and the old
 // message could only give one.
-function formatColisionMultiple(reason, ctx) {
+function formatMultipleCollision(reason, ctx) {
   const blockers = reason.blockers
   const candN = reason.issue
-  const lineas = blockers.slice(0, MAX_BLOQUEANTES_LISTADOS).map((b) => motivoDeBloqueante(b, candN))
-  const ocultos = blockers.length - lineas.length
-  if (ocultos > 0) {
-    lineas.push(`  … y ${ocultos} más (no se listan todos: para decidir aquí lo que cuenta es que son ${blockers.length}, no cuáles)`)
+  const lines = blockers.slice(0, MAX_BLOCKERS_LISTED).map((b) => blockerReason(b, candN))
+  const hidden = blockers.length - lines.length
+  if (hidden > 0) {
+    lines.push(`  … y ${hidden} más (no se listan todos: para decidir aquí lo que cuenta es que son ${blockers.length}, no cuáles)`)
   }
 
-  const enReview = blockers.filter((b) => b.status === 'in-review').map((b) => b.n)
-  const enCurso = blockers.filter((b) => b.status === 'in-progress').map((b) => b.n)
-  const sinEstado = blockers.filter((b) => b.status !== 'in-review' && b.status !== 'in-progress').map((b) => b.n)
+  const inReview = blockers.filter((b) => b.status === 'in-review').map((b) => b.n)
+  const inProgress = blockers.filter((b) => b.status === 'in-progress').map((b) => b.n)
+  const withoutStatus = blockers.filter((b) => b.status !== 'in-review' && b.status !== 'in-progress').map((b) => b.n)
 
-  const remedios = []
-  if (enReview.length) {
-    remedios.push(`${enReview.length} en status:in-review (${refsAcotadas(enReview)}): trabajo entregado pero SIN MERGEAR, sin ningún agente detrás — esperar no sirve de nada. Lo único que suelta esos tokens es el MERGE de su PR (o cerrar el issue como completed si el PR ya se mergeó y nadie lo cerró porque le faltaba el "Closes #<n>"). \`--reopen\` NO suelta nada: deja el slice en status:in-progress reteniendo estos mismos tokens hasta que su trabajo se mergee.`)
+  const remedies = []
+  if (inReview.length) {
+    remedies.push(`${inReview.length} en status:in-review (${boundedRefs(inReview)}): trabajo entregado pero SIN MERGEAR, sin ningún agente detrás — esperar no sirve de nada. Lo único que suelta esos tokens es el MERGE de su PR (o cerrar el issue como completed si el PR ya se mergeó y nadie lo cerró porque le faltaba el "Closes #<n>"). \`--reopen\` NO suelta nada: deja el slice en status:in-progress reteniendo estos mismos tokens hasta que su trabajo se mergee.`)
   }
-  if (enCurso.length) {
-    remedios.push(`${enCurso.length} en status:in-progress (${refsAcotadas(enCurso)}): ahí sí hay (o debería haber) un agente vivo, y esperar es el remedio correcto.`)
+  if (inProgress.length) {
+    remedies.push(`${inProgress.length} en status:in-progress (${boundedRefs(inProgress)}): ahí sí hay (o debería haber) un agente vivo, y esperar es el remedio correcto.`)
   }
-  if (sinEstado.length) {
-    remedios.push(`${sinEstado.length} sin estado conocido (${refsAcotadas(sinEstado)}): compruébalos a mano.`)
+  if (withoutStatus.length) {
+    remedies.push(`${withoutStatus.length} sin estado conocido (${boundedRefs(withoutStatus)}): compruébalos a mano.`)
   }
 
   // The stale-claim note ONLY for those that say they have a live agent (or
@@ -995,19 +995,19 @@ function formatColisionMultiple(reason, ctx) {
   // alarm — the same criterion the single-blocker case already applied. It is
   // capped at the same number as the list so as not to fire forty queries to
   // git/cmux for one message.
-  const notas = ctx
-    ? [...enCurso, ...sinEstado].slice(0, MAX_BLOQUEANTES_LISTADOS).map((n) => ctx.stalenessNoteFor(n)).filter(Boolean)
+  const notes = ctx
+    ? [...inProgress, ...withoutStatus].slice(0, MAX_BLOCKERS_LISTED).map((n) => ctx.stalenessNoteFor(n)).filter(Boolean)
     : []
-  const cola = notas.length ? `\nATENCIÓN, alguno de esos claims puede estar muerto: ${notas.join(' ')}` : ''
+  const tail = notes.length ? `\nATENCIÓN, alguno de esos claims puede estar muerto: ${notes.join(' ')}` : ''
 
   // The lane note only appears if somebody blocks BY lane: if every blocker
   // shares a literal token, explaining the lane is noise.
-  const hayCarril = blockers.some((b) => b.laneTokens.length)
-  const notaCarril = hayCarril
+  const hasLane = blockers.some((b) => b.laneTokens.length)
+  const laneNote = hasLane
     ? ` El carril serializante (migration/ci/pbxproj) es GLOBAL: basta con que #${candN} toque uno cualquiera de esos tres para chocar con TODO el que tenga otro, sin compartir token con nadie.`
     : ''
 
-  return `#${candN} está ready con deps mergeadas, pero NO basta con desbloquear uno: ${blockers.length} issues retienen a la vez lo que necesita, y hasta que salgan TODOS seguirá sin poder despacharse — resolver uno solo te devolvería justo aquí en la vuelta siguiente, con otro nombre distinto.${notaCarril}\n${lineas.join('\n')}\nQué hace falta, por grupos: ${remedios.join(' ')}${cola}`
+  return `#${candN} está ready con deps mergeadas, pero NO basta con desbloquear uno: ${blockers.length} issues retienen a la vez lo que necesita, y hasta que salgan TODOS seguirá sin poder despacharse — resolver uno solo te devolvería justo aquí en la vuelta siguiente, con otro nombre distinto.${laneNote}\n${lines.join('\n')}\nQué hace falta, por grupos: ${remedies.join(' ')}${tail}`
 }
 
 function formatReason(reason, ctx) {
@@ -1034,27 +1034,27 @@ function formatReason(reason, ctx) {
       // The prefix is kept literal in every branch: it is what keeps the
       // cause recognisable at a glance (and what W-B's pre-existing tests
       // pin down).
-      const cabeza = 'No hay ningún issue en status:ready'
+      const head = 'No hay ningún issue en status:ready'
       if (total === 0) {
-        return `${cabeza} — de hecho no hay NINGÚN issue abierto en este repo. Eso no es "el loop está al día", es "no hay nada que mirar": o el epic todavía no se ha groomeado (\`/ct-groom <spec> --repo <owner/repo>\`), o --repo apunta a un repo distinto del que crees. Comprueba las dos cosas antes de darlo por terminado.`
+        return `${head} — de hecho no hay NINGÚN issue abierto en este repo. Eso no es "el loop está al día", es "no hay nada que mirar": o el epic todavía no se ha groomeado (\`/ct-groom <spec> --repo <owner/repo>\`), o --repo apunta a un repo distinto del que crees. Comprueba las dos cosas antes de darlo por terminado.`
       }
-      const partes = []
+      const parts = []
       if (backlog.length) {
-        partes.push(`Hay ${backlog.length} en status:backlog (${refsAcotadas(backlog)}): eso NO se desbloquea esperando. Promover backlog → ready es el gate humano del loop —decides tú qué entra en vuelo— y hasta que lo abras no habrá nada que despachar: \`gh issue edit <n> --repo <owner/repo> --add-label status:ready --remove-label status:backlog\`.`)
+        parts.push(`Hay ${backlog.length} en status:backlog (${boundedRefs(backlog)}): eso NO se desbloquea esperando. Promover backlog → ready es el gate humano del loop —decides tú qué entra en vuelo— y hasta que lo abras no habrá nada que despachar: \`gh issue edit <n> --repo <owner/repo> --add-label status:ready --remove-label status:backlog\`.`)
       }
       if (inReview.length) {
-        partes.push(`Hay ${inReview.length} en status:in-review (${refsAcotadas(inReview)}): su trabajo está entregado pero SIN MERGEAR, así que ni desbloquea a sus dependientes (merge-after exige el merge) ni suelta sus tokens de área/touches. Mergea sus PRs (o, si un PR ya se mergeó y el issue sigue abierto, ciérralo como completed) — y si alguno se rechazó en revisión y vas a corregir encima, devuélvelo al banco de trabajo con \`node <plugin>/scripts/dispatch-check.mjs <n> --repo <owner/repo> --reopen\` (queda en status:in-progress: SIGUE reteniendo sus tokens, porque su trabajo sigue sin mergear — reabrir no desbloquea a sus vecinos, solo dice quién lo está rehaciendo).`)
+        parts.push(`Hay ${inReview.length} en status:in-review (${boundedRefs(inReview)}): su trabajo está entregado pero SIN MERGEAR, así que ni desbloquea a sus dependientes (merge-after exige el merge) ni suelta sus tokens de área/touches. Mergea sus PRs (o, si un PR ya se mergeó y el issue sigue abierto, ciérralo como completed) — y si alguno se rechazó en revisión y vas a corregir encima, devuélvelo al banco de trabajo con \`node <plugin>/scripts/dispatch-check.mjs <n> --repo <owner/repo> --reopen\` (queda en status:in-progress: SIGUE reteniendo sus tokens, porque su trabajo sigue sin mergear — reabrir no desbloquea a sus vecinos, solo dice quién lo está rehaciendo).`)
       }
       if (inProgress.length) {
-        partes.push(`Hay ${inProgress.length} en status:in-progress (${refsAcotadas(inProgress)}): con agente vivo, ahí sí toca esperar.`)
+        parts.push(`Hay ${inProgress.length} en status:in-progress (${boundedRefs(inProgress)}): con agente vivo, ahí sí toca esperar.`)
       }
-      if (!partes.length) {
+      if (!parts.length) {
         // Neither backlog, nor in-review, nor in-progress, and yet there are
         // open issues: they are outside the loop. Say so, instead of letting
         // the short sentence read as "there is no work left".
-        return `${cabeza}, y ninguno de los ${total} issue(s) abiertos está en ningún otro estado del loop (backlog/in-progress/in-review): están FUERA del loop, probablemente sin ninguna label \`status:\` — /ct-next no los ve. Si alguno debería despacharse, etiquétalo; si no, no hay nada que hacer aquí.`
+        return `${head}, y ninguno de los ${total} issue(s) abiertos está en ningún otro estado del loop (backlog/in-progress/in-review): están FUERA del loop, probablemente sin ninguna label \`status:\` — /ct-next no los ve. Si alguno debería despacharse, etiquétalo; si no, no hay nada que hacer aquí.`
       }
-      return `${cabeza}. ${partes.join(' ')}`
+      return `${head}. ${parts.join(' ')}`
     }
     case 'deps-unmet': {
       // D1 finding 2/5: two VERY different causes used to end up in the same
@@ -1147,7 +1147,7 @@ function formatReason(reason, ctx) {
       // `blockers` may be missing in old unit calls to this function (which
       // only knew the attribution of one issue): in that case exactly the
       // previous behaviour is kept.
-      if ((reason.blockers || []).length > 1) return formatColisionMultiple(reason, ctx)
+      if ((reason.blockers || []).length > 1) return formatMultipleCollision(reason, ctx)
       const holderStatus = reason.withIssueStatus ?? null
       const inReviewHolder = holderStatus === 'in-review'
       // Finding 2: `ctx?.stalenessNoteFor(reason.withIssue)` only does
@@ -1644,18 +1644,18 @@ function readDispatchInput() {
   // The paginated read of open/closed issues lives in scripts/loop-issues.js,
   // shared with other commands: the same two `gh api ... --paginate --slurp`
   // blocks, the same comments, the same normalisation of state_reason.
-  const { abiertos, cerrados, motivos } = loadIssues({ repo, gh })
+  const { abiertos: open, cerrados: closed, motivos: reasons } = loadIssues({ repo, gh })
   // The same criterion as always, and /ct-next's behaviour does not change: a
   // failed read is NOT degraded to "there are no issues". We abort with the
   // message that names which read failed. The only thing `loadIssues`'s new
   // contract adds (returning what is partial instead of throwing) is that if
   // BOTH fail, both are said, instead of only the first: this dispatcher is
   // going to mutate things, so any reason is reason enough not to carry on.
-  if (motivos.length) {
-    console.error(motivos.join('\n'))
+  if (reasons.length) {
+    console.error(reasons.join('\n'))
     process.exit(1)
   }
-  return buildDispatchInput(abiertos, cerrados)
+  return buildDispatchInput(open, closed)
 }
 
 // formatOrderCollisions (D1 finding 1, the gravest of the dispatch hardening —
@@ -1809,51 +1809,51 @@ function ackedResidueNumbers() {
   return entry?.cases ?? new Set()
 }
 
-const RESIDUO_ESTADO_TERMINAL = 'in-review'
+const RESIDUE_TERMINAL_STATUS = 'in-review'
 // The two states with a real consequence. The order IS that of severity, and
 // also the order in which they are printed.
-const RESIDUO_ESTADOS_GRAVES = ['ready', 'in-progress']
+const RESIDUE_GRAVE_STATUSES = ['ready', 'in-progress']
 function formatClosedStatusResidueWarning(residue, { acked = new Set() } = {}) {
-  const todos = residue || []
-  const acusados = todos.filter((r) => acked.has(r.n))
-  const vivos = todos.filter((r) => !acked.has(r.n))
-  const esTerminal = (r) => r.statusLabels.length === 1 && r.statusLabels[0] === RESIDUO_ESTADO_TERMINAL
-  const esGrave = (r) => r.statusLabels.some((s) => RESIDUO_ESTADOS_GRAVES.includes(s))
-  const anomalos = vivos.filter((r) => !esTerminal(r) && esGrave(r))
-  const inertes = vivos.filter((r) => !esTerminal(r) && !esGrave(r))
-  const terminales = vivos.filter(esTerminal).length
-  const notaInerte = inertes.length
-    ? ` (Otros ${inertes.length} cerrados conservan ${[...new Set(inertes.flatMap((r) => r.statusLabels))].map((s) => `status:${s}`).join(', ')} — ${refsAcotadas(inertes.map((r) => r.n))}: inerte. No retiene tokens, no bloquea ninguna cola y no le pasa nada a nadie por dejarlo; se dice para que el número no sorprenda en una auditoría de labels, no como algo que arreglar.)`
+  const all = residue || []
+  const acknowledged = all.filter((r) => acked.has(r.n))
+  const live = all.filter((r) => !acked.has(r.n))
+  const isTerminal = (r) => r.statusLabels.length === 1 && r.statusLabels[0] === RESIDUE_TERMINAL_STATUS
+  const isGrave = (r) => r.statusLabels.some((s) => RESIDUE_GRAVE_STATUSES.includes(s))
+  const anomalous = live.filter((r) => !isTerminal(r) && isGrave(r))
+  const inert = live.filter((r) => !isTerminal(r) && !isGrave(r))
+  const terminalCount = live.filter(isTerminal).length
+  const inertNote = inert.length
+    ? ` (Otros ${inert.length} cerrados conservan ${[...new Set(inert.flatMap((r) => r.statusLabels))].map((s) => `status:${s}`).join(', ')} — ${boundedRefs(inert.map((r) => r.n))}: inerte. No retiene tokens, no bloquea ninguna cola y no le pasa nada a nadie por dejarlo; se dice para que el número no sorprenda en una auditoría de labels, no como algo que arreglar.)`
     : ''
-  const notaTerminal = terminales
-    ? ` (Otros ${terminales} cerrados conservan status:${RESIDUO_ESTADO_TERMINAL}: ése es el final NORMAL de un slice —nada le quita la label al cerrar— y no cuentan como anomalía.)`
+  const terminalNote = terminalCount
+    ? ` (Otros ${terminalCount} cerrados conservan status:${RESIDUE_TERMINAL_STATUS}: ése es el final NORMAL de un slice —nada le quita la label al cerrar— y no cuentan como anomalía.)`
     : ''
-  if (!anomalos.length) {
+  if (!anomalous.length) {
     // With nothing grave, there is no headline. The inert/terminal counts only
     // come out if there really is something to count; the acknowledged ones
     // are NOT mentioned here on purpose — repeating «3 acknowledged» on every
     // run would be exactly the static noise this change removes.
-    return terminales || inertes.length
-      ? `${terminales + inertes.length} issue(s) cerrados conservan una label \`status:\` que no es una anomalía.${notaTerminal}${notaInerte}`.trim()
+    return terminalCount || inert.length
+      ? `${terminalCount + inert.length} issue(s) cerrados conservan una label \`status:\` que no es una anomalía.${terminalNote}${inertNote}`.trim()
       : null
   }
-  const conEstado = (s) => anomalos.filter((r) => r.statusLabels.includes(s)).map((r) => r.n)
-  const listos = conEstado('ready')
-  const enCurso = conEstado('in-progress').filter((n) => !listos.includes(n))
-  const partes = []
-  if (listos.length) {
-    partes.push(`${refsAcotadas(listos)} siguen en status:ready: estaban en la cola de despacho y se cayeron de ella sin una palabra — si esperabas que /ct-next despachara alguno de ésos, ésta es la explicación que ninguna otra línea te va a dar.`)
+  const withStatus = (s) => anomalous.filter((r) => r.statusLabels.includes(s)).map((r) => r.n)
+  const ready = withStatus('ready')
+  const inProgress = withStatus('in-progress').filter((n) => !ready.includes(n))
+  const parts = []
+  if (ready.length) {
+    parts.push(`${boundedRefs(ready)} siguen en status:ready: estaban en la cola de despacho y se cayeron de ella sin una palabra — si esperabas que /ct-next despachara alguno de ésos, ésta es la explicación que ninguna otra línea te va a dar.`)
   }
-  if (enCurso.length) {
-    partes.push(`${refsAcotadas(enCurso)} siguen en status:in-progress: son claims que nunca se soltaron (su worktree y su rama pueden seguir en disco).`)
+  if (inProgress.length) {
+    parts.push(`${boundedRefs(inProgress)} siguen en status:in-progress: son claims que nunca se soltaron (su worktree y su rama pueden seguir en disco).`)
   }
   // The acknowledgement is only mentioned when there is something LIVE to say:
   // it is useful context ("you have already looked at 8, these 2 are new"), not
   // a periodic reminder.
-  const notaAcuse = acusados.length
-    ? ` (${acusados.length} más ya acusados en \`${ACK_PATH}\`, no se repiten.)`
+  const ackNote = acknowledged.length
+    ? ` (${acknowledged.length} más ya acusados en \`${ACK_PATH}\`, no se repiten.)`
     : ''
-  return `${anomalos.length} issue(s) CERRADOS conservan una label \`status:\` viva, y para /ct-next NO EXISTEN: este dispatcher solo barre issues ABIERTOS. ${partes.join(' ')} Cerrar el issue y quitarle su label son dos actos distintos y NADA comprueba el segundo, así que el residuo se acumula solo (medido en un repo real: 10 de 99 cerrados). Límpialos con \`gh issue edit <n> --repo ${repo} --remove-label status:<la que tenga>\` — o, si ya los has mirado y decides DEJARLOS así, escribe una línea en \`${ACK_PATH}\`: \`residuo-status: ${new Date().toISOString().slice(0, 10)} — ${refsAcotadas(anomalos.slice(0, 3).map((r) => r.n))} <por qué se quedan>\`. Esos números dejan de salir y los nuevos siguen apareciendo, que es la única forma de que este aviso siga sirviendo dentro de tres corridas.${notaAcuse}${notaTerminal}${notaInerte}`
+  return `${anomalous.length} issue(s) CERRADOS conservan una label \`status:\` viva, y para /ct-next NO EXISTEN: este dispatcher solo barre issues ABIERTOS. ${parts.join(' ')} Cerrar el issue y quitarle su label son dos actos distintos y NADA comprueba el segundo, así que el residuo se acumula solo (medido en un repo real: 10 de 99 cerrados). Límpialos con \`gh issue edit <n> --repo ${repo} --remove-label status:<la que tenga>\` — o, si ya los has mirado y decides DEJARLOS así, escribe una línea en \`${ACK_PATH}\`: \`residuo-status: ${new Date().toISOString().slice(0, 10)} — ${boundedRefs(anomalous.slice(0, 3).map((r) => r.n))} <por qué se quedan>\`. Esos números dejan de salir y los nuevos siguen apareciendo, que es la única forma de que este aviso siga sirviendo dentro de tres corridas.${ackNote}${terminalNote}${inertNote}`
 }
 
 // ============================================================================
@@ -1938,10 +1938,10 @@ function formatBlockedClaimWarnings(issues) {
       continue
     }
     if (b.state !== 'blocked') continue
-    const motivo = b.reason ? `: «${b.reason}»` : ' (sin motivo declarado)'
-    const salida = b.unblock ? ` Para levantarlo, lo que el propio agente dejó escrito: «${b.unblock}».` : ''
+    const reasonText = b.reason ? `: «${b.reason}»` : ' (sin motivo declarado)'
+    const unblockNote = b.unblock ? ` Para levantarlo, lo que el propio agente dejó escrito: «${b.unblock}».` : ''
     const extras = (b.notes || []).length ? ` ${b.notes.join(' ')}` : ''
-    out.push(`#${i.n} está en status:in-progress —el dispatcher lo cuenta como trabajo en curso, ocupando una plaza de --cap y reteniendo sus tokens de área/touches— pero su propio .worktrees/${i.n}/${SLICE_REL_PATH} se declara BLOQUEADO${motivo}. No hay ningún agente avanzándolo, y NINGUNA transición del loop lo saca de ahí sola: la detección de claims rancios no lo ve (el worktree y la rama SÍ existen), \`--requeue\` se niega mientras existan, y \`--release\` mentiría (no hay PR). Esto lo decides tú: desbloquéalo, o abandónalo (borra .worktrees/${i.n} y la rama feat/${i.n} —comprueba antes que no pierdes trabajo sin pushear— y solo entonces \`node <plugin>/scripts/dispatch-check.mjs ${i.n} --repo ${repo} --requeue\`).${salida}${extras}`)
+    out.push(`#${i.n} está en status:in-progress —el dispatcher lo cuenta como trabajo en curso, ocupando una plaza de --cap y reteniendo sus tokens de área/touches— pero su propio .worktrees/${i.n}/${SLICE_REL_PATH} se declara BLOQUEADO${reasonText}. No hay ningún agente avanzándolo, y NINGUNA transición del loop lo saca de ahí sola: la detección de claims rancios no lo ve (el worktree y la rama SÍ existen), \`--requeue\` se niega mientras existan, y \`--release\` mentiría (no hay PR). Esto lo decides tú: desbloquéalo, o abandónalo (borra .worktrees/${i.n} y la rama feat/${i.n} —comprueba antes que no pierdes trabajo sin pushear— y solo entonces \`node <plugin>/scripts/dispatch-check.mjs ${i.n} --repo ${repo} --requeue\`).${unblockNote}${extras}`)
   }
   return out
 }
@@ -2006,7 +2006,7 @@ for (const w of formatBlockedClaimWarnings(issues)) warn(w)
 // checkout, so the answer would say nothing about anything.
 if (!fx && (mergedIssues || []).length) {
   let worktreeDirs = []
-  let dirsLeidos = true
+  let dirsRead = true
   try {
     worktreeDirs = readdirSync(join(repoRoot, '.worktrees'), { withFileTypes: true })
       .filter((d) => d.isDirectory())
@@ -2015,29 +2015,29 @@ if (!fx && (mergedIssues || []).length) {
     // ENOENT is the normal, healthy case: there is no worktree at all.
     // Anything else (permissions, a file where a directory should be) is a
     // FAILED query and cannot be read as "it is clean".
-    if (e.code !== 'ENOENT') dirsLeidos = false
+    if (e.code !== 'ENOENT') dirsRead = false
   }
   let branchNames = []
-  let ramasLeidas = true
+  let branchesRead = true
   try {
     branchNames = execFileSync('git', ['branch', '--list', '--format=%(refname:short)', 'feat/*'], {
       cwd: repoRoot, encoding: 'utf8', timeout: childTimeoutFor(), killSignal: 'SIGKILL',
     }).split('\n').map((l) => l.trim()).filter(Boolean)
   } catch {
-    ramasLeidas = false
+    branchesRead = false
   }
-  if (!dirsLeidos || !ramasLeidas) {
-    warn(`no se ha podido comprobar si algún slice ya mergeado deja worktree o rama sin recoger en este checkout (${!dirsLeidos ? `no se pudo listar ${join(repoRoot, '.worktrees')}` : `falló \`git branch --list 'feat/*'\``}). NO lo leas como "está limpio": el residuo de un slice terminado bloquea cualquier redespacho futuro de ese mismo número.`)
+  if (!dirsRead || !branchesRead) {
+    warn(`no se ha podido comprobar si algún slice ya mergeado deja worktree o rama sin recoger en este checkout (${!dirsRead ? `no se pudo listar ${join(repoRoot, '.worktrees')}` : `falló \`git branch --list 'feat/*'\``}). NO lo leas como "está limpio": el residuo de un slice terminado bloquea cualquier redespacho futuro de ese mismo número.`)
   } else {
-    const preliminar = collectFinishedResidue(mergedIssues, {
+    const preliminary = collectFinishedResidue(mergedIssues, {
       worktreeDirs, branchNames, cmuxTitles: null, worktreePathOf: (n) => `${repoRoot}/.worktrees/${n}`,
     })
-    if (preliminar.length) {
+    if (preliminary.length) {
       const titles = queryCmuxWorkspaceTitles() // null = not conclusive, never "there are no sessions"
-      const residuo = collectFinishedResidue(mergedIssues, {
+      const residue = collectFinishedResidue(mergedIssues, {
         worktreeDirs, branchNames, cmuxTitles: titles, worktreePathOf: (n) => `${repoRoot}/.worktrees/${n}`,
       })
-      const w = formatFinishedResidueWarning(residuo, { repo })
+      const w = formatFinishedResidueWarning(residue, { repo })
       if (w) warn(titles === null ? `${w}\n(no se pudo consultar cmux, así que de las sesiones abiertas no se afirma nada: puede haber agentes vivos que no salen en esta lista.)` : w)
     }
   }
@@ -2074,8 +2074,8 @@ if (!fx) {
       for (const w of formatSuspectClosureWarnings(closers, plan.dependents)) warn(w)
       for (const w of formatMergedButOpenWarnings(mergedPr, repo)) warn(w)
     }
-    const cobertura = formatClosureCoverageNote(plan)
-    if (cobertura) warn(cobertura)
+    const coverage = formatClosureCoverageNote(plan)
+    if (coverage) warn(coverage)
   }
 }
 // F11, part B — the same finding that made ct-init stop bootstrapping on top
@@ -2167,7 +2167,7 @@ if (dryRun) {
   // resolved (neither against GitHub nor against the local checkout).
   console.log(`rama base resuelta: ${resolvedBase}${baseIsFixtureDefault ? ' (fixture)' : ''}`)
   if (inFlight.length) {
-    console.log(`En vuelo (${inFlight.length}/${cap} del cap ocupados): ${detalleDeHolders(inFlight)}`)
+    console.log(`En vuelo (${inFlight.length}/${cap} del cap ocupados): ${holdersDetail(inFlight)}`)
   } else {
     console.log(`En vuelo: ninguno (0/${cap} del cap ocupados).`)
   }
@@ -2179,7 +2179,7 @@ if (dryRun) {
   // into "En vuelo", precisely because they are two different accountings.
   const reviewHolders = (tokenHolders || []).filter((i) => i.status === 'in-review')
   if (reviewHolders.length) {
-    console.log(`Sin mergear, reteniendo tokens (${reviewHolders.length}, status:in-review, NO ocupan cap): ${detalleDeHolders(reviewHolders)}`)
+    console.log(`Sin mergear, reteniendo tokens (${reviewHolders.length}, status:in-review, NO ocupan cap): ${holdersDetail(reviewHolders)}`)
   }
 }
 
@@ -3627,7 +3627,7 @@ for (let idx = 0; idx < plans.length; idx++) {
   // that justifies it (0/6 without a resend, 5/5 with it, against the real
   // cmux).
   const sentinel = await awaitLaunchSentinelWithRetypes({ sentinelPath, expectedCwd: wt, title: name, typedCommand })
-  const reenvio = retypeNote(sentinel.retypes, sentinel.retypeProblem)
+  const resendNote = retypeNote(sentinel.retypes, sentinel.retypeProblem)
   // Finding 3: `new-workspace` has already returned success (otherwise the
   // line above would have aborted) — but that, on its own, NEVER implies that
   // the session started in `wt` (cmux tolerates a non-existent cwd and carries
@@ -3695,23 +3695,23 @@ for (let idx = 0; idx < plans.length; idx++) {
     continue
   }
   if (sentinel.status === 'never' || sentinel.status === 'garbled') {
-    const ventana = launchCheck.status === 'confirmed' || launchCheck.status === 'cwd-unknown'
+    const windowNote = launchCheck.status === 'confirmed' || launchCheck.status === 'cwd-unknown'
       ? ' La ventana de cmux SÍ existe con el título esperado — pero eso ya no cuenta como prueba de nada: la abre este mismo dispatcher, y el día del hallazgo también existía.'
       : launchCheck.status === 'not-found'
         ? ' Y cmux tampoco encuentra ninguna sesión con ese título: dos ausencias, no una.'
         : ''
-    const detalle = sentinel.status === 'garbled'
+    const detail = sentinel.status === 'garbled'
       ? `el fichero centinela ${sentinelPath} EXISTE pero no tiene el formato esperado (empieza por «${sentinel.raw}»), así que no dice nada fiable`
       : `el centinela de arranque ${sentinelPath} NO apareció en ${launchSentinelTimeoutMs} ms`
     // F20/H1: what was ATTEMPTED, not just how long was waited. The three
     // situations lead you to look in different places and until now all three
     // said the same thing.
-    const reintentoFallido = sentinel.retypeProblem
+    const failedRetry = sentinel.retypeProblem
       ? ` Y el reenvío automático de la línea tampoco se pudo hacer: ${sentinel.retypeProblem}.`
       : sentinel.retypes > 0
         ? ` Y esto YA no se arregla esperando más: la línea se reenvió ${sentinel.retypes} ${sentinel.retypes === 1 ? 'vez' : 'veces'} a esa sesión dentro del presupuesto y siguió sin ejecutarse — mira qué hay en esa pantalla.`
         : ` No hubo ningún reenvío automático: el presupuesto (${launchSentinelTimeoutMs} ms) no dio para un intento más allá del primero.`
-    console.error(`ATENCIÓN: cmux aceptó el lanzamiento de #${s.n} (exit 0) y la ventana está abierta, pero ${detalle} — NO se puede confirmar que el comando llegara a ejecutarse. Los dos casos que esto cubre son indistinguibles desde aquí: (a) el comando nunca corrió —el shell de login se comió parte de la línea al arrancar, que es lo que pasó en el primer despacho real de este loop: un prompt de oh-my-zsh convirtió \`claude\` en \`laude\`— o (b) ese shell sigue arrancando y va a ejecutarlo dentro de un momento. Por eso NO se cuenta como lanzado y por eso TAMPOCO se revierte el claim solo: mira la sesión de cmux "${name}". Si el shell está ahí parado en un prompt, el agente no va a arrancar nunca. Si tu shell de login tarda de verdad tanto, sube CT_NEXT_LAUNCH_TIMEOUT_MS (ahora ${launchSentinelTimeoutMs}).${ventana}${reintentoFallido}`)
+    console.error(`ATENCIÓN: cmux aceptó el lanzamiento de #${s.n} (exit 0) y la ventana está abierta, pero ${detail} — NO se puede confirmar que el comando llegara a ejecutarse. Los dos casos que esto cubre son indistinguibles desde aquí: (a) el comando nunca corrió —el shell de login se comió parte de la línea al arrancar, que es lo que pasó en el primer despacho real de este loop: un prompt de oh-my-zsh convirtió \`claude\` en \`laude\`— o (b) ese shell sigue arrancando y va a ejecutarlo dentro de un momento. Por eso NO se cuenta como lanzado y por eso TAMPOCO se revierte el claim solo: mira la sesión de cmux "${name}". Si el shell está ahí parado en un prompt, el agente no va a arrancar nunca. Si tu shell de login tarda de verdad tanto, sube CT_NEXT_LAUNCH_TIMEOUT_MS (ahora ${launchSentinelTimeoutMs}).${windowNote}${failedRetry}`)
     unverifiedLaunches.push({ n: s.n, wt, branch, name, why: sentinel.status === 'garbled' ? `el centinela de arranque existe pero es ilegible: no se puede afirmar que el comando corriera` : `el comando no dejó constancia de haberse ejecutado en ${launchSentinelTimeoutMs} ms (centinela ausente en ${sentinelPath})` })
     continue
   }
@@ -3724,9 +3724,9 @@ for (let idx = 0; idx < plans.length; idx++) {
   // increment it ('wrong-cwd' and 'not-found') are the ones that record the
   // slice in `unverifiedLaunches`, and in both of them the session's title
   // —the watcher's only handle— is precisely what cmux has just denied.
-  const lanzadosAntesDeVerificar = launchedCount
+  const launchedBeforeVerifying = launchedCount
   if (launchCheck.status === 'confirmed') {
-    console.log(`lanzado #${s.n} en ${wt} — verificado: la sesión cmux está corriendo en ese directorio, y el comando llegó a ejecutarse de verdad (centinela de arranque escrito por el propio shell, con $PWD=${sentinel.cwd} y \`claude\` resoluble).${reenvio}`)
+    console.log(`lanzado #${s.n} en ${wt} — verificado: la sesión cmux está corriendo en ese directorio, y el comando llegó a ejecutarse de verdad (centinela de arranque escrito por el propio shell, con $PWD=${sentinel.cwd} y \`claude\` resoluble).${resendNote}`)
     launchedCount++
   } else if (launchCheck.status === 'wrong-cwd') {
     // D5, finding A: besides the ATENCIÓN, the slice is RECORDED in
@@ -3734,7 +3734,7 @@ for (let idx = 0; idx < plans.length; idx++) {
     // written, branch and worktree created, and a `cmux new-workspace` that
     // returned 0, i.e. possibly an agent running) and the final summary has to
     // be able to say so instead of asserting "nothing was left half-done".
-    console.error(`ATENCIÓN: cmux aceptó el lanzamiento de #${s.n} (exit 0), pero la sesión NO está en ${wt} — está en "${launchCheck.actualCwd}" en su lugar (cmux tolera un cwd inexistente y arranca en el shell de login por defecto en vez de fallar; ¿el worktree no llegó a existir a tiempo, o se borró justo antes?). El agente puede estar corriendo en el directorio equivocado — revisa la sesión a mano antes de asumir que está trabajando #${s.n}. NO se cuenta como lanzado con éxito.${reenvio}`)
+    console.error(`ATENCIÓN: cmux aceptó el lanzamiento de #${s.n} (exit 0), pero la sesión NO está en ${wt} — está en "${launchCheck.actualCwd}" en su lugar (cmux tolera un cwd inexistente y arranca en el shell de login por defecto en vez de fallar; ¿el worktree no llegó a existir a tiempo, o se borró justo antes?). El agente puede estar corriendo en el directorio equivocado — revisa la sesión a mano antes de asumir que está trabajando #${s.n}. NO se cuenta como lanzado con éxito.${resendNote}`)
     unverifiedLaunches.push({ n: s.n, wt, branch, name, why: `la sesión de cmux existe pero está en "${launchCheck.actualCwd}", no en ${wt} — aunque el comando SÍ se ejecutó (su propio $PWD era ${sentinel.cwd}), así que lo más probable es que haya un agente vivo: no borres nada sin mirarlo` })
   } else if (launchCheck.status === 'not-found') {
     console.error(`ATENCIÓN: cmux devolvió éxito (exit 0) al lanzar #${s.n}, pero no se encontró ninguna sesión con el nombre "${name}" al consultarlo — no se puede confirmar que el agente esté corriendo en absoluto, y mucho menos en ${wt}. El comando SÍ llegó a ejecutarse (centinela de arranque escrito, $PWD=${sentinel.cwd}), o sea que muy probablemente hay un agente vivo en alguna parte y lo que falla es localizar su ventana. Revisa cmux a mano. NO se cuenta como lanzado con éxito.`)
@@ -3747,7 +3747,7 @@ for (let idx = 0; idx < plans.length; idx++) {
     // launched (the same "benefit of the doubt in the face of an incomplete
     // query" criterion as 'unverifiable'), but the message does not assert
     // "verified".
-    console.log(`lanzado #${s.n} en ${wt} — la sesión de cmux con el título esperado EXISTE, pero cmux no expuso un directorio legible para ella (¿esquema/versión distinta de la esperada?), así que NO se pudo comprobar que esté corriendo en ${wt}. Eso sí: el comando llegó a ejecutarse (centinela de arranque escrito) y su propio $PWD era ${sentinel.cwd}, que es el worktree esperado — así que lo que falta es el dato de cmux, no la evidencia del arranque.${reenvio}`)
+    console.log(`lanzado #${s.n} en ${wt} — la sesión de cmux con el título esperado EXISTE, pero cmux no expuso un directorio legible para ella (¿esquema/versión distinta de la esperada?), así que NO se pudo comprobar que esté corriendo en ${wt}. Eso sí: el comando llegó a ejecutarse (centinela de arranque escrito) y su propio $PWD era ${sentinel.cwd}, que es el worktree esperado — así que lo que falta es el dato de cmux, no la evidencia del arranque.${resendNote}`)
     launchedCount++
   } else {
     // F19/H1: this path is no longer the "benefit of the doubt" it was.
@@ -3755,7 +3755,7 @@ for (let idx = 0; idx < plans.length; idx++) {
     // all and it counted anyway; now the sentinel has already said, on its own
     // and without asking cmux anything, that the command ran in the right
     // place. The only thing not known is in which window.
-    console.log(`lanzado #${s.n} en ${wt} — no se pudo verificar la sesión de cmux (la consulta falló: ¿daemon caído?), pero el comando SÍ llegó a ejecutarse: el centinela de arranque está escrito, con $PWD=${sentinel.cwd} y \`claude\` resoluble en ese shell. Lo que no se sabe es en qué ventana de cmux quedó.${reenvio}`)
+    console.log(`lanzado #${s.n} en ${wt} — no se pudo verificar la sesión de cmux (la consulta falló: ¿daemon caído?), pero el comando SÍ llegó a ejecutarse: el centinela de arranque está escrito, con $PWD=${sentinel.cwd} y \`claude\` resoluble en ese shell. Lo que no se sabe es en qué ventana de cmux quedó.${resendNote}`)
     launchedCount++
   }
   // finding 1: the slice was launched completely — there is no longer a claim
@@ -3771,7 +3771,7 @@ for (let idx = 0; idx < plans.length; idx++) {
   // is kept as an idempotent one in case the flow above changed; it is not the
   // one that closes the window.)
   activeClaim = null
-  if (launchedCount > lanzadosAntesDeVerificar) lanzarVigilanteDelGo(s, name)
+  if (launchedCount > launchedBeforeVerifying) launchGoWatcher(s, name)
 }
 
 // D2 review, minor 1: ALL of this counting/exit-code block is exclusive to the

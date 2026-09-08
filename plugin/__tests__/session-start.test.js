@@ -46,7 +46,7 @@ describe('session-start hook', () => {
     mkdirSync(join(dir, '.agent'), { recursive: true })
     writeFileSync(join(dir, '.agent', 'STATE.md'), text)
   }
-  const INCIDENTE = [
+  const INCIDENT = [
     '---',
     'task: "Plan vs Propuestas"',
     'status: in_progress',
@@ -61,7 +61,7 @@ describe('session-start hook', () => {
 
   it('a BLOCKED STATE.md → the injected context opens with the warning and declares the next_action suspended', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
-    writeState(dir, INCIDENTE)
+    writeState(dir, INCIDENT)
     const ctx = JSON.parse(runHook(dir)).hookSpecificOutput.additionalContext
     expect(ctx.split('\n')[0]).toMatch(/TRABAJO BLOQUEADO/)
     expect(ctx).toMatch(/SUSPENDIDO/)
@@ -76,9 +76,9 @@ describe('session-start hook', () => {
 
   it('control: the SAME STATE.md without the `blocked` field is injected with no warning at all', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
-    const sinBlocked = INCIDENTE.replace(/blocked:\n(  .*\n)+/, '')
-    expect(sinBlocked).not.toContain('blocked:') // control: the field really was removed
-    writeState(dir, sinBlocked)
+    const withoutBlocked = INCIDENT.replace(/blocked:\n(  .*\n)+/, '')
+    expect(withoutBlocked).not.toContain('blocked:') // control: the field really was removed
+    writeState(dir, withoutBlocked)
     const ctx = JSON.parse(runHook(dir)).hookSpecificOutput.additionalContext
     expect(ctx).not.toMatch(/TRABAJO BLOQUEADO/)
     expect(ctx).toMatch(/Lanzar la corrida REAL/) // it still hydrates just as always

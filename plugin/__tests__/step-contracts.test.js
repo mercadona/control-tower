@@ -23,72 +23,72 @@ import {
 import { findClosingKeywords } from '../scripts/closing-keywords.js'
 import { PluginYardstick } from '../scripts/plugin-yardstick.js'
 
-const AGENTE_JUEZ = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-judge.md')
-const AGENTE_JUEZ_DE_SLICE = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-slice-judge.md')
-const AGENTE_RECONCILIADOR = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-reconciler.md')
-const AGENTE_CONSEJERO = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-advisor.md')
+const JUDGE_AGENT = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-judge.md')
+const SLICE_JUDGE_AGENT = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-slice-judge.md')
+const RECONCILER_AGENT = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-reconciler.md')
+const ADVISOR_AGENT = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-advisor.md')
 
 // The `tools:` line of the reconciler's frontmatter (Branch reconciliation,
-// Task 9) — the same pattern as `toolsDelAgente()`/`toolsDelJuezDeSlice()`,
+// Task 9) — the same pattern as `judgeAgentTools()`/`sliceJudgeAgentTools()`,
 // over `agents/ct-reconciler.md`.
-const toolsDelReconciliador = () => {
-  const m = /^tools:\s*(.+)$/m.exec(readFileSync(AGENTE_RECONCILIADOR, 'utf8'))
+const reconcilerAgentTools = () => {
+  const m = /^tools:\s*(.+)$/m.exec(readFileSync(RECONCILER_AGENT, 'utf8'))
   return m ? m[1].trim() : null
 }
 
 // The `tools:` line of the SLICE judge's frontmatter — the same pattern as
-// `toolsDelAgente()` for ct-judge.md, over §3.7-B's own file.
-const toolsDelJuezDeSlice = () => {
-  const m = /^tools:\s*(.+)$/m.exec(readFileSync(AGENTE_JUEZ_DE_SLICE, 'utf8'))
+// `judgeAgentTools()` for ct-judge.md, over §3.7-B's own file.
+const sliceJudgeAgentTools = () => {
+  const m = /^tools:\s*(.+)$/m.exec(readFileSync(SLICE_JUDGE_AGENT, 'utf8'))
   return m ? m[1].trim() : null
 }
 
 // The headings of the slice judge's rubric — "### 1. `estado-final` — ..." —
-// in the order the agent walks them. The same pattern as `reglasDelAgente()`,
+// in the order the agent walks them. The same pattern as `judgeAgentRules()`,
 // parameterised by file because there are now TWO agents with this same rubric
 // shape.
-const reglasDeAgente = (fichero) => {
-  const texto = readFileSync(fichero, 'utf8')
+const rulesOfAgent = (file) => {
+  const text = readFileSync(file, 'utf8')
   const regex = /^### \d+\.\s+`([a-z-]+)`/gm
-  const reglas = []
+  const rules = []
   let m
-  while ((m = regex.exec(texto)) !== null) reglas.push(m[1])
-  return reglas
+  while ((m = regex.exec(text)) !== null) rules.push(m[1])
+  return rules
 }
 
 // The ```json block of the slice judge's "What you write" — the same pattern
-// as `esquemaDelAgente()`, parameterised by file.
-const esquemaDeAgente = (fichero) => {
-  const texto = readFileSync(fichero, 'utf8')
-  const m = /## What you write[\s\S]*?```json\n([\s\S]*?)```/.exec(texto)
+// as `judgeAgentSchema()`, parameterised by file.
+const schemaOfAgent = (file) => {
+  const text = readFileSync(file, 'utf8')
+  const m = /## What you write[\s\S]*?```json\n([\s\S]*?)```/.exec(text)
   return m ? m[1] : ''
 }
 
 // The headings of the review package that the slice judge's "What you are
-// given" cites. The same pattern as `seccionesDelPaquete()`, over the "The
+// given" cites. The same pattern as `packageSections()`, over the "The
 // slice review package." paragraph instead of "The review package.".
-const seccionesDelPaqueteDeSlice = () => {
-  const texto = readFileSync(AGENTE_JUEZ_DE_SLICE, 'utf8')
-  const parrafo = /- \*\*The slice review package\.\*\*([\s\S]*?)\n- \*\*The plan/.exec(texto)
-  if (!parrafo) return []
-  const normalizado = parrafo[1].replace(/\s+/g, ' ')
+const slicePackageSections = () => {
+  const text = readFileSync(SLICE_JUDGE_AGENT, 'utf8')
+  const paragraph = /- \*\*The slice review package\.\*\*([\s\S]*?)\n- \*\*The plan/.exec(text)
+  if (!paragraph) return []
+  const normalized = paragraph[1].replace(/\s+/g, ' ')
   const regex = /`## ([^`]+)`/g
-  const secciones = []
+  const sections = []
   let m
-  while ((m = regex.exec(normalizado)) !== null) {
-    const seccion = m[1].trim()
-    if (!secciones.includes(seccion)) secciones.push(seccion)
+  while ((m = regex.exec(normalized)) !== null) {
+    const section = m[1].trim()
+    if (!sections.includes(section)) sections.push(section)
   }
-  return secciones
+  return sections
 }
 // The `tools:` line of the frontmatter, which is what really decides what the
 // judge can do. The module's constant is a copy of it.
-const toolsDelAgente = () => {
-  const m = /^tools:\s*(.+)$/m.exec(readFileSync(AGENTE_JUEZ, 'utf8'))
+const judgeAgentTools = () => {
+  const m = /^tools:\s*(.+)$/m.exec(readFileSync(JUDGE_AGENT, 'utf8'))
   return m ? m[1].trim() : null
 }
 
-const PROMPT_IMPLEMENTADOR = join(dirname(fileURLToPath(import.meta.url)), '..', 'prompts', 'task-implementer.md')
+const IMPLEMENTER_PROMPT = join(dirname(fileURLToPath(import.meta.url)), '..', 'prompts', 'task-implementer.md')
 
 // Point 3 of the implementer's prompt, isolated up to point 4: it is where
 // e473c97's mirror sentence lives ("Rules to obey... Open both before you
@@ -97,12 +97,12 @@ const PROMPT_IMPLEMENTADOR = join(dirname(fileURLToPath(import.meta.url)), '..',
 // the task" (the boundary of the task's SCOPE, a subject unrelated to
 // architecture boundaries) — a match against the whole file would pass just
 // the same with the mirror sentence deleted.
-const punto3DelImplementador = () => {
-  const m = /^3\.\s[\s\S]*?(?=^4\.\s)/m.exec(readFileSync(PROMPT_IMPLEMENTADOR, 'utf8'))
+const implementerPoint3 = () => {
+  const m = /^3\.\s[\s\S]*?(?=^4\.\s)/m.exec(readFileSync(IMPLEMENTER_PROMPT, 'utf8'))
   return m ? m[0] : ''
 }
 
-const PLANTILLA_PLAN = join(
+const PLAN_TEMPLATE = join(
   dirname(fileURLToPath(import.meta.url)), '..',
   'skills', 'writing-plans-prescriptive', 'plan-template.md',
 )
@@ -110,15 +110,15 @@ const PLANTILLA_PLAN = join(
 // what is admitted as a yardstick. It is isolated up to the next `## ` because
 // the rest of the template also names skills and not all of them are the
 // judge's yardstick.
-const seccion3DeLaPlantilla = () => {
-  const m = /^## 3\. Reference patterns$([\s\S]*?)^## /m.exec(readFileSync(PLANTILLA_PLAN, 'utf8'))
+const templateSection3 = () => {
+  const m = /^## 3\. Reference patterns$([\s\S]*?)^## /m.exec(readFileSync(PLAN_TEMPLATE, 'utf8'))
   return m ? m[1] : ''
 }
 
 // The rubric's `patrones` item, isolated up to the next heading: it is the only
 // place where the judge is ordered to open the repo's yardstick.
-const item5DeLaRubrica = () => {
-  const m = /^### 5\. `patrones`[\s\S]*?(?=^### |^## )/m.exec(readFileSync(AGENTE_JUEZ, 'utf8'))
+const rubricItem5 = () => {
+  const m = /^### 5\. `patrones`[\s\S]*?(?=^### |^## )/m.exec(readFileSync(JUDGE_AGENT, 'utf8'))
   return m ? m[0] : ''
 }
 
@@ -126,23 +126,23 @@ const item5DeLaRubrica = () => {
 // across two lines of the file a sentence that in the text is a single one, so
 // an expression looking for the distinctive sentence against the raw text would
 // go red on reflowing a paragraph without anything having been deleted. The
-// same device `seccionesDelPaquete` uses, for the same reason.
-const item5Normalizado = () => item5DeLaRubrica().replace(/\s+/g, ' ')
+// same device `packageSections` uses, for the same reason.
+const rubricItem5Normalized = () => rubricItem5().replace(/\s+/g, ' ')
 
 // The `alcance` item, isolated up to the next heading, with the same trim as
 // `item5DeLaRubrica`: it is the only place where the judge is told that a diff
 // of the plan file inside a task is an amendment it has to rule on, not a path
 // out of scope.
 const item8DeLaRubrica = () => {
-  const m = /^### 8\. `alcance`[\s\S]*?(?=^### |^## )/m.exec(readFileSync(AGENTE_JUEZ, 'utf8'))
+  const m = /^### 8\. `alcance`[\s\S]*?(?=^### |^## )/m.exec(readFileSync(JUDGE_AGENT, 'utf8'))
   return m ? m[0] : ''
 }
 
 // The `test-desiderata` item, isolated up to the next heading, with the same
-// trim as `item5DeLaRubrica`: it is the only place where the judge is told what
+// trim as `rubricItem5`: it is the only place where the judge is told what
 // it looks at in the tests the task has JUST written.
-const item9DeLaRubrica = () => {
-  const m = /^### 9\. `test-desiderata`[\s\S]*?(?=^### |^## )/m.exec(readFileSync(AGENTE_JUEZ, 'utf8'))
+const rubricItem9 = () => {
+  const m = /^### 9\. `test-desiderata`[\s\S]*?(?=^### |^## )/m.exec(readFileSync(JUDGE_AGENT, 'utf8'))
   return m ? m[0] : ''
 }
 
@@ -151,15 +151,15 @@ const item9DeLaRubrica = () => {
 // headings— and the one that breaks nothing by falling short: an identifier
 // that does not appear there is an item the judge walks but from which it never
 // dares emit a finding.
-const identificadoresQueElJuezPuedeEscribir = () => {
-  const m = /- `rule` is one of the[\s\S]*?(?=\n- `path`)/.exec(readFileSync(AGENTE_JUEZ, 'utf8'))
+const identifiersTheJudgeMayWrite = () => {
+  const m = /- `rule` is one of the[\s\S]*?(?=\n- `path`)/.exec(readFileSync(JUDGE_AGENT, 'utf8'))
   return m ? m[0].replace(/\s+/g, ' ') : ''
 }
 
 // Point 1 of the implementer's prompt (the loading of the TDD skill), isolated
 // up to point 2: it is where this item's mirror sentence lives.
-const punto1DelImplementador = () => {
-  const m = /^1\.\s[\s\S]*?(?=^2\.\s)/m.exec(readFileSync(PROMPT_IMPLEMENTADOR, 'utf8'))
+const implementerPoint1 = () => {
+  const m = /^1\.\s[\s\S]*?(?=^2\.\s)/m.exec(readFileSync(IMPLEMENTER_PROMPT, 'utf8'))
   return m ? m[0] : ''
 }
 
@@ -170,13 +170,13 @@ const punto1DelImplementador = () => {
 // because there is no schema error to give it away — a `rule` renamed in the
 // code does not break ct-judge.md, it only makes EVERY verdict using that
 // `rule` be discarded at run time until the run is exhausted.
-const reglasDelAgente = () => {
-  const texto = readFileSync(AGENTE_JUEZ, 'utf8')
+const judgeAgentRules = () => {
+  const text = readFileSync(JUDGE_AGENT, 'utf8')
   const regex = /^### \d+\.\s+`([a-z-]+)`/gm
-  const reglas = []
+  const rules = []
   let m
-  while ((m = regex.exec(texto)) !== null) reglas.push(m[1])
-  return reglas
+  while ((m = regex.exec(text)) !== null) rules.push(m[1])
+  return rules
 }
 
 // The schema the rubric SHOWS the judge: the ```json block of "What you
@@ -185,9 +185,9 @@ const reglasDelAgente = () => {
 // show, the judge cannot get it right even by accident and every verdict is
 // discarded until the run is exhausted — the same decoupling as JUDGE_TOOLS and
 // VERDICT_RULES, with the bill paid in round trips.
-const esquemaDelAgente = () => {
-  const texto = readFileSync(AGENTE_JUEZ, 'utf8')
-  const m = /## What you write[\s\S]*?```json\n([\s\S]*?)```/.exec(texto)
+const judgeAgentSchema = () => {
+  const text = readFileSync(JUDGE_AGENT, 'utf8')
+  const m = /## What you write[\s\S]*?```json\n([\s\S]*?)```/.exec(text)
   return m ? m[1] : ''
 }
 
@@ -196,16 +196,16 @@ const esquemaDelAgente = () => {
 // VERDICT_RULES and not from a hand-written list for the same reason the schema
 // does not duplicate the list either: two copies of the identifiers diverge,
 // and the test that tied them together would stop looking at all of them.
-const recorridoCompleto = () => VERDICT_RULES.map((rule) => ({ rule, result: 'sin hallazgos', outcome: 'conforme' }))
+const fullWalk = () => VERDICT_RULES.map((rule) => ({ rule, result: 'sin hallazgos', outcome: 'conforme' }))
 
 // Slice 11 — these tests do not care WHICH token the verdict carries, only
 // that readVerdict demands it and preserves it: any 64-char hex will do, and it
-// is not typed twice for the same reason recorridoCompleto is not typed out.
+// is not typed twice for the same reason fullWalk is not typed out.
 const TOKEN = 'a'.repeat(64)
 
 // The headings of the review package cited by the "The review package."
 // paragraph of "What you are given" — the only place in the rubric that talks
-// about the package `escribirPaquete` writes. That paragraph is isolated before
+// about the package `writeReviewPackage` writes. That paragraph is isolated before
 // searching, because the rest of the file also cites headings between backticks
 // (the BRIEF's: `## 2. Closed decisions`, `### Out of scope`...) and those do
 // not belong to this package. The whitespace is normalised because Markdown's
@@ -214,19 +214,19 @@ const TOKEN = 'a'.repeat(64)
 // it introduces it and may name it again afterwards (to explain where the list
 // comes from); a repetition does not add a second entry, only the first mention
 // of each one counts.
-const seccionesDelPaquete = () => {
-  const texto = readFileSync(AGENTE_JUEZ, 'utf8')
-  const parrafo = /- \*\*The review package\.\*\*([\s\S]*?)\n- \*\*The task brief/.exec(texto)
-  if (!parrafo) return []
-  const normalizado = parrafo[1].replace(/\s+/g, ' ')
+const packageSections = () => {
+  const text = readFileSync(JUDGE_AGENT, 'utf8')
+  const paragraph = /- \*\*The review package\.\*\*([\s\S]*?)\n- \*\*The task brief/.exec(text)
+  if (!paragraph) return []
+  const normalized = paragraph[1].replace(/\s+/g, ' ')
   const regex = /`## ([^`]+)`/g
-  const secciones = []
+  const sections = []
   let m
-  while ((m = regex.exec(normalizado)) !== null) {
-    const seccion = m[1].trim()
-    if (!secciones.includes(seccion)) secciones.push(seccion)
+  while ((m = regex.exec(normalized)) !== null) {
+    const section = m[1].trim()
+    if (!sections.includes(section)) sections.push(section)
   }
-  return secciones
+  return sections
 }
 
 describe('who can do what', () => {
@@ -234,7 +234,7 @@ describe('who can do what', () => {
     // The binary used to take it away with --tools; now agents/ct-judge.md
     // declares it. The property is the same: structural, not a promise inside
     // the prompt. That is why the FILE is looked at and not only the constant.
-    expect(toolsDelAgente()).not.toMatch(/Bash|Edit/)
+    expect(judgeAgentTools()).not.toMatch(/Bash|Edit/)
     expect(JUDGE_TOOLS).not.toMatch(/Bash|Edit/)
     expect(IMPLEMENTER_TOOLS).toMatch(/Bash/)
   })
@@ -245,11 +245,11 @@ describe('who can do what', () => {
     // `ct-step next` went on to announce tools that were not the real judge's.
     // A pure module cannot read the file, so what stops it happening again is
     // this test and not the code.
-    expect(JUDGE_TOOLS).toBe(toolsDelAgente())
+    expect(JUDGE_TOOLS).toBe(judgeAgentTools())
   })
 
   it('the judge can write its verdict: it is the channel it answers through', () => {
-    expect(toolsDelAgente()).toMatch(/Write/)
+    expect(judgeAgentTools()).toMatch(/Write/)
   })
 
   it('the implementer can load skills: without that it cannot follow its own rubric', () => {
@@ -263,7 +263,7 @@ describe('who can do what', () => {
     // `plan-contract` deliberately does not check it on disk. The secondary
     // yardstick was unreachable in silence — the judge would have said
     // `conforme` about a document it never opened.
-    expect(toolsDelAgente()).toMatch(/\bSkill\b/)
+    expect(judgeAgentTools()).toMatch(/\bSkill\b/)
     expect(JUDGE_TOOLS).toMatch(/\bSkill\b/)
   })
 
@@ -273,9 +273,9 @@ describe('who can do what', () => {
     // two of the three were done and nothing noticed. If somebody later takes
     // option B of §3.1 (removing skills from §3), this test goes red and forces
     // them to remove it from all three places, not from one.
-    expect(seccion3DeLaPlantilla()).toMatch(/skill/i)
-    expect(item5DeLaRubrica()).toMatch(/skill/i)
-    expect(toolsDelAgente()).toMatch(/\bSkill\b/)
+    expect(templateSection3()).toMatch(/skill/i)
+    expect(rubricItem5()).toMatch(/skill/i)
+    expect(judgeAgentTools()).toMatch(/\bSkill\b/)
   })
 
   it('boundaries is measured inside patrones: item 5 aims the gaze at imports and injection', () => {
@@ -284,9 +284,9 @@ describe('who can do what', () => {
     // are its imports, its constructors and its signatures. Without that
     // direction, the judge audits literal text and does not look at the
     // architecture (measured in rust-monitoring run-4 task 2).
-    expect(item5DeLaRubrica()).toMatch(/boundar/i)
-    expect(item5DeLaRubrica()).toMatch(/import/i)
-    expect(item5DeLaRubrica()).toMatch(/inject/i)
+    expect(rubricItem5()).toMatch(/boundar/i)
+    expect(rubricItem5()).toMatch(/import/i)
+    expect(rubricItem5()).toMatch(/inject/i)
   })
 
   it("boundaries is not a ninth item: §3.6's decision is pinned", () => {
@@ -295,7 +295,7 @@ describe('who can do what', () => {
     // a heading of its own would only duplicate the sin-vara in repos with no
     // architecture convention.
     expect(VERDICT_RULES).not.toContain('boundaries')
-    expect(reglasDelAgente()).not.toContain('boundaries')
+    expect(judgeAgentRules()).not.toContain('boundaries')
   })
 
   it('the yardstick of boundaries is the same on both sides: the implementer reads it before writing', () => {
@@ -305,7 +305,7 @@ describe('who can do what', () => {
     // carried "boundary" in another point and another subject before this
     // slice, so a loose match against the whole file would not detect this
     // sentence being deleted.
-    expect(punto3DelImplementador()).toMatch(/rules speak about boundaries/i)
+    expect(implementerPoint3()).toMatch(/rules speak about boundaries/i)
   })
 
   it('the delivery pattern is measured inside patrones: item 5 asks whether it is THE pattern the convention prescribes', () => {
@@ -317,7 +317,7 @@ describe('who can do what', () => {
     // the judge compares idioms and nobody opens the delivery one. The
     // trigger's words —signature, constructor, public contract— are demanded
     // too, because they are what tell it where to look in the diff.
-    const item = item5Normalizado()
+    const item = rubricItem5Normalized()
     expect(item).toMatch(/well executed and coherent with itself/i)
     expect(item).toMatch(/expand-contract/)
     expect(item).toMatch(/signature, a constructor or a public contract/i)
@@ -330,7 +330,7 @@ describe('who can do what', () => {
     // own would buy no vigilance: it would duplicate the `sin-vara` in every
     // repo that does not write down how it delivers.
     expect(VERDICT_RULES).not.toContain('rollout')
-    expect(reglasDelAgente()).not.toContain('rollout')
+    expect(judgeAgentRules()).not.toContain('rollout')
   })
 
   it("the delivery pattern's yardstick is the same on both sides: the implementer reads it before writing", () => {
@@ -338,9 +338,9 @@ describe('who can do what', () => {
     // them measure with the same text. The distinctive sentence is looked for
     // inside the isolated point 3 and with whitespace normalised, not a loose
     // match against the whole file.
-    const punto3 = punto3DelImplementador().replace(/\s+/g, ' ')
-    expect(punto3).toMatch(/how a change of this kind must reach production/i)
-    expect(punto3).toMatch(/expand-contract/)
+    const point3 = implementerPoint3().replace(/\s+/g, ' ')
+    expect(point3).toMatch(/how a change of this kind must reach production/i)
+    expect(point3).toMatch(/expand-contract/)
   })
 
   it('the alcance item tells the judge that a diff of the plan is an amendment it has to rule on', () => {
@@ -368,7 +368,7 @@ describe('who can do what', () => {
     // Task 1 deleted the filter: the eight documents reach every task. Two
     // places in the file went on asserting the opposite, and one of them sits
     // three lines above the heading that says nothing is filtered.
-    const texto = readFileSync(AGENTE_JUEZ, 'utf8')
+    const texto = readFileSync(JUDGE_AGENT, 'utf8')
     expect(texto).not.toMatch(/picked them by the scope each one/)
     expect(texto).toMatch(/all eight/i)
   })
@@ -381,11 +381,11 @@ describe('who can do what', () => {
     // of the walk, and slotting it in would renumber six headings without
     // changing anything measurable.
     expect(VERDICT_RULES.at(-1)).toBe('test-desiderata')
-    expect(reglasDelAgente().at(-1)).toBe('test-desiderata')
+    expect(judgeAgentRules().at(-1)).toBe('test-desiderata')
   })
 
   it('item 9 names the three violations that block, and discards the medium', () => {
-    const item = item9DeLaRubrica()
+    const item = rubricItem9()
     expect(item).toMatch(/determinis/i)
     expect(item).toMatch(/isolat/i)
     expect(item).toMatch(/real behaviour/i)
@@ -396,7 +396,7 @@ describe('who can do what', () => {
     // §3.5 of the handoff: a relaxed assert in a test that ALREADY existed is
     // one defect and not two. Without the sentence, the two items overlap and
     // the per-rule count the telemetry reads counts the same finding twice.
-    expect(item9DeLaRubrica()).toMatch(/manipulacion-tests/)
+    expect(rubricItem9()).toMatch(/manipulacion-tests/)
   })
 
   it('item 9 measures with the same skill the implementer was under orders to follow', () => {
@@ -405,9 +405,9 @@ describe('who can do what', () => {
     // before Slice 1. And it is the SAME copy the implementer's prompt names: a
     // judge that blocks with a text the implementer never received is a
     // surprise, which is exactly what e473c97's mirror exists to prevent.
-    expect(item9DeLaRubrica()).toMatch(/control-tower-loop:test-driven-development/)
-    expect(readFileSync(PROMPT_IMPLEMENTADOR, 'utf8')).toMatch(/control-tower-loop:test-driven-development/)
-    expect(toolsDelAgente()).toMatch(/\bSkill\b/)
+    expect(rubricItem9()).toMatch(/control-tower-loop:test-driven-development/)
+    expect(readFileSync(IMPLEMENTER_PROMPT, 'utf8')).toMatch(/control-tower-loop:test-driven-development/)
+    expect(judgeAgentTools()).toMatch(/\bSkill\b/)
   })
 
   it('the list of identifiers the judge may write does not fall short', () => {
@@ -415,15 +415,15 @@ describe('who can do what', () => {
     // missing here breaks no schema: it merely makes the judge walk the item
     // and not dare emit a finding of its own, because the file tells it that
     // `rule` is not one of the valid ones.
-    const lista = identificadoresQueElJuezPuedeEscribir()
-    for (const regla of VERDICT_RULES) expect(lista).toContain(`\`${regla}\``)
+    const list = identifiersTheJudgeMayWrite()
+    for (const rule of VERDICT_RULES) expect(list).toContain(`\`${rule}\``)
   })
 
   it('the yardstick of the new tests is the same on both sides: the implementer reads it before writing', () => {
-    const punto1 = punto1DelImplementador()
-    expect(punto1).toMatch(/determinis/i)
-    expect(punto1).toMatch(/isolat/i)
-    expect(punto1).toMatch(/real behaviour/i)
+    const point1 = implementerPoint1()
+    expect(point1).toMatch(/determinis/i)
+    expect(point1).toMatch(/isolat/i)
+    expect(point1).toMatch(/real behaviour/i)
   })
 
   it("VERDICT_RULES cannot diverge from the rubric's headings", () => {
@@ -431,7 +431,7 @@ describe('who can do what', () => {
     // round) breaks no schema: it merely makes a verdict with that `rule` be
     // discarded on every execution. This test is what turns it into a test
     // failure instead of a silent failure in production.
-    expect(VERDICT_RULES).toEqual(reglasDelAgente())
+    expect(VERDICT_RULES).toEqual(judgeAgentRules())
   })
 
   it('the rubric shows the judge the walk field instead of asking for it in prose', () => {
@@ -441,8 +441,8 @@ describe('who can do what', () => {
     // copies has to show it: a validator that demands what the agent cannot see
     // discards every verdict of the run without any of them being the judge's
     // fault.
-    expect(esquemaDelAgente()).toMatch(/"rubric"/)
-    expect(esquemaDelAgente()).toMatch(/"result"/)
+    expect(judgeAgentSchema()).toMatch(/"rubric"/)
+    expect(judgeAgentSchema()).toMatch(/"result"/)
   })
 
   it('the rubric shows the judge the two new fields, or it cannot get them right even by accident', () => {
@@ -450,8 +450,8 @@ describe('who can do what', () => {
     // `evidence`: the validator demands them, so the block the judge copies has
     // to show them. A field that lives only in the validator discards every
     // verdict of the run without any of them being the judge's fault.
-    expect(esquemaDelAgente()).toMatch(/"outcome"/)
-    expect(esquemaDelAgente()).toMatch(/"evidence"/)
+    expect(judgeAgentSchema()).toMatch(/"outcome"/)
+    expect(judgeAgentSchema()).toMatch(/"evidence"/)
   })
 
   it('the rubric shows the judge the two location fields, and no longer the old one', () => {
@@ -460,17 +460,17 @@ describe('who can do what', () => {
     // of them being the judge's fault. And the `not`: an example that also
     // shows the old `where` is a judge that fills in the old one, brings no
     // `path`, and burns MAX_DISCARDS with a correct verdict inside.
-    expect(esquemaDelAgente()).toMatch(/"path"/)
-    expect(esquemaDelAgente()).toMatch(/"line"/)
-    expect(esquemaDelAgente()).not.toMatch(/"where"/)
+    expect(judgeAgentSchema()).toMatch(/"path"/)
+    expect(judgeAgentSchema()).toMatch(/"line"/)
+    expect(judgeAgentSchema()).not.toMatch(/"where"/)
   })
 
   it('the three outcome values are in the rubric, spelled exactly as in the enum', () => {
     // The enum is closed and the judge can only write what the rubric shows it.
     // If the code renames `sin-vara` and the file goes on saying what it said
     // before, the judge writes the old value and the verdict is discarded.
-    const texto = readFileSync(AGENTE_JUEZ, 'utf8')
-    for (const valor of RUBRIC_OUTCOMES) expect(texto).toContain(valor)
+    const text = readFileSync(JUDGE_AGENT, 'utf8')
+    for (const value of RUBRIC_OUTCOMES) expect(text).toContain(value)
   })
 
   // Slice 11 — the mandatory field has to be in what the judge reads: a field
@@ -481,26 +481,26 @@ describe('who can do what', () => {
   // characters typed by hand, and a copying error discarded a whole verdict
   // from opus.
   it('the json block of ct-judge.md no longer asks it for the review_token: the program writes it', () => {
-    expect(esquemaDelAgente()).not.toMatch(/"review_token"/)
+    expect(judgeAgentSchema()).not.toMatch(/"review_token"/)
   })
 
   it("the judge's rubric tells it that field is not its own, naming the package line it no longer copies", () => {
-    const texto = readFileSync(AGENTE_JUEZ, 'utf8')
-    expect(texto).toContain(`${REVIEW_TOKEN_LABEL}:`)
-    expect(texto).toMatch(/There is no `review_token` for you to write/)
-    expect(texto).not.toMatch(/copied verbatim/)
+    const text = readFileSync(JUDGE_AGENT, 'utf8')
+    expect(text).toContain(`${REVIEW_TOKEN_LABEL}:`)
+    expect(text).toMatch(/There is no `review_token` for you to write/)
+    expect(text).not.toMatch(/copied verbatim/)
   })
 
   it('PACKAGE_SECTIONS cannot diverge from the headings the rubric cites by name', () => {
     // The same failure JUDGE_TOOLS and VERDICT_RULES already had, with an
     // aggravating factor: here there is not even a schema to discard anything.
-    // If `escribirPaquete` renames a heading without touching the rubric, the
+    // If `writeReviewPackage` renames a heading without touching the rubric, the
     // judge goes on receiving instructions to read a section that does not
     // exist, and nothing notices except this test.
-    expect(PACKAGE_SECTIONS).toEqual(seccionesDelPaquete())
+    expect(PACKAGE_SECTIONS).toEqual(packageSections())
   })
 
-  // The package's first section is not written by `escribirPaquete`: it is
+  // The package's first section is not written by `writeReviewPackage`: it is
   // written by `PluginYardstick.composePathSection`, with its own constant. Two
   // hand-written strings for the same heading are the decoupling JUDGE_TOOLS
   // and PACKAGE_SECTIONS already suffered, and here it would be mute: the judge
@@ -517,7 +517,7 @@ describe('who can do what', () => {
 // ---------------------------------------------------------------------------
 describe('the slice judge (§3.7-B)', () => {
   it("SLICE_VERDICT_RULES are the three headings of ct-slice-judge.md's rubric", () => {
-    expect(SLICE_VERDICT_RULES).toEqual(reglasDeAgente(AGENTE_JUEZ_DE_SLICE))
+    expect(SLICE_VERDICT_RULES).toEqual(rulesOfAgent(SLICE_JUDGE_AGENT))
     // Slice 10: `observabilidad` is the third item — §3.9's three checks
     // against the accumulated diff, THE SLICE's signal as the subject.
     expect(SLICE_VERDICT_RULES).toEqual(['estado-final', 'coherencia', 'observabilidad'])
@@ -536,10 +536,10 @@ describe('the slice judge (§3.7-B)', () => {
   // list the `rule` bullet of "What you write" shows the judge — an identifier
   // that does not appear there is an item the judge walks but from which it
   // never dares emit a finding. The same reason as
-  // `identificadoresQueElJuezPuedeEscribir` in the task judge.
+  // `identifiersTheJudgeMayWrite` in the task judge.
   it("the rule bullet of ct-slice-judge.md names the three identifiers", () => {
-    const texto = readFileSync(AGENTE_JUEZ_DE_SLICE, 'utf8')
-    const m = /- `rule` is one of the[\s\S]*?(?=\n- `path`)/.exec(texto)
+    const text = readFileSync(SLICE_JUDGE_AGENT, 'utf8')
+    const m = /- `rule` is one of the[\s\S]*?(?=\n- `path`)/.exec(text)
     const bullet = m ? m[0].replace(/\s+/g, ' ') : ''
     for (const rule of SLICE_VERDICT_RULES) {
       expect(bullet).toContain(`\`${rule}\``)
@@ -557,35 +557,35 @@ describe('the slice judge (§3.7-B)', () => {
   })
 
   it('the slice judge has neither a shell nor Edit', () => {
-    expect(toolsDelJuezDeSlice()).not.toMatch(/Bash|Edit/)
+    expect(sliceJudgeAgentTools()).not.toMatch(/Bash|Edit/)
     expect(SLICE_JUDGE_TOOLS).not.toMatch(/Bash|Edit/)
   })
 
   it('SLICE_JUDGE_TOOLS cannot diverge from the agent that gets dispatched', () => {
-    expect(SLICE_JUDGE_TOOLS).toBe(toolsDelJuezDeSlice())
+    expect(SLICE_JUDGE_TOOLS).toBe(sliceJudgeAgentTools())
   })
 
   it('the slice judge can write its verdict: it is the channel it answers through', () => {
-    expect(toolsDelJuezDeSlice()).toMatch(/Write/)
+    expect(sliceJudgeAgentTools()).toMatch(/Write/)
   })
 
   it('the ```json block of ct-slice-judge.md shows rubric, outcome, evidence and path', () => {
-    const esquema = esquemaDeAgente(AGENTE_JUEZ_DE_SLICE)
-    expect(esquema).toMatch(/"rubric"/)
-    expect(esquema).toMatch(/"outcome"/)
-    expect(esquema).toMatch(/"evidence"/)
-    expect(esquema).toMatch(/"path"/)
+    const schema = schemaOfAgent(SLICE_JUDGE_AGENT)
+    expect(schema).toMatch(/"rubric"/)
+    expect(schema).toMatch(/"outcome"/)
+    expect(schema).toMatch(/"evidence"/)
+    expect(schema).toMatch(/"path"/)
   })
 
   it('the json block of ct-slice-judge.md does not ask it for the review_token either, and tells it who writes it', () => {
-    expect(esquemaDeAgente(AGENTE_JUEZ_DE_SLICE)).not.toMatch(/"review_token"/)
-    const texto = readFileSync(AGENTE_JUEZ_DE_SLICE, 'utf8')
-    expect(texto).toContain(`${REVIEW_TOKEN_LABEL}:`)
-    expect(texto).toMatch(/There is no `review_token` for you to write/)
+    expect(schemaOfAgent(SLICE_JUDGE_AGENT)).not.toMatch(/"review_token"/)
+    const text = readFileSync(SLICE_JUDGE_AGENT, 'utf8')
+    expect(text).toContain(`${REVIEW_TOKEN_LABEL}:`)
+    expect(text).toMatch(/There is no `review_token` for you to write/)
   })
 
   it('SLICE_PACKAGE_SECTIONS opens with Vara and cannot diverge from the rubric', () => {
-    expect(SLICE_PACKAGE_SECTIONS).toEqual(seccionesDelPaqueteDeSlice())
+    expect(SLICE_PACKAGE_SECTIONS).toEqual(slicePackageSections())
     // Task 8: `Vara` FIRST, ahead even of `Señal`, for the same reason `Señal`
     // went ahead of the -U10 diff: buried further down nobody reads it. The
     // tie-down above forces package and agent to change in the SAME task.
@@ -603,25 +603,25 @@ describe('the slice judge (§3.7-B)', () => {
     expect(SLICE_VERDICT_SCHEMA.properties.rubric.maxItems).toBe(3)
   })
 
-  const recorridoDeSlice = () => SLICE_VERDICT_RULES.map((rule) => ({ rule, result: `mirado: ${rule}`, outcome: 'conforme' }))
+  const sliceWalk = () => SLICE_VERDICT_RULES.map((rule) => ({ rule, result: `mirado: ${rule}`, outcome: 'conforme' }))
 
   it('readSliceVerdict accepts a valid two-item walk', () => {
-    const r = readSliceVerdict({ ruling: 'PASS', rubric: recorridoDeSlice(), findings: [], review_token: TOKEN })
-    expect(r.verdict).toEqual({ ruling: 'PASS', rubric: recorridoDeSlice(), findings: [], review_token: TOKEN })
+    const r = readSliceVerdict({ ruling: 'PASS', rubric: sliceWalk(), findings: [], review_token: TOKEN })
+    expect(r.verdict).toEqual({ ruling: 'PASS', rubric: sliceWalk(), findings: [], review_token: TOKEN })
   })
 
   // Slice 11: the same field, the same validator — `readSliceVerdict` is
   // `readVerdict` with another rubric inside, so the token is demanded just the
   // same.
   it('the slice judge validates the same field, with the same readVerdict: absent is fine, another shape is not', () => {
-    expect(readSliceVerdict({ ruling: 'PASS', rubric: recorridoDeSlice(), findings: [] }).verdict.review_token).toBeNull()
-    expect(readSliceVerdict({ ruling: 'PASS', rubric: recorridoDeSlice(), findings: [], review_token: 'x' }).verdict).toBeUndefined()
+    expect(readSliceVerdict({ ruling: 'PASS', rubric: sliceWalk(), findings: [] }).verdict.review_token).toBeNull()
+    expect(readSliceVerdict({ ruling: 'PASS', rubric: sliceWalk(), findings: [], review_token: 'x' }).verdict).toBeUndefined()
   })
 
   it('readSliceVerdict discards a verdict with a TASK rule (e.g. "alcance")', () => {
     const r = readSliceVerdict({
       ruling: 'FAIL',
-      rubric: recorridoDeSlice(),
+      rubric: sliceWalk(),
       findings: [{ rule: 'alcance', severity: 'high', what: 'x', path: 'y', evidence: 'z' }],
     })
     expect(r.verdict).toBeUndefined()
@@ -631,7 +631,7 @@ describe('the slice judge (§3.7-B)', () => {
   it('readSliceVerdict discards a PASS with a high finding, just like the task verdict', () => {
     const r = readSliceVerdict({
       ruling: 'PASS',
-      rubric: recorridoDeSlice(),
+      rubric: sliceWalk(),
       findings: [{ rule: 'coherencia', severity: 'high', what: 'x', path: 'y', evidence: 'z' }],
     })
     expect(r.verdict).toBeUndefined()
@@ -639,7 +639,7 @@ describe('the slice judge (§3.7-B)', () => {
   })
 
   it('readSliceVerdict discards an incomplete walk: the rubric is 3 items', () => {
-    const r = readSliceVerdict({ ruling: 'PASS', rubric: [recorridoDeSlice()[0]], findings: [] })
+    const r = readSliceVerdict({ ruling: 'PASS', rubric: [sliceWalk()[0]], findings: [] })
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/coherencia/)
     expect(r.why).toContain('3 ítems')
@@ -649,17 +649,17 @@ describe('the slice judge (§3.7-B)', () => {
   // missing: a slice judge that answers the old two-item walk gets discarded
   // with the third one's name in the text it reads in order to retry.
   it('a slice walk with no observabilidad is discarded naming it', () => {
-    const soloDos = recorridoDeSlice().filter((p) => p.rule !== 'observabilidad')
-    const r = readSliceVerdict({ ruling: 'PASS', rubric: soloDos, findings: [] })
+    const onlyTwo = sliceWalk().filter((p) => p.rule !== 'observabilidad')
+    const r = readSliceVerdict({ ruling: 'PASS', rubric: onlyTwo, findings: [] })
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/observabilidad/)
   })
 
   it('readVerdict (the TASK one) still demands the walk of nine: there is no regression', () => {
-    const completo = VERDICT_RULES.map((rule) => ({ rule, result: 'ok', outcome: 'conforme' }))
-    expect(readVerdict({ ruling: 'PASS', rubric: completo, findings: [], review_token: TOKEN }).verdict).toBeDefined()
+    const complete = VERDICT_RULES.map((rule) => ({ rule, result: 'ok', outcome: 'conforme' }))
+    expect(readVerdict({ ruling: 'PASS', rubric: complete, findings: [], review_token: TOKEN }).verdict).toBeDefined()
     // That same TWO-item walk is not enough for a TASK verdict.
-    expect(readVerdict({ ruling: 'PASS', rubric: recorridoDeSlice(), findings: [] }).verdict).toBeUndefined()
+    expect(readVerdict({ ruling: 'PASS', rubric: sliceWalk(), findings: [] }).verdict).toBeUndefined()
   })
 
   it('outcomeOfSliceVerdict: FAIL is always failed', () => {
@@ -684,9 +684,9 @@ describe('the slice judge (§3.7-B)', () => {
   // The `observabilidad` item, isolated — the same regex vara.test.js isolates
   // the task judge's item 5 with: the exact heading up to the next `###` or
   // `##` (here, `## What you do not judge`).
-  const itemObservabilidad = () => {
-    const texto = readFileSync(AGENTE_JUEZ_DE_SLICE, 'utf8')
-    const m = /^### 3\. `observabilidad`[\s\S]*?(?=^### |^## )/m.exec(texto)
+  const observabilityItem = () => {
+    const text = readFileSync(SLICE_JUDGE_AGENT, 'utf8')
+    const m = /^### 3\. `observabilidad`[\s\S]*?(?=^### |^## )/m.exec(text)
     return m ? m[0] : ''
   }
 
@@ -695,7 +695,7 @@ describe('the slice judge (§3.7-B)', () => {
   // missing — the criterion is measured at judgement time, and with the
   // contract's words.
   it("the observabilidad item measures the redundant signal with the contract's rule", () => {
-    const item = itemObservabilidad()
+    const item = observabilityItem()
     expect(item).not.toBe('')
     const norm = item.replace(/\s+/g, ' ')
     expect(norm).toContain('se puede comprobar corriendo los tests, es un criterio de aceptación, no una señal')
@@ -712,7 +712,7 @@ describe('the slice judge (§3.7-B)', () => {
   // promise — which is what did not happen with «three checks» when the
   // sentence came in.
   it('the item promises three checks and lists three: the smell is not a fourth bullet', () => {
-    const item = itemObservabilidad()
+    const item = observabilityItem()
     expect(item.match(/^- \*\*/gm)).toHaveLength(3)
     const norm = item.replace(/\s+/g, ' ')
     expect(norm).toContain('three checks, and only these three')
@@ -724,15 +724,15 @@ describe('the slice judge (§3.7-B)', () => {
   // `rubric_sin_vara`, which is the only thing that says today whether there
   // was a yardstick at all.
   it('the redundant signal is a finding, not a new outcome: the item stays conforme', () => {
-    expect(itemObservabilidad().replace(/\s+/g, ' ')).toContain('still `conforme`')
+    expect(observabilityItem().replace(/\s+/g, ' ')).toContain('still `conforme`')
     expect(SLICE_VERDICT_SCHEMA.properties.rubric.items.properties.outcome.enum).toBe(RUBRIC_OUTCOMES)
-    for (const valor of RUBRIC_OUTCOMES) expect(itemObservabilidad()).toContain(valor)
+    for (const value of RUBRIC_OUTCOMES) expect(observabilityItem()).toContain(value)
   })
 
   // The item's severity calibration names the case: a judge that reads only
   // that paragraph cannot turn it into a veto or into a round trip paid for.
   it('the smell\'s severity also lives in «Severity, decided here»', () => {
-    const sev = /\*\*Severity, decided here:\*\*[\s\S]*?(?=\n\n)/.exec(itemObservabilidad())
+    const sev = /\*\*Severity, decided here:\*\*[\s\S]*?(?=\n\n)/.exec(observabilityItem())
     expect(sev).not.toBeNull()
     expect(sev[0].replace(/\s+/g, ' ')).toContain('restated an acceptance criterion is `low`')
   })
@@ -751,29 +751,29 @@ describe('the slice judge (§3.7-B)', () => {
 // ---------------------------------------------------------------------------
 describe('the reconciler (Branch reconciliation, Task 9)', () => {
   it('declares exactly Read, Grep, Glob, Edit — neither Bash nor Write', () => {
-    expect(toolsDelReconciliador()).toBe('Read, Grep, Glob, Edit')
-    expect(toolsDelReconciliador()).not.toMatch(/\bBash\b/)
-    expect(toolsDelReconciliador()).not.toMatch(/\bWrite\b/)
+    expect(reconcilerAgentTools()).toBe('Read, Grep, Glob, Edit')
+    expect(reconcilerAgentTools()).not.toMatch(/\bBash\b/)
+    expect(reconcilerAgentTools()).not.toMatch(/\bWrite\b/)
   })
 
   it('the RECONCILER_TOOLS constant cannot diverge from the agent that gets dispatched', () => {
     // The same failure JUDGE_TOOLS and SLICE_JUDGE_TOOLS already suffered: a
     // hand-copied constant that falls behind the real frontmatter.
-    expect(RECONCILER_TOOLS).toBe(toolsDelReconciliador())
+    expect(RECONCILER_TOOLS).toBe(reconcilerAgentTools())
     expect(RECONCILER_TOOLS).not.toMatch(/\bBash\b/)
     expect(RECONCILER_TOOLS).not.toMatch(/\bWrite\b/)
   })
 
   it('the reconciler can edit files that already exist: it is the only channel it resolves through', () => {
-    expect(toolsDelReconciliador()).toMatch(/\bEdit\b/)
+    expect(reconcilerAgentTools()).toMatch(/\bEdit\b/)
   })
 })
 
 describe('the verdict', () => {
-  const v = (ruling, findings = [], rubric = recorridoCompleto()) => readVerdict({ ruling, rubric, findings, review_token: TOKEN })
+  const v = (ruling, findings = [], rubric = fullWalk()) => readVerdict({ ruling, rubric, findings, review_token: TOKEN })
 
   it('a clean PASS reads and holds', () => {
-    expect(v('PASS').verdict).toEqual({ ruling: 'PASS', rubric: recorridoCompleto(), findings: [], review_token: TOKEN })
+    expect(v('PASS').verdict).toEqual({ ruling: 'PASS', rubric: fullWalk(), findings: [], review_token: TOKEN })
   })
 
   it.each([
@@ -787,10 +787,10 @@ describe('the verdict', () => {
     // finding with no `rule` — it would only catch the INVENTED rule, not the
     // ABSENT one.
     ['with a finding with no rule', { ruling: 'FAIL', findings: [{ severity: 'high', what: 'x', path: 'y', evidence: 'z' }] }, /regla desconocida/],
-  ])('%s is discarded', (_caso, structured, motivo) => {
+  ])('%s is discarded', (_case, structured, reason) => {
     const r = readVerdict(structured)
     expect(r.verdict).toBeUndefined()
-    expect(r.why).toMatch(motivo)
+    expect(r.why).toMatch(reason)
   })
 
   it('a PASS with a serious finding is discarded: it contradicts itself', () => {
@@ -837,7 +837,7 @@ describe('the verdict', () => {
   // -------------------------------------------------------------------------
   it('the verdict carries the walk through every item, and it travels inside it', () => {
     const r = v('PASS')
-    expect(r.verdict.rubric.map((paso) => paso.rule)).toEqual(VERDICT_RULES)
+    expect(r.verdict.rubric.map((step) => step.rule)).toEqual(VERDICT_RULES)
   })
 
   it('the verdict that does not carry the walk is discarded: it is the file of the field run', () => {
@@ -852,8 +852,8 @@ describe('the verdict', () => {
     // The same criterion as an invented `rule` in a finding: an item that is
     // not in VERDICT_RULES is not a lax walk, it is a datum that is not
     // understood. It gets asked again.
-    const recorrido = [...recorridoCompleto().slice(1), { rule: 'me-lo-invento', result: 'bien', outcome: 'conforme' }]
-    const r = v('PASS', [], recorrido)
+    const walk = [...fullWalk().slice(1), { rule: 'me-lo-invento', result: 'bien', outcome: 'conforme' }]
+    const r = v('PASS', [], walk)
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/ítem desconocido/)
   })
@@ -863,7 +863,7 @@ describe('the verdict', () => {
     // repeats, a count by set would take them all as walked and the duplicate
     // would pass. It is the same criterion readReport applies to a path
     // declared twice.
-    const r = v('PASS', [], [...recorridoCompleto(), { rule: 'alcance', result: 'otra vez', outcome: 'conforme' }])
+    const r = v('PASS', [], [...fullWalk(), { rule: 'alcance', result: 'otra vez', outcome: 'conforme' }])
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/repite/)
   })
@@ -871,7 +871,7 @@ describe('the verdict', () => {
   it('an incomplete walk is discarded, and the reason says which item is missing', () => {
     // Without naming the missing item, the discard costs a round trip and the
     // judge does not know where to come back to.
-    const r = v('PASS', [], recorridoCompleto().filter((paso) => paso.rule !== 'fixture-theater'))
+    const r = v('PASS', [], fullWalk().filter((step) => step.rule !== 'fixture-theater'))
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/fixture-theater/)
   })
@@ -879,7 +879,7 @@ describe('the verdict', () => {
   it("the discard's reason counts the items the rubric has today, not the ones it used to have", () => {
     // The message said "ocho" literally, and the ninth item turned it into a
     // lie aimed at precisely the agent that has to answer again.
-    const r = v('PASS', [], recorridoCompleto().filter((paso) => paso.rule !== 'test-desiderata'))
+    const r = v('PASS', [], fullWalk().filter((step) => step.rule !== 'test-desiderata'))
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/test-desiderata/)
     expect(r.why).toContain(String(VERDICT_RULES.length))
@@ -888,8 +888,8 @@ describe('the verdict', () => {
   it('the item that is named but does not say what it gave is discarded: an empty text is the unopened item all over again', () => {
     // Eight identifiers with no result are the same artefact as the PASS with
     // empty findings, only longer.
-    const recorrido = recorridoCompleto().map((paso) => (paso.rule === 'patrones' ? { rule: 'patrones', result: '   ', outcome: 'conforme' } : paso))
-    const r = v('PASS', [], recorrido)
+    const walk = fullWalk().map((step) => (step.rule === 'patrones' ? { rule: 'patrones', result: '   ', outcome: 'conforme' } : step))
+    const r = v('PASS', [], walk)
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/patrones/)
   })
@@ -904,19 +904,19 @@ describe('the verdict', () => {
   // -------------------------------------------------------------------------
   it('every step of the walk says what class its result was', () => {
     const r = v('PASS')
-    expect(r.verdict.rubric.every((paso) => RUBRIC_OUTCOMES.includes(paso.outcome))).toBe(true)
+    expect(r.verdict.rubric.every((step) => RUBRIC_OUTCOMES.includes(step.outcome))).toBe(true)
   })
 
   it('the step that does not say what class it was gets discarded: it is "N/A" indistinguishable from "conforme" all over again', () => {
-    const recorrido = recorridoCompleto().map(({ rule, result }) => ({ rule, result }))
-    const r = v('PASS', [], recorrido)
+    const walk = fullWalk().map(({ rule, result }) => ({ rule, result }))
+    const r = v('PASS', [], walk)
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/de qué clase/)
   })
 
   it('an invented class is discarded, with the same criterion as an invented rule', () => {
-    const recorrido = recorridoCompleto().map((paso) => (paso.rule === 'patrones' ? { ...paso, outcome: 'regular' } : paso))
-    const r = v('PASS', [], recorrido)
+    const walk = fullWalk().map((step) => (step.rule === 'patrones' ? { ...step, outcome: 'regular' } : step))
+    const r = v('PASS', [], walk)
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/patrones/)
     expect(RUBRIC_OUTCOMES).not.toContain('regular')
@@ -926,13 +926,13 @@ describe('the verdict', () => {
     // The rust-monitoring case, now legible. `patrones` with no pattern to cite
     // still gives a PASS —it is not a defect of the implementer's— but the file
     // now says that item was walked with nothing to measure against.
-    const recorrido = recorridoCompleto().map((paso) => (
-      paso.rule === 'patrones'
+    const walk = fullWalk().map((step) => (
+      step.rule === 'patrones'
         ? { rule: 'patrones', result: 'el plan dice "N/A": no hay patrón que comparar', outcome: 'sin-vara' }
-        : paso))
-    const r = v('PASS', [], recorrido)
+        : step))
+    const r = v('PASS', [], walk)
     expect(r.verdict.ruling).toBe('PASS')
-    expect(r.verdict.rubric.find((paso) => paso.rule === 'patrones').outcome).toBe('sin-vara')
+    expect(r.verdict.rubric.find((step) => step.rule === 'patrones').outcome).toBe('sin-vara')
   })
 
   // -------------------------------------------------------------------------
@@ -975,7 +975,7 @@ describe('the verdict', () => {
   it.each([
     ['with no line', {}],
     ['with the line at null', { line: null }],
-  ])('a whole-file finding holds %s: the line is not mandatory', (_caso, extra) => {
+  ])('a whole-file finding holds %s: the line is not mandatory', (_case, extra) => {
     // Always demanding a line buys nothing but an invented number or one more
     // of the six discards that kill the run (§3.2 of the handoff).
     const r = v('FAIL', [{ rule: 'alcance', severity: 'high', what: 'este fichero no lo pide ninguna frase', path: 'src/de-mas.js', evidence: '**Files:** src/a.js', ...extra }])
@@ -987,7 +987,7 @@ describe('the verdict', () => {
     ['a range', '12-18'],
     ['a zero', 0],
     ['a decimal', 3.5],
-  ])('the finding whose line is %s gets discarded: what is not a number does not aggregate', (_caso, line) => {
+  ])('the finding whose line is %s gets discarded: what is not a number does not aggregate', (_case, line) => {
     const r = v('FAIL', [{ rule: 'contrato', severity: 'high', what: 'x', path: 'a.js', line, evidence: 'z' }])
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/línea que no es un número/)
@@ -1025,21 +1025,21 @@ describe('the verdict', () => {
   // accepted with the field at null, and who decides whether it binds to any
   // cut is ct-step, the only one that can read the package.
   it('a verdict with no review_token is accepted: the field is written by the program, not by the judge', () => {
-    const r = readVerdict({ ruling: 'PASS', rubric: recorridoCompleto(), findings: [] })
+    const r = readVerdict({ ruling: 'PASS', rubric: fullWalk(), findings: [] })
     expect(r.why).toBeUndefined()
     expect(r.verdict.review_token).toBeNull()
   })
 
   it('a review_token that is not a 64-hex sha256 gets discarded: it cannot be compared with anything', () => {
-    for (const malo of ['12', 'a'.repeat(63), 'z'.repeat(64), 123]) {
-      expect(readVerdict({ ruling: 'PASS', rubric: recorridoCompleto(), findings: [], review_token: malo }).verdict).toBeUndefined()
+    for (const bad of ['12', 'a'.repeat(63), 'z'.repeat(64), 123]) {
+      expect(readVerdict({ ruling: 'PASS', rubric: fullWalk(), findings: [], review_token: bad }).verdict).toBeUndefined()
     }
   })
 
   it('an upper-case review_token is accepted and stored in lower case: copying a hex is not typing a permission', () => {
     // The precedent is matchesGo: the token is compared in lower case so that a
     // reformat does not cost a discard with the correct verdict inside.
-    const r = readVerdict({ ruling: 'PASS', rubric: recorridoCompleto(), findings: [], review_token: 'A'.repeat(64) })
+    const r = readVerdict({ ruling: 'PASS', rubric: fullWalk(), findings: [], review_token: 'A'.repeat(64) })
     expect(r.verdict.review_token).toBe('a'.repeat(64))
   })
 
@@ -1066,11 +1066,11 @@ describe('the verdict', () => {
     // schema treats them as an absent field (it is no longer `required`) and the
     // validator accepts them as the gap the program fills in, so they are not a
     // case of the token's SHAPE.
-    for (const muestra of ['a'.repeat(64), 'A'.repeat(64), 'aB3'.repeat(21) + 'f', 'a'.repeat(63),
+    for (const sample of ['a'.repeat(64), 'A'.repeat(64), 'aB3'.repeat(21) + 'f', 'a'.repeat(63),
                            'a'.repeat(65), 'z'.repeat(64), '', `${'a'.repeat(64)}\n`, ` ${'a'.repeat(64)}`]) {
-      const loDiceElEsquema = re.test(muestra)
-      const loDiceElValidador = readVerdict({ ruling: 'PASS', rubric: recorridoCompleto(), findings: [], review_token: muestra }).verdict !== undefined
-      expect(loDiceElValidador, JSON.stringify(muestra)).toBe(loDiceElEsquema)
+      const schemaSaysSo = re.test(sample)
+      const validatorSaysSo = readVerdict({ ruling: 'PASS', rubric: fullWalk(), findings: [], review_token: sample }).verdict !== undefined
+      expect(validatorSaysSo, JSON.stringify(sample)).toBe(schemaSaysSo)
     }
   })
 })
@@ -1106,7 +1106,7 @@ describe("the implementer's report", () => {
   it.each([
     ['an absolute path', ['/etc/passwd']],
     ['a path that leaves the worktree', ['../otro-repo/secreto.txt']],
-  ])('it rejects %s: the list is written by a model, it is not trusted data', (_caso, paths) => {
+  ])('it rejects %s: the list is written by a model, it is not trusted data', (_case, paths) => {
     const r = readReport({ paths, summary: 'hecho' })
     expect(r.report).toBeUndefined()
     expect(r.why).toMatch(/fuera del worktree/)
@@ -1153,20 +1153,20 @@ describe("the implementer's report", () => {
 // test, and it is not part of this fix.
 // ---------------------------------------------------------------------------
 describe('the declared schemas, tied to what really validates', () => {
-  const informeValido = () => ({
+  const validReport = () => ({
     paths: ['src/a.js'],
     summary: 'hecho',
   })
-  const veredictoValido = () => ({
+  const validVerdict = () => ({
     ruling: 'FAIL',
-    rubric: recorridoCompleto(),
+    rubric: fullWalk(),
     findings: [{ rule: 'contrato', severity: 'high', what: 'x', path: 'y', evidence: 'z' }],
     review_token: TOKEN,
   })
 
-  it.each(REPORT_SCHEMA.required)('readReport demands "%s", as REPORT_SCHEMA.required declares', (campo) => {
-    const payload = informeValido()
-    delete payload[campo]
+  it.each(REPORT_SCHEMA.required)('readReport demands "%s", as REPORT_SCHEMA.required declares', (field) => {
+    const payload = validReport()
+    delete payload[field]
     expect(readReport(payload).report).toBeUndefined()
   })
 
@@ -1174,21 +1174,21 @@ describe('the declared schemas, tied to what really validates', () => {
     expect(REPORT_SCHEMA.properties.paths.items).toEqual({ type: 'string' })
   })
 
-  it.each(VERDICT_SCHEMA.required)('readVerdict demands "%s", as VERDICT_SCHEMA.required declares', (campo) => {
-    const payload = veredictoValido()
-    delete payload[campo]
+  it.each(VERDICT_SCHEMA.required)('readVerdict demands "%s", as VERDICT_SCHEMA.required declares', (field) => {
+    const payload = validVerdict()
+    delete payload[field]
     expect(readVerdict(payload).verdict).toBeUndefined()
   })
 
-  it.each(VERDICT_SCHEMA.properties.findings.items.required)('every finding demands "%s", as the item\'s schema declares', (campo) => {
-    const payload = veredictoValido()
-    delete payload.findings[0][campo]
+  it.each(VERDICT_SCHEMA.properties.findings.items.required)('every finding demands "%s", as the item\'s schema declares', (field) => {
+    const payload = validVerdict()
+    delete payload.findings[0][field]
     expect(readVerdict(payload).verdict).toBeUndefined()
   })
 
-  it.each(VERDICT_SCHEMA.properties.rubric.items.required)('every step of the walk demands "%s", as the item\'s schema declares', (campo) => {
-    const payload = veredictoValido()
-    delete payload.rubric[0][campo]
+  it.each(VERDICT_SCHEMA.properties.rubric.items.required)('every step of the walk demands "%s", as the item\'s schema declares', (field) => {
+    const payload = validVerdict()
+    delete payload.rubric[0][field]
     expect(readVerdict(payload).verdict).toBeUndefined()
   })
 
@@ -1220,7 +1220,7 @@ describe("a finding's location, from two fields into one piece", () => {
   it.each([
     ['with no line', { path: 'src/a.js' }],
     ['with the line at null', { path: 'src/a.js', line: null }],
-  ])('%s is just the file, which is what that finding says', (_caso, f) => {
+  ])('%s is just the file, which is what that finding says', (_case, f) => {
     expect(findingLocation(f)).toBe('src/a.js')
   })
 })
@@ -1246,9 +1246,9 @@ describe('the message the program composes', () => {
     expect(m).toContain('fixes issue 451')
   })
 
-  it.each(['closes #1', 'resolved #99', 'Fixed #7'])('it defuses "%s" too', (nombre) => {
-    expect(() => msg(nombre)).not.toThrow()
-    expect(msg(nombre)).not.toMatch(/#\d+\b(?!, tarea)/)
+  it.each(['closes #1', 'resolved #99', 'Fixed #7'])('it defuses "%s" too', (keyword) => {
+    expect(() => msg(keyword)).not.toThrow()
+    expect(msg(keyword)).not.toMatch(/#\d+\b(?!, tarea)/)
   })
 
   it("the slice's own issue travels as a reference, not as a closing order", () => {
@@ -1262,18 +1262,18 @@ describe('the message the program composes', () => {
 // is the step dispatched most often in a run.
 // ---------------------------------------------------------------------------
 describe("each subagent's model", () => {
-  const modeloDeAgente = (fichero) => {
-    const m = /^model:\s*(.+)$/m.exec(readFileSync(fichero, 'utf8'))
+  const agentModel = (file) => {
+    const m = /^model:\s*(.+)$/m.exec(readFileSync(file, 'utf8'))
     return m ? m[1].trim() : null
   }
 
   it.each([
-    ['the task judge', AGENTE_JUEZ],
-    ['the slice judge', AGENTE_JUEZ_DE_SLICE],
-    ['the reconciler', AGENTE_RECONCILIADOR],
-    ['the advisor', AGENTE_CONSEJERO],
-  ])('%s declares its model, it does not inherit the session\'s', (_, fichero) => {
-    expect(modeloDeAgente(fichero)).toBe('opus')
+    ['the task judge', JUDGE_AGENT],
+    ['the slice judge', SLICE_JUDGE_AGENT],
+    ['the reconciler', RECONCILER_AGENT],
+    ['the advisor', ADVISOR_AGENT],
+  ])('%s declares its model, it does not inherit the session\'s', (_, file) => {
+    expect(agentModel(file)).toBe('opus')
   })
 })
 
@@ -1284,42 +1284,42 @@ describe("each subagent's model", () => {
 // advice that does not meet it is a DISCARD and gets asked again.
 // ---------------------------------------------------------------------------
 describe("the second veto's advisor", () => {
-  const toolsDelConsejero = () => {
-    const m = /^tools:\s*(.+)$/m.exec(readFileSync(AGENTE_CONSEJERO, 'utf8'))
+  const advisorAgentTools = () => {
+    const m = /^tools:\s*(.+)$/m.exec(readFileSync(ADVISOR_AGENT, 'utf8'))
     return m ? m[1].trim() : null
   }
 
-  const seccionesDelPaqueteDeConsejo = () => {
-    const texto = readFileSync(AGENTE_CONSEJERO, 'utf8')
-    const parrafo = /- \*\*The advice package\.\*\*([\s\S]*?)\n\n/.exec(texto)
-    if (!parrafo) return []
-    const normalizado = parrafo[1].replace(/\s+/g, ' ')
+  const advicePackageSections = () => {
+    const text = readFileSync(ADVISOR_AGENT, 'utf8')
+    const paragraph = /- \*\*The advice package\.\*\*([\s\S]*?)\n\n/.exec(text)
+    if (!paragraph) return []
+    const normalized = paragraph[1].replace(/\s+/g, ' ')
     const regex = /`## ([^`]+)`/g
-    const secciones = []
+    const sections = []
     let m
-    while ((m = regex.exec(normalizado)) !== null) {
-      const seccion = m[1].trim()
-      if (!secciones.includes(seccion)) secciones.push(seccion)
+    while ((m = regex.exec(normalized)) !== null) {
+      const section = m[1].trim()
+      if (!sections.includes(section)) sections.push(section)
     }
-    return secciones
+    return sections
   }
 
-  const consejo = (over = {}) => ({ approach: 'tíralo y empieza por el puerto', files_to_reconsider: ['src/uno.js'], ...over })
+  const adviceFixture = (over = {}) => ({ approach: 'tíralo y empieza por el puerto', files_to_reconsider: ['src/uno.js'], ...over })
 
   it('the advisor cannot touch anything: it only reads', () => {
     expect(ADVISOR_TOOLS).toBe('Read')
-    expect(toolsDelConsejero()).toBe(ADVISOR_TOOLS)
+    expect(advisorAgentTools()).toBe(ADVISOR_TOOLS)
   })
 
   it('an advice with an approach and paths is accepted, and repeated paths do not discard it', () => {
-    const { advice, why } = readAdvice(consejo({ files_to_reconsider: ['src/uno.js', 'src/uno.js'] }))
+    const { advice, why } = readAdvice(adviceFixture({ files_to_reconsider: ['src/uno.js', 'src/uno.js'] }))
     expect(why).toBeUndefined()
     expect(advice.approach).toBe('tíralo y empieza por el puerto')
     expect(advice.files_to_reconsider).toEqual(['src/uno.js'])
   })
 
   it('an advice with no list of paths is accepted with the list empty: reconsidering none of them is an answer', () => {
-    expect(readAdvice(consejo({ files_to_reconsider: [] })).advice.files_to_reconsider).toEqual([])
+    expect(readAdvice(adviceFixture({ files_to_reconsider: [] })).advice.files_to_reconsider).toEqual([])
   })
 
   it.each([
@@ -1327,14 +1327,14 @@ describe("the second veto's advisor", () => {
     ['with an empty approach', { approach: '   ' }, /enfoque/],
     ['with the paths in prose', { files_to_reconsider: 'src/uno.js' }, /rutas/],
     ['with a path that is not text', { files_to_reconsider: [7] }, /rutas/],
-  ])('an advice %s gets discarded, and the why names it', (_, over, motivo) => {
-    const { advice, why } = readAdvice(consejo(over))
+  ])('an advice %s gets discarded, and the why names it', (_, over, reason) => {
+    const { advice, why } = readAdvice(adviceFixture(over))
     expect(advice).toBeUndefined()
-    expect(why).toMatch(motivo)
+    expect(why).toMatch(reason)
   })
 
   it('an advice that names paths outside the worktree gets discarded', () => {
-    expect(readAdvice(consejo({ files_to_reconsider: ['/etc/passwd'] })).why).toMatch(/fuera del worktree/)
+    expect(readAdvice(adviceFixture({ files_to_reconsider: ['/etc/passwd'] })).why).toMatch(/fuera del worktree/)
   })
 
   it('with no structured_output there is no advice', () => {
@@ -1347,14 +1347,14 @@ describe("the second veto's advisor", () => {
   })
 
   it('ADVICE_PACKAGE_SECTIONS cannot diverge from the headings the advisor cites by name', () => {
-    expect(ADVICE_PACKAGE_SECTIONS).toEqual(seccionesDelPaqueteDeConsejo())
+    expect(ADVICE_PACKAGE_SECTIONS).toEqual(advicePackageSections())
     expect(ADVICE_PACKAGE_SECTIONS).toEqual(['Brief', 'Intentos', 'Veredictos'])
   })
 
   it('the json block of ct-advisor.md shows the two fields and no others', () => {
-    const esquema = esquemaDeAgente(AGENTE_CONSEJERO)
-    expect(esquema).toMatch(/"approach"/)
-    expect(esquema).toMatch(/"files_to_reconsider"/)
-    expect(esquema).not.toMatch(/"review_token"/)
+    const schema = schemaOfAgent(ADVISOR_AGENT)
+    expect(schema).toMatch(/"approach"/)
+    expect(schema).toMatch(/"files_to_reconsider"/)
+    expect(schema).not.toMatch(/"review_token"/)
   })
 })

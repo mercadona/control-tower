@@ -230,10 +230,10 @@ export function readSpecSection(specMd, heading, opts = {}) {
   // —the slices table included— with nothing to warn about. It is checked with
   // the SAME scanner that locates the section
   // (gh-issue-map.js#unterminatedDelimiter), not with a new one.
-  const abierto = unterminatedDelimiter(loc.content)
-  if (abierto) {
-    const que = abierto === 'valla' ? 'una valla de código (```) sin cerrar' : 'un comentario HTML (<!--) sin cerrar'
-    warnings.push(`aviso: la sección "${heading}" del spec contiene ${que} y por eso NO se emite en ningún issue. Sin el cierre, la sección no termina donde parece: se traga todo lo que venga detrás en el spec (la tabla de slices incluida) y ese texto acabaría en el cuerpo de todos los issues. Cierra el delimitador y vuelve a correr. ${MALFORMED_KEEPS_WHAT_IS_THERE}`)
+  const unterminated = unterminatedDelimiter(loc.content)
+  if (unterminated) {
+    const what = unterminated === 'valla' ? 'una valla de código (```) sin cerrar' : 'un comentario HTML (<!--) sin cerrar'
+    warnings.push(`aviso: la sección "${heading}" del spec contiene ${what} y por eso NO se emite en ningún issue. Sin el cierre, la sección no termina donde parece: se traga todo lo que venga detrás en el spec (la tabla de slices incluida) y ese texto acabaría en el cuerpo de todos los issues. Cierra el delimitador y vuelve a correr. ${MALFORMED_KEEPS_WHAT_IS_THERE}`)
     return { content: null, reason: EPIC_CONTEXT_REASONS.MALFORMED, warnings }
   }
 
@@ -249,7 +249,7 @@ export function readSpecSection(specMd, heading, opts = {}) {
   }
   let out = content
   if (opts.strip) {
-    // Best-effort trimming of the suffix (see PROCEDENCIA_SUFFIX_RE). It is
+    // Best-effort trimming of the suffix (see PROVENANCE_SUFFIX_RE). It is
     // done over the ALREADY validated content: the guardrails look at the raw
     // section; the trim only affects what is projected into the body.
     out = content.split('\n').map((l) => l.replace(opts.strip, '')).join('\n')
@@ -280,7 +280,7 @@ export function readEpicContext(specMd) {
   return readSpecSection(specMd, EPIC_CONTEXT_HEADING, { noun: 'contexto común' })
 }
 
-// PROCEDENCIA_SUFFIX_RE: the "*(Procedencia: …)*" suffix that the decisions
+// PROVENANCE_SUFFIX_RE: the "*(Procedencia: …)*" suffix that the decisions
 // template (_TEMPLATE-execution-spec.md, the core) writes at the end of each
 // line, with a format verified against docs/loop/loop.body.html. It is meta for
 // whoever FREEZES (spoken | deduced | proposed), not for whoever EXECUTES: the
@@ -293,20 +293,20 @@ export function readEpicContext(specMd) {
 // line with two markers matched from the first one all the way to the final
 // `)*` and silently deleted everything in between (DeepSeek #1). This way only
 // the final suffix is trimmed; the inner marker survives and B2 warns about it.
-const PROCEDENCIA_SUFFIX_RE = /\s*\*\(Procedencia:(?:(?!\*\(Procedencia:)[^\n])*?\)\*\s*$/i
+const PROVENANCE_SUFFIX_RE = /\s*\*\(Procedencia:(?:(?!\*\(Procedencia:)[^\n])*?\)\*\s*$/i
 
-// PROCEDENCIA_MARKER_RE: detects a provenance marker that SURVIVED the trim
+// PROVENANCE_MARKER_RE: detects a provenance marker that SURVIVED the trim
 // (for the B2 warning). It looks at the MARKER —an opening parenthesis followed
 // by "Procedencia:"— and not at the loose word: "Procedencia" in legitimate
 // prose ("revisar la Procedencia en el acta") is not a cleaning failure
 // (DeepSeek #2). Case-insensitive like the trim; it covers `*(`, `_(` and `(`.
-const PROCEDENCIA_MARKER_RE = /\(Procedencia:/i
+const PROVENANCE_MARKER_RE = /\(Procedencia:/i
 
 // readFrozenDecisions: the mirror of readEpicContext, both on top of
 // readSpecSection. The ONLY difference is the provenance strip (and its
 // observable warning if a marker survives the trim, B2).
 export function readFrozenDecisions(specMd) {
-  return readSpecSection(specMd, FROZEN_DECISIONS_HEADING, { noun: 'decisiones congeladas', strip: PROCEDENCIA_SUFFIX_RE, survives: PROCEDENCIA_MARKER_RE, stripLabel: 'Procedencia' })
+  return readSpecSection(specMd, FROZEN_DECISIONS_HEADING, { noun: 'decisiones congeladas', strip: PROVENANCE_SUFFIX_RE, survives: PROVENANCE_MARKER_RE, stripLabel: 'Procedencia' })
 }
 
 // gatesOf: a slice's gate resolution, in a single place. buildLabels and
@@ -469,8 +469,8 @@ export function parseSignalCell(raw) {
   const trimmed = (raw ?? '').trim()
   if (!trimmed || isNoValueCell(trimmed)) return { kind: 'ninguna', text: null }
   if (/^n\/a(\b|$)/i.test(trimmed)) {
-    const razon = trimmed.replace(/^n\/a/i, '').replace(/^[\s—–\-:]+/, '').trim()
-    if (!razon) return { kind: 'exencion-sin-razon', text: null }
+    const reason = trimmed.replace(/^n\/a/i, '').replace(/^[\s—–\-:]+/, '').trim()
+    if (!reason) return { kind: 'exencion-sin-razon', text: null }
     return { kind: 'exencion', text: trimmed }
   }
   return { kind: 'senal', text: trimmed }
@@ -604,10 +604,10 @@ export function buildIssueBody(slice, specRef, epicContext = null, frozenDecisio
   // spec link and BEFORE "Acceptance criteria": whoever opens the issue reads
   // first WHAT the slice delivers, and only afterwards its acceptance criteria
   // — the natural reading order (what, then how it is verified).
-  const descripcion = renderDescription(slice)
-  if (descripcion) {
+  const description = renderDescription(slice)
+  if (description) {
     lines.push('## Descripción')
-    lines.push(descripcion)
+    lines.push(description)
     lines.push('')
   }
   // The two context sections go AFTER the description and BEFORE the
@@ -652,10 +652,10 @@ export function buildIssueBody(slice, specRef, epicContext = null, frozenDecisio
   // judge, and a section that came out in every issue of every epic that does
   // not use the column would be the warning-that-always-comes-out that trains
   // people to ignore it.
-  const senal = renderSignalContent(slice)
-  if (senal) {
+  const signal = renderSignalContent(slice)
+  if (signal) {
     lines.push(SIGNAL_HEADING)
-    lines.push(senal)
+    lines.push(signal)
     lines.push('')
   }
   const deps = slice.deps || []

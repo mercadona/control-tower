@@ -335,15 +335,15 @@ if (!report.tableFound) {
   // approve it and the slice judge cannot cite it as not-applicable. It goes
   // into `hardErrors`, that is, BEFORE the first mutation and also under
   // --dry-run.
-  const senalSinRazonRows = []
+  const signalWithoutReasonRows = []
   for (const s of report.slices) {
     if (parseSignalCell(s.senal).kind === 'exencion-sin-razon') {
-      senalSinRazonRows.push({ n: s.n, raw: s.senal })
+      signalWithoutReasonRows.push({ n: s.n, raw: s.senal })
     }
   }
-  if (senalSinRazonRows.length) {
-    const first = senalSinRazonRows[0]
-    hardErrors.push(`${senalSinRazonRows.length} fila(s) de la tabla de slices declaran en "Señal" una exención sin razón (ejemplo, slice #${first.n}: "${first.raw}") — una exención de señal se escribe "N/A — <razón>": la razón es lo que un humano aprueba en el groom y lo que el juez de slice cita como no-aplica. Si lo que quieres es no declarar nada, deja la celda vacía o con "–"; corrige esas filas y vuelve a intentarlo`)
+  if (signalWithoutReasonRows.length) {
+    const first = signalWithoutReasonRows[0]
+    hardErrors.push(`${signalWithoutReasonRows.length} fila(s) de la tabla de slices declaran en "Señal" una exención sin razón (ejemplo, slice #${first.n}: "${first.raw}") — una exención de señal se escribe "N/A — <razón>": la razón es lo que un humano aprueba en el groom y lo que el juez de slice cita como no-aplica. Si lo que quieres es no declarar nada, deja la celda vacía o con "–"; corrige esas filas y vuelve a intentarlo`)
   }
 
   // The FIVE abort conditions of the E2E column. All of them share their shape
@@ -972,8 +972,8 @@ if (typeof repo === 'string') {
   // inconsistent state, I am NOT carrying on" (see the abort of the project's
   // item listing); 2 is an argv/spec validation error; 3 is "there was
   // divergence but the work got done", and here nothing gets done.
-  const bloqueos = []
-  const repoRefBloqueo = typeof repo === 'string' ? repo : '<owner/repo>'
+  const blockers = []
+  const blockerRepoRef = typeof repo === 'string' ? repo : '<owner/repo>'
 
   // Gate A — issues with NO milestone. No epic can be attributed to them, so
   // both possible readings do damage: pairing one would rewrite somebody
@@ -982,21 +982,21 @@ if (typeof repo === 'string') {
   // marker that competes with nothing prevents nothing, but it does not keep
   // quiet either (the same criterion as NO_MILESTONE_KEY in gh-issue-map.js: a
   // shared bucket with a warning, never invisible).
-  const sinMilestoneBloqueantes = []
+  const withoutMilestoneBlockers = []
   for (const i of partition.sinMilestone) {
     const order = extractOrder(i.body)
     if (order == null) continue
     if (knownOrders.has(order)) {
-      sinMilestoneBloqueantes.push(`  #${i.number}  ct-order:${order}`)
+      withoutMilestoneBlockers.push(`  #${i.number}  ct-order:${order}`)
     } else {
-      console.error(`aviso: issue #${i.number} lleva el marcador ct-order:${order} y no tiene milestone — no puedo decidir a qué epic pertenece, así que queda fuera de este groom. No colisiona con la tabla §9 de este spec, por eso no bloquea; asígnale su milestone para que deje de aparecer: gh issue edit ${i.number} --repo ${repoRefBloqueo} --milestone "<el suyo>"`)
+      console.error(`aviso: issue #${i.number} lleva el marcador ct-order:${order} y no tiene milestone — no puedo decidir a qué epic pertenece, así que queda fuera de este groom. No colisiona con la tabla §9 de este spec, por eso no bloquea; asígnale su milestone para que deje de aparecer: gh issue edit ${i.number} --repo ${blockerRepoRef} --milestone "<el suyo>"`)
     }
   }
-  if (sinMilestoneBloqueantes.length) {
-    bloqueos.push({
-      titular: 'estos issues llevan un marcador ct-order que colisiona con la tabla §9 de este spec, pero NO tienen milestone — no puedo decidir si son de este epic o de otro:',
-      lineas: sinMilestoneBloqueantes,
-      remedio: `asígnales su milestone y vuelve a correr: gh issue edit <n> --repo ${repoRefBloqueo} --milestone "<el suyo>"`,
+  if (withoutMilestoneBlockers.length) {
+    blockers.push({
+      headline: 'estos issues llevan un marcador ct-order que colisiona con la tabla §9 de este spec, pero NO tienen milestone — no puedo decidir si son de este epic o de otro:',
+      lines: withoutMilestoneBlockers,
+      remedy: `asígnales su milestone y vuelve a correr: gh issue edit <n> --repo ${blockerRepoRef} --milestone "<el suyo>"`,
     })
   }
 
@@ -1034,15 +1034,15 @@ if (typeof repo === 'string') {
   // duplicated epic —that is, one of a slice that does not yet have an issue
   // in this epic— emits a warning on stderr (further down, in the `continue`
   // itself), non-blocking.
-  const specTargetPorOrden = new Map(plan.issues.map((i) => [i.order, specTarget(i.specLink)]))
-  const otroEpicBloqueantes = []
-  const otroEpicAvisos = []
+  const specTargetByOrder = new Map(plan.issues.map((i) => [i.order, specTarget(i.specLink)]))
+  const otherEpicBlockers = []
+  const otherEpicWarnings = []
   for (const i of partition.otrosEpics) {
     const order = extractOrder(i.body)
     if (order == null || !knownOrders.has(order)) continue
-    const suyo = specTarget(extractSpecLink(i.body))
-    const nuestro = specTargetPorOrden.get(order)
-    if (suyo === null || nuestro === null || suyo !== nuestro) {
+    const theirs = specTarget(extractSpecLink(i.body))
+    const ours = specTargetByOrder.get(order)
+    if (theirs === null || ours === null || theirs !== ours) {
       // The warning of the fail-open. It closes the asymmetry with gate A,
       // which does name on stderr the milestone-less issues that do NOT block:
       // this bucket is exactly the one a duplicated epic with exit 0 comes out
@@ -1062,9 +1062,9 @@ if (typeof repo === 'string') {
       // that teaches you to ignore the rest. The scoping loses no dangerous
       // case — it covers exactly the set in which duplication is possible.
       if (findByMarker(inEpic, `<!-- ct-order:${order} -->`)) continue
-      const motivo = suyo === null
+      const reason = theirs === null
         ? 'pero su body no lleva ninguna línea de enlace al spec con la que compararlo'
-        : (nuestro === null
+        : (ours === null
           ? 'pero este spec no ha producido ningún enlace con el que compararlo'
           : 'pero su enlace al spec no coincide con el de este spec')
       // It accumulates instead of being printed here: the warnings are emitted
@@ -1072,29 +1072,29 @@ if (typeof repo === 'string') {
       // claims this groom is going to create that slice — and in a run that
       // stops dead nothing gets created. Nothing is lost: the next run, now
       // unblocked, computes them all over again just the same.
-      otroEpicAvisos.push(`aviso: el slice #${order} de este spec tiene un issue en otro milestone con el mismo ct-order (#${i.number}, "${epicTitleOf(i)}"), ${motivo} — así que lo trato como otro epic y ${dryRun ? 'crearía' : 'crearé'} un issue nuevo para el slice #${order} en "${milestone}". Si en realidad es el mismo epic renombrado, esto va a duplicarlo: compruébalo antes de seguir.`)
+      otherEpicWarnings.push(`aviso: el slice #${order} de este spec tiene un issue en otro milestone con el mismo ct-order (#${i.number}, "${epicTitleOf(i)}"), ${reason} — así que lo trato como otro epic y ${dryRun ? 'crearía' : 'crearé'} un issue nuevo para el slice #${order} en "${milestone}". Si en realidad es el mismo epic renombrado, esto va a duplicarlo: compruébalo antes de seguir.`)
       continue
     }
-    otroEpicBloqueantes.push(`  #${i.number}  ct-order:${order}  milestone: "${epicTitleOf(i)}"`)
+    otherEpicBlockers.push(`  #${i.number}  ct-order:${order}  milestone: "${epicTitleOf(i)}"`)
   }
-  if (otroEpicBloqueantes.length) {
-    bloqueos.push({
-      titular: 'estos slices ya tienen un issue en OTRO milestone que apunta al MISMO spec — parece este mismo epic bajo otro título, no un epic distinto:',
-      lineas: otroEpicBloqueantes,
-      remedio: `este spec pide --milestone "${milestone}". Si renombraste el epic, usa su título real; si es un epic nuevo de verdad, su tabla §9 no debería apuntar al mismo spec que el anterior.`,
+  if (otherEpicBlockers.length) {
+    blockers.push({
+      headline: 'estos slices ya tienen un issue en OTRO milestone que apunta al MISMO spec — parece este mismo epic bajo otro título, no un epic distinto:',
+      lines: otherEpicBlockers,
+      remedy: `este spec pide --milestone "${milestone}". Si renombraste el epic, usa su título real; si es un epic nuevo de verdad, su tabla §9 no debería apuntar al mismo spec que el anterior.`,
     })
   }
 
-  if (bloqueos.length) {
-    for (const { titular, lineas, remedio } of bloqueos) {
-      console.error(titular)
-      for (const linea of lineas) console.error(linea)
-      console.error(remedio)
+  if (blockers.length) {
+    for (const { headline, lines, remedy } of blockers) {
+      console.error(headline)
+      for (const line of lines) console.error(line)
+      console.error(remedy)
     }
     console.error('/ct-groom NO continúa: no se ha creado ni modificado nada.')
     process.exit(1)
   }
-  for (const aviso of otroEpicAvisos) console.error(aviso)
+  for (const warning of otherEpicWarnings) console.error(warning)
 
   for (const i of inEpic) {
     const order = extractOrder(i.body)

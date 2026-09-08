@@ -136,13 +136,15 @@ export function epicTitleOf(rawIssue) {
 // that discrepancy is exactly what produces duplicates.
 export function partitionByEpic(issues, milestoneTitle) {
   const inEpic = []
-  const sinMilestone = []
-  const otrosEpics = []
+  const withoutMilestone = []
+  const otherEpics = []
   for (const issue of (issues || [])) {
     const title = epicTitleOf(issue)
-    if (title === null) sinMilestone.push(issue)
+    if (title === null) withoutMilestone.push(issue)
     else if (title === milestoneTitle) inEpic.push(issue)
-    else otrosEpics.push(issue)
+    else otherEpics.push(issue)
   }
-  return { inEpic, sinMilestone, otrosEpics }
+  // The KEYS stay Spanish: they are the shape gh-issues.test.js compares with
+  // `toEqual` and the one ct-groom.mjs destructures — a contract, not a name.
+  return { inEpic, sinMilestone: withoutMilestone, otrosEpics: otherEpics }
 }

@@ -10,20 +10,20 @@ const SCRIPT = fileURLToPath(new URL('../scripts/dispatch-check.mjs', import.met
 const FAKE_GH = fileURLToPath(new URL('./fixtures/fake-gh-bin', import.meta.url))
 const A = 'el server escucha en 9115 por defecto y en el puerto indicado si se pasa'
 
-const cuerpo = (recorridos) => [
+const issueBody = (journeys) => [
   '## Acceptance criteria (EARS, 1:1 con tests)',
   '- un criterio',
   '',
   '## Gates',
   '- **`plan`** — …',
-  ...(recorridos.length ? ['', '## E2E', ...recorridos.map((r) => `- ${r}`)] : []),
+  ...(journeys.length ? ['', '## E2E', ...journeys.map((r) => `- ${r}`)] : []),
   '',
 ].join('\n')
 
 // FENCE/minimalPlanFor (Task 8, plan-contract.js): --release demands a
 // prescriptive plan committed on the branch that meets the whole contract.
 const FENCE = '```'
-const planDeUnaTarea = (issue = 9) => [
+const oneTaskPlan = (issue = 9) => [
   `# #${issue} — fixture slice`,
   '',
   '> **This plan is written to be executed by task-scoped subagents with zero context.**',
@@ -87,7 +87,7 @@ function repo(opts = {}) {
   writeFileSync(join(dir, 'f.txt'), 'base\n'); git('add', '-A'); git('commit', '-qm', 'base')
   git('checkout', '-qb', 'feat/9')
   mkdirSync(join(dir, 'docs', 'superpowers', 'plans'), { recursive: true })
-  writeFileSync(join(dir, 'docs', 'superpowers', 'plans', '2026-08-12-issue-9-work.md'), planDeUnaTarea())
+  writeFileSync(join(dir, 'docs', 'superpowers', 'plans', '2026-08-12-issue-9-work.md'), oneTaskPlan())
   writeFileSync(join(dir, 'work.txt'), 'trabajo\n')
   if (contaminaEstado) {
     mkdirSync(join(dir, '.agent'), { recursive: true })
@@ -134,7 +134,7 @@ describe('--release: correspondence between the run and the issue', () => {
   it('a delivered run that covers the issue runs → it releases', () => {
     const dir = repo()
     try {
-      const r = release(dir, { body: cuerpo([A]) })
+      const r = release(dir, { body: issueBody([A]) })
       expect(r.status).toBe(0)
       expect(r.stdout).toMatch(/released #9/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
@@ -143,7 +143,7 @@ describe('--release: correspondence between the run and the issue', () => {
   it('an issue with runs and a run that does NOT declare them → exit 8, without touching labels', () => {
     const dir = repo({ e2eRuns: [] })
     try {
-      const r = release(dir, { body: cuerpo([A]) })
+      const r = release(dir, { body: issueBody([A]) })
       expect(r.status).toBe(8)
       expect(r.stderr).toContain(A)
       // The assertion that really matters: NOTHING was mutated on GitHub.
@@ -157,7 +157,7 @@ describe('--release: correspondence between the run and the issue', () => {
       const r = release(dir, { viewFail: true })
       expect(r.status).toBe(8)
       expect(r.stderr).toMatch(/no se (ha podido|pudo)/i)
-      expect(r.stderr).not.toMatch(/no declara recorridos/)
+      expect(r.stderr).not.toMatch(/no declara journeys/)
       expect(r.argv).not.toMatch(/issue edit/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
@@ -165,14 +165,14 @@ describe('--release: correspondence between the run and the issue', () => {
   it('an issue with no ## E2E section → it releases without looking at the run', () => {
     const dir = repo({ e2eRuns: [] })
     try {
-      expect(release(dir, { body: cuerpo([]) }).status).toBe(0)
+      expect(release(dir, { body: issueBody([]) }).status).toBe(0)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
   it('a gate:e2e label with no section → it releases, with a warning on stderr', () => {
     const dir = repo({ e2eRuns: [] })
     try {
-      const r = release(dir, { body: cuerpo([]) })
+      const r = release(dir, { body: issueBody([]) })
       expect(r.status).toBe(0)
       expect(r.stderr).toMatch(/aviso:/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
@@ -184,7 +184,7 @@ describe('--release: correspondence between the run and the issue', () => {
   it('with no gate:e2e label and no section → it releases, with no warning', () => {
     const dir = repo({ e2eRuns: [] })
     try {
-      const r = release(dir, { body: cuerpo([]), labels: ['status:in-progress', 'gate:plan'] })
+      const r = release(dir, { body: issueBody([]), labels: ['status:in-progress', 'gate:plan'] })
       expect(r.status).toBe(0)
       expect(r.stderr).not.toMatch(/aviso:/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
@@ -193,7 +193,7 @@ describe('--release: correspondence between the run and the issue', () => {
   it('the order rules: a branch that introduces .agent/STATE.md exits 5, not 8', () => {
     const dir = repo({ e2eRuns: [], contaminaEstado: true })
     try {
-      expect(release(dir, { body: cuerpo([A]) }).status).toBe(5)
+      expect(release(dir, { body: issueBody([A]) }).status).toBe(5)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
@@ -202,7 +202,7 @@ describe('--release: correspondence between the run and the issue', () => {
   //
   // Until this round the run persisted only the NAMES of the runs, so this door
   // could not tell a green slice from one whose runs were all "no-verificado" —
-  // and three texts (run-machine.js#trasElE2e, gates.js#GATES.e2e.issue and
+  // and three texts (run-machine.js#afterE2e, gates.js#GATES.e2e.issue and
   // §3.7 of the design) promised that --release "says so". It is the state that
   // releases a slice WITHOUT having verified it: for it to be silent at the
   // door is the opposite of "a limit that is said is operable".
@@ -210,7 +210,7 @@ describe('--release: correspondence between the run and the issue', () => {
   it('a "no-verificado" run in the delivered run → it releases, and the warning names it with its reason', () => {
     const dir = repo({ e2eResults: [{ run: A, verdict: 'no-verificado', reason: 'el docker de staging no arranca en esta máquina' }] })
     try {
-      const r = release(dir, { body: cuerpo([A]) })
+      const r = release(dir, { body: issueBody([A]) })
       expect(r.status).toBe(0)
       expect(r.stdout).toMatch(/released #9/)
       expect(r.stderr).toMatch(/aviso:/)
@@ -223,7 +223,7 @@ describe('--release: correspondence between the run and the issue', () => {
   it('every run green → it releases with no unverified warning at all', () => {
     const dir = repo({ e2eResults: [{ run: A, verdict: 'verde' }] })
     try {
-      const r = release(dir, { body: cuerpo([A]) })
+      const r = release(dir, { body: issueBody([A]) })
       expect(r.status).toBe(0)
       expect(r.stderr).not.toMatch(/NO se pudieron comprobar/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
@@ -232,7 +232,7 @@ describe('--release: correspondence between the run and the issue', () => {
   it('a run with no `e2eResults` (an older version) → it releases and invents no verdict', () => {
     const dir = repo()
     try {
-      const r = release(dir, { body: cuerpo([A]) })
+      const r = release(dir, { body: issueBody([A]) })
       expect(r.status).toBe(0)
       expect(r.stderr).not.toMatch(/NO se pudieron comprobar/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
@@ -241,7 +241,7 @@ describe('--release: correspondence between the run and the issue', () => {
   it('a run NOT delivered → it exits 7, the door that already existed, not 8', () => {
     const dir = repo({ closed: undefined })
     try {
-      expect(release(dir, { body: cuerpo([A]) }).status).toBe(7)
+      expect(release(dir, { body: issueBody([A]) }).status).toBe(7)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 })

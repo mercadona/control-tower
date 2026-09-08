@@ -22,39 +22,39 @@ const { ct, writeReport, writeVerdict, writeRaw, runState, judgeTask, judgeRows 
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
 
-const HALLAZGO = { severity: 'high', what: 'la lógica está en el sitio que no es', path: 'uno.txt', line: 1 }
+const FINDING = { severity: 'high', what: 'la lógica está en el sitio que no es', path: 'uno.txt', line: 1 }
 
 // A whole attempt that ends in a veto, with what the implementer said about it:
 // it is what the advisor's package has to be able to show afterwards.
-const intentoVetado = (dice) => {
+const vetoedAttempt = (says) => {
   ct('next')
-  ct('report', writeReport(['uno.txt'], 'report.json', dice))
+  ct('report', writeReport(['uno.txt'], 'report.json', says))
   ct('controls')
-  return judgeTask(writeVerdict('FAIL', [HALLAZGO]))
+  return judgeTask(writeVerdict('FAIL', [FINDING]))
 }
 
-const dosVetos = () => {
-  intentoVetado('lo puse en el módulo viejo')
-  intentoVetado('lo volví a poner en el módulo viejo')
+const twoVetoes = () => {
+  vetoedAttempt('lo puse en el módulo viejo')
+  vetoedAttempt('lo volví a poner en el módulo viejo')
 }
 
-const consejo = (over = {}, nombre = 'advice.json') => {
-  const p = join(repo, nombre)
-  const cuerpo = { approach: 'saca la decisión a un tipo propio y prueba por ahí', files_to_reconsider: ['uno.txt'], ...over }
-  for (const [k, v] of Object.entries(cuerpo)) if (v === undefined) delete cuerpo[k]
-  writeFileSync(p, JSON.stringify(cuerpo))
+const advice = (over = {}, name = 'advice.json') => {
+  const p = join(repo, name)
+  const body = { approach: 'saca la decisión a un tipo propio y prueba por ahí', files_to_reconsider: ['uno.txt'], ...over }
+  for (const [k, v] of Object.entries(body)) if (v === undefined) delete body[k]
+  writeFileSync(p, JSON.stringify(body))
   return p
 }
 
-const paqueteDeConsejo = () => join(repo, '.agent', 'run-7', `task-${runState().task}-advice.md`)
+const advicePackagePath = () => join(repo, '.agent', 'run-7', `task-${runState().task}-advice.md`)
 
 // `next` is the only verb that writes the advisor's package, the same as with
 // the judge: asking for the advice is, by definition, having asked before.
-const aconsejar = (...args) => { ct('next'); return ct('advice', ...args) }
+const askForAdvice = (...args) => { ct('next'); return ct('advice', ...args) }
 
 describe('the second veto does not go back to implementing blindly', () => {
   it('after two vetoes the step is advise, and next orders dispatching the advisor and not an implementer', () => {
-    dosVetos()
+    twoVetoes()
 
     expect(runState().step).toBe('advise')
     const r = ct('next')
@@ -65,27 +65,27 @@ describe('the second veto does not go back to implementing blindly', () => {
   })
 
   it('the attempt is still the third: advise does not start a counter of its own', () => {
-    dosVetos()
+    twoVetoes()
 
     expect(runState().judgeRetries).toBe(2)
     expect(ct('next').stdout).toMatch(/paso: advise \(intento 3\)/)
   })
 
   it("the advisor's package carries the brief, the two attempts and the two verdicts", () => {
-    dosVetos()
+    twoVetoes()
 
     ct('next')
-    const paquete = readFileSync(paqueteDeConsejo(), 'utf8')
-    for (const seccion of ADVICE_PACKAGE_SECTIONS) expect(paquete).toContain(`## ${seccion}`)
-    expect(paquete).toContain('lo puse en el módulo viejo')
-    expect(paquete).toContain('lo volví a poner en el módulo viejo')
-    expect(paquete).toContain('la lógica está en el sitio que no es')
+    const packageText = readFileSync(advicePackagePath(), 'utf8')
+    for (const section of ADVICE_PACKAGE_SECTIONS) expect(packageText).toContain(`## ${section}`)
+    expect(packageText).toContain('lo puse en el módulo viejo')
+    expect(packageText).toContain('lo volví a poner en el módulo viejo')
+    expect(packageText).toContain('la lógica está en el sitio que no es')
     // The task's brief, which the two attempts came out of.
-    expect(paquete).toContain('the first one')
+    expect(packageText).toContain('the first one')
   })
 
   it('asking for the advice outside its step is refused with a 9, like any other verb', () => {
-    const r = ct('advice', consejo())
+    const r = ct('advice', advice())
 
     expect(r.status).toBe(9)
     expect(r.stderr).toMatch(/no es el paso que toca/)
@@ -94,9 +94,9 @@ describe('the second veto does not go back to implementing blindly', () => {
 
 describe('advice that does not meet the schema does not spend the attempt that is left', () => {
   it('advice with no approach is discarded, counts as a discard and NOT as a retry', () => {
-    dosVetos()
+    twoVetoes()
 
-    const r = aconsejar(consejo({ approach: undefined }))
+    const r = askForAdvice(advice({ approach: undefined }))
 
     expect(r.stdout).toMatch(/consejo descartado/)
     expect(runState().step).toBe('advise')
@@ -105,29 +105,29 @@ describe('advice that does not meet the schema does not spend the attempt that i
   })
 
   it('JSON that does not parse is a discard too and the question is asked again', () => {
-    dosVetos()
+    twoVetoes()
 
-    aconsejar(writeRaw('esto no es json'))
+    askForAdvice(writeRaw('esto no es json'))
 
     expect(runState().step).toBe('advise')
     expect(runState().discards).toBe(1)
   })
 
   it('advice issued with no package is not advice: the advisor advised blindly', () => {
-    dosVetos()
+    twoVetoes()
     ct('next')
-    rmSync(paqueteDeConsejo())
+    rmSync(advicePackagePath())
 
-    const r = ct('advice', consejo())
+    const r = ct('advice', advice())
 
     expect(r.stdout).toMatch(/consejo descartado/)
     expect(runState().discards).toBe(1)
   })
 
   it('discarding without end is cut off with a 3 instead of going on asking', () => {
-    dosVetos()
+    twoVetoes()
     let r
-    for (let i = 0; i < 7; i++) r = aconsejar(writeRaw('nada'))
+    for (let i = 0; i < 7; i++) r = askForAdvice(writeRaw('nada'))
 
     expect(r.status).toBe(3)
   })
@@ -135,9 +135,9 @@ describe('advice that does not meet the schema does not spend the attempt that i
 
 describe('the accepted advice opens the third attempt', () => {
   it('done → implement, with the advice saved in the state', () => {
-    dosVetos()
+    twoVetoes()
 
-    const r = aconsejar(consejo())
+    const r = askForAdvice(advice())
 
     expect(r.status).toBe(0)
     expect(runState().step).toBe('implement')
@@ -145,10 +145,10 @@ describe('the accepted advice opens the third attempt', () => {
   })
 
   it('the third veto no longer consults anybody: it closes in blocked-judge with a 1', () => {
-    dosVetos()
-    aconsejar(consejo())
+    twoVetoes()
+    askForAdvice(advice())
 
-    const r = intentoVetado('lo intenté por el camino que dijo el consejero')
+    const r = vetoedAttempt('lo intenté por el camino que dijo el consejero')
 
     expect(r.status).toBe(1)
     expect(runState().step).toBe('judge')
@@ -162,34 +162,34 @@ describe('the third attempt starts with a clean tree and with the advice in fron
   // folder and the machinery stay untracked on purpose, and counting them here
   // would measure the scaffolding instead of the tree the third attempt
   // inherits.
-  const estadoDeGit = (...rutas) =>
-    execFileSync('git', ['status', '--porcelain', '--', ...rutas], { cwd: repo, encoding: 'utf8' })
+  const gitStatus = (...paths) =>
+    execFileSync('git', ['status', '--porcelain', '--', ...paths], { cwd: repo, encoding: 'utf8' })
 
   it("the tree goes back to the last commit for the task's paths", () => {
-    dosVetos()
+    twoVetoes()
     writeFileSync(join(repo, 'uno.txt'), 'lo que dejó el segundo intento')
     writeFileSync(join(repo, 'sobra.txt'), 'un fichero que el segundo intento se inventó')
 
-    aconsejar(consejo())
+    askForAdvice(advice())
 
-    expect(estadoDeGit('uno.txt', 'sobra.txt')).toBe('')
+    expect(gitStatus('uno.txt', 'sobra.txt')).toBe('')
     expect(existsSync(join(repo, 'sobra.txt'))).toBe(false)
   })
 
   it("what it cleans is the task's paths: the run's file and its folder are still there", () => {
-    dosVetos()
+    twoVetoes()
     writeFileSync(join(repo, 'uno.txt'), 'lo que dejó el segundo intento')
 
-    aconsejar(consejo())
+    askForAdvice(advice())
 
     expect(existsSync(join(repo, '.agent', 'run-7.json'))).toBe(true)
-    expect(existsSync(paqueteDeConsejo())).toBe(true)
+    expect(existsSync(advicePackagePath())).toBe(true)
     expect(runState().step).toBe('implement')
   })
 
   it("the brief of the third attempt carries the advisor's approach inside it", () => {
-    dosVetos()
-    aconsejar(consejo())
+    twoVetoes()
+    askForAdvice(advice())
 
     ct('next')
     const brief = readFileSync(join(repo, '.agent', 'run-7', 'task-1-brief.md'), 'utf8')
@@ -198,8 +198,8 @@ describe('the third attempt starts with a clean tree and with the advice in fron
   })
 
   it('the advice is not inherited: the next task starts a brief without it', () => {
-    dosVetos()
-    aconsejar(consejo())
+    twoVetoes()
+    askForAdvice(advice())
     ct('next')
     ct('report', writeReport(['uno.txt']))
     ct('controls')
@@ -214,42 +214,42 @@ describe('the third attempt starts with a clean tree and with the advice in fron
 
 describe('what the advice leaves measured', () => {
   it('the row of the advise step says how much the advice weighed and how it ended', () => {
-    dosVetos()
-    aconsejar(consejo())
+    twoVetoes()
+    askForAdvice(advice())
 
-    const [fila] = judgeRows('advise')
-    expect(fila.outcome).toBe('done')
-    expect(fila.advice_bytes).toBeGreaterThan(0)
-    expect(fila.task).toBe(1)
-    expect(fila.attempt).toBe(3)
+    const [row] = judgeRows('advise')
+    expect(row.outcome).toBe('done')
+    expect(row.advice_bytes).toBeGreaterThan(0)
+    expect(row.task).toBe(1)
+    expect(row.attempt).toBe(3)
     // The material of the role, as in any other step that dispatches somebody.
-    expect(fila.agent_bytes).toBeGreaterThan(0)
-    expect(fila.package_bytes).toBeGreaterThan(0)
+    expect(row.agent_bytes).toBeGreaterThan(0)
+    expect(row.package_bytes).toBeGreaterThan(0)
   })
 
   it('discarded advice leaves a row too, with the reason and without claiming a size it did not measure', () => {
-    dosVetos()
-    aconsejar(writeRaw('nada'))
+    twoVetoes()
+    askForAdvice(writeRaw('nada'))
 
-    const [fila] = judgeRows('advise')
-    expect(fila.outcome).toBe('discarded')
-    expect(fila.why).toMatch(/no se pudo leer/)
+    const [row] = judgeRows('advise')
+    expect(row.outcome).toBe('discarded')
+    expect(row.why).toMatch(/no se pudo leer/)
   })
 })
 
 describe('the advisor cannot be left without what it was promised', () => {
   it('the dispatch seal covers advise: without going through next, the guard refuses it', () => {
-    dosVetos()
+    twoVetoes()
 
     ct('next')
     expect(runState().nextSeal).toBe('1:advise:3')
   })
 
   it('the package survives a discard: it does not have to be regenerated to ask again', () => {
-    dosVetos()
+    twoVetoes()
     ct('next')
     ct('advice', writeRaw('nada'))
 
-    expect(existsSync(paqueteDeConsejo())).toBe(true)
+    expect(existsSync(advicePackagePath())).toBe(true)
   })
 })

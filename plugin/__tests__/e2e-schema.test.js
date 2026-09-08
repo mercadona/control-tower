@@ -16,27 +16,27 @@ import { OUTCOMES } from '../scripts/run-machine.js'
 const A = 'el server escucha en 9115 por defecto y en el puerto indicado si se pasa'
 const B = 'el example compila y sirve /metrics'
 
-const verde = (run) => ({
+const green = (run) => ({
   run, verdict: 'verde',
   brought_up: 'cargo run --example serve',
   evidence: [{ command: 'curl -sS -o /dev/null -w "%{http_code}" localhost:9115/metrics', output: '200' }],
 })
-const rojo = (run) => ({ run, verdict: 'rojo', brought_up: 'cargo run --example serve', expected: '200', actual: '404', repro: 'curl -i localhost:9115/metrics', refuted_by: 'que el puerto lo ocupe otro proceso' })
-const sinVerificar = (run) => ({ run, verdict: 'no-verificado', reason: 'la sección de AGENTS.md está sin rellenar', unblock: 'rellenar "Levantar" y "Listo cuando"' })
+const red = (run) => ({ run, verdict: 'rojo', brought_up: 'cargo run --example serve', expected: '200', actual: '404', repro: 'curl -i localhost:9115/metrics', refuted_by: 'que el puerto lo ocupe otro proceso' })
+const notVerified = (run) => ({ run, verdict: 'no-verificado', reason: 'la sección de AGENTS.md está sin rellenar', unblock: 'rellenar "Levantar" y "Listo cuando"' })
 
 describe('readE2eReport', () => {
   it('all green → DONE', () => {
-    const r = readE2eReport({ runs: [verde(A)] }, [A])
+    const r = readE2eReport({ runs: [green(A)] }, [A])
     expect(r.outcome).toBe(OUTCOMES.DONE)
     expect(r.runs).toHaveLength(1)
   })
 
   it('one red → FAILED', () => {
-    expect(readE2eReport({ runs: [rojo(A)] }, [A]).outcome).toBe(OUTCOMES.FAILED)
+    expect(readE2eReport({ runs: [red(A)] }, [A]).outcome).toBe(OUTCOMES.FAILED)
   })
 
   it('green + no-verificado → DONE, with the reason inside', () => {
-    const r = readE2eReport({ runs: [verde(A), sinVerificar(B)] }, [A, B])
+    const r = readE2eReport({ runs: [green(A), notVerified(B)] }, [A, B])
     expect(r.outcome).toBe(OUTCOMES.DONE)
     expect(r.runs.find((x) => x.run === B).reason).toMatch(/AGENTS\.md/)
   })
@@ -48,30 +48,30 @@ describe('readE2eReport', () => {
   })
 
   it('a journey entry is missing → DISCARDED, even if the other one is green', () => {
-    const r = readE2eReport({ runs: [verde(A)] }, [A, B])
+    const r = readE2eReport({ runs: [green(A)] }, [A, B])
     expect(r.outcome).toBe(OUTCOMES.DISCARDED)
     expect(r.why).toContain(B)
   })
 
   it('one entry too many → DISCARDED', () => {
-    const r = readE2eReport({ runs: [verde(A), verde(B)] }, [A])
+    const r = readE2eReport({ runs: [green(A), green(B)] }, [A])
     expect(r.outcome).toBe(OUTCOMES.DISCARDED)
     expect(r.why).toContain(B)
   })
 
   it('a `run` that is not identical to the declared one → DISCARDED', () => {
-    const r = readE2eReport({ runs: [verde('el server escucha en 9115')] }, [A])
+    const r = readE2eReport({ runs: [green('el server escucha en 9115')] }, [A])
     expect(r.outcome).toBe(OUTCOMES.DISCARDED)
   })
 
   it('a verdict outside the three → DISCARDED', () => {
-    expect(readE2eReport({ runs: [{ ...verde(A), verdict: 'ok' }] }, [A]).outcome).toBe(OUTCOMES.DISCARDED)
+    expect(readE2eReport({ runs: [{ ...green(A), verdict: 'ok' }] }, [A]).outcome).toBe(OUTCOMES.DISCARDED)
   })
 
   it('a green with no evidence → DISCARDED', () => {
-    expect(readE2eReport({ runs: [{ ...verde(A), evidence: [] }] }, [A]).outcome).toBe(OUTCOMES.DISCARDED)
-    const sinSalida = { ...verde(A), evidence: [{ command: 'curl x', output: '' }] }
-    expect(readE2eReport({ runs: [sinSalida] }, [A]).outcome).toBe(OUTCOMES.DISCARDED)
+    expect(readE2eReport({ runs: [{ ...green(A), evidence: [] }] }, [A]).outcome).toBe(OUTCOMES.DISCARDED)
+    const noOutput = { ...green(A), evidence: [{ command: 'curl x', output: '' }] }
+    expect(readE2eReport({ runs: [noOutput] }, [A]).outcome).toBe(OUTCOMES.DISCARDED)
   })
 
   it('a no-verificado with neither reason nor unblock → DISCARDED', () => {
@@ -79,15 +79,15 @@ describe('readE2eReport', () => {
   })
 
   // Finding 2 of the review of Task 8: a half-formed red was not discarded, and
-  // `escribirInformeE2e` (ct-step.mjs) trusts that whatever reaches it here is
+  // `writeE2eReport` (ct-step.mjs) trusts that whatever reaches it here is
   // already validated — without this branch, a red missing one of its four
   // fields slipped a literal "undefined" into the pull request's markdown.
   it('a red missing one of the four fields that hold it up → DISCARDED', () => {
-    for (const campo of ['expected', 'actual', 'repro', 'refuted_by']) {
-      const incompleto = { ...rojo(A) }
-      delete incompleto[campo]
-      const r = readE2eReport({ runs: [incompleto] }, [A])
-      expect(r.outcome, campo).toBe(OUTCOMES.DISCARDED)
+    for (const field of ['expected', 'actual', 'repro', 'refuted_by']) {
+      const incomplete = { ...red(A) }
+      delete incomplete[field]
+      const r = readE2eReport({ runs: [incomplete] }, [A])
+      expect(r.outcome, field).toBe(OUTCOMES.DISCARDED)
     }
   })
 
@@ -97,28 +97,28 @@ describe('readE2eReport', () => {
   // documents the `curl` but not how the system was brought up is NOT
   // reproducible: the mitigation evaporated exactly on the path that matters.
   it('a green with no `brought_up` → DISCARDED (with no how-it-was-brought-up, the evidence is not reproducible)', () => {
-    const sin = { ...verde(A) }
-    delete sin.brought_up
-    const r = readE2eReport({ runs: [sin] }, [A])
+    const without = { ...green(A) }
+    delete without.brought_up
+    const r = readE2eReport({ runs: [without] }, [A])
     expect(r.outcome).toBe(OUTCOMES.DISCARDED)
     expect(r.why).toContain('brought_up')
   })
 
   it('a red with no `brought_up` → DISCARDED, for the same reason', () => {
-    const sin = { ...rojo(A) }
-    delete sin.brought_up
+    const without = { ...red(A) }
+    delete without.brought_up
     // DISCARDED and not FAILED: without the fields that hold it up, the entry
     // does not make it into `buenos`, so there is no red that can beat the
     // malformed one. It is the same treatment a red with no `expected` already
     // got.
-    expect(readE2eReport({ runs: [sin] }, [A]).outcome).toBe(OUTCOMES.DISCARDED)
+    expect(readE2eReport({ runs: [without] }, [A]).outcome).toBe(OUTCOMES.DISCARDED)
   })
 
   // And it is NOT demanded of a no-verificado, which is not a capricious
   // exception: the typical reason for that verdict is precisely that the system
   // could not be brought up.
   it('a no-verificado with no `brought_up` is still valid', () => {
-    expect(readE2eReport({ runs: [sinVerificar(A)] }, [A]).outcome).toBe(OUTCOMES.DONE)
+    expect(readE2eReport({ runs: [notVerified(A)] }, [A]).outcome).toBe(OUTCOMES.DONE)
   })
 
   // Two identical cells are the SAME journey. Without deduplicating, `find`
@@ -127,7 +127,7 @@ describe('readE2eReport', () => {
   // equal entries made the second fall into "an entry this slice does not
   // declare": the report had no correct way of being written at all.
   it('the same journey declared twice collapses: one entry is enough, and it is not duplicated in `runs`', () => {
-    const r = readE2eReport({ runs: [verde(A)] }, [A, A])
+    const r = readE2eReport({ runs: [green(A)] }, [A, A])
     expect(r.outcome).toBe(OUTCOMES.DONE)
     expect(r.runs).toHaveLength(1)
   })
@@ -136,7 +136,7 @@ describe('readE2eReport', () => {
     // A red says something about the PRODUCT; a broken format, about the
     // report. By emitting the discard first, the agent would fix the format,
     // retry and only THEN see the red: two rounds for a datum already in hand.
-    const r = readE2eReport({ runs: [rojo(A)] }, [A, B])
+    const r = readE2eReport({ runs: [red(A)] }, [A, B])
     expect(r.outcome).toBe(OUTCOMES.FAILED)
   })
 

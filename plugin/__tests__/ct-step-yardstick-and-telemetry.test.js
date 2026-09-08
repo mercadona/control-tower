@@ -44,11 +44,11 @@ describe('what the implementer warns about, and the telemetry, do not stay where
 
   it('Step 5: the telemetry travels INSIDE the commit of its task', () => {
     taskOk('uno.txt')
-    const tocados = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
-    expect(tocados).toMatch(/docs\/superpowers\/metrics\/issue-7\.jsonl/)
-    const filas = readFileSync(join(repo, 'docs', 'superpowers', 'metrics', 'issue-7.jsonl'), 'utf8')
+    const touched = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
+    expect(touched).toMatch(/docs\/superpowers\/metrics\/issue-7\.jsonl/)
+    const rows = readFileSync(join(repo, 'docs', 'superpowers', 'metrics', 'issue-7.jsonl'), 'utf8')
       .trim().split('\n').map((l) => JSON.parse(l))
-    expect(filas.every((f) => f.issue === 7 && f.task === 1)).toBe(true)
+    expect(rows.every((f) => f.issue === 7 && f.task === 1)).toBe(true)
   })
 
   it('Step 5: it is NOT staged before the checks, or the scope check would veto the task', () => {
@@ -57,9 +57,9 @@ describe('what the implementer warns about, and the telemetry, do not stay where
     // measuring.
     ct('report', writeReport(['uno.txt']))
     ct('controls')
-    const enIndice = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: repo, encoding: 'utf8' })
-    expect(enIndice).not.toMatch(/metrics/)
-    expect(enIndice).toMatch(/uno\.txt/)
+    const inIndex = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: repo, encoding: 'utf8' })
+    expect(inIndex).not.toMatch(/metrics/)
+    expect(inIndex).toMatch(/uno\.txt/)
   })
 
   it('Step 5: the rows of the attempt the judge vetoed travel too — the cost of the round trips is the datum', () => {
@@ -70,28 +70,28 @@ describe('what the implementer warns about, and the telemetry, do not stay where
     ct('controls')
     judgeTask(writeVerdict('PASS'))
     ct('commit')
-    const commiteado = execFileSync('git', ['show', 'HEAD:docs/superpowers/metrics/issue-7.jsonl'], { cwd: repo, encoding: 'utf8' })
-    const filas = commiteado.trim().split('\n').map((l) => JSON.parse(l))
-    expect(filas.filter((f) => f.attempt === 1).length).toBeGreaterThan(0)
-    expect(filas.filter((f) => f.attempt === 2).length).toBeGreaterThan(0)
-    expect(filas.find((f) => f.step === 'judge' && f.attempt === 1).ruling).toBe('FAIL')
+    const committed = execFileSync('git', ['show', 'HEAD:docs/superpowers/metrics/issue-7.jsonl'], { cwd: repo, encoding: 'utf8' })
+    const rows = committed.trim().split('\n').map((l) => JSON.parse(l))
+    expect(rows.filter((f) => f.attempt === 1).length).toBeGreaterThan(0)
+    expect(rows.filter((f) => f.attempt === 2).length).toBeGreaterThan(0)
+    expect(rows.find((f) => f.step === 'judge' && f.attempt === 1).ruling).toBe('FAIL')
   })
 
   it('Step 6: the `controls` row carries how long it took, which is the only time the program executes', () => {
     ct('report', writeReport(['uno.txt']))
     ct('controls')
-    const filas = readFileSync(join(repo, '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
+    const rows = readFileSync(join(repo, '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
       .trim().split('\n').map((l) => JSON.parse(l))
-    const controles = filas.find((f) => f.step === 'controls')
-    expect(typeof controles.duration_ms).toBe('number')
-    expect(controles.duration_ms).toBeGreaterThanOrEqual(0)
+    const controlsRow = rows.find((f) => f.step === 'controls')
+    expect(typeof controlsRow.duration_ms).toBe('number')
+    expect(controlsRow.duration_ms).toBeGreaterThanOrEqual(0)
   })
 
   it('Step 6: there is no `commit` row: its sha and its fact are whole in git log', () => {
     taskOk('uno.txt')
-    const filas = readFileSync(join(repo, '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
+    const rows = readFileSync(join(repo, '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
       .trim().split('\n').map((l) => JSON.parse(l))
-    expect(filas.map((f) => f.step)).toEqual(['implement', 'controls', 'judge'])
+    expect(rows.map((f) => f.step)).toEqual(['implement', 'controls', 'judge'])
   })
 })
 
@@ -197,23 +197,23 @@ describe('the repo yardstick travels in the brief, with no agent in between', ()
 // arrives— and its absence is a broken installation, not a state of the repo:
 // it aborts.
 describe('the ct yardstick travels in the brief, and goes ahead of the repo one', () => {
-  const briefDeLaUno = () => readFileSync(join(repo, '.agent', 'run-7', 'task-1-brief.md'), 'utf8')
+  const briefOfTaskOne = () => readFileSync(join(repo, '.agent', 'run-7', 'task-1-brief.md'), 'utf8')
 
   it('the brief ends with the yardstick documents, BEHIND the task', () => {
     ct('next')
-    const brief = briefDeLaUno()
+    const brief = briefOfTaskOne()
     expect(brief).toMatch(/\*\*La vara de ct\*\*/)
-    for (const nombre of PluginYardstick.FILES) {
-      expect(brief).toContain(`## Vara de ct: conventions/${nombre}`)
+    for (const name of PluginYardstick.FILES) {
+      expect(brief).toContain(`## Vara de ct: conventions/${name}`)
     }
     expect(brief.indexOf('Task 1')).toBeLessThan(brief.indexOf('La vara de ct'))
   })
 
   it('it pastes the real content of the documents, not a summary', () => {
     ct('next')
-    for (const nombre of PluginYardstick.FILES) {
-      const documento = readFileSync(join(PLUGIN_ROOT_TEST, 'conventions', nombre), 'utf8')
-      expect(briefDeLaUno(), `${nombre} no viaja verbatim`).toContain(documento.trim())
+    for (const name of PluginYardstick.FILES) {
+      const document = readFileSync(join(PLUGIN_ROOT_TEST, 'conventions', name), 'utf8')
+      expect(briefOfTaskOne(), `${name} no viaja verbatim`).toContain(document.trim())
     }
   })
 
@@ -221,7 +221,7 @@ describe('the ct yardstick travels in the brief, and goes ahead of the repo one'
     mkdirSync(join(repo, '.agent'), { recursive: true })
     writeFileSync(join(repo, '.agent', 'conventions.md'), '# La vara del repo\n\n- `AGENTS.md`\n')
     ct('next')
-    const brief = briefDeLaUno()
+    const brief = briefOfTaskOne()
     expect(brief.indexOf('La vara de ct')).toBeLessThan(brief.indexOf('leída directo de `.agent/conventions.md`'))
   })
 
@@ -229,23 +229,23 @@ describe('the ct yardstick travels in the brief, and goes ahead of the repo one'
   // every diff, whether or not the task creates a module. `architecture.md`
   // used to travel only when the plan declared a `(create)` path; now it always
   // travels.
-  const conLaUnoModificando = () => {
+  const withTaskOneModifying = () => {
     const plan = readFileSync(join(repo, 'plan.md'), 'utf8').replace('`uno.txt` (create)', '`uno.txt` (modify)')
     writeFileSync(join(repo, 'plan.md'), plan)
   }
 
   it('a task that opens no new module takes the whole yardstick, architecture.md included', () => {
-    conLaUnoModificando()
+    withTaskOneModifying()
     ct('next')
-    const brief = briefDeLaUno()
-    for (const nombre of PluginYardstick.FILES) {
-      expect(brief, `${nombre} tendría que viajar`).toContain(`## Vara de ct: conventions/${nombre}`)
+    const brief = briefOfTaskOne()
+    for (const name of PluginYardstick.FILES) {
+      expect(brief, `${name} should travel`).toContain(`## Vara de ct: conventions/${name}`)
     }
   })
 
   it('without a declaration from the repo, the ct one travels all the same: they are two independent yardsticks', () => {
     ct('next')
-    const brief = briefDeLaUno()
+    const brief = briefOfTaskOne()
     expect(brief).toContain('## Vara de ct: conventions/defects.md')
     expect(brief).not.toMatch(/leída directo de `\.agent\/conventions\.md`/)
   })
@@ -293,12 +293,12 @@ describe('the slice package carries the path of simplicity.md, not the whole doc
     ct('reconcile')
     ct('global')
     ct('next')
-    const paquete = readFileSync(join(repo, '.agent', 'run-7', 'slice-review.diff'), 'utf8')
-    expect(paquete).toMatch(/## Vara/)
-    expect(paquete.indexOf('## Vara')).toBeLessThan(paquete.indexOf('## Señal'))
-    const seccionVara = paquete.slice(paquete.indexOf('## Vara'), paquete.indexOf('## Señal'))
-    const ruta = join(PLUGIN_ROOT_TEST, PluginYardstick.DIRECTORY, 'simplicity.md')
-    expect(seccionVara).toContain(ruta)
+    const packageText = readFileSync(join(repo, '.agent', 'run-7', 'slice-review.diff'), 'utf8')
+    expect(packageText).toMatch(/## Vara/)
+    expect(packageText.indexOf('## Vara')).toBeLessThan(packageText.indexOf('## Señal'))
+    const yardstickSection = packageText.slice(packageText.indexOf('## Vara'), packageText.indexOf('## Señal'))
+    const path = join(PLUGIN_ROOT_TEST, PluginYardstick.DIRECTORY, 'simplicity.md')
+    expect(yardstickSection).toContain(path)
   })
 })
 
@@ -308,21 +308,21 @@ describe('the slice package carries the path of simplicity.md, not the whole doc
 // the context saving per slice was an opinion. The three fields are measured on
 // the file that EXISTS on disk, never on what the program meant to write.
 describe('every dispatched role notes what reading cost it, in bytes', () => {
-  const bytesEnElPlugin = (relativa) => statSync(join(PLUGIN_ROOT_TEST, relativa)).size
-  const delAgente = (paso) => bytesEnElPlugin(RoleBytes.filesOf(paso)[0])
-  const deLasSkills = (paso) => RoleBytes.filesOf(paso).slice(1).reduce((suma, r) => suma + bytesEnElPlugin(r), 0)
+  const bytesInPlugin = (relativePath) => statSync(join(PLUGIN_ROOT_TEST, relativePath)).size
+  const agentBytesOf = (step) => bytesInPlugin(RoleBytes.filesOf(step)[0])
+  const skillBytesOf = (step) => RoleBytes.filesOf(step).slice(1).reduce((sum, r) => sum + bytesInPlugin(r), 0)
 
   it('the `implement` row carries the agent, the skills its prompt orders it to load and the brief it was handed', () => {
     ct('next')
     const brief = join(repo, '.agent', 'run-7', 'task-1-brief.md')
-    const bytesDelBrief = statSync(brief).size
+    const briefBytes = statSync(brief).size
     ct('report', writeReport(['uno.txt']))
-    const fila = judgeRows('implement').at(-1)
-    expect(fila.agent_bytes).toBe(delAgente(STEPS.IMPLEMENT))
-    expect(fila.skill_bytes).toBe(deLasSkills(STEPS.IMPLEMENT))
-    expect(fila.package_bytes).toBe(bytesDelBrief)
-    expect(fila.agent_bytes).toBeGreaterThan(0)
-    expect(fila.skill_bytes).toBeGreaterThan(0)
+    const row = judgeRows('implement').at(-1)
+    expect(row.agent_bytes).toBe(agentBytesOf(STEPS.IMPLEMENT))
+    expect(row.skill_bytes).toBe(skillBytesOf(STEPS.IMPLEMENT))
+    expect(row.package_bytes).toBe(briefBytes)
+    expect(row.agent_bytes).toBeGreaterThan(0)
+    expect(row.skill_bytes).toBeGreaterThan(0)
   })
 
   // The unavoidable duplication of `conventions/decisions.md`: `brief_bytes` and
@@ -333,25 +333,25 @@ describe('every dispatched role notes what reading cost it, in bytes', () => {
   // later.
   it('in `implement`, the package is the brief: the two columns measure the same file and cannot diverge', () => {
     ct('report', writeReport(['uno.txt']))
-    const fila = judgeRows('implement').at(-1)
-    expect(fila.package_bytes).toBe(fila.brief_bytes)
+    const row = judgeRows('implement').at(-1)
+    expect(row.package_bytes).toBe(row.brief_bytes)
   })
 
   it('the judge row carries the agent, its skill and the review package it judged', () => {
     ct('report', writeReport(['uno.txt']))
     ct('controls')
     ct('next')
-    const bytesDelPaquete = statSync(taskPackage()).size
+    const packageBytes = statSync(taskPackage()).size
     const v = writeVerdict('PASS')
     seal(v, taskPackage())
     expect(ct('verdict', v).status).toBe(0)
-    const fila = judgeRows('judge').at(-1)
-    expect(fila.agent_bytes).toBe(delAgente(STEPS.JUDGE))
-    expect(fila.skill_bytes).toBe(deLasSkills(STEPS.JUDGE))
-    expect(fila.package_bytes).toBe(bytesDelPaquete)
-    expect(fila.agent_bytes).toBeGreaterThan(0)
-    expect(fila.skill_bytes).toBeGreaterThan(0)
-    expect(fila.package_bytes).toBeGreaterThan(0)
+    const row = judgeRows('judge').at(-1)
+    expect(row.agent_bytes).toBe(agentBytesOf(STEPS.JUDGE))
+    expect(row.skill_bytes).toBe(skillBytesOf(STEPS.JUDGE))
+    expect(row.package_bytes).toBe(packageBytes)
+    expect(row.agent_bytes).toBeGreaterThan(0)
+    expect(row.skill_bytes).toBeGreaterThan(0)
+    expect(row.package_bytes).toBeGreaterThan(0)
   })
 
   it('the slice judge loads no skill: its row notes zero, which is not the same as not having measured it', () => {
@@ -360,30 +360,30 @@ describe('every dispatched role notes what reading cost it, in bytes', () => {
     ct('reconcile')
     ct('global')
     ct('next')
-    const bytesDelPaquete = statSync(slicePackage()).size
+    const packageBytes = statSync(slicePackage()).size
     const v = writeSliceVerdict('PASS')
     seal(v, slicePackage())
     expect(ct('slice-verdict', v).status).toBe(0)
-    const fila = judgeRows('slice-judge').at(-1)
-    expect(fila.agent_bytes).toBe(delAgente(STEPS.SLICE_JUDGE))
-    expect(fila.skill_bytes).toBe(0)
-    expect(fila.package_bytes).toBe(bytesDelPaquete)
+    const row = judgeRows('slice-judge').at(-1)
+    expect(row.agent_bytes).toBe(agentBytesOf(STEPS.SLICE_JUDGE))
+    expect(row.skill_bytes).toBe(0)
+    expect(row.package_bytes).toBe(packageBytes)
   })
 
   it('a discarded verdict names no input, nor its size', () => {
     ct('report', writeReport(['uno.txt']))
     ct('controls')
     ct('verdict', writeVerdict('PASS'))
-    const fila = judgeRows('judge').at(-1)
-    expect(fila.outcome).toBe('discarded')
-    expect(Object.hasOwn(fila, 'agent_bytes')).toBe(false)
+    const row = judgeRows('judge').at(-1)
+    expect(row.outcome).toBe('discarded')
+    expect(Object.hasOwn(row, 'agent_bytes')).toBe(false)
   })
 
   it('with no reconciliation package in the run directory, the `reconcile` row does not invent the cost of a role nobody dispatched', () => {
     taskOk('uno.txt')
     taskOk('dos.txt')
     expect(ct('reconcile').status).toBe(0)
-    const fila = judgeRows('reconcile').at(-1)
-    expect(Object.hasOwn(fila, 'agent_bytes')).toBe(false)
+    const row = judgeRows('reconcile').at(-1)
+    expect(Object.hasOwn(row, 'agent_bytes')).toBe(false)
   })
 })

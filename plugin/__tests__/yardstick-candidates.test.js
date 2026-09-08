@@ -40,7 +40,7 @@ function tmp(prefix = 'vara-cand-') {
   dirs.push(d)
   return d
 }
-const rutas = (r) => r.candidatos.map((c) => c.ruta)
+const paths = (r) => r.candidatos.map((c) => c.ruta)
 
 // ---------------------------------------------------------------------------
 // yardstickCandidates (pure)
@@ -50,10 +50,10 @@ describe('yardstickCandidates', () => {
     const r = yardstickCandidates({
       entradas: ['AGENTS.md', 'CLAUDE.md', 'CONTRIBUTING.md', 'CONTRIBUTING', 'docs/', 'docs/AGENTS.md'],
     })
-    expect(rutas(r)).toContain('AGENTS.md')
-    expect(rutas(r)).toContain('CLAUDE.md')
-    expect(rutas(r)).toContain('CONTRIBUTING.md')
-    expect(rutas(r)).not.toContain('docs/AGENTS.md')
+    expect(paths(r)).toContain('AGENTS.md')
+    expect(paths(r)).toContain('CLAUDE.md')
+    expect(paths(r)).toContain('CONTRIBUTING.md')
+    expect(paths(r)).not.toContain('docs/AGENTS.md')
     const agents = r.candidatos.find((c) => c.ruta === 'AGENTS.md')
     expect(agents.motivo).toBe('guía del repo en la raíz')
   })
@@ -65,11 +65,11 @@ describe('yardstickCandidates', () => {
         '.cursor/', '.cursor/rules/', '.cursor/rules/style.md',
       ],
     })
-    expect(rutas(r)).toContain('docs/conventions/backend.md')
-    expect(rutas(r)).toContain('docs/conventions/frontend.md')
-    expect(rutas(r)).toContain('.cursor/rules/style.md')
+    expect(paths(r)).toContain('docs/conventions/backend.md')
+    expect(paths(r)).toContain('docs/conventions/frontend.md')
+    expect(paths(r)).toContain('.cursor/rules/style.md')
     // the directory itself is NEVER a candidate: a path ending in "/" cannot be read
-    expect(rutas(r).some((x) => x.endsWith('/'))).toBe(false)
+    expect(paths(r).some((x) => x.endsWith('/'))).toBe(false)
     const m = r.candidatos.find((c) => c.ruta === 'docs/conventions/backend.md').motivo
     expect(m).toContain('docs/conventions/')
     expect(m).toContain('convention|rules')
@@ -77,7 +77,7 @@ describe('yardstickCandidates', () => {
 
   it('proposes project skills by their SKILL.md', () => {
     const r = yardstickCandidates({ entradas: ['.claude/', '.claude/skills/', '.claude/skills/oc-review/', '.claude/skills/oc-review/SKILL.md'] })
-    expect(rutas(r)).toContain('.claude/skills/oc-review/SKILL.md')
+    expect(paths(r)).toContain('.claude/skills/oc-review/SKILL.md')
     const m = r.candidatos.find((c) => c.ruta === '.claude/skills/oc-review/SKILL.md').motivo
     expect(m).toContain('Skills')
   })
@@ -89,7 +89,7 @@ describe('yardstickCandidates', () => {
         '.agent/rules/', '.agent/rules/x.md',
       ],
     })
-    expect(rutas(r)).toEqual([])
+    expect(paths(r)).toEqual([])
   })
 
   it('filters out the ones already declared', () => {
@@ -97,36 +97,38 @@ describe('yardstickCandidates', () => {
       entradas: ['AGENTS.md', 'CLAUDE.md'],
       declaradas: new Set(['AGENTS.md']),
     })
-    expect(rutas(r)).toEqual(['CLAUDE.md'])
+    expect(paths(r)).toEqual(['CLAUDE.md'])
   })
 
   it('deterministic order: the input order makes no difference, and there are no duplicates even when a path matches two rules', () => {
-    const entradas = [
+    // `entradas` and `declaradas` are the option keys of `yardstickCandidates`
+    // in repo-yardstick.js: they cross the module boundary and stay as they are.
+    const entries = [
       'CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING.md',
       'docs/', 'docs/conventions/', 'docs/conventions/rules/',
       'docs/conventions/rules/x.md', 'docs/conventions/b.md',
       '.claude/', '.claude/skills/', '.claude/skills/oc-review/', '.claude/skills/oc-review/SKILL.md',
     ]
-    const a = yardstickCandidates({ entradas })
-    const b = yardstickCandidates({ entradas: [...entradas].reverse() })
+    const a = yardstickCandidates({ entradas: entries })
+    const b = yardstickCandidates({ entradas: [...entries].reverse() })
     expect(a).toEqual(b)
     // docs/conventions/rules/x.md matches TWO directories that match the rule
     // (docs/conventions/ AND docs/conventions/rules/) — once only in the list.
-    expect(rutas(a).filter((x) => x === 'docs/conventions/rules/x.md').length).toBe(1)
+    expect(paths(a).filter((x) => x === 'docs/conventions/rules/x.md').length).toBe(1)
   })
 
   it('omitidos counts what did not fit in MAX_PER_DIRECTORY, and what is already declared does not count as omitted', () => {
-    const ficheros = Array.from({ length: 15 }, (_, i) => `docs/conventions/f${String(i + 1).padStart(2, '0')}.md`)
-    const entradas = ['docs/', 'docs/conventions/', ...ficheros]
-    const sinDeclarar = yardstickCandidates({ entradas })
-    expect(rutas(sinDeclarar).length).toBe(MAX_PER_DIRECTORY)
-    expect(sinDeclarar.omitidos).toBe(15 - MAX_PER_DIRECTORY)
+    const files = Array.from({ length: 15 }, (_, i) => `docs/conventions/f${String(i + 1).padStart(2, '0')}.md`)
+    const entries = ['docs/', 'docs/conventions/', ...files]
+    const undeclared = yardstickCandidates({ entradas: entries })
+    expect(paths(undeclared).length).toBe(MAX_PER_DIRECTORY)
+    expect(undeclared.omitidos).toBe(15 - MAX_PER_DIRECTORY)
 
-    const conUnoDeclarado = yardstickCandidates({ entradas, declaradas: new Set(['docs/conventions/f01.md']) })
-    expect(rutas(conUnoDeclarado)).not.toContain('docs/conventions/f01.md')
-    expect(rutas(conUnoDeclarado).length).toBe(MAX_PER_DIRECTORY)
+    const withOneDeclared = yardstickCandidates({ entradas: entries, declaradas: new Set(['docs/conventions/f01.md']) })
+    expect(paths(withOneDeclared)).not.toContain('docs/conventions/f01.md')
+    expect(paths(withOneDeclared).length).toBe(MAX_PER_DIRECTORY)
     // 14 candidates are left after filtering the declared one; cut to 12 → 2 omitted
-    expect(conUnoDeclarado.omitidos).toBe(14 - MAX_PER_DIRECTORY)
+    expect(withOneDeclared.omitidos).toBe(14 - MAX_PER_DIRECTORY)
   })
 
   it('MAX_CANDIDATOS cuts the global list once grouped, and counts the rest as omitted', () => {
@@ -155,8 +157,8 @@ describe('declaredIn', () => {
   it('the seed ct-init.sh sows declares nothing — the set comes out empty', () => {
     const dir = tmp()
     execFileSync('bash', [initScript, dir], { encoding: 'utf8' })
-    const contenido = readFileSync(join(dir, CONVENTIONS_FILE), 'utf8')
-    expect(declaredIn(contenido).size).toBe(0)
+    const content = readFileSync(join(dir, CONVENTIONS_FILE), 'utf8')
+    expect(declaredIn(content).size).toBe(0)
   })
 })
 
@@ -165,7 +167,7 @@ describe('declaredIn', () => {
 // ---------------------------------------------------------------------------
 describe('pareceEsqueleto', () => {
   it('an AGENTS.md of headings only, in a vacuum, is a skeleton', () => {
-    const soloEncabezados = [
+    const headingsOnly = [
       '# AGENTS.md',
       '<!-- Guía durable del repo (≤150 líneas). Procedimientos → Skills. -->',
       '## Project overview',
@@ -181,7 +183,7 @@ describe('pareceEsqueleto', () => {
       '## Skills (load on demand)',
       '',
     ].join('\n')
-    expect(pareceEsqueleto(soloEncabezados)).toBe(true)
+    expect(pareceEsqueleto(headingsOnly)).toBe(true)
   })
 
   // Round 2 of the judge's verdict: the test above measures a literal written by
@@ -189,34 +191,34 @@ describe('pareceEsqueleto', () => {
   // does not stay at "headings only": the script itself always adds the slices
   // contract section to it (hundreds of lines of prose). This test runs the real
   // `ct-init.sh` and measures over its output, so that a regression in the
-  // discounting of the contract block (see `sinBloquesDeCtInit` in
+  // discounting of the contract block (see `withoutCtInitBlocks` in
   // scripts/repo-yardstick.js) shows up here.
   it('the AGENTS.md ct-init.sh REALLY leaves on disk is a skeleton, despite the sections the script itself adds to it', () => {
     const dir = tmp()
     execFileSync('bash', [initScript, dir], { encoding: 'utf8' })
-    const contenido = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
+    const content = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
     // Confirms that the scenario is the real one and not a degenerate case: the
     // real file carries prose from the plugin —since #93, the short loop section
     // and the crossing one; before that, the whole contract as well— and not a
     // handful of loose headings. The threshold dropped from 100 lines to 20
     // precisely because of that split: what is measured here is that
-    // `sinBloquesDeCtInit`'s discounting still covers ALL the blocks ct-init
+    // `withoutCtInitBlocks`'s discounting still covers ALL the blocks ct-init
     // sows, and today there are three.
-    expect(contenido.split('\n').length).toBeGreaterThan(20)
-    for (const marcador of ['<!-- ct-init:loop -->', '<!-- ct-init:e2e-howto -->']) {
-      expect(contenido, marcador).toContain(marcador)
+    expect(content.split('\n').length).toBeGreaterThan(20)
+    for (const marker of ['<!-- ct-init:loop -->', '<!-- ct-init:e2e-howto -->']) {
+      expect(content, marker).toContain(marker)
     }
-    expect(pareceEsqueleto(contenido)).toBe(true)
+    expect(pareceEsqueleto(content)).toBe(true)
   })
 
   it('a document with three real rules is not a skeleton', () => {
-    const conReglas = [
+    const withRules = [
       '# Convenciones',
       'Usa siempre inyección de dependencias en el constructor.',
       'Los objetos de frontera son Pydantic, nunca dicts sueltos.',
       'Ningún caso de uso importa infraestructura directamente.',
     ].join('\n')
-    expect(pareceEsqueleto(conReglas)).toBe(false)
+    expect(pareceEsqueleto(withRules)).toBe(false)
   })
 })
 
@@ -229,30 +231,30 @@ describe('formatCandidatos', () => {
   })
 
   it('with candidates, it carries the header, every path between backticks and the sentence saying it proposes and does not declare — and never "aviso"/"ATENCIÓN"/"unblock"', () => {
-    const texto = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz' }])
-    expect(texto).toContain(CANDIDATOS_HEADER)
-    expect(texto).toContain('`AGENTS.md`')
-    expect(texto).toMatch(/PROPONE.*humano DECLARA|el humano DECLARA/s)
-    expect(texto.toLowerCase()).not.toContain('aviso')
-    expect(texto).not.toContain('ATENCIÓN')
-    expect(texto).not.toContain('unblock')
+    const text = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz' }])
+    expect(text).toContain(CANDIDATOS_HEADER)
+    expect(text).toContain('`AGENTS.md`')
+    expect(text).toMatch(/PROPONE.*humano DECLARA|el humano DECLARA/s)
+    expect(text.toLowerCase()).not.toContain('aviso')
+    expect(text).not.toContain('ATENCIÓN')
+    expect(text).not.toContain('unblock')
   })
 
   it("with a candidate marked as a skeleton, it explains that declaring it is worse than not declaring it — it hands the judge an empty document that does count as the repository's yardstick", () => {
-    const texto = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz', esqueleto: true }])
-    expect(texto).toContain('[esqueleto: sólo encabezados]')
-    expect(texto).toMatch(/documento vacío/)
-    expect(texto).toMatch(/peor que no declararlos/)
+    const text = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz', esqueleto: true }])
+    expect(text).toContain('[esqueleto: sólo encabezados]')
+    expect(text).toMatch(/documento vacío/)
+    expect(text).toMatch(/peor que no declararlos/)
   })
 
   it('with omitted ones, it says how many more candidates are left unlisted', () => {
-    const texto = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz' }], { omitidos: 5 })
-    expect(texto).toMatch(/\+5 candidatos más/)
+    const text = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz' }], { omitidos: 5 })
+    expect(text).toMatch(/\+5 candidatos más/)
   })
 
   it('with truncated, it warns that absence is not proof of absence', () => {
-    const texto = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz' }], { truncated: true })
-    expect(texto).toContain('Ausencia aquí no es prueba de ausencia')
+    const text = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz' }], { truncated: true })
+    expect(text).toContain('Ausencia aquí no es prueba de ausencia')
   })
 })
 
@@ -289,9 +291,9 @@ describe('detect-yardstick.mjs end to end', () => {
 
   it('a target that is not a directory → exit 1, stderr explains it, empty stdout', () => {
     const dir = tmp()
-    const fichero = join(dir, 'no-es-dir.txt')
-    writeFileSync(fichero, 'x')
-    const r = spawnSync('node', [detectYardstickScript, fichero], { encoding: 'utf8' })
+    const file = join(dir, 'no-es-dir.txt')
+    writeFileSync(file, 'x')
+    const r = spawnSync('node', [detectYardstickScript, file], { encoding: 'utf8' })
     expect(r.status).toBe(1)
     expect(r.stdout.trim()).toBe('')
     expect(r.stderr).toMatch(/no es un directorio/)
@@ -342,19 +344,19 @@ describe('ct-init.sh invokes the candidate sweep', () => {
     writeFileSync(join(dir, 'docs', 'conventions', 'x.md'), '# reglas\n')
 
     spawnSync('bash', [initScript, dir], { encoding: 'utf8' })
-    const segunda = spawnSync('bash', [initScript, dir], { encoding: 'utf8' })
-    expect(segunda.status).toBe(0)
-    expect(segunda.stdout).toContain('docs/conventions/x.md')
+    const second = spawnSync('bash', [initScript, dir], { encoding: 'utf8' })
+    expect(second.status).toBe(0)
+    expect(second.stdout).toContain('docs/conventions/x.md')
     expect(readFileSync(join(dir, CONVENTIONS_FILE), 'utf8')).toMatch(/ninguna declarada todavía/)
 
     const conventionsPath = join(dir, CONVENTIONS_FILE)
-    const editado = 'Rules to obey (una ruta por línea, entre backticks; tiene que poder leerse):\n\n- `docs/conventions/x.md`\n'
-    writeFileSync(conventionsPath, editado)
+    const edited = 'Rules to obey (una ruta por línea, entre backticks; tiene que poder leerse):\n\n- `docs/conventions/x.md`\n'
+    writeFileSync(conventionsPath, edited)
 
-    const tercera = spawnSync('bash', [initScript, dir], { encoding: 'utf8' })
-    expect(tercera.status).toBe(0)
-    expect(tercera.stdout).not.toContain('docs/conventions/x.md')
-    expect(readFileSync(conventionsPath, 'utf8')).toBe(editado)
+    const third = spawnSync('bash', [initScript, dir], { encoding: 'utf8' })
+    expect(third.status).toBe(0)
+    expect(third.stdout).not.toContain('docs/conventions/x.md')
+    expect(readFileSync(conventionsPath, 'utf8')).toBe(edited)
   })
 
   // Round 2 of the judge's verdict: the case that motivates `pareceEsqueleto`
@@ -375,13 +377,13 @@ describe('ct-init.sh invokes the candidate sweep', () => {
 // block the script actually prints.
 // ---------------------------------------------------------------------------
 describe('the sweep does not diverge from the texts that describe it', () => {
-  const leer = (...partes) => readFileSync(join(root, ...partes), 'utf8')
+  const read = (...parts) => readFileSync(join(root, ...parts), 'utf8')
 
   it('commands/ct-init.md contains CANDIDATOS_HEADER verbatim', () => {
-    expect(leer('commands', 'ct-init.md')).toContain(CANDIDATOS_HEADER)
+    expect(read('commands', 'ct-init.md')).toContain(CANDIDATOS_HEADER)
   })
 
   it('scripts/ct-init.sh mentions detect-yardstick.mjs', () => {
-    expect(leer('scripts', 'ct-init.sh')).toContain('detect-yardstick.mjs')
+    expect(read('scripts', 'ct-init.sh')).toContain('detect-yardstick.mjs')
   })
 })

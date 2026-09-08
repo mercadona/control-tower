@@ -38,7 +38,7 @@ Que esto funcione.
 | 1 | uno | backend | algo | – | un criterio | – | core | – | ${gateCell} | ${e2eCell} |
 `
 
-// specSinColumnaE2e: the SAME table, but with no "E2E" column at all (neither
+// specWithoutE2eColumn: the SAME table, but with no "E2E" column at all (neither
 // header nor cell). It exists for abort 4 on its own: with the column present,
 // any undeclared "E2E" cell already fires abort 1 (undeclared cell), so a test
 // with the column in place cannot tell "abort 4 works" from "abort 1 is
@@ -47,7 +47,7 @@ Que esto funcione.
 // (`parseGateCell(s.gate).add.includes('e2e') && r.runs.length === 0`)
 // deliberately does NOT look at `e2eColumnPresent`, so the only way to test it
 // for real is a spec where abort 1 can never fire.
-const specSinColumnaE2e = (gateCell) => `# Spec
+const specWithoutE2eColumn = (gateCell) => `# Spec
 
 Estado: CONGELADA
 
@@ -72,7 +72,7 @@ function run(spec) {
 }
 
 const groom = (gateCell, e2eCell) => run(specWith(gateCell, e2eCell))
-const groomSinE2e = (gateCell) => run(specSinColumnaE2e(gateCell))
+const groomWithoutE2e = (gateCell) => run(specWithoutE2eColumn(gateCell))
 
 describe('aborts of the E2E column', () => {
   it('an undeclared cell (a dash) aborts and names the row', () => {
@@ -96,7 +96,7 @@ describe('aborts of the E2E column', () => {
   })
 
   it('Gate: e2e with no "E2E" column in the table aborts (abort 4 on its own, with abort 1 unable to mask it)', () => {
-    const r = groomSinE2e('e2e')
+    const r = groomWithoutE2e('e2e')
     expect(r.status).not.toBe(0)
     expect(r.stderr).toMatch(/#1/)
     expect(r.stderr).toMatch(/e2e/)

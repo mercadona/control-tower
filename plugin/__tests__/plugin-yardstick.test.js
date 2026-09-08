@@ -156,30 +156,30 @@ describe('PluginYardstick.composeSection', () => {
 })
 
 describe('PluginYardstick.composePathSection hands the documents by path to whoever can Read them', () => {
-  const documentos = [
+  const documents = [
     { name: 'style.md', content: 'x', path: '/plugin/conventions/style.md' },
     { name: 'defects.md', content: 'y', path: '/plugin/conventions/defects.md' },
   ]
 
   it('lists_each_document_by_its_path', () => {
-    const section = PluginYardstick.composePathSection(documentos)
+    const section = PluginYardstick.composePathSection(documents)
     expect(section).toContain('/plugin/conventions/style.md')
     expect(section).toContain('/plugin/conventions/defects.md')
   })
 
   it('does_not_paste_the_content_of_any_document', () => {
-    expect(PluginYardstick.composePathSection(documentos)).not.toContain('## Vara de ct: conventions/style.md')
+    expect(PluginYardstick.composePathSection(documents)).not.toContain('## Vara de ct: conventions/style.md')
   })
 
   it('carries_the_same_precedence_header_as_the_pasted_section_because_the_rule_has_one_source', () => {
     const header = PluginYardstick.composeSection(YardstickDocumentMother.withContentForEach()).split('## Vara de ct')[0]
-    expect(PluginYardstick.composePathSection(documentos)).toContain(header.trim())
+    expect(PluginYardstick.composePathSection(documents)).toContain(header.trim())
   })
 
   it('keeps_the_declared_order', () => {
-    const lista = PluginYardstick.composePathSection(documentos)
-      .split('\n').filter((linea) => linea.startsWith('- `'))
-    expect(lista).toEqual(['- `/plugin/conventions/defects.md`', '- `/plugin/conventions/style.md`'])
+    const list = PluginYardstick.composePathSection(documents)
+      .split('\n').filter((line) => line.startsWith('- `'))
+    expect(list).toEqual(['- `/plugin/conventions/defects.md`', '- `/plugin/conventions/style.md`'])
   })
 
   it('throws_instead_of_promising_a_document_it_cannot_locate', () => {
@@ -347,7 +347,7 @@ describe('the implementer and the judge read the same text', () => {
   })
 
   it('the_implementer_carries_the_full_phrase_that_closes_the_old_module_exemption', () => {
-    const [implementador] = readImplementerAndJudge()
-    expect(implementador).toContain('a new concept is a new module and is born conforming')
+    const [implementer] = readImplementerAndJudge()
+    expect(implementer).toContain('a new concept is a new module and is born conforming')
   })
 })

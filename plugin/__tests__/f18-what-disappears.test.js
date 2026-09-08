@@ -95,13 +95,13 @@ describe('H2 (unit) — closedWithLiveStatus: the residue of labels on closed is
     // Real numbers and states, measured with a COMPLETE paginated query (not a
     // hand-written list: the first field measurement counted 6 out of 10
     // because it left out the four `in-review` ones).
-    const campo = [
+    const fieldSet = [
       [53, 'in-review'], [54, 'in-review'], [58, 'in-review'], [63, 'in-review'],
       [155, 'in-progress'], [245, 'in-progress'],
       [156, 'ready'], [157, 'ready'], [161, 'ready'],
       [158, 'blocked'],
     ]
-    const closed = campo.map(([n, s]) => ({ number: n, stateReason: 'COMPLETED', labels: [{ name: `status:${s}` }] }))
+    const closed = fieldSet.map(([n, s]) => ({ number: n, stateReason: 'COMPLETED', labels: [{ name: `status:${s}` }] }))
     // …plus 89 closed ones with no `status:` label at all (the rest of the repo).
     for (let i = 0; i < 89; i++) closed.push({ number: 1000 + i, stateReason: 'COMPLETED', labels: [] })
     const res = closedWithLiveStatus(closed)
@@ -116,19 +116,19 @@ describe('H2 (unit) — closedWithLiveStatus: the residue of labels on closed is
   it('buildDispatchInput exposes it alongside mergedIssues, with no extra call', () => {
     const open = [rawIssue({ number: 1, order: 1 })]
     const closed = [{ number: 451, state_reason: 'COMPLETED', stateReason: 'COMPLETED', body: '<!-- ct-order:9 -->', labels: [{ name: 'status:ready' }] }]
-    const di = buildDispatchInput(open, closed)
-    expect(di.closedStatusResidue).toEqual([{ n: 451, statusLabels: ['ready'], stateReason: 'COMPLETED' }])
+    const dispatchInput = buildDispatchInput(open, closed)
+    expect(dispatchInput.closedStatusResidue).toEqual([{ n: 451, statusLabels: ['ready'], stateReason: 'COMPLETED' }])
   })
 })
 
 describe('H2 (CLI) — the slice that fell off the queue stops disappearing in silence', () => {
   it('a closed one with status:ready is named, and it is said that for /ct-next it DOES NOT EXIST', () => {
     const repoRoot = makeRepoRoot()
-    const abierto = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['ui'] })
-    const cerrado = { number: 451, state_reason: 'completed', body: '<!-- ct-order:1 -->', labels: [{ name: 'status:ready' }] }
+    const openIssue = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['ui'] })
+    const closedIssue = { number: 451, state_reason: 'completed', body: '<!-- ct-order:1 -->', labels: [{ name: 'status:ready' }] }
     const r = runReal(['--repo', 'o/r', '--dry-run'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[abierto], [cerrado]]),
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue], [closedIssue]]),
     })
     expect(r.code).toBe(0)
     expect(r.err).toMatch(/#451/)
@@ -141,11 +141,11 @@ describe('H2 (CLI) — the slice that fell off the queue stops disappearing in s
 
   it('a closed one with status:in-review is NOT reported as an anomaly: it is the normal end of a slice', () => {
     const repoRoot = makeRepoRoot()
-    const abierto = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['ui'] })
-    const cerrado = { number: 300, state_reason: 'completed', body: '<!-- ct-order:1 -->', labels: [{ name: 'status:in-review' }] }
+    const openIssue = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['ui'] })
+    const closedIssue = { number: 300, state_reason: 'completed', body: '<!-- ct-order:1 -->', labels: [{ name: 'status:in-review' }] }
     const r = runReal(['--repo', 'o/r', '--dry-run'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[abierto], [cerrado]]),
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue], [closedIssue]]),
     })
     expect(r.code).toBe(0)
     expect(r.out).not.toMatch(/#300 .*status:ready/)
@@ -157,19 +157,19 @@ describe('H2 (CLI) — the slice that fell off the queue stops disappearing in s
 
   it('a single aggregated warning, not one per issue: ten residues are NOT ten lines', () => {
     const repoRoot = makeRepoRoot()
-    const abierto = rawIssue({ number: 42, order: 20, status: 'status:ready', touches: ['ui'] })
-    const cerrados = []
-    const estados = ['ready', 'ready', 'ready', 'in-progress', 'in-progress', 'blocked', 'in-review', 'in-review', 'in-review', 'in-review']
-    estados.forEach((s, i) => cerrados.push({ number: 100 + i, state_reason: 'completed', body: `<!-- ct-order:${i + 1} -->`, labels: [{ name: `status:${s}` }] }))
+    const openIssue = rawIssue({ number: 42, order: 20, status: 'status:ready', touches: ['ui'] })
+    const closedIssues = []
+    const statuses = ['ready', 'ready', 'ready', 'in-progress', 'in-progress', 'blocked', 'in-review', 'in-review', 'in-review', 'in-review']
+    statuses.forEach((s, i) => closedIssues.push({ number: 100 + i, state_reason: 'completed', body: `<!-- ct-order:${i + 1} -->`, labels: [{ name: `status:${s}` }] }))
     const r = runReal(['--repo', 'o/r', '--dry-run'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[abierto], cerrados]),
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue], closedIssues]),
     })
     expect(r.code).toBe(0)
     // Only the emissions AT THE MOMENT (`aviso: …`) are counted, not the recap
     // at the end, which by design repeats every accumulated warning.
-    const lineas = r.err.split('\n').filter((l) => /^aviso: \d+ issue\(s\) CERRADOS/.test(l))
-    expect(lineas.length).toBe(1)
+    const lines = r.err.split('\n').filter((l) => /^aviso: \d+ issue\(s\) CERRADOS/.test(l))
+    expect(lines.length).toBe(1)
     // F19/H2 CHANGES THIS NUMBER ON PURPOSE: it was 6 when `blocked` counted as
     // an anomaly alongside `ready` and `in-progress`. A closed one with
     // `status:blocked` is INERT — it holds no tokens, it blocks no queue,
@@ -178,9 +178,9 @@ describe('H2 (CLI) — the slice that fell off the queue stops disappearing in s
     // teaches a reader to discount the whole headline. Now the headline counts
     // 5 (3 ready + 2 in-progress) and the `blocked` one comes out in its own
     // count, just like the `in-review` ones.
-    expect(lineas[0]).toMatch(/^aviso: 5 issue\(s\) CERRADOS/)
-    expect(lineas[0]).toMatch(/Otros 4 cerrados conservan status:in-review/)
-    expect(lineas[0]).toMatch(/Otros 1 cerrados conservan status:blocked/)
+    expect(lines[0]).toMatch(/^aviso: 5 issue\(s\) CERRADOS/)
+    expect(lines[0]).toMatch(/Otros 4 cerrados conservan status:in-review/)
+    expect(lines[0]).toMatch(/Otros 1 cerrados conservan status:blocked/)
   })
 })
 
@@ -193,7 +193,7 @@ describe('H2 (CLI) — the slice that fell off the queue stops disappearing in s
 // __tests__/f22-slice-state.test.js). This block seeds SLICE.md, which is
 // the file a worktree of THIS version brings.
 describe('H3 (CLI) — a claim whose SLICE.md declares itself BLOCKED', () => {
-  function repoConWorktree(n, sliceMd) {
+  function repoWithWorktree(n, sliceMd) {
     const repoRoot = makeRepoRoot()
     const wt = join(repoRoot, '.worktrees', String(n), '.agent')
     mkdirSync(wt, { recursive: true })
@@ -201,15 +201,15 @@ describe('H3 (CLI) — a claim whose SLICE.md declares itself BLOCKED', () => {
     return repoRoot
   }
 
-  const bloqueado = '---\nstatus: wip\nblocked:\n  reason: la API de pagos del sandbox está caída\n  unblock: que Stripe restaure el entorno de test\n---\n\nnotas\n'
+  const blockedSliceMd = '---\nstatus: wip\nblocked:\n  reason: la API de pagos del sandbox está caída\n  unblock: que Stripe restaure el entorno de test\n---\n\nnotas\n'
 
   it('it says so, with the reason, and names the three transitions that do NOT help', () => {
-    const repoRoot = repoConWorktree(41, bloqueado)
-    const enCurso = rawIssue({ number: 41, order: 1, status: 'status:in-progress', touches: ['api'] })
-    const listo = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['api'] })
+    const repoRoot = repoWithWorktree(41, blockedSliceMd)
+    const inProgress = rawIssue({ number: 41, order: 1, status: 'status:in-progress', touches: ['api'] })
+    const ready = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['api'] })
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[enCurso, listo], []]),
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[inProgress, ready], []]),
     })
     expect(r.err).toMatch(/#41/)
     expect(r.err).toMatch(/se declara BLOQUEADO/)
@@ -221,23 +221,23 @@ describe('H3 (CLI) — a claim whose SLICE.md declares itself BLOCKED', () => {
   })
 
   it('with no `blocked` in the SLICE.md it says nothing (negative control: the normal case)', () => {
-    const repoRoot = repoConWorktree(41, '---\nstatus: wip\nnext_action: seguir\n---\n\nnotas\n')
-    const enCurso = rawIssue({ number: 41, order: 1, status: 'status:in-progress', touches: ['api'] })
-    const listo = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['api'] })
+    const repoRoot = repoWithWorktree(41, '---\nstatus: wip\nnext_action: seguir\n---\n\nnotas\n')
+    const inProgress = rawIssue({ number: 41, order: 1, status: 'status:in-progress', touches: ['api'] })
+    const ready = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['api'] })
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[enCurso, listo], []]),
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[inProgress, ready], []]),
     })
     expect(r.out).not.toMatch(/se declara BLOQUEADO/)
   })
 
   it('`status: blocked` (the most likely way of writing it wrong) also counts', () => {
-    const repoRoot = repoConWorktree(41, '---\nstatus: blocked\nnext_action: seguir\n---\n\nnotas\n')
-    const enCurso = rawIssue({ number: 41, order: 1, status: 'status:in-progress', touches: ['api'] })
-    const listo = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['api'] })
+    const repoRoot = repoWithWorktree(41, '---\nstatus: blocked\nnext_action: seguir\n---\n\nnotas\n')
+    const inProgress = rawIssue({ number: 41, order: 1, status: 'status:in-progress', touches: ['api'] })
+    const ready = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['api'] })
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[enCurso, listo], []]),
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[inProgress, ready], []]),
     })
     expect(r.err).toMatch(/se declara BLOQUEADO/)
   })
@@ -273,8 +273,8 @@ describe('H1/H4 (unit) — planClosureProbe: what is asked and what is not', () 
     expect(q).toMatch(/rev12: pullRequests\(headRefName:"feat\/12", states:\[MERGED\]/)
   })
   it('the cap is SAID when it trims, it never trims in silence', () => {
-    const muchos = Array.from({ length: CLOSURE_PROBE_MAX + 5 }, (_, i) => ({ n: 1000 + i, status: 'ready', deps: [i + 1] }))
-    const plan = planClosureProbe({ issues: muchos, mergedIssues: muchos.map((_, i) => i + 1) })
+    const many = Array.from({ length: CLOSURE_PROBE_MAX + 5 }, (_, i) => ({ n: 1000 + i, status: 'ready', deps: [i + 1] }))
+    const plan = planClosureProbe({ issues: many, mergedIssues: many.map((_, i) => i + 1) })
     expect(formatClosureCoverageNote(plan)).toMatch(/SIN mirar/)
     expect(formatClosureCoverageNote(planClosureProbe({ issues, mergedIssues: [451] }))).toBeNull()
   })
@@ -327,14 +327,14 @@ describe('H1/H4 (unit) — parseClosureProbe: it does not invent what did not ar
 describe('H1/H4 (CLI) — the check enters the real run', () => {
   it('a dep closed by a loose commit is warned about, naming whoever depends on it', () => {
     const repoRoot = makeRepoRoot()
-    const abierto = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['ui'], deps: [1] })
-    const cerrado = { number: 451, state_reason: 'completed', body: '<!-- ct-order:1 -->', labels: [] }
+    const openIssue = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['ui'], deps: [1] })
+    const closedIssue = { number: 451, state_reason: 'completed', body: '<!-- ct-order:1 -->', labels: [] }
     const closure = {
       data: { repository: { dep451: { timelineItems: { nodes: [{ closer: { __typename: 'Commit', oid: 'c4b0da66b398', messageHeadline: 'docs(loop): kickoff', associatedPullRequests: { nodes: [] } } }] } } } },
     }
     const r = runReal(['--repo', 'o/r', '--dry-run'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[abierto], [cerrado]]),
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue], [closedIssue]]),
       FAKE_GH_CLOSURE_JSON: JSON.stringify(closure),
     })
     expect(r.err).toMatch(/#451 consta cerrado como \*completed\* por el COMMIT/)
@@ -343,11 +343,11 @@ describe('H1/H4 (CLI) — the check enters the real run', () => {
 
   it('if the query fails, it is said and NOTHING is blocked (a detector has no veto)', () => {
     const repoRoot = makeRepoRoot()
-    const abierto = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['ui'], deps: [1] })
-    const cerrado = { number: 451, state_reason: 'completed', body: '<!-- ct-order:1 -->', labels: [] }
+    const openIssue = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['ui'], deps: [1] })
+    const closedIssue = { number: 451, state_reason: 'completed', body: '<!-- ct-order:1 -->', labels: [] }
     const r = runReal(['--repo', 'o/r', '--dry-run'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[abierto], [cerrado]]),
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue], [closedIssue]]),
       FAKE_GH_CLOSURE_FAIL: '1',
     })
     expect(r.code).toBe(0)
@@ -365,9 +365,9 @@ const ctInit = join(here, '..', 'scripts', 'ct-init.sh')
 function seedContract() {
   const dir = mkdtemp2(join(tmpdir(), 'ct-f18-init-'))
   execFileSync('bash', [ctInit, dir], { encoding: 'utf8' })
-  const contrato = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
+  const contract = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
   rmSync(dir, { recursive: true, force: true })
-  return contrato
+  return contract
 }
 const flat = (s) => s.replace(/\*/g, '').replace(/\s+/g, ' ')
 // The v7 fixture is not a transcription: its sha256 is 8730d7be…, exactly the

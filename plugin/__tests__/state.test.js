@@ -104,7 +104,7 @@ describe('composeHydration with no commits', () => {
 // was to rewrite the field with the word "BLOQUEADO" in prose: exactly what
 // these tests exist so as never to need again.
 // ===========================================================================
-const STATE_BLOQUEADO = `---
+const STATE_BLOCKED = `---
 task: "Plan vs Propuestas"
 status: in_progress
 next_action: "Lanzar la corrida REAL de /ct-groom sobre el spec"
@@ -119,7 +119,7 @@ Groom preparado, sin ejecutar.`
 
 describe('readBlocked', () => {
   it('a map with reason/since/unblock → blocked, with the three fields', () => {
-    const b = readBlocked(parseState(STATE_BLOQUEADO).meta)
+    const b = readBlocked(parseState(STATE_BLOCKED).meta)
     expect(b.state).toBe('blocked')
     expect(b.reason).toMatch(/datos falsos/)
     expect(b.since).toBe('2026-07-25')
@@ -225,9 +225,9 @@ describe('readBlocked', () => {
 
 describe('parseStateSafe', () => {
   it('a broken YAML frontmatter → the error as a datum, without throwing', () => {
-    const roto = '---\ntask: "sin cerrar\n  ]: [\n---\ncuerpo'
-    expect(() => parseState(roto)).toThrow() // control: the strict parser DOES throw
-    const r = parseStateSafe(roto)
+    const broken = '---\ntask: "sin cerrar\n  ]: [\n---\ncuerpo'
+    expect(() => parseState(broken)).toThrow() // control: the strict parser DOES throw
+    const r = parseStateSafe(broken)
     expect(r.error).toBeTruthy()
     expect(r.meta).toEqual({})
   })
@@ -239,7 +239,7 @@ describe('parseStateSafe', () => {
 })
 
 describe('composeHydration with BLOCKED work', () => {
-  const out = composeHydration(STATE_BLOQUEADO, 'abc log')
+  const out = composeHydration(STATE_BLOCKED, 'abc log')
 
   it('the blocking warning goes FIRST, before the state (it is read from the top down)', () => {
     expect(out.split('\n')[0]).toMatch(/TRABAJO BLOQUEADO/) // la PRIMERA línea
@@ -277,12 +277,12 @@ describe('composeHydration with BLOCKED work', () => {
   })
 
   it('a mile-long next_action is trimmed in the warning (but stays whole in the state)', () => {
-    const largo = 'x'.repeat(900)
-    const o = composeHydration(`---\nnext_action: "${largo}"\nblocked: "porque sí"\n---\ncuerpo`, '')
-    const aviso = o.slice(0, o.indexOf('# Estado del repo'))
-    expect(aviso).toContain('…')
-    expect(aviso.length).toBeLessThan(2000)
-    expect(o).toContain(largo) // the text in full is still there, further down
+    const longText = 'x'.repeat(900)
+    const o = composeHydration(`---\nnext_action: "${longText}"\nblocked: "porque sí"\n---\ncuerpo`, '')
+    const warning = o.slice(0, o.indexOf('# Estado del repo'))
+    expect(warning).toContain('…')
+    expect(warning.length).toBeLessThan(2000)
+    expect(o).toContain(longText) // the text in full is still there, further down
   })
 })
 
@@ -392,13 +392,13 @@ describe('describeStopRelation', () => {
     expect(r.raw).toBe('sha_viejo')
   })
   it('a value that looks like a git option does not even reach git', () => {
-    let llamado = false
+    let called = false
     const r = describeStopRelation({
       headSha: HEAD, lastCommit: '--output=pwned', branch: 'main',
-      git: () => { llamado = true; return { status: 0, stdout: HEAD } },
+      git: () => { called = true; return { status: 0, stdout: HEAD } },
     })
     expect(r.kind).toBe('unresolvable')
-    expect(llamado).toBe(false)
+    expect(called).toBe(false)
   })
   it('the same commit → same', () => {
     expect(rel(HEAD, { 'rev-parse': HEAD }).kind).toBe('same')
@@ -433,32 +433,32 @@ describe('describeStopRelation', () => {
   // Local preferred over remote: `origin/*` is noise when there is already a
   // local branch that answers, and the only possible answer when there is
   // not.
-  const noAncestro = { 'rev-parse': OTHER, [`is-ancestor:${OTHER}:${HEAD}`]: 1, [`is-ancestor:${HEAD}:${OTHER}`]: 1, 'merge-base': 'c'.repeat(40) }
+  const notAncestor = { 'rev-parse': OTHER, [`is-ancestor:${OTHER}:${HEAD}`]: 1, [`is-ancestor:${HEAD}:${OTHER}`]: 1, 'merge-base': 'c'.repeat(40) }
 
   it('with a local branch that contains it, the remote ones are not even asked about', () => {
     const log = []
-    const r = describeStopRelation({ headSha: HEAD, lastCommit: OTHER, branch: 'main', git: fakeGit({ ...noAncestro, branch: 'local-viva\n', 'branch-r': 'origin/local-viva\n' }, log) })
+    const r = describeStopRelation({ headSha: HEAD, lastCommit: OTHER, branch: 'main', git: fakeGit({ ...notAncestor, branch: 'local-viva\n', 'branch-r': 'origin/local-viva\n' }, log) })
     expect(r.containers).toEqual(['local-viva'])
     expect(log.some((a) => a[0] === 'branch' && a[1] === '-r')).toBe(false)
   })
   it('with no local branch, it falls back to the remote ones and names origin/…', () => {
-    const r = rel(OTHER, { ...noAncestro, branch: '', 'branch-r': 'origin/polish-v2\norigin/HEAD\n' })
+    const r = rel(OTHER, { ...notAncestor, branch: '', 'branch-r': 'origin/polish-v2\norigin/HEAD\n' })
     expect(r.kind).toBe('diverged')
     expect(r.containers).toEqual(['origin/polish-v2'])
     expect(r.containersKnown).toBe(true)
   })
   it('neither local nor remote contains it → orphan (whether it comes from ahead or from diverged)', () => {
-    const desdeDiverged = rel(OTHER, { ...noAncestro, branch: '', 'branch-r': '' })
-    expect(desdeDiverged.kind).toBe('orphan')
-    expect(desdeDiverged.fromKind).toBe('diverged')
-    const desdeAhead = rel(OTHER, { 'rev-parse': OTHER, [`is-ancestor:${OTHER}:${HEAD}`]: 1, [`is-ancestor:${HEAD}:${OTHER}`]: 0, branch: '', 'branch-r': '' })
-    expect(desdeAhead.kind).toBe('orphan')
-    expect(desdeAhead.fromKind).toBe('ahead')
+    const fromDiverged = rel(OTHER, { ...notAncestor, branch: '', 'branch-r': '' })
+    expect(fromDiverged.kind).toBe('orphan')
+    expect(fromDiverged.fromKind).toBe('diverged')
+    const fromAhead = rel(OTHER, { 'rev-parse': OTHER, [`is-ancestor:${OTHER}:${HEAD}`]: 1, [`is-ancestor:${HEAD}:${OTHER}`]: 0, branch: '', 'branch-r': '' })
+    expect(fromAhead.kind).toBe('orphan')
+    expect(fromAhead.fromKind).toBe('ahead')
   })
   // "git has not answered" is not "no branch contains it": declaring a commit
   // orphaned because `git branch` failed would be inventing the answer.
   it('if git fails while listing branches it is NOT declared orphaned', () => {
-    const r = rel(OTHER, { ...noAncestro, branch: -1 })
+    const r = rel(OTHER, { ...notAncestor, branch: -1 })
     expect(r.kind).toBe('diverged')
     expect(r.containersKnown).toBe(false)
     expect(r.containers).toEqual([])
@@ -570,7 +570,7 @@ describe('classifyStopState', () => {
 // does not already say when it applies.
 // ===========================================================================
 describe('composeHydration: the frontmatter comments do not travel', () => {
-  const CON_COMENTARIOS = [
+  const WITH_COMMENTS = [
     '---',
     'task: "X"',
     '# role: quién eres en el loop. Hay DOS sesiones vivas por repo',
@@ -584,12 +584,12 @@ describe('composeHydration: the frontmatter comments do not travel', () => {
   ].join('\n')
 
   it('the lines that begin with # inside the frontmatter disappear', () => {
-    const out = composeHydration(CON_COMENTARIOS, '')
+    const out = composeHydration(WITH_COMMENTS, '')
     expect(out).not.toContain('quién eres en el loop')
     expect(out).not.toContain('CHECKOUT PRINCIPAL')
   })
   it('the frontmatter fields and the body stay whole, including a # inside a value and a heading of the body', () => {
-    const out = composeHydration(CON_COMENTARIOS, '')
+    const out = composeHydration(WITH_COMMENTS, '')
     expect(out).toContain('task: "X"')
     expect(out).toContain('role: "coordinador"')
     expect(out).toContain('verify: "grep \'#\' fichero devuelve 3 líneas"')
@@ -619,36 +619,36 @@ describe('noticeDecision: the warning comes out the first time, when it changes,
 
   it('the following turns keep quiet until the period is up', () => {
     let previous = null
-    const emitidos = []
-    for (let turno = 1; turno <= 5; turno++) {
+    const emitted = []
+    for (let turn = 1; turn <= 5; turn++) {
       const d = noticeDecision({ relation: rel, previous })
-      if (d.emit) emitidos.push(turno)
+      if (d.emit) emitted.push(turn)
       previous = d.next
     }
-    expect(emitidos).toEqual([1])
+    expect(emitted).toEqual([1])
   })
 
   it('after N turns it comes out again, and the period starts over', () => {
     let previous = null
-    const emitidos = []
-    for (let turno = 1; turno <= NOTICE_REPEAT_EVERY_TURNS * 2; turno++) {
+    const emitted = []
+    for (let turn = 1; turn <= NOTICE_REPEAT_EVERY_TURNS * 2; turn++) {
       const d = noticeDecision({ relation: rel, previous })
-      if (d.emit) emitidos.push(turno)
+      if (d.emit) emitted.push(turn)
       previous = d.next
     }
-    expect(emitidos).toEqual([1, NOTICE_REPEAT_EVERY_TURNS + 1])
+    expect(emitted).toEqual([1, NOTICE_REPEAT_EVERY_TURNS + 1])
   })
 
   it('changing relation warns even if the period is not up: it is another anomaly', () => {
-    const primera = noticeDecision({ relation: rel, previous: null })
-    const segunda = noticeDecision({ relation: { kind: 'diverged', stateSha: OTHER }, previous: primera.next })
-    expect(segunda.emit).toBe(true)
+    const first = noticeDecision({ relation: rel, previous: null })
+    const second = noticeDecision({ relation: { kind: 'diverged', stateSha: OTHER }, previous: first.next })
+    expect(second.emit).toBe(true)
   })
 
   it('the same kind pointing at ANOTHER commit is another anomaly too', () => {
-    const primera = noticeDecision({ relation: rel, previous: null })
-    const segunda = noticeDecision({ relation: { kind: 'ahead', stateSha: HEAD }, previous: primera.next })
-    expect(segunda.emit).toBe(true)
+    const first = noticeDecision({ relation: rel, previous: null })
+    const second = noticeDecision({ relation: { kind: 'ahead', stateSha: HEAD }, previous: first.next })
+    expect(second.emit).toBe(true)
   })
 
   it('a marker that is unreadable or of another shape silences nothing: it warns', () => {

@@ -10,7 +10,7 @@ import {
   failedGoAttempt, GO_FORMAT_REPLY,
 } from '../scripts/go-response.js'
 
-const comentario = (id, body) => ({ id, body })
+const comment = (id, body) => ({ id, body })
 
 // F38 — the go is no longer a constant: it is `-OK <nonce>`, with one nonce per
 // dispatch that the agent cannot guess. These tests pin the nonce (the
@@ -30,21 +30,21 @@ describe('the token', () => {
 })
 
 describe('what counts as a go', () => {
-  const nuevo = (body) => hasGo([comentario('IC_nuevo', body)], new Set(), HASH)
+  const fresh = (body) => hasGo([comment('IC_nuevo', body)], new Set(), HASH)
 
   it('a comment that is exactly the token and the nonce of this dispatch', () => {
-    expect(nuevo(GO)).toBe(true)
+    expect(fresh(GO)).toBe(true)
   })
 
   it('with spaces or newlines around it, it still counts: the editor puts those there, not the person', () => {
-    expect(nuevo(`  ${GO}\n`)).toBe(true)
+    expect(fresh(`  ${GO}\n`)).toBe(true)
   })
 
   it('the nonce in upper case counts: it is hex retyped off a screen', () => {
     // It opens nothing extra —the nonce is still needed— and it avoids the
     // worst possible moment, which is typing the right permission and having
     // nothing happen.
-    expect(nuevo(`${GO_TOKEN} ${NONCE.toUpperCase()}`)).toBe(true)
+    expect(fresh(`${GO_TOKEN} ${NONCE.toUpperCase()}`)).toBe(true)
   })
 
   // -------------------------------------------------------------------------
@@ -54,21 +54,21 @@ describe('what counts as a go', () => {
   // indistinguishable from the legitimate one.
   // -------------------------------------------------------------------------
   it('the BARE token is not a go: it is the only thing the agent would know how to write', () => {
-    expect(nuevo(GO_TOKEN)).toBe(false)
+    expect(fresh(GO_TOKEN)).toBe(false)
   })
 
   it('another nonce is not one either, nor one from another dispatch', () => {
-    expect(nuevo(`${GO_TOKEN} deadbeef`)).toBe(false)
-    expect(nuevo(goBody(newGoNonce(Buffer.from([1, 2, 3, 4]))))).toBe(false)
+    expect(fresh(`${GO_TOKEN} deadbeef`)).toBe(false)
+    expect(fresh(goBody(newGoNonce(Buffer.from([1, 2, 3, 4]))))).toBe(false)
   })
 
   it('with no commitment NOTHING counts, not even the right go: there is no way back to the fixed token', () => {
     // A fallback to yesterday's `-OK` would be a door that opens by OMITTING an
     // argument (or by deleting a file), that is to say exactly what this round
     // takes out of the agent's repertoire.
-    expect(hasGo([comentario('IC_nuevo', GO)], new Set())).toBe(false)
-    expect(hasGo([comentario('IC_nuevo', GO)], new Set(), '')).toBe(false)
-    expect(hasGo([comentario('IC_nuevo', GO)], new Set(), 'no-es-un-sha')).toBe(false)
+    expect(hasGo([comment('IC_nuevo', GO)], new Set())).toBe(false)
+    expect(hasGo([comment('IC_nuevo', GO)], new Set(), '')).toBe(false)
+    expect(hasGo([comment('IC_nuevo', GO)], new Set(), 'no-es-un-sha')).toBe(false)
   })
 
   // -------------------------------------------------------------------------
@@ -78,17 +78,17 @@ describe('what counts as a go', () => {
   // cambia el nombre» would start precisely what the person meant to stop.
   // -------------------------------------------------------------------------
   it('the go with something behind it is NOT a go: when in doubt, nothing starts', () => {
-    expect(nuevo(`${GO} pero cambia el nombre`)).toBe(false)
-    expect(nuevo('-OK pero cambia el nombre')).toBe(false)
+    expect(fresh(`${GO} pero cambia el nombre`)).toBe(false)
+    expect(fresh('-OK pero cambia el nombre')).toBe(false)
   })
 
   it('a comment that only contains the go inside a sentence is not one either', () => {
-    expect(nuevo(`me parece ${GO}`)).toBe(false)
+    expect(fresh(`me parece ${GO}`)).toBe(false)
   })
 
   it('ordinary prose is not a go, and there is no third category to learn', () => {
-    expect(nuevo('ok, adelante')).toBe(false)
-    expect(nuevo('lgtm')).toBe(false)
+    expect(fresh('ok, adelante')).toBe(false)
+    expect(fresh('lgtm')).toBe(false)
   })
 
   it('a body that is not text neither blows up nor counts', () => {
@@ -147,42 +147,42 @@ describe('the commitment', () => {
 // ---------------------------------------------------------------------------
 describe('the window: only what was not in the initial snapshot', () => {
   it('a go that was already there starts nothing', () => {
-    const viejos = [comentario('IC_viejo', GO)]
-    expect(hasGo(viejos, commentIds(viejos), HASH)).toBe(false)
+    const old = [comment('IC_viejo', GO)]
+    expect(hasGo(old, commentIds(old), HASH)).toBe(false)
   })
 
   it('and a new one does, with the old one ahead of it', () => {
-    const viejos = [comentario('IC_viejo', GO)]
-    const ahora = [...viejos, comentario('IC_nuevo', GO)]
-    expect(hasGo(ahora, commentIds(viejos), HASH)).toBe(true)
+    const old = [comment('IC_viejo', GO)]
+    const now = [...old, comment('IC_nuevo', GO)]
+    expect(hasGo(now, commentIds(old), HASH)).toBe(true)
   })
 
   it('no clock takes part: the same comment decides the same way with any date', () => {
     // The regression this test prevents is going back to cutting by time. The
     // two comments carry absurd dates in opposite directions and nothing
     // changes, because nobody looks at them.
-    const viejos = [{ id: 'IC_viejo', body: GO, createdAt: '2099-01-01T00:00:00Z' }]
-    const ahora = [...viejos, { id: 'IC_nuevo', body: GO, createdAt: '1999-01-01T00:00:00Z' }]
-    expect(hasGo(ahora, commentIds(viejos), HASH)).toBe(true)
-    expect(hasGo(viejos, commentIds(viejos), HASH)).toBe(false)
+    const old = [{ id: 'IC_viejo', body: GO, createdAt: '2099-01-01T00:00:00Z' }]
+    const now = [...old, { id: 'IC_nuevo', body: GO, createdAt: '1999-01-01T00:00:00Z' }]
+    expect(hasGo(now, commentIds(old), HASH)).toBe(true)
+    expect(hasGo(old, commentIds(old), HASH)).toBe(false)
   })
 
   it('accepts the snapshot as a list as well as a set', () => {
-    expect(hasGo([comentario('IC_a', GO)], ['IC_a'], HASH)).toBe(false)
+    expect(hasGo([comment('IC_a', GO)], ['IC_a'], HASH)).toBe(false)
   })
 
   // F38 — THE WINDOW IS NO LONGER THE ONLY THING HOLDING THIS UP. A go from a
   // previous dispatch carries ANOTHER nonce, so it does not match even with no
   // window — which is exactly why `--release` can look at the whole issue.
   it('a go inherited from another dispatch does not match even looking at the whole issue', () => {
-    const otroDespacho = goBody(newGoNonce(Buffer.from([9, 9, 9, 9])))
-    expect(hasGo([comentario('IC_viejo', otroDespacho)], new Set(), HASH)).toBe(false)
+    const otherDispatch = goBody(newGoNonce(Buffer.from([9, 9, 9, 9])))
+    expect(hasGo([comment('IC_viejo', otherDispatch)], new Set(), HASH)).toBe(false)
   })
 })
 
 describe('the initial snapshot', () => {
   it('is the identifiers of what was already there', () => {
-    expect(commentIds([comentario('IC_a', 'x'), comentario('IC_b', 'y')])).toEqual(new Set(['IC_a', 'IC_b']))
+    expect(commentIds([comment('IC_a', 'x'), comment('IC_b', 'y')])).toEqual(new Set(['IC_a', 'IC_b']))
   })
 
   it('a comment with no readable identifier does NOT go into the snapshot', () => {
@@ -205,44 +205,44 @@ describe('the initial snapshot', () => {
 // with `matchesGo`—; what was missing is telling the format to whoever has
 // already shown they are trying.
 describe('the go attempt that starts nothing', () => {
-  const previos = commentIds([comentario('IC_viejo', 'el plan')])
-  const conElViejo = (...nuevos) => [comentario('IC_viejo', 'el plan'), ...nuevos]
+  const previous = commentIds([comment('IC_viejo', 'el plan')])
+  const withTheOld = (...newOnes) => [comment('IC_viejo', 'el plan'), ...newOnes]
 
   it('recognises the measured case: the bare token, with no nonce', () => {
-    expect(failedGoAttempt(conElViejo(comentario('IC_a', GO_TOKEN)), previos, HASH)).toBe('IC_a')
+    expect(failedGoAttempt(withTheOld(comment('IC_a', GO_TOKEN)), previous, HASH)).toBe('IC_a')
   })
 
   it('recognises the token in lower case, which is exactly the mistake that needs explaining', () => {
-    expect(failedGoAttempt(conElViejo(comentario('IC_b', `-ok ${NONCE}`)), previos, HASH)).toBe('IC_b')
+    expect(failedGoAttempt(withTheOld(comment('IC_b', `-ok ${NONCE}`)), previous, HASH)).toBe('IC_b')
   })
 
   it('recognises the wrong nonce', () => {
-    expect(failedGoAttempt(conElViejo(comentario('IC_c', `${GO_TOKEN} deadbeef`)), previos, HASH)).toBe('IC_c')
+    expect(failedGoAttempt(withTheOld(comment('IC_c', `${GO_TOKEN} deadbeef`)), previous, HASH)).toBe('IC_c')
   })
 
   it('a VALID go is not a failed attempt: the opposite would be answering back to whoever got it right', () => {
-    expect(failedGoAttempt(conElViejo(comentario('IC_d', GO)), previos, HASH)).toBeNull()
+    expect(failedGoAttempt(withTheOld(comment('IC_d', GO)), previous, HASH)).toBeNull()
   })
 
   it('a comment that does not start with the token is not an attempt: nobody was giving the go', () => {
-    expect(failedGoAttempt(conElViejo(comentario('IC_e', 'me parece bien el plan')), previos, HASH)).toBeNull()
-    expect(failedGoAttempt(conElViejo(comentario('IC_f', 'ok')), previos, HASH)).toBeNull()
+    expect(failedGoAttempt(withTheOld(comment('IC_e', 'me parece bien el plan')), previous, HASH)).toBeNull()
+    expect(failedGoAttempt(withTheOld(comment('IC_f', 'ok')), previous, HASH)).toBeNull()
   })
 
   it('an attempt that was already in the initial snapshot gets no answer: it is from a previous dispatch', () => {
-    const viejos = [comentario('IC_viejo', GO_TOKEN)]
-    expect(failedGoAttempt(viejos, commentIds(viejos), HASH)).toBeNull()
+    const old = [comment('IC_viejo', GO_TOKEN)]
+    expect(failedGoAttempt(old, commentIds(old), HASH)).toBeNull()
   })
 
   it('with no comments, or with rubbish for comments, there is no attempt', () => {
-    expect(failedGoAttempt([], previos, HASH)).toBeNull()
-    expect(failedGoAttempt(null, previos, HASH)).toBeNull()
-    expect(failedGoAttempt([null, undefined], previos, HASH)).toBeNull()
+    expect(failedGoAttempt([], previous, HASH)).toBeNull()
+    expect(failedGoAttempt(null, previous, HASH)).toBeNull()
+    expect(failedGoAttempt([null, undefined], previous, HASH)).toBeNull()
   })
 
   it('returns the LAST attempt when there are several, just as hasGo walks backwards', () => {
-    const comentarios = conElViejo(comentario('IC_x', GO_TOKEN), comentario('IC_y', `${GO_TOKEN} nope`))
-    expect(failedGoAttempt(comentarios, previos, HASH)).toBe('IC_y')
+    const comments = withTheOld(comment('IC_x', GO_TOKEN), comment('IC_y', `${GO_TOKEN} nope`))
+    expect(failedGoAttempt(comments, previous, HASH)).toBe('IC_y')
   })
 })
 

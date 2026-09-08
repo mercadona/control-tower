@@ -111,36 +111,36 @@ export function stripParenthesised(text) {
 // (`'lists the clones'`) and code identifiers (`window=all`), so they
 // distinguish nothing and do get in the way.
 function quotedNames(text) {
-  const limpio = stripParenthesised(text).replace(/`/g, '')
-  const nombres = []
+  const stripped = stripParenthesised(text).replace(/`/g, '')
+  const names = []
   const re = /'([^']+)'/g
   let m
-  while ((m = re.exec(limpio)) !== null) {
-    const nombre = m[1].trim()
-    if (nombre) nombres.push(nombre)
+  while ((m = re.exec(stripped)) !== null) {
+    const name = m[1].trim()
+    if (name) names.push(name)
   }
-  return nombres
+  return names
 }
 
 // Splits the **Tests:** line into what the task adds and what it removes. With
 // no removal marker, everything is an addition.
 function splitTests(text) {
-  const bajo = text.toLowerCase()
-  let corte = -1
-  let marca = ''
+  const lower = text.toLowerCase()
+  let cut = -1
+  let marker = ''
   for (const m of REMOVAL_MARKERS) {
-    const at = bajo.indexOf(m)
-    if (at !== -1 && (corte === -1 || at < corte)) { corte = at; marca = m }
+    const at = lower.indexOf(m)
+    if (at !== -1 && (cut === -1 || at < cut)) { cut = at; marker = m }
   }
-  if (corte === -1) return { added: quotedNames(text), removed: [] }
+  if (cut === -1) return { added: quotedNames(text), removed: [] }
   return {
-    added: quotedNames(text.slice(0, corte)),
-    removed: quotedNames(text.slice(corte + marca.length)),
+    added: quotedNames(text.slice(0, cut)),
+    removed: quotedNames(text.slice(cut + marker.length)),
   }
 }
 
 // The only two actions the rest of the program knows how to interpret
-// (`alcanceDeclarado`, in ct-step.mjs, only has branches for these). Just like
+// (`declaredScope`, in ct-step.mjs, only has branches for these). Just like
 // "a path with no declared action is not checked against git, and that is not a
 // problem of the plan", an action that is neither of the two is not one either:
 // better to check nothing than to check with a value nobody declared.
@@ -153,17 +153,17 @@ const KNOWN_ACTIONS = ['create', 'modify']
 // behind it is left with action: null), and anything that is neither "create"
 // nor "modify" is also left as null instead of sneaking through as it is.
 export function splitFiles(text) {
-  const rutas = []
+  const paths = []
   const re = /`([^`]+)`(?:\s*\(([^)]+)\))?/g
   let m
   while ((m = re.exec(text)) !== null) {
     const path = m[1].trim()
     if (!path) continue
-    const cruda = m[2] ? m[2].trim() : null
-    const action = KNOWN_ACTIONS.includes(cruda) ? cruda : null
-    rutas.push({ path, action })
+    const raw = m[2] ? m[2].trim() : null
+    const action = KNOWN_ACTIONS.includes(raw) ? raw : null
+    paths.push({ path, action })
   }
-  return rutas
+  return paths
 }
 
 // The four role labels of a block of the plan, with their path. Duplicated
@@ -231,25 +231,25 @@ const NO_TDD = /^No TDD\b/i
 
 function tddNameOf(text) {
   if (NO_TDD.test(text)) return null
-  const cuerpo = firstParenBody(text)
-  const nombres = quotedNames(cuerpo === null ? text : cuerpo)
-  return nombres[0] || null
+  const body = firstParenBody(text)
+  const names = quotedNames(body === null ? text : body)
+  return names[0] || null
 }
 
 // Joins up the paragraph that starts at `from`: the marker's line and its
 // continuations, up to the first blank line, another marker, a fence or a
 // heading. Returns the text without the marker and where it stopped.
 function paragraphFrom(lines, from, marker) {
-  const trozos = [lines[from].line.trim().slice(marker.length).trim()]
+  const pieces = [lines[from].line.trim().slice(marker.length).trim()]
   let i = from + 1
   for (; i < lines.length; i++) {
     const l = lines[i]
     const t = l.line.trim()
     if (t === '' || l.fence || t.startsWith('#')) break
     if (OTHER_MARKERS.some((m) => t.startsWith(m)) || t.startsWith(VERIFICATION)) break
-    trozos.push(t)
+    pieces.push(t)
   }
-  return { text: trozos.join(' ').trim(), end: i }
+  return { text: pieces.join(' ').trim(), end: i }
 }
 
 // The block of commands: the first fence that OPENS after the
@@ -260,12 +260,12 @@ function commandsAfter(lines, from) {
   let i = from
   while (i < lines.length && lines[i].line.trim() === '') i++
   if (i >= lines.length || !lines[i].fence || !lines[i].opens) return null
-  const comandos = []
+  const commands = []
   for (let j = i + 1; j < lines.length; j++) {
-    if (lines[j].fence) return comandos
+    if (lines[j].fence) return commands
     const t = lines[j].line.trim()
     if (t === '' || t.startsWith('#')) continue
-    comandos.push(t)
+    commands.push(t)
   }
   return null // an unclosed fence: there is no block worth anything
 }
@@ -337,7 +337,7 @@ export function lastPipelineStage(command) {
 // A short flag carrying the letter asked for (`-c`, `-rc`, `-ic`), or its long
 // form. `--color` does not count: it starts with two hyphens and is not
 // `--count`.
-const shortFlagHas = (arg, letra) => /^-[A-Za-z]+$/.test(arg) && arg.includes(letra)
+const shortFlagHas = (arg, letter) => /^-[A-Za-z]+$/.test(arg) && arg.includes(letter)
 
 // «This is a `grep -c`» is ONE decision — which programs count matches and
 // with which flag —, and it is asked from two places: the rule that rejects a
@@ -463,10 +463,10 @@ function substitutionsIn(stage) {
 
 function countsOverManyFiles(stage) {
   return substitutionsIn(stage).some((inner) => {
-    const tramo = lastPipelineStage(inner)
-    if (!tramo || !tramo.stage) return false
+    const span = lastPipelineStage(inner)
+    if (!span || !span.stage) return false
 
-    return grepCountFileOperands(tramo.stage) > 1
+    return grepCountFileOperands(span.stage) > 1
   })
 }
 
@@ -524,51 +524,51 @@ const GLOBAL_HEADING = /^## 8\. Global verification\b/
 const GLOBAL_NA = /^N\/A\b/i
 
 function extractGlobal(lines, push) {
-  const desde = lines.findIndex((l) => l.structural && GLOBAL_HEADING.test(l.line))
-  if (desde === -1) {
+  const from = lines.findIndex((l) => l.structural && GLOBAL_HEADING.test(l.line))
+  if (from === -1) {
     push(0, 'global-verification-block', 'el plan no declara "## 8. Global verification": la validación de punta a punta no puede ejecutarla un programa que no sabe dónde buscarla.')
     return { commands: [] }
   }
-  let hasta = lines.findIndex((l, i) => i > desde && l.structural && /^## /.test(l.line))
-  if (hasta === -1) hasta = lines.length
-  const cuerpo = lines.slice(desde + 1, hasta)
+  let to = lines.findIndex((l, i) => i > from && l.structural && /^## /.test(l.line))
+  if (to === -1) to = lines.length
+  const body = lines.slice(from + 1, to)
 
   // The escape: "N/A — <reason>" as the first non-blank line of the stretch
   // declares that this slice has no end-to-end to run, and that is not a
   // problem.
-  const primeraNoVacia = cuerpo.find((l) => l.structural && l.line.trim() !== '')
-  if (primeraNoVacia && GLOBAL_NA.test(primeraNoVacia.line.trim())) return { commands: [] }
+  const firstNonBlank = body.find((l) => l.structural && l.line.trim() !== '')
+  if (firstNonBlank && GLOBAL_NA.test(firstNonBlank.line.trim())) return { commands: [] }
 
-  const abre = cuerpo.findIndex((l) => l.fence && l.opens)
-  let comandos = null
-  if (abre !== -1) {
-    comandos = []
-    for (let j = abre + 1; j < cuerpo.length; j++) {
-      if (cuerpo[j].fence) break
-      const t = cuerpo[j].line.trim()
+  const opensAt = body.findIndex((l) => l.fence && l.opens)
+  let commands = null
+  if (opensAt !== -1) {
+    commands = []
+    for (let j = opensAt + 1; j < body.length; j++) {
+      if (body[j].fence) break
+      const t = body[j].line.trim()
       if (t === '' || t.startsWith('#')) continue
-      comandos.push(t)
+      commands.push(t)
     }
     // An unclosed fence: no block worth anything, just as in `commandsAfter`.
-    if (!cuerpo.slice(abre + 1).some((l) => l.fence)) comandos = null
+    if (!body.slice(opensAt + 1).some((l) => l.fence)) commands = null
   }
 
-  if (comandos === null || comandos.length === 0) {
+  if (commands === null || commands.length === 0) {
     push(0, 'global-verification-block', 'la "## 8. Global verification" del plan declara la validación de punta a punta en prosa, y un programa no ejecuta prosa. Los comandos van en un bloque cercado bajo "## 8. Global verification", o la línea exacta "N/A — <razón>".')
     return { commands: [] }
   }
 
-  for (const comando of comandos) {
-    const tramo = lastPipelineStage(comando)
-    if (!tramo || !tramo.stage) continue
-    const words = splitRespectingQuotes(tramo.stage)
-    const roto = NOT_A_PREDICATE.find((r) => r.matches(words, tramo.piped, tramo.stage))
-    if (roto) {
-      push(0, 'global-verification-predicate', `la "## 8. Global verification" verifica con \`${comando}\`, y su código de salida no puede afirmar lo que el control dice medir: ${roto.why}`)
+  for (const command of commands) {
+    const span = lastPipelineStage(command)
+    if (!span || !span.stage) continue
+    const words = splitRespectingQuotes(span.stage)
+    const broken = NOT_A_PREDICATE.find((r) => r.matches(words, span.piped, span.stage))
+    if (broken) {
+      push(0, 'global-verification-predicate', `la "## 8. Global verification" verifica con \`${command}\`, y su código de salida no puede afirmar lo que el control dice medir: ${broken.why}`)
     }
   }
 
-  return { commands: comandos }
+  return { commands }
 }
 
 // ============================================================================
@@ -595,8 +595,8 @@ export function extractTasks(markdown) {
   })
 
   const tasks = heads.map((h, k) => {
-    const hasta = k + 1 < heads.length ? heads[k + 1].at : lines.length
-    const cuerpo = lines.slice(h.at, hasta)
+    const to = k + 1 < heads.length ? heads[k + 1].at : lines.length
+    const body = lines.slice(h.at, to)
 
     let commands = null
     let added = []
@@ -609,31 +609,31 @@ export function extractTasks(markdown) {
     const blockPaths = []
     const finalTexts = []
 
-    cuerpo.forEach((l, i) => {
+    body.forEach((l, i) => {
       if (!l.structural) return
       const t = l.line.trim()
       if (t.startsWith(VERIFICATION) && commands === null) {
-        const { end } = paragraphFrom(cuerpo, i, VERIFICATION)
-        commands = commandsAfter(cuerpo, end)
+        const { end } = paragraphFrom(body, i, VERIFICATION)
+        commands = commandsAfter(body, end)
       }
       if (t.startsWith(TESTS) && !testsDeclared) {
         testsDeclared = true
-        const { text } = paragraphFrom(cuerpo, i, TESTS)
+        const { text } = paragraphFrom(body, i, TESTS)
         // "N/A — <reason>" is a legitimate declaration: the task adds no
         // behaviour and the existing suite must stay green.
         if (!/^N\/A\b/i.test(text)) {
-          const partido = splitTests(text)
-          added = partido.added
-          removed = partido.removed
+          const split = splitTests(text)
+          added = split.added
+          removed = split.removed
         }
       }
       if (t.startsWith(FILES) && !filesDeclared) {
         filesDeclared = true
-        const { text } = paragraphFrom(cuerpo, i, FILES)
+        const { text } = paragraphFrom(body, i, FILES)
         files = splitFiles(text)
         // There is text and not one path came out: almost always because the
         // paths do not go between backticks, which is the only thing
-        // `splitFiles` recognises. Without this warning, `alcanceDeclarado`
+        // `splitFiles` recognises. Without this warning, `declaredScope`
         // (in ct-step.mjs) sees `files: []` and reports EVERYTHING touched as
         // out of scope, with a message that does not mention the format — it
         // fails on the safe side, but blindly.
@@ -643,15 +643,15 @@ export function extractTasks(markdown) {
       }
       if (t.startsWith(TDD) && !tddDeclared) {
         tddDeclared = true
-        const { text } = paragraphFrom(cuerpo, i, TDD)
+        const { text } = paragraphFrom(body, i, TDD)
         tddName = tddNameOf(text)
       }
-      const rol = roleOf(l.line)
-      if (rol) {
-        blockPaths.push(rol)
-        if (rol.role === 'Final text') {
-          const body = fenceBodyAfter(cuerpo, i + 1)
-          if (body !== null) finalTexts.push({ path: rol.path, text: body })
+      const role = roleOf(l.line)
+      if (role) {
+        blockPaths.push(role)
+        if (role.role === 'Final text') {
+          const blockText = fenceBodyAfter(body, i + 1)
+          if (blockText !== null) finalTexts.push({ path: role.path, text: blockText })
         }
       }
     })
@@ -661,13 +661,13 @@ export function extractTasks(markdown) {
     } else if (commands.length === 0) {
       push(h.n, 'verification-block', `la tarea ${h.n} trae un bloque de comandos vacío detrás de "${VERIFICATION}".`)
     } else {
-      for (const comando of commands) {
-        const tramo = lastPipelineStage(comando)
-        if (!tramo || !tramo.stage) continue
-        const words = splitRespectingQuotes(tramo.stage)
-        const roto = NOT_A_PREDICATE.find((r) => r.matches(words, tramo.piped, tramo.stage))
-        if (roto) {
-          push(h.n, 'verification-predicate', `la tarea ${h.n} verifica con \`${comando}\`, y su código de salida no puede afirmar lo que el control dice medir: ${roto.why}`)
+      for (const command of commands) {
+        const span = lastPipelineStage(command)
+        if (!span || !span.stage) continue
+        const words = splitRespectingQuotes(span.stage)
+        const broken = NOT_A_PREDICATE.find((r) => r.matches(words, span.piped, span.stage))
+        if (broken) {
+          push(h.n, 'verification-predicate', `la tarea ${h.n} verifica con \`${command}\`, y su código de salida no puede afirmar lo que el control dice medir: ${broken.why}`)
         }
       }
     }

@@ -583,22 +583,22 @@ export function collectFinishedResidue(mergedIssues, { worktreeDirs = [], branch
 // says).
 export function formatFinishedResidueWarning(residue, { repo } = {}) {
   if (!residue || residue.length === 0) return null
-  const conSesion = residue.filter((r) => r.cmuxTitle)
-  const lineas = residue.map((r) => {
-    const partes = []
-    if (r.hasWorktree) partes.push(`worktree ${r.worktree}`)
-    if (r.hasBranch) partes.push(`rama ${r.branch}`)
-    if (r.cmuxTitle) partes.push(`sesión de cmux "${r.cmuxTitle}" todavía abierta`)
-    return `  #${r.n}: ${partes.join(', ')}`
+  const withSession = residue.filter((r) => r.cmuxTitle)
+  const lines = residue.map((r) => {
+    const parts = []
+    if (r.hasWorktree) parts.push(`worktree ${r.worktree}`)
+    if (r.hasBranch) parts.push(`rama ${r.branch}`)
+    if (r.cmuxTitle) parts.push(`sesión de cmux "${r.cmuxTitle}" todavía abierta`)
+    return `  #${r.n}: ${parts.join(', ')}`
   })
-  const comandos = residue.map((r) => {
+  const commands = residue.map((r) => {
     const cmds = []
     if (r.hasWorktree) cmds.push(`git worktree remove --force ${r.worktree}`)
     if (r.hasBranch) cmds.push(`git branch -D ${r.branch}`)
     return `  ${cmds.join(' && ')}`
   })
-  const sesiones = conSesion.length
-    ? `\n${conSesion.length} de ${conSesion.length === 1 ? 'ellos tiene' : 'ellos tienen'} además su sesión de cmux abierta: ese \`claude\` sigue vivo con el trabajo YA entregado (en el caso que originó esto llevaba trece horas). Ciérralas a mano cuando compruebes que no hay nada dentro — el loop crea agentes y hasta ahora no enterraba a ninguno.`
+  const sessions = withSession.length
+    ? `\n${withSession.length} de ${withSession.length === 1 ? 'ellos tiene' : 'ellos tienen'} además su sesión de cmux abierta: ese \`claude\` sigue vivo con el trabajo YA entregado (en el caso que originó esto llevaba trece horas). Ciérralas a mano cuando compruebes que no hay nada dentro — el loop crea agentes y hasta ahora no enterraba a ninguno.`
     : ''
-  return `cosecha pendiente: ${residue.length} slice(s) de ${repo || 'este repo'} con el trabajo YA mergeado siguen dejando residuo en este checkout:\n${lineas.join('\n')}\nNo se borra solo, y es deliberado: un worktree puede tener cambios sin pushear, y borrarlo es irreversible (el mismo criterio por el que \`--requeue\` se niega a actuar mientras existan). Compruébalo y límpialo tú:\n${comandos.join('\n')}\nO deja que lo compruebe la guarda por ti: \`node <plugin>/scripts/dispatch-check.mjs <n> --repo ${repo || '<o/r>'} --collect\` cierra la sesión de cmux y borra worktree y rama SOLO si la PR de ese slice está mergeada, el árbol está limpio y la punta local es el commit que aterrizó; si no, se niega y dice cuál de las tres falla (con \`--dry-run\` solo lo cuenta).\nMientras siga ahí, \`/ct-next\` se NEGARÁ a redespachar cualquiera de esos números: el worktree existente es una precondición que corta el despacho.${sesiones}`
+  return `cosecha pendiente: ${residue.length} slice(s) de ${repo || 'este repo'} con el trabajo YA mergeado siguen dejando residuo en este checkout:\n${lines.join('\n')}\nNo se borra solo, y es deliberado: un worktree puede tener cambios sin pushear, y borrarlo es irreversible (el mismo criterio por el que \`--requeue\` se niega a actuar mientras existan). Compruébalo y límpialo tú:\n${commands.join('\n')}\nO deja que lo compruebe la guarda por ti: \`node <plugin>/scripts/dispatch-check.mjs <n> --repo ${repo || '<o/r>'} --collect\` cierra la sesión de cmux y borra worktree y rama SOLO si la PR de ese slice está mergeada, el árbol está limpio y la punta local es el commit que aterrizó; si no, se niega y dice cuál de las tres falla (con \`--dry-run\` solo lo cuenta).\nMientras siga ahí, \`/ct-next\` se NEGARÁ a redespachar cualquiera de esos números: el worktree existente es una precondición que corta el despacho.${sessions}`
 }

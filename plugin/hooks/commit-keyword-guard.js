@@ -32,11 +32,11 @@
 // BLOCKING; in an interactive session what to expect is that it asks and stays
 // stopped. Both things are «not silence»; they are not the same thing.
 //
-// THE EVALUATION ORDER OF `decidir` IS NOT COSMETIC. This hook runs on EVERY
+// THE EVALUATION ORDER OF `decide` IS NOT COSMETIC. This hook runs on EVERY
 // Bash command of EVERY session with the plugin loaded. The first two
 // questions are pure parsing, without a single read from disk; only the
 // command that already turned out to be a commit WITH a keyword pays the I/O
-// of finding out whether the repository is governed. `decidir` is a PURE
+// of finding out whether the repository is governed. `decide` is a PURE
 // function that does not touch disk by itself — the only possible I/O is
 // whatever the `probe` it receives does, and it is only called at that third
 // step — precisely so that this property can be measured without file
@@ -85,60 +85,60 @@ import { extractCommitMessages, findClosingKeywords } from '../scripts/closing-k
 import { probeGovernedRepo } from '../scripts/governed-repo.js'
 
 /**
- * decidir: the whole logic of the door, as a PURE function.
+ * decide: the whole logic of the door, as a PURE function.
  *
  * It does no I/O by itself, and it does not read ambient state either: the
  * only possible I/O is whatever `probe` does (it receives the `cwd` EXACTLY AS
  * IT ARRIVED in the payload and returns `{governed}` or `{error}`), and
  * `probe` is only invoked at step (3), once the command has already turned out
  * to be a commit WITH a closing keyword. That is the property this door cares
- * about, and because `decidir` is pure it can be checked by passing it a spy
+ * about, and because `decide` is pure it can be checked by passing it a spy
  * `probe`, without needing any unreadable directory.
  *
  * Returns `null` when there is no decision to emit, or the hook's complete
  * output object.
  */
-export function decidir(input, probe) {
+export function decide(input, probe) {
   if (input?.hook_event_name !== 'PreToolUse') return null
   if (input?.tool_name !== 'Bash') return null
   const command = input?.tool_input?.command
   if (typeof command !== 'string' || !command) return null
 
   // (1) and (2): pure parsing, zero I/O.
-  const mensajes = extractCommitMessages(command)
-  if (!mensajes.length) return null
-  const hallazgos = mensajes.flatMap(findClosingKeywords)
-  if (!hallazgos.length) return null
+  const messages = extractCommitMessages(command)
+  if (!messages.length) return null
+  const findings = messages.flatMap(findClosingKeywords)
+  if (!findings.length) return null
 
   // (3): the only read from disk, and only for a command that is already
   // dangerous. `input.cwd` travels AS IS, without substituting the hook
   // PROCESS's cwd when it is missing: that would answer about a directory the
   // caller never named, and `probeGovernedRepo` already knows how to turn an
   // absent/null/empty cwd into `{error}` instead of inventing an answer.
-  const sonda = probe(input.cwd)
+  const probeResult = probe(input.cwd)
 
-  const salida = (permissionDecision, permissionDecisionReason) => ({
+  const output = (permissionDecision, permissionDecisionReason) => ({
     hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision, permissionDecisionReason },
   })
 
-  const citado = hallazgos.map((h) => `\`${h.keyword} ${h.ref}\``).join(', ')
+  const cited = findings.map((h) => `\`${h.keyword} ${h.ref}\``).join(', ')
 
-  if (sonda.error) {
-    return salida('ask', `Este mensaje de commit lleva ${citado}, y NO se ha podido comprobar si el loop Control Tower gobierna los issues de este repo: ${sonda.error}. Si los gobierna, ese commit cerrara ${hallazgos.length > 1 ? 'esos issues' : 'ese issue'} al llegar a la rama por defecto, sin que nadie revise ni mergee nada. Decide tu: reformula la frase para que no lleve la cadena literal, o continua si sabes que este repo no esta gobernado.`)
+  if (probeResult.error) {
+    return output('ask', `Este mensaje de commit lleva ${cited}, y NO se ha podido comprobar si el loop Control Tower gobierna los issues de este repo: ${probeResult.error}. Si los gobierna, ese commit cerrara ${findings.length > 1 ? 'esos issues' : 'ese issue'} al llegar a la rama por defecto, sin que nadie revise ni mergee nada. Decide tu: reformula la frase para que no lleve la cadena literal, o continua si sabes que este repo no esta gobernado.`)
   }
 
-  if (!sonda.governed) return null
+  if (!probeResult.governed) return null
 
-  return salida(
+  return output(
     'deny',
-    `Este mensaje de commit lleva ${citado}. GitHub aplica las closing keywords de CUALQUIER mensaje de commit que llegue a la rama por defecto, y LAS COMILLAS NO PROTEGEN: un commit de documentacion que solo MENCIONABA la cadena cerro el issue en un repo real. En este repo el loop Control Tower gobierna los issues, asi que cerrarlo asi lo daria por entregado sin que nadie haya revisado ni mergeado nada, y liberaria sus dependencias sobre trabajo que puede no existir.\n\n` +
+    `Este mensaje de commit lleva ${cited}. GitHub aplica las closing keywords de CUALQUIER mensaje de commit que llegue a la rama por defecto, y LAS COMILLAS NO PROTEGEN: un commit de documentacion que solo MENCIONABA la cadena cerro el issue en un repo real. En este repo el loop Control Tower gobierna los issues, asi que cerrarlo asi lo daria por entregado sin que nadie haya revisado ni mergeado nada, y liberaria sus dependencias sobre trabajo que puede no existir.\n\n` +
     `El cierre del slice va en el CUERPO DEL PR, no en el mensaje del commit.\n\n` +
     `Que hacer: reescribe la frase sin la cadena literal (por ejemplo «el kickoff no lleva la keyword de cierre» en vez de nombrarla). Si de verdad quieres cerrar el issue, hazlo explicito: \`gh issue close <n> --reason completed\`.`,
   )
 }
 
 // The executable body only runs when the file is invoked as a script
-// (`node hooks/commit-keyword-guard.js`), not when a test imports `decidir`: a
+// (`node hooks/commit-keyword-guard.js`), not when a test imports `decide`: a
 // `readFileSync(0, ...)` without a real stdin would block the module from
 // loading.
 //
@@ -159,11 +159,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
   let input
   try { input = JSON.parse(readFileSync(0, 'utf8')) } catch { process.exit(0) }
 
-  const resultado = decidir(input, probeGovernedRepo)
+  const result = decide(input, probeGovernedRepo)
   // The `exit` waits for `write`'s callback: without it, a large message can
   // be left half written into a pipe (a pipe's default buffer is around 64 KB)
   // and the host receives a truncated JSON that it discards instead of a
   // `deny` — the very silence this door exists to prevent.
-  if (resultado) process.stdout.write(JSON.stringify(resultado), () => process.exit(0))
+  if (result) process.stdout.write(JSON.stringify(result), () => process.exit(0))
   else process.exit(0)
 }

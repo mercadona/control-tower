@@ -16,7 +16,7 @@ import { analyzeSlicesTable } from '../scripts/slices.js'
 // really did, not against another implementation of our own.
 
 describe('githubSlug — the anchor GitHub generates for the text of a heading (pairs observed against the real renderer)', () => {
-  const OBSERVADOS = [
+  const OBSERVED = [
     // the case that F10 comes from: the link said "#9", the real anchor is another
     ['9. Slices', '9-slices'],
     ['10. Riesgos & Mitigaciones', '10-riesgos--mitigaciones'],
@@ -45,9 +45,9 @@ describe('githubSlug — the anchor GitHub generates for the text of a heading (
     ['a\tb', 'ab'],
     ['9. Slices', '9slices'],
   ]
-  for (const [texto, ancla] of OBSERVADOS) {
-    it(`${JSON.stringify(texto)} → ${JSON.stringify(ancla)}`, () => {
-      expect(githubSlug(texto)).toBe(ancla)
+  for (const [text, anchor] of OBSERVED) {
+    it(`${JSON.stringify(text)} → ${JSON.stringify(anchor)}`, () => {
+      expect(githubSlug(text)).toBe(anchor)
     })
   }
 
@@ -198,16 +198,16 @@ describe('analyzeSlicesTable — the report carries the real heading the §9 tab
     expect(analyzeSlicesTable(SPEC).sectionHeading).toEqual({ line: 6, text: '9. Slices', anchor: '9-slices' })
   })
   it('the heading does NOT have to be called "9" nor be the ninth: the table is located by its column header', () => {
-    const otro = SPEC.replace('## 9. Slices', '## Desglose en slices')
-    expect(analyzeSlicesTable(otro).sectionHeading.anchor).toBe('desglose-en-slices')
+    const other = SPEC.replace('## 9. Slices', '## Desglose en slices')
+    expect(analyzeSlicesTable(other).sectionHeading.anchor).toBe('desglose-en-slices')
   })
   it('a table with no heading above it at all → sectionHeading null (no anchor is invented)', () => {
-    const sinCabecera = '| # | Slice | Dep |\n|---|---|---|\n| 1 | login | – |\n'
-    expect(analyzeSlicesTable(sinCabecera).sectionHeading).toBeNull()
+    const withoutHeading = '| # | Slice | Dep |\n|---|---|---|\n| 1 | login | – |\n'
+    expect(analyzeSlicesTable(withoutHeading).sectionHeading).toBeNull()
   })
   it('a heading with no usable anchor ("## ...") → anchor is the empty string, never "#"', () => {
-    const raro = SPEC.replace('## 9. Slices', '## ...')
-    expect(analyzeSlicesTable(raro).sectionHeading).toEqual({ line: 6, text: '...', anchor: '' })
+    const odd = SPEC.replace('## 9. Slices', '## ...')
+    expect(analyzeSlicesTable(odd).sectionHeading).toEqual({ line: 6, text: '...', anchor: '' })
   })
   it('with no §9 table there is no heading to report', () => {
     expect(analyzeSlicesTable('# Solo prosa\n\nnada.').sectionHeading).toBeNull()

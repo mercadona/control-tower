@@ -43,9 +43,9 @@ function run(dir, stopActive = false) {
 describe('stop hook', () => {
   it('it blocks if HEAD moved on with respect to STATE.last_commit', () => {
     const dir = initRepo()
-    const viejo = head(dir)
+    const old = head(dir)
     commit(dir, 'b.txt')
-    writeState(dir, viejo)
+    writeState(dir, old)
     const out = JSON.parse(run(dir))
     expect(out.decision).toBe('block')
     expect(out.reason).toMatch(/STATE\.md/)
@@ -80,9 +80,9 @@ describe('stop hook', () => {
   // a block is recorded is that very moment, and `blocked` was not in the list.
   it('the warning names the `blocked` field as the way to say the work cannot go on', () => {
     const dir = initRepo()
-    const viejo = head(dir)
+    const old = head(dir)
     commit(dir, 'b.txt')
-    writeState(dir, viejo)
+    writeState(dir, old)
     const out = JSON.parse(run(dir))
     expect(out.reason).toMatch(/`blocked`/)
     expect(out.reason).toMatch(/no lo escribas en prosa dentro de next_action/i)
@@ -132,10 +132,10 @@ describe('stop hook', () => {
 describe('stop hook — the relation between last_commit and HEAD', () => {
   it('ancestor of HEAD: it blocks, and now it COUNTS the commits instead of assuming them', () => {
     const dir = initRepo()
-    const viejo = head(dir)
+    const old = head(dir)
     commit(dir, 'b.txt')
     commit(dir, 'c.txt')
-    writeState(dir, viejo)
+    writeState(dir, old)
     const out = JSON.parse(run(dir))
     expect(out.decision).toBe('block')
     expect(out.reason).toMatch(/2 commits/)
@@ -151,10 +151,10 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
   it('divergent branches: it does NOT block, does not say "más nuevos", and names the branch where the commit lives', () => {
     const dir = initRepo()
     git(dir, 'checkout', '-qb', 'polish-v2-geometria')
-    const otro = commit(dir, 'b.txt')
+    const other = commit(dir, 'b.txt')
     git(dir, 'checkout', '-q', 'main')
     commit(dir, 'c.txt')
-    writeState(dir, otro)
+    writeState(dir, other)
 
     const out = JSON.parse(run(dir))
     expect(out.decision).toBeUndefined()
@@ -169,16 +169,16 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
   it('divergent branches: the closure is not a dead end (two turns in a row, neither blocks)', () => {
     const dir = initRepo()
     git(dir, 'checkout', '-qb', 'otra')
-    const otro = commit(dir, 'b.txt')
+    const other = commit(dir, 'b.txt')
     git(dir, 'checkout', '-q', 'main')
     commit(dir, 'c.txt')
-    writeState(dir, otro)
+    writeState(dir, other)
     // #95: the second turn no longer repeats the warning (it comes out empty),
     // and that is also "it does not block" — what this test protects is that
     // there is no `decision`.
     for (const _ of [1, 2]) {
-      const salida = run(dir)
-      expect(salida ? JSON.parse(salida).decision : undefined).toBeUndefined()
+      const output = run(dir)
+      expect(output ? JSON.parse(output).decision : undefined).toBeUndefined()
     }
     rmSync(dir, { recursive: true, force: true })
   })
@@ -187,10 +187,10 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
     const dir = initRepo()
     const base = head(dir)
     git(dir, 'checkout', '-qb', 'adelantada')
-    const delante = commit(dir, 'b.txt')
+    const aheadSha = commit(dir, 'b.txt')
     git(dir, 'checkout', '-q', 'main')
     expect(head(dir)).toBe(base)
-    writeState(dir, delante)
+    writeState(dir, aheadSha)
 
     const out = JSON.parse(run(dir))
     expect(out.decision).toBeUndefined()
@@ -202,10 +202,10 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
   it('divergent + stop_hook_active: neither block nor warning (anti-loop)', () => {
     const dir = initRepo()
     git(dir, 'checkout', '-qb', 'otra')
-    const otro = commit(dir, 'b.txt')
+    const other = commit(dir, 'b.txt')
     git(dir, 'checkout', '-q', 'main')
     commit(dir, 'c.txt')
-    writeState(dir, otro)
+    writeState(dir, other)
     expect(run(dir, true)).toBe('')
     rmSync(dir, { recursive: true, force: true })
   })
@@ -215,9 +215,9 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
     const dir = initRepo()
     const wt = join(dir, '..', `wt-${Math.random().toString(36).slice(2)}`)
     git(dir, 'worktree', 'add', '-q', '-b', 'rama-worktree', wt)
-    const otro = commit(wt, 'w.txt')
+    const other = commit(wt, 'w.txt')
     commit(dir, 'c.txt')
-    writeState(dir, otro)
+    writeState(dir, other)
     const out = JSON.parse(run(dir))
     expect(out.decision).toBeUndefined()
     expect(out.systemMessage).toMatch(/divergentes/)
@@ -238,10 +238,10 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
   })
 
   it('an empty or null last_commit: it does not block (nothing to compare)', () => {
-    for (const linea of ['last_commit:', "last_commit: ''", 'last_commit: "   "']) {
+    for (const line of ['last_commit:', "last_commit: ''", 'last_commit: "   "']) {
       const dir = initRepo()
       mkdirSync(join(dir, '.agent'), { recursive: true })
-      writeFileSync(join(dir, '.agent', 'STATE.md'), `---\n${linea}\n---\nx`)
+      writeFileSync(join(dir, '.agent', 'STATE.md'), `---\n${line}\n---\nx`)
       expect(run(dir)).toBe('')
       rmSync(dir, { recursive: true, force: true })
     }
@@ -270,10 +270,10 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
 
   it('detached HEAD: it does not invent a branch, it says so', () => {
     const dir = initRepo()
-    const viejo = head(dir)
+    const old = head(dir)
     commit(dir, 'b.txt')
     git(dir, 'checkout', '-q', '--detach', 'HEAD')
-    writeState(dir, viejo)
+    writeState(dir, old)
     const out = JSON.parse(run(dir))
     expect(out.decision).toBe('block')
     expect(out.reason).toMatch(/desprendido/)
@@ -287,10 +287,10 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
   it('the divergence warning is brief: only what changes a decision', () => {
     const dir = initRepo()
     git(dir, 'checkout', '-qb', 'polish-v2-geometria')
-    const otro = commit(dir, 'b.txt')
+    const other = commit(dir, 'b.txt')
     git(dir, 'checkout', '-q', 'main')
     commit(dir, 'c.txt')
-    writeState(dir, otro)
+    writeState(dir, other)
     const msg = JSON.parse(run(dir)).systemMessage
     expect(msg.length).toBeLessThan(340)
     // What has to keep being there: where it lives, that they diverge, and the
@@ -307,9 +307,9 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
   it('the "va por delante" warning is brief too', () => {
     const dir = initRepo()
     git(dir, 'checkout', '-qb', 'adelantada')
-    const delante = commit(dir, 'b.txt')
+    const aheadSha = commit(dir, 'b.txt')
     git(dir, 'checkout', '-q', 'main')
-    writeState(dir, delante)
+    writeState(dir, aheadSha)
     const msg = JSON.parse(run(dir)).systemMessage
     expect(msg.length).toBeLessThan(280)
     expect(msg).toMatch(/hacia atrás/)
@@ -321,9 +321,9 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
   // points at work that no longer exists under any ref.
   it('orphan commit after reset --hard: its own warning, distinct from the "va por delante" one, and it does NOT block', () => {
     const dir = initRepo()
-    const huerfano = commit(dir, 'b.txt')
+    const orphan = commit(dir, 'b.txt')
     git(dir, 'reset', '-q', '--hard', 'HEAD~1')
-    writeState(dir, huerfano)
+    writeState(dir, orphan)
     const out = JSON.parse(run(dir))
     expect(out.decision).toBeUndefined()
     expect(out.systemMessage).toMatch(/huérfano/)
@@ -338,11 +338,11 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
   it('deleted divergent branch: the commit is left orphan and falls into that warning, not the divergence one', () => {
     const dir = initRepo()
     git(dir, 'checkout', '-qb', 'efimera')
-    const huerfano = commit(dir, 'b.txt')
+    const orphan = commit(dir, 'b.txt')
     git(dir, 'checkout', '-q', 'main')
     commit(dir, 'c.txt')
     git(dir, 'branch', '-qD', 'efimera')
-    writeState(dir, huerfano)
+    writeState(dir, orphan)
     const out = JSON.parse(run(dir))
     expect(out.decision).toBeUndefined()
     expect(out.systemMessage).toMatch(/huérfano/)
@@ -352,46 +352,46 @@ describe('stop hook — the relation between last_commit and HEAD', () => {
 
   // «Vive en `origin/polish-v2`» is far more useful than «no sé dónde está».
   it('with no local branch containing it, the remote ones are looked at and origin/… is named', () => {
-    const origen = initRepo()
-    git(origen, 'checkout', '-qb', 'polish-v2')
-    const otro = commit(origen, 'b.txt')
-    git(origen, 'checkout', '-q', 'main')
+    const origin = initRepo()
+    git(origin, 'checkout', '-qb', 'polish-v2')
+    const other = commit(origin, 'b.txt')
+    git(origin, 'checkout', '-q', 'main')
 
-    const clon = mkdtempSync(join(tmpdir(), 'ct-clon-'))
-    execFileSync('git', ['clone', '-q', origen, clon], { encoding: 'utf8' })
-    execFileSync('git', ['config', 'user.email', 't@t'], { cwd: clon })
-    execFileSync('git', ['config', 'user.name', 't'], { cwd: clon })
-    commit(clon, 'c.txt')
+    const clone = mkdtempSync(join(tmpdir(), 'ct-clon-'))
+    execFileSync('git', ['clone', '-q', origin, clone], { encoding: 'utf8' })
+    execFileSync('git', ['config', 'user.email', 't@t'], { cwd: clone })
+    execFileSync('git', ['config', 'user.name', 't'], { cwd: clone })
+    commit(clone, 'c.txt')
     // In the clone there is no LOCAL branch containing that commit.
-    expect(git(clon, 'branch', '--contains', otro, '--format=%(refname:short)')).toBe('')
-    writeState(clon, otro)
+    expect(git(clone, 'branch', '--contains', other, '--format=%(refname:short)')).toBe('')
+    writeState(clone, other)
 
-    const out = JSON.parse(run(clon))
+    const out = JSON.parse(run(clone))
     expect(out.decision).toBeUndefined()
     expect(out.systemMessage).toMatch(/`origin\/polish-v2`/)
     expect(out.systemMessage).toMatch(/divergentes/)
     expect(out.systemMessage).not.toMatch(/huérfano/)
-    rmSync(clon, { recursive: true, force: true })
-    rmSync(origen, { recursive: true, force: true })
+    rmSync(clone, { recursive: true, force: true })
+    rmSync(origin, { recursive: true, force: true })
   })
 
   it('with a local branch containing it, the noise of origin/* does not creep in', () => {
-    const origen = initRepo()
-    const clon = mkdtempSync(join(tmpdir(), 'ct-clon-'))
-    execFileSync('git', ['clone', '-q', origen, clon], { encoding: 'utf8' })
-    execFileSync('git', ['config', 'user.email', 't@t'], { cwd: clon })
-    execFileSync('git', ['config', 'user.name', 't'], { cwd: clon })
-    git(clon, 'checkout', '-qb', 'local-viva')
-    const otro = commit(clon, 'b.txt')
-    git(clon, 'checkout', '-q', 'main')
-    commit(clon, 'c.txt')
-    writeState(clon, otro)
+    const origin = initRepo()
+    const clone = mkdtempSync(join(tmpdir(), 'ct-clon-'))
+    execFileSync('git', ['clone', '-q', origin, clone], { encoding: 'utf8' })
+    execFileSync('git', ['config', 'user.email', 't@t'], { cwd: clone })
+    execFileSync('git', ['config', 'user.name', 't'], { cwd: clone })
+    git(clone, 'checkout', '-qb', 'local-viva')
+    const other = commit(clone, 'b.txt')
+    git(clone, 'checkout', '-q', 'main')
+    commit(clone, 'c.txt')
+    writeState(clone, other)
 
-    const msg = JSON.parse(run(clon)).systemMessage
+    const msg = JSON.parse(run(clone)).systemMessage
     expect(msg).toMatch(/`local-viva`/)
     expect(msg).not.toMatch(/origin\//)
-    rmSync(clon, { recursive: true, force: true })
-    rmSync(origen, { recursive: true, force: true })
+    rmSync(clone, { recursive: true, force: true })
+    rmSync(origin, { recursive: true, force: true })
   })
 
   it('a tag or a branch as last_commit resolves to its commit (it is not treated as unreadable)', () => {
@@ -503,9 +503,9 @@ describe('F15/H4 — obeying the freshness guard has to leave it green', () => {
   it('the `unresolvable` remedy (put the real SHA in and commit it) now TERMINATES', () => {
     const dir = initRepo()
     writeState(dir, 'relleno-que-no-es-un-sha')
-    const bloqueado = JSON.parse(run(dir))
-    expect(bloqueado.decision).toBe('block')
-    expect(bloqueado.reason).toMatch(/no es ningún commit de este repositorio/)
+    const blocked = JSON.parse(run(dir))
+    expect(blocked.decision).toBe('block')
+    expect(blocked.reason).toMatch(/no es ningún commit de este repositorio/)
     commitState(dir, head(dir))
     expect(run(dir)).toBe('')
     rmSync(dir, { recursive: true, force: true })
@@ -537,10 +537,10 @@ describe('#95 — the commits ct-step made do not block the turn closure', () =>
     const dir = initRepo()
     const base = head(dir)
     writeState(dir, base)
-    const nuevo = ctStepCommit(dir, 'b.txt')
+    const newSha = ctStepCommit(dir, 'b.txt')
     const out = run(dir)
     expect(out).toBe('')
-    expect(lastCommitOf(dir)).toBe(nuevo)
+    expect(lastCommitOf(dir)).toBe(newSha)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -548,9 +548,9 @@ describe('#95 — the commits ct-step made do not block the turn closure', () =>
     const dir = initRepo()
     writeState(dir, head(dir))
     ctStepCommit(dir, 'b.txt')
-    const ultimo = ctStepCommit(dir, 'c.txt')
+    const last = ctStepCommit(dir, 'c.txt')
     expect(run(dir)).toBe('')
-    expect(lastCommitOf(dir)).toBe(ultimo)
+    expect(lastCommitOf(dir)).toBe(last)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -587,9 +587,9 @@ describe('#95 — the commits ct-step made do not block the turn closure', () =>
     mkdirSync(join(dir, '.agent'), { recursive: true })
     writeFileSync(join(dir, '.agent', 'STATE.md'), '---\nlast_commit: intacto\n---\nc')
     writeFileSync(join(dir, '.agent', 'SLICE.md'), `---\nlast_commit: ${base}\n---\ns`)
-    const nuevo = ctStepCommit(dir, 'b.txt')
+    const newSha = ctStepCommit(dir, 'b.txt')
     expect(run(dir)).toBe('')
-    expect(lastCommitOf(dir, '.agent/SLICE.md')).toBe(nuevo)
+    expect(lastCommitOf(dir, '.agent/SLICE.md')).toBe(newSha)
     expect(lastCommitOf(dir, '.agent/STATE.md')).toBe('intacto')
     rmSync(dir, { recursive: true, force: true })
   })
@@ -601,7 +601,7 @@ describe('#95 — the commits ct-step made do not block the turn closure', () =>
     const dir = initRepo()
     const base = head(dir)
     mkdirSync(join(dir, '.agent'), { recursive: true })
-    const antes = [
+    const before = [
       '---',
       '# un comentario que explica el campo',
       'task: "algo"',
@@ -612,11 +612,11 @@ describe('#95 — the commits ct-step made do not block the turn closure', () =>
       'prosa del agente',
       '',
     ].join('\n')
-    writeFileSync(join(dir, '.agent', 'STATE.md'), antes)
-    const nuevo = ctStepCommit(dir, 'b.txt')
+    writeFileSync(join(dir, '.agent', 'STATE.md'), before)
+    const newSha = ctStepCommit(dir, 'b.txt')
     expect(run(dir)).toBe('')
-    const despues = readFileSync(join(dir, '.agent', 'STATE.md'), 'utf8')
-    expect(despues).toBe(antes.replace(base, nuevo))
+    const after = readFileSync(join(dir, '.agent', 'STATE.md'), 'utf8')
+    expect(after).toBe(before.replace(base, newSha))
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -627,9 +627,9 @@ describe('#95 — the commits ct-step made do not block the turn closure', () =>
     const base = head(dir)
     mkdirSync(join(dir, '.agent'), { recursive: true })
     writeFileSync(join(dir, '.agent', 'STATE.md'), `---\nlast_commit: "${base}"\n---\nx`)
-    const nuevo = ctStepCommit(dir, 'b.txt')
+    const newSha = ctStepCommit(dir, 'b.txt')
     expect(run(dir)).toBe('')
-    expect(readFileSync(join(dir, '.agent', 'STATE.md'), 'utf8')).toContain(`last_commit: "${nuevo}"`)
+    expect(readFileSync(join(dir, '.agent', 'STATE.md'), 'utf8')).toContain(`last_commit: "${newSha}"`)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -649,54 +649,54 @@ describe('#95 — the commits ct-step made do not block the turn closure', () =>
 // lasted. It comes out on the first, when the relation changes, and every N
 // turns.
 // ===========================================================================
-function repoAdelantado() {
+function aheadRepo() {
   const dir = initRepo()
   git(dir, 'checkout', '-qb', 'adelantada')
-  const delante = commit(dir, 'b.txt')
+  const aheadSha = commit(dir, 'b.txt')
   git(dir, 'checkout', '-q', 'main')
-  writeState(dir, delante)
+  writeState(dir, aheadSha)
   return dir
 }
-const avisosEn = (dir, turnos) => {
+const warningsIn = (dir, turns) => {
   const out = []
-  for (let i = 0; i < turnos; i++) {
-    const salida = run(dir)
-    if (salida) out.push(JSON.parse(salida).systemMessage)
+  for (let i = 0; i < turns; i++) {
+    const output = run(dir)
+    if (output) out.push(JSON.parse(output).systemMessage)
   }
   return out.filter(Boolean)
 }
 
 describe('#95 — the non-blocking warning stops coming out on every turn', () => {
   it('five turns in a row in `ahead` give ONE single warning, not five', () => {
-    const dir = repoAdelantado()
-    const avisos = avisosEn(dir, 5)
-    expect(avisos).toHaveLength(1)
-    expect(avisos[0]).toMatch(/descendiente de HEAD/)
+    const dir = aheadRepo()
+    const warnings = warningsIn(dir, 5)
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toMatch(/descendiente de HEAD/)
     rmSync(dir, { recursive: true, force: true })
   })
 
   it('the warning comes out again once the period is up, so the anomaly does not become invisible', () => {
-    const dir = repoAdelantado()
-    expect(avisosEn(dir, NOTICE_REPEAT_EVERY_TURNS * 2)).toHaveLength(2)
+    const dir = aheadRepo()
+    expect(warningsIn(dir, NOTICE_REPEAT_EVERY_TURNS * 2)).toHaveLength(2)
     rmSync(dir, { recursive: true, force: true })
   })
 
   it('if the relation changes, the new warning comes out without waiting for the period', () => {
-    const dir = repoAdelantado()
-    expect(avisosEn(dir, 1)).toHaveLength(1)
-    expect(avisosEn(dir, 1)).toHaveLength(0)
+    const dir = aheadRepo()
+    expect(warningsIn(dir, 1)).toHaveLength(1)
+    expect(warningsIn(dir, 1)).toHaveLength(0)
     // The same session goes from `ahead` to `diverged`: it is another anomaly.
     commit(dir, 'c.txt')
-    const avisos = avisosEn(dir, 1)
-    expect(avisos).toHaveLength(1)
-    expect(avisos[0]).toMatch(/divergentes/)
+    const warnings = warningsIn(dir, 1)
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toMatch(/divergentes/)
     rmSync(dir, { recursive: true, force: true })
   })
 
   // The marker is the hook's bookkeeping: it cannot end up inside a PR.
   it('the marker lives in .agent/ and git does not see it', () => {
-    const dir = repoAdelantado()
-    avisosEn(dir, 1)
+    const dir = aheadRepo()
+    warningsIn(dir, 1)
     expect(existsSync(join(dir, '.agent', STOP_NOTICE_REL_NAME))).toBe(true)
     expect(git(dir, 'status', '--porcelain', '--ignored=no')).not.toMatch(/stop-notice/)
     rmSync(dir, { recursive: true, force: true })
@@ -705,18 +705,18 @@ describe('#95 — the non-blocking warning stops coming out on every turn', () =
   // A warning silenced by mistake is worse than a repeated one: if the marker
   // cannot be read or cannot be kept out of git, the warning goes out anyway.
   it('a corrupt marker does not silence the warning', () => {
-    const dir = repoAdelantado()
-    avisosEn(dir, 1)
+    const dir = aheadRepo()
+    warningsIn(dir, 1)
     writeFileSync(join(dir, '.agent', STOP_NOTICE_REL_NAME), 'esto no es json')
-    expect(avisosEn(dir, 1)).toHaveLength(1)
+    expect(warningsIn(dir, 1)).toHaveLength(1)
     rmSync(dir, { recursive: true, force: true })
   })
 
   it('the `behind` block does not go through the marker: it always comes out', () => {
     const dir = initRepo()
-    const viejo = head(dir)
+    const old = head(dir)
     commit(dir, 'b.txt')
-    writeState(dir, viejo)
+    writeState(dir, old)
     for (const _ of [1, 2, 3]) {
       expect(JSON.parse(run(dir)).decision).toBe('block')
     }

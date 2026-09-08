@@ -48,7 +48,7 @@ describe('parseSlices', () => {
   })
 })
 
-const SPEC_AREA_TOCA = `# Spec Y
+const SPEC_AREA_TOUCHES = `# Spec Y
 ## 9. Desglose en slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|-------|------|---------|-----|--------|-----------|------|------|
@@ -58,7 +58,7 @@ const SPEC_AREA_TOCA = `# Spec Y
 `
 
 describe('parseSlices — the Área/Toca columns', () => {
-  const s = parseSlices(SPEC_AREA_TOCA)
+  const s = parseSlices(SPEC_AREA_TOUCHES)
   it('it parses area/touches comma-separated', () => {
     expect(s[0].area).toEqual(['api'])
     expect(s[0].touches).toEqual(['db', 'migration'])
@@ -1252,7 +1252,7 @@ describe('analyzeSlicesTable — "Acepta": an escaped comma (\\,) does NOT chop 
 // measures its `observabilidad` item as without-a-yardstick across the whole
 // epic).
 describe('analyzeSlicesTable — the Señal column (Slice 10)', () => {
-  const SPEC_SENAL = `## 9. Slices
+  const SPEC_SIGNAL = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca | Gate | Señal |
 |---|-------|------|---------|-----|--------|-----------|------|------|------|-------|
 | 1 | modelo | backend | tabla | – | AC-1.1 | schema | api | db | – | – |
@@ -1260,7 +1260,7 @@ describe('analyzeSlicesTable — the Señal column (Slice 10)', () => {
 | 3 | pantalla | ui | alta | #2 | AC-3.1 | – | api | app | – | N/A — pantalla sin telemetría nueva que prometer |
 `
   it('the raw cell arrives in slice.senal, unresolved', () => {
-    const r = analyzeSlicesTable(SPEC_SENAL)
+    const r = analyzeSlicesTable(SPEC_SIGNAL)
     expect(r.missingOptionalColumns).not.toContain('Señal')
     // The cell arrives VERBATIM (only trimmed): the "no value" marker and the
     // N/A exemption arrive as they stand — the classification lives in
@@ -1280,7 +1280,7 @@ describe('analyzeSlicesTable — the Señal column (Slice 10)', () => {
     expect(r.slices[0].senal).toBe('métrica viva')
   })
   it('with no Señal column, it goes into missingOptionalColumns and the slices carry an empty senal', () => {
-    const r = analyzeSlicesTable(SPEC_AREA_TOCA)
+    const r = analyzeSlicesTable(SPEC_AREA_TOUCHES)
     expect(r.missingOptionalColumns).toContain('Señal')
     for (const s of r.slices) expect(s.senal).toBe('')
   })

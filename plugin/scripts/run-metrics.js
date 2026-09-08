@@ -94,7 +94,7 @@ export const IDENTITY_FIELDS = Object.freeze([
 export const NO_VERSION_KEY = '(sin versión)'
 export const NO_ACTOR_KEY = '(sin actor)'
 
-export const planSha256 = (texto) => createHash('sha256').update(String(texto ?? ''), 'utf8').digest('hex')
+export const planSha256 = (text) => createHash('sha256').update(String(text ?? ''), 'utf8').digest('hex')
 
 // THE MACHINE DESTINATION, which is no longer the only one. Here goes this
 // account's running total —every repo, every epic—, under CLAUDE_CONFIG_DIR when
@@ -126,8 +126,8 @@ export function controlTowerLogDir(opts = {}) {
   return join(controlTowerDir(opts), 'log')
 }
 
-export function metricsPath(concepto, { configDir = null, home = null } = {}) {
-  return join(controlTowerLogDir({ configDir, home }), `${concepto}.jsonl`)
+export function metricsPath(concept, { configDir = null, home = null } = {}) {
+  return join(controlTowerLogDir({ configDir, home }), `${concept}.jsonl`)
 }
 
 // THE PATH INSIDE THE REPO, in a single constant and not in two: `ct-step
@@ -145,26 +145,26 @@ export const metricsRepoRelPath = (issue) => `${METRICS_REPO_DIR}/issue-${issue}
 // duration of the call, the size of the judged diff— and they travel apart from
 // the identity so that adding a new measurement cannot break a key.
 export function metricRow(identity, measures = {}, { now }) {
-  const fila = {}
-  for (const campo of IDENTITY_FIELDS) fila[campo] = normalizar(campo, identity[campo])
-  fila.written_at = now
-  return { ...fila, ...measures }
+  const row = {}
+  for (const field of IDENTITY_FIELDS) row[field] = normalize(field, identity[field])
+  row.written_at = now
+  return { ...row, ...measures }
 }
 
 // The empty is treated as the absence in the three fields with a sentinel
-// (`valor ||` and not `??`): an `epic: ''`, a version that came out empty from
+// (`value ||` and not `??`): an `epic: ''`, a version that came out empty from
 // reading the manifest or an actor the environment could not supply are the same
 // gap as not carrying them, and telling them apart would create a phantom group
 // named with the empty string.
-function normalizar(campo, valor) {
-  if (campo === 'epic') return valor || NO_MILESTONE_KEY
-  if (campo === 'plugin_version') return valor || NO_VERSION_KEY
-  if (campo === 'actor') return valor || NO_ACTOR_KEY
-  if (valor === undefined) return null
-  return valor
+function normalize(field, value) {
+  if (field === 'epic') return value || NO_MILESTONE_KEY
+  if (field === 'plugin_version') return value || NO_VERSION_KEY
+  if (field === 'actor') return value || NO_ACTOR_KEY
+  if (value === undefined) return null
+  return value
 }
 
-export const metricLine = (fila) => JSON.stringify(fila) + '\n'
+export const metricLine = (row) => JSON.stringify(row) + '\n'
 
 // RECOGNISING A CITATION OF THE YARDSTICK lives in
 // `scripts/yardstick-citation.js` and not here. It was here for two rounds and
@@ -204,7 +204,7 @@ export function verdictMeasures(verdict) {
     // the total. A run with this column high is a judge that said PASS blind,
     // which is exactly what could not be seen reading rust-monitoring's
     // verdicts by hand.
-    rubric_sin_vara: (verdict?.rubric || []).filter((paso) => paso.outcome === 'sin-vara').length,
+    rubric_sin_vara: (verdict?.rubric || []).filter((step) => step.outcome === 'sin-vara').length,
     // TWO columns, and they are two OPPOSITE questions the previous one mixed
     // into one. `findings_patrones_vara_ct` —the one these two replace— only
     // looked at findings of the `patrones` item, with the argument that it is
@@ -238,7 +238,7 @@ export function verdictMeasures(verdict) {
     // thing —the reproach that sank the previous one—: they measure the input
     // and the effect.
     rubric_vara_ct_docs: [...new Set(
-      (verdict?.rubric || []).flatMap((paso) => YardstickCitation.documentsIn(paso?.result))
+      (verdict?.rubric || []).flatMap((step) => YardstickCitation.documentsIn(step?.result))
     )].length,
     findings_vara_ct: findings.filter((f) => YardstickCitation.cites(f.evidence)).length,
   }
@@ -282,14 +282,14 @@ export function verdictMeasures(verdict) {
 // VERDICT_RULES: a rule withdrawn from the rubric has to keep showing up in the
 // old telemetry. Filtering against today's enum would erase history in
 // silence.
-export function aggregateVerdictMeasures(texto) {
+export function aggregateVerdictMeasures(text) {
   let rows = 0
   let malformed = 0
   let verdicts = 0
   let fails = 0
   let measured = 0
   let legacy = 0
-  let sinVara = 0
+  let withoutYardstick = 0
   // THE SEVERITY, with twin counters of its own for the same reason as the
   // yardstick's: it was born after `rubric_sin_vara` and a row can carry the one
   // and not the others. The three go TOGETHER —a row missing a single one is old
@@ -311,58 +311,58 @@ export function aggregateVerdictMeasures(texto) {
   // the one they replaced (`findings_patrones_vara_ct`) proved that one column
   // gets withdrawn and the other stays. Sharing counters would force untangling
   // them on that day.
-  let measuredVaraCtDocs = 0
-  let legacyVaraCtDocs = 0
-  let varaCtDocs = 0
-  let measuredFindingsVaraCt = 0
-  let legacyFindingsVaraCt = 0
-  let findingsVaraCt = 0
+  let measuredCtYardstickDocs = 0
+  let legacyCtYardstickDocs = 0
+  let ctYardstickDocs = 0
+  let measuredFindingsCtYardstick = 0
+  let legacyFindingsCtYardstick = 0
+  let findingsCtYardstick = 0
   const findingsByRule = {}
-  for (const linea of String(texto ?? '').split('\n')) {
-    if (linea.trim() === '') continue
-    let fila
+  for (const line of String(text ?? '').split('\n')) {
+    if (line.trim() === '') continue
+    let row
     try {
-      fila = JSON.parse(linea)
+      row = JSON.parse(line)
     } catch {
       malformed += 1
       continue
     }
-    if (fila === null || typeof fila !== 'object' || Array.isArray(fila)) { malformed += 1; continue }
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) { malformed += 1; continue }
     rows += 1
-    if (!Object.hasOwn(fila, 'ruling')) continue
+    if (!Object.hasOwn(row, 'ruling')) continue
     verdicts += 1
     // `FAIL` and not `!== 'PASS'`: the vocabulary is closed by `readVerdict`,
     // and counting as a veto a ruling this loop does not know how to write would
     // be guessing.
-    if (fila.ruling === 'FAIL') fails += 1
-    const severidades = [fila.findings_high, fila.findings_medium, fila.findings_low]
-    if (severidades.every((cuantos) => Number.isInteger(cuantos) && cuantos >= 0)) {
+    if (row.ruling === 'FAIL') fails += 1
+    const severities = [row.findings_high, row.findings_medium, row.findings_low]
+    if (severities.every((count) => Number.isInteger(count) && count >= 0)) {
       measuredSeverities += 1
-      high += fila.findings_high
-      medium += fila.findings_medium
-      low += fila.findings_low
+      high += row.findings_high
+      medium += row.findings_medium
+      low += row.findings_low
     } else {
       legacySeverities += 1
     }
-    const n = fila.rubric_sin_vara
-    if (Number.isInteger(n) && n >= 0) { measured += 1; sinVara += n } else { legacy += 1 }
-    const d = fila.rubric_vara_ct_docs
-    if (Number.isInteger(d) && d >= 0) { measuredVaraCtDocs += 1; varaCtDocs += d } else { legacyVaraCtDocs += 1 }
-    const h = fila.findings_vara_ct
-    if (Number.isInteger(h) && h >= 0) { measuredFindingsVaraCt += 1; findingsVaraCt += h } else { legacyFindingsVaraCt += 1 }
-    const porRegla = fila.findings_by_rule
-    if (porRegla && typeof porRegla === 'object' && !Array.isArray(porRegla)) {
-      for (const [regla, cuantos] of Object.entries(porRegla)) {
-        if (Number.isInteger(cuantos) && cuantos > 0) findingsByRule[regla] = (findingsByRule[regla] || 0) + cuantos
+    const n = row.rubric_sin_vara
+    if (Number.isInteger(n) && n >= 0) { measured += 1; withoutYardstick += n } else { legacy += 1 }
+    const d = row.rubric_vara_ct_docs
+    if (Number.isInteger(d) && d >= 0) { measuredCtYardstickDocs += 1; ctYardstickDocs += d } else { legacyCtYardstickDocs += 1 }
+    const h = row.findings_vara_ct
+    if (Number.isInteger(h) && h >= 0) { measuredFindingsCtYardstick += 1; findingsCtYardstick += h } else { legacyFindingsCtYardstick += 1 }
+    const byRule = row.findings_by_rule
+    if (byRule && typeof byRule === 'object' && !Array.isArray(byRule)) {
+      for (const [rule, count] of Object.entries(byRule)) {
+        if (Number.isInteger(count) && count > 0) findingsByRule[rule] = (findingsByRule[rule] || 0) + count
       }
     }
   }
   return {
-    rows, malformed, verdicts, fails, measured, legacy, rubricSinVara: measured ? sinVara : null, findingsByRule,
-    measuredVaraCtDocs, legacyVaraCtDocs,
-    varaCtDocs: measuredVaraCtDocs ? varaCtDocs : null,
-    measuredFindingsVaraCt, legacyFindingsVaraCt,
-    findingsVaraCt: measuredFindingsVaraCt ? findingsVaraCt : null,
+    rows, malformed, verdicts, fails, measured, legacy, rubricSinVara: measured ? withoutYardstick : null, findingsByRule,
+    measuredVaraCtDocs: measuredCtYardstickDocs, legacyVaraCtDocs: legacyCtYardstickDocs,
+    varaCtDocs: measuredCtYardstickDocs ? ctYardstickDocs : null,
+    measuredFindingsVaraCt: measuredFindingsCtYardstick, legacyFindingsVaraCt: legacyFindingsCtYardstick,
+    findingsVaraCt: measuredFindingsCtYardstick ? findingsCtYardstick : null,
     measuredSeverities, legacySeverities,
     findingsHigh: measuredSeverities ? high : null,
     findingsMedium: measuredSeverities ? medium : null,
@@ -374,13 +374,13 @@ export function aggregateVerdictMeasures(texto) {
 // WHETHER THE YARDSTICK ARRIVED, AND HOW MUCH IT WEIGHED. Today `ct-step.mjs`
 // aborts if the `conventions/` documents are missing from the PLUGIN, but
 // nothing checked that a task's brief had TAKEN them with it: if somebody
-// touches `escribirBrief` and breaks the pasting, everything stays green and the
+// touches `writeBrief` and breaks the pasting, everything stays green and the
 // judge silently measures only against the repo's yardstick. This is the
 // mechanism that closes that silent drift.
 //
 // PURE ON PURPOSE, like the rest of the file: it does not read disk. It counts
 // over the CONTENT `ct-step.mjs` already read from the brief that is on disk —
-// the single source of truth, and not a datum dragged along from `escribirBrief`
+// the single source of truth, and not a datum dragged along from `writeBrief`
 // (which runs in an EARLIER invocation of the process, with nothing in memory to
 // pass). The one that decides `null` when the brief cannot be read is
 // `ct-step.mjs`: a zero here would assert a brief with no yardstick, and what
@@ -393,16 +393,16 @@ export function aggregateVerdictMeasures(texto) {
 // fifth document (`defects.md`, on splitting `code.md`) be counted without
 // touching this function. And so it was verified: it did not have to be
 // touched.
-export function briefCtYardstickMeasures(contenidoBrief) {
-  const texto = String(contenidoBrief ?? '')
-  const docs = (texto.match(/^## Vara de ct: conventions\//gm) || []).length
-  return { brief_vara_ct_docs: docs, brief_bytes: Buffer.byteLength(texto, 'utf8') }
+export function briefCtYardstickMeasures(briefContent) {
+  const text = String(briefContent ?? '')
+  const docs = (text.match(/^## Vara de ct: conventions\//gm) || []).length
+  return { brief_vara_ct_docs: docs, brief_bytes: Buffer.byteLength(text, 'utf8') }
 }
 
 // ---------------------------------------------------------------------------
 // THE READER OF WHAT `briefCtYardstickMeasures` WRITES in the row of the `implement`
 // step. It is a SIBLING aggregator of `aggregateVerdictMeasures`, not the same
-// one: those rows carry no `ruling` —`ct-step.mjs` writes them in `verboReport`,
+// one: those rows carry no `ruling` —`ct-step.mjs` writes them in `reportVerb`,
 // before any verdict exists— so the verdict aggregator ignores them by design
 // (tolerance nº3 up above) and there is no need to touch it. Without an
 // aggregator of its own, `brief_vara_ct_docs` and `brief_bytes` would have
@@ -414,25 +414,25 @@ export function briefCtYardstickMeasures(contenidoBrief) {
 // measurement, or an attempt in which the brief could not be read at the time—
 // does NOT count as a zero. Only what was measured gets added up, and if no
 // attempt carries the column the aggregate is `null`.
-export function aggregateBriefMeasures(texto) {
+export function aggregateBriefMeasures(text) {
   let briefAttempts = 0
   let briefMeasured = 0
   let briefLegacy = 0
   let docs = 0
   let bytes = 0
-  for (const linea of String(texto ?? '').split('\n')) {
-    if (linea.trim() === '') continue
-    let fila
+  for (const line of String(text ?? '').split('\n')) {
+    if (line.trim() === '') continue
+    let row
     try {
-      fila = JSON.parse(linea)
+      row = JSON.parse(line)
     } catch {
       continue
     }
-    if (fila === null || typeof fila !== 'object' || Array.isArray(fila)) continue
-    if (fila.step !== 'implement') continue
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) continue
+    if (row.step !== 'implement') continue
     briefAttempts += 1
-    const d = fila.brief_vara_ct_docs
-    const b = fila.brief_bytes
+    const d = row.brief_vara_ct_docs
+    const b = row.brief_bytes
     if (Number.isInteger(d) && d >= 0 && Number.isInteger(b) && b >= 0) {
       briefMeasured += 1
       docs += d
@@ -477,32 +477,32 @@ export function aggregateBriefMeasures(texto) {
 //     the denominator calls to the model that were never made, and the figure
 //     that comes out of dividing by it is precisely the one this column exists
 //     to make legible.
-export function aggregateRoleBytesMeasures(texto) {
+export function aggregateRoleBytesMeasures(text) {
   let roleAttempts = 0
   let roleMeasured = 0
   let roleLegacy = 0
   let agentBytes = 0
   let skillBytes = 0
   let packageBytes = 0
-  for (const linea of String(texto ?? '').split('\n')) {
-    if (linea.trim() === '') continue
-    let fila
+  for (const line of String(text ?? '').split('\n')) {
+    if (line.trim() === '') continue
+    let row
     try {
-      fila = JSON.parse(linea)
+      row = JSON.parse(line)
     } catch {
       continue
     }
-    if (fila === null || typeof fila !== 'object' || Array.isArray(fila)) continue
-    const medidas = [fila.agent_bytes, fila.skill_bytes, fila.package_bytes]
-    if (medidas.every((cuantos) => Number.isInteger(cuantos) && cuantos >= 0)) {
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) continue
+    const measurements = [row.agent_bytes, row.skill_bytes, row.package_bytes]
+    if (measurements.every((count) => Number.isInteger(count) && count >= 0)) {
       roleAttempts += 1
       roleMeasured += 1
-      agentBytes += fila.agent_bytes
-      skillBytes += fila.skill_bytes
-      packageBytes += fila.package_bytes
+      agentBytes += row.agent_bytes
+      skillBytes += row.skill_bytes
+      packageBytes += row.package_bytes
       continue
     }
-    if (fila.step === 'implement' || Object.hasOwn(fila, 'ruling')) {
+    if (row.step === 'implement' || Object.hasOwn(row, 'ruling')) {
       roleAttempts += 1
       roleLegacy += 1
     }

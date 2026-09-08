@@ -15,12 +15,12 @@ const A = 'el server escucha en 9115 por defecto y en el puerto indicado si se p
 // `e2e`. The committed task matters: ct-step cross-checks the real commits
 // against the state.
 //
-// `comiteaLaTarea: false` leaves the work STAGED instead of committed: zero
+// `commitsTheTask: false` leaves the work STAGED instead of committed: zero
 // commits since `baseSha`, which is the count the `commit` step demands
 // (`task - 1`, with `task: 1`). It is the only way to really exercise the
 // `commit` step with this fixture — see the test "with no runs…", which for
 // the whole branch died at PRECONDITION without anyone noticing.
-function worktreeEnE2e({ tasksTotal = 1, e2eRuns = [A], comiteaLaTarea = true } = {}) {
+function worktreeAtE2e({ tasksTotal = 1, e2eRuns = [A], commitsTheTask = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ct-step-e2e-'))
   const git = (...a) => execFileSync('git', a, { cwd: dir, stdio: 'ignore' })
   git('init', '-q', '-b', 'main')
@@ -29,11 +29,11 @@ function worktreeEnE2e({ tasksTotal = 1, e2eRuns = [A], comiteaLaTarea = true } 
   const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim()
   git('checkout', '-qb', 'feat/4')
   mkdirSync(join(dir, 'docs', 'superpowers', 'plans'), { recursive: true })
-  writeFileSync(join(dir, 'docs', 'superpowers', 'plans', 'plan.md'), planDeUnaTarea())
+  writeFileSync(join(dir, 'docs', 'superpowers', 'plans', 'plan.md'), oneTaskPlan())
   mkdirSync(join(dir, '.agent'), { recursive: true })
   writeFileSync(join(dir, '.agent', 'SLICE.md'), '---\nissue: 4\n---\n')
   git('add', '-A')
-  if (comiteaLaTarea) git('commit', '-qm', 'tarea 1')
+  if (commitsTheTask) git('commit', '-qm', 'tarea 1')
   writeFileSync(join(dir, '.agent', 'run-4.json'), JSON.stringify({
     plan: 'docs/superpowers/plans/plan.md', issue: 4, baseSha,
     task: tasksTotal, tasksTotal, e2eRuns, step: 'e2e',
@@ -43,14 +43,14 @@ function worktreeEnE2e({ tasksTotal = 1, e2eRuns = [A], comiteaLaTarea = true } 
 }
 
 // A slice worktree with the last task already committed and the run stopped
-// at `reconcile` (Phase B, Task 8). Unlike `worktreeEnE2e`, here a real
-// `origin` IS needed: `verboReconcile` talks to git — `BranchReconciliation.merge`
+// at `reconcile` (Phase B, Task 8). Unlike `worktreeAtE2e`, here a real
+// `origin` IS needed: `reconcileVerb` talks to git — `BranchReconciliation.merge`
 // does `git fetch origin <branch>` and measures how many commits it brings —
 // so with no real remote there is no "base that has not moved" to test. The
 // `origin` is a bare repo that starts at the same commit as `HEAD` and is
 // never touched again: that IS "the base has not moved", with no need to fake
 // anything else.
-function worktreeEnReconcile({ tasksTotal = 1 } = {}) {
+function worktreeAtReconcile({ tasksTotal = 1 } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ct-step-reconcile-'))
   const git = (...a) => execFileSync('git', a, { cwd: dir, stdio: 'ignore' })
   git('init', '-q', '-b', 'main')
@@ -63,7 +63,7 @@ function worktreeEnReconcile({ tasksTotal = 1 } = {}) {
   git('push', '-q', 'origin', 'main')
   git('checkout', '-qb', 'feat/4')
   mkdirSync(join(dir, 'docs', 'superpowers', 'plans'), { recursive: true })
-  writeFileSync(join(dir, 'docs', 'superpowers', 'plans', 'plan.md'), planDeUnaTarea())
+  writeFileSync(join(dir, 'docs', 'superpowers', 'plans', 'plan.md'), oneTaskPlan())
   mkdirSync(join(dir, '.agent'), { recursive: true })
   writeFileSync(join(dir, '.agent', 'SLICE.md'), '---\nissue: 4\n---\n')
   writeFileSync(join(dir, 'work.txt'), 'trabajo\n')
@@ -78,7 +78,7 @@ function worktreeEnReconcile({ tasksTotal = 1 } = {}) {
   return dir
 }
 
-// Fix round 1 (Task 8) — the four escalation messages of `verboReconcile` ARE
+// Fix round 1 (Task 8) — the four escalation messages of `reconcileVerb` ARE
 // the mechanism: they are the only thing that makes a conflict get resolved.
 // Testing them against a double proves nothing about the verb — a REAL
 // conflict against a real `origin` is needed.
@@ -97,7 +97,7 @@ function worktreeEnReconcile({ tasksTotal = 1 } = {}) {
 // during the merge, so `RESOLVED` was unreachable— and since the fix the
 // question is `git diff --name-only`, which sees neither what is cleanly
 // staged nor what is untracked.
-function worktreeEnConflicto({ reconcileRetries = 0 } = {}) {
+function worktreeInConflict({ reconcileRetries = 0 } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ct-step-reconcile-conflicto-'))
   const git = (...a) => execFileSync('git', a, { cwd: dir, stdio: 'ignore' })
   git('init', '-q', '-b', 'main')
@@ -112,7 +112,7 @@ function worktreeEnConflicto({ reconcileRetries = 0 } = {}) {
   git('push', '-q', 'origin', 'main')
   git('checkout', '-qb', 'feat/4')
   mkdirSync(join(dir, 'docs', 'superpowers', 'plans'), { recursive: true })
-  writeFileSync(join(dir, 'docs', 'superpowers', 'plans', 'plan.md'), planDeUnaTarea())
+  writeFileSync(join(dir, 'docs', 'superpowers', 'plans', 'plan.md'), oneTaskPlan())
   mkdirSync(join(dir, '.agent'), { recursive: true })
   writeFileSync(join(dir, '.agent', 'SLICE.md'), '---\nissue: 4\n---\n')
   writeFileSync(join(dir, 'work.txt'), 'trabajo\n')
@@ -145,7 +145,7 @@ function worktreeEnConflicto({ reconcileRetries = 0 } = {}) {
 // `MERGE_HEAD`. It is the slice's own dirty tree, not a content conflict —
 // that is why it does not need the `.gitignore` of the helper above:
 // `merge()` never calls `git status --porcelain`.
-function worktreeConArbolSucio() {
+function worktreeWithDirtyTree() {
   const dir = mkdtempSync(join(tmpdir(), 'ct-step-reconcile-sucio-'))
   const git = (...a) => execFileSync('git', a, { cwd: dir, stdio: 'ignore' })
   git('init', '-q', '-b', 'main')
@@ -158,7 +158,7 @@ function worktreeConArbolSucio() {
   git('push', '-q', 'origin', 'main')
   git('checkout', '-qb', 'feat/4')
   mkdirSync(join(dir, 'docs', 'superpowers', 'plans'), { recursive: true })
-  writeFileSync(join(dir, 'docs', 'superpowers', 'plans', 'plan.md'), planDeUnaTarea())
+  writeFileSync(join(dir, 'docs', 'superpowers', 'plans', 'plan.md'), oneTaskPlan())
   mkdirSync(join(dir, '.agent'), { recursive: true })
   writeFileSync(join(dir, '.agent', 'SLICE.md'), '---\nissue: 4\n---\n')
   writeFileSync(join(dir, 'work.txt'), 'trabajo\n')
@@ -190,7 +190,7 @@ function worktreeConArbolSucio() {
 // and therefore the only one that can prove that the reader of
 // `.agent/SLICE.md` really feeds `e2eRuns` — the helper above seeds the run
 // by hand and never goes through there.
-function worktreeNuevo({ e2eYaml = '' } = {}) {
+function newWorktree({ e2eYaml = '' } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ct-step-nuevo-'))
   const git = (...a) => execFileSync('git', a, { cwd: dir, stdio: 'ignore' })
   git('init', '-q', '-b', 'main')
@@ -198,7 +198,7 @@ function worktreeNuevo({ e2eYaml = '' } = {}) {
   writeFileSync(join(dir, 'f.txt'), 'base\n'); git('add', '-A'); git('commit', '-qm', 'base')
   git('checkout', '-qb', 'feat/4')
   mkdirSync(join(dir, 'docs', 'superpowers', 'plans'), { recursive: true })
-  writeFileSync(join(dir, 'docs', 'superpowers', 'plans', 'plan.md'), planDeUnaTarea())
+  writeFileSync(join(dir, 'docs', 'superpowers', 'plans', 'plan.md'), oneTaskPlan())
   mkdirSync(join(dir, '.agent'), { recursive: true })
   writeFileSync(join(dir, '.agent', 'SLICE.md'), `---\nissue: 4\n${e2eYaml}---\n`)
   git('add', '-A'); git('commit', '-qm', 'setup')
@@ -210,7 +210,7 @@ function worktreeNuevo({ e2eYaml = '' } = {}) {
 // `minimalPlanFor` of __tests__/dispatch-check-dryrun.test.js:73, copied (not
 // imported: this repo's tests do not import each other) and pinned to issue 4.
 const FENCE = '```'
-const planDeUnaTarea = () => [
+const oneTaskPlan = () => [
   '# #4 — fixture slice',
   '',
   '> **This plan is written to be executed by task-scoped subagents with zero context.**',
@@ -264,16 +264,16 @@ const planDeUnaTarea = () => [
 ].join('\n')
 
 const step = (dir, args) => spawnSync(process.execPath, [STEP, ...args, '--plan', 'docs/superpowers/plans/plan.md', '--issue', '4'], { cwd: dir, encoding: 'utf8' })
-const informe = (dir, obj) => { const p = join(dir, 'informe.json'); writeFileSync(p, JSON.stringify(obj)); return 'informe.json' }
+const report = (dir, obj) => { const p = join(dir, 'informe.json'); writeFileSync(p, JSON.stringify(obj)); return 'informe.json' }
 
-const VERDE = { runs: [{ run: A, verdict: 'verde', brought_up: 'cargo run --example serve', evidence: [{ command: 'curl -sS localhost:9115/metrics', output: '# HELP x' }] }] }
-const ROJO = { runs: [{ run: A, verdict: 'rojo', brought_up: 'cargo run --example serve', expected: '200', actual: '404', repro: 'curl -i localhost:9115/metrics', refuted_by: 'otro proceso en el puerto' }] }
+const GREEN = { runs: [{ run: A, verdict: 'verde', brought_up: 'cargo run --example serve', evidence: [{ command: 'curl -sS localhost:9115/metrics', output: '# HELP x' }] }] }
+const RED = { runs: [{ run: A, verdict: 'rojo', brought_up: 'cargo run --example serve', expected: '200', actual: '404', repro: 'curl -i localhost:9115/metrics', refuted_by: 'otro proceso en el puerto' }] }
 
 describe('ct-step e2e', () => {
   it('green: exit 0, run delivered and the markdown written and COMMITTED', () => {
-    const dir = worktreeEnE2e()
+    const dir = worktreeAtE2e()
     try {
-      const r = step(dir, ['e2e', informe(dir, VERDE)])
+      const r = step(dir, ['e2e', report(dir, GREEN)])
       expect(r.status).toBe(0)
       const run = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
       expect(run.closed).toBe('delivered')
@@ -288,8 +288,8 @@ describe('ct-step e2e', () => {
       // the last commit.
       const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: dir, encoding: 'utf8' })
       expect(staged).not.toContain('docs/superpowers/e2e/4.md')
-      const enElCommit = execFileSync('git', ['show', '--name-only', '--pretty=', 'HEAD'], { cwd: dir, encoding: 'utf8' })
-      expect(enElCommit).toContain('docs/superpowers/e2e/4.md')
+      const inTheCommit = execFileSync('git', ['show', '--name-only', '--pretty=', 'HEAD'], { cwd: dir, encoding: 'utf8' })
+      expect(inTheCommit).toContain('docs/superpowers/e2e/4.md')
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
@@ -299,10 +299,10 @@ describe('ct-step e2e', () => {
   // --release "says so". The shape is the minimum that sustains that warning:
   // run -> verdict, plus `reason` where there is one.
   it("the run persists each run's verdict, with its reason when it is no-verificado", () => {
-    const dir = worktreeEnE2e()
+    const dir = worktreeAtE2e()
     try {
-      const SIN_VERIFICAR = { runs: [{ run: A, verdict: 'no-verificado', reason: 'la sección de AGENTS.md está sin rellenar', unblock: 'rellenar "Levantar" y "Listo cuando"' }] }
-      const r = step(dir, ['e2e', informe(dir, SIN_VERIFICAR)])
+      const UNVERIFIED = { runs: [{ run: A, verdict: 'no-verificado', reason: 'la sección de AGENTS.md está sin rellenar', unblock: 'rellenar "Levantar" y "Listo cuando"' }] }
+      const r = step(dir, ['e2e', report(dir, UNVERIFIED)])
       expect(r.status).toBe(0) // the no-verificado DELIVERS
       const run = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
       expect(run.closed).toBe('delivered')
@@ -311,18 +311,18 @@ describe('ct-step e2e', () => {
   })
 
   it('when green, the persisted verdict carries no `reason` (there is no reason to give)', () => {
-    const dir = worktreeEnE2e()
+    const dir = worktreeAtE2e()
     try {
-      expect(step(dir, ['e2e', informe(dir, VERDE)]).status).toBe(0)
+      expect(step(dir, ['e2e', report(dir, GREEN)]).status).toBe(0)
       const run = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
       expect(run.e2eResults).toEqual([{ run: A, verdict: 'verde' }])
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
   it('red: exit 7, run blocked-e2e, NOT delivered, and the report STAGED but NOT committed', () => {
-    const dir = worktreeEnE2e()
+    const dir = worktreeAtE2e()
     try {
-      const r = step(dir, ['e2e', informe(dir, ROJO)])
+      const r = step(dir, ['e2e', report(dir, RED)])
       expect(r.status).toBe(7)
       const run = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
       expect(run.closed).not.toBe('delivered')
@@ -333,37 +333,37 @@ describe('ct-step e2e', () => {
       // waiting for whoever fixes it.
       const staged = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: dir, encoding: 'utf8' })
       expect(staged).toContain('docs/superpowers/e2e/4.md')
-      const enElCommit = execFileSync('git', ['show', '--name-only', '--pretty=', 'HEAD'], { cwd: dir, encoding: 'utf8' })
-      expect(enElCommit).not.toContain('docs/superpowers/e2e/4.md')
+      const inTheCommit = execFileSync('git', ['show', '--name-only', '--pretty=', 'HEAD'], { cwd: dir, encoding: 'utf8' })
+      expect(inTheCommit).not.toContain('docs/superpowers/e2e/4.md')
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
   it('outside its step: exit 9 and it says which one is due', () => {
-    const dir = worktreeEnE2e()
+    const dir = worktreeAtE2e()
     try {
       const run = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
       // `task: 2, tasksTotal: 2` and not `task: 1` (which would be this
       // fixture's real `task` with `tasksTotal: 1`): there is ONE commit
-      // since `baseSha` (worktreeEnE2e commits once only, "tarea 1"), so
+      // since `baseSha` (worktreeAtE2e commits once only, "tarea 1"), so
       // outside the `e2e` step the invariant demands `task - 1 === 1`.
       // `task: 2` without raising `tasksTotal` would make the count add up
       // but would describe "task 2 of 1", a state
-      // `run-machine.js#trasElCommit` never produces: `task` does not advance
+      // `run-machine.js#afterCommit` never produces: `task` does not advance
       // beyond `tasksTotal` (on committing the last one it enters E2E or
       // closes DELIVERED). With `tasksTotal: 2` this is really "working on
       // the second of two tasks" — the real state the guard protects. With
       // `task: 1` (the original value) the PRECONDITION guard itself fires
-      // before reaching `exigirPaso` — correct for THAT check, but it is not
+      // before reaching `requireStep` — correct for THAT check, but it is not
       // what this test wants to exercise.
       writeFileSync(join(dir, '.agent', 'run-4.json'), JSON.stringify({ ...run, step: 'implement', task: 2, tasksTotal: 2 }))
-      const r = step(dir, ['e2e', informe(dir, VERDE)])
+      const r = step(dir, ['e2e', report(dir, GREEN)])
       expect(r.status).toBe(9)
       expect(r.stderr).toMatch(/implement/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
   it('unreadable JSON is a discard, not a usage error', () => {
-    const dir = worktreeEnE2e()
+    const dir = worktreeAtE2e()
     try {
       writeFileSync(join(dir, 'roto.json'), '{no es json')
       const r = step(dir, ['e2e', 'roto.json'])
@@ -375,7 +375,7 @@ describe('ct-step e2e', () => {
   })
 
   it('`next` at the e2e step says what is expected and cites the WHOLE schema (including the per-verdict fields)', () => {
-    const dir = worktreeEnE2e()
+    const dir = worktreeAtE2e()
     try {
       const r = step(dir, ['next'])
       expect(r.status).toBe(0)
@@ -396,7 +396,7 @@ describe('ct-step e2e', () => {
 
   // This test PASSED for the wrong reason, and the final branch review
   // reproduced it: with the task already committed, `ct-step commit` died at
-  // PRECONDITION (exit 8, "el estado y git no cuentan lo mismo") because
+  // PRECONDITION (exit 8, "el state y git no cuentan lo mismo") because
   // outside the `e2e` step the invariant demands `commits === task - 1` and
   // here there was one too many. `run-4.json` was never rewritten, so
   // `after.step` was the 'commit' the test itself had just written and the
@@ -417,13 +417,13 @@ describe('ct-step e2e', () => {
   // neither in the state nor in what `next` asks for. The closure at
   // DELIVERED is proved by the global phase's tests, which is whose it is now.
   it('with no runs, the run never enters e2e (and `next` does not ask for it)', () => {
-    const dir = worktreeEnE2e({ e2eRuns: [], comiteaLaTarea: false })
+    const dir = worktreeAtE2e({ e2eRuns: [], commitsTheTask: false })
     try {
       const run = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
       // Slice 12: `commit` demands the seal the verdict leaves on being
       // accepted, and this fixture seeds the state by hand — so it seeds the
       // seal too. It is the index's tree AS OF NOW, which is what that commit
-      // is going to carry: the same thing `verboVerdict` seals after staging
+      // is going to carry: the same thing `verdictVerb` seals after staging
       // the verdict.
       const sealedTree = execFileSync('git', ['write-tree'], { cwd: dir, encoding: 'utf8' }).trim()
       writeFileSync(join(dir, '.agent', 'run-4.json'), JSON.stringify({ ...run, step: 'commit', sealedTree }))
@@ -447,10 +447,10 @@ describe('ct-step e2e', () => {
   // THE ADDITION THE BRIEF DOES NOT COVER: `newRun` receives `e2eRuns`, but
   // nothing in the brief proves that ct-step really READS them from anywhere.
   // The six tests above seed `run-<issue>.json` by hand (helper
-  // `worktreeEnE2e`), so none of them goes through the `else` branch that
+  // `worktreeAtE2e`), so none of them goes through the `else` branch that
   // creates the run — the only path that calls `newRun`. These two do.
   it('a new run reads the runs from .agent/SLICE.md (the only path that calls newRun)', () => {
-    const dir = worktreeNuevo({ e2eYaml: 'e2e:\n  - uno\n  - dos\n' })
+    const dir = newWorktree({ e2eYaml: 'e2e:\n  - uno\n  - dos\n' })
     try {
       const r = step(dir, ['next'])
       expect(r.status).toBe(0)
@@ -460,7 +460,7 @@ describe('ct-step e2e', () => {
   })
 
   it('with no `e2e` field in SLICE.md, the new run is born with e2eRuns: [] (not undefined)', () => {
-    const dir = worktreeNuevo()
+    const dir = newWorktree()
     try {
       const r = step(dir, ['next'])
       expect(r.status).toBe(0)
@@ -473,26 +473,26 @@ describe('ct-step e2e', () => {
 // Phase B, Task 8 — the `reconcile` verb, idempotent through MERGE_HEAD.
 describe('ct-step reconcile', () => {
   it('with the base unmoved, it advances to global without creating any commit', () => {
-    const dir = worktreeEnReconcile()
+    const dir = worktreeAtReconcile()
     try {
-      const antes = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim()
+      const before = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim()
       const r = step(dir, ['reconcile'])
       expect(r.status).toBe(0)
       expect(r.stdout).toMatch(/up-to-date/)
-      const despues = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim()
-      expect(despues).toBe(antes) // no reconcile round commits anything here
+      const after = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim()
+      expect(after).toBe(before) // no reconcile round commits anything here
       const run = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
       expect(run.step).toBe('global')
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
   // Ruling 2 of the brief: RECONCILE is a step of the SLICE, not of a task —
-  // if `PASOS_DE_SLICE` did not know that, the state and git would not add up
+  // if `SLICE_STEPS` did not know that, the state and git would not add up
   // on loading the run and ANY verb (including this `global`) would die at
   // PRECONDITION before even getting to look at the step. This test also
   // serves as a net for that regression (see Step 5 of the brief).
   it('`global` outside its step (the run is at reconcile) exits with 9 naming "reconcile"', () => {
-    const dir = worktreeEnReconcile()
+    const dir = worktreeAtReconcile()
     try {
       const r = step(dir, ['global'])
       expect(r.status).toBe(9)
@@ -507,7 +507,7 @@ describe('ct-step reconcile', () => {
   // four say "reconcile", the first three say "shared.txt", etc.).
   describe('the four escalation messages', () => {
     it('CONFLICTING with budget left: it names the conflicting files and asks for ct-reconciler to be dispatched', () => {
-      const dir = worktreeEnConflicto({ reconcileRetries: 0 })
+      const dir = worktreeInConflict({ reconcileRetries: 0 })
       try {
         const r = step(dir, ['reconcile'])
         expect(r.stdout).toMatch(/conflicting — 1 fichero\(s\) en conflicto/)
@@ -528,21 +528,21 @@ describe('ct-step reconcile', () => {
     // was after (the Task 9 brief is explicit: "without this it resolves
     // blind").
     it('CONFLICTING with budget left: it writes the reconciliation package with the conflicting files and the base log', () => {
-      const dir = worktreeEnConflicto({ reconcileRetries: 0 })
+      const dir = worktreeInConflict({ reconcileRetries: 0 })
       try {
         const r = step(dir, ['reconcile'])
         expect(r.status).toBe(0)
-        const paquete = join(dir, '.agent', 'run-4', 'reconcile-package-1.md')
-        expect(existsSync(paquete)).toBe(true)
-        const contenido = readFileSync(paquete, 'utf8')
-        expect(contenido).toContain('shared.txt')
-        expect(contenido).toMatch(/la base avanza/)
-        expect(r.stdout).toContain(paquete)
+        const packagePath = join(dir, '.agent', 'run-4', 'reconcile-package-1.md')
+        expect(existsSync(packagePath)).toBe(true)
+        const content = readFileSync(packagePath, 'utf8')
+        expect(content).toContain('shared.txt')
+        expect(content).toMatch(/la base avanza/)
+        expect(r.stdout).toContain(packagePath)
       } finally { rmSync(dir, { recursive: true, force: true }) }
     })
 
     it('CONFLICTING with the budget spent: it stops naming ct-reconciler and hands the turn to the slice agent', () => {
-      const dir = worktreeEnConflicto({ reconcileRetries: DEFAULT_BUDGETS.reconcileRetries })
+      const dir = worktreeInConflict({ reconcileRetries: DEFAULT_BUDGETS.reconcileRetries })
       try {
         const r = step(dir, ['reconcile'])
         expect(r.stdout).toMatch(/conflicting — 1 fichero\(s\) en conflicto/)
@@ -555,7 +555,7 @@ describe('ct-step reconcile', () => {
     })
 
     it('UNMERGEABLE_TREE: it goes to the slice agent and NEVER mentions ct-reconciler (it is not a content conflict)', () => {
-      const dir = worktreeConArbolSucio()
+      const dir = worktreeWithDirtyTree()
       try {
         const r = step(dir, ['reconcile'])
         expect(r.stdout).toMatch(/unmergeable-tree/)
@@ -573,13 +573,13 @@ describe('ct-step reconcile', () => {
     // but the cause was that `BranchReconciliation` did not tell the loop's
     // own footprint apart from a resolution that touched too much. Fix round
     // 2 teaches it that through the constructor (`isMachineryPath`, wired in
-    // `verboReconcile` from `LOOP_ARTIFACT_PATTERNS`/`matchesPattern` of
+    // `reconcileVerb` from `LOOP_ARTIFACT_PATTERNS`/`matchesPattern` of
     // `scope.js`): the metrics file no longer counts as "touched outside", so
     // this second call DOES get to look at the markers — and it finds them,
     // because nobody resolved anything. `markers-left` is once again the
     // correct and reachable reason.
     it('ROUND_DISCARDED: it names which of the three DiscardReason it was (markers-left)', () => {
-      const dir = worktreeEnConflicto({ reconcileRetries: 0 })
+      const dir = worktreeInConflict({ reconcileRetries: 0 })
       try {
         // First round: CONFLICTING (covered above). Its own telemetry leaves
         // the metrics file uncommitted in the tree — that no longer matters,
@@ -598,20 +598,20 @@ describe('ct-step reconcile', () => {
     // carries that reason: without it, the re-dispatched reconciler repeats
     // the same attempt that already failed, blind to why it failed.
     it('ROUND_DISCARDED: the new package (attempt 2) carries the discard reason', () => {
-      const dir = worktreeEnConflicto({ reconcileRetries: 0 })
+      const dir = worktreeInConflict({ reconcileRetries: 0 })
       try {
         step(dir, ['reconcile']) // round 1: CONFLICTING, writes reconcile-package-1.md
         const r = step(dir, ['reconcile']) // round 2: nobody resolved -> MARKERS_LEFT
         expect(r.status).toBe(0)
-        const primero = join(dir, '.agent', 'run-4', 'reconcile-package-1.md')
-        const segundo = join(dir, '.agent', 'run-4', 'reconcile-package-2.md')
-        expect(existsSync(primero)).toBe(true)
-        expect(existsSync(segundo)).toBe(true)
-        const contenido = readFileSync(segundo, 'utf8')
-        expect(contenido).toContain('shared.txt')
-        expect(contenido).toMatch(/markers-left/)
-        expect(contenido).toMatch(/quedaron marcas de conflicto/)
-        expect(r.stdout).toContain(segundo)
+        const first = join(dir, '.agent', 'run-4', 'reconcile-package-1.md')
+        const second = join(dir, '.agent', 'run-4', 'reconcile-package-2.md')
+        expect(existsSync(first)).toBe(true)
+        expect(existsSync(second)).toBe(true)
+        const content = readFileSync(second, 'utf8')
+        expect(content).toContain('shared.txt')
+        expect(content).toMatch(/markers-left/)
+        expect(content).toMatch(/quedaron marcas de conflicto/)
+        expect(r.stdout).toContain(second)
       } finally { rmSync(dir, { recursive: true, force: true }) }
     })
 
@@ -620,16 +620,16 @@ describe('ct-step reconcile', () => {
     // the round writes afterwards for the next attempt: the other way round,
     // the column would state the cost of a call that has not been made yet.
     it('ROUND_DISCARDED: the row records the reconciler agent and the package it read, not the one written afterwards', () => {
-      const dir = worktreeEnConflicto({ reconcileRetries: 0 })
+      const dir = worktreeInConflict({ reconcileRetries: 0 })
       try {
         step(dir, ['reconcile'])
-        const bytesDelPrimero = statSync(join(dir, '.agent', 'run-4', 'reconcile-package-1.md')).size
+        const firstPackageBytes = statSync(join(dir, '.agent', 'run-4', 'reconcile-package-1.md')).size
         step(dir, ['reconcile'])
-        const filas = readFileSync(join(dir, 'docs', 'superpowers', 'metrics', 'issue-4.jsonl'), 'utf8')
+        const rows = readFileSync(join(dir, 'docs', 'superpowers', 'metrics', 'issue-4.jsonl'), 'utf8')
           .trim().split('\n').map((l) => JSON.parse(l)).filter((f) => f.step === 'reconcile')
-        expect(filas.at(-1).package_bytes).toBe(bytesDelPrimero)
-        expect(filas.at(-1).agent_bytes).toBeGreaterThan(0)
-        expect(filas.at(-1).skill_bytes).toBe(0)
+        expect(rows.at(-1).package_bytes).toBe(firstPackageBytes)
+        expect(rows.at(-1).agent_bytes).toBeGreaterThan(0)
+        expect(rows.at(-1).skill_bytes).toBe(0)
       } finally { rmSync(dir, { recursive: true, force: true }) }
     })
   })
@@ -644,27 +644,27 @@ describe('ct-step reconcile', () => {
 // merge. This test walks the three real rounds and demands the ending.
 describe('the reconcile ladder reaches all the way down', () => {
   it('three rounds without resolving end at BLOCKED_RECONCILE, with exit 13 and the slice agent taking the turn', () => {
-    const dir = worktreeEnConflicto({ reconcileRetries: 0 })
+    const dir = worktreeInConflict({ reconcileRetries: 0 })
     try {
-      const primera = step(dir, ['reconcile'])
-      expect(primera.status).toBe(0)
-      expect(primera.stdout).toMatch(/DESPACHA ct-reconciler/)
+      const firstRound = step(dir, ['reconcile'])
+      expect(firstRound.status).toBe(0)
+      expect(firstRound.stdout).toMatch(/DESPACHA ct-reconciler/)
 
-      const segunda = step(dir, ['reconcile'])
-      expect(segunda.status).toBe(0)
-      expect(segunda.stdout).toMatch(/round-discarded \(markers-left\)/)
-      const trasLaSegunda = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
-      expect(trasLaSegunda.reconcileRetries).toBe(DEFAULT_BUDGETS.reconcileRetries)
+      const secondRound = step(dir, ['reconcile'])
+      expect(secondRound.status).toBe(0)
+      expect(secondRound.stdout).toMatch(/round-discarded \(markers-left\)/)
+      const afterTheSecondRound = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
+      expect(afterTheSecondRound.reconcileRetries).toBe(DEFAULT_BUDGETS.reconcileRetries)
 
-      const tercera = step(dir, ['reconcile'])
-      expect(tercera.stdout).toMatch(/round-discarded \(markers-left\)/)
-      expect(tercera.stdout).toMatch(/ct-reconciler agotó sus \d+ ronda\(s\)/)
-      expect(tercera.stdout).toMatch(/le toca al agente del propio slice, que sí tiene Bash/)
-      expect(tercera.stdout).not.toMatch(/REDESPACHA ct-reconciler/)
-      expect(tercera.status).toBe(13)
-      expect(tercera.stdout).toMatch(/run blocked-reconcile/)
-      const alFinal = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
-      expect(alFinal.discards).toBeLessThan(6)
+      const thirdRound = step(dir, ['reconcile'])
+      expect(thirdRound.stdout).toMatch(/round-discarded \(markers-left\)/)
+      expect(thirdRound.stdout).toMatch(/ct-reconciler agotó sus \d+ ronda\(s\)/)
+      expect(thirdRound.stdout).toMatch(/le toca al agente del propio slice, que sí tiene Bash/)
+      expect(thirdRound.stdout).not.toMatch(/REDESPACHA ct-reconciler/)
+      expect(thirdRound.status).toBe(13)
+      expect(thirdRound.stdout).toMatch(/run blocked-reconcile/)
+      const atTheEnd = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
+      expect(atTheEnd.discards).toBeLessThan(6)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
@@ -674,19 +674,19 @@ describe('the reconcile ladder reaches all the way down', () => {
   // without having dispatched the reconciler even once — and precisely to the
   // oldest runs, which are the ones whose base has moved the most.
   it('a run that was open before the field existed dispatches the reconciler instead of blocking on the first go', () => {
-    const dir = worktreeEnConflicto({ reconcileRetries: 0 })
+    const dir = worktreeInConflict({ reconcileRetries: 0 })
     try {
-      const estado = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
-      delete estado.reconcileRetries
-      writeFileSync(join(dir, '.agent', 'run-4.json'), JSON.stringify(estado, null, 2))
+      const state = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
+      delete state.reconcileRetries
+      writeFileSync(join(dir, '.agent', 'run-4.json'), JSON.stringify(state, null, 2))
 
       const r = step(dir, ['reconcile'])
 
       expect(r.status).toBe(0)
       expect(r.stdout).toMatch(/DESPACHA ct-reconciler/)
       expect(r.stdout).not.toMatch(/agotó sus/)
-      const despues = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
-      expect(despues.reconcileRetries).toBe(1)
+      const after = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
+      expect(after.reconcileRetries).toBe(1)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 })
@@ -697,20 +697,20 @@ describe('the reconcile ladder reaches all the way down', () => {
 // validation is what stops the branch from going on to `global` with the
 // markers inside the commit.
 describe('ct-step reconcile validates post hoc the merge someone else committed', () => {
-  function worktreeConLaFusionComiteadaAMano(resolucion) {
-    const dir = worktreeEnConflicto({ reconcileRetries: 0 })
+  function worktreeWithMergeCommittedByHand(resolution) {
+    const dir = worktreeInConflict({ reconcileRetries: 0 })
     const git = (...a) => execFileSync('git', a, { cwd: dir, stdio: 'ignore' })
     git('fetch', '-q', 'origin', 'main')
-    const fusion = spawnSync('git', ['merge', '--no-edit', 'origin/main'], { cwd: dir, encoding: 'utf8' })
-    if (fusion.status === 0) throw new Error('el montaje esperaba un conflicto real y no lo obtuvo')
-    writeFileSync(join(dir, 'shared.txt'), resolucion)
+    const merge = spawnSync('git', ['merge', '--no-edit', 'origin/main'], { cwd: dir, encoding: 'utf8' })
+    if (merge.status === 0) throw new Error('el montaje esperaba un conflicto real y no lo obtuvo')
+    writeFileSync(join(dir, 'shared.txt'), resolution)
     git('add', 'shared.txt')
-    git('commit', '-qm', 'fusion resuelta a mano, sin pasar por ct-step reconcile')
+    git('commit', '-qm', 'merge resuelta a mano, sin pasar por ct-step reconcile')
     return dir
   }
 
   it('a merge commit with markers inside is not announced as up-to-date: it names the file and sends for the slice agent', () => {
-    const dir = worktreeConLaFusionComiteadaAMano('<<<<<<< HEAD\nlínea de la tarea\n=======\nlínea de la base avanzada\n>>>>>>> origin/main\n')
+    const dir = worktreeWithMergeCommittedByHand('<<<<<<< HEAD\nlínea de la tarea\n=======\nlínea de la base avanzada\n>>>>>>> origin/main\n')
     try {
       const r = step(dir, ['reconcile'])
       expect(r.stdout).toMatch(/markers-committed/)
@@ -721,14 +721,14 @@ describe('ct-step reconcile validates post hoc the merge someone else committed'
   })
 
   it('a properly resolved merge commit is still up-to-date and advances to global', () => {
-    const dir = worktreeConLaFusionComiteadaAMano('línea de la tarea\nlínea de la base avanzada\n')
+    const dir = worktreeWithMergeCommittedByHand('línea de la tarea\nlínea de la base avanzada\n')
     try {
       const r = step(dir, ['reconcile'])
       expect(r.status).toBe(0)
       expect(r.stdout).toMatch(/up-to-date/)
       expect(r.stdout).not.toMatch(/markers-committed/)
-      const despues = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
-      expect(despues.step).toBe('global')
+      const after = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
+      expect(after.step).toBe('global')
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 })

@@ -8,7 +8,7 @@
 //
 //   - `ct-next.mjs#queryAllCmuxWorkspaces` — hardened by two external reviews,
 //     with the complete schema guard that sits further down.
-//   - `ct-watch-go.mjs#consultarSesion` — raw, matching by `custom_title`.
+//   - `ct-watch-go.mjs#querySession` — raw, matching by `custom_title`.
 //   - `ct-watch-merge.mjs#consultarCoordinadora` — raw, matching by
 //     `current_directory`.
 //

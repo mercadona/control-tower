@@ -84,8 +84,8 @@ describe('buildReconcileBody — frozen decisions', () => {
     // body may change because of other reconcile blocks —here the link to the
     // spec—; what matters is that the decisions gave up instead of inventing a
     // position.)
-    const sinAncla = 'algo de texto\n\n<!-- ct-order:1 -->'
-    const res = buildReconcileBody(sinAncla, wanted('- **D-1** — iOS 17.'))
+    const withoutAnchor = 'algo de texto\n\n<!-- ct-order:1 -->'
+    const res = buildReconcileBody(withoutAnchor, wanted('- **D-1** — iOS 17.'))
     expect(res.unresolvedFrozenDecisions).toBe('sin-ancla')
     expect(res.body || '').not.toContain('## Decisiones congeladas') // it was not written blind
   })

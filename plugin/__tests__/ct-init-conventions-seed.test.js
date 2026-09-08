@@ -20,8 +20,8 @@ describe('ct-init.sh seeds .agent/conventions.md', () => {
   it('in an empty dir, it creates the file and announces it with "creado"', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-conv-'))
     const out = execFileSync('bash', [script, dir], { encoding: 'utf8' })
-    const ruta = join(dir, CONVENTIONS_FILE)
-    expect(existsSync(ruta)).toBe(true)
+    const path = join(dir, CONVENTIONS_FILE)
+    expect(existsSync(path)).toBe(true)
     expect(out).toMatch(/creado.*conventions\.md/)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -39,16 +39,16 @@ describe('ct-init.sh seeds .agent/conventions.md', () => {
   it('the seed sets itself apart from conventions-ack.md (a comment of its own)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-conv-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
-    const contenido = readFileSync(join(dir, CONVENTIONS_FILE), 'utf8')
-    expect(contenido).toMatch(/conventions-ack\.md/)
+    const content = readFileSync(join(dir, CONVENTIONS_FILE), 'utf8')
+    expect(content).toMatch(/conventions-ack\.md/)
     rmSync(dir, { recursive: true, force: true })
   })
 
   it('the seed declares no yardstick — it keeps measuring sin-vara until a human confirms', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-conv-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
-    const contenido = readFileSync(join(dir, CONVENTIONS_FILE), 'utf8')
-    expect(contenido).toMatch(/ninguna declarada todavía/)
+    const content = readFileSync(join(dir, CONVENTIONS_FILE), 'utf8')
+    expect(content).toMatch(/ninguna declarada todavía/)
     rmSync(dir, { recursive: true, force: true })
   })
 })

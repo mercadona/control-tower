@@ -22,7 +22,7 @@ const F = '```'
 const REAL = fixture('plan-real-issue-5.md')
 // The same plan with the commands already in a block, which is what the new
 // rule of the contract asks of the plans from now on.
-const EJECUTABLE = fixture('plan-real-issue-5-ejecutable.md')
+const EXECUTABLE = fixture('plan-real-issue-5-ejecutable.md')
 
 const taskOf = (plan, n) => extractTasks(plan).tasks.find((t) => t.n === n)
 
@@ -45,7 +45,7 @@ describe('the tasks of the plan', () => {
 // ---------------------------------------------------------------------------
 describe('the yardstick of the task: the block of commands', () => {
   it('it takes the commands out of the block that goes after **Verification:**', () => {
-    expect(taskOf(EJECUTABLE, 2).commands).toEqual([
+    expect(taskOf(EXECUTABLE, 2).commands).toEqual([
       'npm test -w web   # exit 0',
       'npm run build && npm run lint   # exit 0',
     ])
@@ -62,7 +62,7 @@ describe('the yardstick of the task: the block of commands', () => {
 
   it('it accepts the block even when the **Verification:** paragraph spans two lines', () => {
     // Task 8 of the real plan spans two lines before the paragraph ends.
-    expect(taskOf(EJECUTABLE, 8).commands).toEqual([
+    expect(taskOf(EXECUTABLE, 8).commands).toEqual([
       'npm test && npm run lint && npm run build   # exit 0',
       'test "$(wc -l < AGENTS.md)" -le 150',
     ])
@@ -72,7 +72,7 @@ describe('the yardstick of the task: the block of commands', () => {
     // Real tasks carry their own fences of quoted code. Only the one that goes
     // immediately after **Verification:** counts, and that is why no task of
     // the executable plan brings TypeScript among its commands.
-    for (const t of extractTasks(EJECUTABLE).tasks) {
+    for (const t of extractTasks(EXECUTABLE).tasks) {
       expect(t.commands.every((c) => /^(npm|test|git|node|npx)\b/.test(c))).toBe(true)
     }
   })
@@ -83,12 +83,12 @@ describe('the yardstick of the task: the block of commands', () => {
     // command and expected output}}", inline), and even so no program can
     // execute it.
     const { problems } = extractTasks(REAL)
-    const sinBloque = problems.filter((p) => p.rule === 'verification-block')
-    expect(sinBloque.map((p) => p.task)).toEqual([2, 3, 4, 5, 6, 7, 8])
+    const withoutBlock = problems.filter((p) => p.rule === 'verification-block')
+    expect(withoutBlock.map((p) => p.task)).toEqual([2, 3, 4, 5, 6, 7, 8])
   })
 
   it('the same plan with the commands in a block does not have a single problem', () => {
-    expect(extractTasks(EJECUTABLE).problems).toEqual([])
+    expect(extractTasks(EXECUTABLE).problems).toEqual([])
   })
 
   it('an empty block of commands is a problem, not a task without a yardstick', () => {
@@ -129,10 +129,10 @@ describe('the test names', () => {
 
   it('the single-level sweep —the one that does NOT hold— would let the false name through', () => {
     // The proof that the trap is real and not an imaginary precaution.
-    const linea = "'a zero series sits on the baseline' (polylinePoints([0, 0], 1) es '0.0,199.0 600.0,199.0')"
-    const unNivel = linea.replace(/\([^()]*\)/g, '')
-    expect(unNivel).toContain('0.0,199.0 600.0,199.0')
-    expect(stripParenthesised(linea)).not.toContain('0.0,199.0 600.0,199.0')
+    const line = "'a zero series sits on the baseline' (polylinePoints([0, 0], 1) es '0.0,199.0 600.0,199.0')"
+    const oneLevel = line.replace(/\([^()]*\)/g, '')
+    expect(oneLevel).toContain('0.0,199.0 600.0,199.0')
+    expect(stripParenthesised(line)).not.toContain('0.0,199.0 600.0,199.0')
   })
 
   it('what goes between backticks with no single quotes are identifiers, not tests', () => {
@@ -220,7 +220,7 @@ describe('the paths the task declares in **Files:**', () => {
     // Task 1 of the executable plan:
     //   **Files:** `web/package.json` (modify), `web/vite.config.ts` (modify),
     //   `web/src/testing/setup.ts` (create), `web/src/App.test.tsx` (modify)
-    expect(taskOf(EJECUTABLE, 1).files).toEqual([
+    expect(taskOf(EXECUTABLE, 1).files).toEqual([
       { path: 'web/package.json', action: 'modify' },
       { path: 'web/vite.config.ts', action: 'modify' },
       { path: 'web/src/testing/setup.ts', action: 'create' },
@@ -243,7 +243,7 @@ describe('the paths the task declares in **Files:**', () => {
   })
 
   it('an action that is neither "create" nor "modify" also leaves the path at null', () => {
-    // `alcanceDeclarado`, in ct-step.mjs, only has branches for 'create' and
+    // `declaredScope`, in ct-step.mjs, only has branches for 'create' and
     // 'modify'. A different value ("renombra", a typo, whatever it is) must not
     // sneak through as it is: it is treated as if no action had been declared.
     const plan = [
@@ -261,7 +261,7 @@ describe('the paths the task declares in **Files:**', () => {
 
   it('a **Files:** paragraph with text that yields no path at all is a problem of the plan', () => {
     // The wrong format (with no backticks): `splitFiles` extracts nothing, and
-    // without this warning `alcanceDeclarado` would report ALL the paths
+    // without this warning `declaredScope` would report ALL the paths
     // touched as out of scope without saying why.
     const plan = [
       '### Task 1 — sin backticks',
@@ -279,7 +279,7 @@ describe('the paths the task declares in **Files:**', () => {
 
   it('the two real plans are still without a single "files-line" problem', () => {
     expect(extractTasks(REAL).problems.map((p) => p.rule)).not.toContain('files-line')
-    expect(extractTasks(EJECUTABLE).problems.map((p) => p.rule)).not.toContain('files-line')
+    expect(extractTasks(EXECUTABLE).problems.map((p) => p.rule)).not.toContain('files-line')
   })
 })
 
@@ -289,13 +289,13 @@ describe('the paths the task declares in **Files:**', () => {
 describe('the name of the test that **TDD:** declares', () => {
   it('it reads the name of the test that **TDD:** declares', () => {
     // Task 1 of the executable plan: **TDD:** `test('renders the app title in a DOM')` — ...
-    expect(taskOf(EJECUTABLE, 1).tddName).toBe('renders the app title in a DOM')
+    expect(taskOf(EXECUTABLE, 1).tddName).toBe('renders the app title in a DOM')
   })
 
   it('a No TDD declares no test at all', () => {
     // Task 4 says "No TDD — son los tokens de marca..." and task 8 "No TDD — es documentación.
-    expect(taskOf(EJECUTABLE, 4).tddName).toBeNull()
-    expect(taskOf(EJECUTABLE, 8).tddName).toBeNull()
+    expect(taskOf(EXECUTABLE, 4).tddName).toBeNull()
+    expect(taskOf(EXECUTABLE, 8).tddName).toBeNull()
   })
 })
 
@@ -304,15 +304,15 @@ describe('the name of the test that **TDD:** declares', () => {
 // ---------------------------------------------------------------------------
 describe('the role labels of the blocks of the task', () => {
   it('it reads the files each role label names', () => {
-    expect(taskOf(EJECUTABLE, 5).blockPaths).toEqual([
+    expect(taskOf(EXECUTABLE, 5).blockPaths).toEqual([
       { role: 'Current state', path: 'web/src/App.tsx' },
       { role: 'Contract', path: 'web/src/Header.tsx' },
     ])
-    expect(taskOf(EJECUTABLE, 4).blockPaths).toEqual([
+    expect(taskOf(EXECUTABLE, 4).blockPaths).toEqual([
       { role: 'Contract', path: 'web/src/tokens.css' },
       { role: 'Call site', path: 'web/src/main.tsx' },
     ])
-    expect(taskOf(EJECUTABLE, 8).blockPaths).toEqual([
+    expect(taskOf(EXECUTABLE, 8).blockPaths).toEqual([
       { role: 'Current state', path: 'AGENTS.md' },
       { role: 'Final text', path: 'AGENTS.md' },
     ])
@@ -343,7 +343,7 @@ describe('the role labels of the blocks of the task', () => {
     // The only test of finalTexts so far was a synthetic markdown of two
     // lines. Task 8 of the real plan is the real case: multi-line, with
     // backticks inside the text itself.
-    const t8 = taskOf(EJECUTABLE, 8)
+    const t8 = taskOf(EXECUTABLE, 8)
     expect(t8.finalTexts).toEqual([
       {
         path: 'AGENTS.md',
@@ -378,7 +378,7 @@ describe('the role labels of the blocks of the task', () => {
 // whose exit code is DEMONSTRABLY independent of what the plan claims, and for
 // each one it says how the equivalent predicate is written.
 describe('the yardstick has to be able to measure what it says it measures (verification-predicate)', () => {
-  const planCon = (comandos) => [
+  const planWith = (commands) => [
     '### Task 1 — una tarea',
     '',
     '**Objective:** algo.',
@@ -392,131 +392,131 @@ describe('the yardstick has to be able to measure what it says it measures (veri
     '**Verification:** los comandos.',
     '',
     `${F}bash`,
-    ...comandos,
+    ...commands,
     F,
     '',
   ].join('\n')
 
-  const reglas = (comandos) => extractTasks(planCon(comandos)).problems.filter((p) => p.rule === 'verification-predicate')
+  const rules = (commands) => extractTasks(planWith(commands)).problems.filter((p) => p.rule === 'verification-predicate')
 
   it('the inverted check of rust-monitoring, verbatim: `grep -c` closing the pipeline', () => {
-    const r = reglas(["git diff HEAD -- AGENTS.md | grep -c 'ct-init:slices-contract'   # expected: 0"])
+    const r = rules(["git diff HEAD -- AGENTS.md | grep -c 'ct-init:slices-contract'   # expected: 0"])
     expect(r).toHaveLength(1)
     expect(r[0].detail).toMatch(/grep -c/)
     expect(r[0].detail).toMatch(/test "\$\(/)
   })
 
   it('`grep -c` without a pipeline does not hold either: its exit code says "I found something", never how many', () => {
-    expect(reglas(["grep -c '^      - run: cargo ' .github/workflows/ci.yml   # expected: 4"])).toHaveLength(1)
+    expect(rules(["grep -c '^      - run: cargo ' .github/workflows/ci.yml   # expected: 4"])).toHaveLength(1)
   })
 
   it('the fix DOES validate: the predicate that wraps the count, with its pipeline inside `$(...)`', () => {
-    expect(reglas(['test "$(git diff HEAD -- AGENTS.md | grep -c \'ct-init:slices-contract\')" -eq 0'])).toEqual([])
+    expect(rules(['test "$(git diff HEAD -- AGENTS.md | grep -c \'ct-init:slices-contract\')" -eq 0'])).toEqual([])
   })
 
   it('the case of slice 35 of repo-pulse, verbatim: `grep -c` with TWO files inside the predicate', () => {
-    const r = reglas(['test "$(grep -c \'Cargando…\' web/src/App.tsx web/src/App.test.tsx)" -eq 0'])
+    const r = rules(['test "$(grep -c \'Cargando…\' web/src/App.tsx web/src/App.test.tsx)" -eq 0'])
     expect(r).toHaveLength(1)
     expect(r[0].detail).toMatch(/dos o más ficheros/)
     expect(r[0].detail).toMatch(/grep -l/)
   })
 
   it('one file inside the predicate is the good form and still validates', () => {
-    expect(reglas(['test "$(grep -c \'^test(\' web/src/screen.test.ts)" -eq 7'])).toEqual([])
+    expect(rules(['test "$(grep -c \'^test(\' web/src/screen.test.ts)" -eq 7'])).toEqual([])
   })
 
   it('the boundary is two: with one it holds, with two it does not, and it makes no difference whether the count is zero or seven', () => {
-    expect(reglas(['test "$(grep -c \'x\' a.ts)" -eq 7'])).toEqual([])
-    expect(reglas(['test "$(grep -c \'x\' a.ts b.ts)" -eq 7'])).toHaveLength(1)
-    expect(reglas(['test "$(grep -c \'x\' a.ts b.ts c.ts)" -eq 0'])).toHaveLength(1)
+    expect(rules(['test "$(grep -c \'x\' a.ts)" -eq 7'])).toEqual([])
+    expect(rules(['test "$(grep -c \'x\' a.ts b.ts)" -eq 7'])).toHaveLength(1)
+    expect(rules(['test "$(grep -c \'x\' a.ts b.ts c.ts)" -eq 0'])).toHaveLength(1)
   })
 
   it('a `grep -c` after a pipeline, over what arrives on stdin, has no files to count', () => {
-    expect(reglas(['test "$(git diff --name-only | grep -c \'web/src/App.tsx\')" -eq 1'])).toEqual([])
+    expect(rules(['test "$(git diff --name-only | grep -c \'web/src/App.tsx\')" -eq 1'])).toEqual([])
   })
 
   it('the substitution IS split by pipeline before counting: unsplit, the stage in front would confuse the count', () => {
-    expect(reglas(['test "$(cat a.ts | grep -c \'x\' b.ts c.ts)" -eq 0'])).toHaveLength(1)
+    expect(rules(['test "$(cat a.ts | grep -c \'x\' b.ts c.ts)" -eq 0'])).toHaveLength(1)
   })
 
   it('the patterns of `-e` are not counted as files, or two patterns and one file would look like two files', () => {
-    expect(reglas(['test "$(grep -c -e p1 -e p2 a.ts)" -eq 0'])).toEqual([])
-    expect(reglas(['test "$(grep -c -e p1 a.ts b.ts)" -eq 0'])).toHaveLength(1)
+    expect(rules(['test "$(grep -c -e p1 -e p2 a.ts)" -eq 0'])).toEqual([])
+    expect(rules(['test "$(grep -c -e p1 a.ts b.ts)" -eq 0'])).toHaveLength(1)
   })
 
   it('the flags of grep are not mistaken for files', () => {
-    expect(reglas(['test "$(grep -cE \'a|b\' --color=never web/src/screen.ts)" -eq 0'])).toEqual([])
+    expect(rules(['test "$(grep -cE \'a|b\' --color=never web/src/screen.ts)" -eq 0'])).toEqual([])
   })
 
   it('a redirection after the file does not count as a second file', () => {
-    expect(reglas(['test "$(grep -c \'x\' a.ts 2>/dev/null)" -eq 0'])).toEqual([])
-    expect(reglas(['test "$(grep -c \'x\' a.ts 2>&1)" -eq 0'])).toEqual([])
+    expect(rules(['test "$(grep -c \'x\' a.ts 2>/dev/null)" -eq 0'])).toEqual([])
+    expect(rules(['test "$(grep -c \'x\' a.ts 2>&1)" -eq 0'])).toEqual([])
   })
 
   it('the argument of a flag that takes a value (`-m N`) is not counted as a file', () => {
-    expect(reglas(['test "$(grep -c -m 1 \'x\' a.ts)" -eq 0'])).toEqual([])
+    expect(rules(['test "$(grep -c -m 1 \'x\' a.ts)" -eq 0'])).toEqual([])
   })
 
   it('a quoted pattern with a space inside is still ONE operand, not two', () => {
-    expect(reglas(['test "$(grep -c \'dos palabras\' a.ts)" -eq 0'])).toEqual([])
+    expect(rules(['test "$(grep -c \'dos palabras\' a.ts)" -eq 0'])).toEqual([])
   })
 
   it('a pattern with a parenthesis inside and two real files is still accused', () => {
-    expect(reglas(['test "$(grep -c \'a)b\' a.ts b.ts)" -eq 0'])).toHaveLength(1)
+    expect(rules(['test "$(grep -c \'a)b\' a.ts b.ts)" -eq 0'])).toHaveLength(1)
   })
 
   it('a `$(...)` that is literal text inside single quotes is not read as a real substitution', () => {
-    expect(reglas(["grep -Fq '$(grep -c mark a.ts b.ts)' incidencias.md"])).toEqual([])
+    expect(rules(["grep -Fq '$(grep -c mark a.ts b.ts)' incidencias.md"])).toEqual([])
   })
 
   it('a `$(...)` inside double quotes IS expanded, because in that quote the shell expands it too', () => {
-    expect(reglas(['test -n "$(grep -c \'x\' a.ts b.ts)"'])).toHaveLength(1)
+    expect(rules(['test -n "$(grep -c \'x\' a.ts b.ts)"'])).toHaveLength(1)
   })
 
   it('`rg -c` and `grep --count` with two files are caught by the SAME decision that catches `grep -c`, not by a copy that can drift away', () => {
-    expect(reglas(['test "$(rg -c \'x\' a.ts b.ts)" -eq 0'])).toHaveLength(1)
-    expect(reglas(['test "$(grep --count \'x\' a.ts b.ts)" -eq 0'])).toHaveLength(1)
+    expect(rules(['test "$(rg -c \'x\' a.ts b.ts)" -eq 0'])).toHaveLength(1)
+    expect(rules(['test "$(grep --count \'x\' a.ts b.ts)" -eq 0'])).toHaveLength(1)
   })
 
   it('double quotes that close stop suppressing, and a single one that opens right after DOES suppress what it carries inside', () => {
-    expect(reglas(['grep -Fq "prefix" \'$(grep -c mark a.ts b.ts)\' incidencias.md'])).toEqual([])
+    expect(rules(['grep -Fq "prefix" \'$(grep -c mark a.ts b.ts)\' incidencias.md'])).toEqual([])
   })
 
   it('single quotes that close stop suppressing, and a real substitution that comes afterwards IS inspected', () => {
-    expect(reglas(['grep -Fq \'note\' "$(grep -c \'x\' a.ts b.ts)" file.md'])).toHaveLength(1)
+    expect(rules(['grep -Fq \'note\' "$(grep -c \'x\' a.ts b.ts)" file.md'])).toHaveLength(1)
   })
 
   it('`grep -q` and the bare `grep` are not touched: there the exit code IS the assertion', () => {
-    expect(reglas(["grep -q 'cargo clippy' AGENTS.md"])).toEqual([])
-    expect(reglas(["grep 'cargo clippy' AGENTS.md"])).toEqual([])
+    expect(rules(["grep -q 'cargo clippy' AGENTS.md"])).toEqual([])
+    expect(rules(["grep 'cargo clippy' AGENTS.md"])).toEqual([])
   })
 
   it('`wc` is never a check: it exits with 0 with twelve lines and with twelve thousand — and the real plan carries one', () => {
-    expect(reglas(['wc -l AGENTS.md'])).toHaveLength(1)
+    expect(rules(['wc -l AGENTS.md'])).toHaveLength(1)
   })
 
   it('`| tail` closes the pipeline with the exit code of tail, not with that of the command that matters', () => {
-    expect(reglas(['make check 2>&1 | tail -80'])).toHaveLength(1)
+    expect(rules(['make check 2>&1 | tail -80'])).toHaveLength(1)
     // On its own, over a file, it does assert something (that the file can be read).
-    expect(reglas(['tail -5 CHANGELOG.md'])).toEqual([])
+    expect(rules(['tail -5 CHANGELOG.md'])).toEqual([])
   })
 
   it('`git status` exits with 0 with the tree dirty and with the tree clean', () => {
-    expect(reglas(['git status --short   # expected: vacío'])).toHaveLength(1)
+    expect(rules(['git status --short   # expected: vacío'])).toHaveLength(1)
   })
 
   it('a `#` or a `|` between quotes are neither a comment nor a pipeline', () => {
-    expect(reglas(["grep -c '#ct-init' AGENTS.md"])).toHaveLength(1)
-    expect(reglas(['grep -q "a|b" AGENTS.md'])).toEqual([])
+    expect(rules(["grep -c '#ct-init' AGENTS.md"])).toHaveLength(1)
+    expect(rules(['grep -q "a|b" AGENTS.md'])).toEqual([])
   })
 
   it('with `&&`, `||` or `;` it does not pronounce: the exit code depends on what got to run', () => {
-    expect(reglas(['npm test && npm run lint && npm run build   # exit 0'])).toEqual([])
-    expect(reglas(['cargo test || wc -l x'])).toEqual([])
+    expect(rules(['npm test && npm run lint && npm run build   # exit 0'])).toEqual([])
+    expect(rules(['cargo test || wc -l x'])).toEqual([])
   })
 
   it('the real executable plan is still without problems, with its `wc -l` turned into a predicate', () => {
-    expect(extractTasks(EJECUTABLE).problems).toEqual([])
+    expect(extractTasks(EXECUTABLE).problems).toEqual([])
   })
 })
 
@@ -527,7 +527,7 @@ describe('the yardstick has to be able to measure what it says it measures (veri
 // measures the per-task block.
 // ---------------------------------------------------------------------------
 describe('the Global verification belongs to the program (§3.7-A)', () => {
-  const conTareaY = (bloqueGlobal) => [
+  const withTaskAnd = (globalBlock) => [
     '### Task 1 — una tarea',
     '**Objective:** algo.',
     '**Files:** `a.js` (modify)',
@@ -538,12 +538,12 @@ describe('the Global verification belongs to the program (§3.7-A)', () => {
     'npm test',
     F,
     '',
-    ...bloqueGlobal,
+    ...globalBlock,
     '',
   ].join('\n')
 
   it('it extracts the commands of the first fence of §8, with prose before and after', () => {
-    const plan = conTareaY([
+    const plan = withTaskAnd([
       '## 8. Global verification',
       '',
       'Con todo comiteado, desde la raíz:',
@@ -560,34 +560,34 @@ describe('the Global verification belongs to the program (§3.7-A)', () => {
   })
 
   it('"N/A — <reason>" leaves the global with no commands and no problem', () => {
-    const plan = conTareaY(['## 8. Global verification', '', 'N/A — no hay punta a punta que correr.'])
+    const plan = withTaskAnd(['## 8. Global verification', '', 'N/A — no hay punta a punta que correr.'])
     const { global, problems } = extractTasks(plan)
     expect(global.commands).toEqual([])
     expect(problems.filter((p) => p.rule.startsWith('global-verification'))).toEqual([])
   })
 
   it('a §8 in prose, with no block of commands, is a problem', () => {
-    const plan = conTareaY(['## 8. Global verification', '', 'Que todo siga en verde.'])
+    const plan = withTaskAnd(['## 8. Global verification', '', 'Que todo siga en verde.'])
     const { global, problems } = extractTasks(plan)
     expect(global.commands).toEqual([])
     expect(problems.map((p) => p.rule)).toContain('global-verification-block')
   })
 
   it('a plan with no "## 8." brings the same problem', () => {
-    const plan = conTareaY([])
+    const plan = withTaskAnd([])
     const { global, problems } = extractTasks(plan)
     expect(global.commands).toEqual([])
     expect(problems.map((p) => p.rule)).toContain('global-verification-block')
   })
 
   it('a §8 whose last stage is `wc -l` is a predicate problem, just as in a task', () => {
-    const plan = conTareaY(['## 8. Global verification', '', F + 'bash', 'wc -l AGENTS.md', F])
+    const plan = withTaskAnd(['## 8. Global verification', '', F + 'bash', 'wc -l AGENTS.md', F])
     const { problems } = extractTasks(plan)
     expect(problems.map((p) => p.rule)).toContain('global-verification-predicate')
   })
 
   it('a §8 with a `grep -c` over two files is a predicate problem too: the rule of slice 35 is not only for the tasks', () => {
-    const plan = conTareaY([
+    const plan = withTaskAnd([
       '## 8. Global verification', '', F + 'bash', 'test "$(grep -c \'x\' a.ts b.ts)" -eq 0', F,
     ])
     const { problems } = extractTasks(plan)
@@ -595,7 +595,7 @@ describe('the Global verification belongs to the program (§3.7-A)', () => {
   })
 
   it('§8 also splits its words respecting quotes: a `-c` inside a literal does not confuse the head rule', () => {
-    const plan = conTareaY([
+    const plan = withTaskAnd([
       '## 8. Global verification', '', F + 'bash',
       "grep -Fq '$(grep -c mark a.ts b.ts)' incidencias.md", F,
     ])
@@ -604,7 +604,7 @@ describe('the Global verification belongs to the program (§3.7-A)', () => {
   })
 
   it('the real fixture extracts the single command of its Global verification', () => {
-    const { global } = extractTasks(EJECUTABLE)
+    const { global } = extractTasks(EXECUTABLE)
     expect(global.commands).toEqual(['npm run build && npm test && npm run lint   # exit 0'])
   })
 })

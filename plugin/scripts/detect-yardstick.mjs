@@ -41,7 +41,7 @@ if (!target) {
   process.exit(1)
 }
 
-let entradas = []
+let entries = []
 let truncated = false
 try {
   const st = statSync(target)
@@ -50,7 +50,7 @@ try {
     process.exit(1)
   }
   const r = walkRepo(target)
-  entradas = r.entradas
+  entries = r.entradas
   truncated = r.truncated
 } catch (e) {
   console.error(`no se ha podido barrer ${target}: ${e.message}`)
@@ -61,20 +61,26 @@ try {
 // declared: everything is proposed. If it exists and cannot be READ
 // (permissions), that is not the same thing — it gets said, so that the human
 // knows the list below may repeat something already declared.
-let declaradas = new Set()
-let notaLectura = ''
+let declared = new Set()
+let readNote = ''
 try {
-  declaradas = declaredIn(readFileSync(join(target, CONVENTIONS_FILE), 'utf8'))
+  declared = declaredIn(readFileSync(join(target, CONVENTIONS_FILE), 'utf8'))
 } catch (e) {
   if (e.code !== 'ENOENT') {
-    notaLectura =
+    readNote =
       `  nota: ${CONVENTIONS_FILE} existe y no se ha podido leer (${String(e.message).trim()}): ` +
       'puede que alguno de los candidatos de abajo ya esté declarado.'
   }
 }
 
-const { candidatos, omitidos } = yardstickCandidates({ entradas, declaradas })
-for (const c of candidatos) {
+// `entradas`, `declaradas`, `candidatos` and `omitidos` are the option and
+// result keys of `yardstickCandidates` in repo-yardstick.js: they cross the
+// module boundary, so only the local names on this side are English.
+const { candidatos: candidates, omitidos: omitted } = yardstickCandidates({
+  entradas: entries,
+  declaradas: declared,
+})
+for (const c of candidates) {
   try {
     c.esqueleto = pareceEsqueleto(readFileSync(join(target, c.ruta), 'utf8'))
   } catch {
@@ -82,6 +88,6 @@ for (const c of candidatos) {
   }
 }
 
-const texto = formatCandidatos(candidatos, { omitidos, truncated })
-if (texto) console.log(texto)
-if (notaLectura && texto) console.log(notaLectura)
+const text = formatCandidatos(candidates, { omitidos: omitted, truncated })
+if (text) console.log(text)
+if (readNote && text) console.log(readNote)

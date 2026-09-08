@@ -357,13 +357,13 @@ function renderStateGates(gates) {
   return `${list.join(', ')} — GATES HUMANOS pendientes: los cierra quien revisa el PR, NO tú. Detalle en la sección "## Gates" del issue.`
 }
 
-// renderStateSenal (Slice 10): the value of the `senal:` field — the text of
+// renderStateSignal (Slice 10): the value of the `senal:` field — the text of
 // the issue's section, verbatim (a signal, or an `N/A — <razón>` exemption, as
 // it is: the reader tells the exemption apart by its prefix alone), or
 // SIGNAL_ABSENT when the issue declares nothing. Never a gap: the absence is
 // declared, not omitted — see SIGNAL_ABSENT's comment.
-function renderStateSenal(senal) {
-  return (senal || '').trim() || SIGNAL_ABSENT
+function renderStateSignal(signal) {
+  return (signal || '').trim() || SIGNAL_ABSENT
 }
 
 // #96 — `baseline`: the result of `Baseline.measure` (scripts/baseline.js) over
@@ -422,7 +422,7 @@ export function buildStateSeed(slice, { branch, base, baseSha = '', baseline = B
       // omitted). Its readers: ct-step, which pastes it as the first section of
       // the slice judge's package —read from disk, with no agent in between,
       // §3.3's doctrine— and the agent itself when re-hydrating.
-      senal: renderStateSenal(slice.senal),
+      senal: renderStateSignal(slice.senal),
       // e2e (TASK 9) — the journeys the spec's E2E column declares. Unlike
       // `gates` (readable text, and whose own comment above warns that "no code
       // of the plugin decides anything with this field"), THIS field IS read by

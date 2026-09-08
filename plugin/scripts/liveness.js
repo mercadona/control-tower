@@ -50,7 +50,7 @@ export function assessLocalLiveness(n, getCmuxTitles, { repoRoot, timeoutMs }) {
   return { hasWorktree, hasBranch, hasCmuxWorkspace, cmuxChecked }
 }
 
-// SEÑAL_TIMEOUT_MS: neither `ps` nor `lsof` may leave this command hanging
+// SIGNAL_TIMEOUT_MS: neither `ps` nor `lsof` may leave this command hanging
 // forever. `lsof` is the classic case —a dead network mount blocks it
 // indefinitely while stat-ing a process's cwd— and /ct-status is sold as
 // invokable in a loop by an external watcher: a hang there does not even return
@@ -63,13 +63,13 @@ export function assessLocalLiveness(n, getCmuxTitles, { repoRoot, timeoutMs }) {
 // load, only because of a real hang. A timeout arrives here with `status: null`
 // (not 1), so it falls through the "could not be checked" branch with its
 // reason, never through the empty-list one.
-const SEÑAL_TIMEOUT_MS = 10_000
-const ejecutar = (cmd, args, opciones) => execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opciones })
+const SIGNAL_TIMEOUT_MS = 10_000
+const runCommand = (cmd, args, options) => execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...options })
 
 // Exact basename of the PATH a process was invoked with. No `path.basename` on
 // purpose: nothing is normalised here, it is cut at the last slash and compared
 // as it is.
-const nombreInvocado = (ruta) => ruta.slice(ruta.lastIndexOf('/') + 1)
+const invokedName = (path) => path.slice(path.lastIndexOf('/') + 1)
 
 // liveSliceProcesses: which slices have, RIGHT NOW, a `claude` process working
 // inside their worktree? It is the question no other signal of the loop
@@ -166,7 +166,7 @@ const nombreInvocado = (ruta) => ruta.slice(ruta.lastIndexOf('/') + 1)
 // for permission reasons) would produce the same rc=1 and would be read here as
 // "dead" while it could still be alive: it would be the only way to falsely
 // accuse a healthy slice. Do not take it out.
-export function liveSliceProcesses(repoRoot, { run = ejecutar } = {}) {
+export function liveSliceProcesses(repoRoot, { run = runCommand } = {}) {
   // `process.getuid` does not exist on Windows. Without a uid no narrowing is
   // possible, and an unnarrowed listing breaks the premise that makes the
   // partial read of `lsof` further down safe, so it degrades here instead of
@@ -176,9 +176,9 @@ export function liveSliceProcesses(repoRoot, { run = ejecutar } = {}) {
   }
   const uid = process.getuid()
 
-  let listado
+  let listing
   try {
-    listado = run('ps', ['-u', String(uid), '-o', 'pid=,comm='], { timeout: SEÑAL_TIMEOUT_MS, killSignal: 'SIGKILL' })
+    listing = run('ps', ['-u', String(uid), '-o', 'pid=,comm='], { timeout: SIGNAL_TIMEOUT_MS, killSignal: 'SIGKILL' })
   } catch (e) {
     // A `ps` that fails is a read that could NOT be made. Never an empty list
     // presented as a fact: that is exactly the failure this module has just
@@ -186,14 +186,14 @@ export function liveSliceProcesses(repoRoot, { run = ejecutar } = {}) {
     return { porSlice: new Map(), comprobado: false, motivo: `no se pudo listar procesos con ps: ${e && e.message}` }
   }
   const pids = []
-  for (const linea of listado.split('\n')) {
+  for (const line of listing.split('\n')) {
     // The PID is the first field and ALL the rest of the line is the path. It
     // is not split on spaces: the desktop app's paths carry them inside
     // (`.../Claude Helper.app/Contents/MacOS/Claude Helper`), and splitting on
     // spaces would turn that line into the loose token `Helper`.
-    const m = /^\s*(\d+)\s+(.*)$/.exec(linea)
+    const m = /^\s*(\d+)\s+(.*)$/.exec(line)
     if (!m) continue
-    if (nombreInvocado(m[2]) !== 'claude') continue
+    if (invokedName(m[2]) !== 'claude') continue
     pids.push(m[1])
   }
   // With no PIDs lsof is not called, and it is not an optimisation: measured,
@@ -204,9 +204,9 @@ export function liveSliceProcesses(repoRoot, { run = ejecutar } = {}) {
   // worktree.
   if (!pids.length) return { porSlice: new Map(), comprobado: true, motivo: null }
 
-  let salida
+  let output
   try {
-    salida = run('lsof', ['-a', '-p', pids.join(','), '-d', 'cwd', '-Fpn'], { timeout: SEÑAL_TIMEOUT_MS, killSignal: 'SIGKILL' })
+    output = run('lsof', ['-a', '-p', pids.join(','), '-d', 'cwd', '-Fpn'], { timeout: SIGNAL_TIMEOUT_MS, killSignal: 'SIGKILL' })
   } catch (e) {
     // rc=1 with a readable `stdout` is the ps→lsof race, not a failure: see
     // this function's header comment on why narrowing by user is what makes
@@ -220,27 +220,27 @@ export function liveSliceProcesses(repoRoot, { run = ejecutar } = {}) {
     // two cases would be read as a GOOD, partial read: the report would assert
     // "nobody is alive" over a `stdout` that stopped halfway.
     if (e && e.status === 1 && typeof e.stdout === 'string') {
-      salida = e.stdout
+      output = e.stdout
     } else {
       return { porSlice: new Map(), comprobado: false, motivo: `no se pudo leer el directorio de trabajo de los procesos con lsof: ${e && e.message}` }
     }
   }
 
   // `-Fpn` emits triplets: p<pid> / fcwd / n<path>.
-  const porSlice = new Map()
-  const prefijo = `${repoRoot}/.worktrees/`
-  let pidActual = null
-  for (const linea of salida.split('\n')) {
-    if (linea.startsWith('p')) { pidActual = linea.slice(1); continue }
-    if (!linea.startsWith('n') || pidActual === null) continue
-    const cwd = linea.slice(1)
-    const pid = pidActual
-    pidActual = null
-    if (!cwd.startsWith(prefijo)) continue
+  const bySlice = new Map()
+  const prefix = `${repoRoot}/.worktrees/`
+  let currentPid = null
+  for (const line of output.split('\n')) {
+    if (line.startsWith('p')) { currentPid = line.slice(1); continue }
+    if (!line.startsWith('n') || currentPid === null) continue
+    const cwd = line.slice(1)
+    const pid = currentPid
+    currentPid = null
+    if (!cwd.startsWith(prefix)) continue
     // The agent may have gone DEEPER INSIDE the worktree, so the first segment
     // after `.worktrees/` is taken, not the whole path.
-    const slice = cwd.slice(prefijo.length).split('/')[0]
-    if (slice && !porSlice.has(slice)) porSlice.set(slice, pid)
+    const slice = cwd.slice(prefix.length).split('/')[0]
+    if (slice && !bySlice.has(slice)) bySlice.set(slice, pid)
   }
-  return { porSlice, comprobado: true, motivo: null }
+  return { porSlice: bySlice, comprobado: true, motivo: null }
 }

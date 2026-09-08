@@ -190,9 +190,9 @@ describe('F19/H1 — the sentinel sees what no query to cmux can see', () => {
 
   it('the shell started up in ANOTHER directory: its own $PWD gives it away, not what cmux says about its window — and nothing is deleted', () => {
     const repoRoot = makeRepoRoot()
-    const otro = mkdtempSync(join(tmpdir(), 'ct-f19-otro-'))
-    dirs.push(otro)
-    const r = dispatchOne(repoRoot, { FAKE_CMUX_COMMAND_CWD: otro, CT_NEXT_LAUNCH_TIMEOUT_MS: '4000' })
+    const otherDir = mkdtempSync(join(tmpdir(), 'ct-f19-otro-'))
+    dirs.push(otherDir)
+    const r = dispatchOne(repoRoot, { FAKE_CMUX_COMMAND_CWD: otherDir, CT_NEXT_LAUNCH_TIMEOUT_MS: '4000' })
     expect(r.code).toBe(1)
     expect(r.all).toMatch(/el shell que lo ejecutó estaba en/)
     expect(r.all).toMatch(/NO se cuenta como lanzado con éxito, y NO se borra nada/)
@@ -311,28 +311,28 @@ describe('F19/H1 — format of the sentinel (unit)', () => {
 function closedWith(n, status) {
   return { number: n, state_reason: 'completed', body: `<!-- ct-order:${n} -->`, labels: [{ name: `status:${status}` }] }
 }
-const abierto42 = { number: 42, title: '#42 x', body: '<!-- ct-order:99 -->', labels: [{ name: 'status:ready' }, { name: 'touches:ui' }] }
+const open42 = { number: 42, title: '#42 x', body: '<!-- ct-order:99 -->', labels: [{ name: 'status:ready' }, { name: 'touches:ui' }] }
 
-function runResiduo(repoRoot, cerrados) {
+function runResidue(repoRoot, closedIssues) {
   return runReal(['--repo', 'o/r', '--dry-run'], {
     FAKE_GIT_TOPLEVEL: repoRoot,
-    FAKE_GH_LIST_SEQUENCE: JSON.stringify([[abierto42], cerrados]),
+    FAKE_GH_LIST_SEQUENCE: JSON.stringify([[open42], closedIssues]),
     FAKE_GH_COUNTER_FILE: join(repoRoot, 'gh-list-count'),
   })
 }
-function lineaResiduo(r) {
+function residueLine(r) {
   return r.err.split('\n').find((l) => /^aviso: \d+ issue\(s\) CERRADOS/.test(l)) || ''
 }
-function escribirAck(repoRoot, texto) {
+function writeAck(repoRoot, text) {
   mkdirSync(join(repoRoot, '.agent'), { recursive: true })
-  writeFileSync(join(repoRoot, '.agent', 'conventions-ack.md'), texto)
+  writeFileSync(join(repoRoot, '.agent', 'conventions-ack.md'), text)
 }
 
 describe('F19/H2 — the severity gradient that was flattened', () => {
   it('a closed one with status:blocked is inert: it does not enter the anomaly count, it is counted apart', () => {
     const repoRoot = makeRepoRoot()
-    const r = runResiduo(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'blocked')])
-    const l = lineaResiduo(r)
+    const r = runResidue(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'blocked')])
+    const l = residueLine(r)
     // Verified against the unfixed code: it said «2 issue(s) CERRADOS»,
     // throwing into the same sack the one that fell out of the dispatch queue
     // and the one nobody cares about.
@@ -344,16 +344,16 @@ describe('F19/H2 — the severity gradient that was flattened', () => {
 
   it('ready comes first and is said to be the serious one; in-progress after it', () => {
     const repoRoot = makeRepoRoot()
-    const r = runResiduo(repoRoot, [closedWith(101, 'in-progress'), closedWith(102, 'ready')])
-    const l = lineaResiduo(r)
+    const r = runResidue(repoRoot, [closedWith(101, 'in-progress'), closedWith(102, 'ready')])
+    const l = residueLine(r)
     expect(l).toMatch(/^aviso: 2 issue\(s\) CERRADOS/)
     expect(l.indexOf('#102')).toBeLessThan(l.indexOf('#101'))
   })
 
   it('if EVERYTHING left over is inert or terminal, there is no anomaly and nobody shouts', () => {
     const repoRoot = makeRepoRoot()
-    const r = runResiduo(repoRoot, [closedWith(101, 'blocked'), closedWith(102, 'in-review')])
-    expect(lineaResiduo(r)).toBe('')
+    const r = runResidue(repoRoot, [closedWith(101, 'blocked'), closedWith(102, 'in-review')])
+    expect(residueLine(r)).toBe('')
     expect(r.err).not.toMatch(/CERRADOS conservan una label `status:` viva/)
   })
 })
@@ -361,9 +361,9 @@ describe('F19/H2 — the severity gradient that was flattened', () => {
 describe('F19/H2 — acknowledgement PER CASE: keep quiet about these numbers, go on warning about the new ones', () => {
   it('the acknowledged numbers disappear from the warning and the new ones go on coming out', () => {
     const repoRoot = makeRepoRoot()
-    escribirAck(repoRoot, 'residuo-status: 2026-07-28 — #101, #102 revisados: slices descartados, las labels se quedan.\n')
-    const r = runResiduo(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'ready'), closedWith(103, 'ready')])
-    const l = lineaResiduo(r)
+    writeAck(repoRoot, 'residuo-status: 2026-07-28 — #101, #102 revisados: slices descartados, las labels se quedan.\n')
+    const r = runResidue(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'ready'), closedWith(103, 'ready')])
+    const l = residueLine(r)
     expect(l).toMatch(/^aviso: 1 issue\(s\) CERRADOS/)
     expect(l).toMatch(/#103/)
     expect(l).not.toMatch(/#101/)
@@ -376,32 +376,32 @@ describe('F19/H2 — acknowledgement PER CASE: keep quiet about these numbers, g
 
   it('with ALL of them acknowledged the warning disappears entirely: that is the point', () => {
     const repoRoot = makeRepoRoot()
-    escribirAck(repoRoot, '# decisiones\n\nresiduo-status: 2026-07-28 — #101, #102 son slices descartados.\n')
-    const r = runResiduo(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'in-progress')])
-    expect(lineaResiduo(r)).toBe('')
+    writeAck(repoRoot, '# decisiones\n\nresiduo-status: 2026-07-28 — #101, #102 son slices descartados.\n')
+    const r = runResidue(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'in-progress')])
+    expect(residueLine(r)).toBe('')
     expect(r.err).not.toMatch(/2 más ya acusados/)
   })
 
   it('the acknowledgement accumulates across lines (one decision per date), instead of treating them as duplicates', () => {
     const repoRoot = makeRepoRoot()
-    escribirAck(repoRoot, 'residuo-status: 2026-07-01 — #101 descartado.\nresiduo-status: 2026-07-28 — #102 también.\n')
-    const r = runResiduo(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'ready')])
-    expect(lineaResiduo(r)).toBe('')
+    writeAck(repoRoot, 'residuo-status: 2026-07-01 — #101 descartado.\nresiduo-status: 2026-07-28 — #102 también.\n')
+    const r = runResidue(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'ready')])
+    expect(residueLine(r)).toBe('')
     expect(r.err).not.toMatch(/ya estaba acusada más arriba/)
   })
 
   it('an acknowledgement with NO numbers silences nothing and says so: believing you have silenced something and not having done it is the failure we cannot afford', () => {
     const repoRoot = makeRepoRoot()
-    escribirAck(repoRoot, 'residuo-status: 2026-07-28 — ya lo he mirado todo, da igual.\n')
-    const r = runResiduo(repoRoot, [closedWith(101, 'ready')])
-    expect(lineaResiduo(r)).toMatch(/^aviso: 1 issue\(s\) CERRADOS/)
+    writeAck(repoRoot, 'residuo-status: 2026-07-28 — ya lo he mirado todo, da igual.\n')
+    const r = runResidue(repoRoot, [closedWith(101, 'ready')])
+    expect(residueLine(r)).toMatch(/^aviso: 1 issue\(s\) CERRADOS/)
     expect(r.err).toMatch(/no silencia nada/)
   })
 
   it('the warning teaches how to acknowledge: without that, the way out exists but nobody finds it', () => {
     const repoRoot = makeRepoRoot()
-    const r = runResiduo(repoRoot, [closedWith(101, 'ready')])
-    expect(lineaResiduo(r)).toMatch(/\.agent\/conventions-ack\.md/)
-    expect(lineaResiduo(r)).toMatch(/residuo-status: \d{4}-\d{2}-\d{2}/)
+    const r = runResidue(repoRoot, [closedWith(101, 'ready')])
+    expect(residueLine(r)).toMatch(/\.agent\/conventions-ack\.md/)
+    expect(residueLine(r)).toMatch(/residuo-status: \d{4}-\d{2}-\d{2}/)
   })
 })

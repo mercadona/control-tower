@@ -160,7 +160,7 @@ var CONTRACT_MARKER = "<!-- ct-init:slices-contract -->";
 var LOOP_MARKER = "<!-- ct-init:loop -->";
 var GOVERNED_MARKERS = [CONTRACT_MARKER, LOOP_MARKER];
 var AGENTS = "AGENTS.md";
-function describirValor(v) {
+function describeValue(v) {
   try {
     return String(v);
   } catch {
@@ -178,7 +178,7 @@ function isRepoRoot(dir) {
 }
 function probeGovernedRepo(cwd) {
   if (typeof cwd !== "string" || cwd.length === 0) {
-    return { error: `cwd invalido: se esperaba una cadena no vacia y llego ${typeof cwd} (${describirValor(cwd)})` };
+    return { error: `cwd invalido: se esperaba una cadena no vacia y llego ${typeof cwd} (${describeValue(cwd)})` };
   }
   let dir;
   try {
@@ -194,18 +194,18 @@ function probeGovernedRepo(cwd) {
   try {
     for (; ; ) {
       if (isRepoRoot(dir)) {
-        let texto;
+        let text;
         try {
-          texto = readFileSync(join(dir, AGENTS), "utf8");
+          text = readFileSync(join(dir, AGENTS), "utf8");
         } catch (e) {
           if (e && (e.code === "ENOENT" || e.code === "ENOTDIR")) return { governed: false };
           return { error: `no se ha podido leer ${AGENTS} (${e.code || e.message})` };
         }
-        return { governed: GOVERNED_MARKERS.some((m) => texto.includes(m)) };
+        return { governed: GOVERNED_MARKERS.some((m) => text.includes(m)) };
       }
-      const padre = dirname(dir);
-      if (padre === dir) return { governed: false };
-      dir = padre;
+      const parent = dirname(dir);
+      if (parent === dir) return { governed: false };
+      dir = parent;
     }
   } catch (e) {
     return { error: `no se ha podido determinar la raiz del repo (${e.code || e.message})` };
@@ -213,27 +213,27 @@ function probeGovernedRepo(cwd) {
 }
 
 // hooks/commit-keyword-guard.js
-function decidir(input, probe) {
+function decide(input, probe) {
   if (input?.hook_event_name !== "PreToolUse") return null;
   if (input?.tool_name !== "Bash") return null;
   const command = input?.tool_input?.command;
   if (typeof command !== "string" || !command) return null;
-  const mensajes = extractCommitMessages(command);
-  if (!mensajes.length) return null;
-  const hallazgos = mensajes.flatMap(findClosingKeywords);
-  if (!hallazgos.length) return null;
-  const sonda = probe(input.cwd);
-  const salida = (permissionDecision, permissionDecisionReason) => ({
+  const messages = extractCommitMessages(command);
+  if (!messages.length) return null;
+  const findings = messages.flatMap(findClosingKeywords);
+  if (!findings.length) return null;
+  const probeResult = probe(input.cwd);
+  const output = (permissionDecision, permissionDecisionReason) => ({
     hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision, permissionDecisionReason }
   });
-  const citado = hallazgos.map((h) => `\`${h.keyword} ${h.ref}\``).join(", ");
-  if (sonda.error) {
-    return salida("ask", `Este mensaje de commit lleva ${citado}, y NO se ha podido comprobar si el loop Control Tower gobierna los issues de este repo: ${sonda.error}. Si los gobierna, ese commit cerrara ${hallazgos.length > 1 ? "esos issues" : "ese issue"} al llegar a la rama por defecto, sin que nadie revise ni mergee nada. Decide tu: reformula la frase para que no lleve la cadena literal, o continua si sabes que este repo no esta gobernado.`);
+  const cited = findings.map((h) => `\`${h.keyword} ${h.ref}\``).join(", ");
+  if (probeResult.error) {
+    return output("ask", `Este mensaje de commit lleva ${cited}, y NO se ha podido comprobar si el loop Control Tower gobierna los issues de este repo: ${probeResult.error}. Si los gobierna, ese commit cerrara ${findings.length > 1 ? "esos issues" : "ese issue"} al llegar a la rama por defecto, sin que nadie revise ni mergee nada. Decide tu: reformula la frase para que no lleve la cadena literal, o continua si sabes que este repo no esta gobernado.`);
   }
-  if (!sonda.governed) return null;
-  return salida(
+  if (!probeResult.governed) return null;
+  return output(
     "deny",
-    `Este mensaje de commit lleva ${citado}. GitHub aplica las closing keywords de CUALQUIER mensaje de commit que llegue a la rama por defecto, y LAS COMILLAS NO PROTEGEN: un commit de documentacion que solo MENCIONABA la cadena cerro el issue en un repo real. En este repo el loop Control Tower gobierna los issues, asi que cerrarlo asi lo daria por entregado sin que nadie haya revisado ni mergeado nada, y liberaria sus dependencias sobre trabajo que puede no existir.
+    `Este mensaje de commit lleva ${cited}. GitHub aplica las closing keywords de CUALQUIER mensaje de commit que llegue a la rama por defecto, y LAS COMILLAS NO PROTEGEN: un commit de documentacion que solo MENCIONABA la cadena cerro el issue en un repo real. En este repo el loop Control Tower gobierna los issues, asi que cerrarlo asi lo daria por entregado sin que nadie haya revisado ni mergeado nada, y liberaria sus dependencias sobre trabajo que puede no existir.
 
 El cierre del slice va en el CUERPO DEL PR, no en el mensaje del commit.
 
@@ -247,10 +247,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
   } catch {
     process.exit(0);
   }
-  const resultado = decidir(input, probeGovernedRepo);
-  if (resultado) process.stdout.write(JSON.stringify(resultado), () => process.exit(0));
+  const result = decide(input, probeGovernedRepo);
+  if (result) process.stdout.write(JSON.stringify(result), () => process.exit(0));
   else process.exit(0);
 }
 export {
-  decidir
+  decide
 };

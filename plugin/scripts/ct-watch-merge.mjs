@@ -149,7 +149,8 @@ if (!issue || !repo || !coordinatorCwd) {
 }
 
 const branch = `feat/${issue}`
-const { log, terminar } = openLog(logPath)
+// `terminar` is the key `openLog` returns; only the local name is English.
+const { log, terminar: finish } = openLog(logPath)
 const pollMs = plazo('CT_WATCH_MERGE_POLL_MS', DEFAULT_POLL_MS)
 const timeoutMs = plazo('CT_WATCH_MERGE_TIMEOUT_MS', DEFAULT_TIMEOUT_MS)
 
@@ -163,7 +164,7 @@ const timeoutMs = plazo('CT_WATCH_MERGE_TIMEOUT_MS', DEFAULT_TIMEOUT_MS)
 // opposite of what the first version of the metrics harvest did, which deduced
 // the PR by scanning `cross-referenced` and tied slices to the wrong PRs (see
 // commands/ct-harvest.md).
-function leerPrMergeado() {
+function readMergedPr() {
   try {
     const raw = execFileSync('gh', [
       'pr', 'list', '--repo', repo, '--head', branch, '--state', 'merged',
@@ -213,7 +214,7 @@ const consultarCoordinadora = () => {
 // And it says "comprueba que no queda trabajo sin pushear" on purpose: the one
 // who deletes is an agent, and what it is missing when it receives this line is
 // exactly what F20 refused to assume.
-const linea = (pr) => `El PR #${pr} del slice #${issue} está mergeado: la cosecha del #${issue} está pendiente. \`.worktrees/${issue}\` y la rama \`${branch}\` siguen en disco. Comprueba que no queda trabajo sin pushear y recógelos.`
+const line = (pr) => `El PR #${pr} del slice #${issue} está mergeado: la cosecha del #${issue} está pendiente. \`.worktrees/${issue}\` y la rama \`${branch}\` siguen en disco. Comprueba que no queda trabajo sin pushear y recógelos.`
 
 log(`vigilando el merge de ${repo} ${branch} (slice #${issue}) para la coordinadora en ${coordinatorCwd} — tick ${pollMs} ms, plazo ${timeoutMs} ms`)
 
@@ -225,21 +226,21 @@ log(`vigilando el merge de ${repo} ${branch} (slice #${issue}) para la coordinad
 // on the first poll, the harvest is pending all the same and it has to be said.
 // A watcher that kept quiet because of that would be a watcher that keeps quiet
 // precisely when there is already residue on disk.
-const limite = Date.now() + timeoutMs
+const deadline = Date.now() + timeoutMs
 
 for (;;) {
-  const pr = leerPrMergeado()
+  const pr = readMergedPr()
   if (pr) {
     log(`${branch} mergeado en el PR #${pr.number}${pr.mergedAt ? ` (${pr.mergedAt})` : ''}`)
     const { consultado, ref } = consultarCoordinadora()
     if (ref) {
       try {
-        execFileSync('cmux', buildCmuxSendArgv({ workspace: ref, text: linea(pr.number) }), {
+        execFileSync('cmux', buildCmuxSendArgv({ workspace: ref, text: line(pr.number) }), {
           stdio: ['ignore', 'ignore', 'pipe'], timeout: CMUX_TIMEOUT_MS, killSignal: 'SIGKILL',
         })
       } catch (e) {
         log(`ERROR: el merge se vio y el texto no se pudo escribir en la coordinadora (${ref}): ${String(e.message).trim()}. Recoge la cosecha del #${issue} a mano.`)
-        terminar(1)
+        finish(1)
       }
       try {
         execFileSync('cmux', buildCmuxSendKeyArgv({ workspace: ref }), {
@@ -252,13 +253,13 @@ for (;;) {
         // line written in the window and has to know that all it is missing is
         // the Enter.
         log(`ERROR: el texto quedó escrito en la línea de edición de la coordinadora (${ref}) pero el Enter falló: ${String(e.message).trim()}. Ve a esa ventana y pulsa Enter.`)
-        terminar(1)
+        finish(1)
       }
       // What is known is this and no more: the two commands returned 0. There is
       // no sentinel that proves the coordinator received it and acted (see the
       // header), so the message does not claim the harvest has started.
       log(`línea enviada a la coordinadora (${ref}): \`cmux send\` y \`send-key Enter\` devolvieron 0. No hay forma de comprobar desde aquí que la sesión la haya procesado. Vigilancia terminada.`)
-      terminar(0)
+      finish(0)
     }
     if (consultado) {
       // THE RULE is named, not just the fact. The previous message said "no
@@ -269,15 +270,15 @@ for (;;) {
       log(`ERROR: el merge de ${branch} se vio, pero cmux dice que no existe ninguna workspace cuyo directorio sea ${coordinatorCwd}, así que no hay a quién entregárselo.`)
       log(`La regla que no se cumplió: la sesión coordinadora tiene que ser una workspace de cmux abierta EN ${coordinatorCwd} — este vigilante la localiza por su directorio porque no hay ningún nombre de sesión que el loop pueda derivar (a ella no la crea el loop, la abres tú).`)
       log(`No se ha perdido trabajo: el próximo \`/ct-next\` en ese checkout emitirá \`cosecha pendiente:\` para el #${issue} con los comandos exactos. Lo que se ha perdido es enterarte ahora.`)
-      terminar(1)
+      finish(1)
     }
     // The coordinator could not be ASKED about. Nothing follows from that, and
     // less so with the merge already in hand: it retries on the next tick.
     log(`el merge está visto pero no se pudo consultar cmux para localizar la coordinadora — se reintenta la entrega en el próximo tick`)
   }
-  if (Date.now() >= limite) {
+  if (Date.now() >= deadline) {
     log(`plazo agotado sin ver ningún merge de ${branch} en ${repo}. Si ya lo mergeaste, la cosecha del #${issue} sigue pendiente: recógela a mano, o vuelve a lanzar este vigilante.`)
-    terminar(3)
+    finish(3)
   }
-  await sleep(Math.min(pollMs, Math.max(0, limite - Date.now())))
+  await sleep(Math.min(pollMs, Math.max(0, deadline - Date.now())))
 }

@@ -3,10 +3,10 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const raiz = join(dirname(fileURLToPath(import.meta.url)), '..')
+const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-class NacidosConformes {
-  static RUTAS = [
+class BornConforming {
+  static PATHS = [
     'scripts/plugin-yardstick.js',
     'scripts/yardstick-citation.js',
     '__tests__/plugin-yardstick.test.js',
@@ -64,152 +64,152 @@ class NacidosConformes {
     'intento', 'cuerpo', 'previos', 'comentario', 'comentarios', 'recorrido', 'alcance', 'sujeto',
   ]
 
-  static MARCADOR = '-real-process.test.js'
+  static MARKER = '-real-process.test.js'
 
-  static IMPORT_RELATIVO = /from\s+['"](\.{1,2}\/[^'"]+)['"]/g
+  static RELATIVE_IMPORT = /from\s+['"](\.{1,2}\/[^'"]+)['"]/g
 
-  static #numeradas(ruta) {
-    return readFileSync(join(raiz, ruta), 'utf8')
+  static #numbered(path) {
+    return readFileSync(join(root, path), 'utf8')
       .split('\n')
-      .map((linea, indice) => [indice + 1, linea])
+      .map((line, index) => [index + 1, line])
   }
 
-  static prosaEn(ruta) {
-    return NacidosConformes.#numeradas(ruta)
-      .filter(([, linea]) => /^\s*(?:\/\/|\/\*|\*)/.test(linea))
-      .map(([numero]) => numero)
+  static proseIn(path) {
+    return BornConforming.#numbered(path)
+      .filter(([, line]) => /^\s*(?:\/\/|\/\*|\*)/.test(line))
+      .map(([number]) => number)
   }
 
-  static funcionesSueltasEn(ruta) {
-    return NacidosConformes.#numeradas(ruta)
-      .filter(([, linea]) => /^(?:export\s+)?(?:async\s+)?function\b/.test(linea))
-      .map(([numero]) => numero)
+  static looseFunctionsIn(path) {
+    return BornConforming.#numbered(path)
+      .filter(([, line]) => /^(?:export\s+)?(?:async\s+)?function\b/.test(line))
+      .map(([number]) => number)
   }
 
-  static funcionesSueltasDisfrazadasEn(ruta) {
-    return NacidosConformes.#numeradas(ruta)
-      .filter(([, linea]) => /^(?:export\s+)?(?:const|let|var)\s+[\w$]+\s*=\s*(?:\(|async\s*\(|function\b)/.test(linea))
-      .map(([numero]) => numero)
+  static disguisedLooseFunctionsIn(path) {
+    return BornConforming.#numbered(path)
+      .filter(([, line]) => /^(?:export\s+)?(?:const|let|var)\s+[\w$]+\s*=\s*(?:\(|async\s*\(|function\b)/.test(line))
+      .map(([number]) => number)
   }
 
-  static identificadoresCastellanosEn(ruta) {
-    const fuente = readFileSync(join(raiz, ruta), 'utf8')
-    const declarados = [...fuente.matchAll(/\b(?:class|const|let|var|function|static)\s+#?([A-Za-z_$][\w$]*)/g)]
-      .map((encaje) => encaje[1])
-    return [...new Set(declarados.filter((identificador) =>
-      NacidosConformes.PALABRAS_CASTELLANAS.includes(identificador.toLowerCase())
+  static spanishIdentifiersIn(path) {
+    const source = readFileSync(join(root, path), 'utf8')
+    const declared = [...source.matchAll(/\b(?:class|const|let|var|function|static)\s+#?([A-Za-z_$][\w$]*)/g)]
+      .map((match) => match[1])
+    return [...new Set(declared.filter((identifier) =>
+      BornConforming.PALABRAS_CASTELLANAS.includes(identifier.toLowerCase())
     ))]
   }
 
-  static #cadenasDeTestEn(ruta) {
-    return NacidosConformes.#numeradas(ruta)
-      .map(([numero, linea]) => [numero, linea.match(/^\s*(?:describe|it)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/)])
-      .filter(([, encaje]) => encaje)
-      .map(([numero, encaje]) => [numero, encaje[2].replace(/\$\{[^}]*\}/g, ' ')])
+  static #testStringsIn(path) {
+    return BornConforming.#numbered(path)
+      .map(([number, line]) => [number, line.match(/^\s*(?:describe|it)\(\s*(['"`])((?:\\.|(?!\1).)*)\1/)])
+      .filter(([, match]) => match)
+      .map(([number, match]) => [number, match[2].replace(/\$\{[^}]*\}/g, ' ')])
   }
 
-  static #letraNoAsciiEn(cadena) {
-    return [...cadena].some((caracter) => {
-      if (caracter.codePointAt(0) <= 127) return false
-      if (caracter === '¿' || caracter === '¡') return true
-      return /\p{L}/u.test(caracter)
+  static #nonAsciiLetterIn(text) {
+    return [...text].some((character) => {
+      if (character.codePointAt(0) <= 127) return false
+      if (character === '¿' || character === '¡') return true
+      return /\p{L}/u.test(character)
     })
   }
 
-  static noAsciiEnTestsDe(ruta) {
-    return NacidosConformes.#cadenasDeTestEn(ruta)
-      .filter(([, cadena]) => NacidosConformes.#letraNoAsciiEn(cadena))
-      .map(([numero]) => numero)
+  static nonAsciiTestNamesIn(path) {
+    return BornConforming.#testStringsIn(path)
+      .filter(([, text]) => BornConforming.#nonAsciiLetterIn(text))
+      .map(([number]) => number)
   }
 
-  static palabrasCastellanasEnTestsDe(ruta) {
-    return NacidosConformes.#cadenasDeTestEn(ruta)
-      .filter(([, cadena]) => cadena.split(/[^A-Za-z]+/).some((palabra) =>
-        NacidosConformes.PALABRAS_CASTELLANAS.includes(palabra.toLowerCase())
+  static spanishTestNamesIn(path) {
+    return BornConforming.#testStringsIn(path)
+      .filter(([, text]) => text.split(/[^A-Za-z]+/).some((word) =>
+        BornConforming.PALABRAS_CASTELLANAS.includes(word.toLowerCase())
       ))
-      .map(([numero]) => numero)
+      .map(([number]) => number)
   }
 
-  static lanzaProcesosReales(ruta, vistos = new Set()) {
-    if (vistos.has(ruta)) return false
-    vistos.add(ruta)
-    const fuente = readFileSync(join(raiz, ruta), 'utf8')
-    if (/(?:from\s+['"]node:child_process['"]|require\(\s*['"]node:child_process['"]\s*\))/.test(fuente)) {
+  static launchesRealProcesses(path, seen = new Set()) {
+    if (seen.has(path)) return false
+    seen.add(path)
+    const source = readFileSync(join(root, path), 'utf8')
+    if (/(?:from\s+['"]node:child_process['"]|require\(\s*['"]node:child_process['"]\s*\))/.test(source)) {
       return true
     }
-    return [...fuente.matchAll(NacidosConformes.IMPORT_RELATIVO)]
-      .map(([, especificador]) => join(dirname(ruta), especificador))
-      .filter((relativa) => relativa.startsWith('__tests__/fixtures/'))
-      .some((relativa) => NacidosConformes.lanzaProcesosReales(relativa, vistos))
+    return [...source.matchAll(BornConforming.RELATIVE_IMPORT)]
+      .map(([, specifier]) => join(dirname(path), specifier))
+      .filter((relative) => relative.startsWith('__tests__/fixtures/'))
+      .some((relative) => BornConforming.launchesRealProcesses(relative, seen))
   }
 
-  static sinMarcador() {
-    return NacidosConformes.RUTAS.filter((ruta) =>
-      ruta.endsWith('.test.js') &&
-      !ruta.endsWith(NacidosConformes.MARCADOR) &&
-      NacidosConformes.lanzaProcesosReales(ruta)
+  static withoutMarker() {
+    return BornConforming.PATHS.filter((path) =>
+      path.endsWith('.test.js') &&
+      !path.endsWith(BornConforming.MARKER) &&
+      BornConforming.launchesRealProcesses(path)
     )
   }
 
-  static marcadorDeAdorno() {
-    return NacidosConformes.RUTAS.filter((ruta) =>
-      ruta.endsWith(NacidosConformes.MARCADOR) &&
-      !NacidosConformes.lanzaProcesosReales(ruta)
+  static decorativeMarker() {
+    return BornConforming.PATHS.filter((path) =>
+      path.endsWith(BornConforming.MARKER) &&
+      !BornConforming.launchesRealProcesses(path)
     )
   }
 }
 
 describe('modules born under the yardstick keep being born conforming', () => {
   it('measures only the THREE rules of style.md and not a fourth invented one: that document does not forbid a loose constant, only a loose function', () => {
-    expect(NacidosConformes.prosaEn('scripts/yardstick-citation.js')).toEqual([])
-    expect(NacidosConformes.funcionesSueltasEn('scripts/yardstick-citation.js')).toEqual([])
-    expect(NacidosConformes.funcionesSueltasDisfrazadasEn('scripts/yardstick-citation.js')).toEqual([])
+    expect(BornConforming.proseIn('scripts/yardstick-citation.js')).toEqual([])
+    expect(BornConforming.looseFunctionsIn('scripts/yardstick-citation.js')).toEqual([])
+    expect(BornConforming.disguisedLooseFunctionsIn('scripts/yardstick-citation.js')).toEqual([])
   })
 
   it('the list names both modules and names ITSELF: a guard blind to its own file once left 21 comments inside it', () => {
-    expect(NacidosConformes.RUTAS).toContain('scripts/plugin-yardstick.js')
-    expect(NacidosConformes.RUTAS).toContain('scripts/yardstick-citation.js')
-    expect(NacidosConformes.RUTAS).toContain('__tests__/conforming-modules.test.js')
+    expect(BornConforming.PATHS).toContain('scripts/plugin-yardstick.js')
+    expect(BornConforming.PATHS).toContain('scripts/yardstick-citation.js')
+    expect(BornConforming.PATHS).toContain('__tests__/conforming-modules.test.js')
   })
 
-  for (const ruta of NacidosConformes.RUTAS) {
-    it(`${ruta} does not carry a single line of prose`, () => {
-      expect(NacidosConformes.prosaEn(ruta), `${ruta} has comments on those lines`).toEqual([])
+  for (const path of BornConforming.PATHS) {
+    it(`${path} does not carry a single line of prose`, () => {
+      expect(BornConforming.proseIn(path), `${path} has comments on those lines`).toEqual([])
     })
 
-    it(`${ruta} does not declare any loose function at module level`, () => {
-      expect(NacidosConformes.funcionesSueltasEn(ruta), `${ruta} declares loose functions on those lines`)
+    it(`${path} does not declare any loose function at module level`, () => {
+      expect(BornConforming.looseFunctionsIn(path), `${path} declares loose functions on those lines`)
         .toEqual([])
     })
 
-    it(`${ruta} does not sneak in a loose module-level function disguised as an arrow constant`, () => {
-      expect(NacidosConformes.funcionesSueltasDisfrazadasEn(ruta), `${ruta} declares loose arrow functions`)
+    it(`${path} does not sneak in a loose module-level function disguised as an arrow constant`, () => {
+      expect(BornConforming.disguisedLooseFunctionsIn(path), `${path} declares loose arrow functions`)
         .toEqual([])
     })
   }
 })
 
 describe('the language of identifiers, by an EXACT block list', () => {
-  for (const ruta of ['scripts/plugin-yardstick.js', 'scripts/yardstick-citation.js']) {
-    it(`${ruta} does not declare identifiers in Spanish`, () => {
-      expect(NacidosConformes.identificadoresCastellanosEn(ruta)).toEqual([])
+  for (const path of ['scripts/plugin-yardstick.js', 'scripts/yardstick-citation.js']) {
+    it(`${path} does not declare identifiers in Spanish`, () => {
+      expect(BornConforming.spanishIdentifiersIn(path)).toEqual([])
     })
   }
 
   it('the match is exact and not by prefix: by prefix it flagged `citation`, which is perfect English', () => {
-    expect(NacidosConformes.PALABRAS_CASTELLANAS).toContain('cita')
-    expect(NacidosConformes.identificadoresCastellanosEn('scripts/yardstick-citation.js')).toEqual([])
+    expect(BornConforming.PALABRAS_CASTELLANAS).toContain('cita')
+    expect(BornConforming.spanishIdentifiersIn('scripts/yardstick-citation.js')).toEqual([])
   })
 })
 
 describe('the language of test names, by two mechanical checks: no non-ASCII letters, and the same EXACT block list', () => {
-  for (const ruta of NacidosConformes.RUTAS) {
-    it(`${ruta} carries no describe or it with a non-ASCII letter`, () => {
-      expect(NacidosConformes.noAsciiEnTestsDe(ruta), `${ruta} has a non-ASCII test name on those lines`).toEqual([])
+  for (const path of BornConforming.PATHS) {
+    it(`${path} carries no describe or it with a non-ASCII letter`, () => {
+      expect(BornConforming.nonAsciiTestNamesIn(path), `${path} has a non-ASCII test name on those lines`).toEqual([])
     })
 
-    it(`${ruta} carries no describe or it with a word from the Spanish block list`, () => {
-      expect(NacidosConformes.palabrasCastellanasEnTestsDe(ruta), `${ruta} has a Spanish test name on those lines`)
+    it(`${path} carries no describe or it with a word from the Spanish block list`, () => {
+      expect(BornConforming.spanishTestNamesIn(path), `${path} has a Spanish test name on those lines`)
         .toEqual([])
     })
   }
@@ -217,18 +217,18 @@ describe('the language of test names, by two mechanical checks: no non-ASCII let
 
 describe('the marker of a real subprocess, in both directions', () => {
   it('a_test_born_conforming_that_launches_a_real_process_carries_the_marker_in_its_file_name', () => {
-    expect(NacidosConformes.sinMarcador()).toEqual([])
+    expect(BornConforming.withoutMarker()).toEqual([])
   })
 
   it('a_test_born_conforming_that_carries_the_marker_really_launches_a_real_process', () => {
-    expect(NacidosConformes.marcadorDeAdorno()).toEqual([])
+    expect(BornConforming.decorativeMarker()).toEqual([])
   })
 
   it('a_test_born_conforming_that_launches_a_real_process_through_a_fixture_counts_as_launching_it', () => {
-    expect(NacidosConformes.lanzaProcesosReales('__tests__/ct-step-dispatch-seal-real-process.test.js')).toBe(true)
+    expect(BornConforming.launchesRealProcesses('__tests__/ct-step-dispatch-seal-real-process.test.js')).toBe(true)
   })
 
   it('a_test_that_imports_neither_child_process_nor_a_spawning_fixture_does_not_count_as_launching_one', () => {
-    expect(NacidosConformes.lanzaProcesosReales('__tests__/plugin-manifest.test.js')).toBe(false)
+    expect(BornConforming.launchesRealProcesses('__tests__/plugin-manifest.test.js')).toBe(false)
   })
 })
