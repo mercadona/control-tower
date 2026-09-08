@@ -30,10 +30,15 @@ const watch = (issue: number, repo: string, listener: PlanEventsListener): PlanE
 
   source.addEventListener(FAILURE_EVENT, (event: Event) => {
     if (settled) return
-    settle()
     if (carriesData(event)) {
-      const { detail } = JSON.parse(event.data) as PlanFailure
-      listener.onFailure(detail)
+      const failure = JSON.parse(event.data) as PlanFailure
+      listener.onFailure(failure)
+      return
+    }
+    const refused = source.readyState === EventSource.CLOSED
+    settle()
+    if (refused) {
+      listener.onRefused()
       return
     }
     listener.onUnreachable()
