@@ -23,7 +23,8 @@ the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
 ## Rules that apply to every endpoint
 
 1. **Decide by `code`, never by status.** Every refusal answers the same body:
-   `{"code": "<kebab-case>", "detail": "<one sentence>"}`.
+   `{"code": "<kebab-case>", "detail": "<one sentence>"}`. One refusal adds a
+   third field: `no-plan-started` carries `failed`.
 2. **An application refusal answers 400.** The status stopped being the signal.
    Three refusals keep another status because they are about the protocol, not
    about the request: 405, 409 and 503 below.
@@ -58,19 +59,22 @@ Starts a plan: cuts a worktree, opens the plan issue, launches the agent. It is
 slow — it runs the target repository's baseline test suite before answering, and
 that can take minutes. There is no progress signal while it waits.
 
-**Request**
+**It has two modes**, told apart by which fields name the target. Send `repo` and
+`path` for one repository, or `repo_list` for several. Sending both is refused.
 
 | Field | Type | Required | Shape |
 |---|---|---|---|
 | `id` | string | one of `id` / `user_comment` | a user story key, `ABC-123` |
 | `user_comment` | string | one of `id` / `user_comment` | free text, not blank |
-| `repo` | string | yes | `owner/name` |
-| `path` | string | yes | absolute path of the local clone |
+| `repo` | string | single mode | `owner/name` |
+| `path` | string | single mode | absolute path of the local clone |
+| `repo_list` | array | list mode | one or more `{"repo": "...", "path": "..."}` |
 
 `id` and `user_comment` may both be sent. Omit a field to leave it unsaid; do
-not send `null`, which is a malformed value.
+not send `null`, which is a malformed value. A `repo_list` entry holds those two
+keys and **nothing else** — an extra key makes the whole list malformed.
 
-**202 Accepted**
+### Single mode — 202 Accepted
 
 ```json
 {"status":"started","id":"ABC-123","repo":"owner/name",
@@ -83,7 +87,52 @@ not send `null`, which is a malformed value.
 canonical path for the checkout, which may differ from the `path` that was sent;
 keep the answered one.
 
-**Refusals**
+### List mode — 202 Accepted, and it may be partial
+
+The answer is never flat. The seven fields above move into `started`, one entry
+per repository that got a plan, and `failed` names each repository that did not.
+
+```json
+{"status":"started",
+ "started":[{"id":"ABC-123","repo":"owner/one",
+   "issue":{"number":7,"url":"https://github.com/owner/one/issues/7"},
+   "agent":"workspace:4","branch":"feat/7",
+   "worktree":"/one/.worktrees/7","root":"/one"}],
+ "failed":[{"repo":"owner/two","code":"plan-issue-not-created","detail":"gh refused"}]}
+```
+
+**A 202 does not mean every plan started.** Both arrays are always present, and
+`failed` is often non-empty while the status still says `started`. The UI must
+read both. A `failed` entry carries the same `code` and `detail` the single mode
+would have refused with, plus the `repo` it belongs to.
+
+When **no** plan started, the answer is a 400 that keeps the same evidence:
+
+```json
+{"code":"no-plan-started",
+ "detail":"no plan started: every repository of repo_list failed",
+ "failed":[{"repo":"owner/one","code":"plan-issue-not-created","detail":"gh refused"},
+           {"repo":"owner/two","code":"plan-agent-not-launched","detail":"cmux refused"}]}
+```
+
+This is the one refusal in the API with a third field beside `code` and `detail`.
+
+### The list is checked as a whole before anything starts
+
+Two failures behave differently, and the difference is deliberate:
+
+| Cause | What happens |
+|---|---|
+| A path is not a checkout of the repo beside it, git cannot be asked, or Jira refuses | the **whole request** is refused flat, before any side effect; no plan starts, no `failed` array |
+| Opening the issue, claiming it, cutting the worktree or launching the agent fails | that repository lands in `failed`, and the others still start |
+
+So one bad pairing in one entry stops every other repository, and the answer
+looks like the single mode's — `{code, detail}`, no `failed`. Do not assume list
+mode always answers with arrays.
+
+### Refusals
+
+Shared by both modes:
 
 | `code` | Status | Meaning |
 |---|---|---|
@@ -92,27 +141,50 @@ keep the answered one.
 | `malformed-id` | 400 | `id` is not a story key |
 | `malformed-user-comment` | 400 | `user_comment` is blank or not text |
 | `nothing-to-plan` | 400 | neither `id` nor `user_comment` was sent |
-| `malformed-repo` | 400 | `repo` is not `owner/name` |
-| `malformed-path` | 400 | `path` is not absolute |
-| `checkout-not-confirmed` | 400 | `path` is not a checkout of `repo`; `detail` names both the repo asked for and the one the path holds |
-| `user-story-not-read` | 400 | Jira refused |
-| `user-story-not-understood` | 400 | Jira answered something unreadable |
-| `plan-issue-not-created` | 400 | `gh issue create` refused |
-| `plan-issue-not-named` | 400 | the created issue could not be identified |
-| `plan-issue-not-claimed` | 400 | the claim on the issue failed |
-| `plan-agent-not-launched` | 400 | cmux refused |
-| `plan-agent-not-named` | 400 | cmux launched but gave no handle |
-| `workspace-not-prepared` | 400 | the worktree could not be cut |
-| `workspace-not-read` | 400 | git refused when surveying |
-| `workspace-not-understood` | 400 | git answered something unreadable |
+| `malformed-repo` | 400 | a repo is not `owner/name`; `detail` names which field |
+| `malformed-path` | 400 | a path is not absolute; `detail` names which field |
+| `checkout-not-confirmed` | 400 | a path is not a checkout of its repo; `detail` names both the repo asked for and the one the path holds |
 
-The last ten carry the tool's own message in `detail`. They are the same failure
-family split by cause, so the UI can treat them as one class and show `detail`.
+`malformed-repo` and `malformed-path` name their field, so the UI can point at
+the offending input: `repo` in single mode, `repo_list[1].repo` in list mode.
+
+Only in list mode:
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `target-said-twice` | 400 | `repo_list` came with `repo` or `path` beside it |
+| `malformed-repo-list` | 400 | not a list, empty, or an entry is not exactly `{repo, path}` |
+| `repo-listed-twice` | 400 | the same repo appears twice; `detail` names it |
+| `no-plan-started` | 400 | every repository failed; carries `failed` |
+
+From a tool refusing, in either mode:
+
+| `code` | Meaning |
+|---|---|
+| `user-story-not-read` | Jira refused |
+| `user-story-not-understood` | Jira answered something unreadable |
+| `plan-issue-not-created` | `gh issue create` refused |
+| `plan-issue-not-named` | the created issue could not be identified |
+| `plan-issue-not-claimed` | the claim on the issue failed |
+| `plan-agent-not-launched` | cmux refused |
+| `plan-agent-not-named` | cmux launched but gave no handle |
+| `workspace-not-prepared` | the worktree could not be cut |
+| `workspace-not-read` | git refused when surveying |
+| `workspace-not-understood` | git answered something unreadable |
+
+All ten answer 400 and carry the tool's own message in `detail`. They are one
+failure family split by cause, so the UI can treat them as one class and show
+`detail`. In list mode they arrive inside a `failed` entry instead.
 
 ```
 curl -s -X POST -H 'Content-Type: application/json' \
   http://127.0.0.1:8787/start-plan \
   -d '{"id":"ABC-1","repo":"owner/name","path":"/repo/checkout"}'
+
+curl -s -X POST -H 'Content-Type: application/json' \
+  http://127.0.0.1:8787/start-plan \
+  -d '{"id":"ABC-1","repo_list":[{"repo":"owner/one","path":"/one"},
+                                 {"repo":"owner/two","path":"/two"}]}'
 ```
 
 ---
