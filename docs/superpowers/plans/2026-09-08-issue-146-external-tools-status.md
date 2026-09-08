@@ -146,6 +146,8 @@ Rules to obey:
 | `backend/src/infrastructure/ct-api.mjs` | modify | the entrypoint | prose (Task 3) |
 | `backend/__tests__/infrastructure/external-tools-route.test.js` | create | vitest | none (body by TDD) |
 | `README.md` | modify | whoever reads the repo | Final text (Task 4) |
+| `backend/API.md` | modify | the frontend, and whoever codes against the API | Final text (Task 4) |
+| `frontend/vite.config.ts` | modify | the dev server | prose (Task 4) |
 | `backend/conventions/this-repository.md` | modify | whoever writes backend code | Final text (Task 4) |
 
 ## 5. Interfaces
@@ -399,40 +401,53 @@ cd backend && npx vitest run   # exit 0: whole suite, entrypoint real-process in
 
 ### Task 4 — The repo says the endpoint exists and what its words mean
 
-**Objective:** the README lists the new endpoint and `this-repository.md` declares the two terms
-this slice adds to the backend's ubiquitous language.
+**Objective:** the API contract document carries the endpoint, the README counts it, the
+conventions declare its two words, and the dev server stops shadowing its path.
 
 **Files:**
+- Modify: `backend/API.md`
 - Modify: `README.md`
 - Modify: `backend/conventions/this-repository.md`
+- Modify: `frontend/vite.config.ts`
 
-Final text (README.md, line 8 — the `backend/` row, in the document's own language):
-
-```markdown
-| [`backend/`](backend/) | La API HTTP local que la interfaz consume (`POST /start-plan`, `GET /plan-events/:issue`, `POST /implement-plan`, `GET /implement-progress/:issue`, `GET /external-tools`); además barre cada minuto los clones que ha atendido y cosecha con `dispatch-check --collect` lo que dejó cada slice cuya PR ya se mergeó | No |
-```
-
-Final text (backend/conventions/this-repository.md, two rows after `Workbench` on line 42):
+Final text (backend/conventions/this-repository.md, two rows after `Workbench`):
 
 ```markdown
 | **External tool** | A binary Control Tower drives that carries a credential of its own: `gh`, `acli`, `claude`, `git`, `bq`. Which five, and what is asked of each, lives in `probed-tool-sessions.js` |
-| **Tool session** | Whether that credential is usable right now: `ready`, `missing`, or `unknown` when it cannot be observed from this process. `unknown` is not a failure |
+| **Tool session** | Whether that credential is usable right now: `ready`, `missing`, or `unknown` when it cannot be observed from this process. `unknown` is not a failure, and the `fix` beside it repairs the credential — it presupposes the binaries are installed, which `installed` answers separately |
 ```
 
-**TDD:** No TDD — documentation. Both claims were verified against the branch's base while writing
-this plan: `README.md:8` lists four endpoints today, and `Workbench` on
-`backend/conventions/this-repository.md:42` is the ubiquitous language table's last row.
+Final text (README.md, the `backend/` row — only the count changes):
 
-**Tests:** N/A — documentation, as §6 declares.
+```markdown
+| [`backend/`](backend/) | La API HTTP local que la interfaz consume — seis endpoints, documentados en [`backend/API.md`](backend/API.md); además barre cada minuto los clones que ha atendido y cosecha con `dispatch-check --collect` lo que dejó cada slice cuya PR ya se mergeó | No |
+```
 
-**Verification:** the endpoint is named where the repo lists its endpoints, the terms are in the
-table, and only one line of the README moved.
+`backend/API.md` gains a `## GET /external-tools` section in that document's own shape — the 200
+body as a real server printed it, the three-member `session` vocabulary with what the UI may do
+with each, how every tool is asked, and the refusals it does **not** have — plus `6 (POST 2, GET 4)`
+in its endpoint count, a `none yet` row in "Where the frontend consumes each one", and the two
+costs a caller must know: the probes are sequential and one reaches the network, and `gh` reads
+`ready` on a token with no `project` scope.
+
+`frontend/vite.config.ts`: `/external-tools` joins `API_PATHS`. This is not frontend feature work,
+which §1 puts out of scope — it is the line without which the dev server answers the page's HTML
+instead of the API, as `backend/API.md` states in its own "Reaching it" section.
+
+**TDD:** No TDD — documentation and one config list. Every claim was verified against the tree:
+`API.md`'s count line, its two tables, `Workbench` as the last language row, and `API_PATHS`.
+
+**Tests:** N/A — nothing executable changes. The frontend suite is run anyway, because a broken
+`vite.config.ts` would take it down.
+
+**Verification:** the endpoint is in the contract, the README counts six, the words are declared,
+and the dev server proxies the path.
 
 ```bash
-test "$(grep -c 'GET /external-tools' README.md)" -eq 1
+test "$(grep -c 'GET /external-tools' backend/API.md)" -ge 1
+test "$(grep -c 'seis endpoints' README.md)" -eq 1
 test "$(grep -c 'Tool session' backend/conventions/this-repository.md)" -eq 1
-test "$(git diff --numstat origin/main -- README.md | cut -f2)" -eq 1
-test -z "$(git status --porcelain)"
+test "$(grep -c external-tools frontend/vite.config.ts)" -eq 1
 ```
 
 ## 8. Global verification
@@ -509,3 +524,14 @@ node --input-type=module -e 'import {readFileSync} from "node:fs"; const b=JSON.
    derivable from the table"), and a reader per row is a design change worth its own slice rather
    than a late edit to a reviewed branch. *Provenance: final whole-branch review; carried by own
    call.*
+11. **`main` moved while this branch was in review, and Task 4 grew because of it.** Two pull
+   requests landed: one added `backend/API.md`, a 411-line contract document, and moved the list of
+   endpoints out of the README's `backend/` row into it. So the README edit this plan first
+   specified — appending `GET /external-tools` to an inline list — described a line that no longer
+   exists. The rebase took `main`'s shape and changed only the count, and the endpoint's real
+   documentation went where that document now lives. Two things came with it that this plan had not
+   foreseen: the contract document's own rule that a new endpoint must join `API_PATHS` in
+   `frontend/vite.config.ts` or the dev server shadows it with the page's HTML, and its
+   frontend-consumption table, which now carries a `none yet` row for this endpoint. Both are
+   plumbing and neither is the frontend work §1 declared out of scope. *Provenance: the rebase onto
+   b77c76e; own call.*
