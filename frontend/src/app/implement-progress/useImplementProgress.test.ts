@@ -24,7 +24,7 @@ describe('useImplementProgress', () => {
     expect(fetching).toHaveBeenCalledTimes(2)
   })
 
-  it('should stop polling once the run is delivered', async () => {
+  it('should keep polling past delivered, because it can still turn into a review or a fix', async () => {
     const fetching = answerWith(ImplementProgressMother.delivered())
     vi.stubGlobal('fetch', fetching)
     vi.useFakeTimers()
@@ -34,7 +34,48 @@ describe('useImplementProgress', () => {
 
     await vi.advanceTimersByTimeAsync(15000)
 
+    expect(fetching).toHaveBeenCalledTimes(2)
+  })
+
+  it('should keep polling once in review, because a reviewer can send it back to fixing', async () => {
+    const fetching = answerWith(ImplementProgressMother.inReview())
+    vi.stubGlobal('fetch', fetching)
+    vi.useFakeTimers()
+
+    renderHook(() => useImplementProgress(ImplementProgressMother.ISSUE, ImplementProgressMother.ROOT, ImplementProgressMother.REPO))
+    await vi.waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
+
+    await vi.advanceTimersByTimeAsync(15000)
+
+    expect(fetching).toHaveBeenCalledTimes(2)
+  })
+
+  it('should keep polling once fixing, because the push can move it back to review', async () => {
+    const fetching = answerWith(ImplementProgressMother.fixing())
+    vi.stubGlobal('fetch', fetching)
+    vi.useFakeTimers()
+
+    renderHook(() => useImplementProgress(ImplementProgressMother.ISSUE, ImplementProgressMother.ROOT, ImplementProgressMother.REPO))
+    await vi.waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
+
+    await vi.advanceTimersByTimeAsync(15000)
+
+    expect(fetching).toHaveBeenCalledTimes(2)
+  })
+
+  it('should slow the cadence down once a person is the bottleneck, instead of polling every 3s', async () => {
+    const fetching = answerWith(ImplementProgressMother.delivered())
+    vi.stubGlobal('fetch', fetching)
+    vi.useFakeTimers()
+
+    renderHook(() => useImplementProgress(ImplementProgressMother.ISSUE, ImplementProgressMother.ROOT, ImplementProgressMother.REPO))
+    await vi.waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
+
+    await vi.advanceTimersByTimeAsync(3000)
     expect(fetching).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(12000)
+    expect(fetching).toHaveBeenCalledTimes(2)
   })
 
   it('should stop polling once the backend refuses the request for good', async () => {
