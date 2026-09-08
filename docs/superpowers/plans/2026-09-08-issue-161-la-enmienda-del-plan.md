@@ -222,12 +222,12 @@ task and say the exemption in their own text. In `plugin/__tests__/conventions-v
 `ALCANCES` entry for `architecture.md` becomes `every diff`.
 
 **TDD:** red first, in `plugin/__tests__/kickoff.test.js`: `it('no reparte la arquitectura entre
-(create) y (modify): architecture.md alcanza a toda tarea')` — the kickoff rendered by
+las dos marcas: architecture.md alcanza a toda tarea')` — the kickoff rendered by
 `renderKickoff(SLICE, OPTS_CON_VARA)` contains neither the string `MÓDULOS NUEVOS` nor the phrase
 that splits the work between the two marks. Today it contains both.
 
-**Tests:** added: `no reparte la arquitectura entre (create) y (modify): architecture.md alcanza
-a toda tarea`. Removed on purpose: none — the scope tests of `conventions-vara.test.js` are
+**Tests:** added: 'no reparte la arquitectura entre las dos marcas: architecture.md alcanza a
+toda tarea'. Removed on purpose: none — the scope tests of `conventions-vara.test.js` are
 generated from the `ALCANCES` map and keep their names.
 
 **Verification:** the new scope is declared, the three false claims are gone, and the suites that
@@ -283,12 +283,12 @@ y el estado y el directorio del run no')` — after `report`, `controls`, `verdi
 `git show --name-only HEAD` names `plan.md` and does NOT name `.agent/SLICE.md`, and the commit
 count from the base is still one.
 
-**Tests:** added, all in `plugin/__tests__/ct-step-enmienda.test.js`: `el plan enmendado a media
-tarea entra en el commit de esa tarea, y el estado y el directorio del run no`; `el control de
-alcance sale 0 y su salida no nombra la ruta del plan`; `el paquete de revisión de la tarea trae
-el diff del plan`; `tras una tarea con enmienda, reconcile, global y slice-verdict no salen con
-PRECONDITION`; `un veredicto vetado devuelve el árbol y el plan de HEAD no declara la ruta que la
-enmienda añadió`.
+**Tests:** added, all in `plugin/__tests__/ct-step-enmienda.test.js`: 'el plan enmendado a media
+tarea entra en el commit de esa tarea, y el estado y el directorio del run no'; 'el control de
+alcance sale 0 y su salida no nombra la ruta del plan'; 'el paquete de revisión de la tarea trae
+el diff del plan'; 'tras una tarea con enmienda, reconcile, global y slice-verdict no salen con
+PRECONDITION'; 'un veredicto vetado devuelve el árbol y el plan de HEAD no declara la ruta que la
+enmienda añadió'.
 
 **Verification:** the new file passes, and the suites that drive the index and the controls
 through the same harness stay green.
@@ -332,9 +332,9 @@ rojo')` — the implementer of task 1 writes `uno.txt`, then amends `plan.md` so
 only `dos.txt`; `ct-step controls` exits non-zero and its log carries the phrase `sólo puede
 AÑADIR rutas` together with the removed path `uno.txt`.
 
-**Tests:** added: `una enmienda que quita una ruta declarada se rechaza y el paso sale en rojo`;
-`una enmienda que sólo añade rutas pasa el control`; `tras el rechazo, el plan de HEAD sigue
-declarando la ruta que la enmienda quitó`.
+**Tests:** added: 'una enmienda que quita una ruta declarada se rechaza y el paso sale en rojo';
+'una enmienda que sólo añade rutas pasa el control'; 'tras el rechazo, el plan de HEAD sigue
+declarando la ruta que la enmienda quitó'.
 
 **Verification:** the guard exists, its tests pass, and the pre-existing control suite is
 unchanged by it.
@@ -368,8 +368,8 @@ plan.
 del plan es una enmienda que tiene que dictaminar')` — the text of item 8 contains the word
 `amendment` and names the plan file as the subject of that item.
 
-**Tests:** added: `el ítem alcance le dice al juez que un diff del plan es una enmienda que tiene
-que dictaminar`. Removed on purpose: none.
+**Tests:** added: 'el ítem alcance le dice al juez que un diff del plan es una enmienda que tiene
+que dictaminar'. Removed on purpose: none.
 
 **Verification:** the paragraph is there and the suites that read the judge's definition pass.
 
