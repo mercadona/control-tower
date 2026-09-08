@@ -32,6 +32,11 @@ class FakeEventSource extends EventTarget {
     this.dispatchEvent(new Event('error'))
   }
 
+  refuseBeforeOpen() {
+    this.readyState = FakeEventSource.CLOSED
+    this.dispatchEvent(new Event('error'))
+  }
+
   static install() {
     FakeEventSource.opened = []
     vi.stubGlobal('EventSource', FakeEventSource)

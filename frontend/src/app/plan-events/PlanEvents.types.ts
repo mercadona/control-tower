@@ -11,7 +11,8 @@ export type PlanFailure = {
 
 export type PlanEventsListener = {
   onState: (state: PlanState) => void
-  onFailure: (error: string) => void
+  onFailure: (failure: PlanFailure) => void
+  onRefused: () => void
   onUnreachable: () => void
 }
 
