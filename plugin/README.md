@@ -260,7 +260,7 @@ npm run test:fast   # the suite without the tests that launch a real process
 npm run build       # only the bundle of the hooks
 ```
 
-`npm run test:fast` runs the suite **without the tests that launch a real process**, marked with the suffix `-real-process.test.js` — the same marker the backend uses, because it is the same decision and this repo writes it once. Today only the tests born conformant carry it: of the 77 files of `__tests__/` that launch a process —74 import `node:child_process` and 3 do it through `fixtures/ct-step-harness.js`— **68 are left unmarked**, so the fast subset **is not fast yet**. It is declared debt and it is paid off by renaming. What is already tied down is that a test born conformant cannot spawn without its marker nor carry it as an ornament, nor hide the process behind a fixture: `__tests__/modulos-conformes.test.js` measures that.
+`npm run test:fast` runs the suite **without the tests that launch a real process**, marked with the suffix `-real-process.test.js` — the same marker the backend uses, because it is the same decision and this repo writes it once. Today only the tests born conformant carry it: of the 77 files of `__tests__/` that launch a process —74 import `node:child_process` and 3 do it through `fixtures/ct-step-harness.js`— **68 are left unmarked**, so the fast subset **is not fast yet**. It is declared debt and it is paid off by renaming. What is already tied down is that a test born conformant cannot spawn without its marker nor carry it as an ornament, nor hide the process behind a fixture: `__tests__/conforming-modules.test.js` measures that.
 
 ### The `dist/` rule
 
@@ -268,7 +268,7 @@ npm run build       # only the bundle of the hooks
 
 > **Every change in `hooks/`, or in any module of `scripts/` that those hooks import, has to carry a rebuilt `dist/` in the same commit.**
 
-The same holds for `scripts/vendor/yaml.js`, and for a different reason: **Claude Code installs a plugin by copying it, never by running `npm install`**, so an `import` of an npm package only survives while an untracked `node_modules` travels along for free with the copy — and dies in any installation from git. `scripts/state.js` imports the bundle, not the package, and `__tests__/frontera-de-distribucion.test.js` goes red at any `import` of a package in the runtime code.
+The same holds for `scripts/vendor/yaml.js`, and for a different reason: **Claude Code installs a plugin by copying it, never by running `npm install`**, so an `import` of an npm package only survives while an untracked `node_modules` travels along for free with the copy — and dies in any installation from git. `scripts/state.js` imports the bundle, not the package, and `__tests__/distribution-boundary.test.js` goes red at any `import` of a package in the runtime code.
 
 Otherwise, the repo goes on distributing the old hook while the source already says something else — and the suite stays **green**, because `npm test` builds first: it tests a freshly made `dist/` while the committed one rots. It really happened. Before committing anything that touches `hooks/`: `npm run build`, and look at the diff of `dist/*.js` as part of the change.
 

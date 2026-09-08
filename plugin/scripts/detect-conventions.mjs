@@ -14,7 +14,7 @@ import { statSync } from 'node:fs'
 import { detectConventions, formatFindings, ACK_PATH } from './conventions.js'
 import { readRepoDocs, readAck, MAX_LINKED_DOCS } from './conventions-io.js'
 // The tree walk used to live here and was extracted into `repo-walk.js`: it
-// shares it with `detect-vara.mjs` (§3.12 of the handoff, candidates for the
+// shares it with `detect-yardstick.mjs` (§3.12 of the handoff, candidates for the
 // repo's yardstick) so that the caps and the exclusions of the two sweeps
 // cannot diverge in silence. See that file's header for the why of each rule;
 // nothing that follows changes one letter of behaviour.

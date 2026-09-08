@@ -66,7 +66,7 @@ import { extractTasks } from './plan-tasks.js'
 import { BranchReconciliation } from './branch-reconciliation.js'
 import { ReconcileOutcome, DiscardReason } from './reconcile-outcome.js'
 import { LOOP_ARTIFACT_PATTERNS, matchesPattern } from './scope.js'
-import { CONVENTIONS_FILE, seccionDeVara } from './vara.js'
+import { CONVENTIONS_FILE, seccionDeVara } from './repo-yardstick.js'
 import { PluginYardstick } from './plugin-yardstick.js'
 import { PluginManifest } from './plugin-manifest.js'
 import {
@@ -1621,7 +1621,7 @@ const esRutaDeLaMaquinaria = (path) => LOOP_ARTIFACT_PATTERNS.some((pat) => matc
 //
 // THE COPY IS DECLARED AND MEASURED (`conventions/decisions.md`, "when the
 // copy is unavoidable"): the rule lives in two languages because the script is
-// bash and this is JavaScript, and `__tests__/seccion-del-plan-real-process.test.js`
+// bash and this is JavaScript, and `__tests__/plan-section-real-process.test.js`
 // passes the same plans through both implementations and compares the output
 // byte for byte — so rewriting both passes and touching only one fails. Until
 // that test existed, the two had already diverged over the quotes of the

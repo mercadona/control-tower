@@ -433,7 +433,7 @@ describe('the first act names the yardstick of ct', () => {
   // reinterpreted— and does not state it: five copies of one rule in five
   // files is what let it diverge (the backend's said `architecture.md` always
   // applies). Whoever stated it here no longer states it, and the test that
-  // checks that is `precedencia-una-sola-fuente.test.js`.
+  // checks that is `precedence-one-single-source.test.js`.
   it('it cites the header where the rule lives, and does not state it again', () => {
     const k = renderKickoff(SLICE, OPTS_CON_VARA)
     expect(k).toMatch(/CABECERA/)

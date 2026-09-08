@@ -125,7 +125,7 @@ describe('what the marketplace ships has to stand on its own', () => {
     expect(sources).toContain(join('scripts', 'ct-next.mjs'))
     expect(sources).toContain(join('scripts', 'state.js'))
     expect(sources).toContain(join('dist', 'session-start.js'))
-    expect(sources).toContain(join('__tests__', 'frontera-de-distribucion.test.js'))
+    expect(sources).toContain(join('__tests__', 'distribution-boundary.test.js'))
   })
 
   it('no source imports anything living outside the shipped subtree', () => {

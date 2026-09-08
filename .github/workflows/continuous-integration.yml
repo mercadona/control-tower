@@ -77,7 +77,7 @@ jobs:
             echo "dist/ is tracked and holds the bundles that are actually executed:"
             echo "  - hooks/hooks.json runs dist/session-start.js, dist/stop.js and dist/commit-keyword-guard.js — never the sources in hooks/."
             echo "  - dist/scope-check.js is vendored by hand into governed repos (docs/loop/ct-scope-gate.md); no hook imports it."
-            echo "The canonical input list of every bundle lives in __tests__/dist-coherente-con-fuentes.test.js."
+            echo "The canonical input list of every bundle lives in __tests__/dist-matches-sources.test.js."
             echo "Fix: run 'npm run build' inside plugin/ and commit the diff of plugin/dist/ as part of the same change."
             exit 1
           fi

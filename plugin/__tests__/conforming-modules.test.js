@@ -11,17 +11,17 @@ class NacidosConformes {
     'scripts/yardstick-citation.js',
     '__tests__/plugin-yardstick.test.js',
     '__tests__/yardstick-citation.test.js',
-    '__tests__/conventions-vara.test.js',
+    '__tests__/conventions-yardstick.test.js',
     'scripts/branch-reconciliation.js',
     'scripts/reconcile-outcome.js',
-    '__tests__/modulos-conformes.test.js',
+    '__tests__/conforming-modules.test.js',
     '__tests__/branch-reconciliation.test.js',
     '__tests__/branch-reconciliation-real-process.test.js',
-    '__tests__/branch-reconciliation-produccion-real-process.test.js',
-    '__tests__/branch-reconciliation-base-ilegible-real-process.test.js',
+    '__tests__/branch-reconciliation-production-real-process.test.js',
+    '__tests__/branch-reconciliation-unreadable-base-real-process.test.js',
     '__tests__/reconcile-outcome.test.js',
-    '__tests__/seccion-del-plan-real-process.test.js',
-    '__tests__/frontera-de-distribucion.test.js',
+    '__tests__/plan-section-real-process.test.js',
+    '__tests__/distribution-boundary.test.js',
     'scripts/slice-collection.js',
     '__tests__/slice-collection.test.js',
     'scripts/slice-collector.js',
@@ -169,7 +169,7 @@ describe('modules born under the yardstick keep being born conforming', () => {
   it('the list names both modules and names ITSELF: a guard blind to its own file once left 21 comments inside it', () => {
     expect(NacidosConformes.RUTAS).toContain('scripts/plugin-yardstick.js')
     expect(NacidosConformes.RUTAS).toContain('scripts/yardstick-citation.js')
-    expect(NacidosConformes.RUTAS).toContain('__tests__/modulos-conformes.test.js')
+    expect(NacidosConformes.RUTAS).toContain('__tests__/conforming-modules.test.js')
   })
 
   for (const ruta of NacidosConformes.RUTAS) {

@@ -49,7 +49,7 @@ import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { cargarIssues } from './loop-issues.js'
 import { liveSliceProcesses } from './liveness.js'
-import { construirEstado } from './loop-estado.js'
+import { construirEstado } from './loop-state.js'
 import { mapGhIssue, filterMergedIssues, closedWithLiveStatus } from './gh-issue-map.js'
 import { parseRepoSlug } from './dispatch.js'
 
@@ -168,7 +168,7 @@ const enProgreso = mapeados.filter((i) => i.status === 'in-progress').map((i) =>
 // three questions («qué está en vuelo, qué ha entregado, qué es residuo») and
 // until now the command did not answer it: its worktrees fell into RESIDUO and
 // fired an exit 3 over a perfectly healthy loop. See the `enRevision` comment
-// in loop-estado.js for why it is neither residue nor harvest.
+// in loop-state.js for why it is neither residue nor harvest.
 const enRevision = mapeados.filter((i) => i.status === 'in-review').map((i) => ({ n: i.n, nombre: i.name }))
 const mergeados = filterMergedIssues(cerrados)
 const cerradosConStatus = closedWithLiveStatus(cerrados)

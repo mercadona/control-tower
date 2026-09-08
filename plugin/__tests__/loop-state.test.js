@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { construirEstado } from '../scripts/loop-estado.js'
+import { construirEstado } from '../scripts/loop-state.js'
 
 const base = {
   enProgreso: [], mergeados: [], cerradosConStatus: [],

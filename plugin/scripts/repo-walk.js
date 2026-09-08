@@ -2,7 +2,7 @@
 //
 // This repo has TWO deterministic, offline sweeps over the same file tree:
 // `scripts/detect-conventions.mjs` (PROTOCOL collisions between the loop and
-// the target repo — claim, worktrees, state file) and `scripts/detect-vara.mjs`
+// the target repo — claim, worktrees, state file) and `scripts/detect-yardstick.mjs`
 // (§3.12 of the handoff, docs/prompt-juez-lo-que-queda.md: candidates for the
 // repo's CODE yardstick). They are different subjects, but they walk the same
 // tree with the same bounds and the same exclusions — and if each carried its
@@ -58,7 +58,7 @@ export const MAX_ENTRIES = 20000
 //
 // It does not `statSync` the `target` nor validate that it is a directory: that
 // is each wrapper's responsibility (`detect-conventions.mjs`,
-// `detect-vara.mjs`), which need to decide the exact error message ON THEIR OWN
+// `detect-yardstick.mjs`), which need to decide the exact error message ON THEIR OWN
 // — and that way neither of the two changes its text because of coming from
 // here.
 export function walkRepo(target, { maxDepth = MAX_DEPTH, maxEntries = MAX_ENTRIES } = {}) {

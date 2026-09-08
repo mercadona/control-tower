@@ -13,7 +13,7 @@ it: `plugin-yardstick.js`, `yardstick-citation.js`, `harvest.js`,
 `reconcile-outcome.js`, `scope.js`, `claim.js`, `gates.js`, `state.js`,
 `state-paths.js`, `step-contracts.js`.
 
-The migration is visibly half-done: `vara.js` and `plugin-yardstick.js` sit in
+The migration is visibly half-done: `repo-yardstick.js` and `plugin-yardstick.js` sit in
 the same directory today. A term translated two ways is worse than a term left
 in Spanish — the second is visibly debt, the first looks finished.
 
@@ -84,7 +84,7 @@ and test names, measured on `b77c76e`.
   `status:ready`, `status:in-progress`, `status:in-review`. These are **GitHub
   labels and already English** — they are contract and no rename touches them.
 
-`loop-estado.js` is the loop's own record, so it becomes `loop-state.js`.
+`loop-state.js` is the loop's own record, so it becomes `loop-state.js`.
 
 ## Terms settled during the migration
 
