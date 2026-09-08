@@ -16,10 +16,10 @@ No es un orquestador de agentes en paralelo. Es lo contrario: una máquina para 
 | Licencia | [MIT](LICENSE) |
 
 > ### 📘 La referencia completa
-> Este README es la vista de conjunto. El documento largo —los 16 pasos uno a uno, la máquina de estados, y el **formato exacto de los 11 artefactos** que viajan entre pasos— está en [`docs/loop/`](https://github.com/josemerca/control-tower-plugin/tree/main/docs/loop):
+> Este README es la vista de conjunto. El documento largo —los 16 pasos uno a uno, la máquina de estados, y el **formato exacto de los 11 artefactos** que viajan entre pasos— está en [`docs/loop/`](https://github.com/mercadona/control-tower/tree/main/docs/loop):
 >
-> - **[control-tower-loop.pdf](https://github.com/josemerca/control-tower-plugin/blob/main/docs/loop/control-tower-loop.pdf)** — 29 páginas, para leer y compartir
-> - **[control-tower-loop.html](https://github.com/josemerca/control-tower-plugin/blob/main/docs/loop/control-tower-loop.html)** — página autocontenida, un solo fichero, sin dependencias de red
+> - **[control-tower-loop.pdf](https://github.com/mercadona/control-tower/blob/main/docs/loop/control-tower-loop.pdf)** — 29 páginas, para leer y compartir
+> - **[control-tower-loop.html](https://github.com/mercadona/control-tower/blob/main/docs/loop/control-tower-loop.html)** — página autocontenida, un solo fichero, sin dependencias de red
 
 ---
 
@@ -73,7 +73,7 @@ Control Tower es el patrón de desarrollo dirigido por subagentes **un nivel por
 ## Instalación
 
 ```
-/plugin marketplace add josemerca/control-tower-plugin
+/plugin marketplace add mercadona/control-tower
 /plugin install control-tower-loop@control-tower
 ```
 
@@ -105,7 +105,7 @@ Si `/ct-init` avisa de que el repo **ya traía sus propias convenciones** —otr
 | **`/ct-next`** | Elige el siguiente slice despachable (orden, dependencias mergeadas, sin colisión de tokens, con hueco de `--cap`), lo reclama, crea worktree y rama, siembra el estado y lanza al agente **verificando que arrancó de verdad**. | GitHub + disco |
 | **`/ct-status`** | Responde de una vez: qué está en vuelo, qué ha entregado y qué es residuo. **No escribe una sola vez** — hay un test que lo comprueba mirando el `argv` real con el que se llamó a `gh`. | nada |
 
-Los cuatro comparten convención de canal: **stdout es el producto** (el plan, la selección, el informe, el motivo de bloqueo) y **stderr es el diagnóstico** (`aviso:`, `ATENCIÓN:`, y todo aborto). Y una gramática de códigos de salida con tres estados: hecho, no se pudo comprobar, queda algo pendiente. Están todos tabulados en [la referencia completa](https://github.com/josemerca/control-tower-plugin/blob/main/docs/loop/control-tower-loop.pdf).
+Los cuatro comparten convención de canal: **stdout es el producto** (el plan, la selección, el informe, el motivo de bloqueo) y **stderr es el diagnóstico** (`aviso:`, `ATENCIÓN:`, y todo aborto). Y una gramática de códigos de salida con tres estados: hecho, no se pudo comprobar, queda algo pendiente. Están todos tabulados en [la referencia completa](https://github.com/mercadona/control-tower/blob/main/docs/loop/control-tower-loop.pdf).
 
 Empieza siempre en seco:
 
@@ -166,7 +166,7 @@ kickoff, como su propia cabecera pedía.
 
 El diseño, lo que se midió para tomarlo y lo que la primera corrida real enseñó
 están en
-[`docs/superpowers/specs/2026-08-18-el-conductor-como-programa-design.md`](https://github.com/josemerca/control-tower-plugin/blob/main/docs/superpowers/specs/2026-08-18-el-conductor-como-programa-design.md).
+[`docs/superpowers/specs/2026-08-18-el-conductor-como-programa-design.md`](https://github.com/mercadona/control-tower/blob/main/docs/superpowers/specs/2026-08-18-el-conductor-como-programa-design.md).
 
 **El verbo `e2e` es TERMINAL, y condicional.** Se pregunta con `ct-step next`
 igual que cualquier otro paso, pero solo aparece en la secuencia de un slice
@@ -236,7 +236,7 @@ El principio que ordena todo el diseño:
 | PR | el agente | GitHub — con la closing keyword en el **cuerpo** |
 | `conventions-ack.md` | el humano | `.agent/` — silencia un aviso sin borrar documentación |
 
-**El formato exacto de cada uno está en [la referencia completa](https://github.com/josemerca/control-tower-plugin/blob/main/docs/loop/control-tower-loop.pdf)**, sacado en cada caso de la función que lo emite, no de una descripción.
+**El formato exacto de cada uno está en [la referencia completa](https://github.com/mercadona/control-tower/blob/main/docs/loop/control-tower-loop.pdf)**, sacado en cada caso de la función que lo emite, no de una descripción.
 
 El plan del slice tiene contrato mecánico (`scripts/plan-contract.js`), y desde F-jjponz-4 ese contrato acota **qué** puede llevar un bloque de código: cada uno declara su rol —`Current state` (el tramo que cambia, comprobado verbatim contra el repo), `Contract` (tipos, firmas, errores tipados, constantes no deducibles), `Call site` (cómo queda la llamada en el consumidor) o `Final text` (documentación)— con su presupuesto de líneas. Los cuerpos de los módulos y los ficheros de test **no van en el plan**: los escribe el implementador con TDD, y la configuración se describe en prosa. El motivo es el gate `plan`: un plan de 74k caracteres que no cabe en un comentario del issue no se revisa, se hojea — y lo que viaja sin revisar son defectos.
 

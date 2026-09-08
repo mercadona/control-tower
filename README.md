@@ -1,4 +1,4 @@
-# control-tower-plugin — el repo único
+# control-tower — el repo único
 
 Tres piezas, un repo, y solo una de ellas se distribuye:
 
@@ -23,7 +23,7 @@ El diseño de la fusión con la app companion, con su nota de divergencia, en
 ## Instalar el plugin
 
 ```
-/plugin marketplace add josemerca/control-tower-plugin
+/plugin marketplace add mercadona/control-tower
 /plugin install control-tower-loop@control-tower
 ```
 
