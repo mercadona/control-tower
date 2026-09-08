@@ -1,42 +1,42 @@
 // ===========================================================================
-// F20 — EL ARRANQUE DEL AGENTE DEJA DE DEPENDER DE QUE NADIE ESCRIBA EN EL PTY
-// EN EL MOMENTO EQUIVOCADO.
+// F20 — THE AGENT'S START-UP STOPS DEPENDING ON NOBODY WRITING INTO THE PTY AT
+// THE WRONG MOMENT.
 //
-// LO QUE SE MIDIÓ (contra el cmux real de la máquina de desarrollo, abriendo y
-// cerrando workspaces de prueba — nunca contra un repo de trabajo):
+// WHAT WAS MEASURED (against the real cmux of the development machine, opening
+// and closing throwaway workspaces — never against a working repo):
 //
-//   1. `--layout` NO ejecuta. Era la vía que F19 dejó apuntada como posible
-//      exec y no pudo probar porque tenía prohibido lanzar cmux. Con
+//   1. `--layout` does NOT exec. It was the route F19 flagged as a possible
+//      exec and could not test because it was forbidden to launch cmux. With
 //      `--layout '{"pane":{"surfaces":[{"type":"terminal","command":"…"}]}}'`
-//      el texto sale ECOADO detrás del prompt en la pantalla de la sesión, y
-//      el proceso lanzado cuelga de `-/bin/zsh` (login) → `login -flp …
-//      exec -l /bin/zsh` → cmux. Es tecleo, igual que `--command`. Y de
-//      propina: con `--layout`, el `--cwd` pedido se IGNORA (el `$PWD` medido
-//      fue el directorio por defecto).
-//   2. No hay ninguna otra vía de exec: `new-surface` no acepta `--command`, y
-//      el único tipo que arranca un binario por su cuenta (`agent-session
-//      --provider claude`) es la sesión de Claude propia de cmux, sin forma de
-//      pasarle argumentos ni prompt.
-//   3. `--env` sí llega al shell (`CLAUDE_CONFIG_DIR` visible dentro), pero
-//      `ZDOTDIR` NO: cmux/Ghostty lo usa para su propia integración y llega
-//      VACÍO — así que tampoco se puede inyectar un rc que arranque el agente.
-//   4. Con el mecanismo de F19 tal cual, SEIS lanzamientos consecutivos dieron
-//      CERO centinelas. En la pantalla:
+//      the text comes out ECHOED after the prompt on the session's screen, and
+//      the launched process hangs off `-/bin/zsh` (login) → `login -flp …
+//      exec -l /bin/zsh` → cmux. It is typing, just like `--command`. And as a
+//      bonus: with `--layout`, the requested `--cwd` is IGNORED (the measured
+//      `$PWD` was the default directory).
+//   2. There is no other exec route: `new-surface` does not accept `--command`,
+//      and the only type that starts a binary on its own (`agent-session
+//      --provider claude`) is cmux's own Claude session, with no way of passing
+//      it arguments or a prompt.
+//   3. `--env` does reach the shell (`CLAUDE_CONFIG_DIR` visible inside), but
+//      `ZDOTDIR` does NOT: cmux/Ghostty uses it for its own integration and it
+//      arrives EMPTY — so an rc that starts the agent cannot be injected either.
+//   4. With F19's mechanism as it was, SIX consecutive launches gave ZERO
+//      sentinels. On the screen:
 //
 //          [oh-my-zsh] Would you like to update? [Y/n]
 //          … >  '/…/launch.sh'
 //          zsh: permission denied: /…/launch.sh
 //
-//      El `read` de un carácter se comió el `.` de `. '/…/launch.sh'`.
-//   5. Un shell de login limpio ejecuta lo tecleado a los ~723 ms; un reenvío,
-//      ~250–400 ms después de mandarlo. Los 8000 ms de F19 (que nadie midió)
-//      son diez veces el arranque real: esperar más nunca iba a arreglarlo.
-//   6. Con reenvío: 5 de 5 arrancaron, todos al segundo intento, y el agente
-//      se lanzó UNA sola vez en cada uno.
+//      The one-character `read` ate the `.` of `. '/…/launch.sh'`.
+//   5. A clean login shell runs what was typed at ~723 ms; a resend, ~250–400 ms
+//      after sending it. F19's 8000 ms (which nobody measured) are ten times the
+//      real start-up: waiting longer was never going to fix it.
+//   6. With a resend: 5 out of 5 started, all on the second attempt, and the
+//      agent was launched ONCE in each of them.
 //
-// Estos tests fijan las propiedades, no la implementación: (a) un tecleo que
-// se pierde ya no condena el despacho, (b) reenviar NUNCA puede lanzar dos
-// agentes, y (c) cuando ni el reenvío basta, se sigue sin mentir.
+// These tests pin the properties, not the implementation: (a) a lost keystroke
+// no longer condemns the dispatch, (b) resending can NEVER launch two agents,
+// and (c) when not even the resend is enough, it still does not lie.
 // ===========================================================================
 import { describe, it, expect, afterEach } from 'vitest'
 import { spawnSync } from 'node:child_process'
@@ -97,15 +97,15 @@ function claudeRuns(repoRoot) {
 }
 
 // ---------------------------------------------------------------------------
-// H1 — el tecleo perdido deja de condenar el despacho
+// H1 — the lost keystroke stops condemning the dispatch
 // ---------------------------------------------------------------------------
-describe('F20/H1 — si el pty se come la línea, se reenvía', () => {
-  it('el caso de campo (oh-my-zsh se come el primer carácter) YA NO condena el despacho: se reenvía y el agente arranca', () => {
+describe('F20/H1 — if the pty eats the line, it is resent', () => {
+  it('the field case (oh-my-zsh eats the first character) NO LONGER condemns the dispatch: it is resent and the agent starts', () => {
     const repoRoot = makeRepoRoot()
-    // Verificado contra el código SIN el arreglo: exit 1, «lanzados 0/1» y
-    // «NO se puede confirmar que el comando llegara a ejecutarse» — el
-    // dispatcher se comportaba con honestidad, pero el despacho fallaba igual
-    // y dejaba claim + rama + worktree para que los limpiara un humano.
+    // Verified against the code WITHOUT the fix: exit 1, «lanzados 0/1» and
+    // «NO se puede confirmar que el comando llegara a ejecutarse» — the
+    // dispatcher behaved honestly, but the dispatch failed all the same and left
+    // a claim + branch + worktree for a human to clean up.
     const r = dispatchOne(repoRoot, {
       FAKE_CMUX_EAT_FIRST_CHAR_SUBSTR: '#90',
       FAKE_CMUX_CLAUDE_RUNS_FILE: join(repoRoot, 'claude-runs'),
@@ -113,19 +113,19 @@ describe('F20/H1 — si el pty se come la línea, se reenvía', () => {
     expect(r.code).toBe(0)
     expect(r.all).toMatch(/lanzado #90 en .*\.worktrees\/90/)
     expect(r.all).toMatch(/lanzados 1\/1 slice\(s\)/)
-    // …y NO se calla que hizo falta: un shell que se come lo que se le teclea
-    // sigue siendo un dato del que el humano tiene que enterarse.
+    // …and it does NOT keep quiet about having needed it: a shell that eats what
+    // is typed into it is still a datum the human has to find out about.
     expect(r.all).toMatch(/hizo falta REENVIAR la línea 1 vez/)
-    // La propiedad que hace que reenviar sea seguro.
+    // The property that makes resending safe.
     expect(claudeRuns(repoRoot)).toBe(1)
   })
 
-  it('reenviar NUNCA lanza dos agentes: si el primer tecleo llega tarde, el segundo sourceo es un no-op', () => {
+  it('resending NEVER launches two agents: if the first keystroke arrives late, the second sourcing is a no-op', () => {
     const repoRoot = makeRepoRoot()
-    // El tecleo original tarda 3 s; el reenvío sale a los 2,5 s y arranca al
-    // agente. Cuando el original por fin llega, la guarda del launcher lo
-    // convierte en un no-op. Sin la guarda serían DOS `claude` sobre el mismo
-    // worktree — el daño que un reintento ciego habría introducido.
+    // The original keystroke takes 3 s; the resend goes out at 2.5 s and starts
+    // the agent. When the original finally arrives, the launcher's guard turns it
+    // into a no-op. Without the guard there would be TWO `claude` processes on
+    // the same worktree — the damage a blind retry would have introduced.
     const r = dispatchOne(repoRoot, {
       FAKE_CMUX_COMMAND_DELAY_MS: '3000',
       CT_NEXT_LAUNCH_TIMEOUT_MS: '8000',
@@ -133,17 +133,17 @@ describe('F20/H1 — si el pty se come la línea, se reenvía', () => {
     })
     expect(r.code).toBe(0)
     expect(r.all).toMatch(/lanzado #90/)
-    // Margen para que el tecleo retrasado llegue después del reenvío.
+    // Margin so that the delayed keystroke arrives after the resend.
     const t0 = Date.now()
-    while (Date.now() - t0 < 2000) { /* espera activa corta: el stub retrasado corre en segundo plano */ }
+    while (Date.now() - t0 < 2000) { /* short busy wait: the delayed stub runs in the background */ }
     expect(claudeRuns(repoRoot)).toBe(1)
   })
 
-  it('cuando ni los reenvíos bastan, se sigue sin mentir — y se dice que se reenvió, no solo que se esperó', () => {
+  it('when not even the resends are enough, it still does not lie — and it says it resent, not just that it waited', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot, {
       FAKE_CMUX_EAT_FIRST_CHAR_SUBSTR: '#90',
-      FAKE_CMUX_EAT_ALWAYS_SUBSTR: '#90', // un rc que devora TODO lo que se teclee
+      FAKE_CMUX_EAT_ALWAYS_SUBSTR: '#90', // an rc that devours EVERYTHING that is typed
       CT_NEXT_LAUNCH_TIMEOUT_MS: '5200',
       FAKE_CMUX_CLAUDE_RUNS_FILE: join(repoRoot, 'claude-runs'),
     })
@@ -155,7 +155,7 @@ describe('F20/H1 — si el pty se come la línea, se reenvía', () => {
     expect(claudeRuns(repoRoot)).toBe(0)
   })
 
-  it('sin presupuesto para un segundo intento, se dice que NO hubo reenvío — no se deja creer que se intentó', () => {
+  it('with no budget for a second attempt, it says there was NO resend — it does not let you believe it tried', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot, {
       FAKE_CMUX_EAT_FIRST_CHAR_SUBSTR: '#90',
@@ -165,7 +165,7 @@ describe('F20/H1 — si el pty se come la línea, se reenvía', () => {
     expect(r.all).toMatch(/No hubo ningún reenvío automático: el presupuesto \(600 ms\)/)
   })
 
-  it('cmux no expone un handle para la sesión: el reenvío no se puede dirigir, y eso NO pasa en silencio', () => {
+  it('cmux exposes no handle for the session: the resend cannot be addressed, and that does NOT happen in silence', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot, {
       FAKE_CMUX_EAT_FIRST_CHAR_SUBSTR: '#90',
@@ -177,7 +177,7 @@ describe('F20/H1 — si el pty se come la línea, se reenvía', () => {
     expect(r.all).toMatch(/no expuso un handle/)
   })
 
-  it('el camino feliz sin reenvíos no menciona ninguno: la nota aparece solo cuando hubo algo que contar', () => {
+  it('the happy path with no resends mentions none: the note only shows up when there was something to report', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot, { FAKE_CMUX_CLAUDE_RUNS_FILE: join(repoRoot, 'claude-runs') })
     expect(r.code).toBe(0)
@@ -186,12 +186,12 @@ describe('F20/H1 — si el pty se come la línea, se reenvía', () => {
     expect(claudeRuns(repoRoot)).toBe(1)
   })
 
-  it('el presupuesto por defecto da para varios reenvíos, no para uno justo', () => {
-    // La medida que lo fija: idle, 1 reenvío a los ~2,9 s; con la máquina
-    // cargada, 2 reenvíos y ~7 s (1 de 3 se pasaba de los 8000 de F19). Un
-    // presupuesto que solo diera para dos intentos volvería a fallar bajo
-    // carga — y ahora, a diferencia de F19, más presupuesto SÍ compra algo:
-    // cada ventana de más es un tecleo más, no una espera más.
+  it('the default budget is enough for several resends, not for exactly one', () => {
+    // The measurement that pins it: idle, 1 resend at ~2.9 s; with the machine
+    // loaded, 2 resends and ~7 s (1 in 3 went past F19's 8000). A budget that
+    // was only enough for two attempts would fail again under load — and now,
+    // unlike in F19, more budget DOES buy something: every extra window is
+    // another keystroke, not another wait.
     const src = readFileSync(join(here, '..', 'scripts', 'ct-next.mjs'), 'utf8')
     const total = Number(src.match(/^const DEFAULT_LAUNCH_SENTINEL_TIMEOUT_MS = (\d+)$/m)?.[1])
     const attempt = Number(src.match(/^const LAUNCH_ATTEMPT_MS = (\d+)$/m)?.[1])
@@ -200,7 +200,7 @@ describe('F20/H1 — si el pty se come la línea, se reenvía', () => {
     expect(Math.floor(total / attempt)).toBeGreaterThanOrEqual(5)
   })
 
-  it('el --dry-run enseña el reparto en intentos y la medida que lo justifica', () => {
+  it('the --dry-run shows the split into attempts and the measurement that justifies it', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1', '--dry-run'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
@@ -213,10 +213,10 @@ describe('F20/H1 — si el pty se come la línea, se reenvía', () => {
 })
 
 // ---------------------------------------------------------------------------
-// H1 — unitarios: la guarda y los argv del reenvío
+// H1 — unit tests: the guard and the argv of the resend
 // ---------------------------------------------------------------------------
-describe('F20/H1 — la guarda de idempotencia (unitario)', () => {
-  it('el launcher NO relanza al agente si su centinela ya existe', () => {
+describe('F20/H1 — the idempotency guard (unit)', () => {
+  it('the launcher does NOT relaunch the agent if its sentinel already exists', () => {
     const d = mkdtempSync(join(tmpdir(), 'ct-f20-guard-'))
     dirs.push(d)
     const sentinelPath = join(d, 'started')
@@ -231,28 +231,28 @@ describe('F20/H1 — la guarda de idempotencia (unitario)', () => {
     run()
     expect(existsSync(sentinelPath)).toBe(true)
     expect(readFileSync(marker, 'utf8')).toBe('X')
-    // Segundo sourceo: el centinela ya está, así que no se relanza nada.
+    // Second sourcing: the sentinel is already there, so nothing is relaunched.
     const r2 = run()
     expect(readFileSync(marker, 'utf8')).toBe('X')
     expect(r2.stdout).toMatch(/ya arrancó \(centinela presente\)/)
   })
 
-  it('el centinela se sigue escribiendo ANTES del agente: la guarda no invierte el orden', () => {
+  it('the sentinel is still written BEFORE the agent: the guard does not invert the order', () => {
     const s = buildLauncherScript({ sentinelPath: '/tmp/s', agentCommand: 'claude --x', agentBin: 'claude', issue: 7, worktree: '/wt' }, shQuote)
     expect(s.indexOf("> '/tmp/s'")).toBeLessThan(s.indexOf('claude --x'))
   })
 
-  it('`send` y `send-key` van separados: cmux send no manda Enter por su cuenta', () => {
+  it('`send` and `send-key` go separately: cmux send does not send Enter on its own', () => {
     expect(buildCmuxSendArgv({ workspace: 'workspace:3', text: ". '/tmp/x'" })).toEqual(['send', '--workspace', 'workspace:3', ". '/tmp/x'"])
     expect(buildCmuxSendKeyArgv({ workspace: 'workspace:3' })).toEqual(['send-key', '--workspace', 'workspace:3', 'Enter'])
   })
 })
 
 // ---------------------------------------------------------------------------
-// H2 — la cosecha
+// H2 — the harvest
 // ---------------------------------------------------------------------------
-describe('F20/H2 — el residuo de un slice TERMINADO se nombra', () => {
-  it('un issue ya mergeado con su worktree y su rama todavía en disco sale nombrado, con los comandos exactos', () => {
+describe('F20/H2 — the residue of a FINISHED slice gets named', () => {
+  it('an already merged issue with its worktree and its branch still on disk comes out named, with the exact commands', () => {
     const repoRoot = makeRepoRoot()
     mkdirSync(join(repoRoot, '.worktrees', '451'), { recursive: true })
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
@@ -261,16 +261,16 @@ describe('F20/H2 — el residuo de un slice TERMINADO se nombra', () => {
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[], [{ number: 451, state_reason: 'completed', body: '' }]]),
       FAKE_GH_COUNTER_FILE: join(repoRoot, 'gh-list-count'),
     })
-    // Verificado contra el código SIN arreglar: ni una sola mención de #451,
-    // de `.worktrees/451` ni de `feat/451` en toda la salida.
+    // Verified against the UNFIXED code: not a single mention of #451, of
+    // `.worktrees/451` or of `feat/451` in the whole output.
     expect(r.all).toMatch(/cosecha pendiente: 1 slice\(s\)/)
     expect(r.all).toMatch(/#451: worktree .*\.worktrees\/451, rama feat\/451/)
     expect(r.all).toMatch(/git worktree remove --force .*\.worktrees\/451 && git branch -D feat\/451/)
-    // El filo añadido: ese residuo bloquea el redespacho del MISMO número.
+    // The added edge: that residue blocks the redispatch of the SAME number.
     expect(r.all).toMatch(/se NEGARÁ a redespachar/)
   })
 
-  it('un repo sin residuo no dice nada (y no se inventa una cosecha)', () => {
+  it('a repo with no residue says nothing (and does not invent a harvest)', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
@@ -280,7 +280,7 @@ describe('F20/H2 — el residuo de un slice TERMINADO se nombra', () => {
     expect(r.all).not.toMatch(/cosecha pendiente/)
   })
 
-  it('la sesión de cmux que sigue abierta sobre un slice ya mergeado se nombra aparte: ese `claude` lleva horas vivo', () => {
+  it('the cmux session still open on an already merged slice is named separately: that `claude` has been alive for hours', () => {
     const residue = collectFinishedResidue([451], {
       worktreeDirs: ['451'],
       branchNames: ['feat/451'],
@@ -293,7 +293,7 @@ describe('F20/H2 — el residuo de un slice TERMINADO se nombra', () => {
     expect(w).toMatch(/sigue vivo con el trabajo YA entregado/)
   })
 
-  it('#45 no casa dentro de #451: el número se busca como token entero', () => {
+  it('#45 does not match inside #451: the number is looked up as a whole token', () => {
     const residue = collectFinishedResidue([45], {
       worktreeDirs: ['45'],
       branchNames: [],
@@ -302,21 +302,21 @@ describe('F20/H2 — el residuo de un slice TERMINADO se nombra', () => {
     expect(residue[0].cmuxTitle).toBe(null)
   })
 
-  it('un issue mergeado SIN residuo no entra en la lista', () => {
+  it('a merged issue with NO residue does not go into the list', () => {
     expect(collectFinishedResidue([451, 452], { worktreeDirs: ['451'], branchNames: [] })).toHaveLength(1)
     expect(formatFinishedResidueWarning([], { repo: 'o/r' })).toBe(null)
   })
 })
 
 // ---------------------------------------------------------------------------
-// H3 — quién es quién
+// H3 — who is who
 // ---------------------------------------------------------------------------
-describe('F20/H3 — el reparto de roles vive en el estado, no solo en un kickoff', () => {
-  it('el STATE.md sembrado en el worktree declara que esa sesión es la DESPACHADA y que para', () => {
-    // Verificado contra el código SIN arreglar: el frontmatter sembrado no
-    // tenía ningún campo `role`, así que una sesión despachada que se
-    // re-hidratara de su STATE.md no tenía forma de saber que no le toca
-    // mergear ni despachar el siguiente slice.
+describe('F20/H3 — the division of roles lives in the state, not only in a kickoff', () => {
+  it('the STATE.md seeded in the worktree declares that that session is the DISPATCHED one and that it stops', () => {
+    // Verified against the UNFIXED code: the seeded frontmatter had no `role`
+    // field at all, so a dispatched session that re-hydrated from its STATE.md
+    // had no way of knowing that merging or dispatching the next slice is not
+    // its job.
     const seed = buildStateSeed(
       { name: 'algo', issue: '#90', n: 90, ac: ['ac1'], order: 1 },
       { branch: 'feat/90', base: 'main' },
@@ -326,22 +326,22 @@ describe('F20/H3 — el reparto de roles vive en el estado, no solo en un kickof
     expect(seed).toMatch(/No groomeas, no mergeas/)
   })
 
-  it('la plantilla del checkout principal declara el rol OPUESTO: coordinador', () => {
+  it('the template of the main checkout declares the OPPOSITE role: coordinator', () => {
     const tpl = readFileSync(join(here, '..', 'skills', 'state-template', 'STATE.template.md'), 'utf8')
     expect(tpl).toMatch(/^role: "coordinador/m)
     expect(tpl).toMatch(/NO implementas slices aquí/)
   })
 
-  it('el contrato §9 que siembra /ct-init nombra las dos sesiones y dónde vive cada rol', () => {
+  it('the §9 contract /ct-init seeds names both sessions and where each role lives', () => {
     const src = readFileSync(join(here, '..', 'scripts', 'ct-init.sh'), 'utf8')
     expect(src).toMatch(/Dos sesiones por repo, con papeles OPUESTOS/)
-    // F21: esto pinaba la versión EXACTA (`=9`), y eso convertía cada ronda
-    // posterior que tocara el contrato en una edición de este test, que no
-    // trata sobre el número. Lo que sí importa es que el contenido de F20 viaje
-    // en una versión igual o posterior a aquella — si alguien lo quitara y
-    // bajara la versión, este test lo vería igual. Mismo criterio que
-    // ct-init.test.js#CONTRACT_VERSION, que ya dejó de hardcodearla por esta
-    // misma razón.
+    // F21: this pinned the EXACT version (`=9`), and that turned every later
+    // round touching the contract into an edit of this test, which is not about
+    // the number. What does matter is that F20's content travels in a version
+    // equal to or later than that one — if someone removed it and lowered the
+    // version, this test would see it just the same. Same criterion as
+    // ct-init.test.js#CONTRACT_VERSION, which already stopped hardcoding it for
+    // this very reason.
     expect(Number(src.match(/^SLICES_CONTRACT_VERSION=(\d+)$/m)[1])).toBeGreaterThanOrEqual(9)
   })
 })

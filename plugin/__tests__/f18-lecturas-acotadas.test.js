@@ -1,18 +1,19 @@
-// F18/H6 — LECTURAS ACOTADAS QUE SE TRATABAN COMO COMPLETAS.
+// F18/H6 — BOUNDED READS THAT WERE BEING TREATED AS COMPLETE.
 //
-// El patrón: una llamada a `gh` con tope (`--limit N`, o un `first: N` de
-// GraphQL) cuyo resultado se usa para decidir que algo NO EXISTE. El plugin ya
-// tenía la lección escrita en dos sitios —`ct-next.mjs#loadIssues` ("un
-// `--limit` fijo deja fuera justo los issues VIEJOS") y la enumeración de
-// issues de `ct-groom.mjs` ("reintroduciría el mismo fallo por truncado")— y
-// sin aplicar en los dos que quedaban, ambos en el camino de `--project`:
+// The pattern: a call to `gh` with a cap (`--limit N`, or a GraphQL `first: N`)
+// whose result is used to decide that something DOES NOT EXIST. The plugin
+// already had the lesson written down in two places —`ct-next.mjs#loadIssues`
+// ("a fixed `--limit` leaves out precisely the OLD issues") and the issue
+// enumeration of `ct-groom.mjs` ("it would reintroduce the same failure by
+// truncation")— and unapplied in the two that were left, both on the
+// `--project` path:
 //
-//   1. `gh project item-list --limit 200`: con más de 200 items,
-//      `hasProjectItem` devuelve `false` de items que SÍ existen y /ct-groom
-//      los vuelve a añadir. DUPLICADOS en el Project, en silencio.
-//   2. `fields(first: 50)`: con más de 50 campos, un project que SÍ tiene su
-//      campo Sprint recibe un "este project no tiene un campo de iteración
-//      llamado Sprint" — una afirmación falsa sobre algo que no se ha visto.
+//   1. `gh project item-list --limit 200`: with more than 200 items,
+//      `hasProjectItem` returns `false` for items that DO exist and /ct-groom
+//      adds them again. DUPLICATES in the Project, in silence.
+//   2. `fields(first: 50)`: with more than 50 fields, a project that DOES have
+//      its Sprint field gets a "este project no tiene un campo de iteración
+//      llamado Sprint" — a false claim about something that has not been seen.
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { writeFileSync, readFileSync, existsSync } from 'node:fs'
@@ -45,19 +46,20 @@ function run(args, envOverrides = {}) {
 
 const MILESTONE_ENV = { FAKE_GH_MILESTONES_LIST: JSON.stringify([{ title: 'Epic', number: 7 }]) }
 
-// Un issue YA existente (orden 1, marcador ct-order:1) para que /ct-groom no
-// cree nada y solo tenga que decidir si le falta el item de project.
+// An issue that ALREADY exists (order 1, marker ct-order:1) so that /ct-groom
+// creates nothing and only has to decide whether it is missing its project
+// item.
 const existente = { number: 501, title: '#1 login', milestone: { title: 'Epic' }, body: '<!-- ct-order:1 -->', labels: [{ name: 'status:backlog' }] }
 
-// 200 items de relleno + el del issue 501 en la posición 201: dentro del
-// project, pero FUERA de la primera página de `--limit 200`.
+// 200 filler items + the one for issue 501 at position 201: inside the
+// project, but OUTSIDE the first page of `--limit 200`.
 function itemsConElNuestroAlFinal() {
   const relleno = Array.from({ length: 200 }, (_, i) => ({ id: `PVTI_${i}`, content: { repository: 'o/r', number: 9000 + i, type: 'Issue' } }))
   return [...relleno, { id: 'PVTI_ours', content: { repository: 'o/r', number: 501, type: 'Issue' } }]
 }
 
-describe('H6 — `gh project item-list` truncado ya no produce duplicados en silencio', () => {
-  it('con 201 items, el item que vive más allá del tope SE ENCUENTRA (segunda consulta por totalCount) y no se re-añade', () => {
+describe('H6 — a truncated `gh project item-list` no longer produces duplicates in silence', () => {
+  it('with 201 items, the item living beyond the cap IS FOUND (second query driven by totalCount) and is not re-added', () => {
     const { dir, spec } = writeSpec()
     const argvLog = join(dir, 'argv.log')
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--project', '3'], {
@@ -66,23 +68,23 @@ describe('H6 — `gh project item-list` truncado ya no produce duplicados en sil
       FAKE_GH_PROJECT_ITEMS: JSON.stringify(itemsConElNuestroAlFinal()),
       FAKE_GH_ARGV_LOG_FILE: argvLog,
     })
-    // exit 3 = divergencias detectadas contra el spec (el issue de fixture es
-    // mínimo a propósito); lo que importa aquí es que la corrida NO abortó
-    // (exit 1) y que la lectura del project fue completa.
+    // exit 3 = divergences detected against the spec (the fixture issue is
+    // minimal on purpose); what matters here is that the run did NOT abort
+    // (exit 1) and that the read of the project was complete.
     expect([0, 3]).toContain(res.status)
     const log = readFileSync(argvLog, 'utf8')
-    // Se pidió una segunda vez, con el total exacto que dijo GitHub.
+    // It was asked a second time, with the exact total GitHub gave.
     expect(log).toMatch(/project item-list 3 --owner o --limit 201 --format json/)
-    // Y NO se volvió a añadir al project: el item ya estaba.
+    // And it was NOT added to the project again: the item was already there.
     expect(log).not.toMatch(/project item-add/)
   })
 
-  it('sin `totalCount` (gh que no lo expone) NO se da la lista por completa en silencio', () => {
+  it('with no `totalCount` (a gh that does not expose it) the list is NOT taken as complete in silence', () => {
     const { dir, spec } = writeSpec()
-    // El stub honra `--limit` como el gh real, así que "la segunda consulta
-    // sigue viniendo corta" no es simulable sin un stub deshonesto — ese
-    // camino queda cubierto por lectura de código (aborta con exit 1) y no se
-    // afirma aquí. Lo que sí se comprueba es el otro extremo del contrato.
+    // The stub honours `--limit` like the real gh, so "the second query still
+    // comes back short" is not simulable without a dishonest stub — that path
+    // is covered by reading the code (it aborts with exit 1) and is not
+    // asserted here. What IS checked is the other end of the contract.
     const argvLog = join(dir, 'argv.log')
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--project', '3'], {
       ...MILESTONE_ENV,
@@ -95,7 +97,7 @@ describe('H6 — `gh project item-list` truncado ya no produce duplicados en sil
     expect(res.stderr).toMatch(/NO se ha podido descartar que la lista de items/)
   })
 
-  it('control negativo: con pocos items no hay segunda consulta', () => {
+  it('negative check: with few items there is no second query', () => {
     const { dir, spec } = writeSpec()
     const argvLog = join(dir, 'argv.log')
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--project', '3'], {
@@ -111,8 +113,8 @@ describe('H6 — `gh project item-list` truncado ya no produce duplicados en sil
   })
 })
 
-describe('H6 — `fields(first: 50)`: "no lo he visto" deja de decirse como "no existe"', () => {
-  it('con más campos de los que trajo la consulta, NO se afirma que falte el campo Sprint', () => {
+describe('H6 — `fields(first: 50)`: "I have not seen it" stops being said as "it does not exist"', () => {
+  it('with more fields than the query brought back, it is NOT claimed that the Sprint field is missing', () => {
     const { spec } = writeSpec()
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--project', '3'], {
       ...MILESTONE_ENV,
@@ -126,7 +128,7 @@ describe('H6 — `fields(first: 50)`: "no lo he visto" deja de decirse como "no 
     expect(res.stderr).not.toMatch(/no tiene un campo de iteración llamado "Sprint" —/)
   })
 
-  it('control negativo: si de verdad se vieron todos los campos y no hay Sprint, se sigue diciendo tal cual', () => {
+  it('negative check: if all the fields really were seen and there is no Sprint, it is still said just as it was', () => {
     const { spec } = writeSpec()
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--project', '3'], {
       ...MILESTONE_ENV,
@@ -138,13 +140,13 @@ describe('H6 — `fields(first: 50)`: "no lo he visto" deja de decirse como "no 
   })
 })
 
-// Barrido explícito del resto de lecturas de `gh` de los tres ejecutables,
-// para que el criterio quede fijado y no haya que redescubrirlo: toda
-// enumeración que decida "no existe" usa paginación REAL (`--paginate`), sin
-// ningún tope fijo.
-describe('H6 — barrido: ninguna enumeración del plugin usa un tope fijo', () => {
+// Explicit sweep of the rest of the `gh` reads of the three executables, so
+// that the criterion is pinned down and nobody has to rediscover it: every
+// enumeration that decides "it does not exist" uses REAL pagination
+// (`--paginate`), with no fixed cap at all.
+describe('H6 — sweep: no enumeration in the plugin uses a fixed cap', () => {
   const scripts = ['ct-next.mjs', 'ct-groom.mjs', 'dispatch-check.mjs']
-  it('las enumeraciones de issues (los tres ejecutables) van con --paginate y sin --limit', () => {
+  it('the issue enumerations (the three executables) go with --paginate and without --limit', () => {
     for (const s of scripts) {
       const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', s), 'utf8')
       const lineas = src.split('\n').filter((l) => l.includes("'issues'") && l.includes('gh(['))
@@ -154,7 +156,7 @@ describe('H6 — barrido: ninguna enumeración del plugin usa un tope fijo', () 
       }
     }
   })
-  it('el único `--limit` que queda (items del project) comprueba su propio truncado', () => {
+  it('the only `--limit` left (the project items) checks its own truncation', () => {
     const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'ct-groom.mjs'), 'utf8')
     expect(src).toMatch(/item-list/)
     expect(src).toMatch(/totalCount/)

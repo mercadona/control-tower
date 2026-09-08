@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { envDelGo } from './fixtures/go-gate.js'
+import { goEnv } from './fixtures/go-gate.js'
 
 const SCRIPT = fileURLToPath(new URL('../scripts/dispatch-check.mjs', import.meta.url))
 const FAKE_GH = fileURLToPath(new URL('./fixtures/fake-gh-bin', import.meta.url))
@@ -20,8 +20,8 @@ const cuerpo = (recorridos) => [
   '',
 ].join('\n')
 
-// FENCE/minimalPlanFor (Task 8, plan-contract.js): --release exige un plan
-// prescriptivo commiteado en la rama que cumpla el contrato completo.
+// FENCE/minimalPlanFor (Task 8, plan-contract.js): --release demands a
+// prescriptive plan committed on the branch that meets the whole contract.
 const FENCE = '```'
 const planDeUnaTarea = (issue = 9) => [
   `# #${issue} — fixture slice`,
@@ -67,16 +67,16 @@ const planDeUnaTarea = (issue = 9) => [
   '',
 ].join('\n')
 
-// Worktree de slice con la tarea comiteada, el plan y el run ENTREGADO. Copiado
-// de mkReleaseDryRunRepo (__tests__/dispatch-check-dryrun.test.js:117): los
-// tests de este repo no se importan entre sí.
-// `closed` NO lleva default por destructuring: `repo({ closed: undefined })`
-// (el fixture del run NO entregado) debe producir un run-9.json SIN la clave
-// "closed" — pero un default por destructuring se dispara igual quando el
-// valor pasado es `undefined` explícito, no solo cuando la clave falta. Con
-// `'closed' in opts` se distingue "no me han dado closed" (→ 'delivered',
-// el caso feliz) de "me han dado closed: undefined a propósito" (→ se omite
-// la clave del JSON, que es como luce un run que ct-step nunca cerró).
+// A slice worktree with the task committed, the plan and the run DELIVERED.
+// Copied from mkReleaseDryRunRepo (__tests__/dispatch-check-dryrun.test.js:117):
+// the tests of this repo do not import one another.
+// `closed` does NOT carry a destructuring default: `repo({ closed: undefined })`
+// (the fixture of the run NOT delivered) must produce a run-9.json WITHOUT the
+// "closed" key — but a destructuring default fires all the same when the value
+// passed is an explicit `undefined`, not only when the key is missing. With
+// `'closed' in opts` we tell "I was not given closed" (→ 'delivered', the happy
+// case) from "I was given closed: undefined on purpose" (→ the key is omitted
+// from the JSON, which is what a run ct-step never closed looks like).
 function repo(opts = {}) {
   const { e2eRuns = [A], contaminaEstado = false, e2eResults } = opts
   const closed = 'closed' in opts ? opts.closed : 'delivered'
@@ -102,17 +102,17 @@ function repo(opts = {}) {
     e2eRuns,
   }
   if (closed !== undefined) run.closed = closed
-  // `e2eResults` sólo se escribe si el test lo pide: un run de una versión
-  // anterior a la review final de rama no lo lleva, y esa ausencia también hay
-  // que poder probarla.
+  // `e2eResults` is only written if the test asks for it: a run from a version
+  // older than the final branch review does not carry it, and that absence has
+  // to be testable too.
   if (e2eResults !== undefined) run.e2eResults = e2eResults
   writeFileSync(join(dir, '.agent', 'run-9.json'), JSON.stringify(run, null, 2))
   return dir
 }
 
-// `go` (F38): el gate `plan` de la puerta 9 va CERRADO por defecto en este
-// fichero, porque lo que aquí se prueba es la correspondencia del e2e y no el
-// go. Los tests del go están en f38-el-go-del-gate-plan.test.js.
+// `go` (F38): the `plan` gate of door 9 is CLOSED by default in this file,
+// because what is being tested here is the e2e correspondence and not the go.
+// The go's tests are in f38-el-go-del-gate-plan.test.js.
 function release(dir, { body, viewFail = false, labels, go = true } = {}) {
   const log = join(dir, 'gh-argv.log')
   const r = spawnSync(process.execPath, [SCRIPT, '9', '--repo', 'o/r', '--release'], {
@@ -124,14 +124,14 @@ function release(dir, { body, viewFail = false, labels, go = true } = {}) {
       ...(body !== undefined ? { FAKE_GH_VIEW_BODY: body } : {}),
       ...(viewFail ? { FAKE_GH_VIEW_FAIL: '1' } : {}),
       FAKE_GH_VIEW_LABELS: JSON.stringify(labels || ['status:in-progress', 'gate:plan', 'gate:e2e']),
-      ...(go ? envDelGo({ repo: 'o/r', issue: 9 }) : {}),
+      ...(go ? goEnv({ repo: 'o/r', issue: 9 }) : {}),
     },
   })
   return { ...r, argv: existsSync(log) ? readFileSync(log, 'utf8') : '' }
 }
 
-describe('--release: correspondencia entre el run y el issue', () => {
-  it('run entregado que cubre los recorridos del issue → libera', () => {
+describe('--release: correspondence between the run and the issue', () => {
+  it('a delivered run that covers the issue runs → it releases', () => {
     const dir = repo()
     try {
       const r = release(dir, { body: cuerpo([A]) })
@@ -140,18 +140,18 @@ describe('--release: correspondencia entre el run y el issue', () => {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  it('issue con recorridos y run que NO los declara → exit 8, sin tocar labels', () => {
+  it('an issue with runs and a run that does NOT declare them → exit 8, without touching labels', () => {
     const dir = repo({ e2eRuns: [] })
     try {
       const r = release(dir, { body: cuerpo([A]) })
       expect(r.status).toBe(8)
       expect(r.stderr).toContain(A)
-      // La aserción que de verdad importa: NADA se mutó en GitHub.
+      // The assertion that really matters: NOTHING was mutated on GitHub.
       expect(r.argv).not.toMatch(/issue edit/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  it('cuerpo del issue ilegible → exit 8, y NO afirma que no haya recorridos', () => {
+  it('an unreadable issue body → exit 8, and it does NOT assert that there are no runs', () => {
     const dir = repo()
     try {
       const r = release(dir, { viewFail: true })
@@ -162,14 +162,14 @@ describe('--release: correspondencia entre el run y el issue', () => {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  it('issue sin sección ## E2E → libera sin mirar el run', () => {
+  it('an issue with no ## E2E section → it releases without looking at the run', () => {
     const dir = repo({ e2eRuns: [] })
     try {
       expect(release(dir, { body: cuerpo([]) }).status).toBe(0)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  it('label gate:e2e sin sección → libera, con aviso por stderr', () => {
+  it('a gate:e2e label with no section → it releases, with a warning on stderr', () => {
     const dir = repo({ e2eRuns: [] })
     try {
       const r = release(dir, { body: cuerpo([]) })
@@ -178,10 +178,10 @@ describe('--release: correspondencia entre el run y el issue', () => {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  // Las dos anteriores comparten la MISMA fixture de labels (siempre trae
-  // "gate:e2e"), así que "sin label Y sin sección" nunca se ejercitaba solo
-  // — el caso realmente silencioso: nada que verificar y nada que avisar.
-  it('sin label gate:e2e y sin sección → libera, sin aviso', () => {
+  // The two above share the SAME labels fixture (it always carries
+  // "gate:e2e"), so "no label AND no section" was never exercised on its own —
+  // the genuinely silent case: nothing to verify and nothing to warn about.
+  it('with no gate:e2e label and no section → it releases, with no warning', () => {
     const dir = repo({ e2eRuns: [] })
     try {
       const r = release(dir, { body: cuerpo([]), labels: ['status:in-progress', 'gate:plan'] })
@@ -190,7 +190,7 @@ describe('--release: correspondencia entre el run y el issue', () => {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  it('el orden manda: una rama que introduce .agent/STATE.md sale 5, no 8', () => {
+  it('the order rules: a branch that introduces .agent/STATE.md exits 5, not 8', () => {
     const dir = repo({ e2eRuns: [], contaminaEstado: true })
     try {
       expect(release(dir, { body: cuerpo([A]) }).status).toBe(5)
@@ -198,16 +198,16 @@ describe('--release: correspondencia entre el run y el issue', () => {
   })
 
   // ==========================================================================
-  // LOS *NO-VERIFICADOS*, DICHOS (review final de rama, Importante 3).
+  // THE *UNVERIFIED* ONES, SAID OUT LOUD (final branch review, Important 3).
   //
-  // Hasta esta ronda el run persistía sólo los NOMBRES de los recorridos, así
-  // que esta puerta no distinguía un slice verde de otro cuyos recorridos
-  // fueron todos "no-verificado" — y tres textos (run-machine.js#trasElE2e,
-  // gates.js#GATES.e2e.issue y el §3.7 del diseño) prometían que --release "lo
-  // dice". Es el estado que libera un slice SIN haberlo verificado: que sea
-  // silencioso en la puerta es lo contrario de "un límite dicho es operable".
+  // Until this round the run persisted only the NAMES of the runs, so this door
+  // could not tell a green slice from one whose runs were all "no-verificado" —
+  // and three texts (run-machine.js#trasElE2e, gates.js#GATES.e2e.issue and
+  // §3.7 of the design) promised that --release "says so". It is the state that
+  // releases a slice WITHOUT having verified it: for it to be silent at the
+  // door is the opposite of "a limit that is said is operable".
   // ==========================================================================
-  it('un recorrido "no-verificado" en el run entregado → libera, y el aviso lo nombra con su motivo', () => {
+  it('a "no-verificado" run in the delivered run → it releases, and the warning names it with its reason', () => {
     const dir = repo({ e2eResults: [{ run: A, verdict: 'no-verificado', reason: 'el docker de staging no arranca en esta máquina' }] })
     try {
       const r = release(dir, { body: cuerpo([A]) })
@@ -220,7 +220,7 @@ describe('--release: correspondencia entre el run y el issue', () => {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  it('todos los recorridos en verde → libera sin ningún aviso de no-verificado', () => {
+  it('every run green → it releases with no unverified warning at all', () => {
     const dir = repo({ e2eResults: [{ run: A, verdict: 'verde' }] })
     try {
       const r = release(dir, { body: cuerpo([A]) })
@@ -229,7 +229,7 @@ describe('--release: correspondencia entre el run y el issue', () => {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  it('un run sin `e2eResults` (versión anterior) → libera y no se inventa ningún veredicto', () => {
+  it('a run with no `e2eResults` (an older version) → it releases and invents no verdict', () => {
     const dir = repo()
     try {
       const r = release(dir, { body: cuerpo([A]) })
@@ -238,7 +238,7 @@ describe('--release: correspondencia entre el run y el issue', () => {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  it('run NO entregado → sale 7, la puerta que ya existía, no 8', () => {
+  it('a run NOT delivered → it exits 7, the door that already existed, not 8', () => {
     const dir = repo({ closed: undefined })
     try {
       expect(release(dir, { body: cuerpo([A]) }).status).toBe(7)

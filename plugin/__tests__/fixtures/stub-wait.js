@@ -1,32 +1,33 @@
-// F8 — HANDSHAKE EXPLÍCITO PARA LOS STUBS, EN VEZ DE UNA VENTANA DE TIEMPO.
+// F8 — AN EXPLICIT HANDSHAKE FOR THE STUBS, INSTEAD OF A TIME WINDOW.
 //
-// Varios tests necesitan que el proceso bajo prueba esté PARADO en un punto
-// concreto mientras el arnés hace algo (típicamente: mandarle una señal).
-// Hasta F8 eso se conseguía haciendo que el stub durmiera una cantidad fija de
-// milisegundos (FAKE_GH_EDIT_DELAY_MS, FAKE_GIT_WORKTREE_ADD_DELAY_MS,
-// CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS) y confiando en que el arnés llegara a
-// tiempo dentro de esa ventana.
+// Several tests need the process under test to be STOPPED at one precise point
+// while the harness does something (typically: sending it a signal). Until F8
+// that was achieved by having the stub sleep a fixed number of milliseconds
+// (FAKE_GH_EDIT_DELAY_MS, FAKE_GIT_WORKTREE_ADD_DELAY_MS,
+// CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS) and trusting that the harness would get
+// there in time inside that window.
 //
-// Eso es una carrera, no una sincronización. La ventana la fija un número
-// escrito a mano; quien tiene que llegar a tiempo es un proceso de node que
-// compite por CPU con el resto de la suite (y con lo que sea que esté
-// corriendo en la máquina). Con la máquina ociosa el arnés reacciona en
-// milisegundos y la ventana de 2000ms parece infinita; con carga, el mismo
-// arnés puede no ser planificado en varios segundos y la ventana se cierra
-// sola. Es exactamente el mismo error de razonamiento que este proyecto ya
-// desterró del protocolo de claim cuando retiró el "settle".
+// That is a race, not a synchronisation. The window is fixed by a number
+// written by hand; the one that has to get there in time is a node process
+// competing for CPU with the rest of the suite (and with whatever else is
+// running on the machine). With the machine idle the harness reacts in
+// milliseconds and the 2000ms window looks infinite; under load, that same
+// harness may not be scheduled for several seconds and the window closes by
+// itself. It is exactly the same reasoning error this project already banished
+// from the claim protocol when it withdrew the "settle".
 //
-// `waitForReleaseFile` invierte la responsabilidad: el stub se PARA y no
-// continúa hasta que el propio test le dice que puede, creando un fichero
-// centinela. El test ya no tiene que llegar a tiempo a ningún sitio — el
-// proceso bajo prueba le espera a él, tarde lo que tarde.
+// `waitForReleaseFile` inverts the responsibility: the stub STOPS and does not
+// carry on until the test itself tells it that it may, by creating a sentinel
+// file. The test no longer has to get anywhere in time — the process under
+// test waits for it, however long it takes.
 //
-// El tope de tiempo que sí queda (`capMs`) NO es sincronización: es un
-// rescate para que un test mal escrito (que nunca cree el centinela) falle
-// ruidosamente en vez de colgar el runner para siempre. Por eso sale con un
-// código distintivo y escribe en stderr en vez de seguir como si nada: un
-// stub que continuara en silencio al agotarse el tope reintroduciría, sin
-// avisar, justo la carrera que este fichero existe para quitar.
+// The time cap that does remain (`capMs`) is NOT synchronisation: it is a
+// rescue so that a badly written test (one that never creates the sentinel)
+// fails noisily instead of hanging the runner for ever. That is why it exits
+// with a distinctive code and writes to stderr instead of carrying on as if
+// nothing had happened: a stub that carried on in silence once the cap ran out
+// would reintroduce, with no warning, exactly the race this file exists to
+// remove.
 import { existsSync } from 'node:fs'
 
 export const RELEASE_FILE_TIMEOUT_EXIT = 97
@@ -35,9 +36,9 @@ export function waitForReleaseFile(varName, capMs = 120_000) {
   const path = process.env[varName]
   if (!path) return
   const deadline = Date.now() + capMs
-  // Espera BLOQUEANTE de verdad (Atomics.wait sobre un SharedArrayBuffer):
-  // estos stubs son procesos síncronos de arriba abajo, y lo que tienen que
-  // simular es un binario que todavía no ha vuelto.
+  // A really BLOCKING wait (Atomics.wait over a SharedArrayBuffer): these
+  // stubs are synchronous processes from top to bottom, and what they have to
+  // simulate is a binary that has not come back yet.
   const sab = new Int32Array(new SharedArrayBuffer(4))
   while (!existsSync(path)) {
     if (Date.now() > deadline) {

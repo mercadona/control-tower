@@ -1,5 +1,5 @@
-// Un trozo de la máquina de estados de scripts/ct-step.mjs. El preámbulo —y
-// por qué son nueve ficheros y no uno— está en fixtures/ct-step-harness.js.
+// A piece of the state machine of scripts/ct-step.mjs. The preamble —and why
+// there are nine files and not one— is in fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { spawnSync, execFileSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, readFileSync, existsSync, cpSync, symlinkSync, statSync } from 'node:fs'
@@ -10,40 +10,40 @@ import { PluginYardstick } from '../scripts/plugin-yardstick.js'
 import { RoleBytes } from '../scripts/role-bytes.js'
 import { STEPS } from '../scripts/run-machine.js'
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
-import { crearHelpers, montarRepo, PLUGIN_ROOT_TEST } from './fixtures/ct-step-harness.js'
+import { makeHelpers, makeRepo, PLUGIN_ROOT_TEST } from './fixtures/ct-step-harness.js'
 
 let repo
-const { ct, informe, veredicto, veredictoDeSlice, log, commits, estado, juzgar,
-  juzgarSlice, tareaOk, paqueteDeTarea, paqueteDeSlice, filasDeJuez, sellar } = crearHelpers(() => repo)
+const { ct, writeReport, writeVerdict, writeSliceVerdict, log, commits, runState, judgeTask,
+  judgeSlice, taskOk, taskPackage, slicePackage, judgeRows, seal } = makeHelpers(() => repo)
 
-beforeEach(() => { repo = montarRepo() })
+beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
 
-// Pasos 4, 5 y 6 del spec de la primera corrida en un repo ajeno.
-describe('lo que el implementador avisa, y la telemetría, no se quedan donde nadie los lee', () => {
-  it('Paso 4: `report` imprime el resumen del informe', () => {
-    // El prompt del implementador le manda poner en `summary` la decisión
-    // cerrada que obedeció a disgusto y el problema que vio y no tocó. Medido en
-    // campo (jjponz/rust-monitoring#10): dijo que el Cargo.lock se commitea "para
-    // CI reproducible" mientras el workflow corre sin --locked, y eso llegó a la
-    // pull request SOLO porque aquella sesión abrió el fichero del informe por su
-    // cuenta. Ningún verbo lo imprimía y ningún otro lo consultaba.
-    const r = ct('report', informe(['uno.txt'], 'report.json', 'obedecí la fila del Cargo.lock y creo que se paga caro'))
+// Steps 4, 5 and 6 of the spec of the first run in a foreign repo.
+describe('what the implementer warns about, and the telemetry, do not stay where nobody reads them', () => {
+  it('Step 4: `report` prints the summary of the report', () => {
+    // The implementer's prompt orders it to put in `summary` the closed decision
+    // it obeyed grudgingly and the problem it saw and did not touch. Measured in
+    // the field (jjponz/rust-monitoring#10): it said the Cargo.lock is committed
+    // "para CI reproducible" while the workflow runs without --locked, and that
+    // reached the pull request ONLY because that session opened the report file
+    // on its own account. No verb printed it and no other one consulted it.
+    const r = ct('report', writeReport(['uno.txt'], 'report.json', 'obedecí la fila del Cargo.lock y creo que se paga caro'))
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/obedecí la fila del Cargo.lock/)
   })
 
-  it('Paso 4: `next` lo repite en el paso de commit, que es cuando la sesión escribe la pull request', () => {
-    ct('report', informe(['uno.txt'], 'report.json', 'la decisión de la tarea 2 deja el lockfile sin hacer valer'))
+  it('Step 4: `next` repeats it at the commit step, which is when the session writes the pull request', () => {
+    ct('report', writeReport(['uno.txt'], 'report.json', 'la decisión de la tarea 2 deja el lockfile sin hacer valer'))
     ct('controls')
-    juzgar(veredicto('PASS'))
+    judgeTask(writeVerdict('PASS'))
     const r = ct('next')
     expect(r.stdout).toMatch(/paso: commit/)
     expect(r.stdout).toMatch(/lockfile sin hacer valer/)
   })
 
-  it('Paso 5: la telemetría viaja DENTRO del commit de su tarea', () => {
-    tareaOk('uno.txt')
+  it('Step 5: the telemetry travels INSIDE the commit of its task', () => {
+    taskOk('uno.txt')
     const tocados = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
     expect(tocados).toMatch(/docs\/superpowers\/metrics\/issue-7\.jsonl/)
     const filas = readFileSync(join(repo, 'docs', 'superpowers', 'metrics', 'issue-7.jsonl'), 'utf8')
@@ -51,23 +51,24 @@ describe('lo que el implementador avisa, y la telemetría, no se quedan donde na
     expect(filas.every((f) => f.issue === 7 && f.task === 1)).toBe(true)
   })
 
-  it('Paso 5: NO se stagea antes de los controles, o el control de alcance vetaría la tarea', () => {
-    // El veredicto ya resolvió esto mismo: es un artefacto de la maquinaria, no
-    // alcance del implementador, así que entra en el índice DESPUÉS de medir.
-    ct('report', informe(['uno.txt']))
+  it('Step 5: it is NOT staged before the checks, or the scope check would veto the task', () => {
+    // The verdict already settled this same thing: it is an artefact of the
+    // machinery, not the implementer's scope, so it enters the index AFTER
+    // measuring.
+    ct('report', writeReport(['uno.txt']))
     ct('controls')
     const enIndice = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: repo, encoding: 'utf8' })
     expect(enIndice).not.toMatch(/metrics/)
     expect(enIndice).toMatch(/uno\.txt/)
   })
 
-  it('Paso 5: las filas del intento que el juez vetó viajan también — el coste de las vueltas es el dato', () => {
-    ct('report', informe(['uno.txt']))
+  it('Step 5: the rows of the attempt the judge vetoed travel too — the cost of the round trips is the datum', () => {
+    ct('report', writeReport(['uno.txt']))
     ct('controls')
-    juzgar(veredicto('FAIL', [{ severity: 'high', what: 'no', path: 'uno.txt', line: 1 }]))
-    ct('report', informe(['uno.txt']))
+    judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'no', path: 'uno.txt', line: 1 }]))
+    ct('report', writeReport(['uno.txt']))
     ct('controls')
-    juzgar(veredicto('PASS'))
+    judgeTask(writeVerdict('PASS'))
     ct('commit')
     const commiteado = execFileSync('git', ['show', 'HEAD:docs/superpowers/metrics/issue-7.jsonl'], { cwd: repo, encoding: 'utf8' })
     const filas = commiteado.trim().split('\n').map((l) => JSON.parse(l))
@@ -76,8 +77,8 @@ describe('lo que el implementador avisa, y la telemetría, no se quedan donde na
     expect(filas.find((f) => f.step === 'judge' && f.attempt === 1).ruling).toBe('FAIL')
   })
 
-  it('Paso 6: la fila de `controls` lleva cuánto tardó, que es el único tiempo que ejecuta el programa', () => {
-    ct('report', informe(['uno.txt']))
+  it('Step 6: the `controls` row carries how long it took, which is the only time the program executes', () => {
+    ct('report', writeReport(['uno.txt']))
     ct('controls')
     const filas = readFileSync(join(repo, '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
       .trim().split('\n').map((l) => JSON.parse(l))
@@ -86,84 +87,85 @@ describe('lo que el implementador avisa, y la telemetría, no se quedan donde na
     expect(controles.duration_ms).toBeGreaterThanOrEqual(0)
   })
 
-  it('Paso 6: no hay fila de `commit`: su sha y su hecho están enteros en git log', () => {
-    tareaOk('uno.txt')
+  it('Step 6: there is no `commit` row: its sha and its fact are whole in git log', () => {
+    taskOk('uno.txt')
     const filas = readFileSync(join(repo, '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
       .trim().split('\n').map((l) => JSON.parse(l))
     expect(filas.map((f) => f.step)).toEqual(['implement', 'controls', 'judge'])
   })
 })
 
-describe('un fallo de la telemetría no puede tumbar la tarea', () => {
-  it('si la ruta del veredicto está gitignoreada, `git add` falla y la tarea se comitea igual', () => {
-    // Mismo defecto que el de las métricas, en código anterior (590b995, el que
-    // hizo viajar el veredicto): `git add` sobre una ruta ignorada sale con 1, la
-    // excepción subía y el run se quedaba atascado en exit 9 con la tarea sin
-    // comitear. Decisión humana, tomada al encontrarlo: avisar y seguir. Un
-    // veredicto que no puede viajar degrada el contrato de F37 y hay que verlo,
-    // pero un run atascado no lo arregla — y el veredicto sigue en disco, en la
-    // carpeta del run.
+describe('a failure of the telemetry cannot bring the task down', () => {
+  it('if the verdict path is gitignored, `git add` fails and the task is committed all the same', () => {
+    // The same defect as the one with the metrics, in earlier code (590b995, the
+    // one that made the verdict travel): `git add` on an ignored path exits with
+    // 1, the exception rose and the run got stuck at exit 9 with the task
+    // uncommitted. A human decision, taken on finding it: warn and carry on. A
+    // verdict that cannot travel degrades the F37 contract and that has to be
+    // seen, but a stuck run does not fix it — and the verdict is still on disk,
+    // in the run's folder.
     appendFileSync(join(repo, '.gitignore'), 'docs/superpowers/verdicts/\n')
     execFileSync('git', ['add', '--', '.gitignore'], { cwd: repo })
     execFileSync('git', ['commit', '-q', '-m', 'ignora los veredictos'], { cwd: repo })
-    const r = tareaOk('uno.txt')
+    const r = taskOk('uno.txt')
     expect(r.status).toBe(0)
     expect(commits()).toBe(3)
     expect(execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })).toMatch(/uno\.txt/)
   })
 
-  it('si la ruta de las métricas está gitignoreada, `git add` falla y la tarea se comitea igual', () => {
-    // El principio es del diseño y es viejo: "ninguna transición depende de la
-    // medida". Al hacer que la telemetría VIAJE aparece un camino nuevo por el
-    // que podía romperlo — el `git add` del fichero — y `git add` sobre una ruta
-    // ignorada sale con 1. Un repo que ignore `docs/` no es raro.
-    // Se ignora SOLO la ruta de las métricas, no `docs/` entero: con `docs/`
-    // ignorado el que revienta primero es el `git add` del VEREDICTO, que es
-    // código anterior a este cambio y tiene el mismo defecto — sale por 9 y deja
-    // el run atascado. Ese hallazgo se reporta aparte; este test mide lo mío.
+  it('if the metrics path is gitignored, `git add` fails and the task is committed all the same', () => {
+    // The principle belongs to the design and it is old: "ninguna transición
+    // depende de la medida". Making the telemetry TRAVEL opens a new path by
+    // which it could break that — the `git add` of the file — and `git add` on
+    // an ignored path exits with 1. A repo that ignores `docs/` is not unusual.
+    // ONLY the metrics path is ignored, not the whole of `docs/`: with `docs/`
+    // ignored the first thing to blow up is the `git add` of the VERDICT, which
+    // is code older than this change and carries the same defect — it exits by 9
+    // and leaves the run stuck. That finding is reported separately; this test
+    // measures my own.
     appendFileSync(join(repo, '.gitignore'), 'docs/superpowers/metrics/\n')
-    // Solo el .gitignore: un `git add -A` se llevaría también `uno.txt`, y
-    // entonces el control de ALCANCE vetaría la tarea (un `(create)` de un
-    // fichero que ya está en el commit anterior) y el fallo sería otro.
+    // Only the .gitignore: a `git add -A` would take `uno.txt` along too, and
+    // then the SCOPE check would veto the task (a `(create)` of a file that is
+    // already in the previous commit) and the failure would be a different one.
     execFileSync('git', ['add', '--', '.gitignore'], { cwd: repo })
     execFileSync('git', ['commit', '-q', '-m', 'ignora las metricas'], { cwd: repo })
-    const r = tareaOk('uno.txt')
+    const r = taskOk('uno.txt')
     expect(r.status).toBe(0)
     expect(commits()).toBe(3)
     expect(execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })).toMatch(/uno\.txt/)
   })
 
-  it('si el veredicto de slice PASS no puede commitearse, la entrega sigue igual', () => {
-    // La misma doctrina que los dos de arriba, aplicada a la fase nueva: con
-    // docs/superpowers/ entero ignorado, ni el veredicto del slice ni la
-    // telemetría se pueden stagear — no hay commit del veredicto, pero el run
-    // entrega: la evidencia que no viaja avisa, nunca bloquea un slice cuyo
-    // trabajo ya está comiteado entero.
+  it('if the PASS slice verdict cannot be committed, the delivery goes ahead all the same', () => {
+    // The same doctrine as the two above, applied to the new phase: with the
+    // whole of docs/superpowers/ ignored, neither the slice verdict nor the
+    // telemetry can be staged — there is no verdict commit, but the run
+    // delivers: evidence that cannot travel warns, it never blocks a slice whose
+    // work is already committed whole.
     appendFileSync(join(repo, '.gitignore'), 'docs/superpowers/\n')
     execFileSync('git', ['add', '--', '.gitignore'], { cwd: repo })
     execFileSync('git', ['commit', '-q', '-m', 'ignora la evidencia'], { cwd: repo })
-    tareaOk('uno.txt')
-    tareaOk('dos.txt')
+    taskOk('uno.txt')
+    taskOk('dos.txt')
     ct('reconcile')
     ct('global')
-    const r = juzgarSlice(veredictoDeSlice('PASS'))
+    const r = judgeSlice(writeSliceVerdict('PASS'))
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/run delivered/)
     expect(r.stderr).toMatch(/nada que commitear del veredicto del slice/)
-    expect(estado().closed).toBe('delivered')
-    // 1 base + 1 gitignore + 2 tareas, y NINGÚN commit de veredicto.
+    expect(runState().closed).toBe('delivered')
+    // 1 base + 1 gitignore + 2 tasks, and NO verdict commit at all.
     expect(commits()).toBe(4)
     expect(log()).not.toMatch(/Veredicto del slice entero/)
   })
 })
 
-// §3.3 del handoff: `.agent/conventions.md` es la vara del REPO, no del plan.
-// `ct-step` la lee directo del disco y la pega al final de cada task brief —
-// sin ningún agente en medio, así que un repo con el fichero y otro sin él se
-// comportan distinto sólo por lo que hay en disco, nunca por lo que un agente
-// decidió copiar.
-describe('la vara del repo viaja en el brief, sin agente en medio', () => {
-  it('con .agent/conventions.md, el brief lleva el banner y el contenido, DETRÁS de la tarea', () => {
+// §3.3 of the handoff: `.agent/conventions.md` is the yardstick of the REPO,
+// not of the plan. `ct-step` reads it straight off disk and pastes it at the end
+// of every task brief — with no agent in between, so a repo with the file and
+// one without behave differently only because of what is on disk, never because
+// of what an agent decided to copy.
+describe('the repo yardstick travels in the brief, with no agent in between', () => {
+  it('with .agent/conventions.md, the brief carries the banner and the content, BEHIND the task', () => {
     mkdirSync(join(repo, '.agent'), { recursive: true })
     writeFileSync(join(repo, '.agent', 'conventions.md'), '# La vara\n\n- `AGENTS.md`\n')
     ct('next')
@@ -173,13 +175,13 @@ describe('la vara del repo viaja en el brief, sin agente en medio', () => {
     expect(brief.indexOf('Task 1')).toBeLessThan(brief.indexOf('leída directo'))
   })
 
-  it('sin el fichero, el brief no lo menciona — el camino de hoy, intacto', () => {
+  it('without the file, the brief does not mention it — the path of today, intact', () => {
     ct('next')
     const brief = readFileSync(join(repo, '.agent', 'run-7', 'task-1-brief.md'), 'utf8')
     expect(brief).not.toMatch(/conventions\.md/)
   })
 
-  it('con el fichero en blanco, el brief no lleva el banner — vacío no es vara', () => {
+  it('with the file blank, the brief does not carry the banner — empty is not a yardstick', () => {
     mkdirSync(join(repo, '.agent'), { recursive: true })
     writeFileSync(join(repo, '.agent', 'conventions.md'), '\n')
     ct('next')
@@ -188,14 +190,16 @@ describe('la vara del repo viaja en el brief, sin agente en medio', () => {
   })
 })
 
-// La vara la dicta ct (docs/superpowers/specs/2026-08-26-la-vara-la-dicta-ct-design.md).
-// La vara de ct viaja SIEMPRE, va DELANTE de la del repo —su cabecera fija la
-// precedencia y hay que leerla antes de que llegue la vara sobre la que decide— y
-// que falte es una instalación rota, no un estado del repo: se aborta.
-describe('la vara de ct viaja en el brief, y va delante de la del repo', () => {
+// The yardstick is dictated by ct
+// (docs/superpowers/specs/2026-08-26-la-vara-la-dicta-ct-design.md). The ct
+// yardstick ALWAYS travels, it goes AHEAD of the repo one —its header settles
+// the precedence and it has to be read before the yardstick it decides about
+// arrives— and its absence is a broken installation, not a state of the repo:
+// it aborts.
+describe('the ct yardstick travels in the brief, and goes ahead of the repo one', () => {
   const briefDeLaUno = () => readFileSync(join(repo, '.agent', 'run-7', 'task-1-brief.md'), 'utf8')
 
-  it('el brief termina con los documentos de la vara, DETRÁS de la tarea', () => {
+  it('the brief ends with the yardstick documents, BEHIND the task', () => {
     ct('next')
     const brief = briefDeLaUno()
     expect(brief).toMatch(/\*\*La vara de ct\*\*/)
@@ -205,7 +209,7 @@ describe('la vara de ct viaja en el brief, y va delante de la del repo', () => {
     expect(brief.indexOf('Task 1')).toBeLessThan(brief.indexOf('La vara de ct'))
   })
 
-  it('pega el contenido real de los documentos, no un resumen', () => {
+  it('it pastes the real content of the documents, not a summary', () => {
     ct('next')
     for (const nombre of PluginYardstick.FILES) {
       const documento = readFileSync(join(PLUGIN_ROOT_TEST, 'conventions', nombre), 'utf8')
@@ -213,7 +217,7 @@ describe('la vara de ct viaja en el brief, y va delante de la del repo', () => {
     }
   })
 
-  it('con declaración del repo, la de ct va PRIMERO', () => {
+  it('with a declaration from the repo, the ct one goes FIRST', () => {
     mkdirSync(join(repo, '.agent'), { recursive: true })
     writeFileSync(join(repo, '.agent', 'conventions.md'), '# La vara del repo\n\n- `AGENTS.md`\n')
     ct('next')
@@ -221,15 +225,16 @@ describe('la vara de ct viaja en el brief, y va delante de la del repo', () => {
     expect(brief.indexOf('La vara de ct')).toBeLessThan(brief.indexOf('leída directo de `.agent/conventions.md`'))
   })
 
-  // EL ALCANCE YA NO FILTRA POR `**Files:**`: los ocho documentos alcanzan a
-  // todo diff, cree o no cree módulo la tarea. `architecture.md` viajaba antes
-  // sólo cuando el plan declaraba una ruta `(create)`; ahora viaja siempre.
+  // THE SCOPE NO LONGER FILTERS BY `**Files:**`: the eight documents reach
+  // every diff, whether or not the task creates a module. `architecture.md`
+  // used to travel only when the plan declared a `(create)` path; now it always
+  // travels.
   const conLaUnoModificando = () => {
     const plan = readFileSync(join(repo, 'plan.md'), 'utf8').replace('`uno.txt` (create)', '`uno.txt` (modify)')
     writeFileSync(join(repo, 'plan.md'), plan)
   }
 
-  it('una tarea que no estrena módulo se lleva la vara entera, architecture.md incluido', () => {
+  it('a task that opens no new module takes the whole yardstick, architecture.md included', () => {
     conLaUnoModificando()
     ct('next')
     const brief = briefDeLaUno()
@@ -238,27 +243,28 @@ describe('la vara de ct viaja en el brief, y va delante de la del repo', () => {
     }
   })
 
-  it('sin declaración del repo, la de ct viaja igual: son dos varas independientes', () => {
+  it('without a declaration from the repo, the ct one travels all the same: they are two independent yardsticks', () => {
     ct('next')
     const brief = briefDeLaUno()
     expect(brief).toContain('## Vara de ct: conventions/defects.md')
     expect(brief).not.toMatch(/leída directo de `\.agent\/conventions\.md`/)
   })
 
-  it('sin el directorio de la vara, aborta nombrando lo que falta y no entrega brief', () => {
-    // Un plugin FALSO: se copian `scripts/` y `skills/` y se omite `conventions/`,
-    // que es exactamente el estado de una instalación rota. `PLUGIN_ROOT` sale de
-    // la ubicación del propio script, así que copiarlo es la única forma de moverlo.
+  it('without the yardstick directory, it aborts naming what is missing and delivers no brief', () => {
+    // A FAKE plugin: `scripts/` and `skills/` are copied and `conventions/` is
+    // omitted, which is exactly the state of a broken installation. `PLUGIN_ROOT`
+    // comes from the location of the script itself, so copying it is the only way
+    // to move it.
     const fake = mkdtempSync(join(tmpdir(), 'ct-plugin-roto-'))
     try {
       cpSync(join(PLUGIN_ROOT_TEST, 'scripts'), join(fake, 'scripts'), { recursive: true })
       cpSync(join(PLUGIN_ROOT_TEST, 'skills'), join(fake, 'skills'), { recursive: true })
-      // `scripts/state.js` importa el paquete npm `yaml`. Copiado fuera del repo
-      // (aquí, bajo tmpdir()), la resolución de módulos ESM no encuentra
-      // `node_modules/yaml` subiendo directorios y el proceso muere con
-      // MODULE_NOT_FOUND (exit 1) antes de llegar a la comprobación de la vara.
-      // El mismo problema ya lo resuelve `ct-next-claim.test.js` con un symlink
-      // a `node_modules` en vez de copiar el repo entero.
+      // `scripts/state.js` imports the npm package `yaml`. Copied outside the
+      // repo (here, under tmpdir()), ESM module resolution does not find
+      // `node_modules/yaml` by walking up directories and the process dies with
+      // MODULE_NOT_FOUND (exit 1) before it reaches the yardstick check. The
+      // same problem is already solved by `ct-next-claim.test.js` with a symlink
+      // to `node_modules` instead of copying the whole repo.
       symlinkSync(join(PLUGIN_ROOT_TEST, 'node_modules'), join(fake, 'node_modules'), 'dir')
       const r = spawnSync('node', [join(fake, 'scripts', 'ct-step.mjs'), 'next', '--plan', 'plan.md', '--issue', '7'], {
         cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
@@ -274,16 +280,16 @@ describe('la vara de ct viaja en el brief, y va delante de la del repo', () => {
   })
 })
 
-// Tarea 8: el juez de slice mide estado final, coherencia y señal — no
-// código regla a regla —, así que de la vara entera sólo le toca la que
-// mide precisamente eso: `simplicity.md` (la carga de la prueba está en lo
-// que se añade), la vara de su ítem `observabilidad`. Una sola ruta, no el
-// documento pegado: `## Vara` va PRIMERA, delante incluso de `## Señal`,
-// por el mismo motivo que `## Señal` va delante del diff -U10.
-describe('el paquete de slice trae la ruta de simplicity.md, no el documento entero', () => {
-  it('la sección "## Vara" es la primera del paquete y trae la ruta absoluta de simplicity.md', () => {
-    tareaOk('uno.txt')
-    tareaOk('dos.txt')
+// Task 8: the slice judge measures end state, coherence and signal — not code
+// rule by rule —, so out of the whole yardstick it only gets the one that
+// measures precisely that: `simplicity.md` (the burden of proof lies on what
+// gets added), the yardstick of its `observabilidad` item. One single path, not
+// the pasted document: `## Vara` goes FIRST, ahead even of `## Señal`, for the
+// same reason that `## Señal` goes ahead of the diff -U10.
+describe('the slice package carries the path of simplicity.md, not the whole document', () => {
+  it('the "## Vara" section is the first of the package and carries the absolute path of simplicity.md', () => {
+    taskOk('uno.txt')
+    taskOk('dos.txt')
     ct('reconcile')
     ct('global')
     ct('next')
@@ -296,22 +302,22 @@ describe('el paquete de slice trae la ruta de simplicity.md, no el documento ent
   })
 })
 
-// H7a (#92): la telemetría anotaba `brief_bytes` del paso `implement` y nada
-// más. El tamaño del agente despachado, el de las skills que su prompt le manda
-// cargar y el del paquete que recibe no se medían, así que el ahorro de
-// contexto por slice era una opinión. Los tres campos se miden sobre el fichero
-// que EXISTE en disco, nunca sobre lo que el programa pretendía escribir.
-describe('cada papel despachado anota lo que le costó leer, en bytes', () => {
+// H7a (#92): the telemetry noted `brief_bytes` of the `implement` step and
+// nothing else. The size of the dispatched agent, that of the skills its prompt
+// orders it to load and that of the package it receives were not measured, so
+// the context saving per slice was an opinion. The three fields are measured on
+// the file that EXISTS on disk, never on what the program meant to write.
+describe('every dispatched role notes what reading cost it, in bytes', () => {
   const bytesEnElPlugin = (relativa) => statSync(join(PLUGIN_ROOT_TEST, relativa)).size
   const delAgente = (paso) => bytesEnElPlugin(RoleBytes.filesOf(paso)[0])
   const deLasSkills = (paso) => RoleBytes.filesOf(paso).slice(1).reduce((suma, r) => suma + bytesEnElPlugin(r), 0)
 
-  it('la fila de `implement` trae el agente, las skills que su prompt ordena cargar y el brief que se le entregó', () => {
+  it('the `implement` row carries the agent, the skills its prompt orders it to load and the brief it was handed', () => {
     ct('next')
     const brief = join(repo, '.agent', 'run-7', 'task-1-brief.md')
     const bytesDelBrief = statSync(brief).size
-    ct('report', informe(['uno.txt']))
-    const fila = filasDeJuez('implement').at(-1)
+    ct('report', writeReport(['uno.txt']))
+    const fila = judgeRows('implement').at(-1)
     expect(fila.agent_bytes).toBe(delAgente(STEPS.IMPLEMENT))
     expect(fila.skill_bytes).toBe(deLasSkills(STEPS.IMPLEMENT))
     expect(fila.package_bytes).toBe(bytesDelBrief)
@@ -319,26 +325,27 @@ describe('cada papel despachado anota lo que le costó leer, en bytes', () => {
     expect(fila.skill_bytes).toBeGreaterThan(0)
   })
 
-  // La copia inevitable de `conventions/decisions.md`: `brief_bytes` y
-  // `package_bytes` miden el MISMO fichero del paso `implement`, uno leyendo su
-  // contenido y el otro preguntándole el tamaño al sistema de ficheros. Se
-  // declara aquí y se mide, para que el día que una de las dos deje de mirar el
-  // brief falle este test y no una lectura de la tabla tres meses después.
-  it('en `implement`, el paquete es el brief: las dos columnas miden el mismo fichero y no pueden divergir', () => {
-    ct('report', informe(['uno.txt']))
-    const fila = filasDeJuez('implement').at(-1)
+  // The unavoidable duplication of `conventions/decisions.md`: `brief_bytes` and
+  // `package_bytes` measure the SAME file of the `implement` step, one reading
+  // its content and the other asking the filesystem for its size. It is declared
+  // here and measured, so that the day one of the two stops looking at the brief
+  // it is this test that fails and not a reading of the table three months
+  // later.
+  it('in `implement`, the package is the brief: the two columns measure the same file and cannot diverge', () => {
+    ct('report', writeReport(['uno.txt']))
+    const fila = judgeRows('implement').at(-1)
     expect(fila.package_bytes).toBe(fila.brief_bytes)
   })
 
-  it('la fila del juez trae el agente, su skill y el paquete de revisión que juzgó', () => {
-    ct('report', informe(['uno.txt']))
+  it('the judge row carries the agent, its skill and the review package it judged', () => {
+    ct('report', writeReport(['uno.txt']))
     ct('controls')
     ct('next')
-    const bytesDelPaquete = statSync(paqueteDeTarea()).size
-    const v = veredicto('PASS')
-    sellar(v, paqueteDeTarea())
+    const bytesDelPaquete = statSync(taskPackage()).size
+    const v = writeVerdict('PASS')
+    seal(v, taskPackage())
     expect(ct('verdict', v).status).toBe(0)
-    const fila = filasDeJuez('judge').at(-1)
+    const fila = judgeRows('judge').at(-1)
     expect(fila.agent_bytes).toBe(delAgente(STEPS.JUDGE))
     expect(fila.skill_bytes).toBe(deLasSkills(STEPS.JUDGE))
     expect(fila.package_bytes).toBe(bytesDelPaquete)
@@ -347,36 +354,36 @@ describe('cada papel despachado anota lo que le costó leer, en bytes', () => {
     expect(fila.package_bytes).toBeGreaterThan(0)
   })
 
-  it('el juez de slice no carga ninguna skill: su fila anota cero, que no es lo mismo que no haberlo medido', () => {
-    tareaOk('uno.txt')
-    tareaOk('dos.txt')
+  it('the slice judge loads no skill: its row notes zero, which is not the same as not having measured it', () => {
+    taskOk('uno.txt')
+    taskOk('dos.txt')
     ct('reconcile')
     ct('global')
     ct('next')
-    const bytesDelPaquete = statSync(paqueteDeSlice()).size
-    const v = veredictoDeSlice('PASS')
-    sellar(v, paqueteDeSlice())
+    const bytesDelPaquete = statSync(slicePackage()).size
+    const v = writeSliceVerdict('PASS')
+    seal(v, slicePackage())
     expect(ct('slice-verdict', v).status).toBe(0)
-    const fila = filasDeJuez('slice-judge').at(-1)
+    const fila = judgeRows('slice-judge').at(-1)
     expect(fila.agent_bytes).toBe(delAgente(STEPS.SLICE_JUDGE))
     expect(fila.skill_bytes).toBe(0)
     expect(fila.package_bytes).toBe(bytesDelPaquete)
   })
 
-  it('un veredicto descartado no nombra ningún insumo, tampoco su tamaño', () => {
-    ct('report', informe(['uno.txt']))
+  it('a discarded verdict names no input, nor its size', () => {
+    ct('report', writeReport(['uno.txt']))
     ct('controls')
-    ct('verdict', veredicto('PASS'))
-    const fila = filasDeJuez('judge').at(-1)
+    ct('verdict', writeVerdict('PASS'))
+    const fila = judgeRows('judge').at(-1)
     expect(fila.outcome).toBe('discarded')
     expect(Object.hasOwn(fila, 'agent_bytes')).toBe(false)
   })
 
-  it('sin paquete de reconciliación en el directorio del run, la fila de `reconcile` no inventa el coste de un papel que nadie despachó', () => {
-    tareaOk('uno.txt')
-    tareaOk('dos.txt')
+  it('with no reconciliation package in the run directory, the `reconcile` row does not invent the cost of a role nobody dispatched', () => {
+    taskOk('uno.txt')
+    taskOk('dos.txt')
     expect(ct('reconcile').status).toBe(0)
-    const fila = filasDeJuez('reconcile').at(-1)
+    const fila = judgeRows('reconcile').at(-1)
     expect(Object.hasOwn(fila, 'agent_bytes')).toBe(false)
   })
 })

@@ -1,64 +1,65 @@
 #!/usr/bin/env node
 // ============================================================================
-// CT-WATCH-GO — el vigilante del `-OK` del gate `plan`.
+// CT-WATCH-GO — the watcher of the `-OK` of the `plan` gate.
 //
-// QUÉ ARREGLA. El gate `plan` manda al agente publicar su plan como comentario
-// del issue y PARAR. El humano contesta en GitHub, y hasta esta ronda nadie leía
-// esa respuesta: el trabajo se reanudaba cuando esa misma persona iba a la
-// ventana de cmux y empujaba la sesión a mano. Dos permisos para lo mismo, y el
-// que contaba no era el que queda escrito en el issue.
+// WHAT IT FIXES. The `plan` gate orders the agent to publish its plan as a
+// comment on the issue and STOP. The human answers on GitHub, and until this
+// round nobody read that answer: the work resumed when that same person went to
+// the cmux window and pushed the session by hand. Two permissions for the same
+// thing, and the one that counted was not the one left written on the issue.
 //
-// Este proceso cierra el hueco: sondea el issue, y en cuanto ve el `-OK` teclea
-// la línea en la sesión del slice. Un solo go, en GitHub, con autor.
+// This process closes the gap: it polls the issue, and the moment it sees the
+// `-OK` it types the line into the slice's session. A single go, on GitHub,
+// with an author.
 //
-// LO LANZA LA COORDINADORA, DESPRENDIDO. `ct-next` lo arranca con
-// `spawn(..., { detached: true }).unref()` justo después de despachar el slice,
-// y sólo si ese slice lleva el gate `plan` Y contó como lanzado. Desprendido
-// porque tiene que sobrevivir a que se cierre la sesión coordinadora: si sólo
-// viviera mientras alguien mira, no serviría para el caso que motiva todo esto —
-// el gate pedido a la 01:00 esperando a que alguien se despierte, que en la
-// medida de F33 fue el 54% del reloj de un epic.
+// THE COORDINATOR LAUNCHES IT, DETACHED. `ct-next` starts it with
+// `spawn(..., { detached: true }).unref()` right after dispatching the slice,
+// and only if that slice carries the `plan` gate AND counted as launched.
+// Detached because it has to survive the coordinating session being closed: if
+// it only lived while somebody was watching, it would be useless for the case
+// that motivates all of this — the gate asked for at 01:00 waiting for somebody
+// to wake up, which in the F33 measurement was 54% of an epic's clock.
 //
-// POR QUÉ NO UNA WORKSPACE DE CMUX. Se consideró, porque es el segundo plano que
-// este repo ya conoce, y se descartó con un motivo concreto: lanzar por cmux es
-// TECLEAR UN COMANDO EN UN PTY, y ése es el camino frágil de este plugin. Existe
-// `launch-sentinel.js` entero porque no había forma de saber si el comando llegó
-// a ejecutarse, y `ct-next` lleva un bucle de reenvío porque el prompt del shell
-// se comía caracteres. Pagar todo eso para un bucle que nadie va a mirar no sale
-// a cuenta: un `spawn` no pasa por ningún pty, ni por comillas, ni necesita
-// centinela.
+// WHY NOT A CMUX WORKSPACE. It was considered, because that is the background
+// this repository already knows, and it was rejected for a concrete reason:
+// launching through cmux is TYPING A COMMAND INTO A PTY, and that is this
+// plugin's fragile path. The whole of `launch-sentinel.js` exists because there
+// was no way to know whether the command ever ran, and `ct-next` carries a
+// resend loop because the shell prompt was eating characters. Paying all of
+// that for a loop nobody is going to watch does not pay off: a `spawn` goes
+// through no pty, through no quoting, and needs no sentinel.
 //
-// LÍMITE HEREDADO, DICHO SIN ADORNOS: para ENTREGAR la línea sí se usa ese
-// camino frágil (`cmux send` + `send-key`), y aquí no hay centinela que pruebe
-// que la sesión la recibió. Lo único que se sabe es que los dos comandos
-// devolvieron 0, y así se dice en el log — no «la sesión ha arrancado». Un
-// centinela de verdad exigiría que el agente escribiera algo, o sea depender del
-// agente al que se le entrega, que es justo lo que este reparto evita. Ese
-// límite se acepta y no se disfraza.
+// INHERITED LIMIT, SAID WITHOUT ORNAMENT: to DELIVER the line that fragile path
+// IS used (`cmux send` + `send-key`), and here there is no sentinel proving the
+// session received it. All that is known is that the two commands returned 0,
+// and that is what the log says — not «the session has started». A real
+// sentinel would require the agent to write something, that is, to depend on
+// the agent being delivered to, which is exactly what this split avoids. That
+// limit is accepted and not dressed up.
 //
-// LO QUE DELIBERADAMENTE NO TIENE, y no es un olvido:
+// WHAT IT DELIBERATELY DOES NOT HAVE, and it is not an oversight:
 //
-//   - NI PIDFILE NI COMPROBACIÓN DE VIDA. Si redespachas un slice nacen dos
-//     vigilantes: el segundo empuja igual y el primero caduca. Lo peor que pasa
-//     es que la línea se teclee dos veces en la sesión, que es molesto y nada
-//     más. Pagar el problema entero de "¿está vivo, huérfano o colgado?" —al que
-//     este repo ya dedica tres ficheros— para evitar eso sería caro y no
-//     compraría nada.
-//   - NI CATEGORÍA DE RESPUESTA MALFORMADA. Ver go-response.js: cualquier cosa
-//     que no sea exactamente `-OK` simplemente no arranca, que es el lado
-//     prudente. No comenta en el issue para explicar formatos.
-//   - NI `-REVIEW`. Mandar una corrección por comentario y que el plan se rehaga
-//     es otra función; para pedir cambios sigue estando el terminal.
+//   - NO PIDFILE AND NO LIVENESS CHECK. If you re-dispatch a slice, two watchers
+//     are born: the second one pushes just the same and the first one expires.
+//     The worst that happens is that the line gets typed twice into the session,
+//     which is annoying and nothing more. Paying the whole "is it alive,
+//     orphaned or hung?" problem —to which this repository already devotes three
+//     files— to avoid that would be expensive and would buy nothing.
+//   - NO CATEGORY FOR A MALFORMED ANSWER. See go-response.js: anything that is
+//     not exactly `-OK` simply does not start anything, which is the prudent
+//     side. It does not comment on the issue to explain formats.
+//   - NO `-REVIEW`. Sending a correction by comment and having the plan redone
+//     is another function; to ask for changes the terminal is still there.
 //
-// EL LOG LO ABRE ESTE PROCESO, no quien lo lanza, y va fuera del repo
-// (`~/.claude/control-tower/log/`). No es una decisión nueva: es donde
-// run-metrics.js#metricsPath ya pone lo suyo, y por el motivo que ya está
-// escrito allí — «fuera del repo, para que ningún git add de la slice la meta en
-// la PR». Un proceso que corre cuando no estás mirando y no deja rastro en
-// ningún sitio es indepurable. Lo abre ÉL porque, cuando lo abría `ct-next`, la
-// suite acabó creando ficheros en el `$HOME` real de quien la corriera — que es
-// exactamente lo que `__tests__/fixtures/hermetic-env.js` existe para evitar— y
-// además dejaba un descriptor sin cerrar por slice.
+// THIS PROCESS OPENS THE LOG, not whoever launches it, and it goes outside the
+// repository (`~/.claude/control-tower/log/`). It is not a new decision: it is
+// where run-metrics.js#metricsPath already puts its own, and for the reason
+// already written there — «outside the repository, so that no git add of the
+// slice puts it into the PR». A process that runs when you are not watching and
+// leaves no trace anywhere is undebuggable. IT opens it because, when `ct-next`
+// opened it, the suite ended up creating files in the real `$HOME` of whoever
+// ran it — which is exactly what `__tests__/fixtures/hermetic-env.js` exists to
+// prevent— and on top of that left one descriptor unclosed per slice.
 // ============================================================================
 
 import { execFileSync } from 'node:child_process'
@@ -67,13 +68,14 @@ import { buildCmuxSendArgv, buildCmuxSendKeyArgv } from './dispatch.js'
 import { findWorkspaceByTitle } from './cmux.js'
 import { arg, sleep, plazo, abrirLog } from './watch-common.js'
 
-// 30 segundos, el mismo tick con el que agentic-skills sondea a una persona. Y
-// 8 horas de plazo, que es su `person_wait_seconds`: el número sale de que el
-// caso real es un gate pedido de noche, así que el plazo tiene que cubrir dormir.
+// 30 seconds, the same tick with which agentic-skills polls a person. And an
+// 8 hour deadline, which is its `person_wait_seconds`: the number comes from the
+// real case being a gate asked for at night, so the deadline has to cover
+// sleeping.
 //
-// El coste está medido y es holgado: 8 h a un sondeo cada 30 s son ~960 llamadas
-// a `gh` por slice; con tres slices en vuelo, ~360 a la hora contra un límite de
-// 5000.
+// The cost is measured and it is roomy: 8 h at one poll every 30 s is ~960 calls
+// to `gh` per slice; with three slices in flight, ~360 an hour against a limit
+// of 5000.
 const DEFAULT_POLL_MS = 30_000
 const DEFAULT_TIMEOUT_MS = 8 * 60 * 60 * 1000
 const GH_TIMEOUT_MS = 30_000
@@ -83,18 +85,19 @@ const issue = arg(process.argv, '--issue')
 const repo = arg(process.argv, '--repo')
 const sesion = arg(process.argv, '--session')
 const logPath = arg(process.argv, '--log')
-// EL COMPROMISO ENTRA POR ARGV, Y EL NONCE NO ENTRA NUNCA (F38). Este proceso
-// corre desprendido y su argv lo enseña `ps` a cualquier proceso del mismo uid
-// —el agente incluido—, igual que su log es un fichero legible. Así que lo que
-// viaja hasta aquí es el sha256 del go, que a quien lo lee no le sirve de nada:
-// el nonce sólo existe en la pantalla de quien despachó y en la cabeza de quien
-// lo teclea.
+// THE COMMITMENT COMES IN THROUGH ARGV, AND THE NONCE NEVER DOES (F38). This
+// process runs detached and `ps` shows its argv to any process of the same uid
+// —the agent included—, just as its log is a readable file. So what travels
+// this far is the sha256 of the go, which is of no use to whoever reads it: the
+// nonce only exists on the screen of whoever dispatched and in the head of
+// whoever types it.
 //
-// SIN COMPROMISO NO SE VIGILA. Se sale con 2 en vez de caer al `-OK` desnudo de
-// ayer: un vigilante que reconociera el token fijo sería una puerta que se abre
-// OMITIENDO un argumento, y el agente que quisiera saltarse el gate sólo tendría
-// que relanzar el vigilante él. Un vigilante que no arranca lo nota la persona
-// que espera —va a mirar—; uno que arranca con la puerta vieja no lo nota nadie.
+// WITHOUT A COMMITMENT THERE IS NO WATCHING. It exits with 2 instead of falling
+// back to yesterday's bare `-OK`: a watcher that recognised the fixed token
+// would be a door that opens by OMITTING an argument, and the agent that wanted
+// to skip the gate would only have to relaunch the watcher itself. A watcher
+// that does not start is noticed by the person waiting —they go and look—; one
+// that starts with the old door is noticed by nobody.
 const goHash = (arg(process.argv, '--go-hash') || '').trim().toLowerCase()
 if (!issue || !repo || !sesion) {
   process.stderr.write('uso: ct-watch-go.mjs --issue N --repo owner/name --session "<título de la workspace>" --go-hash <sha256 del go> [--log <ruta>]\n')
@@ -117,56 +120,56 @@ function leerComentarios() {
     const parsed = JSON.parse(raw)
     return Array.isArray(parsed?.comments) ? parsed.comments : []
   } catch (e) {
-    // Un fallo de `gh` NO termina la vigilancia: la red se cae, el token
-    // caduca y se renueva, GitHub devuelve un 502. Lo que no puede pasar es que
-    // un fallo transitorio se lea como "no hay go" de forma permanente, así que
-    // se anota y se vuelve a intentar en el siguiente tick.
+    // A failure of `gh` does NOT end the watch: the network goes down, the
+    // token expires and is renewed, GitHub returns a 502. What cannot happen is
+    // for a transient failure to be read as "there is no go" permanently, so it
+    // gets noted down and tried again on the next tick.
     log(`aviso: no se pudo leer el issue (${String(e.message).trim()}) — se reintenta en el próximo tick`)
     return null
   }
 }
 
-// Devuelve `{ consultado, ref }`. La distinción entre "cmux contestó y la sesión
-// NO está" (`consultado: true, ref: null`) y "no se pudo preguntar"
-// (`consultado: false`) es la misma que ct-next.mjs sostiene con tanto cuidado
-// en `queryAllCmuxWorkspaces`, y por el mismo motivo: de las dos se sigue algo
-// distinto. Que no esté significa que no hay a quién entregarle nada; no poder
-// preguntar no significa nada y sólo se puede reintentar.
+// Returns `{ consultado, ref }`. The distinction between "cmux answered and the
+// session is NOT there" (`consultado: true, ref: null`) and "it could not be
+// asked" (`consultado: false`) is the same one ct-next.mjs holds so carefully in
+// `queryAllCmuxWorkspaces`, and for the same reason: something different
+// follows from each. That it is not there means there is nobody to deliver
+// anything to; not being able to ask means nothing and can only be retried.
 //
-// LAS DOS SE USAN, y en los dos sitios. La primera versión de este fichero
-// distinguía las dos aquí y luego tiraba `consultado` en el camino de ENTREGA:
-// un timeout de cmux justo en el tick en que llegaba el `-OK` mataba la
-// vigilancia de ocho horas en el único instante que importaba, y encima
-// diagnosticaba "no se encontró la sesión" cuando la sesión estaba ahí. Lo cazó
-// una revisión adversarial.
+// BOTH ARE USED, and in both places. The first version of this file
+// distinguished the two here and then threw `consultado` away on the DELIVERY
+// path: a cmux timeout right on the tick the `-OK` arrived killed the eight-hour
+// watch at the one instant that mattered, and on top of that diagnosed "the
+// session was not found" when the session was right there. An adversarial
+// review caught it.
 //
-// LA BÚSQUEDA VIVE EN scripts/cmux.js desde esta ronda, y con ella llega una
-// guarda que este fichero no tenía: si cmux renombrara `custom_title`, la
-// lectura cruda de antes no casaba con nada, devolvía `consultado: true, ref:
-// null` — «cmux contestó y la sesión no está»— y este vigilante se apagaba con
-// exit 4 declarando muerta una sesión que estaba ahí delante, tirando el go de
-// esa persona. `ct-next.mjs` ya se había peleado con esto (D5, hallazgo B) y su
-// conclusión es la que ahora aplica también aquí: un campo cuyo esquema no
-// reconocemos degrada a NO CONCLUYENTE, jamás a "verificado que no está".
+// THE LOOKUP LIVES IN scripts/cmux.js as of this round, and with it comes a
+// guard this file did not have: if cmux renamed `custom_title`, the raw read of
+// before matched nothing, returned `consultado: true, ref: null` — «cmux
+// answered and the session is not there»— and this watcher shut down with exit
+// 4 declaring dead a session that was right in front of it, throwing away that
+// person's go. `ct-next.mjs` had already fought with this (D5, finding B) and
+// its conclusion is the one that now applies here too: a field whose schema we
+// do not recognise degrades to NOT CONCLUSIVE, never to "verified not there".
 function consultarSesion() {
   const r = findWorkspaceByTitle(sesion, { timeoutMs: CMUX_TIMEOUT_MS })
   if (!r.consultado) log('aviso: no se pudo consultar cmux (o su respuesta no trae el campo del título que este plugin sabe leer)')
   return r
 }
 
-// La línea que se teclea en la sesión del slice. `send` no añade Enter: hay que
-// mandarlo aparte, medido en F20/H1.
+// The line that gets typed into the slice's session. `send` does not add Enter:
+// it has to be sent separately, measured in F20/H1.
 const LINEA = `El humano ha respondido ${GO_TOKEN} en el issue #${issue}: el gate \`plan\` queda cerrado. Continúa con ct-step next.`
 
 log(`vigilando el ${GO_TOKEN} de ${repo}#${issue} para la sesión "${sesion}" — tick ${pollMs} ms, plazo ${timeoutMs} ms, go ${goHash.slice(0, 12)}…`)
 
 // ---------------------------------------------------------------------------
-// LA FOTO INICIAL. La ventana son los comentarios que YA ESTABAN (ver
-// go-response.js), así que hay que sacarla antes de buscar nada — y hay que
-// SACARLA DE VERDAD: si la primera lectura falla y se diera por vacía, un `-OK`
-// heredado de un despacho anterior contaría como nuevo y saltaría el gate en
-// silencio, que es justo lo que la ventana existe para impedir. Así que se
-// reintenta hasta conseguirla, dentro del mismo plazo.
+// THE INITIAL SNAPSHOT. The window is the comments that were ALREADY THERE (see
+// go-response.js), so it has to be taken before looking for anything — and it
+// has to be TAKEN FOR REAL: if the first read fails and were taken as empty, an
+// `-OK` inherited from an earlier dispatch would count as new and would open the
+// gate in silence, which is exactly what the window exists to prevent. So it is
+// retried until it succeeds, within the same deadline.
 // ---------------------------------------------------------------------------
 const arrancadoEn = Date.now()
 const limite = arrancadoEn + timeoutMs
@@ -182,11 +185,11 @@ while (previos === null) {
 }
 log(`foto inicial: ${previos.size} comentario(s) ya presentes, que no cuentan como respuesta`)
 
-// UNA sola vez por vigilancia. El formato no cambia entre un intento y el
-// siguiente, así que contestar a cada uno sería ruido en el issue de alguien que
-// ya sabe lo que le dijimos. Y si el proceso se reinicia se vuelve a poder
-// contestar, que es lo correcto: quien lo relanzó puede no haber visto el
-// primero.
+// ONCE per watch, and once only. The format does not change between one attempt
+// and the next, so answering each one would be noise on the issue of somebody
+// who already knows what we told them. And if the process restarts, answering
+// becomes possible again, which is right: whoever relaunched it may not have
+// seen the first one.
 let intentoContestado = false
 
 function explicarElFormato(idDelIntento) {
@@ -197,9 +200,9 @@ function explicarElFormato(idDelIntento) {
     intentoContestado = true
     log(`intento de go que no arranca nada (${idDelIntento}): publicado el formato en ${repo}#${issue}`)
   } catch (e) {
-    // No se reintenta ni se marca como contestado: el próximo tick lo vuelve a
-    // ver y lo vuelve a intentar. Fallar en publicar una explicación no puede
-    // costar la vigilancia, que es lo único que este proceso existe para hacer.
+    // It is neither retried nor marked as answered: the next tick sees it again
+    // and tries again. Failing to publish an explanation cannot cost the watch,
+    // which is the only thing this process exists to do.
     log(`aviso: se vio un intento de go (${idDelIntento}) y no se pudo publicar el formato (${String(e.message).trim()}) — se reintenta en el próximo tick`)
   }
 }
@@ -223,16 +226,17 @@ for (;;) {
           stdio: ['ignore', 'ignore', 'pipe'], timeout: CMUX_TIMEOUT_MS, killSignal: 'SIGKILL',
         })
       } catch (e) {
-        // `send` sin `send-key` deja el texto en la línea de edición SIN
-        // ejecutar (medido en F20/H1), así que hay que decir eso y no "no se
-        // pudo teclear": quien lo lea va a encontrarse la línea escrita en la
-        // ventana y tiene que saber que sólo le falta el Enter.
+        // `send` without `send-key` leaves the text on the edit line WITHOUT
+        // executing it (measured in F20/H1), so that is what has to be said and
+        // not "it could not be typed": whoever reads it is going to find the
+        // line written in the window and has to know all it is missing is the
+        // Enter.
         log(`ERROR: el texto quedó escrito en la línea de edición de "${sesion}" (${ref}) pero el Enter falló: ${String(e.message).trim()}. Ve a esa ventana y pulsa Enter, o empuja la sesión a mano.`)
         terminar(1)
       }
-      // Lo que se sabe es esto y no más: los dos comandos devolvieron 0. No hay
-      // centinela que pruebe que la sesión lo recibió y actuó (ver la cabecera),
-      // así que el mensaje no afirma que haya arrancado.
+      // What is known is this and no more: the two commands returned 0. There is
+      // no sentinel proving the session received it and acted (see the header),
+      // so the message does not claim that it has started.
       log(`línea enviada a "${sesion}" (${ref}): \`cmux send\` y \`send-key Enter\` devolvieron 0. No hay forma de comprobar desde aquí que la sesión la haya procesado. Vigilancia terminada.`)
       terminar(0)
     }
@@ -240,32 +244,32 @@ for (;;) {
       log(`ERROR: el go se vio, pero cmux dice que no existe ninguna sesión "${sesion}", así que no hay a quién entregárselo. Empuja la sesión a mano.`)
       terminar(1)
     }
-    // No se pudo PREGUNTAR por la sesión. De eso no se sigue nada, y menos con
-    // el go ya en la mano: se reintenta en el próximo tick.
+    // The session could not be ASKED about. Nothing follows from that, least of
+    // all with the go already in hand: it is retried on the next tick.
     log(`el go está visto pero no se pudo consultar cmux para localizar la sesión — se reintenta la entrega en el próximo tick`)
   } else if (comentarios && !intentoContestado) {
-    // Alguien está intentando dar el go y su comentario no lo abre. El gate NO
-    // se mueve por esto —lo único que lo abre sigue siendo `matchesGo`—: lo
-    // único que pasa es que quien lo intenta se entera del formato en el sitio
-    // donde está mirando.
+    // Somebody is trying to give the go and their comment does not open it. The
+    // gate does NOT move because of this —the only thing that opens it is still
+    // `matchesGo`—: all that happens is that whoever is trying finds out the
+    // format in the place where they are looking.
     const intento = failedGoAttempt(comentarios, previos, goHash)
     if (intento) explicarElFormato(intento)
   }
   // ---------------------------------------------------------------------------
-  // SIN SESIÓN NO HAY NADA QUE VIGILAR, Y ESO ES UNA COTA DE VERDAD.
+  // WITH NO SESSION THERE IS NOTHING TO WATCH, AND THAT IS A REAL BOUND.
   //
-  // El plazo de ocho horas cubre que la persona esté durmiendo. Lo que no cubre
-  // —y se vio a la primera— es que la sesión del slice desaparezca: entonces el
-  // vigilante sigue sondeando GitHub durante horas para entregarle una línea a
-  // algo que ya no existe. Medido: la primera corrida de la suite completa dejó
-  // 42 procesos así.
+  // The eight-hour deadline covers the person being asleep. What it does not
+  // cover —and this showed up on the very first try— is the slice's session
+  // disappearing: then the watcher goes on polling GitHub for hours to deliver a
+  // line to something that no longer exists. Measured: the first run of the full
+  // suite left 42 processes like that.
   //
-  // Vale igual en producción, y es la razón de fondo: cierras la ventana del
-  // slice, o el agente muere, y su vigilante se apaga solo. Un proceso vivo
-  // vigilando una sesión que no está es peor que su ausencia, porque parece que
-  // el gate sigue cubierto.
+  // It holds just the same in production, and that is the underlying reason: you
+  // close the slice's window, or the agent dies, and its watcher shuts itself
+  // down. A live process watching a session that is not there is worse than its
+  // absence, because it looks as though the gate is still covered.
   //
-  // Sólo se muere si cmux CONTESTÓ que no está.
+  // It only dies if cmux ANSWERED that it is not there.
   // ---------------------------------------------------------------------------
   const sesionAhora = consultarSesion()
   if (sesionAhora.consultado && !sesionAhora.ref) {

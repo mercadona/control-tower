@@ -7,14 +7,14 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 describe('hooks.json', () => {
   const h = JSON.parse(readFileSync(join(root, 'hooks/hooks.json'), 'utf8'))
-  it('registra SessionStart y Stop', () => {
+  it('registers SessionStart and Stop', () => {
     expect(h.hooks.SessionStart).toBeTruthy()
     expect(h.hooks.Stop).toBeTruthy()
   })
-  it('usa ${CLAUDE_PLUGIN_ROOT} y apunta a ficheros existentes', () => {
-    // Genérico sobre TODOS los eventos del fichero, no sobre una lista escrita a
-    // mano: enumerarlos aquí hacía que un hook nuevo quedara sin comprobar y el
-    // test siguiera verde — es decir, un test que no podía fallar.
+  it('uses ${CLAUDE_PLUGIN_ROOT} and points at files that exist', () => {
+    // Generic over ALL the events in the file, not over a hand-written list:
+    // enumerating them here left a new hook unchecked and the test still green —
+    // that is, a test that could not fail.
     const eventos = Object.values(h.hooks).flat()
     for (const e of eventos) {
       expect(e.hooks, `evento sin la clave "hooks": ${JSON.stringify(e)}`).toBeTruthy()
@@ -27,14 +27,14 @@ describe('hooks.json', () => {
       expect(existsSync(join(root, rel))).toBe(true)
     }
   })
-  it('registra el PreToolUse de la puerta del despacho, sobre Task', () => {
+  it('registers the dispatch guard PreToolUse, on Task', () => {
     const pre = h.hooks.PreToolUse
     expect(pre).toBeTruthy()
     const sobreTask = pre.filter((e) => e.matcher === 'Task')
     expect(sobreTask.length).toBeGreaterThan(0)
     expect(JSON.stringify(sobreTask)).toContain('dispatch-guard.js')
   })
-  it('registra el PreToolUse de la puerta de closing keywords, sobre Bash', () => {
+  it('registers the closing-keywords guard PreToolUse, on Bash', () => {
     const pre = h.hooks.PreToolUse
     expect(pre).toBeTruthy()
     const sobreBash = pre.filter((e) => e.matcher === 'Bash')

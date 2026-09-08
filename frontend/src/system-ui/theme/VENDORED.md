@@ -1,15 +1,15 @@
-# Tema vendido a mano — design system de logística
+# Hand-vendored theme — logistics design system
 
-Copia **literal** de `packages/logistics-ui/src/theme/` del repo
-`mercadona/mo.staff-design`, el paquete `@mercadona/mo.library.logistics-ds`
+**Verbatim** copy of `packages/logistics-ui/src/theme/` from the
+`mercadona/mo.staff-design` repo, package `@mercadona/mo.library.logistics-ds`
 0.42.1, commit `466bfd3aa5a6ca2e97dda468c15dc02e8584bef6`.
 
-No se edita nada aquí: son ficheros generados (`READONLY` en cabecera). El
-paquete real vive en el Verdaccio privado y CI de este repo no lo alcanza; el
-día que el repo se mude a la organización, esta carpeta se borra y
-`main.tsx` importa `@mercadona/mo.library.logistics-ds/theme/styles.css`.
+Nothing here gets edited: these are generated files (`READONLY` in the header).
+The real package lives in the private Verdaccio and this repository's CI cannot
+reach it; the day the repo moves to the organisation, this folder is deleted and
+`main.tsx` imports `@mercadona/mo.library.logistics-ds/theme/styles.css`.
 
-## Refrescar
+## Refreshing
 
 ```bash
 git clone --depth 1 git@github.com:mercadona/mo.staff-design.git /tmp/staff
@@ -18,4 +18,4 @@ cp -R /tmp/staff/packages/logistics-ui/src/theme/{styles.css,tokens,fonts,utilit
 rm -rf frontend/src/system-ui/theme/*/__tests__
 ```
 
-Y actualizar el commit de arriba.
+And update the commit above.

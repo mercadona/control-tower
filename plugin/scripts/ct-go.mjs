@@ -1,27 +1,29 @@
 #!/usr/bin/env node
 // ============================================================================
-// CT-GO — REEMITIR EL GO DE UN DESPACHO QUE YA ESTÁ EN VUELO.
+// CT-GO — REISSUING THE GO OF A DISPATCH THAT IS ALREADY IN FLIGHT.
 //
-// F38. El nonce del go se sortea una vez, al despachar, y sólo existe en la
-// pantalla de quien despachó. Eso deja un modo de fallo cotidiano: la pantalla
-// se pierde (se cierra la sesión, se hace scroll, se despachó ayer) y entonces
-// nadie puede cerrar el gate `plan` — ni el vigilante arranca la sesión, ni
-// `dispatch-check --release` libera. Un slice atascado por haber perdido un
-// papelito es exactamente el modo de fallo que este repo lleva tres rondas
-// quitando, así que la recuperación es una pieza del mecanismo, no un extra.
+// F38. The go's nonce is drawn once, at dispatch time, and exists only on the
+// screen of whoever dispatched. That leaves an everyday failure mode: the
+// screen is lost (the session is closed, it scrolls away, it was dispatched
+// yesterday) and then nobody can close the `plan` gate — the watcher does not
+// start the session, and `dispatch-check --release` does not release. A slice
+// stuck for having lost a scrap of paper is exactly the failure mode this repo
+// has spent three rounds removing, so recovery is a piece of the mechanism,
+// not an extra.
 //
-// QUÉ HACE: sortea un nonce NUEVO, reescribe el compromiso de ese issue (el
-// anterior deja de valer en el mismo acto — es lo que se quiere: un go viejo que
-// siguiera sirviendo sería un go de más) y lo dicta por el canal de siempre
-// (go-channel.js, `CT_GO_CHANNEL` incluido).
+// WHAT IT DOES: it draws a NEW nonce, rewrites that issue's commitment (the
+// previous one stops being valid in the same act — which is what is wanted: an
+// old go that still worked would be one go too many) and dictates it through
+// the usual channel (go-channel.js, `CT_GO_CHANNEL` included).
 //
-// QUÉ NO HACE, a propósito: NO relanza el vigilante. El vigilante que esté vivo
-// está buscando el compromiso ANTERIOR, así que tras contestar el go nuevo habrá
-// que empujar la sesión a mano — que es el camino que ya existía cuando el
-// vigilante caducaba, y está documentado. Relanzarlo desde aquí exigiría el
-// título de la workspace de cmux y duplicar el arranque del hijo desprendido;
-// dos piezas que sólo servirían para ahorrar un empujón manual que la persona ya
-// sabe dar. Se dice en la salida, no se esconde.
+// WHAT IT DOES NOT DO, on purpose: it does NOT relaunch the watcher. Whatever
+// watcher is alive is looking for the PREVIOUS commitment, so after answering
+// the new go you will have to push the session by hand — which is the path
+// that already existed when the watcher expired, and it is documented.
+// Relaunching it from here would require the cmux workspace's title and
+// duplicating the start-up of the detached child; two pieces that would only
+// serve to save a manual push the person already knows how to give. It is said
+// in the output, it is not hidden.
 // ============================================================================
 
 import { randomBytes } from 'node:crypto'

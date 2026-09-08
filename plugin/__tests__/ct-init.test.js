@@ -12,63 +12,63 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const script = join(root, 'scripts', 'ct-init.sh')
 const groomScript = join(root, 'scripts', 'ct-groom.mjs')
 
-// F5: ct-groom.mjs --dry-run ahora también enumera issues existentes de
-// `--repo` (lectura, para detectar divergencia) — sin un `gh` de mentira en
-// el PATH, el único test de este fichero que invoca groomScript llamaría al
-// `gh` real de la máquina contra el repo ficticio "o/r". Mismo stub y mismo
-// criterio que __tests__/ct-groom-dryrun.test.js: sin overrides, responde
-// "ningún issue existente", que es lo correcto para un plan recién creado.
+// F5: ct-groom.mjs --dry-run now also enumerates existing issues of `--repo`
+// (a read, to detect divergence) — with no fake `gh` on the PATH, the only test
+// in this file that invokes groomScript would call the machine's real `gh`
+// against the fictitious repository "o/r". Same stub and same criterion as
+// __tests__/ct-groom-dryrun.test.js: with no overrides, it answers "no existing
+// issues", which is the right answer for a freshly created plan.
 const fakeGhDir = join(root, '__tests__', 'fixtures', 'fake-gh-bin')
 const fakeGhEnv = { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}` }
 
-// extractWorkedExample: saca el bloque de tabla markdown bajo "Ejemplo que
-// parsea tal cual" del AGENTS.md sembrado por ct-init.sh — las mismas
-// líneas que empiezan por "|", contiguas, hasta la primera línea que no
-// empiece por "|" (la prosa "Detalle completo..." que cierra la sección).
-// F6, menor 6 — la sección sembrada lleva ahora una versión, y hay una vía
-// EXPLÍCITA para actualizar un repo ya bootstrapeado. Helpers compartidos:
+// extractWorkedExample: pulls out the markdown table block under "Ejemplo que
+// parsea tal cual" from the AGENTS.md seeded by ct-init.sh — the same lines
+// that start with "|", contiguous, up to the first line that does not start
+// with "|" (the "Detalle completo..." prose that closes the section).
+// F6, minor 6 — the seeded section now carries a version, and there is an
+// EXPLICIT route to update an already bootstrapped repository. Shared helpers:
 const MARKER_OPEN = '<!-- ct-init:slices-contract -->'
 const MARKER_CLOSE = '<!-- /ct-init:slices-contract -->'
-// El bloque REAL que sembraba la versión anterior del contrato (v1, sin línea
-// de versión), byte a byte. Vive como fixture porque es la única forma de
-// probar de verdad la migración de un repo bootstrapeado antes de F6 — que es
-// justo el caso que menor 6 describe (menoplus, el sandbox, cualquier repo ya
-// inicializado). Su hash está registrado en SLICES_PRISTINE_HASHES; el test
-// de "hashes registrados" (más abajo) lo comprueba, así que este fichero no
-// puede derivar sin que la suite se entere.
+// The REAL block the previous version of the contract seeded (v1, with no
+// version line), byte for byte. It lives as a fixture because it is the only
+// way to really test the migration of a repository bootstrapped before F6 —
+// which is exactly the case minor 6 describes (menoplus, the sandbox, any
+// already initialised repository). Its hash is recorded in
+// SLICES_PRISTINE_HASHES; the "recorded hashes" test (further down) checks it,
+// so this file cannot drift without the suite finding out.
 const V1_BLOCK = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'slices-contract-v1.md'), 'utf8')
 
 // ---------------------------------------------------------------------------
-// LOS BLOQUES QUE EL SQUASH SE LLEVÓ. `historicalContractBlocks()` reconstruye
-// desde `git rev-list HEAD`, y esa fuente de verdad tiene un agujero que no
-// tenía cuando se escribió: **una PR mergeada con squash no deja en main sus
-// commits intermedios**. Si una rama subió el contrato dos veces antes de
-// aterrizar, la variante de en medio existió —se pushó, y cualquiera pudo
-// bootstrapear un repo clonando ese ref, que es literalmente cómo se instala un
-// plugin de Claude Code— pero desde main no hay forma de verla.
+// THE BLOCKS THE SQUASH TOOK AWAY. `historicalContractBlocks()` reconstructs
+// from `git rev-list HEAD`, and that source of truth has a hole it did not have
+// when it was written: **a pull request merged with squash does not leave its
+// intermediate commits on main**. If a branch bumped the contract twice before
+// landing, the variant in the middle existed —it was pushed, and anybody could
+// bootstrap a repository by cloning that ref, which is literally how a Claude
+// Code plugin gets installed— but from main there is no way to see it.
 //
-// El caso real, que es el que dejó este fichero en rojo durante dos merges: la
-// PR #27 (rama `jjponz/prescriptive-plans`) subió el contrato a **v17** en
-// `ac48fa3` (12-ago, Juanjo) y a v18 después; se mergeó con SQUASH en `529d2f4`,
-// así que main pasó de v16 a v18 de un salto y el bloque v17 no es alcanzable
-// desde HEAD. Su hash SÍ está registrado en SLICES_PRISTINE_HASHES, y debe
-// estarlo: sin él, un repo sembrado con esa variante y jamás tocado recibe "no
-// coincide con ninguna versión conocida" y no puede actualizarse sin `--force`
-// — la acusación falsa contra la que existe F9. Durante esa ronda se
-// bootstrapearon repos de verdad (repo-pulse, 7 slices).
+// The real case, the one that left this file red across two merges: pull request
+// #27 (branch `jjponz/prescriptive-plans`) bumped the contract to **v17** in
+// `ac48fa3` (12 Aug, Juanjo) and to v18 afterwards; it was merged with SQUASH in
+// `529d2f4`, so main jumped from v16 to v18 in one go and the v17 block is not
+// reachable from HEAD. Its hash IS recorded in SLICES_PRISTINE_HASHES, and it
+// must be: without it, a repository seeded with that variant and never touched
+// gets "does not match any known version" and cannot be updated without
+// `--force` — the false accusation F9 exists against. During that round real
+// repositories were bootstrapped (repo-pulse, 7 slices).
 //
-// LA FORMA DE LA SOLUCIÓN, y por qué no basta con anotar la procedencia en un
-// comentario: un comentario se cree, no se comprueba. El bloque se guarda como
-// fixture, byte a byte, igual que ya se guardan los de v1/v4/v5/v6/v7, y el
-// guardián de "hashes que no corresponden a ningún bloque real" pasa a aceptar
-// los que un fixture JUSTIFICA. Con eso el guardián no se debilita nada: para
-// justificar un hash hay que producir un contenido que hashee a él, que es
-// exactamente lo que un hash garantiza que no se puede inventar.
+// THE SHAPE OF THE SOLUTION, and why noting the provenance in a comment is not
+// enough: a comment is believed, not checked. The block is kept as a fixture,
+// byte for byte, just as the v1/v4/v5/v6/v7 ones already are, and the guard for
+// "hashes that correspond to no real block" comes to accept the ones a fixture
+// JUSTIFIES. That weakens the guard not at all: to justify a hash you have to
+// produce content that hashes to it, which is exactly what a hash guarantees
+// cannot be made up.
 const SQUASHED_BLOCK_FIXTURES = ['slices-contract-v17.md']
-// Los que ya existían antes de esto y los usan otros tests de este fichero:
-// bloques históricos SÍ alcanzables desde main, guardados para poder probar la
-// migración desde cada uno. Se nombran aquí sólo para que el inventario del
-// directorio no acuse a un fichero que sí tiene dueño.
+// The ones that already existed before this and that other tests in this file
+// use: historical blocks that ARE reachable from main, kept so the migration
+// from each of them can be tested. They are named here only so the directory
+// inventory does not accuse a file that does have an owner.
 const FIXTURES_DE_OTROS_TESTS = [
   'slices-contract-v1.md', 'slices-contract-v4.md', 'slices-contract-v5.md',
   'slices-contract-v6.md', 'slices-contract-v7.md',
@@ -78,13 +78,14 @@ const squashedBlocks = () => SQUASHED_BLOCK_FIXTURES.map((f) => ({
   block: readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures', f), 'utf8'),
 }))
 const initScriptSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'ct-init.sh'), 'utf8')
-// CONTRACT_VERSION: la versión del contrato se LEE del propio ct-init.sh, no
-// se repite a mano en cada aserción. F11 la subió de 2 a 3 y hubo que tocar
-// cinco tests que la llevaban hardcodeada — un coste que no aporta ninguna
-// garantía (ninguno de esos tests trata SOBRE el número, solo necesitan "la
-// versión que este script emite hoy").
-// (F10 llegó a la misma conclusión por su cuenta, con otro nombre; al
-// integrar se conserva esta, que además trae el helper `versionLineRe`.)
+// CONTRACT_VERSION: the contract's version is READ from ct-init.sh itself, not
+// repeated by hand in every assertion. F11 bumped it from 2 to 3 and five tests
+// that carried it hardcoded had to be touched — a cost that buys no guarantee
+// at all (none of those tests is ABOUT the number, they just need "the version
+// this script emits today").
+// (F10 reached the same conclusion on its own, under another name; on
+// integrating, this one is kept, and it also brings the `versionLineRe`
+// helper.)
 const CONTRACT_VERSION = Number(initScriptSrc.match(/^SLICES_CONTRACT_VERSION=(\d+)$/m)[1])
 const versionLineRe = () => new RegExp(`<!-- ct-init:slices-contract-version: ${CONTRACT_VERSION} -->`)
 
@@ -98,14 +99,14 @@ function extractBlock(agentsMd) {
 const sha256 = (s) => createHash('sha256').update(s).digest('hex')
 
 // ---------------------------------------------------------------------------
-// F9 — el bloque del contrato cambió NUEVE veces con contenido distinto, ocho
-// de ellas bajo el mismo nombre "v1" (la línea de versión no existió hasta
-// F6). SLICES_PRISTINE_HASHES solo registraba dos, así que un AGENTS.md
-// sembrado por el plugin 0.5.1 y jamás tocado recibía un "la has editado a
-// mano" y se quedaba sin poder actualizarse. Estos helpers reconstruyen desde
-// el propio historial de git TODOS los bloques que ct-init.sh llegó a emitir:
-// es la lista que la suite compara contra la registrada, para que registrar el
-// hash nuevo (o no borrar uno viejo) no dependa de que alguien se acuerde.
+// F9 — the contract block changed NINE times with different content, eight of
+// them under the same name "v1" (the version line did not exist until F6).
+// SLICES_PRISTINE_HASHES only recorded two, so an AGENTS.md seeded by plugin
+// 0.5.1 and never touched got a "you edited it by hand" and was left unable to
+// update. These helpers reconstruct from git's own history ALL the blocks
+// ct-init.sh ever emitted: it is the list the suite compares against the
+// recorded one, so that recording the new hash (or not deleting an old one)
+// does not depend on somebody remembering.
 function git(args, input = undefined) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8', input, maxBuffer: 64 * 1024 * 1024 })
 }
@@ -118,14 +119,14 @@ const rutasDeArbolPara = (cwd, ruta) => [...new Set([`${prefijoDeArbolDe(cwd)}${
 const existeEnElArbol = (cwd, rev, rutas) =>
   rutas.some((r) => spawnSync('git', ['cat-file', '-e', `${rev}:${r}`], { cwd }).status === 0)
 
-// extractBlockFromSource: el bloque tal cual lo emitiría ese ct-init.sh. El
-// bloque vive dentro de un heredoc `<<'EOF'` sin expansión, así que las líneas
-// del script entre el marcador de apertura y el de cierre (comparadas como
-// línea COMPLETA, que es como nunca coinciden con las asignaciones tipo
-// `SLICES_MARKER_OPEN='...'`) son literalmente lo que se escribe en el
-// AGENTS.md. El test `el extractor textual coincide con lo que ct-init emite
-// de verdad` lo comprueba contra una ejecución real, para que este atajo no
-// pueda derivar en silencio.
+// extractBlockFromSource: the block exactly as that ct-init.sh would emit it.
+// The block lives inside a `<<'EOF'` heredoc with no expansion, so the lines of
+// the script between the opening marker and the closing one (compared as a
+// WHOLE line, which is how they never match assignments of the
+// `SLICES_MARKER_OPEN='...'` sort) are literally what gets written into the
+// AGENTS.md. The test `the textual extractor matches what ct-init really emits`
+// checks it against a real execution, so this shortcut cannot drift in
+// silence.
 function extractBlockFromSource(src) {
   const lines = src.split('\n')
   const start = lines.indexOf(MARKER_OPEN)
@@ -135,21 +136,21 @@ function extractBlockFromSource(src) {
   return lines.slice(start, end + 1).join('\n') + '\n'
 }
 
-// historicalContractBlocks: cada bloque DISTINTO emitido por algún commit
-// alcanzable desde HEAD, en orden de aparición. Criterio deliberado (ver el
-// comentario de SLICES_PRISTINE_HASHES en ct-init.sh): todo commit de la
-// historia, no solo los que bumpean la versión del plugin — este repo no tiene
-// tags, un plugin de Claude Code se instala clonando un ref, y de todas formas
-// cinco bloques distintos convivieron bajo el mismo plugin.json 0.6.0.
-// No cubre el árbol de trabajo sin commitear: de eso se encarga el test del
-// hash del bloque de HOY.
-// oidsDelLedger: el blob del ledger en cada commit, en UNA sola invocación de
-// git. Antes eran hasta dos `git rev-parse` por commit —cerca de 1.900 procesos
-// en esta historia—, unos 20 s de puro spawn que con otra suite en marcha se
-// comían el timeout de 120 s del test que estrena la caché (#109). `cat-file
-// --batch-check` contesta una línea por línea de entrada y en el mismo orden,
-// así que la respuesta se empareja por posición; la de un objeto que no existe
-// termina en `missing` y no nombra ningún tipo.
+// historicalContractBlocks: every DISTINCT block emitted by some commit
+// reachable from HEAD, in order of appearance. A deliberate criterion (see the
+// SLICES_PRISTINE_HASHES comment in ct-init.sh): every commit of the history,
+// not only the ones that bump the plugin's version — this repository has no
+// tags, a Claude Code plugin is installed by cloning a ref, and in any case
+// five different blocks coexisted under the same plugin.json 0.6.0.
+// It does not cover the uncommitted working tree: TODAY's block hash test takes
+// care of that.
+// oidsDelLedger: the ledger's blob at each commit, in ONE single invocation of
+// git. It used to be up to two `git rev-parse` per commit —close to 1,900
+// processes across this history—, some 20 s of pure spawn that, with another
+// suite running, ate the 120 s timeout of the test that primes the cache
+// (#109). `cat-file --batch-check` answers one line per input line and in the
+// same order, so the answer is paired up by position; the one for an object
+// that does not exist ends in `missing` and names no type.
 function oidsDelLedger(commits, rutas) {
   const consulta = commits.flatMap((c) => rutas.map((r) => `${c}:${r}`)).join('\n') + '\n'
   const respuestas = git(['cat-file', '--batch-check'], consulta).split('\n')
@@ -169,9 +170,10 @@ function historicalContractBlocks() {
   try {
     commits = git(['rev-list', 'HEAD']).trim().split('\n').filter(Boolean)
   } catch (err) {
-    // Deliberadamente NO se salta en silencio: este es el único guardián que
-    // detecta que a SLICES_PRISTINE_HASHES le falta (o le sobra) un hash, y
-    // saltárselo sin decir nada es el mismo fallo que viene a evitar.
+    // Deliberately NOT skipped in silence: this is the only guard that detects
+    // that SLICES_PRISTINE_HASHES is missing (or carrying one too many) a hash,
+    // and skipping it without saying so is the very failure it comes to
+    // prevent.
     throw new Error(
       'los tests de SLICES_PRISTINE_HASHES necesitan el historial de git del plugin ' +
         '(reconstruyen desde ahí todos los bloques del contrato que ct-init llegó a emitir). ' +
@@ -188,7 +190,7 @@ function historicalContractBlocks() {
   const seenBlock = new Set()
   for (const { oid, commit } of oids) {
     const block = extractBlockFromSource(git(['cat-file', 'blob', oid]))
-    if (!block || seenBlock.has(block)) continue // pre-F2 (aún no sembraba nada), o ya visto
+    if (!block || seenBlock.has(block)) continue // pre-F2 (it seeded nothing yet), or already seen
     seenBlock.add(block)
     blocks.push({ block, commit: commit.slice(0, 7), hash: sha256(block) })
   }
@@ -196,98 +198,97 @@ function historicalContractBlocks() {
   return blocks
 }
 
-// bloquesEmitidos: la historia alcanzable MÁS los bloques que el squash se
-// llevó (SQUASHED_BLOCK_FIXTURES, arriba). Es la respuesta a "¿qué llegó a
-// EMITIR ct-init?", que no es "¿qué hay en main?": la preguntan el camino de
-// upgrade y el del bloque vN-1, y las dos veces la respuesta correcta incluye
-// el v17. Deriva de la lista de arriba — no hay una segunda lista de bloques
-// escondidos, y la procedencia de cada uno la prueba su propio test más abajo.
-// `commit` es el nombre del FIXTURE a propósito: para un bloque que ningún
-// commit alcanzable reproduce, la etiqueta honesta es el fichero que lo
-// guarda, no un sha que no se puede resolver en un clon limpio.
+// bloquesEmitidos: the reachable history PLUS the blocks the squash took away
+// (SQUASHED_BLOCK_FIXTURES, above). It is the answer to "what did ct-init ever
+// EMIT?", which is not "what is on main?": the upgrade path and the vN-1 block
+// path both ask it, and both times the right answer includes v17. It derives
+// from the list above — there is no second list of hidden blocks, and each
+// one's provenance is proved by its own test further down. `commit` is the name
+// of the FIXTURE on purpose: for a block that no reachable commit reproduces,
+// the honest label is the file that keeps it, not a sha that cannot be resolved
+// in a clean clone.
 const bloquesEmitidos = () => [
   ...historicalContractBlocks(),
   ...squashedBlocks().map(({ fixture, block }) => ({ block, fixture, commit: fixture, hash: sha256(block) })),
 ]
 
 // ---------------------------------------------------------------------------
-// Slice 8 (hallazgo BAJO del review de la PR #36) — PROCEDENCIA de los
-// bloques guardados por squash. El slice 4 arregló el test del ledger con
-// SQUASHED_BLOCK_FIXTURES, y con ello la autovigilancia pasó de "git lo
-// prueba" a "git O un fichero de este mismo commit lo prueba": el par
-// (entrada del ledger, fixture) se validaba contra sí mismo, porque el
-// fixture es editable en el MISMO commit que registra su hash. No es
-// forjable —nadie fabrica un fichero con un sha256 elegido— pero sí
-// DEGRADABLE: un bloque que ct-init nunca publicó podía entrar en la lista
-// pristine sin que ningún test lo notara, y a partir de ahí
-// `--update-slices-contract` lo aceptaría sin --force.
+// Slice 8 (LOW finding of the review of pull request #36) — PROVENANCE of the
+// blocks kept because of a squash. Slice 4 fixed the ledger test with
+// SQUASHED_BLOCK_FIXTURES, and with that the self-watch went from "git proves
+// it" to "git OR a file of this very commit proves it": the pair (ledger entry,
+// fixture) was validated against itself, because the fixture is editable in the
+// SAME commit that records its hash. It is not forgeable —nobody manufactures a
+// file with a chosen sha256— but it is DEGRADABLE: a block ct-init never
+// published could get into the pristine list without any test noticing, and
+// from then on `--update-slices-contract` would accept it without --force.
 //
-// Lo que ataba el caso del v17 no era el fixture: era que su hash ya estaba en
-// main OCHO DÍAS antes de que el fixture existiera. Eso es evidencia
-// INDEPENDIENTE, y es lo que se exige aquí para todo fixture de la lista,
-// presente y futuro.
+// What tied down the v17 case was not the fixture: it was that its hash was
+// already on main EIGHT DAYS before the fixture existed. That is INDEPENDENT
+// evidence, and it is what is demanded here of every fixture in the list,
+// present and future.
 //
-// La comprobación, en una frase: el commit que metió el hash en el ledger NO
-// contenía todavía el fixture. Deliberadamente NO se data el fixture ni se
-// comparan ancestros:
-//   - datar la adición y mirar su commit padre se rompe con merges (`^` es
-//     `^1`), con un fixture borrado y re-añadido, y con un renombrado;
-//   - exigir `merge-base --is-ancestor <testigo> <commit-del-fixture>` no caza
-//     NINGÚN caso que el paso de abajo no cace ya, y se pondría rojo cuando la
-//     entrada del ledger llega por una rama y el fixture por otra (la carrera
-//     de números v19/v20/v21/v22 de este repo, dos veces).
-// Esta forma, en cambio, es MONÓTONA (un testigo válido lo sigue siendo tras
-// cualquier merge futuro) y tolera que el árbol de trabajo vaya por delante de
-// la historia, que es el estado normal a mitad de un slice.
+// The check, in one sentence: the commit that put the hash into the ledger did
+// NOT yet contain the fixture. Deliberately, the fixture is NOT dated and
+// ancestors are NOT compared:
+//   - dating the addition and looking at its parent commit breaks with merges
+//     (`^` is `^1`), with a fixture deleted and re-added, and with a rename;
+//   - demanding `merge-base --is-ancestor <witness> <fixture-commit>` catches NO
+//     case the step below does not catch already, and it would go red when the
+//     ledger entry arrives on one branch and the fixture on another (this
+//     repository's v19/v20/v21/v22 numbering race, twice over).
+// This shape, by contrast, is MONOTONIC (a valid witness stays valid after any
+// future merge) and tolerates the working tree running ahead of the history,
+// which is the normal state halfway through a slice.
 //
-// Lo que esto NO hace, dicho para que nadie lo sobrevenda: un atacante con DOS
-// commits (1º el hash, 2º el fixture) pasa esta comprobación. Lo que cierra el
-// agujero es el PAR de tests — en ese commit 1º el hash está registrado sin
-// respaldo, y el test "no registra hashes de bloques que no existieron nunca"
-// está ROJO. Sobre una historia con la suite verde en cada commit, una entrada
-// pristine falsa es imposible: hace falta pasar por un commit rojo.
+// What this does NOT do, said so nobody oversells it: an attacker with TWO
+// commits (1st the hash, 2nd the fixture) passes this check. What closes the
+// hole is the PAIR of tests — in that 1st commit the hash is recorded with no
+// backing, and the test "it records no hashes of blocks that never existed" is
+// RED. Over a history with the suite green at every commit, a false pristine
+// entry is impossible: you have to pass through a red commit.
 //
-// Este test NO duplica los dos guardianes del fixture, que prueban otra cosa:
-// el suyo prueba que el bloque EXISTE (el fichero hashea al hash registrado);
-// el de aquí, que no lo INVENTÓ quien añadió el fichero. Y no basta con anotar
-// la procedencia en el comentario del ledger —el de la línea del v17 la
-// cuenta— por la misma razón que su propio mensaje da para el fixture: un
-// comentario se cree, no se comprueba. Los dos dicen lo mismo; solo uno se
-// pone rojo.
+// This test does NOT duplicate the fixture's two guards, which prove something
+// else: theirs proves the block EXISTS (the file hashes to the recorded hash);
+// this one, that whoever added the file did not MAKE IT UP. And noting the
+// provenance in the ledger's comment is not enough —the one on the v17 line
+// tells it— for the same reason its own message gives for the fixture: a
+// comment is believed, not checked. Both say the same thing; only one goes
+// red.
 const RUTA_LEDGER = 'scripts/ct-init.sh'
 const RUTA_FIXTURES = '__tests__/fixtures'
 
-// procedenciaDelBloqueGuardado: devuelve null si la procedencia está probada, o el
-// MOTIVO (string) si no. El repo es un PARÁMETRO —no el `git()` de arriba, que
-// tiene `root` fijo— justo para que el test negativo pueda correr esta misma
-// función contra un repo de juguete construido con `git init`, en vez de
-// reimplementarla (un test negativo que reimplementa lo que juzga no juzga
-// nada).
+// procedenciaDelBloqueGuardado: returns null if the provenance is proved, or the
+// REASON (a string) if not. The repository is a PARAMETER —not the `git()`
+// above, which has `root` fixed— precisely so the negative test can run this
+// very function against a toy repository built with `git init`, instead of
+// reimplementing it (a negative test that reimplements what it judges judges
+// nothing).
 function procedenciaDelBloqueGuardado({ cwd, fixture, hash }) {
   const g = (args) => execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
   const rutaFixture = `${RUTA_FIXTURES}/${fixture}`
   const rutasDelLedger = rutasDeArbolPara(cwd, RUTA_LEDGER)
   const rutasDelFixture = rutasDeArbolPara(cwd, rutaFixture)
   const existeEn = (rev, rutas) => existeEnElArbol(cwd, rev, rutas)
-  // Control anti-tautología: si estas rutas relativas dejaran de existir (un
-  // día que se mueva el directorio de fixtures o el script), el `cat-file -e`
-  // de abajo fallaría SIEMPRE y la comprobación pasaría a estar vacía en
-  // silencio — exactamente el modo de fallo que este slice viene a cerrar. No
-  // basta con mirar el disco: el `git mv` a `plugin/` dejó el fichero donde
-  // `existsSync` lo ve y donde `cat-file` ya no. De que las rutas de ÁRBOL
-  // sigan nombrando algo se ocupa "las fixtures y el ledger se buscan por
-  // rutas que el ÁRBOL de HEAD resuelve", que juzga el repo real; aquí no,
-  // porque un repo de juguete sin commitear es un caso legítimo con su propio
-  // diagnóstico.
+  // An anti-tautology check: were these relative paths to stop existing (some
+  // day the fixtures directory or the script gets moved), the `cat-file -e`
+  // below would ALWAYS fail and the check would quietly become empty — exactly
+  // the failure mode this slice comes to close. Looking at the disk is not
+  // enough: the `git mv` to `plugin/` left the file where `existsSync` sees it
+  // and where `cat-file` no longer does. Making sure the TREE paths still name
+  // something is the job of "the fixtures and the ledger are looked up by paths
+  // that HEAD's TREE resolves", which judges the real repository; not here,
+  // because a toy repository with nothing committed is a legitimate case with a
+  // diagnostic of its own.
   if (!existsSync(join(cwd, RUTA_LEDGER))) return `no existe ${RUTA_LEDGER} en ${cwd}`
   if (!existsSync(join(cwd, rutaFixture))) return `no existe ${rutaFixture} en ${cwd}`
-  // El commit que introdujo el hash en el ledger. `git log` sin revisión =
-  // alcanzable desde HEAD, que es la única base durable. Es también el motivo
-  // de que SQUASHED_BLOCK_FIXTURES sea una lista de NOMBRES DE FICHERO y no de
-  // pares (fichero, commit): los shas que la prosa del ledger cita para el v17
-  // (743fe3f, ac48fa3) NO son alcanzables desde HEAD — usarlos como ref
-  // funciona en esta máquina y se rompe en un clon limpio.
-  // Cronológico inverso, así que el más antiguo es el último.
+  // The commit that introduced the hash into the ledger. `git log` with no
+  // revision = reachable from HEAD, which is the only durable base. It is also
+  // the reason SQUASHED_BLOCK_FIXTURES is a list of FILE NAMES and not of
+  // (file, commit) pairs: the shas the ledger's prose cites for v17 (743fe3f,
+  // ac48fa3) are NOT reachable from HEAD — using them as a ref works on this
+  // machine and breaks in a clean clone.
+  // Reverse chronological, so the oldest one is the last.
   const testigos = g(['log', '--format=%H', `-S${hash}`, '--', ...rutasDelLedger.map((r) => `:(top)${r}`)])
     .trim().split('\n').filter(Boolean)
   if (testigos.length === 0) {
@@ -308,17 +309,20 @@ function procedenciaDelBloqueGuardado({ cwd, fixture, hash }) {
   return null
 }
 
-// exigirHistorialCompleto: la MISMA postura que historicalContractBlocks() —
-// sin historial NO se salta en silencio, porque "no se sabe" no es "está bien"
-// (es el tercer estado que ct-init.sh ya distingue cuando no puede calcular el
-// sha256). Dos formas de no tenerlo, y solo una la detecta `rev-list`:
-//   - sin .git: el tarball de npm empaqueta __tests__/ pero nunca .git, así
-//     que `rev-list` falla;
-//   - clon shallow: `rev-list` NO falla, devuelve menos commits, y el testigo
-//     queda por debajo del injerto. Sin esta rama el test diría "el hash no
-//     entró nunca en el ledger", ACUSANDO DE FORJA A UN LEDGER CORRECTO.
-// Este fichero ya exigía historial completo desde F9 (los dos controles
-// `toBeGreaterThanOrEqual(9)` fallan con --depth 1): no es un requisito nuevo.
+// exigirHistorialCompleto: the SAME stance as historicalContractBlocks() —
+// with no history it is NOT skipped in silence, because "it is not known" is
+// not "it is fine" (it is the third state ct-init.sh already tells apart when
+// it cannot compute the sha256). Two ways of not having it, and `rev-list` only
+// detects one:
+//   - no .git: the npm tarball packs __tests__/ but never .git, so `rev-list`
+//     fails;
+//   - a shallow clone: `rev-list` does NOT fail, it returns fewer commits, and
+//     the witness ends up below the graft. Without this branch the test would
+//     say "the hash never entered the ledger", ACCUSING A CORRECT LEDGER OF
+//     FORGERY.
+// This file has demanded a complete history since F9 (the two
+// `toBeGreaterThanOrEqual(9)` checks fail with --depth 1): it is not a new
+// requirement.
 function exigirHistorialCompleto() {
   try {
     git(['rev-list', '-1', 'HEAD'])
@@ -338,8 +342,8 @@ function exigirHistorialCompleto() {
   }
 }
 
-// seedFreshAgentsMd: corre ct-init.sh en un dir vacío y devuelve el AGENTS.md
-// que siembra.
+// seedFreshAgentsMd: runs ct-init.sh in an empty directory and returns the
+// AGENTS.md it seeds.
 function seedFreshAgentsMd() {
   const dir = mkdtempSync(join(tmpdir(), 'ct-'))
   execFileSync('bash', [script, dir], { encoding: 'utf8' })
@@ -348,18 +352,19 @@ function seedFreshAgentsMd() {
   return agents
 }
 
-// #93 — el contrato salió de AGENTS.md a su propio fichero del repo gobernado.
-// El bloque es EL MISMO byte a byte (marcadores, línea de versión y cuerpo), y
-// por eso todo lo que este fichero vigila —el ledger de hashes, el extractor
-// textual del historial, la doctrina de versiones— sigue valiendo sin tocar una
-// sola entrada: lo único que cambia es en qué fichero se busca.
+// #93 — the contract left AGENTS.md for its own file in the governed
+// repository. The block is THE SAME byte for byte (markers, version line and
+// body), and that is why everything this file watches —the hash ledger, the
+// textual extractor of the history, the doctrine of versions— still holds
+// without touching a single entry: the only thing that changes is which file
+// gets searched.
 const CONTRATO_REL = ['docs', 'superpowers', 'CONTRATO-SLICES.md']
 const contratoPath = (dir) => join(dir, ...CONTRATO_REL)
 const leerContrato = (dir) => readFileSync(contratoPath(dir), 'utf8')
 
-// seedFreshContrato: el bloque de HOY tal cual sale del script (no leído de su
-// fuente), que es contra lo que se validan el registro de hashes y el extractor
-// textual de arriba.
+// seedFreshContrato: TODAY's block exactly as it comes out of the script (not
+// read from its source), which is what the hash ledger and the textual
+// extractor above are validated against.
 function seedFreshContrato() {
   const dir = mkdtempSync(join(tmpdir(), 'ct-'))
   execFileSync('bash', [script, dir], { encoding: 'utf8' })
@@ -368,31 +373,30 @@ function seedFreshContrato() {
   return contrato
 }
 
-// conContrato: un fichero de contrato con texto propio del repo alrededor del
-// bloque. Es el escenario que interesa en cada test de actualización: lo de
-// fuera del bloque no se toca nunca.
+// conContrato: a contract file with text of the repository's own around the
+// block. It is the scenario that matters in every update test: what is outside
+// the block is never touched.
 const conContrato = (bloque, nota = 'mías') =>
   `# Contrato de slices\n\n## Notas\n- ${nota}\n\n${bloque}\n## Después\n- intocable\n`
 
-// sembrarContrato: escribe ese fichero en el sitio donde ct-init lo busca.
+// sembrarContrato: writes that file in the place where ct-init looks for it.
 function sembrarContrato(dir, contenido) {
   mkdirSync(dirname(contratoPath(dir)), { recursive: true })
   writeFileSync(contratoPath(dir), contenido)
   return contenido
 }
 
-// E2E_MARKER_OPEN/CLOSE + E2E_BLOCK: la tarea 5 de "e2e al cierre del slice"
-// añadió una SEGUNDA sección que ct-init siembra (la de travesía), que se
-// añade SIEMPRE que falte, sin importar en qué estado esté la sección del
-// contrato de slices. Muchos de los tests de abajo escriben un AGENTS.md que
-// solo trae el contrato (para probar SU lógica en aislamiento) y comprueban
-// con `toBe` que el fichero queda byte a byte igual — una asunción cierta
-// hasta que existió la sección de travesía. Ahora esos fixtures reciben
-// también esa sección (correcto: un repo bootstrapeado antes de esta tarea
-// también la recibe en su próxima corrida), así que sus aserciones tienen
-// que contar con el bloque añadido. E2E_BLOCK se calcula UNA vez ejecutando
-// el script (nunca copiado a mano), para que un cambio futuro en el texto no
-// haga divergir esta constante en silencio.
+// E2E_MARKER_OPEN/CLOSE + E2E_BLOCK: task 5 of "e2e at the slice's closure"
+// added a SECOND section that ct-init seeds (the journey one), which gets added
+// WHENEVER it is missing, no matter what state the slices contract section is
+// in. Many of the tests below write an AGENTS.md that carries only the contract
+// (to test THEIR logic in isolation) and check with `toBe` that the file is left
+// byte for byte the same — an assumption that held true until the journey
+// section existed. Now those fixtures receive that section too (correctly: a
+// repository bootstrapped before this task also receives it on its next run), so
+// their assertions have to account for the added block. E2E_BLOCK is computed
+// ONCE by running the script (never copied by hand), so a future change in the
+// text does not make this constant drift in silence.
 const E2E_MARKER_OPEN = '<!-- ct-init:e2e-howto -->'
 const E2E_MARKER_CLOSE = '<!-- /ct-init:e2e-howto -->'
 function extractE2eBlock(agentsMd) {
@@ -404,9 +408,9 @@ function extractE2eBlock(agentsMd) {
 }
 const E2E_BLOCK = extractE2eBlock(seedFreshAgentsMd())
 
-// #93 — la sección corta del loop, la que queda en AGENTS.md en el sitio que
-// dejó el contrato. Se calcula igual que E2E_BLOCK, ejecutando el script, para
-// que un cambio de su texto no haga divergir esta constante en silencio.
+// #93 — the loop's short section, the one that stays in AGENTS.md in the place
+// the contract left. It is computed like E2E_BLOCK, by running the script, so a
+// change in its text does not make this constant drift in silence.
 const LOOP_MARKER_OPEN = '<!-- ct-init:loop -->'
 const LOOP_MARKER_CLOSE = '<!-- /ct-init:loop -->'
 function extractLoopBlock(agentsMd) {
@@ -418,14 +422,15 @@ function extractLoopBlock(agentsMd) {
 }
 const LOOP_BLOCK = extractLoopBlock(seedFreshAgentsMd())
 
-// withE2eAppended: reproduce EXACTAMENTE lo que hace ct-init.sh al añadir sus
-// secciones a un AGENTS.md que no las trae todavía — asegura un salto de línea
-// final, añade una línea en blanco, y pega el bloque. `crlf` hace lo mismo que
-// `file_is_crlf`/`replace_slices_block` del script: si el fichero de partida
-// usa CRLF, la línea en blanco y el bloque se escriben con los mismos saltos.
-// `loop: false` es para el caso en que el AGENTS.md ya lleva el contrato dentro
-// (uno bootstrapeado antes de #93): ahí la sección corta NO se añade, porque
-// sería una segunda copia de lo mismo, y en su lugar sale el aviso de migración.
+// withE2eAppended: reproduces EXACTLY what ct-init.sh does when adding its
+// sections to an AGENTS.md that does not carry them yet — it makes sure of a
+// trailing newline, adds a blank line, and pastes the block. `crlf` does the
+// same as the script's `file_is_crlf`/`replace_slices_block`: if the starting
+// file uses CRLF, the blank line and the block are written with the same line
+// endings. `loop: false` is for the case in which the AGENTS.md already carries
+// the contract inside it (one bootstrapped before #93): there the short section
+// is NOT added, because it would be a second copy of the same thing, and the
+// migration warning comes out instead.
 function withE2eAppended(before, { crlf = false, loop = true } = {}) {
   let out = before
   const nl = crlf ? '\r\n' : '\n'
@@ -451,17 +456,17 @@ function extractWorkedExample(agentsMd) {
 }
 
 describe('ct-init.sh', () => {
-  it('crea .agent/STATE.md y AGENTS.md en dir vacío', () => {
+  it('creates .agent/STATE.md and AGENTS.md in an empty directory', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     expect(existsSync(join(dir, '.agent', 'STATE.md'))).toBe(true)
     expect(existsSync(join(dir, 'AGENTS.md'))).toBe(true)
     rmSync(dir, { recursive: true, force: true })
   })
-  // F7: el STATE.md sembrado tiene que traer el campo `blocked` — y tiene que
-  // seguir siendo un STATE.md parseable con el campo dentro (no solo un
-  // comentario suelto que nadie lee).
-  it('el STATE.md sembrado trae `blocked: null` y explica para qué sirve', () => {
+  // F7: the seeded STATE.md has to carry the `blocked` field — and it has to
+  // stay a parseable STATE.md with the field inside (not just a stray comment
+  // nobody reads).
+  it('the seeded STATE.md carries `blocked: null` and explains what it is for', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const state = readFileSync(join(dir, '.agent', 'STATE.md'), 'utf8')
@@ -471,15 +476,15 @@ describe('ct-init.sh', () => {
     const { meta } = parseState(state)
     expect(meta.blocked).toBe(null)
     expect(readBlocked(meta).state).toBe('none')
-    // Y el otro campo que se lee mal en frío queda con su tiempo verbal escrito.
-    expect(state).toMatch(/PENDIENTE/)
+    // And the other field that reads badly cold is left with its tense written out.
+    expect(state).toMatch(/PENDING/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Estrechar el formato crea una categoría nueva: los STATE.md anteriores al
-  // campo. Siguen funcionando (se leen como NO bloqueados) pero su dueño no se
-  // enteraría nunca de que ahora existe otra forma de decirlo.
-  it('STATE.md preexistente SIN el campo `blocked` → no se toca, pero se dice que existe el campo y cómo usarlo', () => {
+  // Tightening the format creates a new category: the STATE.md files older than
+  // the field. They still work (they are read as NOT blocked) but their owner
+  // would never find out that another way of saying it now exists.
+  it('a pre-existing STATE.md WITHOUT the `blocked` field → it is not touched, but it is said that the field exists and how to use it', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     mkdirSync(join(dir, '.agent'))
     writeFileSync(join(dir, '.agent', 'STATE.md'), '---\ntask: "lo mío"\nnext_action: "seguir"\n---\ncuerpo')
@@ -491,7 +496,7 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('STATE.md preexistente que YA declara `blocked` → no repite el aviso', () => {
+  it('a pre-existing STATE.md that ALREADY declares `blocked` → the warning is not repeated', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     mkdirSync(join(dir, '.agent'))
     writeFileSync(join(dir, '.agent', 'STATE.md'), '---\ntask: "lo mío"\nblocked: null\n---\ncuerpo')
@@ -501,7 +506,7 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('idempotente: no pisa un STATE.md existente', () => {
+  it('idempotent: it does not tread on an existing STATE.md', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     mkdirSync(join(dir, '.agent'))
     writeFileSync(join(dir, '.agent', 'STATE.md'), 'MÍO')
@@ -509,26 +514,27 @@ describe('ct-init.sh', () => {
     expect(readFileSync(join(dir, '.agent', 'STATE.md'), 'utf8')).toBe('MÍO')
     rmSync(dir, { recursive: true, force: true })
   })
-  it('idempotente: no pisa un AGENTS.md existente (preserva su contenido, solo añade la sección §9 si falta)', () => {
+  it('idempotent: it does not tread on an existing AGENTS.md (it preserves its content, it only adds the §9 section if missing)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     writeFileSync(join(dir, 'AGENTS.md'), 'MÍO-AGENTS')
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
-    // El contenido del usuario no se toca ni se reordena...
+    // The user's content is neither touched nor reordered...
     expect(agents.startsWith('MÍO-AGENTS')).toBe(true)
-    // ...pero la sección corta del loop se añade igual, porque este AGENTS.md
-    // no la traía — y el contrato entero se siembra en su propio fichero.
+    // ...but the loop's short section is added all the same, because this
+    // AGENTS.md did not carry it — and the whole contract is seeded in its own
+    // file.
     expect(agents).toContain(LOOP_MARKER_OPEN)
     expect(leerContrato(dir)).toContain(MARKER_OPEN)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // F2: el contrato de la tabla §9 (qué columnas exige /ct-groom, qué
-  // marcadores de "sin valor" acepta, qué genera cada una) hasta ahora solo
-  // vivía en commands/ct-groom.md — un fichero que lee quien EJECUTA groom,
-  // nunca quien ESCRIBE el spec. `ct-init` debe sembrar ese contrato en el
-  // AGENTS.md del repo destino, que sí lee quien escribe specs.
-  it('AGENTS.md nuevo: el esqueleto ya trae la sección §9 (contrato con /ct-groom)', () => {
+  // F2: the §9 table contract (which columns /ct-groom demands, which "no
+  // value" markers it accepts, what each one generates) until now lived only in
+  // commands/ct-groom.md — a file read by whoever RUNS groom, never by whoever
+  // WRITES the spec. `ct-init` must seed that contract in the target
+  // repository's AGENTS.md, which whoever writes specs does read.
+  it('a new AGENTS.md: the skeleton already carries the §9 section (the contract with /ct-groom)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = leerContrato(dir)
@@ -537,10 +543,10 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // F3: el contrato sembrado escondía que "Tipo" decide el addendum del
-  // agente despachado, y que el título del issue sale de "Slice" (no de
-  // "Entrega") — ver el hallazgo del spec real que disparó este cambio.
-  it('AGENTS.md nuevo: la sección §9 dice que "Slice" es obligatoria y alimenta el título, y que "Entrega" es opcional (Descripción)', () => {
+  // F3: the seeded contract hid that "Tipo" decides the dispatched agent's
+  // addendum, and that the issue's title comes from "Slice" (not from
+  // "Entrega") — see the finding of the real spec that triggered this change.
+  it('a new AGENTS.md: the §9 section says that "Slice" is mandatory and feeds the title, and that "Entrega" is optional (Descripción)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = leerContrato(dir)
@@ -551,28 +557,28 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Review de F3, finding 2: esta aserción antes listaba los cuatro tipos
-  // como literales escritos a mano ('ui'/'backend'/'infra'/'bugfix') — si
-  // alguien añade un quinto addendum a ADDENDA (kickoff.js), el aviso en
-  // runtime de ct-groom.mjs lo reflejaría solo (deriva de
-  // Object.keys(ADDENDA)), pero este test seguiría en VERDE con la prosa
-  // sembrada diciendo solo cuatro, sin detectar la deriva. Se deriva de
-  // ADDENDA en vez de hardcodear una tercera copia de la lista: el test se
-  // autovigila, no hace falta tocarlo cuando se añada un tipo nuevo.
-  it('AGENTS.md nuevo: la sección §9 nombra TODOS los valores de "Tipo" reconocidos (derivado de ADDENDA, no una lista hardcodeada) y que deciden el addendum', () => {
+  // F3's review, finding 2: this assertion used to list the four types as
+  // hand-written literals ('ui'/'backend'/'infra'/'bugfix') — if somebody adds a
+  // fifth addendum to ADDENDA (kickoff.js), ct-groom.mjs's runtime warning would
+  // reflect it on its own (it derives from Object.keys(ADDENDA)), but this test
+  // would stay GREEN with the seeded prose saying only four, without detecting
+  // the drift. It derives from ADDENDA instead of hardcoding a third copy of the
+  // list: the test watches itself, there is no need to touch it when a new type
+  // is added.
+  it('a new AGENTS.md: the §9 section names ALL the recognised "Tipo" values (derived from ADDENDA, not a hardcoded list) and that they decide the addendum', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = leerContrato(dir)
     expect(agents).toMatch(/addendum/i)
-    expect(Object.keys(ADDENDA).length).toBeGreaterThan(0) // control: si ADDENDA quedara vacío, el .every() de abajo pasaría vacío y no probaría nada
+    expect(Object.keys(ADDENDA).length).toBeGreaterThan(0) // a check: were ADDENDA to be left empty, the .every() below would pass empty and prove nothing
     expect(Object.keys(ADDENDA).every((t) => agents.includes(`\`${t}\``))).toBe(true)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Requisito explícito: el ejemplo sembrado debe seguir parseando de
-  // verdad — se extrae tal cual del AGENTS.md generado (no una copia
-  // parafraseada en el test) y se pasa por ct-groom.mjs --dry-run.
-  it('el ejemplo sembrado ("Ejemplo que parsea tal cual") parsea de verdad con ct-groom.mjs --dry-run: 3 issues, títulos desde "Slice"', () => {
+  // An explicit requirement: the seeded example must keep really parsing — it is
+  // extracted exactly as it is from the generated AGENTS.md (not a paraphrased
+  // copy in the test) and run through ct-groom.mjs --dry-run.
+  it('the seeded example ("Ejemplo que parsea tal cual") really parses with ct-groom.mjs --dry-run: 3 issues, titles from "Slice"', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = leerContrato(dir)
@@ -580,15 +586,15 @@ describe('ct-init.sh', () => {
     expect(table).toContain('| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca | Gate | Señal |')
     const specDir = mkdtempSync(join(tmpdir(), 'ct-example-'))
     const specPath = join(specDir, 'spec.md')
-    // El envoltorio (hipótesis + cabecera de sección) lo pone el TEST, no el
-    // ejemplo sembrado: el bloque del contrato documenta la TABLA y no crece
-    // por la puerta de congelación de F32 (regla: el contrato no crece sin
-    // quitar). Un spec real lleva su "## Hipótesis" por la plantilla.
+    // The wrapper (hypothesis + section heading) is put in by the TEST, not by
+    // the seeded example: the contract block documents the TABLE and does not
+    // grow past F32's freeze gate (the rule: the contract does not grow without
+    // removing). A real spec carries its "## Hipótesis" from the template.
     writeFileSync(specPath, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Desglose en slices\n${table}`)
-    // F21: el ejemplo trae ahora una fila con un gate declarado, así que el
-    // groom avisa por stderr (es su trabajo: un gate que no viene del Tipo se
-    // dice en voz alta). Ese stderr es ESPERADO aquí — se captura en vez de
-    // ecoarlo a la salida de `npm test`, igual que hace ct-groom-dryrun.test.js.
+    // F21: the example now brings a row with a declared gate, so the groom warns
+    // on stderr (that is its job: a gate that does not come from Tipo gets said
+    // out loud). That stderr is EXPECTED here — it is captured instead of echoed
+    // to the output of `npm test`, just as ct-groom-dryrun.test.js does.
     const out = execFileSync('node', [groomScript, specPath, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeGhEnv, stdio: ['ignore', 'pipe', 'pipe'] })
     const plan = JSON.parse(out)
     expect(plan.issues).toHaveLength(3)
@@ -596,20 +602,20 @@ describe('ct-init.sh', () => {
     expect(plan.issues[1].title).toBe('#2 barra')
     expect(plan.issues[2].title).toBe('#3 pantalla')
     expect(plan.issues[0].body).toContain('tabla `medicamentos`') // Entrega -> Descripción
-    // F21: el ejemplo sembrado no solo parsea — DEMUESTRA la columna Gate. La
-    // fila 2 es `backend` con `Gate: visual` (el caso real que motivó la
-    // columna) y la fila 3 es `ui` sin declarar nada, que recibe su gate
-    // igualmente. Si alguien cambiara el ejemplo por uno que no ejercita
-    // ninguno de los dos caminos, esto se entera.
-    expect(plan.issues[1].labels).toContain('gate:visual') // declarado, contra su Tipo
-    expect(plan.issues[2].labels).toContain('gate:visual') // implícito, por Tipo: ui
-    expect(plan.issues[0].labels).toContain('gate:plan') // F-jjponz-2: el defecto universal, también en el ejemplo
-    // Slice 10: el ejemplo DEMUESTRA la columna Señal en sus tres formas —
-    // la fila 2 declara su señal (sección en el body, verbatim), la fila 3 se
-    // exime con razón (N/A — <razón>, también al body), y la fila 1 no
-    // declara nada (sin sección). Calcado de los asserts de gate: si alguien
-    // cambiara el ejemplo por uno que no ejercita los tres caminos, esto se
-    // entera.
+    // F21: the seeded example does not only parse — it DEMONSTRATES the Gate
+    // column. Row 2 is `backend` with `Gate: visual` (the real case that
+    // motivated the column) and row 3 is `ui` declaring nothing, which receives
+    // its gate all the same. If somebody swapped the example for one that
+    // exercises neither of the two paths, this finds out.
+    expect(plan.issues[1].labels).toContain('gate:visual') // declared, against its Tipo
+    expect(plan.issues[2].labels).toContain('gate:visual') // implicit, from Tipo: ui
+    expect(plan.issues[0].labels).toContain('gate:plan') // F-jjponz-2: the universal default, in the example too
+    // Slice 10: the example DEMONSTRATES the Señal column in its three forms —
+    // row 2 declares its signal (a section in the body, verbatim), row 3 exempts
+    // itself with a reason (N/A — <razón>, also into the body), and row 1
+    // declares nothing (no section). Copied from the gate asserts: if somebody
+    // swapped the example for one that does not exercise the three paths, this
+    // finds out.
     expect(plan.issues[1].body).toContain('## Señal de observabilidad')
     expect(plan.issues[1].body).toContain('métrica `backfill_progress` con label `estado`')
     expect(plan.issues[2].body).toContain('N/A — pantalla sin telemetría nueva que prometer')
@@ -618,13 +624,13 @@ describe('ct-init.sh', () => {
     rmSync(specDir, { recursive: true, force: true })
   })
 
-  // Slice 10 — el contrato (v19, hoy v20 tras converger con la columna E2E)
-  // documenta la columna Señal: qué es, cómo se
-  // exime (`N/A — <razón>`, y que sin razón aborta), a dónde llega (sección
-  // del body → SLICE.md → paquete del juez de slice → ítem observabilidad) y
-  // que una celda sin valor se mide como sin-vara en la telemetría del epic.
-  // Un v18 no puede deducir ninguna de esas cosas.
-  it('el contrato documenta la columna Señal: la exención N/A — <razón>, a dónde llega y que sin valor es sin-vara', () => {
+  // Slice 10 — the contract (v19, today v20 after converging with the E2E
+  // column) documents the Señal column: what it is, how it is exempted (`N/A —
+  // <razón>`, and that without a reason it aborts), where it ends up (body
+  // section → SLICE.md → the slice judge's package → observability item) and
+  // that a cell with no value is measured as sin-vara in the epic's telemetry.
+  // A v18 can deduce none of those things.
+  it('the contract documents the Señal column: the N/A — <razón> exemption, where it ends up and that no value is sin-vara', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = leerContrato(dir)
@@ -635,36 +641,36 @@ describe('ct-init.sh', () => {
     expect(agents).toContain('.agent/SLICE.md')
     expect(agents).toContain('`observabilidad`')
     expect(agents).toContain('`sin-vara`')
-    // La línea de marcadores de "sin valor" nombra también a Señal.
+    // The line of "no value" markers names Señal too.
     expect(agents).toContain('Marcadores de "sin valor" (`Dep`/`Acepta`/`Protegido`/`Área`/`Toca`/`Gate`/`Señal`):')
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Slice 4 (apuntes de Capde) — el contrato v19 describía la columna pero no
-  // decía cuándo vale algo, y en una corrida real la señal declarada era una
-  // paráfrasis de los criterios de aceptación: el ítem `observabilidad` del juez
-  // midió lo que `estado-final` ya había medido. La frase vive en DOS sitios (el
-  // contrato que llega verbatim al AGENTS.md del repo usuario y el comando que
-  // lee quien groomea) y este test es lo que impide que uno de los dos se quede
-  // atrás.
-  it('el contrato dice que la señal no es un criterio de aceptación más, y ct-groom.md dice lo mismo', () => {
+  // Slice 4 (Capde's notes) — the v19 contract described the column but did not
+  // say when it is worth anything, and on a real run the declared signal was a
+  // paraphrase of the acceptance criteria: the judge's `observabilidad` item
+  // measured what `estado-final` had already measured. The sentence lives in TWO
+  // places (the contract that reaches the user repository's AGENTS.md verbatim
+  // and the command whoever grooms reads) and this test is what stops one of the
+  // two from falling behind.
+  it('the contract says the signal is not one more acceptance criterion, and ct-groom.md says the same', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = leerContrato(dir)
-    // La frase, en una sola línea (el bullet va envuelto a ~72 columnas: si el
-    // reflow la partiera, este assert es lo que lo caza).
+    // The sentence, on a single line (the bullet is wrapped at ~72 columns: if
+    // the reflow broke it, this assert is what catches it).
     expect(agents).toMatch(/no es un criterio de aceptación más/i)
-    // Y lo que la frase promete: producción frente a lo funcional, y el ítem que
-    // se queda sin medir nada nuevo cuando la señal repite un AC.
+    // And what the sentence promises: production against the functional, and the
+    // item that is left measuring nothing new when the signal repeats an AC.
     expect(agents).toMatch(/EN PRODUCCIÓN/)
     expect(agents).toContain('`estado-final`')
     expect(agents).toContain('`observabilidad`')
-    // Control: hasta el v21 el contrato no decía nada de esto — este test no
-    // pasa por una coincidencia de prosa que ya estuviera ahí. El control se
-    // ancla a ESA versión y no a `CONTRACT_VERSION - 1`: la frase entró con el
-    // v22, así que en cuanto un bump posterior trata de otra cosa (el v23 de
-    // #93, sin ir más lejos) «la versión anterior» ya la trae y deja de
-    // controlar nada.
+    // A check: up to v21 the contract said none of this — this test does not
+    // pass on a coincidence of prose that was already there. The check is
+    // anchored to THAT version and not to `CONTRACT_VERSION - 1`: the sentence
+    // came in with v22, so as soon as a later bump is about something else (#93's
+    // v23, to look no further) «the previous version» already carries it and
+    // stops checking anything.
     const VERSION_SIN_LA_FRASE = 21
     const anterior = bloquesEmitidos().find(({ block }) =>
       block.includes(`<!-- ct-init:slices-contract-version: ${VERSION_SIN_LA_FRASE} -->`)
@@ -672,38 +678,38 @@ describe('ct-init.sh', () => {
     expect(anterior, `no hay ningún bloque v${VERSION_SIN_LA_FRASE} ni en la historia ni en SQUASHED_BLOCK_FIXTURES`).toBeDefined()
     expect(anterior.block).not.toMatch(/no es un criterio de aceptación más/i)
     expect(anterior.block).not.toContain('`estado-final`')
-    // El otro documento que enseña la columna no puede quedarse atrás: quien
-    // groomea lee la referencia de /ct-groom, no el contrato del repo destino.
-    // Desde #93 esa referencia vive fuera del plugin, en docs/loop/ct-groom.md
-    // del repo (commands/ct-groom.md se quedó con la invocación y los exit
-    // codes), así que se lee de ahí.
+    // The other document that teaches the column cannot fall behind: whoever
+    // grooms reads /ct-groom's reference, not the target repository's contract.
+    // Since #93 that reference lives outside the plugin, in the repository's
+    // docs/loop/ct-groom.md (commands/ct-groom.md kept the invocation and the
+    // exit codes), so it is read from there.
     const groom = readFileSync(join(root, '..', 'docs', 'loop', 'ct-groom.md'), 'utf8')
     expect(groom).toMatch(/no es un criterio de aceptación más/i)
     expect(groom).toContain('`estado-final`')
-    // Slice 7: y el JUEZ mide con la MISMA regla, con las mismas palabras. El
-    // hueco del Slice 4 fue justo éste: la frase entró en los dos documentos y
-    // `git diff main...HEAD -- agents/` salió vacío, así que una señal calcada
-    // de los AC seguía satisfaciendo los tres checks del ítem. Normalizado
-    // porque el bullet del contrato va envuelto a ~72 columnas.
+    // Slice 7: and the JUDGE measures by the SAME rule, in the same words. Slice
+    // 4's gap was exactly this: the sentence went into both documents and `git
+    // diff main...HEAD -- agents/` came out empty, so a signal copied straight
+    // from the ACs still satisfied the item's three checks. Normalised because
+    // the contract's bullet is wrapped at ~72 columns.
     const norm = (s) => s.replace(/\s+/g, ' ')
     const REGLA = 'se puede comprobar corriendo los tests, es un criterio de aceptación, no una señal'
     expect(norm(agents)).toContain(REGLA)
     expect(norm(groom)).toContain(REGLA)
     const juez = readFileSync(join(root, 'agents', 'ct-slice-judge.md'), 'utf8')
     expect(norm(juez)).toContain(REGLA)
-    // El token con el que la telemetría/`grep` distingue este low de los demás
-    // lows del ítem, en los dos textos que lo prometen.
+    // The token with which telemetry/`grep` tells this low apart from the item's
+    // other lows, in the two texts that promise it.
     expect(norm(juez)).toContain('`señal redundante`')
     expect(norm(groom)).toContain('`señal redundante`')
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Slice 7: el ítem `observabilidad` cita la regla del contrato entre « », y
-  // esa cita tiene que ser LITERAL. Mismo patrón que kickoff.test.js usa con
-  // «it opens with `(sin señal declarada`»: se extrae la cita DEL FICHERO DEL
-  // AGENTE y se comprueba contra la fuente, para que el criterio del groom y el
-  // criterio del juicio no puedan derivar cada uno por su lado.
-  it('la cita del juez de slice es literalmente la regla del contrato', () => {
+  // Slice 7: the `observabilidad` item quotes the contract's rule between « »,
+  // and that quotation has to be LITERAL. The same pattern kickoff.test.js uses
+  // with «it opens with `(sin señal declarada`»: the quotation is extracted FROM
+  // THE AGENT'S FILE and checked against the source, so the groom's criterion and
+  // the judgement's criterion cannot each drift on their own.
+  it('the slice judge\'s quotation is literally the contract\'s rule', () => {
     const norm = (s) => s.replace(/\s+/g, ' ')
     const juez = readFileSync(join(root, 'agents', 'ct-slice-judge.md'), 'utf8')
     const cita = /«([^»]+)»/.exec(juez)
@@ -711,20 +717,19 @@ describe('ct-init.sh', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const bloque = extractBlock(leerContrato(dir))
-    // Las DOS normalizadas: la cita del agente va envuelta a ~73 columnas y el
-    // bullet del contrato a ~72, así que ninguna de las dos contiene a la otra
-    // sin colapsar los saltos de línea. (Verificado: sin normalizar `cita[1]`,
-    // este test falla.)
+    // BOTH normalised: the agent's quotation is wrapped at ~73 columns and the
+    // contract's bullet at ~72, so neither of the two contains the other without
+    // collapsing the line breaks. (Verified: without normalising `cita[1]`, this
+    // test fails.)
     expect(norm(bloque)).toContain(norm(cita[1]))
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Control de los cinco tests siguientes: el contrato ANTERIOR (fixture
-  // slices-contract-v1.md, el bloque real que sembraba la versión previa) no
-  // decía ninguna de estas cinco cosas. Sin esta comprobación, cualquiera de
-  // esos tests podría estar pasando por una coincidencia de prosa en vez de
-  // por el contenido que F6 añade.
-  it('control: el contrato anterior (v1) no decía nada de esto — los cinco tests siguientes no pasan por casualidad', () => {
+  // A check on the five tests that follow: the PREVIOUS contract (the fixture
+  // slices-contract-v1.md, the real block the earlier version seeded) said none
+  // of these five things. Without this check, any of those tests could be
+  // passing on a coincidence of prose instead of on the content F6 adds.
+  it('check: the previous contract (v1) said nothing of this — the five tests that follow do not pass by accident', () => {
     expect(V1_BLOCK).not.toContain('status:backlog')
     expect(V1_BLOCK).not.toContain('status:ready')
     expect(V1_BLOCK).not.toContain('\\,')
@@ -735,10 +740,10 @@ describe('ct-init.sh', () => {
     expect(V1_BLOCK).not.toContain('merge-after `#N`')
   })
 
-  // F6, grave 2: el contrato no mencionaba `status:backlog` ni una sola vez.
-  // Quien solo lee AGENTS.md groomeaba un epic entero y descubría después que
-  // /ct-next no veía ninguno de esos issues.
-  it('el contrato dice que los issues nacen en status:backlog, que promoverlos a status:ready es un paso humano, y con qué comando', () => {
+  // F6, serious 2: the contract did not mention `status:backlog` even once.
+  // Whoever reads only AGENTS.md groomed a whole epic and found out afterwards
+  // that /ct-next saw none of those issues.
+  it('the contract says issues are born in status:backlog, that promoting them to status:ready is a human step, and with which command', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = leerContrato(dir)
@@ -750,37 +755,37 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // F6, importante 3: "coma-separados" sin decir qué pasa con una coma
-  // DENTRO de un criterio — y la sección que genera se llama "Acceptance
-  // criteria (EARS…)", donde la coma es casi obligatoria.
-  it('el contrato explica que la coma separa siempre en "Acepta" y cómo escaparla', () => {
+  // F6, important 3: "comma-separated" without saying what happens with a comma
+  // INSIDE a criterion — and the section it generates is called "Acceptance
+  // criteria (EARS…)", where the comma is all but mandatory.
+  it('the contract explains that the comma always separates in "Acepta" and how to escape it', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = leerContrato(dir)
     expect(agents).toContain('\\,')
-    expect(agents).toMatch(/Protegido[\s\S]{0,400}la coma\s+\*\*no\*\*/i) // y dónde NO separa
+    expect(agents).toMatch(/Protegido[\s\S]{0,400}la coma\s+\*\*no\*\*/i) // and where it does NOT separate
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // F6, importante 4: el contrato hablaba de "la tabla §9" como si fuera un
-  // sitio fijo, sin decir de dónde sale el número de sección, si el milestone
-  // es obligatorio, ni por qué --project tiene las restricciones que tiene.
-  it('el contrato explica qué decisiones del autor dependen de --milestone/--section/--project', () => {
+  // F6, important 4: the contract spoke of "the §9 table" as if it were a fixed
+  // place, without saying where the section number comes from, whether the
+  // milestone is mandatory, nor why --project has the restrictions it has.
+  it('the contract explains which of the author\'s decisions depend on --milestone/--section/--project', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = leerContrato(dir)
     expect(agents).toContain('--milestone')
     expect(agents).toContain('--section')
     expect(agents).toContain('--project')
-    expect(agents).toMatch(/únicos \*\*dentro de su milestone\*\*/i) // el alcance real de los "#"
-    expect(agents).toMatch(/cabecera/i) // la tabla se localiza por cabecera, no por el número de sección
+    expect(agents).toMatch(/únicos \*\*dentro de su milestone\*\*/i) // the real scope of the "#"s
+    expect(agents).toMatch(/cabecera/i) // the table is located by its header, not by the section number
     expect(agents).toContain('Sprint')
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // F6, menor 5: "reutiliza el vocabulario que ya exista" sin decir cómo
-  // comprobarlo.
-  it('el contrato dice cómo comprobar qué labels existen ya en el repo', () => {
+  // F6, minor 5: "reuse the vocabulary that already exists" without saying how
+  // to check it.
+  it('the contract says how to check which labels already exist in the repository', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = leerContrato(dir)
@@ -788,9 +793,9 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // F6, grave 1: quien escribe la tabla tiene que saber que el "#N" que verá
-  // en el cuerpo del issue NO es un número de issue.
-  it('el contrato avisa de que el "#N" de merge-after es el orden de la tabla, no un issue de GitHub', () => {
+  // F6, serious 1: whoever writes the table has to know that the "#N" they will
+  // see in the issue's body is NOT an issue number.
+  it('the contract warns that merge-after\'s "#N" is the table\'s order, not a GitHub issue', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = leerContrato(dir)
@@ -800,7 +805,7 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('AGENTS.md existente SIN la sección del loop → se añade sin tocar el resto (caso "muy editado a mano")', () => {
+  it('an existing AGENTS.md WITHOUT the loop section → it is added without touching the rest (the "heavily hand-edited" case)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const heavilyEdited = [
       '# AGENTS.md',
@@ -818,27 +823,27 @@ describe('ct-init.sh', () => {
     expect(agents).toContain('Mi proyecto rarísimo con notas personales de Jose que no se deben perder.')
     expect(agents).toContain('ojo con el símbolo `#` en mis propias notas, no es un slice')
     expect(agents).toContain(LOOP_MARKER_OPEN)
-    // La sección añadida va DESPUÉS del contenido existente, no lo desplaza.
+    // The added section goes AFTER the existing content, it does not displace it.
     expect(agents.indexOf('notas personales')).toBeLessThan(agents.indexOf(LOOP_MARKER_OPEN))
-    // Y el contrato entero no entra en AGENTS.md: vive en su fichero.
+    // And the whole contract does not go into AGENTS.md: it lives in its file.
     expect(agents).not.toContain(MARKER_OPEN)
     expect(leerContrato(dir)).toContain(MARKER_OPEN)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('AGENTS.md existente SIN salto de línea final → añade la sección del loop sin corromper la última línea del usuario', () => {
+  it('an existing AGENTS.md WITHOUT a trailing newline → it adds the loop section without corrupting the user\'s last line', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
-    writeFileSync(join(dir, 'AGENTS.md'), '## Gotchas\n- última línea sin salto') // sin \n final, a propósito
+    writeFileSync(join(dir, 'AGENTS.md'), '## Gotchas\n- última línea sin salto') // no trailing \n, on purpose
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
     expect(agents).toContain('- última línea sin salto')
-    expect(agents).not.toMatch(/salto<!--/) // nunca fusionadas en la misma línea
+    expect(agents).not.toMatch(/salto<!--/) // never merged onto the same line
     expect(agents).not.toMatch(/salto##/)
     expect(agents).toContain(LOOP_MARKER_OPEN)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('AGENTS.md ya trae el contrato dentro (editado a mano por el usuario) → no se duplica ni se pisa, y tampoco recibe la sección corta', () => {
+  it('AGENTS.md already carries the contract inside it (hand-edited by the user) → it is neither duplicated nor trodden on, and it does not receive the short section either', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const customSection = [
       '# AGENTS.md',
@@ -852,24 +857,25 @@ describe('ct-init.sh', () => {
     writeFileSync(join(dir, 'AGENTS.md'), customSection)
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
-    // El contrato editado no se toca ni una letra; la sección de travesía SÍ
-    // se añade (le faltaba, igual que a cualquier AGENTS.md que no la trae).
-    // La del loop no: mientras el contrato siga ahí dentro, añadirla contaría
-    // el mismo tema dos veces — el aviso de migración dice cómo salir de ahí.
+    // The edited contract is not touched by so much as a letter; the journey
+    // section IS added (it was missing, as in any AGENTS.md that does not carry
+    // it). The loop's is not: while the contract is still in there, adding it
+    // would tell the same story twice — the migration warning says how to get
+    // out of that.
     expect(agents).toBe(withE2eAppended(customSection, { loop: false }))
     const occurrences = agents.split('<!-- ct-init:slices-contract -->').length - 1
-    expect(occurrences).toBe(1) // no duplicada
+    expect(occurrences).toBe(1) // not duplicated
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Review de F2, punto 2: si alguien se carga el marcador de APERTURA pero
-  // deja el heading y el cuerpo (y el marcador de cierre), el `grep -qF` del
-  // marcador de apertura no encuentra nada → el script cree que la sección
-  // no está y añade una SEGUNDA copia entera, en silencio, exit 0: dos
-  // headings "## Formato de la tabla §9...", un marcador de cierre huérfano.
-  // Debe, en su lugar, detectar el rastro parcial (heading O cierre sin el
-  // par completo) y avisar sin añadir nada.
-  it('AGENTS.md con el marcador de APERTURA borrado (heading + cuerpo + cierre intactos) → avisa, no duplica', () => {
+  // F2's review, point 2: if somebody wipes out the OPENING marker but leaves
+  // the heading and the body (and the closing marker), the `grep -qF` for the
+  // opening marker finds nothing → the script believes the section is not there
+  // and adds a SECOND whole copy, in silence, exit 0: two "## Formato de la
+  // tabla §9..." headings, one orphan closing marker. It must instead detect the
+  // partial trace (heading OR closing marker without the complete pair) and warn
+  // without adding anything.
+  it('an AGENTS.md with the OPENING marker deleted (heading + body + closing marker intact) → it warns, it does not duplicate', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const orphan = [
       '# AGENTS.md',
@@ -882,17 +888,17 @@ describe('ct-init.sh', () => {
     writeFileSync(join(dir, 'AGENTS.md'), orphan)
     const output = execFileSync('bash', ['-c', `bash '${script}' '${dir}' 2>&1`], { encoding: 'utf8' })
     const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
-    // El rastro parcial del contrato no se toca ni una letra; la sección de
-    // travesía SÍ se añade — es independiente de en qué estado esté el
-    // contrato.
+    // The contract's partial trace is not touched by so much as a letter; the
+    // journey section IS added — it is independent of whatever state the
+    // contract is in.
     expect(agents).toBe(withE2eAppended(orphan))
     const headingOccurrences = agents.split('## Formato de la tabla §9').length - 1
-    expect(headingOccurrences).toBe(1) // no duplicado
+    expect(headingOccurrences).toBe(1) // not duplicated
     expect(output.toLowerCase()).toMatch(/aviso|warning/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('AGENTS.md con el marcador de CIERRE borrado (apertura + heading + cuerpo intactos) → avisa, no duplica', () => {
+  it('an AGENTS.md with the CLOSING marker deleted (opening marker + heading + body intact) → it warns, it does not duplicate', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const orphan = [
       '# AGENTS.md',
@@ -905,37 +911,37 @@ describe('ct-init.sh', () => {
     writeFileSync(join(dir, 'AGENTS.md'), orphan)
     const output = execFileSync('bash', ['-c', `bash '${script}' '${dir}' 2>&1`], { encoding: 'utf8' })
     const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
-    // Mismo motivo que en el caso de la apertura borrada: el contrato no se
-    // toca, pero la sección de travesía se añade porque le faltaba. La sección
-    // corta del loop NO: este AGENTS.md conserva el marcador de apertura del
-    // contrato, y añadirla dejaría el mismo tema contado dos veces.
+    // The same reason as in the deleted-opening case: the contract is not
+    // touched, but the journey section is added because it was missing. The
+    // loop's short section is NOT: this AGENTS.md keeps the contract's opening
+    // marker, and adding it would leave the same story told twice.
     expect(agents).toBe(withE2eAppended(orphan, { loop: false }))
     const headingOccurrences = agents.split('## Formato de la tabla §9').length - 1
-    expect(headingOccurrences).toBe(1) // no duplicado
+    expect(headingOccurrences).toBe(1) // not duplicated
     expect(output.toLowerCase()).toMatch(/aviso|warning/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('correrlo tres veces seguidas es idempotente: ni la sección del loop ni el contrato se duplican', () => {
+  it('running it three times in a row is idempotent: neither the loop section nor the contract gets duplicated', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
     expect(agents.split(LOOP_MARKER_OPEN).length - 1).toBe(1)
-    // Y el contrato, en su fichero, sigue siendo uno: ni el marcador ni el
-    // fichero se duplican por correr el scaffolder otra vez.
+    // And the contract, in its file, is still one: neither the marker nor the
+    // file gets duplicated by running the scaffolder again.
     expect(leerContrato(dir).split(MARKER_OPEN).length - 1).toBe(1)
     rmSync(dir, { recursive: true, force: true })
   })
 
   // ==========================================================================
-  // F6, menor 6 — una corrección del contrato no llegaba a los repos ya
-  // bootstrapeados: ct-init detecta la sección entre sus marcadores y no la
-  // toca (correcto por defecto, para no pisar ediciones a mano), así que todo
-  // lo arreglado aquí se quedaba en el plugin para siempre.
+  // F6, minor 6 — a correction to the contract never reached already
+  // bootstrapped repositories: ct-init detects the section between its markers
+  // and does not touch it (correct by default, so as not to tread on hand
+  // edits), so everything fixed here stayed in the plugin forever.
   // ==========================================================================
-  it('el contrato sembrado declara su versión, y una segunda corrida dice que está al día (sin avisar de nada)', () => {
+  it('the seeded contract declares its version, and a second run says it is up to date (warning about nothing)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     expect(leerContrato(dir)).toMatch(/<!-- ct-init:slices-contract-version: \d+ -->/)
@@ -946,11 +952,11 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('contrato de una versión ANTERIOR (v1, sin línea de versión) → lo dice y explica cómo actualizarlo; no toca nada', () => {
+  it('a contract from a PREVIOUS version (v1, with no version line) → it says so and explains how to update it; it touches nothing', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const before = sembrarContrato(dir, conContrato(V1_BLOCK, 'mis notas'))
     const res = spawnSync('bash', [script, dir], { encoding: 'utf8' })
-    expect(res.status).toBe(0) // avisar no es fallar
+    expect(res.status).toBe(0) // warning is not failing
     expect(res.stderr).toMatch(/v1/)
     expect(res.stderr).toMatch(new RegExp(`v${CONTRACT_VERSION}`))
     expect(res.stderr).toContain('--update-slices-contract')
@@ -958,7 +964,7 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('--update-slices-contract sobre un contrato v1 SIN TOCAR → lo reemplaza por el actual y deja intacto el resto del fichero', () => {
+  it('--update-slices-contract over an UNTOUCHED v1 contract → it replaces it with the current one and leaves the rest of the file intact', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     sembrarContrato(dir, conContrato(V1_BLOCK, 'mis notas irremplazables').replace('## Después\n- intocable', '## Lo que va después\n- tampoco se toca'))
     const res = spawnSync('bash', [script, dir, '--update-slices-contract'], { encoding: 'utf8' })
@@ -968,49 +974,49 @@ describe('ct-init.sh', () => {
     expect(agents).toContain('- mis notas irremplazables')
     expect(agents).toContain('## Lo que va después')
     expect(agents).toContain('- tampoco se toca')
-    expect(agents).toContain('status:ready') // contenido nuevo, de verdad
-    expect(agents.split(MARKER_OPEN).length - 1).toBe(1) // exactamente un bloque
+    expect(agents).toContain('status:ready') // new content, for real
+    expect(agents.split(MARKER_OPEN).length - 1).toBe(1) // exactly one block
     expect(agents.split(MARKER_CLOSE).length - 1).toBe(1)
     expect(agents).toMatch(versionLineRe())
-    // Y correrlo otra vez ya no tiene nada que hacer.
+    // And running it again has nothing left to do.
     const again = spawnSync('bash', [script, dir, '--update-slices-contract'], { encoding: 'utf8' })
     expect(again.status).toBe(0)
     expect(again.stdout).toMatch(/al día/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('--update-slices-contract sobre un bloque NO RECONOCIDO → se niega, y dice que puede ser una edición a mano O una versión que no conoce (sin elegir)', () => {
+  it('--update-slices-contract over an UNRECOGNISED block → it refuses, and says it may be a hand edit OR a version it does not know (without choosing)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const edited = V1_BLOCK.replace('- **Tipo** *(opcional)*', '- **Tipo** *(opcional; en ESTE repo también usamos `ios`)*')
-    expect(edited).not.toBe(V1_BLOCK) // control: la edición se aplicó de verdad
+    expect(edited).not.toBe(V1_BLOCK) // a check: the edit really was applied
     const before = `# AGENTS.md\n\n${edited}`
     writeFileSync(join(dir, 'AGENTS.md'), before)
     const res = spawnSync('bash', [script, dir, '--update-slices-contract'], { encoding: 'utf8' })
-    expect(res.status).toBe(3) // se pidió actualizar y no se pudo: no es un éxito
-    // F9: lo que el script SABE es que ese hash no está en su lista. Que sea
-    // una edición del usuario es UNA de las dos lecturas posibles, y no puede
-    // distinguirlas — así que no puede afirmar ninguna. Antes decía "la has
-    // editado a mano" a secas, y con eso acusaba a quien solo tenía un
-    // AGENTS.md sembrado por una versión anterior del plugin.
+    expect(res.status).toBe(3) // an update was asked for and could not be done: that is not a success
+    // F9: what the script KNOWS is that that hash is not in its list. That it is
+    // an edit of the user's is ONE of the two possible readings, and it cannot
+    // tell them apart — so it cannot assert either. It used to say "la has
+    // editado a mano" flatly, and with that it accused someone who merely had an
+    // AGENTS.md seeded by an earlier version of the plugin.
     expect(res.stderr).not.toMatch(/la has editado a mano/)
     expect(res.stderr).toMatch(/edición a mano/) // (a)
     expect(res.stderr).toMatch(/versión del plugin cuyo hash este ct-init no lleva registrado/) // (b)
     expect(res.stderr).toMatch(/NO hay forma de distinguirlas/)
-    // Y da el dato con el que salir de dudas / conseguir que se registre.
+    // And it gives the datum with which to settle the doubt / get it recorded.
     expect(res.stderr).toContain(sha256(extractBlock(before)))
     expect(res.stderr).toContain('--force')
     expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toBe(before)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('--update-slices-contract --force sobre un contrato no reconocido → lo sobrescribe, y avisa en condicional (no afirma que hubiera ediciones)', () => {
+  it('--update-slices-contract --force over an unrecognised contract → it overwrites it, and warns in the conditional (it does not assert that there were edits)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const edited = V1_BLOCK.replace('- **Tipo** *(opcional)*', '- **Tipo** *(opcional; en ESTE repo también usamos `ios`)*')
     sembrarContrato(dir, `# Contrato de slices\n\n${edited}`)
     const res = spawnSync('bash', [script, dir, '--update-slices-contract', '--force'], { encoding: 'utf8' })
     expect(res.status).toBe(0)
     expect(res.stderr).toMatch(/no coincidía con ninguna versión que este ct-init sepa reconocer/)
-    expect(res.stderr).toMatch(/Si había ediciones tuyas/) // condicional, no "tus cambios se han perdido"
+    expect(res.stderr).toMatch(/Si había ediciones tuyas/) // conditional, not "your changes have been lost"
     expect(res.stderr).not.toMatch(/EDITADA A MANO/)
     const contrato = leerContrato(dir)
     expect(contrato).not.toContain('en ESTE repo también usamos')
@@ -1018,11 +1024,11 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // #93 — la otra mitad de ese mismo `--force`: un AGENTS.md que todavía lleva
-  // el contrato dentro y cuyo bloque no se reconoce. Lo que hace `--force` ahí
-  // no es actualizar el bloque en su sitio: es SACARLO, dejando en su lugar la
-  // sección corta que enlaza al contrato de verdad.
-  it('--update-slices-contract --force saca de AGENTS.md un contrato no reconocido y deja la sección corta', () => {
+  // #93 — the other half of that same `--force`: an AGENTS.md that still carries
+  // the contract inside it and whose block is not recognised. What `--force`
+  // does there is not to update the block in place: it TAKES IT OUT, leaving in
+  // its place the short section that links to the real contract.
+  it('--update-slices-contract --force takes an unrecognised contract out of AGENTS.md and leaves the short section', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const edited = V1_BLOCK.replace('- **Tipo** *(opcional)*', '- **Tipo** *(opcional; en ESTE repo también usamos `ios`)*')
     writeFileSync(join(dir, 'AGENTS.md'), `# AGENTS.md\n\n## Gotchas\n- mías\n\n${edited}`)
@@ -1033,31 +1039,31 @@ describe('ct-init.sh', () => {
     expect(agents).not.toContain('en ESTE repo también usamos')
     expect(agents).not.toContain(MARKER_OPEN)
     expect(agents).toContain(LOOP_MARKER_OPEN)
-    expect(agents).toContain('- mías') // lo de alrededor no se toca
-    // Y el contrato de verdad está donde ahora vive, con la versión de hoy.
+    expect(agents).toContain('- mías') // what is around it is not touched
+    // And the real contract is where it now lives, with today's version.
     expect(leerContrato(dir)).toMatch(versionLineRe())
     rmSync(dir, { recursive: true, force: true })
   })
 
   // ==========================================================================
-  // F9 — el caso real: un AGENTS.md sembrado por el plugin 0.5.1, byte a byte
-  // como salió de ct-init, recibía "la has editado a mano" y exit 3. El
-  // contenido del bloque cambió nueve veces (ocho de ellas llamándose todas
-  // "v1"), y SLICES_PRISTINE_HASHES solo registraba dos de esos nueve.
+  // F9 — the real case: an AGENTS.md seeded by plugin 0.5.1, byte for byte as it
+  // came out of ct-init, got "la has editado a mano" and exit 3. The block's
+  // content changed nine times (eight of them all called "v1"), and
+  // SLICES_PRISTINE_HASHES recorded only two of those nine.
   // ==========================================================================
-  it('TODO bloque que ct-init emitió alguna vez, intacto, se actualiza con --update-slices-contract sin --force y sin acusar a nadie', () => {
+  it('EVERY block ct-init ever emitted, untouched, updates with --update-slices-contract without --force and without accusing anybody', () => {
     const historical = bloquesEmitidos()
-    // Control: si esto no reconstruye varias versiones, el test no prueba nada.
+    // A check: if this does not reconstruct several versions, the test proves nothing.
     expect(historical.length).toBeGreaterThanOrEqual(9)
-    // El control de "la reconstrucción llega hasta hoy" tolera un bump del
-    // contrato todavía SIN comitear (el flujo de ct-step comitea después del
-    // juez, así que el árbol de trabajo va por delante del historial durante
-    // el propio slice que sube la versión): si el bloque del árbol no está
-    // aún en ningún commit, lo que se exige en su lugar es que su hash ya
-    // esté registrado en SLICES_PRISTINE_HASHES — el mismo trato del árbol
-    // de trabajo que ya aplica "no registra hashes de bloques que no
-    // existieron nunca" (known.add del bloque del árbol). En cuanto el bump
-    // se comitea, la rama estricta vuelve a regir sola.
+    // The "the reconstruction reaches today" check tolerates a contract bump
+    // still UNCOMMITTED (ct-step's flow commits after the judge, so the working
+    // tree runs ahead of the history during the very slice that bumps the
+    // version): if the tree's block is not yet in any commit, what is demanded
+    // instead is that its hash already be recorded in SLICES_PRISTINE_HASHES —
+    // the same treatment of the working tree that "it records no hashes of
+    // blocks that never existed" already applies (the known.add of the tree's
+    // block). As soon as the bump is committed, the strict branch rules on its
+    // own again.
     const bloqueDeHoy = extractBlock(seedFreshContrato())
     const current = historical.find((h) => sha256(h.block) === sha256(bloqueDeHoy))
     if (!current) expect(initScriptSrc).toContain(sha256(bloqueDeHoy))
@@ -1068,7 +1074,7 @@ describe('ct-init.sh', () => {
       expect(res.status, `${commit}: ${res.stderr}`).toBe(0)
       expect(res.stderr, commit).not.toMatch(/editado a mano|EDITADA A MANO|no coincide/)
       const contrato = leerContrato(dir)
-      // Queda el contrato actual, y el resto del fichero sin tocar.
+      // The current contract is left, and the rest of the file untouched.
       expect(contrato, commit).toContain(`- notas de ${commit}`)
       expect(contrato, commit).toContain('- intocable')
       expect(contrato, commit).toMatch(versionLineRe())
@@ -1077,13 +1083,14 @@ describe('ct-init.sh', () => {
     }
   })
 
-  // RESERVA 2 del for_developers: el camino que recorre un repo real cuando se
-  // publica un bump — bloque de la versión anterior INTACTO, `--update-slices-contract`
-  // sin `--force`. El bucle de arriba ya lo pisa, pero no exige que el bloque
-  // vN-1 esté en la historia: si un squash volviera a esconderlo (que es cómo se
-  // perdió el v17), el bucle seguiría verde sin cubrir este camino. Sin números
-  // hardcodeados: sube solo con CONTRACT_VERSION.
-  it('un repo con el bloque de la versión ANTERIOR intacto sube al contrato actual sin --force', () => {
+  // RESERVE 2 of the for_developers: the path a real repository walks when a
+  // bump is published — the previous version's block INTACT,
+  // `--update-slices-contract` without `--force`. The loop above already treads
+  // it, but it does not demand that the vN-1 block be in the history: if a squash
+  // hid it again (which is how v17 was lost), the loop would stay green without
+  // covering this path. With no hardcoded numbers: it goes up on its own with
+  // CONTRACT_VERSION.
+  it('a repository with the PREVIOUS version\'s block intact moves up to the current contract without --force', () => {
     const anterior = bloquesEmitidos().find(({ block }) =>
       block.includes(`<!-- ct-init:slices-contract-version: ${CONTRACT_VERSION - 1} -->`)
     )
@@ -1102,10 +1109,11 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('sin poder calcular el sha256 (ni shasum ni sha256sum) NO se acusa a nadie: se dice que no se ha podido comprobar, y no se toca nada', () => {
-    // La comprobación de "sin editar" es lo único que separa un update seguro
-    // de pisar trabajo ajeno. Si la máquina no puede hacerla, el estado no es
-    // "editado a mano" — es "no se sabe", y no tiene el mismo remedio.
+  it('with no way to compute the sha256 (neither shasum nor sha256sum) NOBODY is accused: it says it could not be checked, and it touches nothing', () => {
+    // The "unedited" check is the only thing that separates a safe update from
+    // treading on somebody else's work. If the machine cannot do it, the state
+    // is not "hand-edited" — it is "not known", and it does not have the same
+    // remedy.
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const before = `# AGENTS.md\n\n${V1_BLOCK}`
     writeFileSync(join(dir, 'AGENTS.md'), before)
@@ -1115,7 +1123,7 @@ describe('ct-init.sh', () => {
       const found = spawnSync('/bin/sh', ['-c', `command -v ${tool}`], { encoding: 'utf8' }).stdout.trim()
       if (found) symlinkSync(found, join(binDir, tool))
     }
-    // Control: en este PATH no hay con qué hashear.
+    // A check: on this PATH there is nothing to hash with.
     for (const h of ['shasum', 'sha256sum']) {
       expect(existsSync(join(binDir, h))).toBe(false)
     }
@@ -1125,14 +1133,15 @@ describe('ct-init.sh', () => {
     expect(res.stderr).toMatch(/no se ha podido comprobar/)
     expect(res.stderr).toMatch(/puede estar perfectamente intacto, simplemente no se sabe/)
     expect(res.stderr).not.toMatch(/editad[oa] a mano/i)
-    expect(res.stderr).toMatch(/sha256sum/) // dice cómo desbloquearlo
+    expect(res.stderr).toMatch(/sha256sum/) // it says how to unblock it
     expect(readFileSync(join(dir, 'AGENTS.md'), 'utf8')).toBe(before)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el aviso de "hay una versión más nueva" dice si actualizar es seguro, en vez del genérico "podrías tenerla editada"', () => {
-    // Sin el flag, ct-init solo avisa — pero ya sabe en qué estado está el
-    // bloque, así que puede decir si el update va a funcionar o a negarse.
+  it('the "there is a newer version" warning says whether updating is safe, instead of the generic "you may have edited it"', () => {
+    // Without the flag, ct-init only warns — but it already knows what state the
+    // block is in, so it can say whether the update is going to work or to
+    // refuse.
     const intact = mkdtempSync(join(tmpdir(), 'ct-'))
     writeFileSync(join(intact, 'AGENTS.md'), `# AGENTS.md\n\n${V1_BLOCK}`)
     const a = spawnSync('bash', [script, intact], { encoding: 'utf8' })
@@ -1145,49 +1154,50 @@ describe('ct-init.sh', () => {
     const b = spawnSync('bash', [script, changed], { encoding: 'utf8' })
     expect(b.stderr).toMatch(/no coincide con ningún bloque que este ct-init reconozca/)
     expect(b.stderr).toMatch(/puede ser una edición tuya o una versión que no tiene registrada/)
-    expect(b.stderr).toMatch(/[0-9a-f]{64}/) // el hash, para poder registrarlo
+    expect(b.stderr).toMatch(/[0-9a-f]{64}/) // the hash, so it can be recorded
     rmSync(changed, { recursive: true, force: true })
   })
 
   // ==========================================================================
-  // F9, caso que no estaba en el encargo: saltos de línea CRLF. Todos los
-  // marcadores se buscaban con `grep -qxF`, que con un `\r` pegado al final no
-  // encuentra nada — ni apertura, ni cierre, ni heading. El script concluía
-  // "aquí no hay sección" y añadía una SEGUNDA copia entera, en silencio.
+  // F9, a case that was not in the commission: CRLF line endings. Every marker
+  // was searched for with `grep -qxF`, which with a `\r` stuck on the end finds
+  // nothing — not the opening, not the closing, not the heading. The script
+  // concluded "there is no section here" and added a SECOND whole copy, in
+  // silence.
   // ==========================================================================
-  it('un contrato con saltos CRLF no recibe una segunda copia del bloque: se reconoce el que ya tiene', () => {
+  it('a contract with CRLF line endings does not receive a second copy of the block: the one it already has is recognised', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const crlf = `# Contrato de slices\n\n## Notas\n- notas\n\n${V1_BLOCK}`.replace(/\n/g, '\r\n')
     sembrarContrato(dir, crlf)
     const res = spawnSync('bash', [script, dir], { encoding: 'utf8' })
     expect(res.status).toBe(0)
     const contrato = leerContrato(dir)
-    expect(contrato.split(MARKER_OPEN).length - 1).toBe(1) // no una segunda copia
+    expect(contrato.split(MARKER_OPEN).length - 1).toBe(1) // not a second copy
     expect(contrato.split('## Formato de la tabla §9').length - 1).toBe(1)
-    expect(contrato).toBe(crlf) // no se toca nada
-    // Y se da el aviso que le tocaba dar (antes se lo saltaba entero).
+    expect(contrato).toBe(crlf) // nothing is touched
+    // And the warning it was due to give is given (it used to skip it entirely).
     expect(res.stderr).toMatch(/es del contrato v1/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('un bloque intacto con CRLF se reconoce como intacto y se actualiza sin --force, conservando los saltos CRLF', () => {
+  it('an intact block with CRLF is recognised as intact and updates without --force, keeping the CRLF line endings', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const crlf = `# Contrato de slices\n\n## Notas\n- notas\n\n${V1_BLOCK}`.replace(/\n/g, '\r\n')
     sembrarContrato(dir, crlf)
     const res = spawnSync('bash', [script, dir, '--update-slices-contract'], { encoding: 'utf8' })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/actualizado/)
-    expect(res.stderr).not.toMatch(/no coincide|editad/i) // los saltos no son una edición
+    expect(res.stderr).not.toMatch(/no coincide|editad/i) // line endings are not an edit
     const contrato = leerContrato(dir)
     expect(contrato.split(MARKER_OPEN).length - 1).toBe(1)
     expect(contrato).toContain('- notas')
     expect(contrato).toMatch(versionLineRe())
-    // El bloque nuevo mantiene CRLF: nada de dejar el fichero a medias.
+    // The new block keeps CRLF: no leaving the file half done.
     expect(contrato).not.toMatch(/[^\r]\n/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('un contrato de una versión MÁS NUEVA que la del plugin no se llama "al día": se dice que el desactualizado es el plugin', () => {
+  it('a contract from a version NEWER than the plugin\'s is not called "up to date": it is said that the out-of-date one is the plugin', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const seeded = leerContrato(dir)
@@ -1198,37 +1208,38 @@ describe('ct-init.sh', () => {
     expect(res.stdout).not.toMatch(/al día/)
     expect(res.stderr).toMatch(new RegExp(`v${CONTRACT_VERSION + 1}`))
     expect(res.stderr).toMatch(/más nueva del plugin/)
-    expect(leerContrato(dir)).toBe(fromFuture) // no se degrada
+    expect(leerContrato(dir)).toBe(fromFuture) // it is not downgraded
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('la versión se lee del BLOQUE: una línea de versión citada más arriba en el AGENTS.md no secuestra el diagnóstico', () => {
+  it('the version is read from the BLOCK: a version line quoted further up in the AGENTS.md does not hijack the diagnosis', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
-    // El usuario documenta el marcador en sus propias notas, más arriba.
+    // The user documents the marker in their own notes, further up.
     const before = sembrarContrato(dir, `# Contrato de slices\n\n## Notas\n- el bloque lo marca \`<!-- ct-init:slices-contract-version: 99 -->\`\n\n${V1_BLOCK}`)
     const res = spawnSync('bash', [script, dir], { encoding: 'utf8' })
     expect(res.status).toBe(0)
-    expect(res.stdout).not.toMatch(/v99/) // antes: "contrato v99, al día", sin mirar el bloque
+    expect(res.stdout).not.toMatch(/v99/) // before: "contrato v99, al día", without looking at the block
     expect(res.stderr).toMatch(/es del contrato v1/)
     expect(res.stderr).toContain('--update-slices-contract')
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('un bloque que ya declara la versión actual pero con OTRO contenido no se despacha como "al día" cuando se pide actualizar', () => {
+  it('a block that already declares the current version but with DIFFERENT content is not waved through as "up to date" when an update is asked for', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const seeded = leerContrato(dir)
     const tweaked = seeded.replace('status:backlog', 'status:backlog-de-la-casa')
     expect(tweaked).not.toBe(seeded)
     writeFileSync(contratoPath(dir), tweaked)
-    // Corrida normal: se calla (el número de versión ES el actual y no hay
-    // nada que ofrecer — avisar aquí sería ruido en cada sesión).
+    // A normal run: it keeps quiet (the version number IS the current one and
+    // there is nothing to offer — warning here would be noise in every
+    // session).
     const plain = spawnSync('bash', [script, dir], { encoding: 'utf8' })
     expect(plain.stdout).toMatch(/al día/)
     expect(plain.stderr).not.toMatch(/aviso/)
-    // Pero si se PIDE sincronizar, decir "al día" sería tapar que el texto no
-    // es el de este plugin — que es exactamente lo que pasó nueve veces bajo
-    // el nombre "v1".
+    // But if a sync is ASKED FOR, saying "al día" would cover up that the text
+    // is not this plugin's — which is exactly what happened nine times under the
+    // name "v1".
     const asked = spawnSync('bash', [script, dir, '--update-slices-contract'], { encoding: 'utf8' })
     expect(asked.status).toBe(0)
     expect(asked.stdout).not.toMatch(/al día/)
@@ -1238,18 +1249,18 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('sin --update-slices-contract, --force por sí solo no toca un contrato desactualizado (el opt-in es el otro flag)', () => {
+  it('without --update-slices-contract, --force on its own does not touch an out-of-date contract (the opt-in is the other flag)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const before = sembrarContrato(dir, `# Contrato de slices\n\n${V1_BLOCK}`)
     const res = spawnSync('bash', [script, dir, '--force'], { encoding: 'utf8' })
     expect(res.status).toBe(0)
-    // El contrato v1 no se toca: --force sin --update-slices-contract no hace
-    // nada sobre él.
+    // The v1 contract is not touched: --force without --update-slices-contract
+    // does nothing to it.
     expect(leerContrato(dir)).toBe(before)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('una opción desconocida aborta en vez de ignorarse en silencio', () => {
+  it('an unknown option aborts instead of being ignored in silence', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const res = spawnSync('bash', [script, dir, '--updat-slices-contract'], { encoding: 'utf8' })
     expect(res.status).toBe(2)
@@ -1257,12 +1268,12 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Autovigilancia: la detección de "sin tocar" se apoya en una lista de
-  // hashes DENTRO del script. Si alguien edita el bloque y olvida registrar
-  // el hash nuevo, la versión siguiente no podría reconocer a esta como
-  // intacta (y ningún repo con ella podría actualizarse sin --force) — un
-  // fallo que no se vería hasta la próxima ronda, en el repo de un usuario.
-  it('el hash del bloque que se siembra HOY está registrado en SLICES_PRISTINE_HASHES (y el del fixture v1 también)', () => {
+  // Self-watch: the "untouched" detection rests on a list of hashes INSIDE the
+  // script. If somebody edits the block and forgets to record the new hash, the
+  // next version could not recognise this one as intact (and no repository
+  // carrying it could update without --force) — a failure that would not be seen
+  // until the next round, in a user's repository.
+  it('the hash of the block seeded TODAY is recorded in SLICES_PRISTINE_HASHES (and the v1 fixture\'s too)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const block = extractBlock(leerContrato(dir))
@@ -1272,21 +1283,21 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // F9 — el test de arriba solo cubre el bloque de HOY, y por eso F6 pudo
-  // registrar dos hashes creyendo que eran todos: la lista puede quedarse
-  // corta por abajo (una variante antigua que nunca se registró) o encogerse
-  // (alguien "limpia" un hash viejo creyéndolo muerto), y ninguna de las dos
-  // se nota hasta que un usuario con esa variante recibe una acusación falsa.
-  // Este cierra el hueco: la fuente de verdad no es la memoria de nadie, es el
-  // historial de git. Entre los dos cubren todo — este, lo commiteado; el de
-  // arriba, el árbol de trabajo todavía sin commitear.
-  // Lo que este NO cubre, a propósito: los bloques que el squash borró de la
-  // historia. De esos se ocupa "cada bloque guardado por squash sigue hasheando
-  // a su hash registrado", que es el guardián específico y da mejor mensaje.
-  // Meterlos aquí lo convertiría en un duplicado suyo.
-  it('todo bloque que ct-init emitió alguna vez en la historia está registrado en SLICES_PRISTINE_HASHES', () => {
+  // F9 — the test above covers only TODAY's block, and that is why F6 could
+  // record two hashes believing they were all of them: the list can fall short
+  // at the bottom (an old variant that was never recorded) or shrink (somebody
+  // "tidies up" an old hash believing it dead), and neither of the two is
+  // noticed until a user with that variant receives a false accusation. This one
+  // closes the gap: the source of truth is nobody's memory, it is git's history.
+  // Between the two they cover everything — this one, what is committed; the one
+  // above, the working tree not yet committed.
+  // What this one does NOT cover, on purpose: the blocks the squash deleted from
+  // the history. Those are the business of "every block kept because of a squash
+  // still hashes to its recorded hash", which is the specific guard and gives a
+  // better message. Putting them in here would turn it into a duplicate of it.
+  it('every block ct-init ever emitted in the history is recorded in SLICES_PRISTINE_HASHES', () => {
     const historical = historicalContractBlocks()
-    expect(historical.length).toBeGreaterThanOrEqual(9) // control: se reconstruyó de verdad
+    expect(historical.length).toBeGreaterThanOrEqual(9) // a check: it really did reconstruct
     const missing = historical
       .filter(({ hash }) => !initScriptSrc.includes(hash))
       .map(({ commit, hash }) => `${commit} → ${hash}`)
@@ -1299,7 +1310,7 @@ describe('ct-init.sh', () => {
     ).toEqual([])
   })
 
-  it('la reconstrucción histórica alcanza el commit de HOY: el bloque de HEAD está entre los que ve', () => {
+  it('the historical reconstruction reaches TODAY\'s commit: HEAD\'s block is among the ones it sees', () => {
     const deHead = extractBlockFromSource(initScriptSrc)
     expect(
       historicalContractBlocks().map(({ block }) => block),
@@ -1309,23 +1320,23 @@ describe('ct-init.sh', () => {
     ).toContain(deHead)
   })
 
-  it('el extractor textual del historial coincide con lo que ct-init emite de verdad al correr', () => {
-    // El test de arriba lee los bloques históricos de la FUENTE de cada
-    // ct-init.sh (entre marcadores, dentro de su heredoc) en vez de ejecutar
-    // cada versión. Si ese atajo dejara de ser fiel, el guardián dejaría de
-    // guardar nada sin que nadie se enterase.
+  it('the textual extractor of the history matches what ct-init really emits when it runs', () => {
+    // The test above reads the historical blocks from the SOURCE of each
+    // ct-init.sh (between markers, inside its heredoc) instead of running each
+    // version. Were that shortcut to stop being faithful, the guard would stop
+    // guarding anything without anybody finding out.
     const emitted = extractBlock(seedFreshContrato())
     expect(extractBlockFromSource(initScriptSrc)).toBe(emitted)
   })
 
-  it('SLICES_PRISTINE_HASHES no registra hashes de bloques que no existieron nunca', () => {
-    // La otra dirección: un hash INVENTADO hace que ct-init reemplace en
-    // silencio algo que no reconoce de verdad. Todo hash registrado tiene que
-    // corresponder a un bloque real, y "real" tiene tres fuentes posibles: la
-    // historia de main, el árbol de trabajo, y los bloques que un merge con
-    // squash borró de la historia pero que se pushearon y viven aquí como
-    // fixture (ver SQUASHED_BLOCK_FIXTURES arriba). Las tres son contenido: en
-    // ninguna se cree a un comentario.
+  it('SLICES_PRISTINE_HASHES records no hashes of blocks that never existed', () => {
+    // The other direction: a MADE-UP hash makes ct-init silently replace
+    // something it does not really recognise. Every recorded hash has to
+    // correspond to a real block, and "real" has three possible sources: main's
+    // history, the working tree, and the blocks a squash merge deleted from the
+    // history but which were pushed and live here as a fixture (see
+    // SQUASHED_BLOCK_FIXTURES above). All three are content: in none of them is
+    // a comment believed.
     const registered = initScriptSrc
       .split('\n')
       .map((l) => l.trim().match(/^([0-9a-f]{64})\b/))
@@ -1333,7 +1344,7 @@ describe('ct-init.sh', () => {
       .map((m) => m[1])
     expect(registered.length).toBeGreaterThanOrEqual(9)
     const known = new Set(historicalContractBlocks().map((h) => h.hash))
-    known.add(sha256(extractBlock(seedFreshContrato()))) // el árbol de trabajo
+    known.add(sha256(extractBlock(seedFreshContrato()))) // the working tree
     for (const { block } of squashedBlocks()) known.add(sha256(block))
     expect(
       registered.filter((h) => !known.has(h)),
@@ -1347,11 +1358,11 @@ describe('ct-init.sh', () => {
     ).toEqual([])
   })
 
-  // El otro lado del fixture: si el fichero deriva un byte, deja de hashear al
-  // hash registrado y ya no justifica nada — así que el guardián de arriba
-  // volvería a acusar a ese hash de inventado, culpando al sitio equivocado.
-  // Este test señala la causa de verdad.
-  it('cada bloque guardado por squash sigue hasheando a su hash registrado', () => {
+  // The fixture's other side: if the file drifts by a byte, it stops hashing to
+  // the recorded hash and no longer justifies anything — so the guard above
+  // would go back to accusing that hash of being made up, blaming the wrong
+  // place. This test points at the real cause.
+  it('every block kept because of a squash still hashes to its recorded hash', () => {
     for (const { fixture, block } of squashedBlocks()) {
       const h = sha256(block)
       expect(
@@ -1364,31 +1375,32 @@ describe('ct-init.sh', () => {
     }
   })
 
-  // Y que no sobren: un fixture sin hash registrado sería un bloque guardado
-  // "por si acaso" que ct-init no reconoce, o sea la mitad de un arreglo. El
-  // test de arriba lo cubre por hash; este cubre el inventario del directorio,
-  // para que añadir un fichero y olvidar la lista no pase inadvertido.
-  it('no hay fixtures de contrato guardados por squash fuera de la lista', () => {
+  // And that there be none left over: a fixture with no recorded hash would be a
+  // block kept "just in case" that ct-init does not recognise, that is, half a
+  // fix. The test above covers it by hash; this one covers the directory's
+  // inventory, so that adding a file and forgetting the list does not go
+  // unnoticed.
+  it('there are no squash-kept contract fixtures outside the list', () => {
     const dir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
     const enDisco = readdirSync(dir).filter((f) => /^slices-contract-v\d+\.md$/.test(f))
     const usados = new Set([...SQUASHED_BLOCK_FIXTURES, ...FIXTURES_DE_OTROS_TESTS])
     expect(enDisco.filter((f) => !usados.has(f))).toEqual([])
   })
 
-  // Slice 8 — el test que ata SQUASHED_BLOCK_FIXTURES a la historia. Sin él,
-  // añadir una entrada al ledger y su fixture en el mismo commit deja la suite
-  // verde, y un bloque que ct-init nunca publicó pasa a ser "pristine" para
-  // siempre. El hash NO se declara a mano: sale del sha256 del propio fichero,
-  // que es la única forma de que el testigo que se busca en el ledger sea el
-  // del bloque que el fixture guarda de verdad. Que ese hash esté registrado lo
-  // exige el guardián de al lado ("cada bloque guardado por squash sigue
-  // hasheando a su hash registrado"), y por eso aquí no se repite.
-  it('todo fixture de SQUASHED_BLOCK_FIXTURES tiene procedencia: su hash ya estaba en el ledger de un commit que NO traía el fichero', () => {
+  // Slice 8 — the test that ties SQUASHED_BLOCK_FIXTURES to the history. Without
+  // it, adding a ledger entry and its fixture in the same commit leaves the suite
+  // green, and a block ct-init never published becomes "pristine" forever. The
+  // hash is NOT declared by hand: it comes from the sha256 of the file itself,
+  // which is the only way for the witness looked up in the ledger to be that of
+  // the block the fixture really keeps. That that hash is recorded is demanded by
+  // the guard next door ("every block kept because of a squash still hashes to
+  // its recorded hash"), and that is why it is not repeated here.
+  it('every SQUASHED_BLOCK_FIXTURES fixture has provenance: its hash was already in the ledger of a commit that did NOT carry the file', () => {
     exigirHistorialCompleto()
     const guardados = squashedBlocks().map(({ fixture, block }) => ({ fixture, hash: sha256(block) }))
-    // Control: si la lista está vacía este test no prueba nada. Hoy hay uno
-    // (el v17 de la PR #27, escondido por el squash 529d2f4). Si algún día se
-    // vacía a propósito, este assert es el sitio donde decirlo.
+    // A check: if the list is empty this test proves nothing. Today there is one
+    // (the v17 of pull request #27, hidden by the squash 529d2f4). If some day it
+    // is emptied on purpose, this assert is the place to say so.
     expect(guardados.length).toBeGreaterThanOrEqual(1)
     const sinProcedencia = guardados
       .map(({ fixture, hash }) => procedenciaDelBloqueGuardado({ cwd: root, fixture, hash }))
@@ -1402,7 +1414,7 @@ describe('ct-init.sh', () => {
     ).toEqual([])
   })
 
-  it('el testigo que se toma por el commit que introdujo el hash lo introdujo de verdad: su padre no lo traía', () => {
+  it('the witness taken to be the commit that introduced the hash really did introduce it: its parent did not carry it', () => {
     exigirHistorialCompleto()
     const rutas = rutasDeArbolPara(root, RUTA_LEDGER)
     const ledgerEn = (rev) => {
@@ -1435,7 +1447,7 @@ describe('ct-init.sh', () => {
     ).toEqual([])
   })
 
-  it('las fixtures y el ledger se buscan por rutas que el ÁRBOL de HEAD resuelve, no sólo el disco', () => {
+  it('the fixtures and the ledger are looked up by paths that HEAD\'s TREE resolves, not only the disk', () => {
     expect(
       existeEnElArbol(root, 'HEAD', rutasDeArbolPara(root, RUTA_LEDGER)),
       `HEAD no resuelve ${RUTA_LEDGER}: todo cat-file de la procedencia falla y la comprobación queda vacía`
@@ -1448,20 +1460,20 @@ describe('ct-init.sh', () => {
     }
   })
 
-  it('la comprobación de procedencia caza el par forjado: entrada del ledger y fixture en el MISMO commit', () => {
-    // No-tautología. La comprobación de arriba pasa en verde sobre este repo;
-    // eso por sí solo no demuestra que sea capaz de ponerse roja. Se corre la
-    // MISMA función (no una reimplementación) sobre repos de juguete con la
-    // historia fabricada a propósito.
-    const HASH = 'a'.repeat(64) // no es el sha256 de nada: aquí lo único que se juzga es la HISTORIA
+  it('the provenance check catches the forged pair: ledger entry and fixture in the SAME commit', () => {
+    // Non-tautology. The check above passes green over this repository; that on
+    // its own does not prove it is capable of going red. The SAME function (not a
+    // reimplementation) is run over toy repositories with the history
+    // manufactured on purpose.
+    const HASH = 'a'.repeat(64) // it is the sha256 of nothing: the only thing judged here is the HISTORY
     const FIXTURE = 'bloque-inventado.md'
     const escenarios = []
     const construir = (guion) => {
       const dir = mkdtempSync(join(tmpdir(), 'proc-'))
       escenarios.push(dir)
       const g = (...args) => execFileSync('git', args, { cwd: dir, stdio: 'ignore' })
-      // `-b main` explícito: sin él `git init` usa el init.defaultBranch de la
-      // máquina (mismo motivo que en f22-estado-del-slice.test.js).
+      // An explicit `-b main`: without it `git init` uses the machine's
+      // init.defaultBranch (the same reason as in f22-estado-del-slice.test.js).
       g('init', '-q', '-b', 'main', '.')
       g('config', 'user.email', 'test@test')
       g('config', 'user.name', 'test')
@@ -1478,52 +1490,54 @@ describe('ct-init.sh', () => {
     }
     const juzgar = (dir) => procedenciaDelBloqueGuardado({ cwd: dir, fixture: FIXTURE, hash: HASH })
 
-    // (1) CONTROL POSITIVO: el orden legítimo (el del v17) — la entrada
-    // primero, el fixture después. Sin esto, un rojo de los de abajo no
-    // significaría nada: podría ser que los repos de juguete siempre fallen.
+    // (1) POSITIVE CONTROL: the legitimate order (v17's) — the entry first, the
+    // fixture afterwards. Without this, a red from the ones below would mean
+    // nothing: it could be that the toy repositories always fail.
     const bueno = construir(({ g, ledger, fixture }) => {
       ledger(true); g('add', '-A'); g('commit', '-qm', 'entrada en el ledger')
       fixture(); g('add', '-A'); g('commit', '-qm', 'el fixture, después')
     })
     expect(juzgar(bueno)).toBeNull()
 
-    // (2) EL CASO DEL REVIEW: los dos en el mismo commit.
+    // (2) THE REVIEW'S CASE: both of them in the same commit.
     const mismoCommit = construir(({ g, ledger, fixture }) => {
       ledger(true); fixture(); g('add', '-A'); g('commit', '-qm', 'entrada + fixture juntos')
     })
     expect(juzgar(mismoCommit)).toMatch(/se valida contra sí mismo/)
 
-    // (3) La variante que también hay que cazar: el fixture primero y la
-    // entrada después. El testigo del hash ya trae el fixture ⇒ mismo motivo.
+    // (3) The variant that also has to be caught: the fixture first and the
+    // entry afterwards. The hash's witness already carries the fixture ⇒ the
+    // same reason.
     const fixturePrimero = construir(({ g, ledger, fixture }) => {
       fixture(); g('add', '-A'); g('commit', '-qm', 'el fixture primero')
       ledger(true); g('add', '-A'); g('commit', '-qm', 'la entrada, después')
     })
     expect(juzgar(fixturePrimero)).toMatch(/se valida contra sí mismo/)
 
-    // (4) La entrada solo en el árbol de trabajo, sin comitear: no hay testigo
-    // de nada. Mensaje DISTINTO al de (2)/(3), porque el remedio es distinto.
+    // (4) The entry only in the working tree, uncommitted: there is no witness
+    // to anything. A DIFFERENT message from (2)/(3)'s, because the remedy is
+    // different.
     const soloArbol = construir(({ ledger, fixture }) => {
-      ledger(true); fixture() // deliberadamente sin `git commit`
+      ledger(true); fixture() // deliberately without a `git commit`
     })
     expect(juzgar(soloArbol)).toMatch(/no entró en scripts\/ct-init\.sh en ningún commit/)
 
     for (const dir of escenarios) rmSync(dir, { recursive: true, force: true })
   })
 
-  // Finding 6 de la review final: ct-next.mjs escribe cada worktree de slice
-  // en <repoRoot>/.worktrees/<n>, DENTRO del propio checkout del repo
-  // destino. Si ese repo no ignora `.worktrees/`, un `git add -A` en el
-  // checkout principal se traga un working tree anidado entero, y un `git
-  // clean -fdx` destruye worktrees vivos.
-  it('añade .worktrees/ a .gitignore (crea el fichero si no existe)', () => {
+  // Finding 6 of the final review: ct-next.mjs writes each slice worktree in
+  // <repoRoot>/.worktrees/<n>, INSIDE the target repository's own checkout. If
+  // that repository does not ignore `.worktrees/`, a `git add -A` in the main
+  // checkout swallows a whole nested working tree, and a `git clean -fdx`
+  // destroys live worktrees.
+  it('adds .worktrees/ to .gitignore (it creates the file if it does not exist)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toContain('.worktrees/')
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('.gitignore ya existe con otro contenido → añade .worktrees/ sin pisar lo que ya había', () => {
+  it('.gitignore already exists with other content → it adds .worktrees/ without treading on what was already there', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     writeFileSync(join(dir, '.gitignore'), 'node_modules/\n')
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
@@ -1533,11 +1547,11 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // D-4 — el estado del run de ct-run y su carpeta de trabajo. Son el bucle
-  // INTERNO de una slice dentro de su worktree: viven menos que el worktree, y
-  // la carpeta lleva los diffs de cada tarea, que son el mismo contenido que el
-  // commit. Verlos aparecer como ficheros nuevos en la PR es ruido puro.
-  it('añade las reglas del run de ct-run a .gitignore', () => {
+  // D-4 — the state of ct-run's run and its working folder. They are a slice's
+  // INNER loop inside its worktree: they live less long than the worktree, and
+  // the folder carries each task's diffs, which are the same content as the
+  // commit. Seeing them show up as new files in the pull request is pure noise.
+  it('adds ct-run\'s run rules to .gitignore', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const gi = readFileSync(join(dir, '.gitignore'), 'utf8')
@@ -1546,7 +1560,7 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('idempotente también para las reglas del run: dos corridas, una línea de cada', () => {
+  it('idempotent for the run rules too: two runs, one line of each', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
@@ -1556,34 +1570,33 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('idempotente: correrlo dos veces no duplica la línea .worktrees/ en .gitignore', () => {
+  it('idempotent: running it twice does not duplicate the .worktrees/ line in .gitignore', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
-    execFileSync('bash', [script, dir], { encoding: 'utf8' }) // segunda corrida
+    execFileSync('bash', [script, dir], { encoding: 'utf8' }) // second run
     const gi = readFileSync(join(dir, '.gitignore'), 'utf8')
     const occurrences = gi.split('\n').filter((l) => l === '.worktrees/').length
     expect(occurrences).toBe(1)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Bloqueante de la re-review: un `.gitignore` que YA tiene contenido pero
-  // no termina en salto de línea (p.ej. escrito a mano con `printf`, sin
-  // `\n` final) hacía que `echo '.worktrees/' >> .gitignore` concatenara la
-  // línea nueva en la MISMA línea que la última regla del usuario —
-  // "node_modules/.worktrees/" — corrompiendo esa regla (deja de ignorar
-  // node_modules/) y sin que .worktrees/ quedara ignorado de verdad tampoco
-  // (el propósito entero del finding 6, incumplido en silencio). Reproduce
-  // exactamente el caso reportado y comprueba que, tras el fix, las DOS
-  // reglas quedan intactas en líneas separadas.
-  it('.gitignore existente SIN salto de línea final → normaliza antes de añadir, sin corromper la regla previa', () => {
+  // A blocker from the re-review: a `.gitignore` that ALREADY has content but
+  // does not end in a newline (written by hand with `printf`, say, with no
+  // trailing `\n`) made `echo '.worktrees/' >> .gitignore` concatenate the new
+  // line onto the SAME line as the user's last rule — "node_modules/.worktrees/"
+  // — corrupting that rule (it stops ignoring node_modules/) and without
+  // .worktrees/ really being ignored either (the whole purpose of finding 6,
+  // silently unmet). It reproduces the reported case exactly and checks that,
+  // after the fix, BOTH rules are left intact on separate lines.
+  it('an existing .gitignore WITHOUT a trailing newline → it normalises before adding, without corrupting the previous rule', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
-    writeFileSync(join(dir, '.gitignore'), 'node_modules/') // sin \n final, a propósito
+    writeFileSync(join(dir, '.gitignore'), 'node_modules/') // no trailing \n, on purpose
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const gi = readFileSync(join(dir, '.gitignore'), 'utf8')
     const lines = gi.split('\n').filter((l) => l.length > 0)
     expect(lines).toContain('node_modules/')
     expect(lines).toContain('.worktrees/')
-    expect(gi).not.toMatch(/node_modules\/\.worktrees\//) // nunca concatenadas en la misma línea
+    expect(gi).not.toMatch(/node_modules\/\.worktrees\//) // never concatenated onto the same line
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1638,7 +1651,7 @@ describe('ct-init.sh', () => {
     const before = `# AGENTS.md\n\n## Gotchas\n- mías\n\n${V1_BLOCK}`
     writeFileSync(join(dir, 'AGENTS.md'), before)
     const res = spawnSync('bash', [script, dir], { encoding: 'utf8' })
-    expect(res.status).toBe(0) // avisar no es fallar
+    expect(res.status).toBe(0) // warning is not failing
     expect(res.stderr).toMatch(/todavía lleva DENTRO el contrato/)
     expect(res.stderr).toContain('--update-slices-contract')
     // Su bloque no se toca, y tampoco recibe la sección corta: mientras el

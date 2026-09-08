@@ -1,20 +1,21 @@
-// D4 — el dry-run miente y el mapa de cuentas manda trabajo a la cuenta
-// equivocada. Tests de EXTREMO A EXTREMO contra ct-next.mjs (nunca contra un
-// repo, un cmux o un gh reales: stubs en PATH, repoRoot en un directorio
-// temporal, y --dry-run con fixture donde no hace falta ni eso).
+// D4 — the dry-run lies and the account map sends work to the wrong account.
+// END-TO-END tests against ct-next.mjs (never against a real repo, a real cmux
+// or a real gh: stubs on PATH, repoRoot in a temporary directory, and
+// --dry-run with a fixture where not even that is needed).
 //
-// Cada bloque de aquí se comprobó primero contra el código SIN arreglar: si
-// no falla ahí, no prueba nada. Ver el informe de la tarea para el detalle.
+// Every block in here was checked first against the code BEFORE the fix: if it
+// does not fail there, it proves nothing. See the report of the task for the
+// detail.
 import { describe, it, expect, afterEach } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, rmSync, readFileSync, existsSync, writeFileSync, cpSync, openSync, closeSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-// D4: entorno hermético (dirs de cuenta reales bajo tmpdir + stubs de
-// cmux/claude en PATH) — ver fixtures/hermetic-env.js. Los tests de este
-// fichero que ejercen la AUSENCIA de un binario fijan su propio PATH, que
-// gana sobre este (los overrides se esparcen después).
+// D4: a hermetic environment (real account dirs under tmpdir + cmux/claude
+// stubs on PATH) — see fixtures/hermetic-env.js. The tests of this file that
+// exercise the ABSENCE of a binary set their own PATH, which wins over this one
+// (the overrides are spread afterwards).
 import {hermeticEnv} from './fixtures/hermetic-env.js'
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
 
@@ -32,13 +33,14 @@ const fakePath = [
   process.env.PATH,
 ].join(':')
 
-// PATH mínimo para los casos que necesitan simular la AUSENCIA de un binario.
-// No basta con omitir el stub y dejar `process.env.PATH` detrás: `cmux` y
-// `claude` están instalados DE VERDAD en la máquina de desarrollo, así que
-// esa omisión encontraría el binario real (el error exacto que ya cometió un
-// agente anterior de este proyecto). Estos tests usan un PATH que NO incluye
-// el real — posible solo porque van con --dry-run + CT_NEXT_FIXTURE, donde
-// ct-next.mjs no lanza ni un subproceso (ni git, ni gh, ni cmux).
+// A minimal PATH for the cases that need to simulate the ABSENCE of a binary.
+// Omitting the stub and leaving `process.env.PATH` behind is not enough: `cmux`
+// and `claude` are REALLY installed on the development machine, so that
+// omission would find the real binary (the exact mistake an earlier agent of
+// this project already made). These tests use a PATH that does NOT include the
+// real one — possible only because they go with --dry-run + CT_NEXT_FIXTURE,
+// where ct-next.mjs does not launch a single subprocess (no git, no gh, no
+// cmux).
 const dirs = []
 function makeTmp(prefix) {
   const d = mkdtempSync(join(tmpdir(), prefix))
@@ -54,11 +56,11 @@ const FIXTURE_ONE_READY = JSON.stringify({
   mergedIssues: [],
 })
 
-// process.execPath, no la cadena 'node': varios tests de aquí fijan un PATH
-// que NO contiene el PATH real (para poder simular la ausencia de cmux/claude
-// sin riesgo de encontrar los binarios de verdad de la máquina), y con ese
-// PATH la propia palabra 'node' no resolvería — el spawn fallaría antes de
-// ejecutar nada y el test mediría el arnés, no el código.
+// process.execPath, not the string 'node': several tests here set a PATH that
+// does NOT contain the real PATH (so that the absence of cmux/claude can be
+// simulated with no risk of finding the machine's real binaries), and with that
+// PATH the word 'node' itself would not resolve — the spawn would fail before
+// running anything and the test would measure the harness, not the code.
 function run(args, envOverrides = {}) {
   const r = spawnSync(process.execPath, [script, ...args], {
     encoding: 'utf8',
@@ -78,18 +80,18 @@ function runReal(args, envOverrides = {}) {
 const openIssue42 = { number: 42, title: '#42 algo', labels: [{ name: 'status:ready' }], body: '' }
 
 // ---------------------------------------------------------------------------
-// Defecto 2 — argumentos numéricos parseados con `parseInt`
+// Defect 2 — numeric arguments parsed with `parseInt`
 // ---------------------------------------------------------------------------
-// ctNextSiblings (F11): los ficheros de `scripts/` que ct-next.mjs necesita
-// para arrancar, DERIVADOS de sus propios imports relativos en vez de escritos
-// a mano. La lista hardcodeada que había aquí era una copia del grafo de
-// dependencias que nadie actualizaba: al añadir un import nuevo a ct-next.mjs
-// (F11 añadió `conventions.js`) estos tests copiaban un árbol INCOMPLETO y
-// medían un ERR_MODULE_NOT_FOUND (exit 1) creyendo que medían el exit code del
-// escenario — verde en la lista de nombres, falso en lo que afirmaban. La
-// resolución es transitiva; un fichero que no exista se ignora, así que
-// `dispatch-check.mjs` (que algunos tests borran a propósito) sigue pudiendo
-// omitirse por separado.
+// ctNextSiblings (F11): the files of `scripts/` that ct-next.mjs needs in order
+// to start, DERIVED from its own relative imports instead of written by hand.
+// The hardcoded list that used to be here was a copy of the dependency graph
+// that nobody kept up to date: on adding a new import to ct-next.mjs (F11 added
+// `conventions.js`) these tests copied an INCOMPLETE tree and measured an
+// ERR_MODULE_NOT_FOUND (exit 1) believing they were measuring the exit code of
+// the scenario — green in the list of names, false in what they claimed. The
+// resolution is transitive; a file that does not exist is ignored, so
+// `dispatch-check.mjs` (which some tests delete on purpose) can still be left
+// out separately.
 function ctNextSiblings(scriptsDirPath) {
   const seen = new Set()
   const pending = ['ct-next.mjs']
@@ -108,13 +110,13 @@ function ctNextSiblings(scriptsDirPath) {
   return [...seen]
 }
 
-describe('ct-next --cap: parseo estricto (D4, defecto 2)', () => {
-  // Verificado contra el código sin arreglar, en el mismo orden que aquí:
-  // "1e3" despachaba 1 slice, "3perros" despachaba 3, "2.9" despachaba 2, y
-  // " 3" y "+2" colaban igual — los cinco con exit 0 y sin una sola línea de
-  // aviso. El usuario pedía un cap y recibía otro.
+describe('ct-next --cap: strict parsing (D4, defect 2)', () => {
+  // Checked against the code before the fix, in the same order as here: "1e3"
+  // dispatched 1 slice, "3perros" dispatched 3, "2.9" dispatched 2, and " 3"
+  // and "+2" sneaked through just the same — all five with exit 0 and without a
+  // single line of warning. The user asked for a cap and got another one.
   for (const bad of ['1e3', '3perros', '2.9', ' 3', '0x2', '1_000', '']) {
-    it(`--cap ${JSON.stringify(bad)} → exit 2, nunca un cap distinto del pedido`, () => {
+    it(`--cap ${JSON.stringify(bad)} → exit 2, never a cap other than the one asked for`, () => {
       const r = run(['--repo', 'menoplus-app/menoplus', '--cap', bad, '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
       expect(r.code).toBe(2)
       expect(r.out).toMatch(/--cap inválido/)
@@ -122,25 +124,25 @@ describe('ct-next --cap: parseo estricto (D4, defecto 2)', () => {
     })
   }
 
-  // Rango vs. forma: dos errores distintos, con dos correcciones distintas.
-  // Un "0" está BIEN ESCRITO (parseStrictInt lo lee fielmente como 0), así
-  // que el mensaje correcto es el de rango, no "esto no es un entero".
-  // (D5, hallazgo I: "-1" se movió de aquí a la lista de FORMA inválida — un
-  // signo ya no es "dígitos decimales a secas". La distinción rango/forma se
-  // conserva donde sigue significando algo: el 0.)
-  it('--cap 0 → exit 2 con un mensaje de RANGO, distinto del de "no es un entero"', () => {
+  // Range vs. form: two different errors, with two different corrections. A
+  // "0" is WELL WRITTEN (parseStrictInt reads it faithfully as 0), so the right
+  // message is the one about range, not "this is not an integer".
+  // (D5, finding I: "-1" moved from here to the list of invalid FORM — a sign
+  // is no longer "plain decimal digits". The range/form distinction is kept
+  // where it still means something: the 0.)
+  it('--cap 0 → exit 2 with a RANGE message, different from the "this is not an integer" one', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '0', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
     expect(r.code).toBe(2)
     expect(r.out).toMatch(/debe ser >= 1/)
   })
 
-  // D5, hallazgo I — el mensaje de error decía "debe ser un entero en dígitos
-  // decimales a secas" y "+2" se aceptaba igual: el mensaje afirmaba una
-  // regla y el código aplicaba otra, la misma familia que el resto de esta
-  // tanda. Verificado contra el código sin arreglar: `--cap +2` salía con
-  // exit 0 e imprimía "cap 2", y `--cap -1` daba el mensaje de rango.
+  // D5, finding I — the error message said "debe ser un entero en dígitos
+  // decimales a secas" and "+2" was accepted all the same: the message claimed
+  // one rule and the code applied another, the same family as the rest of this
+  // batch. Checked against the code before the fix: `--cap +2` exited with 0
+  // and printed "cap 2", and `--cap -1` gave the range message.
   for (const signed of ['+2', '-1']) {
-    it(`--cap ${signed} → exit 2 con el mensaje de FORMA, que ahora sí nombra el signo`, () => {
+    it(`--cap ${signed} → exit 2 with the FORM message, which now does name the sign`, () => {
       const r = run(['--repo', 'menoplus-app/menoplus', '--cap', signed, '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
       expect(r.code).toBe(2)
       expect(r.out).toMatch(/--cap inválido/)
@@ -150,13 +152,13 @@ describe('ct-next --cap: parseo estricto (D4, defecto 2)', () => {
     })
   }
 
-  it('--cap 3 (bien escrito) sigue funcionando', () => {
+  it('--cap 3 (well written) still works', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '3', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/cap 3/)
   })
 
-  it('--repo sin forma owner/repo → exit 2 (antes llegaba hasta gh y moría con un 404 sin explicar por qué)', () => {
+  it('--repo without the owner/repo form → exit 2 (it used to get as far as gh and die with a 404 without explaining why)', () => {
     const r = run(['--repo', 'menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
     expect(r.code).toBe(2)
     expect(r.out).toMatch(/--repo inválido/)
@@ -164,17 +166,17 @@ describe('ct-next --cap: parseo estricto (D4, defecto 2)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Defecto 1 — mapa de cuentas, con voz
+// Defect 1 — the account map, with a voice
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Defecto 3 — precondiciones del run real
+// Defect 3 — preconditions of the real run
 // ---------------------------------------------------------------------------
-describe('ct-next --dry-run — precondiciones de binarios (D4, defecto 3)', () => {
-  // PATH sin cmux Y sin el PATH real: con --dry-run + fixture, ct-next.mjs no
-  // lanza NINGÚN subproceso, así que un PATH vacío es seguro y, sobre todo,
-  // no puede encontrar el cmux de verdad de la máquina.
-  it('cmux ausente del PATH → FALLO DURO (exit 1): lo invoca este mismo proceso, su ausencia rompe seguro', () => {
+describe('ct-next --dry-run — preconditions of the binaries (D4, defect 3)', () => {
+  // A PATH without cmux AND without the real PATH: with --dry-run + fixture,
+  // ct-next.mjs launches NO subprocess at all, so an empty PATH is safe and,
+  // above all, cannot find the machine's real cmux.
+  it('cmux absent from the PATH → HARD FAILURE (exit 1): this very process invokes it, so its absence breaks safely', () => {
     const emptyDir = makeTmp('ct-next-emptypath-')
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], {
       CT_NEXT_FIXTURE: FIXTURE_ONE_READY,
@@ -185,42 +187,42 @@ describe('ct-next --dry-run — precondiciones de binarios (D4, defecto 3)', () 
     expect(r.out).toMatch(/NO es luz verde/)
   })
 
-  it('cmux presente pero claude ausente → AVISO (no concluyente: lo resuelve el shell de login), exit 0', () => {
+  it('cmux present but claude absent → WARNING (not conclusive: the login shell resolves it), exit 0', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], {
       CT_NEXT_FIXTURE: FIXTURE_ONE_READY,
       PATH: join(fixturesDir, 'fake-cmux-bin'),
     })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/aviso: `claude` no aparece en el PATH/)
-    // y el recap final tiene que dejar claro que el 0 se dio A PESAR del aviso
+    // and the final recap has to make clear that the 0 was given IN SPITE of the warning
     expect(r.out).toMatch(/terminó con exit 0 A PESAR de \d+ aviso/)
   })
 
 
 
 
-  it('con todo en su sitio, el dry-run dice explícitamente qué comprobó', () => {
+  it('with everything in place, the dry-run says explicitly what it checked', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/cmux: \S+ \(encontrado en PATH; no se ejecuta/)
-    // F35: aquí se comprobaba también el CLAUDE_CONFIG_DIR de la cuenta
-    // resuelta. Sin cuentas, el único preflight que queda de este par es el
-    // del binario del agente.
+    // F35: the CLAUDE_CONFIG_DIR of the resolved account used to be checked
+    // here too. With no accounts, the only preflight left of that pair is the
+    // one of the agent's binary.
     expect(r.out).toMatch(/claude: \S+ \(encontrado en el PATH de este proceso\)/)
   })
 
-  it('en modo fixture, el destino se marca como NO COMPROBADO en vez de darse por libre', () => {
+  it('in fixture mode, the destination is marked as NOT CHECKED instead of being taken for free', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
     expect(r.out).toMatch(/NO COMPROBADOS \(modo fixture/)
   })
 })
 
-describe('ct-next — destino ocupado: se detecta ANTES de reclamar (D4, defecto 3)', () => {
+describe('ct-next — an occupied destination: it is detected BEFORE claiming (D4, defect 3)', () => {
   function makeRepoRoot() {
     return makeTmp('ct-next-precond-repo-')
   }
 
-  it('--dry-run con la rama feat/42 ya existente → exit 1 y lo dice; el dry-run deja de ser luz verde', () => {
+  it('--dry-run with the branch feat/42 already existing → exit 1 and it says so; the dry-run stops being a green light', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1', '--dry-run'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
@@ -232,7 +234,7 @@ describe('ct-next — destino ocupado: se detecta ANTES de reclamar (D4, defecto
     expect(r.out).toMatch(/NO es luz verde/)
   })
 
-  it('--dry-run con el worktree ya existente → exit 1 y lo dice', () => {
+  it('--dry-run with the worktree already existing → exit 1 and it says so', () => {
     const repoRoot = makeRepoRoot()
     mkdirSync(join(repoRoot, '.worktrees', '42'), { recursive: true })
     const r = runReal(['--repo', 'o/r', '--cap', '1', '--dry-run'], {
@@ -243,12 +245,12 @@ describe('ct-next — destino ocupado: se detecta ANTES de reclamar (D4, defecto
     expect(r.out).toMatch(/el worktree de #42 ya existe/)
   })
 
-  // EL test que justifica todo el bloque: en la corrida REAL, con la rama ya
-  // ocupada, ct-next.mjs escribía primero el claim (status:ready →
-  // status:in-progress), luego `git worktree add` fallaba, y recién entonces
-  // revertía. Ahora no se escribe NADA: el log de argv de gh no puede tener
-  // ni un solo `issue edit` para #42.
-  it('corrida REAL con la rama ocupada → exit 1 SIN haber escrito ningún claim', () => {
+  // THE test that justifies the whole block: in the REAL run, with the branch
+  // already occupied, ct-next.mjs wrote the claim first (status:ready →
+  // status:in-progress), then `git worktree add` failed, and only then did it
+  // revert. Now NOTHING is written: the argv log of gh cannot carry a single
+  // `issue edit` for #42.
+  it('a REAL run with the branch occupied → exit 1 WITHOUT having written a single claim', () => {
     const repoRoot = makeRepoRoot()
     const argvLog = join(repoRoot, 'gh-argv-log')
     const gitLog = join(repoRoot, 'git-log')
@@ -268,11 +270,11 @@ describe('ct-next — destino ocupado: se detecta ANTES de reclamar (D4, defecto
     expect(gitLogTxt).not.toMatch(/worktree add/)
   })
 
-  // El directorio ya no está, pero git sigue teniéndolo registrado (alguien
-  // lo borró a mano sin `git worktree remove`). `existsSync` por sí solo dice
-  // "libre" y `git worktree add` revienta después con "missing but already
-  // registered worktree" — en el run real, con el claim ya escrito.
-  it('worktree registrado pero con el directorio borrado a mano → exit 1 y apunta a `git worktree prune`', () => {
+  // The directory is gone, but git still has it registered (somebody deleted
+  // it by hand without `git worktree remove`). `existsSync` on its own says
+  // "free" and `git worktree add` blows up afterwards with "missing but already
+  // registered worktree" — in the real run, with the claim already written.
+  it('a worktree registered but with its directory deleted by hand → exit 1 and it points at `git worktree prune`', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1', '--dry-run'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
@@ -284,10 +286,10 @@ describe('ct-next — destino ocupado: se detecta ANTES de reclamar (D4, defecto
     expect(r.out).toMatch(/git worktree prune/)
   })
 
-  // Un fallo de la CONSULTA no es una respuesta: "no pude preguntar si la
-  // rama existe" no puede leerse como "la rama está libre", porque "libre"
-  // es justo lo que autoriza a reclamar.
-  it('si la consulta de la rama falla, se avisa — nunca se da por libre en silencio', () => {
+  // A failure of the QUERY is not an answer: "I could not ask whether the
+  // branch exists" cannot be read as "the branch is free", because "free" is
+  // exactly what authorises a claim.
+  it('if the query about the branch fails, a warning is given — it is never taken for free in silence', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1', '--dry-run'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
@@ -299,7 +301,7 @@ describe('ct-next — destino ocupado: se detecta ANTES de reclamar (D4, defecto
     expect(r.out).toMatch(/A PESAR de \d+ aviso/)
   })
 
-  it('destino libre en una corrida real → el dry-run lo afirma con evidencia, no por omisión', () => {
+  it('a free destination in a real run → the dry-run states it with evidence, not by omission', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1', '--dry-run'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
@@ -310,8 +312,8 @@ describe('ct-next — destino ocupado: se detecta ANTES de reclamar (D4, defecto
   })
 })
 
-describe('ct-next --dry-run — el kickoff se ve como PROSA (D4, defecto 3)', () => {
-  it('imprime el kickoff en líneas de verdad, no como un blob con \\n escapados', () => {
+describe('ct-next --dry-run — the kickoff reads as PROSE (D4, defect 3)', () => {
+  it('it prints the kickoff in real lines, not as a blob with escaped \\n', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
     expect(r.code).toBe(0)
     const start = r.out.indexOf('--- kickoff que recibiría el agente')
@@ -319,23 +321,23 @@ describe('ct-next --dry-run — el kickoff se ve como PROSA (D4, defecto 3)', ()
     expect(start).toBeGreaterThan(-1)
     expect(end).toBeGreaterThan(start)
     const block = r.out.slice(start, end)
-    // Prosa de verdad: varias líneas reales…
+    // Real prose: several real lines…
     expect(block.split('\n').length).toBeGreaterThan(5)
-    // …y ni un solo "\n" de dos caracteres (que es como salía antes, dentro
-    // del JSON.stringify de la línea de cmux).
+    // …and not a single two-character "\n" (which is how it used to come out,
+    // inside the JSON.stringify of the cmux line).
     expect(block).not.toContain('\\n')
     expect(block).toMatch(/Es human-gated/)
   })
 
-  it('lo que se ejecutaría se conserva íntegro y literal — F19 lo movió de la línea de cmux al script de arranque, pero NO se puede esconder', () => {
+  it('what would be executed is kept whole and literal — F19 moved it from the cmux line to the start-up script, but it cannot be hidden', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
-    // ANTES de F19 esto era `--command "claude --dangerously-skip-permissions
-    // …"`: el comando entero viajaba TECLEADO al pty, que es exactamente lo
-    // que dejó que un prompt de oh-my-zsh se comiera la `c` de `claude` en el
-    // primer despacho real (ver __tests__/f19-verificar-el-arranque.test.js).
-    // Ahora se teclea solo un `. <ruta>` y el comando vive en el script. La
-    // propiedad que este test defiende NO cambia —el dry-run tiene que enseñar
-    // literalmente lo que se ejecutaría, sin recortes— solo cambia dónde está.
+    // BEFORE F19 this was `--command "claude --dangerously-skip-permissions
+    // …"`: the whole command travelled TYPED into the pty, which is exactly
+    // what let an oh-my-zsh prompt eat the `c` of `claude` in the first real
+    // dispatch (see __tests__/f19-verificar-el-arranque.test.js). Now only a
+    // `. <path>` is typed and the command lives in the script. The property
+    // this test defends does NOT change —the dry-run has to show literally what
+    // would be executed, with no trimming— only where it lives changes.
     expect(r.out).toMatch(/cmux new-workspace --name .*--command "\. '.*launch\.sh'"/)
     expect(r.out).toMatch(/script de arranque que cmux sourcearía/)
     expect(r.out).toMatch(/^claude --dangerously-skip-permissions '/m)
@@ -343,31 +345,31 @@ describe('ct-next --dry-run — el kickoff se ve como PROSA (D4, defecto 3)', ()
 })
 
 // ---------------------------------------------------------------------------
-// Defecto 5 — un slice sin número resoluble no puede despacharse
+// Defect 5 — a slice with no resolvable number cannot be dispatched
 // ---------------------------------------------------------------------------
-describe('ct-next — slice sin número de issue utilizable (D4, defecto 5)', () => {
+describe('ct-next — a slice with no usable issue number (D4, defect 5)', () => {
   const FIXTURE_NO_N = JSON.stringify({
     issues: [{ order: 1, status: 'ready', deps: [], touches: [], name: 'sin numero', type: 'backend' }],
     mergedIssues: [],
   })
 
-  it('no se despacha, y el identificador ilegible no se propaga a rama/worktree/claim/título', () => {
+  it('it is not dispatched, and the unreadable identifier does not propagate to branch/worktree/claim/title', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_NO_N })
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/no es un número de issue utilizable/)
-    // Antes: "feat/undefined", ".worktrees/undefined", "dispatch-check.mjs
-    // undefined", y el título "repo · #undefined nombre" — con exit 0.
+    // Before: "feat/undefined", ".worktrees/undefined", "dispatch-check.mjs
+    // undefined", and the title "repo · #undefined nombre" — with exit 0.
     expect(r.out).not.toMatch(/feat\/undefined|worktrees\/undefined|· #undefined/)
     expect(r.out).not.toMatch(/=== slice/)
   })
 
-  // El encargo describía este defecto como "el nombre del workspace sale como
-  // `repo · #— nombre`". Lo observado contra el código sin arreglar con un
-  // slice SIN `n` fue peor (`#undefined` propagado a rama/worktree/claim),
-  // pero un `n` que es literalmente un guion largo — la forma que usa
-  // slices.js para "sin valor" — es el mismo defecto por la otra puerta, y
-  // se para en el mismo sitio.
-  it('un `n` que es un guion largo (el caso literal del encargo) tampoco se despacha', () => {
+  // The errand described this defect as "el nombre del workspace sale como
+  // `repo · #— nombre`". What was observed against the code before the fix,
+  // with a slice with NO `n`, was worse (`#undefined` propagated to
+  // branch/worktree/claim), but an `n` that is literally an em dash — the form
+  // slices.js uses for "no value" — is the same defect through the other door,
+  // and it stops in the same place.
+  it('an `n` that is an em dash (the literal case of the errand) is not dispatched either', () => {
     const fx = JSON.stringify({
       issues: [{ n: '—', order: 1, status: 'ready', deps: [], touches: [], name: 'raro', type: 'backend' }],
       mergedIssues: [],
@@ -378,14 +380,14 @@ describe('ct-next — slice sin número de issue utilizable (D4, defecto 5)', ()
     expect(r.out).not.toMatch(/· #—/)
   })
 
-  // Con cap > 1, un solo slice sin número aborta la tanda ENTERA antes de
-  // reclamar nada — la misma decisión que ya regía para cualquier fallo de
-  // precondición: se prefiere no empezar a empezar a medias.
-  // D5, hallazgo H: la tanda entera sigue sin despacharse (exit 1, ningún
-  // claim), pero el --dry-run YA NO se calla el plan de los slices sanos —
-  // un dry-run existe para enseñar la tanda entera de una vez. Antes, el
-  // bloque `=== slice #7 ===` no se imprimía en absoluto.
-  it('con cap 2, un slice roto impide el despacho de la tanda entera — pero el dry-run SÍ enseña el plan del slice sano', () => {
+  // With cap > 1, a single slice with no number aborts the WHOLE batch before
+  // claiming anything — the same decision that already governed any
+  // precondition failure: better not to start at all than to start halfway.
+  // D5, finding H: the whole batch is still not dispatched (exit 1, no claim),
+  // but the --dry-run NO LONGER keeps quiet about the plan of the healthy
+  // slices — a dry-run exists to show the whole batch at once. Before, the
+  // block `=== slice #7 ===` was not printed at all.
+  it('with cap 2, one broken slice prevents the dispatch of the whole batch — but the dry-run DOES show the plan of the healthy slice', () => {
     const fx = JSON.stringify({
       issues: [
         { n: null, order: 1, status: 'ready', deps: [], touches: ['a'], name: 'roto', type: 'backend' },
@@ -395,17 +397,17 @@ describe('ct-next — slice sin número de issue utilizable (D4, defecto 5)', ()
     })
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '2', '--dry-run'], { CT_NEXT_FIXTURE: fx })
     expect(r.code).toBe(1)
-    // El plan del slice sano se imprime igual...
+    // The plan of the healthy slice is printed all the same...
     expect(r.out).toMatch(/=== slice #7/)
-    // ...y el resumen final dice cuántos fallaron, cuál rompería primero, y
-    // cuál queda sin problemas propios.
+    // ...and the final summary says how many failed, which one would break
+    // first, and which one is left with no problems of its own.
     expect(r.out).toMatch(/precondiciones NO cumplidas \(1\)/)
     expect(r.out).toMatch(/el primero que rompería es \(slice SIN número de issue utilizable/)
     expect(r.out).toMatch(/1 sin problemas propios \(#7\)/)
     expect(r.out).toMatch(/NO es luz verde/)
   })
 
-  it('la línea de selección tampoco lo imprime como si fuera un número', () => {
+  it('the selection line does not print it as if it were a number either', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_NO_N })
     expect(r.out).toMatch(/seleccionados para esta tanda.*SIN número de issue utilizable/)
     expect(r.out).not.toMatch(/#undefined/)

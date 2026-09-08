@@ -9,44 +9,42 @@ const ISSUES = [
   { n: 5, order: 5, status: 'ready',     deps: [],  touches: ['migration'] },
 ]
 
-// computeReadyCandidates: fix round 1 de la review de W-B (finding Important
-// — la duplicación del filtro ready/deps-mergeadas entre selectNext y
-// explainNoSelection era un riesgo de deriva silenciosa). Ahora es la única
-// fuente de verdad de ese cómputo; estos tests la cubren directamente.
-// (Fix round 2, finding 1: la nota que había aquí antes afirmaba que no
-// existía una comprobación de comportamiento barata capaz de detectar una
-// futura divergencia entre selectNext y explainNoSelection — la review
-// corrigió eso, con razón: SÍ la hay, ver el describe
-// 'explainNoSelection / selectNext — oráculo de identidad de candidato' más
-// abajo, que compara contra el selectNext REAL, no contra este mismo
-// helper.)
+// computeReadyCandidates: fix round 1 of the W-B review (finding Important —
+// the duplication of the ready/merged-deps filter between selectNext and
+// explainNoSelection was a risk of silent drift). It is now the single source of
+// truth of that computation; these tests cover it directly.
+// (Fix round 2, finding 1: the note that used to be here claimed there was no
+// cheap behavioural check capable of detecting a future divergence between
+// selectNext and explainNoSelection — the review corrected that, and rightly so:
+// there IS one, see the describe 'explainNoSelection / selectNext — candidate
+// identity oracle' further down, which compares against the REAL selectNext, not
+// against this same helper.)
 describe('computeReadyCandidates', () => {
-  it('ready: solo status:ready, en el orden original', () => {
+  it('ready: status:ready only, in the original order', () => {
     const { ready } = computeReadyCandidates(ISSUES, [1])
     expect(ready.map((i) => i.n)).toEqual([2, 3, 4, 5])
   })
-  it('readyDepsMet: además filtra por deps mergeadas, ordenado por `order` ascendente', () => {
+  it('readyDepsMet: it also filters by merged deps, sorted by ascending `order`', () => {
     const { readyDepsMet } = computeReadyCandidates(ISSUES, [])
-    expect(readyDepsMet.map((i) => i.n)).toEqual([3, 4, 5]) // #2 fuera: dep #1 no mergeada
+    expect(readyDepsMet.map((i) => i.n)).toEqual([3, 4, 5]) // #2 out: dep #1 not merged
   })
-  it('con deps mergeadas, readyDepsMet incluye también al que las tenía pendientes', () => {
+  it('with merged deps, readyDepsMet also includes the one whose deps were pending', () => {
     const { readyDepsMet } = computeReadyCandidates(ISSUES, [1])
     expect(readyDepsMet.map((i) => i.n)).toEqual([2, 3, 4, 5])
   })
-  it('sin ningún ready → ambos arrays vacíos', () => {
+  it('with no ready at all → both arrays empty', () => {
     const issues = [{ n: 1, order: 1, status: 'in-review', deps: [], touches: [] }]
     const { ready, readyDepsMet } = computeReadyCandidates(issues, [])
     expect(ready).toEqual([])
     expect(readyDepsMet).toEqual([])
   })
-  // Fix round 2, finding 2: en TODOS los fixtures de este fichero (los viejos
-  // y los tres de arriba), el orden del array de entrada ya coincide con el
-  // orden del campo `order` — así que una implementación que filtrara bien
-  // pero se olvidara del `.sort` pasaría igualmente todos los tests
-  // existentes. Este fixture entra deliberadamente DESORDENADO respecto a
-  // `order` (30, 10, 20) para que la aserción solo pueda pasar si de verdad
-  // se ordena.
-  it('readyDepsMet sale ordenado por `order` ascendente aunque el array de entrada venga desordenado', () => {
+  // Fix round 2, finding 2: in ALL the fixtures of this file (the old ones and
+  // the three above), the order of the input array already coincides with the
+  // order of the `order` field — so an implementation that filtered correctly
+  // but forgot the `.sort` would pass every existing test just the same. This
+  // fixture comes in deliberately UNSORTED with respect to `order` (30, 10, 20)
+  // so that the assertion can only pass if it really sorts.
+  it('readyDepsMet comes out sorted by ascending `order` even when the input array arrives unsorted', () => {
     const issues = [
       { n: 100, order: 30, status: 'ready', deps: [], touches: [] },
       { n: 200, order: 10, status: 'ready', deps: [], touches: [] },

@@ -1,59 +1,63 @@
-// COSECHA de las variables dependientes del pre-registro (§6 del handoff F32):
-// ready→claim, claim→release, release→merge, reopens, requeues, episodios
-// blocked, tamaño del PR y comentarios de review.
+// HARVEST of the dependent variables of the pre-registration (§6 of the F32
+// handoff): ready→claim, claim→release, release→merge, reopens, requeues,
+// blocked episodes, PR size and review comments.
 //
-// LA REGLA QUE GOBIERNA TODO ESTE FICHERO: la medida se COSECHA, no se captura.
-// Cero campos manuales nuevos. Todo lo de aquí sale del timeline que GitHub ya
-// escribe solo cada vez que el loop mueve una label. El único campo manual de
-// la medida —los minutos de intervención humana— vive en el desenlace del epic
-// y NO entra aquí a propósito: en cuanto un cosechador admite un campo a mano,
-// se convierte en un formulario y muere como murió docs/medicion-slices.md.
+// THE RULE THAT GOVERNS THIS WHOLE FILE: the measure is HARVESTED, not
+// captured. Zero new manual fields. Everything here comes out of the timeline
+// GitHub already writes on its own every time the loop moves a label. The one
+// manual field of the measure —the minutes of human intervention— lives in the
+// epic's outcome and does NOT come in here, on purpose: the moment a harvester
+// admits one field by hand, it turns into a form and dies the way
+// docs/medicion-slices.md died.
 //
-// Se escribió DESPUÉS del despacho 1, no antes, y eso se nota en las decisiones:
-// las tres de abajo existen porque la primera cosecha (hecha a mano sobre el
-// epic #602 de menoplus, 2026-08-12/13) se topó con ellas. Ninguna se dedujo.
+// It was written AFTER dispatch 1, not before, and that shows in the decisions:
+// the three below exist because the first harvest (done by hand over menoplus's
+// epic #602, 2026-08-12/13) ran into them. Not one of them was deduced.
 //
-// Este módulo es PURO: no toca red ni disco. La IO vive en ct-harvest.mjs. Es
-// la misma separación que gh-issue-map.js/loop-issues.js y por el mismo motivo
-// (poder testear la lógica contra timelines reales sin red).
+// This module is PURE: it touches neither network nor disk. The IO lives in
+// ct-harvest.mjs. It is the same separation as gh-issue-map.js/loop-issues.js
+// and for the same reason (being able to test the logic against real timelines
+// without a network).
 
-// La escalera del loop, en orden. El índice ES el peldaño: retroceder en él es
-// lo que este módulo llama requeue.
+// The loop's ladder, in order. The index IS the rung: going backwards along it
+// is what this module calls a requeue.
 //
-// `blocked` NO está en la lista, y es deliberado: entrar en blocked no es
-// retroceder, es salirse de la escalera. Mezclarlo con los requeues juntaría
-// dos fenómenos que el §6 pregunta por separado.
+// `blocked` is NOT in the list, and that is deliberate: entering blocked is not
+// going backwards, it is stepping off the ladder. Mixing it with the requeues
+// would lump together two phenomena that §6 asks about separately.
 export const STATUS_LADDER = ['backlog', 'ready', 'in-progress', 'in-review']
 
 const STATUS_PREFIX = 'status:'
 
-// DECISIÓN 1, la que más datos salva: la escalera se deriva SOLO de los
-// eventos `labeled`.
+// DECISION 1, the one that saves the most data: the ladder is derived ONLY
+// from the `labeled` events.
 //
-// Medido en el despacho 1: el par (unlabeled del estado viejo, labeled del
-// nuevo) llega EMPATADO AL SEGUNDO y el orden entre ambos NO es estable entre
-// issues. En el #659 el `labeled status:ready` precede al `unlabeled
-// status:backlog`; en el #660, minutos después y por la misma API, el orden es
-// el contrario. Un cosechador que leyera los `unlabeled` para decidir "de qué
-// estado salgo" derivaría estados distintos para dos issues a los que no les
-// pasó nada distinto: ruido puro inyectado en la variable dependiente.
+// Measured in dispatch 1: the pair (unlabeled of the old status, labeled of the
+// new one) arrives TIED TO THE SECOND and the order between the two is NOT
+// stable across issues. In #659 the `labeled status:ready` precedes the
+// `unlabeled status:backlog`; in #660, minutes later and through the same API,
+// the order is the opposite. A harvester that read the `unlabeled` events to
+// decide "which status am I leaving" would derive different states for two
+// issues that had nothing different happen to them: pure noise injected into
+// the dependent variable.
 //
-// Con `labeled` solo, el empate deja de importar: cada peldaño se marca por su
-// entrada, que es un evento único y sin pareja.
+// With `labeled` alone, the tie stops mattering: each rung is marked by its
+// entry, which is a single event with no partner.
 export function statusTransitions(events) {
   return (events || [])
     .filter((e) => e && e.event === 'labeled' && typeof e.label?.name === 'string' && e.label.name.startsWith(STATUS_PREFIX))
     .map((e) => ({ at: e.created_at, status: e.label.name.slice(STATUS_PREFIX.length) }))
-    // La API los devuelve en orden cronológico, pero ordenar es barato y no
-    // depender de ello evita que una paginación futura o un `--slurp` que
-    // concatene páginas al revés produzca duraciones NEGATIVAS en silencio.
+    // The API returns them in chronological order, but sorting is cheap and not
+    // depending on it prevents a future pagination, or a `--slurp` that
+    // concatenates pages backwards, from silently producing NEGATIVE durations.
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
 }
 
-// Primera entrada a un peldaño. La PRIMERA, no la última: si un slice vuelve a
-// `in-progress` tras una review, la fase claim→release del ciclo original sigue
-// siendo la que va de su primer claim a su primera release. El retroceso se
-// cuenta aparte, en countRequeues, en vez de deformar la duración.
+// First entry into a rung. The FIRST, not the last: if a slice goes back to
+// `in-progress` after a review, the claim→release phase of the original cycle
+// is still the one that runs from its first claim to its first release. Going
+// backwards is counted separately, in countRequeues, instead of deforming the
+// duration.
 function firstAt(transiciones, status) {
   const t = transiciones.find((x) => x.status === status)
   return t ? t.at : null
@@ -67,20 +71,21 @@ function segundosEntre(desde, hasta) {
   return Math.round((h - d) / 1000)
 }
 
-// Las tres fases del §6, en segundos.
+// The three phases of §6, in seconds.
 //
-// DECISIÓN 2: una fase que no ocurrió vale `null`, JAMÁS 0. Un slice que nunca
-// llegó a `in-review` no tardó cero segundos en llegar: no llegó. Emitir 0
-// metería un dato falso en el denominador de cualquier media posterior, y con N
-// pequeña —que es todo lo que esta medida va a tener— un cero inventado mueve
-// la media más que el dato real que sustituye.
+// DECISION 2: a phase that did not happen is worth `null`, NEVER 0. A slice
+// that never reached `in-review` did not take zero seconds to get there: it did
+// not get there. Emitting 0 would put a false datum into the denominator of any
+// later mean, and with a small N —which is all this measure is ever going to
+// have— an invented zero moves the mean more than the real datum it replaces.
 //
-// DECISIÓN 3: `release→merge` prefiere el merge del PR y, si no lo hay, cae al
-// cierre del issue DECLARÁNDOLO en `mergeSource`. En este loop el `Closes` del
-// kickoff ata los dos eventos (van a segundos uno de otro), pero no son la
-// misma cosa: un issue puede cerrarse a mano sin merge. Quien lea la fila tiene
-// que poder distinguir la medida de su sustituto — la procedencia nunca es
-// implícita, que es la misma regla que el §4.2 impone a las decisiones.
+// DECISION 3: `release→merge` prefers the PR's merge and, failing that, falls
+// back to the closing of the issue, DECLARING it in `mergeSource`. In this loop
+// the kickoff's `Closes` ties the two events together (they land seconds apart),
+// but they are not the same thing: an issue can be closed by hand with no merge.
+// Whoever reads the row has to be able to tell the measure from its substitute —
+// provenance is never implicit, which is the same rule §4.2 imposes on
+// decisions.
 export function phaseDurations(transiciones, { mergedAt = null, closedAt = null } = {}) {
   const ready = firstAt(transiciones, 'ready')
   const claim = firstAt(transiciones, 'in-progress')
@@ -97,13 +102,13 @@ export function phaseDurations(transiciones, { mergedAt = null, closedAt = null 
   }
 }
 
-// Un requeue es un peldaño hacia atrás: `in-review` → `in-progress` (la review
-// devolvió el slice) o `in-progress` → `ready` (alguien soltó el claim).
+// A requeue is one rung backwards: `in-review` → `in-progress` (the review sent
+// the slice back) or `in-progress` → `ready` (someone released the claim).
 //
-// Los estados fuera de la escalera (hoy solo `blocked`) no participan: ni
-// cuentan como retroceso al entrar, ni el peldaño desde el que se volvió se
-// pierde. Por eso el "último peldaño visto" solo se actualiza con estados que
-// SÍ están en la escalera.
+// The states off the ladder (today only `blocked`) do not take part: they
+// neither count as going backwards when entered, nor is the rung that was
+// stepped back from lost. That is why the "last rung seen" is only updated with
+// states that ARE on the ladder.
 export function countRequeues(transiciones) {
   let ultimo = -1
   let n = 0
@@ -116,24 +121,26 @@ export function countRequeues(transiciones) {
   return n
 }
 
-// Reopens: evento de issue, no de label. Va aparte de los requeues porque
-// responde a otra pregunta del §6 (la 2: ¿el spec reduce la ambigüedad o la
-// desplaza?) y agregarlos escondería cuál de los dos se movió.
+// Reopens: an issue event, not a label one. It goes separately from the
+// requeues because it answers a different question of §6 (number 2: does the
+// spec reduce the ambiguity or displace it?) and aggregating them would hide
+// which of the two moved.
 export function countReopens(events) {
   return (events || []).filter((e) => e && e.event === 'reopened').length
 }
 
-// Episodios de `status:blocked` — la arista de vuelta (A3 del handoff).
+// Episodes of `status:blocked` — the edge back (A3 of the handoff).
 //
-// ÉSTE es el único sitio del módulo donde los `unlabeled` SÍ se leen, y no es
-// una excepción a la decisión 1 sino su otra cara: la escalera es una máquina
-// de estados donde cada `labeled` marca la entrada a un peldaño y el
-// `unlabeled` es redundante; blocked es un INTERVALO, y el final de un
-// intervalo solo lo marca la retirada del label. Una lo ignora porque le sobra;
-// la otra lo necesita porque es su única fuente.
+// THIS is the only place in the module where the `unlabeled` events ARE read,
+// and it is not an exception to decision 1 but its other face: the ladder is a
+// state machine where each `labeled` marks the entry into a rung and the
+// `unlabeled` is redundant; blocked is an INTERVAL, and the end of an interval
+// is marked only by the removal of the label. One ignores it because it is
+// superfluous; the other needs it because it is its only source.
 //
-// Un episodio todavía abierto se emite con `to`/`seconds` en null en vez de
-// omitirse: un slice bloqueado AHORA es justo el que hay que ver.
+// An episode that is still open is emitted with `to`/`seconds` at null instead
+// of being omitted: a slice that is blocked RIGHT NOW is exactly the one to
+// look at.
 export function blockedEpisodes(events) {
   const episodios = []
   const ordenados = (events || [])
@@ -143,9 +150,9 @@ export function blockedEpisodes(events) {
   let abierto = null
   for (const e of ordenados) {
     if (e.event === 'labeled') {
-      // Un `labeled` sobre un episodio ya abierto no abre otro: GitHub no
-      // reetiqueta lo ya etiquetado, así que si aparece es un duplicado de la
-      // API y contarlo inflaría los episodios.
+      // A `labeled` on an already open episode does not open another: GitHub
+      // does not relabel what is already labelled, so if one shows up it is an
+      // API duplicate and counting it would inflate the episodes.
       if (!abierto) abierto = { from: e.created_at, to: null, seconds: null }
     } else if (abierto) {
       abierto.to = e.created_at
@@ -158,13 +165,13 @@ export function blockedEpisodes(events) {
   return episodios
 }
 
-// `1m03`, `52m42`, `2h06m17`, `9h41m23` — la forma exacta en que quedó escrito
-// el desenlace del despacho 1, para que la tabla cosechada y la escrita a mano
-// se puedan comparar sin traducir.
+// `1m03`, `52m42`, `2h06m17`, `9h41m23` — the exact form in which dispatch 1's
+// outcome was written down, so that the harvested table and the hand-written one
+// can be compared without translating anything.
 //
-// El minuto se imprime siempre, incluso por debajo de 60s (`0m14`): sin él la
-// columna deja de alinear y el ojo compara mal, que es la mitad de para qué
-// existe una tabla.
+// The minute is always printed, even below 60s (`0m14`): without it the column
+// stops lining up and the eye compares badly, which is half of what a table
+// exists for.
 export function formatDuration(segundos) {
   if (segundos === null || segundos === undefined) return '—'
   const s = Math.max(0, Math.round(segundos))
@@ -175,29 +182,30 @@ export function formatDuration(segundos) {
   return h > 0 ? `${h}h${dosCifras(m)}m${dosCifras(sec)}` : `${m}m${dosCifras(sec)}`
 }
 
-// Qué PR cerró el issue. NO se deduce del timeline: se pregunta.
+// Which PR closed the issue. It is NOT deduced from the timeline: it is asked
+// for.
 //
-// La primera versión de /ct-harvest lo deducía —escaneaba los
-// `cross-referenced` y se quedaba con el último PR mergeado— y contra el epic
-// #602 real ató el issue #659 al PR #665 y el #660 al #666, cuando los buenos
-// eran el #663 y el #665. La causa es estructural, no un descuido: cada PR de
-// un slice cita al slice anterior, así que el issue viejo acumula referencias
-// de PRs POSTERIORES y "el último mergeado" premia exactamente a los
-// equivocados. La tabla salía verde y con los tamaños de PR cambiados de sitio.
+// The first version of /ct-harvest deduced it —it scanned the
+// `cross-referenced` events and kept the last merged PR— and against the real
+// epic #602 it tied issue #659 to PR #665 and #660 to #666, when the right ones
+// were #663 and #665. The cause is structural, not an oversight: every PR of a
+// slice cites the previous slice, so the old issue accumulates references from
+// LATER PRs and "the last merged one" rewards exactly the wrong ones. The table
+// came out green and with the PR sizes swapped around.
 //
-// GitHub publica `closedByPullRequestsReferences` justamente para esto. Se lee
-// tal cual y no se adivina nada.
+// GitHub publishes `closedByPullRequestsReferences` precisely for this. It is
+// read as it comes and nothing is guessed.
 //
-// Se devuelven TODAS las referencias del propio repo, no una: dos PRs cerrando
-// el mismo issue es una anomalía, y el llamante tiene que poder decirla en voz
-// alta en vez de elegir en silencio y perder el hallazgo.
+// ALL the references from the repo itself are returned, not one: two PRs
+// closing the same issue is an anomaly, and the caller has to be able to say it
+// out loud instead of picking in silence and losing the finding.
 export function closingPrNumbers(issue, repo) {
   const refs = issue?.closedByPullRequestsReferences || []
   return refs
     .filter((r) => {
       if (!r || typeof r.number !== 'number') return false
-      // Sin repo declarado en la referencia, se acepta: es el caso normal
-      // dentro del mismo repositorio en algunas respuestas de la API.
+      // With no repo declared in the reference, it is accepted: that is the
+      // normal case within the same repository in some API responses.
       const owner = r.repository?.owner?.login
       const name = r.repository?.name
       if (!owner || !name) return true
@@ -211,17 +219,17 @@ function labelValue(labels, prefijo) {
   return l ? l.name.slice(prefijo.length) : null
 }
 
-// La fila entera de un slice, lista para una tabla o un CSV.
+// The whole row of a slice, ready for a table or a CSV.
 //
-// `type` y `gate` viajan en la fila porque las reglas de honestidad del §6
-// obligan a reportar POR FAMILIA y nunca agregado. Si la familia no viaja con
-// el dato, el agregado deshonesto es el camino de menor resistencia para quien
-// lea la cosecha — y es exactamente el error (FDR 0,08–0,31 de POSTCONDBENCH)
-// que esa regla existe para evitar.
+// `type` and `gate` travel in the row because the honesty rules of §6 force
+// reporting BY FAMILY and never aggregated. If the family does not travel with
+// the datum, the dishonest aggregate is the path of least resistance for
+// whoever reads the harvest — and it is exactly the mistake (POSTCONDBENCH's FDR
+// 0,08–0,31) that rule exists to avoid.
 //
-// Un issue sin label `type:` emite `type: null`, no una familia inventada ni la
-// cadena vacía: una fila sin familia tiene que ser visiblemente inclasificable,
-// no colarse en un bucket.
+// An issue with no `type:` label emits `type: null`, not an invented family and
+// not the empty string: a row with no family has to be visibly unclassifiable,
+// not sneak into a bucket.
 export function harvestSlice({ events, issue, pr }) {
   const transiciones = statusTransitions(events)
   const fases = phaseDurations(transiciones, { mergedAt: pr?.mergedAt || null, closedAt: issue?.closedAt || null })

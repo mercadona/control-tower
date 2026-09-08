@@ -1,46 +1,49 @@
 #!/usr/bin/env node
-// /ct-status — QUÉ PREGUNTA RESPONDE: «¿en qué estado está el loop ahora
-// mismo?», entera y en una sola llamada. Tres cubos, agrupados por lo que hay
-// que hacer con ellos, no por el tipo de dato del que salen:
+// /ct-status — WHAT QUESTION IT ANSWERS: «¿en qué estado está el loop ahora
+// mismo?», whole and in a single call. Three buckets, grouped by what has to be
+// done with them, not by the kind of datum they come from:
 //
-//   EN VUELO             qué slices están reclamados, y si alguien los está
-//                        trabajando de verdad (proceso `claude` dentro del
-//                        worktree) o sólo lo parece (worktree y rama en disco).
-//   ENTREGADO, SIN COSECHAR  qué slices ya cerrados dejan worktree o rama.
-//   RESIDUO              labels `status:` vivas sobre issues cerrados, y
-//                        worktrees que ningún issue reclama.
+//   EN VUELO             which slices are claimed, and whether somebody is
+//                        really working on them (a `claude` process inside the
+//                        worktree) or it only looks that way (worktree and
+//                        branch on disk).
+//   ENTREGADO, SIN COSECHAR  which already closed slices leave a worktree or a
+//                        branch behind.
+//   RESIDUO              live `status:` labels on closed issues, and worktrees
+//                        no issue claims.
 //
-// Antes de este comando el coordinador se lo componía a mano CADA VEZ,
-// cruzando pgrep + lsof + gh issue view + gh pr list + git worktree list + git
-// rev-list. Eso ya costó un error medido: una de esas comprobaciones usó `gh
-// issue list --state closed --limit 60` sobre 99 issues cerrados y reportó 6
-// casos cuando eran 10 — con un fallback que además imprimía «(ninguno —
-// limpio)». Por eso aquí NINGUNA lectura lleva `--limit`: todo pagina.
+// Before this command the coordinator put it together by hand EVERY TIME,
+// crossing pgrep + lsof + gh issue view + gh pr list + git worktree list + git
+// rev-list. That already cost one measured error: one of those checks used `gh
+// issue list --state closed --limit 60` over 99 closed issues and reported 6
+// cases when there were 10 — with a fallback that also printed «(ninguno —
+// limpio)». That is why NO read here carries a `--limit`: everything paginates.
 //
-// NO MUTA NADA. Ni labels, ni worktrees, ni ramas: sólo lee. Es la propiedad
-// que permite invocarlo sin pensárselo —y la que deja que lo invoque un
-// vigilante externo en bucle—, así que está atada por un test que mira el
-// argv REAL con el que se llamó a `gh` (__tests__/ct-status.test.js), no la
-// mera ausencia de errores. Nombrar y no borrar es deliberado y viene de
-// `collectFinishedResidue` (dispatch.js): borrar el worktree de alguien que
-// sigue trabajando es irreversible.
+// IT MUTATES NOTHING. Not labels, not worktrees, not branches: it only reads.
+// It is the property that lets you invoke it without a second thought —and the
+// one that lets an external watcher invoke it in a loop— so it is tied down by
+// a test that looks at the REAL argv `gh` was called with
+// (__tests__/ct-status.test.js), not at the mere absence of errors. Naming and
+// not deleting is deliberate and comes from `collectFinishedResidue`
+// (dispatch.js): deleting the worktree of somebody who is still working is
+// irreversible.
 //
-// EL 1 NUNCA SE DEGRADA A 0, y ésta es la regla dura del comando. Los tres
-// códigos son los mismos que usa /ct-groom: 0 = nada que revisar, 3 = hay algo
-// que revisar, 1 = no se pudo comprobar. La precedencia es 1 > 3 > 0 — nunca
-// al revés — porque una lectura incompleta NO es un loop en reposo, y quien
-// reciba la señal tiene que poder distinguirlas: el bug que originó todo esto
-// fue exactamente un informe que decía «limpio» sobre datos truncados. De ahí
-// dos conductas concretas de este fichero: la línea de «loop en reposo» sólo
-// se imprime cuando no queda NADA sin comprobar, y un worktree en disco no se
-// acusa de huérfano si la lectura de issues falló — no porque entonces no se
-// sepa nada (con una lectura parcial, los issues que sí llegaron siguen
-// explicando sus worktrees), sino porque un issue que NO llegó podría
-// reclamarlo, y acusarlo sería inventar el hallazgo.
+// THE 1 NEVER DEGRADES TO 0, and this is the command's hard rule. The three
+// codes are the same ones /ct-groom uses: 0 = nothing to review, 3 = there is
+// something to review, 1 = it could not be checked. The precedence is 1 > 3 > 0
+// — never the other way round — because an incomplete read is NOT a loop at
+// rest, and whoever receives the signal has to be able to tell them apart: the
+// bug that started all of this was exactly a report that said «limpio» about
+// truncated data. Hence two concrete behaviours of this file: the «loop en
+// reposo» line is only printed when NOTHING is left unchecked, and a worktree
+// on disk is not accused of being an orphan if the issue read failed — not
+// because nothing is known then (with a partial read, the issues that did
+// arrive still explain their worktrees), but because an issue that did NOT
+// arrive could claim it, and accusing it would be inventing the finding.
 //
-// Un hallazgo parcial tampoco oculta el resto: si falla la lectura de procesos
-// pero la de issues va bien, se informa de lo que sí se sabe, se avisa de lo
-// que no, y se sale con 1.
+// A partial finding does not hide the rest either: if the process read fails
+// but the issue read goes well, what is known is reported, what is not is
+// warned about, and it exits with 1.
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -50,17 +53,18 @@ import { construirEstado } from './loop-estado.js'
 import { mapGhIssue, filterMergedIssues, closedWithLiveStatus } from './gh-issue-map.js'
 import { parseRepoSlug } from './dispatch.js'
 
-// `arg()` endurecido: el MISMO de ct-next.mjs/ct-groom.mjs/dispatch-check.mjs,
-// palabra por palabra y por el mismo motivo medido. Sólo devuelve un string
-// cuando el flag trae de verdad un valor; si el flag es el último token de
-// argv, o el siguiente token es a su vez otro flag (empieza por `--`),
-// devuelve `true` (presente-sin-valor) en vez de colarlo como valor. La
-// versión ingenua (`process.argv[i + 1]` tal cual) hacía que un `--milestone`
-// colgante creara en GitHub un milestone literalmente titulado "true", y que
-// `--project` sin valor se convirtiera en `1` (`Number(true) === 1`). Aquí no
-// hay mutaciones que corromper, pero un `--repo` colgante sí llegaría a `gh
-// api repos/true/issues` y produciría un informe sobre un repo que no existe:
-// el call-site de más abajo lo rechaza explícitamente, igual que los hermanos.
+// A hardened `arg()`: the SAME one as in
+// ct-next.mjs/ct-groom.mjs/dispatch-check.mjs, word for word and for the same
+// measured reason. It only returns a string when the flag really carries a
+// value; if the flag is argv's last token, or the next token is itself another
+// flag (it starts with `--`), it returns `true` (present-without-value) instead
+// of smuggling it in as a value. The naive version (`process.argv[i + 1]` as
+// is) made a dangling `--milestone` create a milestone on GitHub literally
+// titled "true", and a `--project` with no value turn into `1`
+// (`Number(true) === 1`). There are no mutations to corrupt here, but a
+// dangling `--repo` would indeed reach `gh api repos/true/issues` and produce a
+// report about a repo that does not exist: the call site further down rejects
+// it explicitly, just like its siblings.
 const arg = (f, d) => {
   const i = process.argv.indexOf(f)
   if (i === -1) return d
@@ -75,27 +79,27 @@ if (repo === true) {
   process.exit(2)
 }
 if (typeof repo !== 'string' || repo.length === 0) { console.error(usage); process.exit(2) }
-// Forma de `--repo`: el mismo criterio (y la misma función) que /ct-next, para
-// que `--repo menoplus` no muera con un 404 sin explicar que el problema era
-// la forma del argumento.
+// The shape of `--repo`: the same criterion (and the same function) as
+// /ct-next, so that a `--repo menoplus` does not die with a 404 without
+// explaining that the problem was the shape of the argument.
 if (!parseRepoSlug(repo)) {
   console.error(`--repo inválido: "${repo}" — debe tener la forma owner/repo (p.ej. josemerca/control-tower), con exactamente una barra y ambas mitades no vacías.`)
   process.exit(2)
 }
 
-// VENTANA_ARRANQUE_MS: por debajo de esta edad de claim, un slice sin proceso
-// se informa como «arrancando», no como «sin señal de vida». Justo después de
-// un despacho, cmux está tecleando el comando y `claude` todavía no ha
-// arrancado; sin esta ventana, mirar el estado en ese hueco acusaría de
-// abandono a un slice perfectamente sano. El valor es el presupuesto del
-// centinela de arranque de /ct-next (DEFAULT_LAUNCH_SENTINEL_TIMEOUT_MS,
-// ct-next.mjs) y se lee de la MISMA variable de entorno, con el mismo tope: si
-// alguien se lo sube al dispatcher, este informe tiene que moverse con él o
-// diría «muerto» sobre slices que el dispatcher todavía está esperando. La
-// diferencia con /ct-next es qué se hace ante un valor que no se entiende: el
-// dispatcher aborta con exit 2 (va a mutar cosas), y aquí, que sólo se lee, se
-// avisa y se sigue con el default — cerrar el informe por una variable mal
-// puesta sería peor que informarlo.
+// VENTANA_ARRANQUE_MS: below this claim age, a slice with no process is
+// reported as «arrancando», not as «sin señal de vida». Right after a dispatch,
+// cmux is typing the command and `claude` has not started up yet; without this
+// window, looking at the state in that gap would accuse a perfectly healthy
+// slice of abandonment. The value is the budget of /ct-next's start-up sentinel
+// (DEFAULT_LAUNCH_SENTINEL_TIMEOUT_MS, ct-next.mjs) and is read from the SAME
+// environment variable, with the same cap: if somebody raises it for the
+// dispatcher, this report has to move with it or it would say «muerto» about
+// slices the dispatcher is still waiting for. The difference with /ct-next is
+// what is done in the face of a value that cannot be understood: the dispatcher
+// aborts with exit 2 (it is about to mutate things), and here, where it only
+// reads, it warns and carries on with the default — closing down the report
+// because of a badly set variable would be worse than reporting it.
 const VENTANA_ARRANQUE_DEFECTO_MS = 15000
 const VENTANA_ARRANQUE_TOPE_MS = 600_000
 let ventanaArranqueMs = VENTANA_ARRANQUE_DEFECTO_MS
@@ -109,19 +113,20 @@ if (ventanaRaw !== undefined && ventanaRaw !== '') {
   }
 }
 
-// maxBuffer: el default de execFileSync es 1 MiB y aquí no hay ningún
-// `--limit` que acote la respuesta (a propósito) — un repo con unos cientos de
-// issues con body completo lo supera con facilidad. Mismo valor que
-// ct-next.mjs/ct-groom.mjs. timeout+killSignal: un `gh` colgado (red a medias,
-// auth que no responde) no puede dejar este comando esperando para siempre.
+// maxBuffer: execFileSync's default is 1 MiB and there is no `--limit` here to
+// bound the answer (on purpose) — a repo with a few hundred issues with a full
+// body exceeds it easily. Same value as ct-next.mjs/ct-groom.mjs.
+// timeout+killSignal: a hung `gh` (a half-working network, an auth that does
+// not answer) cannot leave this command waiting forever.
 const GH_MAX_BUFFER = 20 * 1024 * 1024
 const CHILD_TIMEOUT_MS = 10 * 60 * 1000
 
-// El stderr del hijo va a `pipe`, no a `inherit` como en ct-next.mjs: aquí el
-// mensaje de `gh` no es sólo diagnóstico suelto, es el MOTIVO que viaja dentro
-// de `sinComprobar` hasta el informe. Y se prefiere ese texto al `e.message`
-// de Node ("Command failed: gh api repos/…" con el argv entero dentro), que
-// entierra la razón real bajo doscientos caracteres de línea de comandos.
+// The child's stderr goes to `pipe`, not to `inherit` as in ct-next.mjs: here
+// `gh`'s message is not just loose diagnostics, it is the REASON that travels
+// inside `sinComprobar` all the way into the report. And that text is preferred
+// over Node's `e.message` ("Command failed: gh api repos/…" with the whole argv
+// inside), which buries the real reason under two hundred characters of command
+// line.
 const gh = (a) => {
   try {
     return execFileSync('gh', a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: GH_MAX_BUFFER, timeout: CHILD_TIMEOUT_MS, killSignal: 'SIGKILL' })
@@ -133,68 +138,69 @@ const gh = (a) => {
 
 const git = (args) => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: CHILD_TIMEOUT_MS, killSignal: 'SIGKILL' })
 
-// motivos: todo lo que NO se pudo comprobar. Es lo único que decide el exit 1,
-// así que nada que llegue aquí puede acabar en un informe que se lea como
-// «nada que revisar».
+// motivos: everything that could NOT be checked. It is the only thing that
+// decides the exit 1, so nothing that lands here can end up in a report that
+// reads as «nada que revisar».
 const motivos = []
 
 // ---------------------------------------------------------------- issues ---
-// `cargarIssues` intenta SIEMPRE las dos lecturas y devuelve lo que salió bien
-// junto con los motivos de lo que no: un módulo compartido no decide por su
-// llamante, y este llamante quiere informar de lo que sí sabe en vez de
-// abortar. Antes lanzaba, y lanzar al fallar la segunda lectura tiraba la
-// primera —que ya estaba entera en memoria—: el informe salía VACÍO bajo un
-// «lo de arriba es sólo lo que sí se ha podido comprobar» que no tenía nada
-// arriba. Cada motivo nombra cuál de las dos lecturas falló.
+// `cargarIssues` ALWAYS attempts both reads and returns what went well
+// together with the reasons for what did not: a shared module does not decide
+// on its caller's behalf, and this caller wants to report what it does know
+// instead of aborting. It used to throw, and throwing when the second read
+// failed threw away the first —which was already whole in memory—: the report
+// came out EMPTY under a «lo de arriba es sólo lo que sí se ha podido
+// comprobar» that had nothing above it. Each reason names which of the two
+// reads failed.
 //
-// `issuesLeidos` exige las DOS. No es exceso de celo: con sólo los abiertos no
-// se sabe qué worktree dejó atrás un slice ya entregado, y con sólo los
-// cerrados no se sabe cuál está en vuelo — en cualquiera de los dos casos, el
-// cruce que decide "huérfano" fabricaría hallazgos. Lo que sí se pudo leer
-// sigue alimentando su bloque del informe.
+// `issuesLeidos` demands BOTH. This is not over-zealousness: with only the open
+// ones there is no knowing which worktree an already delivered slice left
+// behind, and with only the closed ones there is no knowing which one is in
+// flight — in either case, the crossing that decides "orphan" would manufacture
+// findings. What could be read still feeds its own block of the report.
 const { abiertos, cerrados, motivos: motivosIssues } = cargarIssues({ repo, gh })
 const issuesLeidos = motivosIssues.length === 0
 motivos.push(...motivosIssues)
 
 const mapeados = abiertos.map(mapGhIssue)
 const enProgreso = mapeados.filter((i) => i.status === 'in-progress').map((i) => ({ n: i.n, nombre: i.name }))
-// enRevision: trabajo ENTREGADO que espera merge. Es la segunda de las tres
-// preguntas del §3.2 («qué está en vuelo, qué ha entregado, qué es residuo») y
-// hasta ahora el comando no la respondía: sus worktrees caían en RESIDUO y
-// disparaban exit 3 sobre un loop perfectamente sano. Ver el comentario de
-// `enRevision` en loop-estado.js para por qué no es residuo ni cosecha.
+// enRevision: DELIVERED work waiting for a merge. It is the second of §3.2's
+// three questions («qué está en vuelo, qué ha entregado, qué es residuo») and
+// until now the command did not answer it: its worktrees fell into RESIDUO and
+// fired an exit 3 over a perfectly healthy loop. See the `enRevision` comment
+// in loop-estado.js for why it is neither residue nor harvest.
 const enRevision = mapeados.filter((i) => i.status === 'in-review').map((i) => ({ n: i.n, nombre: i.name }))
 const mergeados = filterMergedIssues(cerrados)
 const cerradosConStatus = closedWithLiveStatus(cerrados)
-// statusAbiertoPorNumero: para poder decir la VERDAD sobre un worktree que
-// ningún issue en vuelo ni entregado explica — ver el bloque de residuo del
-// render. No cuesta ninguna llamada más: sale de los issues ya leídos.
+// statusAbiertoPorNumero: so that the TRUTH can be told about a worktree that
+// no in-flight or delivered issue explains — see the render's residue block. It
+// costs no extra call: it comes out of the issues already read.
 const statusAbiertoPorNumero = new Map(mapeados.map((i) => [String(i.n), i.status]))
 
-// ------------------------------------------------------------ el checkout ---
-// La mitad LOCAL de este informe —worktrees, ramas, procesos— sale de un
-// checkout; la mitad remota sale de `--repo`. Cruzarlas sin comprobar que
-// hablan del MISMO repositorio no produce un informe incompleto: produce
-// hallazgos FABRICADOS. Medido, con esta comprobación desactivada y un
-// checkout de `o/r` con tres worktrees y un claim de 3 h: `--repo otro/repo`
-// daba 3 hallazgos con cero avisos y exit 3 — uno de ellos la acusación de
-// abandono que el §4 del diseño llama «el peor fallo posible de este
-// comando», y dos worktrees marcados como candidatos a `git worktree remove`.
-// Que este comando no escriba nada no protege de nada: escribe el humano, por
-// indicación suya.
+// ---------------------------------------------------------- the checkout ---
+// The LOCAL half of this report —worktrees, branches, processes— comes out of
+// a checkout; the remote half comes out of `--repo`. Crossing them without
+// checking that they talk about the SAME repository does not produce an
+// incomplete report: it produces MANUFACTURED findings. Measured, with this
+// check disabled and a checkout of `o/r` with three worktrees and a 3 h old
+// claim: `--repo otro/repo` gave 3 findings with zero warnings and exit 3 — one
+// of them the accusation of abandonment that §4 of the design calls «el peor
+// fallo posible de este comando», and two worktrees marked as candidates for a
+// `git worktree remove`. That this command writes nothing protects against
+// nothing: the human writes, on its say-so.
 //
-// Y la raíz tiene que ser la del CHECKOUT PRINCIPAL, no la de `git rev-parse
-// --show-toplevel`. Invocado desde dentro de `.worktrees/7`, `--show-toplevel`
-// devuelve ese mismo worktree: ahí no hay ningún `.worktrees/` (todo sale
-// `worktree ✗`) y el prefijo con el que `liveSliceProcesses` mapea cada `cwd`
-// a un slice queda mal (todo sale `proceso ✗`) — el informe niega justo el
-// directorio en el que estás parado. `git worktree list --porcelain` lista
-// SIEMPRE el checkout principal el primero.
+// And the root has to be the MAIN CHECKOUT's, not `git rev-parse
+// --show-toplevel`'s. Invoked from inside `.worktrees/7`, `--show-toplevel`
+// returns that very worktree: there is no `.worktrees/` in there (everything
+// comes out `worktree ✗`) and the prefix with which `liveSliceProcesses` maps
+// each `cwd` to a slice comes out wrong (everything comes out `proceso ✗`) —
+// the report denies the very directory you are standing in. `git worktree list
+// --porcelain` ALWAYS lists the main checkout first.
 //
-// A diferencia de /ct-next (`ensureRepoIdentity`, que aborta con exit 1 porque
-// va a crear ramas y worktrees), aquí no se aborta: una comprobación que no se
-// puede hacer es exactamente un `sinComprobar` con exit 1. Se dice cuál es la
-// mitad que no es fiable y se sigue informando de la otra.
+// Unlike /ct-next (`ensureRepoIdentity`, which aborts with exit 1 because it is
+// about to create branches and worktrees), nothing is aborted here: a check
+// that cannot be made is exactly a `sinComprobar` with exit 1. Which half is
+// not trustworthy is said, and the other one keeps being reported.
 const detalleDe = (e) => (e && e.stderr ? String(e.stderr).trim() : '') || (e && e.message) || 'error desconocido'
 
 function motivoDeIdentidad(root, esperado) {
@@ -202,10 +208,11 @@ function motivoDeIdentidad(root, esperado) {
   try {
     originUrl = git(['-C', root, 'remote', 'get-url', 'origin']).trim()
   } catch (e) {
-    // Sin remote `origin` no hay NADA que comparar. Se trata como "no
-    // verificable" —nunca como "adelante"—, mismo criterio que ct-next.mjs:
-    // un repo local sin origin es un entorno legítimo, y por eso esto degrada
-    // a exit 1 con su motivo en vez de tumbar el comando.
+    // With no `origin` remote there is NOTHING to compare. It is treated as
+    // "not verifiable" —never as "go ahead"—, the same criterion as
+    // ct-next.mjs: a local repo with no origin is a legitimate environment, and
+    // that is why this degrades to exit 1 with its reason instead of taking the
+    // command down.
     return `no se pudo verificar que ${root} sea el checkout de ${esperado}: no tiene remote "origin" (${detalleDe(e)})`
   }
   const m = originUrl.match(/github\.com[:/]+([^/]+)\/(.+?)(?:\.git)?\/?$/)
@@ -218,9 +225,9 @@ function motivoDeIdentidad(root, esperado) {
 }
 
 let repoRoot = null
-// motivoCheckout: por qué la mitad local no es utilizable. Viaja como el
-// `motivo` de `procesos` (ver más abajo) en vez de empujarse a `motivos`
-// aparte, para que la misma causa no produzca dos avisos distintos.
+// motivoCheckout: why the local half is not usable. It travels as `procesos`'s
+// `motivo` (see further down) instead of being pushed to `motivos` separately,
+// so that the same cause does not produce two different warnings.
 let motivoCheckout = null
 try {
   const linea = git(['worktree', 'list', '--porcelain']).split('\n').find((l) => l.startsWith('worktree '))
@@ -233,17 +240,18 @@ if (repoRoot) motivoCheckout = motivoDeIdentidad(repoRoot, repo)
 const checkoutComprobado = repoRoot !== null && motivoCheckout === null
 if (motivoCheckout) motivoCheckout += ': este informe no dice nada sobre worktrees, ramas ni procesos'
 
-// worktreesEnDisco / ramasEnDisco: un fallo de lectura NUNCA se traduce a «no
-// hay». Que `.worktrees/` no exista sí es una respuesta legítima (ningún
-// dispatch ha creado nada todavía); cualquier otro error es una lectura que no
-// se pudo hacer, y va a `motivos`.
+// worktreesEnDisco / ramasEnDisco: a read failure NEVER translates into «no
+// hay». That `.worktrees/` does not exist is a legitimate answer (no dispatch
+// has created anything yet); any other error is a read that could not be made,
+// and it goes into `motivos`.
 //
-// `worktreesLeidos`/`ramasLeidas` distinguen las dos cosas para el render: sin
-// ellas, un array vacío por FALLO era indistinguible de un array vacío por «no
-// hay nada», y el bloque en vuelo imprimía `worktree ✗ rama ✗` a la vez que el
-// `aviso:` decía que no se había podido mirar. Reproducido con `.worktrees/`
-// en `chmod 000`. Un `ENOENT` sí es una lectura completada: el directorio no
-// existe, y eso responde la pregunta.
+// `worktreesLeidos`/`ramasLeidas` tell the two apart for the render: without
+// them, an empty array caused by a FAILURE was indistinguishable from an empty
+// array caused by «no hay nada», and the in-flight block printed
+// `worktree ✗ rama ✗` at the same time as the `aviso:` said it had not been
+// possible to look. Reproduced with `.worktrees/` under `chmod 000`. An
+// `ENOENT` is a completed read: the directory does not exist, and that answers
+// the question.
 let worktreesEnDisco = []
 let ramasEnDisco = []
 let worktreesLeidos = false
@@ -259,8 +267,9 @@ if (checkoutComprobado) {
     else motivos.push(`no se pudo listar ${join(repoRoot, '.worktrees')} (${e.code || e.message}): este informe no dice nada sobre worktrees en disco`)
   }
   try {
-    // --format en vez de parsear la salida decorada de `git branch`: sin él,
-    // la rama actual llega con un "* " delante y ninguna casaría con `feat/N`.
+    // --format instead of parsing `git branch`'s decorated output: without it,
+    // the current branch arrives with a "* " in front and none would match
+    // `feat/N`.
     ramasEnDisco = git(['-C', repoRoot, 'branch', '--list', 'feat/*', '--format=%(refname:short)'])
       .split('\n').map((s) => s.trim()).filter(Boolean)
     ramasLeidas = true
@@ -269,31 +278,31 @@ if (checkoutComprobado) {
   }
 }
 
-// ---------------------------------------------------------- señal de vida ---
-// La única señal que responde «¿alguien está trabajando AHORA?» en vez de
-// «¿queda rastro?». Devuelve `comprobado: false` con su motivo cuando `ps` o
-// `lsof` no están, fallan o se cuelgan (las dos llamadas llevan tope de
-// tiempo); el compositor lo convierte en `vivo: null` para todo el mundo,
-// nunca en «muerto». Ya no interviene `pgrep`: ver el comentario de
-// `liveSliceProcesses` en scripts/liveness.js para por qué se descartó.
+// ---------------------------------------------------------- sign of life ---
+// The only signal that answers «is somebody working NOW?» instead of «is there
+// any trace left?». It returns `comprobado: false` with its reason when `ps` or
+// `lsof` are missing, fail or hang (both calls carry a time cap); the composer
+// turns that into `vivo: null` for everybody, never into «dead». `pgrep` no
+// longer takes part: see the `liveSliceProcesses` comment in
+// scripts/liveness.js for why it was rejected.
 const procesos = checkoutComprobado
   ? liveSliceProcesses(repoRoot)
   : { porSlice: new Map(), comprobado: false, motivo: motivoCheckout }
 
-// ---------------------------------------------------- la edad de cada claim ---
-// Del TIMELINE del issue: el evento `labeled` más reciente para
-// `status:in-progress`. No vale el `updated_at` del issue (que vendría gratis
-// en el payload ya leído): cambia con cualquier edición —un comentario, otra
-// label—, así que un comentario reciente haría pasar por «arrancando» un claim
-// de hace tres horas. Y las labels no llevan fecha en el payload REST.
+// ------------------------------------------------- the age of each claim ---
+// Out of the issue's TIMELINE: the most recent `labeled` event for
+// `status:in-progress`. The issue's `updated_at` will not do (and it would come
+// for free in the payload already read): it changes with any edit —a comment,
+// another label— so a recent comment would make a three-hour-old claim pass for
+// «arrancando». And labels carry no date in the REST payload.
 //
-// Una llamada por issue EN VUELO, y «en vuelo» está acotado por el cap del
-// dispatcher. `--paginate` sin `--slurp`: sobre un endpoint que devuelve un
-// array, gh fusiona las páginas en un único array.
+// One call per IN-FLIGHT issue, and «in flight» is bounded by the dispatcher's
+// cap. `--paginate` without `--slurp`: over an endpoint that returns an array,
+// gh merges the pages into a single array.
 const edadClaimMs = new Map()
-// motivosEdad: por qué no se pudo leer la edad de un claim concreto. Se guarda
-// aparte porque el compositor sabe QUE falta, pero sólo aquí se sabe POR QUÉ —
-// ver la sustitución de más abajo.
+// motivosEdad: why the age of one particular claim could not be read. It is
+// kept aside because the composer knows THAT it is missing, but only here is it
+// known WHY — see the substitution further down.
 const motivosEdad = new Map()
 const ahora = Date.now()
 for (const { n } of enProgreso) {
@@ -309,45 +318,46 @@ for (const { n } of enProgreso) {
     .filter((ev) => ev && ev.event === 'labeled' && ev.label && ev.label.name === 'status:in-progress')
     .map((ev) => Date.parse(ev.created_at))
     .filter((t) => Number.isFinite(t))
-  // El ÚLTIMO `labeled`, no el primero: un slice reabierto con `--reopen`
-  // vuelve a `status:in-progress`, y la edad que importa es la del claim
-  // vigente, no la del primero de su historia.
+  // The LAST `labeled`, not the first: a slice reopened with `--reopen` goes
+  // back to `status:in-progress`, and the age that matters is the current
+  // claim's, not that of the first one in its history.
   edadClaimMs.set(n, marcas.length ? ahora - Math.max(...marcas) : null)
 }
 
-// ------------------------------------------------------------ composición ---
-// Con la lista de issues incompleta SÍ se puede atribuir un worktree —con los
-// issues que sí llegaron—; lo que NO se puede es concluir que no lo reclama
-// nadie, porque un issue que no llegó podría reclamarlo. Acusar de huérfano a
-// los que no aparezcan sería fabricar el hallazgo — exactamente la clase de
-// afirmación confiada sobre datos incompletos que este comando existe para
-// eliminar. Se dice cuáles quedaron sin explicar y se sigue.
+// ----------------------------------------------------------- composition ---
+// With an incomplete list of issues a worktree CAN still be attributed —with
+// the issues that did arrive—; what CANNOT be done is to conclude that nobody
+// claims it, because an issue that did not arrive could claim it. Accusing the
+// ones that do not show up of being orphans would be manufacturing the finding
+// — exactly the class of confident assertion over incomplete data this command
+// exists to eliminate. Which ones were left unexplained is said, and the run
+// goes on.
 //
-// Lo que se apaga es la CONCLUSIÓN de residuo (`sePuedeAtribuirWorktree`), no
-// la lista ni la atribución: los worktrees que un issue leído sí reclama se
-// siguen atribuyendo, y por eso el aviso de más abajo puede callarse sobre
-// ellos. Antes se vaciaba `worktreesEnDisco` aquí mismo, y eso protegía de
-// más: el
-// mismo dato alimenta el `hasWorktree` del bloque EN VUELO, que es una lectura
-// de DISCO y no depende de GitHub. El informe se contradecía en dos líneas
-// seguidas —el aviso nombraba `.worktrees/7` y el bloque decía `worktree ✗`
-// sobre #7—, y era la misma clase de afirmación falsa que la marca `?` de más
-// abajo vino a matar, entrando por otra puerta. Era inalcanzable mientras
-// `cargarIssues` lanzaba (sin issues no había bloque en vuelo que imprimir);
-// el informe parcial lo hizo alcanzable.
+// What is turned off is the residue CONCLUSION (`sePuedeAtribuirWorktree`),
+// not the list nor the attribution: the worktrees an issue that was read does
+// claim are still attributed, and that is why the warning further down can keep
+// quiet about them. `worktreesEnDisco` used to be emptied right here, and that
+// protected too much: the same datum feeds the `hasWorktree` of the EN VUELO
+// block, which is a DISK read and does not depend on GitHub. The report
+// contradicted itself in two consecutive lines —the warning named
+// `.worktrees/7` and the block said `worktree ✗` about #7— and it was the same
+// class of false assertion the `?` mark further down came to kill, coming in
+// through another door. It was unreachable while `cargarIssues` threw (with no
+// issues there was no in-flight block to print); the partial report made it
+// reachable.
 //
-// Y OJO CON LA REDACCIÓN, que es donde reapareció el mismo defecto una vuelta
-// después: una lectura PARCIAL no deja el informe a ciegas. Si los abiertos se
-// leyeron y los cerrados no, `enProgreso` SÍ explica worktrees, y la cosecha
-// también en el caso simétrico. El aviso decía «no se han cruzado con nada» de
-// TODOS los directorios en disco, y esa frase se volvió falsa en el momento en
-// que la lista real pasó a alimentar los bloques: afirmaba por stderr lo
-// contrario de lo que el propio informe imprimía dos líneas más abajo. Por eso
-// el aviso se emite DESPUÉS de componer, y sólo sobre los que de verdad
-// quedaron sin explicar. Si todos quedaron explicados no hay nada que avisar
-// —y el exit sigue siendo 1 igualmente, porque el motivo de la lectura que
-// falló ya está en `motivos` desde que se leyeron los issues; eso no se pierde
-// nunca.
+// AND MIND THE WORDING, which is where the same defect reappeared one round
+// later: a PARTIAL read does not leave the report blind. If the open ones were
+// read and the closed ones were not, `enProgreso` DOES explain worktrees, and
+// so does the harvest in the symmetric case. The warning said «no se han
+// cruzado con nada» about ALL the directories on disk, and that sentence became
+// false the moment the real list started feeding the blocks: it asserted on
+// stderr the opposite of what the report itself printed two lines below. That
+// is why the warning is emitted AFTER composing, and only about the ones that
+// really were left unexplained. If all of them were explained there is nothing
+// to warn about —and the exit is still 1 all the same, because the reason for
+// the read that failed has been in `motivos` since the issues were read; that
+// is never lost.
 const estado = construirEstado({
   enProgreso,
   enRevision,
@@ -361,9 +371,10 @@ const estado = construirEstado({
   ventanaArranqueMs,
 })
 
-// Los que quedaron SIN EXPLICAR, usando el mismo criterio que el compositor
-// (`worktreesExplicados` sale de él, no se recalcula aquí: dos copias del
-// criterio derivarían, y la primera víctima sería este mismo aviso).
+// The ones left UNEXPLAINED, using the same criterion as the composer
+// (`worktreesExplicados` comes out of it, it is not recomputed here: two copies
+// of the criterion would drift, and the first victim would be this very
+// warning).
 if (!issuesLeidos) {
   const explicados = new Set(estado.worktreesExplicados)
   const sinCruzar = worktreesEnDisco.filter((w) => !explicados.has(w))
@@ -372,11 +383,11 @@ if (!issuesLeidos) {
   }
 }
 
-// El compositor emite un motivo genérico («#N: no se pudo determinar la
-// antigüedad del claim») para cada slice sin vida y sin edad. Cuando el fallo
-// fue de LECTURA, aquí se conoce la causa exacta, así que su motivo se
-// SUSTITUYE por el concreto en vez de acumularse: dos líneas en stderr sobre
-// el mismo issue por una sola causa se leen como dos problemas distintos.
+// The composer emits a generic reason («#N: no se pudo determinar la
+// antigüedad del claim») for every slice with no life and no age. When the
+// failure was a READ failure, the exact cause is known here, so its reason is
+// REPLACED by the concrete one instead of accumulating: two lines on stderr
+// about the same issue for a single cause read as two different problems.
 const numeroCitado = (m) => {
   const x = /^#(\d+):/.exec(m)
   return x ? Number(x[1]) : null
@@ -387,11 +398,12 @@ const sinComprobar = [
   ...motivosEdad.values(),
 ]
 
-// ---------------------------------------------------------------- informe ---
+// ---------------------------------------------------------------- report ---
 const VIVO = { true: '✓', false: '✗', null: '?' }
-// marca: `✓` / `✗` sólo cuando la lectura que responde esa pregunta se pudo
-// completar; `?` cuando no. Mismo alfabeto de tres estados que `VIVO`, y por
-// el mismo motivo: «no lo hay» y «no se ha podido mirar» no son la misma cosa.
+// marca: `✓` / `✗` only when the read that answers that question could be
+// completed; `?` when it could not. The same three-state alphabet as `VIVO`,
+// and for the same reason: «there is none» and «it could not be looked at» are
+// not the same thing.
 const marca = (leido, hay) => (leido ? (hay ? '✓' : '✗') : '?')
 function formatearEdad(ms) {
   const s = Math.max(0, Math.round(ms / 1000))
@@ -403,16 +415,16 @@ function formatearEdad(ms) {
   return `${Math.round(h / 24)} d`
 }
 
-// sufijoDeProceso: si alguien está trabajando AHORA dentro de ese worktree, y
-// sólo si se ha podido comprobar. La primera versión de este bloque decía
-// «nadie lo está trabajando ahora» sin mirar `procesos.porSlice` —que ya está
-// en memoria—, y la frase salía igual con un `claude` vivo dentro del
-// directorio, e igual también cuando la comprobación de procesos había FALLADO
-// (el aviso por stderr y la afirmación por stdout, a la vez). Es exactamente
-// la conflación que el §1.1 del diseño existe para romper —«existen
-// artefactos» frente a «alguien está trabajando ahora»— reintroducida en
-// prosa, y contradice el §4: cuando no se puede comprobar, no se acusa.
-// Cuando no se sabe, esta función no dice NADA.
+// sufijoDeProceso: whether somebody is working RIGHT NOW inside that worktree,
+// and only if that could be checked. The first version of this block said
+// «nadie lo está trabajando ahora» without looking at `procesos.porSlice`
+// —which is already in memory— and the sentence came out just the same with a
+// live `claude` inside the directory, and just the same too when the process
+// check had FAILED (the warning on stderr and the assertion on stdout, at
+// once). It is exactly the conflation §1.1 of the design exists to break
+// —«there are artefacts» versus «somebody is working now»— reintroduced in
+// prose, and it contradicts §4: when it cannot be checked, nobody is accused.
+// When it is not known, this function says NOTHING.
 function sufijoDeProceso(w) {
   if (!procesos.comprobado) return ''
   const pid = procesos.porSlice.get(String(w))
@@ -422,25 +434,26 @@ function sufijoDeProceso(w) {
 }
 
 const lineas = []
-// Bloques vacíos NO se imprimen: un loop en reposo produce un informe corto,
-// no tres encabezados con «(ninguno)». El fallback que imprimía «(ninguno —
-// limpio)» sobre datos truncados es el bug que da nombre a todo esto.
+// Empty blocks are NOT printed: a loop at rest produces a short report, not
+// three headings with «(ninguno)». The fallback that printed «(ninguno —
+// limpio)» over truncated data is the bug that gives all of this its name.
 if (estado.enVuelo.length) {
   lineas.push(`EN VUELO (${estado.enVuelo.length})`)
   for (const s of estado.enVuelo) {
     lineas.push(`  #${s.n}  ${s.nombre}`)
     if (!checkoutComprobado) {
-      // `hasWorktree`/`hasBranch` son `false` aquí porque no se miró, no
-      // porque no estén: imprimir `worktree ✗` sería afirmar lo que no se ha
-      // comprobado, que es el mismo defecto que este comando persigue.
+      // `hasWorktree`/`hasBranch` are `false` here because nothing was looked
+      // at, not because they are not there: printing `worktree ✗` would be
+      // asserting what has not been checked, which is the same defect this
+      // command is after.
       lineas.push('        worktree ?  rama ?  proceso ?  ← no se ha mirado ningún checkout (ver los avisos)')
     } else {
-      // `?`, no `✗`, cuando la lectura correspondiente no se pudo completar:
-      // afirmar que no hay lo que no se ha podido mirar es el mismo defecto
-      // que este comando persigue, y la incoherencia era interna —el `else`
-      // de arriba ya imprime `worktree ?` por esta misma razón—. Un `✓` sólo
-      // puede venir de una lectura que sí se hizo, así que la marca de duda
-      // nunca degrada una señal positiva.
+      // `?`, not `✗`, when the corresponding read could not be completed:
+      // asserting that there is none of what could not be looked at is the same
+      // defect this command is after, and the inconsistency was internal —the
+      // `else` above already prints `worktree ?` for this very reason. A `✓` can
+      // only come from a read that really happened, so the mark of doubt never
+      // degrades a positive signal.
       const señales = [`worktree ${marca(worktreesLeidos, s.hasWorktree)}`, `rama ${marca(ramasLeidas, s.hasBranch)}`, `proceso ${VIVO[String(s.vivo)]}`]
       if (s.pid) señales.push(`pid ${s.pid}`)
       let nota = ''
@@ -454,10 +467,10 @@ if (estado.enVuelo.length) {
   }
 }
 
-// Bloque informativo: NO cuenta como hallazgo (`hayHallazgos` no lo mira), así
-// que un loop sano con tres PRs abiertos vuelve a salir con 0. Distinto del
-// bloque de cosecha de aquí abajo, que es lo YA MERGEADO que dejó restos en
-// disco — los dos pueden aparecer a la vez.
+// An informative block: it does NOT count as a finding (`hayHallazgos` does
+// not look at it), so a healthy loop with three open PRs comes out with 0
+// again. Different from the harvest block just below, which is what is ALREADY
+// MERGED and left remains on disk — the two can appear at once.
 if (estado.enRevision.length) {
   if (lineas.length) lineas.push('')
   lineas.push(`ENTREGADO, ESPERANDO MERGE (${estado.enRevision.length})`)
@@ -471,10 +484,11 @@ if (estado.cosecha.length) {
   lineas.push(`ENTREGADO, SIN COSECHAR (${estado.cosecha.length})`)
   for (const c of estado.cosecha) {
     const queda = [c.hasWorktree ? `worktree .worktrees/${c.n}` : null, c.hasBranch ? `rama feat/${c.n}` : null].filter(Boolean)
-    // «cerrado como completado», no «mergeado»: lo único observable sin cruzar
-    // con el grafo de PRs es el `stateReason` del issue (ver filterMergedIssues
-    // en gh-issue-map.js). Cerrar a mano como completed cuenta igual, y decir
-    // «mergeado» sería afirmar algo que no se ha comprobado.
+    // «cerrado como completado», not «mergeado»: the only thing observable
+    // without crossing with the PR graph is the issue's `stateReason` (see
+    // filterMergedIssues in gh-issue-map.js). Closing by hand as completed
+    // counts just the same, and saying «mergeado» would be asserting something
+    // that has not been checked.
     lineas.push(`  #${c.n}  cerrado como completado, y todavía queda en disco: ${queda.join(' y ')}`)
   }
 }
@@ -487,50 +501,52 @@ if (residuoTotal) {
     lineas.push(`  #${r.n}  cerrado, pero conserva ${r.statusLabels.map((l) => `status:${l}`).join(' y ')}`)
   }
   for (const w of estado.residuo.worktreesHuerfanos) {
-    // LA FRASE. El §6 del spec proponía «sin issue vivo que lo reclame», y esa
-    // frase es FALSA cuando el issue está ABIERTO en un estado que no es
-    // `status:in-progress` (p.ej. `ready`, `blocked`): no lo explica ni
-    // `enProgreso` ni `mergeados`, así que cae aquí — con su issue vivo. Son
-    // situaciones distintas con remedios distintos, y distinguirlas no cuesta
-    // ninguna llamada: sale de los issues abiertos que ya se leyeron.
+    // THE SENTENCE. §6 of the spec proposed «sin issue vivo que lo reclame»,
+    // and that sentence is FALSE when the issue is OPEN in a state that is not
+    // `status:in-progress` (e.g. `ready`, `blocked`): neither `enProgreso` nor
+    // `mergeados` explains it, so it falls in here — with its issue alive. They
+    // are different situations with different remedies, and telling them apart
+    // costs no call at all: it comes out of the open issues that were already
+    // read.
     const status = statusAbiertoPorNumero.get(w)
     if (status) lineas.push(`  .worktrees/${w}  su issue #${w} sigue abierto (status:${status}) y no está en vuelo${sufijoDeProceso(w)}`)
     else if (/^\d+$/.test(w)) lineas.push(`  .worktrees/${w}  ningún issue lo reclama: no hay ninguno abierto con ese número, ni ninguno entregado que lo dejara atrás${sufijoDeProceso(w)}`)
     else lineas.push(`  .worktrees/${w}  no corresponde al número de ningún issue${sufijoDeProceso(w)}`)
   }
-  // La nota es sobre worktrees, así que sólo aparece cuando hay alguno: con
-  // residuo de labels a secas hablaría de algo que no está en el informe.
-  // Detectado corriendo el comando de verdad contra un repo con residuo real.
+  // The note is about worktrees, so it only appears when there is one: with
+  // label residue alone it would talk about something that is not in the
+  // report. Spotted by running the command for real against a repo with real
+  // residue.
   if (estado.residuo.worktreesHuerfanos.length) {
     lineas.push('  (mientras un .worktrees/<n> exista, /ct-next se niega a despachar #<n> — este comando lo nombra, nunca lo borra)')
   }
 }
 
-// La línea de reposo SÓLO cuando no hay nada pendiente de comprobar. Afirmar
-// que no hay nada, habiendo dejado una lectura a medias, es literalmente el
-// bug del §3.2 del feedback de campo.
+// The at-rest line ONLY when there is nothing left to check. Asserting that
+// there is nothing, having left a read half-done, is literally the bug of §3.2
+// of the field feedback.
 if (!lineas.length && !sinComprobar.length) {
   lineas.push('loop en reposo: nada en vuelo, nada por cosechar, nada de residuo.')
 }
 
-// Canal: el informe es el PRODUCTO y va por stdout; los motivos de lo que no
-// se pudo comprobar son diagnóstico y van por stderr como el resto de
-// `aviso:` del plugin. Los avisos se escriben ANTES del informe a propósito:
-// matizan todo lo que viene debajo.
+// Channel: the report is the PRODUCT and goes on stdout; the reasons for what
+// could not be checked are diagnostics and go on stderr like the rest of the
+// plugin's `aviso:`. The warnings are written BEFORE the report on purpose:
+// they qualify everything that comes below.
 for (const m of sinComprobar) console.error(`aviso: ${m}`)
 
-// El exit code lo decide `hayHallazgos` del compositor, no este recuento: el
-// número es sólo para el humano, y calcularlo aquí no puede cambiar la señal
-// que recibe un vigilante externo.
+// The exit code is decided by the composer's `hayHallazgos`, not by this
+// count: the number is only for the human, and computing it here cannot change
+// the signal an external watcher receives.
 const cuantos = estado.enVuelo.filter((s) => s.vivo === false && !s.arrancando && s.edadMs !== null).length
   + estado.cosecha.length + residuoTotal
 if (sinComprobar.length) {
-  // «aviso(s)», no «lectura(s) sin completar»: el recuento es el de líneas de
-  // `aviso:` que acaban de salir por stderr, y no todas son lecturas. El aviso
-  // de los worktrees que no explica ningún issue leído no es una lectura
-  // fallida —la lectura de disco fue bien—, así que contarlo como tal hacía
-  // decir «2 lectura(s)» donde había fallado UNA. Contar avisos es exacto y
-  // además lo puede verificar quien lo lee, contando las líneas de arriba.
+  // «aviso(s)», not «lectura(s) sin completar»: the count is the count of
+  // `aviso:` lines that have just come out on stderr, and not all of them are
+  // reads. The warning about the worktrees that no issue read explains is not a
+  // failed read —the disk read went fine— so counting it as one made it say
+  // «2 lectura(s)» where ONE had failed. Counting warnings is exact and, on top
+  // of that, whoever reads it can verify it by counting the lines above.
   lineas.push(`exit 1 — ${sinComprobar.length} aviso(s): lo de arriba es sólo lo que sí se ha podido comprobar`)
 } else if (estado.hayHallazgos) {
   lineas.push(`exit 3 — hay ${cuantos} cosa(s) que revisar`)
@@ -539,18 +555,19 @@ if (sinComprobar.length) {
 }
 console.log(lineas.join('\n'))
 
-// `process.exitCode` y NO `process.exit(code)` — la misma lección que ya está
-// escrita dos veces en este repo (ct-next.mjs, junto a su `finalExitCode`, y
-// la cabecera de __tests__/fixtures/fake-gh-bin/gh). `process.stdout` es
-// ASÍNCRONO hacia una tubería en POSIX, así que `process.exit()` mata el
-// proceso sin esperar a que se vacíe lo ya escrito. Medido con un informe de
-// 4003 hallazgos: 195 095 bytes a un fichero, y 65 536 por tubería —cortado a
-// mitad de línea, sin dejar rastro—. El exit code sobrevivía, así que la señal
-// de máquina no mentía; el PRODUCTO del comando sí, leído por `| less`,
-// `| tee`, una captura de cmux o cualquier padre que capture stdout. Es el bug
-// del §3.2 otra vez con otro mecanismo. Fijar el código y dejar que el proceso
-// termine solo conserva el mismo exit code y además vacía la salida; nada
-// mantiene vivo el event loop a estas alturas. Los abortos de arriba (exit 2
-// por un `--repo` mal puesto) sí usan `process.exit()`, con el mismo criterio
-// que ct-next.mjs: son una línea por console.error y no hay informe que vaciar.
+// `process.exitCode` and NOT `process.exit(code)` — the same lesson already
+// written twice in this repo (ct-next.mjs, next to its `finalExitCode`, and the
+// header of __tests__/fixtures/fake-gh-bin/gh). `process.stdout` is
+// ASYNCHRONOUS towards a pipe on POSIX, so `process.exit()` kills the process
+// without waiting for what has already been written to be flushed. Measured
+// with a report of 4003 findings: 195,095 bytes to a file, and 65,536 down a
+// pipe —cut off mid-line, leaving no trace. The exit code survived, so the
+// machine signal was not lying; the command's PRODUCT was, read through
+// `| less`, `| tee`, a cmux capture or any parent that captures stdout. It is
+// the §3.2 bug again through another mechanism. Setting the code and letting
+// the process finish on its own keeps the same exit code and flushes the output
+// as well; nothing keeps the event loop alive at this point. The aborts above
+// (exit 2 for a badly set `--repo`) do use `process.exit()`, with the same
+// criterion as ct-next.mjs: they are one line through console.error and there
+// is no report to flush.
 process.exitCode = sinComprobar.length ? 1 : (estado.hayHallazgos ? 3 : 0)

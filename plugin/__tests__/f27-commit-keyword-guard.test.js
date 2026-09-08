@@ -33,15 +33,15 @@ function correr(command, cwd, bin = hook) {
   return { status: r.status, out, json: out ? JSON.parse(out) : null }
 }
 
-// La propiedad que más importa —sólo el comando que ya resultó ser un commit
-// CON keyword paga el I/O de `probe`— medida DIRECTAMENTE sobre la función
-// pura, con un espía que cuenta sus propias invocaciones. Esto es lo que un
-// `chmod 000` sólo podía insinuar por efecto secundario (y, para el camino
-// `ls`, ni eso: un `ls` sale limpio tanto si `probe` se llama y falla en
-// silencio como si no se llama nunca, así que ese camino no se puede
-// verificar mirando sólo la salida del proceso).
-describe('F27 — decidir (funcion pura, sin proceso)', () => {
-  it('ls -la: sin decision Y el probe NO se invoca', () => {
+// The property that matters most —only the command that already turned out to
+// be a commit WITH a keyword pays the I/O of `probe`— measured DIRECTLY on the
+// pure function, with a spy that counts its own invocations. This is what a
+// `chmod 000` could only hint at as a side effect (and, for the `ls` path, not
+// even that: an `ls` comes out clean whether `probe` is called and fails in
+// silence or is never called at all, so that path cannot be verified by looking
+// at the process output alone).
+describe('F27 — decidir (pure function, no process)', () => {
+  it('ls -la: no decision AND the probe is NOT invoked', () => {
     let llamadas = 0
     const espia = () => { llamadas++; return { governed: true } }
     const r = decidir({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'ls -la' }, cwd: '/x' }, espia)
@@ -49,7 +49,7 @@ describe('F27 — decidir (funcion pura, sin proceso)', () => {
     expect(llamadas).toBe(0)
   })
 
-  it('commit sin keyword: sin decision Y el probe NO se invoca', () => {
+  it('a commit with no keyword: no decision AND the probe is NOT invoked', () => {
     let llamadas = 0
     const espia = () => { llamadas++; return { governed: true } }
     const r = decidir({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'git commit -m "arregla el parser"' }, cwd: '/x' }, espia)
@@ -57,7 +57,7 @@ describe('F27 — decidir (funcion pura, sin proceso)', () => {
     expect(llamadas).toBe(0)
   })
 
-  it('commit con keyword y repo gobernado: DENY Y el probe se invoca UNA vez', () => {
+  it('a commit with a keyword and a governed repo: DENY AND the probe is invoked ONCE', () => {
     let llamadas = 0
     const espia = () => { llamadas++; return { governed: true } }
     const r = decidir({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'git commit -m "Closes #7"' }, cwd: '/x' }, espia)
@@ -65,19 +65,19 @@ describe('F27 — decidir (funcion pura, sin proceso)', () => {
     expect(r.hookSpecificOutput.permissionDecision).toBe('deny')
   })
 
-  it('commit con keyword y probe que no puede saber: ASK, nunca silencio', () => {
+  it('a commit with a keyword and a probe that cannot know: ASK, never silence', () => {
     const r = decidir({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'git commit -m "Closes #7"' }, cwd: '/x' }, () => ({ error: 'lo que sea' }))
     expect(r.hookSpecificOutput.permissionDecision).toBe('ask')
   })
 
-  it('commit con keyword y repo NO gobernado: sin decision', () => {
+  it('a commit with a keyword and a NOT governed repo: no decision', () => {
     const r = decidir({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'git commit -m "Closes #7"' }, cwd: '/x' }, () => ({ governed: false }))
     expect(r).toBeNull()
   })
 
-  // El evento tiene que ser el que se espera: un `tool_name: 'Bash'` que
-  // llegase colgado de OTRO evento (o sin `hook_event_name`) no es este hook.
-  it('hook_event_name distinto de PreToolUse: sin decision, aunque el resto encaje', () => {
+  // The event has to be the expected one: a `tool_name: 'Bash'` arriving hung
+  // off ANOTHER event (or with no `hook_event_name`) is not this hook.
+  it('a hook_event_name other than PreToolUse: no decision, even if the rest fits', () => {
     let llamadas = 0
     const espia = () => { llamadas++; return { governed: true } }
     const r = decidir({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'git commit -m "Closes #7"' }, cwd: '/x' }, espia)
@@ -85,66 +85,66 @@ describe('F27 — decidir (funcion pura, sin proceso)', () => {
     expect(llamadas).toBe(0)
   })
 
-  // LA ruptura deliberada: si se llamase a `probe` ANTES de saber que hay una
-  // closing keyword, este test se pondria rojo porque `llamadas` dejaria de
-  // ser 0 aqui, para un comando compuesto sin ninguna keyword.
-  it('el orden importa: para un comando sin closing keyword, el probe nunca corre', () => {
+  // THE deliberate breakage: if `probe` were called BEFORE knowing there is a
+  // closing keyword, this test would go red because `llamadas` would stop being
+  // 0 here, for a compound command with no keyword at all.
+  it('the order matters: for a command with no closing keyword, the probe never runs', () => {
     let llamadas = 0
     const espia = () => { llamadas++; return { governed: true } }
     decidir({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'git status && ls -la /etc' } }, espia)
     expect(llamadas).toBe(0)
   })
 
-  // Un `cwd` ausente, `null` o vacio NO se sustituye por el cwd del PROCESO
-  // del hook: eso contestaria sobre un directorio que quien invoco nunca
-  // nombro. `probeGovernedRepo` (el probe real, no un espia) ya convierte
-  // eso en `{error}`, y aqui debe salir `ask`, nunca silencio.
+  // An absent, `null` or empty `cwd` is NOT replaced by the cwd of the hook's
+  // own PROCESS: that would answer about a directory the caller never named.
+  // `probeGovernedRepo` (the real probe, not a spy) already turns that into
+  // `{error}`, and here it must come out `ask`, never silence.
   it.each([
-    ['ausente', undefined],
+    ['absent', undefined],
     ['null', null],
-    ['cadena vacia', ''],
-  ])('cwd %s en el payload: ASK, nunca silencio', (_etiqueta, cwd) => {
+    ['empty string', ''],
+  ])('a %s cwd in the payload: ASK, never silence', (_etiqueta, cwd) => {
     const r = decidir({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'git commit -m "Closes #451"' }, cwd }, probeGovernedRepo)
     expect(r.hookSpecificOutput.permissionDecision).toBe('ask')
   })
 })
 
-describe('F27 — el hook (extremo a extremo sobre el binario, via stdin)', () => {
-  it('repo gobernado + commit con keyword => DENY, nombrando keyword y referencia', () => {
+describe('F27 — the hook (end to end over the binary, via stdin)', () => {
+  it('governed repo + commit with a keyword => DENY, naming keyword and reference', () => {
     const r = correr('git commit -m "no dice \\"Closes #451\\" el kickoff"', repoGobernado())
     expect(r.status).toBe(0)
     expect(r.json.hookSpecificOutput.permissionDecision).toBe('deny')
     const motivo = r.json.hookSpecificOutput.permissionDecisionReason
     expect(motivo).toContain('Closes')
     expect(motivo).toContain('#451')
-    // El enfasis en mayusculas de "CUERPO DEL PR" es deliberado -lo lee un
-    // agente que va a reintentar- asi que la asercion es insensible a caja.
+    // The uppercase emphasis of "CUERPO DEL PR" is deliberate -an agent that is
+    // going to retry reads it- so the assertion is case insensitive.
     expect(motivo).toMatch(/cuerpo del PR/i)
   })
 
-  it('repo NO gobernado => sin decision', () => {
+  it('a NOT governed repo => no decision', () => {
     const r = correr('git commit -m "Closes #451"', repoNormal())
     expect(r.status).toBe(0)
     expect(r.out).toBe('')
   })
 
-  // El camino feliz que el contrato EXIGE.
-  it('gh pr create con el cierre en el cuerpo => sin decision', () => {
+  // The happy path the contract DEMANDS.
+  it('gh pr create with the closure in the body => no decision', () => {
     const r = correr('gh pr create --body "Closes #42"', repoGobernado())
     expect(r.out).toBe('')
   })
 
-  it('commit limpio encadenado con gh pr create => sin decision', () => {
+  it('a clean commit chained with gh pr create => no decision', () => {
     const r = correr('git commit -m limpio && gh pr create --body "Closes #1"', repoGobernado())
     expect(r.out).toBe('')
   })
 
-  it('un commit sin keyword => sin decision', () => {
+  it('a commit with no keyword => no decision', () => {
     const r = correr('git commit -m "arregla el parser"', repoGobernado())
     expect(r.out).toBe('')
   })
 
-  it('una herramienta que no es Bash => sin decision', () => {
+  it('a tool that is not Bash => no decision', () => {
     const r = spawnSync('node', [hook], {
       input: JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: { command: 'git commit -m "Closes #1"' }, cwd: repoGobernado() }),
       encoding: 'utf8',
@@ -152,19 +152,19 @@ describe('F27 — el hook (extremo a extremo sobre el binario, via stdin)', () =
     expect((r.stdout || '').trim()).toBe('')
   })
 
-  it('stdin malformado => salida vacia, exit 0 (no crash)', () => {
+  it('malformed stdin => empty output, exit 0 (no crash)', () => {
     const r = spawnSync('node', [hook], { input: 'no-json{', encoding: 'utf8' })
     expect(r.status).toBe(0)
     expect((r.stdout || '').trim()).toBe('')
   })
 
-  // Esto prueba UNA cosa concreta: que un cwd que no se puede leer produce
-  // ASK y no silencio. NO prueba "cero I/O en el camino comun" -para un `ls`,
-  // la salida es identica se llame o no se llame a `probe`, porque
-  // `probeGovernedRepo` atrapa el EACCES y el camino `ls` ni siquiera llega a
-  // mirar el resultado- esa propiedad la prueba el bloque de arriba, sobre
-  // `decidir` con un espia.
-  it('con un cwd ilegible, un commit con keyword sale ASK (nunca silencio)', () => {
+  // This tests ONE concrete thing: that a cwd that cannot be read produces ASK
+  // and not silence. It does NOT test "zero I/O on the common path" -for an
+  // `ls`, the output is identical whether or not `probe` is called, because
+  // `probeGovernedRepo` catches the EACCES and the `ls` path does not even get
+  // as far as looking at the result- that property is tested by the block
+  // above, over `decidir` with a spy.
+  it('with an unreadable cwd, a commit with a keyword comes out ASK (never silence)', () => {
     const d = mkdtempSync(join(tmpdir(), 'f27y-')); hechos.push(d)
     const dentro = join(d, 'dentro'); mkdirSync(dentro)
     chmodSync(d, 0o000)
@@ -172,12 +172,12 @@ describe('F27 — el hook (extremo a extremo sobre el binario, via stdin)', () =
     expect(r.json.hookSpecificOutput.permissionDecision).toBe('ask')
   })
 
-  // El bug real: `process.argv[1]` conserva la ruta tal como se invoco,
-  // `import.meta.url` llega con los symlinks ya resueltos. Sin resolverlos
-  // los dos antes de comparar, el cuerpo ejecutable no corre por esta ruta y
-  // la puerta entera se apaga en silencio (exit 0, stdout vacio),
-  // indistinguible de "no habia nada que denegar".
-  it('invocado a traves de un symlink de DIRECTORIO al repo: sigue denegando', () => {
+  // The real bug: `process.argv[1]` keeps the path exactly as it was invoked,
+  // `import.meta.url` arrives with the symlinks already resolved. Without
+  // resolving both before comparing, the executable body does not run down this
+  // path and the whole gate switches off in silence (exit 0, empty stdout),
+  // indistinguishable from "there was nothing to deny".
+  it('invoked through a DIRECTORY symlink to the repo: it still denies', () => {
     const enlaces = mkdtempSync(join(tmpdir(), 'f27link-')); hechos.push(enlaces)
     const enlaceRepo = join(enlaces, 'repo-enlazado')
     symlinkSync(root, enlaceRepo, 'dir')
@@ -186,7 +186,7 @@ describe('F27 — el hook (extremo a extremo sobre el binario, via stdin)', () =
     expect(r.json.hookSpecificOutput.permissionDecision).toBe('deny')
   })
 
-  it('invocado por una ruta donde el propio FICHERO es un symlink: sigue denegando', () => {
+  it('invoked by a path where the FILE itself is a symlink: it still denies', () => {
     const enlaces = mkdtempSync(join(tmpdir(), 'f27link-')); hechos.push(enlaces)
     const hookEnlazado = join(enlaces, 'guard-enlazado.js')
     symlinkSync(hook, hookEnlazado, 'file')
@@ -194,17 +194,17 @@ describe('F27 — el hook (extremo a extremo sobre el binario, via stdin)', () =
     expect(r.json.hookSpecificOutput.permissionDecision).toBe('deny')
   })
 
-  it('el BUNDLE de produccion decide igual que el fuente', () => {
+  it('the production BUNDLE decides the same as the source', () => {
     const bundle = join(root, 'dist/commit-keyword-guard.js')
     const r = correr('git commit -m "Closes #451"', repoGobernado(), bundle)
     expect(r.json.hookSpecificOutput.permissionDecision).toBe('deny')
   })
 
-  // El caso mas valioso, contra el BUNDLE de produccion: la forma multilinea
-  // por defecto de Claude Code (`-m "$(cat <<'EOF' ... EOF)"`) viaja literal
-  // dentro del comando, y el hook la deniega igual que a cualquier otro
-  // mensaje entrecomillado.
-  it('el heredoc citado dentro del -m, contra el BUNDLE: DENY igual que el fuente', () => {
+  // The most valuable case, against the production BUNDLE: Claude Code's
+  // default multiline form (`-m "$(cat <<'EOF' ... EOF)"`) travels literally
+  // inside the command, and the hook denies it just as it denies any other
+  // quoted message.
+  it('the quoted heredoc inside the -m, against the BUNDLE: DENY, same as the source', () => {
     const bundle = join(root, 'dist/commit-keyword-guard.js')
     const command = [
       'git commit -m "$(cat <<\'EOF\'',

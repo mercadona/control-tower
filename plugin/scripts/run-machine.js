@@ -1,38 +1,40 @@
 // ============================================================================
-// RUN-MACHINE — quién decide el paso siguiente de la fase de implementación.
+// RUN-MACHINE — who decides the next step of the implementation phase.
 //
-// Hoy lo decide una sesión de chat leyendo prosa (`subagent-driven-development`
-// en el idioma de la skill). Aquí lo decide esta tabla, que es una función
-// pura: mismo estado y mismo resultado, misma decisión, siempre, y sin que
-// haga falta un modelo para tomarla.
+// Today a chat session decides it by reading prose
+// (`subagent-driven-development` in the skill's own language). Here this table
+// decides it, and it is a pure function: same state and same outcome, same
+// decision, always, and with no need for a model to take it.
 //
-// Portada de `state_machine.py` de agentic-skills y reducida a la forma de
-// Control Tower: de sus siete pasos sobreviven cuatro. El de alineación no
-// aplica —su equivalente es el gate `plan`, que ocurre antes de que el programa
-// arranque— y `await-ci` / `await-merge` tampoco: este repo no tiene
-// integración continua (D-6 sigue abierta) y el merge es una decisión humana
-// con la pull request delante, que es donde la sesión para hoy.
+// Ported from agentic-skills' `state_machine.py` and reduced to Control
+// Tower's shape: of its seven steps, four survive. The alignment one does not
+// apply —its equivalent is the `plan` gate, which happens before the program
+// starts— and neither do `await-ci` / `await-merge`: this repo has no
+// continuous integration (D-6 is still open) and the merge is a human decision
+// with the pull request in front of it, which is where the session stops
+// today.
 //
-// La dimensión que el original NO tiene es la TAREA: allí el run es la slice
-// entera, aquí una slice son N tareas y cada una es un commit. Por eso los tres
-// contadores de reintento se reinician al avanzar de tarea —cada tarea estrena
-// su cuenta— mientras que los descartes y el dinero acumulan durante toda la
-// slice.
+// The dimension the original does NOT have is the TASK: there the run is the
+// whole slice, here a slice is N tasks and each one is a commit. That is why
+// the three retry counters are reset when moving on to the next task —each
+// task starts its own count afresh— while the discards and the money
+// accumulate over the whole slice.
 //
-// §3.7 del handoff (docs/prompt-juez-lo-que-queda.md) añade los dos pasos que
-// cierran sus dos agujeros: `## 8. Global verification` nunca la ejecutaba
-// nadie (`controls` sólo mide el bloque POR TAREA) y el slice entero nunca
-// tenía juez (`ct-judge` juzga una tarea; la coherencia entre las tres no la
-// miraba nadie). Los cuatro pasos de antes pasan a SEIS: tras la última tarea
-// comiteada, `commit` ya no cierra el run — abre `global` (el programa corre
-// la punta a punta) y, en verde, `slice-judge` (el juicio del slice entero).
-// Los dos van SIN reintento propio: todo está comiteado, así que reintentar
-// mide el mismo árbol y repite el coste sin cambiar nada — el mismo
-// razonamiento que ya cierra `indeterminate` a la primera en `controls`.
+// §3.7 of the handoff (docs/prompt-juez-lo-que-queda.md) adds the two steps
+// that close its two holes: `## 8. Global verification` was never run by
+// anyone (`controls` only measures the PER-TASK block) and the whole slice
+// never had a judge (`ct-judge` judges one task; the coherence between the
+// three was looked at by nobody). The four steps of before become SIX: after
+// the last task is committed, `commit` no longer closes the run — it opens
+// `global` (the program runs the end-to-end) and, on green, `slice-judge` (the
+// judgement of the whole slice). Both go WITHOUT a retry of their own:
+// everything is committed, so retrying measures the same tree and repeats the
+// cost without changing anything — the same reasoning that already closes
+// `indeterminate` on the first go in `controls`.
 //
-// PURO: ni un import, ni una lectura, ni un reloj. Es lo que permite testear la
-// tabla entera —incluidos los pares imposibles— sin tocar disco ni lanzar un
-// proceso.
+// PURE: not one import, not one read, not one clock. That is what makes it
+// possible to test the whole table —impossible pairs included— without
+// touching disk or launching a process.
 // ============================================================================
 
 import { ReconcileOutcome } from './reconcile-outcome.js'
@@ -41,39 +43,42 @@ export const STEPS = Object.freeze({
   IMPLEMENT: 'implement',
   CONTROLS: 'controls',
   JUDGE: 'judge',
-  // ADVISE (H9) — entre el SEGUNDO veto y el TERCER intento, y en ningún otro
-  // sitio. Los dos primeros intentos son el patrón feedback-flip: el
-  // implementador hereda el árbol vetado y el veredicto que lo vetó, y eso es
-  // lo correcto mientras la corrección sea local. El tercero ya no lo es —
-  // parchea dos capas de parches— así que aquí se cambia de estrategia en vez
-  // de repetir la misma a ciegas: un consejero de tier superior, sin más
-  // herramienta que `Read`, mira los dos intentos y los dos vetos y dicta un
-  // enfoque, y el programa devuelve el árbol al último commit antes de que el
-  // tercer implementador empiece (happy-to-delete).
+  // ADVISE (H9) — between the SECOND veto and the THIRD attempt, and nowhere
+  // else. The first two attempts are the feedback-flip pattern: the
+  // implementer inherits the vetoed tree and the verdict that vetoed it, and
+  // that is the right thing while the correction is local. The third one no
+  // longer is — it patches two layers of patches — so here the strategy is
+  // changed instead of repeating the same one blindly: an adviser of a higher
+  // tier, with no tool other than `Read`, looks at the two attempts and the
+  // two vetoes and dictates an approach, and the program returns the tree to
+  // the last commit before the third implementer starts (happy-to-delete).
   //
-  // SIN CONTADOR PROPIO, y es una decisión: el reintento que este paso ocupa ya
-  // lo gastó el veto que lo abrió (`judgeRetries`), así que el intento sigue
-  // siendo `controlRetries + judgeRetries + correctionRetries + 1` — la misma
-  // fórmula que cuentan el sello del despacho y el backend que lee este fichero.
+  // WITH NO COUNTER OF ITS OWN, and that is a decision: the retry this step
+  // occupies was already spent by the veto that opened it (`judgeRetries`), so
+  // the attempt is still `controlRetries + judgeRetries + correctionRetries +
+  // 1` — the same formula the dispatch's stamp and the backend that reads this
+  // file count.
   ADVISE: 'advise',
   COMMIT: 'commit',
-  // RECONCILE va ANTES de GLOBAL y no después: la punta a punta del plan
-  // (`global`) tiene que correr sobre el árbol ya puesto al día con su base,
-  // no sobre uno que se quede atrás y que luego el merge de la pull request
-  // vuelva a mover. Verificar antes de reconciliar mediría un árbol que ya no
-  // es el que se entrega.
+  // RECONCILE goes BEFORE GLOBAL and not after: the plan's end-to-end
+  // (`global`) has to run over the tree already brought up to date with its
+  // base, not over one that lags behind and that the pull request's merge then
+  // moves again. Verifying before reconciling would measure a tree that is no
+  // longer the one being delivered.
   RECONCILE: 'reconcile',
-  // GLOBAL / SLICE_JUDGE (§3.7) y E2E son los tres pasos que NO son por tarea:
-  // se entra en ellos al comitear la última, y cierran la SLICE, no una tarea.
+  // GLOBAL / SLICE_JUDGE (§3.7) and E2E are the three steps that are NOT
+  // per-task: they are entered on committing the last one, and they close the
+  // SLICE, not a task.
   GLOBAL: 'global',
   SLICE_JUDGE: 'slice-judge',
-  // E2E — el último de esa cola, y el único condicional: sólo se entra si la
-  // slice declara recorridos. Va aquí y no colgado de `controls` porque
-  // `controls` mide lo que el PLAN prometió contra el árbol, por tarea, y esto
-  // atraviesa lo que el SPEC declaró contra el sistema levantado, por slice.
-  // Colgarlo de controls obligaría a que cada tarea arrastrara un e2e que no le
-  // toca, o a un controls especial en la última — una rama de la tabla que no
-  // describe ningún estado real.
+  // E2E — the last of that queue, and the only conditional one: it is only
+  // entered if the slice declares runs. It goes here and not hung off
+  // `controls` because `controls` measures what the PLAN promised against the
+  // tree, per task, and this walks through what the SPEC declared against the
+  // system brought up, per slice. Hanging it off controls would force every
+  // task to drag along an e2e that is none of its business, or a special
+  // controls on the last one — a branch of the table that describes no real
+  // state.
   E2E: 'e2e',
 })
 
@@ -95,8 +100,8 @@ export const RUN_STATES = Object.freeze({
   BLOCKED_GLOBAL: 'blocked-global',
   BLOCKED_SLICE_JUDGE: 'blocked-slice-judge',
   BLOCKED_RECONCILE: 'blocked-reconcile',
-  // Mismo sitio y misma forma que sus hermanos: un cierre en fallo del que
-  // sale una persona, no un reintento.
+  // Same place and same shape as its siblings: a closure in failure that a
+  // person gets out of, not a retry.
   BLOCKED_E2E: 'blocked-e2e',
   ABORTED_BUDGET: 'aborted-budget',
 })
@@ -108,17 +113,17 @@ export const DEFAULT_BUDGETS = Object.freeze({
   reconcileRetries: 2,
 })
 
-// El run recién nacido: tarea 1, paso implement, todos los contadores a cero.
+// The newborn run: task 1, step implement, every counter at zero.
 export function newRun({ plan, issue, baseSha, tasksTotal, e2eRuns }) {
   return freeze({
     plan, issue, baseSha,
     task: 1,
     tasksTotal,
-    // e2eRuns — los recorridos que la columna E2E del spec declara para esta
-    // slice, sembrados por /ct-next en .agent/SLICE.md (ct-step no habla con
-    // GitHub). Lista vacía y no `undefined` a propósito: `[]` significa "esta
-    // slice no tiene e2e" y es un dato, mientras que `undefined` no se
-    // distingue de "una versión vieja escribió este run".
+    // e2eRuns — the runs the spec's E2E column declares for this slice, seeded
+    // by /ct-next into .agent/SLICE.md (ct-step does not talk to GitHub). An
+    // empty list and not `undefined` on purpose: `[]` means "this slice has no
+    // e2e" and is a datum, whereas `undefined` cannot be told apart from "an
+    // old version wrote this run".
     e2eRuns: Array.isArray(e2eRuns) ? [...e2eRuns] : [],
     step: STEPS.IMPLEMENT,
     controlRetries: 0,
@@ -136,27 +141,28 @@ const con = (run, cambios) => freeze({ ...run, ...cambios })
 const abierto = (run, cambios) => ({ run: con(run, cambios), state: RUN_STATES.OPEN })
 const cerrado = (run, state) => ({ run: freeze(run), state })
 
-// El par que la tabla no describe LANZA. No cae en una rama genérica y no se
-// interpreta como "pues sigue por donde ibas": es la propiedad `_impossible`
-// del original, y es lo que hace que un resultado nuevo —o un paso al que se
-// llega por un camino que nadie pensó— sea un error ruidoso y no una decisión
-// silenciosa tomada por omisión.
+// The pair the table does not describe THROWS. It does not fall into a generic
+// branch and it is not read as "well, carry on where you were": it is the
+// original's `_impossible` property, and it is what makes a new outcome —or a
+// step reached by a path nobody thought of— a noisy error and not a silent
+// decision taken by omission.
 function imposible(run, outcome) {
   throw new Error(`transición imposible: el paso "${run.step}" no sabe qué hacer con el resultado "${outcome}"`)
 }
 
 // ============================================================================
-// LA TABLA (§3.3 del spec)
+// THE TABLE (§3.3 of the spec)
 //
 //   after(run, outcome, budgets) → { run, state }
 //
-// `state` es `open` mientras el run siga vivo, y el motivo del cierre cuando no.
-// Cada transición devuelve una COPIA: el run que entra no se toca nunca, así
-// que quien persiste el estado puede quedarse con el anterior sin miedo.
+// `state` is `open` while the run is still alive, and the reason for the
+// closure when it is not. Every transition returns a COPY: the run that goes
+// in is never touched, so whoever persists the state can keep the previous one
+// without fear.
 // ============================================================================
 export function after(run, outcome, budgets = DEFAULT_BUDGETS) {
-  // El dinero corta por encima de todo. Da igual en qué paso esté el run: si el
-  // tope está agotado, la llamada siguiente no se lanza.
+  // The money cuts above everything else. It does not matter which step the
+  // run is on: if the cap is spent, the next call is not launched.
   if (outcome === OUTCOMES.OVER_BUDGET) return cerrado(run, RUN_STATES.ABORTED_BUDGET)
 
   switch (run.step) {
@@ -177,9 +183,9 @@ function trasImplementar(run, outcome) {
   switch (outcome) {
     case OUTCOMES.DONE:
       return abierto(run, { step: STEPS.CONTROLS })
-    // El informe del implementador que no se puede leer. No gasta reintento
-    // porque no se tocó el código: lo único que respalda este camino es el tope
-    // en dinero.
+    // The implementer's report that cannot be read. It does not spend a retry
+    // because the code was not touched: the only thing backing this path is
+    // the cap in money.
     case OUTCOMES.DISCARDED:
       return abierto(run, { step: STEPS.IMPLEMENT, discards: run.discards + 1 })
     default:
@@ -195,9 +201,10 @@ function trasLosControles(run, outcome, budgets) {
       return run.controlRetries < budgets.controlRetries
         ? abierto(run, { step: STEPS.IMPLEMENT, controlRetries: run.controlRetries + 1 })
         : cerrado(run, RUN_STATES.BLOCKED_CONTROLS)
-    // No se pudo MEDIR: el comando no existe, o se colgó y saltó el tope de
-    // tiempo. Reintentar a ciegas repite el coste sin cambiar nada, así que
-    // cierra a la primera en vez de gastarse los dos intentos.
+    // It could not be MEASURED: the command does not exist, or it hung and the
+    // time cap fired. Retrying blindly repeats the cost without changing
+    // anything, so it closes on the first go instead of spending both
+    // attempts.
     case OUTCOMES.INDETERMINATE:
       return cerrado(run, RUN_STATES.BLOCKED_CONTROLS)
     default:
@@ -211,25 +218,25 @@ function trasElJuez(run, outcome, budgets) {
       return abierto(run, { step: STEPS.COMMIT })
     case OUTCOMES.FAILED:
       if (run.judgeRetries >= budgets.judgeRetries) return cerrado(run, RUN_STATES.BLOCKED_JUDGE)
-      // EL ÚLTIMO REINTENTO NO SE CONCEDE A CIEGAS. Que el que se está
-      // concediendo sea el último es la única pregunta que separa los dos
-      // caminos, y se hace con el presupuesto delante en vez de con un `2`
-      // tecleado: quien suba `judgeRetries` a tres mueve el consejero al tercer
-      // veto sin tocar esta línea.
+      // THE LAST RETRY IS NOT GRANTED BLINDLY. Whether the one being granted
+      // is the last is the only question that separates the two paths, and it
+      // is asked with the budget in front of it instead of with a typed `2`:
+      // whoever raises `judgeRetries` to three moves the adviser to the third
+      // veto without touching this line.
       return esElUltimoReintentoDeVeto(run, budgets)
         ? abierto(run, { step: STEPS.ADVISE, judgeRetries: run.judgeRetries + 1 })
         : abierto(run, { step: STEPS.IMPLEMENT, judgeRetries: run.judgeRetries + 1 })
-    // La diferencia entre un juez que VETA y un juez que REFUNFUÑA: un PASA con
-    // hallazgos que no son de severidad baja vuelve al implementador con
-    // presupuesto propio, y agotarlo ENTREGA IGUAL. Sin esta distinción, cada
-    // refunfuño gastaría un reintento de veto y tres quejas menores bloquearían
-    // una tarea que el juez había aprobado.
+    // The difference between a judge that VETOES and a judge that GRUMBLES: a
+    // PASS with findings that are not of low severity goes back to the
+    // implementer with a budget of its own, and spending it DELIVERS ALL THE
+    // SAME. Without this distinction, every grumble would spend a veto retry
+    // and three minor complaints would block a task the judge had approved.
     case OUTCOMES.CORRECTIONS_ORDERED:
       return run.correctionRetries < budgets.correctionRetries
         ? abierto(run, { step: STEPS.IMPLEMENT, correctionRetries: run.correctionRetries + 1 })
         : abierto(run, { step: STEPS.COMMIT })
-    // El veredicto que incumple el esquema. Como el descarte del implementador:
-    // no se tocó el código, así que no gasta reintento.
+    // The verdict that breaks the schema. Like the implementer's discard: the
+    // code was not touched, so it does not spend a retry.
     case OUTCOMES.DISCARDED:
       return abierto(run, { step: STEPS.JUDGE, discards: run.discards + 1 })
     default:
@@ -237,17 +244,17 @@ function trasElJuez(run, outcome, budgets) {
   }
 }
 
-// H9 — el consejo, entre el segundo veto y el tercer intento. Sólo dos
-// resultados: el consejo que cumple el esquema (y con él el árbol limpio y el
-// brief del tercer intento) o el que no.
+// H9 — the advice, between the second veto and the third attempt. Only two
+// outcomes: the advice that meets the schema (and with it the clean tree and
+// the third attempt's brief) or the one that does not.
 //
-// El DESCARTE no gasta reintento, y es el mismo razonamiento que ya rige en
-// `implement` y en el juez: el consejero no toca el código, así que un JSON que
-// incumple el esquema no puede costar un intento de implementación — igual que
-// un veredicto ilegible no es un veto. Lo que respalda este autobucle es el tope
-// de descartes de la slice, no un presupuesto propio; y a diferencia de
-// `reconcile`, aquí no queda ningún estado a medias que haga que la ronda
-// siguiente vuelva a descartar por lo mismo.
+// The DISCARD does not spend a retry, and it is the same reasoning that
+// already rules in `implement` and in the judge: the adviser does not touch
+// the code, so a JSON that breaks the schema cannot cost an implementation
+// attempt — just as an illegible verdict is not a veto. What backs this
+// self-loop is the slice's discard cap, not a budget of its own; and unlike
+// `reconcile`, no half-made state is left here that would make the next round
+// discard for the same reason again.
 function trasElConsejo(run, outcome) {
   switch (outcome) {
     case OUTCOMES.DONE:
@@ -262,8 +269,8 @@ function trasElConsejo(run, outcome) {
 function trasElCommit(run, outcome) {
   switch (outcome) {
     case OUTCOMES.DONE:
-      // Cada tarea estrena su cuenta de reintentos. Los descartes y el dinero
-      // no: ésos son de la slice entera.
+      // Each task starts its retry count afresh. The discards and the money do
+      // not: those belong to the whole slice.
       return run.task < run.tasksTotal
         ? abierto(run, {
             task: run.task + 1,
@@ -272,21 +279,21 @@ function trasElCommit(run, outcome) {
             judgeRetries: 0,
             correctionRetries: 0,
           })
-        // La última tarea comiteada NO entrega el run: §3.7 abre aquí la fase
-        // RECONCILE — la rama tiene que quedar al día con su base antes de que
-        // GLOBAL mida la punta a punta — con los tres contadores a cero (la
-        // fase estrena su cuenta, como cada tarea). `delivered` pasa a
-        // significar tareas comiteadas + rama reconciliada + punta a punta
-        // verde + slice juzgado, no sólo lo primero.
+        // The last task committed does NOT deliver the run: §3.7 opens the
+        // RECONCILE phase here — the branch has to end up up to date with its
+        // base before GLOBAL measures the end-to-end — with the three counters
+        // at zero (the phase starts its own count afresh, like every task).
+        // `delivered` comes to mean tasks committed + branch reconciled +
+        // end-to-end green + slice judged, not just the first of those.
         //
-        // `task` NO avanza en ninguno de los pasos de esa cola final
-        // (RECONCILE, GLOBAL, SLICE_JUDGE y, si el spec declaró recorridos,
-        // E2E): son pasos de la SLICE, no de una tarea sexta que no existe.
-        // (Ojo: eso rompe la invariante `commits === task - 1` que ct-step
-        // comprueba al cargar el estado — ver Task 8.)
+        // `task` does NOT advance in any of the steps of that final queue
+        // (RECONCILE, GLOBAL, SLICE_JUDGE and, if the spec declared runs,
+        // E2E): they are steps of the SLICE, not of a sixth task that does not
+        // exist. (Careful: that breaks the `commits === task - 1` invariant
+        // ct-step checks when loading the state — see Task 8.)
         : abierto(run, { step: STEPS.RECONCILE, controlRetries: 0, judgeRetries: 0, correctionRetries: 0 })
-    // Un commit que falla no se reintenta: si git dice que no, es el índice o
-    // el mensaje, y ninguna de las dos cosas se arregla volviendo a implementar.
+    // A commit that fails is not retried: if git says no, it is the index or
+    // the message, and neither of those gets fixed by implementing again.
     case OUTCOMES.FAILED:
       return cerrado(run, RUN_STATES.BLOCKED_COMMIT)
     default:
@@ -294,9 +301,9 @@ function trasElCommit(run, outcome) {
   }
 }
 
-// LA RECONCILIACIÓN (Fase B). La política vive aquí, no en el verbo que hará
-// el `git merge`/`git rebase`: qué paso viene después de cada resultado y qué
-// cuenta como agotado es una decisión de esta tabla.
+// THE RECONCILIATION (Phase B). The policy lives here, not in the verb that
+// will do the `git merge`/`git rebase`: which step comes after each outcome
+// and what counts as spent is a decision of this table.
 function trasReconciliar(run, outcome, budgets) {
   switch (outcome) {
     case OUTCOMES.DONE:
@@ -305,16 +312,17 @@ function trasReconciliar(run, outcome, budgets) {
       return reconcileBudgetSpent(run, budgets)
         ? cerrado(run, RUN_STATES.BLOCKED_RECONCILE)
         : abierto(run, { step: STEPS.RECONCILE, reconcileRetries: run.reconcileRetries + 1 })
-    // La ronda descartada SÍ gasta reintento, y aquí es donde este paso se
-    // separa de implement y del juez. Allí un descarte significa "la respuesta
-    // no se pudo leer" y el árbol quedó como estaba, así que la ronda siguiente
-    // arranca de cero. Aquí el conflicto PERSISTE: el descarte no aborta la
-    // fusión, así que toda llamada posterior vuelve a `conclude()` y vuelve a
-    // descartar. Sin gastar, `reconcileRetries` no se consume nunca,
-    // BLOCKED_RECONCILE y el relevo al agente del slice son inalcanzables, y el
-    // run acaba muriendo en MAX_DISCARDS —"no hay veredicto de fiar"— hablando
-    // de una fusión a medias. Y lo caro ya se gastó: cada descarte consumió un
-    // despacho real de ct-reconciler.
+    // The discarded round DOES spend a retry, and this is where this step
+    // parts company with implement and with the judge. There a discard means
+    // "the answer could not be read" and the tree stayed as it was, so the
+    // next round starts from scratch. Here the conflict PERSISTS: the discard
+    // does not abort the merge, so every later call goes back to `conclude()`
+    // and discards again. Without spending, `reconcileRetries` is never
+    // consumed, BLOCKED_RECONCILE and the handover to the slice agent are
+    // unreachable, and the run ends up dying in MAX_DISCARDS —"there is no
+    // trustworthy verdict"— while talking about a half-made merge. And the
+    // expensive part has already been spent: every discard consumed a real
+    // dispatch of ct-reconciler.
     case OUTCOMES.DISCARDED:
       return reconcileBudgetSpent(run, budgets)
         ? cerrado(run, RUN_STATES.BLOCKED_RECONCILE)
@@ -328,16 +336,16 @@ function trasReconciliar(run, outcome, budgets) {
   }
 }
 
-// La pregunta del presupuesto de reconcile, con el dato. `ct-step` la hace para
-// decidir a quién nombra el mensaje —al reconciliador o ya al agente del
-// slice— y la tabla la hace para decidir si retiene el paso o cierra en
-// BLOCKED_RECONCILE: es UNA decisión, y las dos mitades tienen que contestar lo
-// mismo o el verbo anuncia una cosa y la máquina hace otra.
-// La pregunta del último reintento de veto, con el dato — exportada por el
-// mismo motivo que `reconcileBudgetSpent`: `ct-step` la hace para nombrar en el
-// mensaje del veto a quién se despacha después, y la tabla la hace para decidir
-// el paso. Es UNA decisión, y las dos mitades tienen que contestar lo mismo o el
-// verbo anuncia una cosa y la máquina hace otra.
+// The question about the reconcile budget, with the datum. `ct-step` asks it
+// to decide who the message names —the reconciler or already the slice agent—
+// and the table asks it to decide whether it holds on to the step or closes in
+// BLOCKED_RECONCILE: it is ONE decision, and the two halves have to answer the
+// same thing or the verb announces one thing and the machine does another.
+// The question about the last veto retry, with the datum — exported for the
+// same reason as `reconcileBudgetSpent`: `ct-step` asks it in order to name in
+// the veto's message who gets dispatched next, and the table asks it to decide
+// the step. It is ONE decision, and the two halves have to answer the same
+// thing or the verb announces one thing and the machine does another.
 export function esElUltimoReintentoDeVeto(run, budgets = DEFAULT_BUDGETS) {
   return run.judgeRetries + 1 === budgets.judgeRetries
 }
@@ -346,10 +354,10 @@ export function reconcileBudgetSpent(run, budgets = DEFAULT_BUDGETS) {
   return run.reconcileRetries >= budgets.reconcileRetries
 }
 
-// La proyección del vocabulario de Task 4 (`reconcile-outcome.js`) al
-// vocabulario del flujo. Vive aquí y no en `ct-step.mjs`: traducir el
-// resultado de un paso al vocabulario del flujo es cosa del destino, no del
-// conductor.
+// The projection of Task 4's vocabulary (`reconcile-outcome.js`) onto the
+// flow's vocabulary. It lives here and not in `ct-step.mjs`: translating the
+// outcome of a step into the flow's vocabulary is the destination's business,
+// not the conductor's.
 export function outcomeOfReconcile(reconcileOutcome) {
   switch (reconcileOutcome) {
     case ReconcileOutcome.UP_TO_DATE:
@@ -358,10 +366,10 @@ export function outcomeOfReconcile(reconcileOutcome) {
       return OUTCOMES.DONE
     case ReconcileOutcome.CONFLICTING:
     case ReconcileOutcome.UNMERGEABLE_TREE:
-    // Marcas de conflicto DENTRO de un commit de fusión que ya está hecho: no
-    // hay ronda que descartar (no queda fusión viva) y el paso no avanza — lo
-    // arregla quien tiene shell, y si no lo arregla, bloquea. Misma proyección
-    // que el árbol sucio, por el mismo motivo.
+    // Conflict markers INSIDE a merge commit that is already made: there is no
+    // round to discard (no live merge is left) and the step does not advance —
+    // whoever has a shell fixes it, and if they do not, it blocks. Same
+    // projection as the dirty tree, for the same reason.
     case ReconcileOutcome.MARKERS_COMMITTED:
       return OUTCOMES.FAILED
     case ReconcileOutcome.ROUND_DISCARDED:
@@ -371,12 +379,12 @@ export function outcomeOfReconcile(reconcileOutcome) {
   }
 }
 
-// LA GLOBAL VERIFICATION (§3.7-A). `ct-step global` ejecuta el bloque de "##
-// 8. Global verification" del plan, con la misma maquinaria que `controls`:
-// exit code manda, `unmeasured` es una clase distinta de rojo. Sin reintento
-// propio: todo está comiteado, así que reintentar mide el mismo árbol y repite
-// el coste sin cambiar nada — el mismo argumento que ya cierra `indeterminate`
-// a la primera en `trasLosControles`.
+// THE GLOBAL VERIFICATION (§3.7-A). `ct-step global` runs the plan's "## 8.
+// Global verification" block, with the same machinery as `controls`: the exit
+// code rules, `unmeasured` is a different class of red. With no retry of its
+// own: everything is committed, so retrying measures the same tree and repeats
+// the cost without changing anything — the same argument that already closes
+// `indeterminate` on the first go in `trasLosControles`.
 function trasLaGlobal(run, outcome) {
   switch (outcome) {
     case OUTCOMES.DONE:
@@ -390,24 +398,25 @@ function trasLaGlobal(run, outcome) {
   }
 }
 
-// EL JUICIO DEL SLICE ENTERO (§3.7-B). `agents/ct-slice-judge.md` juzga los
-// dos ítems que ningún juez de tarea mira: si las tres tareas juntas entregan
-// el `### Desired end state` del plan, y si son coherentes entre sí. Sin
-// presupuesto de veto propio y sin `corrections-ordered`: aquí no queda un
-// implementador con trabajo stageado al que devolver — todo es commit, así
-// que un FAIL cierra el run (`blocked-slice-judge`) y un PASS con hallazgos
-// medium/low entrega igual, viajando en el veredicto para quien revise la PR.
-// `discarded` sí vuelve a preguntar sin gastar reintento, igual que el juez de
-// tarea: un veredicto ilegible no es un veto.
+// THE JUDGEMENT OF THE WHOLE SLICE (§3.7-B). `agents/ct-slice-judge.md`
+// judges the two items no task judge looks at: whether the three tasks
+// together deliver the plan's `### Desired end state`, and whether they are
+// coherent with each other. With no veto budget of its own and no
+// `corrections-ordered`: there is no implementer left here with staged work to
+// hand it back to — everything is a commit, so a FAIL closes the run
+// (`blocked-slice-judge`) and a PASS with medium/low findings delivers all the
+// same, travelling in the verdict for whoever reviews the PR. `discarded` does
+// ask again without spending a retry, just like the task judge: an illegible
+// verdict is not a veto.
 function trasElJuezDeSlice(run, outcome) {
   switch (outcome) {
-    // Juzgada la slice, sólo queda atravesarla — y sólo si el spec declaró
-    // recorridos. El e2e va DESPUÉS del juez, y no antes, por dos razones: su
-    // diseño lo fija como paso TERMINAL (su DONE y su INDETERMINATE cierran en
-    // DELIVERED, no encadenan con nada), y el juez de slice no tiene shell a
-    // propósito — juzga el diff acumulado, no el sistema levantado, así que no
-    // gana nada esperando al informe del e2e. Sin recorridos, el juez cierra el
-    // run como hasta ahora.
+    // With the slice judged, all that is left is walking through it — and only
+    // if the spec declared runs. The e2e goes AFTER the judge, and not before,
+    // for two reasons: its design fixes it as a TERMINAL step (its DONE and its
+    // INDETERMINATE both close in DELIVERED, they chain into nothing), and the
+    // slice judge has no shell on purpose — it judges the accumulated diff, not
+    // the system brought up, so it gains nothing by waiting for the e2e's
+    // report. With no runs, the judge closes the run as it did until now.
     case OUTCOMES.DONE:
       return (run.e2eRuns || []).length
         ? abierto(run, { step: STEPS.E2E })
@@ -425,19 +434,19 @@ function trasElE2e(run, outcome) {
   switch (outcome) {
     case OUTCOMES.DONE:
       return cerrado(run, RUN_STATES.DELIVERED)
-    // El no-verificado ENTREGA. No es indulgencia: si retuviera el run, un
-    // docker que no arranca o una credencial caducada dejaría el slice en
-    // status:in-progress ocupando `area:`/`touches:` y una plaza de `--cap` sin
-    // nadie trabajando — el modo de fallo que F13 y F18 se dedicaron a quitar.
-    // Lo que no pasa nunca es que se afirme verde: el motivo viaja en el
-    // informe y `--release` lo imprime.
+    // The unverified DELIVERS. It is not indulgence: if it held the run back, a
+    // docker that does not start or an expired credential would leave the slice
+    // in status:in-progress occupying `area:`/`touches:` and a `--cap` slot
+    // with nobody working — the failure mode F13 and F18 were dedicated to
+    // removing. What never happens is that green gets asserted: the reason
+    // travels in the report and `--release` prints it.
     case OUTCOMES.INDETERMINATE:
       return cerrado(run, RUN_STATES.DELIVERED)
     case OUTCOMES.FAILED:
       return cerrado(run, RUN_STATES.BLOCKED_E2E)
-    // Un informe que no se puede leer no gasta reintento: no se tocó el código
-    // ni el entorno. Mismo trato que en `implement`, y con el mismo respaldo —
-    // el tope de descartes de la slice.
+    // A report that cannot be read does not spend a retry: neither the code nor
+    // the environment was touched. Same treatment as in `implement`, and with
+    // the same backing — the slice's discard cap.
     case OUTCOMES.DISCARDED:
       return abierto(run, { step: STEPS.E2E, discards: run.discards + 1 })
     default:
@@ -446,15 +455,15 @@ function trasElE2e(run, outcome) {
 }
 
 // ============================================================================
-// EL GATE DEL RELEASE (la mitad que lee; la que escribe está en ct-step.mjs,
-// que persiste `closed: 'delivered'` al cerrar bien).
+// THE RELEASE GATE (the half that reads; the one that writes is in
+// ct-step.mjs, which persists `closed: 'delivered'` when it closes well).
 //
-// `dispatch-check --release` no puede fiarse de que la sesión haya obedecido
-// el kickoff — un prompt no es un gate (doctrina del documento de
-// convergencia al descartar la opción (a) de F36). Esto lo convierte en
-// mecanismo: sin un run de ct-step ENTREGADO, no se libera. Pura a propósito:
-// recibe el contenido crudo del fichero (o null si no existe) y contesta,
-// sin git ni disco, para poder probarse sola.
+// `dispatch-check --release` cannot trust that the session obeyed the kickoff
+// — a prompt is not a gate (the doctrine of the convergence document when it
+// discarded option (a) of F36). This turns it into mechanism: without a
+// DELIVERED ct-step run, nothing is released. Pure on purpose: it receives the
+// raw content of the file (or null if it does not exist) and answers, with no
+// git and no disk, so that it can be tested on its own.
 // ============================================================================
 export function deliveredRun(raw, issue) {
   if (raw === null) {

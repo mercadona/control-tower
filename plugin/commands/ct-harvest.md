@@ -1,18 +1,18 @@
 ---
-description: Cosecha del epic — el coste real de cada slice, sacado del timeline de GitHub. Cero campos manuales. Sólo lee de GitHub; con --bq carga la cosecha en BigQuery.
+description: Harvest of the epic — the real cost of every slice, taken from GitHub's timeline. Zero manual fields. Only reads from GitHub; with --bq it loads the harvest into BigQuery.
 ---
 ```
-node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-harvest.mjs --repo "<owner/repo>" --milestone "<título del epic>" [--json] [--bq <proyecto:dataset.tabla>]
+node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-harvest.mjs --repo "<owner/repo>" --milestone "<epic title>" [--json] [--bq <project:dataset.table>]
 ```
 
-Una fila por slice (`ready→claim`, `claim→release`, `release→merge`, reopens, requeues, `blocked`, tamaño del PR) más la telemetría del juez por slice y, por cada papel que el loop despacha a un subagente, cuánto material fijo leyó (`agent_bytes`, `skill_bytes`, `package_bytes`, resumidos en la columna `bytes por papel`). Todo sale del timeline que GitHub escribe solo; no pide ningún campo a mano. **No muta nada.** Una fase que no ocurrió se imprime `—`, nunca `0`; el resumen va por familia (`Tipo`) y cada familia enseña su N. La tabla o el JSON van por stdout; los motivos y todo lo de BigQuery, por stderr.
+One row per slice (`ready→claim`, `claim→release`, `release→merge`, reopens, requeues, `blocked`, PR size) plus the judge's telemetry per slice and, for every role the loop dispatches to a subagent, how much fixed material it read (`agent_bytes`, `skill_bytes`, `package_bytes`, summarised in the `bytes por papel` column). Everything comes out of the timeline GitHub writes on its own; it asks for no field by hand. **It mutates nothing.** A phase that did not happen prints `—`, never `0`; the summary goes by family (`Tipo`) and every family shows its N. The table or the JSON go to stdout; the reasons and everything about BigQuery, to stderr.
 
-| Exit | Significa | Qué hacer |
+| Exit | Means | What to do |
 |---|---|---|
-| `0` | Cosecha completa | leer la tabla |
-| `1` | **No se pudo completar**: falló una lectura de `gh` o la carga en BigQuery | mirar los motivos de stderr, arreglar y repetir — lo impreso es sólo lo que sí se sabe |
-| `2` | Argumentos mal | corregir la invocación |
+| `0` | Harvest complete | read the table |
+| `1` | **Could not be completed**: a `gh` read or the BigQuery load failed | look at the reasons on stderr, fix it and repeat — what is printed is only what is actually known |
+| `2` | Bad arguments | fix the invocation |
 
-El `1` nunca se degrada a `0`: un timeline que no se pudo leer produce un motivo y ninguna fila, no una fila de ceros.
+The `1` never degrades into a `0`: a timeline that could not be read produces a reason and no row, not a row of zeros.
 
-Referencia completa —las tres decisiones de la cosecha, cada columna de telemetría, el mapa de celda a columna de BigQuery—: `docs/loop/ct-harvest.md` en el repo del plugin.
+Full reference —the three decisions of the harvest, every telemetry column, the map from cell to BigQuery column—: `docs/loop/ct-harvest.md` in the plugin repo.

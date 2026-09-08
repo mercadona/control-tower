@@ -1,53 +1,55 @@
 #!/usr/bin/env node
-// /ct-harvest — QUÉ PREGUNTA RESPONDE: «¿cuánto costó cada slice de este epic,
-// según lo que GitHub ya escribió solo?». Emite una fila por slice con las
-// variables dependientes del pre-registro (§6 del handoff F32): ready→claim,
-// claim→release, release→merge, reopens, requeues, episodios blocked, tamaño
-// del PR y comentarios de review.
+// /ct-harvest — WHAT QUESTION IT ANSWERS: «how much did each slice of this
+// epic cost, according to what GitHub already wrote on its own?». It emits one
+// row per slice with the dependent variables of the pre-registration (§6 of the
+// F32 handoff): ready→claim, claim→release, release→merge, reopens, requeues,
+// blocked episodes, PR size and review comments.
 //
-// SE COSECHA, NO SE CAPTURA. Cero campos manuales. Ni uno. El único dato a mano
-// de toda la medida —los minutos de intervención humana— vive en el desenlace
-// del epic y NO se le pide aquí: en cuanto un cosechador admite un campo
-// manual se convierte en un formulario, y un formulario es exactamente cómo
-// murió docs/medicion-slices.md (2 filas, la columna clave en «no medido»).
+// IT IS HARVESTED, NOT CAPTURED. Zero manual fields. Not one. The only by-hand
+// datum in the whole measure —the minutes of human intervention— lives in the
+// epic's outcome and is NOT asked for here: the moment a harvester admits one
+// manual field it turns into a form, and a form is exactly how
+// docs/medicion-slices.md died (2 rows, the key column at «no medido»).
 //
-// SE ESCRIBIÓ DESPUÉS DEL DESPACHO 1, a propósito y por orden del handoff. Las
-// tres decisiones de scripts/harvest.js salen de haber cosechado a mano el
-// epic #602 de menoplus (2026-08-12/13); ninguna se dedujo antes de tener
-// datos delante. Lo que este comando automatiza es un trabajo que ya se hizo
-// una vez con las manos, no un trabajo que se imagina.
+// IT WAS WRITTEN AFTER DISPATCH 1, on purpose and by order of the handoff. The
+// three decisions of scripts/harvest.js come from having harvested menoplus's
+// epic #602 by hand (2026-08-12/13); not one of them was deduced before having
+// data in front of us. What this command automates is work that was already
+// done once by hand, not work that is imagined.
 //
-// NO MUTA NADA. Ni labels, ni issues, ni PRs: solo lee. Igual que /ct-status, y
-// atado por el mismo tipo de test sobre el argv real con el que se llama a
-// `gh` — no por la mera ausencia de errores.
+// IT MUTATES NOTHING. No labels, no issues, no PRs: it only reads. Same as
+// /ct-status, and tied down by the same kind of test over the real argv `gh` is
+// called with — not by the mere absence of errors.
 //
-// EL 1 NUNCA SE DEGRADA A 0, la misma regla dura que /ct-status y /ct-groom:
-// 0 = cosecha completa, 1 = no se pudo completar alguna lectura. Una cosecha
-// parcial NO es un epic barato, y quien reciba la señal tiene que poder
-// distinguirlas: una tabla con huecos que se lea como «este slice no tuvo
-// review» cuando lo que pasó es que la lectura falló sería un dato inventado
-// entrando por la puerta de atrás en un pre-registro que prohíbe justamente eso.
+// THE 1 NEVER DEGRADES INTO A 0, the same hard rule as /ct-status and
+// /ct-groom: 0 = complete harvest, 1 = some read could not be completed. A
+// partial harvest is NOT a cheap epic, and whoever receives the signal has to
+// be able to tell them apart: a table with gaps that gets read as «this slice
+// had no review» when what happened is that the read failed would be an
+// invented datum coming in through the back door of a pre-registration that
+// forbids exactly that.
 //
-// LEE ADEMÁS LA TELEMETRÍA DEL JUEZ que la propia slice dejó commiteada en
-// docs/superpowers/metrics/issue-<n>.jsonl. Desde 1422c67 cada veredicto emite
-// `rubric_sin_vara` (cuántos ítems de la rúbrica se recorrieron sin el insumo
-// con el que medirlos) y `findings_by_rule`, y hasta ahora NO LOS LEÍA NADIE:
-// la columna existía en disco y la pregunta que motivó todo aquello —«¿está
-// llegando la vara?»— se contestaba abriendo ficheros jsonl a mano (§3.4 del
-// handoff docs/prompt-juez-lo-que-queda.md).
+// IT ALSO READS THE JUDGE'S TELEMETRY that the slice itself left committed in
+// docs/superpowers/metrics/issue-<n>.jsonl. Since 1422c67 every verdict emits
+// `rubric_sin_vara` (how many rubric items were walked without the input to
+// measure them with) and `findings_by_rule`, and until now NOBODY READ THEM:
+// the column existed on disk and the question that motivated all of that —«is
+// the yardstick arriving?»— was answered by opening jsonl files by hand (§3.4
+// of the handoff docs/prompt-juez-lo-que-queda.md).
 //
-// Se lee de GitHub y no del disco, como todo lo demás de este comando: no hay
-// checkout que suponer, y un directorio ausente en el cwd equivocado saldría
-// como «cero sin-vara», que es el cero inventado que este fichero prohíbe.
+// It is read from GitHub and not from disk, like everything else in this
+// command: there is no checkout to assume, and a directory absent in the wrong
+// cwd would come out as «zero sin-vara», which is the invented zero this file
+// forbids.
 //
-// Y LAS DOS LECTURAS TIENEN DISTINTO PESO. El LISTADO del directorio que falla
-// NO baja el exit a 1: la causa casi siempre es que ese repo no tiene
-// telemetría (todo epic anterior a 1422c67), y un exit 1 permanente en esos
-// epics enseña a ignorar el exit code, que es justo la señal que la regla «el 1
-// nunca se degrada a 0» protege. Lo que se paga a cambio es no imprimir NI UN
-// NÚMERO en ese caso y decir en voz alta que no se sabe. Un FICHERO que el
-// listado sí nombraba y no se pudo leer, en cambio, es una cosecha incompleta
-// de verdad: motivo y exit 1.
+// AND THE TWO READS CARRY DIFFERENT WEIGHT. The directory LISTING failing does
+// NOT drop the exit to 1: the cause is almost always that that repo has no
+// telemetry (every epic older than 1422c67), and a permanent exit 1 on those
+// epics teaches people to ignore the exit code, which is exactly the signal the
+// «the 1 never degrades into a 0» rule protects. What is paid in exchange is
+// printing NOT A SINGLE NUMBER in that case and saying out loud that it is not
+// known. A FILE that the listing did name and could not be read, on the other
+// hand, is a genuinely incomplete harvest: reason and exit 1.
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -59,9 +61,9 @@ import { BigQueryTable, LoadOutcome } from './bigquery-load.js'
 import { HarvestLedger, LedgerIdentity } from './harvest-ledger.js'
 import { IndexOutcome, SliceHarvest, SliceRead, TelemetryIndex } from './slice-harvest.js'
 
-// `arg()` endurecido: el MISMO de ct-next.mjs/ct-groom.mjs/ct-status.mjs,
-// palabra por palabra y por el mismo motivo medido — un flag colgante no puede
-// colar el siguiente flag como su valor.
+// Hardened `arg()`: the SAME one as ct-next.mjs/ct-groom.mjs/ct-status.mjs,
+// word for word and for the same measured reason — a dangling flag cannot
+// sneak the next flag in as its value.
 const arg = (f, d) => {
   const i = process.argv.indexOf(f)
   if (i === -1) return d
@@ -105,9 +107,9 @@ const gh = (a) => {
   }
 }
 
-// `bqRunner`: calcado de `localRunner` en dispatch-check.mjs. El adaptador
-// (BigQueryLoad) recibe el runner con el tope YA puesto — no elige él el
-// timeout, lo elige quien lo construye aquí.
+// `bqRunner`: traced from `localRunner` in dispatch-check.mjs. The adapter
+// (BigQueryLoad) receives the runner with the cap ALREADY in place — it does
+// not choose the timeout itself, whoever builds it here chooses it.
 const bqRunner = (a) => {
   try {
     return { code: 0, stdout: execFileSync('bq', a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: CHILD_TIMEOUT_MS, killSignal: 'SIGKILL' }), stderr: '' }
@@ -116,35 +118,36 @@ const bqRunner = (a) => {
   }
 }
 
-// motivos: todo lo que NO se pudo cosechar. Es lo único que decide el exit 1.
+// motivos: everything that could NOT be harvested. It is the only thing that decides the exit 1.
 const motivos = []
 
-// Los issues del epic, abiertos Y cerrados. Vía GraphQL de `gh issue list`
-// porque necesitamos filtrar por milestone y traer `closedAt`, que el endpoint
-// REST no expone con ese nombre.
+// The epic's issues, open AND closed. Via the GraphQL of `gh issue list`
+// because we need to filter by milestone and bring `closedAt`, which the REST
+// endpoint does not expose under that name.
 //
-// SIN `--limit` acotado a un número pequeño: ese endpoint devuelve más nuevo
-// primero, así que un tope bajo deja fuera justo los slices VIEJOS — los
-// primeros del epic, que son los que más interesa medir. Es el mismo error que
-// ya costó un informe falso en este repo (ver la cabecera de ct-status.mjs).
+// WITHOUT a `--limit` bounded to a small number: that endpoint returns newest
+// first, so a low cap leaves out precisely the OLD slices — the first ones of
+// the epic, which are the ones it matters most to measure. It is the same
+// mistake that already cost a false report in this repo (see the header of
+// ct-status.mjs).
 let issues = []
 try {
   issues = JSON.parse(gh([
     'issue', 'list', '--repo', repo, '--milestone', milestone, '--state', 'all',
     '--limit', '1000',
-    // closedByPullRequestsReferences: es GitHub quien dice qué PR cerró cada
-    // issue. Deducirlo del timeline ya produjo una tabla verde y equivocada
-    // (ver closingPrNumbers en harvest.js).
+    // closedByPullRequestsReferences: it is GitHub that says which PR closed
+    // each issue. Deducing it from the timeline already produced a green and
+    // wrong table (see closingPrNumbers in harvest.js).
     '--json', 'number,title,state,closedAt,labels,milestone,closedByPullRequestsReferences',
   ]))
 } catch (e) {
   motivos.push(`no se pudieron listar los issues del milestone "${milestone}" en ${repo}: ${e.message}`)
 }
 
-// `ghRunner`: el mismo `gh` de arriba pero con la forma `{ code, stdout,
-// stderr }` que SliceHarvest y TelemetryIndex esperan de su dependencia
-// inyectada — el adaptador no sabe que detrás hay un `execFileSync` que
-// lanza.
+// `ghRunner`: the same `gh` as above but with the `{ code, stdout, stderr }`
+// shape that SliceHarvest and TelemetryIndex expect of their injected
+// dependency — the adapter does not know there is an `execFileSync` behind it
+// that throws.
 const ghRunner = (a) => {
   try {
     return { code: 0, stdout: gh(a), stderr: '' }
@@ -153,20 +156,20 @@ const ghRunner = (a) => {
   }
 }
 
-// El listado del directorio: UNA llamada que decide qué hay, ANTES de cosechar
-// ningún slice. La ausencia de un fichero se deduce de un listado que sí se
-// leyó, nunca de interpretar el stderr de un 404 — este repo no parsea
-// códigos HTTP en ningún sitio y no empieza aquí. El listado que falla NO
-// baja el exit a 1: la causa casi siempre es que este repo no tiene
-// telemetría (todo epic anterior a 1422c67).
+// The directory listing: ONE call that decides what is there, BEFORE
+// harvesting any slice. The absence of a file is deduced from a listing that
+// WAS read, never from interpreting the stderr of a 404 — this repo parses HTTP
+// codes nowhere and it does not start here. The listing failing does NOT drop
+// the exit to 1: the cause is almost always that this repo has no telemetry
+// (every epic older than 1422c67).
 const indice = TelemetryIndex.read({ gh: ghRunner, repo })
 const dirTelemetria = indice.outcome === IndexOutcome.NOT_READ
   ? { status: 'no-leido', why: indice.detail }
   : { status: 'ok', why: null }
 
-// motivoDe: reproduce los tres textos de siempre según qué lectura falló. Un
-// `read` que este comando no espera lanza en vez de perderse en un texto
-// genérico.
+// motivoDe: reproduces the usual three texts according to which read failed. A
+// `read` this command does not expect throws instead of getting lost in a
+// generic text.
 function motivoDe(n, f) {
   if (f.read === SliceRead.TIMELINE) return `no se pudo leer el timeline del issue #${n}: ${f.detail}`
   if (f.read === SliceRead.PULL_REQUEST) return `no se pudieron leer los datos del ${f.subject} (issue #${n}): ${f.detail}`
@@ -178,8 +181,8 @@ const filas = []
 const cosechador = new SliceHarvest({ gh: ghRunner })
 for (const issue of issues) {
   const informe = cosechador.harvest({ repo, issue, index: indice })
-  // Dos PRs cerrando el mismo issue es raro: se dice en voz alta y se cosecha
-  // el primero, en vez de elegir en silencio y perder el hallazgo.
+  // Two PRs closing the same issue is rare: it is said out loud and the first
+  // one is harvested, instead of picking in silence and losing the finding.
   if (informe.closers.length > 1) motivos.push(`el issue #${issue.number} lo cierran ${informe.closers.length} PRs (${informe.closers.map((n) => `#${n}`).join(', ')}); la fila cosecha solo el #${informe.closers[0]}`)
   for (const f of informe.failures) motivos.push(motivoDe(issue.number, f))
   if (informe.row) filas.push(informe.row)
@@ -192,9 +195,9 @@ else if (bqTable && !filas.length) console.error('BigQuery: nada que cargar — 
 else if (bqTable) {
   const ledger = new HarvestLedger({ table: bqTable, bq: bqRunner, workspace: { create: () => mkdtempSync(join(tmpdir(), 'ct-harvest-bq-')), remove: (d) => rmSync(d, { recursive: true, force: true }) }, identity: LedgerIdentity.fromEnvironment() })
   const informe = ledger.record({ repo, milestone, rows: filas })
-  // Proyección EXHAUSTIVA del desenlace: un `LoadOutcome` sin clave aquí
-  // lanza (llamar a `undefined` como función), nunca cae en un catch-all
-  // silencioso.
+  // EXHAUSTIVE projection of the outcome: a `LoadOutcome` with no key here
+  // throws (calling `undefined` as a function), it never falls into a silent
+  // catch-all.
   const PROYECCION_BQ = {
     [LoadOutcome.LOADED]: () => console.error(`BigQuery: ${informe.rowCount} filas cargadas en ${informe.table.id} (harvest_id ${informe.harvestId})`),
     [LoadOutcome.REJECTED]: () => motivos.push(`no se pudo cargar en BigQuery (${informe.table.id}): bq salió con ${informe.code}: ${informe.detail}. Los ficheros quedan en ${informe.directory}; reintenta a mano: ${informe.retryCommand}`),
@@ -211,18 +214,19 @@ if (comoJson) {
   console.log('| Issue | Slice | Tipo | Gate | ready→claim | claim→release | release→merge | reopens | requeues | blocked | PR |')
   console.log('|---|---|---|---|---|---|---|---|---|---|---|')
   for (const f of filas) {
-    // El `*` marca que release→merge se midió contra el CIERRE DEL ISSUE y no
-    // contra el merge de un PR. Se marca en la propia celda, no en una nota al
-    // pie: una nota al pie no viaja cuando alguien copia la tabla.
+    // The `*` marks that release→merge was measured against the CLOSING OF THE
+    // ISSUE and not against the merge of a PR. It is marked in the cell itself,
+    // not in a footnote: a footnote does not travel when someone copies the
+    // table.
     const marca = f.mergeSource === 'issue-closed' ? '*' : ''
     const pr = f.pr ? `#${f.pr} +${f.additions}/−${f.deletions} ${f.changedFiles}f` : '—'
     console.log(`| #${f.issue} | ${f.title ?? '—'} | ${f.type ?? '—'} | ${f.gate ?? '—'} | ${formatDuration(f.readyToClaim)} | ${formatDuration(f.claimToRelease)} | ${formatDuration(f.releaseToMerge)}${marca} | ${f.reopens} | ${f.requeues} | ${f.blocked.length} | ${pr} |`)
   }
   console.log('')
-  // Se reporta POR FAMILIA (`Tipo`), nunca agregado — regla de honestidad del
-  // §6, tomada de la lección del FDR 0,08–0,31 de POSTCONDBENCH. Y con la N de
-  // cada familia a la vista: una familia de 1 no es una media, y quien lea esto
-  // tiene que verlo sin preguntar.
+  // It is reported BY FAMILY (`Tipo`), never aggregated — honesty rule of §6,
+  // taken from the lesson of POSTCONDBENCH's FDR 0,08–0,31. And with each
+  // family's N in plain sight: a family of 1 is not a mean, and whoever reads
+  // this has to see it without asking.
   const familias = new Map()
   for (const f of filas) {
     const k = f.type ?? '(sin type:)'
@@ -253,77 +257,81 @@ if (comoJson) {
       let veredictos = '—'
       let sinVara = '—'
       let porRegla = '—'
-      // LA VARA DE CT, en sus dos mitades y una sola columna: cuántos de sus
-      // documentos llegaron a citarse en el recorrido de la rúbrica, y cuántos
-      // hallazgos los citan. Combinadas como el `N docs · MB` del brief, porque
-      // son dos números de la misma medida y una columna por cada uno ensancharía
-      // la tabla sin añadir una pregunta.
+      // THE CT YARDSTICK, in its two halves and a single column: how many of
+      // its documents ended up cited along the rubric's run, and how many
+      // findings cite them. Combined like the brief's `N docs · MB`, because
+      // they are two numbers of the same measure and a column for each would
+      // widen the table without adding a question.
       //
-      // Se leen JUNTAS y en ese orden: `5 docs` con `0 hallazgos` slice tras
-      // slice es el caso que hay que vigilar —o el código conformaba, o la vara
-      // se está nombrando de adorno—, y esa lectura es imposible con una sola
-      // cifra. Sustituye a `patrones-ct`, que sólo miraba hallazgos del ítem
-      // `patrones` y por eso no vio los dos que el slice #7 archivó en
-      // `decisiones-cerradas`.
+      // They are read TOGETHER and in that order: `5 docs` with `0 hallazgos`
+      // slice after slice is the case to watch —either the code conformed, or
+      // the yardstick is being named as decoration—, and that reading is
+      // impossible with a single figure. It replaces `patrones-ct`, which only
+      // looked at findings of the `patrones` item and for that reason missed
+      // the two that slice #7 filed under `decisiones-cerradas`.
       let varaCt = '—'
-      // Si la vara de ct llegó al brief del paso `implement`, y cuánto pesó —
-      // sumado sobre TODOS los intentos de `implement` que el slice dejó
-      // escritos. Combinado en una sola columna, como el `#pr +a/-d Nf` de la
-      // tabla de coste de arriba: son dos números de la misma medida.
+      // Whether the ct yardstick reached the brief of the `implement` step,
+      // and how much it weighed — added up over ALL the `implement` attempts
+      // the slice left written. Combined into a single column, like the `#pr
+      // +a/-d Nf` of the cost table above: they are two numbers of the same
+      // measure.
       let brief = '—'
-      // #92 — LO QUE COSTÓ EL MATERIAL FIJO, en una celda y en tres números:
-      // el fichero del agente despachado, las skills que su prompt le ordena
-      // cargar y el paquete que recibió, sumados sobre todos los papeles del
-      // slice. Juntos por lo mismo que `vara ct`: son la misma medida, y la
-      // pregunta que motivó la columna (cuánto material fijo se ahorra por
-      // slice) es su suma, no cada uno por su lado.
+      // #92 — WHAT THE FIXED MATERIAL COST, in one cell and three numbers:
+      // the file of the dispatched agent, the skills its prompt orders it to
+      // load and the package it received, added up over all the roles of the
+      // slice. Together for the same reason as `vara ct`: they are the same
+      // measure, and the question that motivated the column (how much fixed
+      // material is saved per slice) is their sum, not each one on its own.
       let bytesPorPapel = '—'
-      // LA SEVERIDAD, en una celda y en el orden en que se decide: una alta VETA
-      // —el contrato del veredicto no admite un PASS con una alta—, una media
-      // compra una vuelta pagada al implementador, una baja sólo se anota. Las
-      // tres juntas por lo mismo que `vara ct`: son el mismo reparto y una
-      // columna por severidad ensancharía la tabla sin añadir una pregunta.
+      // THE SEVERITY, in one cell and in the order in which it is decided: a
+      // high VETOES —the verdict's contract does not admit a PASS with a high—,
+      // a medium buys a paid round trip to the implementer, a low is only noted
+      // down. The three together for the same reason as `vara ct`: they are the
+      // same distribution and a column per severity would widen the table
+      // without adding a question.
       let severidades = '—'
       if (t.status === 'sin-fichero') porRegla = '(sin telemetría)'
       else if (t.status === 'no-leido') porRegla = '(no se pudo leer)'
       else {
-        // Las dos notas de la celda caben juntas y separadas por coma: cuántos
-        // de esos veredictos fueron un VETO, y cuántos son de telemetría vieja.
-        // Sólo se anotan si hay algo que anotar — un slice limpio se lee de un
-        // golpe, que es para lo que sirve la columna.
+        // The cell's two notes fit together, separated by a comma: how many of
+        // those verdicts were a VETO, and how many come from old telemetry.
+        // They are only noted if there is something to note — a clean slice is
+        // read at a glance, which is what the column is for.
         const notas = []
         if (t.fails > 0) notas.push(`${t.fails} ${t.fails === 1 ? 'veto' : 'vetos'}`)
         if (t.legacy > 0) notas.push(`${t.legacy} sin columna`)
         veredictos = notas.length ? `${t.verdicts} (${notas.join(', ')})` : String(t.verdicts)
-        // Misma regla que todo lo demás de esta tabla: measuredSeverities === 0
-        // imprime «—» y jamás `0/0/0`, que afirmaría un reparto que nadie midió.
+        // Same rule as everything else in this table: measuredSeverities === 0
+        // prints «—» and never `0/0/0`, which would assert a distribution
+        // nobody measured.
         if (t.measuredSeverities > 0) {
           severidades = `${t.findingsHigh}/${t.findingsMedium}/${t.findingsLow}`
           if (t.legacySeverities > 0) severidades += ` (${t.legacySeverities} sin columna)`
         }
-        // measured === 0 imprime «—» y JAMÁS «0»: ningún veredicto de este slice
-        // traía la columna, así que un cero afirmaría una medida que no se hizo.
+        // measured === 0 prints «—» and NEVER «0»: no verdict of this slice
+        // carried the column, so a zero would assert a measure that was never
+        // taken.
         sinVara = t.measured > 0 ? String(t.rubricSinVara) : '—'
         const entradas = Object.entries(t.findingsByRule).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         porRegla = t.verdicts === 0 ? '(sin veredictos)' : (entradas.length ? entradas.map(([r, n]) => `${r} ${n}`).join(' · ') : '(ninguno)')
-        // Misma regla que `sin-vara`: measured* === 0 imprime «—», nunca «0» —
-        // ningún veredicto de este slice traía la columna. Se exigen las DOS
-        // medidas para imprimir la celda: media celda con la otra mitad en
-        // blanco invitaría a leer el hueco como un cero, que es justo lo que
-        // esta regla existe para impedir.
+        // Same rule as `sin-vara`: measured* === 0 prints «—», never «0» — no
+        // verdict of this slice carried the column. BOTH measures are required
+        // to print the cell: half a cell with the other half blank would invite
+        // reading the gap as a zero, which is exactly what this rule exists to
+        // prevent.
         if (t.measuredVaraCtDocs > 0 && t.measuredFindingsVaraCt > 0) {
           varaCt = `${t.varaCtDocs} docs · ${t.findingsVaraCt} hallazgos`
           if (t.legacyVaraCtDocs > 0) varaCt += ` (${t.legacyVaraCtDocs} sin columna)`
         }
-        // Misma regla otra vez: briefMeasured === 0 imprime «—» — ningún
-        // intento de `implement` de este slice traía las dos columnas, así
-        // que un cero afirmaría un brief sin vara que nadie pudo medir.
+        // The same rule again: briefMeasured === 0 prints «—» — no `implement`
+        // attempt of this slice carried both columns, so a zero would assert a
+        // brief with no yardstick that nobody could measure.
         if (t.briefMeasured > 0) {
           brief = `${t.briefVaraCtDocs} docs · ${t.briefBytes}B`
           if (t.briefLegacy > 0) brief += ` (${t.briefLegacy} sin columna)`
         }
-        // Y otra vez la misma: roleMeasured === 0 imprime «—» y jamás tres
-        // ceros, que afirmarían papeles despachados sin material.
+        // And the same one again: roleMeasured === 0 prints «—» and never
+        // three zeros, which would assert dispatched roles with no material.
         if (t.roleMeasured > 0) {
           bytesPorPapel = `agente ${t.agentBytes}B · skills ${t.skillBytes}B · paquete ${t.packageBytes}B`
           if (t.roleLegacy > 0) bytesPorPapel += ` (${t.roleLegacy} sin columna)`

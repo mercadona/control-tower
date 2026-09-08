@@ -1,36 +1,35 @@
-// Integración D1 (fix/dispatch-graph-hardening) + D2 (fix/dispatch-silent-failures):
-// cada rama por separado prueba su propia mitad — D1 el alcance por epic del
-// grafo de dependencias (colisión de orden, deps por sección, avisos), D2 el
-// contrato de exit codes del bucle de claim (skip/infra/stuck, exit 0/1/2/3).
-// Ninguna de las dos suites originales ejercita las DOS mitades A LA VEZ en
-// una sola corrida real de ct-next.mjs — exactamente donde una integración
-// puede romperse en las costuras sin que ningún test heredado lo note. Estos
-// tests construyen esos escenarios de costura explícitamente:
+// Integration of D1 (fix/dispatch-graph-hardening) + D2 (fix/dispatch-silent-failures):
+// each branch on its own tests its own half — D1 the per-epic scope of the
+// dependency graph (order collision, deps by section, warnings), D2 the exit
+// code contract of the claim loop (skip/infra/stuck, exit 0/1/2/3). Neither of
+// the two original suites exercises BOTH halves AT ONCE in a single real run of
+// ct-next.mjs — exactly where an integration can break at the seams without any
+// inherited test noticing. These tests build those seam scenarios explicitly:
 //
-//   Costura A — un epic queda EXCLUIDO por colisión de orden (D1) Y el único
-//   candidato que queda de otro epic pierde la carrera de claim en vivo (D2)
-//   → exit 3 (nunca 0 ni 1): la exclusión no debe, por sí sola, cambiar el
-//   código de "reintenta más tarde".
-//   Costura B — un epic con colisión de orden es la ÚNICA fuente de trabajo
-//   del repo → tras excluirlo no queda NADA que seleccionar → exit 0 (no
-//   exit 1: la colisión nunca aborta el batch, solo lo estrecha).
-//   Costura C — un issue con "merge-after" fuera de "## Dependencias" (D1,
-//   avisa pero despacha) termina huérfano en status:in-progress al reclamar
-//   (D2, 'stuck') → exit 1 con el aviso Y el ATENCIÓN presentes a la vez, sin
-//   que ninguno contradiga al otro.
-//   Costura D — en una misma tanda: un epic excluido por colisión (D1), un
-//   issue con deps mal formadas en OTRO epic (D1, bloquea SOLO ese issue) y
-//   un issue con stray deps en un TERCER epic (D1, avisa pero despacha) que
-//   sí se reclama y lanza con éxito (D2, exit 0) — verifica que los avisos
-//   de datos rotos no interfieren entre sí ni con el progreso real de la
-//   tanda.
+//   Seam A — an epic is EXCLUDED by an order collision (D1) AND the only
+//   candidate left from another epic loses the live claim race (D2) → exit 3
+//   (never 0 nor 1): the exclusion must not, on its own, change the "retry
+//   later" code.
+//   Seam B — an epic with an order collision is the ONLY source of work in the
+//   repo → once it is excluded there is NOTHING left to select → exit 0 (not
+//   exit 1: the collision never aborts the batch, it only narrows it).
+//   Seam C — an issue with a "merge-after" outside "## Dependencias" (D1, it
+//   warns but dispatches) ends up orphaned in status:in-progress when claiming
+//   (D2, 'stuck') → exit 1 with the warning AND the ATENCIÓN present at the same
+//   time, with neither contradicting the other.
+//   Seam D — in a single batch: an epic excluded by collision (D1), an issue
+//   with malformed deps in ANOTHER epic (D1, it blocks ONLY that issue) and an
+//   issue with stray deps in a THIRD epic (D1, it warns but dispatches) that
+//   does get claimed and launched successfully (D2, exit 0) — it verifies that
+//   the warnings about broken data neither interfere with each other nor with
+//   the batch's real progress.
 import { describe, it, expect, afterEach } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-// D4: entorno hermético (dirs de cuenta + stubs de cmux/claude) — ver fixtures/hermetic-env.js
+// D4: hermetic environment (account dirs + cmux/claude stubs) — see fixtures/hermetic-env.js
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'ct-next.mjs')
@@ -59,9 +58,9 @@ function makeRepoRoot() {
   return d
 }
 
-// Issue "crudo" tal y como lo devuelve `gh api repos/<o>/<r>/issues` — con
-// milestone (D1, epicKeyOf) y body (marcador ct-order + secciones opcionales
-// de Dependencias/Descripción, D1 dep-por-sección).
+// A "raw" issue exactly as `gh api repos/<o>/<r>/issues` returns it — with a
+// milestone (D1, epicKeyOf) and a body (the ct-order marker + the optional
+// Dependencias/Descripción sections, D1 dep-by-section).
 function rawIssue({ number, milestone, order, status = 'status:ready', touches = [], body = '' }) {
   const labels = [{ name: status }, ...touches.map((t) => ({ name: `touches:${t}` }))]
   const fullBody = `${body}\n<!-- ct-order:${order} -->\n`
@@ -74,51 +73,52 @@ function rawIssue({ number, milestone, order, status = 'status:ready', touches =
   }
 }
 
-describe('Costura A — epic excluido por colisión de orden (D1) + único candidato restante pierde la carrera (D2) → exit 3', () => {
-  it('la colisión no cambia el código de "reintenta más tarde"', () => {
+describe('Seam A — an epic excluded by an order collision (D1) + the only remaining candidate loses the race (D2) → exit 3', () => {
+  it('the collision does not change the "retry later" code', () => {
     const repoRoot = makeRepoRoot()
     const gitLog = join(repoRoot, 'git-log')
     const counterFile = join(repoRoot, 'gh-list-count')
 
-    // Epic 100: #10 y #11 comparten <!-- ct-order:1 --> → colisión, epic
-    // excluido ENTERO de `issues` (buildDispatchInput).
+    // Epic 100: #10 and #11 share <!-- ct-order:1 --> → collision, the WHOLE
+    // epic excluded from `issues` (buildDispatchInput).
     const i10 = rawIssue({ number: 10, milestone: 100, order: 1 })
     const i11 = rawIssue({ number: 11, milestone: 100, order: 1 })
-    // Epic 200: #20, único superviviente, listo y sin deps.
+    // Epic 200: #20, the only survivor, ready and with no deps.
     const i20 = rawIssue({ number: 20, milestone: 200, order: 1, touches: ['foo'] })
-    // Trabajo en vuelo que SOLO dispatch-check ve en su propia lectura en
-    // vivo (idx2) — nunca en la foto que toma ct-next (idx0) — reproduciendo
-    // la carrera perdida limpia del propio D2.
+    // Work in flight that ONLY dispatch-check sees in its own live read (idx2)
+    // — never in the snapshot ct-next takes (idx0) — reproducing D2's own clean
+    // lost race.
     const inFlight99 = { number: 99, labels: [{ name: 'status:in-progress' }, { name: 'touches:foo' }] }
 
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
       // idx0: ct-next open ; idx1: ct-next closed ; idx2: dispatch-check(#20)
-      // collision-check en vivo → ve a #99 en vuelo.
+      // live collision-check → it sees #99 in flight.
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[i10, i11, i20], [], [inFlight99]]),
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:foo', 'status:ready']),
       FAKE_GH_COUNTER_FILE: counterFile,
       FAKE_GIT_LOG_FILE: gitLog,
     })
 
-    // D1: el aviso de colisión se imprime SIEMPRE, nunca en silencio.
+    // D1: the collision warning is ALWAYS printed, never in silence.
     expect(r.out).toMatch(/aviso: colisión de orden.*#10.*#11|aviso: colisión de orden.*#11.*#10/)
     expect(r.out).toMatch(/EXCLUIDO de esta tanda/)
-    // Solo #20 se seleccionó (los de la epic 100 nunca compitieron).
+    // Only #20 was selected (epic 100's never competed).
     expect(r.out).toMatch(/seleccionados para esta tanda.*#20/)
-    // #20 choca en vivo contra #99 → se salta, cero lanzados.
+    // #20 collides live with #99 → it is skipped, zero launched.
     expect(r.out).toMatch(/saltando #20/)
     expect(r.out).toMatch(/lanzad[oa]s? 0.*1/i)
-    // Exit 3 — el mismo "reintenta más tarde" de D2, NO 0 (habría progreso
-    // real que no hubo) ni 1 (nada se rompió: la exclusión no es un fallo).
+    // Exit 3 — the same "retry later" as D2, NOT 0 (that would claim real
+    // progress that never happened) nor 1 (nothing broke: the exclusion is not
+    // a failure).
     expect(r.code).toBe(3)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
   })
 })
 
-describe('Costura B — la colisión de orden es la ÚNICA fuente de trabajo del repo → exit 0, no exit 1', () => {
-  it('tras excluir el epic colisionado no queda nada que seleccionar, y eso NO es un fallo', () => {
+describe('Seam B — the order collision is the ONLY source of work in the repo → exit 0, not exit 1', () => {
+  it('once the collided epic is excluded there is nothing left to select, and that is NOT a failure', () => {
     const repoRoot = makeRepoRoot()
     const gitLog = join(repoRoot, 'git-log')
     const argvLog = join(repoRoot, 'gh-argv-log')
@@ -136,28 +136,29 @@ describe('Costura B — la colisión de orden es la ÚNICA fuente de trabajo del
     })
 
     expect(r.out).toMatch(/aviso: colisión de orden/)
-    // planDispatch no seleccionó nada — nunca se abre un dispatch-check.
+    // planDispatch selected nothing — no dispatch-check is ever opened.
     expect(r.out).toMatch(/No hay ningún issue en status:ready/)
-    // exit 0: "nada que hacer, y ya se explicó por qué" — la colisión NUNCA
-    // aborta el batch (round 2 de D1), ni siquiera cuando deja el repo sin
-    // nada que despachar.
+    // exit 0: "nothing to do, and it has already been explained why" — the
+    // collision NEVER aborts the batch (D1's round 2), not even when it leaves
+    // the repo with nothing to dispatch.
     expect(r.code).toBe(0)
     const argv = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
-    expect(argv).not.toMatch(/issue edit/) // ningún claim intentado
+    expect(argv).not.toMatch(/issue edit/) // no claim attempted
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
   })
 })
 
-describe('Costura C — stray dep fuera de sección (D1, avisa y despacha) que termina huérfana en status:in-progress (D2, stuck) → exit 1 con ambos mensajes', () => {
-  it('el aviso de stray dep y el ATENCIÓN de huérfano conviven sin contradecirse', () => {
+describe('Seam C — a stray dep outside the section (D1, it warns and dispatches) that ends up orphaned in status:in-progress (D2, stuck) → exit 1 with both messages', () => {
+  it('the stray dep warning and the orphan ATENCIÓN live together without contradicting each other', () => {
     const repoRoot = makeRepoRoot()
     const gitLog = join(repoRoot, 'git-log')
     const counterFile = join(repoRoot, 'gh-list-count')
 
-    // #50: sin sección "## Dependencias" en absoluto (deps=[], malformed:false
-    // — nunca bloquea), pero con un "merge-after #7" suelto en la
-    // "## Descripción" — D1 lo expone como strayDeps, avisa, despacha igual.
+    // #50: with no "## Dependencias" section at all (deps=[], malformed:false —
+    // it never blocks), but with a loose "merge-after #7" in the
+    // "## Descripción" — D1 exposes it as strayDeps, warns, and dispatches all
+    // the same.
     const i50 = rawIssue({
       number: 50,
       milestone: 500,
@@ -169,25 +170,25 @@ describe('Costura C — stray dep fuera de sección (D1, avisa y despacha) que t
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
       // idx0: ct-next open ; idx1: ct-next closed ; idx2: dispatch-check(#50)
-      // collision-check (limpio) ; idx3: dispatch-check(#50) readback → FALLA.
+      // collision-check (clean) ; idx3: dispatch-check(#50) readback → FAILS.
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[i50], [], []]),
       FAKE_GH_LIST_FAIL_AT: '3',
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:zzz', 'status:ready']),
       FAKE_GH_COUNTER_FILE: counterFile,
       FAKE_GIT_LOG_FILE: gitLog,
-      // El revert posterior al fallo de readback TAMBIÉN falla → huérfano.
+      // The revert that follows the readback failure ALSO fails → orphan.
       FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready --remove-label status:in-progress',
     })
 
-    // D1: el aviso de stray dep se imprime — el estrechamiento del dominio de
-    // deps es correcto, pero nunca en silencio.
+    // D1: the stray dep warning is printed — the narrowing of the deps domain
+    // is correct, but never in silence.
     expect(r.out).toMatch(/aviso: #50 tiene "merge-after #7" fuera de la sección/)
-    // D2: 'stuck' aborta la tanda ENTERA — el issue queda huérfano.
+    // D2: 'stuck' aborts the WHOLE batch — the issue is left orphaned.
     expect(r.out).toMatch(/ATENCIÓN.*bloqueado en status:in-progress/is)
     expect(r.out).not.toMatch(/lanzado #50/)
-    // Ninguno de los dos mensajes se pisa: el aviso de stray dep no dice que
-    // el dispatch se completó, y el ATENCIÓN no dice que la dependencia
-    // bloqueó nada.
+    // Neither of the two messages steps on the other: the stray dep warning
+    // does not say the dispatch completed, and the ATENCIÓN does not say the
+    // dependency blocked anything.
     expect(r.out).not.toMatch(/aviso: #50 tiene "merge-after #7"[^\n]*bloquead/i)
     expect(r.code).toBe(1)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
@@ -195,26 +196,26 @@ describe('Costura C — stray dep fuera de sección (D1, avisa y despacha) que t
   })
 })
 
-describe('Costura D — colisión de orden + deps mal formadas en otro epic + stray dep en un tercero, en la MISMA tanda → el progreso real no se ve bloqueado por los avisos', () => {
-  it('el epic colisionado se excluye, el issue con deps mal formadas se excluye de la selección (sin abortar nada), y el issue con stray dep se despacha con éxito', () => {
+describe('Seam D — an order collision + malformed deps in another epic + a stray dep in a third, in the SAME batch → real progress is not blocked by the warnings', () => {
+  it('the collided epic is excluded, the issue with malformed deps is excluded from the selection (without aborting anything), and the issue with a stray dep is dispatched successfully', () => {
     const repoRoot = makeRepoRoot()
     const gitLog = join(repoRoot, 'git-log')
     const argvLog = join(repoRoot, 'gh-argv-log')
     const counterFile = join(repoRoot, 'gh-list-count')
 
-    // Epic 100: colisión de orden — #10/#11 excluidos enteros.
+    // Epic 100: order collision — #10/#11 excluded whole.
     const i10 = rawIssue({ number: 10, milestone: 100, order: 1 })
     const i11 = rawIssue({ number: 11, milestone: 100, order: 1 })
-    // Epic 200: #20 con "## Dependencias" presente pero SIN ningún
-    // "merge-after #N" reconocible (reescritura humana) → depsMalformed.
-    // Se excluye de readyDepsMet, pero NO de `issues` — no bloquea el resto.
+    // Epic 200: #20 with "## Dependencias" present but WITHOUT any recognisable
+    // "merge-after #N" (a human rewrite) → depsMalformed. It is excluded from
+    // readyDepsMet, but NOT from `issues` — it does not block the rest.
     const i20 = rawIssue({
       number: 20,
       milestone: 200,
       order: 1,
       body: '## Dependencias\n- Depende de #1 (ver más abajo)\n',
     })
-    // Epic 300: #30 con stray dep fuera de sección — avisa, despacha igual.
+    // Epic 300: #30 with a stray dep outside the section — it warns, and dispatches all the same.
     const i30 = rawIssue({
       number: 30,
       milestone: 300,
@@ -226,8 +227,8 @@ describe('Costura D — colisión de orden + deps mal formadas en otro epic + st
     const r = runReal(['--repo', 'o/r', '--cap', '2'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
       // idx0: ct-next open ; idx1: ct-next closed ; idx2: dispatch-check(#30)
-      // collision-check (limpio, nada en vuelo) ; idx3: readback (limpio).
-      // #20 nunca llega a un dispatch-check: no está en readyDepsMet.
+      // collision-check (clean, nothing in flight) ; idx3: readback (clean).
+      // #20 never reaches a dispatch-check: it is not in readyDepsMet.
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[i10, i11, i20, i30], [], [], []]),
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:qux', 'status:ready']),
       FAKE_GH_COUNTER_FILE: counterFile,
@@ -235,19 +236,19 @@ describe('Costura D — colisión de orden + deps mal formadas en otro epic + st
       FAKE_GIT_LOG_FILE: gitLog,
     })
 
-    // D1: los tres avisos de datos rotos/estrechados conviven.
+    // D1: the three warnings about broken/narrowed data live together.
     expect(r.out).toMatch(/aviso: colisión de orden.*#10.*#11|aviso: colisión de orden.*#11.*#10/)
     expect(r.out).toMatch(/aviso: #30 tiene "merge-after #9" fuera de la sección/)
-    // #20 (malformed) NUNCA aparece como seleccionado ni lanzado — pero
-    // tampoco aborta ni contamina el resultado de #30: como #30 SÍ se
-    // selecciona, planDispatch nunca invoca explainNoSelection (solo se usa
-    // cuando selected.length === 0), así que no hay una línea de bloqueo
-    // dedicada a #20 en esta corrida — se queda fuera en silencio funcional,
-    // sin abortar nada ni impedir el progreso de #30 (comportamiento
-    // verificado aquí a propósito, no asumido).
+    // #20 (malformed) NEVER appears as selected nor launched — but it neither
+    // aborts nor contaminates #30's result either: since #30 IS selected,
+    // planDispatch never invokes explainNoSelection (it is only used when
+    // selected.length === 0), so there is no blocking line dedicated to #20 in
+    // this run — it stays out in functional silence, without aborting anything
+    // or preventing #30's progress (behaviour verified here on purpose, not
+    // assumed).
     expect(r.out).not.toMatch(/seleccionados para esta tanda.*#20/)
     expect(r.out).not.toMatch(/lanzado #20/)
-    // #30 sí se seleccionó, reclamó y lanzó con éxito.
+    // #30 was indeed selected, claimed and launched successfully.
     expect(r.out).toMatch(/seleccionados para esta tanda.*#30/)
     expect(r.out).toMatch(/lanzado #30/)
     expect(r.out).toMatch(/lanzad[oa]s? 1.*1/i)

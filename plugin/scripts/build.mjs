@@ -1,16 +1,16 @@
-// Bundlea los hooks del plugin (uno por entry point de buildOptions, abajo)
-// en dist/*.js, autocontenidos (sin dependencias npm en runtime; solo
-// imports node:*).
+// Bundles the plugin's hooks (one per entry point of buildOptions, below)
+// into dist/*.js, self-contained (no npm dependencies at runtime; only
+// node:* imports).
 //
-// El banner `createRequire` de abajo es IMPRESCINDIBLE, no cosmético:
-// la librería `yaml` usa internamente un `require()` de CommonJS. Al
-// bundlear en formato ESM, ese `require` no existe de forma nativa en un
-// módulo ESM (no hay `require` global) y el bundle revienta en runtime
-// con "require is not defined". El shim `createRequire(import.meta.url)`
-// reconstruye un `require` válido dentro del bundle para que la parte
-// inlineada de `yaml` seguir funcionando. Si quitas el banner, los hooks
-// compilan pero fallan al ejecutarse. Ver __tests__/bundle.test.js, que
-// verifica que el bundle resultante solo importa builtins `node:*`.
+// The `createRequire` banner below is ESSENTIAL, not cosmetic: the `yaml`
+// library internally uses a CommonJS `require()`. When bundling in ESM
+// format, that `require` does not exist natively in an ESM module (there is
+// no global `require`) and the bundle blows up at runtime with
+// "require is not defined". The `createRequire(import.meta.url)` shim
+// rebuilds a valid `require` inside the bundle so that the inlined part of
+// `yaml` keeps working. If you remove the banner, the hooks compile but fail
+// when run. See __tests__/bundle.test.js, which verifies that the resulting
+// bundle only imports `node:*` builtins.
 import { build } from 'esbuild'
 import { realpathSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -37,23 +37,23 @@ export const vendorOptions = {
   banner: { js: VENDOR_BANNER },
 }
 
-// buildOptions se exporta (F24) para que haya UNA sola fuente de verdad de la
-// configuración de build: quien necesite reconstruir los fuentes y comparar el
-// resultado con el `dist/` commiteado la importa de aquí en vez de llevar su
-// propia copia, que se quedaría atrás en silencio y daría por buena una
-// configuración que ya no es la del proyecto.
+// buildOptions is exported (F24) so that there is ONE single source of truth
+// for the build configuration: whoever needs to rebuild the sources and
+// compare the result with the committed `dist/` imports it from here instead
+// of carrying their own copy, which would fall behind in silence and would
+// take for good a configuration that is no longer the project's.
 export const buildOptions = {
-  // entryPoints en forma de MAPA (nombre de salida → fuente), no de lista, y no
-  // es cosmético: en cuanto entró una fuente de `scripts/` junto a las de
-  // `hooks/`, esbuild calculó un `outbase` común y empezó a escribir
-  // `dist/hooks/*.js` y `dist/scripts/*.js` en vez de los `dist/*.js` planos que
-  // hooks.json y el vendorizado de ct-init esperan. El mapa fija el nombre de
-  // salida y deja de depender de dónde viva la fuente.
+  // entryPoints as a MAP (output name → source), not as a list, and this is
+  // not cosmetic: as soon as a source from `scripts/` came in alongside those
+  // from `hooks/`, esbuild computed a common `outbase` and started writing
+  // `dist/hooks/*.js` and `dist/scripts/*.js` instead of the flat `dist/*.js`
+  // that hooks.json and ct-init's vendoring expect. The map fixes the output
+  // name and stops depending on where the source lives.
   //
-  // scope-check NO es un hook: es el gate de conformidad que corre en el CI del
-  // REPO DESTINO, donde el plugin no está instalado. Se bundlea por el mismo
-  // motivo que los hooks —autocontenido, sin node_modules— y `ct-init`
-  // vendoriza el resultado junto al workflow.
+  // scope-check is NOT a hook: it is the conformance gate that runs in the
+  // TARGET REPO's CI, where the plugin is not installed. It is bundled for the
+  // same reason as the hooks —self-contained, no node_modules— and `ct-init`
+  // vendors the result alongside the workflow.
   entryPoints: {
     'session-start': 'hooks/session-start.js',
     stop: 'hooks/stop.js',
@@ -68,39 +68,41 @@ export const buildOptions = {
   banner: { js: RUNTIME_BANNER },
 }
 
-// Construye solo al EJECUTARSE (`npm run build`), nunca al importarse — el
-// test importa este módulo y no debe disparar un build como efecto colateral.
-// La guarda de `process.argv[1]` no es defensiva de más: bajo `node -e` ese
-// valor es `undefined`, y sin ella lanzaría `realpathSync(undefined)` con
-// ENOENT —y, si no estuviese ese, `pathToFileURL(undefined)` con
-// ERR_INVALID_ARG_TYPE— en vez de limitarse a no construir.
+// It builds only when EXECUTED (`npm run build`), never when imported — the
+// test imports this module and must not trigger a build as a side effect.
+// The `process.argv[1]` guard is not over-defensive: under `node -e` that
+// value is `undefined`, and without it this would throw `realpathSync(undefined)`
+// with ENOENT —and, if that one were not there, `pathToFileURL(undefined)` with
+// ERR_INVALID_ARG_TYPE— instead of simply not building.
 //
-// `realpathSync` NO es cosmético: sin él la comparación falla EN ABIERTO —no
-// construye nada y sale 0— cuando la ruta que Node acaba resolviendo para
-// `argv[1]` atraviesa un symlink. `argv[1]` conserva la ruta TAL COMO SE
-// INVOCÓ; `import.meta.url` llega, POR DEFECTO, con los symlinks ya resueltos.
+// `realpathSync` is NOT cosmetic: without it the comparison fails OPEN —it
+// builds nothing and exits 0— when the path Node ends up resolving for
+// `argv[1]` goes through a symlink. `argv[1]` keeps the path EXACTLY AS IT WAS
+// INVOKED; `import.meta.url` arrives, BY DEFAULT, with the symlinks already
+// resolved.
 //
-// No lo dispara cualquier symlink, y conviene saber cuál. Medido en macOS con
-// Node 25, sin este `realpathSync`:
-//   - `cd` a un symlink del repo y ruta RELATIVA (`node scripts/build.mjs`,
-//     que es justo lo que hace `npm run build`): SÍ construye. Node resuelve
-//     lo relativo contra el cwd FÍSICO —`process.cwd()` ya viene con los
-//     symlinks resueltos—, así que las dos cadenas coinciden.
-//   - ruta ABSOLUTA que pasa por el symlink: NO construye.
-//   - `scripts/build.mjs` siendo él mismo un symlink: NO construye, y este
-//     caso sí muerde al `npm run build` de toda la vida.
-// Los dos últimos son el fallo silencioso que deja al desarrollador en bucle:
-// el test de coherencia le pide un rebuild que el build se niega a hacer sin
-// decirlo. Con `realpathSync`, los tres construyen.
+// Not just any symlink triggers it, and it is worth knowing which. Measured on
+// macOS with Node 25, without this `realpathSync`:
+//   - `cd` into a symlink of the repo and a RELATIVE path
+//     (`node scripts/build.mjs`, which is exactly what `npm run build` does):
+//     it DOES build. Node resolves the relative path against the PHYSICAL cwd
+//     —`process.cwd()` already comes with the symlinks resolved—, so the two
+//     strings match.
+//   - an ABSOLUTE path that goes through the symlink: it does NOT build.
+//   - `scripts/build.mjs` being a symlink itself: it does NOT build, and this
+//     case does bite the everyday `npm run build`.
+// The last two are the silent failure that leaves the developer in a loop: the
+// coherence test asks them for a rebuild that the build refuses to do without
+// saying so. With `realpathSync`, all three build.
 //
-// Dos límites conocidos y aceptados. Bajo `--preserve-symlinks-main`
-// —flag que `npm run build` no usa— `import.meta.url` NO resuelve los
-// symlinks, el desajuste se invierte y este arreglo deja de casar; comprobado:
-// exit 0 sin construir. Y si `argv[1]` fuese truthy apuntando a algo
-// inexistente, `realpathSync` lanzaría ENOENT donde antes simplemente no se
-// construía; no lo alcanza ninguna invocación real de node/npm/vitest, porque
-// cuando `argv[1]` está definido el fichero existe.
-// No lo "simplifiques" quitándolo.
+// Two known and accepted limits. Under `--preserve-symlinks-main` —a flag
+// `npm run build` does not use— `import.meta.url` does NOT resolve the
+// symlinks, the mismatch is inverted and this fix stops matching; checked:
+// exit 0 without building. And if `argv[1]` were truthy pointing at something
+// non-existent, `realpathSync` would throw ENOENT where before it simply did
+// not build; no real invocation of node/npm/vitest reaches that, because when
+// `argv[1]` is defined the file exists.
+// Do not "simplify" it away.
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   await build(vendorOptions)
   await build(buildOptions)

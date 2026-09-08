@@ -1,107 +1,110 @@
 // ============================================================================
-// CMUX — la ÚNICA copia del recorrido de workspaces, y la única que sabe que el
-// esquema de cmux no está garantizado.
+// CMUX — the ONLY copy of the workspace walk, and the only one that knows
+// cmux's schema is not guaranteed.
 //
-// POR QUÉ EXISTE ESTE FICHERO. Hasta esta ronda el mismo recorrido
-// (`list-windows --json` + un `workspace list --window <id> --json` por ventana)
-// vivía en TRES sitios, y sólo uno estaba bien:
+// WHY THIS FILE EXISTS. Until this round the same walk (`list-windows --json`
+// plus one `workspace list --window <id> --json` per window) lived in THREE
+// places, and only one of them was right:
 //
-//   - `ct-next.mjs#queryAllCmuxWorkspaces` — endurecido por dos revisiones
-//     externas, con la guarda de esquema completa que está más abajo.
-//   - `ct-watch-go.mjs#consultarSesion` — crudo, casando por `custom_title`.
-//   - `ct-watch-merge.mjs#consultarCoordinadora` — crudo, casando por
+//   - `ct-next.mjs#queryAllCmuxWorkspaces` — hardened by two external reviews,
+//     with the complete schema guard that sits further down.
+//   - `ct-watch-go.mjs#consultarSesion` — raw, matching by `custom_title`.
+//   - `ct-watch-merge.mjs#consultarCoordinadora` — raw, matching by
 //     `current_directory`.
 //
-// Lo cazó una revisión adversarial sobre la #37, y su observación más afilada no
-// era la duplicación: era que el vigilante del merge había MEJORADO su mensaje
-// de error justo antes. El mensaje viejo («no existe ninguna sesión en <cwd>»)
-// era vago e inútil; el nuevo nombra la regla y le dice a la persona qué hizo
-// mal. Con la lectura cruda, un renombrado de campo en cmux convierte eso en una
-// acusación específica, segura y FALSA — y este repo tiene un fichero de tests
-// entero (`ct-next-honest-messages.test.js`) contra esa clase exacta de mensaje.
-// O sea que la mejora de honestidad, sin la guarda, empeoró el modo de fallo.
+// An adversarial review on #37 caught it, and its sharpest observation was not
+// the duplication: it was that the merge watcher had IMPROVED its error message
+// just before. The old message («no existe ninguna sesión en <cwd>») was vague
+// and useless; the new one names the rule and tells the person what they did
+// wrong. With the raw read, a field rename in cmux turns that into a specific,
+// confident and FALSE accusation — and this repo has a whole test file
+// (`ct-next-honest-messages.test.js`) against that exact class of message. So
+// the improvement in honesty, without the guard, made the failure mode worse.
 //
-// Es el desacople que este repo ya pagó con JUDGE_TOOLS, VERDICT_RULES y
-// PACKAGE_SECTIONS, y aquí con un agravante: las tres copias no eran iguales, y
-// la que estaba bien era la que menos se leía.
+// It is the decoupling this repo already paid for with JUDGE_TOOLS,
+// VERDICT_RULES and PACKAGE_SECTIONS, and here with an aggravating factor: the
+// three copies were not the same, and the one that was right was the one least
+// read.
 //
-// ESTE MÓDULO NO ES PURO, y por eso no vive en `dispatch.js`. Aquél se declara
-// «lógica pura del dispatcher» y guarda los constructores de argv de cmux
-// (`buildCmuxSendArgv`, `cmuxSessionName`); esto lanza subprocesos. Son dos
-// sujetos distintos y se mantienen separados: la misma razón por la que
-// `harvest.js` es puro y `ct-harvest.mjs` hace la IO.
+// THIS MODULE IS NOT PURE, and that is why it does not live in `dispatch.js`.
+// That one declares itself "the dispatcher's pure logic" and holds cmux's argv
+// builders (`buildCmuxSendArgv`, `cmuxSessionName`); this one launches
+// subprocesses. They are two different subjects and they are kept apart: the
+// same reason why `harvest.js` is pure and `ct-harvest.mjs` does the IO.
 // ============================================================================
 
 import { execFileSync } from 'node:child_process'
 
-// 5 segundos, el valor con el que nació esta consulta en ct-next.mjs. Se exporta
-// porque los dos vigilantes tenían su propia constante (10 s) para la MISMA
-// consulta: dos números para lo mismo es una divergencia esperando a que alguien
-// ajuste uno y crea que ha ajustado los dos. Quien necesite otro plazo lo pasa.
+// 5 seconds, the value this query was born with in ct-next.mjs. It is exported
+// because the two watchers each had their own constant (10 s) for the SAME
+// query: two numbers for the same thing is a divergence waiting for somebody to
+// tune one and believe they have tuned both. Whoever needs another deadline
+// passes it in.
 export const CMUX_QUERY_TIMEOUT_MS = 5000
 
 // ---------------------------------------------------------------------------
-// listCmuxWorkspaces: consulta de SOLO LECTURA de todas las workspaces de todas
-// las ventanas. Devuelve un array de `{title, cwd, cwdKnown, ref}`, o `null` si
-// el resultado es NO CONCLUYENTE.
+// listCmuxWorkspaces: a READ-ONLY query of every workspace of every window. It
+// returns an array of `{title, cwd, cwdKnown, ref}`, or `null` if the result is
+// INCONCLUSIVE.
 //
 // By default, one failed window does not invalidate the other windows. This
 // preserves the contract for existing consumers. With `requireComplete: true`,
 // any failed window query returns `null`. Zero windows remains conclusive and
 // returns `[]`.
 //
-// LA DISTINCIÓN QUE SOSTIENE TODO: `null` (no se pudo saber) no es `[]` (cmux
-// contestó y de verdad no hay ninguna). De las dos se sigue algo distinto en
-// cada uno de los tres consumidores, y confundirlas es el defecto que este
-// módulo centraliza.
+// THE DISTINCTION THAT HOLDS EVERYTHING UP: `null` (it could not be known) is
+// not `[]` (cmux answered and there really is none). Something different
+// follows from each of them in each of the three consumers, and confusing them
+// is the defect this module centralises.
 //
-// IMPORTANTE (revisión externa): `custom_title`/`current_directory` son los
-// nombres de campo observados contra la versión de cmux instalada en la máquina
-// de desarrollo — no hay ninguna garantía de versión ni de esquema. Si el nombre
-// real cambiara, CADA `ws.custom_title` sería `undefined`, fallaría el
-// `typeof === 'string'` de más abajo, y el resultado se filtraría en silencio a
-// un array vacío — indistinguible, antes de esta guarda, de "cmux respondió y de
-// verdad no hay ninguna sesión". Eso degradaba CADA staleness-check a un falso
-// "abandonado" y CADA verificación de lanzamiento a un falso "not-found", ambos
-// ruidosos. `sawAnyWorkspaceEntry`/`sawAnyKnownTitleField` distinguen las dos
-// causas de "cero resultados": si hubo entradas de verdad (`parsed.workspaces`
-// no vacío) pero en NINGUNA se reconocía el campo, es mucho más probable un
-// cambio de esquema que "cero sesiones de verdad" — se trata como NO
-// CONCLUYENTE. Si nunca hubo ninguna entrada en ninguna ventana (el caso normal
-// y esperado de "no hay nada abierto"), sigue siendo un `[]` con toda confianza.
+// IMPORTANT (external review): `custom_title`/`current_directory` are the field
+// names observed against the version of cmux installed on the development
+// machine — there is no guarantee of version or of schema. If the real name
+// were to change, EVERY `ws.custom_title` would be `undefined`, the
+// `typeof === 'string'` further down would fail, and the result would silently
+// filter down to an empty array — indistinguishable, before this guard, from
+// "cmux answered and there really is no session". That degraded EVERY
+// staleness-check into a false "abandoned" and EVERY launch verification into a
+// false "not-found", both of them noisy.
+// `sawAnyWorkspaceEntry`/`sawAnyRecognizedTitle` tell the two causes of "zero
+// results" apart: if there really were entries (`parsed.workspaces` not empty)
+// but NONE of them had the expected field, a schema change is far more likely
+// than "genuinely zero sessions" — it is treated as INCONCLUSIVE. If there
+// never was any entry in any window (the normal, expected case of "nothing is
+// open"), it is still a confident `[]`.
 //
-// LO QUE "RECONOCER EL CAMPO" NO PUEDE SIGNIFICAR. La primera versión de esta
-// guarda exigía una CADENA, y con eso se comió el caso más común que existe:
-// una terminal de cmux sin título puesto trae `custom_title: null` (con su
-// `has_custom_title: false` al lado). O sea que cualquiera con una terminal
-// abierta y ningún plan en marcha —el arranque normal, incluido el de quien
-// lanza el backend DESDE cmux— caía en "hubo entradas y ninguna con título" y
-// se llevaba un NO CONCLUYENTE: `GET /active-plans` respondía 503
-// `active-plans-recovery-inconclusive` y el front plantaba "No se puede saber
-// qué hay en marcha" antes de poder hacer nada. La guarda contra la falsa
-// certeza se había convertido en una falsa incertidumbre PERMANENTE, que es el
-// mismo pecado por el otro lado. La línea correcta no es cadena-vs-resto, es
-// campo PRESENTE (cadena o `null`: cmux ha contestado) vs campo AUSENTE
-// (`undefined`: no sabemos si nos entendemos con este esquema).
+// WHAT "RECOGNISING THE FIELD" CANNOT MEAN. The first version of this guard
+// demanded a STRING, and with that it swallowed the commonest case there is: a
+// cmux terminal with no title set carries `custom_title: null` (with its
+// `has_custom_title: false` alongside). Which means anybody with a terminal
+// open and no plan under way —the normal start-up, including that of whoever
+// launches the backend FROM cmux— fell into "there were entries and none with a
+// title" and got an INCONCLUSIVE: `GET /active-plans` answered 503
+// `active-plans-recovery-inconclusive` and the front end planted "No se puede
+// saber qué hay en marcha" before anything could be done. The guard against
+// false certainty had turned into a PERMANENT false uncertainty, which is the
+// same sin from the other side. The right line is not string-vs-rest, it is
+// field PRESENT (string or `null`: cmux has answered) vs field ABSENT
+// (`undefined`: we do not know whether we understand this schema).
 //
-// D5, hallazgo B — la guarda de arriba cubría `custom_title` y NADA MÁS:
-// `current_directory` se leía a pelo (`ws.current_directory ?? null`) y luego se
-// comparaba con igualdad ESTRICTA contra el worktree esperado. Si cmux
-// renombrara SOLO ese campo (el título seguiría reconociéndose, así que
-// `sawAnyKnownTitleField` no salvaría nada), cada `cwd` sería `null`,
-// `null !== <worktree>` y CADA lanzamiento correcto se clasificaría como
-// 'wrong-cwd' — es decir, exactamente la falsa alarma que la guarda de
-// `custom_title` existe para evitar, y además con consecuencia de exit code:
-// desde que 'wrong-cwd' dejó de contar como lanzado, un repo entero pasaría de
-// exit 0 a exit 3 sin que nada estuviera mal.
+// D5, finding B — the guard above covered `custom_title` and NOTHING ELSE:
+// `current_directory` was read bare (`ws.current_directory ?? null`) and then
+// compared with STRICT equality against the expected worktree. If cmux were to
+// rename ONLY that field (the title would still be recognised, so
+// `sawAnyRecognizedTitle` would save nothing), every `cwd` would be `null`,
+// `null !== <worktree>` and EVERY correct launch would be classified as
+// 'wrong-cwd' — that is, exactly the false alarm the `custom_title` guard exists
+// to prevent, and with an exit-code consequence on top: since 'wrong-cwd'
+// stopped counting as launched, a whole repo would go from exit 0 to exit 3
+// with nothing being wrong.
 //
-// Arreglo, aplicado a los DOS campos y no a uno: un campo cuyo esquema no
-// reconocemos degrada a NO CONCLUYENTE, nunca a "verificado que está mal". Para
-// el cwd la degradación es POR ENTRADA (`cwdKnown`), no global como la del
-// título: así también se comporta bien ante una flota mixta (unas entradas con
-// el campo, otras sin él), y ante una sesión que legítimamente no expone
-// directorio. Quien consuma esto traduce `cwdKnown: false` a un estado propio
-// ('cwd-unknown' en `verifyCmuxLaunch`), jamás a 'wrong-cwd'.
+// The fix, applied to BOTH fields and not to one: a field whose schema we do not
+// recognise degrades to INCONCLUSIVE, never to "verified to be wrong". For the
+// cwd the degradation is PER ENTRY (`cwdKnown`), not global like the title's:
+// that way it also behaves well in the face of a mixed fleet (some entries with
+// the field, others without it), and of a session that legitimately exposes no
+// directory. Whoever consumes this translates `cwdKnown: false` into a state of
+// its own ('cwd-unknown' in `verifyCmuxLaunch`), never into 'wrong-cwd'.
 // ---------------------------------------------------------------------------
 export class CmuxAnswer {
   static answered(entries) {
@@ -143,22 +146,22 @@ export class CmuxWorkspaceQuery {
         for (const ws of workspaces) {
           sawAnyWorkspaceEntry = true
           if (ws !== null && typeof ws === 'object') fieldsSeen = Object.keys(ws)
-          // El campo se da por CONOCIDO tanto si trae una cadena como si trae
-          // `null`: `null` es cmux diciendo "esta workspace no tiene título
-          // puesto" (lo corrobora su `has_custom_title: false`), y eso es una
-          // respuesta, no una laguna. El rename que esta guarda vigila deja el
-          // campo AUSENTE (`undefined`), y sólo eso sigue siendo no concluyente.
+          // The field counts as KNOWN whether it carries a string or `null`:
+          // `null` is cmux saying "this workspace has no title set" (its
+          // `has_custom_title: false` corroborates it), and that is an answer,
+          // not a gap. The rename this guard watches for leaves the field
+          // ABSENT (`undefined`), and only that is still inconclusive.
           if (ws && (typeof ws.custom_title === 'string' || ws.custom_title === null)) {
             sawAnyKnownTitleField = true
           }
           if (ws && typeof ws.custom_title === 'string') {
             const cwdKnown = typeof ws.current_directory === 'string'
-            // F20/H1: `ref` (p.ej. "workspace:97") es el handle que acepta
-            // `cmux send --workspace`. Se degrada a `null` con el MISMO
-            // criterio que el cwd —por entrada, nunca global— porque su
-            // ausencia no invalida nada de lo que ya se sabía: solo significa
-            // que a ESA sesión no se le puede reenviar la línea, y quien lo
-            // necesite tiene que poder decirlo en vez de mandar un `send` a
+            // F20/H1: `ref` (e.g. "workspace:97") is the handle
+            // `cmux send --workspace` accepts. It degrades to `null` with the
+            // SAME criterion as the cwd —per entry, never global— because its
+            // absence invalidates nothing of what was already known: it only
+            // means the line cannot be forwarded to THAT session, and whoever
+            // needs to must be able to say so instead of sending a `send` to
             // `undefined`.
             const ref = typeof ws.ref === 'string' && ws.ref.length > 0 ? ws.ref : null
             out.push({ title: ws.custom_title, cwd: cwdKnown ? ws.current_directory : null, cwdKnown, ref })
@@ -207,35 +210,35 @@ function ejecutar(argv, timeoutMs) {
 }
 
 // ---------------------------------------------------------------------------
-// LOS DOS BUSCADORES DE LOS VIGILANTES. Devuelven `{ consultado, ref }`, que es
-// la forma que los dos ya sostenían por separado:
+// THE WATCHERS' TWO FINDERS. They return `{ consultado, ref }`, which is the
+// shape both of them already held up separately:
 //
-//   { consultado: true,  ref: '<handle>' } → está, y se le puede teclear.
-//   { consultado: true,  ref: null }       → cmux contestó y NO está.
-//   { consultado: false, ref: null }       → no se pudo saber.
+//   { consultado: true,  ref: '<handle>' } → it is there, and can be typed into.
+//   { consultado: true,  ref: null }       → cmux answered and it is NOT there.
+//   { consultado: false, ref: null }       → it could not be known.
 //
-// La tercera es la que se pierde con una lectura cruda, y perderla tiene
-// consecuencias opuestas en los dos vigilantes: el del `-OK` se apaga con exit 4
-// diciendo que la sesión del slice ya no existe, y el del merge acusa a una
-// persona de no tener la coordinadora donde toca. Los dos con toda confianza y
-// los dos en falso. Por eso el `null` de `listCmuxWorkspaces` se traduce aquí a
-// `consultado: false` y no a "no está": es el único sitio donde esa traducción
-// se hace, y así no puede volver a divergir.
+// The third is the one a raw read loses, and losing it has opposite
+// consequences in the two watchers: the `-OK` one shuts down with exit 4 saying
+// the slice's session no longer exists, and the merge one accuses a person of
+// not having the coordinator where it belongs. Both confidently and both
+// falsely. That is why `listCmuxWorkspaces`'s `null` is translated here into
+// `consultado: false` and not into "it is not there": this is the only place
+// where that translation happens, and so it cannot diverge again.
 //
-// `undefined` para `ref` NO se usa nunca: "no se miró" viaja en `consultado`,
-// jamás camuflado en el handle.
+// `undefined` is NEVER used for `ref`: "it was not looked at" travels in
+// `consultado`, never camouflaged inside the handle.
 // ---------------------------------------------------------------------------
 export function findWorkspaceByTitle(title, opts = {}) {
   return primeraQueCase((w) => w.title === title, opts)
 }
 
-// Casa por DIRECTORIO, y sólo contra entradas cuyo `cwdKnown` sea cierto: una
-// entrada cuyo esquema de cwd no reconocemos no puede decir ni que coincide ni
-// que no. Si NINGUNA entrada expone directorio, el resultado no es "no está":
-// es `consultado: false`, porque la pregunta no se ha podido hacer. Sin esto, un
-// renombrado de ese campo devolvería "cmux contestó y no está" con toda
-// confianza — el falso negativo que D5 eliminó en ct-next y que aquí se colaba
-// por la puerta de atrás.
+// Matches by DIRECTORY, and only against entries whose `cwdKnown` is true: an
+// entry whose cwd schema we do not recognise can say neither that it matches
+// nor that it does not. If NO entry exposes a directory, the result is not "it
+// is not there": it is `consultado: false`, because the question could not be
+// asked. Without this, a rename of that field would confidently return "cmux
+// answered and it is not there" — the false negative D5 removed in ct-next and
+// that was slipping in here through the back door.
 export function findWorkspaceByCwd(cwd, opts = {}) {
   const all = listCmuxWorkspaces(opts)
   if (all === null) return { consultado: false, ref: null }

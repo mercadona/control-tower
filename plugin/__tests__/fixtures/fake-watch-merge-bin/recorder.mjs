@@ -1,16 +1,17 @@
 #!/usr/bin/env node
-// Grabadora para CT_WATCH_MERGE_BIN: apunta su argv en un fichero y se muere.
+// Recorder for CT_WATCH_MERGE_BIN: writes down its argv in a file and dies.
 //
-// Sustituye al vigilante del merge de verdad en los tests. Sin ella, cada test
-// que libera un slice pondría un proceso REAL a sondear GitHub cada minuto
-// durante 48 horas — y `--release` se ejercita en muchos tests, no sólo en los
-// que hablan de esto. Es la lección de CT_WATCH_GO_BIN, que la suite aprendió
-// dejando 42 procesos huérfanos en su primera corrida.
+// It stands in for the real merge watcher in the tests. Without it, every test
+// that releases a slice would put a REAL process to poll GitHub every minute
+// for 48 hours — and `--release` is exercised in many tests, not only in the
+// ones that talk about this. It is the lesson of CT_WATCH_GO_BIN, which the
+// suite learned by leaving 42 orphan processes behind on its first run.
 //
-// CT_WATCH_MERGE_BIN no es un modo de prueba encubierto: sigue el patrón de
-// CT_WATCH_GO_BIN y de CT_ACCOUNT_*_DIR, o sea que no cambia NINGUNA decisión de
-// dispatch-check, sólo qué programa se lanza. Lo que el test comprueba —que se
-// lanza, y con qué argumentos— es exactamente lo que importa de esa costura.
+// CT_WATCH_MERGE_BIN is not a covert test mode: it follows the pattern of
+// CT_WATCH_GO_BIN and of CT_ACCOUNT_*_DIR, which is to say it changes NO
+// decision of dispatch-check, only which program gets launched. What the test
+// checks —that it is launched, and with which arguments— is exactly what
+// matters about that seam.
 import { appendFileSync } from 'node:fs'
 
 const destino = process.env.FAKE_WATCH_MERGE_LOG

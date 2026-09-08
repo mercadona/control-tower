@@ -1,36 +1,36 @@
 #!/usr/bin/env bash
-# T11 — brazo ESTOCÁSTICO del harness adversarial de AC6: 8 claimants reales
-# sobre el mismo token compartido, liberados por una barrera de arranque real
-# (FIFO, técnica de T9 — ver task-9-report.md, sección "mecanismo de
-# barrera") en vez de `sleep`, con jitter de arranque. NO forma parte de
-# `npm test`: experimento en vivo contra un repo real de GitHub.
+# T11 — STOCHASTIC arm of the AC6 adversarial harness: 8 real claimants over
+# the same shared token, released by a real start-up barrier (FIFO, the T9
+# technique — see task-9-report.md, section "mecanismo de barrera") instead of
+# `sleep`, with start-up jitter. It is NOT part of `npm test`: a live
+# experiment against a real GitHub repository.
 #
-# A diferencia de ac6-race2-deterministic.sh, este brazo NO usa el hook
-# CT_CLAIM_PRECLAIM_DELAY_MS: aquí se deja que la latencia de red real y el
-# scheduler del SO produzcan (o no) el doble claim por sí mismos, con 8
-# corredores en vez de 2, para maximizar la probabilidad de solape frente a
-# las 14 rondas de 2 corredores de T10 que nunca lo vieron.
+# Unlike ac6-race2-deterministic.sh, this arm does NOT use the
+# CT_CLAIM_PRECLAIM_DELAY_MS hook: here real network latency and the OS
+# scheduler are left to produce (or not) the double claim by themselves, with 8
+# runners instead of 2, to maximise the probability of an overlap against T10's
+# 14 rounds of 2 runners that never saw one.
 #
-# Fixture auto-contenido (fix round 1, T11 review): por defecto (sin
-# CT_AC6_ISSUES) el propio script crea N issues desechables al arrancar y los
-# BORRA al terminar (éxito, fallo o Ctrl-C, vía `trap ... EXIT`) — nunca
-# depende de números de issue fijados a mano en una sesión anterior, que es
-# justo lo que se rompió la vez pasada (el fixture #5-#12 se borró al limpiar
-# el sandbox y el script siguió "funcionando" en un fixture inexistente,
-# leyendo 0 en todo y reportando `in_progress_count=0 OK` — un pase vacuo).
-# Si se pasa CT_AC6_ISSUES a mano, el preflight verifica que cada issue
-# exista y aborta ruidosamente si no.
+# Self-contained fixture (fix round 1, T11 review): by default (without
+# CT_AC6_ISSUES) the script itself creates N disposable issues at start-up and
+# DELETES them at the end (success, failure or Ctrl-C, via `trap ... EXIT`) — it
+# never depends on issue numbers pinned by hand in an earlier session, which is
+# exactly what broke last time (the #5-#12 fixture was deleted when the sandbox
+# was cleaned and the script went on "working" against a non-existent fixture,
+# reading 0 for everything and reporting `in_progress_count=0 OK` — a vacuous
+# pass). If CT_AC6_ISSUES is passed by hand, the preflight verifies that every
+# issue exists and aborts noisily if not.
 #
-# Tras cada ronda se comprueba la INVARIANTE REAL contra GitHub (no el exit
-# code): a lo sumo un issue QUE LLEVE EL TOKEN COMPARTIDO puede estar en
-# status:in-progress (fix round 1, finding Important 3: antes se contaba
-# in-progress sin exigir el token, así que en realidad no medía nada sobre
-# el token compartido).
+# After every round the REAL INVARIANT is checked against GitHub (not the exit
+# code): at most one issue THAT CARRIES THE SHARED TOKEN may be in
+# status:in-progress (fix round 1, finding Important 3: before, in-progress was
+# counted without requiring the token, so it was in fact measuring nothing about
+# the shared token).
 #
-# (fix round 2, T11 review — decisión de José): este script ya NO pasa
-# --settle-ms — ese flag y toda la espera de asentamiento se retiraron de
-# dispatch-check.mjs (ver el comentario de cabecera de ese fichero). Ya no
-# hay dos brazos que comparar aquí, solo N rondas.
+# (fix round 2, T11 review — José's decision): this script no longer passes
+# --settle-ms — that flag and the whole settling wait were withdrawn from
+# dispatch-check.mjs (see that file's header comment). There are no longer two
+# arms to compare here, just N rounds.
 set -uo pipefail
 
 REPO="${CT_AC6_REPO:-josemerca/ct-loop-sandbox}"
@@ -50,7 +50,7 @@ else
   read -ra ISSUES <<< "$CT_AC6_ISSUES"
 fi
 
-# Comparación exacta por label, no substring (fix round 1, Minor 3).
+# Exact comparison by label, not substring (fix round 1, Minor 3).
 has_label() {
   local csv="$1" target="$2" IFS=','
   local l
@@ -76,11 +76,11 @@ cleanup_auto_issues() {
 }
 trap cleanup_auto_issues EXIT
 
-# Preflight (fix round 1, findings Important 2 y 3): crea el label del token
-# de forma idempotente (--force) y, o bien crea el fixture desechable, o
-# verifica el que se le haya pasado — ABORTA RUIDOSAMENTE si algo falta, en
-# vez de seguir con un fixture roto que produciría un "pase" que no significa
-# nada (el bug real observado la vez anterior).
+# Preflight (fix round 1, findings Important 2 and 3): it creates the token's
+# label idempotently (--force) and either creates the disposable fixture or
+# verifies the one it was handed — IT ABORTS NOISILY if anything is missing,
+# instead of going on with a broken fixture that would produce a "pass" meaning
+# nothing (the real bug observed last time).
 preflight() {
   echo "-- preflight --"
   if ! gh label create "$TOKEN_LABEL" --repo "$REPO" --color 5319e7 \
@@ -137,9 +137,9 @@ run_round() {
   for n in "${ISSUES[@]}"; do
     (
       read -r -n 1 -u 3 _
-      # Jitter de arranque real (no el hook de delay): 0-80ms, simula que en
-      # el mundo real 8 corredores no arrancan en el mismo tick exacto de
-      # CPU aunque compartan la misma señal de disparo.
+      # Real start-up jitter (not the delay hook): 0-80ms, it simulates that in
+      # the real world 8 runners do not start on the exact same CPU tick even
+      # though they share the same trigger signal.
       jitter_ms=$(( RANDOM % 80 ))
       python3 -c "import time; time.sleep($jitter_ms/1000)"
       out="$RESULTS_DIR/round-${round}-issue${n}.out"
@@ -191,9 +191,9 @@ PYEOF
     local labels
     labels="$(gh issue view "$n" --repo "$REPO" --json labels -q '[.labels[].name] | join(",")')"
     echo "#$n: $labels"
-    # Exige AMBOS: status:in-progress Y el token compartido (fix round 1,
-    # finding Important 3) — contar in-progress sin el token no comprueba
-    # nada sobre la premisa del experimento (el token compartido).
+    # It requires BOTH: status:in-progress AND the shared token (fix round 1,
+    # finding Important 3) — counting in-progress without the token checks
+    # nothing about the experiment's premise (the shared token).
     if has_label "$labels" "status:in-progress" && has_label "$labels" "$TOKEN_LABEL"; then
       inprog=$((inprog+1))
     fi

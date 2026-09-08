@@ -6,48 +6,49 @@ import { describe, it, expect } from 'vitest'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 describe('plugin manifest', () => {
-  it('plugin.json tiene name y version', () => {
+  it('plugin.json has a name and a version', () => {
     const m = JSON.parse(readFileSync(join(root, '.claude-plugin/plugin.json'), 'utf8'))
     expect(m.name).toBe('control-tower-loop')
     expect(m.version).toMatch(/^\d+\.\d+\.\d+$/)
   })
-  // La versión vive en DOS ficheros porque dos consumidores distintos la leen:
-  // Claude Code lee `.claude-plugin/plugin.json` y npm lee `package.json`. Nada
-  // en el runtime obliga a que coincidan, y durante mucho tiempo no coincidieron
-  // (0.1.0 contra 0.2x): quien abría el repo y miraba el `package.json` primero
-  // se llevaba una versión que no era la del plugin. Este test es lo que hace
-  // que el duplicado no pueda divergir en silencio — si hay que repetir una
-  // verdad en dos sitios, algo tiene que atarlos.
-  it('package.json y plugin.json declaran la MISMA version', () => {
+  // The version lives in TWO files because two different consumers read it:
+  // Claude Code reads `.claude-plugin/plugin.json` and npm reads `package.json`.
+  // Nothing in the runtime forces them to agree, and for a long time they did
+  // not agree (0.1.0 against 0.2x): whoever opened the repo and looked at
+  // `package.json` first walked away with a version that was not the plugin's.
+  // This test is what makes it impossible for the duplicate to diverge in
+  // silence — if a truth has to be repeated in two places, something has to tie
+  // them together.
+  it('package.json and plugin.json declare the SAME version', () => {
     const plugin = JSON.parse(readFileSync(join(root, '.claude-plugin/plugin.json'), 'utf8'))
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
     expect(pkg.version).toBe(plugin.version)
   })
-  // TERCER SITIO donde vive la misma version, y por el mismo motivo que los dos
-  // de arriba: `.release-please-manifest.json` es el estado desde el que
-  // release-please calcula el siguiente numero. Si ese fichero dijera una
-  // version distinta de la que el plugin declara, la primera release posterior
-  // saltaria desde un punto que nunca existio — y lo haria en silencio, porque
-  // release-please no lee `plugin.json`, lo ESCRIBE. El manifiesto vive en la
-  // raiz del repo, fuera de lo que se distribuye, igual que marketplace.json.
-  it('el manifiesto de release-please parte de la version que el plugin declara', () => {
+  // A THIRD PLACE where the same version lives, and for the same reason as the
+  // two above: `.release-please-manifest.json` is the state release-please
+  // computes the next number from. If that file said a version other than the
+  // one the plugin declares, the first release after it would jump from a point
+  // that never existed — and it would do so in silence, because release-please
+  // does not read `plugin.json`, it WRITES it. The manifest lives at the root of
+  // the repo, outside what gets distributed, just like marketplace.json.
+  it('the release-please manifest starts from the version the plugin declares', () => {
     const plugin = JSON.parse(readFileSync(join(root, '.claude-plugin/plugin.json'), 'utf8'))
     const manifest = JSON.parse(readFileSync(join(root, '..', '.release-please-manifest.json'), 'utf8'))
     expect(manifest.plugin).toBe(plugin.version)
   })
-  // Y un CUARTO fichero del propio plugin la repite: `package-lock.json` copia
-  // la version de `package.json` en dos sitios, y npm no la sincroniza sola —
-  // se quedo en 0.54.0 mientras el plugin ya iba por la 0.56.0, dos releases
-  // por detras, sin que nada se quejara. A release-please le da igual (reescribe
-  // los tres), pero un lockfile que miente es lo que lee quien clona el repo
-  // hoy, antes de la primera release.
-  it('el lockfile copia la version del package.json que lo genero', () => {
+  // And a FOURTH file of the plugin itself repeats it: `package-lock.json`
+  // copies the version of `package.json` into two places, and npm does not keep
+  // it in sync on its own — it stayed at 0.54.0 while the plugin was already at
+  // 0.56.0, two releases behind, without anything complaining. release-please
+  // does not care (it rewrites all three), but a lockfile that lies is what
+  // whoever clones the repo reads today, before the first release.
+  it('the lockfile copies the version of the package.json that generated it', () => {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
     const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'))
     expect(lock.version).toBe(pkg.version)
     expect(lock.packages[''].version).toBe(pkg.version)
   })
-  it('el README que se distribuye anuncia la version que se instala', () => {
+  it('the README that gets distributed announces the version that gets installed', () => {
     const plugin = JSON.parse(readFileSync(join(root, '.claude-plugin/plugin.json'), 'utf8'))
     const readme = readFileSync(join(root, 'README.md'), 'utf8')
     expect(
@@ -55,13 +56,14 @@ describe('plugin manifest', () => {
       `README.md no nombra la version ${plugin.version}: quien lo lee se lleva otra`
     ).toBe(true)
   })
-  // El marketplace vive en la RAÍZ DEL REPO, no en la del plugin: desde que el
-  // plugin se mudó a `plugin/`, el `source` de su entrada es LO QUE DECIDE qué
-  // se distribuye (el subdir entero, y nada fuera de él). backend/ y frontend/
-  // quedan fuera de la instalación precisamente porque ese campo dice
-  // "./plugin" — si alguien lo devuelve a "./", cada instalación volvería a
-  // llevarse el repo completo, y este test es el único que lo notaría.
-  it('marketplace.json referencia el plugin y distribuye solo plugin/', () => {
+  // The marketplace lives at the ROOT OF THE REPO, not at the plugin's: ever
+  // since the plugin moved to `plugin/`, the `source` of its entry is WHAT
+  // DECIDES what gets distributed (the whole subdir, and nothing outside it).
+  // backend/ and frontend/ stay out of the installation precisely because that
+  // field says "./plugin" — if someone put it back to "./", every installation
+  // would again take the whole repo, and this test is the only thing that would
+  // notice.
+  it('marketplace.json references the plugin and distributes only plugin/', () => {
     const mk = JSON.parse(readFileSync(join(root, '..', '.claude-plugin/marketplace.json'), 'utf8'))
     const entry = mk.plugins.find((p) => p.name === 'control-tower-loop')
     expect(entry).toBeDefined()

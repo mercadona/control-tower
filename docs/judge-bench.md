@@ -1,56 +1,56 @@
-# El banco de pruebas del juez
+# The judge's bench
 
-El juez es el único punto del loop donde el modelo decide algo que el programa no puede
-comprobar. Los tres primeros incidentes del catálogo son jueces que aprobaron trabajo
-incorrecto, y hasta ahora la única forma de decir si un cambio en la rúbrica mejoraba algo era
-leer veredictos a mano. Este banco convierte «el juez parece mejor» en una tasa de acierto y un
-coste.
+The judge is the only point of the loop where the model decides something the program cannot
+check. The first three incidents of the catalogue are judges that approved incorrect work, and
+until now the only way to say whether a change to the rubric improved anything was to read
+verdicts by hand. This bench turns «the judge seems better» into a hit rate and a cost.
 
-**No forma parte de `npm test`.** Lo que sí entra en la suite es el runner —con el ejecutor de
-`claude` doblado— y la coherencia de los casos. Contra el modelo se ejecuta a mano, antes y
-después de tocar un agente.
+**It is not part of `npm test`.** What does go into the suite is the runner —with the `claude`
+executor doubled— and the coherence of the cases. Against the model it is run by hand, before
+and after touching an agent.
 
-## Ejecutarlo
+## Running it
 
 ```bash
 node plugin/scripts/judge-bench.mjs --agent plugin/agents/ct-judge.md --runs 5
 ```
 
-| Flag | Qué hace |
+| Flag | What it does |
 |---|---|
-| `--agent <ruta>` | El fichero del agente a medir. De su frontmatter salen el modelo y las herramientas, y de su cuerpo el prompt: el banco nunca hereda el modelo de quien lo lanza. Obligatorio |
-| `--runs N` | Cuántas veces se juzga cada caso. Por defecto 5 |
-| `--case <nombre>` | Un solo caso, por el nombre de su directorio |
-| `--dry-run` | Prepara los directorios e imprime los comandos `claude` que lanzaría, sin lanzar ninguno |
-| `--budget-usd <n>` | Tope de gasto por run (`--max-budget-usd`). Por defecto 3 |
-| `--cases <dir>` | Otro directorio de casos. Por defecto `plugin/__tests__/fixtures/judge-bench/` |
+| `--agent <ruta>` | The file of the agent to measure. Its frontmatter gives the model and the tools, and its body gives the prompt: the bench never inherits the model of whoever launches it. Mandatory |
+| `--runs N` | How many times each case is judged. 5 by default |
+| `--case <nombre>` | A single case, by the name of its directory |
+| `--dry-run` | Prepares the directories and prints the `claude` commands it would launch, without launching any |
+| `--budget-usd <n>` | Spending cap per run (`--max-budget-usd`). 3 by default |
+| `--cases <dir>` | Another directory of cases. `plugin/__tests__/fixtures/judge-bench/` by default |
 
-Códigos de salida: `0` todos los runs aciertan, `1` alguno no, `2` uso, `3` precondición (el
-agente no se puede leer, un caso está corrupto, `claude` no está en el PATH).
+Exit codes: `0` every run hits, `1` some run does not, `2` usage, `3` precondition (the agent
+cannot be read, a case is corrupt, `claude` is not on the PATH).
 
-La salida es una tabla con una fila por caso y una de total: runs, tasa de acierto, tasa de
-descarte por esquema, runs que no llegaron a ejecutarse, la distribución de severidades de los
-hallazgos y el coste sumado de `total_cost_usd`. Debajo, un renglón por cada run que no acertó
-con el motivo y el directorio donde quedaron su brief, su paquete y su veredicto.
+The output is a table with one row per case and one total row: runs, hit rate, schema discard
+rate, runs that never got to execute, the severity distribution of the findings and the summed
+cost from `total_cost_usd`. Below it, one line per run that did not hit, with the reason and the
+directory where its brief, its package and its verdict were left.
 
-Un run cae en una de cuatro clases, y la diferencia importa:
+A run falls into one of four classes, and the difference matters:
 
-- **acierto** — el `ruling` es el esperado y hay un hallazgo bajo cada regla que el caso exige.
-- **fallo** — el juez juzgó y se equivocó: otro `ruling`, o el `ruling` correcto por la regla
-  equivocada. Lo segundo cuenta como fallo a propósito: la telemetría del loop cuenta hallazgos
-  por regla, y un FAIL por `alcance` sobre un defecto de `asercion-tdd` no es el mismo juez.
-- **descarte** — el veredicto no pasa `VERDICT_SCHEMA` (el mismo `readVerdict` que aplica
-  `ct-step verdict`, no una copia), o trae un `review_token` que no es el del paquete. Que **no
-  lo traiga** no es un descarte, igual que en el camino real: ese campo lo escribe el programa y
-  `ct-judge.md` le dice al juez que no lo copie. En un run de verdad un descarte cuesta una
-  vuelta pagada; aquí es una columna.
-- **no ejecutado** — `claude` no llegó a contestar (autenticación, cuota, tope de gasto). No es
-  un dato sobre el juez y no se mezcla con los otros tres.
+- **hit** — the `ruling` is the expected one and there is a finding under every rule the case
+  demands.
+- **miss** — the judge judged and got it wrong: another `ruling`, or the right `ruling` for the
+  wrong rule. The second counts as a miss on purpose: the loop's telemetry counts findings by
+  rule, and a FAIL for `alcance` over a defect of `asercion-tdd` is not the same judge.
+- **discard** — the verdict does not pass `VERDICT_SCHEMA` (the same `readVerdict` that
+  `ct-step verdict` applies, not a copy), or it carries a `review_token` that is not the
+  package's. **Not carrying it** is not a discard, exactly as on the real path: that field is
+  written by the program and `ct-judge.md` tells the judge not to copy it. In a real run a
+  discard costs a paid round; here it is a column.
+- **not executed** — `claude` never got to answer (authentication, quota, spending cap). It is
+  not a datum about the judge and it is not mixed in with the other three.
 
-## Comparar dos versiones del agente
+## Comparing two versions of the agent
 
-El banco mide un fichero de agente, no el instalado, así que dos versiones se comparan
-apuntándolo a cada una:
+The bench measures an agent file, not the installed one, so two versions are compared by
+pointing it at each:
 
 ```bash
 git show HEAD:plugin/agents/ct-judge.md > /tmp/ct-judge-antes.md
@@ -58,41 +58,41 @@ node plugin/scripts/judge-bench.mjs --agent /tmp/ct-judge-antes.md   --runs 5 | 
 node plugin/scripts/judge-bench.mjs --agent plugin/agents/ct-judge.md --runs 5 | tee /tmp/despues.txt
 ```
 
-Qué se compara, y en este orden:
+What gets compared, and in this order:
 
-1. **La tasa de acierto por caso.** Es la respuesta a la pregunta. Con `--runs 5` la resolución
-   es de 20 puntos: 4/5 y 5/5 no son distinguibles con esa N, así que una mejora de un solo run
-   no es una mejora.
-2. **La tasa de descarte.** Una rúbrica más larga que sube el acierto y triplica los descartes
-   sale más cara de lo que parece: cada descarte es una vuelta pagada, y seis matan el run.
-3. **La distribución de severidades sobre el caso correcto.** Los `medium` de una tarea correcta
-   son vetos defensivos: cada uno manda al implementador a una vuelta pagada sin defecto que
-   arreglar. Que bajen es una mejora aunque el acierto no se mueva.
-4. **El coste.** El juez corre con opus una vez por tarea y por reintento; un preámbulo más
-   largo se paga en cada una.
+1. **The hit rate per case.** It is the answer to the question. With `--runs 5` the resolution is
+   20 points: 4/5 and 5/5 are not distinguishable with that N, so an improvement of a single run
+   is not an improvement.
+2. **The discard rate.** A longer rubric that raises the hit rate and triples the discards is
+   more expensive than it looks: every discard is a paid round, and six of them kill the run.
+3. **The severity distribution over the correct case.** The `medium`s of a correct task are
+   defensive vetoes: each one sends the implementer to a paid round with no defect to fix. Their
+   going down is an improvement even if the hit rate does not move.
+4. **The cost.** The judge runs with opus once per task and per retry; a longer preamble is paid
+   on every one of them.
 
-Guarda las dos salidas junto al cambio del agente. Una tasa sin la corrida que la produjo es una
-opinión.
+Save both outputs next to the agent's change. A rate without the run that produced it is an
+opinion.
 
-## La línea base
+## The baseline
 
-Está en [`judge-bench-linea-base-2026-09.md`](judge-bench-linea-base-2026-09.md): `--runs 5`
-sobre `ct-judge.md` en el commit `c5b3659`, 15 de 15 aciertos, cero descartes, 8,3644 USD. Es la
-corrida contra la que se compara cualquier cambio de la rúbrica, y el documento dice también
-qué **no** se puede concluir de ella: con el banco en el techo, sirve de barandilla contra la
-regresión y no de vara para la mejora.
+It is in [`judge-bench-linea-base-2026-09.md`](judge-bench-linea-base-2026-09.md): `--runs 5`
+over `ct-judge.md` at commit `c5b3659`, 15 hits out of 15, zero discards, 8.3644 USD. It is the
+run against which any change to the rubric is compared, and the document also says what **cannot**
+be concluded from it: with the bench at the ceiling, it serves as a guardrail against regression
+and not as a yardstick for improvement.
 
-### La corrida de #99: la rúbrica en positivo
+### The run of #99: the rubric in the positive
 
-`--runs 5` sobre el `ct-judge.md` reescrito en positivo (sha256 `432eb0fb…`, commit `17b13c3`):
-15 de 15 aciertos, cero descartes, cero severidades sobre `tarea-correcta` y 8,8829 USD — un 6,2 %
-más por juicio. La comparación de las dos tablas, con lo que se puede y lo que no se puede concluir
-de ellas, está en
-[`judge-bench-99-rubrica-en-positivo.md`](judge-bench-99-rubrica-en-positivo.md). Es también el
-ejemplo de cómo se documenta un cambio de rúbrica: las dos tablas juntas y el sha256 del agente que
-produjo cada una.
+`--runs 5` over the `ct-judge.md` rewritten in the positive (sha256 `432eb0fb…`, commit
+`17b13c3`): 15 hits out of 15, zero discards, zero severities over `tarea-correcta` and 8.8829
+USD — 6.2 % more per judgement. The comparison of the two tables, with what can and what cannot
+be concluded from them, is in
+[`judge-bench-99-rubrica-en-positivo.md`](judge-bench-99-rubrica-en-positivo.md). It is also the
+example of how a change to the rubric is documented: the two tables together and the sha256 of
+the agent that produced each one.
 
-### La corrida anterior, de N=1
+### The previous run, of N=1
 
 `--agent plugin/agents/ct-judge.md --runs 1`, plugin 0.56.0, 2026-09-05:
 
@@ -105,37 +105,36 @@ test-inexistente-en-verde  1     1 (100%)  0 (0%)     0 (0%)         1     0    
 total                      3     3 (100%)  0 (0%)     0 (0%)         2     0       0    1.7566
 ```
 
-Lo que dice, y lo que no. Con N=1 por caso esto **no** es una tasa de acierto: es una corrida
-que salió bien y una cota de coste — del orden de 0,6 USD por juicio. La cuenta de «unos 3 USD
-el banco entero con `--runs 5`» que llevaba aquí estaba mal por un factor de tres: `--runs 5`
-son cinco juicios **por caso**, quince llamadas, 8,4 USD.
+What it says, and what it does not. With N=1 per case this is **not** a hit rate: it is a run
+that came out well and a bound on cost — of the order of 0.6 USD per judgement. The sum of
+«about 3 USD for the whole bench with `--runs 5`» that this document used to carry was wrong by
+a factor of three: `--runs 5` is five judgements **per case**, fifteen calls, 8.4 USD.
 
-## Añadir un caso
+## Adding a case
 
-Un caso es un directorio bajo `plugin/__tests__/fixtures/judge-bench/<nombre>/` con cuatro
-piezas:
+A case is a directory under `plugin/__tests__/fixtures/judge-bench/<nombre>/` with four pieces:
 
-| Pieza | Qué es |
+| Piece | What it is |
 |---|---|
-| `brief.md` | El brief de la tarea tal y como lo compone `task-brief --with-plan-context`: `### Desired end state`, `### Out of scope`, `## 2. Closed decisions`, `## 3. Reference patterns` y la tarea con sus marcadores `**Objective:**`, `**Files:**`, `**TDD:**`, `**Tests:**` y `**Verification:**`. La vara de ct **no** se escribe aquí: el banco la pega al final, leída del directorio `conventions/` del plugin, igual que hace `ct-step` |
-| `package.md` | El paquete de revisión que escribe `escribirPaquete`: la cabecera `# Review package: task N/M of issue #I (staged, not yet committed)`, la línea `Review token: <sha256 del diff>`, y las secciones `## Files changed`, `## Rutas tocadas` y `## Diff` |
-| `expected.json` | `{"ruling": "PASS"\|"FAIL", "must_find": ["<regla>"...], "incident": "…"}`. `must_find` sólo admite reglas de `VERDICT_RULES`; `incident` explica qué defecto de juicio mide el caso y es para quien lo lea, no para el programa |
-| `repo/` | El árbol de trabajo que el juez va a poder abrir: el estado en el que el implementador lo dejó, con los ficheros que el paquete declara tocados ya aplicados. El juez lee el diff pero también abre ficheros, y un caso sin árbol lo deja midiendo sobre la mitad |
+| `brief.md` | The task's brief exactly as `task-brief --with-plan-context` composes it: `### Desired end state`, `### Out of scope`, `## 2. Closed decisions`, `## 3. Reference patterns` and the task with its markers `**Objective:**`, `**Files:**`, `**TDD:**`, `**Tests:**` and `**Verification:**`. ct's yardstick is **not** written here: the bench pastes it at the end, read from the plugin's `conventions/` directory, exactly as `ct-step` does |
+| `package.md` | The review package that `escribirPaquete` writes: the header `# Review package: task N/M of issue #I (staged, not yet committed)`, the line `Review token: <sha256 del diff>`, and the sections `## Files changed`, `## Rutas tocadas` and `## Diff` |
+| `expected.json` | `{"ruling": "PASS"\|"FAIL", "must_find": ["<regla>"...], "incident": "…"}`. `must_find` only admits rules from `VERDICT_RULES`; `incident` explains which defect of judgement the case measures and is for whoever reads it, not for the program |
+| `repo/` | The working tree the judge will be able to open: the state the implementer left it in, with the files the package declares as touched already applied. The judge reads the diff but also opens files, and a case without a tree leaves it measuring over half of one |
 
-La forma de construirlo sin escribir un diff a mano: monta un repo temporal con el estado
-previo, comitéalo, aplica los cambios del caso, `git add -A`, y saca de ahí `git diff --cached
---stat` y `git diff --cached -U10`. El token es `reviewToken(diff)` de
-`plugin/scripts/step-contracts.js` — y el banco lo recomprueba al cargar el caso: un
-`package.md` cuyo token no sea el sha256 de su propia sección `## Diff` es un caso corrupto y
-aborta con exit 3, porque el juez descartaría ese veredicto por una razón que no es la que el
-caso quería medir.
+The way to build it without writing a diff by hand: set up a temporary repo with the previous
+state, commit it, apply the case's changes, `git add -A`, and take `git diff --cached --stat` and
+`git diff --cached -U10` from there. The token is `reviewToken(diff)` from
+`plugin/scripts/step-contracts.js` — and the bench re-checks it when loading the case: a
+`package.md` whose token is not the sha256 of its own `## Diff` section is a corrupt case and
+aborts with exit 3, because the judge would discard that verdict for a reason that is not the one
+the case wanted to measure.
 
-**Un caso mide un defecto de juicio, no un defecto de código.** Antes de escribirlo, contesta:
-¿qué comprobación mecánica del loop deja pasar esto? Si un control lo pilla, no es asunto del
-juez. Los tres iniciales pasan esa prueba: el `it.todo` deja `node --test` en verde y el grep de
-`ct-step controls` encuentra el nombre del test; la carrera del claim pasa el test secuencial
-que el propio diff trae; y la tarea correcta no tiene nada que pillar.
+**A case measures a defect of judgement, not a defect of code.** Before writing it, answer: which
+mechanical check of the loop lets this through? If a check catches it, it is not the judge's
+business. The initial three pass that test: the `it.todo` leaves `node --test` green and the grep
+of `ct-step controls` finds the test's name; the claim's race passes the sequential test the diff
+itself brings; and the correct task has nothing to catch.
 
-Después de crear el directorio, añade al caso su comprobación en
-`plugin/__tests__/judge-bench.test.js` —el bloque `the bench cases on disk`— para que la pieza
-que el caso mide esté atada por un test y no por el recuerdo de quien lo escribió.
+After creating the directory, add the case's own check to
+`plugin/__tests__/judge-bench.test.js` —the `the bench cases on disk` block— so that the piece
+the case measures is tied down by a test and not by the memory of whoever wrote it.

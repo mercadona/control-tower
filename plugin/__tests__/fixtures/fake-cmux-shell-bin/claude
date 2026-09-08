@@ -1,20 +1,20 @@
 #!/bin/sh
-# `claude` tal y como lo vería el shell de login que abre cmux (F19/H1).
+# `claude` exactly as the login shell that cmux opens would see it (F19/H1).
 #
-# NO confundir con __tests__/fixtures/fake-claude-bin/claude, que existe para
-# GRITAR si ct-next.mjs ejecutara `claude` por su cuenta (no lo hace, y ese
-# contrato sigue en pie). Este otro lo ejecuta el shell simulado del stub de
-# cmux — que es exactamente quien lo ejecuta en la vida real — así que aquí lo
-# correcto es salir en silencio y con éxito: el agente arrancó.
+# NOT to be confused with __tests__/fixtures/fake-claude-bin/claude, which
+# exists to SHOUT if ct-next.mjs were to run `claude` on its own (it does not,
+# and that contract still stands). This other one is run by the simulated shell
+# of the cmux stub — which is exactly who runs it in real life — so here the
+# right thing is to exit silently and successfully: the agent started.
 #
-# No imprime nada a propósito: su salida iría al mismo stdout/stderr que los
-# tests inspeccionan para juzgar los mensajes de ct-next.mjs.
+# It prints nothing on purpose: its output would go to the same stdout/stderr
+# the tests inspect in order to judge ct-next.mjs's messages.
 #
-# F20/H1 — FAKE_CMUX_CLAUDE_RUNS_FILE: una `X` por invocación. Desde que
-# /ct-next REENVÍA la línea cuando el centinela no aparece, "arrancó" ya no
-# basta: hay que poder demostrar que arrancó UNA VEZ. Sin este contador, un
-# doble lanzamiento sobre el mismo worktree —dos agentes pisándose— pasaría
-# por un despacho perfecto en todos los tests.
+# F20/H1 — FAKE_CMUX_CLAUDE_RUNS_FILE: one `X` per invocation. Ever since
+# /ct-next RESENDS the line when the sentinel does not appear, "it started" is
+# no longer enough: it has to be provable that it started ONCE. Without this
+# counter, a double launch onto the same worktree —two agents stepping on each
+# other— would pass for a perfect dispatch in every test.
 if [ -n "$FAKE_CMUX_CLAUDE_RUNS_FILE" ]; then
   printf 'X' >> "$FAKE_CMUX_CLAUDE_RUNS_FILE"
 fi

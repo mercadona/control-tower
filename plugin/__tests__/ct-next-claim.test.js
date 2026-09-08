@@ -1,21 +1,21 @@
-// W-C: /ct-next debe reclamar cada slice (dispatch-check.mjs, status:ready →
-// status:in-progress) ANTES de crear su worktree, saltar el slice si el claim
-// falla por colisión/carrera perdida (exit 1) pero seguir con el resto de la
-// tanda, abortar TODA la tanda ante un fallo inesperado de dispatch-check
-// (exit distinto de 0/1), y revertir el claim si el dispatch falla DESPUÉS de
-// reclamar (git worktree add, seed de STATE.md, o cmux) — para no dejar el
-// issue huérfano en status:in-progress sin nadie trabajándolo. Ver el brief
-// de W-C y el comentario de cabecera de scripts/dispatch-check.mjs (T11) para
-// la advertencia honesta sobre por qué esto NO cierra el hueco de
-// compare-and-swap: solo evita el caso, mucho más común, de que /ct-next
-// nunca llame a dispatch-check en absoluto.
+// W-C: /ct-next must claim every slice (dispatch-check.mjs, status:ready →
+// status:in-progress) BEFORE creating its worktree, skip the slice if the claim
+// fails through a collision/lost race (exit 1) but carry on with the rest of
+// the batch, abort the WHOLE batch on an unexpected failure of dispatch-check
+// (an exit other than 0/1), and revert the claim if the dispatch fails AFTER
+// claiming (git worktree add, the seeding of STATE.md, or cmux) — so as not to
+// leave the issue orphaned in status:in-progress with nobody working on it. See
+// the W-C brief and the header comment of scripts/dispatch-check.mjs (T11) for
+// the honest warning about why this does NOT close the compare-and-swap gap: it
+// only avoids the much more common case of /ct-next never calling
+// dispatch-check at all.
 import { describe, it, expect, afterEach } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync, cpSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-// D4: entorno hermético (dirs de cuenta + stubs de cmux/claude) — ver fixtures/hermetic-env.js
+// D4: hermetic environment (account dirs + cmux/claude stubs) — see fixtures/hermetic-env.js
 import {hermeticEnv} from './fixtures/hermetic-env.js'
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
 
@@ -30,17 +30,17 @@ const fakePath = [
   process.env.PATH,
 ].join(':')
 
-// spawnSync (no execFileSync): execFileSync solo devuelve stdout cuando el
-// hijo sale con éxito (exit 0) — su stderr, en ese caso, NUNCA llega a
-// `e.stderr` porque no hay excepción que capturarlo. Varios escenarios de
-// W-C terminan en exit 0 general (la tanda progresa) pero con un mensaje de
-// aviso (p.ej. "saltando #42...") impreso por console.error — con
-// execFileSync esas aserciones pasarían en falso por falta de ese texto.
-// spawnSync siempre expone stdout/stderr por separado, exista o no excepción.
+// spawnSync (not execFileSync): execFileSync only returns stdout when the child
+// exits successfully (exit 0) — its stderr, in that case, NEVER reaches
+// `e.stderr` because there is no exception to capture it. Several W-C scenarios
+// end in an overall exit 0 (the batch makes progress) but with a warning
+// message (e.g. "saltando #42...") printed by console.error — with execFileSync
+// those assertions would pass falsely for want of that text. spawnSync always
+// exposes stdout/stderr separately, exception or no exception.
 function run(args, envOverrides = {}) {
-  // hermeticEnv() (D4): dirs de cuenta + stubs de cmux/claude por delante del
-  // PATH real, para que el preflight de ct-next.mjs no dependa del $HOME ni
-  // de qué tenga instalado la máquina que corre los tests.
+  // hermeticEnv() (D4): account dirs + cmux/claude stubs ahead of the real
+  // PATH, so that ct-next.mjs's preflight depends neither on $HOME nor on what
+  // the machine running the tests happens to have installed.
   const r = spawnSync('node', [script, ...args], { encoding: 'utf8', env: { ...process.env, ...hermeticEnv(), ...envOverrides } })
   return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }
 }
@@ -50,14 +50,14 @@ function runReal(args, envOverrides = {}) {
   return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }
 }
 
-// countOccurrences (D2 review, importante 1): cuenta cuántas veces aparece
-// `substr` en `text`. La duplicación de la salida de dispatch-check (el
-// bug: `attemptClaim` reenviaba con `stdio` por defecto, que YA hereda el
-// stderr del hijo al padre — Node lo hace automáticamente en execFileSync
-// salvo que se indique lo contrario — Y ADEMÁS lo devolvía en `e.stderr`
-// para reenviarlo otra vez) es invisible a un `toMatch`/`not.toMatch`: el
-// texto SIGUE apareciendo, solo que dos veces. Sin un recuento explícito,
-// una regresión de esta clase pasa la suite entera en verde.
+// countOccurrences (D2 review, important 1): counts how many times `substr`
+// appears in `text`. The duplication of dispatch-check's output (the bug:
+// `attemptClaim` forwarded with the default `stdio`, which ALREADY inherits the
+// child's stderr into the parent — Node does it automatically in execFileSync
+// unless told otherwise — AND ON TOP OF THAT returned it in `e.stderr` to
+// forward it again) is invisible to a `toMatch`/`not.toMatch`: the text is
+// STILL there, only twice. Without an explicit count, a regression of this
+// class passes the whole suite green.
 function countOccurrences(text, substr) {
   if (!substr) return 0
   let count = 0
@@ -82,18 +82,18 @@ function makeRepoRoot() {
 
 const openIssue42 = { number: 42, title: '#42 algo', labels: [{ name: 'status:ready' }], body: '' }
 
-// El fixture atado a --dry-run (CT_NEXT_FIXTURE) ya selecciona #2 sin tocar
-// red — reutilizado tal cual de ct-next-dryrun.test.js para la parte de
-// visibilidad en --dry-run (punto 5 del brief de W-C).
-// F13: este fixture describía un estado IMPOSIBLE — #1 aparecía a la vez en
-// `mergedIssues` (o sea, cerrado y mergeado) y dentro de `issues`, que es la
-// lista de issues ABIERTOS (buildDispatchInput solo mapea `rawOpenIssues`).
-// Era inocuo mientras `status:in-review` no hiciera nada; desde F13/H2 un
-// in-review retiene sus tokens, así que ese #1 fantasma bloqueaba a #2 por
-// `touches:api` y el fixture dejaba de despachar nada. Se corrige la
-// contradicción, no el comportamiento: un issue mergeado no está abierto, así
-// que desaparece de `issues` y sigue en `mergedIssues` — que es justo lo que
-// este fixture quería decir (la dep de #2 está mergeada).
+// The fixture tied to --dry-run (CT_NEXT_FIXTURE) already selects #2 without
+// touching the network — reused as it is from ct-next-dryrun.test.js for the
+// visibility part in --dry-run (point 5 of the W-C brief).
+// F13: this fixture described an IMPOSSIBLE state — #1 appeared at the same
+// time in `mergedIssues` (that is, closed and merged) and inside `issues`,
+// which is the list of OPEN issues (buildDispatchInput only maps
+// `rawOpenIssues`). It was harmless while `status:in-review` did nothing; since
+// F13/H2 an in-review holds on to its tokens, so that phantom #1 blocked #2
+// through `touches:api` and the fixture stopped dispatching anything. What is
+// corrected is the contradiction, not the behaviour: a merged issue is not
+// open, so it disappears from `issues` and stays in `mergedIssues` — which is
+// exactly what this fixture meant to say (#2's dep is merged).
 const FIXTURE = JSON.stringify({
   issues: [
     { n: 2, order: 2, status: 'ready', deps: [1], touches: ['api'], name: 'refresh', type: 'backend' },
@@ -101,22 +101,22 @@ const FIXTURE = JSON.stringify({
   mergedIssues: [1],
 })
 
-// La ruta real de dispatch-check.mjs, tal y como la resuelve ct-next.mjs
-// (relativa a su propia ubicación) — usada para comprobar que la línea de
-// --dry-run es un comando copiable de verdad, no un nombre suelto.
+// The real path of dispatch-check.mjs, exactly as ct-next.mjs resolves it
+// (relative to its own location) — used to check that the --dry-run line is a
+// genuinely copy-pasteable command, not a loose name.
 const realDispatchCheckPath = join(dirname(script), 'dispatch-check.mjs')
 const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-// ctNextSiblings (F11): los ficheros de `scripts/` que ct-next.mjs necesita
-// para arrancar, DERIVADOS de sus propios imports relativos en vez de escritos
-// a mano. La lista hardcodeada que había aquí era una copia del grafo de
-// dependencias que nadie actualizaba: al añadir un import nuevo a ct-next.mjs
-// (F11 añadió `conventions.js`) estos tests copiaban un árbol INCOMPLETO y
-// medían un ERR_MODULE_NOT_FOUND (exit 1) creyendo que medían el exit code del
-// escenario — verde en la lista de nombres, falso en lo que afirmaban. La
-// resolución es transitiva; un fichero que no exista se ignora, así que
-// `dispatch-check.mjs` (que algunos tests borran a propósito) sigue pudiendo
-// omitirse por separado.
+// ctNextSiblings (F11): the files of `scripts/` ct-next.mjs needs in order to
+// start, DERIVED from its own relative imports instead of written by hand. The
+// hardcoded list that used to be here was a copy of the dependency graph that
+// nobody kept up to date: on adding a new import to ct-next.mjs (F11 added
+// `conventions.js`) these tests copied an INCOMPLETE tree and measured an
+// ERR_MODULE_NOT_FOUND (exit 1) believing they were measuring the scenario's
+// exit code — green on the list of names, false in what they asserted. The
+// resolution is transitive; a file that does not exist is ignored, so
+// `dispatch-check.mjs` (which some tests delete on purpose) can still be left
+// out separately.
 function ctNextSiblings(scriptsDirPath) {
   const seen = new Set()
   const pending = ['ct-next.mjs']
@@ -135,22 +135,22 @@ function ctNextSiblings(scriptsDirPath) {
   return [...seen]
 }
 
-describe('ct-next — --dry-run muestra el claim sin ejecutarlo (W-C, punto 5; fix round 1, minor: línea copiable y guarda real)', () => {
-  it('imprime el comando REAL y copiable (node <ruta> <issue> --repo <repo>), y deja claro que no se ejecuta', () => {
+describe('ct-next — --dry-run shows the claim without executing it (W-C, point 5; fix round 1, minor: a copy-pasteable line and a real guard)', () => {
+  it('prints the REAL, copy-pasteable command (node <ruta> <issue> --repo <repo>), and makes clear that it is not executed', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(new RegExp(`node ${escapeRegExp(realDispatchCheckPath)} 2 --repo menoplus-app/menoplus`))
     expect(r.out).toMatch(/no se ejecuta/i)
   })
 
-  // Fix round 1, minor: el test de arriba solo comprueba la FORMA del texto
-  // impreso — una regresión que SÍ invocara dispatch-check.mjs de verdad en
-  // --dry-run seguiría en verde mientras el texto pareciera correcto, aunque
-  // esa invocación intentara hablar con `gh` real contra
-  // menoplus-app/menoplus. Se pasa por runReal() (PATH con los stubs) +
-  // FAKE_GH_ARGV_LOG_FILE y se comprueba que NUNCA se registra un `gh issue
-  // edit` — eso es una guarda de comportamiento, no de formato.
-  it('NUNCA invoca dispatch-check.mjs de verdad en --dry-run: ningún `gh issue edit` queda registrado', () => {
+  // Fix round 1, minor: the test above only checks the SHAPE of the printed
+  // text — a regression that DID really invoke dispatch-check.mjs in --dry-run
+  // would stay green as long as the text looked right, even though that
+  // invocation tried to talk to the real `gh` against menoplus-app/menoplus. It
+  // goes through runReal() (PATH with the stubs) + FAKE_GH_ARGV_LOG_FILE and it
+  // is checked that a `gh issue edit` is NEVER recorded — that is a guard on
+  // behaviour, not on format.
+  it('NEVER really invokes dispatch-check.mjs in --dry-run: no `gh issue edit` is recorded', () => {
     const repoRoot = makeRepoRoot()
     const argvLog = join(repoRoot, 'gh-argv-log')
     const r = runReal(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], {
@@ -163,8 +163,8 @@ describe('ct-next — --dry-run muestra el claim sin ejecutarlo (W-C, punto 5; f
   })
 })
 
-describe('ct-next — claim exitoso antes de dispatch (W-C, punto 1)', () => {
-  it('dispatch-check exit 0 → procede con el dispatch normal, y la orden de invocación es claim → worktree', () => {
+describe('ct-next — a successful claim before the dispatch (W-C, point 1)', () => {
+  it('dispatch-check exit 0 → it proceeds with the normal dispatch, and the order of invocation is claim → worktree', () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const argvLog = join(repoRoot, 'gh-argv-log')
@@ -181,7 +181,7 @@ describe('ct-next — claim exitoso antes de dispatch (W-C, punto 1)', () => {
     expect(r.out).toMatch(/lanzado #42/)
     const argv = readFileSync(argvLog, 'utf8')
     expect(argv).toMatch(/issue edit 42 --repo o\/r --add-label status:in-progress --remove-label status:ready/)
-    // el claim (gh) sucede ANTES de crear el worktree (git)
+    // the claim (gh) happens BEFORE the worktree is created (git)
     const gitLogTxt = readFileSync(gitLog, 'utf8')
     const claimIdx = argv.indexOf('issue edit 42 --repo o/r --add-label status:in-progress')
     expect(claimIdx).toBeGreaterThan(-1)
@@ -189,8 +189,8 @@ describe('ct-next — claim exitoso antes de dispatch (W-C, punto 1)', () => {
   })
 })
 
-describe('ct-next — claim fallido (exit 1) salta el slice y sigue con el resto (W-C, punto 2)', () => {
-  it('#42 colisiona (exit 1, se salta) y #43 sí se reclama y se despacha', () => {
+describe('ct-next — a failed claim (exit 1) skips the slice and carries on with the rest (W-C, point 2)', () => {
+  it('#42 collides (exit 1, it is skipped) and #43 does get claimed and dispatched', () => {
     const repoRoot = makeRepoRoot()
     const openIssue43 = { number: 43, title: '#43 otro', labels: [{ name: 'status:ready' }], body: '' }
     const collidingRaw = { number: 99, labels: [{ name: 'status:in-progress' }, { name: 'touches:db' }] }
@@ -199,15 +199,15 @@ describe('ct-next — claim fallido (exit 1) salta el slice y sigue con el resto
     const r = runReal(['--repo', 'o/r', '--cap', '2'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
       // idx0: ct-next open ; idx1: ct-next closed ; idx2: dispatch-check(#42)
-      // collision-check → colisiona ; idx3: dispatch-check(#43) collision-check
-      // → limpio ; idx4: dispatch-check(#43) readback → limpio
+      // collision-check → it collides ; idx3: dispatch-check(#43)
+      // collision-check → clean ; idx4: dispatch-check(#43) readback → clean
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue42, openIssue43], [], [collidingRaw], [], []]),
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:db']),
       FAKE_GH_COUNTER_FILE: counterFile,
       FAKE_GIT_LOG_FILE: gitLog,
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/COLLISION|colisión/i) // mensaje propio de dispatch-check, surfaced tal cual
+    expect(r.out).toMatch(/COLLISION|colisión/i) // dispatch-check's own message, surfaced as it is
     expect(r.out).toMatch(/saltando #42/)
     expect(r.out).toMatch(/lanzado #43/)
     const gitLogTxt = readFileSync(gitLog, 'utf8')
@@ -216,8 +216,8 @@ describe('ct-next — claim fallido (exit 1) salta el slice y sigue con el resto
   })
 })
 
-describe('ct-next — fallo inesperado de dispatch-check (no exit 0/1) aborta TODA la tanda (W-C, punto 2)', () => {
-  it('dispatch-check exit 2 (error de uso/config, simulado vía CT_CLAIM_PRECLAIM_DELAY_MS malformado) → aborta, no sigue con el resto', () => {
+describe('ct-next — an unexpected failure of dispatch-check (not exit 0/1) aborts the WHOLE batch (W-C, point 2)', () => {
+  it('dispatch-check exit 2 (a usage/config error, simulated through a malformed CT_CLAIM_PRECLAIM_DELAY_MS) → it aborts, it does not carry on with the rest', () => {
     const repoRoot = makeRepoRoot()
     const openIssue43 = { number: 43, title: '#43 otro', labels: [{ name: 'status:ready' }], body: '' }
     const counterFile = join(repoRoot, 'gh-list-count')
@@ -233,46 +233,46 @@ describe('ct-next — fallo inesperado de dispatch-check (no exit 0/1) aborta TO
     expect(r.out).toMatch(/fallo inesperado/i)
     expect(r.out).toMatch(/exit 2/)
     expect(r.out).toMatch(/abort/i)
-    // Fix round 1, minor: el aborto puede dispararse DESPUÉS de haber
-    // lanzado con éxito algún slice anterior de la misma tanda (cap > 1) —
-    // igual que ya hace cleanupOrphanedWorktree, el mensaje de aborto tiene
-    // que dejar explícito que esos slices siguen corriendo sin tocarse.
+    // Fix round 1, minor: the abort can fire AFTER some earlier slice of the
+    // same batch has been launched successfully (cap > 1) — just as
+    // cleanupOrphanedWorktree already does, the abort message has to make
+    // explicit that those slices go on running untouched.
     expect(r.out).toMatch(/ya lanzados.*siguen corriendo.*no se han tocado/is)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
-    expect(gitLogTxt).not.toMatch(/worktree add/) // ni #42 ni #43 llegaron a crear worktree
+    expect(gitLogTxt).not.toMatch(/worktree add/) // neither #42 nor #43 got as far as creating a worktree
   })
 })
 
-// Fix round 1 (review de W-C), finding 2 — IMPORTANT: si dispatch-check.mjs
-// falta o se renombra, Node sale con exit 1 (MODULE_NOT_FOUND) — el MISMO
-// exit code que dispatch-check.mjs usa para "colisión/carrera perdida". Sin
-// una guarda dedicada, attemptClaim clasificaría esto como un resultado
-// ESPERADO del protocolo: se saltarían TODOS los slices de la tanda
-// ("saltando #N...") y el proceso terminaría con exit 0 sin haber
-// despachado nada — un no-op silencioso que además contradice el propio
-// mensaje de aborto de "fallo inesperado" (que dice cubrir justo este caso).
-describe('ct-next — dispatch-check.mjs ausente (W-C, fix round 1, finding 2)', () => {
-  // No se toca el scripts/dispatch-check.mjs REAL del repo (renombrarlo
-  // temporalmente arriesgaría a cualquier otro fichero de test que lo
-  // invoque directamente y que vitest pudiera correr en paralelo, en otro
-  // worker). En su lugar se copian ct-next.mjs y SOLO los módulos hermanos
-  // que de verdad importa (ninguno de ellos importa dispatch-check.mjs) a
-  // un directorio temporal DENTRO del propio repo — para que la resolución
-  // de "yaml" (que usa scripts/state.js) siga encontrando node_modules
-  // subiendo directorios — y deliberadamente NO se copia dispatch-check.mjs:
-  // así `dispatchCheckPath`, resuelto relativo a la nueva ubicación del
-  // ct-next.mjs copiado, apunta a un fichero que de verdad no existe.
+// Fix round 1 (W-C review), finding 2 — IMPORTANT: if dispatch-check.mjs is
+// missing or gets renamed, Node exits with exit 1 (MODULE_NOT_FOUND) — the SAME
+// exit code dispatch-check.mjs uses for "collision/lost race". Without a
+// dedicated guard, attemptClaim would classify this as an EXPECTED outcome of
+// the protocol: EVERY slice of the batch would be skipped ("saltando #N...")
+// and the process would end with exit 0 having dispatched nothing — a silent
+// no-op that on top of that contradicts the very "unexpected failure" abort
+// message (which claims to cover exactly this case).
+describe('ct-next — dispatch-check.mjs absent (W-C, fix round 1, finding 2)', () => {
+  // The repo's REAL scripts/dispatch-check.mjs is not touched (renaming it
+  // temporarily would put at risk any other test file that invokes it directly
+  // and that vitest might run in parallel, in another worker). Instead
+  // ct-next.mjs and ONLY the sibling modules it really imports (none of which
+  // imports dispatch-check.mjs) are copied into a temporary directory INSIDE
+  // the repo itself — so that the resolution of "yaml" (used by
+  // scripts/state.js) goes on finding node_modules by walking up directories —
+  // and dispatch-check.mjs is deliberately NOT copied: that way
+  // `dispatchCheckPath`, resolved relative to the copied ct-next.mjs's new
+  // location, points at a file that really does not exist.
   const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
   const scriptsDir = join(projectRoot, 'scripts')
   const SIBLING_FILES = ctNextSiblings(scriptsDir)
 
-  it('dispatch-check.mjs no existe en la ruta resuelta → aborta al arrancar con esa ruta, ANTES de tratarlo como colisión', () => {
+  it('dispatch-check.mjs does not exist at the resolved path → it aborts at start-up with that path, BEFORE treating it as a collision', () => {
     const copyDir = mkdtempSync(join(projectRoot, 'tmp-missing-dispatch-check-'))
     try {
       for (const f of SIBLING_FILES) cpSync(join(scriptsDir, f), join(copyDir, f))
       const copiedScript = join(copyDir, 'ct-next.mjs')
       const expectedMissingPath = join(copyDir, 'dispatch-check.mjs')
-      expect(existsSync(expectedMissingPath)).toBe(false) // precondición: de verdad no está
+      expect(existsSync(expectedMissingPath)).toBe(false) // precondition: it really is not there
 
       const repoRoot = makeRepoRoot()
       const r = spawnSync('node', [copiedScript, '--repo', 'o/r', '--cap', '1'], {
@@ -288,8 +288,8 @@ describe('ct-next — dispatch-check.mjs ausente (W-C, fix round 1, finding 2)',
       expect(r.status).toBe(1)
       expect(out).toMatch(/no se encontró dispatch-check\.mjs/i)
       expect(out).toContain(expectedMissingPath)
-      // Nunca debe leerse como "colisión" ni intentar saltar el slice: el
-      // guard de arranque tiene que cortar ANTES de llegar ahí.
+      // It must never be read as a "collision" nor try to skip the slice: the
+      // start-up guard has to cut in BEFORE getting there.
       expect(out).not.toMatch(/saltando #42/)
       expect(out).not.toMatch(/COLLISION/)
     } finally {
@@ -298,58 +298,57 @@ describe('ct-next — dispatch-check.mjs ausente (W-C, fix round 1, finding 2)',
   })
 })
 
-// D2 review, menor 4: attemptClaim capturaba stdout/stderr de dispatch-check
-// SIN `maxBuffer` explícito — con `stdio: 'inherit'` (antes de este cambio)
-// eso nunca importó, pero al pasar a capturar (finding 3, para poder
-// clasificar el texto) hereda el default de Node (1 MiB por stream). Un
-// candidato con MUCHOS issues en vuelo colisionando (`COLLISION: #N choca
-// con #A[...] #B[...] ...`, uno por cada uno) puede superar 1 MiB con
-// facilidad contra un repo real — y Node no trunca en silencio: mata al hijo
-// (SIGTERM) y `execFileSync` lanza sin `status` numérico, que ct-next ya
-// clasifica como "fallo inesperado al lanzar el subproceso" — un aborto
-// ruidoso pero ENGAÑOSO (parece un bug/mala config, cuando en realidad es
-// solo un mensaje grande y legítimo).
+// D2 review, minor 4: attemptClaim captured dispatch-check's stdout/stderr
+// WITHOUT an explicit `maxBuffer` — with `stdio: 'inherit'` (before this
+// change) that never mattered, but on moving to capturing (finding 3, so as to
+// be able to classify the text) it inherits Node's default (1 MiB per stream).
+// A candidate with MANY issues in flight colliding (`COLLISION: #N choca con
+// #A[...] #B[...] ...`, one per issue) can exceed 1 MiB easily against a real
+// repo — and Node does not truncate in silence: it kills the child (SIGTERM)
+// and `execFileSync` throws with no numeric `status`, which ct-next already
+// classifies as "an unexpected failure launching the subprocess" — a loud but
+// MISLEADING abort (it looks like a bug/bad config, when in reality it is just
+// a large and legitimate message).
 //
-// No se puede reproducir esto invocando al dispatch-check.mjs REAL: se
-// verificó por construcción (fuera de la suite, contra scripts/dispatch-
-// check.mjs directamente) que su propia rama de colisión hace
-// `console.error(mensajeGrande); process.exit(1)` — y `process.stderr` es
-// ASÍNCRONO hacia una tubería en POSIX (documentado en los propios docs de
-// Node), así que un `process.exit()` inmediato trunca su propia escritura al
-// tamaño del buffer del pipe del SO (64 KiB en este Mac) ANTES de que
-// `maxBuffer`, del lado que lee, llegue siquiera a importar — un defecto
-// latente y separado en dispatch-check.mjs, fuera del alcance de esta tarea
-// (no se toca ese fichero). Por eso este test sustituye dispatch-check.mjs
-// por un doble simple que SÍ vacía su escritura antes de salir (mismo
-// patrón que se aplicó a __tests__/fixtures/fake-gh-bin/gh), para poder
-// aislar y probar de verdad el `maxBuffer` del LADO DE CT-NEXT.MJS —
-// exactamente lo que este test existe para cubrir — sin depender de un bug
-// no relacionado en un fichero que no se puede tocar.
-describe('ct-next — maxBuffer explícito al capturar la salida de dispatch-check (D2 review, menor 4)', () => {
+// This cannot be reproduced by invoking the REAL dispatch-check.mjs: it was
+// verified by construction (outside the suite, against
+// scripts/dispatch-check.mjs directly) that its own collision branch does
+// `console.error(mensajeGrande); process.exit(1)` — and `process.stderr` is
+// ASYNCHRONOUS towards a pipe on POSIX (documented in Node's own docs), so an
+// immediate `process.exit()` truncates its own write to the size of the OS's
+// pipe buffer (64 KiB on this Mac) BEFORE `maxBuffer`, on the reading side, even
+// gets to matter — a latent and separate defect in dispatch-check.mjs, outside
+// the scope of this task (that file is not touched). That is why this test
+// replaces dispatch-check.mjs with a simple double that DOES flush its write
+// before exiting (the same pattern applied to __tests__/fixtures/fake-gh-bin/gh),
+// so as to isolate and really test the `maxBuffer` ON CT-NEXT.MJS'S SIDE —
+// exactly what this test exists to cover — without depending on an unrelated
+// bug in a file that cannot be touched.
+describe("ct-next — an explicit maxBuffer when capturing dispatch-check's output (D2 review, minor 4)", () => {
   const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
   const scriptsDir = join(projectRoot, 'scripts')
   const SIBLING_FILES = ctNextSiblings(scriptsDir)
-  // ~2 MiB: por encima del default de Node (1 MiB) y por debajo de
-  // GH_MAX_BUFFER (20 MiB) — si el fix aplica el mismo límite, esto cabe
-  // entero; si no lo aplica (el bug), Node mata al hijo antes de esto.
+  // ~2 MiB: above Node's default (1 MiB) and below GH_MAX_BUFFER (20 MiB) — if
+  // the fix applies the same limit, this fits whole; if it does not apply it
+  // (the bug), Node kills the child before this.
   const BIG_PAYLOAD_BYTES = 2 * 1024 * 1024
 
   function makeFakeDispatchCheck(dir) {
     writeFileSync(join(dir, 'dispatch-check.mjs'), [
       '#!/usr/bin/env node',
-      "// Doble de dispatch-check.mjs SOLO para este test (D2 review, menor 4):",
-      "// misma forma de salida que una COLLISION real (texto grande a stderr,",
-      "// exit 1), pero con `process.exitCode` en vez de `process.exit()` para no",
-      "// truncar su propia escritura por el mismo motivo ya documentado en",
-      "// fake-gh-bin/gh — NO es una copia de dispatch-check.mjs, no se toca el",
-      "// fichero real.",
+      "// A double of dispatch-check.mjs ONLY for this test (D2 review, minor 4):",
+      "// the same output shape as a real COLLISION (a large text on stderr,",
+      "// exit 1), but with `process.exitCode` instead of `process.exit()` so as not",
+      "// to truncate its own write, for the same reason already documented in",
+      "// fake-gh-bin/gh — it is NOT a copy of dispatch-check.mjs, the real file is",
+      "// not touched.",
       `process.stderr.write('COLLISION: #42 choca con ' + 'X'.repeat(${BIG_PAYLOAD_BYTES}))`,
       'process.exitCode = 1',
       '',
     ].join('\n'))
   }
 
-  it('una colisión de varios MiB se captura entera y se trata como un salto normal, no como un fallo inesperado', () => {
+  it('a collision of several MiB is captured whole and treated as a normal skip, not as an unexpected failure', () => {
     const copyDir = mkdtempSync(join(projectRoot, 'tmp-maxbuffer-'))
     try {
       for (const f of SIBLING_FILES) cpSync(join(scriptsDir, f), join(copyDir, f))
@@ -359,15 +358,14 @@ describe('ct-next — maxBuffer explícito al capturar la salida de dispatch-che
       const repoRoot = makeRepoRoot()
       const r = spawnSync('node', [copiedScript, '--repo', 'o/r', '--cap', '1'], {
         encoding: 'utf8',
-        // maxBuffer del PROPIO harness de test (D2 review, hallazgo
-        // colateral al construir este test): el default de Node (1 MiB) no
-        // es solo el límite que ct-next.mjs debe superar al capturar a
-        // dispatch-check — es TAMBIÉN el límite de este `spawnSync`, que
-        // captura la salida de ct-next.mjs. Sin subirlo aquí, el propio
-        // arnés mataría a ct-next.mjs (SIGTERM) antes de que llegara a
-        // imprimir "saltando #42", por la MISMA razón que este test existe
-        // para probar — un falso negativo del test, no del código bajo
-        // prueba.
+        // The maxBuffer of the test harness ITSELF (D2 review, a collateral
+        // finding while building this test): Node's default (1 MiB) is not
+        // only the limit ct-next.mjs has to exceed when capturing
+        // dispatch-check — it is ALSO the limit of this `spawnSync`, which
+        // captures ct-next.mjs's output. Without raising it here, the harness
+        // itself would kill ct-next.mjs (SIGTERM) before it got to print
+        // "saltando #42", for the SAME reason this test exists to prove — a
+        // false negative of the test, not of the code under test.
         maxBuffer: 20 * 1024 * 1024,
         env: {
           ...process.env,
@@ -377,14 +375,13 @@ describe('ct-next — maxBuffer explícito al capturar la salida de dispatch-che
         },
       })
       const out = (r.stdout || '') + (r.stderr || '')
-      // NUNCA "fallo inesperado" (que es como se ve un hijo matado por
-      // desbordar el maxBuffer por defecto de Node) — un candidato que
-      // colisiona, aunque el mensaje sea grande, sigue siendo un salto
-      // NORMAL del protocolo.
+      // NEVER "fallo inesperado" (which is how a child killed by overflowing
+      // Node's default maxBuffer looks) — a candidate that collides, however
+      // large the message, is still a NORMAL skip of the protocol.
       expect(out).not.toMatch(/fallo inesperado/i)
       expect(out).toContain('COLLISION: #42 choca con')
       expect(out).toMatch(/saltando #42/)
-      // Único candidato, colisiona, cero lanzados → mismo exit 3 de finding 1.
+      // A single candidate, it collides, zero launched → the same exit 3 as finding 1.
       expect(r.status).toBe(3)
     } finally {
       rmSync(copyDir, { recursive: true, force: true })
@@ -392,16 +389,15 @@ describe('ct-next — maxBuffer explícito al capturar la salida de dispatch-che
   })
 })
 
-// D2 (auditoría del dispatch), finding 2: en el path REAL (sin --dry-run) no
-// se imprimía en ningún sitio la lista completa de slices seleccionados para
-// esta tanda ANTES de intentar reclamarlos — si el proceso abortaba a medio
-// camino, no había forma de saber, a posteriori, qué se había elegido en
-// total (solo lo que se llegó a intentar). --dry-run sí lo deja ver de forma
-// implícita (imprime un bloque por cada slice de `selected`, sin abortar
-// nunca) — el fix imprime la selección completa explícitamente, up front, en
-// AMBos paths.
-describe('ct-next — la selección de la tanda se imprime up front también en el path real (D2, finding 2)', () => {
-  it('antes de intentar ningún claim, ya se ve qué se seleccionó para esta tanda', () => {
+// D2 (dispatch audit), finding 2: on the REAL path (without --dry-run) the
+// complete list of slices selected for this batch was not printed anywhere
+// BEFORE attempting to claim them — if the process aborted halfway, there was
+// no way of knowing, after the fact, what had been chosen in total (only what
+// was actually attempted). --dry-run does let it be seen implicitly (it prints
+// one block per slice of `selected`, never aborting) — the fix prints the
+// complete selection explicitly, up front, on BOTH paths.
+describe("ct-next — the batch's selection is printed up front on the real path too (D2, finding 2)", () => {
+  it('before any claim is attempted, what was selected for this batch is already visible', () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
@@ -411,7 +407,7 @@ describe('ct-next — la selección de la tanda se imprime up front también en 
     })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/seleccion.*#42/i)
-    // Y aparece ANTES de que se intente el claim de verdad.
+    // And it appears BEFORE the claim is really attempted.
     const selIdx = r.out.search(/seleccion.*#42/i)
     const claimIdx = r.out.indexOf('claimed #42')
     expect(selIdx).toBeGreaterThan(-1)
@@ -420,15 +416,15 @@ describe('ct-next — la selección de la tanda se imprime up front también en 
   })
 })
 
-// D2 review, menor 1: --dry-run no reclama ni lanza NADA de verdad (es
-// puramente informativo) — pero el conteo terminal "lanzados X/Y" que el fix
-// de finding 1 añadió al final del bucle se imprimía también en --dry-run,
-// donde `launchedCount` es siempre 0 por construcción. Una línea "lanzados
-// 0/1" en un --dry-run exitoso es exactamente la misma clase de mensaje
-// engañoso que esta tarea existe para eliminar, solo que al revés (afirma
-// "cero lanzamientos" de un plan que ni siquiera lo intentó).
-describe('ct-next — --dry-run no imprime el conteo de lanzamientos (D2 review, menor 1)', () => {
-  it('--dry-run con un slice seleccionado: sin línea "lanzados X/Y", y exit 0', () => {
+// D2 review, minor 1: --dry-run claims and launches NOTHING for real (it is
+// purely informative) — but the terminal count "lanzados X/Y" that finding 1's
+// fix added at the end of the loop was printed in --dry-run too, where
+// `launchedCount` is always 0 by construction. A line "lanzados 0/1" in a
+// successful --dry-run is exactly the same class of misleading message this
+// task exists to eliminate, only the other way round (it claims "zero launches"
+// for a plan that never even attempted them).
+describe('ct-next — --dry-run does not print the count of launches (D2 review, minor 1)', () => {
+  it('--dry-run with one selected slice: no "lanzados X/Y" line, and exit 0', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], {
       CT_NEXT_FIXTURE: JSON.stringify({
         issues: [{ n: 2, order: 2, status: 'ready', deps: [], touches: ['api'], name: 'refresh', type: 'backend' }],
@@ -440,19 +436,18 @@ describe('ct-next — --dry-run no imprime el conteo de lanzamientos (D2 review,
   })
 })
 
-// D2, finding 1: cuando TODOS los slices seleccionados de la tanda se saltan
-// a la hora de reclamar (cada uno choca de verdad, en vivo, contra trabajo
-// que otro proceso reclamó justo después de que ct-next cargara su propia
-// foto de issues — la misma advertencia honesta de "sin compare-and-swap"
-// documentada en dispatch-check.mjs), el proceso terminaba en exit 0 sin
-// ninguna traza de que cero agentes se lanzaron, y la última línea
-// ("sigo con el resto de esta tanda") prometía continuar cuando ya no
-// quedaba ningún candidato. Reproducción: cap=2, #41 y #42 no chocan ENTRE
-// SÍ (así que ct-next los selecciona a los dos con su propia foto, que no ve
-// a #99 en vuelo todavía) pero cada uno, por separado, choca de verdad
-// contra #99 cuando dispatch-check hace su propia lectura en vivo.
-describe('ct-next — TODOS los slices seleccionados se saltan al reclamar → no silencioso (D2, finding 1)', () => {
-  it('cero lanzados de dos seleccionados → línea de conteo, wording sin promesa falsa, y exit distinto de 0', () => {
+// D2, finding 1: when EVERY selected slice of the batch is skipped at claim
+// time (each one really collides, live, with work another process claimed just
+// after ct-next loaded its own snapshot of issues — the same honest warning
+// about "no compare-and-swap" documented in dispatch-check.mjs), the process
+// ended in exit 0 with no trace at all that zero agents were launched, and the
+// last line ("sigo con el resto de esta tanda") promised to carry on when there
+// was no candidate left. Reproduction: cap=2, #41 and #42 do not collide WITH
+// EACH OTHER (so ct-next selects both with its own snapshot, which does not see
+// #99 in flight yet) but each of them, separately, really collides with #99
+// when dispatch-check does its own live read.
+describe('ct-next — EVERY selected slice is skipped at claim time → not silent (D2, finding 1)', () => {
+  it('zero launched out of two selected → a count line, wording with no false promise, and a non-zero exit', () => {
     const repoRoot = makeRepoRoot()
     const openIssue41x = { number: 41, title: '#41 x', labels: [{ name: 'status:ready' }, { name: 'touches:x' }], body: '' }
     const openIssue42y = { number: 42, title: '#42 y', labels: [{ name: 'status:ready' }, { name: 'touches:y' }], body: '' }
@@ -461,38 +456,38 @@ describe('ct-next — TODOS los slices seleccionados se saltan al reclamar → n
     const gitLog = join(repoRoot, 'git-log')
     const r = runReal(['--repo', 'o/r', '--cap', '2'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
-      // idx0: ct-next open (sin #99 en vuelo todavía — la carrera es
-      // exactamente que otro proceso lo reclama DESPUÉS de esta foto) ;
-      // idx1: ct-next closed ; idx2: dispatch-check(#41) collision-check
-      // (#99 YA en vuelo, comparte 'x') ; idx3: dispatch-check(#42)
-      // collision-check (#99, comparte 'y').
+      // idx0: ct-next open (without #99 in flight yet — the race is exactly
+      // that another process claims it AFTER this snapshot) ; idx1: ct-next
+      // closed ; idx2: dispatch-check(#41) collision-check (#99 ALREADY in
+      // flight, it shares 'x') ; idx3: dispatch-check(#42) collision-check
+      // (#99, it shares 'y').
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue41x, openIssue42y], [], [inFlight99], [inFlight99]]),
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:x', 'touches:y']),
       FAKE_GH_COUNTER_FILE: counterFile,
       FAKE_GIT_LOG_FILE: gitLog,
     })
-    // Ningún worktree debió crearse: los dos candidatos se saltaron.
+    // No worktree should have been created: both candidates were skipped.
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
     expect(r.out).not.toMatch(/lanzado #/)
-    // Conteo terminal explícito de cuántos de cuántos se lanzaron.
+    // An explicit terminal count of how many out of how many were launched.
     expect(r.out).toMatch(/lanzad[oa]s? 0.*2/i)
-    // #41 (no es el último) sigue diciendo que continúa con el resto.
+    // #41 (not the last one) still says it carries on with the rest.
     expect(r.out).toMatch(/saltando #41:.*sigo con el resto/i)
-    // #42 (el ÚLTIMO candidato) YA NO promete "sigo con el resto" — no
-    // queda nada con lo que seguir.
+    // #42 (the LAST candidate) NO LONGER promises "sigo con el resto" — there
+    // is nothing left to carry on with.
     expect(r.out).toMatch(/saltando #42:.*no quedan más candidatos/i)
     expect(r.out).not.toMatch(/saltando #42:.*sigo con el resto/i)
-    // Exit code FIJADO a 3 (D2 review, menor 2): antes se comprobaba con
-    // `not.toBe(0)`/`not.toBe(2)`, que un futuro cambio que colapsara este
-    // caso en el 1 ("algo se rompió") seguiría pasando en verde — el propio
-    // contrato que este finding introduce (distinguir "reintenta luego" de
-    // "para y mira") solo se prueba de verdad fijando el valor exacto.
+    // Exit code PINNED to 3 (D2 review, minor 2): before it was checked with
+    // `not.toBe(0)`/`not.toBe(2)`, which a future change collapsing this case
+    // into 1 ("something broke") would still pass green — the very contract
+    // this finding introduces (telling "retry later" apart from "stop and
+    // look") is only really proved by pinning the exact value.
     expect(r.code).toBe(3)
-    // D2 review, importante 1: cada línea de COLLISION de dispatch-check
-    // debe aparecer UNA sola vez — antes, `attemptClaim` reenviaba el
-    // stderr del hijo dos veces (una por el reenvío por defecto de Node en
-    // execFileSync, otra por el propio `process.stderr.write` del wrapper).
+    // D2 review, important 1: every COLLISION line of dispatch-check must
+    // appear ONCE only — before, `attemptClaim` forwarded the child's stderr
+    // twice (once through Node's default forwarding in execFileSync, once
+    // through the wrapper's own `process.stderr.write`).
     expect(countOccurrences(r.out, 'COLLISION: #41 choca con #99')).toBe(1)
     expect(countOccurrences(r.out, 'COLLISION: #42 choca con #99')).toBe(1)
   })

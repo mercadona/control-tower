@@ -53,6 +53,30 @@ the YAML keys of `.agent/STATE.md`, or the paths that code validates against —
 `docs/superpowers/plans` is checked by `plan-contract-progress.js` and read by
 `task-brief.test.js`; it is a contract, not a name you are free to translate.
 
+### The parsed headings — Spanish, and contract until a coordinated change
+
+Ten markdown headings are anchors the code locates sections by. They read as
+prose and they are still Spanish, and they are contract anyway:
+
+| Heading | Pinned at |
+|---|---|
+| `## Contexto del epic` | `plugin/scripts/groom.js` `EPIC_CONTEXT_HEADING` |
+| `## Contexto heredado` | `plugin/scripts/groom.js` `INHERITED_CONTEXT_HEADING` |
+| `## Decisiones congeladas` | `plugin/scripts/groom.js` `FROZEN_DECISIONS_HEADING` |
+| `## Dependencias` | `plugin/scripts/gh-issue-map.js` `DEPS_HEADING` |
+| `## Acceptance criteria (EARS, 1:1 con tests)` | `backend/src/infrastructure/gh-plan-issues.js` `AC_HEADING` |
+| `## Descripción`, `## Hipótesis`, `## Señal de observabilidad`, the judge's telemetry heading, `## Current State` with its dispatched-slice subtitle | literals in `plugin/scripts` and `backend/src` |
+
+Each lives in three places at once: the constant, the body of every live GitHub
+issue, and every governed repository's spec. Translating one is a coordinated
+change of all three in a single move — otherwise `/ct-groom --reconcile` stops
+finding the section and dispatch breaks. **Until that change happens they stay
+Spanish everywhere, issues and pull requests included.**
+
+The plan's own sections (`## 7. Tasks`, `## 8. Global verification`,
+`**Objective:**`, `**Files:**`, `**TDD:**`, `**Tests:**`, `**Verification:**`)
+are already English and are not affected.
+
 ## This repository does not take the declared-debt exemption for language
 
 `plugin/conventions/style.md` grants one exemption in the whole travelling

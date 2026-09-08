@@ -1,61 +1,62 @@
 // ============================================================================
-// PLAN-TASKS — el plan prescriptivo leído como una LISTA DE TAREAS EJECUTABLE.
+// PLAN-TASKS — the prescriptive plan read as an EXECUTABLE TASK LIST.
 //
-// `plan-contract.js` ya dice si un plan es un plan: que están las nueve
-// secciones, que las tareas van numeradas sin huecos, que cada una lleva sus
-// cinco marcadores y que el código que cita existe verbatim. Lo que no dice es
-// qué hay que EJECUTAR para saber si una tarea quedó verde — y eso es
-// exactamente lo que un conductor que no razona necesita del plan.
+// `plan-contract.js` already says whether a plan is a plan: that the nine
+// sections are there, that the tasks are numbered without gaps, that each one
+// carries its five markers and that the code it quotes exists verbatim. What it
+// does not say is what has to be EXECUTED to know whether a task came out green
+// — and that is exactly what a conductor that does not reason needs from the
+// plan.
 //
-// Este módulo extrae, por tarea: los comandos de su **Verification:**, los
-// nombres de test que la tarea AÑADE y los que RETIRA a propósito, las rutas
-// de **Files:**, el nombre del test que declara **TDD:**, la ruta de cada
-// bloque con etiqueta de rol y el texto literal de sus bloques `Final text`.
-// Con eso, el programa mide la tarea sin preguntarle al implementador si le
-// salió bien.
+// This module extracts, per task: the commands of its **Verification:**, the
+// test names the task ADDS and the ones it REMOVES on purpose, the paths of
+// **Files:**, the name of the test its **TDD:** declares, the path of every
+// block carrying a role label and the literal text of its `Final text` blocks.
+// With that, the program measures the task without asking the implementer
+// whether it went well.
 //
-// PURO a propósito, como `plan-contract.js`: entra el markdown, sale la lista.
-// Ni un import.
+// PURE on purpose, like `plan-contract.js`: the markdown goes in, the list
+// comes out. Not one import.
 //
 // ---------------------------------------------------------------------------
-// LO QUE ESTE PARSER TIENE MEDIDO (y por qué no vale validarlo con la plantilla)
+// WHAT THIS PARSER HAS MEASURED (and why validating it against the template is
+// no good)
 //
-// Todo lo de aquí abajo salió de un plan REAL —el del slice #5 de repo-pulse,
-// 534 líneas, 8 tareas, `__tests__/fixtures/plan-real-issue-5.md`— y ninguna de
-// las tres trampas aparece en `plan-template.md`. Un parser validado contra la
-// plantilla pasa en verde y luego se rompe con el primer plan de verdad.
+// Everything below came out of a REAL plan —the one of slice #5 of repo-pulse,
+// 534 lines, 8 tasks, `__tests__/fixtures/plan-real-issue-5.md`— and not one of
+// the three traps appears in `plan-template.md`. A parser validated against the
+// template goes green and then breaks with the first real plan.
 //
-// 1. LOS COMANDOS VAN EN EL BLOQUE CERCADO, NO EN LA LÍNEA. En línea llegan
-//    mezclados con prosa ("→ exit 0.", "y después:", un `wc -l AGENTS.md`
-//    dentro de un paréntesis explicativo) y no hay forma honrada de separar el
-//    comando del comentario. Y tiene que ser el bloque INMEDIATAMENTE
-//    posterior, no cualquier bloque de la tarea: las tareas reales llevan sus
-//    propios bloques `Contract (path):` y `Current state (path):`, que son
-//    código citado, no comandos.
+// 1. THE COMMANDS GO IN THE FENCED BLOCK, NOT ON THE LINE. On the line they
+//    arrive mixed with prose ("→ exit 0.", "y después:", a `wc -l AGENTS.md`
+//    inside an explanatory parenthesis) and there is no honest way to separate
+//    the command from the comment. And it has to be the block IMMEDIATELY
+//    after, not any block of the task: real tasks carry their own `Contract
+//    (path):` and `Current state (path):` blocks, which are quoted code, not
+//    commands.
 //
-//    El párrafo de **Verification:** puede ocupar varias líneas (la tarea 8 del
-//    plan real ocupa dos) y puede llevar texto en línea ANTES del bloque (la
-//    tarea 1 dice "`npm install` y después:"). Las dos formas se aceptan: lo
-//    que se mira es el primer cercado que abre tras el párrafo.
+//    The **Verification:** paragraph can span several lines (task 8 of the real
+//    plan spans two) and can carry inline text BEFORE the block (task 1 says
+//    "`npm install` y después:"). Both forms are accepted: what is looked at is
+//    the first fence that opens after the paragraph.
 //
-// 2. LOS PARÉNTESIS SE BARREN POR PROFUNDIDAD. Los nombres de test viven entre
-//    comillas simples, a veces envueltos en backticks, y llevan detrás
-//    paréntesis explicativos que CONTIENEN paréntesis:
+// 2. PARENTHESES ARE SWEPT BY DEPTH. Test names live between single quotes,
+//    sometimes wrapped in backticks, and carry explanatory parentheses behind
+//    them that CONTAIN parentheses:
 //
 //      'a zero series sits on the baseline' (polylinePoints([0, 0], 1) es
 //      '0.0,199.0 600.0,199.0')
 //
-//    Un barrido de un solo nivel (/\([^()]*\)/g) no casa ese paréntesis, así
-//    que `0.0,199.0 600.0,199.0` se cuela como nombre de test, no aparece en
-//    ningún fichero y BLOQUEA LA TAREA CON UN FALSO POSITIVO. Con barrido por
-//    profundidad, las ocho líneas **Tests:** del plan real extraen sus nombres
-//    y ni uno más.
+//    A single-level sweep (/\([^()]*\)/g) does not match that parenthesis, so
+//    `0.0,199.0 600.0,199.0` sneaks in as a test name, appears in no file and
+//    BLOCKS THE TASK WITH A FALSE POSITIVE. With a sweep by depth, the eight
+//    **Tests:** lines of the real plan extract their names and not one more.
 //
-// 3. EL MARCADOR DE RETIRADA TIENE TRES FORMAS: "removed on purpose:" (la
-//    plantilla, en inglés), "retira a propósito" y "retira" a secas. Exigir la
-//    forma larga deja sin partir la tarea que usa la corta y mete su test
-//    retirado en la lista de los que DEBEN EXISTIR: exactamente lo contrario de
-//    lo correcto.
+// 3. THE REMOVAL MARKER HAS THREE FORMS: "removed on purpose:" (the template,
+//    in English), "retira a propósito" and a bare "retira". Demanding the long
+//    form leaves the task that uses the short one unsplit and puts its removed
+//    test into the list of the ones that MUST EXIST: exactly the opposite of
+//    what is right.
 // ============================================================================
 
 const TASK_HEADING = /^### Task (\d+) — (.*)$/
@@ -64,18 +65,19 @@ const TESTS = '**Tests:**'
 const FILES = '**Files:**'
 const TDD = '**TDD:**'
 
-// Cualquier otro marcador de tarea corta el párrafo: si tras **Verification:**
-// viene **Objective:** en vez de un bloque, es que no hay bloque, y decirlo es
-// mejor que seguir buscando hasta el final del fichero.
+// Any other task marker cuts the paragraph: if after **Verification:** comes
+// **Objective:** instead of a block, then there is no block, and saying so is
+// better than going on searching to the end of the file.
 const OTHER_MARKERS = ['**Objective:**', FILES, TDD, TESTS]
 
-// Las tres formas del §2.5. El orden importa: "retira a propósito" antes que
-// "retira", o la corta se come a la larga y parte por el sitio equivocado.
+// The three forms of §2.5. The order matters: "retira a propósito" before
+// "retira", or the short one eats the long one and splits in the wrong place.
 const REMOVAL_MARKERS = ['removed on purpose:', 'retira a propósito', 'retira']
 
-// Mismo parseo de cercados que `plan-contract.js`: un fence abre y cierra con
-// una línea que EMPIEZA por tres backticks. Se repite aquí y no se importa
-// porque este módulo no depende de aquél y la duplicación son ocho líneas.
+// Same fence parsing as `plan-contract.js`: a fence opens and closes with a
+// line that STARTS with three backticks. It is repeated here and not imported
+// because this module does not depend on that one and the duplication is eight
+// lines.
 function annotate(markdown) {
   const out = []
   let inFence = false
@@ -90,9 +92,9 @@ function annotate(markdown) {
   return out
 }
 
-// El barrido de la trampa 2. Se recorre carácter a carácter contando
-// profundidad en vez de aplicar una expresión regular, porque una expresión
-// regular sin recursión no sabe contar paréntesis.
+// The sweep of trap 2. It walks character by character counting depth instead
+// of applying a regular expression, because a regular expression without
+// recursion cannot count parentheses.
 export function stripParenthesised(text) {
   let depth = 0
   let out = ''
@@ -104,10 +106,10 @@ export function stripParenthesised(text) {
   return out
 }
 
-// Los nombres de test son lo que va entre comillas simples una vez barridos los
-// paréntesis. Los backticks se tiran: envuelven tanto nombres de test
-// (`'lists the clones'`) como identificadores de código (`window=all`), así que
-// no distinguen nada y sí estorban.
+// Test names are what goes between single quotes once the parentheses have been
+// swept. The backticks are dropped: they wrap both test names
+// (`'lists the clones'`) and code identifiers (`window=all`), so they
+// distinguish nothing and do get in the way.
 function quotedNames(text) {
   const limpio = stripParenthesised(text).replace(/`/g, '')
   const nombres = []
@@ -120,8 +122,8 @@ function quotedNames(text) {
   return nombres
 }
 
-// Parte la línea de **Tests:** en lo que la tarea añade y lo que retira. Sin
-// marcador de retirada, todo son añadidos.
+// Splits the **Tests:** line into what the task adds and what it removes. With
+// no removal marker, everything is an addition.
 function splitTests(text) {
   const bajo = text.toLowerCase()
   let corte = -1
@@ -137,19 +139,19 @@ function splitTests(text) {
   }
 }
 
-// Las únicas dos acciones que el resto del programa sabe interpretar
-// (`alcanceDeclarado`, en ct-step.mjs, sólo tiene ramas para éstas). Igual que
-// "una ruta sin acción declarada no se comprueba contra git, y no es un
-// problema del plan", una acción que no sea ninguna de las dos tampoco lo es:
-// mejor no comprobar nada que comprobar con un valor que nadie declaró.
+// The only two actions the rest of the program knows how to interpret
+// (`alcanceDeclarado`, in ct-step.mjs, only has branches for these). Just like
+// "a path with no declared action is not checked against git, and that is not a
+// problem of the plan", an action that is neither of the two is not one either:
+// better to check nothing than to check with a value nobody declared.
 const KNOWN_ACTIONS = ['create', 'modify']
 
-// Parte el párrafo de **Files:** en las rutas que declara, con su acción.
-// Formato real, medido en el plan del slice #5:
+// Splits the **Files:** paragraph into the paths it declares, with their
+// action. Real format, measured in the plan of slice #5:
 //   **Files:** `web/package.json` (modify), `web/src/testing/setup.ts` (create)
-// Los backticks se tiran; la acción es opcional (una ruta sin paréntesis
-// detrás queda con action: null), y lo que no sea "create" ni "modify"
-// también queda en null en vez de colarse tal cual.
+// The backticks are dropped; the action is optional (a path with no parenthesis
+// behind it is left with action: null), and anything that is neither "create"
+// nor "modify" is also left as null instead of sneaking through as it is.
 export function splitFiles(text) {
   const rutas = []
   const re = /`([^`]+)`(?:\s*\(([^)]+)\))?/g
@@ -164,9 +166,9 @@ export function splitFiles(text) {
   return rutas
 }
 
-// Las cuatro etiquetas de rol de un bloque del plan, con su ruta. Duplicadas
-// de `plan-contract.js` (constante `ROLE_LABELS`), por la misma razón que
-// `annotate`: este módulo no depende de aquél.
+// The four role labels of a block of the plan, with their path. Duplicated
+// from `plan-contract.js` (constant `ROLE_LABELS`), for the same reason as
+// `annotate`: this module does not depend on that one.
 export const ROLES = ['Current state', 'Contract', 'Call site', 'Final text']
 
 const ROLE_LABELS = [
@@ -184,10 +186,10 @@ function roleOf(line) {
   return null
 }
 
-// El cuerpo del cercado que sigue a una línea, saltando líneas en blanco antes
-// de él. Se devuelve tal cual, sin recortar: un bloque `Final text` es
-// contenido literal, y lo que hay que comprobar es justo lo que no se toca.
-// Duplicada de `plan-contract.js`, por la misma razón que `annotate`.
+// The body of the fence that follows a line, skipping the blank lines before
+// it. It is returned as it is, untrimmed: a `Final text` block is literal
+// content, and what has to be checked is precisely what is not touched.
+// Duplicated from `plan-contract.js`, for the same reason as `annotate`.
 function fenceBodyAfter(lines, from) {
   let i = from
   while (i < lines.length && lines[i].line.trim() === '') i++
@@ -200,15 +202,15 @@ function fenceBodyAfter(lines, from) {
   return null
 }
 
-// El nombre de test de **TDD:** vive AL REVÉS que en **Tests:**: la comilla
-// está DENTRO del paréntesis de la llamada —`test('nombre')`—, no fuera con
-// una aclaración detrás. Medido contra la tarea 1 del plan real: aplicar
-// quotedNames al párrafo entero devuelve 'jsdom' (la comilla de
-// `environment: 'jsdom'`, más adelante en el mismo párrafo), porque el barrido
-// por profundidad se come el nombre real junto con los paréntesis de
-// `test(...)`. Por eso primero se aísla el interior del primer paréntesis
-// balanceado del párrafo, y SOBRE ESE interior sí vale quotedNames — que sigue
-// siendo el barrido correcto si el nombre citado trajera los suyos.
+// The test name of **TDD:** lives THE OTHER WAY ROUND than in **Tests:**: the
+// quote is INSIDE the parenthesis of the call —`test('nombre')`—, not outside
+// with a clarification behind it. Measured against task 1 of the real plan:
+// applying quotedNames to the whole paragraph returns 'jsdom' (the quote of
+// `environment: 'jsdom'`, further on in the same paragraph), because the sweep
+// by depth eats the real name along with the parentheses of `test(...)`. That
+// is why the inside of the first balanced parenthesis of the paragraph is
+// isolated first, and ON THAT inside quotedNames does hold — and it is still
+// the right sweep if the quoted name were to bring parentheses of its own.
 function firstParenBody(text) {
   const start = text.indexOf('(')
   if (start === -1) return null
@@ -223,8 +225,8 @@ function firstParenBody(text) {
   return null
 }
 
-// "No TDD — <razón>" es una declaración legítima: la tarea no lleva
-// comportamiento que poner en rojo, y no declara ningún test.
+// "No TDD — <reason>" is a legitimate declaration: the task carries no
+// behaviour to put in red, and declares no test.
 const NO_TDD = /^No TDD\b/i
 
 function tddNameOf(text) {
@@ -234,9 +236,9 @@ function tddNameOf(text) {
   return nombres[0] || null
 }
 
-// Junta el párrafo que arranca en `from`: la línea del marcador y sus
-// continuaciones, hasta la primera línea en blanco, otro marcador, un cercado o
-// un encabezado. Devuelve el texto sin el marcador y dónde se quedó.
+// Joins up the paragraph that starts at `from`: the marker's line and its
+// continuations, up to the first blank line, another marker, a fence or a
+// heading. Returns the text without the marker and where it stopped.
 function paragraphFrom(lines, from, marker) {
   const trozos = [lines[from].line.trim().slice(marker.length).trim()]
   let i = from + 1
@@ -250,10 +252,10 @@ function paragraphFrom(lines, from, marker) {
   return { text: trozos.join(' ').trim(), end: i }
 }
 
-// El bloque de comandos: el primer cercado que ABRE tras el párrafo de
-// **Verification:**, saltando líneas en blanco. Si antes de ese cercado aparece
-// cualquier otra cosa, no hay bloque — y eso es un plan que no se puede
-// ejecutar, no un detalle de formato.
+// The block of commands: the first fence that OPENS after the
+// **Verification:** paragraph, skipping blank lines. If anything else at all
+// appears before that fence, there is no block — and that is a plan that cannot
+// be executed, not a formatting detail.
 function commandsAfter(lines, from) {
   let i = from
   while (i < lines.length && lines[i].line.trim() === '') i++
@@ -265,44 +267,47 @@ function commandsAfter(lines, from) {
     if (t === '' || t.startsWith('#')) continue
     comandos.push(t)
   }
-  return null // cercado sin cerrar: no hay bloque que valga
+  return null // an unclosed fence: there is no block worth anything
 }
 
 // ============================================================================
-// LA VARA TIENE QUE PODER MEDIR LO QUE DICE MEDIR
+// THE YARDSTICK HAS TO BE ABLE TO MEASURE WHAT IT SAYS IT MEASURES
 //
-// `verification-block` cerró "la verificación es prosa". Esto cierra el agujero
-// de al lado, medido en jjponz/rust-monitoring#10: la verificación ES un comando
-// ejecutable, vive en su bloque, y su código de salida dice lo CONTRARIO de lo
-// que su comentario dice medir.
+// `verification-block` closed "the verification is prose". This closes the hole
+// right next to it, measured in jjponz/rust-monitoring#10: the verification IS
+// an executable command, it lives in its block, and its exit code says the
+// OPPOSITE of what its comment says it measures.
 //
 //   git diff HEAD -- AGENTS.md | grep -c 'ct-init:slices-contract'   # expected: 0
 //
-// `ct-step controls` puntúa SOLO por código de salida, y `grep -c` sale con 1
-// cuando no encuentra nada y con 0 cuando encuentra. O sea que ese control solo
-// podía ponerse verde en el caso MALO —la sección protegida tocada— y fallaba
-// siempre en el bueno. Ninguna implementación podía superarlo, y aun así pasó
-// `--check-plan` y pasó el gate humano de un humano leyendo 246 líneas en 125
-// segundos. El comentario decía la verdad; el exit code decía lo contrario, y el
-// exit code es el que manda.
+// `ct-step controls` scores ONLY by exit code, and `grep -c` exits with 1 when
+// it finds nothing and with 0 when it finds something. Which means that check
+// could only go green in the BAD case —the protected section touched— and
+// failed always in the good one. No implementation could pass it, and even so
+// it passed `--check-plan` and it passed the human gate of a human reading 246
+// lines in 125 seconds. The comment told the truth; the exit code said the
+// opposite, and the exit code is the one that rules.
 //
-// LO QUE ESTA REGLA NO HACE: leer el `# expected:`. Ahí empieza a adivinar —el
-// comentario es prosa libre y "exit 0, 1 passed" lleva un número dentro. Lo que
-// mira es el ÚLTIMO TRAMO de la tubería, que es lo que decide `$?`, contra una
-// lista CERRADA de comandos cuyo código de salida es demostrablemente
-// independiente de lo que el plan afirma. Cada entrada trae su prueba y su
-// remedio; nada más se toca.
+// WHAT THIS RULE DOES NOT DO: read the `# expected:`. That is where it would
+// start guessing —the comment is free prose and "exit 0, 1 passed" carries a
+// number inside. What it looks at is the LAST STAGE of the pipeline, which is
+// what decides `$?`, against a CLOSED list of commands whose exit code is
+// demonstrably independent of what the plan claims. Every entry brings its
+// evidence and its remedy; nothing else is touched.
 //
-// Y CALLA CUANDO NO PUEDE PROBARLO: ante `&&`, `||` o `;` no se pronuncia,
-// porque entonces el exit code depende de qué llegó a correr. Un falso positivo
-// aquí bloquea un plan correcto en un gate, que es peor que el agujero.
+// AND IT KEEPS QUIET WHEN IT CANNOT PROVE IT: faced with `&&`, `||` or `;` it
+// does not pronounce, because then the exit code depends on what got to run. A
+// false positive here blocks a correct plan at a gate, which is worse than the
+// hole.
 
-// El último tramo de la tubería, sin su comentario final. `null` = no se analiza
-// (hay encadenamiento y el exit code ya no es de un solo comando).
+// The last stage of the pipeline, without its trailing comment. `null` = it is
+// not analysed (there is chaining and the exit code is no longer that of a
+// single command).
 //
-// Respeta comillas y `$(...)`: sin lo segundo, el propio ARREGLO del control de
-// rust-monitoring —`test "$(… | grep -c …)" -eq 0`— se leería como una tubería
-// que acaba en `grep -c` y la regla vetaría la corrección en vez del defecto.
+// It respects quotes and `$(...)`: without the second, the very FIX of the
+// rust-monitoring check —`test "$(… | grep -c …)" -eq 0`— would read as a
+// pipeline ending in `grep -c` and the rule would veto the correction instead
+// of the defect.
 export function lastPipelineStage(command) {
   let stage = ''
   let quote = null
@@ -329,41 +334,41 @@ export function lastPipelineStage(command) {
   return { stage: stage.trim(), piped }
 }
 
-// Un flag corto que lleve la letra pedida (`-c`, `-rc`, `-ic`), o su forma
-// larga. `--color` no cuenta: empieza por dos guiones y no es `--count`.
+// A short flag carrying the letter asked for (`-c`, `-rc`, `-ic`), or its long
+// form. `--color` does not count: it starts with two hyphens and is not
+// `--count`.
 const shortFlagHas = (arg, letra) => /^-[A-Za-z]+$/.test(arg) && arg.includes(letra)
 
-// «Esto es un `grep -c`» es UNA decisión — qué programas cuentan coincidencias
-// y con qué bandera —, y se pregunta desde dos sitios: la regla que rechaza
-// `grep -c` a secas, y el auxiliar que cuenta sus ficheros. Vivir en dos
-// copias es lo que `conventions/decisions.md` prohíbe: añadir `rg
-// --count-matches` a una y no a la otra dejaría a la otra sin enterarse.
+// «This is a `grep -c`» is ONE decision — which programs count matches and
+// with which flag —, and it is asked from two places: the rule that rejects a
+// bare `grep -c`, and the helper that counts its files. Living in two copies is
+// what `conventions/decisions.md` forbids: adding `rg --count-matches` to one
+// and not to the other would leave the other one none the wiser.
 const isGrepCountInvocation = (words) => /^(grep|egrep|fgrep|rg)$/.test(words[0]) &&
   words.slice(1).some((a) => a === '--count' || shortFlagHas(a, 'c'))
 
-// La lista cerrada. `words` son las palabras del último tramo.
-// EL PREDICADO QUE NO PUEDE MEDIR PORQUE `grep -c` CAMBIA DE FORMA CON DOS
-// FICHEROS. Medido en el slice #35 de repo-pulse, que se bloqueó por esto.
+// The closed list. `words` are the words of the last stage.
+// THE PREDICATE THAT CANNOT MEASURE BECAUSE `grep -c` CHANGES SHAPE WITH TWO
+// FILES. Measured in slice #35 of repo-pulse, which got blocked by this.
 //
-// `test "$(… | grep -c …)" -eq N` es la forma que este mismo vocabulario
-// RECOMIENDA, y con un solo flujo es correcta: `grep -c` imprime un número. Con
-// DOS O MÁS ficheros como argumentos imprime `fichero:cuenta` por cada uno, así
-// que la sustitución devuelve varias líneas, `test` recibe un no-entero y sale
-// con 2 —«integer expression expected»— diga lo que diga el código. Rojo
-// siempre, y ningún implementador puede arreglarlo desde el código: lo que está
-// roto es la vara.
+// `test "$(… | grep -c …)" -eq N` is the form this very vocabulary RECOMMENDS,
+// and with a single stream it is correct: `grep -c` prints a number. With TWO
+// OR MORE files as arguments it prints `file:count` for each one, so the
+// substitution returns several lines, `test` receives a non-integer and exits
+// with 2 —«integer expression expected»— whatever the code says. Red always,
+// and no implementer can fix it from the code: what is broken is the yardstick.
 //
-// Por qué hacía falta una regla y no bastaba la de `grep -c`: aquélla mira la
-// CABEZA del tramo, y en cuanto la cuenta se envuelve en `test` la cabeza es
-// `test`. O sea que la forma recomendada era también la que dejaba de
-// inspeccionarse.
+// Why a rule was needed and the `grep -c` one was not enough: that one looks at
+// the HEAD of the stage, and as soon as the count is wrapped in `test` the head
+// is `test`. Which means the recommended form was also the one that stopped
+// being inspected.
 //
-// SE DECIDE EN FALSO ANTES QUE EN FALSO POSITIVO. Un falso negativo deja pasar
-// un control que se bloqueará —lo que pasa hoy—; un falso positivo tumba un plan
-// válido y no hay forma de que su autor lo arregle. Así que sólo se acusa cuando
-// se han contado dos operandos con certeza: se respetan las comillas, se consume
-// el argumento de `-e`/`--regexp`, y cualquier cosa que no se sepa trocear
-// devuelve `null` y no se acusa a nadie.
+// IT ERRS TOWARD THE FALSE NEGATIVE BEFORE THE FALSE POSITIVE. A false negative
+// lets through a check that will get blocked —which is what happens today—; a
+// false positive brings down a valid plan and there is no way for its author to
+// fix it. So it only accuses when two operands have been counted with
+// certainty: quotes are respected, the argument of `-e`/`--regexp` is consumed,
+// and anything it cannot split returns `null` and accuses nobody.
 function splitRespectingQuotes(text) {
   const out = []
   let current = ''
@@ -379,23 +384,25 @@ function splitRespectingQuotes(text) {
   return out
 }
 
-// `-e`/`--regexp` es la única bandera cuyo argumento ES el patrón: consumirlo
-// cierra `patternTaken` a propósito.
+// `-e`/`--regexp` is the only flag whose argument IS the pattern: consuming it
+// closes `patternTaken` on purpose.
 const PATTERN_FLAGS = new Set(['-e', '--regexp'])
 
-// El resto de banderas que se llevan un argumento propio detrás no aportan ni
-// el patrón ni un fichero — contar ese argumento como fichero es el falso
-// positivo medido en `-m 1`: sin distinguirla de `-e`, el «1» de `-m 1` cerraba
-// `patternTaken` y el patrón de verdad, que venía justo después, se contaba
-// como el primer fichero. Se consume igual, pero SIN tocar `patternTaken`.
+// The rest of the flags that take an argument of their own behind them
+// contribute neither the pattern nor a file — counting that argument as a file
+// is the false positive measured on `-m 1`: without telling it apart from `-e`,
+// the «1» of `-m 1` closed `patternTaken` and the real pattern, which came
+// right after, was counted as the first file. It is consumed all the same, but
+// WITHOUT touching `patternTaken`.
 const VALUE_TAKING_FLAGS = new Set(['-m', '--max-count'])
 
-// Una redirección de shell (`>`, `>>`, `<`, `2>`, `2>&1`…) no es un operando
-// de grep — es lo que viene DESPUÉS de la llamada. Medido: `grep -c 'x' a.ts
-// 2>/dev/null` tiene un solo fichero de verdad y `2>/dev/null` se colaba como
-// el segundo. En cuanto aparece, deja de haber certeza sobre lo que sigue, así
-// que se corta ahí — coherente con "sólo se acusa con dos operandos con
-// certeza": aquí ni siquiera se afirma que no haya dos, se deja de contar.
+// A shell redirection (`>`, `>>`, `<`, `2>`, `2>&1`…) is not an operand of
+// grep — it is what comes AFTER the call. Measured: `grep -c 'x' a.ts
+// 2>/dev/null` has a single real file and `2>/dev/null` was sneaking in as the
+// second one. As soon as one appears, there is no longer any certainty about
+// what follows, so it stops there — coherent with "it only accuses with two
+// operands with certainty": here it does not even claim there are not two, it
+// just stops counting.
 const looksLikeRedirection = (word) => /^\d*&?[<>]/.test(word)
 
 function grepCountFileOperands(stage) {
@@ -416,12 +423,12 @@ function grepCountFileOperands(stage) {
   return operands.length
 }
 
-// Dentro de comillas SIMPLES el shell no expande nada: `'$(grep -c a b)'` es
-// el texto literal ocho caracteres, no una sustitución. Medido: `grep -Fq
-// '$(grep -c mark a.ts b.ts)' incidencias.md` es un grep legítimo buscando esa
-// cadena, y sin este barrido exterior se leía como una sustitución real con
-// dos ficheros. Dentro de comillas DOBLES el shell SÍ expande `$(...)`, así
-// que ahí se sigue buscando.
+// Inside SINGLE quotes the shell expands nothing: `'$(grep -c a b)'` is the
+// literal text, those eight characters, not a substitution. Measured: `grep -Fq
+// '$(grep -c mark a.ts b.ts)' incidencias.md` is a legitimate grep looking for
+// that string, and without this outer sweep it read as a real substitution with
+// two files. Inside DOUBLE quotes the shell DOES expand `$(...)`, so there the
+// search goes on.
 function substitutionsIn(stage) {
   const out = []
   let outerQuote = null
@@ -487,31 +494,31 @@ const NOT_A_PREDICATE = [
 ]
 
 // ============================================================================
-// `## 8. Global verification` ES DEL PROGRAMA, NO DE PROSA (§3.7-A del handoff
-// docs/prompt-juez-lo-que-queda.md).
+// `## 8. Global verification` BELONGS TO THE PROGRAM, NOT TO PROSE (§3.7-A of
+// the handoff docs/prompt-juez-lo-que-queda.md).
 //
-// El plan declara la validación de punta a punta para cuando todas las tareas
-// estén comiteadas, y hasta este slice ningún programa la ejecutaba: `ct-step
-// controls` sólo mide el bloque **Verification:** DE CADA TAREA — cero
-// referencias a §8 en todo el fichero. Es la misma trampa del §2.5 que ya
-// cerró `verification-block` para las tareas —prosa no es ejecutable— y el
-// mismo remedio: los comandos van en un bloque cercado, con el escape
-// declarable "N/A — <razón>" para el slice que de verdad no tiene punta a
-// punta que correr (documentación, configuración pura). Exigir un comando a
-// ese slice sería el guard imposible de F14 otra vez, sólo que aplicado a §8.
+// The plan declares the end-to-end validation for when every task is
+// committed, and until this slice no program ran it: `ct-step controls` only
+// measures the **Verification:** block OF EACH TASK — zero references to §8 in
+// the whole file. It is the same trap of §2.5 that `verification-block` already
+// closed for the tasks —prose is not executable— and the same remedy: the
+// commands go in a fenced block, with the declarable escape "N/A — <reason>"
+// for the slice that genuinely has no end-to-end to run (documentation, pure
+// configuration). Demanding a command from that slice would be the impossible
+// guard of F14 all over again, only applied to §8.
 //
-// A diferencia del bloque por tarea, aquí SÍ se admite prosa antes Y DESPUÉS
-// del fence: §8 lleva también el "qué mirar" para el gate humano `visual`
-// (arrancar los servidores, abrir la URL, comprobar tres cosas a ojo), y esa
-// prosa no es el objeto de esta regla — sólo el bloque de comandos lo es. Por
-// eso la búsqueda del fence no exige que sea el primero tras el encabezado
-// (como sí exige `commandsAfter` para **Verification:**): recorre todo el
-// tramo de §8 y se queda con el PRIMERO que abre.
+// Unlike the per-task block, here prose IS allowed before AND AFTER the fence:
+// §8 also carries the "what to look at" for the `visual` human gate (start the
+// servers, open the URL, check three things by eye), and that prose is not the
+// object of this rule — only the block of commands is. That is why the search
+// for the fence does not demand that it be the first one after the heading (as
+// `commandsAfter` does demand for **Verification:**): it walks the whole
+// stretch of §8 and keeps the FIRST one that opens.
 //
-// Reusa `lastPipelineStage` y `NOT_A_PREDICATE`: la vara que impide que un
-// control mida al revés es la misma para el bloque por tarea y para el bloque
-// de §8 — el `grep -c` invertido de rust-monitoring#10 es el mismo defecto
-// aquí que allí.
+// It reuses `lastPipelineStage` and `NOT_A_PREDICATE`: the yardstick that stops
+// a check from measuring backwards is the same for the per-task block and for
+// the §8 block — the inverted `grep -c` of rust-monitoring#10 is the same
+// defect here as there.
 // ============================================================================
 const GLOBAL_HEADING = /^## 8\. Global verification\b/
 const GLOBAL_NA = /^N\/A\b/i
@@ -526,8 +533,9 @@ function extractGlobal(lines, push) {
   if (hasta === -1) hasta = lines.length
   const cuerpo = lines.slice(desde + 1, hasta)
 
-  // El escape: "N/A — <razón>" como primera línea no vacía del tramo declara
-  // que este slice no tiene punta a punta que correr, y no es un problema.
+  // The escape: "N/A — <reason>" as the first non-blank line of the stretch
+  // declares that this slice has no end-to-end to run, and that is not a
+  // problem.
   const primeraNoVacia = cuerpo.find((l) => l.structural && l.line.trim() !== '')
   if (primeraNoVacia && GLOBAL_NA.test(primeraNoVacia.line.trim())) return { commands: [] }
 
@@ -541,7 +549,7 @@ function extractGlobal(lines, push) {
       if (t === '' || t.startsWith('#')) continue
       comandos.push(t)
     }
-    // Cercado sin cerrar: no hay bloque que valga, igual que en `commandsAfter`.
+    // An unclosed fence: no block worth anything, just as in `commandsAfter`.
     if (!cuerpo.slice(abre + 1).some((l) => l.fence)) comandos = null
   }
 
@@ -564,21 +572,21 @@ function extractGlobal(lines, push) {
 }
 
 // ============================================================================
-// LA ENTRADA PÚBLICA
+// THE PUBLIC ENTRY POINT
 //
-// Devuelve `{ tasks, problems, global }`. `problems` no está vacío cuando el
-// plan no es ejecutable, y su presencia es lo que el conductor traduce a su
-// código de salida 6: "arregla el plan", que no es lo mismo que "el trabajo
-// está mal". `global` es lo que hay que ejecutar tras la última tarea
-// comiteada (§3.7-A): `{ commands }`, vacío cuando §8 declara "N/A" o cuando
-// el plan no la trae ejecutable (y entonces hay un `problem` que lo explica).
+// Returns `{ tasks, problems, global }`. `problems` is not empty when the plan
+// is not executable, and its presence is what the conductor translates into its
+// exit code 6: "fix the plan", which is not the same as "the work is wrong".
+// `global` is what has to be executed after the last task is committed
+// (§3.7-A): `{ commands }`, empty when §8 declares "N/A" or when the plan does
+// not bring it executable (and then there is a `problem` that explains it).
 // ============================================================================
 export function extractTasks(markdown) {
   const lines = annotate(markdown)
   const problems = []
   const push = (task, rule, detail) => problems.push({ task, rule, detail })
 
-  // Los encabezados de tarea, con el trozo de fichero que le toca a cada una.
+  // The task headings, with the piece of the file that falls to each one.
   const heads = []
   lines.forEach((l, i) => {
     if (!l.structural) return
@@ -611,8 +619,8 @@ export function extractTasks(markdown) {
       if (t.startsWith(TESTS) && !testsDeclared) {
         testsDeclared = true
         const { text } = paragraphFrom(cuerpo, i, TESTS)
-        // "N/A — <razón>" es una declaración legítima: la tarea no añade
-        // comportamiento y la suite existente debe seguir verde.
+        // "N/A — <reason>" is a legitimate declaration: the task adds no
+        // behaviour and the existing suite must stay green.
         if (!/^N\/A\b/i.test(text)) {
           const partido = splitTests(text)
           added = partido.added
@@ -623,11 +631,12 @@ export function extractTasks(markdown) {
         filesDeclared = true
         const { text } = paragraphFrom(cuerpo, i, FILES)
         files = splitFiles(text)
-        // Hay texto y no salió ni una ruta: casi siempre porque las rutas no
-        // van entre backticks, que es lo único que `splitFiles` reconoce. Sin
-        // este aviso, `alcanceDeclarado` (en ct-step.mjs) ve `files: []` y
-        // reporta TODO lo tocado como fuera de alcance, con un mensaje que no
-        // menciona el formato — falla del lado seguro, pero a ciegas.
+        // There is text and not one path came out: almost always because the
+        // paths do not go between backticks, which is the only thing
+        // `splitFiles` recognises. Without this warning, `alcanceDeclarado`
+        // (in ct-step.mjs) sees `files: []` and reports EVERYTHING touched as
+        // out of scope, with a message that does not mention the format — it
+        // fails on the safe side, but blindly.
         if (text.trim() !== '' && files.length === 0) {
           push(h.n, 'files-line', `la tarea ${h.n} declara "${FILES}" pero no se extrajo ninguna ruta: las rutas van entre backticks, por ejemplo \`path/to/fichero.ext\` (create).`)
         }
@@ -681,11 +690,11 @@ export function extractTasks(markdown) {
 
   if (!tasks.length) push(0, 'tasks', 'el plan no declara ninguna tarea ("### Task N — ...").')
 
-  // La extracción de §8 corre sobre `lines` COMPLETO, no sobre el `cuerpo` de
-  // ninguna tarea: sin tareas siguientes, el §8 de un plan real cae dentro del
-  // tramo de la ÚLTIMA tarea (es inocuo para el bucle de arriba, que sólo
-  // reacciona a marcadores), pero aquí hace falta el fichero entero para
-  // encontrar su propio encabezado "## 8.".
+  // The extraction of §8 runs over the COMPLETE `lines`, not over the `cuerpo`
+  // of any task: with no tasks following it, the §8 of a real plan falls inside
+  // the stretch of the LAST task (which is harmless for the loop above, that
+  // only reacts to markers), but here the whole file is needed to find its own
+  // "## 8." heading.
   const global = extractGlobal(lines, push)
 
   return { tasks, problems, global }

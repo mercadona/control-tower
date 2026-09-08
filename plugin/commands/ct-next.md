@@ -1,27 +1,27 @@
 ---
-description: Dispatcher — lanza el siguiente slice ready (orden §9, deps mergeadas) en un worktree + cmux
+description: Dispatcher — launches the next ready slice (§9 order, merged deps) in a worktree + cmux
 ---
-Primero en seco para ver qué lanzaría:
+Dry first, to see what it would launch:
 ```
 node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-next.mjs --repo "<owner/repo>" --cap 1 --dry-run
 ```
-Si el plan está bien, lánzalo de verdad:
+If the plan looks right, launch it for real:
 ```
 node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-next.mjs --repo "<owner/repo>" --cap 1
 ```
 
-Solo despacha issues en `status:ready`; `/ct-groom` los crea en `status:backlog` y promoverlos es un paso humano. **stdout es el producto** (el plan, la selección, el motivo de bloqueo con su remedio) y **stderr el diagnóstico** (`aviso:`, `ATENCIÓN:`). Lo que imprime ya trae el remedio: transmítelo tal cual, no lo resumas.
+It only dispatches issues in `status:ready`; `/ct-groom` creates them in `status:backlog` and promoting them is a human step. **stdout is the product** (the plan, the selection, the reason for blocking with its remedy) and **stderr the diagnostics** (`aviso:`, `ATENCIÓN:`). What it prints already carries the remedy: pass it on as it is, do not summarise it.
 
-| Exit | Significa | Qué hacer |
+| Exit | Means | What to do |
 |---|---|---|
-| `0` | Progreso (algo se lanzó), o nada seleccionable y ya se explicó por qué | seguir con normalidad |
-| `1` | Algo se rompió o quedó a medias: precondición sin cumplir, issue huérfano en `status:in-progress`, un lanzamiento sin verificar | parar y que lo mire un humano; **mirar la sesión de cmux antes de borrar nada**; la salida lista los comandos exactos |
-| `2` | Error de uso o de configuración estática (flags, `CT_AGENT_BIN`) | corregir la invocación |
-| `3` | Tanda seleccionada, cero lanzamientos y nada a medias (carrera de claim perdida contra otro dispatcher) | reintentar más tarde; no es alarma |
-| `130` / `143` | Interrumpido (SIGINT / SIGTERM); un claim a medias se revierte solo | nada |
+| `0` | Progress (something was launched), or nothing selectable and it already explained why | carry on as normal |
+| `1` | Something broke or was left half-done: an unmet precondition, an orphaned issue in `status:in-progress`, an unverified launch | stop and let a human look at it; **look at the cmux session before deleting anything**; the output lists the exact commands |
+| `2` | Usage or static-configuration error (flags, `CT_AGENT_BIN`) | fix the invocation |
+| `3` | Batch selected, zero launches and nothing half-done (claim race lost against another dispatcher) | retry later; it is not an alarm |
+| `130` / `143` | Interrupted (SIGINT / SIGTERM); a half-done claim reverts itself | nothing |
 
-Al despachar un slice con gate `plan` imprime el go (`GO de #N: contesta exactamente -OK <nonce>`), que el humano escribe como comentario del issue; `dispatch-check --release` se niega sin él (exit 9). Las otras transiciones —`--reopen`, `--requeue`, `--collect`— viven en `scripts/dispatch-check.mjs` e imprimen su propio remedio.
+When dispatching a slice with the `plan` gate it prints the go (`GO de #N: contesta exactamente -OK <nonce>`), which the human writes as a comment on the issue; `dispatch-check --release` refuses without it (exit 9). The other transitions —`--reopen`, `--requeue`, `--collect`— live in `scripts/dispatch-check.mjs` and print their own remedy.
 
-No lances dos `/ct-next` a la vez contra el mismo repo: el claim es un label sin compare-and-swap.
+Do not launch two `/ct-next` at once against the same repo: the claim is a label with no compare-and-swap.
 
-Referencia completa —cada mecanismo, sus límites y la historia de las decisiones—: `docs/loop/ct-next.md` en el repo del plugin.
+Full reference —every mechanism, its limits and the history of the decisions—: `docs/loop/ct-next.md` in the plugin's repo.

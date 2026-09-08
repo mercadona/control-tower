@@ -1,29 +1,32 @@
-// F17 — EL KICKOFF FABRICABA EL DEADLOCK QUE EL PROPIO LOOP DESCRIBE COMO AVERÍA.
+// F17 — THE KICKOFF MANUFACTURED THE VERY DEADLOCK THE LOOP DESCRIBES AS A
+// BREAKDOWN.
 //
-// La última línea del kickoff que recibe cada agente despachado decía:
+// The last line of the kickoff every dispatched agent receives said:
 //
 //   «Al acabar: commit refs al issue, actualiza .agent/STATE.md, abre PR,
 //    libera el claim con `node <dispatch-check> <n> --repo <repo> --release`,
 //    deja el estado mergeable y PARA.»
 //
-// No pedía `Closes #N` en el PR. Cadena completa, toda verificable en este
-// repo:
-//   1. el PR se mergea y el issue se queda ABIERTO (nada lo cierra);
-//   2. desde F13 un issue abierto en `status:in-review` RETIENE sus tokens
-//      (`area:`/`touches:`) hasta el merge, y el dispatcher no puede saber que
-//      ya se mergeó porque mira el estado del ISSUE (claim.js:52-57);
-//   3. esos tokens quedan retenidos indefinidamente;
-//   4. `merge-after` se satisface EXACTAMENTE cuando el issue está cerrado con
-//      `stateReason === 'COMPLETED'` (gh-issue-map.js#filterMergedIssues), así
-//      que ningún dependiente ve nunca su dependencia satisfecha.
+// It did not ask for `Closes #N` in the PR. The complete chain, all of it
+// verifiable in this repo:
+//   1. the PR is merged and the issue stays OPEN (nothing closes it);
+//   2. since F13 an open issue in `status:in-review` HOLDS ON to its tokens
+//      (`area:`/`touches:`) until the merge, and the dispatcher cannot know it
+//      has already been merged because it looks at the ISSUE's state
+//      (claim.js:52-57);
+//   3. those tokens are held indefinitely;
+//   4. `merge-after` is satisfied EXACTLY when the issue is closed with
+//      `stateReason === 'COMPLETED'` (gh-issue-map.js#filterMergedIssues), so no
+//      dependent ever sees its dependency satisfied.
 //
-// El propio dispatcher ya describe ese estado como avería y da el remedio
-// ("ciérralo como completed si el PR ya se mergeó y nadie lo cerró porque le
-// faltaba el Closes #N", ct-next.mjs:726/787/901). Que el remedio exista y la
-// causa la produzca el propio kickoff era la contradicción que cierra F17.
+// The dispatcher itself already describes that state as a breakdown and gives
+// the remedy ("ciérralo como completed si el PR ya se mergeó y nadie lo cerró
+// porque le faltaba el Closes #N", ct-next.mjs:726/787/901). That the remedy
+// exists and the cause is produced by the kickoff itself was the contradiction
+// F17 closes.
 //
-// Cada test de este fichero se comprobó ROJO contra el código sin arreglar; la
-// salida observada está anotada en el propio test.
+// Every test in this file was checked RED against the unfixed code; the
+// observed output is noted in the test itself.
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
@@ -56,56 +59,57 @@ const SLICE = { n: 42, order: 3, name: 'refresh token', type: 'backend', ac: ['A
 const OPTS = { repo: 'o/r', dispatchCheckPath: '/plugin/scripts/dispatch-check.mjs', base: 'main' , conventionsDir: '/plugin/conventions' }
 
 // ============================================================================
-// H1 — el kickoff tiene que pedir el `Closes #N`.
+// H1 — the kickoff has to ask for the `Closes #N`.
 // ============================================================================
-describe('F17/H1 — el kickoff pide `Closes #N` en el cuerpo del PR', () => {
-  // OBSERVADO SIN ARREGLAR (kickoff.js:129): la línea final era
+describe('F17/H1 — the kickoff asks for `Closes #N` in the body of the PR', () => {
+  // OBSERVED UNFIXED (kickoff.js:129): the final line was
   //   «Al acabar: commit refs al issue, actualiza .agent/STATE.md, abre PR,
   //    libera el claim con `node /plugin/scripts/dispatch-check.mjs 42 --repo
   //    o/r --release`, deja el estado mergeable y PARA.»
-  // — la cadena "Closes" no aparecía NI UNA VEZ en el kickoff completo.
-  it('el kickoff contiene el literal `Closes #<issue>` con el número ya sustituido', () => {
+  // — the string "Closes" did not appear ONCE in the whole kickoff.
+  it('the kickoff contains the literal `Closes #<issue>` with the number already substituted', () => {
     const k = renderKickoff(SLICE, OPTS)
     expect(k).toContain('Closes #42')
   })
 
-  it('usa el número de ISSUE, no el de orden §9 (son dos espacios de IDs distintos)', () => {
-    // slice.n = 42 (issue), slice.order = 3 (tabla §9). Un `Closes #3` cerraría
-    // el issue equivocado — o ninguno.
+  it('uses the ISSUE number, not the §9 order one (they are two different ID spaces)', () => {
+    // slice.n = 42 (issue), slice.order = 3 (§9 table). A `Closes #3` would
+    // close the wrong issue — or none.
     const k = renderKickoff(SLICE, OPTS)
     expect(k).not.toMatch(/Closes #3\b/)
     expect(k).toContain('Closes #42')
-    // Y el mismo número que el comando de --release, que sale de la misma
-    // fuente (`slice.n`): si divergieran, uno de los dos estaría mintiendo.
+    // And the same number as the --release command, which comes out of the
+    // same source (`slice.n`): if they diverged, one of the two would be
+    // lying.
     expect(k).toContain('--repo o/r --release')
     expect(k).toMatch(/dispatch-check\.mjs 42 --repo/)
   })
 
-  it('dice que va en el CUERPO del PR (no en el título ni en un comentario)', () => {
-    // GitHub solo interpreta las closing keywords en el cuerpo del PR y en los
-    // mensajes de commit de la rama; un `Closes #N` en el TÍTULO no cierra
-    // nada. Sin esta precisión, "ponlo en el PR" es ambiguo justo donde no
-    // puede serlo.
+  it('says it goes in the BODY of the PR (not in the title nor in a comment)', () => {
+    // GitHub only interprets the closing keywords in the PR's body and in the
+    // branch's commit messages; a `Closes #N` in the TITLE closes nothing.
+    // Without this precision, "put it in the PR" is ambiguous exactly where it
+    // cannot be.
     const k = renderKickoff(SLICE, OPTS)
     expect(k).toMatch(/CUERPO del PR/)
   })
 
-  // OBSERVADO SIN ARREGLAR: ninguna de estas palabras aparecía en el kickoff.
-  // Sin el porqué, la línea es una más de una lista de seis y es la primera
-  // que se cae cuando el agente va justo de contexto.
-  it('dice POR QUÉ: sin el cierre, el slice retiene sus tokens y no desbloquea a sus dependientes', () => {
+  // OBSERVED UNFIXED: none of these words appeared in the kickoff. Without the
+  // why, the line is one more in a list of six and is the first to fall away
+  // when the agent is running short of context.
+  it('says WHY: without the closure, the slice holds on to its tokens and does not unblock its dependents', () => {
     const k = renderKickoff(SLICE, OPTS)
     expect(k).toMatch(/tokens/)
     expect(k).toMatch(/merge-after/)
-    // El estado concreto que se produce, nombrado: es el que el dispatcher
-    // describe como avería.
+    // The concrete state that is produced, named: it is the one the dispatcher
+    // describes as a breakdown.
     expect(k).toMatch(/mergeado.{0,80}issue.{0,40}abierto|issue.{0,40}abierto.{0,80}mergeado/is)
   })
 
-  // Control ejecutable contra la fuente de verdad: `merge-after` NO se
-  // satisface con un issue abierto ni con uno cerrado de cualquier manera —
-  // solo con COMPLETED, que es lo que produce el `Closes #N` al mergear.
-  it('control: filterMergedIssues solo cuenta COMPLETED (lo que produce el Closes #N al mergear)', () => {
+  // An executable check against the source of truth: `merge-after` is NOT
+  // satisfied by an open issue nor by one closed in just any way — only by
+  // COMPLETED, which is what `Closes #N` produces on merging.
+  it('check: filterMergedIssues only counts COMPLETED (what the Closes #N produces on merging)', () => {
     expect(filterMergedIssues([{ number: 7, stateReason: 'COMPLETED' }])).toEqual([7])
     expect(filterMergedIssues([{ number: 7, stateReason: 'NOT_PLANNED' }])).toEqual([])
     expect(filterMergedIssues([{ number: 7, stateReason: null }])).toEqual([])
@@ -113,35 +117,34 @@ describe('F17/H1 — el kickoff pide `Closes #N` en el cuerpo del PR', () => {
 })
 
 // ============================================================================
-// H1, caso colateral que nadie pidió y que rompe la cadena AUNQUE el agente
-// obedezca: el PR abierto contra la rama equivocada.
+// H1, the collateral case nobody asked for and which breaks the chain EVEN IF
+// the agent obeys: the PR opened against the wrong branch.
 //
-// `gh pr create` sin `--base` apunta a la rama por defecto del repo. Pero
-// ct-next.mjs acepta `--base <rama>` y crea el worktree con `git worktree add
-// -b feat/<n> <wt> <resolvedBase>`: si esa base NO es la rama por defecto, el
-// agente abriría el PR contra la rama por defecto — un diff que no es el suyo.
-// El kickoff no le decía la base en ningún sitio.
+// `gh pr create` with no `--base` points at the repo's default branch. But
+// ct-next.mjs accepts `--base <rama>` and creates the worktree with `git
+// worktree add -b feat/<n> <wt> <resolvedBase>`: if that base is NOT the
+// default branch, the agent would open the PR against the default branch — a
+// diff that is not its own. The kickoff did not tell it the base anywhere.
 // ============================================================================
-describe('F17/H1 — el kickoff nombra la rama base contra la que se abre el PR', () => {
-  // OBSERVADO SIN ARREGLAR: el kickoff no contenía la cadena "main" ni ninguna
-  // otra mención de la rama base; `renderKickoff` ni siquiera recibía el dato
-  // (ct-next.mjs:1809 llamaba `renderKickoff(slice, { repo, dispatchCheckPath })`
-  // mientras `buildStateSeed` sí recibía `base: resolvedBase` en la línea
-  // siguiente).
-  it('con base conocida, el kickoff la nombra', () => {
+describe('F17/H1 — the kickoff names the base branch the PR is opened against', () => {
+  // OBSERVED UNFIXED: the kickoff contained neither the string "main" nor any
+  // other mention of the base branch; `renderKickoff` did not even receive the
+  // datum (ct-next.mjs:1809 called `renderKickoff(slice, { repo, dispatchCheckPath })`
+  // while `buildStateSeed` did receive `base: resolvedBase` on the next line).
+  it('with a known base, the kickoff names it', () => {
     const k = renderKickoff(SLICE, { ...OPTS, base: 'release/2026-08' })
     expect(k).toContain('release/2026-08')
   })
 
-  it('sin base, NO se inventa "main": se remite a la rama de la que salió el worktree', () => {
+  it('with no base, it does NOT invent "main": it refers to the branch the worktree came off', () => {
     const k = renderKickoff(SLICE, { repo: 'o/r', dispatchCheckPath: '/x/d.mjs' , conventionsDir: '/plugin/conventions' })
     expect(k).not.toMatch(/contra `main`/)
     expect(k).toMatch(/rama base de la que sali[óo] este worktree/i)
-    // El `Closes` sigue estando: no depende de conocer la base.
+    // The `Closes` is still there: it does not depend on knowing the base.
     expect(k).toContain('Closes #42')
   })
 
-  it('ct-next le pasa la base resuelta al kickoff (dry-run, el kickoff se imprime entero)', () => {
+  it('ct-next passes the resolved base to the kickoff (dry-run, the kickoff is printed whole)', () => {
     const fx = JSON.stringify({
       issues: [{ n: 2, order: 2, status: 'ready', deps: [], touches: ['api'], name: 'refresh', type: 'backend', ac: [] }],
       mergedIssues: [],
@@ -154,76 +157,75 @@ describe('F17/H1 — el kickoff nombra la rama base contra la que se abre el PR'
 })
 
 // ============================================================================
-// H1, el caso que convierte un agente OBEDIENTE en el mismo deadlock.
+// H1, the case that turns an OBEDIENT agent into the very same deadlock.
 //
-// VERIFICADO EN CAMPO contra josemerca/ct-loop-sandbox (28-jul-2026), no
-// deducido de la documentación:
-//   - PR #33, `Closes #31` en el cuerpo, mergeado con base `f17-base` (rama
-//     NO por defecto) → issue #31 quedó {"state":"OPEN","stateReason":""}.
-//   - PR #34, `Closes #32` en el cuerpo, mergeado con base `main` (rama por
-//     defecto) → issue #32 quedó {"state":"CLOSED","stateReason":"COMPLETED"}.
-// Es decir: las closing keywords SOLO cierran el issue cuando el PR se mergea
-// en la rama POR DEFECTO del repo. Con `--base <otra-rama>`, un agente que
-// obedezca el kickoff al pie de la letra deja igualmente el issue abierto y el
-// carril tapado — y quien lea el remedio del dispatcher ("al PR le faltaba el
-// Closes #N") mirará el PR, verá el `Closes #N`, y descartará el diagnóstico.
+// VERIFIED IN THE FIELD against josemerca/ct-loop-sandbox (28-jul-2026), not
+// deduced from the documentation:
+//   - PR #33, `Closes #31` in the body, merged with base `f17-base` (NOT the
+//     default branch) → issue #31 was left {"state":"OPEN","stateReason":""}.
+//   - PR #34, `Closes #32` in the body, merged with base `main` (the default
+//     branch) → issue #32 was left {"state":"CLOSED","stateReason":"COMPLETED"}.
+// That is: the closing keywords ONLY close the issue when the PR is merged into
+// the repo's DEFAULT branch. With `--base <otra-rama>`, an agent that obeys the
+// kickoff to the letter still leaves the issue open and the lane blocked — and
+// whoever reads the dispatcher's remedy ("al PR le faltaba el Closes #N") will
+// look at the PR, see the `Closes #N`, and dismiss the diagnosis.
 // ============================================================================
-describe('F17 — `--base` no-por-defecto: el aviso de que el `Closes #N` no cerrará el issue', () => {
+describe('F17 — a non-default `--base`: the warning that the `Closes #N` will not close the issue', () => {
   const fx = JSON.stringify({
     issues: [{ n: 2, order: 2, status: 'ready', deps: [], touches: ['api'], name: 'refresh', type: 'backend', ac: [] }],
     mergedIssues: [],
   })
 
-  // OBSERVADO SIN ARREGLAR: una corrida con `--base develop` no decía nada al
-  // respecto (stderr solo traía el aviso de ACCOUNT_MAP si el repo no casaba).
-  it('con --base, avisa por STDERR de la regla de la rama por defecto', () => {
+  // OBSERVED UNFIXED: a run with `--base develop` said nothing about it
+  // (stderr only carried the ACCOUNT_MAP warning if the repo did not match).
+  it('with --base, it warns on STDERR about the default branch rule', () => {
     const r = runNext(['--repo', 'o/r', '--cap', '1', '--dry-run', '--base', 'develop'], { CT_NEXT_FIXTURE: fx })
     expect(r.stderr).toMatch(/aviso:.*--base develop/)
     expect(r.stderr).toMatch(/rama por defecto/)
     expect(r.stderr).toMatch(/Closes #/)
-    // Es diagnóstico, no producto: no se cuela en el plan.
+    // It is diagnostics, not product: it does not sneak into the plan.
     expect(r.stdout).not.toMatch(/^aviso:/m)
   })
 
-  // Control negativo: sin --base, la base resuelta ES la rama por defecto (la
-  // resuelve `detectDefaultBranch` contra GitHub), así que el aviso sería
-  // ruido puro.
-  it('sin --base NO se avisa de nada (la base resuelta es, por construcción, la rama por defecto)', () => {
+  // A negative check: with no --base, the resolved base IS the default branch
+  // (`detectDefaultBranch` resolves it against GitHub), so the warning would be
+  // pure noise.
+  it('with no --base NOTHING is warned about (the resolved base is, by construction, the default branch)', () => {
     const r = runNext(['--repo', 'o/r', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: fx })
     expect(r.stderr).not.toMatch(/rama por defecto/)
   })
 })
 
 // ============================================================================
-// H2 — DECISIÓN, no cambio: el motivo del bloqueo se QUEDA en stdout.
+// H2 — A DECISION, not a change: the reason for the block STAYS on stdout.
 //
-// F16 fijó "stdout = producto, stderr = diagnóstico" y, al escribirlo, ya
-// enumeró el motivo de bloqueo del lado del PRODUCTO (ct-next.mjs:1040-1046:
+// F16 fixed "stdout = product, stderr = diagnostics" and, in writing it, had
+// already listed the block reason on the PRODUCT side (ct-next.mjs:1040-1046:
 // «STDOUT = el PRODUCTO. […] el plan de despacho, la selección, EL MOTIVO DE
-// BLOQUEO, el registro de lo lanzado»). No es un cabo suelto de F16: es una
-// clasificación explícita, y sigue siendo la correcta.
+// BLOQUEO, el registro de lo lanzado»). It is not a loose end of F16: it is an
+// explicit classification, and it is still the right one.
 //
-// El argumento, y por qué la "doble naturaleza" no lo es:
-//   - la pregunta que responde /ct-next es «¿qué se despacha ahora?». «Nada, y
-//     esto es exactamente lo que lo impide, con su remedio» es una respuesta
-//     COMPLETA y terminal a esa pregunta, no una observación sobre la corrida.
-//     Un `aviso:` sí es lo segundo: la corrida hizo su trabajo y ADEMÁS anota
-//     algo. Esa es la línea divisoria, y el motivo de bloqueo cae del lado del
-//     producto en los DOS modos;
-//   - `--dry-run` no cambia QUÉ es el producto, solo si el plan se ejecuta.
-//     Enrutar la misma frase a un canal distinto según un flag sería la
-//     incoherencia de verdad: `/ct-next > out.txt` y `/ct-next --dry-run >
-//     out.txt` dejarían cosas distintas en `out.txt` sin que el usuario haya
-//     pedido nada distinto;
-//   - la evidencia decisiva está en el código: tras imprimirlo se hace
-//     `process.exit(0)`. Si el motivo se fuera a stderr, una corrida real
-//     bloqueada dejaría STDOUT VACÍO con exit 0 — que se lee como «todo bien,
-//     nada que reportar», exactamente el malentendido que F16 combatió con el
-//     recap de avisos.
-// Este test fija la decisión para que un futuro "barrido de coherencia de
-// canales" tenga que argumentar contra ella en vez de aplicarla en silencio.
+// The argument, and why the "dual nature" is not one:
+//   - the question /ct-next answers is «what gets dispatched now?». «Nothing,
+//     and this is exactly what prevents it, with its remedy» is a COMPLETE and
+//     terminal answer to that question, not an observation about the run. An
+//     `aviso:` is the second thing: the run did its job and ALSO notes
+//     something. That is the dividing line, and the block reason falls on the
+//     product's side in BOTH modes;
+//   - `--dry-run` does not change WHAT the product is, only whether the plan is
+//     executed. Routing the same sentence to a different channel depending on a
+//     flag would be the real incoherence: `/ct-next > out.txt` and `/ct-next
+//     --dry-run > out.txt` would leave different things in `out.txt` without
+//     the user having asked for anything different;
+//   - the decisive evidence is in the code: after printing it, `process.exit(0)`
+//     is called. If the reason went to stderr, a real blocked run would leave
+//     STDOUT EMPTY with exit 0 — which reads as «all fine, nothing to report»,
+//     exactly the misunderstanding F16 fought with the recap of warnings.
+// This test fixes the decision so that a future "channel coherence sweep" has
+// to argue against it instead of applying it in silence.
 // ============================================================================
-describe('F17/H2 — el motivo del bloqueo es PRODUCTO: stdout, en dry-run y en real', () => {
+describe('F17/H2 — the block reason is PRODUCT: stdout, in dry-run and for real', () => {
   const bloqueado = JSON.stringify({
     issues: [
       { n: 1, order: 1, status: 'in-progress', deps: [], touches: ['api'], name: 'a' },
@@ -232,16 +234,16 @@ describe('F17/H2 — el motivo del bloqueo es PRODUCTO: stdout, en dry-run y en 
     mergedIssues: [],
   })
 
-  it('el motivo del bloqueo sale por stdout y NO se duplica en stderr', () => {
+  it('the block reason comes out on stdout and is NOT duplicated on stderr', () => {
     const r = runNext(['--repo', 'o/r', '--cap', '9', '--dry-run'], { CT_NEXT_FIXTURE: bloqueado })
     expect(r.code).toBe(0)
     expect(r.stdout).toMatch(/colisiona con trabajo en vuelo/)
     expect(r.stderr).not.toMatch(/colisiona con trabajo en vuelo/)
   })
 
-  it('el criterio escrito en el propio fichero clasifica el motivo de bloqueo como stdout', () => {
-    // Si alguien mueve la línea a stderr sin tocar el criterio, este test lo
-    // pilla: el código y su criterio no pueden divergir en silencio.
+  it('the criterion written in the file itself classifies the block reason as stdout', () => {
+    // If somebody moves the line to stderr without touching the criterion, this
+    // test catches it: the code and its criterion cannot diverge in silence.
     const src = readFileSync(join(root, 'scripts', 'ct-next.mjs'), 'utf8')
     expect(src).toMatch(/STDOUT = el PRODUCTO[\s\S]{0,400}motivo de bloqueo/)
     expect(src).toMatch(/console\.log\(formatBlockReason\(/)
@@ -249,9 +251,9 @@ describe('F17/H2 — el motivo del bloqueo es PRODUCTO: stdout, en dry-run y en 
 })
 
 // ============================================================================
-// El contrato §9 (ct-init.sh) enumera lo que recibe el agente despachado y
-// describe el estado "PR mergeado, issue abierto". Las dos cosas cambian aquí,
-// y un repo ya bootstrapeado no puede deducirlas: por eso el bump v6 → v7.
+// The §9 contract (ct-init.sh) lists what the dispatched agent receives and
+// describes the "PR merged, issue open" state. Both things change here, and a
+// repo that is already bootstrapped cannot deduce them: hence the v6 → v7 bump.
 // ============================================================================
 function seed() {
   const dir = mkdtempSync(join(tmpdir(), 'ct-'))
@@ -262,57 +264,60 @@ function seed() {
 }
 const flat = (s) => s.replace(/\*/g, '').replace(/\s+/g, ' ')
 const V6 = () => readFileSync(join(root, '__tests__', 'fixtures', 'slices-contract-v6.md'), 'utf8')
-// El fixture v6 no es una transcripción: su sha256 es 8de58db9…, exactamente
-// el hash que SLICES_PRISTINE_HASHES ya tenía registrado para el bloque v6, y
-// se generó ejecutando el ct-init.sh de 25caa11. Es el bloque de verdad.
+// The v6 fixture is not a transcription: its sha256 is 8de58db9…, exactly the
+// hash SLICES_PRISTINE_HASHES already had recorded for the v6 block, and it was
+// generated by running the ct-init.sh of 25caa11. It is the real block.
 
-// El párrafo del contrato que enumera qué lleva el kickoff. Se acota a él a
-// propósito: `Closes #N` y "rama por defecto" ya aparecían en OTROS puntos del
-// bloque v6 (el remedio del PR mergeado, y el enlace al spec «…/blob/<rama por
-// defecto>/…»), así que un `toMatch` sobre el bloque entero pasaría en verde
-// sin que la enumeración hubiera dejado de callárselo. Comprobado: las dos
-// primeras versiones de estos tests pasaban contra el v6 sin arreglar.
+// The paragraph of the contract that lists what the kickoff carries. It is
+// narrowed to that paragraph on purpose: `Closes #N` and "rama por defecto"
+// already appeared at OTHER points of the v6 block (the remedy for the merged
+// PR, and the link to the spec «…/blob/<rama por defecto>/…»), so a `toMatch`
+// over the whole block would pass green without the enumeration having stopped
+// keeping quiet about it. Checked: the first two versions of these tests passed
+// against the unfixed v6.
 const bulletKickoff = (s) => {
   const m = flat(s).match(/Qué recibe el agente despachado[\s\S]*?no llega al agente\./)
   return m ? m[0] : ''
 }
 
-describe('contrato §9 (F17): el cierre del issue y la trampa de la rama por defecto', () => {
-  it('control: el contrato v6 no decía nada de esto', () => {
+describe('§9 contract (F17): the closure of the issue and the default branch trap', () => {
+  it('check: the v6 contract said nothing about this', () => {
     const v6 = flat(V6())
-    // Enumeraba lo que lleva el kickoff, y el `Closes #N` NO estaba ahí.
+    // It listed what the kickoff carries, and the `Closes #N` was NOT there.
     expect(bulletKickoff(V6())).not.toBe('')
     expect(bulletKickoff(V6())).not.toMatch(/Closes/)
-    // Y atribuía el estado "PR mergeado, issue abierto" a UNA sola causa.
+    // And it attributed the "PR merged, issue open" state to ONE single cause.
     expect(v6).toMatch(/al PR le faltaba `Closes #N`/)
     expect(v6).not.toMatch(/DOS causas/)
     expect(v6).not.toMatch(/solo cierra el issue cuando el PR entra en la rama por defecto/)
   })
 
-  it('dice que el kickoff pide el `Closes #N` (la enumeración de lo que recibe el agente ya no se lo calla)', () => {
+  it('says the kickoff asks for the `Closes #N` (the list of what the agent receives no longer keeps quiet about it)', () => {
     const b = bulletKickoff(seed())
     expect(b).toMatch(/Closes #N/)
     expect(b).toMatch(/cuerpo/)
-    // Y la rama base, que es el otro dato que el kickoff no le daba.
+    // And the base branch, which is the other datum the kickoff did not give it.
     expect(b).toMatch(/rama base/)
   })
 
-  it('nombra la SEGUNDA causa de "PR mergeado, issue abierto": el merge a una rama que no es la por defecto', () => {
+  it('names the SECOND cause of "PR merged, issue open": the merge into a branch that is not the default one', () => {
     const f = flat(seed())
     expect(f).toMatch(/DOS causas/)
     expect(f).toMatch(/solo cierra el issue cuando el PR entra en la rama por defecto/)
-    // La consecuencia accionable, que es lo que cambia una decisión: con
-    // --base a otra rama, cerrar el issue al mergear es un paso a mano.
+    // The actionable consequence, which is what changes a decision: with
+    // --base pointing at another branch, closing the issue on merging is a
+    // manual step.
     expect(f).toMatch(/--base <otra-rama>/)
     expect(f).toMatch(/paso a mano/)
   })
 
-  // F18: este test fijaba el literal '7' y por tanto había que editarlo en
-  // cada bump — es decir, el guardián se tocaba justo cuando debía vigilar.
-  // Lo que de verdad tiene que ser cierto es que las TRES declaraciones (el
-  // marcador del bloque, la nota de pie y SLICES_CONTRACT_VERSION del script)
-  // coinciden entre sí; el número concreto lo aporta el script.
-  it('la nota de pie, el marcador y SLICES_CONTRACT_VERSION declaran la MISMA versión', () => {
+  // F18: this test pinned the literal '7' and therefore had to be edited on
+  // every bump — that is, the guard was touched exactly when it should have
+  // been guarding. What really has to be true is that the THREE declarations
+  // (the block's marker, the footer note and the script's
+  // SLICES_CONTRACT_VERSION) agree with each other; the script supplies the
+  // concrete number.
+  it('the footer note, the marker and SLICES_CONTRACT_VERSION declare the SAME version', () => {
     const a = seed()
     const declared = readFileSync(ctInit, 'utf8').match(/^SLICES_CONTRACT_VERSION=(\d+)$/m)
     const marker = a.match(/<!-- ct-init:slices-contract-version: (\d+) -->/)
@@ -320,7 +325,7 @@ describe('contrato §9 (F17): el cierre del issue y la trampa de la rama por def
     expect(declared).not.toBeNull()
     expect(marker[1]).toBe(declared[1])
     expect(footer[1]).toBe(declared[1])
-    // Control: nunca vuelve atrás. El v7 fue la anterior.
+    // Check: it never goes backwards. v7 was the previous one.
     expect(Number(declared[1])).toBeGreaterThanOrEqual(8)
   })
 })

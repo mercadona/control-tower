@@ -10,28 +10,28 @@ import { buildIssueBody, EPIC_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, LOOP_ST
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'ct-groom.mjs')
 
-// stdio explícito (finding 11 de la review final): sin esto, execFileSync
-// además de capturar el stderr del hijo en `e.stderr` también lo reenvía al
-// proceso padre — la salida de `npm test`. Varios tests de este fichero
-// disparan rutas de error a propósito (spec inexistente, --repo faltante,
-// flags colgantes de la sección de finding 3 más abajo); ese stderr es
-// esperado, y stdio:['ignore','pipe','pipe'] lo mantiene disponible vía
-// `e.stderr` sin ecoarlo al padre.
+// Explicit stdio (finding 11 of the final review): without this, execFileSync
+// not only captures the child's stderr in `e.stderr`, it also forwards it to
+// the parent process — the output of `npm test`. Several tests in this file
+// trigger error paths on purpose (non-existent spec, missing --repo, dangling
+// flags in the finding 3 section further down); that stderr is expected, and
+// stdio:['ignore','pipe','pipe'] keeps it available through `e.stderr` without
+// echoing it to the parent.
 const QUIET_STDIO = ['ignore', 'pipe', 'pipe']
 
-// F5: --dry-run dejó de ser 100% offline — ahora también enumera issues
-// existentes de `--repo` (lectura pura, para detectar divergencia) ANTES de
-// imprimir el plan, precisamente para que el preview no informe MENOS que
-// una corrida real (la misma trampa que F1 cerró para la validación de la
-// tabla §9). Todos los tests de este fichero pasan `--repo o/r` bajo
-// --dry-run — sin un `gh` de mentira en el PATH, esa enumeración invocaría
-// el `gh` REAL de la máquina (instalado y autenticado en este sandbox)
-// contra un repo que no existe. `fakeEnv()` antepone el stub de
-// __tests__/fixtures/fake-gh-bin al PATH; sin overrides, ese stub responde
-// "[]" (ningún issue existente) al listado de issues — exactamente
-// "no hay nada con qué comparar todavía", que es la lectura correcta para
-// un plan que se está creando por primera vez y preserva, sin cambios, todo
-// lo que esta suite ya verificaba antes de F5.
+// F5: --dry-run stopped being 100% offline — it now also enumerates the
+// existing issues of `--repo` (a pure read, to detect drift) BEFORE printing
+// the plan, precisely so that the preview does not report LESS than a real
+// run (the same trap F1 closed for the validation of the §9 table). Every
+// test in this file passes `--repo o/r` under --dry-run — without a fake `gh`
+// on the PATH, that enumeration would invoke the machine's REAL `gh`
+// (installed and authenticated in this sandbox) against a repo that does not
+// exist. `fakeEnv()` prepends the stub in __tests__/fixtures/fake-gh-bin to
+// the PATH; with no overrides, that stub answers "[]" (no existing issue) to
+// the issue listing — exactly "there is nothing to compare against yet",
+// which is the correct reading for a plan that is being created for the first
+// time and preserves, unchanged, everything this suite already verified
+// before F5.
 const fakeGhDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-gh-bin')
 const fakeEnv = (overrides = {}) => ({ ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, ...overrides })
 

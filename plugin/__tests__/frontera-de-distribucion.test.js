@@ -35,8 +35,27 @@ class Frontier {
     )
   }
 
+  static #withoutComments(source) {
+    return source.split('\n').map((line) => Frontier.#codeInLine(line)).join('\n')
+  }
+
+  static #codeInLine(line) {
+    let quote = null
+    for (let i = 0; i < line.length; i += 1) {
+      const c = line[i]
+      if (quote) {
+        if (c === '\\') { i += 1; continue }
+        if (c === quote) quote = null
+        continue
+      }
+      if (c === "'" || c === '"' || c === '`') { quote = c; continue }
+      if (c === '/' && (line[i + 1] === '/' || line[i + 1] === '*')) return line.slice(0, i)
+    }
+    return line
+  }
+
   static #specifiersIn(source) {
-    return [...source.matchAll(Frontier.#SPECIFIER)].map((found) => found[2])
+    return [...Frontier.#withoutComments(source).matchAll(Frontier.#SPECIFIER)].map((found) => found[2])
   }
 
   static escapingSpecifiersInSource(source, from) {
@@ -154,6 +173,34 @@ describe('what the marketplace ships has to stand on its own', () => {
     expect(Frontier.packageSpecifiersInSource("import { parse } from './vendor/yaml.js'")).toEqual([])
     expect(Frontier.packageSpecifiersInSource("import { readFileSync } from 'node:fs'")).toEqual([])
     expect(Frontier.packageSpecifiersInSource("const { readFileSync } = require('fs')")).toEqual([])
+  })
+
+  it('a comment that says "from" and then quotes something is prose, not an import', () => {
+    expect(Frontier.packageSpecifiersInSource('// tell it apart from "there is no conflict"')).toEqual([])
+    expect(Frontier.packageSpecifiersInSource('/* copied from "yaml" by hand */')).toEqual([])
+    expect(Frontier.packageSpecifiersInSource("// what we import from 'somewhere' is not this")).toEqual([])
+  })
+
+  it('a real import beside such a comment is still caught', () => {
+    const source = [
+      '// the parser we took from "the old bundle"',
+      "import { parse } from 'yaml'",
+    ].join('\n')
+    expect(Frontier.packageSpecifiersInSource(source)).toEqual(['yaml'])
+  })
+
+  it('a `//` inside a string does not blind the detector to the rest of the line', () => {
+    expect(Frontier.packageSpecifiersInSource("import { get } from 'https://example.com/x'"))
+      .toEqual(['https://example.com/x'])
+  })
+
+  it('a regex literal holding a quote does not blind the detector on the lines below it', () => {
+    const source = [
+      "const SPECIFIER = /(['\"])([^'\"]+)/g",
+      '// tell it apart from "cell with a dash"',
+      "import { parse } from 'yaml'",
+    ].join('\n')
+    expect(Frontier.packageSpecifiersInSource(source)).toEqual(['yaml'])
   })
 
   it('the vendored bundle is the one esbuild produces from the declared version, byte for byte', async () => {

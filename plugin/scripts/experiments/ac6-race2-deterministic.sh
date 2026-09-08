@@ -1,65 +1,66 @@
 #!/usr/bin/env bash
-# T11 — harness adversarial DETERMINISTA para AC6 (claim concurrente por
-# labels). NO forma parte de `npm test`: es un experimento en vivo contra un
-# repo real de GitHub (por defecto, `josemerca/ct-loop-sandbox`), pensado
-# para ejecutarse a mano. Ver task-11-report.md para el veredicto y la salida
-# cruda de la última corrida.
+# T11 — DETERMINISTIC adversarial harness for AC6 (concurrent claim through
+# labels). It is NOT part of `npm test`: it is a live experiment against a real
+# GitHub repository (by default, `josemerca/ct-loop-sandbox`), meant to be run
+# by hand. See task-11-report.md for the verdict and the raw output of the last
+# run.
 #
-# Qué construye: la interleaving exacta que el AC6 original (T10, 14 rondas
-# de 2 claimants naturales) nunca alcanzó por construcción del scheduler:
+# What it builds: the exact interleaving that the original AC6 (T10, 14 rounds
+# of 2 natural claimants) never reached, by construction of the scheduler:
 #
-#   1. LOW  comprobación de colisión → limpia (ninguno ha escrito todavía)
-#   2. HIGH comprobación de colisión → limpia
-#   3. HIGH escribe status:in-progress + relee → se ve solo a sí mismo → exit 0
-#   4. LOW  escribe status:in-progress + relee → ve a HIGH, pero HIGH > LOW →
-#      claimLost(LOW) == false (el desempate solo hace perder al MAYOR) → exit 0
-#   → si ambos exit 0, es un doble claim real, no solo "posible en teoría".
+#   1. LOW  collision check → clean (neither has written yet)
+#   2. HIGH collision check → clean
+#   3. HIGH writes status:in-progress + re-reads → sees only itself → exit 0
+#   4. LOW  writes status:in-progress + re-reads → sees HIGH, but HIGH > LOW →
+#      claimLost(LOW) == false (the tie-break only makes the HIGHER one lose)
+#      → exit 0
+#   → if both exit 0, it is a real double claim, not just "possible in theory".
 #
-# Mecanismo: CT_CLAIM_PRECLAIM_DELAY_MS (hook en dispatch-check.mjs, ver
-# comentario junto a su definición) se fija a CT_AC6_PRECLAIM_LOW_MS SOLO en
-# LOW ("skew"), para forzar que LOW pase su comprobación de colisión y se
-# quede dormido mientras HIGH completa su ciclo entero (escritura + readback +
-# decisión). HIGH usa CT_CLAIM_PRECLAIM_DELAY_MS=0 (comportamiento normal). No
-# hace falta barrera de arranque aquí: mientras el skew sea mayor que el ciclo
-# completo de HIGH, la asimetría de tiempos domina cualquier sesgo de unos
-# pocos ms al lanzar los dos procesos en background desde bash.
+# Mechanism: CT_CLAIM_PRECLAIM_DELAY_MS (a hook in dispatch-check.mjs, see the
+# comment next to its definition) is set to CT_AC6_PRECLAIM_LOW_MS ONLY in LOW
+# ("skew"), to force LOW to pass its collision check and then fall asleep while
+# HIGH completes its whole cycle (write + readback + decision). HIGH uses
+# CT_CLAIM_PRECLAIM_DELAY_MS=0 (the normal behaviour). No start-up barrier is
+# needed here: as long as the skew is greater than HIGH's full cycle, the
+# asymmetry of the timings dominates any bias of a few ms in launching the two
+# processes in the background from bash.
 #
-# (fix round 2, T11 review — decisión de José): este script ya NO pasa
-# --settle-ms — ese flag y toda la espera de asentamiento se retiraron de
-# dispatch-check.mjs. La razón NO es que se demostrara que el settle no
-# aportaba nada (eso no está demostrado): es que no queremos mitigar una
-# carrera real con una ventana temporal, mida lo que mida esa ventana. Lo que
-# sí se midió (task-11-report.md §5): tres puntos de skew (500, 3000 y
-# 8000ms) dieron el mismo resultado contra settle=0 y settle=2000; un cuarto
-# punto, skew=1000, SÍ divergió (settle=0 → doble claim 3/3; settle=2000 →
-# sin doble claim 3/3) — n=1, no concluyente. El único knob que queda para
-# reproducir el doble claim es el skew de este propio script.
+# (fix round 2, T11 review — José's decision): this script no longer passes
+# --settle-ms — that flag and the whole settling wait were withdrawn from
+# dispatch-check.mjs. The reason is NOT that the settle was shown to add
+# nothing (that has not been shown): it is that we do not want to mitigate a
+# real race with a time window, whatever that window measures. What was
+# measured (task-11-report.md §5): three skew points (500, 3000 and 8000ms)
+# gave the same result against settle=0 and settle=2000; a fourth point,
+# skew=1000, DID diverge (settle=0 → double claim 3/3; settle=2000 → no double
+# claim 3/3) — n=1, not conclusive. The only knob left for reproducing the
+# double claim is the skew of this very script.
 #
-# Tras cada ronda se comprueba la INVARIANTE REAL contra GitHub (no el exit
-# code, que es solo lo que cada proceso CREE): a lo sumo un issue con el
-# token compartido puede estar en status:in-progress.
+# After each round the REAL INVARIANT is checked against GitHub (not the exit
+# code, which is only what each process BELIEVES): at most one issue carrying
+# the shared token may be in status:in-progress.
 set -uo pipefail
 
 REPO="${CT_AC6_REPO:-josemerca/ct-loop-sandbox}"
 SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/dispatch-check.mjs"
-LOW="${CT_AC6_LOW:-3}"    # issue de número MENOR — nunca puede perder por construcción
-HIGH="${CT_AC6_HIGH:-4}"  # issue de número MAYOR — el único que claimLost() puede hacer perder
+LOW="${CT_AC6_LOW:-3}"    # the LOWER-numbered issue — by construction it can never lose
+HIGH="${CT_AC6_HIGH:-4}"  # the HIGHER-numbered issue — the only one claimLost() can make lose
 TOKEN_LABEL="${CT_AC6_TOKEN_LABEL:-touches:t11}"
 SCRATCH="$(cd "$(dirname "$0")" && pwd)"
 RESULTS_DIR="$SCRATCH/race2-results"
 mkdir -p "$RESULTS_DIR"
 ROUNDS="${CT_AC6_ROUNDS:-3}"
 
-# El skew debe superar el ciclo completo de HIGH (comprobación de colisión +
-# escritura + readback, todo ello sin ninguna espera artificial ya). En la
-# práctica, unos pocos cientos de ms de latencia real de red ya bastan para
-# ese ciclo — 8000ms deja un margen generoso.
+# The skew must exceed HIGH's full cycle (collision check + write + readback,
+# all of it with no artificial wait left in it). In practice, a few hundred ms
+# of real network latency are already enough for that cycle — 8000ms leaves a
+# generous margin.
 PRECLAIM_LOW_MS="${CT_AC6_PRECLAIM_LOW_MS:-8000}"
 
-# Comparación exacta por label, no substring (fix round 1, Minor 3): un CSV
-# de labels comparado con `== *"status:in-progress"*` daría un falso
-# positivo si algún otro label contuviera esa cadena. Se compara elemento a
-# elemento tras partir por coma.
+# Exact comparison per label, not substring (fix round 1, Minor 3): a CSV of
+# labels compared with `== *"status:in-progress"*` would give a false positive
+# if some other label contained that string. It is compared element by element
+# after splitting on the comma.
 has_label() {
   local csv="$1" target="$2" IFS=','
   local l
@@ -69,13 +70,13 @@ has_label() {
   return 1
 }
 
-# Preflight (fix round 1, findings Important 2 y 3): sin esto, si el fixture
-# (los issues LOW/HIGH, o el label del token) no existe — por ejemplo porque
-# una corrida anterior lo limpió, como pasó de verdad en esta task — el
-# script seguía adelante en silencio, sin token compartido, y el resultado
-# ("VIOLADO" o "OK") no medía nada sobre el lock: medía un fixture roto. Es
-# imposible ahora que un fixture ausente se lea como éxito o como fallo del
-# lock: se aborta ruidosamente antes de la primera ronda.
+# Preflight (fix round 1, findings Important 2 and 3): without this, if the
+# fixture (the LOW/HIGH issues, or the token label) does not exist — for example
+# because an earlier run cleaned it up, as really happened in this task — the
+# script went on in silence, with no shared token, and the result ("VIOLADO" or
+# "OK") measured nothing about the lock: it measured a broken fixture. It is now
+# impossible for an absent fixture to be read as a success or as a failure of
+# the lock: it aborts noisily before the first round.
 preflight() {
   echo "-- preflight --"
   if ! gh label create "$TOKEN_LABEL" --repo "$REPO" --color 5319e7 \

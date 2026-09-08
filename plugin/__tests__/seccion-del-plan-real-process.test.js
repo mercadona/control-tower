@@ -123,7 +123,7 @@ describe('the same rule written twice: extract_section in awk and seccionDelPlan
     ['a_section_closed_by_a_sibling_heading_at_the_same_level', PlanMother.a_section_closed_by_a_sibling_heading_at_the_same_level()],
   ]
 
-  it.each(planes)('las dos implementaciones dicen lo mismo sobre %s', (_nombre, plan) => {
+  it.each(planes)('both implementations say the same thing about %s', (_nombre, plan) => {
     const planPath = join(dir, 'plan.md')
     writeFileSync(planPath, plan)
 

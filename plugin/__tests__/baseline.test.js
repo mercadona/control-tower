@@ -76,7 +76,7 @@ describe('Baseline', () => {
     Worktree.sweep()
   })
 
-  it('a_declared_command_that_exits_zero_is_verde_and_the_result_names_the_command_it_ran', async () => {
+  it('a_declared_command_that_exits_zero_is_green_and_the_result_names_the_command_it_ran', async () => {
     const runner = RunnerDouble.green()
 
     const result = await Measured.of(runner, Worktree.declaringInAgents('- test: `npm test`'))
@@ -101,7 +101,7 @@ describe('Baseline', () => {
     expect(result.summary).toBe('exit 0 · Tests  12 passed (12) | Duration  1.2s')
   })
 
-  it('a_non_zero_exit_is_rojo_and_the_summary_quotes_what_the_suite_said', async () => {
+  it('a_non_zero_exit_is_red_and_the_summary_quotes_what_the_suite_said', async () => {
     const result = await Measured.of(
       RunnerDouble.red(1, 'FAIL src/a.test.js\n  expected 2 to be 3\n'),
       Worktree.declaringInAgents('- test: `npm test`')
@@ -112,7 +112,7 @@ describe('Baseline', () => {
     expect(result.summary).toBe('exit 1 · FAIL src/a.test.js | expected 2 to be 3')
   })
 
-  it('a_worktree_that_declares_no_test_command_is_no_verificado_and_nothing_gets_run', async () => {
+  it('a_worktree_that_declares_no_test_command_is_unverified_and_nothing_gets_run', async () => {
     const runner = RunnerDouble.green()
 
     const result = await Measured.of(runner, Worktree.empty())
@@ -125,7 +125,7 @@ describe('Baseline', () => {
     expect(runner.asked).toEqual([])
   })
 
-  it('an_agents_md_whose_test_section_names_no_command_is_no_verificado_too', async () => {
+  it('an_agents_md_whose_test_section_names_no_command_is_unverified_too', async () => {
     const runner = RunnerDouble.green()
 
     const result = await Measured.of(runner, Worktree.declaringInAgents('run the suite before pushing'))
@@ -160,7 +160,7 @@ describe('Baseline', () => {
     }
   })
 
-  it('a_run_that_never_finished_is_no_verificado_and_not_rojo_because_nothing_was_measured', async () => {
+  it('a_run_that_never_finished_is_unverified_and_not_red_because_nothing_was_measured', async () => {
     const result = await Measured.of(
       RunnerDouble.notFinished('spawnSync sh ETIMEDOUT'),
       Worktree.declaringInAgents('- test: `npm test`')

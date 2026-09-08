@@ -1,37 +1,40 @@
-// Composición del estado del loop: recibe señales ya recogidas y devuelve los
-// tres cubos del informe. NO hace I/O — ni red, ni procesos, ni disco.
+// Composing the loop's state: it receives signals that have already been
+// collected and returns the report's three buckets. It does NO I/O — no
+// network, no processes, no disk.
 //
-// No hace I/O a propósito: todas las decisiones que importan —quién está vivo,
-// quién sólo está arrancando, qué worktree no reclama nadie, y si hay algo que
-// revisar— se toman aquí, y por tanto se pueden probar sin montar un repo, sin
-// lanzar procesos y sin red. Quien recoja las señales es cosa suya.
+// It does no I/O on purpose: every decision that matters —who is alive, who is
+// merely starting up, which worktree nobody claims, and whether there is
+// anything to review— is taken here, and can therefore be tested without
+// setting up a repo, without launching processes and without a network.
+// Whoever collects the signals is their own business.
 //
-// Tres estados para "¿está vivo?", no dos: `true`, `false`, y `null` cuando no
-// se pudo comprobar. Colapsar el tercero en `false` convertiría una
-// herramienta que falta en una acusación de abandono.
+// Three states for "is it alive?", not two: `true`, `false`, and `null` when it
+// could not be checked. Collapsing the third into `false` would turn a missing
+// tool into an accusation of abandonment.
 export function construirEstado(entrada) {
   const {
     enProgreso, enRevision = [], mergeados, cerradosConStatus,
     worktreesEnDisco, ramasEnDisco,
-    // sePuedeAtribuirWorktree: si la lista de issues (abiertos y cerrados) se
-    // pudo leer ENTERA, que es lo que hace falta para concluir que a un
-    // worktree no lo reclama nadie. Separa tres preguntas que antes viajaban
-    // en el mismo dato:
+    // sePuedeAtribuirWorktree: whether the list of issues (open and closed)
+    // could be read WHOLE, which is what it takes to conclude that nobody
+    // claims a worktree. It separates three questions that used to travel in
+    // the same datum:
     //
-    //   ¿existe .worktrees/N?   → `worktreesEnDisco`, que es una lectura de
-    //                             DISCO y no depende de GitHub para nada.
-    //   ¿lo reclama ALGUNO de   → se contesta con los issues que sí llegaron,
-    //   los issues leídos?        aunque la lectura haya sido parcial.
-    //   ¿no lo reclama NADIE?   → sólo con la lista completa. Es la única que
-    //                             apaga este flag, y la única que acusa.
+    //   does .worktrees/N exist? → `worktreesEnDisco`, which is a DISK read and
+    //                              does not depend on GitHub at all.
+    //   does ANY of the issues   → answered with the issues that did arrive,
+    //   that were read claim it?   even if the read was partial.
+    //   does NOBODY claim it?    → only with the complete list. It is the only
+    //                              one that turns this flag off, and the only
+    //                              one that accuses.
     //
-    // El llamante vaciaba `worktreesEnDisco` cuando no tenía los issues, para
-    // no fabricar huérfanos. Protegía lo correcto, pero de más: ese vaciado
-    // también borraba el `hasWorktree` de los slices EN VUELO y de la cosecha,
-    // y el informe acababa diciendo `worktree ✗` sobre un directorio que su
-    // propio aviso acababa de nombrar. Ahora la lista real entra siempre y lo
-    // único que se apaga es la CONCLUSIÓN de residuo — la atribución se sigue
-    // haciendo con lo que haya llegado.
+    // The caller used to empty `worktreesEnDisco` when it did not have the
+    // issues, so as not to manufacture orphans. It protected the right thing,
+    // but too much of it: that emptying also wiped the `hasWorktree` of the
+    // slices IN FLIGHT and of the harvest, and the report ended up saying
+    // `worktree ✗` about a directory its own warning had just named. Now the
+    // real list always goes in and the only thing turned off is the residue
+    // CONCLUSION — the attribution is still done with whatever arrived.
     sePuedeAtribuirWorktree = true,
     procesos, edadClaimMs, ventanaArranqueMs,
   } = entrada
@@ -41,12 +44,12 @@ export function construirEstado(entrada) {
 
   const worktreeSet = new Set(worktreesEnDisco)
   const ramaSet = new Set(ramasEnDisco)
-  // Un worktree deja de ser huérfano en cuanto ALGÚN issue lo reclama. Se
-  // acumula desde los TRES cubos que pueden reclamarlo: en vuelo, entregado
-  // esperando merge (`enRevision`, que es el dueño legítimo del suyo), y ya
-  // mergeado (cosecha). Eran dos hasta que `enRevision` se convirtió en cubo
-  // propio: dejarlo fuera hacía que un loop sano con PRs abiertos sacara sus
-  // worktrees por residuo.
+  // A worktree stops being an orphan the moment SOME issue claims it. It is
+  // accumulated from the THREE buckets that can claim it: in flight, delivered
+  // and waiting for a merge (`enRevision`, which is the legitimate owner of
+  // its own), and already merged (harvest). There were two of them until
+  // `enRevision` became a bucket of its own: leaving it out made a healthy loop
+  // with open PRs report its worktrees as residue.
   const worktreesExplicados = new Set()
 
   const enVuelo = enProgreso.map(({ n, nombre }) => {
@@ -54,43 +57,43 @@ export function construirEstado(entrada) {
     const hasBranch = ramaSet.has(`feat/${n}`)
     if (hasWorktree) worktreesExplicados.add(String(n))
 
-    // `null` cuando no se pudo comprobar la lista de procesos: nunca se
-    // colapsa en `false`, o la ausencia de la herramienta se leería como
-    // que el agente ha muerto.
+    // `null` when the process list could not be checked: it is never collapsed
+    // into `false`, or the absence of the tool would read as the agent having
+    // died.
     const vivo = procesos.comprobado ? procesos.porSlice.has(String(n)) : null
     const pid = procesos.comprobado ? (procesos.porSlice.get(String(n)) ?? null) : null
 
     const edadMs = edadClaimMs.has(n) ? edadClaimMs.get(n) : null
-    // Un claim recién puesto todavía no ha tenido tiempo de arrancar el
-    // proceso que lo demuestra vivo: por debajo de la ventana de arranque
-    // se informa "arrancando", no "sin señal de vida".
+    // A claim just placed has not yet had time to start up the process that
+    // proves it alive: below the start-up window it is reported as "starting
+    // up", not as "no sign of life".
     const arrancando = vivo === false && edadMs !== null && edadMs < ventanaArranqueMs
 
     if (vivo === false && edadMs === null) {
-      // Edad desconocida: no se acusa. Se nombra el issue en sinComprobar
-      // en vez de decidir por él.
+      // Unknown age: nobody is accused. The issue is named in sinComprobar
+      // instead of deciding on its behalf.
       sinComprobar.push(`#${n}: no se pudo determinar la antigüedad del claim`)
     }
 
     return { n, nombre, hasWorktree, hasBranch, pid, vivo, arrancando, edadMs }
   })
 
-  // enRevision: los issues abiertos en `status:in-review` — trabajo ENTREGADO
-  // que espera merge. Es su propio cubo, y no es ninguno de los otros tres:
+  // enRevision: the open issues in `status:in-review` — DELIVERED work waiting
+  // for a merge. It is its own bucket, and it is none of the other three:
   //
-  //   - No es residuo. El §2.1 del diseño enumera los tres casos del worktree
-  //     huérfano (abandonado, requeueado, o de un issue cerrado sin mergear) y
-  //     un `in-review` no es ninguno: su worktree suele estar ahí A PROPÓSITO,
-  //     porque el PR todavía no se ha mergeado. Contándolo como hallazgo, un
-  //     loop SANO con tres PRs abiertos devolvía 3 de forma permanente — el
-  //     coordinador aprende a ignorar el código de salida y un vigilante que
-  //     gatee sobre él queda inservible.
-  //   - No es cosecha. La cosecha es lo YA MERGEADO que dejó restos en disco.
-  //     Las dos cosas pueden aparecer a la vez y no se solapan.
+  //   - It is not residue. §2.1 of the design enumerates the three cases of the
+  //     orphaned worktree (abandoned, requeued, or from an issue closed without
+  //     a merge) and an `in-review` is none of them: its worktree is usually
+  //     there ON PURPOSE, because the PR has not been merged yet. Counting it
+  //     as a finding made a HEALTHY loop with three open PRs return 3
+  //     permanently — the coordinator learns to ignore the exit code and a
+  //     watcher that gates on it becomes useless.
+  //   - It is not harvest. The harvest is what is ALREADY MERGED and left
+  //     remains on disk. The two can appear at once and they do not overlap.
   //
-  // Por eso NO cuenta como hallazgo (ver `hayHallazgos` más abajo): es
-  // informativo. Y por eso sus worktrees quedan EXPLICADOS: un `in-review` es
-  // exactamente el dueño legítimo del suyo.
+  // That is why it does NOT count as a finding (see `hayHallazgos` further
+  // down): it is informative. And that is why its worktrees end up EXPLAINED:
+  // an `in-review` is exactly the legitimate owner of its own.
   const enRevisionSalida = enRevision.map(({ n, nombre }) => {
     const hasWorktree = worktreeSet.has(String(n))
     if (hasWorktree) worktreesExplicados.add(String(n))
@@ -107,19 +110,19 @@ export function construirEstado(entrada) {
     }
   }
 
-  // Huérfano = «está en disco y NINGÚN issue lo explica». La segunda mitad
-  // exige la lista de issues COMPLETA, y ojo con por qué: no es que sin ella
-  // no se pueda atribuir nada. Con una lectura parcial se atribuye
-  // perfectamente con los issues que sí llegaron —medido: con los cerrados
-  // caídos, `enProgreso: [#7]` y `worktreesEnDisco: ['7','8']`,
-  // `worktreesExplicados` sale `["7"]`, no vacío—. Lo que no se puede es
-  // concluir RESIDUO sobre el resto: el `8` no está explicado por lo que se
-  // leyó, pero podría estarlo por un issue que no llegó, y acusarlo sería
-  // fabricar el hallazgo. Por eso lo que se apaga es la conclusión, no la
-  // atribución: `worktreesExplicados` se sigue calculando y sale afuera, y es
-  // lo que el llamante usa para no avisar de lo que el informe sí explica.
-  // Distinto de fingir que el directorio no está, que es lo que hacía el
-  // vaciado del llamante.
+  // Orphan = "it is on disk and NO issue explains it". The second half demands
+  // the COMPLETE list of issues, and mind why: it is not that nothing can be
+  // attributed without it. With a partial read the attribution works perfectly
+  // with the issues that did arrive —measured: with the closed ones down,
+  // `enProgreso: [#7]` and `worktreesEnDisco: ['7','8']`,
+  // `worktreesExplicados` comes out `["7"]`, not empty. What cannot be done is
+  // to conclude RESIDUE about the rest: the `8` is not explained by what was
+  // read, but it could be explained by an issue that did not arrive, and
+  // accusing it would be manufacturing the finding. That is why what is turned
+  // off is the conclusion, not the attribution: `worktreesExplicados` is still
+  // computed and travels outwards, and it is what the caller uses so as not to
+  // warn about what the report does explain. Different from pretending the
+  // directory is not there, which is what the caller's emptying did.
   const worktreesHuerfanos = sePuedeAtribuirWorktree
     ? worktreesEnDisco.filter((w) => !worktreesExplicados.has(w))
     : []
@@ -129,21 +132,22 @@ export function construirEstado(entrada) {
     worktreesHuerfanos,
   }
 
-  // Un enVuelo sin vida cuenta como hallazgo sólo si además se conoce su
-  // edad: sin edad, ya viaja en `sinComprobar` con el número del issue, y
-  // presentarlo TAMBIÉN como hallazgo lo dejaría indistinguible de un claim
-  // abandonado de verdad —justo la acusación que la edad desconocida evita.
+  // An in-flight slice with no life counts as a finding only if its age is
+  // known too: with no age, it already travels in `sinComprobar` with the
+  // issue's number, and presenting it as a finding AS WELL would leave it
+  // indistinguishable from a genuinely abandoned claim — precisely the
+  // accusation that an unknown age avoids.
   const hayHallazgoEnVuelo = enVuelo.some((s) => s.vivo === false && !s.arrancando && s.edadMs !== null)
   const hayHallazgos = cosecha.length > 0
     || residuo.labels.length > 0
     || residuo.worktreesHuerfanos.length > 0
     || hayHallazgoEnVuelo
 
-  // `worktreesExplicados` sale afuera porque el llamante necesita la MISMA
-  // respuesta para otra cosa: avisar de los directorios que quedaron sin
-  // explicar cuando la lista de issues está incompleta. Recalcularlo allí
-  // sería duplicar el criterio de "quién reclama un worktree" en dos sitios
-  // que derivarían por separado — y la primera víctima de esa deriva sería
-  // justo un aviso que nombra un directorio que el informe sí explica.
+  // `worktreesExplicados` travels outwards because the caller needs the SAME
+  // answer for something else: warning about the directories that were left
+  // unexplained when the list of issues is incomplete. Recomputing it there
+  // would duplicate the criterion of "who claims a worktree" in two places that
+  // would drift apart — and the first victim of that drift would be exactly a
+  // warning naming a directory the report does explain.
   return { enVuelo, enRevision: enRevisionSalida, cosecha, residuo, sinComprobar, hayHallazgos, worktreesExplicados: [...worktreesExplicados] }
 }

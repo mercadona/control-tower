@@ -8,51 +8,52 @@ import { describe, it, expect } from 'vitest'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-// comprobarDist: responde UNA pregunta — ¿el `dist/` de HEAD es exactamente lo
-// que producen los fuentes de HEAD?
+// comprobarDist: answers ONE question — is HEAD's `dist/` exactly what HEAD's
+// sources produce?
 //
-// El árbol de trabajo no se lee en ningún punto, ni para comparar ni para
-// decidir si saltar. De ahí las dos conductas que hacen este test usable:
-// verde mientras editas sin commitear (HEAD sigue siendo coherente consigo
-// mismo) y rojo en cuanto existe un commit con el bundle obsoleto — que es el
-// estado que el defecto produce y que `npm test` enmascara, porque reconstruye
-// `dist/` antes de lanzar vitest.
+// The working tree is never read, not to compare and not to decide whether to
+// skip. Hence the two behaviours that make this test usable: green while you
+// edit without committing (HEAD is still coherent with itself) and red as soon
+// as a commit exists carrying a stale bundle — which is the state the defect
+// produces and the one `npm test` masks, because it rebuilds `dist/` before
+// launching vitest.
 async function comprobarDist(root) {
   const tmp = mkdtempSync(join(tmpdir(), 'ct-dist-'))
   try {
-    // 1. Los fuentes de HEAD: TODO lo trackeado, sin lista de rutas. Una lista
-    //    es algo que mantener, y se queda atrás en cuanto el bundle empiece a
-    //    importar un fichero que nadie añadió a ella.
+    // 1. HEAD's sources: EVERYTHING tracked, with no list of paths. A list is
+    //    something to maintain, and it falls behind as soon as the bundle
+    //    starts importing a file nobody added to it.
     //
-    //    Va por un fichero .tar intermedio y NO por una tubería `git archive |
-    //    tar -x`, a propósito. En una tubería el exit code que ve el shell es
-    //    el de `tar`, no el de `git`: si `root` no es un repo git, `git
-    //    archive` falla pero `tar -x` recibe una entrada vacía y sale con 0, y
-    //    el pipeline entero informa éxito. El temporal queda vacío y quien
-    //    acaba lanzando más abajo es el `import` de scripts/build.mjs, con un
-    //    "no encuentro el módulo" que apunta a la causa equivocada. Eso se
-    //    arreglaba con `set -o pipefail`, pero `pipefail` NO es POSIX y bajo
-    //    dash —que es el `/bin/sh` de Debian y de Ubuntu— aborta con "Illegal
-    //    option -o pipefail" y exit 2, tumbando el fichero de tests ENTERO en
-    //    esas máquinas, incluido el test que afirma que HEAD es coherente. En
-    //    macOS no se notaba: ahí `/bin/sh` es bash en modo sh y sí lo acepta.
-    //    Con dos órdenes separadas cada exit code se comprueba por su cuenta,
-    //    no hace falta shell alguno (ni interpolar `root` en un string de
-    //    shell), y el fallo de `git` llega tal cual al llamante. No lo
-    //    "simplifiques" de vuelta a una tubería.
-    //    Desde que el plugin vive en plugin/, `root` puede ser un SUBDIRECTORIO
-    //    del repo ('' de prefijo en los repos de mentira, cuya raíz sí es la
-    //    del repo). Eso obliga a dos cosas aquí. Una: el árbol que se archiva y
-    //    se compara es `HEAD:<prefijo>` — SOLO el subárbol del plugin, que
-    //    además es la misma frontera que la distribución: lo de fuera de `root`
-    //    no participa del build ni debe hacerlo. Y dos: archive y ls-tree se
-    //    lanzan desde el TOPLEVEL, no desde `root`, porque git convierte el
-    //    prefijo del cwd en un pathspec IMPLÍCITO — desde plugin/, un
-    //    `git archive HEAD:plugin` busca `plugin/` DENTRO de ese subárbol y
-    //    produce un tar vacío sin quejarse (reproducido). `git show` no sufre
-    //    esto (la ruta tras `:` es del árbol, no del cwd), y `git log` y
-    //    `git diff`, más abajo, quieren justo lo contrario: sus pathspecs
-    //    relativos al cwd de `-C root` ya apuntan dentro del plugin.
+    //    It goes through an intermediate .tar file and NOT through a `git
+    //    archive | tar -x` pipe, deliberately. In a pipe the exit code the
+    //    shell sees is `tar`'s, not `git`'s: if `root` is not a git repo, `git
+    //    archive` fails but `tar -x` gets an empty input and exits 0, and the
+    //    whole pipeline reports success. The temporary directory is left empty
+    //    and what ends up throwing further down is the `import` of
+    //    scripts/build.mjs, with a "cannot find module" that points at the
+    //    wrong cause. That was fixed with `set -o pipefail`, but `pipefail` is
+    //    NOT POSIX and under dash —which is Debian's and Ubuntu's `/bin/sh`—
+    //    it aborts with "Illegal option -o pipefail" and exit 2, taking down
+    //    the WHOLE test file on those machines, including the test that
+    //    asserts HEAD is coherent. On macOS it went unnoticed: there `/bin/sh`
+    //    is bash in sh mode and does accept it. With two separate commands
+    //    each exit code is checked on its own, no shell is needed at all (nor
+    //    interpolating `root` into a shell string), and `git`'s failure
+    //    reaches the caller as it is. Do not "simplify" it back into a pipe.
+    //    Since the plugin lives in plugin/, `root` may be a SUBDIRECTORY of
+    //    the repo ('' as the prefix in the fake repos, whose root really is
+    //    the repo's). That forces two things here. One: the tree that gets
+    //    archived and compared is `HEAD:<prefix>` — ONLY the plugin's subtree,
+    //    which is also the same boundary as the distribution: what lies
+    //    outside `root` takes no part in the build and must not. And two:
+    //    archive and ls-tree are launched from the TOPLEVEL, not from `root`,
+    //    because git turns the cwd's prefix into an IMPLICIT pathspec — from
+    //    plugin/, a `git archive HEAD:plugin` looks for `plugin/` INSIDE that
+    //    subtree and produces an empty tar without complaining (reproduced).
+    //    `git show` does not suffer this (the path after `:` is the tree's,
+    //    not the cwd's), and `git log` and `git diff`, further down, want the
+    //    exact opposite: their pathspecs relative to the cwd of `-C root`
+    //    already point inside the plugin.
     const gitFacts = execFileSync('git', ['-C', root, 'rev-parse', '--show-toplevel', '--show-prefix'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).split('\n')
     const toplevel = gitFacts[0]
     const prefix = gitFacts[1].trim()
@@ -60,37 +61,38 @@ async function comprobarDist(root) {
     const tar = join(tmp, 'head.tar')
     execFileSync('git', ['-C', toplevel, 'archive', '--format=tar', '-o', tar, headTree], { stdio: ['ignore', 'ignore', 'pipe'] })
     execFileSync('tar', ['-xf', tar, '-C', tmp], { stdio: ['ignore', 'ignore', 'pipe'] })
-    // El .tar se escribió DENTRO de `tmp`, que es donde va a correr el build:
-    // se borra antes de nada para no dejar un intruso en el directorio que
-    // luego se compara.
+    // The .tar was written INSIDE `tmp`, which is where the build is going to
+    // run: it is deleted first thing so as not to leave an intruder in the
+    // directory that gets compared afterwards.
     rmSync(tar, { force: true })
 
-    // 2. El `dist/` que vino en el archive estorba: lo que quede aquí después
-    //    del build tiene que ser EXACTAMENTE lo que el build produce, o un
-    //    fichero que HEAD tiene y el build ya no emite pasaría por bueno.
+    // 2. The `dist/` that came in the archive is in the way: what is left
+    //    here after the build has to be EXACTLY what the build produces, or a
+    //    file HEAD has and the build no longer emits would pass for good.
     rmSync(join(tmp, 'dist'), { recursive: true, force: true })
 
-    // 3. node_modules se COPIA, no se enlaza. esbuild empotra la ruta de cada
-    //    input dentro del bundle (comentarios y claves del shim __commonJS);
-    //    con un symlink resuelve a la ruta real fuera del temporal y el bundle
-    //    sale con "../../../..//Users/..." incrustado — 10 KB de diferencia
-    //    sobre 273 KB, medidos. `preserveSymlinks: true` también daría bytes
-    //    idénticos hoy, y se descartó: es una opción que el build real no
-    //    tiene, así que compararía dos configuraciones distintas afirmando
-    //    identidad. Un repo que no tenga node_modules no necesita la copia: sin
-    //    dependencias npm que resolver, esbuild no empotra ninguna ruta de
-    //    paquete en el bundle.
+    // 3. node_modules is COPIED, not linked. esbuild embeds every input's
+    //    path inside the bundle (comments and keys of the __commonJS shim);
+    //    with a symlink it resolves to the real path outside the temporary
+    //    directory and the bundle comes out with "../../../..//Users/..."
+    //    baked in — 10 KB of difference over 273 KB, measured.
+    //    `preserveSymlinks: true` would also give identical bytes today, and
+    //    it was rejected: it is an option the real build does not have, so it
+    //    would compare two different configurations while claiming identity. A
+    //    repo without node_modules does not need the copy: with no npm
+    //    dependencies to resolve, esbuild embeds no package path in the
+    //    bundle.
     const nm = join(root, 'node_modules')
     if (existsSync(nm)) cpSync(nm, join(tmp, 'node_modules'), { recursive: true })
 
-    // 4. La configuración de build de HEAD, IMPORTADA y no duplicada: así, un
-    //    cambio en build.mjs sin reconstruir también sale rojo.
+    // 4. HEAD's build configuration, IMPORTED and not duplicated: that way a
+    //    change in build.mjs without a rebuild also comes out red.
     const mod = await import(pathToFileURL(join(tmp, 'scripts/build.mjs')).href)
     if (!mod.buildOptions) throw new Error(`scripts/build.mjs de HEAD no exporta buildOptions`)
 
     const res = await build({ ...mod.buildOptions, absWorkingDir: tmp, metafile: true })
 
-    // 5. Comparación de CONJUNTO en las dos direcciones, no de una lista.
+    // 5. A SET comparison in both directions, not a list comparison.
     const construido = readdirSync(join(tmp, 'dist')).sort()
     const enHead = execFileSync('git', ['-C', toplevel, 'ls-tree', '--name-only', headTree, 'dist/'], { encoding: 'utf8' })
       .split('\n').filter(Boolean).map((p) => p.replace(/^dist\//, '')).sort()
@@ -111,17 +113,17 @@ async function comprobarDist(root) {
   }
 }
 
-// explicarIncoherencia: el mensaje que lee un humano. Un fallo tiene dos
-// causas posibles y el arreglo es el mismo, pero saber cuál cambia lo que el
-// lector cree que ha hecho mal — así que se distinguen sin adivinar.
+// explicarIncoherencia: the message a human reads. A failure has two possible
+// causes and the fix is the same for both, but knowing which one changes what
+// the reader thinks they did wrong — so they are told apart without guessing.
 //
-// La lista de inputs sale del metafile REAL de la corrida, no de `scripts/`
-// entero: cada hook importa sólo los módulos de scripts/ que de verdad usa
-// (session-start.js y stop.js: state.js y state-paths.js; commit-keyword-
-// guard.js: closing-keywords.js y governed-repo.js), así que un cambio en
-// cualquier OTRO fichero de scripts/ no entra al bundle de ningún hook.
-// Mirar el directorio entero habría dado un falso positivo con cualquier
-// cambio en esos otros ficheros, aunque ningún bundle dependa de ellos.
+// The list of inputs comes from the run's REAL metafile, not from the whole of
+// `scripts/`: each hook imports only the scripts/ modules it actually uses
+// (session-start.js and stop.js: state.js and state-paths.js; commit-keyword-
+// guard.js: closing-keywords.js and governed-repo.js), so a change in any
+// OTHER file of scripts/ does not enter any hook's bundle. Looking at the
+// whole directory would have given a false positive on any change to those
+// other files, even though no bundle depends on them.
 function explicarIncoherencia(root, { faltan, sobran, difieren, inputs }) {
   const partes = ['el dist/ commiteado NO corresponde a los fuentes commiteados:']
   if (faltan.length) partes.push(`  el build produce ficheros que HEAD no tiene commiteados: ${faltan.join(', ')}`)
@@ -129,10 +131,11 @@ function explicarIncoherencia(root, { faltan, sobran, difieren, inputs }) {
   if (difieren.length) partes.push(`  difieren en contenido: ${difieren.join(', ')}`)
 
   const ultimoDist = execFileSync('git', ['-C', root, 'log', '-1', '--format=%H', '--', 'dist/'], { encoding: 'utf8' }).trim()
-  // `inputs` vacío no puede pasar hoy (el metafile siempre trae al menos los
-  // entry points), pero un `git diff -- ` SIN rutas diffea el repo ENTERO, y
-  // eso convertiría cualquier commit de documentación en un falso "falta un
-  // rebuild". Se corta aquí en vez de confiar en que nunca ocurra.
+  // An empty `inputs` cannot happen today (the metafile always carries at
+  // least the entry points), but a `git diff -- ` with NO paths diffs the
+  // WHOLE repo, and that would turn any documentation commit into a false
+  // "needs a rebuild". It is cut off here instead of trusting it never
+  // happens.
   if (ultimoDist && inputs.length) {
     const cambiados = execFileSync('git', ['-C', root, 'diff', '--name-only', `${ultimoDist}..HEAD`, '--', ...inputs], { encoding: 'utf8' })
       .split('\n').filter(Boolean)
@@ -143,14 +146,15 @@ function explicarIncoherencia(root, { faltan, sobran, difieren, inputs }) {
       partes.push(`  ningún input del bundle cambió desde el último commit que tocó dist/ (${ultimoDist.slice(0, 7)}) — lo que se movió es el toolchain (esbuild ${v} instalado), o alguien editó el bundle a mano`)
     }
   } else {
-    // Nunca un skip silencioso, tampoco aquí: cuando el guard corta, el
-    // mensaje DICE que no puede dar la causa y por qué, en vez de limitarse a
-    // omitirla. Sin esta línea el lector no distingue "se investigó la causa y
-    // no salió nada" de "no se pudo investigar".
+    // Never a silent skip, not here either: when the guard cuts in, the
+    // message SAYS that it cannot give the cause and why, instead of just
+    // omitting it. Without this line the reader cannot tell "the cause was
+    // investigated and nothing came of it" from "it could not be
+    // investigated".
     //
-    // "fuera de node_modules" no es un adorno: `inputs` llega ya filtrado por
-    // ese criterio desde comprobarDist, así que la condición que se cumple
-    // aquí no es "el build no declaró inputs" a secas.
+    // "outside node_modules" is not an ornament: `inputs` arrives already
+    // filtered by that criterion from comprobarDist, so the condition that
+    // holds here is not plainly "the build declared no inputs".
     const motivo = ultimoDist ? 'el build no declaró ningún input fuera de node_modules' : 'dist/ no tiene historia en este repo'
     partes.push(`  no se puede determinar la causa: ${motivo}`)
   }
@@ -166,57 +170,60 @@ function esbuildVersion(root) {
   }
 }
 
-describe('el dist/ commiteado corresponde a los fuentes commiteados (F24)', () => {
-  it('HEAD es coherente: el bundle commiteado es lo que producen los fuentes commiteados', async () => {
+describe('the committed dist/ corresponds to the committed sources (F24)', () => {
+  it('HEAD is coherent: the committed bundle is what the committed sources produce', async () => {
     const r = await comprobarDist(root)
     const incoherente = r.faltan.length || r.sobran.length || r.difieren.length
     expect(incoherente ? explicarIncoherencia(root, r) : 'coherente').toBe('coherente')
   }, 60_000)
 
-  it('los inputs del bundle salen del metafile real, no de una lista escrita a mano', async () => {
+  it('the bundle inputs come from the real metafile, not from a hand-written list', async () => {
     const { inputs } = await comprobarDist(root)
-    // Este literal es un canario, no una fuente de verdad: cuando el bundle
-    // gane o pierda un input hay que actualizarlo a mano, pero nada MÁS
-    // depende de él — el diagnóstico de más arriba (faltan/sobran/difieren)
-    // saca su lista de inputs del metafile en cada corrida, nunca de aquí.
+    // This literal is a canary, not a source of truth: when the bundle gains
+    // or loses an input it has to be updated by hand, but nothing ELSE
+    // depends on it — the diagnosis above (missing/left over/differing) takes
+    // its list of inputs from the metafile on every run, never from here.
     expect(inputs).toEqual([
       'hooks/commit-keyword-guard.js',
       'hooks/dispatch-guard.js',
       'hooks/session-start.js',
       'hooks/stop.js',
       'scripts/closing-keywords.js',
-      // La marca por la que el hook `Stop` reconoce un commit de ct-step
-      // (#95). Entra por state.js, y es también quien la escribe del otro
-      // lado, en step-contracts.js: una sola fuente para las dos mitades.
+      // The mark by which the `Stop` hook recognises a ct-step commit (#95).
+      // It comes in through state.js, and it is also what writes it on the
+      // other side, in step-contracts.js: one single source for both halves.
       'scripts/ct-step-commit.js',
       'scripts/dispatch-gate.js',
       'scripts/governed-repo.js',
-      // La puerta del despacho decide con la tabla de la máquina, así que
-      // dist/dispatch-guard.js arrastra run-machine.js y, con él,
-      // reconcile-outcome.js. Son puros: ni disco, ni procesos, ni yaml.
+      // The dispatch gate decides with the machine's table, so
+      // dist/dispatch-guard.js drags in run-machine.js and, with it,
+      // reconcile-outcome.js. They are pure: no disk, no processes, no yaml.
       'scripts/reconcile-outcome.js',
       'scripts/run-machine.js',
-      // scope.js y scope-check-cli.js entran por dist/scope-check.js, el gate
-      // de conformidad que se vendoriza en el CI del repo destino (donde el
-      // plugin no está instalado). closing-keywords.js ya estaba: scope.js lo
-      // reutiliza en vez de llevar su propio reconocedor de closing keywords.
+      // scope.js and scope-check-cli.js come in through dist/scope-check.js,
+      // the conformance gate that gets vendored into the target repo's CI
+      // (where the plugin is not installed). closing-keywords.js was already
+      // there: scope.js reuses it instead of carrying its own recogniser of
+      // closing keywords.
       'scripts/scope-check-cli.js',
       'scripts/scope.js',
       'scripts/state-paths.js',
       'scripts/state.js',
-      // El bundle de `yaml`: state.js lo importa a él y no al paquete, porque
-      // una instalación de un plugin no trae node_modules. Entra en los tres
-      // hooks por state.js, y se construye en el mismo `npm run build`.
+      // The `yaml` bundle: state.js imports it and not the package, because a
+      // plugin installation does not bring node_modules along. It enters all
+      // three hooks through state.js, and is built by the same
+      // `npm run build`.
       'scripts/vendor/yaml.js',
     ])
   }, 60_000)
 })
 
-// repoDeMentira: un repo git mínimo y COHERENTE, para poder romperlo a
-// propósito. Su scripts/build.mjs no importa esbuild en el tope (a diferencia
-// del real): así el comprobador puede importarlo sin que el temporal necesite
-// node_modules, y estos cuatro tests no pagan la copia de 45 MB. El camino que
-// sí importa un build.mjs con dependencias reales lo cubre el test de HEAD.
+// repoDeMentira: a minimal and COHERENT git repo, so that it can be broken on
+// purpose. Its scripts/build.mjs does not import esbuild at the top (unlike
+// the real one): that way the checker can import it without the temporary
+// directory needing node_modules, and these four tests do not pay for the
+// 45 MB copy. The path that does import a build.mjs with real dependencies is
+// covered by the HEAD test.
 function repoDeMentira() {
   const dir = mkdtempSync(join(tmpdir(), 'ct-falso-'))
   const git = (...args) => execFileSync('git', ['-C', dir, ...args], { stdio: 'ignore' })
@@ -236,23 +243,23 @@ function repoDeMentira() {
   return dir
 }
 
-// construirEnRepo: genera el dist del repo de mentira con la MISMA
-// configuración que el comprobador leerá después, para que el punto de partida
-// sea coherente de verdad y no por casualidad.
+// construirEnRepo: generates the fake repo's dist with the SAME configuration
+// the checker will read afterwards, so that the starting point is really
+// coherent and not coherent by accident.
 async function construirEnRepo(dir) {
   const mod = await import(pathToFileURL(join(dir, 'scripts/build.mjs')).href + `?v=${Date.now()}`)
   await build({ ...mod.buildOptions, absWorkingDir: dir })
 }
 
-describe('el comprobador falla cuando debe (F24)', () => {
-  it('un fuente cambiado sin regenerar el bundle → lo detecta y nombra el fichero', async () => {
+describe('the checker fails when it must (F24)', () => {
+  it('a source changed without regenerating the bundle → it detects it and names the file', async () => {
     const dir = repoDeMentira()
     await construirEnRepo(dir)
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' })
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'coherente'], { stdio: 'ignore' })
 
-    // El defecto de F22, reproducido: se cambia el fuente y se commitea SIN
-    // regenerar el bundle.
+    // F22's defect, reproduced: the source is changed and committed WITHOUT
+    // regenerating the bundle.
     writeFileSync(join(dir, 'src/a.js'), 'export const x = 999\nconsole.log(x)\n')
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' })
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'fuente sin rebuild'], { stdio: 'ignore' })
@@ -266,7 +273,7 @@ describe('el comprobador falla cuando debe (F24)', () => {
     }
   }, 60_000)
 
-  it('un fichero que HEAD tiene en dist/ y el build ya no produce → sale como SOBRANTE', async () => {
+  it('a file HEAD has in dist/ and the build no longer produces → comes out as LEFT OVER', async () => {
     const dir = repoDeMentira()
     await construirEnRepo(dir)
     writeFileSync(join(dir, 'dist/huerfano.js'), '// bundle de un entry point que ya no existe\n')
@@ -282,13 +289,13 @@ describe('el comprobador falla cuando debe (F24)', () => {
     }
   }, 60_000)
 
-  it('un fichero que el build produce y HEAD no tiene commiteado → sale como FALTANTE', async () => {
+  it('a file the build produces and HEAD has not committed → comes out as MISSING', async () => {
     const dir = repoDeMentira()
     await construirEnRepo(dir)
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' })
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'coherente'], { stdio: 'ignore' })
 
-    // Se añade un segundo entry point al build y se commitea sin generar su bundle.
+    // A second entry point is added to the build and committed without generating its bundle.
     writeFileSync(join(dir, 'src/b.js'), 'console.log("b")\n')
     writeFileSync(join(dir, 'scripts/build.mjs'), [
       "export const buildOptions = {",
@@ -309,15 +316,15 @@ describe('el comprobador falla cuando debe (F24)', () => {
     }
   }, 60_000)
 
-  it('el árbol de trabajo sucio NO pone nada rojo: HEAD sigue siendo coherente consigo mismo', async () => {
+  it('a dirty working tree turns NOTHING red: HEAD is still coherent with itself', async () => {
     const dir = repoDeMentira()
     await construirEnRepo(dir)
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' })
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'coherente'], { stdio: 'ignore' })
 
-    // Edición SIN commitear — el ciclo rojo-verde normal. El test no debe
-    // interferir con él: es la conducta que hace este test usable a diario, y
-    // sin este caso nadie sabría que se preservó.
+    // An edit WITHOUT committing — the ordinary red-green cycle. The test must
+    // not interfere with it: this is the behaviour that makes this test usable
+    // day to day, and without this case nobody would know it was preserved.
     writeFileSync(join(dir, 'src/a.js'), 'export const x = 12345\nconsole.log(x)\n')
 
     try {
@@ -329,8 +336,8 @@ describe('el comprobador falla cuando debe (F24)', () => {
   }, 60_000)
 })
 
-describe('el diagnóstico distingue las dos causas (F24)', () => {
-  it('si algún input cambió desde el último commit que tocó dist/ → dice que falta un rebuild y nombra los ficheros', async () => {
+describe('the diagnosis tells the two causes apart (F24)', () => {
+  it('if any input changed since the last commit that touched dist/ → it says a rebuild is missing and names the files', async () => {
     const dir = repoDeMentira()
     await construirEnRepo(dir)
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' })
@@ -350,13 +357,14 @@ describe('el diagnóstico distingue las dos causas (F24)', () => {
     }
   }, 60_000)
 
-  it('si ningún input cambió → dice que se movió el toolchain y nombra la versión de esbuild', async () => {
+  it('if no input changed → it says the toolchain moved and names the esbuild version', async () => {
     const dir = repoDeMentira()
     await construirEnRepo(dir)
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' })
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'coherente'], { stdio: 'ignore' })
-    // Se corrompe el bundle commiteado sin tocar ningún fuente: desde el punto
-    // de vista del diagnóstico es indistinguible de "esbuild produce otra cosa".
+    // The committed bundle is corrupted without touching any source: from the
+    // diagnosis's point of view that is indistinguishable from "esbuild
+    // produces something else".
     writeFileSync(join(dir, 'dist/a.js'), '// bytes que ningún build produce\n')
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' })
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'bundle tocado a mano'], { stdio: 'ignore' })
@@ -365,20 +373,21 @@ describe('el diagnóstico distingue las dos causas (F24)', () => {
       const r = await comprobarDist(dir)
       expect(r.difieren).toEqual(['a.js'])
 
-      // El esbuild de mentira se planta DESPUÉS de comprobarDist y después del
-      // último commit, a propósito: así ni entra en el archive de git ni paga
-      // la copia de node_modules que comprobarDist hace cuando existe. Lo
-      // único que tiene que verlo es esbuildVersion, que corre dentro de
-      // explicarIncoherencia.
+      // The fake esbuild is planted AFTER comprobarDist and after the last
+      // commit, deliberately: that way it neither enters git's archive nor
+      // pays for the node_modules copy comprobarDist makes when one exists.
+      // The only thing that has to see it is esbuildVersion, which runs
+      // inside explicarIncoherencia.
       //
-      // Sin él, la aserción de la versión no valdría nada: la palabra
-      // "esbuild" está en el texto fijo de la plantilla del mensaje, así que
-      // `toMatch(/esbuild/)` casa igual con "(versión no legible)" —que es lo
-      // que salía— y la rama feliz de esbuildVersion se quedaba sin cobertura
-      // en ninguna parte, con un `catch` que se traga cualquier error. Exigir
-      // el número 9.9.9 sólo puede casar leyendo el package.json de abajo, y
-      // de paso demuestra que esbuildVersion lee del repo DIAGNOSTICADO y no
-      // del repo real (que tiene otra versión bien distinta).
+      // Without it, asserting the version would be worth nothing: the word
+      // "esbuild" is in the fixed text of the message template, so
+      // `toMatch(/esbuild/)` matches just as well against "(versión no
+      // legible)" —which is what was coming out— and esbuildVersion's happy
+      // branch was left uncovered anywhere, with a `catch` that swallows any
+      // error. Demanding the number 9.9.9 can only match by reading the
+      // package.json below, and it proves along the way that esbuildVersion
+      // reads from the DIAGNOSED repo and not from the real one (which has a
+      // quite different version).
       mkdirSync(join(dir, 'node_modules/esbuild'), { recursive: true })
       writeFileSync(join(dir, 'node_modules/esbuild/package.json'), JSON.stringify({ version: '9.9.9' }))
 
@@ -392,23 +401,23 @@ describe('el diagnóstico distingue las dos causas (F24)', () => {
   }, 60_000)
 })
 
-describe('cuando no puede responder, falla con motivo (F24)', () => {
-  it('un directorio que no es repo git → lanza nombrando el motivo, no devuelve "coherente"', async () => {
+describe('when it cannot answer, it fails with a reason (F24)', () => {
+  it('a directory that is not a git repo → it throws naming the reason, it does not answer "coherente"', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-nogit-'))
     try {
-      // No basta con "lanza": si el paso 1 dejara escapar el fallo de `git`
-      // (como haría una tubería `git archive | tar -x`, cuyo exit code es el de
-      // `tar`), este mismo directorio también lanzaría, pero por "Cannot find
-      // module .../scripts/build.mjs" — un motivo que apunta a un fichero que
-      // falta, no a que `root` no es un repo git. La aserción tiene que
-      // distinguir el motivo correcto del que lo enmascara.
+      // "It throws" is not enough: if step 1 let `git`'s failure slip through
+      // (as a `git archive | tar -x` pipe would, whose exit code is `tar`'s),
+      // this very directory would throw too, but with "Cannot find module
+      // .../scripts/build.mjs" — a reason that points at a missing file, not
+      // at `root` not being a git repo. The assertion has to tell the right
+      // reason apart from the one that masks it.
       await expect(comprobarDist(dir)).rejects.toThrow(/not a git repository/i)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
   }, 60_000)
 
-  it('un repo cuyo scripts/build.mjs no exporta buildOptions → lanza diciéndolo', async () => {
+  it('a repo whose scripts/build.mjs does not export buildOptions → it throws saying so', async () => {
     const dir = repoDeMentira()
     writeFileSync(join(dir, 'scripts/build.mjs'), '// sin export\n')
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' })

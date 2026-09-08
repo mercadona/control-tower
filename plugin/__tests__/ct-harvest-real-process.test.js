@@ -1,16 +1,17 @@
-// /ct-harvest lee además la telemetría del juez (§3.4 del handoff:
-// docs/prompt-juez-lo-que-queda.md). `rubric_sin_vara` y `findings_by_rule`
-// viajaban en la pull request desde `1422c67` y NO LOS LEÍA NADIE — la
-// columna existía en disco y la pregunta «¿está llegando la vara?» se
-// contestaba abriendo ficheros `jsonl` a mano.
+// /ct-harvest also reads the judge's telemetry (§3.4 of the handoff:
+// docs/prompt-juez-lo-que-queda.md). `rubric_sin_vara` and `findings_by_rule`
+// had been travelling in the pull request since `1422c67` and NOBODY READ THEM
+// — the column existed on disk and the question «is the yardstick arriving?»
+// was answered by opening `jsonl` files by hand.
 //
-// Bancada CALCADA de ct-status.test.js pero SIN checkout git: ct-harvest.mjs
-// no mira el cwd — lee de GitHub, como todo lo demás de este comando — así
-// que no hace falta ningún repo local, sólo el stub de `gh` con PATH.
+// A bench TRACED from ct-status.test.js but WITHOUT a git checkout:
+// ct-harvest.mjs does not look at the cwd — it reads from GitHub, like
+// everything else in this command — so no local repo is needed, only the `gh`
+// stub on the PATH.
 //
-// Los issues del fixture NO traen `closedByPullRequestsReferences` (van
-// vacíos): el stub de `gh` no soporta `gh pr view`, así que ningún test de
-// este fichero puede depender de que ct-harvest intente leer un PR.
+// The fixture's issues do NOT carry `closedByPullRequestsReferences` (they go
+// empty): the `gh` stub does not support `gh pr view`, so no test in this file
+// can depend on ct-harvest trying to read a PR.
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -33,9 +34,9 @@ const TIMELINE = JSON.stringify([
   { event: 'labeled', label: { name: 'status:in-review' }, created_at: '2026-08-20T09:50:00Z' },
 ])
 
-// El directorio de telemetría: issue-12.jsonl (de este milestone) e
-// issue-99.jsonl (de OTRO epic — nunca debe pedirse ni aparecer). #13 queda
-// deliberadamente fuera del listado: es el slice "sin telemetría".
+// The telemetry directory: issue-12.jsonl (of this milestone) and
+// issue-99.jsonl (of ANOTHER epic — it must never be requested nor appear).
+// #13 is deliberately left out of the listing: it is the "no telemetry" slice.
 const DIR_JSON = JSON.stringify([
   { name: 'issue-12.jsonl', type: 'file' },
   { name: 'issue-99.jsonl', type: 'file' },
@@ -62,8 +63,8 @@ const correr = (b, env = {}, args = ['--repo', 'o/r', '--milestone', 'E']) => sp
   }),
 })
 
-describe('/ct-harvest — la telemetría del juez, por slice', () => {
-  it('el bloque sale con el sin-vara y los hallazgos por regla de cada slice, y exit 0', () => {
+describe('/ct-harvest — the judge telemetry, per slice', () => {
+  it('the block comes out with each slice sin-vara and findings per rule, and exit 0', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 1, findings_by_rule: { patrones: 1 } })
@@ -75,11 +76,11 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  // LA SEVERIDAD, en una sola celda y en el orden en que se lee: una alta veta
-  // (el contrato del veredicto no admite un PASS con una alta), una media
-  // compra una vuelta al implementador, una baja sólo se anota. Tres hallazgos
-  // de `alcance` sin esto son indistinguibles de tres vetos.
-  it('las tres severidades salen sumadas en una sola celda, en el orden alta/media/baja', () => {
+  // THE SEVERITY, in a single cell and in the order in which it is read: a high
+  // vetoes (the verdict's contract does not admit a PASS with a high), a medium
+  // buys a round trip to the implementer, a low is only noted down. Three
+  // `alcance` findings without this are indistinguishable from three vetoes.
+  it('the three severities come out added up in a single cell, in the alta/media/baja order', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': veredicto({ ruling: 'FAIL', rubric_sin_vara: 0, findings_by_rule: { patrones: 2 }, findings_high: 1, findings_medium: 0, findings_low: 1 })
@@ -91,7 +92,7 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('un slice cuya telemetría es toda anterior a las severidades imprime «—», nunca 0/0/0', () => {
+  it('a slice whose telemetry is all older than the severities prints «—», never 0/0/0', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0, findings_by_rule: {} }),
@@ -103,7 +104,7 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('un slice que el juez midió limpio imprime tres ceros de verdad y no anota ningún veto', () => {
+  it('a slice the judge measured clean prints three real zeros and notes no veto at all', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0, findings_by_rule: {}, findings_high: 0, findings_medium: 0, findings_low: 0 }),
@@ -114,7 +115,7 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('los vetos y las filas sin columna caben en la misma celda de veredictos, separados por coma', () => {
+  it('the vetoes and the rows with no column fit in the same verdicts cell, separated by a comma', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': veredicto({ ruling: 'FAIL' }) + veredicto({ ruling: 'FAIL', rubric_sin_vara: 1 }),
@@ -125,10 +126,11 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  // MEDIDA 1: si la vara de ct se usó y si cazó algo, en una sola celda y sus
-  // dos mitades. Sustituye a `patrones-ct`, que sólo miraba hallazgos del ítem
-  // `patrones` y por eso no veía los que el juez archiva en otro ítem.
-  it('vara ct imprime las dos mitades sumadas de todos los veredictos del slice', () => {
+  // MEASURE 1: whether the ct yardstick was used and whether it caught
+  // anything, in a single cell and its two halves. It replaces `patrones-ct`,
+  // which only looked at findings of the `patrones` item and for that reason did
+  // not see the ones the judge files under another item.
+  it('vara ct prints both halves added up over all the verdicts of the slice', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': veredicto({ ruling: 'FAIL', rubric_sin_vara: 0, findings_by_rule: { patrones: 2 }, rubric_vara_ct_docs: 5, findings_vara_ct: 1 })
@@ -140,7 +142,7 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('un slice cuya telemetría es toda anterior a estas columnas imprime «—» en vara ct, nunca 0', () => {
+  it('a slice whose telemetry is all older than these columns prints «—» in vara ct, never 0', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': veredicto({ ruling: 'FAIL', rubric_sin_vara: 0, findings_by_rule: { patrones: 2 } }),
@@ -152,7 +154,7 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('media medida no imprime media celda: con una columna sola sale «—», porque el hueco se leería como un cero', () => {
+  it('half a measure does not print half a cell: with one column alone it comes out «—», because the gap would be read as a zero', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': veredicto({ ruling: 'FAIL', rubric_sin_vara: 0, findings_by_rule: { patrones: 2 }, rubric_vara_ct_docs: 5 }),
@@ -163,10 +165,10 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  // MEDIDA 2: si la vara llegó al brief del paso `implement`, y cuánto pesó.
-  // Sumado sobre TODOS los intentos de `implement` que el slice dejó escritos
-  // — el mismo fichero por issue que lee la telemetría del juez.
-  it('brief suma los documentos de vara de ct y el peso de todos los intentos de implement del slice', () => {
+  // MEASURE 2: whether the yardstick reached the brief of the `implement` step,
+  // and how much it weighed. Added up over ALL the `implement` attempts the
+  // slice left written — the same per-issue file the judge's telemetry reads.
+  it('brief adds up the ct yardstick documents and the weight of every implement attempt of the slice', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl':
@@ -180,7 +182,7 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('un slice sin ningún intento de implement en su telemetría dice «—» en brief, nunca 0', () => {
+  it('a slice with no implement attempt at all in its telemetry says «—» in brief, never 0', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
@@ -191,10 +193,10 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('un slice cuyos intentos de implement son todos anteriores a la medida dice «—» en brief, nunca 0, y lo dice en voz alta', () => {
+  it('a slice whose implement attempts are all older than the measure says «—» in brief, never 0, and says so out loud', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
-      // Esquema viejo: fila de `implement` sin brief_vara_ct_docs/brief_bytes.
+      // Old schema: an `implement` row with no brief_vara_ct_docs/brief_bytes.
       'issue-12.jsonl': intentoImplement({ outcome: 'done' }) + veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
     })
     const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
@@ -204,7 +206,7 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('un intento de implement con el brief no leído (null) no cuenta como cero: se anota "sin columna"', () => {
+  it('an implement attempt whose brief was not read (null) does not count as zero: it is noted as "sin columna"', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl':
@@ -218,9 +220,9 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  // MEDIDA 3 (#92): cuánto material fijo leyó cada papel despachado. Sumado
-  // sobre los cuatro pasos que llaman a un subagente, no sólo sobre `implement`.
-  it('bytes por papel suma el agente, las skills y el paquete de todos los papeles despachados del slice', () => {
+  // MEASURE 3 (#92): how much fixed material each dispatched role read. Added
+  // up over the four steps that call a subagent, not only over `implement`.
+  it('bytes por papel adds up the agent, the skills and the package of every dispatched role of the slice', () => {
     const b = bancada()
     const bytes = { agent_bytes: 5000, skill_bytes: 18000, package_bytes: 1000 }
     const filesJson = JSON.stringify({
@@ -234,7 +236,7 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('un slice cuyos papeles son todos anteriores a la medida dice «—» en bytes por papel, nunca 0, y lo dice en voz alta', () => {
+  it('a slice whose roles are all older than the measure says «—» in bytes por papel, never 0, and says so out loud', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': intentoImplement({ outcome: 'done' }) + veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
@@ -245,7 +247,7 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('un slice sin fichero de telemetría dice «(sin telemetría)» y jamás un cero', () => {
+  it('a slice with no telemetry file says «(sin telemetría)» and never a zero', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
@@ -257,10 +259,10 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('un slice cuya telemetría es toda anterior a la columna imprime «—» en sin-vara, nunca 0, y enseña cuántos veredictos son sin columna', () => {
+  it('a slice whose telemetry is all older than the column prints «—» in sin-vara, never 0, and shows how many verdicts have no column', () => {
     const b = bancada()
-    // Una sola fila de veredicto SIN `rubric_sin_vara`: esquema anterior a la
-    // columna (las 15 filas del PR #11 de jjponz/rust-monitoring son de éstas).
+    // A single verdict row WITHOUT `rubric_sin_vara`: the schema older than the
+    // column (the 15 rows of PR #11 of jjponz/rust-monitoring are of this kind).
     const filesJson = JSON.stringify({
       'issue-12.jsonl': veredicto({ ruling: 'PASS' }),
     })
@@ -272,10 +274,10 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('el listado de telemetría que falla no baja el exit a 1, y el informe no imprime ni un número', () => {
+  it('a telemetry listing that fails does not drop the exit to 1, and the report prints not a single number', () => {
     const b = bancada()
-    // Sin FAKE_GH_METRICS_DIR_JSON: el stub hace fallar el listado del
-    // directorio (404 simulado), que es la vida real de todo epic anterior a
+    // Without FAKE_GH_METRICS_DIR_JSON: the stub makes the directory listing
+    // fail (a simulated 404), which is real life for every epic older than
     // 1422c67.
     const res = correr(b, {})
     expect(res.status).toBe(0)
@@ -284,7 +286,7 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('un fichero que el listado sí nombraba y no se pudo leer es una cosecha INCOMPLETA: motivo y exit 1', () => {
+  it('a file the listing did name and could not be read is an INCOMPLETE harvest: reason and exit 1', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILE_FAIL: 'issue-12' })
     expect(res.status).toBe(1)
@@ -293,7 +295,7 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('las líneas ilegibles se dicen en voz alta y no cambian el exit', () => {
+  it('the unreadable lines are said out loud and do not change the exit', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': '{no json\n' + veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
@@ -304,7 +306,7 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('los ficheros de telemetría de otros epics no aparecen', () => {
+  it('the telemetry files of other epics do not show up', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
@@ -316,7 +318,7 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('--json lleva la telemetría dentro de cada fila, con el estado explícito', () => {
+  it('--json carries the telemetry inside each row, with the status explicit', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
@@ -330,7 +332,7 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('lee exactamente donde ct-step escribe', () => {
+  it('reads exactly where ct-step writes', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
@@ -341,7 +343,7 @@ describe('/ct-harvest — la telemetría del juez, por slice', () => {
     limpiar(b)
   })
 
-  it('la cosecha sigue sin mutar nada: ni una llamada de escritura', () => {
+  it('the harvest still mutates nothing: not one write call', () => {
     const b = bancada()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),

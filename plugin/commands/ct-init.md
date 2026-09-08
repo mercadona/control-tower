@@ -1,26 +1,26 @@
 ---
-description: Bootstrap de un repo para el loop Control Tower (.agent/STATE.md + AGENTS.md + contrato de slices + plantilla del execution spec)
+description: Bootstrap a repository for the Control Tower loop (.agent/STATE.md + AGENTS.md + slices contract + execution spec template)
 ---
-Corre el scaffolder sobre el repo actual y confirma qué creó:
+Run the scaffolder over the current repository and confirm what it created:
 ```
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/ct-init.sh "$(pwd)"
 ```
 
-Es idempotente: crea lo que falta y no pisa lo que existe. Siembra `.agent/STATE.md`, `.agent/conventions.md` (la vara del repo), `docs/superpowers/CONTRATO-SLICES.md` (el contrato de la tabla de slices, versionado y mantenido por `/ct-init`), `docs/superpowers/specs/_TEMPLATE-execution-spec.md`, dos secciones en `AGENTS.md` (la del loop, que enlaza al contrato, y la de travesía e2e) y las reglas de `.gitignore` (`.worktrees/`, `.agent/SLICE.md`, `.agent/run-*`).
+It is idempotent: it creates what is missing and does not tread on what is there. It seeds `.agent/STATE.md`, `.agent/conventions.md` (the repository's yardstick), `docs/superpowers/CONTRATO-SLICES.md` (the contract of the slices table, versioned and maintained by `/ct-init`), `docs/superpowers/specs/_TEMPLATE-execution-spec.md`, two sections in `AGENTS.md` (the loop's one, which links to the contract, and the e2e journey one) and the `.gitignore` rules (`.worktrees/`, `.agent/SLICE.md`, `.agent/run-*`).
 
-| Exit | Significa | Qué hacer |
+| Exit | What it means | What to do |
 |---|---|---|
-| `0` | Bootstrap hecho; los `aviso:` de stderr no son fallos | leer stdout y stderr y transmitirlos |
-| `2` | Opción no reconocida | corregir la invocación (`--update-slices-contract`, `--force`) |
-| `3` | Se pidió `--update-slices-contract` y el bloque presente no se reconoce, o no se pudo hashear | transmitir el aviso entero, con el hash; `--force` solo si el usuario confirma que ese bloque no lleva trabajo suyo |
+| `0` | Bootstrap done; the `aviso:` lines on stderr are not failures | read stdout and stderr and pass them on |
+| `2` | Unrecognised option | fix the invocation (`--update-slices-contract`, `--force`) |
+| `3` | `--update-slices-contract` was asked for and the block present is not recognised, or could not be hashed | pass the whole warning on, with the hash; `--force` only if the user confirms that block carries no work of theirs |
 
-Lo que te toca a ti después:
+What falls to you afterwards:
 
-- Rellena en `AGENTS.md` los comandos reales del repo (build, test, lint, CI): para eso sí explora el repo. **No toques** la sección del loop más que para rellenar sus huecos, y **no dupliques, reescribas ni resumas el contrato**: vive en `docs/superpowers/CONTRATO-SLICES.md`, lo mantiene `/ct-init` y solo se actualiza con `--update-slices-contract` cuando el usuario lo pide. Un `AGENTS.md` bootstrapeado con una versión anterior lleva el contrato entero dentro: el scaffolder lo avisa y no lo toca sin ese flag.
-- El bloque de stdout que empieza por el literal `Candidatos a la vara de este repo (barrido determinista — PROPONE, no declara):` **se transmite al usuario tal cual**, con sus motivos y las marcas `[esqueleto: sólo encabezados]` (un esqueleto declarado hoy le da al juez un documento vacío que cuenta como vara). En `.agent/conventions.md` escribe SOLO lo que el usuario confirme; si no confirma nada, déjalo con su placeholder.
-- Un bloque `ATENCIÓN: este repo ya tenía convenciones propias...` por stderr (`[claim]`, `[worktrees]`, `[estado]`) también se transmite entero, con la evidencia: elegir cuál manda es decisión del usuario. Su salida es una línea `señal: fecha — motivo` en `.agent/conventions-ack.md`; díselo, no la escribas tú.
-- «No se ha podido comprobar» (falta `node`) no es «no hay nada»: dilo también.
-- En `.agent/STATE.md` describe solo el bootstrap: `task` `"Bootstrap Control Tower loop (ct-init)"`, `next_action` en `"(sin slice asignado)"`, `blocked` en `null`, `verify` vacío. **No salgas a buscar trabajo pendiente**: el `next_action` real lo siembra `/ct-next` en el `.agent/SLICE.md` del worktree.
-- Si el repo no está registrado en `control-tower/tower/workspaces.*.yaml`, dilo; no lo registres tú.
+- Fill in the repository's real commands in `AGENTS.md` (build, test, lint, CI): for that, do explore the repository. **Do not touch** the loop's section beyond filling in its gaps, and **do not duplicate, rewrite or summarise the contract**: it lives in `docs/superpowers/CONTRATO-SLICES.md`, `/ct-init` maintains it and it is only updated with `--update-slices-contract` when the user asks. An `AGENTS.md` bootstrapped with an earlier version carries the whole contract inside it: the scaffolder warns about that and does not touch it without that flag.
+- The stdout block that begins with the literal `Candidatos a la vara de este repo (barrido determinista — PROPONE, no declara):` **is passed on to the user exactly as it is**, with its reasons and the `[esqueleto: sólo encabezados]` marks (a skeleton declared today gives the judge an empty document that counts as a yardstick). In `.agent/conventions.md` write ONLY what the user confirms; if they confirm nothing, leave it with its placeholder.
+- An `ATENCIÓN: este repo ya tenía convenciones propias...` block on stderr (`[claim]`, `[worktrees]`, `[estado]`) is also passed on whole, with the evidence: choosing which one rules is the user's decision. Its outcome is a `señal: fecha — motivo` line in `.agent/conventions-ack.md`; tell them so, do not write it yourself.
+- «No se ha podido comprobar» (no `node`) is not «there is nothing»: say that too.
+- In `.agent/STATE.md` describe only the bootstrap: `task` `"Bootstrap Control Tower loop (ct-init)"`, `next_action` at `"(sin slice asignado)"`, `blocked` at `null`, `verify` empty. **Do not go looking for pending work**: the real `next_action` is seeded by `/ct-next` in the worktree's `.agent/SLICE.md`.
+- If the repository is not registered in `control-tower/tower/workspaces.*.yaml`, say so; do not register it yourself.
 
-Referencia completa —qué siembra cada fichero y por qué, la doctrina de versiones y hashes del contrato, el campo `blocked`, los acuses—: `docs/loop/ct-init.md` en el repo del plugin.
+Full reference —what each file seeds and why, the doctrine of the contract's versions and hashes, the `blocked` field, the acknowledgements—: `docs/loop/ct-init.md` in the plugin's repository.

@@ -1,29 +1,29 @@
 #!/usr/bin/env node
-// Envoltorio de IO de scripts/vara.js: barre el repo destino y escribe por
-// stdout los candidatos a su vara (`.agent/conventions.md`), si los hay.
-// Lo llama ct-init.sh, que lo imprime SIN redirigir a stderr — a diferencia de
-// su hermano `detect-conventions.mjs`.
+// IO wrapper around scripts/vara.js: it sweeps the target repository and writes
+// to stdout the candidates for its yardstick (`.agent/conventions.md`), if there
+// are any. ct-init.sh calls it, and prints it WITHOUT redirecting to stderr —
+// unlike its sibling `detect-conventions.mjs`.
 //
-// TRAMPA DE NOMBRE, documentada a propósito: este fichero NO es
-// `detect-conventions.mjs`. Ese otro barre COLISIONES DE PROTOCOLO entre el
-// loop y el repo destino (claim, worktrees, fichero de estado) y su salida es
-// una alarma (va a stderr). Este barre CANDIDATOS A LA VARA DE CÓDIGO del
-// repo (§3.12, docs/prompt-juez-lo-que-queda.md) y su salida es material para
-// una decisión humana (va a stdout). Confundirlos por el nombre sería la
-// tercera trampa — la primera y la segunda son `scripts/conventions.js` y
-// `conventions-io.js`, que tampoco son esto.
+// NAME TRAP, documented on purpose: this file is NOT
+// `detect-conventions.mjs`. That other one sweeps for PROTOCOL COLLISIONS
+// between the loop and the target repository (claim, worktrees, state file) and
+// its output is an alarm (it goes to stderr). This one sweeps for CANDIDATES FOR
+// THE REPOSITORY'S CODE YARDSTICK (§3.12, docs/prompt-juez-lo-que-queda.md) and
+// its output is material for a human decision (it goes to stdout). Confusing
+// them by their names would be the third trap — the first and the second are
+// `scripts/conventions.js` and `conventions-io.js`, which are not this either.
 //
-// Contrato de salida, deliberadamente pobre, calcado del hermano:
-//   exit 0  → barrido completado. stdout vacío = nada que proponer (o bien no
-//             hay ningún candidato, o bien todos los que hay ya están
-//             declarados — los dos son estados benignos); stdout con texto =
-//             los candidatos, ya formateados.
-//   exit 1  → NO se ha podido barrer (uso incorrecto, directorio ilegible).
-//             stderr explica por qué. El caller NUNCA debe leer esto como
-//             "este repo no tiene convenciones": no se ha mirado.
+// Output contract, deliberately poor, traced from the sibling:
+//   exit 0  → sweep completed. Empty stdout = nothing to propose (either there
+//             is no candidate at all, or every one there is has already been
+//             declared — both are benign states); stdout with text = the
+//             candidates, already formatted.
+//   exit 1  → the sweep could NOT be done (incorrect usage, unreadable
+//             directory). stderr explains why. The caller must NEVER read this
+//             as "this repository has no conventions": nobody looked.
 //
-// Este script NUNCA escribe en `.agent/conventions.md`. Sólo lee (el árbol y,
-// si existe, la propia declaración) y propone.
+// This script NEVER writes to `.agent/conventions.md`. It only reads (the tree
+// and, if it exists, the declaration itself) and proposes.
 import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { walkRepo } from './repo-walk.js'
@@ -57,10 +57,10 @@ try {
   process.exit(1)
 }
 
-// Si `.agent/conventions.md` no existe todavía (ENOENT), no hay nada
-// declarado: se propone todo. Si existe y no se puede LEER (permisos), no es
-// lo mismo — se dice, para que el humano sepa que la lista de abajo puede
-// repetir algo que ya está declarado.
+// If `.agent/conventions.md` does not exist yet (ENOENT), nothing has been
+// declared: everything is proposed. If it exists and cannot be READ
+// (permissions), that is not the same thing — it gets said, so that the human
+// knows the list below may repeat something already declared.
 let declaradas = new Set()
 let notaLectura = ''
 try {

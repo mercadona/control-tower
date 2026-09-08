@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { envDelGo } from './fixtures/go-gate.js'
+import { goEnv } from './fixtures/go-gate.js'
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'dispatch-check.mjs')
 const fakeGhDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-gh-bin')
@@ -214,7 +214,7 @@ const release = (issue, cwd) => spawnSync(process.execPath, [SCRIPT, String(issu
   cwd,
   encoding: 'utf8',
   stdio: QUIET_STDIO,
-  env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, ...envDelGo({ repo: 'o/r', issue }) },
+  env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, ...goEnv({ repo: 'o/r', issue }) },
 })
 
 describe('dispatch-check --release measures the diff from the merge base, not the cut', () => {

@@ -11,13 +11,13 @@ const fakeCmuxDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'f
 
 const gitEn = (repo, ...args) => execFileSync('git', ['-C', repo, '-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
 
-// bancada: un checkout git DE VERDAD con su worktree `.worktrees/7` y su rama
-// `feat/7`, porque lo que este fichero comprueba es justo lo que un stub de
-// git no puede decir — que tras la cosecha el worktree y la rama YA NO
-// EXISTEN. `realpathSync` no es cosmético: en macOS `tmpdir()` es un symlink
-// (/var → /private/var) y git reporta SIEMPRE la ruta resuelta, así que el
-// `current_directory` que se le enseña a cmux tiene que ser la resuelta o
-// `findWorkspaceByCwd` no casaría con la que calcula `localSliceArtifacts`.
+// bancada: a REAL git checkout with its `.worktrees/7` worktree and its
+// `feat/7` branch, because what this file checks is precisely what a git stub
+// cannot tell you — that after the harvest the worktree and the branch NO
+// LONGER EXIST. `realpathSync` is not cosmetic: on macOS `tmpdir()` is a
+// symlink (/var → /private/var) and git ALWAYS reports the resolved path, so
+// the `current_directory` shown to cmux has to be the resolved one or
+// `findWorkspaceByCwd` would not match the one `localSliceArtifacts` computes.
 function bancada({ conWorktree = true } = {}) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'ct-collect-')))
   const repo = join(dir, 'repo')
@@ -59,13 +59,13 @@ const invocaciones = (b) => (existsSync(b.invokedLog) ? readFileSync(b.invokedLo
 const sesiones = (b) => JSON.parse(readFileSync(b.stateFile, 'utf8'))
 const OTRA_PUNTA = '1122334455667788990011223344556677889900'
 
-describe('dispatch-check --collect — la cosecha', () => {
-  it('una PR mergeada con el árbol limpio y la punta que aterrizó: cierra cmux, borra worktree y rama, exit 0', () => {
+describe('dispatch-check --collect — the harvest', () => {
+  it('a merged pull request with a clean tree and the tip that landed: closes cmux, deletes worktree and branch, exit 0', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_PR_LIST: prList('MERGED', b.tip) })
     expect(res.status).toBe(0)
     expect(res.stdout.trim()).toBe(`collected #7: cerrada la workspace de cmux, borrado el worktree ${b.worktree}, borrada la rama feat/7`)
-    // git de verdad lo dice: el worktree y la rama ya no están.
+    // real git says it: the worktree and the branch are no longer there.
     expect(existsSync(b.worktree)).toBe(false)
     expect(ramas(b)).toBe('')
     expect(invocaciones(b)).toContain('close-workspace --workspace workspace:0')
@@ -73,7 +73,7 @@ describe('dispatch-check --collect — la cosecha', () => {
     limpiar(b)
   })
 
-  it('el argv de gh lleva el --repo pedido y la rama del slice, con los tres campos que el lector consume', () => {
+  it('the gh argv carries the --repo it was asked for and the slice branch, with the three fields the reader consumes', () => {
     const b = bancada()
     correr(b, { FAKE_GH_PR_LIST: prList('MERGED', b.tip) })
     expect(readFileSync(b.ghArgvLog, 'utf8').trim())
@@ -81,7 +81,7 @@ describe('dispatch-check --collect — la cosecha', () => {
     limpiar(b)
   })
 
-  it('la PR sigue abierta: exit 1, lo dice con su estado y no toca nada', () => {
+  it('the pull request is still open: exit 1, it says so with its status and touches nothing', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_PR_LIST: prList('OPEN', OTRA_PUNTA) })
     expect(res.status).toBe(1)
@@ -92,7 +92,7 @@ describe('dispatch-check --collect — la cosecha', () => {
     limpiar(b)
   })
 
-  it('la PR se cerró sin mergear: exit 1 y tampoco borra nada', () => {
+  it('the pull request was closed without merging: exit 1 and it deletes nothing either', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_PR_LIST: prList('CLOSED', OTRA_PUNTA) })
     expect(res.status).toBe(1)
@@ -101,7 +101,7 @@ describe('dispatch-check --collect — la cosecha', () => {
     limpiar(b)
   })
 
-  it('no hay ninguna PR para la rama: exit 1 nombrando que no la hay', () => {
+  it('there is no pull request for the branch: exit 1 naming that there is none', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_PR_LIST: '[]' })
     expect(res.status).toBe(1)
@@ -110,7 +110,7 @@ describe('dispatch-check --collect — la cosecha', () => {
     limpiar(b)
   })
 
-  it('el árbol tiene un fichero sin trackear: exit 10, conserva todo y dice por qué', () => {
+  it('the tree has an untracked file: exit 10, it keeps everything and says why', () => {
     const b = bancada()
     writeFileSync(join(b.worktree, 'sin-commitear.txt'), 'trabajo vivo\n')
     const res = correr(b, { FAKE_GH_PR_LIST: prList('MERGED', b.tip) })
@@ -122,7 +122,7 @@ describe('dispatch-check --collect — la cosecha', () => {
     limpiar(b)
   })
 
-  it('la punta local no es la que mergeó la PR: exit 10 y nombra el commit que sí lo era', () => {
+  it('the local tip is not the one that merged the pull request: exit 10 and it names the commit that was', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_PR_LIST: prList('MERGED', OTRA_PUNTA) })
     expect(res.status).toBe(10)
@@ -131,7 +131,7 @@ describe('dispatch-check --collect — la cosecha', () => {
     limpiar(b)
   })
 
-  it('gh no contesta: exit 3, nada mutado y el diagnóstico va a stderr', () => {
+  it('gh does not answer: exit 3, nothing mutated and the diagnostic goes to stderr', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_PR_LIST_FAIL: '1' })
     expect(res.status).toBe(3)
@@ -142,7 +142,7 @@ describe('dispatch-check --collect — la cosecha', () => {
     limpiar(b)
   })
 
-  it('cmux no concluyente: exit 3 sin haber borrado nada, aunque la PR esté mergeada', () => {
+  it('cmux inconclusive: exit 3 without having deleted anything, even though the pull request is merged', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_PR_LIST: prList('MERGED', b.tip), FAKE_CMUX_LIST_WINDOWS_FAIL: '1' })
     expect(res.status).toBe(3)
@@ -153,7 +153,7 @@ describe('dispatch-check --collect — la cosecha', () => {
     limpiar(b)
   })
 
-  it('cmux contesta y no hay ninguna workspace en ese worktree: cosecha git y no inventa un cierre', () => {
+  it('cmux answers and there is no workspace in that worktree: it harvests git and does not invent a closure', () => {
     const b = bancada()
     writeFileSync(b.stateFile, JSON.stringify([{ title: 'otra cosa', cwd: join(b.dir, 'otro-sitio') }]))
     const res = correr(b, { FAKE_GH_PR_LIST: prList('MERGED', b.tip) })
@@ -164,7 +164,7 @@ describe('dispatch-check --collect — la cosecha', () => {
     limpiar(b)
   })
 
-  it('el cierre de cmux falla tras nada y los borrados sí ocurren: exit 4 con el comando que queda, sin encadenar', () => {
+  it('the cmux closure fails having done nothing and the deletions do happen: exit 4 with the command that is left, unchained', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_PR_LIST: prList('MERGED', b.tip), FAKE_CMUX_CLOSE_FAIL: '1' })
     expect(res.status).toBe(4)
@@ -176,7 +176,7 @@ describe('dispatch-check --collect — la cosecha', () => {
     limpiar(b)
   })
 
-  it('--dry-run imprime los comandos exactos y deja el worktree, la rama y la sesión en su sitio', () => {
+  it('--dry-run prints the exact commands and leaves the worktree, the branch and the session in place', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_PR_LIST: prList('MERGED', b.tip) }, ['7', '--repo', 'o/r', '--collect', '--dry-run'])
     expect(res.status).toBe(0)
@@ -188,7 +188,7 @@ describe('dispatch-check --collect — la cosecha', () => {
     limpiar(b)
   })
 
-  it('no queda nada en disco: exit 0 diciendo que no había nada que recoger', () => {
+  it('nothing is left on disk: exit 0 saying there was nothing to collect', () => {
     const b = bancada({ conWorktree: false })
     const res = correr(b, { FAKE_GH_PR_LIST: '[]' })
     expect(res.status).toBe(0)
@@ -196,7 +196,7 @@ describe('dispatch-check --collect — la cosecha', () => {
     limpiar(b)
   })
 
-  it('invocado fuera de un checkout git: exit 3, porque no se declara ausente lo que no se ha podido mirar', () => {
+  it('invoked outside a git checkout: exit 3, because what could not be looked at is not declared absent', () => {
     const b = bancada()
     const res = spawnSync('node', [script, '7', '--repo', 'o/r', '--collect'], {
       encoding: 'utf8',
@@ -208,7 +208,7 @@ describe('dispatch-check --collect — la cosecha', () => {
     limpiar(b)
   })
 
-  it('--collect con --requeue: exit 2, son mutuamente excluyentes', () => {
+  it('--collect with --requeue: exit 2, they are mutually exclusive', () => {
     const b = bancada()
     const res = correr(b, {}, ['7', '--repo', 'o/r', '--collect', '--requeue'])
     expect(res.status).toBe(2)

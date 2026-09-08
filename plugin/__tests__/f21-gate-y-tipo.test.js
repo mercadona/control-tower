@@ -1,27 +1,27 @@
 // ============================================================================
-// F21 — EL GATE HUMANO Y EL TIPO TÉCNICO ERAN LA MISMA COLUMNA.
+// F21 — THE HUMAN GATE AND THE TECHNICAL TYPE WERE THE SAME COLUMN.
 //
-// Hallazgo, salido de despachar un slice real: el único gate humano que
-// existía en todo el plugin vivía DENTRO de la cadena de texto del addendum de
-// `ui` (kickoff.js#ADDENDA). No había ningún otro mecanismo — ni en slices.js,
-// ni en groom.js, ni en el cuerpo del issue, ni en las labels. Es decir: la
-// columna `Tipo` de la tabla §9 decidía DOS cosas a la vez, qué recordatorio
-// técnico recibe el agente y si hay gate humano, y esos dos ejes no siempre
-// coinciden. El caso real: un slice `Tipo: backend` (una migración con
-// backfill) que el spec del epic marcaba explícitamente como necesitado de
-// gate visual porque "la barra es lo más visible de todo el spec". Recibió el
-// addendum de backend y NINGÚN gate, y nada lo señaló.
+// The finding, which came out of dispatching a real slice: the only human gate
+// that existed in the whole plugin lived INSIDE the text string of the `ui`
+// addendum (kickoff.js#ADDENDA). There was no other mechanism at all — not in
+// slices.js, nor in groom.js, nor in the issue body, nor in the labels. That
+// is: the `Tipo` column of the §9 table decided TWO things at once, which
+// technical reminder the agent receives and whether there is a human gate, and
+// those two axes do not always coincide. The real case: a `Tipo: backend`
+// slice (a migration with a backfill) that the epic's spec explicitly marked as
+// needing a visual gate because "la barra es lo más visible de todo el spec".
+// It received the backend addendum and NO gate at all, and nothing flagged it.
 //
-// La capa de ironía que hay que entender antes de leer estos tests: el spec
-// del epic decía "el gate visual no depende de esto: vive en §10 y en la REGLA
-// #-2, que son más fuertes que un addendum". Eso es cierto para un HUMANO que
-// lee el spec. El agente despachado NO lee el spec: recibe el kickoff y el
-// cuerpo del issue, y en ninguno de los dos aparece esa sección. Una garantía
-// que vive solo en un documento que el destinatario nunca abre no es una
-// garantía — y esa es la propiedad de fondo que esta ronda persigue:
+// The layer of irony to understand before reading these tests: the epic's spec
+// said "el gate visual no depende de esto: vive en §10 y en la REGLA #-2, que
+// son más fuertes que un addendum". That is true for a HUMAN who reads the
+// spec. The dispatched agent does NOT read the spec: it receives the kickoff
+// and the issue body, and that section appears in neither of the two. A
+// guarantee that lives only in a document its addressee never opens is not a
+// guarantee — and that is the underlying property this round pursues:
 //
-//   NINGUNA EXIGENCIA QUE EL SPEC LE HAGA AL AGENTE PUEDE DEPENDER DE QUE EL
-//   AGENTE LEA EL SPEC.
+//   NO DEMAND THE SPEC MAKES OF THE AGENT CAN DEPEND ON THE AGENT READING THE
+//   SPEC.
 // ============================================================================
 import { describe, it, expect } from 'vitest'
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -47,10 +47,10 @@ const fakeEnv = (overrides = {}) => ({ ...process.env, PATH: `${fakeGhDir}:${pro
 
 const SLICE = { n: 7, name: 'barra de progreso', type: 'backend', ac: ['AC-7.1'], deps: [], issue: '#7' }
 
-// specWith: la tabla §9 de diez columnas (nueve de siempre + `Gate`), con las
-// filas que se le pasen. Se escribe entera aquí y no con un helper del
-// producto a propósito: un test que compone la tabla con el mismo código que
-// la parsea no comprueba nada.
+// specWith: the ten-column §9 table (the usual nine + `Gate`), with whatever
+// rows it is given. It is written out whole here and not with a helper from the
+// product on purpose: a test that composes the table with the same code that
+// parses it checks nothing.
 function specWith(rows) {
   return [
     '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices',
@@ -74,171 +74,171 @@ function dryRun(specText, extraArgs = []) {
 }
 
 // ============================================================================
-// 1. El vocabulario de gates: cerrado, y derivado de lo que YA existía.
+// 1. The vocabulary of gates: closed, and derived from what ALREADY existed.
 // ============================================================================
-describe('F21 — vocabulario de gates', () => {
-  it('los gates que existen salen de los addenda que ya los imponían, más el añadido deliberado de F-jjponz-1', () => {
-    // `ui` imponía "gate de screenshot obligatorio"; `infra`, "apply solo tras
-    // review". Son las dos ÚNICAS frases de ADDENDA que exigían un acto
-    // humano; el resto son recordatorios técnicos. `plan` (F-jjponz-1) es el
-    // primer gate AÑADIDO por la vía que la doctrina de gates.js reserva para
-    // eso: acto deliberado, con su texto de kickoff y de issue (ver
-    // gate-plan.test.js). Ningún Tipo lo implica. `e2e` (feature "e2e al
-    // cierre del slice") es el segundo: también deliberado, con sus dos
-    // textos, y tampoco lo implica ningún Tipo — se DERIVA de la columna E2E
-    // (ver gates.js#resolveGates), nunca de `Tipo`.
+describe('F21 — the vocabulary of gates', () => {
+  it('the gates that exist come out of the addenda that already imposed them, plus the deliberate addition of F-jjponz-1', () => {
+    // `ui` imposed "gate de screenshot obligatorio"; `infra`, "apply solo tras
+    // review". They are the two ONLY phrases of ADDENDA that demanded a human
+    // act; the rest are technical reminders. `plan` (F-jjponz-1) is the first
+    // gate ADDED through the route the doctrine of gates.js reserves for that:
+    // a deliberate act, with its kickoff text and its issue text (see
+    // gate-plan.test.js). No Tipo implies it. `e2e` (the "e2e al cierre del
+    // slice" feature) is the second: also deliberate, with its two texts, and
+    // no Tipo implies it either — it is DERIVED from the E2E column (see
+    // gates.js#resolveGates), never from `Tipo`.
     expect(Object.keys(GATES).sort()).toEqual(['apply', 'e2e', 'plan', 'visual'])
     expect(TYPE_GATES.ui).toEqual(['visual'])
     expect(TYPE_GATES.infra).toEqual(['apply'])
-    // F-jjponz-2: `plan` está implicado en TODO slice (gatesForType lo añade
-    // siempre); la renuncia por fila es `!plan`. Los Tipos sin gate técnico
-    // llevan exactamente ese defecto y nada más.
+    // F-jjponz-2: `plan` is implied in EVERY slice (gatesForType always adds
+    // it); the per-row waiver is `!plan`. The Tipos with no technical gate carry
+    // exactly that default and nothing more.
     expect(gatesForType('backend')).toEqual(['plan'])
     expect(gatesForType('')).toEqual(['plan'])
     expect(gatesForType(undefined)).toEqual(['plan'])
   })
 
-  it('los addenda dejan de llevar gate dentro: quedan recordatorios TÉCNICOS y nada más', () => {
-    // Es la mitad "separar los dos ejes" del arreglo. Si la frase del gate se
-    // quedara además dentro del addendum, un slice `ui` que RENUNCIA al gate
-    // seguiría recibiéndola — el addendum contradiría al gate resuelto.
+  it('the addenda stop carrying a gate inside: what is left are TECHNICAL reminders and nothing more', () => {
+    // It is the "separate the two axes" half of the fix. If the gate's phrase
+    // also stayed inside the addendum, a `ui` slice that WAIVES the gate would
+    // keep receiving it — the addendum would contradict the resolved gate.
     for (const [type, text] of Object.entries(ADDENDA)) {
       expect(text.toLowerCase(), type).not.toMatch(/screenshot|\bgate\b|tras review/)
     }
-    // Control: los addenda siguen existiendo y siguen siendo técnicos.
+    // Check: the addenda still exist and are still technical.
     expect(ADDENDA.ui.toLowerCase()).toMatch(/design system/)
     expect(ADDENDA.infra.toLowerCase()).toMatch(/dry-run/)
   })
 })
 
 // ============================================================================
-// 2. resolveGates: los dos ejes, por fin separados.
+// 2. resolveGates: the two axes, separated at last.
 // ============================================================================
-describe('F21 — resolveGates(tipo, celda Gate)', () => {
-  it('sin celda: los gates salen del Tipo más el defecto universal `plan` (F-jjponz-2)', () => {
+describe('F21 — resolveGates(type, Gate cell)', () => {
+  it('with no cell: the gates come out of the Tipo plus the universal default `plan` (F-jjponz-2)', () => {
     expect(resolveGates('ui', '').gates).toEqual(['visual', 'plan'])
     expect(resolveGates('ui', undefined).gates).toEqual(['visual', 'plan'])
     expect(resolveGates('infra', '').gates).toEqual(['apply', 'plan'])
     expect(resolveGates('backend', '').gates).toEqual(['plan'])
   })
 
-  it('un marcador de "sin valor" en Gate significa "no he declarado nada", NO "renuncio a todo"', () => {
-    // El mismo criterio de vacío que Dep/Acepta/Protegido/Área/Toca. Un autor
-    // que rellena la columna con "–" porque el resto de la fila lo lleva no
-    // está renunciando al gate de su Tipo — leerlo así sería quitar un gate
-    // en silencio, justo lo contrario de lo que esta ronda pide.
+  it('a "no value" marker in Gate means "I have declared nothing", NOT "I waive everything"', () => {
+    // The same emptiness criterion as Dep/Acepta/Protegido/Área/Toca. An author
+    // who fills the column with "–" because the rest of the row carries one is
+    // not waiving the gate of their Tipo — reading it that way would be removing
+    // a gate in silence, precisely the opposite of what this round asks for.
     for (const marker of ['-', '–', '—', '―', '−', '--']) {
       expect(resolveGates('ui', marker).gates, marker).toEqual(['visual', 'plan'])
       expect(resolveGates('ui', marker).waived, marker).toEqual([])
     }
   })
 
-  it('el caso que motiva la ronda: un gate que el Tipo NO implica se declara, y queda marcado como tal', () => {
+  it('the case that motivates the round: a gate the Tipo does NOT imply is declared, and is marked as such', () => {
     const r = resolveGates('backend', 'visual')
     expect(r.gates).toEqual(['visual', 'plan'])
-    expect(r.added).toEqual(['visual']) // lo que hay que decir en voz alta
+    expect(r.added).toEqual(['visual']) // what has to be said out loud
     expect(r.implied).toEqual(['plan'])
   })
 
-  it('renunciar a un gate implicado por el Tipo es explícito (`!visual`) y queda registrado', () => {
+  it('waiving a gate implied by the Tipo is explicit (`!visual`) and is recorded', () => {
     const r = resolveGates('ui', '!visual')
     expect(r.gates).toEqual(['plan'])
     expect(r.waived).toEqual(['visual'])
   })
 
-  it('renunciar a un gate que el Tipo no implica no hace nada, y eso se reporta (no se calla)', () => {
+  it('waiving a gate the Tipo does not imply does nothing, and that is reported (not kept quiet)', () => {
     const r = resolveGates('backend', '!visual')
     expect(r.gates).toEqual(['plan'])
     expect(r.inertWaivers).toEqual(['visual'])
   })
 
-  it('declarar un gate que el Tipo ya implica es redundante, no un error, y se reporta', () => {
+  it('declaring a gate the Tipo already implies is redundant, not an error, and is reported', () => {
     const r = resolveGates('ui', 'visual')
     expect(r.gates).toEqual(['visual', 'plan'])
     expect(r.redundant).toEqual(['visual'])
     expect(r.added).toEqual([])
   })
 
-  it('pedir y renunciar al mismo gate en la misma celda es una contradicción, no un ganador silencioso', () => {
+  it('asking for and waiving the same gate in the same cell is a contradiction, not a silent winner', () => {
     const r = resolveGates('ui', 'visual, !visual')
     expect(r.contradictions).toEqual(['visual'])
   })
 
-  it('un token que no está en el vocabulario NO produce gate y se reporta (nunca se inventa un gate que nadie sabe comprobar)', () => {
+  it('a token that is not in the vocabulary produces NO gate and is reported (a gate nobody knows how to check is never invented)', () => {
     const r = resolveGates('backend', 'seguridad')
     expect(r.gates).toEqual(['plan'])
     expect(r.unknown).toEqual(['seguridad'])
     expect(resolveGates('ui', '!seguridad').unknown).toEqual(['seguridad'])
   })
 
-  it('"none" no es un token válido: renunciar es por gate, con nombre, nunca en bloque', () => {
+  it('"none" is not a valid token: waiving is per gate, by name, never wholesale', () => {
     expect(resolveGates('ui', 'none').unknown).toEqual(['none'])
-    expect(resolveGates('ui', 'none').gates).toEqual(['visual', 'plan']) // el gate del Tipo sigue en pie
+    expect(resolveGates('ui', 'none').gates).toEqual(['visual', 'plan']) // the gate of the Tipo still stands
   })
 
-  it('tolera mayúsculas y marcado inline, igual que el resto de columnas de la tabla §9', () => {
+  it('it tolerates capitals and inline markup, just like the rest of the columns of the §9 table', () => {
     expect(resolveGates('backend', '`Visual`').gates).toEqual(['visual', 'plan'])
     expect(resolveGates('ui', '**!visual**').gates).toEqual(['plan'])
     expect(resolveGates('ui', '! visual').gates).toEqual(['plan'])
   })
 
-  it('el orden de los gates resueltos es determinista, venga como venga la celda', () => {
+  it('the order of the resolved gates is deterministic, however the cell arrives', () => {
     expect(resolveGates('backend', 'apply, visual').gates).toEqual(resolveGates('backend', 'visual, apply').gates)
   })
 
   // ==========================================================================
-  // Casos que no venían en el encargo, salidos de sondear el parser.
+  // Cases that were not in the errand, which came out of probing the parser.
   // ==========================================================================
-  it('tolera el prefijo de label completo ("gate:visual"), que es lo que el autor ve en la UI de GitHub', () => {
-    // Mismo error, y mismo remedio, que slices.js#stripColumnPrefix para
-    // "area:x" dentro de la columna Área. Sin esto, escribir lo que se ve en
-    // GitHub caía en el abort de "gate desconocido".
+  it('it tolerates the full label prefix ("gate:visual"), which is what the author sees in the GitHub UI', () => {
+    // The same mistake, and the same remedy, as slices.js#stripColumnPrefix for
+    // "area:x" inside the Área column. Without this, writing what you see in
+    // GitHub fell into the abort of "gate desconocido".
     expect(resolveGates('backend', 'gate:visual').gates).toEqual(['visual', 'plan'])
     expect(resolveGates('ui', '!gate:visual').gates).toEqual(['plan'])
   })
 
-  it('un "!" sin ningún gate detrás se reporta, no se descarta en silencio', () => {
-    // La celda NO estaba vacía: su autor cree haber declarado algo. Es la
-    // versión más pequeña del fallo que toda esta ronda persigue.
+  it('a "!" with no gate behind it is reported, not discarded in silence', () => {
+    // The cell was NOT empty: its author believes they declared something. It
+    // is the smallest version of the failure this whole round pursues.
     expect(resolveGates('ui', '!').unknown).toEqual(['!'])
   })
 
-  it('un token con espacios ("visual visual", sin coma) no cuela como gate', () => {
+  it('a token with spaces in it ("visual visual", with no comma) does not slip through as a gate', () => {
     expect(resolveGates('backend', 'visual visual').gates).toEqual(['plan'])
     expect(resolveGates('backend', 'visual visual').unknown).toEqual(['visual visual'])
   })
 
-  it('declarar el mismo gate dos veces no lo duplica en la salida', () => {
+  it('declaring the same gate twice does not duplicate it in the output', () => {
     expect(resolveGates('backend', 'visual, visual').gates).toEqual(['visual', 'plan'])
     expect(resolveGates('backend', 'visual, visual').added).toEqual(['visual'])
   })
 
-  it('un Tipo que no matchea exactamente (mayúsculas, errata) NO implica ningún gate técnico — el aviso de /ct-groom es quien lo dice', () => {
-    // Se documenta como comportamiento, no se "arregla" haciéndolo
-    // case-insensitive: ADDENDA compara igual de exacto, y dos criterios
-    // distintos para la misma columna serían peores que uno estricto con voz.
-    // El defecto universal `plan` (F-jjponz-2) no depende del Tipo, así que
-    // sobrevive incluso a una errata.
+  it('a Tipo that does not match exactly (capitals, a typo) implies NO technical gate — the /ct-groom warning is what says so', () => {
+    // It is documented as behaviour, not "fixed" by making it
+    // case-insensitive: ADDENDA compares just as exactly, and two different
+    // criteria for the same column would be worse than one strict criterion
+    // with a voice. The universal default `plan` (F-jjponz-2) does not depend on
+    // the Tipo, so it survives even a typo.
     expect(gatesForType('UI')).toEqual(['plan'])
     expect(gatesForType('iu')).toEqual(['plan'])
   })
 })
 
 // ============================================================================
-// 3. La columna `Gate` de la tabla §9.
+// 3. The `Gate` column of the §9 table.
 // ============================================================================
-describe('F21 — columna Gate en la tabla §9', () => {
-  it('se parsea como celda cruda del slice, y el reporte dice que la columna existe', () => {
+describe('F21 — the Gate column in the §9 table', () => {
+  it('it is parsed as a raw cell of the slice, and the report says the column exists', () => {
     const report = analyzeSlicesTable(specWith(['| 1 | barra | backend | tabla | – | AC-1.1 | – | med | db | visual |']))
     expect(report.slices[0].gate).toBe('visual')
     expect(report.gateColumnPresent).toBe(true)
   })
 
-  it('una tabla SIN columna Gate (todas las que existen hoy) sigue funcionando y NO genera un aviso de columna ausente', () => {
-    // Cada columna opcional ausente imprime hoy un aviso con su consecuencia.
-    // La consecuencia de que falte `Gate` es… ninguna: los gates se derivan
-    // del Tipo exactamente como antes. Un aviso que sale siempre y no describe
-    // ninguna degradación es ruido que entrena a ignorar los demás.
+  it('a table WITH NO Gate column (every one that exists today) still works and does NOT generate an absent-column warning', () => {
+    // Every absent optional column prints a warning today with its consequence.
+    // The consequence of `Gate` being missing is… none: the gates are derived
+    // from the Tipo exactly as before. A warning that comes out always and
+    // describes no degradation is noise that trains you to ignore the rest.
     const md = [
       '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices', '',
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |',
@@ -253,87 +253,86 @@ describe('F21 — columna Gate en la tabla §9', () => {
 })
 
 // ============================================================================
-// 4. El gate viaja al ISSUE: labels (máquina) y cuerpo (humano).
+// 4. The gate travels to the ISSUE: labels (machine) and body (human).
 // ============================================================================
-describe('F21 — el gate llega a GitHub, no solo al kickoff', () => {
+describe('F21 — the gate reaches GitHub, not just the kickoff', () => {
   const uiSlice = { n: 1, name: 'pantalla', type: 'ui', gate: '', ac: [], deps: [], area: [], touches: [] }
   const backendConGate = { ...uiSlice, type: 'backend', gate: 'visual' }
   const backendPelado = { ...uiSlice, type: 'backend', gate: '' }
 
-  it('un slice con gate lleva su label gate:<token>, en posición determinista', () => {
+  it('a slice with a gate carries its gate:<token> label, in a deterministic position', () => {
     const labels = buildLabels(uiSlice)
     expect(labels).toContain('gate:visual')
     expect(labels.indexOf('gate:visual')).toBeLessThan(labels.indexOf('status:backlog'))
     expect(buildLabels(backendConGate)).toContain('gate:visual')
   })
 
-  it('un slice sin gates técnicos lleva el defecto `gate:plan`; `gate:none` queda para la renuncia total', () => {
-    // Sin la label `gate:none`, "el issue no tiene ninguna label gate:"
-    // significaría a la vez "este slice no tiene gates" y "este issue es
-    // anterior a los gates" (ver el bloque de redespacho, más abajo). Con el
-    // defecto universal de F-jjponz-2, la única forma de quedarse sin gates
-    // es renunciar explícitamente a todos — `!plan` en un Tipo sin gate
-    // técnico.
+  it('a slice with no technical gates carries the default `gate:plan`; `gate:none` is left for the total waiver', () => {
+    // Without the `gate:none` label, "the issue has no gate: label at all"
+    // would mean at once "this slice has no gates" and "this issue predates the
+    // gates" (see the redispatch block, further down). With the universal
+    // default of F-jjponz-2, the only way to end up with no gates is to waive
+    // them all explicitly — `!plan` on a Tipo with no technical gate.
     expect(buildLabels(backendPelado)).toContain('gate:plan')
     expect(buildLabels(backendPelado)).not.toContain(GATE_LABEL_NONE)
     expect(buildLabels({ ...backendPelado, gate: '!plan' })).toContain(GATE_LABEL_NONE)
     expect(buildLabels(uiSlice)).not.toContain(GATE_LABEL_NONE)
   })
 
-  it('el cuerpo del issue trae una sección de gates que un humano ve al abrir el PR', () => {
+  it('the issue body carries a gates section a human sees on opening the PR', () => {
     const body = buildIssueBody(uiSlice, {})
     expect(body).toContain('## Gates')
     expect(body.toLowerCase()).toMatch(/screenshot|captura/)
-    expect(body.toLowerCase()).toMatch(/human/) // quién lo cierra
+    expect(body.toLowerCase()).toMatch(/human/) // who closes it
   })
 
-  it('la sección de gates existe SIEMPRE, también cuando no hay ninguno (ausencia declarada, no silencio)', () => {
+  it('the gates section ALWAYS exists, also when there is none (a declared absence, not silence)', () => {
     const body = buildIssueBody(backendPelado, {})
     expect(body).toContain('## Gates')
     expect(body.toLowerCase()).toMatch(/ninguno/)
   })
 
-  it('una RENUNCIA queda escrita en el cuerpo del issue, con el Tipo que la implicaba', () => {
+  it('a WAIVER is written into the issue body, with the Tipo that implied it', () => {
     const body = buildIssueBody({ ...uiSlice, gate: '!visual' }, {})
     expect(body.toLowerCase()).toMatch(/renuncia/)
     expect(body).toContain('visual')
     expect(body).toContain('`ui`')
   })
 
-  it('groomPlan expone los gates resueltos como dato estructurado', () => {
+  it('groomPlan exposes the resolved gates as structured data', () => {
     const plan = groomPlan([backendConGate], { milestone: 'Epic', specRef: {} })
     expect(plan.issues[0].gates).toEqual(['visual', 'plan'])
   })
 })
 
 // ============================================================================
-// 5. El gate SOBREVIVE al redespacho: se lee de las labels del issue.
+// 5. The gate SURVIVES the redispatch: it is read from the issue labels.
 // ============================================================================
-describe('F21 — gates leídos del issue (supervivencia al redespacho)', () => {
-  it('mapGhIssue extrae los gates de las labels', () => {
+describe('F21 — gates read from the issue (survival of the redispatch)', () => {
+  it('mapGhIssue extracts the gates from the labels', () => {
     const i = mapGhIssue({ number: 4, title: '#1 x', body: '', labels: [{ name: 'type:backend' }, { name: 'gate:visual' }] })
     expect(i.gates).toEqual(['visual'])
     expect(i.gatesDeclared).toBe(true)
   })
 
-  it('`gate:none` es una declaración de que no hay gates, no una ausencia de declaración', () => {
+  it('`gate:none` is a declaration that there are no gates, not an absence of declaration', () => {
     const i = mapGhIssue({ number: 4, title: '#1 x', body: '', labels: [{ name: 'type:ui' }, { name: GATE_LABEL_NONE }] })
     expect(i.gates).toEqual([])
     expect(i.gatesDeclared).toBe(true)
   })
 
-  it('un issue SIN ninguna label gate: (groomeado antes de esta ronda) no declara nada', () => {
+  it('an issue with NO gate: label at all (groomed before this round) declares nothing', () => {
     const i = mapGhIssue({ number: 4, title: '#1 x', body: '', labels: [{ name: 'type:ui' }] })
     expect(i.gatesDeclared).toBe(false)
   })
 
-  it('una label `gate:` vacía o con solo espacios no cuenta como gate ni como declaración', () => {
+  it('a `gate:` label that is empty or only spaces counts neither as a gate nor as a declaration', () => {
     const i = mapGhIssue({ number: 4, title: '#1 x', body: '', labels: [{ name: 'gate:' }, { name: 'gate: ' }] })
     expect(i.gates).toEqual([])
     expect(i.gatesDeclared).toBe(false)
   })
 
-  it('gatesFromLabels ignora tokens que no están en el vocabulario', () => {
+  it('gatesFromLabels ignores tokens that are not in the vocabulary', () => {
     const r = gatesFromLabels(['gate:visual', 'gate:inventado'])
     expect(r.gates).toEqual(['visual'])
     expect(r.unknown).toEqual(['inventado'])
@@ -341,54 +340,54 @@ describe('F21 — gates leídos del issue (supervivencia al redespacho)', () => 
 })
 
 // ============================================================================
-// 6. El kickoff: el gate deja de depender del Tipo.
+// 6. The kickoff: the gate stops depending on the Tipo.
 // ============================================================================
 describe('F21 — renderKickoff', () => {
-  it('un slice backend CON gate visual recibe el gate (era el caso real que no lo recibía)', () => {
+  it('a backend slice WITH a visual gate receives the gate (it was the real case that did not receive it)', () => {
     const k = renderKickoff({ ...SLICE, gates: ['visual'], gatesDeclared: true }, { repo: 'o/r' , conventionsDir: '/plugin/conventions' })
     expect(k.toLowerCase()).toMatch(/screenshot|captura/)
-    expect(k.toLowerCase()).toMatch(/human/) // que lo cierra un humano, no él
-    expect(k.toLowerCase()).toMatch(/migraci|rollback/) // y conserva su addendum técnico de backend
+    expect(k.toLowerCase()).toMatch(/human/) // that a human closes it, not the agent
+    expect(k.toLowerCase()).toMatch(/migraci|rollback/) // and it keeps its backend technical addendum
   })
 
-  it('un slice ui que RENUNCIÓ al gate no lo recibe', () => {
+  it('a ui slice that WAIVED the gate does not receive it', () => {
     const k = renderKickoff({ ...SLICE, type: 'ui', gates: [], gatesDeclared: true }, { repo: 'o/r' , conventionsDir: '/plugin/conventions' })
     expect(k.toLowerCase()).not.toMatch(/screenshot|captura/)
-    expect(k.toLowerCase()).toMatch(/design system/) // el addendum técnico de ui sigue
+    expect(k.toLowerCase()).toMatch(/design system/) // the ui technical addendum is still there
   })
 
-  it('un issue anterior a los gates cae al Tipo: un `type:ui` sin labels gate: NO pierde su gate', () => {
-    // Sin este fallback, el día que esto se despliega todos los issues `ui` ya
-    // groomeados perderían su gate en silencio — exactamente la avería que
-    // esta ronda existe para cerrar, en la otra dirección.
+  it('an issue that predates the gates falls back to the Tipo: a `type:ui` with no gate: labels does NOT lose its gate', () => {
+    // Without this fallback, the day this is deployed every `ui` issue already
+    // groomed would lose its gate in silence — exactly the breakage this round
+    // exists to close, in the other direction.
     const k = renderKickoff({ ...SLICE, type: 'ui', gatesDeclared: false }, { repo: 'o/r' , conventionsDir: '/plugin/conventions' })
     expect(k.toLowerCase()).toMatch(/screenshot|captura/)
   })
 
-  it('el gate viaja también al .agent/STATE.md sembrado, para sobrevivir a una re-hidratación', () => {
-    // Mismo motivo que el campo `role` (F20) y que `blocked` (F7): lo que
-    // tiene que sobrevivir a un /clear es un CAMPO, no una frase dentro de un
-    // prompt que se pierde con el contexto de la sesión.
+  it('the gate travels to the seeded .agent/STATE.md too, so as to survive a re-hydration', () => {
+    // The same reason as the `role` field (F20) and as `blocked` (F7): what has
+    // to survive a /clear is a FIELD, not a phrase inside a prompt that is lost
+    // along with the session's context.
     const seed = buildStateSeed({ ...SLICE, gates: ['visual'], gatesDeclared: true }, { branch: 'feat/7', base: 'main' })
     const st = parseState(seed)
     expect(JSON.stringify(st.meta.gates)).toContain('visual')
   })
 
-  it('el kickoff nombra la sección "Out of scope / Protected" del issue', () => {
-    // Segundo hallazgo de la misma lente: la columna `Protegido` SÍ llega al
-    // cuerpo del issue, pero el kickoff enumera los criterios de aceptación
-    // uno a uno y no nombraba jamás lo que queda FUERA de alcance. "Hidrátate
-    // del issue" es más débil que nombrar la sección.
+  it('the kickoff names the "Out of scope / Protected" section of the issue', () => {
+    // The second finding through the same lens: the `Protegido` column DOES
+    // reach the issue body, but the kickoff enumerates the acceptance criteria
+    // one by one and never named what is left OUT of scope. "Hidrátate del
+    // issue" is weaker than naming the section.
     const k = renderKickoff(SLICE, { repo: 'o/r' , conventionsDir: '/plugin/conventions' })
     expect(k).toContain('Out of scope / Protected')
   })
 })
 
 // ============================================================================
-// 7. /ct-groom lo dice en voz alta.
+// 7. /ct-groom says it out loud.
 // ============================================================================
-describe('F21 — /ct-groom habla de los gates', () => {
-  it('un gate que el Tipo NO implica se anuncia por stderr (quien groomea tiene que verlo)', () => {
+describe('F21 — /ct-groom talks about the gates', () => {
+  it('a gate the Tipo does NOT imply is announced on stderr (whoever grooms has to see it)', () => {
     const res = dryRun(specWith(['| 1 | barra | backend | tabla | – | AC-1.1 | – | med | db | visual |']))
     expect(res.status).toBe(0)
     expect(res.stderr).toMatch(/gate/i)
@@ -399,58 +398,58 @@ describe('F21 — /ct-groom habla de los gates', () => {
     expect(plan.issues[0].labels).toContain('gate:visual')
   })
 
-  it('una RENUNCIA se anuncia por stderr, nunca en silencio', () => {
+  it('a WAIVER is announced on stderr, never in silence', () => {
     const res = dryRun(specWith(['| 1 | pantalla | ui | alta | – | AC-1.1 | – | med | app | !visual |']))
     expect(res.status).toBe(0)
     expect(res.stderr.toLowerCase()).toMatch(/renuncia/)
     expect(res.stderr).toContain('visual')
     const plan = JSON.parse(res.stdout)
-    expect(plan.issues[0].labels).toContain('gate:plan') // el defecto universal sigue en pie
+    expect(plan.issues[0].labels).toContain('gate:plan') // the universal default still stands
     expect(plan.issues[0].labels).not.toContain('gate:visual')
   })
 
-  it('un token de gate desconocido ABORTA antes de escribir nada, y dice cuál es el vocabulario y cómo se renuncia', () => {
-    // Estrechar lo que el sistema acepta crea una categoría nueva de rechazo,
-    // y esa categoría necesita voz: no basta con "valor inválido".
+  it('an unknown gate token ABORTS before writing anything, and says what the vocabulary is and how you waive', () => {
+    // Narrowing what the system accepts creates a new category of refusal, and
+    // that category needs a voice: "valor inválido" is not enough.
     const res = dryRun(specWith(['| 1 | barra | backend | tabla | – | AC-1.1 | – | med | db | seguridad |']))
     expect(res.status).toBe(2)
     expect(res.stderr).toContain('seguridad')
     expect(res.stderr).toContain('visual')
     expect(res.stderr).toContain('apply')
     expect(res.stderr).toContain('!')
-    expect(res.stdout).toBe('') // ni plan ni nada escrito
+    expect(res.stdout).toBe('') // neither a plan nor anything written
   })
 
-  it('pedir y renunciar al mismo gate aborta en vez de elegir un ganador', () => {
+  it('asking for and waiving the same gate aborts instead of picking a winner', () => {
     const res = dryRun(specWith(['| 1 | pantalla | ui | alta | – | AC-1.1 | – | med | app | visual, !visual |']))
     expect(res.status).toBe(2)
     expect(res.stderr).toContain('visual')
   })
 
-  it('una renuncia que no renuncia a nada se avisa (no se calla ni aborta)', () => {
+  it('a waiver that waives nothing is warned about (it is neither kept quiet nor aborted)', () => {
     const res = dryRun(specWith(['| 1 | barra | backend | tabla | – | AC-1.1 | – | med | db | !visual |']))
     expect(res.status).toBe(0)
     expect(res.stderr.toLowerCase()).toMatch(/no implica|no tiene ese gate|no hace nada/)
   })
 
-  it('un Tipo con errata pierde también sus GATES, y el aviso de Tipo desconocido lo dice (no solo el addendum)', () => {
-    // Caso que no venía en el encargo: `TYPE_GATES` compara exacto, igual que
-    // `ADDENDA`. Un "UI" en mayúsculas se queda sin addendum Y sin gate — la
-    // segunda mitad es la grave, y hasta esta ronda el aviso no la nombraba
-    // porque los gates no existían como concepto.
+  it('a Tipo with a typo loses its GATES too, and the unknown-Tipo warning says so (not just the addendum)', () => {
+    // A case that was not in the errand: `TYPE_GATES` compares exactly, just
+    // like `ADDENDA`. A "UI" in capitals ends up with no addendum AND no gate —
+    // the second half is the serious one, and until this round the warning did
+    // not name it because gates did not exist as a concept.
     const res = dryRun(specWith(['| 1 | pantalla | UI | alta | – | AC-1.1 | – | med | app | – |']))
     expect(res.status).toBe(0)
     expect(res.stderr).toMatch(/gates humanos/)
     expect(res.stderr).toContain('ui→visual')
-    expect(res.stderr).toContain('columna "Gate"') // el remedio, en el propio aviso
+    expect(res.stderr).toContain('columna "Gate"') // the remedy, in the warning itself
     const plan = JSON.parse(res.stdout)
-    // pierde el gate TÉCNICO de su Tipo (visual), pero el defecto universal
-    // `plan` no depende del Tipo y sobrevive a la errata.
+    // it loses the TECHNICAL gate of its Tipo (visual), but the universal
+    // default `plan` does not depend on the Tipo and survives the typo.
     expect(plan.issues[0].labels).toContain('gate:plan')
     expect(plan.issues[0].labels).not.toContain('gate:visual')
   })
 
-  it('el caso por defecto (Tipo ui, sin columna Gate) sigue trayendo su gate sin que nadie declare nada', () => {
+  it('the default case (Tipo ui, with no Gate column) still brings its gate without anyone declaring anything', () => {
     const md = [
       '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices', '',
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |',
@@ -466,33 +465,34 @@ describe('F21 — /ct-groom habla de los gates', () => {
 })
 
 // ============================================================================
-// 8. El contrato §9 que /ct-init siembra.
+// 8. The §9 contract that /ct-init seeds.
 // ============================================================================
-describe('F21 — el contrato §9 documenta los gates y la invariante', () => {
-  it('la sección sembrada explica la columna Gate, la renuncia con `!` y el vocabulario', () => {
+describe('F21 — the §9 contract documents the gates and the invariant', () => {
+  it('the seeded section explains the Gate column, the waiver with `!` and the vocabulary', () => {
     const dir = mkdtempSync(join(tmpdir(), 'f21-init-'))
     execFileSync('bash', [initScript, dir], { encoding: 'utf8' })
     const agents = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
     expect(agents).toContain('**Gate**')
     expect(agents).toContain('`!visual`')
-    // Tarea 5 de "e2e al cierre del slice" cerró la deuda temporal que este
-    // test llevaba: el contrato v20 ya documenta `e2e` (columna `E2E` +
-    // gate derivado), así que el guardián vuelve a cubrir el vocabulario
-    // ENTERO, sin excepción.
+    // Task 5 of "e2e al cierre del slice" closed the temporary debt this test
+    // carried: contract v20 already documents `e2e` (the `E2E` column + a
+    // derived gate), so the guard covers the WHOLE vocabulary again, with no
+    // exception.
     for (const g of Object.keys(GATES)) expect(agents, g).toContain(`\`${g}\``)
     expect(agents).toContain('gate:none')
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('la sección sembrada dice en voz alta que lo que no llega al issue no llega al agente', () => {
-    // Es la lección del caso real: el spec confiaba en una §10 y una "REGLA
-    // #-2" que el agente despachado nunca abre.
+  it('the seeded section says out loud that what does not reach the issue does not reach the agent', () => {
+    // It is the lesson of the real case: the spec relied on a §10 and a "REGLA
+    // #-2" that the dispatched agent never opens.
     const dir = mkdtempSync(join(tmpdir(), 'f21-init-'))
     execFileSync('bash', [initScript, dir], { encoding: 'utf8' })
     const agents = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
-    // F30: la sección dejó de llamarse "§9". Lo que este test defiende es la
-    // FRASE, no el nombre — así que se ancla en lo invariante ("fuera de la
-    // tabla … no llega al agente") y no en cómo se llame la tabla ese mes.
+    // F30: the section stopped being called "§9". What this test defends is the
+    // PHRASE, not the name — so it anchors on what is invariant ("fuera de la
+    // tabla … no llega al agente") and not on whatever the table is called that
+    // month.
     expect(agents).toMatch(/fuera de la tabla[^\n]*no llega al agente/i)
     expect(agents).not.toMatch(/§9/)
     rmSync(dir, { recursive: true, force: true })
@@ -500,29 +500,31 @@ describe('F21 — el contrato §9 documenta los gates y la invariante', () => {
 })
 
 // ---------------------------------------------------------------------------
-// EL TOKEN DEL GO, ATADO A LOS DOS TEXTOS QUE LO EXPLICAN.
+// THE TOKEN OF THE GO, TIED TO THE TWO TEXTS THAT EXPLAIN IT.
 //
-// Desde que un programa lee la respuesta del gate `plan` (scripts/go-response.js
-// + scripts/ct-watch-go.mjs), el token dejó de ser prosa: `-OK` exacto arranca
-// el trabajo y cualquier otra cosa no. O sea que los dos textos del gate —el que
-// lee el AGENTE y el que lee el HUMANO— tienen que nombrar el token de verdad.
+// Ever since a program reads the answer of the `plan` gate
+// (scripts/go-response.js + scripts/ct-watch-go.mjs), the token stopped being
+// prose: an exact `-OK` starts the work and anything else does not. Which is to
+// say that the gate's two texts —the one the AGENT reads and the one the HUMAN
+// reads— have to name the real token.
 //
-// Sin este test el fallo es el peor posible y silencioso: se renombra el token
-// en el código, los textos siguen diciendo lo de antes, la persona escribe lo
-// que le dijeron, y el trabajo no arranca nunca sin que nada falle.
+// Without this test the failure is the worst possible one and a silent one: the
+// token gets renamed in the code, the texts keep saying what they said before,
+// the person writes what they were told, and the work never starts without
+// anything failing.
 // ---------------------------------------------------------------------------
-describe('el token del go viaja en los dos textos del gate `plan`', () => {
-  it('el kickoff del agente lo nombra', () => {
+describe('the token of the go travels in both texts of the `plan` gate', () => {
+  it('the kickoff of the agent names it', () => {
     expect(GATES.plan.kickoff).toContain(GO_TOKEN)
   })
 
-  it('el texto del issue lo nombra, que es el que lee quien tiene que escribirlo', () => {
+  it('the issue text names it, which is the one read by whoever has to write it', () => {
     expect(GATES.plan.issue).toContain(GO_TOKEN)
   })
 
-  it('y el kickoff dice que NO sondee el issue él: eso es del vigilante', () => {
-    // Un agente que se pusiera a mirar el issue por su cuenta estaría vigilando
-    // su propio gate, que es justo lo que este reparto evita.
+  it('and the kickoff says the agent must NOT poll the issue itself: that belongs to the watcher', () => {
+    // An agent that started looking at the issue on its own account would be
+    // watching its own gate, which is precisely what this division avoids.
     expect(GATES.plan.kickoff).toMatch(/no sondees/i)
   })
 })

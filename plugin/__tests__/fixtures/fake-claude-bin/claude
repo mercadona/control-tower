@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// Stub de `claude` para los tests de ct-next.mjs (D4). Existe SOLO para que
-// la búsqueda de precondiciones (`findInPath('claude')`, que hace statSync +
-// accessSync y NUNCA ejecuta nada) encuentre un ejecutable de forma
-// determinista, sin depender de que la máquina que corre los tests tenga
-// `claude` instalado ni de dónde.
+// Stub of `claude` for the ct-next.mjs tests (D4). It exists ONLY so that the
+// precondition search (`findInPath('claude')`, which does statSync +
+// accessSync and NEVER runs anything) finds an executable deterministically,
+// without depending on whether the machine running the tests has `claude`
+// installed, or on where.
 //
-// Si esto llega a EJECUTARSE, es un bug: nada en ct-next.mjs debe lanzar
-// `claude` — lo lanza el shell de login que abre cmux, dentro de una sesión
-// real. El exit code 97 es deliberadamente raro para que salte a la vista en
-// la salida de un test si alguna vez ocurre.
+// If this ever gets EXECUTED, it is a bug: nothing in ct-next.mjs should
+// launch `claude` — the login shell that cmux opens launches it, inside a real
+// session. The exit code 97 is deliberately odd so that it stands out in a
+// test's output if it ever happens.
 console.error('fake-claude: este stub NUNCA debe ejecutarse — ct-next.mjs solo debe BUSCAR claude en el PATH, no invocarlo.')
 process.exit(97)

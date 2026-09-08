@@ -6,8 +6,8 @@ import { renderKickoff } from '../scripts/kickoff.js'
 const SLICE = { n: 1, name: 'login', type: 'backend', entrega: '', gate: '', deps: [], ac: ['AC-1.1'], protected: '', area: [], touches: [] }
 const SPEC_REF = { path: 'spec.md', heading: null, url: null, reason: 'sin publicar' }
 
-// Formato LITERAL de _TEMPLATE-execution-spec.md, verificado contra
-// docs/loop/loop.body.html: la cita del usuario va DENTRO del paréntesis.
+// LITERAL format of _TEMPLATE-execution-spec.md, verified against
+// docs/loop/loop.body.html: the user's quote goes INSIDE the parentheses.
 const SPEC = `# Epic
 
 ## Decisiones congeladas
@@ -18,134 +18,137 @@ const SPEC = `# Epic
 `
 
 describe('readFrozenDecisions', () => {
-  it('proyecta la sección con la procedencia quitada de cada línea', () => {
+  it('projects the section with the provenance stripped from every line', () => {
     const { content } = readFrozenDecisions(SPEC)
     expect(content).toBe('- **D-1 · versión mínima** — iOS 17.\n- **D-2 · nombre** — se llama Pilares.')
   })
-  it('spec sin la sección → content null y reason ausente', () => {
+  it('spec with no section → content null and reason `ausente`', () => {
     const r = readFrozenDecisions('# Epic\n\nnada\n')
     expect(r.content).toBe(null)
     expect(r.reason).toBe('ausente')
   })
-  it('sección presente pero vacía → content null y reason vacia', () => {
+  it('section present but empty → content null and reason `vacia`', () => {
     const r = readFrozenDecisions('## Decisiones congeladas\n\n## 9. Slices\n')
     expect(r.content).toBe(null)
     expect(r.reason).toBe('vacia')
   })
-  it('una cabecera ### dentro la trunca → content null, reason malformada Y el aviso nombra la línea (I3.2)', () => {
+  it('a ### heading inside truncates it → content null, reason `malformada` AND the warning names the line (I3.2)', () => {
     const r = readFrozenDecisions('## Decisiones congeladas\n- **D-1** — algo.\n### sub\nmás\n')
     expect(r.content).toBe(null)
     expect(r.reason).toBe('malformada')
-    expect(r.warnings.join('\n')).toContain('### sub') // el aviso nombra la línea ofensora, no solo el reason
+    expect(r.warnings.join('\n')).toContain('### sub') // the warning names the offending line, not just the reason
   })
-  // B2 — fallo de limpieza OBSERVABLE: un sufijo que la regex no casa (aquí, la
-  // cursiva con guion bajo) NO viaja en silencio: la sección se proyecta pero
-  // con un aviso que nombra la línea donde sobrevive "Procedencia".
-  it('sufijo no reconocido → se proyecta CON aviso (no falla mudo)', () => {
+  // B2 — OBSERVABLE cleanup failure: a suffix the regex does not match (here,
+  // the underscore italics) does NOT travel in silence: the section is
+  // projected, but with a warning naming the line where "Procedencia" survives.
+  it('unrecognised suffix → it is projected WITH a warning (no silent failure)', () => {
     const r = readFrozenDecisions('## Decisiones congeladas\n- **D-1** — iOS 17. _(Procedencia: hablada.)_\n\n## 9. Slices\n')
     expect(r.content).toContain('iOS 17')
     expect(r.warnings.join('\n')).toMatch(/Procedencia/)
-    expect(r.warnings.join('\n')).toContain('- **D-1** — iOS 17.') // nombra la línea
+    expect(r.warnings.join('\n')).toContain('- **D-1** — iOS 17.') // it names the line
   })
-  it('la cabecera se exporta con el literal correcto', () => {
+  it('the heading is exported with the correct literal', () => {
     expect(FROZEN_DECISIONS_HEADING).toBe('## Decisiones congeladas')
   })
-  // DeepSeek #1 — data loss: una línea con DOS marcadores no debe borrar el
-  // texto entre ellos. Se recorta SOLO el sufijo final; el marcador interior
-  // sobrevive y B2 lo avisa (no es un fallo mudo).
-  it('línea con dos marcadores → recorta solo el último, no pierde texto, y avisa', () => {
+  // DeepSeek #1 — data loss: a line with TWO markers must not delete the text
+  // between them. ONLY the trailing suffix is trimmed; the inner marker
+  // survives and B2 warns about it (it is not a silent failure).
+  it('line with two markers → trims only the last one, loses no text, and warns', () => {
     const spec = '## Decisiones congeladas\n- **D-1** — iOS 17 (fijada *(Procedencia: anterior)*) y re-confirmada *(Procedencia: hablada.)*\n\n## 9. Slices\n'
     const r = readFrozenDecisions(spec)
-    expect(r.content).toContain('y re-confirmada') // NO se pierde el texto intermedio
-    expect(r.content).not.toContain('hablada.)*')  // el sufijo final sí se recorta
-    expect(r.warnings.join('\n')).toMatch(/Procedencia/) // el marcador interior superviviente se avisa
+    expect(r.content).toContain('y re-confirmada') // the text in between is NOT lost
+    expect(r.content).not.toContain('hablada.)*')  // the trailing suffix IS trimmed
+    expect(r.warnings.join('\n')).toMatch(/Procedencia/) // the surviving inner marker is warned about
   })
-  // DeepSeek #2 — falso positivo: la palabra "Procedencia" en prosa, sin
-  // marcador, NO es un fallo de limpieza y no debe avisar.
-  it('la palabra "Procedencia" en prosa (sin marcador) no dispara aviso', () => {
+  // DeepSeek #2 — false positive: the word "Procedencia" in prose, with no
+  // marker, is NOT a cleanup failure and must not warn.
+  it('the word "Procedencia" in prose (with no marker) does not fire a warning', () => {
     const r = readFrozenDecisions('## Decisiones congeladas\n- **D-1** — revisar la Procedencia en el acta.\n\n## 9. Slices\n')
     expect(r.content).toContain('revisar la Procedencia en el acta.')
-    expect(r.warnings).toEqual([]) // sin marcador, sin aviso
+    expect(r.warnings).toEqual([]) // no marker, no warning
   })
 })
 
-describe('buildIssueBody — decisiones congeladas', () => {
-  it('emite la sección cuando hay contenido', () => {
+describe('buildIssueBody — frozen decisions', () => {
+  it('emits the section when there is content', () => {
     const body = buildIssueBody(SLICE, SPEC_REF, null, '- **D-1** — iOS 17.')
     expect(body).toContain('## Decisiones congeladas')
     expect(body).toContain('- **D-1** — iOS 17.')
   })
-  it('no emite la sección cuando no hay contenido', () => {
+  it('does not emit the section when there is no content', () => {
     const body = buildIssueBody(SLICE, SPEC_REF, null, null)
     expect(body).not.toContain('## Decisiones congeladas')
   })
-  it('coloca decisiones tras el contexto del epic y antes del heredado', () => {
+  it('places the decisions after the epic context and before the inherited one', () => {
     const body = buildIssueBody(SLICE, SPEC_REF, 'contexto común', '- **D-1** — x.')
     expect(body.indexOf('## Contexto del epic')).toBeLessThan(body.indexOf('## Decisiones congeladas'))
     expect(body.indexOf('## Decisiones congeladas')).toBeLessThan(body.indexOf('## Contexto heredado'))
   })
 })
 
-describe('groomPlan — decisiones congeladas viajan en el plan', () => {
-  it('cada issue lleva frozenDecisions y frozenDecisionsUnknown', () => {
+describe('groomPlan — the frozen decisions travel in the plan', () => {
+  it('every issue carries frozenDecisions and frozenDecisionsUnknown', () => {
     const plan = groomPlan([SLICE], { milestone: 'Epic', specRef: SPEC_REF, frozenDecisions: '- **D-1** — iOS 17.' })
     expect(plan.issues[0].frozenDecisions).toBe('- **D-1** — iOS 17.')
     expect(plan.issues[0].frozenDecisionsUnknown).toBe(false)
     expect(plan.issues[0].body).toContain('## Decisiones congeladas')
   })
-  it('reason malformada → frozenDecisionsUnknown true (no es "no tiene")', () => {
+  it('reason `malformada` → frozenDecisionsUnknown true (it is not "it has none")', () => {
     const plan = groomPlan([SLICE], { milestone: 'Epic', specRef: SPEC_REF, frozenDecisions: null, frozenDecisionsReason: 'malformada' })
     expect(plan.issues[0].frozenDecisionsUnknown).toBe(true)
   })
 })
 
-describe('buildIssueBody — decisiones con contenido hostil no rompe los extractores (I2/P1)', () => {
-  // La prosa mete EL PEOR caso para cada extractor: un ct-order con su cierre
-  // "-->" (que una regex laxa casaría), un merge-after, un AC y un closes.
+describe('buildIssueBody — decisions with hostile content do not break the extractors (I2/P1)', () => {
+  // The prose plants THE WORST case for each extractor: a ct-order with its
+  // "-->" closer (which a lax regex would match), a merge-after, an AC and a
+  // closes.
   const HOSTILE = '- **D-1** — respeta el marcador ct-order:99 -->, no toques merge-after #7, mira AC-1.1 y closes #3.'
-  it('extractOrder devuelve el orden REAL del slice, no el ct-order:99 --> de la prosa (P1)', () => {
+  it('extractOrder returns the slice REAL order, not the ct-order:99 --> from the prose (P1)', () => {
     const body = buildIssueBody(SLICE, SPEC_REF, null, HOSTILE) // SLICE.n === 1
-    expect(extractOrder(body)).toBe(1) // solo casa la LÍNEA "<!-- ct-order:1 -->" del final; NO el 99 con --> de la prosa
+    expect(extractOrder(body)).toBe(1) // only matches the trailing LINE "<!-- ct-order:1 -->"; NOT the 99 with --> from the prose
   })
-  it('extractAc no se traga el AC-1.1 metido en la prosa de la decisión', () => {
+  it('extractAc does not swallow the AC-1.1 planted in the prose of the decision', () => {
     const body = buildIssueBody(SLICE, SPEC_REF, null, HOSTILE)
-    expect(extractAc(body)).toEqual(SLICE.ac) // lee la sección de AC, no la de decisiones
+    expect(extractAc(body)).toEqual(SLICE.ac) // it reads the AC section, not the decisions one
   })
-  it('extractDepsInSection lee SOLO "## Dependencias", ajena al merge-after de la prosa', () => {
+  it('extractDepsInSection reads ONLY "## Dependencias", oblivious to the merge-after in the prose', () => {
     const body = buildIssueBody(SLICE, SPEC_REF, null, HOSTILE)
-    expect(extractDepsInSection(body).deps).toEqual([]) // devuelve {deps, malformed}; SLICE no tiene deps y el #7 hostil vive fuera de esa sección
+    expect(extractDepsInSection(body).deps).toEqual([]) // returns {deps, malformed}; SLICE has no deps and the hostile #7 lives outside that section
   })
-  it('extractStrayDeps SÍ recoge el merge-after #7 de la prosa — ruido conocido y aceptado, no un fallo', () => {
+  it('extractStrayDeps DOES pick up the merge-after #7 from the prose — known and accepted noise, not a fault', () => {
     const body = buildIssueBody(SLICE, SPEC_REF, null, HOSTILE)
-    // Documenta la limitación honestamente (spec §7): un merge-after en prosa
-    // produce un stray dep. NO mueve el exit code (es nota, no divergencia
-    // máquina). Aquí se fija el comportamiento REAL, no uno aspiracional.
+    // Documents the limitation honestly (spec §7): a merge-after in prose
+    // produces a stray dep. It does NOT move the exit code (it is a note, not
+    // a machine divergence). What is pinned here is the REAL behaviour, not an
+    // aspirational one.
     expect(extractStrayDeps(body, [])).toContain(7)
   })
 })
 
-describe('kickoff — decisiones congeladas (B1)', () => {
+describe('kickoff — frozen decisions (B1)', () => {
   const slice = { n: 2, name: 'scoring', type: 'backend', deps: [1], ac: ['AC'], gate: '', protected: '' }
-  // `conventionsDir` es OBLIGATORIO desde que la vara la dicta ct
+  // `conventionsDir` is MANDATORY ever since ct dictates the yardstick
   // (docs/superpowers/specs/2026-08-26-la-vara-la-dicta-ct-design.md §7):
-  // `renderKickoff` lanza si no lo recibe, porque un kickoff sin la ruta de la
-  // vara de ct deja al que planifica escribiendo un plan que el juez va a
-  // bloquear, y perderlo en silencio era el fallo que esa guarda cierra. Estos
-  // tres tests son de OTRO eje —que el kickoff nombre la sección de decisiones
-  // congeladas, su frase de entrada y su destino en el plan— y siguen midiendo
-  // exactamente eso: el argumento se pasa para poder llegar a lo que asertan,
-  // igual que en el resto de los llamadores de esta función.
+  // `renderKickoff` throws if it does not get it, because a kickoff without the
+  // path to ct's yardstick leaves whoever plans writing a plan that the judge
+  // is going to block, and losing that in silence was the failure that guard
+  // closes. These three tests are on ANOTHER axis —that the kickoff names the
+  // frozen decisions section, its input phrase and its destination in the
+  // plan— and they still measure exactly that: the argument is passed so that
+  // they can reach what they assert, just like the rest of this function's
+  // callers.
   const OPTS = { repo: 'o/r', conventionsDir: '/plugin/conventions' }
-  // renderKickoff devuelve el texto del kickoff como una sola cadena.
-  it('nombra la sección usando la CONSTANTE, no un literal (I3.9)', () => {
+  // renderKickoff returns the kickoff text as a single string.
+  it('names the section using the CONSTANT, not a literal (I3.9)', () => {
     expect(renderKickoff(slice, OPTS)).toContain(FROZEN_DECISIONS_HEADING)
   })
-  it('la enumera como entrada del plan (misma frase que AC/Protegido)', () => {
+  it('lists it as an input of the plan (same phrase as AC/Protegido)', () => {
     const entradaLine = renderKickoff(slice, OPTS).split('\n').find((l) => l.includes('entrada que la skill pide'))
     expect(entradaLine).toBeDefined()
     expect(entradaLine).toContain(FROZEN_DECISIONS_HEADING)
   })
-  it('nombra el destino ## 2. Closed decisions', () => {
+  it('names the destination ## 2. Closed decisions', () => {
     expect(renderKickoff(slice, OPTS)).toContain('## 2. Closed decisions')
   })
 })

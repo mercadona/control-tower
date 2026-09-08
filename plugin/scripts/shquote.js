@@ -1,12 +1,12 @@
-// Escapado POSIX de un valor para usarlo como UN solo argumento dentro de una
-// línea de comando que un shell (`sh`, `bash`, …) va a parsear — el caso de
-// `--command` de cmux, que ejecuta la cadena vía shell en vez de recibirla
-// como argv ya separado. `JSON.stringify` es escapado JSON, no de shell: un
-// `$`, un backtick o un `\` sobreviven dentro de comillas dobles y el shell
-// los interpreta igual. Comillas simples POSIX son la única forma que no
-// interpreta NADA dentro (ni `$`, ni backticks, ni `\`, ni saltos de línea) —
-// la única excepción es la propia comilla simple, que hay que cerrar,
-// escapar, y reabrir: `'\''`.
+// POSIX escaping of a value so it can be used as ONE single argument inside a
+// command line that a shell (`sh`, `bash`, …) is going to parse — the case of
+// cmux's `--command`, which runs the string through a shell instead of
+// receiving it as an already-split argv. `JSON.stringify` is JSON escaping, not
+// shell escaping: a `$`, a backtick or a `\` survive inside double quotes and
+// the shell interprets them all the same. POSIX single quotes are the only form
+// that interprets NOTHING inside (not `$`, not backticks, not `\`, not
+// newlines) — the only exception is the single quote itself, which has to be
+// closed, escaped, and reopened: `'\''`.
 export function shQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`
 }

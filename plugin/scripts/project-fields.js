@@ -1,15 +1,15 @@
-// Lógica pura para elegir la iteración vigente de un campo Sprint (Project v2)
-// entre las iteraciones devueltas por la introspección graphql
-// (`ProjectV2IterationField.configuration.iterations`, cada una con
-// `startDate` "YYYY-MM-DD" y `duration` en días). Extraída de ct-groom.mjs
-// para poder testearla sin red: el cálculo de "hoy cae dentro de
-// [startDate, startDate+duration)" es aritmética pura, no necesita `gh`.
+// Pure logic for choosing the current iteration of a Sprint field (Project v2)
+// among the iterations returned by the graphql introspection
+// (`ProjectV2IterationField.configuration.iterations`, each one with
+// `startDate` "YYYY-MM-DD" and `duration` in days). Extracted from ct-groom.mjs
+// so that it can be tested without a network: computing "today falls inside
+// [startDate, startDate+duration)" is pure arithmetic, it does not need `gh`.
 //
-// Se usan días-desde-época en UTC (no `Date#setDate` ni comparación de
-// objetos Date con hora) para no depender de la zona horaria del proceso:
-// una fecha "YYYY-MM-DD" sin hora se interpreta como medianoche UTC, y
-// mutar esa fecha con setDate() opera en hora local, lo que puede
-// desplazar el día calendario en husos horarios negativos.
+// Days-since-epoch in UTC are used (not `Date#setDate`, nor comparing Date
+// objects that carry a time) so as not to depend on the process's time zone:
+// a "YYYY-MM-DD" date with no time is interpreted as midnight UTC, and
+// mutating that date with setDate() operates in local time, which can shift
+// the calendar day in negative time zones.
 
 const MS_PER_DAY = 86400000
 
@@ -18,9 +18,9 @@ function daysSinceEpochUTC(dateStr) {
   return Date.UTC(y, m - 1, d) / MS_PER_DAY
 }
 
-// iterations: [{ id, title, startDate, duration }], todayIso: "YYYY-MM-DD" (o
-// cualquier ISO string, se recorta a los primeros 10 caracteres).
-// Devuelve la iteración vigente o null si ninguna cubre hoy.
+// iterations: [{ id, title, startDate, duration }], todayIso: "YYYY-MM-DD" (or
+// any ISO string, it is trimmed to the first 10 characters).
+// Returns the current iteration, or null if none of them covers today.
 export function pickCurrentIteration(iterations, todayIso) {
   const todayDay = daysSinceEpochUTC(todayIso.slice(0, 10))
   return (iterations || []).find((it) => {
@@ -29,16 +29,16 @@ export function pickCurrentIteration(iterations, todayIso) {
   }) || null
 }
 
-// Cierra el hueco de idempotencia entre "issue creado" y "issue añadido al
-// Project v2": son dos llamadas de red desacopladas (a diferencia de las
-// labels, que van en la misma llamada `gh issue create` y no pueden quedar a
-// medias). Si el proceso se interrumpe entre ambas, una re-ejecución
-// encuentra el issue por su marcador `ct-order` y, sin esta comprobación,
-// haría `continue` sin volver a intentar el `item-add` — el issue quedaría
-// fuera del project para siempre y en silencio.
+// Closes the idempotency gap between "issue created" and "issue added to the
+// Project v2": they are two decoupled network calls (unlike the labels, which
+// travel in the same `gh issue create` call and cannot be left half done). If
+// the process is interrupted between the two, a re-run finds the issue by its
+// `ct-order` marker and, without this check, would `continue` without trying
+// the `item-add` again — the issue would stay out of the project forever, and
+// in silence.
 //
-// items: la forma cruda de `gh project item-list --format json` (`.items`),
-// cada uno con `content.repository` ("owner/repo") y `content.number`.
+// items: the raw shape of `gh project item-list --format json` (`.items`),
+// each one with `content.repository` ("owner/repo") and `content.number`.
 export function hasProjectItem(items, repo, issueNumber) {
   return (items || []).some((it) => it?.content?.repository === repo && it?.content?.number === issueNumber)
 }

@@ -1,40 +1,42 @@
 ---
 task: ""
-# role: quién eres en el loop. Hay DOS sesiones vivas por repo con papeles
-# opuestos, y hasta F20 el reparto solo estaba escrito dentro del kickoff que
-# recibía una de ellas — se perdía en cuanto esa sesión se re-hidrataba.
-#   - Este fichero es el del CHECKOUT PRINCIPAL: quien trabaja aquí es la
-#     sesión COORDINADORA (corre /ct-groom y /ct-next, revisa y mergea PRs).
-#   - Cada slice despachado tiene el suyo en .worktrees/<n>/.agent/SLICE.md
-#     (F22 — antes era STATE.md, que es el de la coordinadora, no el del
-#     slice), con role: slice-agent — implementa ese slice y para.
-# Ningún código decide nada con este campo: es para el agente que lo lee.
+# role: who you are in the loop. There are TWO live sessions per repo with
+# opposite roles, and until F20 the split was only written inside the kickoff
+# one of them received — it was lost the moment that session re-hydrated.
+#   - This file is the MAIN CHECKOUT's: whoever works here is the COORDINATOR
+#     session (runs /ct-groom and /ct-next, reviews and merges PRs).
+#   - Every dispatched slice has its own at .worktrees/<n>/.agent/SLICE.md
+#     (F22 — it used to be STATE.md, which is the coordinator's, not the
+#     slice's), with role: slice-agent — it implements that slice and stops.
+# No code decides anything with this field: it is for the agent that reads it.
 role: "coordinador (checkout principal): groomeas, despachas con /ct-next, revisas y mergeas. NO implementas slices aquí — eso pasa en .worktrees/<n>."
 status: not_started
 branch: ""
 base: main
-# last_commit: el último commit DE TRABAJO de este slice. El hook de Stop
-# bloquea el cierre de turno si hay trabajo por encima de él sin registrar —
-# pero un commit que solo toca este fichero NO cuenta, así que commitear la
-# actualización de STATE.md no te vuelve a dejar atrás.
+# last_commit: this slice's last WORK commit. The Stop hook blocks the end of
+# the turn if there is unrecorded work above it — but a commit that only
+# touches this file does NOT count, so committing the STATE.md update does not
+# leave you behind again.
 last_commit: ""
 github_issue: null
 you_are_here: ""
 next_action: ""
-# blocked: null = NO bloqueado. Si el trabajo no puede continuar (una decisión
-# lo paró, el plan resultó falso, falta algo de fuera), NO lo escribas en prosa
-# dentro de next_action: ponlo aquí. El hook de SessionStart lo anuncia al
-# arrancar cualquier sesión de este repo y SUSPENDE el next_action.
-#   blocked: {reason: "por qué no se puede continuar", unblock: "qué haría falta para levantarlo", since: "2026-07-25"}
-# Levantarlo es borrar el campo (o volver a null): una decisión deliberada.
+# blocked: null = NOT blocked. If the work cannot continue (a decision stopped
+# it, the plan turned out to be false, something external is missing), do NOT
+# write it as prose inside next_action: put it here. The SessionStart hook
+# announces it when any session of this repo starts and SUSPENDS the
+# next_action.
+#   blocked: {reason: "why it cannot continue", unblock: "what it would take to lift it", since: "2026-07-25"}
+# Lifting it means deleting the field (or setting it back to null): a
+# deliberate decision.
 blocked: null
-# verify: la comprobación PENDIENTE que valida este trabajo AL TERMINAR — nunca
-# un hecho ya comprobado, aunque se redacte en presente.
+# verify: the PENDING check that validates this work WHEN IT IS DONE — never a
+# fact already checked, even if it is worded in the present tense.
 verify: ""
 tasks: []
 ---
 ## Current State
-(vacío)
+(empty)
 ## Immediate Next Steps
 ## Decisions Made
 ## Gotchas/Constraints

@@ -1,30 +1,30 @@
-// EL LANZAMIENTO del vigilante del merge, desde el camino de éxito de
-// `--release` (scripts/dispatch-check.mjs).
+// THE LAUNCH of the merge watcher, from the success path of `--release`
+// (scripts/dispatch-check.mjs).
 //
-// Lo que este fichero fija es la costura, que es lo único que queda por probar
-// aquí: que el vigilante se lanza CUANDO el slice se entrega de verdad, con los
-// argumentos correctos, y que ningún fallo suyo puede tumbar el release. La
-// lógica de vigilar ya está probada aparte (ct-watch-merge.test.js).
+// What this file pins down is the seam, which is the only thing left to test
+// here: that the watcher is launched WHEN the slice is really delivered, with
+// the right arguments, and that no failure of its own can knock down the
+// release. The watching logic is already tested apart (ct-watch-merge.test.js).
 //
-// El vigilante de verdad se sustituye por una grabadora vía CT_WATCH_MERGE_BIN:
-// sin ella cada test que libera un slice pondría un proceso REAL a sondear
-// GitHub cada minuto durante 48 horas. Es el mismo doble, y por el mismo motivo,
-// que CT_WATCH_GO_BIN en ct-next-watch-go.test.js.
+// The real watcher is replaced by a recorder via CT_WATCH_MERGE_BIN: without it
+// every test that releases a slice would set a REAL process polling GitHub every
+// minute for 48 hours. It is the same double, and for the same reason, as
+// CT_WATCH_GO_BIN in ct-next-watch-go.test.js.
 import { describe, it, expect } from 'vitest'
 import { spawnSync, execFileSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { envDelGo } from './fixtures/go-gate.js'
+import { goEnv } from './fixtures/go-gate.js'
 
 const SCRIPT = fileURLToPath(new URL('../scripts/dispatch-check.mjs', import.meta.url))
 const FAKE_GH = fileURLToPath(new URL('./fixtures/fake-gh-bin', import.meta.url))
 const RECORDER = fileURLToPath(new URL('./fixtures/fake-watch-merge-bin/recorder.mjs', import.meta.url))
 
-// Plan mínimo que cumple el contrato de plan-contract.js. Copiado de
-// e2e-release-correspondencia.test.js: los tests de este repo no se importan
-// entre sí.
+// Minimal plan that satisfies the contract of plan-contract.js. Copied from
+// e2e-release-correspondencia.test.js: the tests of this repository do not
+// import each other.
 const FENCE = '```'
 const PLAN = [
   '# #9 — fixture slice',
@@ -72,10 +72,10 @@ const PLAN = [
 
 const CUERPO = ['## Acceptance criteria (EARS, 1:1 con tests)', '- un criterio', '', '## Gates', '- **`plan`** — …', ''].join('\n')
 
-// Worktree de slice con la tarea comiteada, el plan y el run ENTREGADO, sobre un
-// repo git de VERDAD: `localSliceArtifacts` pregunta por el checkout principal
-// con `git worktree list --porcelain`, y el vigilante necesita esa ruta. Un stub
-// de git no serviría para probar que la ruta que se le pasa es la real.
+// Slice worktree with the task committed, the plan and the run DELIVERED, on a
+// REAL git repository: `localSliceArtifacts` asks for the main checkout with
+// `git worktree list --porcelain`, and the watcher needs that path. A git stub
+// would be no use for proving that the path passed to it is the real one.
 function repo() {
   const dir = mkdtempSync(join(tmpdir(), 'ct-watch-merge-launch-'))
   const git = (...a) => execFileSync('git', a, { cwd: dir, stdio: 'ignore' })
@@ -97,10 +97,10 @@ function repo() {
   return dir
 }
 
-// El hijo va DESPRENDIDO y con `unref`, así que dispatch-check puede terminar
-// antes de que la grabadora escriba. Se sondea el fichero en vez de leerlo una
-// vez: si no, el test sería intermitente por construcción. Es la misma espera, y
-// por el mismo motivo, que `esperarArgv` en ct-next-watch-go.test.js.
+// The child goes DETACHED and with `unref`, so dispatch-check can finish before
+// the recorder writes. The file is polled instead of read once: otherwise the
+// test would be flaky by construction. It is the same wait, and for the same
+// reason, as `esperarArgv` in ct-next-watch-go.test.js.
 async function esperarArgv(ruta, ms = 5000) {
   const fin = Date.now() + ms
   while (Date.now() < fin) {
@@ -119,11 +119,11 @@ function release(dir, { args = [], env = {} } = {}) {
       PATH: `${FAKE_GH}:${process.env.PATH}`,
       FAKE_GH_VIEW_BODY: CUERPO,
       FAKE_GH_VIEW_LABELS: JSON.stringify(['status:in-progress', 'gate:plan']),
-      // El gate `plan` con su nonce (F38): sin un compromiso registrado y un
-      // comentario que lo satisfaga, `--release` se niega con exit 9 mucho antes
-      // de llegar al lanzamiento del vigilante. No es el objeto de este fichero,
-      // así que se usa la fixture compartida en vez de recrear el registro.
-      ...envDelGo({ repo: 'o/r', issue: 9 }),
+      // The `plan` gate with its nonce (F38): without a registered commitment
+      // and a comment satisfying it, `--release` refuses with exit 9 long before
+      // reaching the watcher's launch. It is not this file's subject, so the
+      // shared fixture is used instead of recreating the record.
+      ...goEnv({ repo: 'o/r', issue: 9 }),
       CT_WATCH_MERGE_BIN: RECORDER,
       FAKE_WATCH_MERGE_LOG: watchLog,
       ...env,
@@ -132,8 +132,8 @@ function release(dir, { args = [], env = {} } = {}) {
   return { ...r, watchLog }
 }
 
-describe('--release lanza el vigilante del merge', () => {
-  it('un release con éxito lo lanza con el issue, el repo y el cwd de la coordinadora', async () => {
+describe('--release launches the merge watcher', () => {
+  it("a successful release launches it with the issue, the repo and the coordinator's cwd", async () => {
     const dir = repo()
     try {
       const r = release(dir)
@@ -145,25 +145,25 @@ describe('--release lanza el vigilante del merge', () => {
       expect(argv).toContain('--issue')
       expect(argv[argv.indexOf('--issue') + 1]).toBe('9')
       expect(argv[argv.indexOf('--repo') + 1]).toBe('o/r')
-      // El cwd de la coordinadora es el checkout PRINCIPAL, no el cwd desde el
-      // que se invoca. En esta fixture coinciden (no hay un `.worktrees/9` de
-      // verdad), pero lo que se comprueba es que sale de `git worktree list` y
-      // no de `process.cwd()` a ciegas: la ruta tiene que resolver al mismo
-      // sitio que git dice, symlinks de /var incluidos.
+      // The coordinator's cwd is the MAIN checkout, not the cwd it is invoked
+      // from. In this fixture they coincide (there is no real `.worktrees/9`),
+      // but what is being checked is that it comes out of `git worktree list`
+      // and not out of `process.cwd()` blindly: the path has to resolve to the
+      // same place git says, /var symlinks included.
       const cwd = argv[argv.indexOf('--coordinator-cwd') + 1]
       expect(cwd).toBe(execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: dir, encoding: 'utf8' }).split('\n')[0].slice('worktree '.length).trim())
-      // El log va FUERA del repo, junto a la telemetría y al del vigilante del
-      // `-OK`, para que ningún `git add` de la slice lo meta en la PR.
+      // The log goes OUTSIDE the repository, alongside the telemetry and the
+      // `-OK` watcher's own, so that no `git add` of the slice puts it in the PR.
       const log = argv[argv.indexOf('--log') + 1]
       expect(log).toMatch(/control-tower[/\\]log[/\\]watch-merge-9\.log$/)
       expect(log.startsWith(dir)).toBe(false)
-      // Y se anuncia: un proceso que corre cuando no estás mirando y del que no
-      // se dice ni el pid ni dónde deja rastro es indepurable.
+      // And it gets announced: a process that runs when you are not watching and
+      // whose pid and trace are never stated is undebuggable.
       expect(r.stdout + r.stderr).toMatch(/vigilante del merge/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  it('con --no-watch-merge no lanza nada, y el release sigue siendo un éxito', async () => {
+  it('with --no-watch-merge it launches nothing, and the release is still a success', async () => {
     const dir = repo()
     try {
       const r = release(dir, { args: ['--no-watch-merge'] })
@@ -173,7 +173,7 @@ describe('--release lanza el vigilante del merge', () => {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  it('con --no-watch-merge se dice que la cosecha queda sin avisar, para que el silencio no se lea como entregado', async () => {
+  it('with --no-watch-merge it says the harvest is left unannounced, so silence is not read as delivered', async () => {
     const dir = repo()
     try {
       const r = release(dir, { args: ['--no-watch-merge'] })
@@ -183,7 +183,7 @@ describe('--release lanza el vigilante del merge', () => {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  it('con --dry-run no lanza nada: nada se ha movido, así que no hay merge que esperar', async () => {
+  it('with --dry-run it launches nothing: nothing has moved, so there is no merge to wait for', async () => {
     const dir = repo()
     try {
       const r = release(dir, { args: ['--dry-run'] })
@@ -193,9 +193,9 @@ describe('--release lanza el vigilante del merge', () => {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  it('un release que NO libera (gate sin cumplir) no lanza nada', async () => {
-    // El run sin `closed` es un slice que ct-step nunca cerró: exit 7. Un
-    // vigilante lanzado aquí sondearía 48 h un PR que nadie va a abrir.
+  it('a release that does NOT release (gate unmet) launches nothing', async () => {
+    // A run without `closed` is a slice ct-step never closed: exit 7. A watcher
+    // launched here would poll for 48 h for a PR nobody is going to open.
     const dir = repo()
     try {
       writeFileSync(join(dir, '.agent', 'run-9.json'), JSON.stringify({
@@ -209,26 +209,27 @@ describe('--release lanza el vigilante del merge', () => {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  it('un release retenido por el gate del go (exit 9) tampoco lanza nada', async () => {
-    // La puerta más nueva de la escalera (F38): sin un `-OK <nonce>` en el issue
-    // el release se niega. Va aquí y no solo en los tests de F38 porque lo que
-    // este fichero fija es "el vigilante nace SI Y SOLO SI el slice se entregó
-    // de verdad", y esa propiedad tiene que valer contra CADA puerta, no contra
-    // las que existían el día que se escribió. Un vigilante lanzado aquí
-    // sondearía 48 h un PR que nadie ha abierto.
+  it('a release held back by the go gate (exit 9) launches nothing either', async () => {
+    // The newest door on the ladder (F38): without an `-OK <nonce>` on the issue
+    // the release refuses. It goes here and not only in the F38 tests because
+    // what this file pins down is "the watcher is born IF AND ONLY IF the slice
+    // was really delivered", and that property has to hold against EVERY door,
+    // not against the ones that existed the day it was written. A watcher
+    // launched here would poll for 48 h for a PR nobody has opened.
     const dir = repo()
     try {
-      const r = release(dir, { env: envDelGo({ repo: 'o/r', issue: 9, dado: false }) })
+      const r = release(dir, { env: goEnv({ repo: 'o/r', issue: 9, given: false }) })
       expect(r.status).toBe(9)
       expect(r.stdout + r.stderr).not.toMatch(/vigilante del merge/)
       expect(await esperarArgv(r.watchLog, 600)).toBe(null)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  it('si el vigilante no se puede lanzar, el release SIGUE siendo un éxito', async () => {
-    // El termómetro no es parte del motor: el trabajo ya está entregado y el
-    // issue ya está en `in-review`. No poder vigilar el merge significa volver
-    // al modo de antes —avisar a mano—, no perder la entrega. Y se dice.
+  it('if the watcher cannot be launched, the release is STILL a success', async () => {
+    // The thermometer is not part of the engine: the work is already delivered
+    // and the issue is already in `in-review`. Not being able to watch the merge
+    // means going back to the old way —telling people by hand—, not losing the
+    // delivery. And it gets said.
     const dir = repo()
     try {
       const r = release(dir, { env: { CT_WATCH_MERGE_BIN: join(dir, 'no-existe', 'ni-de-broma.mjs') } })

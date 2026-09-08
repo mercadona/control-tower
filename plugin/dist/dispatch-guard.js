@@ -27,39 +27,42 @@ var STEPS = Object.freeze({
   IMPLEMENT: "implement",
   CONTROLS: "controls",
   JUDGE: "judge",
-  // ADVISE (H9) — entre el SEGUNDO veto y el TERCER intento, y en ningún otro
-  // sitio. Los dos primeros intentos son el patrón feedback-flip: el
-  // implementador hereda el árbol vetado y el veredicto que lo vetó, y eso es
-  // lo correcto mientras la corrección sea local. El tercero ya no lo es —
-  // parchea dos capas de parches— así que aquí se cambia de estrategia en vez
-  // de repetir la misma a ciegas: un consejero de tier superior, sin más
-  // herramienta que `Read`, mira los dos intentos y los dos vetos y dicta un
-  // enfoque, y el programa devuelve el árbol al último commit antes de que el
-  // tercer implementador empiece (happy-to-delete).
+  // ADVISE (H9) — between the SECOND veto and the THIRD attempt, and nowhere
+  // else. The first two attempts are the feedback-flip pattern: the
+  // implementer inherits the vetoed tree and the verdict that vetoed it, and
+  // that is the right thing while the correction is local. The third one no
+  // longer is — it patches two layers of patches — so here the strategy is
+  // changed instead of repeating the same one blindly: an adviser of a higher
+  // tier, with no tool other than `Read`, looks at the two attempts and the
+  // two vetoes and dictates an approach, and the program returns the tree to
+  // the last commit before the third implementer starts (happy-to-delete).
   //
-  // SIN CONTADOR PROPIO, y es una decisión: el reintento que este paso ocupa ya
-  // lo gastó el veto que lo abrió (`judgeRetries`), así que el intento sigue
-  // siendo `controlRetries + judgeRetries + correctionRetries + 1` — la misma
-  // fórmula que cuentan el sello del despacho y el backend que lee este fichero.
+  // WITH NO COUNTER OF ITS OWN, and that is a decision: the retry this step
+  // occupies was already spent by the veto that opened it (`judgeRetries`), so
+  // the attempt is still `controlRetries + judgeRetries + correctionRetries +
+  // 1` — the same formula the dispatch's stamp and the backend that reads this
+  // file count.
   ADVISE: "advise",
   COMMIT: "commit",
-  // RECONCILE va ANTES de GLOBAL y no después: la punta a punta del plan
-  // (`global`) tiene que correr sobre el árbol ya puesto al día con su base,
-  // no sobre uno que se quede atrás y que luego el merge de la pull request
-  // vuelva a mover. Verificar antes de reconciliar mediría un árbol que ya no
-  // es el que se entrega.
+  // RECONCILE goes BEFORE GLOBAL and not after: the plan's end-to-end
+  // (`global`) has to run over the tree already brought up to date with its
+  // base, not over one that lags behind and that the pull request's merge then
+  // moves again. Verifying before reconciling would measure a tree that is no
+  // longer the one being delivered.
   RECONCILE: "reconcile",
-  // GLOBAL / SLICE_JUDGE (§3.7) y E2E son los tres pasos que NO son por tarea:
-  // se entra en ellos al comitear la última, y cierran la SLICE, no una tarea.
+  // GLOBAL / SLICE_JUDGE (§3.7) and E2E are the three steps that are NOT
+  // per-task: they are entered on committing the last one, and they close the
+  // SLICE, not a task.
   GLOBAL: "global",
   SLICE_JUDGE: "slice-judge",
-  // E2E — el último de esa cola, y el único condicional: sólo se entra si la
-  // slice declara recorridos. Va aquí y no colgado de `controls` porque
-  // `controls` mide lo que el PLAN prometió contra el árbol, por tarea, y esto
-  // atraviesa lo que el SPEC declaró contra el sistema levantado, por slice.
-  // Colgarlo de controls obligaría a que cada tarea arrastrara un e2e que no le
-  // toca, o a un controls especial en la última — una rama de la tabla que no
-  // describe ningún estado real.
+  // E2E — the last of that queue, and the only conditional one: it is only
+  // entered if the slice declares runs. It goes here and not hung off
+  // `controls` because `controls` measures what the PLAN promised against the
+  // tree, per task, and this walks through what the SPEC declared against the
+  // system brought up, per slice. Hanging it off controls would force every
+  // task to drag along an e2e that is none of its business, or a special
+  // controls on the last one — a branch of the table that describes no real
+  // state.
   E2E: "e2e"
 });
 var OUTCOMES = Object.freeze({
@@ -79,8 +82,8 @@ var RUN_STATES = Object.freeze({
   BLOCKED_GLOBAL: "blocked-global",
   BLOCKED_SLICE_JUDGE: "blocked-slice-judge",
   BLOCKED_RECONCILE: "blocked-reconcile",
-  // Mismo sitio y misma forma que sus hermanos: un cierre en fallo del que
-  // sale una persona, no un reintento.
+  // Same place and same shape as its siblings: a closure in failure that a
+  // person gets out of, not a retry.
   BLOCKED_E2E: "blocked-e2e",
   ABORTED_BUDGET: "aborted-budget"
 });

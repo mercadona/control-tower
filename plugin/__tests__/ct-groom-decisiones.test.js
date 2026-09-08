@@ -31,8 +31,8 @@ const TABLE = `## 9. Slices
 | 1 | login | backend | modelo | – | AC-1.1 | schema |
 `
 
-describe('ct-groom --dry-run — decisiones congeladas', () => {
-  it('proyecta la sección al cuerpo, sin la procedencia', () => {
+describe('ct-groom --dry-run — frozen decisions', () => {
+  it('projects the section into the body, without the provenance', () => {
     const DEC = '## Decisiones congeladas\n- **D-1 · versión** — iOS 17. *(Procedencia: hablada.)*\n\n'
     const r = runGroom(HYP + DEC + TABLE)
     expect(r.status).toBe(0)
@@ -40,7 +40,7 @@ describe('ct-groom --dry-run — decisiones congeladas', () => {
     expect(r.stdout).toContain('iOS 17')
     expect(r.stdout).not.toContain('Procedencia')
   })
-  it('sin la sección, el cuerpo no la lleva', () => {
+  it('without the section, the body does not carry it', () => {
     const r = runGroom(HYP + TABLE)
     expect(r.status).toBe(0)
     expect(r.stdout).not.toContain('## Decisiones congeladas')

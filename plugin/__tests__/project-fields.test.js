@@ -8,37 +8,37 @@ describe('pickCurrentIteration', () => {
     { id: 'c', title: 'Sprint 3', startDate: '2026-08-03', duration: 14 },
   ]
 
-  it('elige la iteración cuyo rango [startDate, startDate+duration) cubre hoy', () => {
+  it('picks the iteration whose range [startDate, startDate+duration) covers today', () => {
     expect(pickCurrentIteration(iterations, '2026-07-25')?.id).toBe('b')
   })
 
-  it('el primer día de una iteración cuenta como vigente (límite inferior inclusivo)', () => {
+  it('the first day of an iteration counts as current (lower bound inclusive)', () => {
     expect(pickCurrentIteration(iterations, '2026-07-20')?.id).toBe('b')
   })
 
-  it('el día startDate+duration ya pertenece a la siguiente iteración (límite superior exclusivo)', () => {
+  it('the day startDate+duration already belongs to the next iteration (upper bound exclusive)', () => {
     expect(pickCurrentIteration(iterations, '2026-08-03')?.id).toBe('c')
     expect(pickCurrentIteration(iterations, '2026-08-02')?.id).toBe('b')
   })
 
-  it('devuelve null si ninguna iteración cubre la fecha (hueco entre sprints o fuera de rango)', () => {
+  it('returns null if no iteration covers the date (gap between sprints or out of range)', () => {
     expect(pickCurrentIteration(iterations, '2026-06-01')).toBeNull()
     expect(pickCurrentIteration(iterations, '2026-09-01')).toBeNull()
   })
 
-  it('acepta un ISO string completo (con hora) y lo recorta a la fecha', () => {
+  it('accepts a full ISO string (with a time) and trims it to the date', () => {
     expect(pickCurrentIteration(iterations, '2026-07-25T10:08:43.000Z')?.id).toBe('b')
   })
 
-  it('defensivo: lista vacía o ausente devuelve null sin reventar', () => {
+  it('defensive: an empty or absent list returns null without blowing up', () => {
     expect(pickCurrentIteration([], '2026-07-25')).toBeNull()
     expect(pickCurrentIteration(undefined, '2026-07-25')).toBeNull()
   })
 
-  it('no depende de la zona horaria del proceso (aritmética en días UTC)', () => {
-    // Regresión: si se usara Date#setDate sobre un Date parseado sin hora,
-    // en husos horarios negativos (America/*) la fecha calendario se
-    // desplazaría un día. Fijamos TZ y comprobamos que el resultado no cambia.
+  it('does not depend on the process time zone (arithmetic in UTC days)', () => {
+    // Regression: if Date#setDate were used on a Date parsed with no time,
+    // in negative time zones (America/*) the calendar date would shift by a
+    // day. We pin TZ and check that the result does not change.
     const prevTz = process.env.TZ
     process.env.TZ = 'America/Los_Angeles'
     try {
@@ -55,23 +55,23 @@ describe('hasProjectItem', () => {
   const items = [
     { content: { repository: 'o/r', number: 2 } },
     { content: { repository: 'o/r', number: 3 } },
-    { content: { repository: 'other/repo', number: 2 } }, // mismo número, otro repo: no debe casar
+    { content: { repository: 'other/repo', number: 2 } }, // same number, another repo: it must not match
   ]
 
-  it('detecta un issue ya presente en el project', () => {
+  it('detects an issue already present in the project', () => {
     expect(hasProjectItem(items, 'o/r', 2)).toBe(true)
     expect(hasProjectItem(items, 'o/r', 3)).toBe(true)
   })
 
-  it('un issue con el mismo número pero de otro repo no cuenta como presente', () => {
+  it('an issue with the same number but from another repo does not count as present', () => {
     expect(hasProjectItem(items, 'other/repo', 3)).toBe(false)
   })
 
-  it('devuelve false si el issue no está en la lista de items', () => {
+  it('returns false if the issue is not in the item list', () => {
     expect(hasProjectItem(items, 'o/r', 999)).toBe(false)
   })
 
-  it('defensivo: lista vacía/ausente o content ausente no revienta', () => {
+  it('defensive: an empty/absent list or an absent content does not blow up', () => {
     expect(hasProjectItem([], 'o/r', 2)).toBe(false)
     expect(hasProjectItem(undefined, 'o/r', 2)).toBe(false)
     expect(hasProjectItem([{ content: null }], 'o/r', 2)).toBe(false)

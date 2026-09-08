@@ -1,9 +1,9 @@
-// El "go" del gate `plan`, leído por una máquina (scripts/go-response.js).
+// The "go" of the `plan` gate, read by a machine (scripts/go-response.js).
 //
-// Hasta ahora el «ok» que el humano escribía en el issue no lo leía nadie: el
-// gate se cerraba de verdad cuando esa persona iba a la ventana de cmux y
-// empujaba la sesión a mano. Este módulo es la mitad que decide; la que habla
-// con `gh` y con `cmux` es scripts/ct-watch-go.mjs.
+// Until now nobody read the «ok» the human wrote in the issue: the gate really
+// closed when that person walked over to the cmux window and pushed the session
+// by hand. This module is the half that decides; the one that talks to `gh` and
+// to `cmux` is scripts/ct-watch-go.mjs.
 import { describe, it, expect } from 'vitest'
 import {
   hasGo, commentIds, GO_TOKEN, matchesGo, goBody, goCommitment, newGoNonce,
@@ -12,230 +12,235 @@ import {
 
 const comentario = (id, body) => ({ id, body })
 
-// F38 — el go ya no es una constante: es `-OK <nonce>`, con un nonce por
-// despacho que el agente no puede adivinar. Estos tests fijan el nonce (el azar
-// lo pone quien llama, justo para esto) y el `GO` de abajo es el cuerpo exacto
-// que una persona teclearía.
+// F38 — the go is no longer a constant: it is `-OK <nonce>`, with one nonce per
+// dispatch that the agent cannot guess. These tests pin the nonce (the
+// randomness is supplied by the caller, precisely for this) and the `GO` below
+// is the exact body a person would type.
 const NONCE = newGoNonce(Buffer.from([0x3f, 0x9a, 0x1c, 0x04]))
 const HASH = goCommitment(NONCE)
 const GO = goBody(NONCE)
 
-describe('el token', () => {
-  it('es `-OK`, y se exporta para que no se teclee en cuatro sitios', () => {
-    // Lo nombran el que lo busca, los dos textos del gate y estos tests. Es el
-    // desacople que este repo ya pagó tres veces, y aquí sería mudo.
+describe('the token', () => {
+  it('is `-OK`, and it is exported so that it is not typed in four places', () => {
+    // It is named by whoever looks for it, by the gate's two texts and by these
+    // tests. It is the decoupling this repo has already paid for three times,
+    // and here the breakage would be silent.
     expect(GO_TOKEN).toBe('-OK')
   })
 })
 
-describe('qué cuenta como go', () => {
+describe('what counts as a go', () => {
   const nuevo = (body) => hasGo([comentario('IC_nuevo', body)], new Set(), HASH)
 
-  it('un comentario que es exactamente el token y el nonce de este despacho', () => {
+  it('a comment that is exactly the token and the nonce of this dispatch', () => {
     expect(nuevo(GO)).toBe(true)
   })
 
-  it('con espacios o saltos alrededor sigue contando: eso lo pone el editor, no la persona', () => {
+  it('with spaces or newlines around it, it still counts: the editor puts those there, not the person', () => {
     expect(nuevo(`  ${GO}\n`)).toBe(true)
   })
 
-  it('el nonce en mayúsculas cuenta: es hex reteclado de una pantalla', () => {
-    // No abre nada de más —sigue haciendo falta el nonce— y evita el peor rato
-    // posible, que es teclear el permiso correcto y que no pase nada.
+  it('the nonce in upper case counts: it is hex retyped off a screen', () => {
+    // It opens nothing extra —the nonce is still needed— and it avoids the
+    // worst possible moment, which is typing the right permission and having
+    // nothing happen.
     expect(nuevo(`${GO_TOKEN} ${NONCE.toUpperCase()}`)).toBe(true)
   })
 
   // -------------------------------------------------------------------------
-  // F38 — EL TOKEN DESNUDO YA NO ES UN GO. Es el corazón de la ronda: un `-OK`
-  // sin nonce lo puede escribir el propio agente con `gh` en un comando, dentro
-  // de su repertorio normal y con una traza indistinguible de la legítima.
+  // F38 — THE BARE TOKEN IS NO LONGER A GO. It is the heart of the round: a
+  // `-OK` with no nonce can be written by the agent itself with `gh` in a single
+  // command, well within its normal repertoire and with a trace
+  // indistinguishable from the legitimate one.
   // -------------------------------------------------------------------------
-  it('el token DESNUDO no es un go: es lo único que el agente sabría escribir', () => {
+  it('the BARE token is not a go: it is the only thing the agent would know how to write', () => {
     expect(nuevo(GO_TOKEN)).toBe(false)
   })
 
-  it('otro nonce tampoco, ni uno de otro despacho', () => {
+  it('another nonce is not one either, nor one from another dispatch', () => {
     expect(nuevo(`${GO_TOKEN} deadbeef`)).toBe(false)
     expect(nuevo(goBody(newGoNonce(Buffer.from([1, 2, 3, 4]))))).toBe(false)
   })
 
-  it('sin compromiso NADA cuenta, ni el go correcto: no hay camino de vuelta al token fijo', () => {
-    // Un fallback al `-OK` de ayer sería una puerta que se abre OMITIENDO un
-    // argumento (o borrando un fichero), o sea justo lo que esta ronda quita
-    // del repertorio del agente.
+  it('with no commitment NOTHING counts, not even the right go: there is no way back to the fixed token', () => {
+    // A fallback to yesterday's `-OK` would be a door that opens by OMITTING an
+    // argument (or by deleting a file), that is to say exactly what this round
+    // takes out of the agent's repertoire.
     expect(hasGo([comentario('IC_nuevo', GO)], new Set())).toBe(false)
     expect(hasGo([comentario('IC_nuevo', GO)], new Set(), '')).toBe(false)
     expect(hasGo([comentario('IC_nuevo', GO)], new Set(), 'no-es-un-sha')).toBe(false)
   })
 
   // -------------------------------------------------------------------------
-  // EL MODO DE FALLO NO ES SIMÉTRICO, y es todo el argumento de la
-  // coincidencia exacta. Un token no reconocido te deja esperando y lo notas.
-  // Un token reconocido de más ARRANCA EL TRABAJO — y «-OK pero cambia el
-  // nombre» arrancaría justo lo que la persona quería frenar.
+  // THE FAILURE MODE IS NOT SYMMETRIC, and that is the whole argument for the
+  // exact match. A token that is not recognised leaves you waiting and you
+  // notice. A token recognised too generously STARTS THE WORK — and «-OK pero
+  // cambia el nombre» would start precisely what the person meant to stop.
   // -------------------------------------------------------------------------
-  it('el go con algo detrás NO es un go: ante la duda no se arranca', () => {
+  it('the go with something behind it is NOT a go: when in doubt, nothing starts', () => {
     expect(nuevo(`${GO} pero cambia el nombre`)).toBe(false)
     expect(nuevo('-OK pero cambia el nombre')).toBe(false)
   })
 
-  it('un comentario que sólo contiene el go dentro de una frase tampoco', () => {
+  it('a comment that only contains the go inside a sentence is not one either', () => {
     expect(nuevo(`me parece ${GO}`)).toBe(false)
   })
 
-  it('prosa normal no es un go, y no hay tercera categoría que aprender', () => {
+  it('ordinary prose is not a go, and there is no third category to learn', () => {
     expect(nuevo('ok, adelante')).toBe(false)
     expect(nuevo('lgtm')).toBe(false)
   })
 
-  it('un cuerpo que no es texto no revienta ni cuenta', () => {
+  it('a body that is not text neither blows up nor counts', () => {
     expect(hasGo([{ id: 'IC_x', body: null }, { id: 'IC_y' }], new Set(), HASH)).toBe(false)
   })
 
-  it('sin comentarios no hay go', () => {
+  it('with no comments there is no go', () => {
     expect(hasGo([], new Set(), HASH)).toBe(false)
     expect(hasGo(null, new Set(), HASH)).toBe(false)
   })
 })
 
 // ---------------------------------------------------------------------------
-// EL COMPROMISO. Lo que se guarda en cualquier sitio que el agente pueda leer
-// —el argv del vigilante, que `ps` enseña; el registro en disco; el mensaje de
-// la puerta 9— es el sha256 del nonce, nunca el nonce. Un hash ahí no le sirve
-// de nada a quien lo lee.
+// THE COMMITMENT. What gets stored anywhere the agent can read —the watcher's
+// argv, which `ps` shows; the record on disk; the message of gate 9— is the
+// sha256 of the nonce, never the nonce. A hash there is of no use at all to
+// whoever reads it.
 // ---------------------------------------------------------------------------
-describe('el compromiso', () => {
-  it('es un sha256 hex y no contiene el nonce', () => {
+describe('the commitment', () => {
+  it('is a hex sha256 and does not contain the nonce', () => {
     expect(HASH).toMatch(/^[0-9a-f]{64}$/)
     expect(HASH).not.toContain(NONCE)
   })
 
-  it('no depende de la caja del nonce, porque el matcher tampoco', () => {
+  it('does not depend on the case of the nonce, because the matcher does not either', () => {
     expect(goCommitment(NONCE.toUpperCase())).toBe(HASH)
   })
 
-  it('el nonce son 8 caracteres hex —32 bits— a partir de los bytes que da quien llama', () => {
-    // 4 hex serían 65.536 intentos, y «65.536 intentos no se pueden esconder»
-    // es una apuesta a que alguien esté mirando el issue, no una barandilla.
+  it('the nonce is 8 hex characters —32 bits— out of the bytes the caller gives', () => {
+    // 4 hex would be 65,536 attempts, and «65,536 attempts cannot be hidden» is
+    // a bet on somebody watching the issue, not a guardrail.
     expect(NONCE).toBe('3f9a1c04')
     expect(GO).toBe('-OK 3f9a1c04')
   })
 
-  it('matchesGo es la MISMA función para el vigilante y para --release', () => {
-    // Dos expresiones distintas para lo mismo darían el peor síntoma posible:
-    // el trabajo arranca con un go que luego no libera.
+  it('matchesGo is the SAME function for the watcher and for --release', () => {
+    // Two different expressions for the same thing would give the worst
+    // possible symptom: the work starts with a go that then does not release.
     expect(matchesGo(GO, HASH)).toBe(true)
     expect(matchesGo(GO_TOKEN, HASH)).toBe(false)
   })
 })
 
 // ---------------------------------------------------------------------------
-// LA VENTANA. Su razón de ser: un `-OK` de un despacho ANTERIOR del mismo issue
-// no puede arrancar nada. Sin ella, redespachar un slice cuyo issue ya llevaba
-// un go heredaría ese go y el gate se saltaría EN SILENCIO — el peor de los
-// fallos posibles aquí.
+// THE WINDOW. Its reason to exist: a `-OK` from a PREVIOUS dispatch of the same
+// issue cannot start anything. Without it, redispatching a slice whose issue
+// already carried a go would inherit that go and the gate would be skipped IN
+// SILENCE — the worst of the failures possible here.
 //
-// Y es por IDENTIFICADOR, no por fecha, porque la primera versión cortaba por
-// tiempo y estaba rota: `createdAt` lo pone el servidor de GitHub y el corte lo
-// ponía `Date.now()` de la máquina. Dos relojes. Con el local atrasado, un go
-// heredado entraba en la ventana; con el local adelantado, un go legítimo
-// quedaba fuera para siempre. Lo cazó una revisión adversarial.
+// And it goes by IDENTIFIER, not by date, because the first version cut by time
+// and it was broken: `createdAt` is put there by GitHub's server and the cut was
+// put there by the machine's `Date.now()`. Two clocks. With the local one
+// running slow, an inherited go fell inside the window; with the local one
+// running fast, a legitimate go fell outside it forever. An adversarial review
+// caught it.
 // ---------------------------------------------------------------------------
-describe('la ventana: sólo lo que no estaba en la foto inicial', () => {
-  it('un go que ya estaba no arranca nada', () => {
+describe('the window: only what was not in the initial snapshot', () => {
+  it('a go that was already there starts nothing', () => {
     const viejos = [comentario('IC_viejo', GO)]
     expect(hasGo(viejos, commentIds(viejos), HASH)).toBe(false)
   })
 
-  it('y uno nuevo sí, con el viejo delante', () => {
+  it('and a new one does, with the old one ahead of it', () => {
     const viejos = [comentario('IC_viejo', GO)]
     const ahora = [...viejos, comentario('IC_nuevo', GO)]
     expect(hasGo(ahora, commentIds(viejos), HASH)).toBe(true)
   })
 
-  it('no interviene ningún reloj: el mismo comentario decide igual con cualquier fecha', () => {
-    // La regresión que este test impide es volver a cortar por tiempo. Los dos
-    // comentarios llevan fechas absurdas en direcciones opuestas y no cambia
-    // nada, porque nadie las mira.
+  it('no clock takes part: the same comment decides the same way with any date', () => {
+    // The regression this test prevents is going back to cutting by time. The
+    // two comments carry absurd dates in opposite directions and nothing
+    // changes, because nobody looks at them.
     const viejos = [{ id: 'IC_viejo', body: GO, createdAt: '2099-01-01T00:00:00Z' }]
     const ahora = [...viejos, { id: 'IC_nuevo', body: GO, createdAt: '1999-01-01T00:00:00Z' }]
     expect(hasGo(ahora, commentIds(viejos), HASH)).toBe(true)
     expect(hasGo(viejos, commentIds(viejos), HASH)).toBe(false)
   })
 
-  it('acepta la foto como lista además de como conjunto', () => {
+  it('accepts the snapshot as a list as well as a set', () => {
     expect(hasGo([comentario('IC_a', GO)], ['IC_a'], HASH)).toBe(false)
   })
 
-  // F38 — LA VENTANA YA NO ES LA ÚNICA QUE SOSTIENE ESTO. Un go de un despacho
-  // anterior lleva OTRO nonce, así que no encaja ni sin ventana — que es
-  // exactamente por lo que `--release` puede mirar el issue entero.
-  it('un go heredado de otro despacho no encaja ni mirando todo el issue', () => {
+  // F38 — THE WINDOW IS NO LONGER THE ONLY THING HOLDING THIS UP. A go from a
+  // previous dispatch carries ANOTHER nonce, so it does not match even with no
+  // window — which is exactly why `--release` can look at the whole issue.
+  it('a go inherited from another dispatch does not match even looking at the whole issue', () => {
     const otroDespacho = goBody(newGoNonce(Buffer.from([9, 9, 9, 9])))
     expect(hasGo([comentario('IC_viejo', otroDespacho)], new Set(), HASH)).toBe(false)
   })
 })
 
-describe('la foto inicial', () => {
-  it('son los identificadores de lo que ya había', () => {
+describe('the initial snapshot', () => {
+  it('is the identifiers of what was already there', () => {
     expect(commentIds([comentario('IC_a', 'x'), comentario('IC_b', 'y')])).toEqual(new Set(['IC_a', 'IC_b']))
   })
 
-  it('un comentario sin identificador legible NO entra en la foto', () => {
-    // Así, si apareciera luego, contaría como nuevo. Es el lado prudente: el
-    // coste de contarlo de más es esperar (el token tiene que ser exacto de
-    // todas formas); el de contarlo de menos sería honrar un go viejo.
+  it('a comment with no readable identifier does NOT go into the snapshot', () => {
+    // That way, if it turned up later, it would count as new. It is the prudent
+    // side: the cost of counting it in too generously is waiting (the token has
+    // to be exact anyway); the cost of counting it too sparingly would be
+    // honouring an old go.
     expect(commentIds([{ body: 'x' }, { id: '', body: 'y' }, { id: 42, body: 'z' }])).toEqual(new Set())
   })
 
-  it('sin comentarios la foto está vacía', () => {
+  it('with no comments the snapshot is empty', () => {
     expect(commentIds(null)).toEqual(new Set())
     expect(commentIds([])).toEqual(new Set())
   })
 })
 
-// El intento que no arranca nada. Medido en jjponz/rust-monitoring#7: `-OK`
-// pelado a las 10:50, silencio, y el go bueno a las 10:58. El silencio ante un
-// go mal formado es deliberado y no se toca —el gate sigue abriéndose sólo con
-// `matchesGo`—; lo que faltaba es decirle el formato a quien ya demostró que lo
-// está intentando.
-describe('el intento de go que no arranca nada', () => {
+// The attempt that starts nothing. Measured in jjponz/rust-monitoring#7: a bare
+// `-OK` at 10:50, silence, and the good go at 10:58. The silence in the face of
+// a malformed go is deliberate and is not touched —the gate still opens only
+// with `matchesGo`—; what was missing is telling the format to whoever has
+// already shown they are trying.
+describe('the go attempt that starts nothing', () => {
   const previos = commentIds([comentario('IC_viejo', 'el plan')])
   const conElViejo = (...nuevos) => [comentario('IC_viejo', 'el plan'), ...nuevos]
 
-  it('reconoce el caso medido: el token pelado, sin nonce', () => {
+  it('recognises the measured case: the bare token, with no nonce', () => {
     expect(failedGoAttempt(conElViejo(comentario('IC_a', GO_TOKEN)), previos, HASH)).toBe('IC_a')
   })
 
-  it('reconoce el token en minúsculas, que es justo el error que hay que explicar', () => {
+  it('recognises the token in lower case, which is exactly the mistake that needs explaining', () => {
     expect(failedGoAttempt(conElViejo(comentario('IC_b', `-ok ${NONCE}`)), previos, HASH)).toBe('IC_b')
   })
 
-  it('reconoce el nonce equivocado', () => {
+  it('recognises the wrong nonce', () => {
     expect(failedGoAttempt(conElViejo(comentario('IC_c', `${GO_TOKEN} deadbeef`)), previos, HASH)).toBe('IC_c')
   })
 
-  it('un go VÁLIDO no es un intento fallido: lo contrario sería contestar a quien acertó', () => {
+  it('a VALID go is not a failed attempt: the opposite would be answering back to whoever got it right', () => {
     expect(failedGoAttempt(conElViejo(comentario('IC_d', GO)), previos, HASH)).toBeNull()
   })
 
-  it('un comentario que no empieza por el token no es un intento: nadie estaba dando el go', () => {
+  it('a comment that does not start with the token is not an attempt: nobody was giving the go', () => {
     expect(failedGoAttempt(conElViejo(comentario('IC_e', 'me parece bien el plan')), previos, HASH)).toBeNull()
     expect(failedGoAttempt(conElViejo(comentario('IC_f', 'ok')), previos, HASH)).toBeNull()
   })
 
-  it('un intento que ya estaba en la foto inicial no se contesta: es de un despacho anterior', () => {
+  it('an attempt that was already in the initial snapshot gets no answer: it is from a previous dispatch', () => {
     const viejos = [comentario('IC_viejo', GO_TOKEN)]
     expect(failedGoAttempt(viejos, commentIds(viejos), HASH)).toBeNull()
   })
 
-  it('sin comentarios, o con basura por comentarios, no hay intento', () => {
+  it('with no comments, or with rubbish for comments, there is no attempt', () => {
     expect(failedGoAttempt([], previos, HASH)).toBeNull()
     expect(failedGoAttempt(null, previos, HASH)).toBeNull()
     expect(failedGoAttempt([null, undefined], previos, HASH)).toBeNull()
   })
 
-  it('devuelve el ÚLTIMO intento cuando hay varios, igual que hasGo recorre al revés', () => {
+  it('returns the LAST attempt when there are several, just as hasGo walks backwards', () => {
     const comentarios = conElViejo(comentario('IC_x', GO_TOKEN), comentario('IC_y', `${GO_TOKEN} nope`))
     expect(failedGoAttempt(comentarios, previos, HASH)).toBe('IC_y')
   })

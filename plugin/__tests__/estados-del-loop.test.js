@@ -1,23 +1,23 @@
-// F13 — ESTADOS QUE FALTABAN EN EL LOOP.
+// F13 — STATES THAT WERE MISSING FROM THE LOOP.
 //
-// Cuatro agujeros, todos verificados contra el código SIN arreglar antes de
-// escribir una línea de fix (la salida observada en cada caso está anotada en
-// el test correspondiente):
+// Four holes, all of them verified against the UNFIXED code before writing a
+// single line of fix (the output observed in each case is noted down in the
+// corresponding test):
 //
-//   H1  `status:in-review` era TERMINAL. `--release` movía in-progress →
-//       in-review y no existía ninguna transición de vuelta a `ready` salvo
-//       los reverts por fallo del protocolo. Un PR rechazado en el gate
-//       sacaba su slice del loop para siempre, y con él todos sus
-//       dependientes.
-//   H2  el cerrojo se soltaba antes de que acabara el riesgo. `--release` se
-//       ejecuta AL ABRIR EL PR, y hasta F13 in-review no retenía tokens: en
-//       la ventana [PR abierto, PR mergeado] el siguiente slice del mismo
-//       área salía y ramificaba de una base que aún no contenía ese trabajo.
-//   H3  un claim muerto que copaba el cap sin compartir tokens era invisible
-//       ("sube --cap, o espera a que termine alguno" — a un agente que ya no
-//       existe).
-//   H4  una dep cuyo issue se cerró como "not planned" nunca se satisface, y
-//       el mensaje decía "falta mergear #N" igual que si siguiera en curso.
+//   H1  `status:in-review` was TERMINAL. `--release` moved in-progress →
+//       in-review and there was no transition back to `ready` other than the
+//       protocol-failure reverts. A PR rejected at the gate took its slice out
+//       of the loop for ever, and every one of its dependents with it.
+//   H2  the lock was released before the risk was over. `--release` runs WHEN
+//       THE PR IS OPENED, and until F13 in-review held no tokens: in the
+//       window [PR opened, PR merged] the next slice of the same area went out
+//       and branched off a base that did not yet contain that work.
+//   H3  a dead claim that filled the cap without sharing tokens was invisible
+//       ("sube --cap, o espera a que termine alguno" — said to an agent that no
+//       longer exists).
+//   H4  a dep whose issue was closed as "not planned" is never satisfied, and
+//       the message said "falta mergear #N" exactly as if it were still under
+//       way.
 import { describe, it, expect, afterEach } from 'vitest'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, existsSync } from 'node:fs'
@@ -69,36 +69,36 @@ const rawIssue = ({ number, order, status = 'status:ready', touches = [], body =
 })
 
 // ============================================================================
-// H2 — in-review retiene TOKENS, pero no CAP.
+// H2 — in-review holds TOKENS, but not CAP.
 // ============================================================================
-describe('F13/H2 — la ventana del cerrojo llega hasta el merge, no hasta el PR', () => {
-  it('detectCollisions ve un status:in-review como poseedor del token (antes devolvía [])', () => {
-    // Contra el código sin arreglar, esta MISMA llamada devolvía `[]`:
-    // detectCollisions hacía `if (!labels.includes('status:in-progress'))
-    // continue`. Ejecutado y observado antes de tocar nada.
+describe('F13/H2 — the lock window reaches the merge, not the PR', () => {
+  it('detectCollisions sees a status:in-review as a holder of the token (it used to return [])', () => {
+    // Against the unfixed code, this VERY call returned `[]`: detectCollisions
+    // did `if (!labels.includes('status:in-progress')) continue`. Run and
+    // observed before touching anything.
     const c = detectCollisions(['touches:db'], [{ n: 5, labels: ['status:in-review', 'touches:db'] }])
     expect(c).toEqual([{ n: 5, tokens: ['touches:db'], status: 'status:in-review' }])
   })
 
-  it('holdingStatusOf distingue los dos estados que retienen, y solo esos', () => {
+  it('holdingStatusOf tells apart the two states that hold, and only those', () => {
     expect(holdingStatusOf(['status:in-progress'])).toBe('status:in-progress')
     expect(holdingStatusOf(['status:in-review'])).toBe('status:in-review')
     expect(holdingStatusOf(['status:ready'])).toBeNull()
     expect(holdingStatusOf(['status:backlog'])).toBeNull()
     expect(holdingStatusOf([])).toBeNull()
-    // Un issue con las dos a la vez (edición de label a medias) se lee por el
-    // estado MÁS retentivo, igual que hace resolveStatus: nunca por el orden
-    // en que GitHub devuelva el array.
+    // An issue with both at once (a half-done label edit) is read by the MOST
+    // retentive state, just as resolveStatus does: never by the order in which
+    // GitHub happens to return the array.
     expect(holdingStatusOf(['status:in-review', 'status:in-progress'])).toBe('status:in-progress')
     expect(CLAIM_HOLDING_STATUSES).toEqual(['status:in-progress', 'status:in-review'])
   })
 
-  it('planDispatch NO despacha un ready que comparte token con un in-review (antes sí lo hacía)', () => {
+  it('planDispatch does NOT dispatch a ready that shares a token with an in-review (it used to)', () => {
     const issues = [
       { n: 5, order: 1, status: 'in-review', deps: [], touches: ['db'] },
       { n: 6, order: 2, status: 'ready', deps: [], touches: ['db'] },
     ]
-    // Observado contra el código sin arreglar: selected === [6].
+    // Observed against the unfixed code: selected === [6].
     const plan = planDispatch(issues, { mergedIssues: [], cap: 1 })
     expect(plan.selected).toEqual([])
     expect(plan.blockReason.reason).toBe('collision')
@@ -106,10 +106,10 @@ describe('F13/H2 — la ventana del cerrojo llega hasta el merge, no hasta el PR
     expect(plan.blockReason.withIssueStatus).toBe('in-review')
   })
 
-  it('pero un in-review NO consume cap: con cap 1 y un in-review de tokens ajenos, el ready SÍ sale', () => {
-    // Es la mitad que hace que este arreglo no sea "bloquear más": el cap
-    // mide AGENTES VIVOS y en un in-review no hay ninguno. Si in-review
-    // contara para el cap, un PR de tres días congelaría el repo entero.
+  it('but an in-review does NOT consume cap: with cap 1 and an in-review holding other tokens, the ready DOES go out', () => {
+    // It is the half that keeps this fix from being "block more": the cap
+    // measures LIVE AGENTS and in an in-review there are none. If in-review
+    // counted towards the cap, a three-day PR would freeze the whole repo.
     const issues = [
       { n: 5, order: 1, status: 'in-review', deps: [], touches: ['db'] },
       { n: 6, order: 2, status: 'ready', deps: [], touches: ['ui'] },
@@ -122,7 +122,7 @@ describe('F13/H2 — la ventana del cerrojo llega hasta el merge, no hasta el PR
     expect(collectInFlight(issues)).toEqual([])
   })
 
-  it('la serialización migration/ci/pbxproj también alcanza a un in-review', () => {
+  it('the migration/ci/pbxproj serialisation also reaches an in-review', () => {
     const issues = [
       { n: 1, order: 1, status: 'in-review', deps: [], touches: ['migration'] },
       { n: 2, order: 2, status: 'ready', deps: [], touches: ['ci'] },
@@ -132,10 +132,10 @@ describe('F13/H2 — la ventana del cerrojo llega hasta el merge, no hasta el PR
     expect(plan.blockReason).toMatchObject({ reason: 'collision', kind: 'serializing', withIssue: 1, withIssueStatus: 'in-review' })
   })
 
-  it('ct-next explica la colisión contra un in-review SIN mandar esperar y SIN nota de claim rancio', () => {
-    // La nota de staleness (worktree/rama/sesión cmux) NO debe dispararse
-    // aquí: en un slice ya entregado, no tener sesión abierta es lo normal.
-    // Pedirla convertiría cada PR en revisión en una falsa alarma.
+  it('ct-next explains the collision against an in-review WITHOUT telling you to wait and WITHOUT a stale-claim note', () => {
+    // The staleness note (worktree/branch/cmux session) must NOT fire here: in
+    // an already delivered slice, having no open session is the normal thing.
+    // Demanding one would turn every PR under review into a false alarm.
     const fx = JSON.stringify({
       issues: [
         { n: 5, order: 1, status: 'in-review', deps: [], touches: ['db'], name: 'modelo' },
@@ -150,13 +150,14 @@ describe('F13/H2 — la ventana del cerrojo llega hasta el merge, no hasta el PR
     expect(r.out).toMatch(/esperar no sirve de nada/i)
     expect(r.out).not.toMatch(/espera a que termine/)
     expect(r.out).not.toMatch(/no se encontró worktree/)
-    // Y da las tres salidas reales, incluida la que nadie ve venir: PR ya
-    // mergeado cuyo issue nadie cerró porque al PR le faltaba "Closes #N".
+    // And it gives the three real ways out, including the one nobody sees
+    // coming: an already merged PR whose issue nobody closed because the PR was
+    // missing its "Closes #N".
     expect(r.out).toMatch(/Closes #5/)
     expect(r.out).toMatch(/--reopen/)
   })
 
-  it('--dry-run lista aparte los que retienen tokens sin ocupar cap (si no, "En vuelo: ninguno" + colisión se contradicen)', () => {
+  it('--dry-run lists separately those holding tokens without filling the cap (otherwise "En vuelo: ninguno" + a collision contradict each other)', () => {
     const fx = JSON.stringify({
       issues: [
         { n: 5, order: 1, status: 'in-review', deps: [], touches: ['db'], name: 'modelo' },
@@ -166,21 +167,21 @@ describe('F13/H2 — la ventana del cerrojo llega hasta el merge, no hasta el PR
     })
     const r = runNext(['--repo', 'o/r', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: fx })
     expect(r.out).toMatch(/En vuelo: ninguno/)
-    // F16/H1: la etiqueta de la línea lleva ahora el RECUENTO, porque la
-    // enumeración pasó a estar acotada (treinta slices en revisión hacían de
-    // esta línea un muro que empujaba el motivo del bloqueo fuera de
-    // pantalla). El recuento nunca se recorta; los nombres, sí.
+    // F16/H1: the line's label now carries the COUNT, because the enumeration
+    // became bounded (thirty slices under review turned this line into a wall
+    // that pushed the reason for the block off the screen). The count is never
+    // trimmed; the names are.
     expect(r.out).toMatch(/Sin mergear, reteniendo tokens \(1, status:in-review, NO ocupan cap\): #5 \[touches:db\]/)
   })
 
-  it('dispatch-check aborta el claim contra un in-review, y lo dice con su estado', () => {
+  it('dispatch-check aborts the claim against an in-review, and says so naming its status', () => {
     const fixture = JSON.stringify({
       candLabels: ['touches:db'],
       openIssues: [{ n: 5, labels: ['status:in-review', 'touches:db'] }],
       readback: [],
     })
-    // Contra el código sin arreglar esto salía 0 ("claimed #7 → in-progress"):
-    // el in-review no contaba como colisión.
+    // Against the unfixed code this came out 0 ("claimed #7 → in-progress"):
+    // the in-review did not count as a collision.
     const r = runCheck(['7', '--repo', 'o/r', '--dry-run'], { CT_CLAIM_FIXTURE: fixture })
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/COLLISION: #7 choca con #5\[touches:db status:in-review\]/)
@@ -189,16 +190,16 @@ describe('F13/H2 — la ventana del cerrojo llega hasta el merge, no hasta el PR
 })
 
 // ============================================================================
-// H1 — --reopen: la arista que faltaba para salir de in-review.
+// H1 — --reopen: the missing edge out of in-review.
 // ============================================================================
-describe('F13/H1 — un PR rechazado puede volver al loop', () => {
-  // F15/H1: el destino de --reopen ya NO es `ready`, es `in-progress`. `ready`
-  // no retiene tokens, así que la arista de vuelta de F13 reabría la ventana
-  // que F13 vino a cerrar. Ver el bloque F15/H1 más abajo para el porqué.
-  it('--reopen sobre un status:in-review lo devuelve a in-progress', () => {
-    // Contra el código sin arreglar, `--reopen` era un flag DESCONOCIDO: se
-    // ignoraba en silencio y el script seguía hasta el camino de claim
-    // (observado: intentaba `gh issue view` y salía 3).
+describe('F13/H1 — a rejected PR can come back into the loop', () => {
+  // F15/H1: the destination of --reopen is NO LONGER `ready`, it is
+  // `in-progress`. `ready` holds no tokens, so F13's edge back reopened the
+  // very window F13 came to close. See the F15/H1 block further down for why.
+  it('--reopen on a status:in-review sends it back to in-progress', () => {
+    // Against the unfixed code, `--reopen` was an UNKNOWN flag: it was ignored
+    // in silence and the script carried on to the claim path (observed: it tried
+    // `gh issue view` and exited 3).
     const fixture = JSON.stringify({ candLabels: ['status:in-review'], openIssues: [], readback: [] })
     const r = runCheck(['9', '--repo', 'o/r', '--reopen', '--dry-run'], { CT_CLAIM_FIXTURE: fixture })
     expect(r.code).toBe(0)
@@ -206,20 +207,20 @@ describe('F13/H1 — un PR rechazado puede volver al loop', () => {
     expect(r.out).toMatch(/SIN MERGEAR/)
   })
 
-  // F15/H1: `in-progress` pasa de "estado desde el que no se puede reabrir" a
-  // "estado en el que --reopen ya te habría dejado", así que el mensaje cambia
-  // de sitio pero la propiedad no: NO se toca ninguna label.
-  it('--reopen sobre un status:in-progress se NIEGA sin tocar ninguna label (ya está donde iría)', () => {
+  // F15/H1: `in-progress` goes from "a state you cannot reopen from" to "the
+  // state --reopen would already have left you in", so the message moves but the
+  // property does not: NO label is touched.
+  it('--reopen on a status:in-progress REFUSES without touching any label (it is already where it would go)', () => {
     const fixture = JSON.stringify({ candLabels: ['status:in-progress', 'touches:db'], openIssues: [], readback: [] })
     const r = runCheck(['9', '--repo', 'o/r', '--reopen', '--dry-run'], { CT_CLAIM_FIXTURE: fixture })
     expect(r.code).toBe(2)
     expect(r.out).toMatch(/ya está en status:in-progress/)
     expect(r.out).toMatch(/No se ha tocado ninguna label/)
-    // Y nombra la salida real para el otro camino, que ya no es --reopen.
+    // And it names the real way out for the other path, which is no longer --reopen.
     expect(r.out).toMatch(/--requeue/)
   })
 
-  it('--reopen desde backlog (sin ninguna label status:) se NIEGA sin tocar nada', () => {
+  it('--reopen from backlog (with no status: label at all) REFUSES without touching anything', () => {
     const fixture = JSON.stringify({ candLabels: ['touches:db'], openIssues: [], readback: [] })
     const r = runCheck(['9', '--repo', 'o/r', '--reopen', '--dry-run'], { CT_CLAIM_FIXTURE: fixture })
     expect(r.code).toBe(2)
@@ -228,19 +229,19 @@ describe('F13/H1 — un PR rechazado puede volver al loop', () => {
     expect(r.out).toMatch(/DOS estados a la vez/)
   })
 
-  it('--reopen sobre algo YA ready lo dice como no-op, no como error del usuario', () => {
+  it('--reopen on something ALREADY ready says so as a no-op, not as a user error', () => {
     const fixture = JSON.stringify({ candLabels: ['status:ready'], openIssues: [], readback: [] })
     const r = runCheck(['9', '--repo', 'o/r', '--reopen', '--dry-run'], { CT_CLAIM_FIXTURE: fixture })
     expect(r.code).toBe(2)
     expect(r.out).toMatch(/ya está en status:ready — no hay nada que reabrir/)
   })
 
-  it('--reopen NO reabre un issue con DOS labels de estado, aunque una de ellas sea in-review', () => {
-    // Hallazgo al atacar la propia implementación de F13: la primera versión
-    // comprobaba `labels.includes('status:in-review')`, así que un issue con
-    // in-progress E in-review a la vez pasaba, y el add ready / remove
-    // in-review lo dejaba en [in-progress, ready] — el mismo estado ambiguo
-    // del que avisa su propio mensaje de error. Observado: exit 0 y
+  it('--reopen does NOT reopen an issue with TWO status labels, even if one of them is in-review', () => {
+    // A finding from attacking F13's own implementation: the first version
+    // checked `labels.includes('status:in-review')`, so an issue with
+    // in-progress AND in-review at once passed, and the add ready / remove
+    // in-review left it at [in-progress, ready] — the very ambiguous state its
+    // own error message warns about. Observed: exit 0 and
     // "reopened #9 → ready".
     const fixture = JSON.stringify({ candLabels: ['status:in-review', 'status:in-progress', 'touches:db'], openIssues: [], readback: [] })
     const r = runCheck(['9', '--repo', 'o/r', '--reopen', '--dry-run'], { CT_CLAIM_FIXTURE: fixture })
@@ -251,17 +252,17 @@ describe('F13/H1 — un PR rechazado puede volver al loop', () => {
     expect(r.out).not.toMatch(/reopened/)
   })
 
-  it('--release y --reopen juntos → error de uso, sin adivinar cuál quería quien lo escribió', () => {
+  it('--release and --reopen together → a usage error, without guessing which one the writer meant', () => {
     const r = runCheck(['9', '--repo', 'o/r', '--release', '--reopen', '--dry-run'])
     expect(r.code).toBe(2)
     expect(r.out).toMatch(/mutuamente excluyentes/)
   })
 
-  it('con worktree y rama de la vuelta anterior: dice qué queda y da los DOS caminos con sus comandos', () => {
-    // Reabrir mueve el label, no el disco — y /ct-next se NIEGA a despachar
-    // un slice cuyo worktree o rama ya existen. Sin decirlo aquí, reabrir
-    // "funciona" y el siguiente /ct-next falla con un mensaje que no
-    // menciona la reapertura.
+  it('with a worktree and a branch from the previous round: it says what is left and gives BOTH paths with their commands', () => {
+    // Reopening moves the label, not the disk — and /ct-next REFUSES to
+    // dispatch a slice whose worktree or branch already exist. Without saying so
+    // here, reopening "works" and the next /ct-next fails with a message that
+    // does not mention the reopening.
     const repoRoot = tmpRepo()
     mkdirSync(join(repoRoot, '.worktrees', '9'), { recursive: true })
     const fixture = JSON.stringify({ candLabels: ['status:in-review'], openIssues: [], readback: [] })
@@ -279,13 +280,13 @@ describe('F13/H1 — un PR rechazado puede volver al loop', () => {
     expect(r.out).toMatch(/\(b\) EMPEZAR DE CERO/)
     expect(r.out).toContain(`git -C ${repoRoot} worktree remove`)
     expect(r.out).toContain(`git -C ${repoRoot} branch -D feat/9`)
-    // F15/H1: el camino (b) ya no termina en "y /ct-next lo despacha": tras
-    // borrar hay que devolverlo a la cola explícitamente, porque --reopen lo
-    // dejó reclamado.
+    // F15/H1: path (b) no longer ends in "and /ct-next dispatches it": after
+    // deleting, it has to be put back in the queue explicitly, because --reopen
+    // left it claimed.
     expect(r.out).toMatch(/--requeue/)
   })
 
-  it('sin poder consultar git, NO afirma que no quede nada', () => {
+  it('unable to consult git, it does NOT assert that nothing is left', () => {
     const fixture = JSON.stringify({ candLabels: ['status:in-review'], openIssues: [], readback: [] })
     const r = runCheck(['9', '--repo', 'o/r', '--reopen', '--dry-run'], {
       CT_CLAIM_FIXTURE: fixture,
@@ -296,7 +297,7 @@ describe('F13/H1 — un PR rechazado puede volver al loop', () => {
     expect(r.out).toMatch(/NO lo leas como "no hay nada"/)
   })
 
-  it('la línea de uso anuncia --reopen (si no, nadie que lea el error se entera de que existe)', () => {
+  it('the usage line announces --reopen (otherwise nobody reading the error finds out it exists)', () => {
     const r = runCheck(['9', '--dry-run'])
     expect(r.code).toBe(2)
     expect(r.out).toMatch(/\[--release \| --reopen \| --requeue \| --check-plan \| --collect\]/)
@@ -304,18 +305,18 @@ describe('F13/H1 — un PR rechazado puede volver al loop', () => {
 })
 
 // ============================================================================
-// H3 — un claim muerto que copa el cap.
+// H3 — a dead claim that fills the cap.
 // ============================================================================
-describe('F13/H3 — el claim rancio también se cruza cuando lo único que bloquea es el cap', () => {
+describe('F13/H3 — the stale claim is cross-checked too when the only thing blocking is the cap', () => {
   const issue41Stuck = rawIssue({ number: 41, order: 1, status: 'status:in-progress', touches: ['api'] })
   const issue42Ready = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['ui'] })
 
-  it('in-progress sin worktree/rama/sesión que solo ocupa cap → ATENCIÓN, no "espera a que termine alguno" a secas', () => {
-    // Observado contra el código sin arreglar, con este mismo escenario:
+  it('an in-progress with no worktree/branch/session that only fills the cap → ATENCIÓN, not a bare "espera a que termine alguno"', () => {
+    // Observed against the unfixed code, with this very scenario:
     //   "El cap (1) ya está copado por trabajo en vuelo: 1 slice(s) en
     //    status:in-progress — sube --cap, o espera a que termine alguno."
-    // y ni una palabra de staleness: la detección de D3 solo se consultaba
-    // desde el caso 'collision', y aquí los tokens (api / ui) NO chocan.
+    // and not one word of staleness: D3's detection was only consulted from the
+    // 'collision' case, and here the tokens (api / ui) do NOT clash.
     const repoRoot = tmpRepo()
     const r = runNext(['--repo', 'o/r', '--cap', '1'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
@@ -327,18 +328,18 @@ describe('F13/H3 — el claim rancio también se cruza cuando lo único que bloq
     expect(r.out).toMatch(/El cap \(1\) ya está copado/)
     expect(r.out).toMatch(/ATENCIÓN, el cap puede estar copado por un claim muerto/)
     expect(r.out).toMatch(/no se encontró worktree, rama local, ni sesión cmux para #41 EN ESTA MÁQUINA/)
-    // Y sigue sin afirmar el abandono como un hecho: la evidencia es local.
+    // And it still does not assert the abandonment as a fact: the evidence is local.
     expect(r.out).toMatch(/tampoco afirmamos que esté abandonado/)
   })
 
-  it('con evidencia local de vida (worktree presente) NO se dice nada de claim muerto — y NI SIQUIERA se consulta a cmux', () => {
-    // La segunda mitad es un hallazgo al atacar la propia implementación:
-    // ampliar la comprobación al caso "cap lleno" (el resultado MÁS COMÚN de
-    // un /ct-next con algo corriendo) hacía que CADA invocación rutinaria
-    // pagara la consulta a cmux —list-windows + un workspace list por
-    // ventana, hasta 5s de timeout— solo para no decir nada. Ahora las dos
-    // señales baratas (worktree, rama) se miran primero y cmux solo se
-    // consulta si las dos fallan. La semántica no cambia: basta UNA señal.
+  it('with local evidence of life (a worktree present) nothing is said about a dead claim — and cmux is NOT EVEN consulted', () => {
+    // The second half is a finding from attacking the implementation itself:
+    // widening the check to the "cap full" case (the MOST COMMON outcome of a
+    // /ct-next with something running) made EVERY routine invocation pay for the
+    // cmux query —list-windows + one workspace list per window, up to a 5s
+    // timeout— only to say nothing. Now the two cheap signals (worktree, branch)
+    // are looked at first and cmux is only consulted if both fail. The semantics
+    // do not change: ONE signal is enough.
     const repoRoot = tmpRepo()
     mkdirSync(join(repoRoot, '.worktrees', '41'), { recursive: true })
     const cmuxLog = join(repoRoot, 'cmux-invocations.log')
@@ -355,9 +356,9 @@ describe('F13/H3 — el claim rancio también se cruza cuando lo único que bloq
     expect(existsSync(cmuxLog)).toBe(false) // ni una sola invocación de cmux
   })
 
-  it('un in-review que retiene tokens NO se acusa de claim muerto por no tener sesión', () => {
-    // Categoría nueva creada por H2: si el cruce de staleness se aplicara a
-    // los poseedores in-review, CADA PR en revisión sería una falsa alarma.
+  it('an in-review holding tokens is NOT accused of a dead claim for having no session', () => {
+    // A new category created by H2: if the staleness cross-check were applied to
+    // the in-review holders, EVERY PR under review would be a false alarm.
     const issue50Review = rawIssue({ number: 50, order: 1, status: 'status:in-review', touches: ['api'] })
     const issue51Ready = rawIssue({ number: 51, order: 2, status: 'status:ready', touches: ['api'] })
     const repoRoot = tmpRepo()
@@ -375,10 +376,10 @@ describe('F13/H3 — el claim rancio también se cruza cuando lo único que bloq
 })
 
 // ============================================================================
-// H4 — una dep que no se va a satisfacer nunca tiene que poder decirlo.
+// H4 — a dep that is never going to be satisfied has to be able to say so.
 // ============================================================================
-describe('F13/H4 — "cerrado" no es "mergeado", y ahora se nota', () => {
-  it('closedNotCompleted recoge los cierres que NO satisfacen una dep, y solo esos', () => {
+describe('F13/H4 — "closed" is not "merged", and now it shows', () => {
+  it('closedNotCompleted picks up the closures that do NOT satisfy a dep, and only those', () => {
     expect(closedNotCompleted([
       { number: 1, stateReason: 'COMPLETED' },
       { number: 2, stateReason: 'NOT_PLANNED' },
@@ -388,7 +389,7 @@ describe('F13/H4 — "cerrado" no es "mergeado", y ahora se nota', () => {
     ])).toEqual({ 2: 'NOT_PLANNED', 3: 'REOPENED', 4: null, 5: null })
   })
 
-  it('buildDispatchInput expone depStates junto a mergedIssues (misma fuente, para que no se filtre una y la otra no)', () => {
+  it('buildDispatchInput exposes depStates alongside mergedIssues (same source, so that one cannot leak while the other does not)', () => {
     const closed = [{ number: 7, body: '<!-- ct-order:1 -->', milestone: { number: 1 }, stateReason: 'NOT_PLANNED' }]
     const open = [{ number: 8, body: '<!-- ct-order:2 -->\n## Dependencias\nmerge-after `#1`\n', milestone: { number: 1 }, labels: [{ name: 'status:ready' }], title: 'x' }]
     const di = buildDispatchInput(open, closed)
@@ -397,16 +398,17 @@ describe('F13/H4 — "cerrado" no es "mergeado", y ahora se nota', () => {
     expect(di.issues[0].deps).toEqual([7]) // el orden #1 sí resuelve al issue #7
   })
 
-  it('ct-next nombra el cierre "not planned" y dice que esa dep NO se va a satisfacer nunca', () => {
-    // Contra el código sin arreglar, este mismo escenario producía:
+  it('ct-next names the "not planned" closure and says that dep is NEVER going to be satisfied', () => {
+    // Against the unfixed code, this very scenario produced:
     //   "...#8 (falta mergear #7) — espera a que se mergeen esas dependencias"
-    // con #7 CERRADO. Una instrucción a esperar algo que nunca va a pasar.
+    // with #7 CLOSED. An instruction to wait for something that is never going
+    // to happen.
     const repoRoot = tmpRepo()
     const open = [rawIssue({ number: 8, order: 2, status: 'status:ready', body: '## Dependencias\nmerge-after `#1`\n' })]
     const closed = [{ number: 7, title: '#7 descartado', labels: [], body: '<!-- ct-order:1 -->\n', state_reason: 'not_planned' }]
-    // FAKE_GH_COUNTER_FILE es imprescindible: sin él, el stub de gh sirve
-    // SIEMPRE el elemento 0 de la secuencia, así que la llamada de issues
-    // CERRADOS devolvería la lista de abiertos y este test no probaría nada.
+    // FAKE_GH_COUNTER_FILE is essential: without it, the gh stub ALWAYS serves
+    // element 0 of the sequence, so the call for CLOSED issues would return the
+    // list of open ones and this test would prove nothing.
     const r = runNext(['--repo', 'o/r', '--cap', '1'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
       FAKE_GH_COUNTER_FILE: join(repoRoot, 'gh-counter'),
@@ -415,20 +417,20 @@ describe('F13/H4 — "cerrado" no es "mergeado", y ahora se nota', () => {
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/#7, que está cerrado como "not planned"/)
     expect(r.out).toMatch(/NO SE VA A SATISFACER NUNCA/)
-    // Los dos remedios reales, porque "espera" no es uno de ellos.
+    // The two real remedies, because "wait" is not one of them.
     expect(r.out).toMatch(/quita el "merge-after/)
     expect(r.out).toMatch(/reabre #7 y ciérralo como completed/)
-    // Y la coletilla final no puede contradecir al detalle. Observado en una
-    // corrida real contra josemerca/ct-loop-sandbox con la primera versión de
-    // este mensaje: "...ESTA NO SE VA A SATISFACER NUNCA... — espera a que se
-    // mergeen esas dependencias". La última frase es la que se queda.
+    // And the closing tag line cannot contradict the detail. Observed in a real
+    // run against josemerca/ct-loop-sandbox with the first version of this
+    // message: "...ESTA NO SE VA A SATISFACER NUNCA... — espera a que se
+    // mergeen esas dependencias". The last sentence is the one that sticks.
     expect(r.out).toMatch(/esperar NO va a desbloquear nada aquí/)
     expect(r.out).not.toMatch(/espera a que se mergeen esas dependencias/)
   })
 
-  it('una dep simplemente sin mergear (issue abierto) sigue diciendo "falta mergear", sin ruido nuevo', () => {
-    // Control negativo: el mensaje nuevo NO debe aparecer cuando esperar SÍ
-    // es el consejo correcto.
+  it('a dep that is simply unmerged (an open issue) still says "falta mergear", with no new noise', () => {
+    // Negative control: the new message must NOT appear when waiting IS the
+    // right advice.
     const repoRoot = tmpRepo()
     const open = [
       rawIssue({ number: 7, order: 1, status: 'status:backlog' }),
@@ -442,15 +444,15 @@ describe('F13/H4 — "cerrado" no es "mergeado", y ahora se nota', () => {
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/#8 \(falta mergear #7\)/)
     expect(r.out).not.toMatch(/NO SE VA A SATISFACER NUNCA/)
-    // Control de la coletilla en la otra dirección: aquí esperar SÍ es el
-    // consejo correcto, y hay que seguir dándolo.
+    // A control on the tag line in the other direction: here waiting IS the
+    // right advice, and it has to keep being given.
     expect(r.out).toMatch(/espera a que se mergeen esas dependencias/)
     expect(r.out).not.toMatch(/esperar NO va a desbloquear nada/)
   })
 
-  it('"no hay nada ready" ya no se calla los slices parados en revisión', () => {
-    // Al final de un epic, "todo entregado, nada mergeado" es el estado
-    // NORMAL — y el mensaje lo pintaba como si no se hubiera empezado.
+  it('"nothing is ready" no longer keeps quiet about the slices stopped under review', () => {
+    // At the end of an epic, "everything delivered, nothing merged" is the
+    // NORMAL state — and the message painted it as if nothing had been started.
     const fx = JSON.stringify({
       issues: [
         { n: 5, order: 1, status: 'in-review', deps: [], touches: ['db'], name: 'a' },
@@ -460,23 +462,23 @@ describe('F13/H4 — "cerrado" no es "mergeado", y ahora se nota', () => {
     })
     const r = runNext(['--repo', 'o/r', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: fx })
     expect(r.code).toBe(0)
-    // F16/H1: "Sí hay N" pasó a "Hay N" al unificarse con las otras dos
-    // voces del mismo mensaje (backlog e in-progress) — el "sí" era un
-    // contraste con la frase corta que ya no existe. El contenido que este
-    // test defiende (el recuento y los números concretos) no cambia.
+    // F16/H1: "Sí hay N" became "Hay N" when it was unified with the other two
+    // voices of the same message (backlog and in-progress) — the "sí" was a
+    // contrast with the short sentence that no longer exists. The content this
+    // test defends (the count and the concrete numbers) does not change.
     expect(r.out).toMatch(/Hay 2 en status:in-review \(#5, #6\)/)
     expect(r.out).toMatch(/entregado pero SIN MERGEAR/)
     expect(r.out).toMatch(/--reopen/)
     expect(r.out).not.toMatch(/no hay nada que despachar todavía/)
   })
 
-  // F16/H1 cambió la frase de esta rama: "no hay nada que despachar TODAVÍA"
-  // era una instrucción a ESPERAR, y con todo en status:backlog no hay nada
-  // que esperar — promover backlog → ready es el gate humano del loop, no un
-  // evento que llegue solo. Lo que este test defendía (que la voz de
-  // in-review NO aparezca cuando no hay ningún in-review) se conserva
-  // intacto; lo que se retira es la afirmación equivocada.
-  it('sin ningún in-review, no se cuela la voz de in-review — y el backlog deja de leerse como "espera"', () => {
+  // F16/H1 changed the sentence of this branch: "no hay nada que despachar
+  // TODAVÍA" was an instruction to WAIT, and with everything in status:backlog
+  // there is nothing to wait for — promoting backlog → ready is the loop's human
+  // gate, not an event that arrives on its own. What this test defended (that
+  // the in-review voice does NOT appear when there is no in-review at all) is
+  // kept intact; what is withdrawn is the wrong claim.
+  it('with no in-review at all, the in-review voice does not sneak in — and the backlog stops reading as "wait"', () => {
     const fx = JSON.stringify({ issues: [{ n: 5, order: 1, status: 'backlog', deps: [], touches: [], name: 'a' }], mergedIssues: [] })
     const r = runNext(['--repo', 'o/r', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: fx })
     expect(r.code).toBe(0)

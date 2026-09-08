@@ -7,20 +7,23 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { makeSpecDir, specUrl } from './fixtures/spec-repo.js'
 
-// F6 — dos silencios de /ct-groom que la prueba de campo destapó:
+// F6 — two silences of /ct-groom that the field test uncovered:
 //
-//   grave 2: TODOS los issues nacen con `status:backlog` (groom.js#buildLabels)
-//   y el dispatcher solo mira `status:ready` — así que correr groom y acto
-//   seguido `/ct-next` produce "no hay slices despachables" sobre seis issues
-//   recién creados. El groom no lo mencionaba en ninguna parte de su salida.
+//   serious 2: ALL issues are born with `status:backlog` (groom.js#buildLabels)
+//   and the dispatcher only looks at `status:ready` — so running groom and
+//   then `/ct-next` straight after produces "no hay slices despachables" over
+//   six freshly created issues. The groom did not mention it anywhere in its
+//   output.
 //
-//   menor 5: `gh label create --force` no distingue "reutilicé una label que
-//   ya existía en el repo" de "me acabo de inventar una". El contrato pide
-//   reutilizar el vocabulario de labels del repo, pero nadie podía comprobar
-//   cuál era ese vocabulario ni ver, después, qué acabó inventándose.
+//   minor 5: `gh label create --force` does not tell "I reused a label that
+//   already existed in the repo" apart from "I have just invented one". The
+//   contract asks for the repo's label vocabulary to be reused, but nobody
+//   could check what that vocabulary was, nor see, afterwards, which ones
+//   ended up being invented.
 //
-// Además, --force ACTUALIZA la label existente (color/descripción incluidos):
-// crear solo las que faltan deja de tocar las que el repo ya tenía.
+// Besides, --force UPDATES the existing label (colour and description
+// included): creating only the missing ones stops touching the ones the repo
+// already had.
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'ct-groom.mjs')
 const fakeGhDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-gh-bin')
@@ -30,7 +33,7 @@ const SPEC = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 |---|---|---|---|---|---|---|---|---|
 | 1 | login | backend | modelo | – | AC-1.1 | – | api | db |
 `
-// Labels que este spec produce: type:backend, area:api, touches:db, status:backlog
+// Labels this spec produces: type:backend, area:api, touches:db, status:backlog
 
 function writeSpec(content = SPEC) {
   const dir = makeSpecDir('ctg-labels-')
@@ -48,8 +51,8 @@ function run(args, envOverrides = {}) {
 
 const MILESTONE_ENV = { FAKE_GH_MILESTONES_LIST: JSON.stringify([{ title: 'Epic', number: 7 }]) }
 
-describe('ct-groom — labels: distingue las que ya existían de las que crea (F6, menor 5)', () => {
-  it('corrida real: solo llama a `gh label create` para las que NO existen, y nombra por separado reutilizadas y nuevas', () => {
+describe('ct-groom — labels: it tells the ones that already existed apart from the ones it creates (F6, minor 5)', () => {
+  it('a real run: it only calls `gh label create` for the ones that do NOT exist, and names reused and new ones separately', () => {
     const { dir, spec } = writeSpec()
     const argvLog = join(dir, 'argv.log')
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {
@@ -60,24 +63,25 @@ describe('ct-groom — labels: distingue las que ya existían de las que crea (F
     })
     expect(res.status).toBe(0)
     const log = readFileSync(argvLog, 'utf8')
-    // Las que ya existían NO se tocan (con --force, `gh label create` las
-    // reescribiría — color/descripción incluidos — en cada corrida).
+    // The ones that already existed are NOT touched (with --force, `gh label
+    // create` would rewrite them — colour and description included — on every
+    // run).
     expect(log).not.toMatch(/label create type:backend/)
     expect(log).not.toMatch(/label create area:api/)
-    // Las que faltaban sí se crean.
+    // The ones that were missing do get created.
     expect(log).toMatch(/label create touches:db/)
     expect(log).toMatch(/label create status:backlog/)
-    // Y la salida lo dice, en dos grupos distintos.
+    // And the output says so, in two separate groups.
     expect(res.stderr).toMatch(/ya exist[íi]an.*type:backend/)
     expect(res.stderr).toMatch(/ya exist[íi]an.*area:api/)
     expect(res.stderr).toMatch(/creadas.*touches:db/)
     expect(res.stderr).toMatch(/creadas.*status:backlog/)
-    // Una label del repo ajena al plan no se menciona ni se toca.
+    // A label of the repo that is foreign to the plan is neither mentioned nor touched.
     expect(res.stderr).not.toMatch(/\bbug\b/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('--dry-run --repo: anuncia qué labels se inventarían ANTES de crear nada, y stdout sigue siendo JSON puro', () => {
+  it('--dry-run --repo: it announces which labels would be invented BEFORE creating anything, and stdout is still pure JSON', () => {
     const { dir, spec } = writeSpec()
     const argvLog = join(dir, 'argv.log')
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], {
@@ -87,32 +91,32 @@ describe('ct-groom — labels: distingue las que ya existían de las que crea (F
       FAKE_GH_ARGV_LOG_FILE: argvLog,
     })
     expect(res.status).toBe(0)
-    expect(() => JSON.parse(res.stdout)).not.toThrow() // el plan sigue saliendo limpio por stdout
+    expect(() => JSON.parse(res.stdout)).not.toThrow() // the plan still comes out clean on stdout
     expect(res.stderr).toMatch(/ya exist[íi]an.*type:backend/)
     expect(res.stderr).toMatch(/se crear[íi]an.*area:api/)
     const log = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
-    expect(log).not.toMatch(/label create/) // un dry-run nunca crea una label
+    expect(log).not.toMatch(/label create/) // a dry-run never creates a label
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Contrapeso: el aviso solo tiene valor si NO aparece cuando no hay nada
-  // que inventar. Un mensaje en cada corrida (incluida la que reutiliza el
-  // vocabulario entero) entrenaría a ignorarlo, que es exactamente la
-  // familia de fallo que esta tanda persigue — mismo criterio que el reporte
-  // de divergencia de F5: silencio = nada que revisar.
-  it('todas las labels del plan ya existen → no crea ninguna y no dice nada sobre labels', () => {
+  // Counterweight: the warning is only worth something if it does NOT appear
+  // when there is nothing to invent. A message on every run (including the one
+  // that reuses the whole vocabulary) would train people to ignore it, which
+  // is exactly the family of failure this batch is after — same criterion as
+  // the divergence report of F5: silence = nothing to review.
+  it('every label of the plan already exists → it creates none and says nothing about labels', () => {
     const { dir, spec } = writeSpec()
     const argvLog = join(dir, 'argv.log')
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {
       ...MILESTONE_ENV,
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[]]),
-      // F21: el plan produce además `gate:none` (una label de gate por issue,
-      // siempre) — sin ella en el repo, esta corrida SÍ tendría una label nueva
-      // que crear y el test dejaría de probar el caso "no hay nada que decir".
-      // Mismo criterio que la nota de F21 sobre `gate:none`: el vocabulario
-      // `status:` entero (groom.js#LOOP_STATUS_LABELS) forma parte de lo que el
-      // repo tiene que TENER, así que sin él aquí esta corrida SÍ tendría labels
-      // nuevas que crear y el test dejaría de probar el caso "no hay nada que decir".
+      // F21: the plan also produces `gate:none` (one gate label per issue,
+      // always) — without it in the repo, this run WOULD have a new label to
+      // create and the test would stop testing the case "there is nothing to
+      // say". Same criterion as the note of F21 about `gate:none`: the whole
+      // `status:` vocabulary (groom.js#LOOP_STATUS_LABELS) is part of what the
+      // repo has to HAVE, so without it here this run WOULD have new labels to
+      // create and the test would stop testing the case "there is nothing to say".
       FAKE_GH_LABELS_LIST: JSON.stringify([[{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:plan' }, ...LOOP_STATUS_LABELS.map((name) => ({ name }))]]),
       FAKE_GH_ARGV_LOG_FILE: argvLog,
     })
@@ -123,7 +127,7 @@ describe('ct-groom — labels: distingue las que ya existían de las que crea (F
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('si no se puede listar las labels del repo, aborta con mensaje claro en vez de crearlas a ciegas', () => {
+  it('if the labels of the repo cannot be listed, it aborts with a clear message instead of creating them blindly', () => {
     const { dir, spec } = writeSpec()
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {
       ...MILESTONE_ENV,
@@ -136,8 +140,8 @@ describe('ct-groom — labels: distingue las que ya existían de las que crea (F
   })
 })
 
-describe('ct-groom — dice que lo que acaba de crear NO es despachable todavía (F6, grave 2)', () => {
-  it('corrida real: tras crear los issues, nombra status:backlog, la promoción a status:ready y el comando exacto', () => {
+describe('ct-groom — it says that what it has just created is NOT dispatchable yet (F6, serious 2)', () => {
+  it('a real run: after creating the issues, it names status:backlog, the promotion to status:ready and the exact command', () => {
     const { dir, spec } = writeSpec()
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {
       ...MILESTONE_ENV,
@@ -152,7 +156,7 @@ describe('ct-groom — dice que lo que acaba de crear NO es despachable todavía
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('--dry-run: el mismo recordatorio (el preview no puede callar lo que la corrida real sí diría)', () => {
+  it('--dry-run: the same reminder (the preview cannot keep quiet about what the real run would say)', () => {
     const { dir, spec } = writeSpec()
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], {
       ...MILESTONE_ENV,
@@ -165,12 +169,12 @@ describe('ct-groom — dice que lo que acaba de crear NO es despachable todavía
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // El recordatorio no puede ser ruido perpetuo: si el epic ya está promovido
-  // entero, no hay nada que recordar. `status:` lo mueven un humano o
-  // /ct-next como parte normal del flujo (por eso queda fuera del diff de
-  // divergencia, ver reconcile.js), así que el criterio es el estado REAL de
-  // los issues, no "acabo de crear algo".
-  it('todos los issues del epic ya promovidos (status:ready) → sin recordatorio', () => {
+  // The reminder cannot be perpetual noise: if the epic is already promoted
+  // whole, there is nothing to remind anybody of. `status:` is moved by a human
+  // or by /ct-next as a normal part of the flow (which is why it stays out of
+  // the divergence diff, see reconcile.js), so the criterion is the REAL state
+  // of the issues, not "I have just created something".
+  it('every issue of the epic already promoted (status:ready) → no reminder', () => {
     const { dir, spec } = writeSpec()
     const existing = {
       number: 501,
@@ -189,7 +193,7 @@ describe('ct-groom — dice que lo que acaba de crear NO es despachable todavía
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('un issue preexistente todavía en backlog → el recordatorio lo cuenta aunque esta corrida no cree nada', () => {
+  it('a pre-existing issue still in backlog → the reminder counts it even though this run creates nothing', () => {
     const { dir, spec } = writeSpec()
     const existing = {
       number: 501,

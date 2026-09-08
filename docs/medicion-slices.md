@@ -1,79 +1,79 @@
-# Medición de slices despachados
+# Measuring dispatched slices
 
-Dos datos por slice. Nada más. Son los que deciden si el dispatcher sobrevive.
+Two data points per slice. Nothing more. They are the ones that decide whether the dispatcher survives.
 
-**Criterio de muerte (José, 2026-07-30):** tras 5 slices, si la intervención humana por slice
-no es MENOR que hacer el mismo trabajo a mano en una sesión normal, el dispatcher se retira.
-`/ct-groom` sobrevive por separado (no depende de cmux ni del despacho).
+**Death criterion (José, 2026-07-30):** after 5 slices, if the human intervention per slice
+is not LOWER than doing the same work by hand in a normal session, the dispatcher is retired.
+`/ct-groom` survives separately (it depends on neither cmux nor dispatch).
 
-| # | Tipo | Fecha | Min. intervención humana | ¿Medio estado a mano? | Qué |
+| # | Type | Date | Min. human intervention | Half state by hand? | What |
 |---|------|-------|--------------------------|------------------------|-----|
-| 451 | `type:ui` | 2026-07-29 | **no medido** (el slice pasó antes de existir esta tabla) | **sí** | Issue CLOSED y PR #461 mergeado, pero la label `status:in-review` sigue colgada en el issue. Verificado 2026-07-30 vía `gh issue list`. |
-| 452 | `type:backend` `touches:migration` | en vuelo (desde 29-jul ~20:27) | pendiente | pendiente | Ver nota abajo. |
+| 451 | `type:ui` | 2026-07-29 | **not measured** (the slice went through before this table existed) | **yes** | Issue CLOSED and PR #461 merged, but the `status:in-review` label is still hanging on the issue. Verified 2026-07-30 via `gh issue list`. |
+| 452 | `type:backend` `touches:migration` | in flight (since 29-Jul ~20:27) | pending | pending | See note below. |
 
-## Checklist del gate del PR del #452
+## Checklist for the gate on #452's pull request
 
-Decisión de José (2026-07-30): **no se interrumpe la sesión en vuelo**; el aviso de convenciones se
-comprueba en el gate. Al revisar el PR:
+José's decision (2026-07-30): **the in-flight session is not interrupted**; the conventions
+warning is checked at the gate. When reviewing the pull request:
 
-- [ ] El call-site que pasa `today` a `weekly_cycle` usa `today_madrid()`, **no** `date.today()`.
-      Es el punto exacto donde reentra el bug del PR #419, y no estaba escrito aún a las 11:00.
-- [ ] El gate de este slice **no es visual, es de datos**: el backfill del §7.4 corre sobre datos
-      reales. Si falla el día del deploy, las usuarias ven su plan vacío y parece pérdida de datos.
-      CI verde no cubre eso.
-- [ ] El cuerpo del PR lleva `Closes #452` (es lo único que cierra el issue y libera sus tokens).
-- [ ] `.agent/STATE.md` refleja el trabajo real antes de mergear (hoy dice `not_started`).
+- [ ] The call site that passes `today` to `weekly_cycle` uses `today_madrid()`, **not** `date.today()`.
+      It is the exact point where the bug from PR #419 re-enters, and it was not written yet at 11:00.
+- [ ] This slice's gate **is not visual, it is about data**: the §7.4 backfill runs over real
+      data. If it fails on deploy day, users see their plan empty and it looks like data loss.
+      A green CI does not cover that.
+- [ ] The pull request body carries `Closes #452` (it is the only thing that closes the issue and frees its tokens).
+- [ ] `.agent/STATE.md` reflects the real work before merging (today it says `not_started`).
 
-## Notas
+## Notes
 
-### #451 — no se inventa lo que no se midió
-El slice se completó y mergeó el 29-jul, antes de que existiera este registro. Los minutos de
-intervención humana **no se registraron**; no se estiman aquí. N=1 sin el dato que importa.
-Lo único verificable a posteriori es el medio estado: la label descolgada.
+### #451 — what was not measured is not invented
+The slice was completed and merged on 29-Jul, before this record existed. The minutes of
+human intervention **were not recorded**; they are not estimated here. N=1 without the data point
+that matters. The only thing verifiable after the fact is the half state: the orphaned label.
 
-### #452 — EN VUELO (verificado 2026-07-30 ~11:00), no parado
-Se fue a despacharlo asumiendo `status:ready` sin worktree ni rama. **Lo que hay es un slice vivo:**
-- label `status:in-progress`, worktree `.worktrees/452`, rama local `feat/452`
-- 5 commits, el último `f6bdab95` a las **10:42 de hoy** (ciclo semanal, tabla `plan_adoption` +
-  backfill, fix ON DELETE CASCADE, 2 entradas de bitácora)
-- **proceso `claude` vivo**: PID 35635 con `cwd = .worktrees/452` (`lsof -d cwd`)
+### #452 — IN FLIGHT (verified 2026-07-30 ~11:00), not stopped
+We went to dispatch it assuming `status:ready` with no worktree and no branch. **What is actually there is a live slice:**
+- the `status:in-progress` label, worktree `.worktrees/452`, local branch `feat/452`
+- 5 commits, the last one `f6bdab95` at **10:42 today** (weekly cycle, `plan_adoption` table +
+  backfill, ON DELETE CASCADE fix, 2 logbook entries)
+- **live `claude` process**: PID 35635 with `cwd = .worktrees/452` (`lsof -d cwd`)
 
-O sea: el despacho del #452 **ya funcionó** — el arreglo F20/F21 estaba operativo desde el 29-jul
-por la tarde. El prompt de arranque de esta sesión describía la foto del 29-jul 17:46 (commits
-`bca683e1`/`ae8946d5`, la limpieza a mano de José); entre esa hora y ahora el slice se despachó y
-avanzó dos tasks, **y ese despacho no quedó registrado en ningún STATE.md**.
+In other words: dispatching #452 **already worked** — the F20/F21 fix had been operational since
+the afternoon of 29-Jul. This session's start-up prompt described the snapshot of 29-Jul 17:46 (commits
+`bca683e1`/`ae8946d5`, José's cleanup by hand); between that hour and now the slice was dispatched and
+advanced two tasks, **and that dispatch was recorded in no STATE.md at all**.
 
-**Dato del loop, no anécdota:** `.agent/STATE.md` del worktree sigue diciendo `status: not_started`
-/ "slice recién despachado, sin trabajo aún" encima de 5 commits de backend. El STATE.md es la
-hidratación de la siguiente sesión — mintiendo así, cualquier sesión que llegue después (o un
-humano leyendo) concluye que no se ha hecho nada. Es el candidato número uno a gate, anotado en
+**A data point of the loop, not an anecdote:** the worktree's `.agent/STATE.md` still says `status: not_started`
+/ "slice recién despachado, sin trabajo aún" on top of 5 backend commits. STATE.md is the
+hydration of the next session — lying like that, any session arriving afterwards (or a
+human reading it) concludes that nothing has been done. It is the number one candidate for a gate, noted in
 [backlog-congelado.md](backlog-congelado.md).
 
-**Convenciones (excepción autorizada):** el agente aplicó `JSON` en vez de `JSONB` por su cuenta y
-lo documentó (`src/plan/infrastructure/models.py:4-5`). El dominio `weekly_cycle.py` recibe `today`
-por parámetro y documenta que no llama a `date.today()` — correcto. **Pero el call-site que le
-pasará ese `today` (el endpoint del §5.2) todavía no está escrito**: ahí es donde entraría el
-off-by-one del PR #419. El worktree tiene su copia de AGENTS.md congelada al crear la rama, así
-que la adición hecha hoy en `main` **no la ve**. Riesgo abierto, pendiente de decisión de José.
+**Conventions (authorised exception):** the agent applied `JSON` instead of `JSONB` on its own and
+documented it (`src/plan/infrastructure/models.py:4-5`). The `weekly_cycle.py` domain receives `today`
+as a parameter and documents that it does not call `date.today()` — correct. **But the call site that will
+pass it that `today` (the §5.2 endpoint) is not written yet**: that is where the
+off-by-one from PR #419 would come in. The worktree has its own copy of AGENTS.md frozen at the moment the branch
+was created, so the addition made today on `main` **is invisible to it**. Open risk, pending José's decision.
 
-### Residuo de labels en menoplus, medido por el propio dispatcher (2026-07-30)
-El `--dry-run` sobre `menoplus-app/menoplus` reporta **5 issues CERRADOS que conservan una label
-`status:` viva**, invisibles para `/ct-next` (solo barre abiertos):
-- `#161, #157, #156` en `status:ready` — se cayeron de la cola de despacho sin aviso
-- `#245, #155` en `status:in-progress` — claims que nunca se soltaron; su worktree y rama pueden
-  seguir en disco
-- (+5 en `status:in-review`, que es el final normal de un slice, y `#158` en `status:blocked`, inerte)
+### Label residue in menoplus, measured by the dispatcher itself (2026-07-30)
+The `--dry-run` over `menoplus-app/menoplus` reports **5 CLOSED issues that still keep a live
+`status:` label**, invisible to `/ct-next` (which only sweeps open ones):
+- `#161, #157, #156` in `status:ready` — they fell out of the dispatch queue with no warning
+- `#245, #155` in `status:in-progress` — claims that were never released; their worktree and branch may
+  still be on disk
+- (+5 in `status:in-review`, which is a slice's normal ending, and `#158` in `status:blocked`, inert)
 
-Esto **precede al loop** — son de la era anterior, no medias limpiezas de estos slices. Se registra
-porque cuantifica el fenómeno que sí toca a los slices nuevos: el #451 acabó igual. Cerrar un issue
-y quitarle la label son dos actos distintos y nada comprueba el segundo.
+This **predates the loop** — they are from the earlier era, not half-cleanups of these slices. It is recorded
+because it quantifies the phenomenon that does reach the new slices: #451 ended up the same way. Closing an issue
+and taking its label off are two distinct acts and nothing checks the second.
 
-### Validación del lanzamiento (2026-07-30, sandbox — no es un slice de producción)
-`ct-next --repo josemerca/ct-loop-sandbox --cap 1` sobre el issue #2. Dry-run exit 0 y lanzamiento
-real exit 0. Verificado en la tabla de procesos, no por la ventana: PID 39682
-(`/Users/jpereag/.local/bin/claude … --dangerously-skip-permissions <kickoff #2>`) con
-`cwd = /Users/jpereag/Documents/ct-loop-sandbox/.worktrees/2` vía `lsof -d cwd`. Un solo `claude`
-lanzado — la guarda de idempotencia de F20/F21 aguantó el reenvío.
+### Launch validation (2026-07-30, sandbox — not a production slice)
+`ct-next --repo josemerca/ct-loop-sandbox --cap 1` over issue #2. Dry-run exit 0 and real
+launch exit 0. Verified in the process table, not through the window: PID 39682
+(`/Users/jpereag/.local/bin/claude … --dangerously-skip-permissions <kickoff #2>`) with
+`cwd = /Users/jpereag/Documents/ct-loop-sandbox/.worktrees/2` via `lsof -d cwd`. A single `claude`
+launched — the F20/F21 idempotency guard held against the resend.
 
-Medio estado que deja esta validación (a limpiar cuando José diga): worktree
-`ct-loop-sandbox/.worktrees/2`, rama `feat/2`, e issue #2 del sandbox en `status:in-progress`.
+Half state this validation leaves behind (to be cleaned when José says so): worktree
+`ct-loop-sandbox/.worktrees/2`, branch `feat/2`, and the sandbox's issue #2 in `status:in-progress`.

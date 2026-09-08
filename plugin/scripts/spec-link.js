@@ -1,66 +1,67 @@
-// Resolución del enlace al spec que /ct-groom escribe en cada issue (F10).
+// Resolution of the link to the spec that /ct-groom writes into every issue
+// (F10).
 //
-// El defecto que cierra: hasta aquí, la línea era
-// "Spec: [docs/x-design.md#9](docs/x-design.md#9)" — una ruta RELATIVA con un
-// ancla NUMÉRICA. Las dos mitades están rotas, y las dos se comprobaron
-// contra GitHub antes de tocar nada:
+// The defect it closes: up to here, the line was
+// "Spec: [docs/x-design.md#9](docs/x-design.md#9)" — a RELATIVE path with a
+// NUMERIC anchor. Both halves are broken, and both were checked against
+// GitHub before anything was touched:
 //
-//   1. La ruta relativa. `gh api /markdown -X POST` con `mode: gfm` y
-//      `context: owner/repo` devuelve el href TAL CUAL:
-//      `<a href="docs/x-design.md#9">`. En un fichero del repo (un README)
-//      resolvería bien; en la página de un issue
-//      (github.com/owner/repo/issues/N) resuelve contra ESA url y da 404.
-//      Un issue es justo donde vive esta línea.
-//   2. El ancla. "#<número de sección>" no existe: el encabezado real es
-//      "## 9. Slices" y GitHub le asigna "9-slices" (ver scripts/anchor.js,
-//      donde está la verificación completa contra el renderizador real).
+//   1. The relative path. `gh api /markdown -X POST` with `mode: gfm` and
+//      `context: owner/repo` returns the href AS IS:
+//      `<a href="docs/x-design.md#9">`. In a file of the repo (a README) it
+//      would resolve fine; on an issue's page
+//      (github.com/owner/repo/issues/N) it resolves against THAT url and
+//      gives a 404. An issue is precisely where this line lives.
+//   2. The anchor. "#<section number>" does not exist: the real heading is
+//      "## 9. Slices" and GitHub assigns it "9-slices" (see scripts/anchor.js,
+//      where the full verification against the real renderer lives).
 //
-// Este módulo produce una URL ABSOLUTA y verificada, o ninguna. Deliberado:
-// una URL absoluta que apunta a algo no publicado es el mismo defecto con
-// otra cara, así que "no se pudo construir un enlace bueno" es un resultado
-// de primera clase (`reason`), nunca un enlace a medias.
+// This module produces an ABSOLUTE, verified URL, or none at all. Deliberate:
+// an absolute URL pointing at something unpublished is the same defect with
+// another face, so "a good link could not be built" is a first-class result
+// (`reason`), never a half-made link.
 
 // ---------------------------------------------------------------------------
-// Qué referencia se emite, y por qué esa.
+// Which reference is emitted, and why that one.
 //
-// Se emite la RAMA POR DEFECTO del repo donde vive el spec
-// (`https://<host>/<owner>/<repo>/blob/<rama-por-defecto>/<ruta>#<ancla>`),
-// no un sha ni la rama desde la que se invoca. Tres razones, en orden de
-// peso:
+// What is emitted is the DEFAULT BRANCH of the repo where the spec lives
+// (`https://<host>/<owner>/<repo>/blob/<default-branch>/<path>#<anchor>`),
+// not a sha and not the branch it is invoked from. Three reasons, in order of
+// weight:
 //
-//   - Frente a un sha (permalink): el spec es un documento VIVO y
-//     /ct-groom lo trata como tal — la detección de divergencia de F5
-//     compara cada issue contra la §9 de HOY. Un permalink congelaría el
-//     enlace en una §9 que puede haber dejado de ser la que la herramienta
-//     compara, así que el humano que abre el issue y la máquina que lo
-//     reconcilia estarían mirando documentos distintos. Se paga el precio
-//     conocido: si el fichero se MUEVE, el enlace muere — pero eso ahora se
-//     detecta (ver la nota sobre la comparación en scripts/reconcile.js).
-//   - Frente a la rama actual: la rama actual no es una propiedad del
-//     repositorio sino de QUIÉN invoca. Dos invocaciones legítimas desde
-//     ramas distintas producirían dos líneas distintas para el mismo slice
-//     y --reconcile las reescribiría una sobre otra indefinidamente — el
-//     ping-pong que la comparación "solo por el ancla" evitaba antes a
-//     costa de no detectar nada más. La rama por defecto es la misma se
-//     invoque desde donde se invoque.
-//   - Y porque una rama de feature se borra al mergear: el enlace del issue
-//     moriría justo cuando el epic termina.
+//   - Against a sha (permalink): the spec is a LIVING document and /ct-groom
+//     treats it as such — F5's drift detection compares every issue against
+//     TODAY's §9. A permalink would freeze the link on a §9 that may have
+//     stopped being the one the tool compares against, so the human who opens
+//     the issue and the machine that reconciles it would be looking at
+//     different documents. The known price is paid: if the file MOVES, the
+//     link dies — but that is now detected (see the note about the comparison
+//     in scripts/reconcile.js).
+//   - Against the current branch: the current branch is not a property of the
+//     repository but of WHO is invoking. Two legitimate invocations from
+//     different branches would produce two different lines for the same slice
+//     and --reconcile would rewrite them over one another indefinitely — the
+//     ping-pong that the "by the anchor only" comparison used to avoid at the
+//     cost of detecting nothing else. The default branch is the same wherever
+//     it is invoked from.
+//   - And because a feature branch is deleted on merge: the issue's link
+//     would die exactly when the epic ends.
 // ---------------------------------------------------------------------------
 
-// GITHUB_REMOTE_RES: las formas en que `git remote get-url origin` puede
-// devolver el mismo repo. Se cubren las cuatro que produce git/gh en la
-// práctica (https, https con credencial embebida, ssh scp-like, ssh://) —
-// el `.git` final es opcional en todas.
+// GITHUB_REMOTE_RES: the shapes in which `git remote get-url origin` can
+// return the same repo. The four that git/gh produce in practice are covered
+// (https, https with an embedded credential, scp-like ssh, ssh://) — the
+// trailing `.git` is optional in all of them.
 const GITHUB_REMOTE_RES = [
   /^https?:\/\/(?:[^@/]*@)?([^/]+)\/([^/]+)\/(.+?)(?:\.git)?\/?$/,
   /^ssh:\/\/(?:[^@/]*@)?([^/:]+)(?::\d+)?\/([^/]+)\/(.+?)(?:\.git)?\/?$/,
   /^(?:[^@]+@)?([^:/]+):([^/]+)\/(.+?)(?:\.git)?\/?$/,
 ]
 
-// parseRemote: URL de remoto -> { host, owner, repo }, o null si no se
-// reconoce. NO se exige que el host sea github.com: un GitHub Enterprise
-// self-hosted tiene la misma forma de URL de blob, y hardcodear github.com
-// convertiría un enlace perfectamente construible en una degradación.
+// parseRemote: remote URL -> { host, owner, repo }, or null if it is not
+// recognised. The host is NOT required to be github.com: a self-hosted GitHub
+// Enterprise has the same blob URL shape, and hardcoding github.com would
+// turn a perfectly buildable link into a degradation.
 export function parseRemote(remoteUrl) {
   const url = (remoteUrl || '').trim()
   if (!url) return null
@@ -71,11 +72,11 @@ export function parseRemote(remoteUrl) {
   return null
 }
 
-// encodePathSegment: `encodeURIComponent` NO escapa `!'()*`, y el paréntesis
-// es precisamente el carácter que rompe la sintaxis `[texto](destino)` de un
-// enlace markdown — un spec en "docs/plan (v2)/x.md" produciría un enlace
-// truncado en el paréntesis. Verificado contra GitHub: con `%28`/`%29` el
-// href sale entero.
+// encodePathSegment: `encodeURIComponent` does NOT escape `!'()*`, and the
+// parenthesis is precisely the character that breaks the `[text](target)`
+// syntax of a markdown link — a spec at "docs/plan (v2)/x.md" would produce a
+// link truncated at the parenthesis. Verified against GitHub: with
+// `%28`/`%29` the href comes out whole.
 function encodePathSegment(seg) {
   return encodeURIComponent(seg).replace(/\(/g, '%28').replace(/\)/g, '%29')
 }
@@ -83,34 +84,35 @@ function encodePath(path) {
   return path.split('/').map(encodePathSegment).join('/')
 }
 
-// buildBlobUrl: la URL de "ver este fichero en esta rama", con ancla si la
-// hay. El ancla NO se codifica: un slug de GitHub solo puede contener
-// letras, dígitos, marcas combinantes, `_` y `-` (ver anchor.js#SLUG_DROP_RE),
-// ninguno de los cuales rompe ni la URL ni la sintaxis del enlace markdown.
+// buildBlobUrl: the URL of "view this file on this branch", with an anchor if
+// there is one. The anchor is NOT encoded: a GitHub slug can only contain
+// letters, digits, combining marks, `_` and `-` (see anchor.js#SLUG_DROP_RE),
+// none of which breaks either the URL or the markdown link syntax.
 export function buildBlobUrl({ host, owner, repo, ref, path, anchor }) {
   const base = `https://${host}/${encodePathSegment(owner)}/${encodePathSegment(repo)}/blob/${encodePath(ref)}/${encodePath(path)}`
   return anchor ? `${base}#${anchor}` : base
 }
 
-// ANCHOR_ID_PREFIX: GitHub emite el id del encabezado prefijado
-// (`id="user-content-9-slices"`) y el href sin prefijar (`href="#9-slices"`);
-// su propio JS traduce uno en otro. Para COMPROBAR que el ancla existe hay
-// que buscar la forma prefijada, que es la que aparece en el HTML.
+// ANCHOR_ID_PREFIX: GitHub emits the heading's id prefixed
+// (`id="user-content-9-slices"`) and the href unprefixed (`href="#9-slices"`);
+// its own JS translates one into the other. To CHECK that the anchor exists
+// one has to look for the prefixed form, which is the one that appears in the
+// HTML.
 const ANCHOR_ID_PREFIX = 'user-content-'
 export function renderedHtmlHasAnchor(html, anchor) {
   if (!anchor) return false
   return (html || '').includes(`id="${ANCHOR_ID_PREFIX}${anchor}"`)
 }
 
-// SPEC_REF_REASONS: los motivos por los que puede no haber enlace. Son
-// cadenas fijas porque ACABAN EN EL CUERPO DEL ISSUE (ver
-// groom.js#renderSpecLink): si cambiaran de corrida en corrida, la detección
-// de divergencia de F5 reportaría un cambio que no lo es. Ninguna contiene
-// "#<dígitos>" a propósito — un "#N" desnudo en el body lo autoenlaza GitHub
-// al issue N del repo (verificado: en josemerca/ct-loop-sandbox, un "#3"
-// desnudo sale como `<a href=".../issues/3">`, y solo NO se autoenlaza si
-// ese issue no existe — o sea, que no autoenlace hoy no significa que no
-// vaya a hacerlo mañana).
+// SPEC_REF_REASONS: the reasons why there may be no link. They are fixed
+// strings because they END UP IN THE ISSUE BODY (see
+// groom.js#renderSpecLink): if they changed from run to run, F5's drift
+// detection would report a change that is not one. None of them contains
+// "#<digits>" on purpose — a bare "#N" in the body gets autolinked by GitHub
+// to issue N of the repo (verified: in josemerca/ct-loop-sandbox, a bare "#3"
+// comes out as `<a href=".../issues/3">`, and it is only NOT autolinked if
+// that issue does not exist — that is, it not autolinking today does not mean
+// it will not do so tomorrow).
 export const SPEC_REF_REASONS = {
   notInRepo: 'el spec no está dentro de un repositorio git',
   outsideRepo: 'el spec queda fuera del árbol del repositorio git',
@@ -120,29 +122,30 @@ export const SPEC_REF_REASONS = {
   notPublished: 'el spec no está publicado en la rama por defecto del repositorio',
 }
 
-// resolveSpecRef: de "la ruta que me han pasado en argv" a "la referencia que
-// se puede escribir en un issue". `run(cmd, args)` devuelve stdout y lanza si
-// el comando falla — inyectado para poder probar TODAS las ramas de
-// degradación sin red y sin repo (ver __tests__/spec-link.test.js).
+// resolveSpecRef: from "the path I was handed in argv" to "the reference that
+// can be written into an issue". `run(cmd, args)` returns stdout and throws if
+// the command fails — injected so that ALL the degradation branches can be
+// tested without a network and without a repo (see
+// __tests__/spec-link.test.js).
 //
-// `heading` es { text, anchor } (scripts/anchor.js, vía el reporte de
-// slices.js) o null si la tabla §9 no vive bajo ningún encabezado.
+// `heading` is { text, anchor } (scripts/anchor.js, through slices.js's
+// report) or null if the §9 table does not live under any heading.
 //
-// Devuelve { ref, warnings }:
-//   - ref: lo que se renderiza en el body. `url` no nulo significa
-//     "verificado que existe": el fichero se ha pedido de verdad a GitHub en
-//     esa rama, y si hay ancla se ha comprobado que el HTML renderizado trae
-//     su id. Sin esa comprobación, "absoluta" solo cambiaría la FORMA del
-//     enlace roto.
-//   - warnings: líneas para stderr. NUNCA vacío cuando `url` es null — que
-//     el enlace se caiga en silencio es el defecto original.
-// `specFile` llega YA absoluto y con los enlaces simbólicos resueltos (lo
-// hace ct-groom.mjs): `git -C <dir>` necesita un directorio real, y la ruta
-// relativa al root del repo solo se puede calcular entre dos rutas del mismo
-// tipo. `displayPath` es la ruta TAL COMO se escribió en argv, y es lo que se
-// enseña en el body cuando ni siquiera se llega a saber cuál es el repo — en
-// ese caso una ruta absoluta de la máquina de quien invocó no le dice nada a
-// quien lee el issue.
+// Returns { ref, warnings }:
+//   - ref: what gets rendered into the body. A non-null `url` means "verified
+//     to exist": the file has really been asked of GitHub on that branch, and
+//     if there is an anchor it has been checked that the rendered HTML carries
+//     its id. Without that check, "absolute" would only change the SHAPE of
+//     the broken link.
+//   - warnings: lines for stderr. NEVER empty when `url` is null — the link
+//     falling over in silence is the original defect.
+// `specFile` arrives ALREADY absolute and with its symbolic links resolved
+// (ct-groom.mjs does that): `git -C <dir>` needs a real directory, and the
+// path relative to the repo root can only be computed between two paths of the
+// same kind. `displayPath` is the path EXACTLY AS it was written in argv, and
+// it is what gets shown in the body when even the repo cannot be worked out —
+// in that case an absolute path on the invoker's machine says nothing to
+// whoever reads the issue.
 export function resolveSpecRef({ specFile, displayPath, heading, run, relativize }) {
   const warnings = []
   const headingText = heading && heading.text ? heading.text : null
@@ -181,10 +184,10 @@ export function resolveSpecRef({ specFile, displayPath, heading, run, relativize
   }
   if (!branch) return degraded(SPEC_REF_REASONS.noDefaultBranch, relPath)
 
-  // La comprobación que convierte "absoluto" en "usable": se pide el fichero
-  // RENDERIZADO, en esa rama, al propio GitHub. Un 404 aquí es el caso más
-  // común de todos en la vida real — el spec recién escrito y todavía sin
-  // empujar — y es exactamente el que producía un enlace roto sin decir nada.
+  // The check that turns "absolute" into "usable": the RENDERED file, on that
+  // branch, is asked of GitHub itself. A 404 here is the commonest case of all
+  // in real life — the spec just written and not yet pushed — and it is
+  // exactly the one that produced a broken link without saying anything.
   let html
   try {
     html = run('gh', ['api', `repos/${slug}/contents/${encodePath(relPath)}?ref=${encodeURIComponent(branch)}`,
@@ -201,18 +204,19 @@ export function resolveSpecRef({ specFile, displayPath, heading, run, relativize
     return { ref: { path: relPath, heading: headingText, url, reason: null }, warnings }
   }
   if (!renderedHtmlHasAnchor(html, anchor)) {
-    // El ancla se calcula sobre el fichero LOCAL; el enlace apunta a la copia
-    // PUBLICADA. Si no coinciden es que la publicada es otra (spec editado y
-    // sin empujar, típicamente) — enlazar al ancla igualmente sería inventar.
+    // The anchor is computed over the LOCAL file; the link points at the
+    // PUBLISHED copy. If they do not match, it is because the published one is
+    // another (spec edited and not pushed, typically) — linking to the anchor
+    // anyway would be inventing.
     warnings.push(`aviso: el ancla "${anchor}" (del encabezado "${headingText}") no existe en la copia de ${relPath} publicada en ${slug}@${branch} — el enlace de cada issue apunta al fichero entero, no a la sección; empuja la versión actual del spec y vuelve a correr.`)
     return { ref: { path: relPath, heading: headingText, url: buildBlobUrl({ ...remote, ref: branch, path: relPath, anchor: null }), reason: null }, warnings }
   }
   return { ref: { path: relPath, heading: headingText, url, reason: null }, warnings }
 }
 
-// dirOf: `dirname` sin importar node:path — este módulo se mantiene puro y
-// sin dependencias para poder probarse sin tocar disco. Una ruta sin ninguna
-// barra vive en el directorio actual.
+// dirOf: `dirname` without importing node:path — this module stays pure and
+// dependency-free so that it can be tested without touching disk. A path with
+// no slash at all lives in the current directory.
 function dirOf(p) {
   const i = (p || '').lastIndexOf('/')
   return i === -1 ? '.' : (i === 0 ? '/' : p.slice(0, i))

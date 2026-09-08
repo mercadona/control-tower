@@ -1,10 +1,10 @@
 // ============================================================================
-// La columna E2E: el parser la trata como una celda cruda más.
+// The E2E column: the parser treats it as one more raw cell.
 //
-// Por qué cruda y no resuelta: slices.js "no sabe de gates, igual que no sabe
-// de labels ni de addenda: su trabajo es convertir una tabla markdown en
-// celdas fiables" (comentario del campo `gate`). La resolución de los tres
-// estados de la celda vive en gates.js#resolveE2e.
+// Why raw and not resolved: slices.js "knows nothing about gates, just as it
+// knows nothing about labels or addenda: its job is to turn a markdown table
+// into reliable cells" (comment on the `gate` field). Resolving the cell's
+// three states lives in gates.js#resolveE2e.
 // ============================================================================
 import { describe, it, expect } from 'vitest'
 import { analyzeSlicesTable } from '../scripts/slices.js'
@@ -17,25 +17,25 @@ const table = (headerExtra, rowExtra) => `
 | 1 | uno | backend | algo | – | un criterio | – | core | – | – |${rowExtra}
 `
 
-describe('columna E2E', () => {
-  it('sin columna E2E, el campo llega vacío y nada más cambia', () => {
+describe('E2E column', () => {
+  it('without an E2E column, the field arrives empty and nothing else changes', () => {
     const { slices } = analyzeSlicesTable(table('', ''))
     expect(slices).toHaveLength(1)
     expect(slices[0].e2e).toBe('')
     expect(slices[0].name).toBe('uno')
   })
 
-  it('con columna E2E, el campo trae la celda cruda ya trimmed', () => {
+  it('with an E2E column, the field carries the raw cell already trimmed', () => {
     const { slices } = analyzeSlicesTable(table(' E2E |', ' levantado con el example\\, curl -i :9115/metrics responde 200 |'))
     expect(slices[0].e2e).toBe('levantado con el example\\, curl -i :9115/metrics responde 200')
   })
 
-  it('la celda `no` llega literal, sin interpretar', () => {
+  it('the `no` cell arrives literal, uninterpreted', () => {
     const { slices } = analyzeSlicesTable(table(' E2E |', ' no |'))
     expect(slices[0].e2e).toBe('no')
   })
 
-  it('la cabecera E2E no colisiona con ninguna de las diez existentes', () => {
+  it('the E2E header does not collide with any of the ten existing ones', () => {
     const { slices } = analyzeSlicesTable(table(' E2E |', ' un recorrido |'))
     const s = slices[0]
     expect(s.type).toBe('backend')
@@ -46,27 +46,27 @@ describe('columna E2E', () => {
     expect(s.e2e).toBe('un recorrido')
   })
 
-  it('la columna ausente NO produce aviso de columna opcional', () => {
+  it('the absent column does NOT produce an optional-column warning', () => {
     const res = analyzeSlicesTable(table('', ''))
     expect(res.missingOptionalColumns).not.toContain('E2E')
   })
 
-  // e2eColumnPresent: expuesto porque NO es derivable de las celdas (una
-  // columna con todo "–" es indistinguible de una columna ausente). La
-  // Tarea 3 lo consume para decidir si exige una decisión de e2e por fila,
-  // así que el booleano tiene que ser exacto: `toBe`, no una comprobación de
-  // "truthy" que dejaría pasar por error un índice numérico.
-  it('e2eColumnPresent es true cuando la cabecera E2E está', () => {
+  // e2eColumnPresent: exposed because it is NOT derivable from the cells (a
+  // column that is all "–" is indistinguishable from an absent column). Task 3
+  // consumes it to decide whether it demands an e2e decision per row, so the
+  // boolean has to be exact: `toBe`, not a "truthy" check that would let a
+  // numeric index through by mistake.
+  it('e2eColumnPresent is true when the E2E header is there', () => {
     const res = analyzeSlicesTable(table(' E2E |', ' un recorrido |'))
     expect(res.e2eColumnPresent).toBe(true)
   })
 
-  it('e2eColumnPresent es false cuando la cabecera E2E no está', () => {
+  it('e2eColumnPresent is false when the E2E header is not there', () => {
     const res = analyzeSlicesTable(table('', ''))
     expect(res.e2eColumnPresent).toBe(false)
   })
 
-  it('e2eColumnPresent es false también en el camino de "no se encontró tabla"', () => {
+  it('e2eColumnPresent is false on the "no table found" path too', () => {
     const res = analyzeSlicesTable('# Un documento sin tabla §9 en absoluto\n\nsolo texto.\n')
     expect(res.tableFound).toBe(false)
     expect(res.e2eColumnPresent).toBe(false)

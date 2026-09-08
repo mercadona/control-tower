@@ -6,25 +6,25 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { makeSpecDir, specUrl } from './fixtures/spec-repo.js'
 
-// F10 — el enlace al spec, de punta a punta y por la CLI.
+// F10 — the spec link, end to end and through the CLI.
 //
-// El defecto que cierra, reproducido antes de tocar nada y verificado contra
-// GitHub de verdad (no contra una lectura del markdown):
+// The defect it closes, reproduced before touching anything and verified
+// against the real GitHub (not against a reading of the markdown):
 //
 //   > Slice `#1` del epic. Spec: [docs/x-design.md#9](docs/x-design.md#9)
 //
-//   1. `gh api /markdown -X POST` con mode:gfm y context:owner/repo devuelve
-//      el href TAL CUAL: `<a href="docs/x-design.md#9">`. En la página de un
-//      issue (github.com/owner/repo/issues/N) eso resuelve contra esa URL y
-//      da 404. En un README funcionaría; en un issue, que es donde vive esta
-//      línea, no.
-//   2. El ancla no existe: el encabezado real es "## 9. Slices" y el id que
-//      GitHub genera es "9-slices" — comprobado en el HTML renderizado del
-//      propio fichero.
+//   1. `gh api /markdown -X POST` with mode:gfm and context:owner/repo returns
+//      the href AS IS: `<a href="docs/x-design.md#9">`. On an issue's page
+//      (github.com/owner/repo/issues/N) that resolves against that URL and
+//      gives a 404. In a README it would work; in an issue, which is where
+//      this line lives, it does not.
+//   2. The anchor does not exist: the real heading is "## 9. Slices" and the
+//      id GitHub generates is "9-slices" — checked in the rendered HTML of the
+//      file itself.
 //
-// Estos tests son los que fallan contra el código sin arreglar: comprueban
-// que la línea que se escribe lleve una URL ABSOLUTA y el ancla del
-// encabezado REAL, no un "#9".
+// These tests are the ones that fail against the unfixed code: they check that
+// the line that gets written carries an ABSOLUTE URL and the anchor of the
+// REAL heading, not a "#9".
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'ct-groom.mjs')
 const fakeGhDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-gh-bin')
@@ -55,28 +55,28 @@ function planOf(res) {
   return JSON.parse(res.stdout)
 }
 
-describe('ct-groom — el enlace al spec es absoluto y con el ancla real (F10)', () => {
-  it('la línea lleva una URL absoluta de GitHub, no una ruta relativa (una relativa da 404 desde la página de un issue)', () => {
+describe('ct-groom — the spec link is absolute and carries the real anchor (F10)', () => {
+  it('the line carries an absolute GitHub URL, not a relative path (a relative one 404s from an issue page)', () => {
     const dir = makeSpecDir('ctg-link-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const plan = planOf(run(dir, spec))
     const link = plan.issues[0].specLink
     expect(link).toContain('](https://github.com/o/r/blob/main/spec.md')
-    // Y NADA de la forma vieja: destino relativo.
+    // And NOTHING of the old shape: a relative target.
     expect(link).not.toMatch(/\]\((?!https:\/\/)/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el ancla es la del encabezado real ("## 9. Slices" → "#9-slices"), nunca el número de sección', () => {
+  it('the anchor is the real heading\'s ("## 9. Slices" → "#9-slices"), never the section number', () => {
     const dir = makeSpecDir('ctg-link-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const link = planOf(run(dir, spec)).issues[0].specLink
     expect(link).toContain('#9-slices')
-    expect(link).not.toMatch(/#9\)/) // el "#9" pelado de antes
+    expect(link).not.toMatch(/#9\)/) // the bare "#9" of before
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el ancla sale del TEXTO del encabezado, no de su número: un spec cuya §9 se llama de otra forma produce otra ancla', () => {
+  it("the anchor comes from the heading's TEXT, not from its number: a spec whose §9 is named differently produces a different anchor", () => {
     const dir = makeSpecDir('ctg-link-')
     const spec = join(dir, 'spec.md')
     writeFileSync(spec, SPEC.replace('## 9. Slices', '## Desglose en slices'))
@@ -86,7 +86,7 @@ describe('ct-groom — el enlace al spec es absoluto y con el ancla real (F10)',
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el enlace se escribe en el BODY de cada issue, no solo en el campo specLink del plan', () => {
+  it("the link is written into every issue's BODY, not only into the plan's specLink field", () => {
     const dir = makeSpecDir('ctg-link-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const plan = planOf(run(dir, spec))
@@ -95,7 +95,7 @@ describe('ct-groom — el enlace al spec es absoluto y con el ancla real (F10)',
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el ancla se COMPRUEBA contra la copia publicada: si no está, se enlaza el fichero y se avisa — nunca un ancla inventada', () => {
+  it('the anchor is CHECKED against the published copy: if it is missing, the file is linked and a warning is issued — never an invented anchor', () => {
     const dir = makeSpecDir('ctg-link-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const res = run(dir, spec, [], { FAKE_GH_CONTENTS_ANCHORS: 'otra-cosa' })
@@ -107,7 +107,7 @@ describe('ct-groom — el enlace al spec es absoluto y con el ancla real (F10)',
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('la ruta del enlace es la relativa a la raíz del repo, no la del directorio de trabajo', () => {
+  it("the link's path is the one relative to the repo root, not to the working directory", () => {
     const dir = makeSpecDir('ctg-link-')
     mkdirSync(join(dir, 'docs', 'specs'), { recursive: true })
     const spec = join(dir, 'docs', 'specs', 'plan.md'); writeFileSync(spec, SPEC)
@@ -118,25 +118,25 @@ describe('ct-groom — el enlace al spec es absoluto y con el ancla real (F10)',
   })
 })
 
-describe('ct-groom — cuando no se puede construir un enlace bueno, no pasa callado (F10)', () => {
-  // "El spec escrito pero todavía sin empujar" es el caso más común de todos
-  // en la vida real. Un enlace absoluto a algo no publicado es el mismo
-  // defecto con otra cara.
-  it('spec sin publicar en la rama por defecto → referencia SIN enlace, con el motivo en el body y aviso por stderr', () => {
+describe('ct-groom — when a good link cannot be built, it does not go quiet (F10)', () => {
+  // "The spec written but not pushed yet" is the most common case of all in
+  // real life. An absolute link to something unpublished is the same defect
+  // wearing another face.
+  it('a spec unpublished on the default branch → a reference WITHOUT a link, with the reason in the body and a warning on stderr', () => {
     const dir = makeSpecDir('ctg-link-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const res = run(dir, spec, [], { FAKE_GH_CONTENTS_FAIL: '1' })
-    expect(res.status).toBe(0) // se sigue pudiendo groomear: el enlace no es el trabajo
+    expect(res.status).toBe(0) // grooming is still possible: the link is not the work
     expect(res.stderr).toMatch(/se queda SIN enlace/)
     const link = planOf(res).issues[0].specLink
     expect(link).toContain('sin enlace: el spec no está publicado en la rama por defecto del repositorio (o/r, rama main)')
-    expect(link).not.toMatch(/\]\(/) // ni un enlace markdown a medias
+    expect(link).not.toMatch(/\]\(/) // not even a half-finished markdown link
     expect(link).not.toContain('https://')
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('spec fuera de cualquier repo git → referencia SIN enlace, con el motivo', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'ctg-nogit-')) // a propósito: NO es un repo
+  it('a spec outside any git repository → a reference WITHOUT a link, with the reason', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ctg-nogit-')) // deliberately: NOT a repo
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const res = run(dir, spec)
     expect(res.status).toBe(0)
@@ -145,7 +145,7 @@ describe('ct-groom — cuando no se puede construir un enlace bueno, no pasa cal
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('repo sin remoto "origin" → referencia SIN enlace, con el motivo', () => {
+  it('a repo with no "origin" remote → a reference WITHOUT a link, with the reason', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ctg-noremote-'))
     execFileSync('git', ['-C', dir, 'init', '-q'], { stdio: 'ignore' })
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
@@ -155,26 +155,26 @@ describe('ct-groom — cuando no se puede construir un enlace bueno, no pasa cal
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('tabla §9 sin ningún encabezado encima → enlace al fichero (que sí sirve) y aviso de que no aterriza en la sección', () => {
+  it('a §9 table with no heading above it → a link to the file (which does work) and a warning that it does not land on the section', () => {
     const dir = makeSpecDir('ctg-link-')
     const spec = join(dir, 'spec.md')
-    // La hipótesis va DEBAJO de la tabla a propósito: la premisa del test es
-    // "ningún encabezado ENCIMA de la tabla", y la puerta de congelación (F32)
-    // solo exige que la sección exista en el spec, no dónde.
+    // The hypothesis goes BELOW the table on purpose: the test's premise is
+    // "no heading ABOVE the table", and the freeze gate (F32) only demands
+    // that the section exist in the spec, not where.
     writeFileSync(spec, '| # | Slice | Dep |\n|---|---|---|\n| 1 | login | – |\n\n## Hipótesis\n\nApuesta del fixture.\n')
     const res = run(dir, spec)
     expect(res.status).toBe(0)
     expect(res.stderr).toMatch(/no vive bajo ningún encabezado/)
     const link = planOf(res).issues[0].specLink
-    // El destino del enlace no lleva fragmento: ni el ancla inventada de
-    // antes ni un "#" colgante. (El "#1" del principio de la línea es el
-    // orden del slice, y va en código inline desde F6.)
+    // The link's target carries no fragment: neither the invented anchor of
+    // before nor a dangling "#". (The "#1" at the start of the line is the
+    // slice's order, and it has gone in inline code since F6.)
     expect(link).toMatch(/\]\((https:\/\/[^)#]+)\)$/)
     expect(link).toContain(specUrl('spec.md', null))
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('encabezado sin ancla utilizable ("## ...") → enlace al fichero, aviso, y NUNCA un "#" colgante', () => {
+  it('a heading with no usable anchor ("## ...") → a link to the file, a warning, and NEVER a dangling "#"', () => {
     const dir = makeSpecDir('ctg-link-')
     const spec = join(dir, 'spec.md')
     writeFileSync(spec, SPEC.replace('## 9. Slices', '## ...'))
@@ -187,11 +187,12 @@ describe('ct-groom — cuando no se puede construir un enlace bueno, no pasa cal
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Un ancla VÁLIDA que aterriza en el sitio equivocado es peor que ninguna:
-  // no falla, no avisa, y quien la pincha cree que está leyendo su §9. Pasa
-  // en cuanto el documento repite el texto del encabezado (un resumen arriba,
-  // el desarrollo abajo), porque GitHub sufija la segunda aparición.
-  it('encabezado repetido en el documento: la tabla bajo la SEGUNDA copia enlaza al ancla sufijada, no a la primera', () => {
+  // A VALID anchor that lands in the wrong place is worse than none: it does
+  // not fail, it does not warn, and whoever clicks it believes they are
+  // reading their §9. It happens as soon as the document repeats the heading's
+  // text (a summary above, the development below), because GitHub suffixes the
+  // second appearance.
+  it('a heading repeated in the document: the table under the SECOND copy links to the suffixed anchor, not to the first', () => {
     const dir = makeSpecDir('ctg-link-')
     const spec = join(dir, 'spec.md')
     writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices\n\n(resumen)\n\n${SPEC.slice(SPEC.indexOf('## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices'))}`)
@@ -200,17 +201,17 @@ describe('ct-groom — cuando no se puede construir un enlace bueno, no pasa cal
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('un spec con finales de línea CRLF resuelve el mismo encabezado y el mismo ancla', () => {
+  it('a spec with CRLF line endings resolves the same heading and the same anchor', () => {
     const dir = makeSpecDir('ctg-link-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC.replace(/\n/g, '\r\n'))
     expect(planOf(run(dir, spec)).issues[0].specLink).toContain('#9-slices')
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // El enlace apunta a donde vive el SPEC, que no tiene por qué ser el repo
-  // donde se crean los issues (--repo). Usar --repo para construirlo daría un
-  // enlace a un fichero que no está ahí.
-  it('el enlace apunta al repo del SPEC, no al de --repo', () => {
+  // The link points at where the SPEC lives, which need not be the repo where
+  // the issues are created (--repo). Using --repo to build it would give a
+  // link to a file that is not there.
+  it("the link points at the SPEC's repo, not at --repo's", () => {
     const dir = makeSpecDir('ctg-link-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const res = spawnSync('node', [script, spec, '--repo', 'otro/destino', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: env() })
@@ -218,11 +219,11 @@ describe('ct-groom — cuando no se puede construir un enlace bueno, no pasa cal
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Idempotencia: dos corridas seguidas sobre el mismo spec producen la misma
-  // línea. Si no, F5 reportaría divergencia en cada corrida y --reconcile
-  // (EXPERIMENTAL, ya ha corrompido bodies reales) se dedicaría a reescribir
-  // issues sanos indefinidamente.
-  it('dos corridas seguidas producen EXACTAMENTE la misma línea (ni con enlace ni degradada hay ping-pong)', () => {
+  // Idempotence: two runs in a row over the same spec produce the same line.
+  // Otherwise F5 would report divergence on every run and --reconcile
+  // (EXPERIMENTAL, it has already corrupted real bodies) would spend its time
+  // rewriting healthy issues indefinitely.
+  it('two runs in a row produce EXACTLY the same line (neither with a link nor degraded is there ping-pong)', () => {
     const dir = makeSpecDir('ctg-link-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     for (const overrides of [{}, { FAKE_GH_CONTENTS_FAIL: '1' }]) {

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Stub de `git` para los tests de ct-next.mjs (review round 1, finding
-// Important sobre worktree huérfano): NUNCA toca un repo real. Controlado
-// enteramente por variables de entorno para simular `worktree add`,
-// `worktree remove` y `branch -D` exitosos o fallidos en puntos concretos, y
-// registra cada invocación (comando + argv) en un fichero de log para que el
-// test verifique qué intentó ct-next.mjs y en qué orden — igual que
-// fake-gh-bin/gh hace para los tests de dispatch-check.
+// `git` stub for the ct-next.mjs tests (review round 1, Important finding
+// about an orphan worktree): it NEVER touches a real repo. Controlled
+// entirely by environment variables to simulate `worktree add`,
+// `worktree remove` and `branch -D` succeeding or failing at specific points,
+// and it records every invocation (command + argv) in a log file so that the
+// test can verify what ct-next.mjs attempted and in what order — just as
+// fake-gh-bin/gh does for the dispatch-check tests.
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { waitForReleaseFile } from '../stub-wait.js'
@@ -17,73 +17,74 @@ if (process.env.FAKE_GIT_LOG_FILE) {
   appendFileSync(process.env.FAKE_GIT_LOG_FILE, joined + '\n')
 }
 
-// main(): toda la lógica del stub vive en una función (no en el top-level del
-// módulo) para poder usar `return` en vez de `process.exit()` en la rama de
-// "cuelgue" (finding 1, más abajo) — un `return` en el top-level de un
-// módulo ES es un SyntaxError, y necesitamos poder terminar de decidir sin
-// caer en el fallback de "comando no soportado" del final del fichero.
+// main(): all of the stub's logic lives in a function (not at the module's
+// top level) so that `return` can be used instead of `process.exit()` in the
+// "hang" branch (finding 1, further down) — a `return` at the top level of an
+// ES module is a SyntaxError, and we need to be able to finish deciding
+// without falling into the "unsupported command" fallback at the end of the
+// file.
 function main() {
   if (argv[0] === 'rev-parse' && argv[1] === '--show-toplevel') {
     process.stdout.write(`${process.env.FAKE_GIT_TOPLEVEL || '/tmp/fake-repo-root'}\n`)
     process.exit(0)
   }
 
-  // `git rev-parse --git-common-dir` (F22, ensureSliceIgnored en ct-next.mjs):
-  // el directorio común de git donde vive `info/exclude`. El valor concreto
-  // no le importa a casi ningún test — ensureSliceIgnored() lo usa solo para
-  // construir una ruta de FS a la que escribir con Node (mkdirSync +
-  // writeFileSync), sin volver a pasar por git — así que basta una ruta
-  // ABSOLUTA determinista bajo el propio toplevel simulado. Sin FAIL
-  // configurable (a propósito): ningún test necesita simular que ESTA
-  // consulta concreta falle; los que ejercen la precedencia REAL entre
-  // `info/exclude` y una negación en `.gitignore` (F22, Step 4) usan git de
-  // VERDAD, nunca este stub — ver __tests__/f22-estado-del-slice.test.js.
+  // `git rev-parse --git-common-dir` (F22, ensureSliceIgnored in ct-next.mjs):
+  // the common git directory where `info/exclude` lives. The concrete value
+  // matters to almost no test — ensureSliceIgnored() uses it only to build an
+  // FS path to write to with Node (mkdirSync + writeFileSync), without going
+  // through git again — so a deterministic ABSOLUTE path under the simulated
+  // toplevel itself is enough. With no configurable FAIL (on purpose): no test
+  // needs to simulate THIS particular query failing; the ones that exercise
+  // the REAL precedence between `info/exclude` and a negation in `.gitignore`
+  // (F22, Step 4) use the REAL git, never this stub — see
+  // __tests__/f22-estado-del-slice.test.js.
   if (argv[0] === 'rev-parse' && argv[1] === '--git-common-dir') {
     process.stdout.write(`${process.env.FAKE_GIT_TOPLEVEL || '/tmp/fake-repo-root'}/.git\n`)
     process.exit(0)
   }
 
-  // `git status --porcelain` (F22 — la puerta de efecto tras sembrar
-  // SLICE.md, ver el bloque "SE VERIFICA EL EFECTO" en ct-next.mjs). Siempre
-  // "limpio" (nada visible para git): es el único valor que necesita ningún
-  // test existente, para que los que despachan de verdad pero no ejercitan
-  // esta comprobación sigan pasando sin cambios.
+  // `git status --porcelain` (F22 — the effect gate after seeding SLICE.md,
+  // see the "SE VERIFICA EL EFECTO" block in ct-next.mjs). Always "clean"
+  // (nothing visible to git): it is the only value any existing test needs,
+  // so that the ones that really do dispatch but do not exercise this check
+  // go on passing unchanged.
   if (argv[0] === 'status' && argv.includes('--porcelain')) {
     process.stdout.write('')
     process.exit(0)
   }
 
   // `git rev-parse --verify --quiet <ref>^{commit}` (W-D, fix round 1,
-  // Important): ct-next.mjs comprueba OFFLINE, contra el checkout local, que
-  // la rama base resuelta (vía `gh repo view` o `--base`) existe de verdad
-  // ANTES de reclamar/despachar nada — ver verifyBaseExistsLocally en
-  // ct-next.mjs. Por defecto (ninguna de las dos variables de abajo fijada)
-  // CUALQUIER ref "existe", para que los tests existentes (que no fijan
-  // ninguna de las dos y asumían implícitamente que "main" resolvía) sigan
-  // pasando sin cambios. FAKE_GIT_BASE_NOT_LOCAL hace fallar la comprobación
-  // de la rama LOCAL; FAKE_GIT_BASE_NOT_REMOTE hace fallar la de
-  // `origin/<rama>` — se distinguen por si el ref empieza por "origin/", para
-  // poder simular por separado "no existe en ningún sitio" y "existe en
-  // origin pero no en local".
+  // Important): ct-next.mjs checks OFFLINE, against the local checkout, that
+  // the resolved base branch (via `gh repo view` or `--base`) really exists
+  // BEFORE claiming or dispatching anything — see verifyBaseExistsLocally in
+  // ct-next.mjs. By default (neither of the two variables below set) ANY ref
+  // "exists", so that the existing tests (which set neither of the two and
+  // implicitly assumed that "main" resolved) go on passing unchanged.
+  // FAKE_GIT_BASE_NOT_LOCAL makes the LOCAL branch check fail;
+  // FAKE_GIT_BASE_NOT_REMOTE makes the `origin/<branch>` one fail — they are
+  // told apart by whether the ref starts with "origin/", so that "it does not
+  // exist anywhere" and "it exists in origin but not locally" can be
+  // simulated separately.
   // `git rev-parse --verify --quiet refs/heads/feat/<n>` (finding 2 —
-  // detección de staleness, assessLocalLiveness en ct-next.mjs): forma de
-  // ref DISTINTA a la del chequeo de rama base de arriba/abajo (esta lleva
-  // el prefijo `refs/heads/` y NUNCA el sufijo `^{commit}`) para que ambos
-  // stubs puedan controlarse de forma INDEPENDIENTE — sin esto, el default
-  // "cualquier ref existe" del bloque de abajo (pensado para la rama base)
-  // haría que TODO issue pareciera siempre tener una rama local viva, sin
-  // forma de que un test simule "sin rama" para un issue concreto.
-  // FAKE_GIT_STALE_BRANCH_EXISTS: lista de números de issue (separados por
-  // coma) para los que la rama SÍ existe — por defecto (variable ausente)
-  // NINGUNA existe, lo contrario del default de la comprobación de rama
-  // base, porque el escenario que motiva esta detección (finding 2) es
-  // precisamente "no hay rama" y los tests deben poder partir de ahí sin
-  // tener que apagar nada.
+  // staleness detection, assessLocalLiveness in ct-next.mjs): a ref form
+  // DIFFERENT from the base branch check above/below (this one carries the
+  // `refs/heads/` prefix and NEVER the `^{commit}` suffix) so that both stubs
+  // can be controlled INDEPENDENTLY — without this, the "any ref exists"
+  // default of the block below (meant for the base branch) would make EVERY
+  // issue look as if it always had a live local branch, with no way for a
+  // test to simulate "no branch" for one particular issue.
+  // FAKE_GIT_STALE_BRANCH_EXISTS: a list of issue numbers (comma-separated)
+  // for which the branch DOES exist — by default (variable absent) NONE
+  // exists, the opposite of the base branch check's default, because the
+  // scenario that motivates this detection (finding 2) is precisely "there is
+  // no branch" and the tests must be able to start from there without having
+  // to switch anything off.
   if (argv[0] === 'rev-parse' && argv[1] === '--verify' && argv[2] === '--quiet' && /^refs\/heads\/feat\/\d+$/.test(argv[3] || '')) {
-    // FAKE_GIT_REV_PARSE_BROKEN (D4): simula una CONSULTA rota (repo
-    // corrupto, .git ilegible) — git sale con 128, no con 1. ct-next.mjs
-    // distingue los dos: 1 = "la ref no existe" (respuesta), cualquier otro
-    // = "no pude preguntar" (aviso, nunca "está libre").
+    // FAKE_GIT_REV_PARSE_BROKEN (D4): simulates a broken QUERY (corrupt repo,
+    // unreadable .git) — git exits with 128, not with 1. ct-next.mjs tells the
+    // two apart: 1 = "the ref does not exist" (an answer), anything else =
+    // "I could not ask" (a warning, never "it is free").
     if (process.env.FAKE_GIT_REV_PARSE_BROKEN) {
       console.error('fake-git: fatal: not a git repository (simulado)')
       process.exit(128)
@@ -95,16 +96,16 @@ function main() {
     process.exit(0)
   }
 
-  // `git rev-parse --verify --quiet HEAD^{commit}` con cwd = el worktree recién
-  // creado (slice 9b): el corte real. El valor es DISTINTO del `deadbeef…` que
-  // devuelve la rama genérica de abajo para `origin/<base>^{commit}`, y esa
-  // diferencia es justo lo que permite a un test distinguir "el sha medido en
-  // el worktree" de "el sha resuelto antes del bucle" — con el mismo valor para
-  // los dos, el cableado sería intestable. Va ANTES de la rama genérica para
-  // que FAKE_GIT_BASE_NOT_LOCAL (que hace fallar cualquier ref sin prefijo
-  // `origin/`) no lo alcance por accidente: son dos escenarios sin relación.
-  // FAKE_GIT_WORKTREE_HEAD_FAIL simula el rev-parse roto en un worktree que
-  // git acaba de crear (el caso de degradación).
+  // `git rev-parse --verify --quiet HEAD^{commit}` with cwd = the freshly
+  // created worktree (slice 9b): the real cut. The value is DIFFERENT from the
+  // `deadbeef…` the generic branch below returns for `origin/<base>^{commit}`,
+  // and that difference is exactly what lets a test tell "the sha measured in
+  // the worktree" from "the sha resolved before the loop" — with the same
+  // value for both, the wiring would be untestable. It goes BEFORE the generic
+  // branch so that FAKE_GIT_BASE_NOT_LOCAL (which makes any ref without an
+  // `origin/` prefix fail) does not reach it by accident: they are two
+  // unrelated scenarios. FAKE_GIT_WORKTREE_HEAD_FAIL simulates the rev-parse
+  // broken in a worktree git has just created (the degradation case).
   if (argv[0] === 'rev-parse' && argv[1] === '--verify' && argv[2] === '--quiet' && argv[3] === 'HEAD^{commit}') {
     if (process.env.FAKE_GIT_WORKTREE_HEAD_FAIL) process.exit(1)
     process.stdout.write(`${process.env.FAKE_GIT_WORKTREE_HEAD || 'cafebabecafebabecafebabecafebabecafebabe'}\n`)
@@ -120,14 +121,14 @@ function main() {
     process.exit(0)
   }
 
-  // `git fetch origin <base>` (Paso 1 del spec de la primera corrida en un
-  // repo ajeno): ct-next.mjs refresca el remoto ANTES de resolver la base,
-  // porque el worktree se corta de `origin/<base>` y no de la copia local.
-  // Por defecto tiene éxito y no imprime nada, que es lo que hace un fetch
-  // real cuando no hay nada nuevo. FAKE_GIT_FETCH_FAIL simula el fetch roto
-  // (sin red, sin remote, credenciales): ct-next.mjs NO puede seguir, porque
-  // sin fetch no sabe si la base está al día — que es justo el fallo que este
-  // paso arregla.
+  // `git fetch origin <base>` (Step 1 of the spec for the first run in
+  // somebody else's repo): ct-next.mjs refreshes the remote BEFORE resolving
+  // the base, because the worktree is cut from `origin/<base>` and not from
+  // the local copy. By default it succeeds and prints nothing, which is what a
+  // real fetch does when there is nothing new. FAKE_GIT_FETCH_FAIL simulates
+  // the fetch broken (no network, no remote, credentials): ct-next.mjs CANNOT
+  // carry on, because without a fetch it does not know whether the base is up
+  // to date — which is precisely the failure this step fixes.
   if (argv[0] === 'fetch') {
     if (process.env.FAKE_GIT_FETCH_FAIL) {
       console.error('fake-git: fetch failed (simulado, sin red)')
@@ -136,12 +137,13 @@ function main() {
     process.exit(0)
   }
 
-  // Guarda de identidad de repo de ct-next.mjs (review final, finding 1):
-  // FAKE_GIT_REMOTE_FAIL simula un checkout sin remote `origin` (exit != 0,
-  // nada en stdout). Por defecto el origin es "https://github.com/o/r.git",
-  // para que los tests existentes que usan `--repo o/r` sigan pasando sin
-  // tener que fijar esta variable — solo los tests que quieren ejercitar un
-  // MISMATCH deliberado fijan FAKE_GIT_REMOTE_ORIGIN a otra cosa.
+  // ct-next.mjs's repo identity guard (final review, finding 1):
+  // FAKE_GIT_REMOTE_FAIL simulates a checkout with no `origin` remote (exit
+  // != 0, nothing on stdout). By default the origin is
+  // "https://github.com/o/r.git", so that the existing tests using `--repo
+  // o/r` go on passing without having to set this variable — only the tests
+  // that want to exercise a deliberate MISMATCH set FAKE_GIT_REMOTE_ORIGIN to
+  // something else.
   if (argv[0] === 'remote' && argv[1] === 'get-url' && argv[2] === 'origin') {
     if (process.env.FAKE_GIT_REMOTE_FAIL) {
       console.error('fake-git: remote get-url origin failed (simulado, sin remote origin)')
@@ -151,14 +153,14 @@ function main() {
     process.exit(0)
   }
 
-  // `git worktree list --porcelain` (D4): ct-next.mjs lo consulta en el
-  // preflight para detectar un worktree REGISTRADO cuyo directorio ya no
-  // existe (borrado a mano, sin `git worktree remove`) — ese caso hace
-  // fallar a `git worktree add` con "missing but already registered
-  // worktree", y en el run real eso ocurriría con el claim ya escrito.
-  // FAKE_GIT_WORKTREE_REGISTERED: rutas registradas extra, separadas por
-  // coma. Por defecto solo está registrado el propio toplevel, que es lo que
-  // devuelve un repo normal sin worktrees.
+  // `git worktree list --porcelain` (D4): ct-next.mjs queries it in the
+  // preflight to detect a REGISTERED worktree whose directory no longer exists
+  // (deleted by hand, without `git worktree remove`) — that case makes `git
+  // worktree add` fail with "missing but already registered worktree", and in
+  // the real run that would happen with the claim already written.
+  // FAKE_GIT_WORKTREE_REGISTERED: extra registered paths, comma-separated. By
+  // default only the toplevel itself is registered, which is what a normal
+  // repo with no worktrees returns.
   if (argv[0] === 'worktree' && argv[1] === 'list') {
     if (process.env.FAKE_GIT_WORKTREE_LIST_FAIL) {
       console.error('fake-git: worktree list failed (simulado)')
@@ -172,46 +174,44 @@ function main() {
   }
 
   if (argv[0] === 'worktree' && argv[1] === 'add') {
-    // FAKE_GIT_WORKTREE_ADD_HANG (finding 1 — auditoría de interrupción):
-    // NUNCA termina por su cuenta, e IGNORA SIGINT/SIGTERM — reproduce el
-    // escenario MÁS ADVERSO del auditor (un `git worktree add` colgado que
-    // ni siquiera muere si la señal llegara a alcanzarlo directamente).
-    // Existe para probar que ct-next.mjs acota la espera con su propio
-    // timeout (defensa 2 de finding 1) en vez de quedarse bloqueado para
-    // siempre — sin este stub no hay forma de ejercer ese camino sin colgar
-    // de verdad al runner de tests.
+    // FAKE_GIT_WORKTREE_ADD_HANG (finding 1 — interruption audit): it NEVER
+    // finishes on its own, and it IGNORES SIGINT/SIGTERM — it reproduces the
+    // auditor's MOST ADVERSE scenario (a hung `git worktree add` that would
+    // not even die if the signal did reach it directly). It exists to prove
+    // that ct-next.mjs bounds the wait with its own timeout (defence 2 of
+    // finding 1) instead of blocking forever — without this stub there is no
+    // way to exercise that path without genuinely hanging the test runner.
     if (process.env.FAKE_GIT_WORKTREE_ADD_HANG) {
       process.on('SIGINT', () => {})
       process.on('SIGTERM', () => {})
       setInterval(() => {}, 1000)
       return
     }
-    // FAKE_GIT_WORKTREE_ADD_WAIT_FILE (F8): se queda DENTRO del `worktree
-    // add` hasta que el test cree el fichero centinela, y entonces continúa
-    // con éxito. Es el sustituto sin reloj de FAKE_GIT_WORKTREE_ADD_DELAY_MS
-    // para los tests que necesitan mandar una señal "mientras `git worktree
-    // add` está corriendo": el argv ya se registró en FAKE_GIT_LOG_FILE
-    // arriba (síncrono), así que el test detecta por fichero que estamos
-    // aquí dentro y suelta la señal sin ninguna prisa. A diferencia de
-    // FAKE_GIT_WORKTREE_ADD_HANG (que no vuelve NUNCA, para ejercer el
-    // timeout), este SÍ vuelve — y con éxito — en cuanto se le suelta.
-    // Ver __tests__/fixtures/stub-wait.js.
+    // FAKE_GIT_WORKTREE_ADD_WAIT_FILE (F8): it stays INSIDE the `worktree add`
+    // until the test creates the sentinel file, and then carries on
+    // successfully. It is the clock-free substitute for
+    // FAKE_GIT_WORKTREE_ADD_DELAY_MS for the tests that need to send a signal
+    // "while `git worktree add` is running": the argv was already recorded in
+    // FAKE_GIT_LOG_FILE above (synchronously), so the test detects by file
+    // that we are in here and releases the signal with no hurry at all. Unlike
+    // FAKE_GIT_WORKTREE_ADD_HANG (which NEVER returns, in order to exercise
+    // the timeout), this one DOES return — and successfully — as soon as it is
+    // released. See __tests__/fixtures/stub-wait.js.
     waitForReleaseFile('FAKE_GIT_WORKTREE_ADD_WAIT_FILE')
-    // FAKE_GIT_WORKTREE_ADD_DELAY_MS: ensancha DETERMINÍSTICAMENTE la
-    // ventana de tiempo real entre "claim confirmado" y "worktree add
-    // completo" — necesario para probar el checkpoint de finding 1 A VALOR
-    // DE PRODUCCIÓN (CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS sin fijar, 0):
-    // verificado por construcción que, sin ningún retraso en absoluto, la
-    // tubería entera (stubs de gh/git/cmux, todos procesos node reales pero
-    // triviales) puede completarse en unos pocos milisegundos — más rápido
-    // de lo que tarda el propio test en reaccionar al evento 'data' de
-    // "claimed #N" y despachar la señal, dando un ~20% de falsos "no
-    // interrumpido a tiempo" que no tienen nada que ver con el propio
-    // checkpoint (el proceso hijo terminaba entero antes de que la señal
-    // llegara a procesarse en absoluto). Retrasar aquí (síncrono, en el
-    // HIJO, simulando la latencia real de un `git worktree add` de verdad)
-    // le da al test margen de sobra sin tocar el valor de
-    // CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS que se está verificando.
+    // FAKE_GIT_WORKTREE_ADD_DELAY_MS: DETERMINISTICALLY widens the real-time
+    // window between "claim confirmed" and "worktree add complete" — needed to
+    // test finding 1's checkpoint AT ITS PRODUCTION VALUE
+    // (CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS unset, 0): verified by construction
+    // that, with no delay whatsoever, the whole pipeline (the gh/git/cmux
+    // stubs, all of them real but trivial node processes) can complete in a
+    // few milliseconds — faster than the test itself takes to react to the
+    // 'data' event of "claimed #N" and dispatch the signal, giving a ~20% rate
+    // of false "not interrupted in time" that have nothing to do with the
+    // checkpoint itself (the child process finished entirely before the signal
+    // got processed at all). Delaying here (synchronously, in the CHILD,
+    // simulating the real latency of an actual `git worktree add`) gives the
+    // test plenty of margin without touching the value of
+    // CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS that is being verified.
     if (process.env.FAKE_GIT_WORKTREE_ADD_DELAY_MS) {
       const sab = new Int32Array(new SharedArrayBuffer(4))
       Atomics.wait(sab, 0, 0, Number(process.env.FAKE_GIT_WORKTREE_ADD_DELAY_MS))
@@ -220,39 +220,41 @@ function main() {
       console.error('fake-git: worktree add failed (simulado)')
       process.exit(1)
     }
-    // FAKE_GIT_WORKTREE_ADD_AS_FILE (D4): crea la ruta del worktree como un
-    // FICHERO en vez de como un directorio, para que el `mkdirSync(
-    // `${wt}/.agent`)` posterior de ct-next.mjs falle con ENOTDIR de forma
-    // determinista y sin depender de permisos. Sustituye al truco anterior
-    // de los tests (pre-crear `.worktrees/<n>` como fichero ANTES de correr
-    // ct-next.mjs), que dejó de servir cuando ct-next.mjs pasó a comprobar
-    // que el destino esté libre ANTES de reclamar (D4, defecto 3): con esa
-    // comprobación, el pre-creado ya no llega nunca al paso del seed — se
-    // detecta antes, que es justo el arreglo. Crearlo DURANTE el `worktree
-    // add` reproduce el mismo fallo del seed sin desactivar la comprobación
-    // nueva: el destino estaba libre cuando se miró, y algo salió mal
-    // después. `-b <branch> <wt> <base>` → argv[3] es la ruta del worktree.
+    // FAKE_GIT_WORKTREE_ADD_AS_FILE (D4): creates the worktree's path as a
+    // FILE instead of as a directory, so that ct-next.mjs's later
+    // `mkdirSync(`${wt}/.agent`)` fails with ENOTDIR deterministically and
+    // without depending on permissions. It replaces the tests' earlier trick
+    // (pre-creating `.worktrees/<n>` as a file BEFORE running ct-next.mjs),
+    // which stopped serving when ct-next.mjs started checking that the
+    // destination is free BEFORE claiming (D4, defect 3): with that check, the
+    // pre-created one never reaches the seeding step any more — it is detected
+    // earlier, which is exactly the fix. Creating it DURING the `worktree add`
+    // reproduces the same seeding failure without disabling the new check: the
+    // destination was free when it was looked at, and something went wrong
+    // afterwards. `-b <branch> <wt> <base>` → argv[3] is the worktree's path.
     if (process.env.FAKE_GIT_WORKTREE_ADD_AS_FILE) {
       const wt = argv[argv.indexOf('-b') + 2]
       mkdirSync(dirname(wt), { recursive: true })
       writeFileSync(wt, '')
       process.exit(0)
     }
-    // Éxito normal: el git real DEJA el worktree checkouteado en disco (el
-    // directorio existe, con HEAD apuntando a la rama nueva) — necesario a
-    // partir de slice 9(b), que hace `cwd: <wt>` para medir `HEAD^{commit}`
-    // ANTES de que ct-next.mjs cree `${wt}/.agent` (lo que hasta ahora era lo
-    // único que garantizaba que el directorio existiera bajo este stub). Sin
-    // este mkdir, ese rev-parse fallaría con ENOENT por un cwd inexistente —
-    // un artefacto del stub, no del git real que simula.
+    // Normal success: the real git LEAVES the worktree checked out on disk
+    // (the directory exists, with HEAD pointing at the new branch) — needed
+    // from slice 9(b) onwards, which does `cwd: <wt>` to measure
+    // `HEAD^{commit}` BEFORE ct-next.mjs creates `${wt}/.agent` (which until
+    // now was the only thing guaranteeing that the directory existed under
+    // this stub). Without this mkdir, that rev-parse would fail with ENOENT
+    // because of a non-existent cwd — an artefact of the stub, not of the real
+    // git it simulates.
     const wt = argv[argv.indexOf('-b') + 2]
     mkdirSync(wt, { recursive: true })
-    // FAKE_GIT_WORKTREE_ADD_AGENTS_MD (#96): el contenido del AGENTS.md que el
-    // checkout del worktree traería consigo. El git real deja ahí el árbol
-    // entero del repo; este stub solo materializa el fichero del que
-    // ct-next.mjs lee el comando de test del baseline (scripts/baseline.js),
-    // que es lo único del árbol que ese paso mira. Sin la variable no hay
-    // AGENTS.md, que es el caso "repo sin comando de test declarado".
+    // FAKE_GIT_WORKTREE_ADD_AGENTS_MD (#96): the content of the AGENTS.md that
+    // the worktree's checkout would bring along with it. The real git leaves
+    // the repo's whole tree there; this stub only materializes the file
+    // ct-next.mjs reads the baseline's test command from (scripts/baseline.js),
+    // which is the only part of the tree that step looks at. Without the
+    // variable there is no AGENTS.md, which is the "repo with no declared test
+    // command" case.
     if (process.env.FAKE_GIT_WORKTREE_ADD_AGENTS_MD) {
       writeFileSync(`${wt}/AGENTS.md`, process.env.FAKE_GIT_WORKTREE_ADD_AGENTS_MD)
     }
@@ -267,11 +269,11 @@ function main() {
     process.exit(0)
   }
 
-  // F20/H2: `git branch --list --format=%(refname:short) 'feat/*'` — la
-  // consulta con la que /ct-next descubre ramas de slices YA mergeados que
-  // siguen en el checkout. FAKE_GIT_BRANCH_LIST son los nombres (separados por
-  // comas); FAKE_GIT_BRANCH_LIST_FAIL simula la consulta rota, que NO se puede
-  // leer como "no hay ninguna rama".
+  // F20/H2: `git branch --list --format=%(refname:short) 'feat/*'` — the query
+  // with which /ct-next discovers branches of ALREADY merged slices that are
+  // still in the checkout. FAKE_GIT_BRANCH_LIST holds the names
+  // (comma-separated); FAKE_GIT_BRANCH_LIST_FAIL simulates the query broken,
+  // which must NOT be read as "there are no branches".
   if (argv[0] === 'branch' && argv.includes('--list')) {
     if (process.env.FAKE_GIT_BRANCH_LIST_FAIL) {
       console.error('fake-git: branch --list failed (simulado)')

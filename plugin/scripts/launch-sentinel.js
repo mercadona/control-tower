@@ -1,160 +1,163 @@
 // ============================================================================
-// F19/H1 — EL CENTINELA DE ARRANQUE: LA ÚNICA PRUEBA DE QUE EL COMANDO CORRIÓ.
+// F19/H1 — THE LAUNCH SENTINEL: THE ONLY PROOF THAT THE COMMAND RAN.
 //
-// EL HALLAZGO DE CAMPO (primer despacho real del loop contra producción).
-// `/ct-next --cap 1` salió con exit 0, dijo «lanzados 1/1» y añadió
-// «verificado: la sesión cmux está corriendo en ese directorio». El agente
-// NUNCA arrancó. Lo que había en la terminal de esa sesión:
+// THE FIELD FINDING (the loop's first real dispatch against production).
+// `/ct-next --cap 1` exited 0, said «lanzados 1/1» and added «verificado: la
+// sesión cmux está corriendo en ese directorio». The agent NEVER started. What
+// was in that session's terminal:
 //
 //     [oh-my-zsh] Would you like to update? [Y/n] laude --dangerously-skip-…
 //     zsh: command not found: laude
 //
-// El shell interactivo imprimió el prompt de actualización de oh-my-zsh
-// MIENTRAS llegaba el comando, su `read` de un solo carácter se comió la `c`,
-// y `claude` entró como `laude`. Quedó un shell inactivo, en el directorio
-// correcto, con el título correcto. Consecuencia medida: el issue quedó en
-// `status:in-progress` veinte minutos reclamado por nadie, reteniendo su
-// `area:` y el carril serializante `pbxproj` de todo el repo; cero commits en
-// la rama, cero PRs.
+// The interactive shell printed oh-my-zsh's update prompt WHILE the command
+// was arriving, its single-character `read` ate the `c`, and `claude` went in
+// as `laude`. What was left was an idle shell, in the right directory, with
+// the right title. Measured consequence: the issue sat at
+// `status:in-progress` for twenty minutes claimed by nobody, holding on to its
+// `area:` and the whole repo's serialising `pbxproj` lane; zero commits on the
+// branch, zero PRs.
 //
-// POR QUÉ LA VERIFICACIÓN ANTERIOR NO PODÍA VERLO. `verifyCmuxLaunch`
-// (ct-next.mjs) comprueba que EXISTE una sesión de cmux con el título pedido y
-// en el cwd pedido. Existía: la ventana la crea `cmux new-workspace`, que es
-// el mismo acto que envía el comando. Se estaba comprobando el CONTINENTE
-// —una ventana que el propio dispatcher acaba de abrir— en vez del CONTENIDO
-// —que el comando llegara a ejecutarse—. Es el mismo defecto que D5 arregló un
-// nivel más arriba (`launchedCount` contaba como éxito lo no verificado),
-// reaparecido un nivel más abajo. La segunda capa del engaño, que confundió
-// también a los humanos: el `.agent/STATE.md` del worktree aparecía MODIFICADO
-// y se leyó como «el agente está trabajando» — era la propia semilla del
-// dispatcher. Rastro de la herramienta tomado por prueba del efecto.
+// WHY THE PREVIOUS VERIFICATION COULD NOT SEE IT. `verifyCmuxLaunch`
+// (ct-next.mjs) checks that a cmux session EXISTS with the requested title and
+// in the requested cwd. It did exist: the window is created by `cmux
+// new-workspace`, which is the very same act that sends the command. What was
+// being checked was the CONTAINER —a window the dispatcher itself had just
+// opened— instead of the CONTENT —that the command got to run at all—. It is
+// the same defect D5 fixed one level up (`launchedCount` counted the
+// unverified as a success), reappearing one level down. The second layer of
+// the deception, the one that fooled the humans too: the worktree's
+// `.agent/STATE.md` showed up MODIFIED and was read as «the agent is working»
+// — it was the dispatcher's own seed. The tool's own trace taken as proof of
+// the effect.
 //
-// POR QUÉ OCURRE, con evidencia y no por suposición. El texto de ayuda que el
-// propio binario de cmux instalado en esta máquina lleva embebido dice, para
-// `new-workspace` (leído con `strings`, sin ejecutar cmux):
+// WHY IT HAPPENS, with evidence and not by supposition. The help text that the
+// cmux binary installed on this machine carries embedded says, for
+// `new-workspace` (read with `strings`, without running cmux):
 //
 //     --command <text>     Send text+Enter to the new workspace after creation
 //
-// `--command` NO es un exec: son PULSACIONES enviadas al pty recién creado.
-// Viajan hacia un shell de login interactivo cuyo arranque puede imprimir
-// prompts, pedir confirmaciones y consumir entrada. Cualquier `read` que corra
-// en el rc del usuario mientras el texto llega se come parte del comando —
-// exactamente lo observado. No hay ninguna forma de que el emisor sepa que eso
-// pasó: `new-workspace` ya devolvió 0 mucho antes.
+// `--command` is NOT an exec: they are KEYSTROKES sent to the freshly created
+// pty. They travel towards an interactive login shell whose start-up may print
+// prompts, ask for confirmations and consume input. Any `read` running in the
+// user's rc while the text arrives eats part of the command — exactly what was
+// observed. There is no way at all for the sender to know that happened:
+// `new-workspace` returned 0 long before.
 //
-// QUÉ SE HACE EN VEZ DE SUPONER. Dos cambios, y el reparto entre ellos es
-// deliberado:
+// WHAT IS DONE INSTEAD OF SUPPOSING. Two changes, and the split between them
+// is deliberate:
 //
-//  1. SE REDUCE LA SUPERFICIE. Lo que se teclea deja de ser la línea entera de
-//     `claude` con el kickoff completo dentro (varios KB de pulsaciones) y pasa
-//     a ser UNA línea corta que hace `source` de un script que este fichero
-//     genera. El kickoff viaja por disco, escrito por `writeFileSync`, donde
-//     ningún prompt puede morderlo. Esto no elimina la carrera con el rc — nada
-//     que se teclee puede — pero saca de la línea de fuego todo menos ~70
-//     caracteres.
+//  1. THE SURFACE IS REDUCED. What gets typed stops being the whole `claude`
+//     line with the full kickoff inside it (several KB of keystrokes) and
+//     becomes ONE short line that does a `source` of a script this file
+//     generates. The kickoff travels by disk, written by `writeFileSync`,
+//     where no prompt can bite it. This does not remove the race with the rc —
+//     nothing that gets typed can — but it takes everything but ~70 characters
+//     out of the line of fire.
 //
-//     NO se cambia a un shell no interactivo (`zsh -f -c`, `/bin/sh`), y es una
-//     decisión, no una omisión: `claude` puede ser un alias o una función
-//     definida en el rc del usuario (ct-next.mjs ya lo dice al buscarlo en el
-//     PATH), y un shell sin rc no la encontraría. `source` corre DENTRO del
-//     shell que cmux abrió, así que alias, funciones y PATH del usuario siguen
-//     valiendo exactamente igual que antes de este cambio.
+//     It does NOT switch to a non-interactive shell (`zsh -f -c`, `/bin/sh`),
+//     and that is a decision, not an omission: `claude` may be an alias or a
+//     function defined in the user's rc (ct-next.mjs already says so when it
+//     looks it up on the PATH), and a shell with no rc would not find it.
+//     `source` runs INSIDE the shell cmux opened, so the user's aliases,
+//     functions and PATH keep holding exactly as they did before this change.
 //
-//  2. SE OBSERVA UN EFECTO, NO UNA VENTANA. La PRIMERA cosa que hace el script
-//     es escribir un centinela: un fichero que solo puede existir si el
-//     comando corrió de verdad. Si la cabecera de la línea se corrompe (el
-//     caso vivido), el `source` no se ejecuta, el script no corre, y el
-//     centinela NO aparece. El centinela lleva además dos datos que no se
-//     pueden obtener desde fuera:
-//       - `$PWD` REAL del shell que va a lanzar al agente (no el que cmux dice
-//         que tiene la ventana);
-//       - si `claude` resuelve EN ESE shell (`command -v`), que es la única
-//         forma de saberlo: el PATH del proceso que corre ct-next.mjs no es el
-//         del shell de login que abre cmux, y hasta ahora eso solo se podía
-//         advertir como «no concluyente».
+//  2. AN EFFECT IS OBSERVED, NOT A WINDOW. The FIRST thing the script does is
+//     write a sentinel: a file that can only exist if the command really ran.
+//     If the head of the line gets corrupted (the case that was lived), the
+//     `source` does not run, the script does not run, and the sentinel does
+//     NOT appear. The sentinel also carries two data that cannot be obtained
+//     from outside:
+//       - the REAL `$PWD` of the shell that is going to launch the agent (not
+//         the one cmux says the window has);
+//       - whether `claude` resolves IN THAT shell (`command -v`), which is the
+//         only way to know: the PATH of the process running ct-next.mjs is not
+//         that of the login shell cmux opens, and until now that could only be
+//         warned about as «no concluyente».
 //
-// LO QUE ESTE CENTINELA NO PRUEBA, dicho aquí para que nadie lo lea de más: no
-// prueba que el agente esté haciendo algo útil, ni que siga vivo un minuto
-// después. Prueba que el comando se ejecutó, en qué directorio, y que el
-// binario existía. Es un salto de «hay una ventana abierta» a «la orden llegó
-// y se ejecutó», no un salto a «el trabajo está en marcha».
+// WHAT THIS SENTINEL DOES NOT PROVE, said here so that nobody reads more into
+// it: it does not prove the agent is doing anything useful, nor that it is
+// still alive a minute later. It proves the command ran, in which directory,
+// and that the binary existed. It is a jump from «there is a window open» to
+// «the order arrived and ran», not a jump to «the work is under way».
 //
-// Este fichero es lógica PURA (construir texto, parsear texto) a propósito: el
-// IO y la espera viven en ct-next.mjs, y así el formato del centinela se puede
-// atacar en un test unitario sin lanzar nada.
+// This file is PURE logic (build text, parse text) on purpose: the IO and the
+// waiting live in ct-next.mjs, and that way the sentinel's format can be
+// attacked in a unit test without launching anything.
 // ============================================================================
 
-// Magia y versión del formato. Van DENTRO del fichero y no implícitas en su
-// nombre porque el fichero lo escribe un shell ajeno: si algún día el script
-// cambia, un centinela viejo tirado en /tmp tiene que poder reconocerse como
-// viejo en vez de parsearse mal en silencio.
+// Magic and format version. They go INSIDE the file and are not implicit in
+// its name because the file is written by a foreign shell: if the script ever
+// changes, an old sentinel lying around in /tmp has to be able to recognise
+// itself as old instead of being mis-parsed in silence.
 export const SENTINEL_MAGIC = 'ct-next-launch'
 export const SENTINEL_FORMAT_VERSION = '1'
 
-// Nombres dentro del directorio de arranque de cada slice. Dos ficheros y no
-// uno: el script lo escribimos nosotros, el centinela lo escribe el shell —
-// confundirlos sería, otra vez, tomar el rastro propio por evidencia ajena.
+// Names inside each slice's start-up directory. Two files and not one: we
+// write the script, the shell writes the sentinel — confusing them would be,
+// once again, taking our own trace for somebody else's evidence.
 export const LAUNCHER_FILENAME = 'launch.sh'
 export const SENTINEL_FILENAME = 'started'
 
-// buildTypedCommand: lo ÚNICO que se teclea en el pty. `.` y no `source`:
-// `source` es un builtin de bash/zsh, `.` es POSIX y funciona en los dos —
-// y el shell de login del usuario puede ser cualquiera de ellos.
+// buildTypedCommand: the ONLY thing that gets typed into the pty. `.` and not
+// `source`: `source` is a bash/zsh builtin, `.` is POSIX and works in both —
+// and the user's login shell may be either of them.
 export function buildTypedCommand(launcherPath, shQuote) {
   return `. ${shQuote(launcherPath)}`
 }
 
-// buildLauncherScript: el script que se sourcea. El orden de las líneas ES el
-// diseño:
+// buildLauncherScript: the script that gets sourced. The order of the lines IS
+// the design:
 //
-//   1. resolver `claude` ANTES de escribir nada (si el centinela se escribiera
-//      primero, no podría llevar el dato);
-//   2. escribir el centinela — de una sola llamada a `printf`, no varias, para
-//      que no pueda quedar a medias;
-//   3. y solo entonces lanzar al agente.
+//   1. resolve `claude` BEFORE writing anything (if the sentinel were written
+//      first, it could not carry the datum);
+//   2. write the sentinel — in a single `printf` call, not several, so that it
+//      cannot be left half-written;
+//   3. and only then launch the agent.
 //
-// El centinela se escribe ANTES de `claude` a propósito: si se escribiera
-// después, solo aparecería cuando el agente TERMINARA, que es justo lo que no
-// se puede esperar. Lo que se está probando es que la orden se ejecutó, no que
-// el agente acabara.
+// The sentinel is written BEFORE `claude` on purpose: if it were written
+// afterwards, it would only appear once the agent FINISHED, which is precisely
+// what cannot be waited for. What is being proven is that the order ran, not
+// that the agent got to the end.
 //
-// `$PWD` va el ÚLTIMO campo porque es el único que puede contener un tabulador
-// (una ruta patológica, pero posible): así el parser puede reunir todo lo que
-// venga detrás del tercer tabulador sin partirlo.
+// `$PWD` is the LAST field because it is the only one that can contain a tab
+// (a pathological path, but a possible one): that way the parser can gather
+// everything that comes after the third tab without splitting it.
 //
 // ===========================================================================
-// F20/H1 — LA GUARDA DE IDEMPOTENCIA, Y POR QUÉ ES LA PIEZA QUE SOSTIENE TODO
-// LO DEMÁS.
+// F20/H1 — THE IDEMPOTENCE GUARD, AND WHY IT IS THE PIECE THAT HOLDS UP
+// EVERYTHING ELSE.
 //
-// F20 midió, contra el cmux instalado en esta máquina, lo que F19 solo pudo
-// razonar: `--command` teclea, `--layout` con una superficie `command`
-// TAMBIÉN teclea (medido: el texto sale ECOADO en el prompt de la propia
-// sesión, y el proceso cuelga de un `-/bin/zsh` de login; y además `--cwd` se
-// ignora en ese modo), y no existe ninguna vía de exec en esa versión. O sea:
-// el tecleo no se puede quitar, así que hay que poder REPETIRLO.
+// F20 measured, against the cmux installed on this machine, what F19 could
+// only reason about: `--command` types, `--layout` with a `command` surface
+// ALSO types (measured: the text comes out ECHOED in that very session's
+// prompt, and the process hangs off a login `-/bin/zsh`; and on top of that
+// `--cwd` is ignored in that mode), and there is no exec route at all in that
+// version. Which is to say: the typing cannot be taken away, so it has to be
+// possible to REPEAT it.
 //
-// Repetir el tecleo sin una guarda sería peor que el problema: dos líneas que
-// SÍ lleguen arrancan DOS agentes sobre el mismo worktree. La guarda hace que
-// el segundo sourceo sea un no-op observable — y puede hacerlo porque el
-// centinela se escribe ANTES de lanzar al agente: si existe, el agente ya
-// arrancó (o está arrancando) y no hay nada que repetir.
+// Repeating the typing without a guard would be worse than the problem: two
+// lines that DO arrive start TWO agents on the same worktree. The guard makes
+// the second sourcing an observable no-op — and it can, because the sentinel
+// is written BEFORE launching the agent: if it exists, the agent already
+// started (or is starting) and there is nothing to repeat.
 //
-// El caso que esto cubre de verdad, y que se reprodujo en el laboratorio: el
-// primer tecleo llega tarde (shell lento) y el dispatcher ya ha reenviado la
-// línea. Las dos llegan. Sin guarda: dos `claude`. Con guarda: uno.
+// The case this really covers, and which was reproduced in the laboratory: the
+// first typing arrives late (a slow shell) and the dispatcher has already
+// resent the line. Both arrive. Without a guard: two `claude`. With a guard:
+// one.
 //
-// `[ -e ]` y no `[ -f ]`: lo que importa es que la ruta esté ocupada, no de
-// qué tipo es. Un `-f` dejaría pasar el relanzamiento si alguien pusiera ahí
-// un directorio o un symlink roto.
+// `[ -e ]` and not `[ -f ]`: what matters is that the path is occupied, not
+// what type it is. A `-f` would let the relaunch through if somebody put a
+// directory or a broken symlink there.
 // ===========================================================================
 //
-// F29 — `agentBin` NO es cosmético, y por eso es obligatorio en vez de tener
-// un defecto: es lo que se comprueba con `command -v`, y ese dato decide, allá
-// arriba en ct-next.mjs, si el worktree y el claim se DESHACEN (`no-claude` →
-// cleanupOrphanedWorktree). Comprobar `claude` mientras se teclea
-// `claude-personal` daría el veredicto sobre el binario equivocado en las dos
-// direcciones: un `ok` que precede a un «command not found», o un borrado de
-// worktree por un binario que no era el que se iba a usar.
+// F29 — `agentBin` is NOT cosmetic, and that is why it is mandatory instead of
+// having a default: it is what gets checked with `command -v`, and that datum
+// decides, up there in ct-next.mjs, whether the worktree and the claim are
+// UNDONE (`no-claude` → cleanupOrphanedWorktree). Checking `claude` while what
+// gets typed is `claude-personal` would give the verdict on the wrong binary
+// in both directions: an `ok` that precedes a «command not found», or a
+// worktree deleted over a binary that was not the one about to be used.
 export function buildLauncherScript({ sentinelPath, agentCommand, agentBin, issue, worktree }, shQuote) {
   const q = shQuote
   if (!agentBin) throw new Error('buildLauncherScript: falta agentBin — es el nombre que se comprueba con `command -v` dentro del shell de login, y de su resultado depende que ct-next.mjs deshaga o no el worktree y el claim')
@@ -182,11 +185,11 @@ fi
 `
 }
 
-// parseSentinel: `null` si el contenido no es un centinela de este formato
-// (fichero a medio escribir, versión futura, basura) — nunca se adivina. Un
-// centinela ilegible NO es un centinela ausente y quien llama tiene que poder
-// distinguirlo, así que el `null` viaja acompañado del texto crudo desde
-// ct-next.mjs.
+// parseSentinel: `null` if the content is not a sentinel of this format (a
+// half-written file, a future version, garbage) — it is never guessed. An
+// unreadable sentinel is NOT an absent sentinel and the caller has to be able
+// to tell the two apart, so the `null` travels accompanied by the raw text
+// from ct-next.mjs.
 export function parseSentinel(text) {
   const line = String(text ?? '').split('\n').find((l) => l.trim().length > 0)
   if (!line) return null
@@ -196,22 +199,22 @@ export function parseSentinel(text) {
   if (magic !== SENTINEL_MAGIC) return null
   if (version !== SENTINEL_FORMAT_VERSION) return null
   if (claude !== 'ok' && claude !== 'missing') return null
-  // El resto (pueda llevar tabuladores o no) es la ruta.
+  // The rest (whether it carries tabs or not) is the path.
   const cwd = parts.slice(3).join('\t')
   if (!cwd) return null
   return { version, claudeResolved: claude === 'ok', cwd }
 }
 
-// sameDir: comparación de directorios TOLERANTE a symlinks, y el porqué
-// importa: en macOS `/tmp` es un symlink a `/private/tmp` y `$TMPDIR` cuelga
-// de `/var/folders/…` (que es `/private/var/folders/…`). El shell fija `$PWD`
-// con la ruta LÓGICA por la que entró, así que comparar cadenas a secas
-// declararía «directorio equivocado» en despachos perfectamente correctos —
-// exactamente la falsa alarma que D5 arregló para el campo `current_directory`
-// de cmux, y que no vamos a reintroducir por la puerta de al lado.
+// sameDir: a directory comparison TOLERANT of symlinks, and why that matters:
+// on macOS `/tmp` is a symlink to `/private/tmp` and `$TMPDIR` hangs off
+// `/var/folders/…` (which is `/private/var/folders/…`). The shell sets `$PWD`
+// to the LOGICAL path it came in by, so comparing plain strings would declare
+// «directorio equivocado» on perfectly correct dispatches — exactly the false
+// alarm D5 fixed for cmux's `current_directory` field, and one we are not
+// going to reintroduce through the side door.
 //
-// `realpathOf` se inyecta (en vez de importar `node:fs` aquí) para que este
-// fichero siga siendo puro y testeable sin disco.
+// `realpathOf` is injected (instead of importing `node:fs` here) so that this
+// file stays pure and testable without disk.
 export function sameDir(a, b, realpathOf) {
   if (a === b) return true
   if (!a || !b) return false

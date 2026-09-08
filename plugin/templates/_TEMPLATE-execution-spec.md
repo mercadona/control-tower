@@ -1,4 +1,4 @@
-# <Nombre del epic> — Execution spec
+# <Epic name> — Execution spec
 
 **Handoff origen:** `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
 **Fecha de congelación:** —
@@ -6,97 +6,99 @@
 
 ## Hipótesis del experimento
 
-**Apuesta:** <qué creemos que va a pasar si construimos esto, falsable y
-medible — sin apuesta no hay epic y el groom rechaza el spec>.
+**The bet:** <what we believe will happen if we build this, falsifiable and
+measurable — with no bet there is no epic and the groom rejects the spec>.
 
-**Cómo sabremos que falló:** <la condición observable que tumba la apuesta>.
+**How we will know it failed:** <the observable condition that knocks the bet
+down>.
 
-**Anti-scope — qué NO hace este epic:** <lista explícita de lo que queda
-fuera, para que ningún agente lo "regale">.
+**Anti-scope — what this epic does NOT do:** <an explicit list of what stays
+out, so that no agent "throws it in">.
 
 ## Decisiones congeladas
 
-<!-- Cada decisión lleva ID (D-1, D-2…) y su procedencia:
-     - hablada: el usuario lo dijo — citar su frase literal cuando se pueda
-     - deducida: se sigue de algo hablado — decir de qué
-     - propuesta: idea del redactor — una propuesta NUNCA se congela: se
-       pregunta al usuario o se aparca en «Decisiones aparcadas»
+<!-- Every decision carries an ID (D-1, D-2…) and its provenance:
+     - hablada: the user said it — quote their literal phrase where possible
+     - deducida: it follows from something spoken — say from what
+     - propuesta: the writer's idea — a propuesta is NEVER frozen: you ask the
+       user, or you park it under «Decisiones aparcadas»
 
-     Los huecos NO se rellenan a ojo: se marcan con el marcador de
-     clarificación, que es la palabra NEEDS CLARIFICATION entre corchetes
-     (corchete de apertura pegado a la N). Aquí no se escribe literal a
-     propósito: `/ct-groom` lo busca por grep en TODO el fichero, comentarios
-     incluidos y sin excepción (`analyzeSpecFreeze`, scripts/groom.js), así
-     que un ejemplo literal en esta plantilla tumbaría con exit 2 el groom de
-     cualquier spec que la copie sin borrar este bloque.
+     Gaps are NOT filled in by eye: they are flagged with the clarification
+     marker, which is the words NEEDS CLARIFICATION inside square brackets
+     (opening bracket flush against the N). It is deliberately not written
+     literally here: `/ct-groom` looks for it by grep over the WHOLE file,
+     comments included and with no exception (`analyzeSpecFreeze`,
+     scripts/groom.js), so a literal example in this template would knock down
+     with exit 2 the groom of any spec that copied it without deleting this
+     block.
 
-     Congelar con un marcador pendiente es inválido (exit 2). -->
+     Freezing with a pending marker is invalid (exit 2). -->
 
-- **D-1 · <Tema>** — <la decisión, en una o dos frases>. *(Procedencia:
-  hablada — «<cita literal>».)*
-- **D-2 · <Tema>** — <la decisión>. *(Procedencia: deducida de D-1.)*
+- **D-1 · <Topic>** — <the decision, in one or two sentences>. *(Procedencia:
+  hablada — «<literal quote>».)*
+- **D-2 · <Topic>** — <the decision>. *(Procedencia: deducida de D-1.)*
 
 ## Enfoque técnico
 
-<Párrafo(s) breves: el orden de construcción, qué módulo es el corazón, qué
-áreas hay y por qué los slices se serializan o no. No es el plan — es el
-racional que el plan de cada slice necesita y no puede deducir.>
+<Short paragraph(s): the build order, which module is the heart, which areas
+there are and why the slices serialize or not. This is not the plan — it is the
+rationale that each slice's plan needs and cannot deduce.>
 
-<!-- INSTRUCCIONES DE «Contexto del epic» — a propósito FUERA de la sección.
-     Todo lo que quede DENTRO de esa sección se copia, byte a byte, al cuerpo
-     de todos los issues del epic: un comentario multilínea puesto ahí dentro
-     NO se descarta, viaja verbatim a los N issues (verificado con
-     `readEpicContext`). Por eso estas instrucciones viven aquí arriba.
+<!-- INSTRUCTIONS FOR «Contexto del epic» — deliberately OUTSIDE the section.
+     Everything left INSIDE that section is copied, byte by byte, into the body
+     of every issue of the epic: a multi-line comment placed in there is NOT
+     discarded, it travels verbatim to the N issues (verified with
+     `readEpicContext`). That is why these instructions live up here.
 
-     Reglas duras del groom para el contenido de esa sección:
-     - solo bullets, negritas y vallas de código BIEN CERRADAS
-     - nada de cabeceras ### o inferiores dentro (truncan la sección)
-     - nada de comentarios HTML de una sola línea (truncan la sección)
-     - ninguna valla ni comentario sin cerrar (se traga el resto del spec,
-       la tabla de slices incluida)
-     Contenido típico: stack, convenciones del repo, reglas de cálculo,
-     invariantes que TODO slice debe respetar. -->
+     The groom's hard rules for the content of that section:
+     - bullets, bold text and PROPERLY CLOSED code fences only
+     - no ### headings or lower inside (they truncate the section)
+     - no single-line HTML comments (they truncate the section)
+     - no unclosed fence or comment (it swallows the rest of the spec, the
+       slices table included)
+     Typical content: stack, repo conventions, calculation rules, invariants
+     that EVERY slice must respect. -->
 
 ## Contexto del epic
 
-- Stack: <lenguaje, frameworks, versiones>.
-- <Invariante transversal 1>.
-- <Invariante transversal 2>.
+- Stack: <language, frameworks, versions>.
+- <Cross-cutting invariant 1>.
+- <Cross-cutting invariant 2>.
 
 ## Tabla de slices
 
-<!-- EL CONTRATO COMPLETO DE ESTA TABLA está en `docs/superpowers/CONTRATO-SLICES.md`
-     de este mismo repo (lo siembra y lo versiona /ct-init): qué columnas lee
-     /ct-groom, qué genera cada una, qué aborta y qué hace /ct-next con lo que
-     escribas aquí. Léelo antes de rellenar la tabla — el resumen de abajo es
-     un recordatorio de las trampas, no el contrato.
+<!-- THE FULL CONTRACT OF THIS TABLE lives in `docs/superpowers/CONTRATO-SLICES.md`
+     in this very repo (/ct-init seeds it and versions it): which columns
+     /ct-groom reads, what each one generates, what aborts and what /ct-next
+     does with whatever you write here. Read it before filling in the table —
+     the summary below is a reminder of the traps, not the contract.
 
-     Contrato de la tabla v18 (la valida /ct-groom, exit != 0 si falla):
-     - Título del issue = "#N <Slice>": corto y legible, no una frase.
-     - Tipo: ui | backend | infra | bugfix (decide el addendum del agente;
-       ui implica gate visual, infra implica gate apply).
-     - Dep: "#N" es el ORDEN del slice en esta tabla, no un número de issue.
-     - Acepta: la coma separa criterios SIEMPRE; una coma literal dentro de
-       un criterio se escapa como \,
-     - Protegido: texto libre, lo que el slice NO puede tocar.
-     - Área/Toca: tokens separados por coma; controlan colisión y
-       serialización entre slices (migration, ci y pbxproj serializan).
-     - Gate: solo para desviarse del default del Tipo — añadir (visual,
-       apply) o renunciar (!visual). Vacío o – = sin declaración.
-     - "Sin valor" = – (cualquier variante de guion) o celda vacía. -->
+     Table contract v18 (/ct-groom validates it, exit != 0 if it fails):
+     - Issue title = "#N <Slice>": short and readable, not a sentence.
+     - Tipo: ui | backend | infra | bugfix (it decides the agent's addendum;
+       ui implies a visual gate, infra implies an apply gate).
+     - Dep: "#N" is the slice's ORDER in this table, not an issue number.
+     - Acepta: the comma ALWAYS separates criteria; a literal comma inside a
+       criterion is escaped as \,
+     - Protegido: free text, what the slice may NOT touch.
+     - Área/Toca: comma-separated tokens; they drive collision and
+       serialization between slices (migration, ci and pbxproj serialize).
+     - Gate: only to deviate from the Tipo's default — add (visual, apply) or
+       waive (!visual). Empty or – = no declaration.
+     - "No value" = – (any dash variant) or an empty cell. -->
 
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca | Gate |
 |---|-------|------|---------|-----|--------|-----------|------|------|------|
-| 1 | <nombre corto> | backend | <qué entrega, una frase> | – | <criterio 1>, <criterio 2> | <qué no toca> | <área> | – | – |
-| 2 | <nombre corto> | backend | <qué entrega> | #1 | <criterios> | – | <área> | – | – |
+| 1 | <short name> | backend | <what it delivers, one sentence> | – | <criterion 1>, <criterion 2> | <what it does not touch> | <area> | – | – |
+| 2 | <short name> | backend | <what it delivers> | #1 | <criteria> | – | <area> | – | – |
 
 ## Decisiones aparcadas (BLOCKED)
 
 | ID | Fila | Qué falta decidir | Opciones vistas | Estado |
 |----|------|-------------------|-----------------|--------|
 
-*(Vacía al congelar es válido. Aquí van las «propuesta» sin resolver y el
-futuro descartado explícitamente, por si se retoma.)*
+*(Empty at freeze time is valid. This is where the unresolved «propuesta» go,
+along with the future explicitly discarded, in case it is picked up again.)*
 
 ## Registro de cierre (evidencia)
 

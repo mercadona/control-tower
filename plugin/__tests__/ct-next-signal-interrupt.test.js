@@ -1,29 +1,27 @@
-// Finding 1 (auditoría de interrupción/staleness sobre el dispatcher):
-// ct-next.mjs no tenía NI UN SOLO manejador de señal. La reproducción del
-// auditor — dispatch-check real que escribe el claim y sale 0, un `git` fake
-// colgado en `worktree add`, SIGINT a los 3s — dejaba el issue reclamado
-// (status:in-progress) PARA SIEMPRE: sin revert, sin worktree, sin agente,
-// sin ni un mensaje, solo EXIT=130.
+// Finding 1 (interruption/staleness audit of the dispatcher): ct-next.mjs did
+// not have A SINGLE signal handler. The auditor's reproduction — a real
+// dispatch-check that writes the claim and exits 0, a fake `git` hung on
+// `worktree add`, SIGINT at 3s — left the issue claimed (status:in-progress)
+// FOREVER: no revert, no worktree, no agent, not even a message, only EXIT=130.
 //
-// Estos tests cubren las DOS defensas del fix (ver el bloque de comentarios
-// grande en ct-next.mjs, justo tras la comprobación de dispatchCheckPath):
-//   1. Un checkpoint de cesión real (`await sleep(...)`) justo después de
-//      confirmar el claim y antes de crear el worktree — la ventana exacta
-//      que describe el hallazgo — y otro antes de arrancar un claim nuevo
-//      (idle entre dos slices de la misma tanda).
-//   2. Una cota de tiempo en toda llamada bloqueante a un subproceso
-//      (dispatch-check.mjs, `git worktree add/remove`, `git branch -D`,
-//      `gh()`), para el caso en que la señal NUNCA llega a JS porque el hijo
-//      está genuinamente atascado (verificado por construcción: un
-//      manejador de señal de JS no puede interrumpir una llamada síncrona
-//      bloqueada — ver el informe de esta tarea para el experimento).
+// These tests cover the TWO defences of the fix (see the big comment block in
+// ct-next.mjs, right after the dispatchCheckPath check):
+//   1. A real yielding checkpoint (`await sleep(...)`) right after confirming
+//      the claim and before creating the worktree — the exact window the
+//      finding describes — and another one before starting a fresh claim (idle
+//      between two slices of the same batch).
+//   2. A time cap on every blocking call to a subprocess (dispatch-check.mjs,
+//      `git worktree add/remove`, `git branch -D`, `gh()`), for the case in
+//      which the signal NEVER reaches JS because the child is genuinely stuck
+//      (verified by construction: a JS signal handler cannot interrupt a
+//      blocked synchronous call — see this task's report for the experiment).
 import { describe, it, expect, afterEach } from 'vitest'
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-// D4: entorno hermético (dirs de cuenta + stubs de cmux/claude) — ver fixtures/hermetic-env.js
+// D4: hermetic environment (account dirs + cmux/claude stubs) — see fixtures/hermetic-env.js
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'ct-next.mjs')
@@ -52,33 +50,32 @@ function runInterruptible(args, envOverrides) {
 }
 
 // ===========================================================================
-// F8 — POR QUÉ ESTOS TESTS YA NO USAN UNA VENTANA DE TIEMPO.
+// F8 — WHY THESE TESTS NO LONGER USE A TIME WINDOW.
 //
-// El montaje anterior era: ensanchar con CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS la
-// ventana del checkpoint (2000-3000 ms), escuchar el stdout del hijo hasta ver
-// un marcador ("claimed #77") y mandar la señal en ese momento. El comentario
-// original decía que eso "evita cualquier sleep arbitrario", y es verdad a
-// medias: el ENVÍO va atado al progreso observable, sí — pero la señal sigue
-// teniendo que LLEGAR dentro de una ventana de N milisegundos que se cierra
-// sola. Quien tiene que llegar a tiempo es este proceso de vitest, que compite
-// por CPU con el resto de la suite. Con la máquina ociosa 2000 ms parecen
-// infinitos; con carga, este proceso puede no ser planificado en varios
-// segundos y la ventana se cierra antes de que el evento 'data' se procese
-// siquiera.
+// The previous setup was: widen the checkpoint window with
+// CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS (2000-3000 ms), listen to the child's
+// stdout until a marker showed up ("claimed #77") and send the signal at that
+// moment. The original comment said that this "avoids any arbitrary sleep", and
+// that is half true: the SENDING is tied to observable progress, yes — but the
+// signal still has to ARRIVE inside a window of N milliseconds that closes on
+// its own. The one who has to arrive in time is this vitest process, which
+// competes for CPU with the rest of the suite. On an idle machine 2000 ms look
+// infinite; under load, this process may not be scheduled for several seconds
+// and the window closes before the 'data' event is even processed.
 //
-// El montaje nuevo invierte quién espera a quién. Los stubs (`gh issue edit`,
-// `cmux new-workspace`) se PARAN dentro de la llamada y no vuelven hasta que
-// este test cree un fichero centinela — ver __tests__/fixtures/stub-wait.js.
-// Como ct-next.mjs está bloqueado en un `execFileSync` mientras tanto, la
-// señal queda PENDIENTE a nivel de kernel y no se procesa hasta que la
-// llamada vuelve y el bucle llega a su checkpoint: exactamente el punto que
-// estos tests quieren ejercitar, y ahora sin ninguna carrera. Da igual lo
-// cargada que esté la máquina: el proceso bajo prueba espera.
+// The new setup inverts who waits for whom. The stubs (`gh issue edit`, `cmux
+// new-workspace`) STOP inside the call and do not return until this test
+// creates a sentinel file — see __tests__/fixtures/stub-wait.js. Since
+// ct-next.mjs is blocked in an `execFileSync` meanwhile, the signal stays
+// PENDING at kernel level and is not processed until the call returns and the
+// loop reaches its checkpoint: exactly the point these tests want to exercise,
+// and now with no race at all. It makes no difference how loaded the machine
+// is: the process under test waits.
 // ===========================================================================
 
-// waitForFileMatch: espera a que `path` exista y su contenido case con `re`.
-// Es el detector de "el proceso bajo prueba ya está DENTRO de la llamada que
-// nos interesa" — los stubs registran su argv (síncrono) ANTES de pararse.
+// waitForFileMatch: waits for `path` to exist and its content to match `re`. It
+// is the detector for "the process under test is already INSIDE the call we
+// care about" — the stubs record their argv (synchronously) BEFORE stopping.
 function waitForFileMatch(path, re) {
   return new Promise((resolve) => {
     const t = setInterval(() => {
@@ -89,10 +86,10 @@ function waitForFileMatch(path, re) {
     }, 5)
   })
 }
-// release: suelta al stub parado. Se llama SIEMPRE DESPUÉS de child.kill(),
-// que es síncrono a nivel de syscall: cuando vuelve, la señal ya está
-// pendiente para el proceso destino, así que soltar aquí no puede adelantar
-// al despacho de la señal.
+// release: lets the stopped stub go. It is ALWAYS called AFTER child.kill(),
+// which is synchronous at syscall level: when it returns, the signal is already
+// pending for the target process, so releasing here cannot overtake the
+// dispatch of the signal.
 const release = (path) => writeFileSync(path, '')
 
 function collectOutput(child) {
@@ -111,15 +108,15 @@ function runRealSync(args, envOverrides) {
 
 const openIssue77 = { number: 77, title: '#77 algo', labels: [{ name: 'status:ready' }], body: '' }
 
-describe('ct-next — SIGINT tras un claim confirmado pero antes de crear el worktree (finding 1)', () => {
-  // Montaje común de los dos primeros tests (SIGINT y SIGTERM): la señal se
-  // manda mientras ct-next.mjs está BLOQUEADO dentro del `execFileSync` de
-  // dispatch-check.mjs, que a su vez está parado dentro de su `gh issue edit`
-  // (el claim). Al estar bloqueado, ct-next no puede procesar la señal: queda
-  // pendiente. Cuando soltamos el stub, dispatch-check termina, ct-next marca
-  // `activeClaim` (síncrono, sin ningún `await` de por medio) y el PRIMER
-  // punto en el que cede el control es el checkpoint post-claim — la ventana
-  // exacta de finding 1, alcanzada por construcción y no por temporización.
+describe('ct-next — SIGINT after a confirmed claim but before creating the worktree (finding 1)', () => {
+  // Setup shared by the first two tests (SIGINT and SIGTERM): the signal is
+  // sent while ct-next.mjs is BLOCKED inside the `execFileSync` of
+  // dispatch-check.mjs, which in turn is stopped inside its `gh issue edit`
+  // (the claim). Being blocked, ct-next cannot process the signal: it stays
+  // pending. When we release the stub, dispatch-check finishes, ct-next marks
+  // `activeClaim` (synchronously, with no `await` in between) and the FIRST
+  // point at which it yields control is the post-claim checkpoint — the exact
+  // window of finding 1, reached by construction and not by timing.
   async function signalDuringClaimWindow(repoRoot, signal) {
     const gitLog = join(repoRoot, 'git-log')
     const argvLog = join(repoRoot, 'gh-argv-log')
@@ -141,11 +138,11 @@ describe('ct-next — SIGINT tras un claim confirmado pero antes de crear el wor
     return { code, sig, out: state.out, gitLog, argvLog }
   }
 
-  it('revierte el claim automáticamente, no crea worktree, y sale con 130', async () => {
+  it('reverts the claim automatically, creates no worktree, and exits with 130', async () => {
     const repoRoot = makeRepoRoot()
     const { code, sig, out, gitLog, argvLog } = await signalDuringClaimWindow(repoRoot, 'SIGINT')
 
-    expect(sig).toBeNull() // terminó por su propio process.exit(), no matado por el SO
+    expect(sig).toBeNull() // it ended through its own process.exit(), not killed by the OS
     expect(code).toBe(130)
     expect(out).toMatch(/SIGINT recibido/)
     expect(out).toMatch(/revertido automáticamente a status:ready/)
@@ -158,7 +155,7 @@ describe('ct-next — SIGINT tras un claim confirmado pero antes de crear el wor
     expect(gitLogTxt).not.toMatch(/worktree add/)
   })
 
-  it('lo mismo con SIGTERM: revierte y sale con 143', async () => {
+  it('the same with SIGTERM: it reverts and exits with 143', async () => {
     const repoRoot = makeRepoRoot()
     const { code, sig, out, gitLog } = await signalDuringClaimWindow(repoRoot, 'SIGTERM')
 
@@ -170,23 +167,22 @@ describe('ct-next — SIGINT tras un claim confirmado pero antes de crear el wor
     expect(gitLogTxt).not.toMatch(/worktree add/)
   })
 
-  it('varias señales de más no reintentan el revert ni cuelgan el proceso (invariante de seguridad bajo señales repetidas)', async () => {
-    // OJO — nota sobre por qué esta prueba verifica un INVARIANTE, no el
-    // mensaje exacto de "recibido de nuevo...": las señales POSIX no-realtime
-    // como SIGINT no se encolan — solo puede haber UNA pendiente de procesar
-    // a la vez para un proceso. Si una segunda señal llega mientras la
-    // primera todavía no se ha "drenado" a nivel de kernel/libuv, el SO
-    // puede fusionarla con la ya pendiente en vez de entregarla como una
-    // segunda invocación distinta del manejador — esto se observó
-    // directamente al escribir esta prueba (bajo carga, con la suite
-    // completa corriendo en paralelo, la ruta "recibido de nuevo" no
-    // siempre se alcanzaba, aun con las mismas señales enviadas en la misma
-    // secuencia). Ninguna cantidad de espera artificial por nuestra parte
-    // cierra esa ventana — depende del scheduler del SO, no de este script.
-    // Lo que SÍ es una garantía real y comprobable: pase lo que pase con
-    // esa carrera, el proceso NUNCA hace un revert doble, NUNCA cuelga, y
-    // SIEMPRE sale con un código de señal reconocido. Eso es lo que se
-    // verifica aquí — un burst de señales, no solo dos.
+  it('several extra signals neither retry the revert nor hang the process (safety invariant under repeated signals)', async () => {
+    // CAREFUL — a note on why this test verifies an INVARIANT and not the exact
+    // "recibido de nuevo..." message: non-realtime POSIX signals such as SIGINT
+    // are not queued — there can only be ONE pending for a process at a time.
+    // If a second signal arrives while the first has not yet been "drained" at
+    // kernel/libuv level, the OS may merge it with the already pending one
+    // instead of delivering it as a second, distinct invocation of the handler
+    // — this was observed directly while writing this test (under load, with
+    // the full suite running in parallel, the "recibido de nuevo" path was not
+    // always reached, even with the same signals sent in the same sequence). No
+    // amount of artificial waiting on our part closes that window — it depends
+    // on the OS scheduler, not on this script. What IS a real, checkable
+    // guarantee: whatever happens with that race, the process NEVER does a
+    // double revert, NEVER hangs, and ALWAYS exits with a recognised signal
+    // code. That is what gets verified here — a burst of signals, not just
+    // two.
     const repoRoot = makeRepoRoot()
     const gitLog = join(repoRoot, 'git-log')
     const argvLog = join(repoRoot, 'gh-argv-log')
@@ -199,89 +195,84 @@ describe('ct-next — SIGINT tras un claim confirmado pero antes de crear el wor
       FAKE_GH_COUNTER_FILE: counterFile,
       FAKE_GH_ARGV_LOG_FILE: argvLog,
       FAKE_GIT_LOG_FILE: gitLog,
-      // F8 — la PRIMERA señal ya no depende de una ventana: se manda con el
-      // claim parado dentro del stub (handshake), igual que en los dos tests
-      // de arriba. FAKE_GH_EDIT_DELAY_MS se mantiene porque aquí sí cumple una
-      // función distinta: ensancha el REVERT (que no es donde se decide si el
-      // test pasa) para darle a las señales de más la ocasión de llegar
-      // mientras `interrupting` ya está puesto. Que lleguen o no sigue sin ser
-      // un requisito — el invariante que se comprueba abajo vale en los dos
-      // casos, y así lo dice la nota de arriba.
+      // F8 — the FIRST signal no longer depends on a window: it is sent with
+      // the claim stopped inside the stub (a handshake), just as in the two
+      // tests above. FAKE_GH_EDIT_DELAY_MS stays because here it does serve a
+      // different purpose: it widens the REVERT (which is not where the test's
+      // pass or fail is decided) to give the extra signals a chance to arrive
+      // while `interrupting` is already set. Whether they arrive or not is
+      // still not a requirement — the invariant checked below holds in both
+      // cases, and the note above says so.
       FAKE_GH_EDIT_WAIT_FILE: releaseFile,
       FAKE_GH_EDIT_DELAY_MS: '3000',
     })
     const state = collectOutput(child)
     const timers = []
     await waitForFileMatch(argvLog, /issue edit 77 .*--add-label status:in-progress/)
-    // Burst de señales adicionales (no solo una) para maximizar la
-    // probabilidad de que al menos una llegue mientras `interrupting` ya está
-    // puesto — sin depender de acertar una única carrera exacta.
+    // A burst of extra signals (not just one) to maximise the probability that
+    // at least one arrives while `interrupting` is already set — without
+    // depending on getting one single exact race right.
     child.kill('SIGINT')
     for (const delayMs of [50, 150, 300, 600, 1000, 1500]) {
-      timers.push(setTimeout(() => { try { child.kill('SIGINT') } catch { /* proceso ya muerto: ignorar */ } }, delayMs))
+      timers.push(setTimeout(() => { try { child.kill('SIGINT') } catch { /* process already dead: ignore */ } }, delayMs))
     }
     release(releaseFile)
     const { code, sig: signal } = await state.exited
     for (const t of timers) clearTimeout(t)
     const out = state.out
 
-    expect(signal).toBeNull() // terminó por su propio process.exit(), nunca matado en seco por el SO
+    expect(signal).toBeNull() // it ended through its own process.exit(), never killed outright by the OS
     expect(code).toBe(130)
-    // Invariante real: por muchas señales de más que lleguen, el revert
-    // automático se completa EXACTAMENTE una vez — nunca cero (una
-    // regresión que dejara de revertir del todo pasaría con
-    // `toBeLessThanOrEqual`, señalado por una revisión externa) y nunca dos
-    // (doble revert solapado).
+    // The real invariant: however many extra signals arrive, the automatic
+    // revert completes EXACTLY once — never zero (a regression that stopped
+    // reverting altogether would pass with `toBeLessThanOrEqual`, pointed out
+    // by an external review) and never twice (an overlapping double revert).
     const occurrences = (out.match(/revertido automáticamente a status:ready/g) || []).length
     expect(occurrences).toBe(1)
-    // Si la carrera SÍ se ganó esta vez y una segunda señal se procesó de
-    // verdad como reentrada, el mensaje debe ser el correcto (no una traza
-    // de error ni un segundo revert) — pero no se exige que aparezca.
+    // If the race WAS won this time and a second signal really was processed as
+    // a reentry, the message must be the right one (not an error trace nor a
+    // second revert) — but it is not required to show up.
     if (out.includes('recibido de nuevo mientras ya se estaba limpiando')) {
       expect(occurrences).toBe(1)
     }
   })
 })
 
-// CRÍTICO (revisión externa, reproducido 3/3 y 2/2 de forma determinista
-// contra la primera versión de este fix): el propio manejador de señal, al
-// terminar en `await sleep(0)` antes de `process.exit()`, registraba un
-// temporizador POR DETRÁS del temporizador YA PENDIENTE del bucle principal
-// (su propio `await sleep(testDelayAfterClaimMs)`, registrado ANTES de que
-// la señal se procesara). Node procesa los temporizadores vencidos en el
-// orden en que se registraron — a CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS=0 (el
-// único valor de PRODUCCIÓN; los otros tests de este fichero usan 2000-3000
-// para poder enviar una señal externa con margen, un valor que además
-// enmascaraba este bug por completo: con esa ventana tan grande el
-// temporizador propio del manejador siempre "ganaba" la carrera de todas
-// formas) el temporizador del bucle principal vencía ANTES que el del
-// manejador — el bucle RETOMABA, creaba el worktree, lanzaba cmux, e
-// imprimía "lanzado" DESPUÉS de que el manejador ya hubiera revertido el
-// claim a status:ready. El claim queda revertido en GitHub mientras un
-// agente real sigue corriendo sobre él: el finding 1 exacto, causado por el
-// propio arreglo de finding 1.
+// CRITICAL (external review, reproduced 3/3 and 2/2 deterministically against
+// the first version of this fix): the signal handler itself, by ending in
+// `await sleep(0)` before `process.exit()`, registered a timer BEHIND the main
+// loop's ALREADY PENDING timer (its own `await sleep(testDelayAfterClaimMs)`,
+// registered BEFORE the signal was processed). Node processes expired timers in
+// the order they were registered — at CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS=0 (the
+// only PRODUCTION value; the other tests in this file use 2000-3000 so they can
+// send an external signal with room to spare, a value that also masked this bug
+// completely: with that wide a window the handler's own timer always "won" the
+// race anyway) the main loop's timer expired BEFORE the handler's — the loop
+// RESUMED, created the worktree, launched cmux, and printed "lanzado" AFTER the
+// handler had already reverted the claim to status:ready. The claim ends up
+// reverted on GitHub while a real agent keeps running on it: finding 1 exactly,
+// caused by the very fix for finding 1.
 //
-// Estos dos tests reproducen la carrera EXACTA a valor de producción real
-// (CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS sin fijar) — no al valor de 2000-3000
-// que usa el resto de este fichero, que no la habría detectado nunca (así
-// se confirmó: los diez tests de arriba pasaban igual con el bug presente
-// que sin él). Enviar la señal desde un proceso EXTERNO justo en el
-// instante exacto de esta ventana es, en sí mismo, una carrera de
-// temporización de las que estos tests deberían evitar: verificado por
-// construcción que, a este valor de delay, entre un 10 y un 20% de los
-// intentos de un arnés de test externo nunca llegaban a procesar la señal
-// en absoluto (la tubería entera de subprocesos falsos podía terminar antes
-// de que el proceso externo reaccionara al dato de stdout) — un fallo de
-// temporización del PROPIO test, no del código bajo prueba. En su lugar,
+// These two tests reproduce the EXACT race at the real production value
+// (CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS unset) — not at the 2000-3000 value the
+// rest of this file uses, which would never have detected it (so it was
+// confirmed: the ten tests above passed just the same with the bug present as
+// without it). Sending the signal from an EXTERNAL process at the exact instant
+// of this window is, in itself, one of the timing races these tests ought to
+// avoid: verified by construction that, at this delay value, between 10 and 20%
+// of the attempts of an external test harness never got to process the signal
+// at all (the whole pipeline of fake subprocesses could finish before the
+// external process reacted to the stdout data) — a timing failure of the TEST
+// ITSELF, not of the code under test. Instead,
 // `CT_NEXT_TEST_SELF_SIGINT_AFTER_CLAIM`/`CT_NEXT_TEST_SELF_SIGINT_BEFORE_IDLE_CHECKPOINT`
-// (hooks exclusivos de test, ver ct-next.mjs) hacen que el propio proceso
-// se envíe la señal a sí mismo (`process.kill(pid, sig)`, la MISMA syscall
-// subyacente que una señal externa — indistinguible para Node) de forma
-// síncrona justo en el punto exacto que se quiere ejercitar, sin ninguna
-// carrera de temporización entre procesos. Verificado 20/20 sin excepción
-// contra el fix, y 0/20 (reproducción total) contra el código sin arreglar.
-describe('ct-next — CRÍTICO: el propio manejador no debe darle al bucle principal una segunda oportunidad de mutar (regresión de una revisión externa)', () => {
-  it('cap 1, autointerrupción justo tras confirmar el claim, a valor de producción (delay sin fijar): NUNCA crea el worktree ni relanza tras el revert', () => {
+// (test-only hooks, see ct-next.mjs) make the process send the signal to itself
+// (`process.kill(pid, sig)`, the SAME underlying syscall as an external signal —
+// indistinguishable to Node) synchronously at the exact point to be exercised,
+// with no timing race between processes at all. Verified 20/20 without
+// exception against the fix, and 0/20 (total reproduction) against the unfixed
+// code.
+describe('ct-next — CRITICAL: the handler itself must not give the main loop a second chance to mutate (regression from an external review)', () => {
+  it('cap 1, self-interruption right after confirming the claim, at the production value (delay unset): it NEVER creates the worktree nor relaunches after the revert', () => {
     const repoRoot = makeRepoRoot()
     const gitLog = join(repoRoot, 'git-log')
     const argvLog = join(repoRoot, 'gh-argv-log')
@@ -294,9 +285,9 @@ describe('ct-next — CRÍTICO: el propio manejador no debe darle al bucle princ
       FAKE_GH_ARGV_LOG_FILE: argvLog,
       FAKE_GIT_LOG_FILE: gitLog,
       CT_NEXT_TEST_SELF_SIGINT_AFTER_CLAIM: 'SIGINT',
-      // CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS deliberadamente SIN FIJAR: 0, el
-      // valor real de producción — es el único valor en el que el bug
-      // original se manifestaba.
+      // CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS deliberately UNSET: 0, the real
+      // production value — it is the only value at which the original bug
+      // showed itself.
     })
 
     expect(r.code).toBe(130)
@@ -304,13 +295,13 @@ describe('ct-next — CRÍTICO: el propio manejador no debe darle al bucle princ
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
     const argv = readFileSync(argvLog, 'utf8')
-    // Exactamente un claim (el original) y exactamente un revert — nunca un
-    // segundo `issue edit` que reclamara de nuevo o repitiera nada.
+    // Exactly one claim (the original one) and exactly one revert — never a
+    // second `issue edit` that claimed again or repeated anything.
     expect((argv.match(/issue edit 77 --repo o\/r --add-label status:in-progress/g) || []).length).toBe(1)
     expect((argv.match(/issue edit 77 --repo o\/r --add-label status:ready/g) || []).length).toBe(1)
   })
 
-  it('cap 2, autointerrupción justo antes del checkpoint idle previo al segundo candidato: #78 NUNCA recibe un issue edit', () => {
+  it('cap 2, self-interruption right before the idle checkpoint ahead of the second candidate: #78 NEVER receives an issue edit', () => {
     const repoRoot = makeRepoRoot()
     const gitLog = join(repoRoot, 'git-log')
     const argvLog = join(repoRoot, 'gh-argv-log')
@@ -327,19 +318,19 @@ describe('ct-next — CRÍTICO: el propio manejador no debe darle al bucle princ
     })
 
     expect(r.code).toBe(130)
-    // #77 (el primer candidato) sí se completó antes de la autointerrupción
-    // (que se dispara solo a partir de la SEGUNDA iteración del bucle).
+    // #77 (the first candidate) did complete before the self-interruption
+    // (which only fires from the SECOND iteration of the loop onwards).
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).toMatch(/worktree add -b feat\/77/)
-    // #78 nunca llega a intentar un claim: ni escritura, ni revert, nada.
+    // #78 never gets as far as attempting a claim: no write, no revert, nothing.
     const argv = readFileSync(argvLog, 'utf8')
     expect(argv).not.toMatch(/issue edit 78/)
     expect(gitLogTxt).not.toMatch(/worktree add -b feat\/78/)
   })
 })
 
-describe('ct-next — SIGINT en el hueco idle entre dos slices de la misma tanda (finding 1, checkpoint pre-claim)', () => {
-  it('el primer slice queda lanzado con éxito; el segundo nunca llega a intentarse', async () => {
+describe('ct-next — SIGINT in the idle gap between two slices of the same batch (finding 1, pre-claim checkpoint)', () => {
+  it('the first slice is left successfully launched; the second is never even attempted', async () => {
     const repoRoot = makeRepoRoot()
     const gitLog = join(repoRoot, 'git-log')
     const argvLog = join(repoRoot, 'gh-argv-log')
@@ -351,20 +342,20 @@ describe('ct-next — SIGINT en el hueco idle entre dos slices de la misma tanda
     const child = runInterruptible(['--repo', 'o/r', '--cap', '2'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
       // idx0: ct-next open; idx1: ct-next closed; idx2/idx3: dispatch-check(#77)
-      // collision-check + readback (limpios); idx4/idx5 (si se llegaran a
-      // usar): dispatch-check(#78) — no deberían llegar a invocarse.
+      // collision-check + readback (clean); idx4/idx5 (were they ever used):
+      // dispatch-check(#78) — they should never get invoked.
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue77, openIssue78], []]),
       FAKE_GH_COUNTER_FILE: counterFile,
       FAKE_GH_ARGV_LOG_FILE: argvLog,
       FAKE_GIT_LOG_FILE: gitLog,
       FAKE_CMUX_INVOKED_LOG_FILE: cmuxLog,
-      // F8 — handshake en vez de ventana: la señal se manda mientras ct-next
-      // está BLOQUEADO dentro del `execFileSync('cmux', …)` que lanza #77.
-      // Todo lo que queda por delante hasta el checkpoint idle previo a #78
-      // (la verificación de la sesión, el "lanzado #77") es síncrono, así que
-      // la señal pendiente se despacha exactamente en ese checkpoint — el
-      // punto que este test quiere ejercitar. Antes se dependía de reaccionar
-      // al "lanzado #77" de stdout dentro de una ventana de 2000ms.
+      // F8 — a handshake instead of a window: the signal is sent while ct-next
+      // is BLOCKED inside the `execFileSync('cmux', …)` that launches #77.
+      // Everything that remains ahead until the idle checkpoint before #78 (the
+      // session verification, the "lanzado #77") is synchronous, so the pending
+      // signal is dispatched exactly at that checkpoint — the point this test
+      // wants to exercise. It used to depend on reacting to the "lanzado #77"
+      // on stdout inside a 2000ms window.
       FAKE_CMUX_NEW_WORKSPACE_WAIT_FILE: releaseFile,
     })
     const state = collectOutput(child)
@@ -377,21 +368,21 @@ describe('ct-next — SIGINT en el hueco idle entre dos slices de la misma tanda
     expect(sig).toBeNull()
     expect(code).toBe(130)
     expect(out).toMatch(/SIGINT recibido/)
-    // #77 sí se completó (worktree creado) antes de la señal.
+    // #77 did complete (worktree created) before the signal.
     const gitLogTxt = readFileSync(gitLog, 'utf8')
     expect(gitLogTxt).toMatch(/worktree add -b feat\/77/)
-    // #78 nunca llegó a intentar un claim.
+    // #78 never got as far as attempting a claim.
     const argv = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
     expect(argv).not.toMatch(/issue edit 78/)
     expect(out).not.toMatch(/claimed #78/)
-    // No queda ningún claim propio pendiente de revertir (ninguno se había
-    // hecho para #78).
+    // No claim of our own is left pending a revert (none had been made for
+    // #78).
     expect(out).toMatch(/no había ningún claim propio pendiente de revertir/)
   })
 })
 
-describe('ct-next — `git worktree add` genuinamente colgado, sin que la señal llegue nunca al hijo (finding 1, defensa 2: cota de tiempo)', () => {
-  it('no se queda colgado para siempre: el timeout configurado lo acota, revierte el claim y sale con exit 1', () => {
+describe('ct-next — `git worktree add` genuinely hung, with the signal never reaching the child (finding 1, defence 2: the time cap)', () => {
+  it('it does not hang forever: the configured timeout caps it, reverts the claim and exits with exit 1', () => {
     const repoRoot = makeRepoRoot()
     const gitLog = join(repoRoot, 'git-log')
     const argvLog = join(repoRoot, 'gh-argv-log')
@@ -408,57 +399,57 @@ describe('ct-next — `git worktree add` genuinamente colgado, sin que la señal
         FAKE_GH_ARGV_LOG_FILE: argvLog,
         FAKE_GIT_LOG_FILE: gitLog,
         FAKE_GIT_WORKTREE_ADD_HANG: '1',
-        // Cota corta para que el test no tenga que esperar los 10 minutos
-        // por defecto de producción — ejercita el MISMO camino de código.
+        // A short cap so the test does not have to wait production's default
+        // 10 minutes — it exercises the SAME code path.
         CT_NEXT_CHILD_TIMEOUT_MS: '800',
-        // F8 — ACOTADA AL PASO QUE ESTE TEST CUELGA A PROPÓSITO.
+        // F8 — SCOPED TO THE STEP THIS TEST HANGS ON PURPOSE.
         //
-        // Sin esto, los 800ms se aplicaban a TODOS los subprocesos, y el
-        // test pasaba a depender de que la máquina despachara el
-        // `dispatch-check` legítimo (un node que arranca otros tres nodes)
-        // en menos de 800ms. Reproducido: con otra suite de vitest a la vez,
-        // 2 de 6 corridas contra main fallaban aquí con
+        // Without this, the 800ms applied to ALL the subprocesses, and the test
+        // came to depend on the machine dispatching the legitimate
+        // `dispatch-check` (a node that starts three more nodes) in under
+        // 800ms. Reproduced: with another vitest suite running at the same
+        // time, 2 out of 6 runs against main failed here with
         //   expected 'aviso: ningún patrón de ACCOUNT_MAP c…'
         //   to match /no se pudo crear el worktree/
-        // porque la cota había saltado sobre dispatch-check, no sobre `git
-        // worktree add`. La respuesta correcta no es una ventana más ancha
-        // (el fallo volvería con una máquina más cargada), es que el único
-        // hijo capaz de agotar la cota sea el que este test cuelga.
+        // because the cap had fired on dispatch-check, not on `git worktree
+        // add`. The right answer is not a wider window (the failure would come
+        // back with a more loaded machine), it is that the only child capable
+        // of exhausting the cap be the one this test hangs.
         CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE: 'worktree-add',
       },
-      // Red de seguridad del propio test: si el fix no funcionara,
-      // `FAKE_GIT_WORKTREE_ADD_HANG` no termina NUNCA por su cuenta y
-      // spawnSync colgaría el runner para siempre. Es un plazo de rescate, no
-      // una aserción: la comprobación de "no se colgó" es `r.signal === null`
-      // más abajo, que no depende de ningún umbral.
+      // The test's own safety net: if the fix did not work,
+      // `FAKE_GIT_WORKTREE_ADD_HANG` NEVER finishes on its own and spawnSync
+      // would hang the runner forever. It is a rescue deadline, not an
+      // assertion: the "it did not hang" check is `r.signal === null` further
+      // down, which does not depend on any threshold.
       timeout: 60000,
     })
 
-    // No se quedó colgado: terminó por su PROPIO exit, no lo mató la red de
-    // seguridad de spawnSync (que dejaría `signal` con el killSignal). Antes
-    // esto se comprobaba con `elapsedMs < 5000` — un umbral de reloj de pared
-    // que solo decía algo sobre lo ocupada que estaba la máquina.
+    // It did not hang: it ended through its OWN exit, spawnSync's safety net
+    // did not kill it (that would leave `signal` holding the killSignal). This
+    // used to be checked with `elapsedMs < 5000` — a wall-clock threshold that
+    // only said something about how busy the machine was.
     expect(r.signal).toBeNull()
     const out = (r.stdout || '') + (r.stderr || '')
     expect(out).toMatch(/no se pudo crear el worktree/)
-    // MENOR (revisión externa): el mensaje de timeout debe nombrar el
-    // límite exacto, la variable de entorno con la que se ajusta, y avisar
-    // de que el SIGKILL puede haber dejado un worktree/rama a medio crear.
+    // MINOR (external review): the timeout message must name the exact limit,
+    // the environment variable that tunes it, and warn that the SIGKILL may
+    // have left a half-created worktree/branch behind.
     expect(out).toMatch(/se agotó el límite de 800ms \(CT_NEXT_CHILD_TIMEOUT_MS\)/)
     expect(out).toMatch(/puede haber quedado un directorio y\/o una rama a MEDIO crear/)
     expect(out).toMatch(/revertido automáticamente a status:ready|ATENCIÓN: no se pudo revertir/)
     const argv = readFileSync(argvLog, 'utf8')
-    // el claim inicial sí se escribió (dispatch-check llegó a completarse
-    // antes del cuelgue, que ocurre DESPUÉS, en git worktree add)...
+    // the initial claim was indeed written (dispatch-check did get to complete
+    // before the hang, which happens AFTERWARDS, in git worktree add)...
     expect(argv).toMatch(/issue edit 77 --repo o\/r --add-label status:in-progress --remove-label status:ready/)
-    // ...y el revert automático también se intentó.
+    // ...and the automatic revert was attempted too.
     expect(argv).toMatch(/issue edit 77 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
     expect(r.status).toBe(1)
   })
 })
 
-describe('ct-next — CT_NEXT_CHILD_TIMEOUT_MS / CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS malformados (validación defensiva, ataque adversarial)', () => {
-  it('CT_NEXT_CHILD_TIMEOUT_MS no numérico → exit 2, uso claro, nada de gh/git tocado', () => {
+describe('ct-next — malformed CT_NEXT_CHILD_TIMEOUT_MS / CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS (defensive validation, adversarial attack)', () => {
+  it('a non-numeric CT_NEXT_CHILD_TIMEOUT_MS → exit 2, clear usage, nothing of gh/git touched', () => {
     const r = spawnSync('node', [script, '--repo', 'o/r', '--cap', '1'], {
       encoding: 'utf8',
       env: { ...process.env, PATH: fakePath, CT_NEXT_CHILD_TIMEOUT_MS: 'not-a-number' },
@@ -467,7 +458,7 @@ describe('ct-next — CT_NEXT_CHILD_TIMEOUT_MS / CT_NEXT_TEST_DELAY_AFTER_CLAIM_
     expect((r.stdout || '') + (r.stderr || '')).toMatch(/CT_NEXT_CHILD_TIMEOUT_MS inválido/)
   })
 
-  it('CT_NEXT_CHILD_TIMEOUT_MS negativo → exit 2', () => {
+  it('a negative CT_NEXT_CHILD_TIMEOUT_MS → exit 2', () => {
     const r = spawnSync('node', [script, '--repo', 'o/r', '--cap', '1'], {
       encoding: 'utf8',
       env: { ...process.env, PATH: fakePath, CT_NEXT_CHILD_TIMEOUT_MS: '-5' },
@@ -475,7 +466,7 @@ describe('ct-next — CT_NEXT_CHILD_TIMEOUT_MS / CT_NEXT_TEST_DELAY_AFTER_CLAIM_
     expect(r.status).toBe(2)
   })
 
-  it('CT_NEXT_CHILD_TIMEOUT_MS por encima del techo (25h) → exit 2', () => {
+  it('a CT_NEXT_CHILD_TIMEOUT_MS above the ceiling (25h) → exit 2', () => {
     const r = spawnSync('node', [script, '--repo', 'o/r', '--cap', '1'], {
       encoding: 'utf8',
       env: { ...process.env, PATH: fakePath, CT_NEXT_CHILD_TIMEOUT_MS: String(25 * 60 * 60 * 1000) },
@@ -483,7 +474,7 @@ describe('ct-next — CT_NEXT_CHILD_TIMEOUT_MS / CT_NEXT_TEST_DELAY_AFTER_CLAIM_
     expect(r.status).toBe(2)
   })
 
-  it('CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS negativo → exit 2', () => {
+  it('a negative CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS → exit 2', () => {
     const r = spawnSync('node', [script, '--repo', 'o/r', '--cap', '1'], {
       encoding: 'utf8',
       env: { ...process.env, PATH: fakePath, CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS: '-1' },
@@ -491,7 +482,7 @@ describe('ct-next — CT_NEXT_CHILD_TIMEOUT_MS / CT_NEXT_TEST_DELAY_AFTER_CLAIM_
     expect(r.status).toBe(2)
   })
 
-  it('CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS por encima del techo (60001ms) → exit 2', () => {
+  it('a CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS above the ceiling (60001ms) → exit 2', () => {
     const r = spawnSync('node', [script, '--repo', 'o/r', '--cap', '1'], {
       encoding: 'utf8',
       env: { ...process.env, PATH: fakePath, CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS: '60001' },
@@ -499,15 +490,15 @@ describe('ct-next — CT_NEXT_CHILD_TIMEOUT_MS / CT_NEXT_TEST_DELAY_AFTER_CLAIM_
     expect(r.status).toBe(2)
   })
 
-  // F8 — el hook nuevo (CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE) se valida igual que
-  // los demás. Un hook de test que vive en el script de PRODUCCIÓN y se lee
-  // del entorno es exactamente el sitio del que llega un valor con un typo, y
-  // este en concreto falla en SILENCIO si no se valida: con un alcance que no
-  // se reconoce, la cota corta no se aplicaría a ningún hijo y todos usarían
-  // el default de 10 minutos — el test que creía estar ejercitando el camino
-  // del timeout se quedaría esperando diez minutos contra un stub que no
-  // termina nunca, o aprobaría sin haber ejercitado nada.
-  it('CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE con un alcance desconocido → exit 2, nombrando los válidos', () => {
+  // F8 — the new hook (CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE) is validated like all
+  // the others. A test hook that lives in the PRODUCTION script and is read
+  // from the environment is exactly the place a value with a typo comes from,
+  // and this one in particular fails SILENTLY if it is not validated: with an
+  // unrecognised scope, the short cap would apply to no child at all and every
+  // one of them would use the 10-minute default — the test that thought it was
+  // exercising the timeout path would sit waiting ten minutes against a stub
+  // that never finishes, or would pass without having exercised anything.
+  it('a CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE with an unknown scope → exit 2, naming the valid ones', () => {
     const r = spawnSync('node', [script, '--repo', 'o/r', '--cap', '1'], {
       encoding: 'utf8',
       env: { ...process.env, PATH: fakePath, CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE: 'worktree_add' },
@@ -518,11 +509,12 @@ describe('ct-next — CT_NEXT_CHILD_TIMEOUT_MS / CT_NEXT_TEST_DELAY_AFTER_CLAIM_
     expect(out).toMatch(/dispatch-check, worktree-add/)
   })
 
-  it('CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE vacío se ignora (equivale a no fijarlo): la cota sigue siendo global', () => {
-    // Cadena vacía = "la variable está pero sin valor", el caso típico de un
-    // `export VAR=` colgado en el entorno. No debe abortar, y tampoco debe
-    // desactivar la cota: con CT_NEXT_CHILD_TIMEOUT_MS malformado seguimos
-    // esperando el exit 2 de SIEMPRE, no el del alcance.
+  it('an empty CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE is ignored (equivalent to not setting it): the cap stays global', () => {
+    // The empty string = "the variable is there but with no value", the typical
+    // case of an `export VAR=` left dangling in the environment. It must not
+    // abort, and it must not disable the cap either: with a malformed
+    // CT_NEXT_CHILD_TIMEOUT_MS we still expect the USUAL exit 2, not the scope
+    // one.
     const r = spawnSync('node', [script, '--repo', 'o/r', '--cap', '1'], {
       encoding: 'utf8',
       env: { ...process.env, PATH: fakePath, CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE: '', CT_NEXT_CHILD_TIMEOUT_MS: 'not-a-number' },

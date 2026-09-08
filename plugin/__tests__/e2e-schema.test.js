@@ -1,13 +1,13 @@
 // ============================================================================
-// El contrato del informe de e2e: JSON del agente -> un OUTCOME que la tabla
-// consume. Hermano de readVerdict/readReport, no copia: mismo patrón (validar a
-// mano, cero dependencias nuevas), otro contenido.
+// The contract of the e2e report: the agent's JSON -> an OUTCOME the table
+// consumes. A sibling of readVerdict/readReport, not a copy: same pattern
+// (validate by hand, zero new dependencies), different content.
 //
-// LO QUE NO PUEDE COMPROBAR, Y SE DICE PORQUE UN LÍMITE DICHO ES OPERABLE: que
-// la salida sea real. Nada impide que un agente invente un stdout — la misma
-// clase de agujero que el plugin ya reconoce sobre el `-OK`. Lo único que lo
-// acota es exigir el comando REPRODUCIBLE: una salida inventada se cae en
-// cuanto alguien la pega.
+// WHAT IT CANNOT CHECK, AND IS SAID BECAUSE A STATED LIMIT IS OPERABLE: that
+// the output is real. Nothing stops an agent from inventing a stdout — the same
+// class of hole the plugin already acknowledges about the `-OK`. The only thing
+// that bounds it is demanding a REPRODUCIBLE command: an invented output falls
+// apart the moment somebody pastes it.
 // ============================================================================
 import { describe, it, expect } from 'vitest'
 import { readE2eReport } from '../scripts/step-contracts.js'
@@ -25,64 +25,64 @@ const rojo = (run) => ({ run, verdict: 'rojo', brought_up: 'cargo run --example 
 const sinVerificar = (run) => ({ run, verdict: 'no-verificado', reason: 'la sección de AGENTS.md está sin rellenar', unblock: 'rellenar "Levantar" y "Listo cuando"' })
 
 describe('readE2eReport', () => {
-  it('todo verde → DONE', () => {
+  it('all green → DONE', () => {
     const r = readE2eReport({ runs: [verde(A)] }, [A])
     expect(r.outcome).toBe(OUTCOMES.DONE)
     expect(r.runs).toHaveLength(1)
   })
 
-  it('un rojo → FAILED', () => {
+  it('one red → FAILED', () => {
     expect(readE2eReport({ runs: [rojo(A)] }, [A]).outcome).toBe(OUTCOMES.FAILED)
   })
 
-  it('verde + no-verificado → DONE, con el motivo dentro', () => {
+  it('green + no-verificado → DONE, with the reason inside', () => {
     const r = readE2eReport({ runs: [verde(A), sinVerificar(B)] }, [A, B])
     expect(r.outcome).toBe(OUTCOMES.DONE)
     expect(r.runs.find((x) => x.run === B).reason).toMatch(/AGENTS\.md/)
   })
 
-  it('structured ausente o no objeto → DISCARDED', () => {
+  it('structured absent or not an object → DISCARDED', () => {
     for (const bad of [null, undefined, 'x', 42, []]) {
       expect(readE2eReport(bad, [A]).outcome, JSON.stringify(bad)).toBe(OUTCOMES.DISCARDED)
     }
   })
 
-  it('falta la entrada de un recorrido → DISCARDED, aunque el otro esté verde', () => {
+  it('a traversal entry is missing → DISCARDED, even if the other one is green', () => {
     const r = readE2eReport({ runs: [verde(A)] }, [A, B])
     expect(r.outcome).toBe(OUTCOMES.DISCARDED)
     expect(r.why).toContain(B)
   })
 
-  it('una entrada de más → DISCARDED', () => {
+  it('one entry too many → DISCARDED', () => {
     const r = readE2eReport({ runs: [verde(A), verde(B)] }, [A])
     expect(r.outcome).toBe(OUTCOMES.DISCARDED)
     expect(r.why).toContain(B)
   })
 
-  it('un `run` que no es idéntico al declarado → DISCARDED', () => {
+  it('a `run` that is not identical to the declared one → DISCARDED', () => {
     const r = readE2eReport({ runs: [verde('el server escucha en 9115')] }, [A])
     expect(r.outcome).toBe(OUTCOMES.DISCARDED)
   })
 
-  it('un verdict fuera de los tres → DISCARDED', () => {
+  it('a verdict outside the three → DISCARDED', () => {
     expect(readE2eReport({ runs: [{ ...verde(A), verdict: 'ok' }] }, [A]).outcome).toBe(OUTCOMES.DISCARDED)
   })
 
-  it('un verde sin evidence → DISCARDED', () => {
+  it('a green with no evidence → DISCARDED', () => {
     expect(readE2eReport({ runs: [{ ...verde(A), evidence: [] }] }, [A]).outcome).toBe(OUTCOMES.DISCARDED)
     const sinSalida = { ...verde(A), evidence: [{ command: 'curl x', output: '' }] }
     expect(readE2eReport({ runs: [sinSalida] }, [A]).outcome).toBe(OUTCOMES.DISCARDED)
   })
 
-  it('un no-verificado sin reason ni unblock → DISCARDED', () => {
+  it('a no-verificado with neither reason nor unblock → DISCARDED', () => {
     expect(readE2eReport({ runs: [{ run: A, verdict: 'no-verificado' }] }, [A]).outcome).toBe(OUTCOMES.DISCARDED)
   })
 
-  // Finding 2 de la review de Task 8: un rojo a medias no se descartaba, y
-  // `escribirInformeE2e` (ct-step.mjs) confía en que lo que llega aquí ya está
-  // validado — sin esta rama, un rojo sin uno de sus cuatro campos colaba
-  // "undefined" literal en el markdown de la pull request.
-  it('un rojo sin uno de los cuatro campos que lo sostienen → DISCARDED', () => {
+  // Finding 2 of the review of Task 8: a half-formed red was not discarded, and
+  // `escribirInformeE2e` (ct-step.mjs) trusts that whatever reaches it here is
+  // already validated — without this branch, a red missing one of its four
+  // fields slipped a literal "undefined" into the pull request's markdown.
+  it('a red missing one of the four fields that hold it up → DISCARDED', () => {
     for (const campo of ['expected', 'actual', 'repro', 'refuted_by']) {
       const incompleto = { ...rojo(A) }
       delete incompleto[campo]
@@ -91,12 +91,12 @@ describe('readE2eReport', () => {
     }
   })
 
-  // §8.1 del diseño: la evidencia de un e2e es falsificable, y su ÚNICA
-  // mitigación declarada es que el comando sea REPRODUCIBLE por un humano
-  // ("una salida inventada se cae en cuanto alguien la pega"). Un verde que
-  // documenta el `curl` pero no cómo se puso el sistema en pie NO es
-  // reproducible: la mitigación se evaporaba justo en el camino que importa.
-  it('un verde sin `brought_up` → DISCARDED (sin cómo se levantó, la evidencia no es reproducible)', () => {
+  // §8.1 of the design: the evidence of an e2e is falsifiable, and its ONLY
+  // declared mitigation is that the command be REPRODUCIBLE by a human ("an
+  // invented output falls apart the moment somebody pastes it"). A green that
+  // documents the `curl` but not how the system was brought up is NOT
+  // reproducible: the mitigation evaporated exactly on the path that matters.
+  it('a green with no `brought_up` → DISCARDED (with no how-it-was-brought-up, the evidence is not reproducible)', () => {
     const sin = { ...verde(A) }
     delete sin.brought_up
     const r = readE2eReport({ runs: [sin] }, [A])
@@ -104,42 +104,43 @@ describe('readE2eReport', () => {
     expect(r.why).toContain('brought_up')
   })
 
-  it('un rojo sin `brought_up` → DISCARDED, por el mismo motivo', () => {
+  it('a red with no `brought_up` → DISCARDED, for the same reason', () => {
     const sin = { ...rojo(A) }
     delete sin.brought_up
-    // DISCARDED y no FAILED: sin los campos que lo sostienen, la entrada no
-    // entra en `buenos`, así que no hay ningún rojo que pueda ganarle al mal
-    // formado. Es el mismo trato que ya recibía un rojo sin `expected`.
+    // DISCARDED and not FAILED: without the fields that hold it up, the entry
+    // does not make it into `buenos`, so there is no red that can beat the
+    // malformed one. It is the same treatment a red with no `expected` already
+    // got.
     expect(readE2eReport({ runs: [sin] }, [A]).outcome).toBe(OUTCOMES.DISCARDED)
   })
 
-  // Y NO se exige en no-verificado, que no es una excepción caprichosa: el
-  // motivo típico de ese veredicto es precisamente que no se pudo levantar.
-  it('un no-verificado sin `brought_up` sigue siendo válido', () => {
+  // And it is NOT demanded of a no-verificado, which is not a capricious
+  // exception: the typical reason for that verdict is precisely that the system
+  // could not be brought up.
+  it('a no-verificado with no `brought_up` is still valid', () => {
     expect(readE2eReport({ runs: [sinVerificar(A)] }, [A]).outcome).toBe(OUTCOMES.DONE)
   })
 
-  // Dos celdas idénticas son el MISMO recorrido. Sin deduplicar, `find`
-  // devolvía la misma entrada para las dos y `buenos` la duplicaba —y con ella
-  // el apartado del markdown que viaja en la pull request—, mientras que
-  // mandar dos entradas iguales hacía caer la segunda en "una entrada que esta
-  // slice no declara": el informe no tenía ninguna forma correcta de
-  // escribirse.
-  it('el mismo recorrido declarado dos veces se colapsa: una entrada basta, y no se duplica en `runs`', () => {
+  // Two identical cells are the SAME traversal. Without deduplicating, `find`
+  // returned the same entry for both and `buenos` duplicated it —and with it
+  // the markdown section that travels in the pull request—, while sending two
+  // equal entries made the second fall into "an entry this slice does not
+  // declare": the report had no correct way of being written at all.
+  it('the same traversal declared twice collapses: one entry is enough, and it is not duplicated in `runs`', () => {
     const r = readE2eReport({ runs: [verde(A)] }, [A, A])
     expect(r.outcome).toBe(OUTCOMES.DONE)
     expect(r.runs).toHaveLength(1)
   })
 
-  it('EL ROJO GANA AL MAL FORMADO', () => {
-    // Un rojo dice algo del PRODUCTO; un formato roto, del informe. Emitiendo
-    // el descarte primero, el agente arreglaría el formato, reintentaría y sólo
-    // ENTONCES vería el rojo: dos vueltas para un dato que ya se tenía.
+  it('THE RED BEATS THE MALFORMED', () => {
+    // A red says something about the PRODUCT; a broken format, about the
+    // report. By emitting the discard first, the agent would fix the format,
+    // retry and only THEN see the red: two rounds for a datum already in hand.
     const r = readE2eReport({ runs: [rojo(A)] }, [A, B])
     expect(r.outcome).toBe(OUTCOMES.FAILED)
   })
 
-  it('sin recorridos declarados no se llama a esto, pero si se llama no revienta', () => {
+  it('with no traversals declared this is not called, but if it is called it does not blow up', () => {
     expect(readE2eReport({ runs: [] }, []).outcome).toBe(OUTCOMES.DONE)
   })
 })

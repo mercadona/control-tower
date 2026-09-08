@@ -4,30 +4,30 @@ import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { envDelGo } from './fixtures/go-gate.js'
+import { goEnv } from './fixtures/go-gate.js'
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'dispatch-check.mjs')
-// Stub de `gh` para los tests de manejo de errores (review round 1, Critical
-// 2): NUNCA toca la red ni ningún repo real. Se controla por variables de
-// entorno — ver __tests__/fixtures/fake-gh-bin/gh.
+// Stub of `gh` for the error-handling tests (review round 1, Critical 2): it
+// NEVER touches the network nor any real repository. It is driven by
+// environment variables — see __tests__/fixtures/fake-gh-bin/gh.
 const fakeGhDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-gh-bin')
 
-// stdio explícito en TODAS las invocaciones de abajo (finding 11 de la review
-// final): sin esto, execFileSync además de capturar el stderr del hijo en
-// `e.stderr` (lo que ya usan las aserciones) también lo reenvía al proceso
-// padre — la salida de `npm test`. Todas esas líneas son la salida ESPERADA
-// de rutas de fallo deliberadas (error de uso, colisión, carrera perdida...),
-// pero un lector no puede distinguir ese ruido esperado de un fallo real sin
-// leer el código. `stdio: ['ignore','pipe','pipe']` mantiene stdout/stderr
-// disponibles vía `e.stdout`/`e.stderr` sin ecoarlos al padre.
+// Explicit stdio on EVERY invocation below (finding 11 of the final review):
+// without this, execFileSync, besides capturing the child's stderr in
+// `e.stderr` (which the assertions already use), also forwards it to the parent
+// process — the output of `npm test`. All those lines are the EXPECTED output
+// of deliberate failure paths (usage error, collision, lost race...), but a
+// reader cannot tell that expected noise from a real failure without reading
+// the code. `stdio: ['ignore','pipe','pipe']` keeps stdout/stderr available via
+// `e.stdout`/`e.stderr` without echoing them to the parent.
 const QUIET_STDIO = ['ignore', 'pipe', 'pipe']
 
-// `cwd` es opcional (fix round 2, F22 — ver mkReleaseDryRunRepo más abajo):
-// la inmensa mayoría de los llamantes de runReal() no tocan git en absoluto
-// (solo `gh`, interceptado por fake-gh-bin vía PATH), así que el cwd por
-// defecto (el del proceso de test) nunca importó para ellos. El único que sí
-// importa es cualquiera que invoque `--release`, porque la puerta de F22 lee
-// git real desde el cwd SIEMPRE, dry-run o no.
+// `cwd` is optional (fix round 2, F22 — see mkReleaseDryRunRepo further down):
+// the vast majority of runReal()'s callers do not touch git at all (only `gh`,
+// intercepted by fake-gh-bin via PATH), so the default cwd (that of the test
+// process) never mattered to them. The one that does matter is anyone invoking
+// `--release`, because the F22 door reads real git from the cwd ALWAYS, dry-run
+// or not.
 function runReal(args, envOverrides = {}, cwd) {
   try {
     const out = execFileSync('node', [script, ...args], {
@@ -49,27 +49,26 @@ function run(issue, fixture) {
   } catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') } }
 }
 
-// F22, fix round 1, item 1 (y fix round 2: el mismo defecto encontrado en un
-// CUARTO call-site que no estaba en el barrido original — ver el comentario
-// junto a "--release cuyo gh edit falla" más abajo) — `--release` corre la
-// puerta de F22 (Task 8) tanto en dry-run como en real: la puerta lee git
-// real desde el cwd SIEMPRE. Los tests que invocan `--release` sin `cwd`
-// corrían, antes de este fixture, contra el propio checkout de este plugin,
-// y pasaban solo porque dos hechos AMBIENTALES resultan ciertos hoy: este
-// repo no tiene `.agent/` trackeado, y `main`/`origin/HEAD` resuelven.
-// Ninguna de las dos es una propiedad del test — el día en que este mismo
-// repo se ct-init'ee (que es literalmente lo que este plugin hace a otros
-// repos), `.agent/STATE.md` pasa a estar trackeado, y estos tests
-// empezarían a fallar con un mensaje de contaminación de slice que no tiene
-// nada que ver con lo que están probando. Un repo de propósito específico,
-// con una base real (`main`) y una rama (`feat/9`) que diverge de ella sin
-// tocar ningún fichero de estado, hace que el resultado dependa del fixture,
-// no del checkout en el que corra la suite.
-// Plan mínimo que cumple plan-contract.js — desde F-jjponz-1, --release exige
-// un plan prescriptivo commiteado en la rama, así que el fixture de release
-// lleva uno. Su único bloque va bajo "Final text (work.txt):" (F-jjponz-4:
-// todo bloque declara su rol) y ese rol no se comprueba contra el repo, así
-// que el fixture sigue sin citar nada.
+// F22, fix round 1, item 1 (and fix round 2: the same defect found in a FOURTH
+// call site that was not in the original sweep — see the comment next to
+// "--release whose gh edit fails" further down) — `--release` runs the F22 door
+// (Task 8) in dry-run as much as for real: the door reads real git from the cwd
+// ALWAYS. The tests that invoke `--release` with no `cwd` ran, before this
+// fixture, against this plugin's own checkout, and passed only because two
+// ENVIRONMENTAL facts happen to be true today: this repository does not have
+// `.agent/` tracked, and `main`/`origin/HEAD` resolve. Neither of the two is a
+// property of the test — the day this very repository gets ct-init'ed (which is
+// literally what this plugin does to other repositories), `.agent/STATE.md`
+// becomes tracked, and these tests would start failing with a slice
+// contamination message that has nothing to do with what they are testing. A
+// purpose-built repository, with a real base (`main`) and a branch (`feat/9`)
+// that diverges from it without touching any state file, makes the outcome
+// depend on the fixture, not on the checkout the suite happens to run in.
+// A minimal plan that satisfies plan-contract.js — since F-jjponz-1, --release
+// demands a prescriptive plan committed on the branch, so the release fixture
+// carries one. Its only block goes under "Final text (work.txt):" (F-jjponz-4:
+// every block declares its role) and that role is not checked against the
+// repository, so the fixture still cites nothing.
 const FENCE = '```'
 const minimalPlanFor = (issue) => [
   `# #${issue} — fixture slice`,
@@ -130,9 +129,9 @@ function mkReleaseDryRunRepo(issue = 9) {
   writeFileSync(join(dir, 'docs', 'superpowers', 'plans', `2026-08-12-issue-${issue}-work.md`), minimalPlanFor(issue))
   git('add', '-A')
   git('commit', '-qm', 'work')
-  // El gate del run: --release exige un run de ct-step ENTREGADO. Local del
-  // worktree y sin commitear, que es como lo deja ct-step (ct-init lo
-  // gitignorea). Los tests que prueban su AUSENCIA lo borran.
+  // The run gate: --release demands a ct-step run that is DELIVERED. Local to
+  // the worktree and uncommitted, which is how ct-step leaves it (ct-init
+  // gitignores it). The tests that test its ABSENCE delete it.
   mkdirSync(join(dir, '.agent'), { recursive: true })
   writeFileSync(join(dir, '.agent', `run-${issue}.json`), JSON.stringify({
     plan: `docs/superpowers/plans/2026-08-12-issue-${issue}-work.md`,
@@ -142,16 +141,16 @@ function mkReleaseDryRunRepo(issue = 9) {
 }
 
 describe('dispatch-check --dry-run', () => {
-  it('colisión → exit 1', () => {
+  it('a collision → exit 1', () => {
     const r = run(7, { candLabels: ['touches:db'], openIssues: [{ n: 5, labels: ['status:in-progress', 'touches:db'] }], readback: [] })
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/COLLISION|colisión/i)
   })
-  it('sin colisión y ganamos la carrera → exit 0 (claimed)', () => {
+  it('no collision and we win the race → exit 0 (claimed)', () => {
     const r = run(3, { candLabels: ['touches:db'], openIssues: [], readback: [{ n: 3, labels: ['status:in-progress', 'touches:db'] }] })
     expect(r.code).toBe(0)
   })
-  it('carrera perdida (otro menor in-progress con token) → exit 1', () => {
+  it('a lost race (another lower one in-progress with the token) → exit 1', () => {
     const r = run(7, { candLabels: ['touches:db'], openIssues: [], readback: [
       { n: 7, labels: ['status:in-progress', 'touches:db'] },
       { n: 5, labels: ['status:in-progress', 'touches:db'] },
@@ -160,15 +159,16 @@ describe('dispatch-check --dry-run', () => {
     expect(r.out).toMatch(/perdid|lost/i)
   })
 
-  it('--release → exit 0 e imprime la transición in-progress → in-review', () => {
+  it('--release → exit 0 and prints the in-progress → in-review transition', () => {
     const dir = mkReleaseDryRunRepo()
     try {
-      // Task 10 (F-e2e): --release ahora lee el cuerpo del issue por `gh`
-      // incluso en --dry-run (es una LECTURA, no la mutación que --dry-run
-      // evita) — sin el PATH al stub, este `gh` real fallaría contra un repo
-      // 'o/r' que no existe. FAKE_GH_VIEW_BODY sin fijar → body vacío → sin
-      // sección "## E2E" → nada que cruzar, el camino feliz de este test.
-      const out = execFileSync('node', [script, '9', '--repo', 'o/r', '--release', '--dry-run'], { cwd: dir, encoding: 'utf8', stdio: QUIET_STDIO, env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, ...envDelGo({ repo: 'o/r', issue: 9 }) } })
+      // Task 10 (F-e2e): --release now reads the body of the issue through
+      // `gh` even in --dry-run (it is a READ, not the mutation --dry-run
+      // avoids) — without the PATH to the stub, this real `gh` would fail
+      // against an 'o/r' repository that does not exist. FAKE_GH_VIEW_BODY not
+      // set → empty body → no "## E2E" section → nothing to cross-check, the
+      // happy path of this test.
+      const out = execFileSync('node', [script, '9', '--repo', 'o/r', '--release', '--dry-run'], { cwd: dir, encoding: 'utf8', stdio: QUIET_STDIO, env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, ...goEnv({ repo: 'o/r', issue: 9 }) } })
       expect(out).toMatch(/released #9.*in-review/)
     } catch (e) {
       throw new Error(`no debería fallar: ${e.status} ${(e.stdout || '') + (e.stderr || '')}`)
@@ -177,11 +177,11 @@ describe('dispatch-check --dry-run', () => {
     }
   })
 
-  // Review de capde (2026-08-19), punto 1: el kickoff manda conducir con
-  // ct-step, pero un prompt no es un gate. El gate es este: sin run ENTREGADO
-  // no se libera, y el exit 7 lo distingue del plan ausente (6) y de los
-  // ficheros de estado (5).
-  it('--release sin run de ct-step entregado → exit 7, y el issue no se mueve', () => {
+  // Capde review (2026-08-19), point 1: the kickoff orders you to drive with
+  // ct-step, but a prompt is not a gate. This is the gate: with no DELIVERED run
+  // nothing is released, and exit 7 tells it apart from the absent plan (6) and
+  // from the state files (5).
+  it('--release with no delivered ct-step run → exit 7, and the issue does not move', () => {
     const dir = mkReleaseDryRunRepo()
     rmSync(join(dir, '.agent', 'run-9.json'))
     let threw = false
@@ -197,7 +197,7 @@ describe('dispatch-check --dry-run', () => {
     expect(threw).toBe(true)
   })
 
-  it('--release con run a medias → exit 7 y dice por dónde va', () => {
+  it('--release with a half-finished run → exit 7 and says how far it got', () => {
     const dir = mkReleaseDryRunRepo()
     writeFileSync(join(dir, '.agent', 'run-9.json'), JSON.stringify({ issue: 9, task: 1, tasksTotal: 3, step: 'judge' }))
     let threw = false
@@ -213,7 +213,7 @@ describe('dispatch-check --dry-run', () => {
     expect(threw).toBe(true)
   })
 
-  it('error de uso (sin --repo) → exit 2', () => {
+  it('a usage error (no --repo) → exit 2', () => {
     let threw = false
     try {
       execFileSync('node', [script, '9', '--dry-run'], { encoding: 'utf8', stdio: QUIET_STDIO })
@@ -225,7 +225,7 @@ describe('dispatch-check --dry-run', () => {
     expect(threw).toBe(true)
   })
 
-  it('error de uso (issue no numérico) → exit 2', () => {
+  it('a usage error (a non-numeric issue) → exit 2', () => {
     let threw = false
     try {
       execFileSync('node', [script, 'nope', '--repo', 'o/r', '--dry-run'], { encoding: 'utf8', stdio: QUIET_STDIO })
@@ -238,16 +238,16 @@ describe('dispatch-check --dry-run', () => {
 
 })
 
-// D4, defecto 2 — mismo patrón que `--cap` en ct-next.mjs, pero aquí el
-// número identifica el issue que se va a MUTAR contra un repo real. Con
-// `parseInt(process.argv[2], 10)`, "42x" reclamaba el issue 42 y "1e3"
-// reclamaba el 1: un issue que el usuario no nombró, mutado en silencio.
-// Verificado contra el código sin arreglar: los tres casos de abajo salían 0
-// (dry-run) tras haber DECIDIDO sobre un issue distinto del pedido.
-describe('dispatch-check <issue#> — parseo estricto (D4, defecto 2)', () => {
+// D4, defect 2 — the same pattern as `--cap` in ct-next.mjs, but here the
+// number identifies the issue that is going to be MUTATED against a real
+// repository. With `parseInt(process.argv[2], 10)`, "42x" claimed issue 42 and
+// "1e3" claimed issue 1: an issue the user never named, mutated in silence.
+// Verified against the unfixed code: the three cases below came out 0 (dry-run)
+// after having DECIDED about an issue other than the one asked for.
+describe('dispatch-check <issue#> — strict parsing (D4, defect 2)', () => {
   const FIXTURE = { issue: 42, labels: ['status:ready'], others: [] }
   for (const bad of ['42x', '1e3', '4.2', ' 42', '0x2A', '']) {
-    it(`<issue#> ${JSON.stringify(bad)} → exit 2, nunca un issue distinto del pedido`, () => {
+    it(`<issue#> ${JSON.stringify(bad)} → exit 2, never an issue other than the one asked for`, () => {
       let threw = false
       try {
         execFileSync('node', [script, bad, '--repo', 'o/r', '--dry-run'],
@@ -261,7 +261,7 @@ describe('dispatch-check <issue#> — parseo estricto (D4, defecto 2)', () => {
     })
   }
 
-  it('<issue#> 0 o negativo → exit 2 (no existe el issue 0 en GitHub)', () => {
+  it('<issue#> 0 or negative → exit 2 (there is no issue 0 on GitHub)', () => {
     for (const bad of ['0', '-1']) {
       let threw = false
       try {
@@ -276,14 +276,14 @@ describe('dispatch-check <issue#> — parseo estricto (D4, defecto 2)', () => {
   })
 })
 
-// T11 fix round 3 (re-review): --settle-ms/CT_CLAIM_SETTLE_MS se eliminaron
-// del código (ver el comentario de cabecera de dispatch-check.mjs). Si se
-// ignoraran en silencio, alguien que invoque el script con --settle-ms por
-// costumbre obtendría un exit 0 limpio y se quedaría creyendo que hay una
-// espera de asentamiento activa — exactamente la falsa confianza que motivó
-// eliminarla. Deben rechazarse explícitamente con exit 2.
-describe('dispatch-check — T11 fix round 3 (--settle-ms/CT_CLAIM_SETTLE_MS rechazados explícitamente)', () => {
-  it('--settle-ms en argv → exit 2, mensaje apunta a la cabecera del fichero', () => {
+// T11 fix round 3 (re-review): --settle-ms/CT_CLAIM_SETTLE_MS were removed from
+// the code (see the header comment of dispatch-check.mjs). If they were ignored
+// in silence, someone invoking the script with --settle-ms out of habit would
+// get a clean exit 0 and would go on believing there is an active settling wait
+// — exactly the false confidence that motivated removing it. They must be
+// rejected explicitly with exit 2.
+describe('dispatch-check — T11 fix round 3 (--settle-ms/CT_CLAIM_SETTLE_MS rejected explicitly)', () => {
+  it('--settle-ms in argv → exit 2, and the message points at the header of the file', () => {
     let threw = false
     try {
       execFileSync('node', [script, '5', '--repo', 'o/r', '--dry-run', '--settle-ms', '2000'], { encoding: 'utf8', stdio: QUIET_STDIO })
@@ -295,7 +295,7 @@ describe('dispatch-check — T11 fix round 3 (--settle-ms/CT_CLAIM_SETTLE_MS rec
     expect(threw).toBe(true)
   })
 
-  it('CT_CLAIM_SETTLE_MS en el entorno → exit 2, aunque no se pase el flag', () => {
+  it('CT_CLAIM_SETTLE_MS in the environment → exit 2, even when the flag is not passed', () => {
     let threw = false
     try {
       execFileSync('node', [script, '5', '--repo', 'o/r', '--dry-run'],
@@ -308,24 +308,26 @@ describe('dispatch-check — T11 fix round 3 (--settle-ms/CT_CLAIM_SETTLE_MS rec
     expect(threw).toBe(true)
   })
 
-  it('sin --settle-ms ni CT_CLAIM_SETTLE_MS → no le afecta (camino normal)', () => {
+  it('with neither --settle-ms nor CT_CLAIM_SETTLE_MS → it is unaffected (the normal path)', () => {
     const dir = mkReleaseDryRunRepo()
-    // Task 10 (F-e2e): --release lee el body del issue por `gh` — necesita el
-    // stub aquí igual que el test de arriba, o pega contra el 'o/r' real.
-    const out = execFileSync('node', [script, '9', '--repo', 'o/r', '--release', '--dry-run'], { cwd: dir, encoding: 'utf8', stdio: QUIET_STDIO, env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, ...envDelGo({ repo: 'o/r', issue: 9 }) } })
+    // Task 10 (F-e2e): --release reads the body of the issue through `gh` — it
+    // needs the stub here just as the test above does, or it hits the real
+    // 'o/r'.
+    const out = execFileSync('node', [script, '9', '--repo', 'o/r', '--release', '--dry-run'], { cwd: dir, encoding: 'utf8', stdio: QUIET_STDIO, env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, ...goEnv({ repo: 'o/r', issue: 9 }) } })
     expect(out).toMatch(/released #9.*in-review/)
     rmSync(dir, { recursive: true, force: true })
   })
 })
 
-describe('dispatch-check — fix review round 1 (Critical 1: fixture atado a --dry-run)', () => {
-  it('CT_CLAIM_FIXTURE puesto SIN --dry-run → exit 2, no decide con el fixture ni toca gh', () => {
+describe('dispatch-check — fix review round 1 (Critical 1: the fixture is tied to --dry-run)', () => {
+  it('CT_CLAIM_FIXTURE set WITHOUT --dry-run → exit 2, it neither decides with the fixture nor touches gh', () => {
     const fixture = { candLabels: ['touches:db'], openIssues: [], readback: [{ n: 3, labels: ['status:in-progress', 'touches:db'] }] }
     let threw = false
     try {
-      // Sin PATH a fake-gh: si el script intentara invocar `gh` de verdad aquí,
-      // fallaría igualmente (no hay red/auth), pero la aserción real es que
-      // NUNCA llega a intentarlo — ver el mensaje de error esperado.
+      // With no PATH to fake-gh: if the script tried to invoke the real `gh`
+      // here it would fail anyway (there is no network/auth), but the real
+      // assertion is that it NEVER gets to try — see the expected error
+      // message.
       execFileSync('node', [script, '3', '--repo', 'o/r'], { encoding: 'utf8', stdio: QUIET_STDIO, env: { ...process.env, CT_CLAIM_FIXTURE: JSON.stringify(fixture) } })
     } catch (e) {
       threw = true
@@ -336,8 +338,8 @@ describe('dispatch-check — fix review round 1 (Critical 1: fixture atado a --d
   })
 })
 
-describe('dispatch-check — fix review round 1 (Minor 1: validación de flags)', () => {
-  it('--repo colgante (último token, sin valor) → exit 2', () => {
+describe('dispatch-check — fix review round 1 (Minor 1: flag validation)', () => {
+  it('a dangling --repo (the last token, with no value) → exit 2', () => {
     let threw = false
     try {
       execFileSync('node', [script, '5', '--dry-run', '--repo'], { encoding: 'utf8', stdio: QUIET_STDIO })
@@ -349,7 +351,7 @@ describe('dispatch-check — fix review round 1 (Minor 1: validación de flags)'
     expect(threw).toBe(true)
   })
 
-  it('--repo seguido de otro flag (sin valor real) → exit 2', () => {
+  it('--repo followed by another flag (with no real value) → exit 2', () => {
     let threw = false
     try {
       execFileSync('node', [script, '5', '--repo', '--dry-run'], { encoding: 'utf8', stdio: QUIET_STDIO })
@@ -361,13 +363,13 @@ describe('dispatch-check — fix review round 1 (Minor 1: validación de flags)'
   })
 })
 
-describe('dispatch-check — fix review round 1 (Critical 2: fallos de gh() no dejan locks huérfanos silenciosos)', () => {
-  it('el claim inicial falla (gh caído) → exit 3 (infra, sin mutación persistente), mensaje claro, sin crash sin capturar', () => {
-    // Finding 4: exit code ensanchado — este caso ya NO comparte el exit 1
-    // de una COLLISION real (ver la cabecera de dispatch-check.mjs). Sin
-    // mutación persistente (el claim ni llegó a escribirse), pero es un
-    // fallo de infraestructura, no una colisión — el caller (ct-next.mjs)
-    // ya no necesita parsear el texto para distinguirlo.
+describe('dispatch-check — fix review round 1 (Critical 2: gh() failures leave no silent orphan locks)', () => {
+  it('the initial claim fails (gh down) → exit 3 (infrastructure, no persistent mutation), a clear message, no uncaught crash', () => {
+    // Finding 4: the exit code was widened — this case no longer shares the
+    // exit 1 of a real COLLISION (see the header of dispatch-check.mjs). No
+    // persistent mutation (the claim never even got written), but it is an
+    // infrastructure failure, not a collision — the caller (ct-next.mjs) no
+    // longer needs to parse the text to tell them apart.
     const r = runReal(['11', '--repo', 'o/r'], {
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:db']),
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[]]),
@@ -377,13 +379,13 @@ describe('dispatch-check — fix review round 1 (Critical 2: fallos de gh() no d
     expect(r.out).toMatch(/no se pudo escribir el claim/i)
   })
 
-  it('el readback tras el claim falla → revierte, avisa que la carrera no se pudo confirmar, exit 3 (infra, revert exitoso)', () => {
+  it('the readback after the claim fails → it reverts, warns that the race could not be confirmed, exit 3 (infrastructure, successful revert)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-fakegh-'))
     const counterFile = join(dir, 'list-count')
     const r = runReal(['13', '--repo', 'o/r'], {
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:db']),
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[]]), // primera llamada (colisión): sin choque
-      FAKE_GH_LIST_FAIL_AT: '1', // segunda llamada (readback post-claim): falla
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[]]), // first call (collision): no clash
+      FAKE_GH_LIST_FAIL_AT: '1', // second call (post-claim readback): it fails
       FAKE_GH_COUNTER_FILE: counterFile,
     })
     rmSync(dir, { recursive: true, force: true })
@@ -392,21 +394,22 @@ describe('dispatch-check — fix review round 1 (Critical 2: fallos de gh() no d
     expect(r.out).toMatch(/revertido a status:ready/i)
   })
 
-  it('carrera perdida y el revert también falla → avisa "carrera perdida" Y el lock huérfano con el comando manual, exit 4 (huérfano)', () => {
+  it('a lost race and the revert fails too → it warns of the lost race AND of the orphan lock with the manual command, exit 4 (orphan)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-fakegh-'))
     const counterFile = join(dir, 'list-count')
-    // Formato crudo de `gh issue list --json number,labels` (number/labels[].name),
-    // no el {n,labels} interno — allOpen() hace ese mapeo, y el stub debe imitar
-    // exactamente lo que devolvería gh de verdad.
+    // The raw format of `gh issue list --json number,labels`
+    // (number/labels[].name), not the internal {n,labels} — allOpen() does that
+    // mapping, and the stub must imitate exactly what the real gh would
+    // return.
     const readbackConLoss = [
-      { number: 17, labels: [{ name: 'status:in-progress' }, { name: 'touches:db' }] }, // nosotros
-      { number: 5, labels: [{ name: 'status:in-progress' }, { name: 'touches:db' }] },  // otro, número menor → perdemos
+      { number: 17, labels: [{ name: 'status:in-progress' }, { name: 'touches:db' }] }, // us
+      { number: 5, labels: [{ name: 'status:in-progress' }, { name: 'touches:db' }] },  // another one, a lower number → we lose
     ]
     const r = runReal(['17', '--repo', 'o/r'], {
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:db']),
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[], readbackConLoss]), // 1ª: sin choque; 2ª: readback con pérdida
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[], readbackConLoss]), // 1st: no clash; 2nd: readback with a loss
       FAKE_GH_COUNTER_FILE: counterFile,
-      FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready', // el revert (no el claim inicial) falla
+      FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready', // the revert (not the initial claim) fails
     })
     rmSync(dir, { recursive: true, force: true })
     expect(r.code).toBe(4)
@@ -415,18 +418,19 @@ describe('dispatch-check — fix review round 1 (Critical 2: fallos de gh() no d
     expect(r.out).toMatch(/gh issue edit 17 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
   })
 
-  // F22, fix round 2 — mismo defecto que los tres de mkReleaseDryRunRepo más
-  // arriba, encontrado por el mismo barrido: SIN `--dry-run`, así que no es
-  // uno de esos tres por texto literal, pero la puerta de F22 corre igual
-  // (lee git real desde el cwd en TODO `--release`, dry-run o no) — pasaba
-  // solo porque este checkout no tiene `.agent/` trackeado y `main` resuelve.
-  it('--release cuyo gh edit falla → exit 1, mensaje claro (no crash sin capturar)', () => {
+  // F22, fix round 2 — the same defect as the three of mkReleaseDryRunRepo
+  // above, found by the same sweep: WITHOUT `--dry-run`, so it is not one of
+  // those three by literal text, but the F22 door runs all the same (it reads
+  // real git from the cwd in EVERY `--release`, dry-run or not) — it passed
+  // only because this checkout does not have `.agent/` tracked and `main`
+  // resolves.
+  it('--release whose gh edit fails → exit 1, a clear message (no uncaught crash)', () => {
     const dir = mkReleaseDryRunRepo(19)
     const r = runReal(['19', '--repo', 'o/r', '--release'], {
       FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:in-review',
-      // F38: la puerta 9 va antes de la mutación, así que este test necesita el
-      // gate `plan` cerrado para llegar hasta el `gh edit` que quiere ver fallar.
-      ...envDelGo({ repo: 'o/r', issue: 19 }),
+      // F38: door 9 goes before the mutation, so this test needs the `plan`
+      // gate closed in order to reach the `gh edit` it wants to see fail.
+      ...goEnv({ repo: 'o/r', issue: 19 }),
     }, dir)
     rmSync(dir, { recursive: true, force: true })
     expect(r.code).toBe(1)
@@ -434,23 +438,22 @@ describe('dispatch-check — fix review round 1 (Critical 2: fallos de gh() no d
   })
 })
 
-// Finding 2 de la review final: `allOpen()` usaba `gh issue list --limit 200`
-// — como devuelve más nuevo primero, un tope fijo puede dejar fuera un
-// `in-progress` colisionante VIEJO, y entonces `detectCollisions`/
-// `claimLost` fallan ABIERTOS (el lock deja de bloquear). fake-gh-bin no
-// simula HTTP-pagination de verdad, pero SÍ registra el argv exacto que
-// dispatch-check.mjs le pasa — la forma correcta de comprobar, sin red, que
-// el comando ya no lleva el tope fijo.
-// T11 — AC6 robusto: hook de prueba CT_CLAIM_PRECLAIM_DELAY_MS. El hook solo
-// puede añadir una espera síncrona entre "colisión limpia" y "escribir el
-// claim" en la ruta REAL (nunca --dry-run/fixture, que son puramente
-// síncronos y sin red). Estos tests comprueban: (a) validación de la propia
-// variable, (b) que ausente == 0 espera == camino idéntico al de antes del
-// hook, y (c) que presente sí retrasa medible y verificablemente la
-// escritura — sin lo cual el harness adversarial no podría confiar en que el
-// hook realmente construye la ventana que dice construir.
-describe('dispatch-check — T11 hook CT_CLAIM_PRECLAIM_DELAY_MS', () => {
-  it('CT_CLAIM_PRECLAIM_DELAY_MS malformado ("300ms") → exit 2, mensaje claro', () => {
+// Finding 2 of the final review: `allOpen()` used `gh issue list --limit 200` —
+// since it returns newest first, a fixed cap can leave out an OLD colliding
+// `in-progress`, and then `detectCollisions`/`claimLost` fail OPEN (the lock
+// stops locking). fake-gh-bin does not simulate real HTTP pagination, but it
+// DOES record the exact argv dispatch-check.mjs passes it — the right way to
+// check, with no network, that the command no longer carries the fixed cap.
+// T11 — robust AC6: the CT_CLAIM_PRECLAIM_DELAY_MS test hook. The hook can only
+// add a synchronous wait between "clean collision" and "write the claim" on the
+// REAL path (never --dry-run/fixture, which are purely synchronous and without
+// network). These tests check: (a) validation of the variable itself, (b) that
+// absent == 0 wait == a path identical to the one before the hook, and (c) that
+// present does delay the write measurably and verifiably — without which the
+// adversarial harness could not trust that the hook really builds the window it
+// says it builds.
+describe('dispatch-check — the T11 CT_CLAIM_PRECLAIM_DELAY_MS hook', () => {
+  it('a malformed CT_CLAIM_PRECLAIM_DELAY_MS ("300ms") → exit 2, a clear message', () => {
     const r = runReal(['5', '--repo', 'o/r'], {
       CT_CLAIM_PRECLAIM_DELAY_MS: '300ms',
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:db']),
@@ -460,7 +463,7 @@ describe('dispatch-check — T11 hook CT_CLAIM_PRECLAIM_DELAY_MS', () => {
     expect(r.out).toMatch(/CT_CLAIM_PRECLAIM_DELAY_MS inválido/)
   })
 
-  it('CT_CLAIM_PRECLAIM_DELAY_MS negativo → exit 2', () => {
+  it('a negative CT_CLAIM_PRECLAIM_DELAY_MS → exit 2', () => {
     const r = runReal(['5', '--repo', 'o/r'], {
       CT_CLAIM_PRECLAIM_DELAY_MS: '-50',
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:db']),
@@ -470,7 +473,7 @@ describe('dispatch-check — T11 hook CT_CLAIM_PRECLAIM_DELAY_MS', () => {
     expect(r.out).toMatch(/CT_CLAIM_PRECLAIM_DELAY_MS inválido/)
   })
 
-  it('"0" explícito por entorno → válido (no es un error), mismo resultado que ausente', () => {
+  it('an explicit "0" from the environment → valid (it is not an error), the same result as absent', () => {
     const r = runReal(['3', '--repo', 'o/r'], {
       CT_CLAIM_PRECLAIM_DELAY_MS: '0',
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:db']),
@@ -481,49 +484,51 @@ describe('dispatch-check — T11 hook CT_CLAIM_PRECLAIM_DELAY_MS', () => {
   })
 
   // ==========================================================================
-  // F8 — LOS DOS ÚNICOS TESTS DE LA SUITE QUE DE VERDAD MIDEN TIEMPO.
+  // F8 — THE ONLY TWO TESTS IN THE SUITE THAT REALLY MEASURE TIME.
   //
-  // `CT_CLAIM_PRECLAIM_DELAY_MS` ES un retraso: no hay forma honesta de
-  // comprobar que duerme lo que dice sin mirar un reloj. Lo que sí se puede
-  // quitar es la dependencia del reloj DE LA MÁQUINA — el ruido — sin quitar
-  // la medición.
+  // `CT_CLAIM_PRECLAIM_DELAY_MS` IS a delay: there is no honest way to check
+  // that it sleeps what it says without looking at a clock. What can be removed
+  // is the dependence on THE MACHINE's clock — the noise — without removing the
+  // measurement.
   //
-  // Lo que había antes: cuatro corridas de la rama A seguidas de cuatro de la
-  // rama B, y comparación de MEDIANAS entre bloques. Eso da por hecho que la
-  // carga de la máquina es la misma en los dos bloques, que es justo lo que no
-  // se cumple: los bloques están separados por segundos, y en esos segundos el
-  // resto de la suite (y cualquier otra cosa del portátil) va y viene. Medido
-  // contra main sin tocar, con otra suite de vitest a la vez: 2 de 6 corridas
-  // fallaban aquí, con diferencias de 22ms y 249ms frente al mínimo exigido de
-  // 300 — el retraso de 600ms seguía estando ahí, pero el ruido entre bloques
-  // se lo comía entero.
+  // What there was before: four runs of branch A followed by four of branch B,
+  // and a comparison of MEDIANS between blocks. That takes for granted that the
+  // load on the machine is the same in both blocks, which is exactly what does
+  // not hold: the blocks are separated by seconds, and in those seconds the
+  // rest of the suite (and anything else on the laptop) comes and goes.
+  // Measured against an untouched main, with another vitest suite running at
+  // the same time: 2 out of 6 runs failed here, with differences of 22ms and
+  // 249ms against the required minimum of 300 — the 600ms delay was still
+  // there, but the noise between blocks ate it whole.
   //
-  // Lo que hay ahora: medición PAREADA e INTERCALADA. Cada iteración corre las
-  // dos ramas una detrás de otra y se queda con SU diferencia; el estadístico
-  // es la mediana de las diferencias pareadas, no la diferencia de medianas.
-  // Dos corridas consecutivas ven prácticamente la misma máquina, así que el
-  // ruido común se cancela en la resta en vez de sumarse. El umbral (la mitad
-  // del valor nominal) sigue siendo el mismo, y sigue detectando exactamente
-  // lo que tiene que detectar: un hook que no duerme lo que dice.
+  // What there is now: PAIRED and INTERLEAVED measurement. Each iteration runs
+  // both branches one after the other and keeps ITS difference; the statistic
+  // is the median of the paired differences, not the difference of the medians.
+  // Two consecutive runs see practically the same machine, so the common noise
+  // cancels out in the subtraction instead of adding up. The threshold (half
+  // the nominal value) is still the same, and it still detects exactly what it
+  // has to detect: a hook that does not sleep what it says.
   //
-  // POR QUÉ EL VALOR NOMINAL ES DE SEGUNDOS Y NO DE DÉCIMAS. El pareado quita
-  // el ruido COMÚN a las dos ramas, pero no el que las separa, y aquí ése
-  // manda: cada rama arranca su propio proceso `node`, y ese arranque cuesta
-  // del orden de medio segundo con una dispersión del mismo orden. Con un
-  // nominal de décimas, la señal y el ruido son del mismo tamaño, y la mediana
-  // de unas pocas muestras se cae por debajo del umbral sin que el hook haya
-  // hecho nada malo — que es exactamente lo que pasaba: medido en reposo, 1 de
-  // 15 diferencias pareadas caía por debajo del umbral, y bajo carga esa
-  // proporción bastaba para tumbar la mediana de cinco muestras.
+  // WHY THE NOMINAL VALUE IS IN SECONDS AND NOT IN TENTHS. The pairing removes
+  // the noise COMMON to both branches, but not the noise that separates them,
+  // and here that is what rules: each branch starts its own `node` process, and
+  // that start-up costs of the order of half a second with a spread of the same
+  // order. With a nominal of tenths, the signal and the noise are the same
+  // size, and the median of a few samples falls below the threshold without the
+  // hook having done anything wrong — which is exactly what was happening:
+  // measured at rest, 1 out of 15 paired differences fell below the threshold,
+  // and under load that proportion was enough to bring down the median of five
+  // samples.
   //
-  // La cura no es más muestras (multiplica el coste sin separar señal de
-  // ruido): es que la señal domine. Con un nominal de segundos, el arranque
-  // pasa de valer tanto como la señal a valer una fracción pequeña de ella, y
-  // la muestra PEOR queda muy por encima del umbral en vez de rozarlo. Se
-  // bajan las iteraciones de cinco a tres para no pagar el nominal más alto
-  // cinco veces; aun así este fichero tarda unos segundos MÁS que antes, y ése
-  // es el precio deliberado de que deje de caerse solo. Tres es el mínimo con
-  // el que una mediana sigue significando algo.
+  // The cure is not more samples (it multiplies the cost without separating
+  // signal from noise): it is for the signal to dominate. With a nominal in
+  // seconds, the start-up goes from being worth as much as the signal to being
+  // worth a small fraction of it, and the WORST sample stays well above the
+  // threshold instead of grazing it. The iterations go down from five to three
+  // so as not to pay the higher nominal five times; even so this file takes a
+  // few seconds MORE than before, and that is the deliberate price of it no
+  // longer falling over on its own. Three is the minimum with which a median
+  // still means something.
   // ==========================================================================
   const preclaimEnv = {
     FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:db']),
@@ -536,12 +541,12 @@ describe('dispatch-check — T11 hook CT_CLAIM_PRECLAIM_DELAY_MS', () => {
     return { elapsed: Date.now() - t0, r }
   }
 
-  it('valor positivo retrasa medible la escritura del claim frente a ausente (mismo resultado final, más lento)', () => {
+  it('a positive value measurably delays the write of the claim compared to absent (the same final result, slower)', () => {
     const NOMINAL_MS = 2000
     const diffs = []
     for (let i = 0; i < 3; i++) {
-      // Las dos ramas, una inmediatamente después de la otra, en la misma
-      // iteración: ven la misma máquina.
+      // The two branches, one immediately after the other, in the same
+      // iteration: they see the same machine.
       const a = timed(() => runReal(['3', '--repo', 'o/r'], { ...preclaimEnv }))
       const b = timed(() => runReal(['3', '--repo', 'o/r'], { ...preclaimEnv, CT_CLAIM_PRECLAIM_DELAY_MS: String(NOMINAL_MS) }))
       for (const s of [a, b]) {
@@ -550,18 +555,19 @@ describe('dispatch-check — T11 hook CT_CLAIM_PRECLAIM_DELAY_MS', () => {
       }
       diffs.push(b.elapsed - a.elapsed)
     }
-    // La mediana de las diferencias PAREADAS. Se exige la mitad del valor
-    // nominal: por debajo de eso el hook no estaría durmiendo lo que dice.
+    // The median of the PAIRED differences. Half the nominal value is
+    // required: below that the hook would not be sleeping what it says.
     expect(median(diffs)).toBeGreaterThanOrEqual(NOMINAL_MS / 2)
   })
 
-  it('con --dry-run/fixture, CT_CLAIM_PRECLAIM_DELAY_MS alto NO retrasa nada (el hook nunca toca la ruta pura)', () => {
-    // Misma corrección: antes esto era `elapsed < 1000ms`, un umbral ABSOLUTO
-    // de reloj de pared sobre un arranque de node — bajo carga, arrancar node
-    // solo ya puede pasar de 1s, y el test habría fallado sin que el hook
-    // hubiera dormido ni un milisegundo. Lo que de verdad se quiere afirmar es
-    // "el sleep de 5000ms NO ocurrió", y eso se comprueba comparando contra un
-    // control corrido junto al caso, no contra una constante.
+  it('with --dry-run/fixture, a high CT_CLAIM_PRECLAIM_DELAY_MS delays NOTHING (the hook never touches the pure path)', () => {
+    // The same correction: before, this was `elapsed < 1000ms`, an ABSOLUTE
+    // wall-clock threshold over a node start-up — under load, starting node
+    // alone can already take more than 1s, and the test would have failed
+    // without the hook having slept a single millisecond. What is really meant
+    // to be asserted is "the 5000ms sleep did NOT happen", and that is checked
+    // by comparing against a control run alongside the case, not against a
+    // constant.
     const NOMINAL_MS = 5000
     const fixture = { candLabels: ['touches:db'], openIssues: [], readback: [{ n: 3, labels: ['status:in-progress', 'touches:db'] }] }
     const dryRun = (env) => execFileSync('node', [script, '3', '--repo', 'o/r', '--dry-run'],
@@ -572,34 +578,33 @@ describe('dispatch-check — T11 hook CT_CLAIM_PRECLAIM_DELAY_MS', () => {
 
     expect(control.r).toMatch(/claimed #3/)
     expect(conHook.r).toMatch(/claimed #3/)
-    // Si el hook hubiera tocado la ruta pura, la diferencia sería de ~5000ms.
-    // Se exige que esté por debajo de la MITAD: margen de sobra para el ruido
-    // de dos arranques de node consecutivos, y ni de lejos suficiente para
-    // esconder el sleep.
+    // If the hook had touched the pure path, the difference would be ~5000ms.
+    // It is required to be below HALF: plenty of margin for the noise of two
+    // consecutive node start-ups, and nowhere near enough to hide the sleep.
     expect(conHook.elapsed - control.elapsed).toBeLessThan(NOMINAL_MS / 2)
   })
 
-  // Fix round 1 (review de T11), Minor 1: la validación de
-  // CT_CLAIM_PRECLAIM_DELAY_MS vive DESPUÉS del guard de --release en el
-  // script — --release ni siquiera pasa por ese punto del código. Antes del
-  // fix, un valor malformado colgado en el entorno abortaba --release con
-  // exit 2 sin ejecutar la mutación, dejando el issue atascado en
-  // status:in-progress. Este test demuestra que --release ahora es inmune:
-  // ni siquiera un valor claramente inválido lo afecta.
-  it('--release con CT_CLAIM_PRECLAIM_DELAY_MS malformado en el entorno → --release procede igual, no le afecta', () => {
+  // Fix round 1 (T11 review), Minor 1: the validation of
+  // CT_CLAIM_PRECLAIM_DELAY_MS lives AFTER the --release guard in the script —
+  // --release does not even pass through that point of the code. Before the
+  // fix, a malformed value left hanging in the environment aborted --release
+  // with exit 2 without running the mutation, leaving the issue stuck in
+  // status:in-progress. This test shows that --release is now immune: not even
+  // a clearly invalid value affects it.
+  it('--release with a malformed CT_CLAIM_PRECLAIM_DELAY_MS in the environment → --release proceeds all the same, unaffected', () => {
     const dir = mkReleaseDryRunRepo()
-    // Task 10 (F-e2e): idem — el stub de `gh` hace falta para la lectura del
-    // body del issue, no solo para el escenario de mutación.
+    // Task 10 (F-e2e): likewise — the `gh` stub is needed for reading the body
+    // of the issue, not only for the mutation scenario.
     const out = execFileSync('node', [script, '9', '--repo', 'o/r', '--release', '--dry-run'],
-      { cwd: dir, encoding: 'utf8', stdio: QUIET_STDIO, env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, CT_CLAIM_PRECLAIM_DELAY_MS: 'not-a-number', ...envDelGo({ repo: 'o/r', issue: 9 }) } })
+      { cwd: dir, encoding: 'utf8', stdio: QUIET_STDIO, env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, CT_CLAIM_PRECLAIM_DELAY_MS: 'not-a-number', ...goEnv({ repo: 'o/r', issue: 9 }) } })
     expect(out).toMatch(/released #9.*in-review/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Fix round 1, Minor 2: tope superior de 60000ms. Sin tope, "1e12" (~31
-  // años en ms) se acepta como "número >= 0" válido y es indistinguible en
-  // la práctica de un cuelgue.
-  it('CT_CLAIM_PRECLAIM_DELAY_MS por encima del tope (60000ms) → exit 2, mensaje claro', () => {
+  // Fix round 1, Minor 2: an upper cap of 60000ms. With no cap, "1e12" (~31
+  // years in ms) is accepted as a valid "number >= 0" and is in practice
+  // indistinguishable from a hang.
+  it('CT_CLAIM_PRECLAIM_DELAY_MS above the cap (60000ms) → exit 2, a clear message', () => {
     const r = runReal(['5', '--repo', 'o/r'], {
       CT_CLAIM_PRECLAIM_DELAY_MS: '1e12',
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:db']),
@@ -609,11 +614,11 @@ describe('dispatch-check — T11 hook CT_CLAIM_PRECLAIM_DELAY_MS', () => {
     expect(r.out).toMatch(/CT_CLAIM_PRECLAIM_DELAY_MS inválido/)
   })
 
-  // El límite exacto (60000ms) debe seguir siendo válido — se comprueba por
-  // la ruta --dry-run/fixture (la validación es incondicional, pero
-  // sleepSync() solo se invoca en la ruta real) para no pagar 60s reales de
-  // espera en la suite.
-  it('CT_CLAIM_PRECLAIM_DELAY_MS exactamente en el tope (60000ms) → sigue siendo válido', () => {
+  // The exact limit (60000ms) must keep being valid — it is checked through
+  // the --dry-run/fixture path (the validation is unconditional, but
+  // sleepSync() is only invoked on the real path) so as not to pay 60s of real
+  // waiting in the suite.
+  it('CT_CLAIM_PRECLAIM_DELAY_MS exactly at the cap (60000ms) → it is still valid', () => {
     const fixture = { candLabels: ['touches:db'], openIssues: [], readback: [{ n: 3, labels: ['status:in-progress', 'touches:db'] }] }
     const out = execFileSync('node', [script, '3', '--repo', 'o/r', '--dry-run'],
       { encoding: 'utf8', stdio: QUIET_STDIO, env: { ...process.env, CT_CLAIM_PRECLAIM_DELAY_MS: '60000', CT_CLAIM_FIXTURE: JSON.stringify(fixture) } })
@@ -621,8 +626,8 @@ describe('dispatch-check — T11 hook CT_CLAIM_PRECLAIM_DELAY_MS', () => {
   })
 })
 
-describe('dispatch-check — enumeración de issues abiertos sin --limit fijo (review final, finding 2)', () => {
-  it('allOpen() usa --paginate y nunca --limit', () => {
+describe('dispatch-check — enumerating open issues with no fixed --limit (final review, finding 2)', () => {
+  it('allOpen() uses --paginate and never --limit', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-dc-nolimit-'))
     const logFile = join(dir, 'gh-argv-log')
     const r = runReal(['3', '--repo', 'o/r'], {
@@ -640,15 +645,16 @@ describe('dispatch-check — enumeración de issues abiertos sin --limit fijo (r
 })
 
 // ============================================================================
-// Slice 2 (apuntes de Capde) — la base del diff de --release es el corte real.
+// Slice 2 (Capde notes) — the base of the --release diff is the real cut.
 //
-// La geometría de la corrida del slice 10: el worktree se cortó de
-// origin/main en el commit S; la copia LOCAL de main se quedó 7 commits
-// atrás; y el plan citaba un fichero que existe en S pero no en esa main
-// rancia — el gate del plan (F-jjponz-3 lee las citas en la BASE) lo acusó de
-// "cita inventada". Aquí se reproduce con 1 commit de retraso (misma clase de
-// fallo): `citado.txt` nace en el commit del corte, el plan lo cita, y `main`
-// local se rebobina con `git branch -f` (legal: el checkout está en feat/9).
+// The geometry of the slice 10 run: the worktree was cut from origin/main at
+// commit S; the LOCAL copy of main stayed 7 commits behind; and the plan cited
+// a file that exists in S but not in that stale main — the plan gate
+// (F-jjponz-3 reads the citations in the BASE) accused it of an "invented
+// citation". Here it is reproduced with 1 commit of lag (the same class of
+// failure): `citado.txt` is born in the commit of the cut, the plan cites it,
+// and the local `main` is rewound with `git branch -f` (legal: the checkout is
+// on feat/9).
 function mkStaleMainRepo({ issue = 9, sliceMd } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ct-release-stale-'))
   const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
@@ -663,7 +669,7 @@ function mkStaleMainRepo({ issue = 9, sliceMd } = {}) {
   git('add', '-A')
   git('commit', '-qm', 'main avanza (los 7 commits de la corrida real)')
   const cutSha = git('rev-parse', 'HEAD').trim()
-  git('checkout', '-qb', `feat/${issue}`) // el corte del worktree: origin/<base> en S
+  git('checkout', '-qb', `feat/${issue}`) // the cut of the worktree: origin/<base> at S
   const plan = minimalPlanFor(issue)
     .replace('Final text (work.txt):', 'Current state (citado.txt):')
     .replace(`${FENCE}\ntrabajo\n${FENCE}`, `${FENCE}\ntexto del corte\n${FENCE}`)
@@ -672,8 +678,8 @@ function mkStaleMainRepo({ issue = 9, sliceMd } = {}) {
   writeFileSync(join(dir, 'work.txt'), 'trabajo\n')
   git('add', '-A')
   git('commit', '-qm', 'work')
-  git('branch', '-f', 'main', oldMain) // la main LOCAL se queda ATRÁS del corte
-  // Semilla y run sin commitear, como los deja el despacho real.
+  git('branch', '-f', 'main', oldMain) // the LOCAL main stays BEHIND the cut
+  // Seed and run uncommitted, the way the real dispatch leaves them.
   mkdirSync(join(dir, '.agent'), { recursive: true })
   writeFileSync(join(dir, '.agent', 'SLICE.md'), sliceMd(cutSha))
   writeFileSync(join(dir, '.agent', `run-${issue}.json`), JSON.stringify({
@@ -683,104 +689,107 @@ function mkStaleMainRepo({ issue = 9, sliceMd } = {}) {
   return { dir, cutSha }
 }
 
-// --release lee el body del issue por gh incluso en --dry-run; sin el PATH al stub, el gh
-// real fallaría contra un repo o/r que no existe. FAKE_GH_VIEW_BODY sin fijar → body vacío
-// → sin sección "## E2E" → nada que cruzar.
+// --release reads the body of the issue through gh even in --dry-run; without
+// the PATH to the stub, the real gh would fail against an o/r repository that
+// does not exist. FAKE_GH_VIEW_BODY not set → empty body → no "## E2E" section
+// → nothing to cross-check.
 //
-// `envDelGo` (F38): desde el nonce del go, `--release` tiene una puerta más —el
-// gate `plan` no se cierra sin un `-OK <nonce>` registrado— y sin satisfacerla
-// TODO esto saldría 9 antes de llegar a lo que estos tests miden, que es de
-// dónde sale la base del diff y qué avisa la barandilla de `base:`. La puerta 9
-// no es el objeto de esta prueba: se cubre en f38-el-go-del-gate-plan.test.js.
-// Se usa el fixture compartido y no una copia porque su propia cabecera lo pide
-// («el día que el formato del registro cambie, un fixture compartido rompe una
-// vez y en un sitio»), y es lo que ya hacen los demás tests de `--release` de
-// este fichero y los de f22.
-const releaseStale = (dir) => spawnSync('node', [script, '9', '--repo', 'o/r', '--release', '--dry-run'], { cwd: dir, encoding: 'utf8', env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, ...envDelGo({ repo: 'o/r', issue: 9 }) } })
+// `goEnv` (F38): since the go nonce, `--release` has one more door —the `plan`
+// gate does not close without a registered `-OK <nonce>`— and without
+// satisfying it ALL of this would come out 9 before reaching what these tests
+// measure, which is where the base of the diff comes from and what the `base:`
+// guardrail warns about. Door 9 is not the object of this test: it is covered
+// in f38-el-go-del-gate-plan.test.js. The shared fixture is used and not a copy
+// because its own header asks for it («the day the format of the record
+// changes, a shared fixture breaks once and in one place»), and it is what the
+// other `--release` tests of this file and those of f22 already do.
+const releaseStale = (dir) => spawnSync('node', [script, '9', '--repo', 'o/r', '--release', '--dry-run'], { cwd: dir, encoding: 'utf8', env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, ...goEnv({ repo: 'o/r', issue: 9 }) } })
 
-describe('dispatch-check --release — la base del diff es el corte real (slice 2, apuntes de Capde)', () => {
-  it('con base_sha: presente el diff sale contra ese commit aunque main local esté por detrás', () => {
+describe('dispatch-check --release — the base of the diff is the real cut (slice 2, Capde notes)', () => {
+  it('with base_sha: present the diff comes out against that commit even when the local main is behind', () => {
     const { dir } = mkStaleMainRepo({ sliceMd: (cut) => `---\ntask: slice\nbase: main\nbase_sha: ${cut}\n---\n# s\n` })
     const r = releaseStale(dir)
-    // Sin el fix esto salía 6: `base:` resolvía la main LOCAL (rancia), la
-    // cita de citado.txt no existía ahí, y el plan quedaba acusado de citar
-    // un fichero inventado — el caso exacto de la corrida del slice 10.
+    // Without the fix this came out 6: `base:` resolved the LOCAL (stale)
+    // main, the citation of citado.txt did not exist there, and the plan was
+    // accused of citing an invented file — the exact case of the slice 10
+    // run.
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/released #9.*in-review/)
     expect(r.stderr).not.toContain('no existe en la base')
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('semilla sin base_sha: se comporta como hoy — cae a `base:` y mide la copia local, con su defecto incluido', () => {
+  it('a seed with no base_sha: behaves as it does today — it falls back to `base:` and measures the local copy, defect included', () => {
     const { dir } = mkStaleMainRepo({ sliceMd: () => `---\ntask: slice\nbase: main\n---\n# s\n` })
     const r = releaseStale(dir)
-    // El comportamiento de HOY para semillas anteriores al slice 1,
-    // conservado a propósito (for_developers: la cadena queda intacta). Si
-    // esto empieza a salir 0, alguien tocó el fallback — justo lo que este
-    // slice promete NO hacer.
+    // TODAY's behaviour for seeds older than slice 1, preserved on purpose
+    // (for_developers: the chain stays intact). If this starts coming out 0,
+    // someone touched the fallback — precisely what this slice promises NOT to
+    // do.
     expect(r.status).toBe(6)
     expect(r.stderr).toContain('citado.txt')
     expect(r.stderr).toContain('no existe en la base')
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('base_sha: presente pero no resoluble (repo podado / semilla corrupta) cae a `base:`, no se niega', () => {
+  it('base_sha: present but not resolvable (a pruned repository / a corrupt seed) falls back to `base:`, it does not refuse', () => {
     const { dir } = mkStaleMainRepo({ sliceMd: () => `---\ntask: slice\nbase: main\nbase_sha: ${'a'.repeat(40)}\n---\n# s\n` })
     const r = releaseStale(dir)
-    // Distingue fallback de negación: si sliceBaseRef devolviera el sha SIN
-    // verificarlo, el rev-parse de los consumidores fallaría y esto saldría
-    // 5 ("no se pudo resolver"). El fallback correcto sale 6 por la MISMA
-    // razón que el test de arriba: mide la main local y acusa la cita.
+    // It tells a fallback from a refusal: if sliceBaseRef returned the sha
+    // WITHOUT verifying it, the consumers' rev-parse would fail and this would
+    // come out 5 ("could not be resolved"). The correct fallback comes out 6
+    // for the SAME reason as the test above: it measures the local main and
+    // accuses the citation.
     expect(r.status).toBe(6)
     expect(r.stderr).toContain('citado.txt')
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('un `base:` con pinta de SHA (40 hex) avisa por stderr — una sola vez y sin abortar — de que rompe gh pr create y de que el diff ya usa base_sha:', () => {
-    // La barandilla contra el arreglo espontáneo de la corrida real: el
-    // agente metió un SHA en `base:` para "arreglar" el diff. El diff
-    // funciona igual (un sha resuelve — por eso NO se aborta), pero
-    // `gh pr create --base` exige un nombre de rama y fallará al cerrar.
+  it('a `base:` that looks like a SHA (40 hex) warns on stderr — once only and without aborting — that it breaks gh pr create and that the diff already uses base_sha:', () => {
+    // The guardrail against the spontaneous fix of the real run: the agent put
+    // a SHA into `base:` to "fix" the diff. The diff works all the same (a sha
+    // resolves — that is why it does NOT abort), but `gh pr create --base`
+    // demands a branch name and will fail when closing.
     const { dir } = mkStaleMainRepo({ sliceMd: (cut) => `---\ntask: slice\nbase: ${cut}\nbase_sha: ${cut}\n---\n# s\n` })
     const r = releaseStale(dir)
-    expect(r.status).toBe(0) // avisa, no aborta
+    expect(r.status).toBe(0) // it warns, it does not abort
     expect(r.stdout).toMatch(/released #9.*in-review/)
     expect(r.stderr).toContain('gh pr create')
     expect(r.stderr).toContain('base_sha:')
-    // --release consulta la base DOS veces (limpieza F22 + plan F-jjponz-1);
-    // el aviso sale UNA.
+    // --release consults the base TWICE (F22 cleanup + F-jjponz-1 plan); the
+    // warning comes out ONCE.
     expect(r.stderr.match(/AVISO:/g)).toHaveLength(1)
     rmSync(dir, { recursive: true, force: true })
   })
 })
 
-// Slice 9(a) — la barandilla mira la NATURALEZA de `base:`, no su longitud.
-// El slice 2 exigía 40 hex; un `git rev-parse --short HEAD` metía 7-12 y
-// rompía `gh pr create --base` igual, en silencio.
-describe('dispatch-check --release — la barandilla de `base:` no cuenta caracteres (slice 9)', () => {
-  it('un `base:` con un SHA CORTO (10 hex) avisa igual que el de 40', () => {
+// Slice 9(a) — the guardrail looks at the NATURE of `base:`, not at its length.
+// Slice 2 demanded 40 hex; a `git rev-parse --short HEAD` put in 7-12 and broke
+// `gh pr create --base` just the same, in silence.
+describe('dispatch-check --release — the `base:` guardrail does not count characters (slice 9)', () => {
+  it('a `base:` with a SHORT SHA (10 hex) warns just as the 40-hex one does', () => {
     const { dir } = mkStaleMainRepo({ sliceMd: (cut) => `---\ntask: slice\nbase: ${cut.slice(0, 10)}\nbase_sha: ${cut}\n---\n# s\n` })
     const r = releaseStale(dir)
-    expect(r.status).toBe(0)               // avisa, no aborta (igual que el de 40)
+    expect(r.status).toBe(0)               // it warns, it does not abort (just as the 40-hex one)
     expect(r.stderr).toContain('gh pr create')
     expect(r.stderr).toContain('base_sha:')
-    expect(r.stderr.match(/AVISO:/g)).toHaveLength(1)   // dos consultas, un aviso
+    expect(r.stderr.match(/AVISO:/g)).toHaveLength(1)   // two consultations, one warning
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('`base: main` — una rama de verdad de este clon — NO avisa', () => {
+  it('`base: main` — a real branch of this clone — does NOT warn', () => {
     const { dir } = mkStaleMainRepo({ sliceMd: (cut) => `---\ntask: slice\nbase: main\nbase_sha: ${cut}\n---\n# s\n` })
     const r = releaseStale(dir)
     expect(r.status).toBe(0)
-    expect(r.stderr).not.toContain('AVISO:')  // `AVISO:` sale UNA sola vez en todo dispatch-check
+    expect(r.stderr).not.toContain('AVISO:')  // `AVISO:` comes out ONCE only in the whole of dispatch-check
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('una rama que solo existe en `refs/remotes/origin/` (nunca checkouteada aquí) NO avisa', () => {
-    // El falso positivo que la sonda de refs/remotes existe para evitar: un
-    // clon que solo tiene `main` en local y despacha con --base develop. El
-    // ref remoto se fabrica con `update-ref` (no hace falta remote ni red:
-    // un ref es un fichero).
+  it('a branch that only exists in `refs/remotes/origin/` (never checked out here) does NOT warn', () => {
+    // The false positive the refs/remotes probe exists to avoid: a clone that
+    // only has `main` locally and dispatches with --base develop. The remote
+    // ref is manufactured with `update-ref` (no remote and no network needed: a
+    // ref is a file).
     const { dir, cutSha } = mkStaleMainRepo({ sliceMd: (cut) => `---\ntask: slice\nbase: develop\nbase_sha: ${cut}\n---\n# s\n` })
     execFileSync('git', ['update-ref', 'refs/remotes/origin/develop', cutSha], { cwd: dir })
     const r = releaseStale(dir)
@@ -789,7 +798,7 @@ describe('dispatch-check --release — la barandilla de `base:` no cuenta caract
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('un `base:` que no es rama NI resuelve a un commit (un typo) NO avisa: esa avería tiene otra voz', () => {
+  it('a `base:` that is neither a branch NOR resolves to a commit (a typo) does NOT warn: that breakage has another voice', () => {
     const { dir } = mkStaleMainRepo({ sliceMd: (cut) => `---\ntask: slice\nbase: mian\nbase_sha: ${cut}\n---\n# s\n` })
     const r = releaseStale(dir)
     expect(r.status).toBe(0)

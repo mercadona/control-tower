@@ -1,113 +1,113 @@
-// Un trozo de la máquina de estados de scripts/ct-step.mjs. El preámbulo —y
-// por qué son nueve ficheros y no uno— está en fixtures/ct-step-harness.js.
+// One piece of the state machine of scripts/ct-step.mjs. The preamble —and why
+// there are nine files and not one— is in fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
-import { crearHelpers, montarRepo, PLAN } from './fixtures/ct-step-harness.js'
+import { makeHelpers, makeRepo, PLAN } from './fixtures/ct-step-harness.js'
 
 let repo
-const { ct, informe, veredicto, veredictoDeSlice, commits, estado, juzgar, tareaOk } = crearHelpers(() => repo)
+const { ct, writeReport, writeVerdict, writeSliceVerdict, commits, runState, judgeTask, taskOk } = makeHelpers(() => repo)
 
-beforeEach(() => { repo = montarRepo() })
+beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
 
-describe('next: la sesión pregunta y el oráculo contesta', () => {
-  it('dice la tarea, el paso y qué despachar, sin transicionar', () => {
+describe('next: the session asks and the oracle answers', () => {
+  it('states the task, the step and what to dispatch, without transitioning', () => {
     const r = ct('next')
     expect(r.status).toBe(0)
-    expect(r.stdout).toMatch(/tarea 1\/2 — la primera/)
+    expect(r.stdout).toMatch(/tarea 1\/2 — the first one/)
     expect(r.stdout).toMatch(/paso: implement/)
     expect(r.stdout).toMatch(/DESPACHA UN IMPLEMENTADOR/)
-    // Y con qué modelo: omitirlo hereda el de la sesión, que es el más caro.
+    // And with which model: omitting it inherits the session's, the priciest one.
     expect(r.stdout).toMatch(/modelo sonnet/)
-    // Preguntar no avanza nada: el paso sigue siendo el mismo.
+    // Asking advances nothing: the step is still the same one.
     expect(ct('next').stdout).toMatch(/paso: implement/)
-    expect(estado().step).toBe('implement')
+    expect(runState().step).toBe('implement')
   })
 
-  it('prepara el brief de la tarea, que es lo que el implementador necesita', () => {
+  it('prepares the task brief, which is what the implementer needs', () => {
     ct('next')
     const brief = join(repo, '.agent', 'run-7', 'task-1-brief.md')
     expect(existsSync(brief)).toBe(true)
-    expect(readFileSync(brief, 'utf8')).toMatch(/### Task 1 — la primera/)
+    expect(readFileSync(brief, 'utf8')).toMatch(/### Task 1 — the first one/)
   })
 
-  it('en el paso del juez prepara el paquete de revisión del ÍNDICE', () => {
-    ct('report', informe(['uno.txt']))
+  it('at the judge step it prepares the review package of the INDEX', () => {
+    ct('report', writeReport(['uno.txt']))
     ct('controls')
     const r = ct('next')
     expect(r.stdout).toMatch(/DESPACHA EL JUEZ .*ct-judge.*SIN Bash/)
-    // La propiedad "implementador y juez leen el mismo texto" cuelga de esta
-    // línea: el despacho del juez nombra el brief, o el juez nunca lo abre.
+    // The property "implementer and judge read the same text" hangs off this
+    // line: the judge's dispatch names the brief, or the judge never opens it.
     expect(r.stdout).toMatch(/el brief de la tarea: .*task-1-brief\.md/)
     const paquete = join(repo, '.agent', 'run-7', 'task-1-review.diff')
     expect(readFileSync(paquete, 'utf8')).toMatch(/\+uno/)
   })
 
-  it('cuando el juez devolvió la tarea, next se lo dice al implementador', () => {
-    ct('report', informe(['uno.txt']))
+  it('when the judge sent the task back, next tells the implementer so', () => {
+    ct('report', writeReport(['uno.txt']))
     ct('controls')
-    juzgar(veredicto('FAIL', [{ severity: 'high', what: 'está mal', path: 'uno.txt', line: 1 }]))
+    judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'está mal', path: 'uno.txt', line: 1 }]))
     expect(ct('next').stdout).toMatch(/El juez devolvió esta tarea[\s\S]*uno\.txt:1: está mal/)
   })
 })
 
 // ---------------------------------------------------------------------------
-// LA PROPIEDAD CENTRAL: la secuencia es mecanismo, no prosa.
+// THE CENTRAL PROPERTY: the sequence is mechanism, not prose.
 // ---------------------------------------------------------------------------
-describe('la guardia del paso', () => {
+describe('the step guard', () => {
   it.each([
     ['commit', 'implement'],
     ['controls', 'implement'],
     ['verdict', 'implement'],
     ['global', 'implement'],
     ['slice-verdict', 'implement'],
-  ])('pedir "%s" estando en "%s" se RECHAZA con 9, y dice cuál toca', (verbo, paso) => {
-    const conJson = { verdict: () => ct('verdict', veredicto('PASS')), 'slice-verdict': () => ct('slice-verdict', veredictoDeSlice('PASS')) }
+  ])('asking for "%s" while in "%s" is REFUSED with 9, and it says which one is due', (verbo, paso) => {
+    const conJson = { verdict: () => ct('verdict', writeVerdict('PASS')), 'slice-verdict': () => ct('slice-verdict', writeSliceVerdict('PASS')) }
     const r = conJson[verbo] ? conJson[verbo]() : ct(verbo)
     expect(r.status).toBe(9)
     expect(r.stderr).toMatch(new RegExp(`el run está en "${paso}"`))
     expect(r.stderr).toMatch(/ct-step next/)
   })
 
-  it('no se puede saltar el juez para commitear', () => {
-    ct('report', informe(['uno.txt']))
+  it('the judge cannot be skipped in order to commit', () => {
+    ct('report', writeReport(['uno.txt']))
     ct('controls')
     const r = ct('commit')
     expect(r.status).toBe(9)
     expect(commits()).toBe(1)
   })
 
-  it('no se puede volver a medir una tarea ya comiteada', () => {
-    tareaOk('uno.txt')
-    expect(estado().task).toBe(2)
-    expect(ct('controls').status).toBe(9)   // la tarea 2 está en implement
+  it('a task already committed cannot be measured again', () => {
+    taskOk('uno.txt')
+    expect(runState().task).toBe(2)
+    expect(ct('controls').status).toBe(9)   // task 2 is in implement
   })
 })
 
-describe('el plan y el entorno', () => {
-  it('un plan cuya verificación es prosa sale por 6, y ni siquiera dice qué despachar', () => {
+describe('the plan and the environment', () => {
+  it('a plan whose verification is prose exits with 6, and does not even say what to dispatch', () => {
     writeFileSync(join(repo, 'plan.md'), PLAN.replace(/```bash\ntest -f uno\.txt\n```/, ''))
     const r = ct('next')
     expect(r.status).toBe(6)
     expect(r.stderr).toMatch(/plan no ejecutable/)
   })
 
-  it('fuera del worktree de un slice sale por 8', () => {
+  it('outside a slice worktree it exits with 8', () => {
     rmSync(join(repo, '.agent', 'SLICE.md'))
     expect(ct('next').status).toBe(8)
   })
 
-  it('con el índice sucio de antes y el run nuevo sale por 8', () => {
+  it('with the index dirty from before and the run new it exits with 8', () => {
     writeFileSync(join(repo, 'uno.txt'), 'uno\n')
     execFileSync('git', ['add', 'uno.txt'], { cwd: repo })
     expect(ct('next').status).toBe(8)
   })
 
-  it('un verbo desconocido es error de uso', () => {
+  it('an unknown verb is a usage error', () => {
     expect(ct('bailar').status).toBe(2)
   })
 })

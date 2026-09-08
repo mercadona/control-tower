@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { flattenIssuePages, isPullRequest, realIssuesOnly, findByMarker, epicTitleOf, partitionByEpic } from '../scripts/gh-issues.js'
 
 describe('flattenIssuePages', () => {
-  it('aplana el array de páginas que produce --paginate --slurp', () => {
+  it('it flattens the array of pages --paginate --slurp produces', () => {
     const pages = [
       [{ number: 1, body: 'a' }, { number: 2, body: 'b' }],
       [{ number: 3, body: 'c' }],
@@ -13,18 +13,18 @@ describe('flattenIssuePages', () => {
       { number: 3, body: 'c' },
     ])
   })
-  it('una sola página (una sola entrada de array) también se aplana bien', () => {
+  it('a single page (a single array entry) is flattened correctly too', () => {
     const pages = [[{ number: 1, body: 'a' }]]
     expect(flattenIssuePages(pages)).toEqual([{ number: 1, body: 'a' }])
   })
-  it('defensivo: entrada no-array devuelve []', () => {
+  it('defensive: a non-array input returns []', () => {
     expect(flattenIssuePages(null)).toEqual([])
     expect(flattenIssuePages(undefined)).toEqual([])
   })
 })
 
 describe('isPullRequest / realIssuesOnly', () => {
-  it('descarta entradas que traen la clave pull_request', () => {
+  it('it discards entries carrying the pull_request key', () => {
     const entries = [
       { number: 1, body: 'issue real' },
       { number: 2, body: 'esto es un PR', pull_request: { url: 'x' } },
@@ -33,14 +33,14 @@ describe('isPullRequest / realIssuesOnly', () => {
     expect(isPullRequest(entries[0])).toBe(false)
     expect(realIssuesOnly(entries)).toEqual([{ number: 1, body: 'issue real' }])
   })
-  it('defensivo: entrada vacía no revienta', () => {
+  it('defensive: an empty input does not blow up', () => {
     expect(realIssuesOnly(undefined)).toEqual([])
     expect(isPullRequest(undefined)).toBe(false)
   })
 })
 
 describe('findByMarker', () => {
-  it('casa el marcador exacto de un slice', () => {
+  it('it matches the exact marker of a slice', () => {
     const issues = [
       { number: 10, body: 'algo\n<!-- ct-order:2 -->' },
       { number: 11, body: 'otro\n<!-- ct-order:3 -->' },
@@ -48,11 +48,11 @@ describe('findByMarker', () => {
     const found = findByMarker(issues, '<!-- ct-order:2 -->')
     expect(found.number).toBe(10)
   })
-  it('NO casa el marcador de otro orden', () => {
+  it('it does NOT match the marker of another order', () => {
     const issues = [{ number: 11, body: 'otro\n<!-- ct-order:3 -->' }]
     expect(findByMarker(issues, '<!-- ct-order:2 -->')).toBeUndefined()
   })
-  it('un PR ya filtrado antes no puede casar por error', () => {
+  it('a PR already filtered out beforehand cannot match by mistake', () => {
     const entries = [
       { number: 1, body: 'PR body con <!-- ct-order:2 --> por casualidad', pull_request: {} },
     ]
@@ -61,26 +61,26 @@ describe('findByMarker', () => {
   })
 })
 
-// F23 — el alcance por epic. epicTitleOf/partitionByEpic son a /ct-groom lo
-// que epicKeyOf/buildOrderIndex (gh-issue-map.js) son a /ct-next: la misma
-// idea, con la llave que cada uno puede permitirse. /ct-next usa el NÚMERO
-// del milestone; /ct-groom no puede, porque enumera los issues del repo ANTES
-// de haber resuelto (o creado) el milestone de la corrida, así que en ese punto
-// lo único que conoce del epic es su TÍTULO.
+// F23 — the per-epic scope. epicTitleOf/partitionByEpic are to /ct-groom what
+// epicKeyOf/buildOrderIndex (gh-issue-map.js) are to /ct-next: the same idea,
+// with the key each of them can afford. /ct-next uses the milestone's NUMBER;
+// /ct-groom cannot, because it enumerates the repo's issues BEFORE having
+// resolved (or created) the run's milestone, so at that point the only thing it
+// knows about the epic is its TITLE.
 describe('epicTitleOf', () => {
-  it('devuelve el título del milestone', () => {
+  it('it returns the title of the milestone', () => {
     expect(epicTitleOf({ number: 1, milestone: { number: 4, title: 'Epic A' } })).toBe('Epic A')
   })
-  it('sin milestone → null', () => {
+  it('with no milestone → null', () => {
     expect(epicTitleOf({ number: 1, milestone: null })).toBeNull()
     expect(epicTitleOf({ number: 1 })).toBeNull()
   })
-  it('milestone sin título usable → null (no revienta, cae al cubo compartido)', () => {
+  it('a milestone with no usable title → null (it does not blow up, it falls into the shared bucket)', () => {
     expect(epicTitleOf({ milestone: {} })).toBeNull()
     expect(epicTitleOf({ milestone: { title: '' } })).toBeNull()
     expect(epicTitleOf({ milestone: { title: 42 } })).toBeNull()
   })
-  it('defensivo: entrada vacía no revienta', () => {
+  it('defensive: an empty input does not blow up', () => {
     expect(epicTitleOf(undefined)).toBeNull()
     expect(epicTitleOf(null)).toBeNull()
   })
@@ -93,23 +93,23 @@ describe('partitionByEpic', () => {
     { number: 3, milestone: null },
     { number: 4, milestone: { title: 'Epic A' } },
   ]
-  it('reparte en los tres cubos, disjuntos y en el orden de entrada', () => {
+  it('it sorts into the three buckets, disjoint and in the input order', () => {
     const { inEpic, sinMilestone, otrosEpics } = partitionByEpic(issues, 'Epic A')
     expect(inEpic.map((i) => i.number)).toEqual([1, 4])
     expect(sinMilestone.map((i) => i.number)).toEqual([3])
     expect(otrosEpics.map((i) => i.number)).toEqual([2])
   })
-  it('el título se compara EXACTO: no hay normalización de mayúsculas ni de espacios', () => {
+  it('the title is compared EXACTLY: there is no normalisation of case or whitespace', () => {
     const { inEpic, otrosEpics } = partitionByEpic(issues, 'epic a')
     expect(inEpic).toEqual([])
     expect(otrosEpics.map((i) => i.number)).toEqual([1, 2, 4])
   })
-  it('un título pedido que no existe deja inEpic vacío sin perder a nadie', () => {
+  it('a requested title that does not exist leaves inEpic empty without losing anybody', () => {
     const { inEpic, sinMilestone, otrosEpics } = partitionByEpic(issues, 'Epic Z')
     expect(inEpic).toEqual([])
     expect(sinMilestone.length + otrosEpics.length).toBe(issues.length)
   })
-  it('defensivo: lista vacía o ausente devuelve los tres cubos vacíos', () => {
+  it('defensive: an empty or absent list returns the three buckets empty', () => {
     for (const entrada of [[], undefined, null]) {
       const p = partitionByEpic(entrada, 'Epic A')
       expect(p).toEqual({ inEpic: [], sinMilestone: [], otrosEpics: [] })
@@ -117,8 +117,8 @@ describe('partitionByEpic', () => {
   })
 })
 
-describe('normalizeGraphqlIssues — traduce la respuesta GraphQL a la forma REST que el resto del código espera', () => {
-  it('aplana páginas, baja state a minúsculas y normaliza labels/milestone', async () => {
+describe('normalizeGraphqlIssues — it translates the GraphQL answer into the REST shape the rest of the code expects', () => {
+  it('it flattens pages, lowercases state and normalises labels/milestone', async () => {
     const { normalizeGraphqlIssues } = await import('../scripts/gh-issues.js')
     const pages = [
       { data: { repository: { issues: { nodes: [
@@ -133,7 +133,7 @@ describe('normalizeGraphqlIssues — traduce la respuesta GraphQL a la forma RES
       { number: 502, title: '#2 scoring', body: 'y <!-- ct-order:2 -->', state: 'closed', milestone: null, labels: [] },
     ])
   })
-  it('DOS páginas → concatena los nodes de ambas en orden (no pierde la página 2)', async () => {
+  it('TWO pages → it concatenates the nodes of both in order (it does not lose page 2)', async () => {
     const { normalizeGraphqlIssues } = await import('../scripts/gh-issues.js')
     const mk = (n) => ({ number: n, title: `#${n}`, body: `<!-- ct-order:${n} -->`, state: 'OPEN', milestone: null, labels: { nodes: [] } })
     const pages = [
@@ -142,13 +142,13 @@ describe('normalizeGraphqlIssues — traduce la respuesta GraphQL a la forma RES
     ]
     expect(normalizeGraphqlIssues(pages).map((i) => i.number)).toEqual([1, 2, 3])
   })
-  it('defensivo: páginas vacías o sin nodes → []', async () => {
+  it('defensive: empty pages or pages with no nodes → []', async () => {
     const { normalizeGraphqlIssues } = await import('../scripts/gh-issues.js')
     expect(normalizeGraphqlIssues([])).toEqual([])
     expect(normalizeGraphqlIssues([{ data: { repository: { issues: { nodes: [] } } } }])).toEqual([])
     expect(normalizeGraphqlIssues(null)).toEqual([])
   })
-  it('defensivo: state null/undefined no revienta y sobrevive tal cual (GitHub siempre da OPEN/CLOSED, pero si cambia el esquema el test lo dice)', async () => {
+  it('defensive: a null/undefined state does not blow up and survives as it is (GitHub always gives OPEN/CLOSED, but if the schema changes the test says so)', async () => {
     const { normalizeGraphqlIssues } = await import('../scripts/gh-issues.js')
     const pages = [{ data: { repository: { issues: { nodes: [
       { number: 1, title: '#1', body: 'x', state: null, milestone: null, labels: { nodes: [] } },
