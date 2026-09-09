@@ -1,5 +1,5 @@
 export class UserStories {
-  async detail(key) {
-    throw new Error(`${this.constructor.name} must implement detail(key), asked for ${key}`)
+  async detail(reference) {
+    throw new Error(`${this.constructor.name} must implement detail(reference), asked for ${reference}`)
   }
 }
