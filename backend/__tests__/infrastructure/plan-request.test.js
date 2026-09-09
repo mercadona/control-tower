@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { PlanRequest, PlanRequestOutcome } from '../../src/infrastructure/start-plan-route.js'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
+import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.js'
 import { PlanComment } from '../../src/domain/value-objects/plan-comment.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.js'
@@ -49,6 +50,30 @@ describe('PlanRequest', () => {
 
     expect(accepted.story).toBeInstanceOf(UserStoryKey)
     expect(accepted.story.text).toBe('MO_SHOP-42')
+  })
+
+  it('an_id_that_is_a_github_issue_url_is_accepted_and_hands_back_a_user_story_url', () => {
+    const url = 'https://github.com/mercadona/control-tower/issues/141'
+    const accepted = PlanRequest.from(`{"id":${JSON.stringify(url)},"repo":"josemerca/ct-loop-sandbox","path":"/repo/checkout"}`)
+
+    expect(accepted.outcome).toBe(PlanRequestOutcome.ACCEPTED)
+    expect(accepted.story).toBeInstanceOf(UserStoryUrl)
+    expect(accepted.story.text).toBe(url)
+  })
+
+  it('a_near_miss_of_a_github_issue_url_is_refused_as_a_malformed_id_and_not_silently_read_as_a_jira_key', () => {
+    const refused = [
+      '{"id":"http://github.com/owner/name/issues/1","repo":"owner/name"}',
+      '{"id":"https://github.com/owner/name/pull/1","repo":"owner/name"}',
+      '{"id":"https://github.com/owner/name/issues/0","repo":"owner/name"}',
+      '{"id":"https://github.com/owner/name/issues/12x","repo":"owner/name"}',
+      '{"id":"https://github.example.com/owner/name/issues/1","repo":"owner/name"}',
+      '{"id":"https://github.com/owner/name/issues/1/","repo":"owner/name"}',
+      '{"id":"https://github.com/owner/name/issues/1?tab=comments","repo":"owner/name"}',
+      '{"id":"https://github.com/owner/../issues/1","repo":"owner/name"}',
+    ].map((raw) => PlanRequest.from(raw).outcome)
+
+    expect(refused).toEqual(Array(8).fill(PlanRequestOutcome.MALFORMED_ID))
   })
 
   it('an_accepted_body_hands_back_the_repository_as_a_domain_value_too', () => {

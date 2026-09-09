@@ -2,6 +2,8 @@ import { Answer, JsonBody, Refusal } from './http.js'
 import { Projection } from './projection.js'
 import { StartPlanParams } from '../application/actions/start-plan.js'
 import { UserStoryKey } from '../domain/value-objects/user-story-key.js'
+import { UserStoryUrl } from '../domain/value-objects/user-story-url.js'
+import { UserStoryReference } from '../domain/value-objects/user-story-reference.js'
 import { PlanComment } from '../domain/value-objects/plan-comment.js'
 import { RepositoryName } from '../domain/value-objects/repository-name.js'
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.js'
@@ -84,7 +86,7 @@ export class PlanRequest {
     }
     const idGiven = Object.hasOwn(parsed, PlanRequest.ID_FIELD)
     const given = parsed[PlanRequest.ID_FIELD]
-    if (idGiven && !UserStoryKey.isWellFormed(given)) {
+    if (idGiven && !UserStoryReference.isWellFormed(given)) {
       return PlanRequest.refused(PlanRequestOutcome.MALFORMED_ID)
     }
     const commentGiven = Object.hasOwn(parsed, PlanRequest.COMMENT_FIELD)
@@ -95,7 +97,7 @@ export class PlanRequest {
     if (!idGiven && !commentGiven) {
       return PlanRequest.refused(PlanRequestOutcome.NOTHING_TO_PLAN)
     }
-    const story = idGiven ? new UserStoryKey(given) : null
+    const story = idGiven ? UserStoryReference.of(given) : null
     const comment = commentGiven ? new PlanComment(saidByHand) : null
 
     const listGiven = Object.hasOwn(parsed, PlanRequest.REPO_LIST_FIELD)
@@ -172,7 +174,8 @@ export class PlanRefusal {
     [PlanRequestOutcome.MALFORMED_ID, () => new Refusal({
       status: 400,
       code: PlanRequestOutcome.MALFORMED_ID,
-      detail: `${PlanRequest.ID_FIELD} must be a user story key such as ${UserStoryKey.EXAMPLE}`,
+      detail: `${PlanRequest.ID_FIELD} must be a user story key such as ${UserStoryKey.EXAMPLE} `
+        + `or a github issue url such as ${UserStoryUrl.EXAMPLE}`,
     })],
     [PlanRequestOutcome.MALFORMED_USER_COMMENT, () => new Refusal({
       status: 400,
