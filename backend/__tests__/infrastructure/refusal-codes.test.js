@@ -4,6 +4,7 @@ import { ImplementRequestOutcome, ImplementCollapse } from '../../src/infrastruc
 import { EventsRequestOutcome, PlanEvents } from '../../src/infrastructure/plan-events-route.js'
 import { ActivePlansOutcome } from '../../src/infrastructure/active-plans-route.js'
 import { ProgressRequestOutcome, ProgressCollapse } from '../../src/infrastructure/implement-progress-route.js'
+import { ReviewRequestOutcome, ReviewCollapse } from '../../src/infrastructure/review-plan-route.js'
 
 class RequestVocabularies {
   static #ACCEPTED = 'accepted'
@@ -14,6 +15,7 @@ class RequestVocabularies {
       ...Object.values(ImplementRequestOutcome),
       ...Object.values(EventsRequestOutcome),
       ...Object.values(ProgressRequestOutcome),
+      ...Object.values(ReviewRequestOutcome),
     ].filter((outcome) => outcome !== RequestVocabularies.#ACCEPTED)
   }
 }
@@ -23,6 +25,8 @@ class SharedOnPurposeAcrossRequestVocabularies {
     PlanRequestOutcome.BODY_NOT_A_JSON_OBJECT,
     PlanRequestOutcome.UNKNOWN_FIELD,
     PlanRequestOutcome.MALFORMED_REPO,
+    ImplementRequestOutcome.MALFORMED_ISSUE,
+    ImplementRequestOutcome.NO_LIVE_SESSION,
   ])
 }
 
@@ -58,6 +62,7 @@ describe('the codes the api can emit', () => {
       ...PlanCollapse.declaredCodes(),
       ...ImplementCollapse.declaredCodes(),
       ...ProgressCollapse.declaredCodes(),
+      ReviewCollapse.CODE,
       ...CodesRememberedByHandFromHttpAndApiServer.VALUES,
       ...EventStreamCodes.VALUES,
     ]

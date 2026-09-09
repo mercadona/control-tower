@@ -128,6 +128,12 @@ class GhDouble {
     return this.changesAskedFor(issue).catch((cause) => cause)
   }
 
+  async askChangesRefusalFor(changes = 'parte la tarea 2 en dos') {
+    return this.issues().askChanges({
+      issue: GhDouble.OPENED, repository: GhDouble.REPOSITORY, changes,
+    }).catch((cause) => cause)
+  }
+
   async openFor({ story = GhDouble.story(), comment = null } = {}) {
     return this.issues().open({ story, comment, repository: GhDouble.REPOSITORY })
   }
@@ -722,6 +728,19 @@ describe('asking for changes to the plan publishes them as a comment', () => {
 
     expect(asked).toHaveLength(1)
     expect(asked[0].options).toEqual({ safeToRepeat: false })
+  })
+
+  it('a_blip_while_asking_for_changes_is_not_retried_because_the_comment_may_have_been_the_one_lost', async () => {
+    const gh = new GhDouble([
+      new ProcessOutput({ code: 1, stdout: '', stderr: 'error connecting to api.github.com' }),
+      new ProcessOutput({ code: 0, stdout: '', stderr: '' }),
+    ])
+
+    const refusal = await gh.askChangesRefusalFor()
+
+    expect(gh.calls).toHaveLength(1)
+    expect(gh.sleeping.slept).toEqual([])
+    expect(refusal).toBeInstanceOf(PlanChangesNotAsked)
   })
 })
 

@@ -1,4 +1,5 @@
 import { Answer, JsonBody, Refusal } from './http.js'
+import { ActivePlanPhase } from './active-plans-route.js'
 import { Projection } from './projection.js'
 import { AskPlanChangesParams } from '../application/actions/ask-plan-changes.js'
 import { RepositoryName } from '../domain/value-objects/repository-name.js'
@@ -18,6 +19,7 @@ class ReviewRequest {
   static ISSUE_FIELD = 'issue'
   static REPO_FIELD = 'repo'
   static CHANGES_FIELD = 'changes'
+  static #FORBIDDEN_CONTROL = /[^\P{Cc}\n\r\t]/u
   static KNOWN_FIELDS = Object.freeze([
     ReviewRequest.ISSUE_FIELD, ReviewRequest.REPO_FIELD, ReviewRequest.CHANGES_FIELD,
   ])
@@ -55,7 +57,9 @@ class ReviewRequest {
   }
 
   static #isWellFormedChanges(given) {
-    return typeof given === 'string' && given.trim().length > 0
+    return typeof given === 'string' &&
+      given.trim().length > 0 &&
+      !ReviewRequest.#FORBIDDEN_CONTROL.test(given)
   }
 
   static from(raw) {
@@ -155,7 +159,7 @@ export class ReviewPlanRoute {
         return
       }
       const active = activePlans.find({ issue: asked.issue, repository: asked.repository })
-      if (active === null) {
+      if (active === null || active.phase !== ActivePlanPhase.PLANNING) {
         Answer.refuseAs(response, ReviewRefusal.of(
           ReviewRequest.refused(ReviewRequestOutcome.NO_LIVE_SESSION)
         ))

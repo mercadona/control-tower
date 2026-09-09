@@ -52,7 +52,7 @@ describe('AskPlanChanges', () => {
 
     const said = await screen.findByRole('status')
     expect(said).toHaveTextContent(/Cambios pedidos/)
-    expect(said).toHaveTextContent(/medio minuto/)
+    expect(said).toHaveTextContent(/30 segundos/)
   })
 
   it('should empty the field once accepted, so the same change is not asked for twice', async () => {
@@ -64,18 +64,6 @@ describe('AskPlanChanges', () => {
 
     expect(await screen.findByRole('status')).toBeInTheDocument()
     expect(screen.getByLabelText(FIELD_LABEL)).toHaveValue('')
-  })
-
-  it('should notify its parent once only after the changes are accepted', async () => {
-    answerWith(ReviewPlanMother.changesAsked())
-    const onChangesAsked = vi.fn()
-    const user = userEvent.setup()
-    render(<AskPlanChanges plan={ImplementPlanMother.plan()} onChangesAsked={onChangesAsked} />)
-
-    await ask(user, ReviewPlanMother.CHANGES)
-
-    expect(await screen.findByRole('status')).toBeInTheDocument()
-    expect(onChangesAsked).toHaveBeenCalledTimes(1)
   })
 
   it('should keep what you wrote when the backend no longer watches the plan', async () => {

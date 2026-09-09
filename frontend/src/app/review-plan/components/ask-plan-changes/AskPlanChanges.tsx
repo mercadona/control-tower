@@ -11,17 +11,16 @@ import './AskPlanChanges.css'
 const FIELD_LABEL = 'Qué quieres cambiar del plan'
 const FIELD_MESSAGE = 'Lo que escribas es lo que se le pide al agente'
 const WHERE_MESSAGE = 'El plan está publicado como el último comentario del issue.'
-const ASKED_MESSAGE = 'Cambios pedidos. El agente los recibe en menos de medio minuto y publicará el plan rehecho en el issue.'
+const ASKED_MESSAGE = 'Cambios pedidos. El agente los recibe en unos 30 segundos y publicará el plan rehecho en el issue.'
 const STALE_TITLE = 'El backend ya no tiene este plan activo'
 const STALE_DESCRIPTION = 'Nadie leería los cambios. Recupera el plan activo antes de volver a pedirlos.'
 const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
 
 type AskPlanChangesProps = {
   plan: StartedPlan
-  onChangesAsked?: () => void
 }
 
-const AskPlanChanges = ({ plan, onChangesAsked }: AskPlanChangesProps) => {
+const AskPlanChanges = ({ plan }: AskPlanChangesProps) => {
   const [changes, setChanges] = useState('')
   const [outcome, setOutcome] = useState<ReviewPlanOutcome | null>(null)
   const [isSending, setIsSending] = useState(false)
@@ -38,13 +37,12 @@ const AskPlanChanges = ({ plan, onChangesAsked }: AskPlanChangesProps) => {
     setIsSending(false)
     if (answered.kind !== 'changes-asked') return
     setChanges('')
-    onChangesAsked?.()
   }
 
   return (
     <section className="ask-plan-changes" aria-label="Pedir cambios en el plan">
       <p className="ask-plan-changes__where">{WHERE_MESSAGE}</p>
-      <FormField label={FIELD_LABEL} message={FIELD_MESSAGE} error={false}>
+      <FormField label={FIELD_LABEL} message={FIELD_MESSAGE}>
         <TextArea
           placeholder="Qué hay que cambiar"
           value={changes}
@@ -53,7 +51,7 @@ const AskPlanChanges = ({ plan, onChangesAsked }: AskPlanChangesProps) => {
           onChange={(event) => setChanges(event.target.value)}
         />
       </FormField>
-      <Button onClick={() => void askChanges()} disabled={isSending || changes.trim().length === 0}>
+      <Button onClick={askChanges} disabled={isSending || changes.trim().length === 0}>
         Pedir cambios
       </Button>
       {outcome?.kind === 'changes-asked' && (

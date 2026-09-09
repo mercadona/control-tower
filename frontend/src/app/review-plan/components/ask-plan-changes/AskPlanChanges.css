@@ -5,10 +5,7 @@
   align-items: flex-start;
 }
 
-.ask-plan-changes__where {
-  margin: 0;
-}
-
+.ask-plan-changes__where,
 .ask-plan-changes__asked {
   margin: 0;
 }

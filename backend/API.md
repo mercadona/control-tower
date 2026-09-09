@@ -291,7 +291,13 @@ seen it yet.
 |---|---|---|
 | `issue` | number | whole, from 1 |
 | `repo` | string | `owner/name` |
-| `changes` | string | what to change, not blank |
+| `changes` | string | what to change, not blank, no control characters |
+
+The text is published quieted — mentions, `#123` and `owner/name#123`
+references and GitHub URLs are wrapped in backticks so that commenting on
+someone's behalf notifies nobody. Two forms still get through: a mention
+preceded by a dot (`.@someone`) and the `GH-123` form, which GitHub autolinks
+into a cross-reference that notifies that issue's subscribers.
 
 **202 Accepted**
 

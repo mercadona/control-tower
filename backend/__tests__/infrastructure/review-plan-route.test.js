@@ -34,6 +34,8 @@ class RunningApi {
   static #started = []
   static PATH = '/review-plan'
   static ACCEPTED_BODY = '{"issue":33,"repo":"jjponz/repo-pulse","changes":"parte la tarea 2"}'
+  static PADDED_BODY = '{"issue":33,"repo":"jjponz/repo-pulse","changes":"   parte la tarea 2   "}'
+  static activePlans = null
   static WATCHED = new PlanWatch({
     story: new UserStoryKey('ABC-123'),
     issue: new PlanIssue({ number: 33, url: 'https://github.com/jjponz/repo-pulse/issues/33' }),
@@ -55,6 +57,7 @@ class RunningApi {
     const sessions = new PlanSessions()
     if (options.watched ?? true) sessions.remember(RunningApi.WATCHED)
     const activePlans = new ActivePlans({ sessions })
+    RunningApi.activePlans = activePlans
     const server = new ApiServer({
       port: 0,
       startPlan: null,
@@ -94,9 +97,9 @@ afterEach(async () => {
 })
 
 describe('ReviewPlanRoute', () => {
-  it('a_well_formed_body_for_a_watched_plan_publishes_the_changes_and_answers_accepted', async () => {
+  it('a_well_formed_body_for_a_watched_plan_publishes_the_changes_trimmed_and_answers_accepted', async () => {
     const spy = new AskPlanChangesSpy()
-    const response = await RunningApi.post(await RunningApi.listening(spy), RunningApi.ACCEPTED_BODY)
+    const response = await RunningApi.post(await RunningApi.listening(spy), RunningApi.PADDED_BODY)
 
     expect(response.status).toBe(202)
     expect(await response.text()).toBe('{"status":"changes-asked","issue":33}')
@@ -114,11 +117,47 @@ describe('ReviewPlanRoute', () => {
     expect(spy.asked).toEqual([])
   })
 
+  it('a_plan_already_being_implemented_is_refused_because_its_review_watch_is_gone', async () => {
+    const spy = new AskPlanChangesSpy()
+    const port = await RunningApi.listening(spy)
+    RunningApi.activePlans.rememberImplementing(RunningApi.WATCHED)
+
+    const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
+
+    expect(response.status).toBe(409)
+    expect(JSON.parse(await response.text()).code).toBe('no-live-planning-session')
+    expect(spy.asked).toEqual([])
+  })
+
+  it('a_plan_whose_phase_is_uncertain_is_refused_because_its_review_watch_is_gone', async () => {
+    const spy = new AskPlanChangesSpy()
+    const port = await RunningApi.listening(spy)
+    RunningApi.activePlans.rememberUncertain(RunningApi.WATCHED)
+
+    const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
+
+    expect(response.status).toBe(409)
+    expect(JSON.parse(await response.text()).code).toBe('no-live-planning-session')
+    expect(spy.asked).toEqual([])
+  })
+
   it('blank_changes_are_refused_because_an_empty_review_asks_the_agent_for_nothing', async () => {
     const response = await RunningApi.asking('{"issue":33,"repo":"jjponz/repo-pulse","changes":"   "}')
 
     expect(response.status).toBe(400)
     expect(JSON.parse(await response.text()).code).toBe('malformed-changes')
+  })
+
+  it('changes_carrying_a_control_character_are_refused_because_the_comment_could_not_carry_them', async () => {
+    const spy = new AskPlanChangesSpy()
+    const response = await RunningApi.post(
+      await RunningApi.listening(spy),
+      '{"issue":33,"repo":"jjponz/repo-pulse","changes":"parte\\u0000la tarea 2"}'
+    )
+
+    expect(response.status).toBe(400)
+    expect(JSON.parse(await response.text()).code).toBe('malformed-changes')
+    expect(spy.asked).toEqual([])
   })
 
   it('changes_that_are_not_text_are_refused', async () => {

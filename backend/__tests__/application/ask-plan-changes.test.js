@@ -12,12 +12,6 @@ class PlanIssuesSpy {
   async askChanges({ issue, repository, changes }) {
     this.asked.push({ issue: issue.number, repository: repository.text, changes })
   }
-
-  static refusing(cause) {
-    const spy = new PlanIssuesSpy()
-    spy.answer = cause
-    return spy
-  }
 }
 
 class RejectingPlanIssues {
@@ -54,7 +48,6 @@ describe('AskPlanChanges', () => {
     ).catch((cause) => cause)
 
     expect(refusal).toBeInstanceOf(PlanChangesNotAsked)
-    expect(refusal.name).toBe('PlanChangesNotAsked')
     expect(refusal.message).toBe('GitHub API failed')
   })
 })

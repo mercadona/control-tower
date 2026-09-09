@@ -1,16 +1,13 @@
-const ISSUE = 7
-const REPO = 'owner/name'
+import { ImplementPlanMother } from '__scenarios__/ImplementPlanMother'
+
+const ISSUE = ImplementPlanMother.ISSUE
+const REPO = ImplementPlanMother.REPO
 const CHANGES = 'parte la tarea 2 en dos'
-const REQUEST_BODY = '{"issue":7,"repo":"owner/name","changes":"parte la tarea 2 en dos"}'
+const REQUEST_BODY = `{"issue":${ISSUE},"repo":"${REPO}","changes":"${CHANGES}"}`
 
 const changesAsked = () => ({
   status: 202,
-  body: '{"status":"changes-asked","issue":7}',
-})
-
-const malformedChanges = () => ({
-  status: 400,
-  body: '{"code":"malformed-changes","detail":"changes must say what to change"}',
+  body: `{"status":"changes-asked","issue":${ISSUE}}`,
 })
 
 const noLiveSession = () => ({
@@ -29,7 +26,6 @@ export const ReviewPlanMother = {
   CHANGES,
   REQUEST_BODY,
   changesAsked,
-  malformedChanges,
   noLiveSession,
   notAsked,
 }
