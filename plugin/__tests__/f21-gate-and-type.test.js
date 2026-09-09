@@ -471,7 +471,7 @@ describe('F21 — the §9 contract documents the gates and the invariant', () =>
   it('the seeded section explains the Gate column, the waiver with `!` and the vocabulary', () => {
     const dir = mkdtempSync(join(tmpdir(), 'f21-init-'))
     execFileSync('bash', [initScript, dir], { encoding: 'utf8' })
-    const agents = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
+    const agents = readFileSync(join(dir, 'docs', 'superpowers', 'SLICES-CONTRACT.md'), 'utf8')
     expect(agents).toContain('**Gate**')
     expect(agents).toContain('`!visual`')
     // Task 5 of "e2e al cierre del slice" closed the temporary debt this test
@@ -488,12 +488,12 @@ describe('F21 — the §9 contract documents the gates and the invariant', () =>
     // #-2" that the dispatched agent never opens.
     const dir = mkdtempSync(join(tmpdir(), 'f21-init-'))
     execFileSync('bash', [initScript, dir], { encoding: 'utf8' })
-    const agents = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
+    const agents = readFileSync(join(dir, 'docs', 'superpowers', 'SLICES-CONTRACT.md'), 'utf8')
     // F30: the section stopped being called "§9". What this test defends is the
     // PHRASE, not the name — so it anchors on what is invariant ("fuera de la
     // tabla … no llega al agente") and not on whatever the table is called that
     // month.
-    expect(agents).toMatch(/fuera de la tabla[^\n]*no llega al agente/i)
+    expect(agents).toMatch(/outside the slices table[^\n]*does not reach the agent/i)
     expect(agents).not.toMatch(/§9/)
     rmSync(dir, { recursive: true, force: true })
   })

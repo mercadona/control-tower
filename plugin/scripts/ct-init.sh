@@ -236,8 +236,8 @@ fi
 #     yet" case).
 SLICES_MARKER_OPEN='<!-- ct-init:slices-contract -->'
 SLICES_MARKER_CLOSE='<!-- /ct-init:slices-contract -->'
-SLICES_HEADING='## Formato de la tabla de slices (contrato con /ct-groom)'
-# F30 — the OLD heading is still recognised, and it is never emitted.
+SLICES_HEADING='## Slices table format (contract with /ct-groom)'
+# F30 / #188 — the OLD headings are still recognised, and they are never emitted.
 #
 # Up to v15 the section was called «tabla de slices». The number was a fossil: it
 # never located anything (`/ct-groom` finds the table by its `Slice`+`Dep`
@@ -255,6 +255,11 @@ SLICES_HEADING='## Formato de la tabla de slices (contrato con /ct-groom)'
 # of `## Acceptance criteria` in reconcile.js: a CLOSED set of recognised
 # headings, only one of them emitted.
 SLICES_HEADING_LEGACY='## Formato de la tabla §9 (contrato con /ct-groom)'
+# #188 — and the Spanish spelling of the CURRENT heading, seeded from v16 to v23.
+# A repo bootstrapped in that window carries it, and the same edge the F30 block
+# above describes applies unchanged: without this line, an AGENTS.md with that
+# heading and no markers stops being recognised and receives a whole second copy.
+SLICES_HEADING_LEGACY_ES='## Formato de la tabla de slices (contrato con /ct-groom)'
 # SLICES_CONTRACT_VERSION (F6): the version of the block's CONTENT. It travels
 # on a line of its own right behind the opening marker, not inside it: the
 # opening marker is kept identical to the one it has always been so that a repo
@@ -484,7 +489,7 @@ SLICES_HEADING_LEGACY='## Formato de la tabla §9 (contrato con /ct-groom)'
 #     repo. The v22's three citations point today at a file that no longer
 #     contains what it promises, which is the worst form of a reference: it
 #     looks alive.
-SLICES_CONTRACT_VERSION=23
+SLICES_CONTRACT_VERSION=24
 SLICES_VERSION_LINE_RE='<!-- ct-init:slices-contract-version: [0-9]\{1,\} -->'
 # SLICES_PRISTINE_HASHES: the sha256 of the COMPLETE block (opening marker to
 # closing marker, both included) exactly as each version of this script emitted
@@ -564,6 +569,7 @@ b0eb79ab8fd89f83ce7159e9c2a9c32812ee35b76ad6f4c78c2829c9d9891c0b  v20, 585 líne
 40440bc510e0832695cbd73bc5912cb5bba8c16d89cb0cde0249b64b043dbafe  v20, 575 líneas — Slice 4 apuntes de Capde (la señal no es un criterio de aceptación más: promete lo que se verá en producción, que los criterios funcionales no cubren; v20 nunca publicado, main ya tenía otro v20 y la rama se re-sentó como v22)
 65e788421d42aaf40a33d9dadcd563762503637dd2ff5ab2d352abc2263e96f6  v22, 599 líneas — merge con main tras la segunda carrera de números (el bloque v21 de main + el párrafo del Slice 4: la señal no es un criterio de aceptación más)
 6b7ec30ff95a331542932b199b3b5d2f171e197c61efee0fce0c36fd5def2b6c  v23, 600 líneas — #93 (el contrato deja de ser una sección de AGENTS.md y pasa a docs/superpowers/CONTRATO-SLICES.md; sus tres referencias al detalle apuntan a docs/loop/, no a commands/)
+9962d000dbfc62db370c61ad8015321cc73eb336ad8e8ac0567fa9a4ef414b8c  v24, 601 lines — #188 (the contract is translated into English; the parsed column names, the headings the code locates sections by and every value compared as data stay exactly as they were)
 '
 
 # emit_slices_contract: the block, in a single place (both the "it does not
@@ -571,604 +577,605 @@ b0eb79ab8fd89f83ce7159e9c2a9c32812ee35b76ad6f4c78c2829c9d9891c0b  v20, 585 líne
 emit_slices_contract() {
   cat <<'EOF'
 <!-- ct-init:slices-contract -->
-<!-- ct-init:slices-contract-version: 23 -->
-## Formato de la tabla de slices (contrato con /ct-groom)
-`/ct-groom` lee esta tabla del spec del epic y crea un issue de GitHub por
-fila — es la única parte de un spec que un programa parsea. Cabecera exacta,
-copiable tal cual:
+<!-- ct-init:slices-contract-version: 24 -->
+## Slices table format (contract with /ct-groom)
+`/ct-groom` reads this table from the epic's spec and creates one GitHub issue
+per row — it is the only part of a spec that a program parses. Exact header,
+copyable as is:
 
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca | Gate | Señal |
 |---|-------|------|---------|-----|--------|-----------|------|------|------|-------|
 
-> **Lo que escribas fuera de la tabla de slices no llega al agente.** El agente que
-> implementa un slice no recibe el spec: recibe un prompt de arranque y el
-> CUERPO DEL ISSUE, y el cuerpo del issue se construye con estas columnas y
-> nada más. Una exigencia escrita en otra sección del spec ("§10", "REGLA
-> #-2", un párrafo de introducción) es invisible para él por muy contundente
-> que esté redactada. Si algo tiene que cumplirlo el agente, tiene que caber
-> en una de estas columnas — y si no cabe en ninguna, no cuentes con que se
-> cumpla.
+> **What you write outside the slices table does not reach the agent.** The agent
+> that implements a slice does not receive the spec: it receives a start-up
+> prompt and the ISSUE BODY, and the issue body is built from these columns and
+> nothing else. A requirement written in another section of the spec ("§10",
+> "RULE #-2", an introductory paragraph) is invisible to it however forcefully
+> it is worded. If the agent has to comply with something, it has to fit in one
+> of these columns — and if it fits in none of them, do not count on it being
+> complied with.
 
-- **`#`** *(obligatoria)*: entero puro (`1`, `2`…) → orden del slice y target
-  de `Dep`. Nunca `S1` ni `**1**` (negrita/prefijo): la fila entera se
-  descarta.
-- **Slice** *(obligatoria)*: nombre corto de la fila — alimenta el TÍTULO del
-  issue (`#N <Slice>`). Vacía, con marcador de "sin valor", o que solo trae
-  una referencia `#N` sin ningún nombre alrededor → fila descartada (mismo
-  trato que antes tenía una `Entrega` vacía). Si la celda ya trae una
-  referencia `#N` (p.ej. un issue creado a mano antes de correr
-  `/ct-groom`), esa referencia se extrae aparte y NO aparece en el título.
-  Ese mismo título es lo que `/ct-next` reinyecta al despachar: la primera
-  línea del kickoff del agente y el nombre del workspace cmux salen de aquí
-  — por eso conviene que sea corto y legible, no una frase.
-- **Tipo** *(opcional)*: label `type:<valor>` del issue. Además decide qué
-  **recordatorio técnico** (*addendum*) recibe el agente al despachar
-  (`/ct-next` → `kickoff.js`): valores reconocidos hoy son `ui`, `backend`,
-  `infra`, `bugfix`. Un valor que no sea ninguno de esos NO aborta, pero
-  `/ct-groom` avisa por stderr: el agente despachado para ese slice no
-  recibirá ningún addendum de tipo, y sin ese aviso pasaría en silencio.
-  `Tipo` decide también los gates **por defecto** (ver `Gate`, justo debajo),
-  pero ya no los decide en exclusiva: hasta el contrato v9 eran la misma
-  columna, y un slice `backend` que necesitaba revisión visual no tenía forma
-  de pedirla.
-- **Gate** *(opcional)*: qué **gates humanos** hay que cerrar antes de mergear
-  este slice — el otro eje, separado del `Tipo`. Vocabulario cerrado:
-  - `visual` — un humano tiene que VER el cambio: captura/vídeo del
-    antes/después en el PR;
-  - `apply` — nada se aplica contra un entorno real hasta que un humano
-    revise el plan/dry-run;
-  - `plan` — antes de implementar, un humano revisa el PLAN del slice: el
-    agente lo publica como comentario del issue y se detiene hasta el OK.
-    Está implicado **por defecto en todos los slices**, venga el `Tipo` que
-    venga; se renuncia por fila con `!plan` (y la renuncia se anuncia).
-  - `e2e` — antes de mergear, alguien atraviesa los recorridos que el slice
-    declaró en su columna `E2E` (ver más abajo) y deja el informe en el PR.
-    A diferencia de los otros tres, **`e2e` no se escribe en esta columna**:
-    se DERIVA de que la fila traiga algún recorrido en `E2E`. Escribir
-    `Gate: e2e` a mano **aborta** — el sitio donde se pide un e2e es la
-    columna `E2E`, nunca ésta.
+- **`#`** *(required)*: plain integer (`1`, `2`…) → order of the slice and target
+  of `Dep`. Never `S1` nor `**1**` (bold/prefix): the whole row is
+  discarded.
+- **Slice** *(required)*: short name of the row — it feeds the issue TITLE
+  (`#N <Slice>`). Empty, carrying a "no value" marker, or carrying only
+  a `#N` reference with no name around it → row discarded (the same
+  treatment an empty `Entrega` used to get). If the cell already carries a
+  `#N` reference (e.g. an issue created by hand before running
+  `/ct-groom`), that reference is extracted separately and does NOT appear in the title.
+  That same title is what `/ct-next` re-injects when dispatching: the first
+  line of the agent's kickoff and the name of the cmux workspace come from here
+  — which is why it should be short and readable, not a sentence.
+- **Tipo** *(optional)*: `type:<value>` label of the issue. It also decides which
+  **technical reminder** (*addendum*) the agent receives when dispatched
+  (`/ct-next` → `kickoff.js`): the values recognised today are `ui`, `backend`,
+  `infra`, `bugfix`. A value that is none of those does NOT abort, but
+  `/ct-groom` warns on stderr: the agent dispatched for that slice will not
+  receive any type addendum, and without that warning it would pass in silence.
+  `Tipo` also decides the **default** gates (see `Gate`, just below),
+  but it no longer decides them alone: until contract v9 they were the same
+  column, and a `backend` slice that needed a visual review had no way
+  of asking for one.
+- **Gate** *(optional)*: which **human gates** have to be closed before merging
+  this slice — the other axis, separate from `Tipo`. Closed vocabulary:
+  - `visual` — a human has to SEE the change: before/after screenshot or video
+    in the PR;
+  - `apply` — nothing is applied against a real environment until a human
+    reviews the plan/dry-run;
+  - `plan` — before implementing, a human reviews the slice's PLAN: the
+    agent publishes it as a comment on the issue and stops until the OK.
+    It is implied **by default on every slice**, whatever the `Tipo`
+    is; it is waived per row with `!plan` (and the waiver is announced).
+  - `e2e` — before merging, someone walks the journeys the slice
+    declared in its `E2E` column (see further down) and leaves the report in the PR.
+    Unlike the other three, **`e2e` is not written in this column**:
+    it is DERIVED from the row carrying some journey in `E2E`. Writing
+    `Gate: e2e` by hand **aborts** — the place where an e2e is asked for is the
+    `E2E` column, never this one.
 
-  **No hace falta escribir nada en el caso normal**: `Tipo: ui` implica
-  `visual`, `Tipo: infra` implica `apply`, y **todo slice** lleva `plan` de
-  serie. La columna sirve para las dos desviaciones:
-  - **añadir** un gate que el `Tipo` no implica — `Tipo: backend` +
-    `Gate: visual` (el caso real: una migración con backfill que mueve una
-    barra de progreso muy visible). `/ct-groom` lo **anuncia por stderr**:
-    llevas un gate que no viene de tu tipo;
-  - **renunciar** a uno que sí implica, con un `!` delante: `!visual` sobre un
-    `Tipo: ui` que de verdad no cambia nada visible. También se anuncia, y en
-    voz más alta: quitar un gate nunca es silencioso. (El `!` y no un `-`
-    porque `-` ya significa "sin valor" en todas las demás columnas.)
+  **Nothing needs to be written in the normal case**: `Tipo: ui` implies
+  `visual`, `Tipo: infra` implies `apply`, and **every slice** carries `plan` as
+  standard. The column is there for the two deviations:
+  - **adding** a gate the `Tipo` does not imply — `Tipo: backend` +
+    `Gate: visual` (the real case: a migration with a backfill that moves a
+    very visible progress bar). `/ct-groom` **announces it on stderr**:
+    you are carrying a gate that does not come from your type;
+  - **waiving** one it does imply, with a `!` in front: `!visual` on a
+    `Tipo: ui` that really does not change anything visible. This is announced too, and
+    louder: removing a gate is never silent. (The `!` and not a `-`
+    because `-` already means "no value" in every other column.)
 
-  Celda vacía o con marcador de "sin valor" (`–`) significa *no he declarado
-  nada*, **no** "renuncio a todo". Un valor que no esté en el vocabulario
-  **aborta** (a diferencia de `Tipo`): un gate desconocido no produciría label,
-  ni instrucción al agente, ni línea en el issue — sería un gate que solo
-  existe en el spec, que es justo lo que esta columna viene a impedir.
+  An empty cell or one with a "no value" marker (`–`) means *I have declared
+  nothing*, **not** "I waive everything". A value that is not in the vocabulary
+  **aborts** (unlike `Tipo`): an unknown gate would produce no label,
+  no instruction to the agent, and no line in the issue — it would be a gate that only
+  exists in the spec, which is exactly what this column is here to prevent.
 
-  A dónde llega: cada gate resuelto se escribe como label **`gate:<token>`** del
-  issue (y **`gate:none`** cuando no hay ninguno — el silencio no puede
-  significar a la vez "sin gates" y "issue anterior a los gates"), como sección
-  **`## Gates`** del cuerpo del issue, y como instrucción explícita en el
-  prompt del agente. Por eso sobrevive a un redespacho y a un `--reopen`: se
-  lee del issue, no del spec.
-- **Entrega** *(opcional)*: texto de qué entrega el slice → sección
-  "Descripción" del cuerpo del issue. Ya NO alimenta el título (eso lo hace
-  `Slice`, ver arriba).
-- **Dep**: `#N` (varias, separadas por coma) apuntando a otro `#` de esta
-  misma tabla, o marcador de "sin valor" si no depende de nada. `S1` no
-  sirve — usa `#1`. Alimenta el grafo `merge-after` que respeta `/ct-next`.
-  En el cuerpo del issue aparece como ``merge-after `#N` `` (entre backticks,
-  a propósito: un `#N` desnudo lo convertiría GitHub en un enlace al issue
-  número N de este repo, que no tiene nada que ver). Ese `#N` **siempre es el
-  `#` de esta tabla — el ORDEN del slice, nunca un número de issue**;
-  `/ct-next` lo traduce por el marcador `ct-order` que cada issue lleva al
-  final.
-- **Acepta** *(opcional)*: criterios de aceptación separados por coma →
-  sección "Acceptance criteria" del issue, uno por línea. **La coma separa
-  SIEMPRE**: un criterio en EARS ("Cuando caduca el token, el sistema pide
-  login") se partiría en dos criterios a medias. Si el tuyo lleva coma,
-  escápala como `\,` (`Cuando caduca el token\, el sistema pide login`) o
-  reformula sin ella. Solo la secuencia exacta `\,` es un escape — una barra
-  invertida suelta se conserva tal cual.
-- **Protegido** *(opcional)*: qué queda fuera de alcance → sección "Out of
-  scope / Protected" del issue. Texto libre de una sola pieza: aquí la coma
-  **no** separa nada, escribe con normalidad.
-- **Área / Toca** *(opcionales, separadas por coma)*: tokens → labels
-  `area:<x>` / `touches:<y>`. Misma clave que usan la detección de colisión
-  (`claim.js#tokensOf`) y la serialización (`dispatch.js#SERIALIZING_TOUCHES`):
-  reutiliza el vocabulario de labels que ya exista en este repo, no inventes
-  uno nuevo por spec. Para ver cuál existe: `gh label list --repo
-  <owner/repo>` (y `/ct-groom` te dice, al correr, qué labels ha creado
-  NUEVAS y cuáles ha reutilizado — si aparece una nueva que esperabas
-  reutilizar, es que has escrito un sinónimo). Un token no puede contener
-  comas: se descartan al normalizar, aquí `\,` no sirve de nada.
-  `migration`/`ci`/`pbxproj` en `Toca` son especiales — serializan entre sí:
-  como mucho un slice con uno de esos tres sin mergear a la vez, sin importar
-  `Área`. El alcance real de ese "global" está más abajo, en "Qué hace
-  `/ct-next` con esto": es global **al flujo de issues de este repo**, que no
-  es lo mismo que global al repo.
-- **Señal** *(opcional)*: la SEÑAL DE OBSERVABILIDAD que este slice
-  promete — qué métrica, log o evento tiene que emitir su código de
-  producción (p.ej. "métrica `backfill_progress` con label `estado`").
+  Where it ends up: each resolved gate is written as a **`gate:<token>`** label on the
+  issue (and **`gate:none`** when there is none — silence cannot
+  mean both "no gates" and "issue older than the gates"), as a
+  **`## Gates`** section of the issue body, and as an explicit instruction in the
+  agent's prompt. That is why it survives a re-dispatch and a `--reopen`: it is
+  read from the issue, not from the spec.
+- **Entrega** *(optional)*: text of what the slice delivers → the
+  "Descripción" section of the issue body. It no longer feeds the title (that is what
+  `Slice` does, see above).
+- **Dep**: `#N` (several, comma-separated) pointing at another `#` of this
+  same table, or a "no value" marker if it depends on nothing. `S1` does not
+  work — use `#1`. It feeds the `merge-after` graph that `/ct-next` respects.
+  In the issue body it appears as ``merge-after `#N` `` (in backticks,
+  on purpose: a bare `#N` would be turned by GitHub into a link to issue
+  number N of this repo, which has nothing to do with it). That `#N` **is always the
+  `#` of this table — the ORDER of the slice, never an issue number**;
+  `/ct-next` translates it through the `ct-order` marker that each issue carries at
+  the end.
+- **Acepta** *(optional)*: comma-separated acceptance criteria →
+  the "Acceptance criteria" section of the issue, one per line. **The comma ALWAYS
+  separates**: a criterion in EARS ("When the token expires, the system asks for
+  login") would be split into two half criteria. If yours carries a comma,
+  escape it as `\,` (`When the token expires\, the system asks for login`) or
+  rephrase without it. Only the exact sequence `\,` is an escape — a lone
+  backslash is kept as is.
+- **Protegido** *(optional)*: what is left out of scope → the "Out of
+  scope / Protected" section of the issue. Free text in a single piece: here the comma
+  separates **nothing**, write normally.
+- **Área / Toca** *(optional, comma-separated)*: tokens → labels
+  `area:<x>` / `touches:<y>`. The same key used by collision detection
+  (`claim.js#tokensOf`) and by serialization (`dispatch.js#SERIALIZING_TOUCHES`):
+  reuse the label vocabulary that already exists in this repo, do not invent
+  a new one per spec. To see which exists: `gh label list --repo
+  <owner/repo>` (and `/ct-groom` tells you, when it runs, which labels it has created
+  NEW and which it has reused — if a new one appears that you expected to
+  reuse, you have written a synonym). A token cannot contain
+  commas: they are discarded when normalising, here `\,` is of no use.
+  `migration`/`ci`/`pbxproj` in `Toca` are special — they serialize with each other:
+  at most one slice with one of those three unmerged at a time, regardless of
+  `Área`. The real scope of that "global" is further down, in "What
+  `/ct-next` does with this": it is global **to this repo's issue flow**, which is not
+  the same as global to the repo.
+- **Señal** *(optional)*: the OBSERVABILITY SIGNAL this slice
+  promises — which metric, log or event its production code has to emit
+  (e.g. "`backfill_progress` metric with a `status` label").
 
-  NO ES UN CRITERIO DE ACEPTACIÓN MÁS. Los criterios de `Acepta` son
-  funcionales: dicen qué tiene que hacer el código para que el slice
-  esté hecho, y el juez ya los mide en su ítem `estado-final`. La
-  señal promete otra cosa: QUÉ SE VA A VER EN PRODUCCIÓN cuando el
-  slice esté desplegado — la métrica, el log o el evento por el que
-  alguien sabrá, sin leer el diff, si esto está funcionando. Una señal
-  que repite un criterio de aceptación con otras palabras deja al ítem
-  `observabilidad` midiendo lo que `estado-final` ya midió: no añade
-  ninguna información. Regla práctica: si lo que escribes se puede
-  comprobar corriendo los tests, es un criterio de aceptación, no una
-  señal.
+  IT IS NOT ONE MORE ACCEPTANCE CRITERION. The criteria in `Acepta` are
+  functional: they say what the code has to do for the slice to be
+  done, and the judge already measures them in its `estado-final` item. The
+  signal promises something else: WHAT WILL BE SEEN IN PRODUCTION when the
+  slice is deployed — the metric, the log or the event by which
+  someone will know, without reading the diff, whether this is working. A signal
+  that repeats an acceptance criterion in other words leaves the
+  `observabilidad` item measuring what `estado-final` already measured: it adds
+  no information. Rule of thumb: if what you write can be
+  checked by running the tests, it is an acceptance criterion, not a
+  signal.
 
-  Texto libre de una sola pieza, como `Protegido`: la coma no separa
-  nada. Llega como sección `## Señal de observabilidad` del cuerpo del
-  issue, viaja al `.agent/SLICE.md` del worktree en el despacho, y el
-  JUEZ DE SLICE la mide contra el diff acumulado (ítem `observabilidad`):
-  que lo prometido lo emita código de producción, instrumentado como ya
-  instrumenta este repo, sin labels de cardinalidad ilimitada. Si el
-  slice no tiene nada observable que prometer, se declara la EXENCIÓN
-  RAZONADA: `N/A — <razón>` (el mismo idioma que la Global verification
-  de un plan). Una exención SIN razón **aborta**: una exención que nadie
-  puede leer es una señal sin declarar disfrazada de decisión. Celda
-  vacía o con marcador de "sin valor" significa *no lo he pensado* — no
-  es una exención: el juez lo mide como `sin-vara`, y esa cuenta viaja en
-  la telemetría del epic.
-- **E2E** *(opcional)*: qué recorridos hay que atravesar antes de mergear este
-  slice, separados por coma → sección `## E2E` del cuerpo del issue, uno por
-  línea (mismo criterio de escape que `Acepta`: una coma dentro de un
-  recorrido se escribe `\,`). Declarar aquí algo **deriva** el gate `` `e2e` ``
-  (ver `Gate`, arriba) — no lo escribas también en `Gate`.
+  Free text in a single piece, like `Protegido`: the comma separates
+  nothing. It arrives as the `## Señal de observabilidad` section of the issue
+  body, travels to the worktree's `.agent/SLICE.md` on dispatch, and the
+  SLICE JUDGE measures it against the accumulated diff (`observabilidad` item):
+  that what was promised is emitted by production code, instrumented the way this
+  repo already instruments, without unbounded-cardinality labels. If the
+  slice has nothing observable to promise, the REASONED EXEMPTION is declared:
+  `N/A — <reason>` (the same idiom as the Global verification
+  of a plan). An exemption WITHOUT a reason **aborts**: an exemption nobody
+  can read is an undeclared signal in disguise. An empty cell
+  or one with a "no value" marker means *I have not thought about it* — it
+  is not an exemption: the judge measures it as `sin-vara`, and that count travels in
+  the epic's telemetry.
+- **E2E** *(optional)*: which journeys have to be walked before merging this
+  slice, comma-separated → the `## E2E` section of the issue body, one per
+  line (same escaping rule as `Acepta`: a comma inside a
+  journey is written `\,`). Declaring something here **derives** the `` `e2e` `` gate
+  (see `Gate`, above) — do not write it in `Gate` as well.
 
-  **Si la tabla TIENE esta columna, cada fila tiene que decidir.** Un guion
-  (o cualquier otro marcador de "sin valor") en una fila de una tabla CON
-  columna `E2E` significa lo mismo de siempre —"no he declarado nada aquí"—
-  pero aquí eso **aborta**: con la columna presente, "nadie lo pensó" no es
-  una opción válida por fila. Para decir de verdad "este slice no tiene nada
-  que atravesar", escribe el token **`no`** (o **`n/a`**, que vale igual: los
-  dos son el mismo "se pensó y no hay"). Declarar un recorrido real Y
-  `no` en la misma celda también aborta: no se elige un ganador en silencio.
-  Si ningún slice del epic necesita e2e, la salida es no añadir la columna en
-  absoluto — así ninguna fila tiene que decidir nada.
+  **If the table HAS this column, every row has to decide.** A dash
+  (or any other "no value" marker) in a row of a table WITH an
+  `E2E` column means what it always means —"I have declared nothing here"—
+  but here that **aborts**: with the column present, "nobody thought about it" is not
+  a valid option per row. To really say "this slice has nothing
+  to walk", write the token **`no`** (or **`n/a`**, which works the same: both
+  are the same "it was thought about and there is none"). Declaring a real journey AND
+  `no` in the same cell also aborts: a winner is not picked in silence.
+  If no slice of the epic needs e2e, the way out is not to add the column at
+  all — that way no row has to decide anything.
 
-Marcadores de "sin valor" (`Dep`/`Acepta`/`Protegido`/`Área`/`Toca`/`Gate`/`Señal`):
-`–` `-` `—` `―` `−` `--` o celda vacía — cualquier variante de guion vale.
-`E2E` usa el mismo conjunto de marcadores, con la salvedad de arriba: solo son
-inocuos cuando la columna no está presente.
+"No value" markers (`Dep`/`Acepta`/`Protegido`/`Área`/`Toca`/`Gate`/`Señal`):
+`–` `-` `—` `―` `−` `--` or an empty cell — any dash variant works.
+`E2E` uses the same set of markers, with the caveat above: they are only
+harmless when the column is not present.
 
-### Lo que crea `/ct-groom` NO es despachable todavía
+### What `/ct-groom` creates is NOT dispatchable yet
 
-Todos los issues nacen con **`status:backlog`**, y `/ct-next` solo despacha
-`status:ready`. Promoverlos es un paso **humano y deliberado** — es el gate
-del loop: tú decides qué entra en vuelo y cuándo, el groom nunca lo hace por
-ti. Si `/ct-next` responde "no hay slices despachables" justo después de
-groomear un epic entero, es esto:
+Every issue is born with **`status:backlog`**, and `/ct-next` only dispatches
+`status:ready`. Promoting them is a **human and deliberate** step — it is the gate
+of the loop: you decide what goes in flight and when, the groom never does it for
+you. If `/ct-next` answers "there are no dispatchable slices" right after
+grooming a whole epic, this is why:
 
 ```
 gh issue edit <n> --repo <owner/repo> --add-label status:ready --remove-label status:backlog
 ```
 
-`/ct-groom` recuerda al terminar cuántos issues del epic siguen en backlog.
-De ahí en adelante el label `status:` lo mueven `/ct-next` y el flujo
-(`ready` → `in-progress` → `in-review`, y de vuelta a `ready` si la revisión
-rechaza el PR — ver "Rechazar un PR" más abajo), no el spec — por eso
-re-groomear nunca lo compara ni lo revierte.
+`/ct-groom` reminds you when it finishes how many issues of the epic are still in backlog.
+From then on the `status:` label is moved by `/ct-next` and the flow
+(`ready` → `in-progress` → `in-review`, and back to `ready` if the review
+rejects the PR — see "Rejecting a PR" further down), not by the spec — which is why
+re-grooming never compares it nor reverts it.
 
-### Decisiones tuyas que dependen de cómo se invoque `/ct-groom`
+### Decisions of yours that depend on how `/ct-groom` is invoked
 
-- **`--milestone "<título>"`** (por defecto `Epic`): una invocación = un epic
-  = un milestone, que `/ct-groom` crea si no existe. Los `#` de esta tabla son
-  únicos **dentro de su milestone**, no del repo: dos epics distintos pueden
-  usar `#1` sin pisarse. Pero si dos epics comparten milestone (p.ej. ambos
-  con el título por defecto `Epic`), sus órdenes chocan y `/ct-next` excluye
-  ese epic entero de la selección, avisando. Dale a cada epic su propio
-  título de milestone.
-- **`--section N`**: OBSOLETO, se acepta y se ignora (avisando). Nunca decidió
-  qué se groomeaba: la tabla se localiza por su **cabecera** (una fila con
-  columnas `Slice` y `Dep`), no por ningún número de sección — así que si el
-  documento trae ANTES otra tabla con esas dos columnas, se groomeará esa. Una
-  sola tabla de slices por spec. Lo único que hacía `--section` era componer el
-  ancla del enlace al spec como `#N`, un ancla que en GitHub no existe.
-- **El enlace al spec** que se escribe en cada issue sale ahora del encabezado
-  real bajo el que pongas la tabla (`## 9. Slices` → `…/blob/<rama por
-  defecto>/ruta/al/spec.md#9-slices`), y se **verifica** contra GitHub antes de
-  escribirlo. Consecuencia para ti: **empuja el spec antes de groomear**. Si el
-  fichero no está publicado en la rama por defecto, los issues nacen con una
-  referencia de texto sin enlace (diciendo por qué), y `/ct-groom` no lo corrige
-  en corridas posteriores sin `--reconcile`.
-- **`--project <n>`** *(opcional)*: mete cada issue en el Project v2 número
-  `n` **del mismo owner que `--repo`** (un project de otro owner no está
-  soportado) y le fija el campo de iteración llamado exactamente `Sprint` a la
-  iteración vigente hoy. Si no existe ese campo, o ninguna iteración cubre la
-  fecha de hoy, `/ct-groom` aborta **sin haber creado nada** — ni milestone, ni
-  labels, ni issues. (Hasta el contrato v5 esto no era cierto: el project se
-  validaba después del milestone y de las labels, y un abort las dejaba
-  creadas.)
+- **`--milestone "<title>"`** (default `Epic`): one invocation = one epic
+  = one milestone, which `/ct-groom` creates if it does not exist. The `#` of this table are
+  unique **within their milestone**, not within the repo: two different epics can
+  use `#1` without stepping on each other. But if two epics share a milestone (e.g. both
+  with the default title `Epic`), their orders clash and `/ct-next` excludes
+  that whole epic from the selection, with a warning. Give each epic its own
+  milestone title.
+- **`--section N`**: OBSOLETE, accepted and ignored (with a warning). It never decided
+  what got groomed: the table is located by its **header** (a row with
+  columns `Slice` and `Dep`), not by any section number — so if the
+  document carries another table with those two columns BEFORE it, that one will be groomed. One
+  single slices table per spec. All `--section` did was compose the
+  anchor of the link to the spec as `#N`, an anchor that does not exist on GitHub.
+- **The link to the spec** written in each issue now comes from the real
+  heading you put the table under (`## 9. Slices` → `…/blob/<default
+  branch>/path/to/spec.md#9-slices`), and it is **verified** against GitHub before
+  writing it. Consequence for you: **push the spec before grooming**. If the
+  file is not published on the default branch, the issues are born with a
+  text reference with no link (saying why), and `/ct-groom` does not fix it
+  in later runs without `--reconcile`.
+- **`--project <n>`** *(optional)*: puts each issue in the Project v2 number
+  `n` **of the same owner as `--repo`** (a project of another owner is not
+  supported) and sets its iteration field named exactly `Sprint` to the
+  iteration in force today. If that field does not exist, or no iteration covers
+  today's date, `/ct-groom` aborts **without having created anything** — no milestone, no
+  labels, no issues. (Until contract v5 this was not true: the project was
+  validated after the milestone and the labels, and an abort left them
+  created.)
 
-#### Qué garantiza `/ct-groom` sobre lo que ya ha tocado cuando falla
+#### What `/ct-groom` guarantees about what it has already touched when it fails
 
-Esto importa porque la respuesta natural —"un abort a mitad deja el repo a
-medias"— asusta y lleva a limpiar a mano cosas que no hay que limpiar.
+This matters because the natural answer —"an abort halfway leaves the repo
+half-done"— is frightening and leads to cleaning up by hand things that must not be cleaned up.
 
-- **Todo lo que `/ct-groom` LEE ocurre antes de todo lo que ESCRIBE.** Las
-  validaciones —argumentos, tabla de slices, spec y su enlace, listado de issues, de
-  labels y de milestones, y (con `--project`) el campo `Sprint` con su
-  iteración vigente— van **todas** por delante de la primera mutación. Si
-  aborta por cualquiera de ellas, **no ha creado nada**.
-- **Lo que NO se promete: no hay transacción.** Una vez empieza a escribir, el
-  orden es milestone → labels → issues → alta en el Project. Un fallo *ahí* en
-  medio (red, rate limit, auth caída, un Ctrl-C) deja creado lo anterior. No
-  hay rollback y no se finge que lo haya.
-- **De eso se sale volviendo a correr, no limpiando a mano.** `/ct-groom` es
-  idempotente por construcción: el milestone se reutiliza por título, de las
-  labels solo se crean las que faltan (las que ya existían **no** se tocan,
-  ni su color ni su descripción), los issues se reconocen por su marcador
-  `ct-order` y no se duplican, y un issue que quedó fuera del Project se
-  detecta y se añade en la siguiente corrida.
-- **Sin `--reconcile`, un issue que ya existe NUNCA se edita.** Las
-  divergencias se reportan y se sale `3`; nada se escribe.
-- **`--dry-run` no muta nada, nunca** — ni siquiera crea el milestone.
+- **Everything `/ct-groom` READS happens before everything it WRITES.** The
+  validations —arguments, slices table, spec and its link, listing of issues, of
+  labels and of milestones, and (with `--project`) the `Sprint` field with its
+  iteration in force— **all** come ahead of the first mutation. If it
+  aborts on any of them, **it has created nothing**.
+- **What is NOT promised: there is no transaction.** Once it starts writing, the
+  order is milestone → labels → issues → adding to the Project. A failure *there*
+  in the middle (network, rate limit, auth down, a Ctrl-C) leaves what came before created. There
+  is no rollback and none is pretended.
+- **You get out of that by running again, not by cleaning up by hand.** `/ct-groom` is
+  idempotent by construction: the milestone is reused by title, of the
+  labels only the missing ones are created (the ones that already existed are **not** touched,
+  neither their colour nor their description), the issues are recognised by their
+  `ct-order` marker and are not duplicated, and an issue that was left out of the Project is
+  detected and added on the next run.
+- **Without `--reconcile`, an issue that already exists is NEVER edited.** The
+  drifts are reported and it exits `3`; nothing is written.
+- **`--dry-run` mutates nothing, ever** — it does not even create the milestone.
 
-Ejemplo que parsea tal cual (verificado con `ct-groom.mjs --dry-run`):
+An example that parses as is (verified with `ct-groom.mjs --dry-run`):
 
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca | Gate | Señal |
 |---|-------|------|---------|-----|--------|-----------|------|------|------|-------|
-| 1 | modelo | backend | tabla `medicamentos` | – | AC-1.1 | schema | medicacion | db, migration | – | – |
-| 2 | barra | backend | backfill con progreso visible | #1 | AC-2.1 | – | medicacion | db, migration | visual | métrica `backfill_progress` con label `estado` |
-| 3 | pantalla | ui | pantalla de alta | #2 | AC-3.1 | – | medicacion | app | – | N/A — pantalla sin telemetría nueva que prometer |
+| 1 | model | backend | `medications` table | – | AC-1.1 | schema | medication | db, migration | – | – |
+| 2 | bar | backend | backfill with visible progress | #1 | AC-2.1 | – | medication | db, migration | visual | `backfill_progress` metric with a `status` label |
+| 3 | screen | ui | creation screen | #2 | AC-3.1 | – | medication | app | – | N/A — screen with no new telemetry to promise |
 
-(La fila 2 es el caso que la columna `Gate` existe para cubrir: es `backend`
-por dentro y lo más visible del epic por fuera. La fila 3 no declara nada y
-recibe su gate `visual` igualmente, por ser `Tipo: ui`. La fila 2 declara
-además su señal de observabilidad y la fila 3 se exime con razón — con la
-fila 1, las tres formas de la columna `Señal` en un mismo ejemplo.)
+(Row 2 is the case the `Gate` column exists to cover: it is `backend`
+on the inside and the most visible thing in the epic on the outside. Row 3 declares nothing and
+gets its `visual` gate all the same, by being `Tipo: ui`. Row 2 also declares
+its observability signal and row 3 exempts itself with a reason — with
+row 1, the three forms of the `Señal` column in one single example.)
 
-**Arreglar la tabla y volver a groomear NO arregla los issues ya creados.**
-Re-ejecutar `/ct-groom` no los duplica (los reconoce por su marcador
-`ct-order`), pero tampoco los actualiza: compara título, enlace al spec,
-labels (`type:`/`area:`/`touches:`/`gate:`; `status:` nunca) y las
-dos secciones que el dispatcher obedece
-(`## Dependencias`, `## Acceptance criteria`) contra lo que la tabla produce
-hoy, **reporta** cada diferencia por stderr y sale `3` — pero no escribe nada
-salvo que se le pase `--reconcile` (EXPERIMENTAL: ha corrompido bodies reales
-en pruebas, revisa el diff del issue después de usarlo). Un issue cuyo slice
-ya no está en la tabla se avisa como huérfano y no se toca. Si cambias algo
-en una fila ya groomeada, cuenta con revisar ese issue a mano.
+**Fixing the table and grooming again does NOT fix the issues already created.**
+Re-running `/ct-groom` does not duplicate them (it recognises them by their
+`ct-order` marker), but it does not update them either: it compares title, link to the spec,
+labels (`type:`/`area:`/`touches:`/`gate:`; `status:` never) and the
+two sections the dispatcher obeys
+(`## Dependencias`, `## Acceptance criteria`) against what the table produces
+today, **reports** each difference on stderr and exits `3` — but writes nothing
+unless it is given `--reconcile` (EXPERIMENTAL: it has corrupted real bodies
+in testing, review the issue's diff after using it). An issue whose slice
+is no longer in the table is flagged as orphaned and is not touched. If you change something
+in a row already groomed, count on reviewing that issue by hand.
 
-**El milestone NO está en esa lista, y no es un olvido.** Un groom sólo mira
-los issues del milestone que le has pasado, así que un issue emparejado tiene
-siempre, por construcción, ese mismo milestone: la divergencia de milestone es
-inalcanzable desde `/ct-groom` y nunca la vas a ver reportada. Si mueves un
-issue de milestone en GitHub y vuelves a correr, lo que obtienes no es un
-aviso de divergencia: según a dónde lo hayas movido, o se ignora por ser de
-otro epic, o `/ct-groom` se para en seco con **exit 1** sin crear ni modificar
-nada, o crea un issue nuevo para ese slice avisando de que puede estar
-duplicándolo. Consecuencia práctica de ese mismo alcance: **la tabla de slices de
-cada spec puede empezar en `1`** sin pisar los issues de un epic anterior.
-Ver "El alcance de un groom es su epic, no el repo" en `docs/loop/ct-groom.md` (repo del plugin).
+**The milestone is NOT in that list, and it is not an oversight.** A groom only looks at
+the issues of the milestone you passed it, so a paired issue always has,
+by construction, that same milestone: the milestone drift is
+unreachable from `/ct-groom` and you will never see it reported. If you move an
+issue between milestones on GitHub and run again, what you get is not a
+drift warning: depending on where you moved it, either it is ignored for belonging to
+another epic, or `/ct-groom` stops dead with **exit 1** without creating or modifying
+anything, or it creates a new issue for that slice, warning that it may be
+duplicating it. A practical consequence of that same scope: **the slices table of
+each spec can start at `1`** without stepping on the issues of an earlier epic.
+See "The scope of a groom is its epic, not the repo" in `docs/loop/ct-groom.md` (plugin repo).
 
-Detalle completo (todas las condiciones de abort, columnas opcionales,
-avisos no fatales, el reporte de divergencia, sus límites, y `--reconcile`):
-`docs/loop/ct-groom.md` en el repo del plugin `control-tower-loop` (el comando `commands/ct-groom.md` se quedó con la invocación y sus códigos de salida).
+Full detail (all the abort conditions, optional columns,
+non-fatal warnings, the drift report, its limits, and `--reconcile`):
+`docs/loop/ct-groom.md` in the `control-tower-loop` plugin repo (the command `commands/ct-groom.md` kept the invocation and its exit codes).
 
-### Qué hace `/ct-next` con esto
+### What `/ct-next` does with this
 
-Lo de abajo NO es la referencia de invocación (esa es `docs/loop/ct-next.md`,
-en el repo del plugin): es lo que cambia cómo escribes la tabla y cómo convives
-con el loop una vez hay slices en vuelo.
+What is below is NOT the invocation reference (that is `docs/loop/ct-next.md`,
+in the plugin repo): it is what changes how you write the table and how you live
+with the loop once there are slices in flight.
 
-- **`Área`/`Toca` no avisan: BLOQUEAN.** Un slice que comparta **un solo
-  token** con un issue en `status:in-progress` **o `status:in-review`**
-  no se despacha — `/ct-next` lo salta y prueba el siguiente candidato; si no
-  queda ninguno, no lanza nada y dice contra qué issue chocó y en qué estado.
-  Elegir los tokens **es** elegir qué puede volar en paralelo: dos slices con
-  un token en común quedan serializados aunque toquen ficheros distintos.
-- **Un token se retiene hasta el MERGE, no hasta que el agente pare.** El
-  agente libera su claim al abrir el PR (`in-progress` → `in-review`), y eso
-  suelta el **cap** — pero no los tokens: hasta que el PR se mergea y el
-  issue se cierra, `main` todavía no contiene ese trabajo, así que un vecino
-  de área ramificaría de una base incompleta. Consecuencia al diseñar la
-  tabla: **un PR sin mergear frena a sus vecinos de área**, no solo a sus
-  dependientes. Dos slices que comparten token no se solapan ni "un poquito".
-  Y si `/ct-next` te dice que choca con un `status:in-review`, esperar no
-  sirve de nada: ahí no hay ningún agente. Mergea el PR — o, si el PR ya se
-  mergeó y el issue sigue abierto, ciérralo **como *completed***
+- **`Área`/`Toca` do not warn: they BLOCK.** A slice sharing **a single
+  token** with an issue in `status:in-progress` **or `status:in-review`**
+  is not dispatched — `/ct-next` skips it and tries the next candidate; if none
+  is left, it launches nothing and says which issue it clashed with and in which state.
+  Choosing the tokens **is** choosing what can fly in parallel: two slices with
+  a token in common end up serialized even if they touch different files.
+- **A token is held until the MERGE, not until the agent stops.** The
+  agent releases its claim when opening the PR (`in-progress` → `in-review`), and that
+  frees the **cap** — but not the tokens: until the PR is merged and the
+  issue is closed, `main` still does not contain that work, so an area
+  neighbour would branch from an incomplete base. Consequence when designing the
+  table: **an unmerged PR holds back its area neighbours**, not just its
+  dependants. Two slices sharing a token do not overlap even "a little bit".
+  And if `/ct-next` tells you it clashes with a `status:in-review`, waiting
+  is useless: there is no agent there. Merge the PR — or, if the PR was already
+  merged and the issue is still open, close it **as *completed***
   (`gh issue close <n> --reason completed`).
-- **"PR mergeado, issue abierto" tiene DOS causas, y la segunda engaña.** Es
-  el estado que tapa un carril para siempre, así que conviene saber
-  diagnosticarlo entero:
-  - al PR le faltaba el `Closes #N` en el cuerpo. El kickoff que `/ct-next`
-    le da a cada agente lo pide explícitamente, pero el kickoff es un
-    PROMPT, no un gate: **la causa más probable de este caso es simplemente
-    que el agente no lo puso** (además de un PR abierto a mano, o un cuerpo
-    editado después). Nada del loop lo comprueba;
-  - el PR SÍ llevaba su `Closes #N`, pero se mergeó en una rama que **no es
-    la rama por defecto** del repo. GitHub **solo cierra el issue cuando el
-    PR entra en la rama por defecto** — verificado contra un repo real, no
-    deducido de la documentación. Es el caso que engaña: miras el PR, ves el
-    `Closes #N` ahí puesto, y descartas el diagnóstico correcto.
-  Consecuencia operativa: si despachas con `/ct-next --base <otra-rama>`,
-  **cerrar cada issue al mergear su PR es un paso a mano, siempre** — el
-  `Closes #N` no lo va a hacer por ti. `/ct-next` lo avisa por stderr cada vez
-  que le pasas `--base`.
-- **`migration`/`ci`/`pbxproj` serializan además GLOBALMENTE, con un alcance
-  concreto.** Son dos reglas distintas actuando a la vez: la de arriba
-  compara tokens, esta no. Un slice con `Toca: migration` y otro con
-  `Toca: ci` **no comparten ningún token** y aun así no pueden estar sin
-  mergear a la vez, sin importar `Área`. **Qué significa "global" de verdad:
-  `/ct-next` solo mira issues de ESTE repo con `status:in-progress` o
-  `status:in-review`.** Todo lo que va por fuera del flujo de issues es
-  INVISIBLE para esta regla: otra rama, otro track de trabajo, un humano
-  editando la misma migración a mano, un repo distinto. La serialización es
-  global **al flujo de issues de este repo**, no al repositorio ni al
-  proyecto. Si tienes trabajo en paralelo fuera del loop, esta garantía no lo
-  cubre y no hay nada en el plugin que pueda cubrirlo.
-- **`merge-after` se comprueba mirando CÓMO se cerró el issue.** Una
-  dependencia cuenta como satisfecha si su issue está **cerrado como
-  *completed*** — que es lo que GitHub hace al mergear un PR con `Closes #N`.
-  Un PR aprobado, un PR abierto o un issue en `status:in-review` no
-  desbloquean nada. Las dos trampas de esa aproximación, dichas sin adornos:
-  - un issue cerrado como ***not planned*** (lo correcto para un slice
-    descartado) **no** satisface la dep y deja a sus dependientes esperando
-    para siempre. `/ct-next` lo nombra al explicar el bloqueo: si ves eso,
-    quita el `merge-after` de la sección `## Dependencias` del dependiente, o
-    reabre el issue y ciérralo como *completed* si su trabajo sí se hizo;
-  - un issue cerrado como ***completed*** sin que se haya mergeado nada **sí**
-    satisface la dep, y el dependiente saldrá sobre trabajo que no existe.
-    **Esto no requiere que nadie se equivoque a propósito**: GitHub aplica las
-    *closing keywords* de **cualquier mensaje de commit** que llegue a la rama
-    por defecto, y **las comillas no protegen**. En un repo real, un commit de
-    **documentación** que solo MENCIONABA la cadena `Closes #451` —dentro de
-    una frase que explicaba que el kickoff no la llevaba— cerró ese issue como
+- **"PR merged, issue open" has TWO causes, and the second one deceives.** It is
+  the state that blocks a lane forever, so it is worth knowing how to
+  diagnose it in full:
+  - the PR was missing the `Closes #N` in its body. The kickoff `/ct-next`
+    gives each agent asks for it explicitly, but the kickoff is a
+    PROMPT, not a gate: **the most likely cause of this case is simply
+    that the agent did not put it there** (besides a PR opened by hand, or a body
+    edited afterwards). Nothing in the loop checks it;
+  - the PR DID carry its `Closes #N`, but it was merged into a branch that **is not
+    the repo's default branch**. GitHub **only closes the issue when the
+    PR lands on the default branch** — verified against a real repo, not
+    deduced from the documentation. It is the case that deceives: you look at the PR, you see the
+    `Closes #N` right there, and you discard the correct diagnosis.
+  Operational consequence: if you dispatch with `/ct-next --base <other-branch>`,
+  **closing each issue when merging its PR is a manual step, always** — the
+  `Closes #N` is not going to do it for you. `/ct-next` warns on stderr every time
+  you pass it `--base`.
+- **`migration`/`ci`/`pbxproj` also serialize GLOBALLY, with a specific
+  scope.** They are two different rules acting at once: the one above
+  compares tokens, this one does not. A slice with `Toca: migration` and another with
+  `Toca: ci` **share no token at all** and still cannot be unmerged
+  at the same time, regardless of `Área`. **What "global" really means:
+  `/ct-next` only looks at issues of THIS repo with `status:in-progress` or
+  `status:in-review`.** Everything that goes outside the issue flow is
+  INVISIBLE to this rule: another branch, another track of work, a human
+  editing the same migration by hand, a different repo. The serialization is
+  global **to this repo's issue flow**, not to the repository nor to the
+  project. If you have parallel work outside the loop, this guarantee does not
+  cover it and there is nothing in the plugin that could cover it.
+- **`merge-after` is checked by looking at HOW the issue was closed.** A
+  dependency counts as satisfied if its issue is **closed as
+  *completed*** — which is what GitHub does when merging a PR with `Closes #N`.
+  An approved PR, an open PR or an issue in `status:in-review` do not
+  unblock anything. The two traps of that approximation, said without adornment:
+  - an issue closed as ***not planned*** (the right thing for a discarded
+    slice) does **not** satisfy the dep and leaves its dependants waiting
+    forever. `/ct-next` names it when explaining the blockage: if you see that,
+    remove the `merge-after` from the dependant's `## Dependencias` section, or
+    reopen the issue and close it as *completed* if its work was indeed done;
+  - an issue closed as ***completed*** without anything having been merged **does**
+    satisfy the dep, and the dependant will start on top of work that does not exist.
+    **This does not require anyone to make a deliberate mistake**: GitHub applies
+    the *closing keywords* of **any commit message** that reaches the default
+    branch, and **quotes do not protect**. In a real repo, a
+    **documentation** commit that only MENTIONED the string `Closes #451` —inside
+    a sentence explaining that the kickoff did not carry it— closed that issue as
     *completed*.
-    `/ct-next` **avisa** (no bloquea) cuando una dependencia ya satisfecha
-    consta cerrada por un **commit suelto** que no pertenece a ningún PR
-    mergeado. Lo que **no** exige es que el cierre venga de un PR: cerrar el
-    issue a mano es la práctica mayoritaria (medido: 86 de 97 cierres
-    *completed* de un repo real no tienen ningún PR detrás) y además es un paso
-    **prescrito** aquí mismo cuando se despacha con `--base <otra-rama>`.
-    Cuidado con escribir esas keywords en cualquier commit, aunque sea
-    entrecomillándolas. El plugin **bloquea** el commit cuando la keyword viaja
-    en el mensaje (`-m`) de un `git commit` lanzado desde **una sesión de
-    Claude que tenga este plugin cargado**, contra un repo que tenga esta
-    sección en su `AGENTS.md`. Es una propiedad de la SESIÓN, no sólo del
-    repo: un agente despachado arranca con su propia cuenta
-    (`CLAUDE_CONFIG_DIR`, ver `resolveAccount` en `scripts/dispatch.js`), así
-    que sólo lleva la puerta si el plugin está instalado también ahí.
-    Y la regla que resume qué queda fuera, porque una lista de excepciones
-    envejece peor que el principio del que salen: **la puerta engancha en el
-    tool `Bash`, así que cubre lo que ejecuta CLAUDE, nunca lo que tecleas
-    TÚ**. Ni en tu terminal, ni con el prefijo `!` dentro de la propia sesión
-    de Claude: un `!` no pasa por el tool, así que ningún hook lo ve. Medido
-    en un repo gobernado, con el MISMO mensaje: bloqueado desde el tool
-    `Bash`, limpio con `!`. Lo que además **no ve**, y por tanto sigue siendo
-    tuyo: un `git commit` **sin** `-m` (el mensaje lo pone el editor), un
-    `-F <fichero>` y un `--amend --no-edit`; ni una invocación
-    **envuelta**, donde `git` deja de ser el primer token — `sudo git
-    commit`, `env FOO=1 git commit`, `command git commit`. Con `git -C
-    <ruta> commit -m ...` o `cd <ruta> && git commit -m ...` el problema no
-    es que no la vea: la puerta decide sobre el repo del directorio de LA
-    SESIÓN, nunca sobre el que señala `<ruta>`, y eso corta en los dos
-    sentidos — puede bloquear un commit dirigido a un repo que no gobierna
-    (sesión dentro de uno gobernado, `<ruta>` fuera) y no proteger uno
-    dirigido a un repo que sí gobierna (sesión fuera, `<ruta>` dentro). Para
-    lo que se escape sigue estando el aviso de `/ct-next` de aquí arriba: eso
-    caza el EFECTO, la puerta caza la CAUSA, y ninguno de los dos lo caza
-    todo.
-  Al diseñar la tabla: el slice del que dependen muchos es el **cuello de
-  botella** del epic entero — nada detrás de él avanza hasta que ESE se
-  mergee. Si quieres una ventana de paralelismo, tiene que salir de la
-  columna `Dep`.
-- **Un issue CERRADO que conserva su label `status:` no existe para
-  `/ct-next`.** El dispatcher solo barre issues **abiertos**. Un cerrado con
-  `status:ready` todavía puesta se cae de la cola de despacho, y hasta ahora
-  se caía **sin una palabra**: la corrida siguiente pasaba al siguiente
-  `status:ready` del repo y explicaba con detalle por qué *ése* no era
-  despachable, sin mencionar el que había desaparecido. Ahora sale un aviso
-  agregado —uno solo, con los números agrupados por estado— porque **cerrar el
-  issue y quitarle su label son dos actos distintos y nada comprueba el
-  segundo**: la tasa medida en un repo real es de **10 cerrados con label viva
-  de cada 99**. Un `status:in-review` sobre un issue cerrado NO es anomalía:
-  es el final normal de un slice, y nada le quita esa label al cerrar.
-- **Un slice BLOQUEADO retiene su claim, y no hay transición que lo suelte.**
-  Si el agente marca `blocked: {reason, unblock}` en el `.agent/SLICE.md` de su
-  worktree y para —que es lo que el kickoff le pide—, su issue se queda en
-  `status:in-progress` **reteniendo tokens y una plaza de `--cap`**
-  indefinidamente: la detección de claims rancios no lo ve (el worktree y la
-  rama SÍ existen), `--requeue` se niega precisamente por eso, y `--release`
-  mentiría (no hay PR). `/ct-next` **lee** ese `SLICE.md` (antes de F22 era el
-  `.agent/STATE.md` del worktree; hoy ése es el de la coordinadora y **no** se
-  lee) y lo dice con su motivo, pero **no lo arregla**: sacarlo de ahí es una
-  decisión tuya (desbloquearlo, o abandonarlo borrando worktree y rama antes
-  de `--requeue`).
-- **Una invocación despacha `--cap` slices; por defecto es 1.** Y el cap es
-  **global al repo, no por invocación**: cuenta también lo que ya está en
-  vuelo (`status:in-progress`), así que un segundo `/ct-next --cap 1` con algo
-  corriendo no lanza nada — y lo dice. Un `status:in-review` **no** ocupa cap
-  (no hay ningún agente corriendo ahí), aunque sí retenga sus tokens: son dos
-  contabilidades distintas. Un slice reabierto con `--reopen` vuelve a
-  `in-progress` y por tanto **sí** ocupa cap: esta vez hay alguien
-  rehaciéndolo. Aprovechar una ventana de paralelismo es un acto
-  explícito: `/ct-next --cap 2` (o más).
-- **Las dos garantías de arriba valen para UN dispatcher a la vez.** El claim
-  es un label de GitHub, sin compare-and-swap: está reproducido y verificado
-  que dos `/ct-next` lanzados casi a la vez contra el mismo repo pueden
-  reclamar el mismo token compartido y arrancar los dos, saltándose tanto la
-  regla de colisión como el cap. No hay espera ni reintento que cierre ese
-  hueco hoy. **La mitigación es operativa: no lances dos dispatchers a la vez
-  sobre el mismo repo.** (Detalle y evidencia: `docs/loop/ct-next.md`.)
-- **`/ct-next` no acota por epic.** Acepta `--repo`, `--cap`, `--base` y
-  `--dry-run`; **no hay `--milestone`**. Barre todos los issues abiertos del
-  repo y elige por el `#` más bajo de la tabla, venga del epic que venga (ese
-  `#` sí se resuelve dentro de su propio milestone para traducir `Dep`, pero
-  la SELECCIÓN no se acota). Con dos epics vivos, el `#1` del segundo le gana
-  al `#3` del primero — y si los dos tienen un `#1` despachable, **cuál sale
-  primero no está definido**: depende del orden en que GitHub devuelva los
-  issues. La palanca para decidir qué epic avanza es la que ya tienes:
-  promover a `status:ready` solo los slices que quieras en vuelo.
-- **Hace falta `cmux`.** Es un gestor de workspaces de terminal, externo al
-  plugin: cada slice se lanza como `cmux new-workspace` (un worktree + una
-  sesión de `claude`). Si `cmux` no está en el PATH, **ningún** slice puede
-  lanzarse — `/ct-next` aborta en las precondiciones, antes de reclamar nada.
-  `/ct-groom` y `/ct-init` no lo necesitan: es requisito solo del dispatch.
-- **Interrupción y reanudación.** Un Ctrl-C (SIGINT/SIGTERM) a media corrida
-  revierte a `status:ready` el claim que hubiera quedado a medias antes de
-  salir. Re-invocar `/ct-next` es **idempotente** por construcción: un slice
-  ya despachado está en `status:in-progress`, así que ya no es `status:ready`
-  y no se vuelve a elegir (aunque sigue ocupando cap). Cada slice usa la rama
-  `feat/<n>` y el worktree `.worktrees/<n>` (`<n>` = número de ISSUE, no el
-  `#` de la tabla); si alguno de los dos ya existe de una corrida anterior,
-  `/ct-next` se niega a despachar ese slice **antes** de reclamarlo e imprime
-  el comando de limpieza exacto.
-- **Un claim es un label, sin heartbeat: nada lo caduca.** Si un slice muere
-  (sesión cerrada, máquina apagada, un agente que nunca ejecutó su
-  `--release`), su `status:in-progress` se queda puesto y bloquea
-  indefinidamente a todos los que compartan sus tokens, hasta que alguien lo
-  revierta **a mano**:
+    `/ct-next` **warns** (it does not block) when an already satisfied dependency
+    turns out to be closed by a **loose commit** that does not belong to any merged
+    PR. What it does **not** require is that the closure come from a PR: closing
+    the issue by hand is the majority practice (measured: 86 of 97 *completed*
+    closures in a real repo have no PR behind them) and it is moreover a step
+    **prescribed** right here when dispatching with `--base <other-branch>`.
+    Be careful about writing those keywords in any commit, even in
+    quotes. The plugin **blocks** the commit when the keyword travels
+    in the message (`-m`) of a `git commit` launched from **a session of
+    Claude that has this plugin loaded**, against a repo that has this
+    section in its `AGENTS.md`. It is a property of the SESSION, not just of the
+    repo: a dispatched agent starts with its own account
+    (`CLAUDE_CONFIG_DIR`, see `resolveAccount` in `scripts/dispatch.js`), so
+    it only carries the gate if the plugin is installed there too.
+    And the rule that sums up what is left out, because a list of exceptions
+    ages worse than the principle it comes from: **the gate hooks into the
+    `Bash` tool, so it covers what CLAUDE executes, never what YOU type**.
+    Neither in your terminal, nor with the `!` prefix inside the Claude session
+    itself: a `!` does not go through the tool, so no hook sees it. Measured
+    in a governed repo, with the SAME message: blocked from the `Bash`
+    tool, clean with `!`. What it also **does not see**, and therefore remains
+    yours: a `git commit` **without** `-m` (the message is set by the editor), a
+    `-F <file>` and an `--amend --no-edit`; nor a **wrapped**
+    invocation, where `git` stops being the first token — `sudo git
+    commit`, `env FOO=1 git commit`, `command git commit`. With `git -C
+    <path> commit -m ...` or `cd <path> && git commit -m ...` the problem is
+    not that it does not see it: the gate decides on the repo of THE SESSION's
+    directory, never on the one `<path>` points at, and that cuts both
+    ways — it can block a commit aimed at a repo it does not govern
+    (session inside a governed one, `<path>` outside) and fail to protect one
+    aimed at a repo it does govern (session outside, `<path>` inside). For
+    whatever escapes, there is still the `/ct-next` warning from up here: that
+    catches the EFFECT, the gate catches the CAUSE, and neither of the two catches
+    everything.
+  When designing the table: the slice many depend on is the **bottleneck**
+  of the whole epic — nothing behind it advances until THAT one is
+  merged. If you want a window of parallelism, it has to come out of the
+  `Dep` column.
+- **A CLOSED issue that keeps its `status:` label does not exist for
+  `/ct-next`.** The dispatcher only sweeps **open** issues. A closed one with
+  `status:ready` still on it drops out of the dispatch queue, and until now
+  it dropped out **without a word**: the next run moved on to the next
+  `status:ready` of the repo and explained in detail why *that one* was not
+  dispatchable, without mentioning the one that had disappeared. Now an aggregated
+  warning comes out —one only, with the numbers grouped by state— because **closing the
+  issue and removing its label are two distinct acts and nothing checks the
+  second**: the rate measured in a real repo is **10 closed with a live label
+  out of every 99**. A `status:in-review` on a closed issue is NOT an anomaly:
+  it is the normal end of a slice, and nothing removes that label on closing.
+- **A BLOCKED slice keeps its claim, and there is no transition that frees it.**
+  If the agent marks `blocked: {reason, unblock}` in its worktree's `.agent/SLICE.md`
+  and stops —which is what the kickoff asks of it—, its issue stays in
+  `status:in-progress` **holding tokens and a `--cap` slot**
+  indefinitely: stale-claim detection does not see it (the worktree and the
+  branch DO exist), `--requeue` refuses precisely because of that, and `--release`
+  would lie (there is no PR). `/ct-next` **reads** that `SLICE.md` (before F22 it was the
+  worktree's `.agent/STATE.md`; today that one is the coordinator's and is **not**
+  read) and says so with its reason, but **does not fix it**: getting it out of there is a
+  decision of yours (unblocking it, or abandoning it by deleting worktree and branch before
+  `--requeue`).
+- **One invocation dispatches `--cap` slices; the default is 1.** And the cap is
+  **global to the repo, not per invocation**: it also counts what is already in
+  flight (`status:in-progress`), so a second `/ct-next --cap 1` with something
+  running launches nothing — and says so. A `status:in-review` does **not** occupy cap
+  (there is no agent running there), even though it does hold its tokens: they are two
+  distinct accountings. A slice reopened with `--reopen` goes back to
+  `in-progress` and therefore **does** occupy cap: this time there is someone
+  redoing it. Taking advantage of a window of parallelism is an
+  explicit act: `/ct-next --cap 2` (or more).
+- **The two guarantees above hold for ONE dispatcher at a time.** The claim
+  is a GitHub label, with no compare-and-swap: it is reproduced and verified
+  that two `/ct-next` launched almost at the same time against the same repo can
+  claim the same shared token and both start, skipping both the
+  collision rule and the cap. There is no wait or retry that closes that
+  gap today. **The mitigation is operational: do not launch two dispatchers at once
+  on the same repo.** (Detail and evidence: `docs/loop/ct-next.md`.)
+- **`/ct-next` does not scope by epic.** It accepts `--repo`, `--cap`, `--base` and
+  `--dry-run`; **there is no `--milestone`**. It sweeps every open issue of the
+  repo and chooses by the lowest `#` of the table, whichever epic it comes from (that
+  `#` is indeed resolved within its own milestone in order to translate `Dep`, but
+  the SELECTION is not scoped). With two epics alive, the `#1` of the second beats
+  the `#3` of the first — and if both have a dispatchable `#1`, **which one comes
+  out first is undefined**: it depends on the order in which GitHub returns the
+  issues. The lever for deciding which epic advances is the one you already have:
+  promote to `status:ready` only the slices you want in flight.
+- **`cmux` is required.** It is a terminal workspace manager, external to the
+  plugin: each slice is launched as `cmux new-workspace` (a worktree + a
+  `claude` session). If `cmux` is not on the PATH, **no** slice can be
+  launched — `/ct-next` aborts on the preconditions, before claiming anything.
+  `/ct-groom` and `/ct-init` do not need it: it is a requirement of the dispatch only.
+- **Interruption and resumption.** A Ctrl-C (SIGINT/SIGTERM) mid-run
+  reverts to `status:ready` any claim that had been left half-done before
+  exiting. Re-invoking `/ct-next` is **idempotent** by construction: a slice
+  already dispatched is in `status:in-progress`, so it is no longer `status:ready`
+  and is not chosen again (although it still occupies cap). Each slice uses the branch
+  `feat/<n>` and the worktree `.worktrees/<n>` (`<n>` = ISSUE number, not the
+  `#` of the table); if either of the two already exists from an earlier run,
+  `/ct-next` refuses to dispatch that slice **before** claiming it and prints
+  the exact cleanup command.
+- **A claim is a label, with no heartbeat: nothing expires it.** If a slice dies
+  (session closed, machine powered off, an agent that never ran its
+  `--release`), its `status:in-progress` stays put and blocks
+  indefinitely everyone sharing its tokens, until someone reverts it
+  **by hand**:
 
   ```
   node <plugin>/scripts/dispatch-check.mjs <n> --repo <owner/repo> --requeue
   ```
 
-  `--requeue` es la versión **comprobada** de la edición a mano: se niega si
-  el worktree `.worktrees/<n>` o la rama `feat/<n>` siguen existiendo, porque
-  entonces el trabajo de ese slice sigue vivo sin mergear y soltar sus tokens
-  dejaría salir a un vecino sobre una base que no lo contiene. Si de verdad
-  quieres saltarte esa comprobación (sabes que ese trabajo no importa y
-  prefieres conservar el worktree), la edición cruda sigue estando y no
-  comprueba nada:
+  `--requeue` is the **checked** version of editing by hand: it refuses if
+  the worktree `.worktrees/<n>` or the branch `feat/<n>` still exist, because
+  then that slice's work is still alive unmerged and releasing its tokens
+  would let a neighbour out on a base that does not contain it. If you really
+  want to skip that check (you know that work does not matter and you
+  prefer to keep the worktree), the raw edit is still there and it
+  checks nothing:
 
   ```
   gh issue edit <n> --repo <owner/repo> --add-label status:ready --remove-label status:in-progress
   ```
 
-  `/ct-next` ayuda hasta donde puede: si un `status:in-progress` no tiene ni
-  worktree, ni rama, ni sesión de cmux **en esta máquina**, lo dice — tanto
-  si bloquea por token compartido como si solo está ocupando el `--cap`. Pero
-  no puede afirmar que esté abandonado (pudo reclamarse desde otro sitio), y
-  **solo se entera quien esté corriendo `/ct-next` en ese momento**: no hay
-  ningún demonio vigilando claims entre invocaciones. Comprueba antes de
-  romper un claim ajeno. (Esta comprobación NO se hace sobre un
-  `status:in-review`: ahí no tener sesión abierta es lo normal, no una
-  anomalía — lo que bloquea es el PR sin mergear, no un claim muerto.)
+  `/ct-next` helps as far as it can: if a `status:in-progress` has neither
+  worktree, nor branch, nor cmux session **on this machine**, it says so — both
+  if it blocks by a shared token and if it is only occupying the `--cap`. But
+  it cannot assert that it is abandoned (it could have been claimed from somewhere else), and
+  **only whoever is running `/ct-next` at that moment finds out**: there is no
+  daemon watching claims between invocations. Check before
+  breaking someone else's claim. (This check is NOT done on a
+  `status:in-review`: there, having no session open is the normal thing, not an
+  anomaly — what blocks is the unmerged PR, not a dead claim.)
 
-### Rechazar un PR en el gate, sin sacar el slice del loop
+### Rejecting a PR at the gate, without taking the slice out of the loop
 
-`status:in-review` **no** es un estado terminal, pero salir de él es un acto
-deliberado tuyo: no hay ninguna transición automática de vuelta. El ciclo
-completo de un slice, con quién mueve cada arista:
+`status:in-review` is **not** a terminal state, but getting out of it is a
+deliberate act of yours: there is no automatic transition back. The complete
+cycle of a slice, with who moves each edge:
 
 ```
-backlog --(tú)--> ready --(/ct-next)--> in-progress --(--release)--> in-review
+backlog --(you)--> ready --(/ct-next)--> in-progress --(--release)--> in-review
                     ^                        ^                          |
                     |                        +-------(--reopen)---------+
                     +---------(--requeue)----+
 ```
 
-Si rechazas el PR de un slice, devuélvelo al banco de trabajo con
+If you reject a slice's PR, put it back on the workbench with
 
 ```
 node <plugin>/scripts/dispatch-check.mjs <n> --repo <owner/repo> --reopen
 ```
 
-que lo mueve `in-review` → **`in-progress`** —el inverso exacto de
-`--release`— **solo si de verdad está en `in-review`** (si no, se niega sin
-tocar ninguna label). Que quede en `in-progress` y no en `ready` **no es un
-detalle**: su trabajo sigue existiendo sin mergear en `feat/<n>`, así que
-**sigue reteniendo sus tokens** de `Área`/`Toca` hasta el merge. Reabrir **no
-desbloquea a sus vecinos** — solo dice quién lo está rehaciendo. Y ocupa una
-plaza de `--cap`, porque esta vez sí hay alguien trabajándolo.
+which moves it `in-review` → **`in-progress`** —the exact inverse of
+`--release`— **only if it really is in `in-review`** (if not, it refuses without
+touching any label). That it ends up in `in-progress` and not in `ready` is **not
+a detail**: its work still exists unmerged in `feat/<n>`, so it
+**still holds its tokens** from `Área`/`Toca` until the merge. Reopening does **not
+unblock its neighbours** — it only says who is redoing it. And it occupies a
+`--cap` slot, because this time there is someone working on it.
 
-No borra nada del disco: te dice qué queda de la vuelta anterior (el worktree
-`.worktrees/<n>` y la rama `feat/<n>`) y te deja elegir entre dos caminos
-excluyentes:
+It deletes nothing from disk: it tells you what is left from the previous round (the worktree
+`.worktrees/<n>` and the branch `feat/<n>`) and lets you choose between two
+mutually exclusive paths:
 
-- **corregir encima** de lo que ya hay — lo normal tras un rechazo: sigues en
-  ese mismo worktree y ese mismo PR, y **no** invocas `/ct-next` para ese
-  slice (se negaría, precisamente porque el worktree y la rama existen).
-  Cuando vuelva a estar listo, repites el `--release`;
-- **empezar de cero** — borras worktree y rama (comprueba antes que no
-  pierdes trabajo sin pushear), cierras su PR, y **solo entonces** lo
-  devuelves a la cola:
+- **fixing on top** of what is already there — the normal thing after a rejection: you stay in
+  that same worktree and that same PR, and you do **not** invoke `/ct-next` for that
+  slice (it would refuse, precisely because the worktree and the branch exist).
+  When it is ready again, you repeat the `--release`;
+- **starting from scratch** — you delete worktree and branch (check first that you are not
+  losing unpushed work), you close its PR, and **only then** do you
+  return it to the queue:
 
   ```
   node <plugin>/scripts/dispatch-check.mjs <n> --repo <owner/repo> --requeue
   ```
 
-  `--requeue` mueve `in-progress` → `ready`, y es la ÚNICA transición que
-  suelta tokens sin un merge, así que **comprueba antes de declararlo**: exige
-  que en esta máquina no quede ni `.worktrees/<n>` ni `feat/<n>`, y se niega
-  también si no ha podido mirarlo (no se declara ausente lo que no se ha
-  visto). Lo que **no** puede comprobar y te dice cada vez: la rama en el
-  remoto y el PR abierto. Si siguen ahí, ese trabajo sigue sin mergear y ya no
-  hay nadie reteniendo su área.
+  `--requeue` moves `in-progress` → `ready`, and it is the ONLY transition that
+  releases tokens without a merge, so it **checks before declaring it**: it requires
+  that on this machine neither `.worktrees/<n>` nor `feat/<n>` is left, and it also refuses
+  if it could not look (what has not been seen is not declared absent). What it
+  **cannot** check and tells you every time: the branch on the
+  remote and the open PR. If they are still there, that work is still unmerged and there is no
+  longer anyone holding its area.
 
-`--requeue` sirve además para el otro caso de siempre: **romper un claim
-muerto** (un `status:in-progress` cuyo agente ya no existe). Es la versión
-comprobada del `gh issue edit` a mano que aparece más arriba.
+`--requeue` also serves the other long-standing case: **breaking a dead
+claim** (a `status:in-progress` whose agent no longer exists). It is the checked
+version of the manual `gh issue edit` that appears further up.
 
-Sin estas dos aristas, un PR rechazado dejaba su slice fuera del loop **para
-siempre**, y con él todo lo que dependiera de él: `/ct-next` solo despacha
+Without these two edges, a rejected PR left its slice out of the loop **for
+ever**, and with it everything that depended on it: `/ct-next` only dispatches
 `status:ready`.
-- **Cada slice en vuelo tiene SU `.agent/SLICE.md`**: el de su worktree
-  (`.worktrees/<n>/.agent/SLICE.md`), sembrado al despachar (antes de F22 la
-  semilla iba al `.agent/STATE.md` del worktree — un fichero TRACKEADO, y por
-  eso los PRs de slice acababan llevándose el estado a `main`). Dos slices a
-  la vez no se pisan ese fichero, y ninguno toca ningún `.agent/STATE.md`: ni
-  el del checkout principal ni el que su propio worktree hereda de la base,
-  que se queda a cero diff. `.agent/SLICE.md` está **ignorado** por dos vías:
-  el `.gitignore` del repo (lo añade `/ct-init`) y el `info/exclude` del
-  directorio común de git (lo escribe `/ct-next` en cada despacho, y desde ahí
-  cubre a todos los worktrees). Así no entra en ningún commit — y `--release`
-  se niega si la rama introduce cualquiera de los dos ficheros de estado.
-- **Dos sesiones por repo, con papeles OPUESTOS, y cada una lo lleva escrito
-  en su fichero de estado (campo `role`): el `.agent/STATE.md` del checkout
-  principal, el `.agent/SLICE.md` de cada worktree.** La del **checkout
-  principal** es la *coordinadora*: groomea, despacha con `/ct-next`, revisa y
-  mergea. La de cada `.worktrees/<n>` es la *despachada*: implementa ese slice
-  y **para** — no mergea, no despacha el siguiente. Antes ese reparto solo
-  existía dentro del kickoff que recibía una de las dos, así que se perdía en
-  cuanto esa sesión se re-hidrataba de su fichero de estado. Ningún código lo
-  comprueba: es información para el agente que lo lee.
-- **Qué recibe el agente despachado**: un prompt de arranque (*kickoff*) con
-  el nombre del slice, el número de issue, los criterios de la sección
-  "Acceptance criteria", el aviso de leer la sección "Out of scope /
-  Protected", el addendum técnico de su `Tipo`, **sus gates humanos** (los de
-  la columna `Gate`, o los que implique su `Tipo`), la rama base contra la que
-  tiene que abrir el PR, la orden de poner **`Closes #N` en el cuerpo de ese
-  PR** (con el porqué: sin ese cierre, el slice retiene sus tokens para
-  siempre y no desbloquea a sus dependientes) y el comando literal para
-  liberar el claim al terminar; más el `.agent/SLICE.md` sembrado en su
-  worktree (que repite su `role` y sus gates, para sobrevivir a un `/clear`;
-  antes de F22 esa semilla iba al `.agent/STATE.md`, que es el de la
-  coordinadora) y lo que el propio repo le dé al arrancar (`AGENTS.md`,
-  `CLAUDE.md`, hooks). **No recibe el
-  spec**: se hidrata del issue. **Lo que no llegó al cuerpo del issue no llega
-  al agente.** Ninguna exigencia que le hagas desde otra sección del spec —una
-  §10, una "REGLA #-2", un párrafo de introducción— le va a llegar, por muy
-  contundente que esté redactada. Lo que el kickoff **no** puede garantizar es que el agente
-  obedezca: si un PR aparece sin su `Closes #N`, el loop no lo detecta — lo
-  verás como un `status:in-review` que no se despeja. Lo mismo vale para los
-  gates: el loop los **escribe y los enseña** (kickoff, label `gate:`, sección
-  `## Gates` del issue), pero **no impide mergear** un PR con su gate sin
-  cerrar. El que cierra el gate eres tú.
-  **Y por eso tus comprobaciones previas al merge tienen que ser PUERTAS.**
-  Verifica el EFECTO, nunca el exit code: si el resultado de una comprobación no
-  puede detener el merge, no es una comprobación, es decoración. En campo, una
-  comprobación de contaminación del estado imprimió `1` y el merge entró igual —
-  hubo que arreglar la rama por defecto a posteriori—; la misma comprobación,
-  convertida en puerta, paró el siguiente. Vale para todo lo que mires antes de
-  mergear, no sólo para los gates: si lo compruebas a mano, que el resultado
-  mande.
+- **Each slice in flight has ITS OWN `.agent/SLICE.md`**: the one in its worktree
+  (`.worktrees/<n>/.agent/SLICE.md`), seeded on dispatch (before F22 the
+  seed went to the worktree's `.agent/STATE.md` — a TRACKED file, and that is
+  why slice PRs ended up taking the state to `main`). Two slices at
+  once do not step on that file, and neither of them touches any `.agent/STATE.md`: neither
+  the main checkout's nor the one its own worktree inherits from the base,
+  which is left with a zero diff. `.agent/SLICE.md` is **ignored** by two routes:
+  the repo's `.gitignore` (added by `/ct-init`) and the `info/exclude` of git's
+  common directory (written by `/ct-next` on each dispatch, and from there it
+  covers every worktree). That way it does not enter any commit — and `--release`
+  refuses if the branch introduces either of the two state files.
+- **Two sessions per repo, with OPPOSITE roles, and each one carries it written
+  in its state file (`role` field): the `.agent/STATE.md` of the main
+  checkout, the `.agent/SLICE.md` of each worktree.** The one in the **main
+  checkout** is the *coordinator*: it grooms, dispatches with `/ct-next`, reviews and
+  merges. The one in each `.worktrees/<n>` is the *dispatched* one: it implements that slice
+  and **stops** — it does not merge, it does not dispatch the next one. Before, that split only
+  existed inside the kickoff that one of the two received, so it was lost
+  as soon as that session re-hydrated from its state file. No code checks it:
+  it is information for the agent that reads it.
+- **What the dispatched agent receives**: a start-up prompt (*kickoff*) with
+  the name of the slice, the issue number, the criteria of the
+  "Acceptance criteria" section, the reminder to read the "Out of scope /
+  Protected" section, the technical addendum of its `Tipo`, **its human gates** (those of
+  the `Gate` column, or those its `Tipo` implies), the base branch against which
+  it has to open the PR, the order to put **`Closes #N` in the body of that
+  PR** (with the why: without that closure, the slice holds its tokens for
+  ever and does not unblock its dependants) and the literal command to
+  release the claim when finishing; plus the `.agent/SLICE.md` seeded in its
+  worktree (which repeats its `role` and its gates, to survive a `/clear`;
+  before F22 that seed went to `.agent/STATE.md`, which is the coordinator's)
+  and whatever the repo itself gives it on start-up (`AGENTS.md`,
+  `CLAUDE.md`, hooks). **It does not receive the
+  spec**: it hydrates from the issue. **What did not reach the issue body does not reach
+  the agent.** No requirement you make of it from another section of the spec —a
+  §10, a "RULE #-2", an introductory paragraph— is going to reach it, however
+  forcefully it is worded. What the kickoff **cannot** guarantee is that the agent
+  obeys: if a PR appears without its `Closes #N`, the loop does not detect it — you
+  will see it as a `status:in-review` that never clears. The same goes for the
+  gates: the loop **writes them and shows them** (kickoff, `gate:` label, section
+  `## Gates` of the issue), but it **does not prevent merging** a PR with its gate
+  unclosed. The one who closes the gate is you.
+  **And that is why your pre-merge checks have to be GATES.**
+  Verify the EFFECT, never the exit code: if the result of a check cannot
+  stop the merge, it is not a check, it is decoration. In the field, a
+  state-contamination check printed `1` and the merge went in all the same —
+  the default branch had to be fixed afterwards—; the same check,
+  turned into a gate, stopped the next one. It holds for everything you look at before
+  merging, not just for the gates: if you check it by hand, let the result
+  rule.
 
-<sub>Este contrato lo mantiene `/ct-init` (contrato v23) y vive en
-`docs/superpowers/CONTRATO-SLICES.md` de este repo; `AGENTS.md` solo enlaza a
-él. Si el plugin trae una versión más nueva, `/ct-init` lo avisa al correr;
-para adoptarla: `bash <plugin>/scripts/ct-init.sh <dir-repo>
---update-slices-contract`, que solo lo reemplaza si no lo has editado a mano.</sub>
+<sub>This contract is maintained by `/ct-init` (contract v24) and lives in
+`docs/superpowers/SLICES-CONTRACT.md` of this repo — or in
+`docs/superpowers/CONTRATO-SLICES.md` if the repository was seeded before v24,
+where it is kept and updated under that name; `AGENTS.md` only links to it. If the plugin brings a newer version, `/ct-init` warns about it when running;
+to adopt it: `bash <plugin>/scripts/ct-init.sh <repo-dir>
+--update-slices-contract`, which only replaces it if you have not edited it by hand.</sub>
 <!-- /ct-init:slices-contract -->
 EOF
 }
@@ -1360,7 +1367,19 @@ slices_block_status() {
 # `--update-slices-contract` replaces the block with the short section if it was
 # unedited.
 CONTRATO_DIR="$TARGET/docs/superpowers"
-CONTRATO_MD="$CONTRATO_DIR/CONTRATO-SLICES.md"
+# #188 — the file is emitted as SLICES-CONTRACT.md, and a repo that already
+# carries the Spanish name goes on being recognised AT THAT NAME. It is not
+# renamed for them: a rename is a move of a file this script does not own (it
+# may be linked from their own docs, cited in a review, open in somebody's
+# editor), and the doctrine here has always been that ct-init edits what it
+# seeded and warns about the rest. Same shape as SLICES_HEADING_LEGACY: a closed
+# set of recognised names, only one of them emitted.
+CONTRATO_MD_LEGACY="$CONTRATO_DIR/CONTRATO-SLICES.md"
+if [ -f "$CONTRATO_MD_LEGACY" ]; then
+  CONTRATO_MD="$CONTRATO_MD_LEGACY"
+else
+  CONTRATO_MD="$CONTRATO_DIR/SLICES-CONTRACT.md"
+fi
 LOOP_MARKER_OPEN='<!-- ct-init:loop -->'
 LOOP_MARKER_CLOSE='<!-- /ct-init:loop -->'
 
@@ -1369,6 +1388,14 @@ LOOP_MARKER_CLOSE='<!-- /ct-init:loop -->'
 # section: it brings gaps the repo HAS to fill in (the commands), so detecting
 # "the text changed" would be detecting correct use.
 emit_loop_section() {
+  # #188: everything in this heredoc is literal on purpose — nothing here should
+  # expand by accident — so the one value that differs per repository (the
+  # contract's filename, English for a fresh repo and Spanish for one seeded
+  # before v24) is substituted afterwards instead of unquoting the document.
+  emit_loop_section_body | sed "s|CONTRATO_BASENAME_PLACEHOLDER|$(basename "$CONTRATO_MD")|g"
+}
+
+emit_loop_section_body() {
   cat <<'EOF'
 <!-- ct-init:loop -->
 ## Control Tower loop
@@ -1389,7 +1416,7 @@ Este repo lo gobierna el loop Control Tower: **un issue = un slice = una sesión
   muevas esas labels a mano. Al abrir el PR, `Closes #N` en el cuerpo.
 - **Lo que no llega al cuerpo del issue no llega al agente**: no recibe el spec.
 - **El formato de la tabla de slices —el contrato con `/ct-groom`— está en
-  [`docs/superpowers/CONTRATO-SLICES.md`](docs/superpowers/CONTRATO-SLICES.md)**:
+  [`docs/superpowers/CONTRATO_BASENAME_PLACEHOLDER`](docs/superpowers/CONTRATO_BASENAME_PLACEHOLDER)**:
   qué columnas lee, qué genera cada una y qué hace `/ct-next` con ellas. Es lo
   que lee quien escribe un spec para este repo. Lo mantiene `/ct-init`, lleva su
   propia versión y no se edita a mano.
@@ -1467,6 +1494,7 @@ has_line "$SLICES_HEADING" "$AGENTS_MD" && has_heading=1 || true
 # recognised and would receive a whole second copy (the failure the F2 review
 # closed).
 has_line "$SLICES_HEADING_LEGACY" "$AGENTS_MD" && has_heading=1 || true
+has_line "$SLICES_HEADING_LEGACY_ES" "$AGENTS_MD" && has_heading=1 || true
 if [ "$has_open" -eq 1 ] && [ "$has_close" -eq 1 ]; then
   # An AGENTS.md bootstrapped BEFORE #93: it carries the whole contract inside.
   # It is not touched by default —it may carry edits of its own, the same

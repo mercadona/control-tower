@@ -136,8 +136,8 @@ blocks.
   that adds it.
 
 **And one smell, which settles nothing.** The groom contract states the
-rule for whoever fills the cell — «si lo que escribes se puede comprobar
-corriendo los tests, es un criterio de aceptación, no una señal» — and
+rule for whoever fills the cell — «if what you write can be checked by
+running the tests, it is an acceptance criterion, not a signal» — and
 this is the only place it ever gets read back. Two things have to hold
 together for the smell: what the signal promises is already verified by a
 test of the accumulated diff — it comes true by running the tests, with

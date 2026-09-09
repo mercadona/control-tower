@@ -258,7 +258,7 @@ describe('F17/H2 — the block reason is PRODUCT: stdout, in dry-run and for rea
 function seed() {
   const dir = mkdtempSync(join(tmpdir(), 'ct-'))
   execFileSync('bash', [ctInit, dir], { encoding: 'utf8' })
-  const contract = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
+  const contract = readFileSync(join(dir, 'docs', 'superpowers', 'SLICES-CONTRACT.md'), 'utf8')
   rmSync(dir, { recursive: true, force: true })
   return contract
 }
@@ -275,8 +275,13 @@ const V6 = () => readFileSync(join(root, '__tests__', 'fixtures', 'slices-contra
 // over the whole block would pass green without the enumeration having stopped
 // keeping quiet about it. Checked: the first two versions of these tests passed
 // against the unfixed v6.
+// Both spellings of the two anchors: the v6 fixture (Spanish, frozen) and the
+// contract from v24 on (English). Narrowing it to one language would make the
+// v6 control return '' and stop checking anything.
 const bulletKickoff = (s) => {
-  const m = flat(s).match(/Qué recibe el agente despachado[\s\S]*?no llega al agente\./)
+  const m = flat(s).match(
+    /(Qué recibe el agente despachado|What the dispatched agent receives)[\s\S]*?(no llega al agente|does not reach the agent)\./
+  )
   return m ? m[0] : ''
 }
 
@@ -295,20 +300,20 @@ describe('§9 contract (F17): the closure of the issue and the default branch tr
   it('says the kickoff asks for the `Closes #N` (the list of what the agent receives no longer keeps quiet about it)', () => {
     const b = bulletKickoff(seed())
     expect(b).toMatch(/Closes #N/)
-    expect(b).toMatch(/cuerpo/)
+    expect(b).toMatch(/body of that PR/i)
     // And the base branch, which is the other datum the kickoff did not give it.
-    expect(b).toMatch(/rama base/)
+    expect(b).toMatch(/base branch/i)
   })
 
   it('names the SECOND cause of "PR merged, issue open": the merge into a branch that is not the default one', () => {
     const f = flat(seed())
-    expect(f).toMatch(/DOS causas/)
-    expect(f).toMatch(/solo cierra el issue cuando el PR entra en la rama por defecto/)
+    expect(f).toMatch(/TWO causes/)
+    expect(f).toMatch(/only closes the issue when the PR lands on the default branch/)
     // The actionable consequence, which is what changes a decision: with
     // --base pointing at another branch, closing the issue on merging is a
     // manual step.
-    expect(f).toMatch(/--base <otra-rama>/)
-    expect(f).toMatch(/paso a mano/)
+    expect(f).toMatch(/--base <other-branch>/)
+    expect(f).toMatch(/is a manual step/)
   })
 
   // F18: this test pinned the literal '7' and therefore had to be edited on
@@ -321,7 +326,7 @@ describe('§9 contract (F17): the closure of the issue and the default branch tr
     const a = seed()
     const declared = readFileSync(ctInit, 'utf8').match(/^SLICES_CONTRACT_VERSION=(\d+)$/m)
     const marker = a.match(/<!-- ct-init:slices-contract-version: (\d+) -->/)
-    const footer = a.match(/Este contrato lo mantiene `\/ct-init` \(contrato v(\d+)\)/)
+    const footer = a.match(/This contract is maintained by `\/ct-init` \(contract v(\d+)\)/)
     expect(declared).not.toBeNull()
     expect(marker[1]).toBe(declared[1])
     expect(footer[1]).toBe(declared[1])
