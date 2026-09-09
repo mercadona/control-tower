@@ -1,18 +1,25 @@
 import { describe, it, expect } from 'vitest'
-import { ReadPlanStory, ReadPlanStoryParams } from '../../src/application/queries/read-plan-story.js'
+import { ReadPlanStory, ReadPlanStoryParams } from '../../src/application/queries/read-plan-story.ts'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
 import { PlanStoryNotRead } from '../../src/domain/exceptions.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
+import type { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
 
 class PlanIssuesDouble extends PlanIssues {
-  constructor(answer = null) {
+  readonly answer: UserStoryKey | UserStoryUrl | Error | null
+  readonly asked: { issueNumber: number, repository: RepositoryName }[]
+
+  constructor(answer: UserStoryKey | UserStoryUrl | Error | null = null) {
     super()
     this.answer = answer
     this.asked = []
   }
 
-  async storyOf(subject) {
+  async storyOf(subject: {
+    issueNumber: number,
+    repository: RepositoryName,
+  }): Promise<UserStoryKey | UserStoryUrl | null> {
     this.asked.push(subject)
     if (this.answer instanceof Error) throw this.answer
 
@@ -22,13 +29,13 @@ class PlanIssuesDouble extends PlanIssues {
 
 describe('ReadPlanStory', () => {
   const repository = new RepositoryName('josemerca/ct-loop-sandbox')
-  const asking = (planIssues) => new ReadPlanStory({ planIssues })
+  const asking = (planIssues: PlanIssues) => new ReadPlanStory({ planIssues })
     .execute(new ReadPlanStoryParams({ issueNumber: 42, repository }))
 
   it('the_story_the_issue_names_is_what_it_hands_back', async () => {
     const read = await asking(new PlanIssuesDouble(new UserStoryKey('MO_SHOP-42')))
 
-    expect(read.story.text).toBe('MO_SHOP-42')
+    expect(read.story?.text).toBe('MO_SHOP-42')
   })
 
   it('a_plan_asked_for_by_hand_hands_back_no_story_instead_of_a_made_up_one', async () => {
