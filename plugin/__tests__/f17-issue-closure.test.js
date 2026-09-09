@@ -182,7 +182,7 @@ describe('F17 — a non-default `--base`: the warning that the `Closes #N` will 
   it('with --base, it warns on STDERR about the default branch rule', () => {
     const r = runNext(['--repo', 'o/r', '--cap', '1', '--dry-run', '--base', 'develop'], { CT_NEXT_FIXTURE: fx })
     expect(r.stderr).toMatch(/warning:.*--base develop/)
-    expect(r.stderr).toMatch(/rama por defecto/)
+    expect(r.stderr).toMatch(/default branch/)
     expect(r.stderr).toMatch(/Closes #/)
     // It is diagnostics, not product: it does not sneak into the plan.
     expect(r.stdout).not.toMatch(/^warning:/m)
@@ -193,7 +193,7 @@ describe('F17 — a non-default `--base`: the warning that the `Closes #N` will 
   // pure noise.
   it('with no --base NOTHING is warned about (the resolved base is, by construction, the default branch)', () => {
     const r = runNext(['--repo', 'o/r', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: fx })
-    expect(r.stderr).not.toMatch(/rama por defecto/)
+    expect(r.stderr).not.toMatch(/default branch/)
   })
 })
 
@@ -237,8 +237,8 @@ describe('F17/H2 — the block reason is PRODUCT: stdout, in dry-run and for rea
   it('the block reason comes out on stdout and is NOT duplicated on stderr', () => {
     const r = runNext(['--repo', 'o/r', '--cap', '9', '--dry-run'], { CT_NEXT_FIXTURE: blocked })
     expect(r.code).toBe(0)
-    expect(r.stdout).toMatch(/colisiona con trabajo en vuelo/)
-    expect(r.stderr).not.toMatch(/colisiona con trabajo en vuelo/)
+    expect(r.stdout).toMatch(/collides with work in flight/)
+    expect(r.stderr).not.toMatch(/collides with work in flight/)
   })
 
   it('the criterion written in the file itself classifies the block reason as stdout', () => {

@@ -114,7 +114,7 @@ describe('the coordinator launches the -OK watcher', () => {
     // watcher into play.
     const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]))
     expect(r.code).toBe(0)
-    expect(r.out).toContain(`vigilante del ${GO_TOKEN} de #90 lanzado`)
+    expect(r.out).toContain(`${GO_TOKEN} watcher of #90 launched`)
 
     const calls = await waitForArgv(join(repoRoot, 'watch-go-argv.log'))
     expect(calls).toHaveLength(1)
@@ -153,7 +153,7 @@ describe('the coordinator launches the -OK watcher', () => {
     // eight hours for nothing is worse than its absence.
     const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }, { name: 'gate:none' }]))
     expect(r.code).toBe(0)
-    expect(r.out).not.toContain('vigilante del')
+    expect(r.out).not.toContain('watcher of')
     expect(await waitForArgv(join(repoRoot, 'watch-go-argv.log'), 600)).toBe(null)
   })
 })
@@ -178,11 +178,11 @@ describe('the watcher cannot bring the dispatch down', () => {
       CT_WATCH_GO_BIN: join(repoRoot, 'no-existe', 'ni-de-broma.mjs'),
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/lanzado #90/)
-    expect(r.out).toMatch(/no se ha lanzado el vigilante/)
-    expect(r.out).toMatch(/no existe/)
-    expect(r.out).not.toMatch(/vigilante del .* lanzado \(pid/)
-    expect(r.out).toMatch(/a mano/)
+    expect(r.out).toMatch(/launched #90/)
+    expect(r.out).toMatch(/watcher of/)
+    expect(r.out).toMatch(/does not exist/)
+    expect(r.out).not.toMatch(/watcher of .* lanzado \(pid/)
+    expect(r.out).toMatch(/by hand/)
     expect(await waitForArgv(join(repoRoot, 'watch-go-argv.log'), 600)).toBe(null)
   })
 
@@ -206,15 +206,15 @@ describe('the watcher cannot bring the dispatch down', () => {
       HOME: '',
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/lanzado #90/)
-    expect(r.out).toMatch(/no se ha lanzado el vigilante/)
-    expect(r.out).toMatch(/no se ha podido registrar el go/)
+    expect(r.out).toMatch(/launched #90/)
+    expect(r.out).toMatch(/watcher of/)
+    expect(r.out).toMatch(/the go of this dispatch could not be registered/)
     // The remedy, named: with no registry, gate 9 will refuse, and there is a
     // command to get out of there.
     expect(r.out).toMatch(/ct-go\.mjs --issue 90 --repo o\/r/)
     // And no launched watcher is announced: with no registered commitment, a go
     // that started the work could not be honoured at release time.
-    expect(r.out).not.toMatch(/vigilante del .* lanzado \(pid/)
+    expect(r.out).not.toMatch(/watcher of .* lanzado \(pid/)
   })
 
   // -------------------------------------------------------------------------
@@ -229,8 +229,8 @@ describe('the watcher cannot bring the dispatch down', () => {
     const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]), {
       FAKE_CMUX_SKIP_STATE_SUBSTR: '#90',
     })
-    expect(r.out).toMatch(/no se encontró ninguna sesión con el nombre/)
-    expect(r.out).not.toMatch(/la sesión arranca sola/)
+    expect(r.out).toMatch(/no session named/)
+    expect(r.out).not.toMatch(/the session starts on its own/)
     expect(await waitForArgv(join(repoRoot, 'watch-go-argv.log'), 600)).toBe(null)
   })
 })
@@ -256,7 +256,7 @@ describe('the go nonce: where it shows up and where it does not', () => {
 
     const nonce = nonceOf(r.out)
     expect(nonce).toMatch(/^[0-9a-f]{8}$/)
-    expect(r.out).toContain(`GO de #90: contesta exactamente \`${GO_TOKEN} ${nonce}\``)
+    expect(r.out).toContain(`GO for #90: answer exactly \`${GO_TOKEN} ${nonce}\``)
 
     const argv = (await waitForArgv(join(repoRoot, 'watch-go-argv.log')))[0]
     const hash = argv[argv.indexOf('--go-hash') + 1]
@@ -291,7 +291,7 @@ describe('the go nonce: where it shows up and where it does not', () => {
       FAKE_OSASCRIPT_LOG: log,
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/enviado por notificación del sistema/)
+    expect(r.out).toMatch(/sent through the system notification/)
     expect(r.out).not.toMatch(/-OK [0-9a-f]{8}/)
     // The go does travel in the notification, and in a SEPARATE ARGUMENT:
     // nothing is interpolated inside the AppleScript, so there is nothing to
@@ -307,10 +307,10 @@ describe('the go nonce: where it shows up and where it does not', () => {
       FAKE_OSASCRIPT_FAIL: '1',
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/la notificación del go de #90 falló/)
+    expect(r.out).toMatch(/the go notification of #90 failed/)
     // And it warns of the real consequence: the nonce DOES end up in this
     // context.
-    expect(r.out).toMatch(/SÍ entra en el contexto de esta sesión/)
+    expect(r.out).toMatch(/DOES enter this session's context/)
     expect(r.out).toMatch(/-OK [0-9a-f]{8}/)
   })
 
@@ -319,7 +319,7 @@ describe('the go nonce: where it shows up and where it does not', () => {
     const configDir = join(repoRoot, 'claude-config')
     const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }, { name: 'gate:none' }]))
     expect(r.code).toBe(0)
-    expect(r.out).not.toMatch(/GO de #90/)
+    expect(r.out).not.toMatch(/GO for #90/)
     expect(existsSync(goPath({ repo: 'o/r', issue: 90, configDir }))).toBe(false)
   })
 })

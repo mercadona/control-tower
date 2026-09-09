@@ -145,7 +145,7 @@ describe('ct-next — SIGINT after a confirmed claim but before creating the wor
     expect(sig).toBeNull() // it ended through its own process.exit(), not killed by the OS
     expect(code).toBe(130)
     expect(out).toMatch(/SIGINT recibido/)
-    expect(out).toMatch(/revertido automáticamente a status:ready/)
+    expect(out).toMatch(/reverted automatically to status:ready/)
 
     const argv = readFileSync(argvLog, 'utf8')
     expect(argv).toMatch(/issue edit 77 --repo o\/r --add-label status:in-progress --remove-label status:ready/)
@@ -162,7 +162,7 @@ describe('ct-next — SIGINT after a confirmed claim but before creating the wor
     expect(sig).toBeNull()
     expect(code).toBe(143)
     expect(out).toMatch(/SIGTERM recibido/)
-    expect(out).toMatch(/revertido automáticamente a status:ready/)
+    expect(out).toMatch(/reverted automatically to status:ready/)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
   })
@@ -227,7 +227,7 @@ describe('ct-next — SIGINT after a confirmed claim but before creating the wor
     // revert completes EXACTLY once — never zero (a regression that stopped
     // reverting altogether would pass with `toBeLessThanOrEqual`, pointed out
     // by an external review) and never twice (an overlapping double revert).
-    const occurrences = (out.match(/revertido automáticamente a status:ready/g) || []).length
+    const occurrences = (out.match(/reverted automatically to status:ready/g) || []).length
     expect(occurrences).toBe(1)
     // If the race WAS won this time and a second signal really was processed as
     // a reentry, the message must be the right one (not an error trace nor a
@@ -291,7 +291,7 @@ describe('ct-next — CRITICAL: the handler itself must not give the main loop a
     })
 
     expect(r.code).toBe(130)
-    expect(r.out).toMatch(/revertido automáticamente a status:ready/)
+    expect(r.out).toMatch(/reverted automatically to status:ready/)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
     const argv = readFileSync(argvLog, 'utf8')
@@ -352,9 +352,9 @@ describe('ct-next — SIGINT in the idle gap between two slices of the same batc
       // F8 — a handshake instead of a window: the signal is sent while ct-next
       // is BLOCKED inside the `execFileSync('cmux', …)` that launches #77.
       // Everything that remains ahead until the idle checkpoint before #78 (the
-      // session verification, the "lanzado #77") is synchronous, so the pending
+      // session verification, the "launched #77") is synchronous, so the pending
       // signal is dispatched exactly at that checkpoint — the point this test
-      // wants to exercise. It used to depend on reacting to the "lanzado #77"
+      // wants to exercise. It used to depend on reacting to the "launched #77"
       // on stdout inside a 2000ms window.
       FAKE_CMUX_NEW_WORKSPACE_WAIT_FILE: releaseFile,
     })
@@ -377,7 +377,7 @@ describe('ct-next — SIGINT in the idle gap between two slices of the same batc
     expect(out).not.toMatch(/claimed #78/)
     // No claim of our own is left pending a revert (none had been made for
     // #78).
-    expect(out).toMatch(/no había ningún claim propio pendiente de revertir/)
+    expect(out).toMatch(/there was no claim of our own pending a revert/)
   })
 })
 
@@ -410,7 +410,7 @@ describe('ct-next — `git worktree add` genuinely hung, with the signal never r
         // 800ms. Reproduced: with another vitest suite running at the same
         // time, 2 out of 6 runs against main failed here with
         //   expected 'warning: ningún patrón de ACCOUNT_MAP c…'
-        //   to match /no se pudo crear el worktree/
+        //   to match /the worktree for/
         // because the cap had fired on dispatch-check, not on `git worktree
         // add`. The right answer is not a wider window (the failure would come
         // back with a more loaded machine), it is that the only child capable
@@ -431,13 +431,13 @@ describe('ct-next — `git worktree add` genuinely hung, with the signal never r
     // only said something about how busy the machine was.
     expect(r.signal).toBeNull()
     const out = (r.stdout || '') + (r.stderr || '')
-    expect(out).toMatch(/no se pudo crear el worktree/)
+    expect(out).toMatch(/the worktree for/)
     // MINOR (external review): the timeout message must name the exact limit,
     // the environment variable that tunes it, and warn that the SIGKILL may
     // have left a half-created worktree/branch behind.
-    expect(out).toMatch(/se agotó el límite de 800ms \(CT_NEXT_CHILD_TIMEOUT_MS\)/)
-    expect(out).toMatch(/puede haber quedado un directorio y\/o una rama a MEDIO crear/)
-    expect(out).toMatch(/revertido automáticamente a status:ready|ATTENTION: no se pudo revertir/)
+    expect(out).toMatch(/the limit of 800ms \(CT_NEXT_CHILD_TIMEOUT_MS\) ran out/)
+    expect(out).toMatch(/a HALF-created directory and\/or branch may have been left/)
+    expect(out).toMatch(/reverted automatically to status:ready|ATTENTION: could not be reverted/)
     const argv = readFileSync(argvLog, 'utf8')
     // the initial claim was indeed written (dispatch-check did get to complete
     // before the hang, which happens AFTERWARDS, in git worktree add)...
@@ -455,7 +455,7 @@ describe('ct-next — malformed CT_NEXT_CHILD_TIMEOUT_MS / CT_NEXT_TEST_DELAY_AF
       env: { ...process.env, PATH: fakePath, CT_NEXT_CHILD_TIMEOUT_MS: 'not-a-number' },
     })
     expect(r.status).toBe(2)
-    expect((r.stdout || '') + (r.stderr || '')).toMatch(/CT_NEXT_CHILD_TIMEOUT_MS inválido/)
+    expect((r.stdout || '') + (r.stderr || '')).toMatch(/CT_NEXT_CHILD_TIMEOUT_MS invalid/)
   })
 
   it('a negative CT_NEXT_CHILD_TIMEOUT_MS → exit 2', () => {
@@ -505,7 +505,7 @@ describe('ct-next — malformed CT_NEXT_CHILD_TIMEOUT_MS / CT_NEXT_TEST_DELAY_AF
     })
     expect(r.status).toBe(2)
     const out = (r.stdout || '') + (r.stderr || '')
-    expect(out).toMatch(/CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE inválido/)
+    expect(out).toMatch(/CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE invalid/)
     expect(out).toMatch(/dispatch-check, worktree-add/)
   })
 
@@ -520,6 +520,6 @@ describe('ct-next — malformed CT_NEXT_CHILD_TIMEOUT_MS / CT_NEXT_TEST_DELAY_AF
       env: { ...process.env, PATH: fakePath, CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE: '', CT_NEXT_CHILD_TIMEOUT_MS: 'not-a-number' },
     })
     expect(r.status).toBe(2)
-    expect((r.stdout || '') + (r.stderr || '')).toMatch(/CT_NEXT_CHILD_TIMEOUT_MS inválido/)
+    expect((r.stdout || '') + (r.stderr || '')).toMatch(/CT_NEXT_CHILD_TIMEOUT_MS invalid/)
   })
 })

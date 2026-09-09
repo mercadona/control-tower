@@ -85,7 +85,7 @@ describe('F15/H1 — `ready` meant two incompatible things', () => {
     const r = runCheck(['9', '--repo', 'o/r', '--reopen', '--dry-run'], { CT_CLAIM_FIXTURE: fixture })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/reopened #9 → in-progress/)
-    expect(r.out).toMatch(/SIN MERGEAR/)
+    expect(r.out).toMatch(/UNMERGED/)
     expect(r.out).not.toMatch(/reopened #9 → ready/)
   })
 })
@@ -106,10 +106,10 @@ describe('F15/H1 — --requeue: sending it back to the queue is a DECLARATION th
     })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/requeued #9 → ready/)
-    expect(r.out).toMatch(/suelta sus tokens/)
+    expect(r.out).toMatch(/it releases its tokens/)
     // The half it CANNOT check, said instead of hidden.
-    expect(r.out).toMatch(/NO se ha comprobado/)
-    expect(r.out).toMatch(/REMOTO/)
+    expect(r.out).toMatch(/has NOT been checked/)
+    expect(r.out).toMatch(/REMOTE/)
   })
 
   // THE NEW REFUSAL CATEGORY, with a voice of its own: `ready` would be lying.
@@ -123,9 +123,9 @@ describe('F15/H1 — --requeue: sending it back to the queue is a DECLARATION th
       FAKE_GIT_STALE_BRANCH_EXISTS: '9',
     })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/su trabajo sigue vivo sin mergear/)
-    expect(r.out).toMatch(/soltaría sus tokens/)
-    expect(r.out).toMatch(/No se ha tocado ninguna label/)
+    expect(r.out).toMatch(/its work is still alive and unmerged/)
+    expect(r.out).toMatch(/would release its area\/touches tokens/)
+    expect(r.out).toMatch(/No label has been touched/)
     expect(r.out).toContain(`git -C ${repoRoot} worktree remove`)
     expect(r.out).toContain(`git -C ${repoRoot} branch -D feat/9`)
     expect(r.out).not.toMatch(/requeued/)
@@ -140,8 +140,8 @@ describe('F15/H1 — --requeue: sending it back to the queue is a DECLARATION th
       FAKE_GIT_WORKTREE_LIST_FAIL: '1',
     })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/no se ha podido comprobar/i)
-    expect(r.out).toMatch(/No se declara ausente lo que no se ha podido mirar/)
+    expect(r.out).toMatch(/could not be checked/i)
+    expect(r.out).toMatch(/What could not be looked at is not declared absent/)
     expect(r.out).not.toMatch(/requeued/)
   })
 
@@ -153,9 +153,9 @@ describe('F15/H1 — --requeue: sending it back to the queue is a DECLARATION th
       FAKE_GIT_TOPLEVEL: repoRoot,
     })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/su PR sigue abierto sin mergear/)
+    expect(r.out).toMatch(/its PR is still open and unmerged/)
     expect(r.out).toMatch(/--reopen/)
-    expect(r.out).toMatch(/No se ha tocado ninguna label/)
+    expect(r.out).toMatch(/No label has been touched/)
   })
 
   it('on something ALREADY ready it says so as a no-op, not as an error', () => {
@@ -165,7 +165,7 @@ describe('F15/H1 — --requeue: sending it back to the queue is a DECLARATION th
       CT_CLAIM_FIXTURE: fixture, FAKE_GIT_TOPLEVEL: repoRoot,
     })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/ya está en status:ready — no hay nada que devolver a la cola/)
+    expect(r.out).toMatch(/is already at status:ready — there is nothing to return to the queue/)
   })
 
   it('with TWO status labels it REFUSES without touching either (the same criterion as --reopen)', () => {
@@ -175,7 +175,7 @@ describe('F15/H1 — --requeue: sending it back to the queue is a DECLARATION th
       CT_CLAIM_FIXTURE: fixture, FAKE_GIT_TOPLEVEL: repoRoot,
     })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/DOS o más labels de estado a la vez/)
+    expect(r.out).toMatch(/TWO or more status labels at once/)
     expect(r.out).not.toMatch(/requeued/)
   })
 
@@ -192,14 +192,14 @@ describe('F15/H1 — --requeue: sending it back to the queue is a DECLARATION th
       CT_CLAIM_FIXTURE: fixture, FAKE_GIT_TOPLEVEL: repoRoot,
     })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/todavía tiene el worktree/)
+    expect(r.out).toMatch(/still has the worktree/)
   })
 
   it('--requeue with --reopen (or with --release) → a usage error, no guessing', () => {
     for (const other of ['--reopen', '--release']) {
       const r = runCheck(['9', '--repo', 'o/r', '--requeue', other, '--dry-run'])
       expect(r.code).toBe(2)
-      expect(r.out).toMatch(/mutuamente excluyentes/)
+      expect(r.out).toMatch(/mutually exclusive/)
     }
   })
 })

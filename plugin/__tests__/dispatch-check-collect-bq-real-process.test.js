@@ -110,7 +110,7 @@ describe('dispatch-check --collect accepts, validates and announces --bq', () =>
     const bench = new Bench()
     const result = bench.run(['7', '--repo', Bench.REPO, '--collect', '--bq', Bench.MALFORMED_TABLE])
     expect(result.status).toBe(2)
-    expect(result.stderr).toMatch(/--bq inválido/)
+    expect(result.stderr).toMatch(/--bq invalid/)
     expect(existsSync(bench.ghArgvLog)).toBe(false)
     bench.cleanup()
   })
@@ -168,7 +168,7 @@ describe('dispatch-check --collect --bq: the row travels before anything is dele
       FAKE_BQ_EXIT_CODE: '2',
     })
     expect(result.status).toBe(11)
-    expect(result.stderr).toContain(`no se pudo cargar la fila de #${Bench.ISSUE} en BigQuery (${Bench.TABLE_ID}): bq salió con 2:`)
+    expect(result.stderr).toContain(`the row of #${Bench.ISSUE} could not be loaded into BigQuery (${Bench.TABLE_ID}): bq exited with 2:`)
     expect(existsSync(bench.worktree)).toBe(true)
     expect(bench.branchStillExists()).toBe(true)
     expect(bench.cmuxInvocations()).not.toContain('close-workspace')
@@ -183,7 +183,7 @@ describe('dispatch-check --collect --bq: the row travels before anything is dele
       FAKE_GH_TIMELINE_FAIL: '1',
     })
     expect(result.status).toBe(3)
-    expect(result.stderr).toContain(`no se pudo leer la cosecha de #${Bench.ISSUE}: gh api timeline falló`)
+    expect(result.stderr).toContain(`the harvest of #${Bench.ISSUE} could not be read: gh api timeline failed`)
     expect(existsSync(bench.worktree)).toBe(true)
     expect(bench.branchStillExists()).toBe(true)
     expect(bench.bqWasInvoked()).toBe(false)

@@ -116,14 +116,14 @@ describe('door 9: the `plan` gate does not close by itself', () => {
     expect(r.stdout).toMatch(/released #9/)
     // Who authorised it, on stderr: it is the only place where a go given by
     // the very identity the agent runs with would be seen.
-    expect(r.stderr).toMatch(/gate `plan` cerrado: go de este despacho dado por @josemerca/)
+    expect(r.stderr).toMatch(/gate `plan` closed: go of this dispatch given by @josemerca/)
   })
 
   it('with no go answered at all → exit 9, and it mutates NOTHING', () => {
     const r = release(worktree(), { configDir: register(), comments: [] })
     expect(r.status).toBe(9)
-    expect(r.output).toMatch(/el gate `plan` no está cerrado/)
-    expect(r.output).toMatch(/sigue en status:in-progress/)
+    expect(r.output).toMatch(/the `plan` gate is not closed/)
+    expect(r.output).toMatch(/is still at status:in-progress/)
     // The proof that it did not mutate is not the message: it is the real argv of `gh`.
     expect(r.argv).not.toMatch(/issue edit/)
   })
@@ -151,7 +151,7 @@ describe('door 9: the `plan` gate does not close by itself', () => {
     expect(r.status).toBe(9)
     // And that is why this door can look at the WHOLE issue with no window of
     // ids: an inherited go does not fit, by construction.
-    expect(r.output).toMatch(/ningún comentario de este issue trae el go de este despacho/)
+    expect(r.output).toMatch(/no comment on this issue carries the go of this dispatch/)
   })
 
   it('the right go in an old comment of the issue DOES count: there is no window here, the nonce makes it', () => {
@@ -168,7 +168,7 @@ describe('door 9: the `plan` gate does not close by itself', () => {
   it('with no commitment registered and with a `plan` gate → exit 9, and it names the remedy', () => {
     const r = release(worktree(), { configDir: tmp('ct-f38-vacio-'), comments: [goComment()] })
     expect(r.status).toBe(9)
-    expect(r.output).toMatch(/NO ESTÁ REGISTRADO/)
+    expect(r.output).toMatch(/is NOT RECORDED/)
     expect(r.output).toMatch(/ct-go\.mjs --issue 9 --repo o\/r/)
   })
 
@@ -176,7 +176,7 @@ describe('door 9: the `plan` gate does not close by itself', () => {
     // It is also the path an agent would open by deleting its own labels.
     const r = release(worktree(), { configDir: tmp('ct-f38-vacio-'), labels: ['status:in-progress'], comments: [] })
     expect(r.status).toBe(9)
-    expect(r.output).toMatch(/no declaran NINGÚN gate/)
+    expect(r.output).toMatch(/declare NO gate at all/)
   })
 
   it('the EXPLICIT waiver (`gate:none`) releases without looking at any go', () => {
@@ -192,7 +192,7 @@ describe('door 9: the `plan` gate does not close by itself', () => {
     writeFileSync(goPath({ repo: 'o/r', issue: 9, configDir: cfg }), '{ esto no es json\n')
     const r = release(worktree(), { configDir: cfg, comments: [goComment()] })
     expect(r.status).toBe(9)
-    expect(r.output).toMatch(/NO se ha podido leer/)
+    expect(r.output).toMatch(/could NOT be read/)
     expect(r.output).not.toMatch(/no está cerrado/)
   })
 
@@ -202,8 +202,8 @@ describe('door 9: the `plan` gate does not close by itself', () => {
     // the two at any of its doors.
     const r = release(worktree(), { configDir: register(), commentsFail: true })
     expect(r.status).toBe(9)
-    expect(r.output).toMatch(/no se han podido leer los comentarios/)
-    expect(r.output).toMatch(/no se afirma que falte/)
+    expect(r.output).toMatch(/the issue's comments could not be read/)
+    expect(r.output).toMatch(/it is not asserted that it is missing/)
     expect(r.argv).not.toMatch(/issue edit/)
   })
 

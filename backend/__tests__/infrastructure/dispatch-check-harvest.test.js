@@ -17,32 +17,32 @@ class HarvestDouble {
   static WORKTREE = '/repo/checkout/.worktrees/7'
 
   static COLLECTED_LINE =
-    `collected #7: cerrada la workspace de cmux, borrado el worktree ${HarvestDouble.WORKTREE}, borrada la rama feat/7\n`
-  static WAITING_LINE = 'waiting on #7 (open): la PR #71 sigue abierta — no se ha tocado nada\n'
+    `collected #7: cmux workspace closed, worktree ${HarvestDouble.WORKTREE} deleted, branch feat/7 deleted\n`
+  static WAITING_LINE = 'waiting on #7 (open): the PR #71 is still open — nothing has been touched\n'
   static KEPT_LINE =
-    `kept #7: el worktree ${HarvestDouble.WORKTREE} tiene cambios sin commitear — no se ha borrado nada\n`
+    `kept #7: the worktree ${HarvestDouble.WORKTREE} has uncommitted changes — nothing has been deleted\n`
   static PARTIAL_LINE =
-    `ATTENTION: cosecha a medias de #7: borrado el worktree ${HarvestDouble.WORKTREE}, borrada la rama feat/7. Falló: cmux close-workspace --workspace workspace:0 failed with exit code 1: cmux: close-workspace failed. Pendiente a mano — ejecuta cada comando por separado: cmux close-workspace --workspace workspace:0\n`
+    `ATTENTION: half a harvest of #7: worktree ${HarvestDouble.WORKTREE} deleted, branch feat/7 deleted. It failed: cmux close-workspace --workspace workspace:0 failed with exit code 1: cmux: close-workspace failed. Pending by hand — run each command separately: cmux close-workspace --workspace workspace:0\n`
   static NOT_READ_LINES = [
     'gh: could not connect to api.github.com',
-    'no se pudo leer el estado de #7: gh pr list falló (exit code 1: Command failed: gh pr list --repo owner/name --head feat/7 --state all --json number,state,headRefOid --limit 10) — no se ha tocado nada, el siguiente barrido reintenta.',
+    'the state of #7 could not be read: gh pr list failed (exit code 1: Command failed: gh pr list --repo owner/name --head feat/7 --state all --json number,state,headRefOid --limit 10) — nothing has been touched, the next sweep tries again.',
     '',
   ].join('\n')
   static BQ_DENIED =
     `BigQuery error in load operation: Error processing job: Access Denied: Table ${HarvestDouble.TABLE}: User does not have bigquery.tables.updateData permission`
   static LEDGER_REFUSED_LINE = [
     HarvestDouble.BQ_DENIED,
-    `no se pudo cargar la fila de #7 en BigQuery (${HarvestDouble.TABLE}): bq salió con 1: ${HarvestDouble.BQ_DENIED} — no se ha borrado nada, el siguiente barrido reintenta.`,
+    `the row of #7 could not be loaded into BigQuery (${HarvestDouble.TABLE}): bq exited with 1: ${HarvestDouble.BQ_DENIED} — nothing has been deleted, the next sweep tries again.`,
     '',
   ].join('\n')
   static USAGE_LINE =
-    '--settle-ms/CT_CLAIM_SETTLE_MS ya no existen: la espera de asentamiento se eliminó a propósito (ver el comentario de cabecera de dispatch-check.mjs y task-11-report.md). Quítalo de la invocación/entorno — no hace nada, y dejarlo puesto invita a creer que sigue activo.\n'
+    '--settle-ms/CT_CLAIM_SETTLE_MS no longer exist: the settling wait was removed on purpose (see the header comment of dispatch-check.mjs and task-11-report.md). Take it out of the invocation/environment — it does nothing, and leaving it in place invites the belief that it is still active.\n'
   static BLEW_UP_TRACE = [
     'file:///plugin/scripts/dispatch-check.mjs:1446',
-    '  if (!proyeccion) throw new Error(`--collect no tiene proyección para el desenlace ${report.outcome}`)',
+    '  if (!projection) throw new Error(`--collect has no projection for the outcome ${report.outcome}`)',
     '                   ^',
     '',
-    'Error: --collect no tiene proyección para el desenlace invented',
+    'Error: --collect has no projection for the outcome invented',
     '',
   ].join('\n')
 
@@ -119,7 +119,7 @@ class PluginContract {
     dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'plugin', 'scripts', 'dispatch-check.mjs'
   )
   static #COLLECT = /\nif \(collect\) \{\n([\s\S]*?)\n\}\n/
-  static #TABLE = /\n {2}const PROYECCION = \{\n([\s\S]*?)\n {2}\}\n/
+  static #TABLE = /\n {2}const PROJECTION = \{\n([\s\S]*?)\n {2}\}\n/
   static #CODE = /code: (\d+)/g
   static #DIED = /\bdie(?:Err|Out)\(.*?,\s*(\d+)\)/g
 
@@ -201,7 +201,7 @@ describe('DispatchCheckHarvest', () => {
 
     expect(refusal).toBeInstanceOf(HarvestNotUnderstood)
     expect(refusal.message).toContain('without saying what it waits for')
-    expect(refusal.message).toContain('no tiene proyección para el desenlace invented')
+    expect(refusal.message).toContain('has no projection for the outcome invented')
   })
 
   it('a_read_the_tool_could_not_do_travels_out_typed_carrying_every_line_it_wrote_and_not_only_the_last', async () => {
@@ -209,7 +209,7 @@ describe('DispatchCheckHarvest', () => {
 
     expect(refusal).toBeInstanceOf(HarvestNotRead)
     expect(refusal.message).toContain('gh: could not connect to api.github.com')
-    expect(refusal.message).toContain('no se pudo leer el estado de #7: gh pr list falló')
+    expect(refusal.message).toContain('the state of #7 could not be read: gh pr list failed')
     expect(refusal.message).toContain('the next sweep can try again')
   })
 
@@ -219,7 +219,7 @@ describe('DispatchCheckHarvest', () => {
     expect(refusal).toBeInstanceOf(HarvestNotRead)
     expect(refusal.message).toContain('could not load the harvest row of #7 into the ledger')
     expect(refusal.message).toContain('bigquery.tables.updateData permission')
-    expect(refusal.message).toContain('no se ha borrado nada')
+    expect(refusal.message).toContain('nothing has been deleted')
   })
 
   it('an_invocation_the_plugin_refuses_is_configuration_and_never_something_the_next_sweep_would_fix', async () => {
@@ -227,7 +227,7 @@ describe('DispatchCheckHarvest', () => {
 
     expect(refusal).toBeInstanceOf(HarvestNotUnderstood)
     expect(refusal.message).toContain('retrying changes nothing')
-    expect(refusal.message).toContain('CT_CLAIM_SETTLE_MS ya no existen')
+    expect(refusal.message).toContain('CT_CLAIM_SETTLE_MS no longer exist')
   })
 
   it('an_exit_code_the_contract_never_declared_is_not_guessed_into_an_outcome', async () => {
@@ -267,8 +267,8 @@ describe('DispatchCheckHarvest', () => {
   it('the_census_of_codes_really_sees_the_exit_that_short_circuits_above_the_projection_table', () => {
     const block = [
       '  if (rejected) { dieErr(`the ledger said no`, 11) }',
-      '  const PROYECCION = {',
-      "    [CollectionOutcome.COLLECTED]: { decir: dieOut, code: 0, linea: () => 'done' },",
+      '  const PROJECTION = {',
+      "    [CollectionOutcome.COLLECTED]: { say: dieOut, code: 0, line: () => 'done' },",
       '  }',
       '',
     ].join('\n')

@@ -78,8 +78,8 @@ describe('ct-next — the dispatcher measures the baseline in the worktree and s
     const ran = Dispatch.ofIssue42({ agentsMd: Dispatch.declaring('echo "2 failed" >&2; exit 7') })
 
     expect(ran.code).toBe(0)
-    expect(ran.stdout).toMatch(/lanzado #42/)
-    expect(ran.stderr).toMatch(/baseline de #42: rojo/)
+    expect(ran.stdout).toMatch(/launched #42/)
+    expect(ran.stderr).toMatch(/baseline of #42: rojo/)
     expect(ran.stderr).toMatch(/exit 7 · 2 failed/)
     expect(ran.seed().meta.baseline).toEqual({ outcome: 'rojo', command: 'echo "2 failed" >&2; exit 7', summary: 'exit 7 · 2 failed' })
   })
@@ -88,7 +88,7 @@ describe('ct-next — the dispatcher measures the baseline in the worktree and s
     const ran = Dispatch.ofIssue42()
 
     expect(ran.code).toBe(0)
-    expect(ran.stderr).toMatch(/baseline de #42: no-verificado/)
+    expect(ran.stderr).toMatch(/baseline of #42: no-verificado/)
     expect(ran.stderr).toMatch(/test: `<comando>`/)
     const baseline = ran.seed().meta.baseline
     expect(baseline.outcome).toBe(BaselineOutcome.UNVERIFIED)

@@ -791,7 +791,7 @@ function writeReviewPackage() {
   // could not see for itself. On top of that it was produced by the very agent
   // being judged, nobody verified it, and when it came out wrong it did not
   // degrade the judgement: it disabled it. Do not add it back.
-  const paths = (run.lastPaths || []).map((p) => `- ${p}`).join('\n') || '(ninguna)'
+  const paths = (run.lastPaths || []).map((p) => `- ${p}`).join('\n') || '(none)'
   // The first heading of PACKAGE_SECTIONS is written by `composePathSection`
   // (it is `PluginYardstick.PATH_SECTION`), so it is not typed here: what gets
   // destructured are the three this verb writes.
@@ -1300,7 +1300,7 @@ function controlsVerb() {
   // above off from inside the plan itself.
   const amendment = amendmentOnlyAdds(t)
   if (amendment.length) {
-    lines.push('# enmienda del plan', ...amendment.map((f) => `- ${f}`), '')
+    lines.push('# amendment of the plan', ...amendment.map((f) => `- ${f}`), '')
     result = OUTCOMES.FAILED
   }
 
@@ -1457,10 +1457,10 @@ function declaredScope(t) {
 // nothing to compare against and that is NOT a permission — it is a control
 // that could not measure, and it is said.
 function amendmentOnlyAdds(t) {
-  const ruta = planRelPath()
-  const anterior = git(['show', `HEAD:${ruta}`], { allowFail: true })
-  if (anterior === null) {
-    return [`no se pudo leer '${ruta}' en HEAD: sin el plan comiteado no hay contra qué comparar el del árbol, y este control no puede medir si la tarea ${t.n} le quitó rutas a sus **Files:**. Comitea el plan —el gate \`plan\` ya lo pide antes de implementar— y vuelve a pedir el paso.`]
+  const path = planRelPath()
+  const previous = git(['show', `HEAD:${path}`], { allowFail: true })
+  if (previous === null) {
+    return [`'${path}' could not be read at HEAD: with no committed plan there is nothing to compare the tree's against, and this control cannot measure whether task ${t.n} removed paths from its **Files:**. Commit the plan —the \`plan\` gate already asks for it before implementing— and ask for the step again.`]
   }
 
   // GIT IS ASKED whether the tree and the index say the same thing, instead of
@@ -1468,22 +1468,22 @@ function amendmentOnlyAdds(t) {
   // end-of-line filters (`core.autocrlf`, `.gitattributes`) and a string
   // comparison would ignore them — in a repo that uses them, the tree and the
   // blob always differ and THIS control would come out red on every step.
-  if (git(['diff', '--quiet', '--', ruta], { allowFail: true }) === null) {
-    const stageado = stagedPaths().includes(ruta)
-    return [`el plan del árbol no es el que se va a comitear: los controles y el juez miden '${ruta}' del ÁRBOL, y ${stageado ? 'el del ÍNDICE dice otra cosa' : 'no está entre lo stageado, así que el commit se llevaría el de HEAD'}. Vuelve a pasar por \`report\` para que lo medido y lo que se comitea sean el mismo texto.`]
+  if (git(['diff', '--quiet', '--', path], { allowFail: true }) === null) {
+    const staged = stagedPaths().includes(path)
+    return [`the tree's plan is not the one that is going to be committed: the controls and the judge measure '${path}' of the TREE, and ${staged ? "the INDEX's says something else" : 'it is not among what is staged, so the commit would take HEAD\'s'}. Go through \`report\` again so that what is measured and what is committed are the same text.`]
   }
 
-  const tareaAnterior = extractTasks(anterior).tasks.find((tt) => tt.n === t.n)
-  if (!tareaAnterior) {
-    return [`el plan de HEAD no declara ninguna tarea ${t.n}, así que este control no puede medir si la enmienda le quitó rutas a sus **Files:**. Una enmienda no añade ni quita TAREAS: eso descuadra la cuenta del run.`]
+  const previousTask = extractTasks(previous).tasks.find((tt) => tt.n === t.n)
+  if (!previousTask) {
+    return [`HEAD's plan declares no task ${t.n}, so this control cannot measure whether the amendment removed paths from its **Files:**. An amendment neither adds nor removes TASKS: that throws the run's count out.`]
   }
 
-  return tareaAnterior.files
+  return previousTask.files
     .filter((f) => !t.files.some((tf) => tf.path === f.path))
-    .map((f) => `la tarea ${t.n} enmendó el plan quitando '${f.path}' de sus **Files:** — una enmienda sólo puede AÑADIR rutas: quitar una desactiva desde dentro el control de alcance. Devuelve la ruta al PLAN, o escribe el CÓDIGO que prometía.`)
+    .map((f) => `task ${t.n} amended the plan by removing '${f.path}' from its **Files:** — an amendment can only ADD paths: removing one switches the scope control off from inside. Put the path back in the PLAN, or write the CODE it promised.`)
 }
 
-// Checks whether `nombre` appears in the INDEX, bounded to what is staged (not
+// Checks whether `name` appears in the INDEX, bounded to what is staged (not
 // to the repo's whole index). A prescriptive plan QUOTES the code verbatim and
 // lives committed under docs/, so searching the whole index always finds the
 // name: the withdrawn one "is still there" (a false positive, measured in task
@@ -1492,7 +1492,7 @@ function amendmentOnlyAdds(t) {
 // check exists to catch). With no staged files there is nowhere to look, and
 // that is a NO. Shared by `testsDeclarados` and `declaredBlocks`: same
 // question, same scope, same mechanism.
-function inIndex(nombre) {
+function inIndex(name) {
   const ambito = workingPathsInTheIndex()
   if (!ambito.length) return false
   try {
@@ -1699,7 +1699,7 @@ const DISCARD_FIX = {
 function writeReconcileReviewPackage({ branch, round, attempt }) {
   const packagePath = join(workDir, `reconcile-package-${attempt}.md`)
   const ctDocs = loadCtYardstick()
-  const files = round.files.map((f) => `- ${f}`).join('\n') || '(ninguno)'
+  const files = round.files.map((f) => `- ${f}`).join('\n') || '(none)'
   const header = round.reason
     ? `# Reconcile package: issue #${issue}, round ${attempt} (previous round discarded: ${round.reason})`
     : `# Reconcile package: issue #${issue}, round ${attempt}`
@@ -2351,7 +2351,7 @@ function writeE2eReport(runs) {
         `**Why it does not count:** ${r.refuted_by}`,
       )
     } else {
-      lines.push('', `**Motivo:** ${r.reason}`, `**Para desbloquear:** ${r.unblock}`)
+      lines.push('', `**Motivo:** ${r.reason}`, `**To unblock:** ${r.unblock}`)
     }
     return lines.join('\n')
   }

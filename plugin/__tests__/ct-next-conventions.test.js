@@ -68,7 +68,7 @@ describe('ct-next — warns when the repo AGENTS.md contradicts the kickoff', ()
     })
     // The warning does NOT block: the batch carries on and the slice is launched.
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/lanzado #42/)
+    expect(r.out).toMatch(/launched #42/)
     expect(r.out).toMatch(/\[claim\]/)
     expect(r.out).toContain('AGENTS.md:2')
     expect(r.out).toMatch(/dispatch-check\.sh/)

@@ -159,7 +159,7 @@ describe('--release launches the merge watcher', () => {
       expect(log.startsWith(dir)).toBe(false)
       // And it gets announced: a process that runs when you are not watching and
       // whose pid and trace are never stated is undebuggable.
-      expect(r.stdout + r.stderr).toMatch(/vigilante del merge/)
+      expect(r.stdout + r.stderr).toMatch(/merge watcher/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
@@ -179,7 +179,7 @@ describe('--release launches the merge watcher', () => {
       const r = release(dir, { args: ['--no-watch-merge'] })
 
       expect(r.stdout + r.stderr).toMatch(/--no-watch-merge/)
-      expect(r.stdout).not.toMatch(/vigilante del merge de #9 lanzado/)
+      expect(r.stdout).not.toMatch(/merge watcher de #9 lanzado/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
@@ -188,7 +188,7 @@ describe('--release launches the merge watcher', () => {
     try {
       const r = release(dir, { args: ['--dry-run'] })
       expect(r.status).toBe(0)
-      expect(r.stdout).not.toMatch(/vigilante del merge/)
+      expect(r.stdout).not.toMatch(/merge watcher/)
       expect(await waitForArgv(r.watchLog, 600)).toBe(null)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
@@ -204,7 +204,7 @@ describe('--release launches the merge watcher', () => {
       }))
       const r = release(dir)
       expect(r.status).toBe(7)
-      expect(r.stdout + r.stderr).not.toMatch(/vigilante del merge/)
+      expect(r.stdout + r.stderr).not.toMatch(/merge watcher/)
       expect(await waitForArgv(r.watchLog, 600)).toBe(null)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
@@ -220,7 +220,7 @@ describe('--release launches the merge watcher', () => {
     try {
       const r = release(dir, { env: goEnv({ repo: 'o/r', issue: 9, given: false }) })
       expect(r.status).toBe(9)
-      expect(r.stdout + r.stderr).not.toMatch(/vigilante del merge/)
+      expect(r.stdout + r.stderr).not.toMatch(/merge watcher/)
       expect(await waitForArgv(r.watchLog, 600)).toBe(null)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
@@ -236,8 +236,8 @@ describe('--release launches the merge watcher', () => {
       expect(r.status).toBe(0)
       expect(r.stdout).toMatch(/released #9/)
       expect(r.stderr).toMatch(/warning:/)
-      expect(r.stderr).toMatch(/a mano/)
-      expect(r.stdout).not.toMatch(/vigilante del merge de #9 lanzado \(pid/)
+      expect(r.stderr).toMatch(/by hand/)
+      expect(r.stdout).not.toMatch(/merge watcher de #9 lanzado \(pid/)
       expect(await waitForArgv(r.watchLog, 600)).toBe(null)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })

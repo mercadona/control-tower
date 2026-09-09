@@ -35,27 +35,27 @@ export const GO_CHANNEL_ENV = 'CT_GO_CHANNEL'
 // The line, in a single function: a person types it while reading it, so it
 // states the EXACT body (goBody) instead of describing it.
 export function goDictationLine(issue, nonce) {
-  return `  GO de #${issue}: contesta exactamente \`${goBody(nonce)}\` en un comentario del issue.`
+  return `  GO for #${issue}: answer exactly \`${goBody(nonce)}\` in a comment on the issue.`
 }
 
 export function emitGoNonce(issue, nonce, { log = console.log, env = process.env, run = execFileSync } = {}) {
-  const canal = String(env[GO_CHANNEL_ENV] || '').trim().toLowerCase()
-  if (canal !== 'notify') return log(goDictationLine(issue, nonce))
+  const channel = String(env[GO_CHANNEL_ENV] || '').trim().toLowerCase()
+  if (channel !== 'notify') return log(goDictationLine(issue, nonce))
   try {
     // The text goes in an ARGUMENT, not interpolated inside the AppleScript:
     // that way there is nothing to escape and no value can end up being
     // executed. `on run argv` is the standard hook for that.
     run('osascript', [
-      '-e', 'on run argv\ndisplay notification (item 1 of argv) with title "Control Tower" subtitle "go del gate plan"\nend run',
+      '-e', 'on run argv\ndisplay notification (item 1 of argv) with title "Control Tower" subtitle "plan gate go"\nend run',
       goBody(nonce),
     ], { stdio: 'ignore', timeout: 10_000 })
-    log(`  GO de #${issue}: enviado por notificación del sistema (${GO_CHANNEL_ENV}=notify) — no se imprime aquí a propósito.`)
+    log(`  GO for #${issue}: sent through the system notification (${GO_CHANNEL_ENV}=notify) — it is deliberately not printed here.`)
   } catch (e) {
     // Falls back to stdout SAYING SO. Staying quiet here would leave the gate
     // without a go; falling back without warning would be worse still: the
     // person would believe the nonce had not passed through any agent's context
     // when it has.
-    log(`  warning: la notificación del go de #${issue} falló (${e.message}) — va por aquí, o sea que el nonce SÍ entra en el contexto de esta sesión.`)
+    log(`  warning: the go notification of #${issue} failed (${e.message}) — it goes through here instead, which means the nonce DOES enter this session's context.`)
     log(goDictationLine(issue, nonce))
   }
 }
