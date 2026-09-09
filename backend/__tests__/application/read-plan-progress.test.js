@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../../src/application/queries/read-plan-progress.js'
 import { PlanProgress } from '../../src/domain/ports/plan-progress.js'
 import { PlanState } from '../../src/domain/value-objects/plan-state.js'
+import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
 
@@ -18,6 +19,12 @@ class PlanProgressDouble extends PlanProgress {
   }
 }
 
+class ReviewLogDouble {
+  lastAskedAt() {
+    return null
+  }
+}
+
 describe('ReadPlanProgress', () => {
   const located = new WorkspaceLocation({ path: '/repo/.worktrees/42', branch: 'feat/42' })
   const issue = { number: 42 }
@@ -26,7 +33,7 @@ describe('ReadPlanProgress', () => {
   it('what_the_port_answers_is_what_the_caller_gets_without_being_reinterpreted', async () => {
     const progress = new PlanProgressDouble(PlanState.READY)
 
-    const read = await new ReadPlanProgress({ planProgress: progress })
+    const read = await new ReadPlanProgress({ planProgress: progress, reviewLog: new ReviewLogDouble() })
       .execute(new ReadPlanProgressParams({ located, issue, repository }))
 
     expect(read.state).toBe(PlanState.READY)
@@ -35,7 +42,7 @@ describe('ReadPlanProgress', () => {
   it('the_port_is_asked_about_the_workspace_and_the_issue_and_the_repository_it_was_given', async () => {
     const progress = new PlanProgressDouble(PlanState.WRITING)
 
-    await new ReadPlanProgress({ planProgress: progress })
+    await new ReadPlanProgress({ planProgress: progress, reviewLog: new ReviewLogDouble() })
       .execute(new ReadPlanProgressParams({ located, issue, repository }))
 
     expect(progress.asked).toEqual([{ located, issue, repository }])
@@ -43,5 +50,91 @@ describe('ReadPlanProgress', () => {
 
   it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
     await expect(new PlanProgress().of({ located, issue, repository })).rejects.toThrow(/must implement of/)
+  })
+})
+
+const ISSUE = new PlanIssue({ number: 54, url: 'https://github.com/jjponz/repo-pulse/issues/54' })
+const REPOSITORY = new RepositoryName('jjponz/repo-pulse')
+const LOCATED = new WorkspaceLocation({ path: '/repo/.worktrees/54', branch: 'feat/54' })
+
+class Flow {
+  constructor({ askedAt = null, committedAt = null, onDisk = PlanState.READY } = {}) {
+    this.askedFor = []
+    this.committedAsked = 0
+    this.diskAsked = 0
+    this.reviewLog = {
+      lastAskedAt: (asked) => {
+        this.askedFor.push(asked)
+
+        return askedAt
+      },
+    }
+    this.planProgress = {
+      committedAt: async () => {
+        this.committedAsked += 1
+
+        return committedAt
+      },
+      of: async () => {
+        this.diskAsked += 1
+
+        return onDisk
+      },
+    }
+  }
+
+  async run() {
+    const read = await new ReadPlanProgress({
+      planProgress: this.planProgress,
+      reviewLog: this.reviewLog,
+    }).execute(new ReadPlanProgressParams({ located: LOCATED, issue: ISSUE, repository: REPOSITORY }))
+
+    return read.state
+  }
+}
+
+describe('a plan being reworked is told apart from one waiting for a person', () => {
+  it('a_plan_nobody_asked_changes_for_is_read_from_disk_and_git_is_not_asked_for_a_date', async () => {
+    const flow = new Flow({ askedAt: null, onDisk: PlanState.WRITING })
+
+    expect(await flow.run()).toBe(PlanState.WRITING)
+    expect(flow.committedAsked).toBe(0)
+    expect(flow.askedFor).toEqual([{ issue: 54, repository: REPOSITORY }])
+  })
+
+  it('a_change_asked_for_after_the_plan_was_committed_is_a_review_in_flight_and_disk_is_not_asked', async () => {
+    const flow = new Flow({ askedAt: '2026-09-09T10:00:00Z', committedAt: '2026-09-09T09:00:00Z' })
+
+    expect(await flow.run()).toBe(PlanState.REVIEWING)
+    expect(flow.diskAsked).toBe(0)
+  })
+
+  it('a_change_asked_for_on_a_plan_that_was_never_committed_is_a_review_in_flight', async () => {
+    const flow = new Flow({ askedAt: '2026-09-09T10:00:00Z', committedAt: null })
+
+    expect(await flow.run()).toBe(PlanState.REVIEWING)
+  })
+
+  it('a_change_asked_for_before_the_plan_was_recommitted_is_no_longer_in_flight', async () => {
+    const flow = new Flow({ askedAt: '2026-09-09T09:00:00Z', committedAt: '2026-09-09T10:00:00Z' })
+
+    expect(await flow.run()).toBe(PlanState.READY)
+  })
+
+  it('the_two_dates_are_compared_as_moments_and_not_as_text_because_git_and_github_do_not_write_them_alike', async () => {
+    const asText = new Flow({ askedAt: '2026-09-09T10:00:00Z', committedAt: '2026-09-09T11:00:00+02:00' })
+
+    expect(await asText.run()).toBe(PlanState.REVIEWING)
+
+    const other = new Flow({ askedAt: '2026-09-09T09:54:05Z', committedAt: '2026-09-09T11:55:39+02:00' })
+
+    expect(await other.run()).toBe(PlanState.READY)
+  })
+
+  it('a_date_that_cannot_be_read_as_a_moment_does_not_claim_a_review', async () => {
+    const flow = new Flow({ askedAt: 'un rato', onDisk: PlanState.READY })
+
+    expect(await flow.run()).toBe(PlanState.READY)
+    expect(flow.committedAsked).toBe(0)
   })
 })
