@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { StartPlan, StartPlanParams } from '../../src/application/actions/start-plan.js'
+import { StartPlan, StartPlanParams } from '../../src/application/actions/start-plan.ts'
 import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
 import { UserStories } from '../../src/domain/ports/user-stories.ts'
@@ -16,23 +16,28 @@ import { BaselineResult } from '../../../plugin/scripts/baseline.js'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { PlanTarget } from '../../src/domain/value-objects/plan-target.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
+import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
+import type { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
 import {
   PlanAgentNotLaunched, PlanIssueNotClaimed, PlanIssueNotCreated, UserStoryNotRead,
   WorkspaceNotPrepared,
 } from '../../src/domain/exceptions.ts'
 
 class UserStoriesDouble extends UserStories {
-  constructor(answer) {
+  answer: ((key: UserStoryKey | UserStoryUrl) => UserStory) | Error
+  asked: (UserStoryKey | UserStoryUrl)[]
+
+  constructor(answer: ((key: UserStoryKey | UserStoryUrl) => UserStory) | Error) {
     super()
     this.answer = answer
     this.asked = []
   }
 
-  static reading(summary) {
+  static reading(summary: string): UserStoriesDouble {
     return new UserStoriesDouble((key) => new UserStory({ key, summary, description: 'as a user I want' }))
   }
 
-  async detail(key) {
+  async detail(key: UserStoryKey | UserStoryUrl): Promise<UserStory> {
     this.asked.push(key)
     if (this.answer instanceof Error) throw this.answer
     return this.answer(key)
@@ -42,7 +47,21 @@ class UserStoriesDouble extends UserStories {
 class PlanIssuesDouble extends PlanIssues {
   static OPENED = new PlanIssue({ number: 7, url: 'https://github.com/owner/name/issues/7' })
 
-  constructor(answer = PlanIssuesDouble.OPENED, { claimFailure = null, claimFailureRepository = null } = {}) {
+  answer: PlanIssue | Error
+  claimFailure: PlanIssueNotClaimed | null
+  claimFailureRepository: RepositoryName | null
+  asked: { story: UserStory | null, comment: PlanComment | null, repository: RepositoryName }[]
+  claimed: { issue: PlanIssue, repository: RepositoryName }[]
+  requeued: { issue: PlanIssue, repository: RepositoryName }[]
+  steps: string[]
+
+  constructor(
+    answer: PlanIssue | Error = PlanIssuesDouble.OPENED,
+    { claimFailure = null, claimFailureRepository = null }: {
+      claimFailure?: PlanIssueNotClaimed | null,
+      claimFailureRepository?: RepositoryName | null,
+    } = {}
+  ) {
     super()
     this.answer = answer
     this.claimFailure = claimFailure
@@ -53,32 +72,36 @@ class PlanIssuesDouble extends PlanIssues {
     this.steps = []
   }
 
-  static refusingToClaim(said) {
+  static refusingToClaim(said: string): PlanIssuesDouble {
     return new PlanIssuesDouble(PlanIssuesDouble.OPENED, {
       claimFailure: new PlanIssueNotClaimed(said),
     })
   }
 
-  static refusingToClaimFor(repository, said) {
+  static refusingToClaimFor(repository: RepositoryName, said: string): PlanIssuesDouble {
     return new PlanIssuesDouble(PlanIssuesDouble.OPENED, {
       claimFailure: new PlanIssueNotClaimed(said),
       claimFailureRepository: repository,
     })
   }
 
-  async open({ story, comment, repository }) {
+  async open({ story, comment, repository }: {
+    story: UserStory | null,
+    comment: PlanComment | null,
+    repository: RepositoryName,
+  }): Promise<PlanIssue> {
     this.asked.push({ story, comment, repository })
     if (this.answer instanceof Error) throw this.answer
     return this.answer
   }
 
-  async claim({ issue, repository }) {
+  async claim({ issue, repository }: { issue: PlanIssue, repository: RepositoryName }): Promise<void> {
     this.claimed.push({ issue, repository })
     const targeted = this.claimFailureRepository === null || this.claimFailureRepository === repository
     if (this.claimFailure !== null && targeted) throw this.claimFailure
   }
 
-  async requeue({ issue, repository }) {
+  async requeue({ issue, repository }: { issue: PlanIssue, repository: RepositoryName }): Promise<void> {
     this.requeued.push({ issue, repository })
     this.steps.push('requeue')
   }
@@ -89,9 +112,22 @@ class WorkspaceDouble extends Workspace {
   static GREEN = new BaselineResult({ outcome: 'verde', command: 'npm test', summary: '42 passed' })
   static SOWN = new SownWorkspace({ located: WorkspaceDouble.LOCATED, baseline: WorkspaceDouble.GREEN })
 
+  answer: SownWorkspace | Error
+  confirmFailure: WorkspaceNotPrepared | null
+  confirmedRoot: CheckoutRoot | null
+  confirmFailureRoot: CheckoutRoot | null
+  asked: { issue: PlanIssue, repository: RepositoryName, root: CheckoutRoot }[]
+  undone: WorkspaceLocation[]
+  confirmed: { root: CheckoutRoot, repository: RepositoryName }[]
+  steps: string[]
+
   constructor(
-    answer = WorkspaceDouble.SOWN,
-    { confirmFailure = null, confirmedRoot = null, confirmFailureRoot = null } = {}
+    answer: SownWorkspace | Error = WorkspaceDouble.SOWN,
+    { confirmFailure = null, confirmedRoot = null, confirmFailureRoot = null }: {
+      confirmFailure?: WorkspaceNotPrepared | null,
+      confirmedRoot?: CheckoutRoot | null,
+      confirmFailureRoot?: CheckoutRoot | null,
+    } = {}
   ) {
     super()
     this.answer = answer
@@ -104,26 +140,26 @@ class WorkspaceDouble extends Workspace {
     this.steps = []
   }
 
-  static refusing(said) {
+  static refusing(said: string): WorkspaceDouble {
     return new WorkspaceDouble(new WorkspaceNotPrepared(said))
   }
 
-  static refusingToConfirm(said) {
+  static refusingToConfirm(said: string): WorkspaceDouble {
     return new WorkspaceDouble(WorkspaceDouble.SOWN, { confirmFailure: new WorkspaceNotPrepared(said) })
   }
 
-  static refusingToConfirmRoot(root, said) {
+  static refusingToConfirmRoot(root: CheckoutRoot, said: string): WorkspaceDouble {
     return new WorkspaceDouble(WorkspaceDouble.SOWN, {
       confirmFailure: new WorkspaceNotPrepared(said),
       confirmFailureRoot: root,
     })
   }
 
-  static confirming(confirmedRoot) {
+  static confirming(confirmedRoot: CheckoutRoot): WorkspaceDouble {
     return new WorkspaceDouble(WorkspaceDouble.SOWN, { confirmedRoot })
   }
 
-  async confirm({ root, repository }) {
+  async confirm({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }): Promise<CheckoutRoot> {
     this.confirmed.push({ root, repository })
     this.steps.push('confirm')
     const targeted = this.confirmFailureRoot === null || this.confirmFailureRoot === root
@@ -132,45 +168,54 @@ class WorkspaceDouble extends Workspace {
     return this.confirmedRoot ?? root
   }
 
-  async prepare({ issue, repository, root }) {
+  async prepare({ issue, repository, root }: {
+    issue: PlanIssue,
+    repository: RepositoryName,
+    root: CheckoutRoot,
+  }): Promise<SownWorkspace> {
     this.asked.push({ issue, repository, root })
     if (this.answer instanceof Error) throw this.answer
     return this.answer
   }
 
-  async undo(located) {
+  async undo(located: WorkspaceLocation): Promise<void> {
     this.undone.push(located)
     this.steps.push('undo')
   }
 }
 
 class CheckoutRegistryDouble extends CheckoutRegistry {
+  remembered: CheckoutRoot[]
+
   constructor() {
     super()
     this.remembered = []
   }
 
-  remember(root) {
+  remember(root: CheckoutRoot): void {
     this.remembered.push(root)
   }
 
-  known() {
+  known(): CheckoutRoot[] {
     return [...this.remembered]
   }
 }
 
 class PlanAgentsDouble extends PlanAgents {
-  constructor(answer = 'workspace:4') {
+  answer: string | Error
+  asked: PlanBriefing[]
+
+  constructor(answer: string | Error = 'workspace:4') {
     super()
     this.answer = answer
     this.asked = []
   }
 
-  static refusing(said) {
+  static refusing(said: string): PlanAgentsDouble {
     return new PlanAgentsDouble(new PlanAgentNotLaunched(said))
   }
 
-  async launch(briefing) {
+  async launch(briefing: PlanBriefing): Promise<string> {
     this.asked.push(briefing)
     if (this.answer instanceof Error) throw this.answer
     return this.answer
@@ -187,7 +232,20 @@ class Flow {
     root: new CheckoutRoot('/other-repo'),
   })
 
-  constructor({ userStories, planIssues, workspace, planAgents, checkouts } = {}) {
+  userStories: UserStoriesDouble
+  planIssues: PlanIssuesDouble
+  workspace: WorkspaceDouble
+  planAgents: PlanAgentsDouble
+  checkouts: CheckoutRegistryDouble
+  steps: string[]
+
+  constructor({ userStories, planIssues, workspace, planAgents, checkouts }: {
+    userStories?: UserStoriesDouble,
+    planIssues?: PlanIssuesDouble,
+    workspace?: WorkspaceDouble,
+    planAgents?: PlanAgentsDouble,
+    checkouts?: CheckoutRegistryDouble,
+  } = {}) {
     this.userStories = userStories ?? UserStoriesDouble.reading('the summary of the story')
     this.planIssues = planIssues ?? new PlanIssuesDouble()
     this.workspace = workspace ?? new WorkspaceDouble()
@@ -198,7 +256,7 @@ class Flow {
     this.workspace.steps = this.steps
   }
 
-  async run(story = Flow.STORY, comment = null) {
+  async run(story: UserStoryKey | UserStoryUrl | null = Flow.STORY, comment: PlanComment | null = null) {
     const result = await this.runAcross(
       [new PlanTarget({ repository: Flow.REPOSITORY, root: Flow.ROOT })], story, comment
     )
@@ -206,7 +264,11 @@ class Flow {
     return result.started[0]
   }
 
-  async runAcross(targets, story = Flow.STORY, comment = null) {
+  async runAcross(
+    targets: readonly PlanTarget[],
+    story: UserStoryKey | UserStoryUrl | null = Flow.STORY,
+    comment: PlanComment | null = null
+  ) {
     return new StartPlan(this).execute(new StartPlanParams({ story, comment, targets }))
   }
 
@@ -218,7 +280,7 @@ class Flow {
     return this.run(null, Flow.COMMENT)
   }
 
-  async refusal(story = Flow.STORY) {
+  async refusal(story: UserStoryKey | UserStoryUrl | null = Flow.STORY) {
     return this.run(story).catch((cause) => cause)
   }
 }
@@ -239,8 +301,8 @@ describe('StartPlan', () => {
 
     const [asked] = flow.planIssues.asked
     expect(asked.repository).toBe(Flow.REPOSITORY)
-    expect(asked.story.summary).toBe('rename the button')
-    expect(asked.story.key).toBe(Flow.STORY)
+    expect(asked.story?.summary).toBe('rename the button')
+    expect(asked.story?.key).toBe(Flow.STORY)
   })
 
   it('the_workspace_is_prepared_for_the_issue_that_was_just_opened', async () => {
@@ -333,12 +395,15 @@ describe('StartPlan', () => {
   })
 
   it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
-    await expect(new PlanAgents().launch(null)).rejects.toThrow(/must implement launch/)
-    await expect(new PlanIssues().open({ story: null, repository: Flow.REPOSITORY }))
+    await expect(new PlanAgents().launch(new PlanBriefing({
+      story: Flow.STORY, issue: PlanIssuesDouble.OPENED, located: WorkspaceDouble.LOCATED,
+      repository: Flow.REPOSITORY,
+    }))).rejects.toThrow(/must implement launch/)
+    await expect(new PlanIssues().open({ story: null, comment: null, repository: Flow.REPOSITORY }))
       .rejects.toThrow(/must implement open/)
     await expect(new UserStories().detail(Flow.STORY)).rejects.toThrow(/must implement detail/)
     await expect(new Workspace().prepare({
-      issue: PlanIssuesDouble.OPENED, repository: Flow.REPOSITORY,
+      issue: PlanIssuesDouble.OPENED, repository: Flow.REPOSITORY, root: Flow.ROOT,
     })).rejects.toThrow(/must implement prepare/)
     await expect(new Workspace().undo(WorkspaceDouble.LOCATED)).rejects.toThrow(/must implement undo/)
     await expect(new Workspace().confirm({ root: Flow.ROOT, repository: Flow.REPOSITORY }))
@@ -494,7 +559,7 @@ describe('StartPlan plans from a comment when there is no user story', () => {
 
     const [asked] = flow.planIssues.asked
     expect(asked.comment).toBe(Flow.COMMENT)
-    expect(asked.story.key).toBe(Flow.STORY)
+    expect(asked.story?.key).toBe(Flow.STORY)
   })
 
   it('a_plan_asked_for_with_only_a_story_opens_its_issue_with_no_comment_at_all', async () => {
