@@ -190,7 +190,7 @@ describe('ct-api entrypoint', () => {
     expect(await ExternalTools.cmuxRowOf(refused)).toEqual({
       installed: true,
       session: 'missing',
-      fix: 'update cmux, and start this backend from a terminal inside cmux',
+      fix: 'update cmux and restart the app, then start this backend from a terminal inside cmux',
     })
   })
 

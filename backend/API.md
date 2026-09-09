@@ -443,6 +443,14 @@ How each one is asked:
 | `bq` | `gcloud auth list --filter=status:ACTIVE` | it exited 0 and named an account |
 | `cmux` | the workspace query `GET /active-plans` recovers with | it answered it conclusively |
 
+The `cmux` row is the one that catches a failure no version number reveals: the
+app serves its socket from the process that is **running**, so a cmux updated on
+disk but not restarted keeps answering with the schema of the build it was
+started from, while `cmux --version` already reports the new one. Measured on
+2026-09-09: same binary, byte for byte, on two machines — one answering
+`custom_title`, the other only the older `title`, and the recovery refusing to
+guess.
+
 **Refusals**
 
 None of its own. A probe that fails is data, not a refusal: that tool reads

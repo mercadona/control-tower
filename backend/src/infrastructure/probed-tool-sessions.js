@@ -26,7 +26,7 @@ export class ProbedToolSessions extends ToolSessions {
 
   static CMUX = {
     tool: 'cmux', bin: 'cmux',
-    fix: 'update cmux, and start this backend from a terminal inside cmux',
+    fix: 'update cmux and restart the app, then start this backend from a terminal inside cmux',
   }
 
   static AUTHENTICATED = 'successfully authenticated'

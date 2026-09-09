@@ -237,7 +237,7 @@ describe('ProbedToolSessions', () => {
 
     const cmux = sessions.find((session) => session.tool === 'cmux')
     expect(cmux.state).toBe(SessionState.MISSING)
-    expect(cmux.fix).toBe('update cmux, and start this backend from a terminal inside cmux')
+    expect(cmux.fix).toBe('update cmux and restart the app, then start this backend from a terminal inside cmux')
   })
 
   it('a_cmux_that_is_not_installed_is_missing_without_being_asked', async () => {
