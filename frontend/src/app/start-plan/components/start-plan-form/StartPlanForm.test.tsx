@@ -15,14 +15,16 @@ describe('StartPlanForm', () => {
   it('shows specific field errors only after a field has been blurred', async () => {
     const user = userEvent.setup()
     renderForm()
-    const ticket = screen.getByLabelText('Clave del ticket')
+    const ticket = screen.getByLabelText('Ticket')
 
     await user.type(ticket, 'abc')
     expect(ticket).not.toHaveAttribute('aria-invalid', 'true')
     await user.tab()
 
     expect(ticket).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByText('Usa la forma ABC-123')).toBeInTheDocument()
+    expect(screen.getByText(
+      'Usa una clave como ABC-123 o una URL como https://github.com/owner/name/issues/123',
+    )).toBeInTheDocument()
 
     const repository = screen.getByLabelText(/Repositorio/)
     await user.click(repository)

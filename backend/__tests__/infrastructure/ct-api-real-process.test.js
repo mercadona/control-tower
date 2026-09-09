@@ -268,6 +268,21 @@ describe('ct-api entrypoint', () => {
     expect(body.detail).toMatch(/^acli jira failed: /)
   })
 
+  it('a_whole_request_reaches_gh_so_a_typo_in_the_url_that_wires_the_user_stories_would_show_up_here_and_not_only_in_the_first_real_use', async () => {
+    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+
+    const response = await Entrypoint.startPlan(
+      port,
+      `{"id":"https://github.com/mercadona/control-tower/issues/999999999",` +
+        `"repo":${JSON.stringify(HostCheckout.repository())},"path":${JSON.stringify(HostCheckout.path())}}`
+    )
+
+    expect(response.status).toBe(400)
+    const body = await response.json()
+    expect(body.code).toBe('user-story-not-read')
+    expect(body.detail).toMatch(/^gh issue view failed: /)
+  })
+
   it('the_progress_of_a_slice_is_served_by_the_running_api', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })
     const root = await RunFileFixture.inATemporaryRoot()

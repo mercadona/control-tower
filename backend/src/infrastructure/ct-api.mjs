@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url'
 import { ApiServer, LOOPBACK } from './api-server.js'
 import { CmuxPlanAgents } from './cmux-plan-agents.js'
 import { AcliUserStories } from './acli-user-stories.js'
+import { GhUserStories } from './gh-user-stories.js'
+import { ReferredUserStories } from './referred-user-stories.js'
 import { GhPlanIssues } from './gh-plan-issues.js'
 import { GitWorkspace } from './git-workspace.js'
 import { DiskCheckoutRegistry } from './disk-checkout-registry.js'
@@ -194,9 +196,12 @@ class CtApi {
     return after(seconds * 1000)
   }
 
-  static #startPlan(workspace, planAgents, planIssues, checkouts) {
+  static #startPlan(workspace, planAgents, planIssues, checkouts, gh) {
     return new StartPlan({
-      userStories: new AcliUserStories({ acli: CtApi.#talkingTo(AcliUserStories.BIN, ExternalTool) }),
+      userStories: new ReferredUserStories({
+        jira: new AcliUserStories({ acli: CtApi.#talkingTo(AcliUserStories.BIN, ExternalTool) }),
+        github: new GhUserStories({ gh }),
+      }),
       planIssues,
       workspace,
       planAgents,
@@ -374,7 +379,7 @@ class CtApi {
     })
     const server = new ApiServer({
       port: asked.port,
-      startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts),
+      startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, gh),
       reviews,
       pullRequestReviews,
       implementPlan: new ImplementPlan({

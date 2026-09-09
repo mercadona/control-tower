@@ -547,6 +547,18 @@ describe('ApiServer', () => {
     expect(await response.text()).toBe(RunningApi.ANSWER.replace('ABC-123', 'MO_SHOP-42'))
   })
 
+  it('an_id_that_is_a_github_issue_url_reaches_the_agent_as_that_same_url', async () => {
+    const port = await RunningApi.listening()
+    const url = 'https://github.com/mercadona/control-tower/issues/141'
+
+    const response = await RunningApi.post(
+      port, '/start-plan', `{"id":${JSON.stringify(url)},"repo":"owner/name","path":"/repo/checkout"}`
+    )
+
+    expect(RunningApi.spy.asked).toEqual([url])
+    expect(await response.text()).toBe(RunningApi.ANSWER.replace('ABC-123', url))
+  })
+
   it('the_root_the_answer_carries_is_the_checkout_and_not_the_worktree', async () => {
     const port = await RunningApi.listening()
 

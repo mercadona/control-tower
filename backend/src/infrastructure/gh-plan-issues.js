@@ -16,11 +16,14 @@ import { PlanIssue } from '../domain/value-objects/plan-issue.js'
 import { PlanIssueStatus } from '../domain/value-objects/plan-issue-status.js'
 import { ChangeAsked } from '../domain/value-objects/change-asked.js'
 import { UserStoryKey } from '../domain/value-objects/user-story-key.js'
+import { UserStoryUrl } from '../domain/value-objects/user-story-url.js'
+import { UserStoryReference } from '../domain/value-objects/user-story-reference.js'
 import {
   PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed, PlanGoNotAnswered,
   PlanChangesNotRead, PlanChangesNotUnderstood, PlanChangesNotAsked, PlanStoryNotRead, PlanStoryNotUnderstood,
 } from '../domain/exceptions.js'
 import { Gh } from './gh.js'
+import { Projection } from './projection.js'
 
 export class GhPlanIssues extends PlanIssues {
   static CHANGES_TOKEN = '-REVIEW'
@@ -333,9 +336,10 @@ export class PlanIssueBody {
   static AC_HEADING = '## Acceptance criteria (EARS, 1:1 con tests)'
   static COMMENT_SECTION = 'Comentario de quien pide el plan'
   static COMMENT_HEADING = `## ${PlanIssueBody.COMMENT_SECTION}`
-  static NO_STORY_LINE = '> Plan pedido a mano: no hay historia de usuario en Jira.'
+  static NO_STORY_LINE = '> Plan pedido a mano: no hay ticket detrás.'
   static STORY_LINE = '> Historia de usuario: '
-  static NO_STORY_EPIC_CONTEXT = '_El plan no viene de una historia de usuario de Jira._'
+  static ISSUE_LINE = '> Issue de GitHub: '
+  static NO_STORY_EPIC_CONTEXT = '_El plan no viene de ningún ticket._'
   static NO_HEADLINE = '_El comentario no trae una primera línea que resuma lo que se pide._'
   static HEADLINE_LIMIT = 72
   static HEADLINE_CUT = '…'
@@ -346,20 +350,40 @@ export class PlanIssueBody {
     `> Para pedir cambios en el plan, comenta en este issue empezando por \`${GhPlanIssues.CHANGES_TOKEN}\`: ` +
     'lo que escribas detrás es lo que se le pide al agente, y publicará el plan rehecho aquí mismo.'
 
+  static #LINE_BY_KIND = new Projection('plan issue story line', [
+    [UserStoryKey, (key) => `${PlanIssueBody.STORY_LINE}${PlanIssueBody.quieted(key.text)}`],
+    [UserStoryUrl, (key) => `${PlanIssueBody.ISSUE_LINE}${PlanIssueBody.quieted(key.text)}`],
+  ])
+
+  static #TITLE_BY_KIND = new Projection('plan issue title', [
+    [UserStoryKey, (story) => `${story.key.text} ${story.summary}`],
+    [UserStoryUrl, (story) => `${story.key.repository.text}#${story.key.number} ${story.summary}`],
+  ])
+
   static labels({ story, comment }) {
     return [...gateLabels(gatesOf(PlanIssueBody.rowFor({ story, comment })).gates), GhPlanIssues.READY_LABEL]
   }
 
   static storyIn({ body }) {
-    const named = body.split('\n').find((line) => line.startsWith(PlanIssueBody.STORY_LINE))
-    if (named === undefined) return null
-    const key = named.slice(PlanIssueBody.STORY_LINE.length).trim()
+    const [firstLine] = body.split('\n')
+    const marker = [PlanIssueBody.STORY_LINE, PlanIssueBody.ISSUE_LINE]
+      .find((candidate) => firstLine.startsWith(candidate))
+    if (marker === undefined) return null
+    const unfenced = PlanIssueBody.#unfenced(firstLine.slice(marker.length).trim())
 
-    return UserStoryKey.isWellFormed(key) ? new UserStoryKey(key) : null
+    return UserStoryReference.isWellFormed(unfenced) ? UserStoryReference.of(unfenced) : null
+  }
+
+  static #unfenced(text) {
+    const found = text.match(/^`([^`]*)`$/)
+
+    return found === null ? text : found[1]
   }
 
   static titleFor({ story, comment }) {
-    return story === null ? PlanIssueBody.headlineOf(comment) : `${story.key} ${story.summary}`
+    return story === null
+      ? PlanIssueBody.headlineOf(comment)
+      : PlanIssueBody.#TITLE_BY_KIND.of(story.key.constructor)(story)
   }
 
   static headlineOf(comment) {
@@ -386,12 +410,20 @@ export class PlanIssueBody {
     }
   }
 
+  static #EMPTY_EPIC_CONTEXT_BY_KIND = new Projection('plan issue empty epic context', [
+    [UserStoryKey, (story) =>
+      `_${story.key.text} no trae descripción en Jira: la historia de usuario está sin escribir._`],
+    [UserStoryUrl, (story) =>
+      `_El issue ${story.key.repository.text}#${story.key.number} no trae cuerpo ni comentarios: ` +
+      'no hay nada escrito de donde partir._'],
+  ])
+
   static #epicContextOf(story) {
     if (story === null) return PlanIssueBody.NO_STORY_EPIC_CONTEXT
 
     return story.hasDescription()
       ? PlanIssueBody.quieted(story.description)
-      : `_${story.key} no trae descripción en Jira: la historia de usuario está sin escribir._`
+      : PlanIssueBody.#EMPTY_EPIC_CONTEXT_BY_KIND.of(story.key.constructor)(story)
   }
 
   static quieted(text) {
@@ -407,7 +439,9 @@ export class PlanIssueBody {
     const row = PlanIssueBody.rowFor({ story, comment })
 
     return [
-      story === null ? PlanIssueBody.NO_STORY_LINE : `${PlanIssueBody.STORY_LINE}${story.key}`,
+      story === null
+        ? PlanIssueBody.NO_STORY_LINE
+        : PlanIssueBody.#LINE_BY_KIND.of(story.key.constructor)(story.key),
       PlanIssueBody.CHANGES_LINE,
       '',
       PlanIssueBody.DESCRIPTION_HEADING,

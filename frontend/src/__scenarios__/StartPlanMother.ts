@@ -1,4 +1,5 @@
 const TICKET = 'ABC-123'
+const ISSUE_URL = 'https://github.com/owner/name/issues/141'
 const COMMENT = 'revisar la caché de precios en el checkout'
 const REPO = 'owner/name'
 const ANOTHER_REPO = 'owner/other-name'
@@ -15,6 +16,8 @@ const REQUEST_BODY_COMMENT_ONLY =
 const REQUEST_BODY_WITH_COMMENT =
   '{"id":"ABC-123","user_comment":"revisar la caché de precios en el checkout","repo":"owner/name",' +
   '"path":"/Users/pedro/code/name"}'
+const REQUEST_BODY_ISSUE_URL =
+  '{"id":"https://github.com/owner/name/issues/141","repo":"owner/name","path":"/Users/pedro/code/name"}'
 
 const started = () => ({
   status: 202,
@@ -51,9 +54,20 @@ const startedFromNonCanonicalPath = () => ({
     '"root":"/private/var/code/name"}',
 })
 
+const startedFromIssueUrl = () => ({
+  status: 202,
+  body:
+    '{"status":"started","id":"https://github.com/owner/name/issues/141","repo":"owner/name",' +
+    '"issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},"agent":"workspace:4",' +
+    '"branch":"feat/7","worktree":"/Users/pedro/code/name/.worktrees/7",' +
+    '"root":"/Users/pedro/code/name"}',
+})
+
 const malformedId = () => ({
   status: 400,
-  body: '{"code":"malformed-id","detail":"id must be a user story key such as ABC-123"}',
+  body:
+    '{"code":"malformed-id","detail":"id must be a user story key such as ABC-123 ' +
+    'or a github issue url such as https://github.com/owner/name/issues/123"}',
 })
 
 const malformedRepo = () => ({
@@ -78,6 +92,7 @@ const planNotStarted = () => ({
 
 export const StartPlanMother = {
   TICKET,
+  ISSUE_URL,
   COMMENT,
   REPO,
   ANOTHER_REPO,
@@ -91,10 +106,12 @@ export const StartPlanMother = {
   NON_CANONICAL_WORKTREE,
   REQUEST_BODY_COMMENT_ONLY,
   REQUEST_BODY_WITH_COMMENT,
+  REQUEST_BODY_ISSUE_URL,
   started,
   startedWithoutStory,
   startedInAnotherRepo,
   startedFromNonCanonicalPath,
+  startedFromIssueUrl,
   malformedId,
   malformedRepo,
   malformedPath,
