@@ -11,13 +11,12 @@
 // And that is why it does not THROW either, which is how it was and was
 // worse: throwing when the read of closed issues failed THREW AWAY the read
 // of open ones, which was already whole in memory. Reproduced: the /ct-status
-// report came out empty under a footer that closed with «lo de arriba es sólo
-// lo que sí se ha podido comprobar»… and above it there was nothing. (Back
-// then the footer counted «2 lectura(s) sin completar»; today it counts
-// warnings, which is the exact thing — see ct-status.mjs.) It contradicts the
-// contract that command
-// publishes in its own header and in commands/ct-status.md: «se informa de lo
-// que sí se sabe». So both reads are ALWAYS ATTEMPTED and whatever came out
+// report came out empty under a footer that closed with «what is above is
+// only what it did manage to check»… and above it there was nothing. (Back
+// then the footer counted «2 reads not completed»; today it counts warnings,
+// which is the exact thing — see ct-status.mjs.) It contradicts the contract
+// that command publishes in its own header and in commands/ct-status.md: what
+// IS known is reported. So both reads are ALWAYS ATTEMPTED and whatever came out
 // right is returned together with the reasons for whatever did not:
 //
 //   { abiertos, cerrados, motivos }   motivos: [] ⇔ both reads went fine
@@ -61,7 +60,7 @@ export function loadIssues({ repo, gh }) {
     open = realIssuesOnly(flattenIssuePages(JSON.parse(
       gh(['api', `repos/${repo}/issues`, '--method', 'GET', '-f', 'state=open', '-f', 'per_page=100', '--paginate', '--slurp']))))
   } catch (e) {
-    reasons.push(`no se pudieron listar issues abiertos de ${repo}: ${e.message}`)
+    reasons.push(`could not list open issues of ${repo}: ${e.message}`)
   }
 
   let closed = []
@@ -102,7 +101,7 @@ export function loadIssues({ repo, gh }) {
       stateReason: i.state_reason ? String(i.state_reason).toUpperCase() : null,
     }))
   } catch (e) {
-    reasons.push(`no se pudieron listar issues cerrados de ${repo}: ${e.message}`)
+    reasons.push(`could not list closed issues of ${repo}: ${e.message}`)
   }
 
   return { abiertos: open, cerrados: closed, motivos: reasons }

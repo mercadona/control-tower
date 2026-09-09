@@ -766,7 +766,7 @@ export function formatFindings(findings, { where = 'this repo', ackProblems = []
     for (const f of live) {
       out.push(`  · [${f.id}] ${f.title}`)
       for (const e of f.evidence.slice(0, 6)) {
-        const via = e.via ? ` (enlazado desde ${e.via})` : ''
+        const via = e.via ? ` (linked from ${e.via})` : ''
         out.push(`      ${e.path}${e.line ? `:${e.line}` : ''}${via} — ${e.text}`)
       }
       if (f.evidence.length > 6) out.push(`      (+${f.evidence.length - 6} more)`)

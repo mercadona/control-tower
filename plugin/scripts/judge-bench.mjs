@@ -151,7 +151,7 @@ class Program {
         console.log(`# ${judgeRun.caseName} #${judgeRun.attempt}`)
         console.log(`cd ${shQuote(judgeRun.cwd)} && ${ClaudeRunner.BINARY} ${judgeRun.argv.map(shQuote).join(' ')}`)
       }
-      console.error(`dry-run: ${cases.length} caso(s) × ${args.runs} run(s) preparados en ${workspaceRoot}; nada ejecutado.`)
+      console.error(`dry-run: ${cases.length} case(s) × ${args.runs} run(s) prepared in ${workspaceRoot}; nothing executed.`)
       return ExitCode.ALL_HIT
     }
     if (!ClaudeRunner.isInstalled()) {

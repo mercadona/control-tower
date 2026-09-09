@@ -41,7 +41,7 @@ const SPEC_REF_OK = { path: 'spec.md', heading: '9. Slices', url: specUrl('spec.
 // their only divergence is the one they mean to test — and writing it by hand,
 // instead of calling renderSpecLink, is what makes these tests fail if the
 // format changes by accident.
-const SPEC_LINK_LINE = (n) => `> Slice \`#${n}\` del epic. Spec: [spec.md § 9. Slices](${specUrl('spec.md')})`
+const SPEC_LINK_LINE = (n) => `> Slice \`#${n}\` of the epic. Spec: [spec.md § 9. Slices](${specUrl('spec.md')})`
 
 // matchingBody(): the EXACT body ONE_SLICE_SPEC produces today — generated
 // with the real buildIssueBody (not by hand), so that this file's "it matches
@@ -644,7 +644,7 @@ describe('ct-groom (real run) — the link to the spec is the SAME however it is
       milestone: { title: 'Epic' },
       labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }],
       // The EXACT line the previous version of groom.js produced.
-      body: matchingBody().replace(/^> Slice .*$/m, '> Slice `#1` del epic. Spec: [spec.md#9](spec.md#9)'),
+      body: matchingBody().replace(/^> Slice .*$/m, '> Slice `#1` of the epic. Spec: [spec.md#9](spec.md#9)'),
     }
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {
       FAKE_GH_MILESTONES_LIST: JSON.stringify([{ title: 'Epic', number: 7 }]),
@@ -665,7 +665,7 @@ describe('ct-groom (real run) — the link to the spec is the SAME however it is
       labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }],
       body: buildIssueBody(
         { n: 1, name: 'login', type: 'backend', entrega: 'modelo', deps: [], ac: ['AC-1.1'], protected: 'schema' },
-        { path: 'docs/viejo.md', heading: '9. Slices', url: specUrl('docs/viejo.md'), reason: null },
+        { path: 'docs/old.md', heading: '9. Slices', url: specUrl('docs/old.md'), reason: null },
       ),
     }
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {

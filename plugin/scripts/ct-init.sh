@@ -1613,17 +1613,17 @@ fi
 # purpose: it is not an alarm about a conflict, it is material for a decision,
 # just like the "creado ..." lines. (And there is a test that requires the
 # second run not to write a single "aviso" over stderr.)
-VARA_STATUS=0
-VARA_OUT=''
+YARDSTICK_STATUS=0
+YARDSTICK_OUT=''
 if command -v node >/dev/null 2>&1; then
-  VARA_OUT="$(node "$HERE/scripts/detect-yardstick.mjs" "$TARGET" 2>/dev/null)" || VARA_STATUS=$?
+  YARDSTICK_OUT="$(node "$HERE/scripts/detect-yardstick.mjs" "$TARGET" 2>/dev/null)" || YARDSTICK_STATUS=$?
 else
-  VARA_STATUS=127
+  YARDSTICK_STATUS=127
 fi
-if [ "$VARA_STATUS" -ne 0 ]; then
-  echo "no se ha podido barrer este repo en busca de candidatos a la vara (.agent/conventions.md): la comprobación necesita \`node\` y no se ha podido ejecutar (estado $VARA_STATUS). NO lo leas como \"este repo no tiene convenciones escritas\": no se ha mirado." >&2
-elif [ -n "$VARA_OUT" ]; then
-  printf '%s\n' "$VARA_OUT"
+if [ "$YARDSTICK_STATUS" -ne 0 ]; then
+  echo "could not sweep this repo for yardstick candidates (.agent/conventions.md): the check needs \`node\` and could not be run (status $YARDSTICK_STATUS). Do NOT read it as \"this repo has no written conventions\": nobody looked." >&2
+elif [ -n "$YARDSTICK_OUT" ]; then
+  printf '%s\n' "$YARDSTICK_OUT"
 fi
 
 # F11, part B: until now ct-init bootstrapped ON TOP OF whatever conventions

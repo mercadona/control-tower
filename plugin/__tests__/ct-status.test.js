@@ -111,7 +111,7 @@ describe('/ct-status', () => {
     expect(res.status).toBe(1)
     expect(res.stdout).toMatch(/IN FLIGHT \(1\)/)
     expect(res.stdout).toMatch(/#7\s+refresh/)
-    expect(res.stderr).toMatch(/no se pudieron listar issues cerrados/)
+    expect(res.stderr).toMatch(/could not list closed issues/)
     // And only ONE of the two reads has been lost, not both.
     expect(res.stdout).toMatch(/exit 1 — 1 warning\(s\)/)
     cleanUp(b)
@@ -171,7 +171,7 @@ describe('/ct-status', () => {
     const res = run(b, { FAKE_GH_LIST_SEQUENCE: inProgress7(), FAKE_GH_TIMELINE_JSON: ago(3 * 3600_000), FAKE_GH_LIST_FAIL_AT: '1' })
     expect(res.status).toBe(1)
     expect(res.stderr).not.toMatch(/in \.worktrees\//)
-    expect(res.stderr).toMatch(/no se pudieron listar issues cerrados/)
+    expect(res.stderr).toMatch(/could not list closed issues/)
     expect(res.stdout).toMatch(/exit 1 — 1 warning\(s\)/)
     expect(res.stdout).not.toMatch(/at rest/i)
     cleanUp(b)
@@ -294,7 +294,7 @@ describe('/ct-status', () => {
     expect(res.status).toBe(1)
     expect(res.stdout).toMatch(/process \?/)
     expect(res.stdout).not.toMatch(/NO SIGN OF LIFE/)
-    expect(res.stderr).toMatch(/no se pudo listar procesos con ps/)
+    expect(res.stderr).toMatch(/could not list processes with ps/)
     cleanUp(b)
   })
 
@@ -483,7 +483,7 @@ describe('/ct-status — the sign of life in the residue block', () => {
       // really be done on this machine: if `lsof` is missing, the command
       // stays quiet, and that is exactly what the assertion above already
       // protects.
-      if (!/no se pudo (listar procesos|leer el directorio)/.test(res.stderr)) {
+      if (!/could not (list processes|read the working directory)/.test(res.stderr)) {
         expect(res.stdout).toMatch(new RegExp(`CAREFUL: there is a process working inside right now \\(pid ${child.pid}\\)`))
       }
     } finally {

@@ -108,7 +108,7 @@ describe('diffDeps / diffAc — structured comparison of the sections the dispat
 // F10: today's canonical line — an absolute URL (a relative one = 404 from an
 // issue's page, verified) and the anchor of the real heading
 // ("## 9. Slices" -> "#9-slices", not "#9").
-const SPEC_LINK = '> Slice #2 del epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)'
+const SPEC_LINK = '> Slice #2 of the epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)'
 const WANTED_ISSUE = {
   order: 2, title: '#2 refresh token', labels: ['type:backend', 'status:backlog'],
   deps: [1], ac: ['AC-2.1'], descripcion: 'flujo de refresco', protectedLine: '- 🚫 schema §6',
@@ -164,21 +164,21 @@ describe('diffIssue — it compares title, milestone, link-to-the-spec (anchor),
     expect(d.specLink).toBeNull()
   })
   it('a link to the spec at ANOTHER FILE (the spec moved) → it DOES diverge — what the anchor-only comparison did not detect', () => {
-    const movedFile = '> Slice #2 del epic. Spec: [docs/viejo.md § 9. Slices](https://github.com/o/r/blob/main/docs/viejo.md#9-slices)'
+    const movedFile = '> Slice #2 of the epic. Spec: [docs/old.md § 9. Slices](https://github.com/o/r/blob/main/docs/old.md#9-slices)'
     const d = diffIssue(existingWith({}), { ...WANTED_ISSUE, specLink: movedFile }, 'Epic', ALL_PREFIXES)
     expect(d.specLink).toEqual({ current: SPEC_LINK, wanted: movedFile })
   })
   it('a link to the spec with a different SECTION → it DOES diverge', () => {
-    const movedSection = '> Slice #2 del epic. Spec: [docs/spec.md § 10. Riesgos](https://github.com/o/r/blob/main/docs/spec.md#10-riesgos)'
+    const movedSection = '> Slice #2 of the epic. Spec: [docs/spec.md § 10. Riesgos](https://github.com/o/r/blob/main/docs/spec.md#10-riesgos)'
     const d = diffIssue(existingWith({}), { ...WANTED_ISSUE, specLink: movedSection }, 'Epic', ALL_PREFIXES)
     expect(d.specLink).toEqual({ current: SPEC_LINK, wanted: movedSection })
   })
   it('the RELATIVE link from before F10, still in an issue created back then → it DOES diverge (it was, and still is, a broken link)', () => {
     const preF10 = existingWith({
-      body: existingWith({}).body.replace(SPEC_LINK, '> Slice #2 del epic. Spec: [docs/spec.md#9](docs/spec.md#9)'),
+      body: existingWith({}).body.replace(SPEC_LINK, '> Slice #2 of the epic. Spec: [docs/spec.md#9](docs/spec.md#9)'),
     })
     const d = diffIssue(preF10, WANTED_ISSUE, 'Epic', ALL_PREFIXES)
-    expect(d.specLink).toEqual({ current: '> Slice #2 del epic. Spec: [docs/spec.md#9](docs/spec.md#9)', wanted: SPEC_LINK })
+    expect(d.specLink).toEqual({ current: '> Slice #2 of the epic. Spec: [docs/spec.md#9](docs/spec.md#9)', wanted: SPEC_LINK })
   })
   it('the link to the spec absent from the issue (a human deleted it) → current: null', () => {
     const noSpecLink = existingWith({ body: existingWith({}).body.split('\n').slice(2).join('\n') })
@@ -577,7 +577,7 @@ describe('buildReconcileBody — a surgical splice of link-to-the-spec/AC/Depend
   const SLICE = { n: 2, name: 'refresh', type: 'backend', entrega: 'flujo de refresco', deps: [1], ac: ['AC-2.1'], protected: 'schema §6' }
   const SPEC_OPTS = { path: 'spec.md', heading: '9. Slices', url: 'https://github.com/o/r/blob/main/spec.md#9-slices', reason: null }
   const GENERATED = buildIssueBody(SLICE, SPEC_OPTS)
-  const WANTED_BASE = { deps: [1], ac: ['AC-2.1'], specLink: '> Slice `#2` del epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/spec.md#9-slices)' }
+  const WANTED_BASE = { deps: [1], ac: ['AC-2.1'], specLink: '> Slice `#2` of the epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/spec.md#9-slices)' }
 
   it('no divergence of anything → body: null, no giving-up marked (nothing to apply)', () => {
     const r = buildReconcileBody(GENERATED, WANTED_BASE)
@@ -685,7 +685,7 @@ describe('buildReconcileBody — a surgical splice of link-to-the-spec/AC/Depend
   // (unresolvedDeps: true), just as AC already did, and it does NOT touch the
   // body.
   it('with no locatable "## Out of scope / Protected" (no safe anchor) → it GIVES UP: unresolvedDeps true, body unchanged as far as deps go', () => {
-    const noProtected = '> Slice `#2` del epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/spec.md#9-slices)\n\n## Acceptance criteria (EARS, 1:1 con tests)\n- AC-2.1\n\n<!-- ct-order:2 -->'
+    const noProtected = '> Slice `#2` of the epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/spec.md#9-slices)\n\n## Acceptance criteria (EARS, 1:1 con tests)\n- AC-2.1\n\n<!-- ct-order:2 -->'
     const r = buildReconcileBody(noProtected, { ...WANTED_BASE, deps: [5] })
     expect(r.unresolvedDeps).toBe(true)
     expect(r.body).toBeNull() // nothing else diverged (AC/specLink already matched) → null throughout
@@ -700,7 +700,7 @@ describe('buildReconcileBody — a surgical splice of link-to-the-spec/AC/Depend
   // times, without ever inserting anything.
   it('an unclosed fence (the Protected anchor unfindable) → three successive "runs" give up all three times, without growing without bound', () => {
     const withUnclosedFence = [
-      '> Slice `#2` del epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/spec.md#9-slices)', '',
+      '> Slice `#2` of the epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/spec.md#9-slices)', '',
       '## Descripción', '```', 'esta valla nunca se cierra', '',
       '## Acceptance criteria (EARS, 1:1 con tests)', '- AC-2.1', '',
       '<!-- ct-order:2 -->',
@@ -731,7 +731,7 @@ describe('buildReconcileBody — a surgical splice of link-to-the-spec/AC/Depend
   // from the repository, not from argv), so a difference can now only mean a
   // real change (another section, another file, or the broken relative link
   // from before F10).
-  const OTHER_SECTION = '> Slice `#2` del epic. Spec: [spec.md § 10. Riesgos](https://github.com/o/r/blob/main/spec.md#10-riesgos)'
+  const OTHER_SECTION = '> Slice `#2` of the epic. Spec: [spec.md § 10. Riesgos](https://github.com/o/r/blob/main/spec.md#10-riesgos)'
   it('a link to the spec with another section → the line is replaced, everything else preserved', () => {
     const { body: newBody } = buildReconcileBody(GENERATED, { ...WANTED_BASE, specLink: OTHER_SECTION })
     expect(extractSpecLink(newBody)).toBe(OTHER_SECTION)
@@ -739,7 +739,7 @@ describe('buildReconcileBody — a surgical splice of link-to-the-spec/AC/Depend
     expect(extractDeps(newBody)).toEqual([1])
     expect(newBody).toContain('<!-- ct-order:2 -->')
   })
-  const OTHER_FILE = '> Slice `#2` del epic. Spec: [docs/viejo.md § 9. Slices](https://github.com/o/r/blob/main/docs/viejo.md#9-slices)'
+  const OTHER_FILE = '> Slice `#2` of the epic. Spec: [docs/old.md § 9. Slices](https://github.com/o/r/blob/main/docs/old.md#9-slices)'
   it('a link to the spec at another file (the same section) → it is ALSO replaced — before F10 this was never touched', () => {
     const { body: newBody } = buildReconcileBody(GENERATED, { ...WANTED_BASE, specLink: OTHER_FILE })
     expect(extractSpecLink(newBody)).toBe(OTHER_FILE)
@@ -757,7 +757,7 @@ describe('buildReconcileBody — a surgical splice of link-to-the-spec/AC/Depend
 
   it('reconciling deps with a mention of "## Dependencias" inside a fence in Descripción does not corrupt the fence', () => {
     const withFence = [
-      '> Slice `#2` del epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/spec.md#9-slices)', '',
+      '> Slice `#2` of the epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/spec.md#9-slices)', '',
       '## Descripción', 'Ejemplo:', '```', '## Dependencias', '- merge-after #99', '```', 'fin.', '',
       '## Acceptance criteria (EARS, 1:1 con tests)', '- AC-2.1', '',
       '## Dependencias', '- merge-after #1', '',
@@ -777,7 +777,7 @@ describe('buildReconcileBody — a surgical splice of link-to-the-spec/AC/Depend
   // lose their closing "-->".
   it('reconciling deps with a mention of "## Dependencias" inside a multi-line HTML comment corrupts neither the comment nor loses its closing', () => {
     const withComment = [
-      '> Slice `#2` del epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/spec.md#9-slices)', '',
+      '> Slice `#2` of the epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/spec.md#9-slices)', '',
       '## Descripción', 'Ejemplo:', '<!--', '## Dependencias', '- merge-after #99 (pospuesto, negociado con pagos)', '-->', 'fin.', '',
       '## Acceptance criteria (EARS, 1:1 con tests)', '- AC-2.1', '',
       '## Dependencias', '- merge-after #1', '',
@@ -846,7 +846,7 @@ describe('buildReconcileBody — the "## E2E" section', () => {
   const SPEC_OPTS = { path: 'spec.md', heading: '9. Slices', url: 'https://github.com/o/r/blob/main/spec.md#9-slices', reason: null }
   const WITHOUT_E2E = buildIssueBody(SLICE, SPEC_OPTS)
   const WITH_E2E = buildIssueBody({ ...SLICE, e2e: 'curl -i :9115/metrics responde 200' }, SPEC_OPTS)
-  const WANTED_BASE = { deps: [1], ac: ['AC-2.1'], specLink: '> Slice `#2` del epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/spec.md#9-slices)' }
+  const WANTED_BASE = { deps: [1], ac: ['AC-2.1'], specLink: '> Slice `#2` of the epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/spec.md#9-slices)' }
   const JOURNEY = '- curl -i :9115/metrics responde 200'
 
   it('the issue does not have the section and the spec now asks for runs → it is inserted whole, right before "## Out of scope / Protected"', () => {
@@ -949,7 +949,7 @@ describe('the signal in the reconciliation (Slice 10)', () => {
   it('buildReconcileBody neither writes nor withdraws the signal section even when it diverges', () => {
     const SLICE_S = { n: 2, name: 'refresh', type: 'backend', entrega: 'flujo de refresco', deps: [1], ac: ['AC-2.1'], protected: 'schema §6', senal: 'métrica `x` con label `y`' }
     const SPEC_OPTS = { path: 'spec.md', heading: '9. Slices', url: 'https://github.com/o/r/blob/main/spec.md#9-slices', reason: null }
-    const WANTED = { deps: [1], ac: ['AC-2.1'], specLink: '> Slice `#2` del epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/spec.md#9-slices)' }
+    const WANTED = { deps: [1], ac: ['AC-2.1'], specLink: '> Slice `#2` of the epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/spec.md#9-slices)' }
     // Case A: the body DOES have the section, the spec no longer declares a
     // signal, and there is a real AC divergence that forces a splice — the
     // section survives verbatim into the rewritten body.

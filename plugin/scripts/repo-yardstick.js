@@ -63,9 +63,9 @@ export function yardstickSection(content) {
 // crossing.
 // ============================================================================
 
-export const CANDIDATOS_HEADER =
-  'Candidatos a la vara de este repo (barrido determinista — PROPONE, no declara):'
-export const MAX_CANDIDATOS = 40
+export const CANDIDATES_HEADER =
+  'Yardstick candidates for this repo (deterministic sweep — it PROPOSES, it does not declare):'
+export const MAX_CANDIDATES = 40
 export const MAX_PER_DIRECTORY = 12
 
 // Repo guides, AT THE ROOT only: a `docs/AGENTS.md` is not the guide tools and
@@ -85,9 +85,9 @@ const LOOP_OWN_RE = /^\.agent\//
 const order = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
 
 // yardstickCandidates: takes the flat result of a walk over the repo
-// (`entradas`, `repo-walk.js` format: directories with a trailing `/`) and the
-// set of already declared paths (`declaredIn`), and returns
-// `{ candidatos: [{ ruta, motivo }], omitidos }`.
+// (the `entradas` list `repo-walk.js` returns: directories with a trailing
+// `/`) and the set of already declared paths (`declaredIn`), and returns
+// `{ candidates: [{ path, reason }], omitted }`.
 //
 // Three groups, each sorted with `order` so that the result is deterministic
 // whatever happens to the order of the walk:
@@ -98,11 +98,11 @@ const order = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
 //
 // `MAX_PER_DIRECTORY` caps each directory of group 2 separately —a
 // `docs/conventions/` with a hundred files must not drown the other two
-// groups—, and `MAX_CANDIDATOS` caps the whole list once grouped and sorted.
-// Whatever does not fit under either cap counts in `omitidos`; whatever is
+// groups—, and `MAX_CANDIDATES` caps the whole list once grouped and sorted.
+// Whatever does not fit under either cap counts in `omitted`; whatever is
 // discarded for being the loop's or for being declared already does NOT count
 // there: it has not been kept quiet, it was simply not up for proposing.
-export function yardstickCandidates({ entradas: entries = [], declaradas: declared = new Set() } = {}) {
+export function yardstickCandidates({ entries = [], declared = new Set() } = {}) {
   const seen = new Set()
   let omitted = 0
 
@@ -122,7 +122,7 @@ export function yardstickCandidates({ entradas: entries = [], declaradas: declar
     .filter((f) => !f.includes('/') && ROOT_RE.test(f))
     .sort(order)
     .filter((f) => admits(f))
-    .map((path) => (mark(path), { ruta: path, motivo: 'repo guide at the root' }))
+    .map((path) => (mark(path), { path, reason: 'repo guide at the root' }))
 
   // Group 2 — text files inside directories that match "rules".
   const directoryGroup = []
@@ -138,7 +138,7 @@ export function yardstickCandidates({ entradas: entries = [], declaradas: declar
     omitted += Math.max(0, dirCandidates.length - MAX_PER_DIRECTORY)
     for (const path of admitted) {
       mark(path)
-      directoryGroup.push({ ruta: path, motivo: `inside \`${dir}\`, which matches convention|rules` })
+      directoryGroup.push({ path, reason: `inside \`${dir}\`, which matches convention|rules` })
     }
   }
 
@@ -148,16 +148,16 @@ export function yardstickCandidates({ entradas: entries = [], declaradas: declar
     .sort(order)
     .filter((f) => admits(f))
     .map((path) => (mark(path), {
-      ruta: path,
-      motivo: 'project skill (it can also be declared by name in the `Skills` list)',
+      path,
+      reason: 'project skill (it can also be declared by name in the `Skills` list)',
     }))
 
   let candidates = [...rootGroup, ...directoryGroup, ...skillGroup]
-  if (candidates.length > MAX_CANDIDATOS) {
-    omitted += candidates.length - MAX_CANDIDATOS
-    candidates = candidates.slice(0, MAX_CANDIDATOS)
+  if (candidates.length > MAX_CANDIDATES) {
+    omitted += candidates.length - MAX_CANDIDATES
+    candidates = candidates.slice(0, MAX_CANDIDATES)
   }
-  return { candidatos: candidates, omitidos: omitted }
+  return { candidates, omitted }
 }
 
 // declaredIn: the set of paths `.agent/conventions.md` ALREADY declares
@@ -199,8 +199,8 @@ export function declaredIn(content) {
 // section to it (the slices-table contract with `/ct-groom`, hundreds of lines
 // of real prose). That section is real substance, but it is not a CODE
 // CONVENTION: it is the format `/ct-groom` consumes, not a style rule of the
-// repo. Without discounting it, `pareceEsqueleto` would see substance to spare
-// and would never flag the freshly created AGENTS.md — which is exactly the
+// repo. Without discounting it, `looksLikeSkeleton` would see substance to
+// spare and would never flag the freshly created AGENTS.md — which is exactly the
 // case that motivates this function.
 //
 // And the same reasoning, word for word, holds for the SECOND block
@@ -240,7 +240,7 @@ function withoutCtInitBlocks(content) {
   return out.join('\n')
 }
 
-// pareceEsqueleto: a deliberate approximation, not a markdown parser — it
+// looksLikeSkeleton: a deliberate approximation, not a markdown parser — it
 // counts lines "with substance" (non-empty, not starting with `#` and not a
 // single-line HTML comment), FIRST DISCOUNTING the slices-contract block
 // `ct-init.sh` injects (see above), and says skeleton if there are FEWER than
@@ -254,7 +254,7 @@ function withoutCtInitBlocks(content) {
 // it is F14's impossible guard under another name. A multiline HTML comment
 // counts on the inside (its inner lines neither start with `<!--` nor end with
 // `-->`) — accepted: this is an approximation, not a formal proof.
-export function pareceEsqueleto(content) {
+export function looksLikeSkeleton(content) {
   const lines = withoutCtInitBlocks(content).split('\n')
   let substance = 0
   for (const line of lines) {
@@ -267,7 +267,7 @@ export function pareceEsqueleto(content) {
   return substance < 3
 }
 
-// formatCandidatos: the block of text ready for `ct-init.sh`'s stdout, or `''`
+// formatCandidates: the block of text ready for `ct-init.sh`'s stdout, or `''`
 // if there is nothing to propose (silence = nothing to propose; see the comment
 // on `declaredIn` about why that is benign).
 //
@@ -278,14 +278,14 @@ export function pareceEsqueleto(content) {
 // `__tests__/ct-init.test.js` demands that the second run of a bootstrapped
 // repo carry no word "warning" on stderr, a run in which this block DOES have a
 // candidate (the `AGENTS.md` `ct-init` has just created).
-export function formatCandidatos(candidates, { omitidos: omitted = 0, truncated = false } = {}) {
+export function formatCandidates(candidates, { omitted = 0, truncated = false } = {}) {
   if (!candidates || candidates.length === 0) return ''
-  const out = [CANDIDATOS_HEADER]
+  const out = [CANDIDATES_HEADER]
   let hasSkeleton = false
   for (const c of candidates) {
-    const mark = c.esqueleto ? ' [skeleton: headings only]' : ''
-    if (c.esqueleto) hasSkeleton = true
-    out.push(`  · \`${c.ruta}\` — ${c.motivo}${mark}`)
+    const mark = c.skeleton ? ' [skeleton: headings only]' : ''
+    if (c.skeleton) hasSkeleton = true
+    out.push(`  · \`${c.path}\` — ${c.reason}${mark}`)
   }
   out.push(
     '  None of this has been written for you: the sweep PROPOSES and the human DECLARES. ' +

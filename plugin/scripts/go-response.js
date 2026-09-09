@@ -252,11 +252,11 @@ export function failedGoAttempt(comments, previousIds, commitment) {
 // to be able to check that it does NOT carry the nonce: that is the one thing
 // this comment cannot say, since the agent reads the issue.
 export const GO_FORMAT_REPLY = [
-  `El go de este gate es exactamente \`${GO_TOKEN} <nonce>\`: el token en mayúsculas, un espacio, y el nonce que \`/ct-next\` imprimió al despachar este slice.`,
+  `The go for this gate is exactly \`${GO_TOKEN} <nonce>\`: the token in upper case, a space, and the nonce that \`/ct-next\` printed when it dispatched this slice.`,
   '',
-  `Lo que se escribió no lo arranca, y eso es deliberado: \`${GO_TOKEN}\` a secas o con cualquier otra cosa detrás no abre el gate, para que un "ok, pero cambia el nombre" no eche a andar justo lo que se quería frenar.`,
+  `What was written does not start it, and that is deliberate: \`${GO_TOKEN}\` on its own, or with anything else behind it, does not open the gate, so that an "ok, but change the name" does not set going the very thing somebody wanted stopped.`,
   '',
-  'El nonce **no está escrito en este issue** a propósito, porque el agente lee el issue: es la parte del permiso que él no puede fabricar. Si se ha perdido, quien despachó lo reemite con `scripts/ct-go.mjs`.',
+  'The nonce is **not written in this issue** on purpose, because the agent reads the issue: it is the part of the permission it cannot manufacture. If it has been lost, whoever dispatched re-issues it with `scripts/ct-go.mjs`.',
 ].join('\n')
 
 // Is there a go among the comments that were NOT in the initial photo?

@@ -159,7 +159,7 @@ function querySession() {
 
 // The line that gets typed into the slice's session. `send` does not add Enter:
 // it has to be sent separately, measured in F20/H1.
-const LINE = `El humano ha respondido ${GO_TOKEN} en el issue #${issue}: el gate \`plan\` queda cerrado. Continúa con ct-step next.`
+const LINE = `The human answered ${GO_TOKEN} on issue #${issue}: the \`plan\` gate is closed. Continue with ct-step next.`
 
 log(`watching for the ${GO_TOKEN} of ${repo}#${issue} for the session "${session}" — tick ${pollMs} ms, deadline ${timeoutMs} ms, go ${goHash.slice(0, 12)}…`)
 

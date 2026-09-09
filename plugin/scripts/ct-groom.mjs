@@ -1016,7 +1016,7 @@ if (typeof repo === 'string') {
   // does not fire.
   //
   // The link's TARGET is compared (specTarget), not the whole line: the line
-  // starts with "> Slice `#N` del epic. " and that prefix changed format in
+  // starts with "> Slice `#N` of the epic. " and that prefix changed format in
   // F6, so comparing the whole thing would fail against any earlier issue.
   //
   // When the target is missing on either side, or differs, the gate does NOT

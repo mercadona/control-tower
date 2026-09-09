@@ -278,10 +278,10 @@ describe('the issue body says how changes are asked for', () => {
     const body = PlanIssueBody.of({ story: Opened.story(), comment: null })
 
     expect(body.split(GhPlanIssues.CHANGES_TOKEN)).toHaveLength(2)
-    expect(PlanIssueBody.CHANGES_LINE).toMatch(/comenta/)
-    expect(PlanIssueBody.CHANGES_LINE).toMatch(/cambios en el plan/)
-    expect(PlanIssueBody.CHANGES_LINE).toMatch(/lo que escribas detrás/)
-    expect(PlanIssueBody.CHANGES_LINE).toMatch(/plan rehecho/)
+    expect(PlanIssueBody.CHANGES_LINE).toMatch(/comment on this issue/)
+    expect(PlanIssueBody.CHANGES_LINE).toMatch(/changes to the plan/)
+    expect(PlanIssueBody.CHANGES_LINE).toMatch(/whatever you write after it/)
+    expect(PlanIssueBody.CHANGES_LINE).toMatch(/redone plan/)
     expect(PlanIssueBody.CHANGES_LINE).toContain(`\`${GhPlanIssues.CHANGES_TOKEN}\``)
   })
 

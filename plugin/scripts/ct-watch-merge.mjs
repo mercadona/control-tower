@@ -211,10 +211,10 @@ const consultarCoordinadora = () => {
 // on: a bare "it is already merged" would leave the person being the message bus
 // again, which is the whole problem.
 //
-// And it says "comprueba que no queda trabajo sin pushear" on purpose: the one
+// And it says "check that no unpushed work is left" on purpose: the one
 // who deletes is an agent, and what it is missing when it receives this line is
 // exactly what F20 refused to assume.
-const line = (pr) => `El PR #${pr} del slice #${issue} está mergeado: la cosecha del #${issue} está pendiente. \`.worktrees/${issue}\` y la rama \`${branch}\` siguen en disco. Comprueba que no queda trabajo sin pushear y recógelos.`
+const line = (pr) => `PR #${pr} of slice #${issue} is merged: the harvest of #${issue} is pending. \`.worktrees/${issue}\` and branch \`${branch}\` are still on disk. Check that no unpushed work is left and collect them.`
 
 log(`watching the merge of ${repo} ${branch} (slice #${issue}) for the coordinator in ${coordinatorCwd} — tick ${pollMs} ms, deadline ${timeoutMs} ms`)
 

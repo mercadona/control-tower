@@ -347,8 +347,8 @@ export class PlanIssueBody {
     /((?<![\w])[\w.-]+\/[\w.-]+#\d+|(?<![\w])#\d+|(?<![\w.])@[A-Za-z0-9][A-Za-z0-9-]*|https?:\/\/\S*github\.com\/\S+)/g
   static #CODE_SPAN = /(`[^`]*`)/
   static CHANGES_LINE =
-    `> Para pedir cambios en el plan, comenta en este issue empezando por \`${GhPlanIssues.CHANGES_TOKEN}\`: ` +
-    'lo que escribas detrás es lo que se le pide al agente, y publicará el plan rehecho aquí mismo.'
+    `> To ask for changes to the plan, comment on this issue starting with \`${GhPlanIssues.CHANGES_TOKEN}\`: ` +
+    'whatever you write after it is what gets asked of the agent, and it will publish the redone plan right here.'
 
   static #LINE_BY_KIND = new Projection('plan issue story line', [
     [UserStoryKey, (key) => `${PlanIssueBody.STORY_LINE}${PlanIssueBody.quieted(key.text)}`],
