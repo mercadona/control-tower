@@ -21,6 +21,10 @@ export class PlanContractProgress extends PlanProgress {
     return ['-C', located.path, 'status', '--porcelain', '--', PlanContractProgress.PLANS]
   }
 
+  static committedAtArgvFor(located) {
+    return ['-C', located.path, 'log', '-1', '--format=%cI', '--', PlanContractProgress.PLANS]
+  }
+
   async of({ located, issue, repository }) {
     const validated = await this.node(
       PlanContractProgress.contractArgvFor({ dispatchCheck: this.dispatchCheck, issue, repository }),
@@ -41,5 +45,17 @@ export class PlanContractProgress extends PlanProgress {
     if (pending.stdout.trim().length > 0) return PlanState.WRITING
 
     return PlanState.READY
+  }
+
+  async committedAt({ located }) {
+    const dated = await this.git(PlanContractProgress.committedAtArgvFor(located))
+    if (dated.failed) {
+      throw new PlanProgressNotRead(
+        `git log could not say when the plan of ${located.path} was committed: ${dated.stderr.trim()}`
+      )
+    }
+    const printed = dated.stdout.trim()
+
+    return printed.length === 0 ? null : printed
   }
 }

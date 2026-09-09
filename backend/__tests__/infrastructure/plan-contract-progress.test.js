@@ -5,6 +5,10 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
 import { PlanProgressNotRead } from '../../src/domain/exceptions.js'
 
+const NEVER_ASKED = () => { throw new Error('node should not be called') }
+const DISPATCH_CHECK = '/plugin/scripts/dispatch-check.mjs'
+const LOCATED = new WorkspaceLocation({ path: '/repo/.worktrees/42', branch: 'feat/42' })
+
 class ProgressDouble {
   static WORKTREE = '/repo/.worktrees/42'
   static CHECK = '/plugin/scripts/dispatch-check.mjs'
@@ -124,6 +128,41 @@ describe('PlanContractProgress', () => {
     await asked.asked()
 
     expect(asked.node).toHaveLength(1)
+  })
+})
+
+describe('when the plan was last committed', () => {
+  it('the_date_git_prints_is_the_date_it_answers', async () => {
+    const git = async () => ({ failed: false, stdout: '2026-09-09T08:55:39+02:00\n', stderr: '' })
+    const progress = new PlanContractProgress({ node: NEVER_ASKED, git, dispatchCheck: DISPATCH_CHECK })
+
+    expect(await progress.committedAt({ located: LOCATED })).toBe('2026-09-09T08:55:39+02:00')
+  })
+
+  it('a_plan_that_was_never_committed_has_no_date_instead_of_an_empty_one', async () => {
+    const git = async () => ({ failed: false, stdout: '\n', stderr: '' })
+    const progress = new PlanContractProgress({ node: NEVER_ASKED, git, dispatchCheck: DISPATCH_CHECK })
+
+    expect(await progress.committedAt({ located: LOCATED })).toBeNull()
+  })
+
+  it('it_asks_git_only_for_the_plans_path_so_another_commit_cannot_answer_for_the_plan', async () => {
+    const asked = []
+    const git = async (argv) => { asked.push(argv); return { failed: false, stdout: '\n', stderr: '' } }
+
+    await new PlanContractProgress({ node: NEVER_ASKED, git, dispatchCheck: DISPATCH_CHECK })
+      .committedAt({ located: LOCATED })
+
+    expect(asked).toEqual([[
+      '-C', LOCATED.path, 'log', '-1', '--format=%cI', '--', 'docs/superpowers/plans',
+    ]])
+  })
+
+  it('a_git_that_refuses_is_a_failure_and_not_a_missing_date', async () => {
+    const git = async () => ({ failed: true, stdout: '', stderr: 'not a git repository\n' })
+    const progress = new PlanContractProgress({ node: NEVER_ASKED, git, dispatchCheck: DISPATCH_CHECK })
+
+    await expect(progress.committedAt({ located: LOCATED })).rejects.toThrow(PlanProgressNotRead)
   })
 })
 
