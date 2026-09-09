@@ -34,6 +34,7 @@ export class PlanAgentBrief {
       `Valídalo con \`node ${dispatchCheck} ${issue.number} --repo ${named} --check-plan\` hasta exit 0.`,
       'Commitéalo: el plan viaja en el pull request, y sin commitear no cuenta como escrito.',
       `Y publícalo como comentario del issue con \`gh issue comment ${issue.number} --repo ${named}\`: es donde una persona lo lee para darte el go o para pedirte cambios, así que sin publicarlo el plan no existe para nadie más que para ti.`,
+      `Y cierra ese comentario con esta línea tal cual, que es donde una persona la lee: ${PlanIssueBody.CHANGES_LINE}`,
       `Y entonces PARA. No implementes nada, no abras pull request, no mergees, ${PlanAgentBrief.NO_NEW_WORKTREES}: ya estás en el que te prepararon.`,
     ].join('\n')
   }
@@ -49,6 +50,7 @@ export class PlanAgentBrief {
       `Revalídalo con \`node ${dispatchCheck} ${issueNumber} --repo ${named} --check-plan\` hasta exit 0,`,
       'recommitéalo, y publica el plan rehecho como comentario del issue con',
       `\`gh issue comment ${issueNumber} --repo ${named}\`, que es donde se lee para pedir el cambio siguiente.`,
+      `Y cierra ese comentario con esta línea tal cual, que es donde una persona la lee: ${PlanIssueBody.CHANGES_LINE}`,
       `Y entonces PARA otra vez: no implementes nada, no abras pull request, ${PlanAgentBrief.NO_NEW_WORKTREES}.`,
     ].join(' ')
   }

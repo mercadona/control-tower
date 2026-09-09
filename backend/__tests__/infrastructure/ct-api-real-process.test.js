@@ -305,4 +305,17 @@ describe('ct-api entrypoint', () => {
       await RunFileFixture.remove(root)
     }
   })
+
+  it('review_plan_is_mounted_in_the_real_process_and_not_only_in_the_test_server', async () => {
+    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+
+    const response = await fetch(`http://127.0.0.1:${port}/review-plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ issue: 33, repo: 'jjponz/repo-pulse', changes: 'parte la tarea 2' }),
+    })
+
+    expect(response.status).toBe(409)
+    expect((await response.json()).code).toBe('no-live-planning-session')
+  })
 })

@@ -3,6 +3,7 @@ import { SLICE_REL_PATH } from '../../../plugin/scripts/state-paths.js'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
 import { PluginYardstick } from '../../../plugin/scripts/plugin-yardstick.js'
+import { PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.js'
 
 describe('PlanAgentBrief', () => {
   const errand = () => new PlanAgentBrief({
@@ -14,6 +15,10 @@ describe('PlanAgentBrief', () => {
   it('it_points_at_the_baseline_already_measured_in_the_state_file_instead_of_ordering_one', () => {
     expect(errand()).toMatch(/baseline/)
     expect(errand()).toContain(`campo \`baseline:\` de ${SLICE_REL_PATH}`)
+  })
+
+  it('the_published_plan_ends_with_the_line_that_says_how_to_ask_it_for_changes', () => {
+    expect(errand()).toContain(PlanIssueBody.CHANGES_LINE)
   })
 
   it('it_no_longer_orders_the_ground_checked_because_the_program_cut_and_measured_the_worktree_itself', () => {
@@ -142,6 +147,10 @@ describe('PlanAgentBrief asking the agent for changes', () => {
     conventions: '/plugin/conventions',
     ctStep: '/plugin/scripts/ct-step.mjs',
   }).reviewErrandFor({ issueNumber: 42, repository: new RepositoryName('owner/name'), changes })
+
+  it('the_reworked_plan_ends_with_that_line_too_because_it_can_be_reviewed_again', () => {
+    expect(errand()).toContain(PlanIssueBody.CHANGES_LINE)
+  })
 
   it('the_errand_is_one_line_even_when_the_person_wrote_the_change_across_several', () => {
     expect(errand()).not.toContain('\n')

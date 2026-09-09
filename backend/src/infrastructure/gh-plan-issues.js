@@ -18,7 +18,7 @@ import { ChangeAsked } from '../domain/value-objects/change-asked.js'
 import { UserStoryKey } from '../domain/value-objects/user-story-key.js'
 import {
   PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed, PlanGoNotAnswered,
-  PlanChangesNotRead, PlanChangesNotUnderstood, PlanStoryNotRead, PlanStoryNotUnderstood,
+  PlanChangesNotRead, PlanChangesNotUnderstood, PlanChangesNotAsked, PlanStoryNotRead, PlanStoryNotUnderstood,
 } from '../domain/exceptions.js'
 import { Gh } from './gh.js'
 
@@ -48,6 +48,14 @@ export class GhPlanIssues extends PlanIssues {
       'issue', 'comment', String(issueNumber),
       '--repo', repository.text,
       '--body', GhPlanIssues.goBodyFor(nonce),
+    ]
+  }
+
+  static changesCommentArgvFor({ issueNumber, repository, changes }) {
+    return [
+      'issue', 'comment', String(issueNumber),
+      '--repo', repository.text,
+      '--body', `${GhPlanIssues.CHANGES_TOKEN} ${PlanIssueBody.quieted(changes)}`,
     ]
   }
 
@@ -219,6 +227,16 @@ export class GhPlanIssues extends PlanIssues {
     )
     if (outcome.failed) {
       throw new PlanGoNotAnswered(`${Gh.BIN} issue comment failed: ${outcome.stderr.trim()}`)
+    }
+  }
+
+  async askChanges({ issue, repository, changes }) {
+    const outcome = await this.gh.run(
+      GhPlanIssues.changesCommentArgvFor({ issueNumber: issue.number, repository, changes }),
+      { safeToRepeat: false }
+    )
+    if (outcome.failed) {
+      throw new PlanChangesNotAsked(`${Gh.BIN} issue comment failed: ${outcome.stderr.trim()}`)
     }
   }
 
