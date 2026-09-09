@@ -123,6 +123,19 @@ Spanish and keep their filenames.
 forward, and the same applies to git history: past commit messages stay as they
 were written and nothing here rewrites them.
 
+## Start every issue in the Project
+
+Before editing files or running an implementation command for a GitHub issue,
+add its canonical URL to Project 16 and set its item status to `In Progress`:
+
+```sh
+gh project item-add 16 --owner mercadona --url "<issue URL>" --format json
+gh project item-edit 16 --owner mercadona --url "<issue URL>" --field "Status" --value "In Progress" --format json
+```
+
+The add is safe if the auto-add workflow already added the item. If either
+command fails, stop before implementation and report the Project error.
+
 ## What to do when you are unsure
 
 - **Is this string read by a person using the product?** If yes, Spanish. If it
