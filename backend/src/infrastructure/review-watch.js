@@ -88,7 +88,6 @@ export class ReviewWatch {
   }
 
   #note(watch, changes) {
-    if (this.log === undefined) return
     for (const change of changes) {
       if (change.askedAt === null) continue
       this.log.noted({ issue: watch.issue.number, repository: watch.repository, at: change.askedAt })

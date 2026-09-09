@@ -462,6 +462,7 @@ describe('ReviewWatch delivering while the gate can close underneath it', () => 
         sleep: () => Promise.resolve(),
         stderr: (line) => this.warnings.push(line),
         label: WatchDouble.LABEL,
+        log: new MemoryReviewLog(),
       })
 
       return this.watch.start(WatchDouble.SUBJECT)
