@@ -24,7 +24,7 @@ export class DetachedRun {
 
   constructor({ bin, budgetMs, env }) {
     this.bin = bin
-    this.cap = budgetMs
+    this.budgetMs = budgetMs
     this.env = env
   }
 
@@ -46,7 +46,7 @@ export class DetachedRun {
       throw new PlanAgentNotLaunched(`spawn assigned no pid to ${JSON.stringify(this.bin)}`)
     }
     const pid = child.pid
-    const timer = setTimeout(() => DetachedRun.#killGroupUnlessAlreadyGone(pid), this.cap)
+    const timer = setTimeout(() => DetachedRun.#killGroupUnlessAlreadyGone(pid), this.budgetMs)
     timer.unref()
     child.on('exit', () => clearTimeout(timer))
     child.unref()

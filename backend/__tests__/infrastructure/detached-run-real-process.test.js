@@ -9,6 +9,8 @@ import { DetachedRun } from '../../src/infrastructure/detached-run.js'
 import { PlanAgentNotLaunched } from '../../src/domain/exceptions.js'
 
 class Files {
+  static PROBE_FLAG = 'a'
+
   static named() {
     const directory = mkdtempSync(join(tmpdir(), 'ct-detached-run-'))
 
@@ -16,7 +18,7 @@ class Files {
   }
 
   static lowestFreeDescriptorProbedAgainst(path) {
-    const fd = openSync(path, DetachedRun.APPEND)
+    const fd = openSync(path, Files.PROBE_FLAG)
     closeSync(fd)
 
     return fd
@@ -83,8 +85,14 @@ class Child {
     }
   }
 
+  static trackedGroup(pid) {
+    Child.#groupsStarted.push(pid)
+
+    return pid
+  }
+
   static tracked(startedRun) {
-    Child.#groupsStarted.push(startedRun.pid)
+    Child.trackedGroup(startedRun.pid)
 
     return startedRun
   }
@@ -199,7 +207,7 @@ describe('DetachedRun', () => {
     const files = Files.named()
     const run = Child.running()
 
-    const started = Child.tracked(
+    Child.tracked(
       run.start({ argv: Child.printing(Child.MARKER), cwd: process.cwd(), out: files.out, err: files.err })
     )
 
@@ -279,11 +287,11 @@ describe('DetachedRun', () => {
     expect(printed).toBe('trapped-sigterm')
   })
 
-  it('a_call_that_finishes_inside_its_cap_is_never_signalled', async () => {
+  it('a_call_that_finishes_inside_its_cap_leaves_its_own_exit_code_in_out', async () => {
     const files = Files.named()
     const run = Child.running(5_000)
 
-    const started = Child.tracked(
+    Child.tracked(
       run.start({ argv: Child.exitingCleanly(), cwd: process.cwd(), out: files.out, err: files.err })
     )
 
@@ -375,11 +383,10 @@ describe('DetachedRun', () => {
       return text.length > 0 ? text : null
     })
 
-    const nodeOwnDiagnosticForThatBinary = await new Promise((resolve) => {
-      spawn('ct-detached-run-missing-binary', []).once('error', (failure) => resolve(failure.message))
-    })
+    const nodeOwnDiagnosticCapturedByHandFromASeparateSpawnOfTheSameMissingBinary =
+      'spawn ct-detached-run-missing-binary ENOENT\n'
 
-    expect(writtenToErr).toBe(`${nodeOwnDiagnosticForThatBinary}\n`)
+    expect(writtenToErr).toBe(nodeOwnDiagnosticCapturedByHandFromASeparateSpawnOfTheSameMissingBinary)
   })
 
   it('what_was_already_in_either_file_survives_because_the_call_opens_both_to_append', async () => {
@@ -495,7 +502,7 @@ describe('DetachedRun', () => {
     })
 
     const launchedPid = Number(stdout.trim())
-    if (Number.isInteger(launchedPid) && launchedPid > 0) Child.tracked({ pid: launchedPid })
+    if (Number.isInteger(launchedPid) && launchedPid > 0) Child.trackedGroup(launchedPid)
 
     expect(stderr).toBe('')
     expect(result).toEqual({ exited: true, code: 0 })
