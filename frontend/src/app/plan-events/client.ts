@@ -3,13 +3,11 @@ import {
   PlanEventsListener,
   PlanEventsSubscription,
   PlanFailure,
-  PlanState,
 } from 'app/plan-events/PlanEvents.types'
 
 const PATH = '/plan-events'
 const MESSAGE_EVENT = 'message'
 const FAILURE_EVENT = 'error'
-const LAST_STATE: PlanState = 'ready'
 
 const carriesData = (event: Event): event is MessageEvent<string> => 'data' in event
 
@@ -24,7 +22,6 @@ const watch = (issue: number, repo: string, listener: PlanEventsListener): PlanE
 
   source.addEventListener(MESSAGE_EVENT, (event: MessageEvent<string>) => {
     const { state } = JSON.parse(event.data) as PlanEvent
-    if (state === LAST_STATE) settle()
     listener.onState(state)
   })
 

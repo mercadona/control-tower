@@ -20,11 +20,13 @@ class FakeEventSource extends EventTarget {
   }
 
   receive(data: string) {
+    if (this.readyState === FakeEventSource.CLOSED) return
     this.readyState = FakeEventSource.OPEN
     this.dispatchEvent(new MessageEvent('message', { data }))
   }
 
   failWith(data: string) {
+    if (this.readyState === FakeEventSource.CLOSED) return
     this.dispatchEvent(new MessageEvent('error', { data }))
   }
 
