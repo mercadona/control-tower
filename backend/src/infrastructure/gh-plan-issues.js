@@ -15,9 +15,10 @@ import { PlanIssues } from '../domain/ports/plan-issues.js'
 import { PlanIssue } from '../domain/value-objects/plan-issue.js'
 import { PlanIssueStatus } from '../domain/value-objects/plan-issue-status.js'
 import { ChangeAsked } from '../domain/value-objects/change-asked.js'
+import { UserStoryKey } from '../domain/value-objects/user-story-key.js'
 import {
   PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed, PlanGoNotAnswered,
-  PlanChangesNotRead, PlanChangesNotUnderstood,
+  PlanChangesNotRead, PlanChangesNotUnderstood, PlanStoryNotRead, PlanStoryNotUnderstood,
 } from '../domain/exceptions.js'
 import { Gh } from './gh.js'
 
@@ -221,6 +222,41 @@ export class GhPlanIssues extends PlanIssues {
     }
   }
 
+  static storyArgvFor({ issueNumber, repository }) {
+    return ['issue', 'view', String(issueNumber), '--repo', repository.text, '--json', 'body']
+  }
+
+  async storyOf({ issueNumber, repository }) {
+    const outcome = await this.gh.run(
+      GhPlanIssues.storyArgvFor({ issueNumber, repository }), { safeToRepeat: true }
+    )
+    if (outcome.failed) {
+      throw new PlanStoryNotRead(
+        `${Gh.BIN} issue view --json body failed: ${outcome.stderr.trim()}`
+      )
+    }
+
+    return PlanIssueBody.storyIn(GhPlanIssues.#viewIn(outcome.stdout, issueNumber))
+  }
+
+  static #viewIn(printed, issueNumber) {
+    let view
+    try {
+      view = JSON.parse(printed)
+    } catch {
+      throw new PlanStoryNotUnderstood(
+        `${Gh.BIN} issue view --json body printed something that is not json for #${issueNumber}: ${JSON.stringify(printed)}`
+      )
+    }
+    if (view === null || typeof view.body !== 'string') {
+      throw new PlanStoryNotUnderstood(
+        `${Gh.BIN} issue view --json body printed no body for #${issueNumber}: ${JSON.stringify(printed)}`
+      )
+    }
+
+    return view
+  }
+
   async statusOf({ issueNumber, repository }) {
     const outcome = await this.gh.run(
       GhPlanIssues.labelsArgvFor({ issueNumber, repository }), { safeToRepeat: true }
@@ -280,6 +316,7 @@ export class PlanIssueBody {
   static COMMENT_SECTION = 'Comentario de quien pide el plan'
   static COMMENT_HEADING = `## ${PlanIssueBody.COMMENT_SECTION}`
   static NO_STORY_LINE = '> Plan pedido a mano: no hay historia de usuario en Jira.'
+  static STORY_LINE = '> Historia de usuario: '
   static NO_STORY_EPIC_CONTEXT = '_El plan no viene de una historia de usuario de Jira._'
   static NO_HEADLINE = '_El comentario no trae una primera línea que resuma lo que se pide._'
   static HEADLINE_LIMIT = 72
@@ -293,6 +330,14 @@ export class PlanIssueBody {
 
   static labels({ story, comment }) {
     return [...gateLabels(gatesOf(PlanIssueBody.rowFor({ story, comment })).gates), GhPlanIssues.READY_LABEL]
+  }
+
+  static storyIn({ body }) {
+    const named = body.split('\n').find((line) => line.startsWith(PlanIssueBody.STORY_LINE))
+    if (named === undefined) return null
+    const key = named.slice(PlanIssueBody.STORY_LINE.length).trim()
+
+    return UserStoryKey.isWellFormed(key) ? new UserStoryKey(key) : null
   }
 
   static titleFor({ story, comment }) {
@@ -344,7 +389,7 @@ export class PlanIssueBody {
     const row = PlanIssueBody.rowFor({ story, comment })
 
     return [
-      story === null ? PlanIssueBody.NO_STORY_LINE : `> Historia de usuario: ${story.key}`,
+      story === null ? PlanIssueBody.NO_STORY_LINE : `${PlanIssueBody.STORY_LINE}${story.key}`,
       PlanIssueBody.CHANGES_LINE,
       '',
       PlanIssueBody.DESCRIPTION_HEADING,

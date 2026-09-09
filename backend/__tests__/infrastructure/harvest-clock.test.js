@@ -135,6 +135,13 @@ class Sweeping {
     return this
   }
 
+  static withAnUnreadableRegistry() {
+    const sweeping = new Sweeping({ checkouts: [], harvests: [] })
+    sweeping.known = null
+
+    return sweeping
+  }
+
   broke() {
     return this.run().catch((cause) => cause)
   }
@@ -267,6 +274,15 @@ describe('HarvestClock', () => {
 
     expect(swept.trace).toEqual(['sleep'])
     expect(swept.written).toEqual([])
+  })
+
+  it('a_registry_of_checkouts_that_cannot_be_read_stops_the_sweep_instead_of_surveying_none_of_them', async () => {
+    const swept = await Sweeping.withAnUnreadableRegistry().run()
+
+    expect(swept.trace).toEqual([Sweeping.SLEEP])
+    expect(swept.written).toEqual([
+      'harvest sweep: the registry of checkouts cannot be read, so this sweep surveys none of them\n',
+    ])
   })
 })
 

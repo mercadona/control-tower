@@ -1,5 +1,5 @@
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { readFileSync, realpathSync, statSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { setTimeout as after } from 'node:timers/promises'
 import { homedir, tmpdir } from 'node:os'
@@ -10,7 +10,8 @@ import { CmuxPlanAgents } from './cmux-plan-agents.js'
 import { AcliUserStories } from './acli-user-stories.js'
 import { GhPlanIssues } from './gh-plan-issues.js'
 import { GitWorkspace } from './git-workspace.js'
-import { MemoryCheckoutRegistry } from './memory-checkout-registry.js'
+import { DiskCheckoutRegistry } from './disk-checkout-registry.js'
+import { WorktreePlans } from './worktree-plans.js'
 import { DiskGoRegistry } from './disk-go-registry.js'
 import { DispatchCheckHarvest } from './dispatch-check-harvest.js'
 import { HarvestClock } from './harvest-clock.js'
@@ -34,6 +35,7 @@ import { ReadFixesAsked, ReadFixesAskedParams } from '../application/queries/rea
 import { ReviewPlan, ReviewPlanParams } from '../application/actions/review-plan.js'
 import { RequestFixes, RequestFixesParams } from '../application/actions/request-fixes.js'
 import { SurveyWorkspaces, SurveyWorkspacesParams } from '../application/queries/survey-workspaces.js'
+import { ReadPlanStory, ReadPlanStoryParams } from '../application/queries/read-plan-story.js'
 import { SurveyExternalTools } from '../application/queries/survey-external-tools.js'
 import { HarvestDelivery, HarvestDeliveryParams } from '../application/actions/harvest-delivery.js'
 import { ProbedToolSessions } from './probed-tool-sessions.js'
@@ -104,6 +106,17 @@ class Disk {
     } catch (failure) {
       if (failure.code === 'ENOENT') return null
       throw failure
+    }
+  }
+
+  static atomicWriteSync(path, text) {
+    mkdirSync(dirname(path), { recursive: true })
+    const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`
+    try {
+      writeFileSync(temporary, text)
+      renameSync(temporary, path)
+    } finally {
+      rmSync(temporary, { force: true })
     }
   }
 
@@ -286,7 +299,13 @@ class CtApi {
       stderr: (line) => process.stderr.write(line),
       baseline: CtApi.#baseline(),
     })
-    const checkouts = new MemoryCheckoutRegistry()
+    const checkouts = new DiskCheckoutRegistry({
+      read: (path) => readFileSync(path, 'utf8'),
+      stat: statSync,
+      write: Disk.atomicWriteSync,
+      stderr: (line) => process.stderr.write(line),
+      root: asked.stateRoot,
+    })
     const planAgents = new CmuxPlanAgents({
       run: CtApi.#tool(CmuxPlanAgents.BIN),
       write: Disk.write,
@@ -332,8 +351,17 @@ class CtApi {
     })
     const pullRequestReviews = CtApi.#pullRequestReviews(pullRequests, planIssues, planAgents, workbench)
     const runFileProgress = new RunFileProgress({ read: Disk.read, exists: Disk.exists })
+    const surveyWorkspaces = new SurveyWorkspaces({ workspace })
+    const readPlanStory = new ReadPlanStory({ planIssues })
     const recovery = new ActivePlanRecovery({
-      list: () => listCmuxWorkspaces({ requireComplete: true }),
+      plans: new WorktreePlans({
+        checkouts,
+        survey: async (root) => (await surveyWorkspaces.execute(new SurveyWorkspacesParams({ root }))).survey,
+        sessions: () => listCmuxWorkspaces({ requireComplete: true }),
+        realpathOf: Disk.realpathOf,
+        story: async (subject) => (await readPlanStory.execute(new ReadPlanStoryParams(subject))).story,
+        stderr: (line) => process.stderr.write(line),
+      }),
       implementationStarts,
       goRegistry,
       implementationProgress: runFileProgress,
@@ -341,9 +369,7 @@ class CtApi {
       reviews,
       pullRequestReviews,
       activePlans,
-      checkouts,
     })
-    await recovery.recover()
     const server = new ApiServer({
       port: asked.port,
       startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts),
@@ -375,6 +401,7 @@ class CtApi {
       CtApi.#refuseListen(`could not listen on ${LOOPBACK}: ${error.message}`)
     }
     process.stdout.write(`${JSON.stringify({ port })}\n`)
+    await recovery.recover()
     CtApi.#sweepUntilItBreaks(CtApi.#harvestClock({
       workspace, checkouts, environment, harvestTable: asked.harvestTable,
     }))

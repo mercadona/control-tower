@@ -2,6 +2,7 @@ import { join } from 'node:path'
 
 export class DiskImplementationStartRegistry {
   static DIRECTORY = 'implementation-starts'
+  static NOT_IDENTITY = ['story']
 
   constructor({ read, stat, write, root }) {
     this.read = read
@@ -48,7 +49,9 @@ export class DiskImplementationStartRegistry {
       const expected = DiskImplementationStartRegistry.recordFor(watch)
 
       return record !== null && typeof record === 'object' && !Array.isArray(record) &&
-        Object.keys(expected).every((field) => record[field] === expected[field])
+        Object.keys(expected)
+          .filter((field) => !DiskImplementationStartRegistry.NOT_IDENTITY.includes(field))
+          .every((field) => record[field] === expected[field])
     } catch {
       return false
     }

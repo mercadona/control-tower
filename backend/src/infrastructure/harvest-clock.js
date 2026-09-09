@@ -39,6 +39,10 @@ export class SweepLine {
   static forSurvey(failure) {
     return `harvest sweep: could not survey the checkout: ${failure.message}\n`
   }
+
+  static forAnUnreadableRegistry() {
+    return 'harvest sweep: the registry of checkouts cannot be read, so this sweep surveys none of them\n'
+  }
 }
 
 export class HarvestClock {
@@ -58,7 +62,13 @@ export class HarvestClock {
   }
 
   async sweep() {
-    for (const root of this.checkouts()) {
+    const roots = this.checkouts()
+    if (roots === null) {
+      this.stderr(SweepLine.forAnUnreadableRegistry())
+
+      return
+    }
+    for (const root of roots) {
       await this.#sweepCheckout(root)
     }
   }

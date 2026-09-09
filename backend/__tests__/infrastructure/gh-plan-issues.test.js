@@ -13,7 +13,7 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.j
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
 import {
   PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed, PlanGoNotAnswered, PlanIssueFailure,
-  PlanChangesNotRead, PlanChangesNotUnderstood,
+  PlanChangesNotRead, PlanChangesNotUnderstood, PlanStoryNotRead, PlanStoryNotUnderstood,
 } from '../../src/domain/exceptions.js'
 
 class GhDouble {
@@ -142,6 +142,18 @@ class GhDouble {
 
   async statusFor(issue = GhDouble.OPENED) {
     return this.issues().statusOf({ issueNumber: issue.number, repository: GhDouble.REPOSITORY })
+  }
+
+  static bodied(body) {
+    return GhDouble.printing(`${JSON.stringify({ body })}\n`)
+  }
+
+  async storyFor(issue = GhDouble.OPENED) {
+    return this.issues().storyOf({ issueNumber: issue.number, repository: GhDouble.REPOSITORY })
+  }
+
+  async storyRefusalFor(issue = GhDouble.OPENED) {
+    return this.storyFor(issue).catch((cause) => cause)
   }
 
   get commands() {
@@ -660,5 +672,49 @@ describe('GhPlanIssues reading the changes asked for on the issue', () => {
 
     expect(refusal).toBeInstanceOf(PlanChangesNotUnderstood)
     expect(refusal).not.toBeInstanceOf(PlanChangesNotRead)
+  })
+})
+
+describe('GhPlanIssues asking which user story a plan came from', () => {
+  it('asking_which_story_a_plan_came_from_reads_the_body_of_its_issue_and_nothing_else', async () => {
+    const gh = GhDouble.bodied('> Historia de usuario: MO_SHOP-42\n')
+
+    await gh.storyFor()
+
+    expect(gh.calls).toEqual([[
+      'issue', 'view', '7', '--repo', 'josemerca/ct-loop-sandbox', '--json', 'body',
+    ]])
+  })
+
+  it('the_story_of_a_plan_that_came_from_jira_is_the_key_the_line_of_its_body_names', async () => {
+    const story = await GhDouble.bodied('> Historia de usuario: MO_SHOP-42\n\n## Descripción\n').storyFor()
+
+    expect(story.text).toBe('MO_SHOP-42')
+  })
+
+  it('a_body_with_no_such_line_is_no_story_instead_of_a_made_up_one', async () => {
+    expect(await GhDouble.bodied('## Descripción\n\narreglar el login\n').storyFor()).toBeNull()
+  })
+
+  it('a_renamed_issue_still_names_the_story_its_body_carries', async () => {
+    const story = await GhDouble.bodied('> Historia de usuario: MO_SHOP-42\n').storyFor()
+
+    expect(story.text).toBe('MO_SHOP-42')
+  })
+
+  it('a_command_that_failed_travels_out_as_not_read', async () => {
+    expect(await GhDouble.refusing('gh: issue not found\n').storyRefusalFor())
+      .toBeInstanceOf(PlanStoryNotRead)
+  })
+
+  it('an_answer_that_is_not_the_shape_gh_declares_travels_out_as_not_understood', async () => {
+    const notJson = await GhDouble.printing('this is not json\n').storyRefusalFor()
+    const noBodyKey = await GhDouble.printing(`${JSON.stringify({ title: 'no body here' })}\n`).storyRefusalFor()
+    const printedNull = await GhDouble.printing('null\n').storyRefusalFor()
+
+    expect(notJson).toBeInstanceOf(PlanStoryNotUnderstood)
+    expect(noBodyKey).toBeInstanceOf(PlanStoryNotUnderstood)
+    expect(printedNull).toBeInstanceOf(PlanStoryNotUnderstood)
+    expect(notJson).not.toBeInstanceOf(PlanStoryNotRead)
   })
 })

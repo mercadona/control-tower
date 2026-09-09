@@ -263,3 +263,17 @@ describe('the issue body says how changes are asked for', () => {
     expect(asking).toBe(PlanIssueBody.CHANGES_LINE)
   })
 })
+
+describe('reading back which user story a plan issue came from', () => {
+  it('a_plan_that_came_from_a_story_is_read_back_as_that_story', () => {
+    const seen = Opened.asGithubSees({ story: Opened.story() })
+
+    expect(PlanIssueBody.storyIn(seen).text).toBe('MO_SHOP-42')
+  })
+
+  it('a_plan_asked_for_by_hand_is_read_back_as_having_no_story_because_its_body_says_so', () => {
+    const seen = Opened.asGithubSees(Opened.commentOnly('MO_SHOP-99 arreglar el login'))
+
+    expect(PlanIssueBody.storyIn(seen)).toBeNull()
+  })
+})

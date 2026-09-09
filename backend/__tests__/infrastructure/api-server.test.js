@@ -1228,8 +1228,8 @@ describe('ApiServer', () => {
     expect(recovery.recover).toHaveBeenCalledTimes(2)
   })
 
-  it('active_plans_returns_503_when_the_cmux_workspace_list_is_null', async () => {
-    const recovery = new ActivePlanRecovery({ list: () => null })
+  it('active_plans_returns_503_when_the_plans_in_flight_could_not_be_listed', async () => {
+    const recovery = new ActivePlanRecovery({ plans: { inFlight: async () => null } })
     const port = await RunningApi.listening({ recovery })
 
     const response = await fetch(`http://127.0.0.1:${port}/active-plans`)

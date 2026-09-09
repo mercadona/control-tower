@@ -42,11 +42,18 @@ class Entrypoint {
   }
 
   static async listening(environment) {
+    return (await Entrypoint.#started(environment)).port
+  }
+
+  static async #started(environment) {
     const child = spawn(process.execPath, [Entrypoint.#PATH], {
       env: { ...process.env, ...environment },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     Entrypoint.#spawned.push(child)
+    let stderr = ''
+    child.stderr.on('data', (chunk) => { stderr += chunk })
+
     return new Promise((resolve, reject) => {
       let stdout = ''
       const timer = setTimeout(() => reject(new Error(`no port line in ${stdout}`)), Entrypoint.#TIMEOUT_MS)
@@ -55,10 +62,36 @@ class Entrypoint {
         const end = stdout.indexOf('\n')
         if (end === -1) return
         clearTimeout(timer)
-        resolve(JSON.parse(stdout.slice(0, end)).port)
+        resolve({ port: JSON.parse(stdout.slice(0, end)).port, saidLater: () => stderr })
       })
       child.once('error', reject)
     })
+  }
+
+  static async recovering(environment) {
+    const started = await Entrypoint.#started(environment)
+    for (let waited = 0; waited < 60; waited += 1) {
+      if (started.saidLater().length > 0) break
+      await new Promise((wake) => setTimeout(wake, 100))
+    }
+
+    return started
+  }
+}
+
+class ACmuxWithNoWindows {
+  static SCRIPT = [
+    '#!/bin/sh',
+    'if [ "$1" = "list-windows" ]; then echo \'[]\'; exit 0; fi',
+    'exit 1',
+  ].join('\n')
+
+  static async onThePath() {
+    const directory = await mkdtemp(join(tmpdir(), 'ct-api-cmux-'))
+    const binary = join(directory, 'cmux')
+    await writeFile(binary, `${ACmuxWithNoWindows.SCRIPT}\n`, { mode: 0o755 })
+
+    return { directory, path: `${directory}:${process.env.PATH}` }
   }
 }
 
@@ -92,6 +125,26 @@ class RunFileFixture {
 describe('ct-api entrypoint', () => {
   afterEach(() => {
     Entrypoint.killAll()
+  })
+
+  it('the_plans_in_flight_are_recovered_without_waiting_for_anyone_to_ask_for_them', async () => {
+    const state = await mkdtemp(join(tmpdir(), 'ct-api-recovery-'))
+    const orphan = await mkdtemp(join(tmpdir(), 'ct-api-not-a-repo-'))
+    await mkdir(join(state, 'control-tower'), { recursive: true })
+    await writeFile(
+      join(state, 'control-tower', 'checkouts.json'),
+      `${JSON.stringify({ roots: [orphan] }, null, 2)}\n`
+    )
+    const answering = await ACmuxWithNoWindows.onThePath()
+
+    const started = await Entrypoint.recovering({
+      CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state, PATH: answering.path,
+    })
+
+    expect(started.saidLater()).toContain(`plans in flight: ${orphan}`)
+    await RunFileFixture.remove(state)
+    await RunFileFixture.remove(orphan)
+    await RunFileFixture.remove(answering.directory)
   })
 
   it('prints_the_port_it_bound_so_whoever_started_it_knows_where_to_knock', async () => {

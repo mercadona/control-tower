@@ -52,7 +52,7 @@ describe('PlanRefusal', () => {
 describe('PlanCollapse', () => {
   const FAMILIES = [
     'PlanFailure', 'UserStoryFailure', 'PlanIssueFailure', 'PlanAgentFailure', 'WorkspaceFailure',
-    'PlanProgressFailure', 'PlanChangesFailure', 'GoFailure', 'HarvestFailure',
+    'PlanProgressFailure', 'PlanChangesFailure', 'GoFailure', 'HarvestFailure', 'PlanStoryFailure',
     'ImplementationProgressFailure', 'PullRequestFailure', 'WorkbenchFailure',
   ]
 
@@ -64,6 +64,7 @@ describe('PlanCollapse', () => {
     !RESUMING_AN_AGENT.includes(name) &&
     !(thrown.prototype instanceof exceptions.PlanProgressFailure) &&
     !(thrown.prototype instanceof exceptions.PlanChangesFailure) &&
+    !(thrown.prototype instanceof exceptions.PlanStoryFailure) &&
     !(thrown.prototype instanceof exceptions.HarvestFailure) &&
     !(thrown.prototype instanceof exceptions.ImplementationProgressFailure) &&
     !(thrown.prototype instanceof exceptions.PullRequestFailure) &&
@@ -85,6 +86,13 @@ describe('PlanCollapse', () => {
     expect(PlanCollapse.declaredFailures()).not.toContain('PlanChangesNotRead')
     expect(PlanCollapse.declaredFailures()).not.toContain('PlanChangesNotUnderstood')
     expect(() => PlanCollapse.of(new exceptions.PlanChangesNotRead('gh: not authenticated')))
+      .toThrow(/no refusal declared/)
+  })
+
+  it('a_failure_of_reading_which_story_a_plan_came_from_has_no_refusal_declared_here_because_the_plan_is_recovered_without_it', () => {
+    expect(PlanCollapse.declaredFailures()).not.toContain('PlanStoryNotRead')
+    expect(PlanCollapse.declaredFailures()).not.toContain('PlanStoryNotUnderstood')
+    expect(() => PlanCollapse.of(new exceptions.PlanStoryNotRead('gh: not authenticated')))
       .toThrow(/no refusal declared/)
   })
 
