@@ -31,6 +31,6 @@ export class UserStoryUrl {
   }
 
   toString() {
-    return this.text
+    return `${this.repository.text.replace(/\//g, '__')}-${this.number}`
   }
 }

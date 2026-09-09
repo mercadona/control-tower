@@ -9,6 +9,7 @@ import { LaunchPolicy, LaunchBudget, LaunchStep } from '../../src/domain/policie
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.js'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
+import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
 import {
@@ -38,6 +39,8 @@ class CmuxDouble {
   static TAB = `ct-plan-${CmuxDouble.REPOSITORY_SLUG}-ABC-42`
   static NO_STORY_ISSUE = new PlanIssue({ number: 7, url: 'https://github.com/josemerca/ct-loop-sandbox/issues/7' })
   static NO_STORY_TAB = `ct-plan-${CmuxDouble.REPOSITORY_SLUG}-issue-7`
+  static ISSUE_URL_STORY = new UserStoryUrl('https://github.com/mercadona/control-tower/issues/141')
+  static ISSUE_URL_TAB = `ct-plan-${CmuxDouble.REPOSITORY_SLUG}-mercadona__control-tower-141`
   static NO_STORY_DIRECTORY = `${CmuxDouble.REPOSITORY_SLUG}-7`
   static PROBES_PER_SEND = 2
   static RESENDS = 1
@@ -143,6 +146,15 @@ class CmuxDouble {
     })
   }
 
+  static briefingFromAGithubIssueUrl() {
+    return new PlanBriefing({
+      story: CmuxDouble.ISSUE_URL_STORY,
+      issue: CmuxDouble.ISSUE,
+      located: new WorkspaceLocation({ path: CmuxDouble.WORKTREE, branch: 'feat/42' }),
+      repository: CmuxDouble.REPOSITORY,
+    })
+  }
+
   static briefingWithNoStory() {
     return new PlanBriefing({
       story: null,
@@ -236,6 +248,19 @@ describe('CmuxPlanAgents', () => {
       '--name', CmuxDouble.NO_STORY_TAB,
       '--cwd', CmuxDouble.WORKTREE,
       '--command', CmuxDouble.NO_STORY_TYPED,
+    ]])
+  })
+
+  it('the_tab_of_a_plan_from_a_github_issue_url_carries_no_slash_the_url_had', async () => {
+    const cmux = CmuxDouble.launched()
+
+    await cmux.launch(CmuxDouble.briefingFromAGithubIssueUrl())
+
+    expect(cmux.calls).toEqual([[
+      'new-workspace',
+      '--name', CmuxDouble.ISSUE_URL_TAB,
+      '--cwd', CmuxDouble.WORKTREE,
+      '--command', CmuxDouble.TYPED,
     ]])
   })
 

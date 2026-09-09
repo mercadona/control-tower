@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { PlanIssueBody, GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.js'
 import { UserStory } from '../../src/domain/value-objects/user-story.js'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
+import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.js'
 import { PlanComment } from '../../src/domain/value-objects/plan-comment.js'
 import { mapGhIssue, extractAc, extractOrder } from '../../../plugin/scripts/gh-issue-map.js'
 import { parseScope } from '../../../plugin/scripts/scope.js'
@@ -23,6 +24,14 @@ class Opened {
 
   static story({ summary = 'El buscador acepta acentos', description = 'como comprador quiero' } = {}) {
     return new UserStory({ key: new UserStoryKey('MO_SHOP-42'), summary, description })
+  }
+
+  static ISSUE_URL = 'https://github.com/mercadona/control-tower/issues/141'
+
+  static githubStory({
+    summary = 'El buscador acepta acentos', description = 'como comprador quiero', url = Opened.ISSUE_URL,
+  } = {}) {
+    return new UserStory({ key: new UserStoryUrl(url), summary, description })
   }
 
   static asGithubSees({ story = Opened.story(), comment = null } = {}) {
@@ -51,6 +60,12 @@ describe('PlanIssueBody', () => {
     expect(seen.status).toBe('ready')
     expect(seen.gates).toEqual(['plan'])
     expect(seen.gatesDeclared).toBe(true)
+  })
+
+  it('the_dispatcher_reads_the_title_of_a_plan_from_a_github_issue_whole_because_it_does_not_start_with_a_bare_number', () => {
+    const seen = Opened.asTheDispatcherReadsIt(Opened.githubStory())
+
+    expect(seen.name).toBe('mercadona/control-tower#141 El buscador acepta acentos')
   })
 
   it('with_no_order_marker_the_dispatcher_falls_back_to_the_issue_number_so_two_userStories_never_collide', () => {
@@ -146,6 +161,11 @@ describe('PlanIssueBody', () => {
   it('the_title_names_the_story_because_without_a_slice_table_there_is_no_order_to_name', () => {
     expect(PlanIssueBody.titleFor({ story: Opened.story(), comment: null }))
       .toBe('MO_SHOP-42 El buscador acepta acentos')
+  })
+
+  it('the_title_of_a_plan_from_a_github_issue_names_it_by_repository_and_number_not_by_its_url', () => {
+    expect(PlanIssueBody.titleFor({ story: Opened.githubStory(), comment: null }))
+      .toBe('mercadona/control-tower#141 El buscador acepta acentos')
   })
 
   it('every_section_the_plugin_writes_and_we_can_fill_is_there_in_the_order_it_writes_them', () => {
@@ -259,21 +279,47 @@ describe('the issue body says how changes are asked for', () => {
   it('what_it_says_is_the_second_line_of_the_issue_because_that_is_where_it_gets_read', () => {
     const [story, asking] = PlanIssueBody.of({ story: Opened.story(), comment: null }).split('\n')
 
-    expect(story).toBe(`> Historia de usuario: ${Opened.story().key}`)
+    expect(story).toBe(`> Historia de usuario: ${Opened.story().key.text}`)
     expect(asking).toBe(PlanIssueBody.CHANGES_LINE)
+  })
+
+  it('the_first_line_of_a_plan_from_a_github_issue_names_it_by_url_backticked_so_it_posts_no_cross_reference', () => {
+    const [story] = PlanIssueBody.of({ story: Opened.githubStory(), comment: null }).split('\n')
+
+    expect(story).toBe(`> Issue de GitHub: \`${Opened.ISSUE_URL}\``)
   })
 })
 
 describe('reading back which user story a plan issue came from', () => {
-  it('a_plan_that_came_from_a_story_is_read_back_as_that_story', () => {
+  it('a_plan_that_came_from_a_jira_story_is_read_back_as_that_story', () => {
     const seen = Opened.asGithubSees({ story: Opened.story() })
 
     expect(PlanIssueBody.storyIn(seen).text).toBe('MO_SHOP-42')
+  })
+
+  it('a_plan_that_came_from_a_github_issue_url_is_read_back_as_that_same_url', () => {
+    const seen = Opened.asGithubSees({ story: Opened.githubStory() })
+
+    expect(PlanIssueBody.storyIn(seen).text).toBe(Opened.ISSUE_URL)
   })
 
   it('a_plan_asked_for_by_hand_is_read_back_as_having_no_story_because_its_body_says_so', () => {
     const seen = Opened.asGithubSees(Opened.commentOnly('MO_SHOP-99 arreglar el login'))
 
     expect(PlanIssueBody.storyIn(seen)).toBeNull()
+  })
+
+  it('a_story_line_pasted_inside_the_epic_context_is_not_read_back_because_only_the_first_line_counts', () => {
+    const pasted = Opened.asGithubSees(
+      Opened.commentOnly(`arreglar el buscador\n\n> Historia de usuario: MO_SHOP-99\n`)
+    )
+
+    expect(PlanIssueBody.storyIn(pasted)).toBeNull()
+  })
+
+  it('a_url_the_marker_line_wrote_backticked_is_unfenced_before_it_is_parsed_back', () => {
+    const seen = { body: `${PlanIssueBody.ISSUE_LINE}\`${Opened.ISSUE_URL}\`\n` }
+
+    expect(PlanIssueBody.storyIn(seen).text).toBe(Opened.ISSUE_URL)
   })
 })

@@ -43,12 +43,12 @@ export class GhUserStories extends UserStories {
       parsed = JSON.parse(printed)
     } catch {
       throw new UserStoryNotUnderstood(
-        `gh answered something that is not json for ${reference}, it printed ${JSON.stringify(printed)}`
+        `gh answered something that is not json for ${reference.text}, it printed ${JSON.stringify(printed)}`
       )
     }
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new UserStoryNotUnderstood(
-        `gh answered without the fields of ${reference}, it printed ${JSON.stringify(printed)}`
+        `gh answered without the fields of ${reference.text}, it printed ${JSON.stringify(printed)}`
       )
     }
 
@@ -59,7 +59,7 @@ export class GhUserStories extends UserStories {
     const written = typeof answered.title === 'string' ? answered.title.trim() : ''
     if (written.length === 0 || isNoValueCell(written)) {
       throw new UserStoryNotUnderstood(
-        `${reference} carries no title to plan with, it printed ${JSON.stringify(printed)}`
+        `${reference.text} carries no title to plan with, it printed ${JSON.stringify(printed)}`
       )
     }
 
