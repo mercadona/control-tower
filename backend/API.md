@@ -195,8 +195,9 @@ curl -s -X POST -H 'Content-Type: application/json' \
 
 ## `GET /plan-events/:issue?repo=owner/name`
 
-Server-sent events. It reports whether the plan is written and committed. The
-stream stays open until the client disconnects, and polls in the meantime.
+Server-sent events. It reports whether the plan is written, committed or being
+reworked. The stream stays open until the client disconnects, and polls in the
+meantime.
 
 It only serves an issue whose plan **this process** started or recovered. A
 restarted backend has forgotten every session it did not recover from cmux.

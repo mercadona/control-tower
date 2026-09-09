@@ -316,6 +316,7 @@ describe('ReviewWatch', () => {
       sleep: () => { slept += 1 },
       stderr: () => {},
       label: WatchDouble.LABEL,
+      log: new MemoryReviewLog(),
     })
 
     const following = watch.startRecovered(WatchDouble.SUBJECT)

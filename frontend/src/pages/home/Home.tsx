@@ -490,6 +490,7 @@ const Home = () => {
                 <PlanProgress
                   plan={workflow.plan}
                   onReady={planReady}
+                  onReviewing={planReviewing}
                   observe={false}
                 />
               </WorkflowStep>

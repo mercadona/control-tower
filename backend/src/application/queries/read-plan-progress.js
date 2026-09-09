@@ -43,16 +43,11 @@ export class ReadPlanProgress {
       this.reviewLog.lastAskedAt({ issue: params.issue.number, repository: params.repository })
     )
     if (asked === null) return false
-
-    return !ReadPlanProgress.#recommittedSince(
-      asked, await this.planProgress.committedAt({ located: params.located })
-    )
-  }
-
-  static #recommittedSince(asked, dated) {
+    const dated = await this.planProgress.committedAt({ located: params.located })
+    if (dated === null) return true
     const committed = ReadPlanProgress.#momentOf(dated)
 
-    return committed !== null && committed >= asked
+    return committed !== null && committed < asked
   }
 
   static #momentOf(dated) {
