@@ -668,11 +668,13 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 - [ ] **Step 1: Escribe el test que falla**
 
-En `backend/__tests__/infrastructure/ct-api-real-process.test.js`, con el armazón que ese fichero ya usa para arrancar el proceso real:
+En `backend/__tests__/infrastructure/ct-api-real-process.test.js`, con el armazón `Entrypoint` que ese fichero ya usa (mismo patrón que `a_whole_request_to_external_tools_...`, líneas 156-168):
 
 ```javascript
-  it('review_plan_is_reachable_on_the_real_process_and_refuses_a_plan_nobody_watches', async () => {
-    const response = await fetch(`${base}/review-plan`, {
+  it('a_whole_request_to_review_plan_reaches_the_route_the_entrypoint_wired_up', async () => {
+    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+
+    const response = await fetch(`http://127.0.0.1:${port}/review-plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ issue: 33, repo: 'jjponz/repo-pulse', changes: 'parte la tarea 2' }),
@@ -683,9 +685,11 @@ En `backend/__tests__/infrastructure/ct-api-real-process.test.js`, con el armaz�
   })
 ```
 
+Contesta 409 y no 404 porque el proceso real arranca sin ningún plan en vuelo: eso es exactamente lo que prueba que la ruta está montada y cableada.
+
 - [ ] **Step 2: Corre el test y comprueba que falla**
 
-Run: `cd backend && npx vitest run __tests__/infrastructure/ct-api-real-process.test.js -t review_plan`
+Run: `cd backend && npx vitest run __tests__/infrastructure/ct-api-real-process.test.js -t a_whole_request_to_review_plan`
 Expected: FAIL con 404 `not-found` — la ruta existe en `ApiServer` pero `ct-api.mjs` no le pasa `askPlanChanges`, o con 400 `request-failed` si llega sin acción.
 
 - [ ] **Step 3: Cablea la acción**
