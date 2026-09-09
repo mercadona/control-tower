@@ -40,8 +40,8 @@ yardstick — and this repository does not take it.
 | **Plan issue status** | Which rung of the loop's ladder the issue stands at — `backlog`, `ready`, `in-progress`, `in-review` — or none, which is a status too and not an absence |
 | **Delivery state** | What that status means once a pull request is open: waiting for a person (`in-review`), fixing what was asked (`fixing`), or nobody on it (`unattended`) |
 | **Workbench** | Where a slice goes back to when a person asks for changes; the plugin's `dispatch-check --reopen` puts it there, and the backend only decides when |
-| **External tool** | A binary Control Tower drives that carries a credential of its own: `gh`, `acli`, `claude`, `git`, `bq`. Which five, and what is asked of each, lives in `probed-tool-sessions.js` |
-| **Tool session** | Whether that credential is usable right now: `ready`, `missing`, or `unknown` when it cannot be observed from this process. `unknown` is not a failure, and the `fix` beside it repairs the credential — it presupposes the binaries are installed, which `installed` answers separately |
+| **External tool** | A binary Control Tower drives that has to be usable before work starts: `gh`, `acli`, `claude`, `git`, `bq` carry a credential of their own, and `cmux` carries the query plans are recovered with. Which six, and what is asked of each, lives in `probed-tool-sessions.js` |
+| **Tool session** | Whether what is asked of that tool works right now: `ready`, `missing`, or `unknown` when it cannot be observed from this process. `unknown` is not a failure, and the `fix` beside it repairs what was asked about — it presupposes the binaries are installed, which `installed` answers separately |
 
 ## Naming an exception family
 

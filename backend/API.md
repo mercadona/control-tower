@@ -380,6 +380,11 @@ workspaces, and without cmux it answers 503 on **every** call and never settles.
 The page must show *I cannot tell what is running* rather than *nothing is
 running*, and it must not treat this as an empty list.
 
+Why it could not be asked never reaches this answer — a person reading the page
+can do nothing with `Unknown command: workspace`. It goes to the backend's
+error channel, prefixed `plans in flight:`, in cmux's own words, and
+`GET /external-tools` answers the same question ahead of time in its `cmux` row.
+
 ```
 curl -s http://127.0.0.1:8787/active-plans
 ```
@@ -388,10 +393,15 @@ curl -s http://127.0.0.1:8787/active-plans
 
 ## `GET /external-tools`
 
-Whether the five external tools this backend drives have a usable credential
-right now. No parameters. It exists to be asked **before** starting work: until
-now each of these failed at the moment it was used, mid-flow, in the tool's own
-words.
+Whether the six external tools this backend drives can be used right now. No
+parameters. It exists to be asked **before** starting work: until now each of
+these failed at the moment it was used, mid-flow, in the tool's own words.
+
+Five of them are asked about a credential. `cmux` is asked about something else
+— whether it answers the query this backend recovers plans with — because that
+is what fails first on a machine whose cmux is too old or that is running this
+backend from outside cmux, and it fails as `GET /active-plans` answering 503
+forever.
 
 **200 OK**
 
@@ -402,10 +412,11 @@ words.
   {"tool":"claude","installed":true,"session":"unknown",
     "fix":"claude, then /login \u2014 not observable from this process"},
   {"tool":"git","installed":true,"session":"ready","fix":null},
-  {"tool":"bq","installed":true,"session":"ready","fix":null}]}
+  {"tool":"bq","installed":true,"session":"ready","fix":null},
+  {"tool":"cmux","installed":true,"session":"ready","fix":null}]}
 ```
 
-Five rows, always, in that order. `ready` is the whole verdict: `true` when no
+Six rows, always, in that order. `ready` is the whole verdict: `true` when no
 tool blocks. A tool blocks when it is not installed or its session is `missing`
 — `unknown` never blocks, or `claude` would pin the verdict to `false` forever.
 
@@ -416,9 +427,10 @@ tool blocks. A tool blocks when it is not installed or its session is `missing`
 | `unknown` | the credential cannot be observed from this process | show `fix` as guidance, never as a verdict |
 
 `installed` is a `PATH` lookup and the binary is never executed. `fix` is the
-literal repair command, and `null` exactly when the session is `ready`. It
-repairs the **credential**, so it presupposes the binaries are installed —
-which `installed` answers separately.
+literal repair, and `null` exactly when the session is `ready`. It repairs what
+was asked about — the **credential** for five of the rows, the **query** for
+`cmux` — so it presupposes the binaries are installed, which `installed`
+answers separately.
 
 How each one is asked:
 
@@ -429,6 +441,7 @@ How each one is asked:
 | `claude` | nothing | never: its login is not observable from another process |
 | `git` | `ssh -T git@github.com` | its stderr says `successfully authenticated`, **whatever the exit code** — it exits 1 on success |
 | `bq` | `gcloud auth list --filter=status:ACTIVE` | it exited 0 and named an account |
+| `cmux` | the workspace query `GET /active-plans` recovers with | it answered it conclusively |
 
 **Refusals**
 

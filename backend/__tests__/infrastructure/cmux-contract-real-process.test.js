@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { findWorkspaceByCwd, listCmuxWorkspaces } from '../../../plugin/scripts/cmux.js'
+import { CmuxWorkspaceQuery, findWorkspaceByCwd } from '../../../plugin/scripts/cmux.js'
 import { WorktreePlans } from '../../src/infrastructure/worktree-plans.js'
 import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.js'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.js'
@@ -71,7 +71,7 @@ class TheSameQuestion {
           }),
         })],
       }),
-      sessions: () => listCmuxWorkspaces({ requireComplete: true }),
+      sessions: () => CmuxWorkspaceQuery.ask({ requireComplete: true }),
       story: () => null,
       realpathOf: (path) => path,
       stderr: vi.fn(),

@@ -160,7 +160,7 @@ describe('ct-api entrypoint', () => {
 
     expect(response.status).toBe(200)
     const body = await response.json()
-    expect(body.tools.map((row) => row.tool)).toEqual(['gh', 'acli', 'claude', 'git', 'bq'])
+    expect(body.tools.map((row) => row.tool)).toEqual(['gh', 'acli', 'claude', 'git', 'bq', 'cmux'])
     expect(body.tools.every((row) => ['ready', 'missing', 'unknown'].includes(row.session))).toBe(true)
     const claude = body.tools.find((row) => row.tool === 'claude')
     expect(claude.session).toBe('unknown')

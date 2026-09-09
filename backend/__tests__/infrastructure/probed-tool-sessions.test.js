@@ -9,6 +9,7 @@ class ClientsDouble {
   constructor(answers = {}) {
     this.answers = answers
     this.calls = []
+    this.cmux = () => null
   }
 
   static allHappy() {
@@ -47,8 +48,14 @@ class ClientsDouble {
     }
   }
 
+  whoseCmux(askCmux) {
+    this.cmux = askCmux
+
+    return this
+  }
+
   sessions(lookUp = LookUpDouble.installedEverywhere()) {
-    return new ProbedToolSessions({ clients: this.clients(), lookUp })
+    return new ProbedToolSessions({ clients: this.clients(), lookUp, askCmux: () => this.cmux() })
   }
 }
 
@@ -100,7 +107,7 @@ describe('ProbedToolSessions', () => {
 
     await ClientsDouble.allHappy().sessions(lookUp).all()
 
-    expect(lookUp.calls).toEqual(['gh', 'acli', 'claude', 'git', 'bq'])
+    expect(lookUp.calls).toEqual(['gh', 'acli', 'claude', 'git', 'bq', 'cmux'])
   })
 
   it('git_is_ready_when_ssh_says_it_authenticated_even_though_it_exits_1', async () => {
@@ -212,5 +219,42 @@ describe('ProbedToolSessions', () => {
     const git = sessions.find((session) => session.tool === 'git')
     expect(git.state).toBe(SessionState.MISSING)
     expect(git.fix).toBe('add an SSH key to your GitHub account')
+  })
+
+  it('cmux_is_ready_when_it_answers_the_very_query_this_backend_recovers_plans_with', async () => {
+    const sessions = await ClientsDouble.allHappy().sessions().all()
+
+    const cmux = sessions.find((session) => session.tool === 'cmux')
+
+    expect(cmux.state).toBe(SessionState.READY)
+    expect(cmux.fix).toBeNull()
+  })
+
+  it('a_cmux_that_cannot_be_asked_is_missing_and_says_it_has_to_be_updated_and_run_from_inside', async () => {
+    const clients = ClientsDouble.allHappy().whoseCmux(
+      () => 'cmux could not be asked for its windows: Unknown command: workspace'
+    )
+
+    const sessions = await clients.sessions().all()
+
+    const cmux = sessions.find((session) => session.tool === 'cmux')
+    expect(cmux.state).toBe(SessionState.MISSING)
+    expect(cmux.fix).toBe('update cmux, and start this backend from a terminal inside cmux')
+  })
+
+  it('a_cmux_that_is_not_installed_is_missing_without_being_asked', async () => {
+    const asked = []
+    const clients = ClientsDouble.allHappy().whoseCmux(() => {
+      asked.push('cmux')
+
+      return null
+    })
+
+    const sessions = await clients.sessions(LookUpDouble.missing('cmux')).all()
+
+    const cmux = sessions.find((session) => session.tool === 'cmux')
+    expect(cmux.installed).toBe(false)
+    expect(cmux.state).toBe(SessionState.MISSING)
+    expect(asked).toEqual([])
   })
 })

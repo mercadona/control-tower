@@ -35,17 +35,22 @@ class SessionsOfCmux {
   })
 
   static DISPATCHED_TITLE = 'owner/repo \u00b7 #33 un slice del dispatcher'
+  static REFUSAL = 'cmux could not be asked for its windows: Error: ERROR: Access denied - only processes started inside cmux can connect'
 
   static attending(worktree, { ref = 'workspace:20', title = SessionsOfCmux.PLAN_TITLE } = {}) {
-    return [{ cwd: worktree, cwdKnown: true, ref, title }]
+    return SessionsOfCmux.listing([{ cwd: worktree, cwdKnown: true, ref, title }])
+  }
+
+  static listing(entries) {
+    return { entries, reason: null }
   }
 
   static none() {
-    return []
+    return SessionsOfCmux.listing([])
   }
 
   static couldNotBeListed() {
-    return null
+    return { entries: null, reason: SessionsOfCmux.REFUSAL }
   }
 }
 
@@ -100,10 +105,10 @@ describe('WorktreePlans', () => {
   })
 
   it('a_session_that_hides_its_directory_does_not_lend_its_agent_while_another_one_shows_its_own', async () => {
-    const plans = PlansOf.aWorktreeAttendedBy(() => [
+    const plans = PlansOf.aWorktreeAttendedBy(() => SessionsOfCmux.listing([
       { cwd: '/repos/one/.worktrees/33', cwdKnown: false, ref: 'workspace:20', title: SessionsOfCmux.PLAN_TITLE },
-      ...SessionsOfCmux.attending('/repos/elsewhere/.worktrees/7'),
-    ])
+      ...SessionsOfCmux.attending('/repos/elsewhere/.worktrees/7').entries,
+    ]))
 
     expect(await plans.inFlight()).toEqual([])
   })
@@ -118,6 +123,42 @@ describe('WorktreePlans', () => {
 
   it('sessions_that_could_not_be_listed_is_not_the_same_as_no_plans_in_flight', async () => {
     expect(await PlansOf.aWorktreeAttendedBy(SessionsOfCmux.couldNotBeListed).inFlight()).toBeNull()
+  })
+
+  it('when_cmux_could_not_be_asked_its_own_words_reach_the_error_channel', async () => {
+    const stderr = vi.fn()
+
+    await PlansOf.aWorktreeAttendedBy(SessionsOfCmux.couldNotBeListed, { stderr }).inFlight()
+
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining(SessionsOfCmux.REFUSAL))
+  })
+
+  it('when_no_session_exposes_its_directory_the_error_channel_says_that_is_why', async () => {
+    const stderr = vi.fn()
+    const plans = PlansOf.aWorktreeAttendedBy(
+      () => SessionsOfCmux.listing([{ cwd: null, cwdKnown: false, ref: 'workspace:20', title: SessionsOfCmux.PLAN_TITLE }]),
+      { stderr }
+    )
+
+    await plans.inFlight()
+
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining('none of them exposes its directory'))
+  })
+
+  it('when_the_checkout_registry_cannot_be_read_the_error_channel_says_that_is_why', async () => {
+    const stderr = vi.fn()
+    const plans = new WorktreePlans({
+      checkouts: { known: () => null },
+      survey: () => SurveyedCheckout.of('/repos/one', [33]),
+      sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
+      story: () => null,
+      realpathOf: (path) => path,
+      stderr,
+    })
+
+    await plans.inFlight()
+
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining('the checkouts it serves could not be read'))
   })
 
   it('the_story_it_could_not_read_leaves_the_plan_recovered_without_one', async () => {
@@ -177,7 +218,7 @@ describe('WorktreePlans', () => {
 
   it('sessions_that_all_hide_their_directory_is_not_the_same_as_no_plans_in_flight', async () => {
     const plans = PlansOf.aWorktreeAttendedBy(
-      () => [{ cwd: null, cwdKnown: false, ref: 'workspace:20', title: SessionsOfCmux.PLAN_TITLE }]
+      () => SessionsOfCmux.listing([{ cwd: null, cwdKnown: false, ref: 'workspace:20', title: SessionsOfCmux.PLAN_TITLE }])
     )
 
     expect(await plans.inFlight()).toBeNull()
@@ -276,10 +317,10 @@ describe('WorktreePlans', () => {
   })
 
   it('an_entry_that_is_not_an_object_does_not_take_the_whole_recovery_down_with_it', async () => {
-    const plans = PlansOf.aWorktreeAttendedBy(() => [
+    const plans = PlansOf.aWorktreeAttendedBy(() => SessionsOfCmux.listing([
       null,
-      ...SessionsOfCmux.attending('/repos/one/.worktrees/33'),
-    ])
+      ...SessionsOfCmux.attending('/repos/one/.worktrees/33').entries,
+    ]))
 
     const [watch] = await plans.inFlight()
 

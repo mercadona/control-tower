@@ -63,17 +63,33 @@ export class WorktreePlans {
 
   async inFlight() {
     const listed = this.sessions()
-    if (listed === null) return null
-    const knowable = WorktreePlans.#knowableIn(listed)
-    if (knowable === null) return null
+    if (listed.entries === null) {
+      this.#refuse(`cmux could not be asked: ${listed.reason}`)
+
+      return null
+    }
+    const knowable = WorktreePlans.#knowableIn(listed.entries)
+    if (knowable === null) {
+      this.#refuse('cmux listed sessions and none of them exposes its directory')
+
+      return null
+    }
     const roots = this.#toSurvey(knowable)
-    if (roots === null) return null
+    if (roots === null) {
+      this.#refuse('the checkouts it serves could not be read')
+
+      return null
+    }
     const watches = []
     for (const root of roots) {
       for (const watch of await this.#of(root, knowable)) watches.push(watch)
     }
 
     return watches
+  }
+
+  #refuse(reason) {
+    this.stderr(`plans in flight: ${reason}, so no plan in flight can be recovered\n`)
   }
 
   async #of(root, knowable) {
