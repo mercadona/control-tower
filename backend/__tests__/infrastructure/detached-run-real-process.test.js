@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { execFileSync, spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
-import { closeSync, mkdtempSync, openSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { closeSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -10,11 +10,19 @@ import { PlanAgentNotLaunched } from '../../src/domain/exceptions.js'
 
 class Files {
   static PROBE_FLAG = 'a'
+  static #directoriesCreated = []
 
   static named() {
     const directory = mkdtempSync(join(tmpdir(), 'ct-detached-run-'))
+    Files.#directoriesCreated.push(directory)
 
     return { out: join(directory, 'out.log'), err: join(directory, 'err.log') }
+  }
+
+  static reapEveryDirectoryCreated() {
+    for (const directory of Files.#directoriesCreated.splice(0)) {
+      rmSync(directory, { recursive: true, force: true })
+    }
   }
 
   static lowestFreeDescriptorProbedAgainst(path) {
@@ -30,6 +38,7 @@ class Child {
   static DEFAULT_BUDGET_MS = 30_000
   static MARKER = 'printed-by-the-child'
   static INHERITED = 'CT_DETACHED_RUN_INHERITED'
+  static GIVEN = 'CT_DETACHED_RUN_GIVEN'
   static #groupsStarted = []
   static #soloProcessesStarted = []
 
@@ -75,6 +84,10 @@ class Child {
     return execFileSync('ps', ['-o', 'pgid=', '-p', String(pid)]).toString().trim()
   }
 
+  static fd0Of(pid) {
+    return execFileSync('lsof', ['-p', String(pid), '-a', '-d', '0']).toString()
+  }
+
   static alive(pid) {
     try {
       process.kill(pid, 0)
@@ -87,8 +100,6 @@ class Child {
 
   static trackedGroup(pid) {
     Child.#groupsStarted.push(pid)
-
-    return pid
   }
 
   static tracked(startedRun) {
@@ -109,8 +120,6 @@ class Child {
 
   static trackedSolo(pid) {
     Child.#soloProcessesStarted.push(pid)
-
-    return pid
   }
 
   static killEverySoloProcessStarted() {
@@ -139,6 +148,14 @@ class Child {
       if (Date.now() > deadline) throw new Error('timed out waiting for the condition')
       await new Promise((wake) => setTimeout(wake, everyMs))
     }
+  }
+
+  static eventuallyPrinted(path, options) {
+    return Child.eventually(() => {
+      const text = readFileSync(path, 'utf8')
+
+      return text.length > 0 ? text : null
+    }, options)
   }
 }
 
@@ -176,10 +193,10 @@ class Wrapper {
     join(Wrapper.#HERE, '..', '..', 'src', 'infrastructure', 'detached-run.js')
   ).href
 
-  static callingStartAndThenDoingNothingElse({ cap, out, err }) {
+  static callingStartAndThenDoingNothingElse({ budgetMs, out, err }) {
     return ['-e', `
       import(${JSON.stringify(Wrapper.#MODULE_URL)}).then(({ DetachedRun }) => {
-        const run = new DetachedRun({ bin: process.execPath, budgetMs: ${cap}, env: undefined })
+        const run = new DetachedRun({ bin: process.execPath, budgetMs: ${budgetMs} })
         const started = run.start({
           argv: ['-e', 'setTimeout(() => {}, 60000)'],
           cwd: process.cwd(),
@@ -201,6 +218,7 @@ describe('DetachedRun', () => {
     Child.killEverySoloProcessStarted()
     Child.forgotten()
     vi.restoreAllMocks()
+    Files.reapEveryDirectoryCreated()
   })
 
   it('what_the_call_prints_lands_in_the_file_the_caller_named', async () => {
@@ -211,16 +229,12 @@ describe('DetachedRun', () => {
       run.start({ argv: Child.printing(Child.MARKER), cwd: process.cwd(), out: files.out, err: files.err })
     )
 
-    const printed = await Child.eventually(() => {
-      const text = readFileSync(files.out, 'utf8')
-
-      return text.length > 0 ? text : null
-    })
+    const printed = await Child.eventuallyPrinted(files.out)
 
     expect(printed).toBe(Child.MARKER)
   })
 
-  it('the_started_run_handed_back_to_the_caller_is_frozen_so_nothing_downstream_can_mutate_it', async () => {
+  it('the_started_run_handed_back_to_the_caller_is_frozen_so_nothing_downstream_can_mutate_it', () => {
     const files = Files.named()
     const run = Child.running()
 
@@ -258,13 +272,10 @@ describe('DetachedRun', () => {
       run.start({ argv: Child.spawningAGrandchild(), cwd: process.cwd(), out: files.out, err: files.err })
     )
 
-    const grandchildPid = Number(await Child.eventually(() => {
-      const text = readFileSync(files.out, 'utf8')
-
-      return text.length > 0 ? text : null
-    }))
+    const grandchildPid = Number(await Child.eventuallyPrinted(files.out))
 
     await Child.eventually(() => (Child.alive(started.pid) ? null : true), { timeoutMs: 3_000 })
+    await Child.eventually(() => (Child.alive(grandchildPid) ? null : true), { timeoutMs: 3_000 })
 
     expect(Child.alive(started.pid)).toBe(false)
     expect(Child.alive(grandchildPid)).toBe(false)
@@ -278,11 +289,7 @@ describe('DetachedRun', () => {
       run.start({ argv: Child.trappingSigterm(), cwd: process.cwd(), out: files.out, err: files.err })
     )
 
-    const printed = await Child.eventually(() => {
-      const text = readFileSync(files.out, 'utf8')
-
-      return text.length > 0 ? text : null
-    }, { timeoutMs: 3_000 })
+    const printed = await Child.eventuallyPrinted(files.out, { timeoutMs: 3_000 })
 
     expect(printed).toBe('trapped-sigterm')
   })
@@ -295,11 +302,7 @@ describe('DetachedRun', () => {
       run.start({ argv: Child.exitingCleanly(), cwd: process.cwd(), out: files.out, err: files.err })
     )
 
-    const printed = await Child.eventually(() => {
-      const text = readFileSync(files.out, 'utf8')
-
-      return text.length > 0 ? text : null
-    })
+    const printed = await Child.eventuallyPrinted(files.out)
 
     expect(printed).toBe('0')
   })
@@ -314,11 +317,7 @@ describe('DetachedRun', () => {
       run.start({ argv: Child.exitingCleanly(), cwd: process.cwd(), out: files.out, err: files.err })
     )
 
-    await Child.eventually(() => {
-      const text = readFileSync(files.out, 'utf8')
-
-      return text.length > 0 ? text : null
-    })
+    await Child.eventuallyPrinted(files.out)
 
     await new Promise((wake) => setTimeout(wake, budgetMs + 500))
 
@@ -343,6 +342,9 @@ describe('DetachedRun', () => {
       )
       Child.tracked(started)
 
+      expect(child).not.toBeNull()
+      expect(child.pid).toBe(started.pid)
+
       let groupWasAlreadyGone = null
       let firingTheCap = null
       await ChildExitRace.onceTheChildExitsButBeforeTheModuleReactsToIt(child, () => {
@@ -361,6 +363,28 @@ describe('DetachedRun', () => {
       expect(groupWasAlreadyGone).toBe('ESRCH')
       expect(firingTheCap).toBeNull()
     })
+
+    it('a_reused_pid_whose_group_is_not_ours_answers_eperm_and_that_is_re_raised_not_swallowed', () => {
+      const files = Files.named()
+      const budgetMs = 10_000
+      const run = Child.running(budgetMs)
+      const started = Child.tracked(
+        run.start({ argv: Child.sleeping(), cwd: process.cwd(), out: files.out, err: files.err })
+      )
+      const kill = vi.spyOn(process, 'kill').mockImplementationOnce(() => {
+        throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' })
+      })
+
+      let firingTheCap = null
+      try {
+        vi.advanceTimersByTime(budgetMs)
+      } catch (failure) {
+        firingTheCap = failure
+      }
+
+      expect(firingTheCap?.code).toBe('EPERM')
+      expect(kill).toHaveBeenCalledWith(-started.pid, DetachedRun.SIGNAL)
+    })
   })
 
   it('a_binary_that_is_not_installed_raises_without_taking_the_api_down_with_it', async () => {
@@ -377,11 +401,7 @@ describe('DetachedRun', () => {
     expect(thrown).toBeInstanceOf(PlanAgentNotLaunched)
     expect(thrown.message).toContain('ct-detached-run-missing-binary')
 
-    const writtenToErr = await Child.eventually(() => {
-      const text = readFileSync(files.err, 'utf8')
-
-      return text.length > 0 ? text : null
-    })
+    const writtenToErr = await Child.eventuallyPrinted(files.err)
 
     const nodeOwnDiagnosticCapturedByHandFromASeparateSpawnOfTheSameMissingBinary =
       'spawn ct-detached-run-missing-binary ENOENT\n'
@@ -418,13 +438,13 @@ describe('DetachedRun', () => {
     Child.inheritedByApi()
     const files = Files.named()
     const run = new DetachedRun({
-      bin: process.execPath, budgetMs: Child.DEFAULT_BUDGET_MS, env: { CT_DETACHED_RUN_GIVEN: 'from the caller' },
+      bin: process.execPath, budgetMs: Child.DEFAULT_BUDGET_MS, env: { [Child.GIVEN]: 'from the caller' },
     })
 
     Child.tracked(
       run.start({
         argv: ['-e', `process.stdout.write(
-          String(process.env.CT_DETACHED_RUN_GIVEN) + '|' + String(process.env.${Child.INHERITED})
+          String(process.env.${Child.GIVEN}) + '|' + String(process.env.${Child.INHERITED})
         )`],
         cwd: process.cwd(),
         out: files.out,
@@ -432,13 +452,28 @@ describe('DetachedRun', () => {
       })
     )
 
-    const printed = await Child.eventually(() => {
-      const text = readFileSync(files.out, 'utf8')
-
-      return text.length > 0 ? text : null
-    })
+    const printed = await Child.eventuallyPrinted(files.out)
 
     expect(printed).toBe('from the caller|undefined')
+  })
+
+  it('a_call_that_names_no_environment_hands_the_child_the_one_the_api_was_started_with', async () => {
+    Child.inheritedByApi()
+    const files = Files.named()
+    const run = Child.running()
+
+    Child.tracked(
+      run.start({
+        argv: ['-e', `process.stdout.write(String(process.env.${Child.INHERITED}))`],
+        cwd: process.cwd(),
+        out: files.out,
+        err: files.err,
+      })
+    )
+
+    const printed = await Child.eventuallyPrinted(files.out)
+
+    expect(printed).toBe('from the api')
   })
 
   it('the_directory_the_caller_names_is_where_the_child_runs_and_not_where_the_api_happens_to_run', async () => {
@@ -455,17 +490,13 @@ describe('DetachedRun', () => {
       })
     )
 
-    const printed = await Child.eventually(() => {
-      const text = readFileSync(files.out, 'utf8')
-
-      return text.length > 0 ? text : null
-    })
+    const printed = await Child.eventuallyPrinted(files.out)
 
     expect(printed).toBe(elsewhere)
     expect(printed).not.toBe(process.cwd())
   })
 
-  it('the_descriptors_this_process_opened_for_the_files_are_closed_once_the_child_has_its_own_copy', async () => {
+  it('the_descriptors_this_process_opened_for_the_files_are_closed_once_the_child_has_its_own_copy', () => {
     const files = Files.named()
     const run = Child.running()
 
@@ -484,7 +515,7 @@ describe('DetachedRun', () => {
     const files = Files.named()
     const wrapper = spawn(
       process.execPath,
-      Wrapper.callingStartAndThenDoingNothingElse({ cap: 60_000, out: files.out, err: files.err }),
+      Wrapper.callingStartAndThenDoingNothingElse({ budgetMs: 60_000, out: files.out, err: files.err }),
       { stdio: ['ignore', 'pipe', 'pipe'] }
     )
     Child.trackedSolo(wrapper.pid)
@@ -506,5 +537,24 @@ describe('DetachedRun', () => {
 
     expect(stderr).toBe('')
     expect(result).toEqual({ exited: true, code: 0 })
+  })
+
+  it('the_call_gets_no_stdin_of_its_own_so_it_cannot_read_whatever_the_api_is_reading_on_its_own', async () => {
+    const files = Files.named()
+    const run = Child.running()
+
+    const started = Child.tracked(
+      run.start({ argv: Child.sleeping(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+
+    const fd0 = await Child.eventually(() => {
+      try {
+        return Child.fd0Of(started.pid)
+      } catch {
+        return null
+      }
+    })
+
+    expect(fd0).toContain('/dev/null')
   })
 })
