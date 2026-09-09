@@ -124,12 +124,12 @@ export class ImplementRefusal {
       detail: `unknown field: ${asked.fields.join(', ')}`,
     })],
     [ImplementRequestOutcome.NO_LIVE_SESSION, () => new Refusal({
-      status: 409,
+      status: 400,
       code: ImplementRequestOutcome.NO_LIVE_SESSION,
       detail: 'no matching live planning session exists',
     })],
     [ImplementRequestOutcome.UNCERTAIN_PHASE, () => new Refusal({
-      status: 409,
+      status: 400,
       code: ImplementRequestOutcome.UNCERTAIN_PHASE,
       detail: 'implementation may have started; inspect the plan before retrying',
     })],

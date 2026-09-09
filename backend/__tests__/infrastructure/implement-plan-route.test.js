@@ -360,7 +360,7 @@ describe('implementing the plan lifts the watch on its issue', () => {
 
     const answered = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
 
-    expect(answered.status).toBe(409)
+    expect(answered.status).toBe(400)
     expect((await answered.json()).code).toBe(ImplementRequestOutcome.NO_LIVE_SESSION)
     expect(RunningApi.pullRequestReviews.started).toEqual([])
   })
@@ -404,7 +404,7 @@ describe('implementing the plan lifts the watch on its issue', () => {
 
     const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
 
-    expect(response.status).toBe(409)
+    expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
       code: 'no-live-planning-session', detail: 'no matching live planning session exists',
     })
@@ -418,7 +418,7 @@ describe('implementing the plan lifts the watch on its issue', () => {
 
     const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
 
-    expect(response.status).toBe(409)
+    expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
       code: 'implementation-phase-uncertain',
       detail: 'implementation may have started; inspect the plan before retrying',

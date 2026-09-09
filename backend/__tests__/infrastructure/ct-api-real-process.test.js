@@ -371,7 +371,7 @@ describe('ct-api entrypoint', () => {
       body: JSON.stringify({ issue: 33, repo: 'jjponz/repo-pulse', changes: 'parte la tarea 2' }),
     })
 
-    expect(response.status).toBe(409)
+    expect(response.status).toBe(400)
     expect((await response.json()).code).toBe('no-live-planning-session')
   })
 })

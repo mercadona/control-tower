@@ -26,9 +26,8 @@ the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
    `{"code": "<kebab-case>", "detail": "<one sentence>"}`. One refusal adds a
    third field: `no-plan-started` carries `failed`.
 2. **An application refusal answers 400.** The status stopped being the signal.
-   405 keeps its own status because it is about the protocol, not about the
-   request. The two 409 of `/implement-plan` are not about the protocol either,
-   and are the one place where this rule is still not applied.
+   405 keeps its own status because it is the protocol answering, not the
+   application: it is decided before any request reaches a use case.
 3. **A `POST` must declare `Content-Type: application/json`.** Otherwise 415.
 4. **A body over 8 KiB is refused** with 413 `body-too-large`.
 5. **An unknown field in a `POST` body is refused**, not ignored.
@@ -262,8 +261,8 @@ serialised.
 | `malformed-agent` | 400 | `agent` is empty or holds whitespace |
 | `malformed-issue` | 400 | `issue` is not a whole number from 1 |
 | `malformed-repo` | 400 | `repo` is not `owner/name` |
-| `no-live-planning-session` | **409** | no active plan matches that issue **or** its agent handle differs |
-| `implementation-phase-uncertain` | **409** | the backend cannot tell whether implementation already began; a person must look before retrying |
+| `no-live-planning-session` | 400 | no active plan matches that issue **or** its agent handle differs |
+| `implementation-phase-uncertain` | 400 | the backend cannot tell whether implementation already began; a person must look before retrying |
 | `go-not-recorded` | 400 | the GO marker could not be written |
 | `plan-go-not-answered` | 400 | the GO comment on the issue failed |
 | `plan-agent-not-resumed` | 400 | cmux would not take the line |
@@ -322,12 +321,12 @@ cross-reference that notifies that issue's subscribers.
 | `malformed-issue` | 400 | `issue must be a whole number from one` |
 | `malformed-repo` | 400 | `repo must be a repository such as owner/name` |
 | `malformed-changes` | 400 | `changes must say what to change` |
-| `no-live-planning-session` | **409** | `no matching live planning session exists, so nobody would read the changes` |
-| `plan-already-being-implemented` | **409** | `the plan is already being implemented, so its review watch is gone` |
-| `implementation-phase-uncertain` | **409** | `implementation may have started; inspect the plan before retrying` |
+| `no-live-planning-session` | 400 | `no matching live planning session exists, so nobody would read the changes` |
+| `plan-already-being-implemented` | 400 | `the plan is already being implemented, so its review watch is gone` |
+| `implementation-phase-uncertain` | 400 | `implementation may have started; inspect the plan before retrying` |
 | `plan-changes-not-asked` | 400 | `gh` refused to post the comment; `detail` carries its own message |
 
-The three 409s are three different states, and only `code` separates them:
+Those three are three different states, and only `code` separates them:
 nothing is watching this issue, the plan moved on to being implemented, or this
 process cannot tell which. The last one is the same code `POST /implement-plan`
 emits, with the same meaning — a person has to look at the plan before
@@ -434,7 +433,7 @@ person would have typed — and `plan` — what starting it produced.
 |---|---|---|
 | `planning` | the plan is being written | watch `/plan-events`, offer the GO |
 | `implementing` | the GO was given | poll `/implement-progress` |
-| `uncertain` | the GO was given, but the backend cannot tell whether the work began | show it, refuse the GO; `/implement-plan` answers 409 |
+| `uncertain` | the GO was given, but the backend cannot tell whether the work began | show it, refuse the GO; `/implement-plan` answers `implementation-phase-uncertain` |
 
 **Refusal**
 

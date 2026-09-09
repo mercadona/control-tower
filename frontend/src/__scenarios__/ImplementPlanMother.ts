@@ -26,12 +26,12 @@ const agentNotResumed = () => ({
 })
 
 const noLiveSession = () => ({
-  status: 409,
+  status: 400,
   body: '{"code":"no-live-planning-session","detail":"no active plan matches that issue"}',
 })
 
 const implementationUncertain = () => ({
-  status: 409,
+  status: 400,
   body: '{"code":"implementation-phase-uncertain","detail":"cannot tell whether implementation already began"}',
 })
 

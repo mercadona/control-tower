@@ -123,7 +123,7 @@ describe('ReviewPlanRoute', () => {
       await RunningApi.listening(spy, { watched: false }), RunningApi.ACCEPTED_BODY
     )
 
-    expect(response.status).toBe(409)
+    expect(response.status).toBe(400)
     expect(JSON.parse(await response.text()).code).toBe('no-live-planning-session')
     expect(spy.asked).toEqual([])
   })
@@ -136,7 +136,7 @@ describe('ReviewPlanRoute', () => {
     const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
     const refusal = JSON.parse(await response.text())
 
-    expect(response.status).toBe(409)
+    expect(response.status).toBe(400)
     expect(refusal.code).toBe('plan-already-being-implemented')
     expect(refusal.detail).toBe('the plan is already being implemented, so its review watch is gone')
     expect(spy.asked).toEqual([])
@@ -150,7 +150,7 @@ describe('ReviewPlanRoute', () => {
     const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
     const refusal = JSON.parse(await response.text())
 
-    expect(response.status).toBe(409)
+    expect(response.status).toBe(400)
     expect(refusal.code).toBe('implementation-phase-uncertain')
     expect(refusal.detail).toBe('implementation may have started; inspect the plan before retrying')
     expect(spy.asked).toEqual([])
