@@ -1,0 +1,389 @@
+import { describe, it, expect, afterEach } from 'vitest'
+import { execFileSync, spawn } from 'node:child_process'
+import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { DetachedRun } from '../../src/infrastructure/detached-run.js'
+import { PlanAgentNotLaunched } from '../../src/domain/exceptions.js'
+
+class Files {
+  static named() {
+    const directory = mkdtempSync(join(tmpdir(), 'ct-detached-run-'))
+
+    return { out: join(directory, 'out.log'), err: join(directory, 'err.log') }
+  }
+}
+
+class Child {
+  static SLOW_MS = 5_000
+  static DEFAULT_BUDGET_MS = 30_000
+  static MARKER = 'printed-by-the-child'
+  static #groupsStarted = []
+
+  static running(budgetMs = Child.DEFAULT_BUDGET_MS) {
+    return new DetachedRun({ bin: process.execPath, budgetMs })
+  }
+
+  static printing(marker) {
+    return ['-e', `process.stdout.write(${JSON.stringify(marker)})`]
+  }
+
+  static printingToBoth(marker) {
+    return ['-e', `process.stdout.write(${JSON.stringify(marker)}); process.stderr.write(${JSON.stringify(marker)})`]
+  }
+
+  static sleeping(ms = Child.SLOW_MS) {
+    return ['-e', `setTimeout(() => {}, ${ms})`]
+  }
+
+  static exitingCleanly() {
+    return ['-e', "process.on('exit', (code) => { require('fs').writeSync(1, String(code)) })"]
+  }
+
+  static trappingSigterm() {
+    return ['-e', `
+      process.on('SIGTERM', () => {
+        require('fs').writeSync(1, 'trapped-sigterm')
+        process.exit(0)
+      })
+      setTimeout(() => {}, ${Child.SLOW_MS})
+    `]
+  }
+
+  static spawningAGrandchild() {
+    return ['-e', `
+      const grandchild = require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, ${Child.SLOW_MS})'], { stdio: 'ignore' })
+      process.stdout.write(String(grandchild.pid))
+      setTimeout(() => {}, ${Child.SLOW_MS})
+    `]
+  }
+
+  static pgidOf(pid) {
+    return execFileSync('ps', ['-o', 'pgid=', '-p', String(pid)]).toString().trim()
+  }
+
+  static alive(pid) {
+    try {
+      process.kill(pid, 0)
+
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  static tracked(startedRun) {
+    Child.#groupsStarted.push(startedRun.pid)
+
+    return startedRun
+  }
+
+  static killEveryGroupStarted() {
+    for (const pid of Child.#groupsStarted.splice(0)) {
+      try {
+        process.kill(-pid, 'SIGKILL')
+      } catch {
+        continue
+      }
+    }
+  }
+
+  static async eventually(check, { timeoutMs = 5_000, everyMs = 20 } = {}) {
+    const deadline = Date.now() + timeoutMs
+    for (;;) {
+      const value = check()
+      if (value) return value
+      if (Date.now() > deadline) throw new Error('timed out waiting for the condition')
+      await new Promise((wake) => setTimeout(wake, everyMs))
+    }
+  }
+}
+
+class Wrapper {
+  static #HERE = dirname(fileURLToPath(import.meta.url))
+  static #MODULE_URL = pathToFileURL(
+    join(Wrapper.#HERE, '..', '..', 'src', 'infrastructure', 'detached-run.js')
+  ).href
+
+  static callingStartAndThenDoingNothingElse({ cap, out, err }) {
+    return ['-e', `
+      import(${JSON.stringify(Wrapper.#MODULE_URL)}).then(({ DetachedRun }) => {
+        const run = new DetachedRun({ bin: process.execPath, budgetMs: ${cap}, env: undefined })
+        const started = run.start({
+          argv: ['-e', 'setTimeout(() => {}, 60000)'],
+          cwd: process.cwd(),
+          out: ${JSON.stringify(out)},
+          err: ${JSON.stringify(err)},
+        })
+        process.stdout.write(String(started.pid))
+      }).catch((failure) => {
+        process.stderr.write(failure.stack)
+        process.exitCode = 2
+      })
+    `]
+  }
+}
+
+describe('DetachedRun', () => {
+  afterEach(() => {
+    Child.killEveryGroupStarted()
+  })
+
+  it('what_the_call_prints_lands_in_the_file_the_caller_named', async () => {
+    const files = Files.named()
+    const run = Child.running()
+
+    const started = Child.tracked(
+      run.start({ argv: Child.printing(Child.MARKER), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+
+    const printed = await Child.eventually(() => {
+      const text = readFileSync(files.out, 'utf8')
+
+      return text.length > 0 ? text : null
+    })
+
+    expect(printed).toBe(Child.MARKER)
+    expect(started.pid).toBeGreaterThan(0)
+    expect(Object.isFrozen(started)).toBe(true)
+  })
+
+  it('the_call_gets_a_process_group_of_its_own_so_the_cap_can_reach_what_it_launched', async () => {
+    const files = Files.named()
+    const run = Child.running()
+
+    const started = Child.tracked(
+      run.start({ argv: Child.sleeping(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+
+    const pgid = await Child.eventually(() => {
+      try {
+        return Child.pgidOf(started.pid)
+      } catch {
+        return null
+      }
+    })
+
+    expect(pgid).toBe(String(started.pid))
+  })
+
+  it('the_cap_kills_the_whole_group_so_a_tool_the_call_launched_is_not_left_orphaned', async () => {
+    const files = Files.named()
+    const run = Child.running(250)
+
+    const started = Child.tracked(
+      run.start({ argv: Child.spawningAGrandchild(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+
+    const grandchildPid = Number(await Child.eventually(() => {
+      const text = readFileSync(files.out, 'utf8')
+
+      return text.length > 0 ? text : null
+    }))
+
+    await Child.eventually(() => (Child.alive(started.pid) ? null : true), { timeoutMs: 3_000 })
+
+    expect(Child.alive(started.pid)).toBe(false)
+    expect(Child.alive(grandchildPid)).toBe(false)
+  })
+
+  it('the_cap_sends_sigterm_so_a_tool_trapping_it_gets_the_chance_to_leave_on_its_own_terms', async () => {
+    const files = Files.named()
+    const run = Child.running(250)
+
+    Child.tracked(
+      run.start({ argv: Child.trappingSigterm(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+
+    const printed = await Child.eventually(() => {
+      const text = readFileSync(files.out, 'utf8')
+
+      return text.length > 0 ? text : null
+    }, { timeoutMs: 3_000 })
+
+    expect(printed).toBe('trapped-sigterm')
+  })
+
+  it('a_call_that_finishes_inside_its_cap_is_never_signalled', async () => {
+    const files = Files.named()
+    const run = Child.running(5_000)
+
+    const started = Child.tracked(
+      run.start({ argv: Child.exitingCleanly(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+
+    const printed = await Child.eventually(() => {
+      const text = readFileSync(files.out, 'utf8')
+
+      return text.length > 0 ? text : null
+    })
+
+    expect(printed).toBe('0')
+  })
+
+  it('the_cap_timer_is_cleared_once_the_call_finishes_so_it_never_fires_later_on_a_pid_that_is_gone', async () => {
+    const files = Files.named()
+    const run = Child.running(300)
+    const caught = []
+    const onUncaught = (error) => caught.push(error)
+    process.on('uncaughtException', onUncaught)
+
+    try {
+      Child.tracked(
+        run.start({ argv: Child.exitingCleanly(), cwd: process.cwd(), out: files.out, err: files.err })
+      )
+
+      await Child.eventually(() => {
+        const text = readFileSync(files.out, 'utf8')
+
+        return text.length > 0 ? text : null
+      })
+
+      await new Promise((wake) => setTimeout(wake, 500))
+
+      expect(caught).toEqual([])
+    } finally {
+      process.off('uncaughtException', onUncaught)
+    }
+  })
+
+  it('a_binary_that_is_not_installed_raises_without_taking_the_api_down_with_it', async () => {
+    const files = Files.named()
+    const run = new DetachedRun({ bin: 'ct-detached-run-missing-binary', budgetMs: 5_000 })
+
+    let thrown = null
+    try {
+      run.start({ argv: [], cwd: process.cwd(), out: files.out, err: files.err })
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(PlanAgentNotLaunched)
+    expect(thrown.message).toContain('ct-detached-run-missing-binary')
+
+    const writtenToErr = await Child.eventually(() => {
+      const text = readFileSync(files.err, 'utf8')
+
+      return text.length > 0 ? text : null
+    })
+
+    expect(writtenToErr).toContain('ct-detached-run-missing-binary')
+  })
+
+  it('what_was_already_in_either_file_survives_because_the_call_opens_both_to_append', async () => {
+    const files = Files.named()
+    writeFileSync(files.out, 'already out\n')
+    writeFileSync(files.err, 'already err\n')
+    const run = Child.running()
+
+    const started = Child.tracked(
+      run.start({ argv: Child.printingToBoth(Child.MARKER), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+
+    const printedOut = await Child.eventually(() => {
+      const text = readFileSync(files.out, 'utf8')
+
+      return text.includes(Child.MARKER) ? text : null
+    })
+    const printedErr = await Child.eventually(() => {
+      const text = readFileSync(files.err, 'utf8')
+
+      return text.includes(Child.MARKER) ? text : null
+    })
+
+    expect(printedOut).toBe(`already out\n${Child.MARKER}`)
+    expect(printedErr).toBe(`already err\n${Child.MARKER}`)
+    expect(started.pid).toBeGreaterThan(0)
+  })
+
+  it('the_environment_the_caller_composed_is_what_the_child_reads', async () => {
+    const files = Files.named()
+    const run = new DetachedRun({
+      bin: process.execPath, budgetMs: Child.DEFAULT_BUDGET_MS, env: { CT_DETACHED_RUN_GIVEN: 'from the caller' },
+    })
+
+    Child.tracked(
+      run.start({
+        argv: ['-e', 'process.stdout.write(String(process.env.CT_DETACHED_RUN_GIVEN))'],
+        cwd: process.cwd(),
+        out: files.out,
+        err: files.err,
+      })
+    )
+
+    const printed = await Child.eventually(() => {
+      const text = readFileSync(files.out, 'utf8')
+
+      return text.length > 0 ? text : null
+    })
+
+    expect(printed).toBe('from the caller')
+  })
+
+  it('the_directory_the_caller_names_is_where_the_child_runs_and_not_where_the_api_happens_to_run', async () => {
+    const files = Files.named()
+    const elsewhere = realpathSync(tmpdir())
+    const run = Child.running()
+
+    Child.tracked(
+      run.start({
+        argv: ['-e', 'process.stdout.write(process.cwd())'],
+        cwd: elsewhere,
+        out: files.out,
+        err: files.err,
+      })
+    )
+
+    const printed = await Child.eventually(() => {
+      const text = readFileSync(files.out, 'utf8')
+
+      return text.length > 0 ? text : null
+    })
+
+    expect(printed).toBe(elsewhere)
+    expect(printed).not.toBe(process.cwd())
+  })
+
+  it('the_descriptors_this_process_opened_for_the_files_are_closed_once_the_child_has_its_own_copy', async () => {
+    const files = Files.named()
+    const run = Child.running()
+
+    Child.tracked(
+      run.start({ argv: Child.sleeping(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+
+    const openHere = execFileSync('lsof', ['-p', String(process.pid)]).toString()
+
+    expect(openHere).not.toContain(files.out)
+    expect(openHere).not.toContain(files.err)
+  })
+
+  it('the_process_that_called_start_is_free_to_exit_right_away_because_nothing_it_holds_keeps_its_loop_open', async () => {
+    const files = Files.named()
+    const wrapper = spawn(
+      process.execPath,
+      Wrapper.callingStartAndThenDoingNothingElse({ cap: 60_000, out: files.out, err: files.err }),
+      { stdio: ['ignore', 'pipe', 'pipe'] }
+    )
+    let stdout = ''
+    let stderr = ''
+    wrapper.stdout.on('data', (chunk) => { stdout += chunk })
+    wrapper.stderr.on('data', (chunk) => { stderr += chunk })
+
+    const result = await new Promise((resolve) => {
+      const timer = setTimeout(() => resolve({ exited: false, code: null }), 2_000)
+      wrapper.once('exit', (code) => {
+        clearTimeout(timer)
+        resolve({ exited: true, code })
+      })
+    })
+
+    if (!result.exited) wrapper.kill('SIGKILL')
+    const launchedPid = Number(stdout.trim())
+    if (Number.isInteger(launchedPid) && launchedPid > 0) Child.tracked({ pid: launchedPid })
+
+    expect(stderr).toBe('')
+    expect(result).toEqual({ exited: true, code: 0 })
+  })
+})
