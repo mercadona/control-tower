@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { ReferredUserStories } from '../../src/infrastructure/referred-user-stories.js'
-import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
-import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.js'
-import { UserStory } from '../../src/domain/value-objects/user-story.js'
+import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
+import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
+import { UserStory } from '../../src/domain/value-objects/user-story.ts'
 
 class UserStoriesDouble {
   constructor(name) {

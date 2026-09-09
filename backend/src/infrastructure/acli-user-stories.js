@@ -1,6 +1,6 @@
 import { isNoValueCell } from '../../../plugin/scripts/cells.js'
 import { UserStories } from '../domain/ports/user-stories.js'
-import { UserStory } from '../domain/value-objects/user-story.js'
+import { UserStory } from '../domain/value-objects/user-story.ts'
 import { UserStoryNotRead, UserStoryNotUnderstood } from '../domain/exceptions.js'
 
 export class AcliUserStories extends UserStories {
