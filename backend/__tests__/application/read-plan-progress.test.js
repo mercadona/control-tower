@@ -137,4 +137,10 @@ describe('a plan being reworked is told apart from one waiting for a person', ()
     expect(await flow.run()).toBe(PlanState.READY)
     expect(flow.committedAsked).toBe(0)
   })
+
+  it('a_commit_date_that_cannot_be_read_claims_a_review_because_nothing_proves_the_plan_was_rewritten', async () => {
+    const flow = new Flow({ askedAt: '2026-09-09T10:00:00Z', committedAt: 'un rato' })
+
+    expect(await flow.run()).toBe(PlanState.REVIEWING)
+  })
 })
