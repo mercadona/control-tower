@@ -193,7 +193,7 @@ describe('Home · restore workflow', () => {
 
   it.each([
     ['unavailable', () => Promise.reject(new TypeError('Failed to fetch'))],
-    ['inconclusive', () => Promise.resolve(new Response('{"code":"active-plans-recovery-inconclusive","detail":"cmux unavailable"}', { status: 503 }))],
+    ['inconclusive', () => Promise.resolve(new Response('{"code":"active-plans-recovery-inconclusive","detail":"cmux unavailable"}', { status: 400 }))],
     ['uncertain', () => Promise.resolve(new Response(activePlansAnswer(activePlan('uncertain')).body, { status: 200 }))],
   ])('does not open plan events for an unconfirmed restored workflow that is %s', async (_state, response) => {
     storeWorkflow('ready')
@@ -448,9 +448,9 @@ describe('Home · restore workflow', () => {
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeEnabled()
   })
 
-  it('should show it cannot tell what is running, and offer a retry, on a fresh 503', async () => {
+  it('should show it cannot tell what is running, and offer a retry, on a fresh inconclusive recovery', async () => {
     const inconclusiveAnswer = {
-      status: 503,
+      status: 400,
       body: '{"code":"active-plans-recovery-inconclusive","detail":"cmux could not be asked"}',
     }
     const fetching = vi.fn()

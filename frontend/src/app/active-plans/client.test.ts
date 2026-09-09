@@ -93,7 +93,7 @@ describe('ActivePlansClient', () => {
         async () =>
           new Response(
             '{"code":"active-plans-recovery-inconclusive","detail":"cmux could not be asked"}',
-            { status: 503 },
+            { status: 400 },
           ),
       ),
     )
@@ -107,10 +107,10 @@ describe('ActivePlansClient', () => {
     expect(await ActivePlansClient.get()).toEqual({ kind: 'unavailable' })
   })
 
-  it('should report unavailable for a 503 with a different code', async () => {
+  it('should report unavailable for a refusal with a different code', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response('{"code":"foreign-origin","detail":"not this page"}', { status: 503 })),
+      vi.fn(async () => new Response('{"code":"foreign-origin","detail":"not this page"}', { status: 403 })),
     )
 
     expect(await ActivePlansClient.get()).toEqual({ kind: 'unavailable' })
