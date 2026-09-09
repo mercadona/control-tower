@@ -40,7 +40,7 @@ that section carries no work of theirs.
 The scaffolder also creates `.agent/conventions.md` — the repository's
 yardstick: the documents of code rules, which `ct-step` pastes into every task's
 brief.
-**This is the moment of human confirmation**: the scaffolder prints, on STDOUT, a deterministic block that begins with the literal `Candidatos a la vara de este repo (barrido determinista — PROPONE, no declara):` — it is the §3.12 sweep (docs/prompt-juez-lo-que-queda.md), not a printout of yours.
+**This is the moment of human confirmation**: the scaffolder prints, on STDOUT, a deterministic block that begins with the literal `Yardstick candidates for this repo (deterministic sweep — it PROPOSES, it does not declare):` — it is the §3.12 sweep (docs/prompt-juez-lo-que-queda.md), not a printout of yours.
 **Pass that list on to the user exactly as it is**, with its reasons and its
 `[skeleton: headings only]` marks. If, exploring the repository, you see a
 candidate the sweep did not bring, you may propose it too, but **saying that it

@@ -355,7 +355,7 @@ describe('F14/C — the detector follows the trail the guide itself declares aut
     const r = detectConventions({ docs, files: [] })
     expect(ids(r)).toEqual(['claim'])
     expect(r[0].evidence[0]).toMatchObject({ path: 'docs/agentic-workflow.md', line: 4, via: 'AGENTS.md' })
-    expect(formatFindings(r)).toContain('(enlazado desde AGENTS.md)')
+    expect(formatFindings(r)).toContain('(linked from AGENTS.md)')
   })
 
   it('the same order also comes out in the DISPATCH, not only in the bootstrap', () => {

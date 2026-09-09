@@ -92,7 +92,7 @@ describe('readEpicContext — the section of the spec and its guardrail', () => 
   })
 
   it('the placeholder of the inherited section says who fills it in and that the plugin does not touch it', () => {
-    expect(INHERITED_CONTEXT_PLACEHOLDER).toMatch(/coordinadora/)
+    expect(INHERITED_CONTEXT_PLACEHOLDER).toMatch(/coordinating session/)
     expect(INHERITED_CONTEXT_PLACEHOLDER).toMatch(/ct-groom/)
   })
 
@@ -255,7 +255,7 @@ describe('/ct-groom --dry-run — the epic context reaches the plan', () => {
 import { diffIssue, hasDrift, formatDrift } from '../scripts/reconcile.js'
 
 const bodyWith = (epic, inherited) => [
-  '> Slice `#2` del epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)',
+  '> Slice `#2` of the epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)',
   '',
   ...(epic ? [EPIC_CONTEXT_HEADING, epic, ''] : []),
   ...(inherited ? [INHERITED_CONTEXT_HEADING, inherited, ''] : []),
@@ -269,7 +269,7 @@ const bodyWith = (epic, inherited) => [
 const WANTED = {
   order: 2, title: '#2 card', labels: [], deps: [], ac: ['AC-2.1'],
   descripcion: null, protectedLine: '- 🚫 nada', gatesContent: '',
-  specLink: '> Slice `#2` del epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)',
+  specLink: '> Slice `#2` of the epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)',
   epicContext: '- regla nueva',
 }
 const existingWith = (body) => ({ number: 90, title: '#2 card', state: 'open', milestone: { title: 'E1' }, labels: [], body })
@@ -325,7 +325,7 @@ const chunk = (body, from, to) => body.slice(body.indexOf(from), body.indexOf(to
 
 describe('buildReconcileBody — it rewrites the epic one, it does not touch the inherited one', () => {
   const WITH_BOTH = [
-    '> Slice `#2` del epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)',
+    '> Slice `#2` of the epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)',
     '',
     EPIC_CONTEXT_HEADING,
     '- regla VIEJA',
@@ -348,7 +348,7 @@ describe('buildReconcileBody — it rewrites the epic one, it does not touch the
   ].join('\n')
 
   const wanted = (over) => ({
-    specLink: '> Slice `#2` del epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)',
+    specLink: '> Slice `#2` of the epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)',
     ac: ['AC-NUEVO'], deps: [], epicContext: '- regla NUEVA', ...over,
   })
 
@@ -373,7 +373,7 @@ describe('buildReconcileBody — it rewrites the epic one, it does not touch the
   // anchor is the preferred one, not that it writes blind when there is none.
   it('with no anchor at all, it inserts NOTHING and does not blow up', () => {
     const withoutAnchor = [
-      '> Slice `#2` del epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)',
+      '> Slice `#2` of the epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)',
       '',
       '## Descripción',
       'lo que entrega',
@@ -387,7 +387,7 @@ describe('buildReconcileBody — it rewrites the epic one, it does not touch the
   // of §3.4.
   it('with the inherited one but no Acceptance criteria, it anchors on the inherited one', () => {
     const onlyInherited = [
-      '> Slice `#2` del epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)',
+      '> Slice `#2` of the epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)',
       '',
       INHERITED_CONTEXT_HEADING,
       'lo de la coordinadora',
@@ -568,7 +568,7 @@ describe('giving up on the epic context is said out loud, and it still does not 
   // table asks for no criterion, so AC does not drift and there is no gap that
   // does count.
   const NO_ANCHOR_BODY = [
-    `> Slice \`#1\` del epic. Spec: [spec.md § 9. Slices](${specUrl('spec.md')})`,
+    `> Slice \`#1\` of the epic. Spec: [spec.md § 9. Slices](${specUrl('spec.md')})`,
     '',
     '## Descripción',
     'modelo',
@@ -607,7 +607,7 @@ describe('giving up on the epic context is said out loud, and it still does not 
 // writing: «`/ct-groom` no escribe aquí ni reescribe lo que escribas».
 // ============================================================================
 
-const SPEC_LINK_3 = `> Slice \`#3\` del epic. Spec: [spec.md § 9. Slices](${specUrl('spec.md')})`
+const SPEC_LINK_3 = `> Slice \`#3\` of the epic. Spec: [spec.md § 9. Slices](${specUrl('spec.md')})`
 const END_OF_PASTED = 'Hasta aquí lo pegado por la coordinadora.'
 
 // The real body that reproduced the defect: the coordinator pastes the
@@ -703,7 +703,7 @@ describe('C2 — nothing the coordinator writes is touched', () => {
     // Here the literal forbidden range does bite: the link line is not a
     // heading, so it does not end the inherited section and it lives INSIDE
     // it.
-    const pastedLink = '> Slice `#2` del epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/OTRO.md#9-slices)'
+    const pastedLink = '> Slice `#2` of the epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/OTHER.md#9-slices)'
     const body = [
       INHERITED_CONTEXT_HEADING,
       'El slice #2 apuntaba a:',
@@ -1113,7 +1113,7 @@ describe('C2 (2nd wave) — end to end: the --body that is sent keeps the text o
     // with the block of the neighbour pasted inside the inherited one, and
     // prose of her own after it.
     const body = [
-      `> Slice \`#1\` del epic. Spec: [spec.md § 9. Slices](${specUrl('spec.md')})`, '',
+      `> Slice \`#1\` of the epic. Spec: [spec.md § 9. Slices](${specUrl('spec.md')})`, '',
       '## Descripción', 'modelo', '',
       INHERITED_CONTEXT_HEADING,
       'Copio lo del slice anterior:', '',
@@ -1172,7 +1172,7 @@ describe('C2 (2nd wave) — the reason for giving up on the epic does not assert
   // as "undefined".
   it('the new reason has its sentence: the warning comes out whole and does not assert whose the text is', () => {
     const body = [
-      `> Slice \`#1\` del epic. Spec: [spec.md § 9. Slices](${specUrl('spec.md')})`, '',
+      `> Slice \`#1\` of the epic. Spec: [spec.md § 9. Slices](${specUrl('spec.md')})`, '',
       '## Descripción', 'modelo', '',
       INHERITED_CONTEXT_HEADING, 'Copio lo del vecino:', '',
       EPIC_CONTEXT_HEADING, '- la regla del vecino', '',

@@ -84,7 +84,7 @@ describe('pure groom', () => {
   it('body: the Dependencias section says explicitly that the number is a slice order, not an issue', () => {
     const b = buildIssueBody(SLICE, SPEC_REF)
     expect(b).toContain(DEPS_ORDER_NOTE)
-    expect(DEPS_ORDER_NOTE.toLowerCase()).toMatch(/orden/)
+    expect(DEPS_ORDER_NOTE.toLowerCase()).toMatch(/order/)
     expect(DEPS_ORDER_NOTE.toLowerCase()).toMatch(/issue/)
     // The note itself cannot introduce a bare "#<digits>": it would be another
     // false autolink, and on top of that `extractDepsInSection` would read it
@@ -96,7 +96,7 @@ describe('pure groom', () => {
   // "#3" turned into a link to `issues/3` — slice 2's issue.
   it('body: the spec link cites the order as inline code, never a bare "#N"', () => {
     const b = buildIssueBody(SLICE, SPEC_REF)
-    expect(b.split('\n')[0]).toContain('> Slice `#2` del epic')
+    expect(b.split('\n')[0]).toContain('> Slice `#2` of the epic')
     expect(b).not.toMatch(/> Slice #\d/)
   })
   // renderDepsContent/renderAcContent are the ONLY source of truth for "what
@@ -122,7 +122,7 @@ describe('pure groom', () => {
   it('buildIssueBody, defensively: undefined ac + deps', () => {
     const incomplete = { n: 5, type: 'frontend', entrega: 'fix', ac: undefined, deps: undefined, protected: '–' }
     const b = buildIssueBody(incomplete, SPEC_REF)
-    expect(b).toContain('(rellenar desde el spec)')
+    expect(b).toContain('(fill in from the spec)')
     expect(b).not.toContain('merge-after')
   })
   it('buildLabels with an empty type: only status:backlog', () => {
@@ -170,10 +170,10 @@ describe('pure groom', () => {
   // accepts in EVERY other column (Dep/Acepta/Área/Toca) slipped through as if
   // they were real content, producing a junk bullet ("- 🚫 -", "- 🚫 —",
   // "- 🚫 −") in the issue's body. All five variants must produce
-  // "(ninguno declarado)", just like the other columns.
-  it.each(['-', '–', '—', '―', '−', '--'])('"Protegido" as "%s" (a "no value" marker) → "(ninguno declarado)", not a junk bullet', (marker) => {
+  // "(none declared)", just like the other columns.
+  it.each(['-', '–', '—', '―', '−', '--'])('"Protegido" as "%s" (a "no value" marker) → "(none declared)", not a junk bullet', (marker) => {
     const b = buildIssueBody({ ...SLICE, protected: marker }, SPEC_REF)
-    expect(b).toContain('(ninguno declarado)')
+    expect(b).toContain('(none declared)')
     expect(b).not.toMatch(/🚫 .*[-–—―−]\s*$/m)
   })
   it('"Protegido" with real content still emits its 🚫 bullet', () => {

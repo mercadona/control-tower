@@ -107,7 +107,7 @@ export function readRepoDocs(root, { follow = true } = {}) {
       if (r.oversize) { failures.push(`${path}: ${Math.round(r.size / 1024)} KB, over the read limit`); continue }
       docs.push({ path, content: r.content, via })
     } catch (e) {
-      failures.push(`${path} (enlazado desde ${via}): ${e.message}`)
+      failures.push(`${path} (linked from ${via}): ${e.message}`)
     }
   }
   return { docs, failures, truncated }

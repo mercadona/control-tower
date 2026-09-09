@@ -1301,7 +1301,7 @@ paths that are not touched. One line each, with exact values.</span>
       <div class="art-body">
         <p>The order of the sections is not cosmetic: <strong>what it delivers → with what context it is interpreted → how it is verified → what is missing before it can be merged → what stays out</strong>. A known heading is recognised by <strong>exact equality</strong>, not by prefix: a <code>## Acceptance criteria propuestos por QA (borrador)</code> written by a human is never confused with the real section.</p>
         <p class="fmt-label">Format, in order</p>
-        <pre><code>&gt; Slice `#1` del epic. Spec: [docs/…/spec-execution.md § Tabla de slices](https://github.com/owner/repo/blob/main/docs/…#tabla-de-slices)
+        <pre><code>&gt; Slice `#1` of the epic. Spec: [docs/…/spec-execution.md § Tabla de slices](https://github.com/owner/repo/blob/main/docs/…#tabla-de-slices)
 
 <span class="k">## Descripción</span>                            <span class="c">← only if `Entrega` carries a real value</span>
 &lt;text of Entrega&gt;
@@ -1317,14 +1317,14 @@ paths that are not touched. One line each, with exact values.</span>
 - &lt;criterion 2&gt;
 
 <span class="k">## Dependencias</span>                           <span class="c">← only if there are deps</span>
-*(cada `#N` de esta sección es el ORDEN del slice, NO un número de issue)*
+*(each `#N` in this section is the slice’s ORDER, NOT an issue number)*
 - merge-after `#1`
 
 <span class="k">## Gates</span>                                  <span class="c">← ALWAYS, also when there is none</span>
 &lt;resolved gates, or the assertion that there are none&gt;
 
 <span class="k">## Out of scope / Protected</span>               <span class="c">← ALWAYS</span>
-- 🚫 &lt;Protegido&gt;      <span class="c">|  - (ninguno declarado)</span>
+- 🚫 &lt;Protegido&gt;      <span class="c">|  - (none declared)</span>
 
 &lt;!-- ct-order:1 --&gt;                          <span class="c">← greppable order marker. Bookkeeping, outside every comparison</span></code></pre>
         <div class="note warn" style="margin-top:16px">

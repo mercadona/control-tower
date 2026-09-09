@@ -31,8 +31,8 @@ import {
   CONVENTIONS_FILE,
   yardstickCandidates,
   declaredIn,
-  pareceEsqueleto,
-  formatCandidatos,
+  looksLikeSkeleton,
+  formatCandidates,
 } from './repo-yardstick.js'
 
 const target = process.argv[2]
@@ -46,7 +46,7 @@ let truncated = false
 try {
   const st = statSync(target)
   if (!st.isDirectory()) {
-    console.error(`no es un directorio: ${target}`)
+    console.error(`not a directory: ${target}`)
     process.exit(1)
   }
   const r = walkRepo(target)
@@ -73,21 +73,15 @@ try {
   }
 }
 
-// `entradas`, `declaradas`, `candidatos` and `omitidos` are the option and
-// result keys of `yardstickCandidates` in repo-yardstick.js: they cross the
-// module boundary, so only the local names on this side are English.
-const { candidatos: candidates, omitidos: omitted } = yardstickCandidates({
-  entradas: entries,
-  declaradas: declared,
-})
+const { candidates, omitted } = yardstickCandidates({ entries, declared })
 for (const c of candidates) {
   try {
-    c.esqueleto = pareceEsqueleto(readFileSync(join(target, c.ruta), 'utf8'))
+    c.skeleton = looksLikeSkeleton(readFileSync(join(target, c.path), 'utf8'))
   } catch {
-    c.esqueleto = false
+    c.skeleton = false
   }
 }
 
-const text = formatCandidatos(candidates, { omitidos: omitted, truncated })
+const text = formatCandidates(candidates, { omitted, truncated })
 if (text) console.log(text)
 if (readNote && text) console.log(readNote)

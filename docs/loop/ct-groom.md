@@ -164,7 +164,7 @@ Until this version, "idempotent" meant *existence-only*: if the `<!-- ct-order:N
 Now, for each slice whose issue already exists, `/ct-groom` compares:
 
 - **the title** (`#N <Slice>`);
-- **the link to the spec** (the `> Slice #N del epic. Spec: […]` line) — it is spec content, unlike the `ct-order` marker (bookkeeping of ours, outside every comparison). It is compared **whole**. Before, it was compared only by its anchor, because the line was composed with the path exactly as you typed it when invoking the command, and two invocation habits for the same file would have "corrected" each other forever under `--reconcile`; that cause no longer exists (see "The link to the spec" further down), and comparing the whole line detects in addition that the spec has moved file or points at another repo. Immediate consequence on updating: the issues created with the previous version carry a broken relative link, so they **will come out reported as a divergence** — that is correct, that link never worked;
+- **the link to the spec** (the `> Slice #N of the epic. Spec: […]` line) — it is spec content, unlike the `ct-order` marker (bookkeeping of ours, outside every comparison). It is compared **whole**. Before, it was compared only by its anchor, because the line was composed with the path exactly as you typed it when invoking the command, and two invocation habits for the same file would have "corrected" each other forever under `--reconcile`; that cause no longer exists (see "The link to the spec" further down), and comparing the whole line detects in addition that the spec has moved file or points at another repo. Immediate consequence on updating: the issues created with the previous version carry a broken relative link, so they **will come out reported as a divergence** — that is correct, that link never worked;
 - **the milestone NOT**, since F23: a paired issue always has the run's milestone (see "The scope of a groom is its epic, not the repo"), so that divergence is unreachable from here and you will never see it reported;
 - **labels, but only the prefixes whose column the §9 table carries**: `type:` (if there is a `Tipo` column), `area:` (if there is an `Área` column), `touches:` (if there is a `Toca` column), `gate:` (if there is a `Gate` column **or** a `Tipo` column — the gates can come from either of the two). Without the corresponding column, the spec has NO opinion at all about that prefix. `status:` stays **out of the comparison completely, always** — a human or `/ct-next` move it afterwards (`backlog` → `ready` → `in-progress` → `in-review`…) as a normal part of the flow;
 - **dependencies** (`## Dependencias`, the `merge-after #N` lines) and **acceptance criteria** (`## Acceptance criteria`) — data the dispatcher genuinely obeys (`merge-after` gates whether a slice can be dispatched; the ACs are injected literally into the agent's prompt). Comparison by set, **only inside the recognized section** (see "Known limits"): a `merge-after #N` (or an AC) written in ANOTHER part of the body — Descripción, a new section added by hand — does not count as a real divergence, but it **is warned about as a note** (since the dispatch hardening, `/ct-next` does not obey it either — before that the dispatcher DID, even though `/ct-groom` could not touch it safely; see "Known limits");
@@ -210,7 +210,7 @@ All of this works under **`--dry-run`** too (with `--repo`; without it there is 
 The first line of every issue's body is its only traceability back to the section that originated it:
 
 ```
-> Slice `#1` del epic. Spec: [docs/specs/plan-design.md § 9. Slices](https://github.com/owner/repo/blob/main/docs/specs/plan-design.md#9-slices)
+> Slice `#1` of the epic. Spec: [docs/specs/plan-design.md § 9. Slices](https://github.com/owner/repo/blob/main/docs/specs/plan-design.md#9-slices)
 ```
 
 Until the previous version that line was `[docs/specs/plan-design.md#9](docs/specs/plan-design.md#9)`, and it was broken twice over (checked against GitHub, not deduced):
@@ -227,7 +227,7 @@ Now:
 When the verification does not pass, **no half-link is written**: the line stays as a text reference, with the reason inside it, and it warns through stderr:
 
 ```
-> Slice `#1` del epic. Spec: `docs/specs/plan-design.md` § `9. Slices` — sin enlace: the spec is not published on the default branch of the repository (owner/repo, branch main)
+> Slice `#1` of the epic. Spec: `docs/specs/plan-design.md` § `9. Slices` — sin enlace: the spec is not published on the default branch of the repository (owner/repo, branch main)
 ```
 
 The possible reasons: the spec is not in a git repo, it falls outside the repo's tree, the repo has no `origin` remote, the remote is not a recognizable URL, the default branch could not be resolved, or **the spec is not pushed yet** (by far the most common one: you write it, you groom, and you push afterwards). Intermediate case: if the file is published but the anchor does not appear in the published copy (a spec edited locally and not pushed), the **file** is linked —which does work— with no fragment, and it warns.

@@ -354,7 +354,7 @@ export function extractSectionContent(body, headingText) {
 
 // locateLine / extractLine: like locateSection, but for a SINGLE-line entity
 // (no heading + delimited content) — used for the link line to the spec that
-// buildIssueBody writes as the body's first line (`> Slice #N del epic. Spec:
+// buildIssueBody writes as the body's first line (`> Slice #N of the epic. Spec:
 // […]`). The same criterion of anchoring at column 0 and of ignoring lines
 // hidden inside a code fence or a multi-line HTML comment
 // (scanLines/stepLine, review round 5).
@@ -383,7 +383,7 @@ export function extractLine(body, prefix) {
   return loc ? loc.line : null
 }
 
-// extractSpecLink: the line `> Slice #N del epic. Spec: […]` that
+// extractSpecLink: the line `> Slice #N of the epic. Spec: […]` that
 // buildIssueBody (groom.js) always writes as the body's first line — review
 // round 3, important 5: it is content the spec genuinely owns (F10: it derives
 // from the spec's own path inside its repo and from the heading under which
@@ -441,7 +441,7 @@ export function normalizeSpecLink(specLinkLine) {
 //   specTarget asks "do these two issues point at the SAME document?", in
 //   order to decide whether an issue from another milestone is really this
 //   very epic under another title. There the prefix gets in the way: the line
-//   starts with "> Slice `#N` del epic. " and that prefix (a) carries the
+//   starts with "> Slice `#N` of the epic. " and that prefix (a) carries the
 //   slice's order and (b) changed format in F6 (`#N` with backticks, see
 //   SPEC_LINK_PREFIXES), so comparing the whole line would give a false
 //   negative on any issue created before F6.
@@ -523,6 +523,26 @@ export function countHeadingLines(body, headingText) {
 // prompt, and --reconcile would have replaced QA's prose.
 export const AC_HEADING_FORMS = ['## Acceptance criteria', '## Acceptance criteria (EARS, 1:1 con tests)']
 
+// AC_PLACEHOLDER / AC_PLACEHOLDER_LEGACY (issue #186): the line
+// groom.js#renderAcContent writes when a slice arrives with no acceptance
+// criteria. It is a WRITTEN-AND-READ-BACK string: buildIssueBody puts it into
+// the issue's body and extractAc (just below) has to drop it again, or an
+// empty section would be dispatched as if it carried one real criterion.
+//
+// They live HERE, beside AC_HEADING_FORMS, for the same reason E2E_HEADING
+// does: this file is the one that centralises what groom.js WRITES and
+// mapGhIssue READS, and the dependency already runs in that direction
+// (groom.js imports these and re-exports them).
+//
+// Two constants and not one because every epic groomed before the translation
+// carries the Spanish spelling in its body. The idiom is the one ct-init.sh
+// already uses with SLICES_HEADING_LEGACY: EMIT the new spelling, RECOGNISE
+// both. The legacy one is named, and not left inline in the reader, so the
+// next person can see that it is deliberate back-compat and not a translation
+// that was missed.
+export const AC_PLACEHOLDER = '(fill in from the spec)'
+export const AC_PLACEHOLDER_LEGACY = '(rellenar desde el spec)'
+
 // extractAc: locates the AC section against the closed set AC_HEADING_FORMS
 // (see above) — never by prefix.
 export function extractAc(body) {
@@ -532,7 +552,7 @@ export function extractAc(body) {
     .map((l) => l.trim())
     .filter((l) => l.startsWith('- '))
     .map((l) => l.slice(2).trim())
-    .filter((l) => l && l !== '(rellenar desde el spec)')
+    .filter((l) => l && l !== AC_PLACEHOLDER && l !== AC_PLACEHOLDER_LEGACY)
 }
 
 // E2E_HEADING (TASK 9): the runs section of the issue body. It lives HERE,

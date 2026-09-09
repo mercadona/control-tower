@@ -1,7 +1,7 @@
 // Pure grooming logic: from Slice[] (T1) to a plan of GitHub operations.
 import { isNoValueCell } from './slices.js'
 import { resolveGates, resolveE2e, gateLabels, renderGatesIssueContent } from './gates.js'
-import { locateSection, unterminatedDelimiter, normalizeToLF, SIGNAL_HEADING, E2E_HEADING } from './gh-issue-map.js'
+import { locateSection, unterminatedDelimiter, normalizeToLF, SIGNAL_HEADING, E2E_HEADING, AC_PLACEHOLDER } from './gh-issue-map.js'
 import { STATUS_LADDER } from './harvest.js'
 
 // SIGNAL_HEADING (Slice 10) is born in gh-issue-map.js (the lower layer: this
@@ -68,7 +68,7 @@ export const FROZEN_DECISIONS_HEADING = '## Decisiones congeladas'
 // An empty section without that second sentence is an invitation not to use
 // it.
 export const INHERITED_CONTEXT_PLACEHOLDER =
-  '_(vacía — la rellena la sesión coordinadora cuando algo ya mergeado condiciona a este slice. `/ct-groom` no escribe aquí ni reescribe lo que escribas.)_'
+  '_(empty — the coordinating session fills it in when something already merged conditions this slice. `/ct-groom` neither writes here nor rewrites what you write.)_'
 
 // EPIC_CONTEXT_REASONS (final branch review, I1): why readEpicContext returns
 // no text. It is not message decoration: it decides whether `--reconcile` may
@@ -427,7 +427,7 @@ export function renderProtectedLine(slice) {
   // slipped through as if they were real content, producing a junk bullet
   // ("- 🚫 -") in the body of EVERY issue with that variant. The same "no
   // value" criterion as the other columns, without exception.
-  return (slice.protected && !isNoValueCell(slice.protected)) ? `- 🚫 ${slice.protected}` : '- (ninguno declarado)'
+  return (slice.protected && !isNoValueCell(slice.protected)) ? `- 🚫 ${slice.protected}` : '- (none declared)'
 }
 
 // renderGatesContent (F21): like renderDescription/renderProtectedLine/
@@ -524,7 +524,7 @@ export function renderSignalContent(slice) {
 //   url     the verified absolute link, or null
 //   reason  the reason there is no url (a fixed string, see SPEC_REF_REASONS)
 export function renderSpecLink(slice, specRef) {
-  const head = `> Slice \`#${slice.n}\` del epic. Spec: `
+  const head = `> Slice \`#${slice.n}\` of the epic. Spec: `
   const { path, heading, url, reason } = specRef || {}
   if (url) {
     // The link's text CAN carry a "#N" from the heading itself without risk:
@@ -587,12 +587,12 @@ function inlineCode(text) {
 // read it as a reference not captured by `merge-after` and would mark the
 // section as `malformed` (fail-closed, the slice would stop being
 // dispatched).
-export const DEPS_ORDER_NOTE = '*(cada `#N` de esta sección es el ORDEN del slice en la tabla §9 del spec, NO un número de issue de GitHub — `/ct-next` lo traduce por el marcador `ct-order` de cada issue)*'
+export const DEPS_ORDER_NOTE = '*(each `#N` in this section is the ORDER of the slice in the §9 table of the spec, NOT a GitHub issue number — `/ct-next` translates it through the `ct-order` marker of each issue)*'
 export function renderDepsContent(deps) {
   return [DEPS_ORDER_NOTE, ...(deps || []).map((d) => `- merge-after \`#${d}\``)].join('\n')
 }
 export function renderAcContent(ac) {
-  return (ac && ac.length) ? ac.map((a) => `- ${a}`).join('\n') : '- (rellenar desde el spec)'
+  return (ac && ac.length) ? ac.map((a) => `- ${a}`).join('\n') : `- ${AC_PLACEHOLDER}`
 }
 
 export function buildIssueBody(slice, specRef, epicContext = null, frozenDecisions = null) {

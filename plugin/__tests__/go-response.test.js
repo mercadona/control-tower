@@ -272,6 +272,6 @@ describe('the text the attempt is answered with', () => {
   })
 
   it('says the silence is deliberate, so that it does not read as a breakage', () => {
-    expect(GO_FORMAT_REPLY).toContain('deliberado')
+    expect(GO_FORMAT_REPLY).toContain('deliberate')
   })
 })

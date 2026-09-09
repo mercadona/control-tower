@@ -183,7 +183,7 @@ export function liveSliceProcesses(repoRoot, { run = runCommand } = {}) {
     // A `ps` that fails is a read that could NOT be made. Never an empty list
     // presented as a fact: that is exactly the failure this module has just
     // fixed.
-    return { porSlice: new Map(), comprobado: false, motivo: `no se pudo listar procesos con ps: ${e && e.message}` }
+    return { porSlice: new Map(), comprobado: false, motivo: `could not list processes with ps: ${e && e.message}` }
   }
   const pids = []
   for (const line of listing.split('\n')) {

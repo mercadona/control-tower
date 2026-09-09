@@ -32,13 +32,13 @@ describe('loadIssues', () => {
     const gh = (args) => { if (args.includes('state=open')) throw new Error('rate limit'); return '[[]]' }
     const { motivos } = loadIssues({ repo: 'o/r', gh })
     expect(motivos).toHaveLength(1)
-    expect(motivos[0]).toMatch(/abiertos.*rate limit/s)
+    expect(motivos[0]).toMatch(/open issues.*rate limit/s)
   })
 
   it('when the CLOSED ones fail, the open ones already read are NOT thrown away', () => {
     // Throwing when the second read failed discarded the first one, which was
-    // already whole in memory: /ct-status printed an EMPTY report under «lo de
-    // arriba es sólo lo que sí se ha podido comprobar», with nothing above.
+    // already whole in memory: /ct-status printed an EMPTY report under «what
+    // is above is only what it did manage to check», with nothing above.
     const gh = (args) => {
       if (args.includes('state=closed')) throw new Error('rate limit')
       return JSON.stringify([[{ number: 42, body: '', labels: [] }]])
@@ -47,7 +47,7 @@ describe('loadIssues', () => {
     expect(abiertos.map((i) => i.number)).toEqual([42])
     expect(cerrados).toEqual([])
     expect(motivos).toHaveLength(1)
-    expect(motivos[0]).toMatch(/cerrados/)
+    expect(motivos[0]).toMatch(/closed issues/)
   })
 
   it('when BOTH reads fail both are said, and neither degrades into "there are no issues"', () => {
@@ -55,7 +55,7 @@ describe('loadIssues', () => {
     const { abiertos, cerrados, motivos } = loadIssues({ repo: 'o/r', gh })
     expect(abiertos).toEqual([])
     expect(cerrados).toEqual([])
-    expect(motivos.map((m) => /abiertos/.test(m) ? 'abiertos' : 'cerrados')).toEqual(['abiertos', 'cerrados'])
+    expect(motivos.map((m) => /open issues/.test(m) ? 'open' : 'closed')).toEqual(['open', 'closed'])
   })
 
   it('with both reads good, `motivos` comes back empty', () => {

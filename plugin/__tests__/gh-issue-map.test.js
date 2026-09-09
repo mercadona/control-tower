@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractAc, extractDeps, extractOrder, extractSpecLink, normalizeSpecLink, specTarget, locateSection, countHeadingLines, detectLineEnding, normalizeToLF, mapGhIssue, filterMergedIssues, buildOrderIndex, buildDispatchInput, AC_HEADING_FORMS, NO_MILESTONE_KEY, epicKeyOf, extractDepsInSection, extractStrayDeps, extractE2eRuns, extractSignal, SIGNAL_HEADING } from '../scripts/gh-issue-map.js'
+import { extractAc, extractDeps, extractOrder, extractSpecLink, normalizeSpecLink, specTarget, locateSection, countHeadingLines, detectLineEnding, normalizeToLF, mapGhIssue, filterMergedIssues, buildOrderIndex, buildDispatchInput, AC_HEADING_FORMS, AC_PLACEHOLDER_LEGACY, NO_MILESTONE_KEY, epicKeyOf, extractDepsInSection, extractStrayDeps, extractE2eRuns, extractSignal, SIGNAL_HEADING } from '../scripts/gh-issue-map.js'
 import { selectNext } from '../scripts/dispatch.js'
 import { buildIssueBody } from '../scripts/groom.js'
 
@@ -86,8 +86,16 @@ describe('extractAc', () => {
     const body = '## Acceptance criteria (EARS, 1:1 con tests)\n- AC-7.1 algo\n- AC-7.2 otro\n\n## Dependencias\n- merge-after #1'
     expect(extractAc(body)).toEqual(['AC-7.1 algo', 'AC-7.2 otro'])
   })
-  it('the placeholder "(rellenar desde el spec)" does not count as a real AC', () => {
-    const body = '## Acceptance criteria (EARS, 1:1 con tests)\n- (rellenar desde el spec)\n\n## Dependencias'
+  it('the placeholder "(fill in from the spec)" does not count as a real AC', () => {
+    const body = '## Acceptance criteria (EARS, 1:1 con tests)\n- (fill in from the spec)\n\n## Dependencias'
+    expect(extractAc(body)).toEqual([])
+  })
+  // Back-compat (issue #186): every epic groomed before the placeholder was
+  // translated carries the Spanish spelling in its body. The reader emits the
+  // new one and recognises BOTH — otherwise those placeholders would start
+  // counting as one real acceptance criterion.
+  it('the legacy Spanish placeholder does not count as a real AC either', () => {
+    const body = `## Acceptance criteria (EARS, 1:1 con tests)\n- ${AC_PLACEHOLDER_LEGACY}\n\n## Dependencias`
     expect(extractAc(body)).toEqual([])
   })
   it('the AC block is the last section of the body (with no following heading) → it is extracted too', () => {
@@ -162,10 +170,10 @@ describe('extractDeps / extractDepsInSection — the new format (`#N`) and the o
   })
   it('a body with the OLD format still maps the same through the production path (mapGhIssue)', () => {
     const legacyBody = [
-      '> Slice #5 del epic. Spec: [spec.md#9](spec.md#9)', '',
+      '> Slice #5 of the epic. Spec: [spec.md#9](spec.md#9)', '',
       '## Acceptance criteria (EARS, 1:1 con tests)', '- AC-5.1', '',
       '## Dependencias', '- merge-after #1', '- merge-after #2', '',
-      '## Out of scope / Protected', '- (ninguno declarado)', '',
+      '## Out of scope / Protected', '- (none declared)', '',
       '<!-- ct-order:5 -->',
     ].join('\n')
     const mapped = mapGhIssue({ number: 60, title: '#60 x', labels: [{ name: 'status:ready' }], body: legacyBody })
@@ -498,7 +506,7 @@ describe('locateSection — anchored to column 0 and aware of code fences (revie
       '- merge-after #1',
       '',
       '## Out of scope / Protected',
-      '- (ninguno declarado)',
+      '- (none declared)',
       '',
       '<!-- ct-order:2 -->',
     ].join('\n')
@@ -521,7 +529,7 @@ describe('locateSection — anchored to column 0 and aware of code fences (revie
       '- merge-after #3',
       '',
       '## Out of scope / Protected',
-      '- (ninguno declarado)',
+      '- (none declared)',
       '',
       '<!-- ct-order:1 -->',
     ].join('\n')
@@ -546,7 +554,7 @@ describe('locateSection — anchored to column 0 and aware of code fences (revie
       '- merge-after #1',
       '',
       '## Out of scope / Protected',
-      '- (ninguno declarado)',
+      '- (none declared)',
       '',
       '<!-- ct-order:1 -->',
     ].join('\n')
@@ -591,7 +599,7 @@ describe('locateSection / stepFence — real CommonMark: it closes only with the
       '- merge-after #1',
       '',
       '## Out of scope / Protected',
-      '- (ninguno declarado)',
+      '- (none declared)',
       '',
       '<!-- ct-order:1 -->',
     ].join('\n')
@@ -622,7 +630,7 @@ describe('locateSection / stepFence — real CommonMark: it closes only with the
       '- merge-after #1',
       '',
       '## Out of scope / Protected',
-      '- (ninguno declarado)',
+      '- (none declared)',
       '',
       '<!-- ct-order:1 -->',
     ].join('\n')
@@ -693,7 +701,7 @@ describe('locateSection / stepFence — real CommonMark: it closes only with the
       '- merge-after #1',
       '',
       '## Out of scope / Protected',
-      '- (ninguno declarado)',
+      '- (none declared)',
       '',
       '<!-- ct-order:1 -->',
     ].join('\n')
@@ -782,7 +790,7 @@ describe('locateSection / stepLine — multiline HTML comments hide their interi
       '- merge-after #1',
       '',
       '## Out of scope / Protected',
-      '- (ninguno declarado)',
+      '- (none declared)',
       '',
       '<!-- ct-order:1 -->',
     ].join('\n')
@@ -821,7 +829,7 @@ describe('locateSection / stepLine — multiline HTML comments hide their interi
       '- merge-after #1',
       '',
       '## Out of scope / Protected',
-      '- (ninguno declarado)',
+      '- (none declared)',
       '',
       '<!-- ct-order:1 -->',
     ].join('\n')
@@ -856,7 +864,7 @@ describe('locateSection / stepLine — multiline HTML comments hide their interi
   it('a SELF-CONTAINED comment (it opens and closes on the SAME line, like the ct-order marker) still terminates a section as normal — it is not mistaken for the opening of a multiline one', () => {
     const body = [
       '## Out of scope / Protected',
-      '- (ninguno declarado)',
+      '- (none declared)',
       '<!-- ct-order:1 -->',
       '',
       '## Dependencias',
@@ -1002,7 +1010,7 @@ describe('CRLF — normalizeToLF/detectLineEnding (review round 4, menor)', () =
 // good). Now the line is canonical — it derives from the repository, not from
 // argv — and it is compared whole.
 describe('normalizeSpecLink — it compares the whole line, normalising only the whitespace at the ends (F10)', () => {
-  const LINK = '> Slice `#2` del epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)'
+  const LINK = '> Slice `#2` of the epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)'
   it('two identical lines are equal', () => {
     expect(normalizeSpecLink(LINK)).toBe(normalizeSpecLink(LINK))
   })
@@ -1010,11 +1018,11 @@ describe('normalizeSpecLink — it compares the whole line, normalising only the
     expect(normalizeSpecLink(`${LINK}  `)).toBe(normalizeSpecLink(LINK))
   })
   it('the SAME anchor in ANOTHER file is NO longer considered equal — the hole the anchor comparison left', () => {
-    const anotherFile = '> Slice `#2` del epic. Spec: [docs/viejo.md § 9. Slices](https://github.com/o/r/blob/main/docs/viejo.md#9-slices)'
+    const anotherFile = '> Slice `#2` of the epic. Spec: [docs/old.md § 9. Slices](https://github.com/o/r/blob/main/docs/old.md#9-slices)'
     expect(normalizeSpecLink(anotherFile)).not.toBe(normalizeSpecLink(LINK))
   })
   it('the RELATIVE link from before F10 is not considered equal to today\u2019s absolute one', () => {
-    expect(normalizeSpecLink('> Slice `#2` del epic. Spec: [docs/spec.md#9](docs/spec.md#9)')).not.toBe(normalizeSpecLink(LINK))
+    expect(normalizeSpecLink('> Slice `#2` of the epic. Spec: [docs/spec.md#9](docs/spec.md#9)')).not.toBe(normalizeSpecLink(LINK))
   })
   it('with no line → null (and null is not equal to any real line)', () => {
     expect(normalizeSpecLink(null)).toBeNull()
@@ -1040,29 +1048,29 @@ describe('countHeadingLines — it counts duplicated headings (review round 3, m
   })
 })
 
-describe('extractSpecLink — the "> Slice #N del epic. Spec: …" line (review round 3, important 5)', () => {
+describe('extractSpecLink — the "> Slice #N of the epic. Spec: …" line (review round 3, important 5)', () => {
   it('it extracts it as it stands', () => {
-    const body = '> Slice #2 del epic. Spec: [docs/spec.md#9](docs/spec.md#9)\n\n## Acceptance criteria (EARS, 1:1 con tests)\n- AC-1.1'
-    expect(extractSpecLink(body)).toBe('> Slice #2 del epic. Spec: [docs/spec.md#9](docs/spec.md#9)')
+    const body = '> Slice #2 of the epic. Spec: [docs/spec.md#9](docs/spec.md#9)\n\n## Acceptance criteria (EARS, 1:1 con tests)\n- AC-1.1'
+    expect(extractSpecLink(body)).toBe('> Slice #2 of the epic. Spec: [docs/spec.md#9](docs/spec.md#9)')
   })
   it('with no such line → null', () => {
     expect(extractSpecLink('## Acceptance criteria\n- x')).toBeNull()
   })
   it('a quoted or indented mention does not count as the real line', () => {
-    const body = '> algo más\n  > Slice #9 no es la línea real (indentada)\n> Slice #2 del epic. Spec: [x#9](x#9)'
-    expect(extractSpecLink(body)).toBe('> Slice #2 del epic. Spec: [x#9](x#9)')
+    const body = '> something else\n  > Slice #9 is not the real line (indented)\n> Slice #2 of the epic. Spec: [x#9](x#9)'
+    expect(extractSpecLink(body)).toBe('> Slice #2 of the epic. Spec: [x#9](x#9)')
   })
   // F6, grave 1: the order now goes between backticks in this line too (the
   // real `body_html` of the sandbox's issue #4 proves that GitHub linked that
   // "#3" to issue #3). Both formats have to be located: old issues are not
   // rewritten.
   it('it also locates the line with the order between backticks (the F6 format)', () => {
-    const body = '> Slice `#2` del epic. Spec: [docs/spec.md#9](docs/spec.md#9)\n\n## Acceptance criteria\n- AC-1.1'
-    expect(extractSpecLink(body)).toBe('> Slice `#2` del epic. Spec: [docs/spec.md#9](docs/spec.md#9)')
+    const body = '> Slice `#2` of the epic. Spec: [docs/spec.md#9](docs/spec.md#9)\n\n## Acceptance criteria\n- AC-1.1'
+    expect(extractSpecLink(body)).toBe('> Slice `#2` of the epic. Spec: [docs/spec.md#9](docs/spec.md#9)')
   })
   it('a "> Slice …" line that quotes no order at all is not mistaken for the spec link', () => {
-    const body = '> Slice pendiente de negociar con Ana\n> Slice `#2` del epic. Spec: [x#9](x#9)'
-    expect(extractSpecLink(body)).toBe('> Slice `#2` del epic. Spec: [x#9](x#9)')
+    const body = '> Slice still to be negotiated with Ana\n> Slice `#2` of the epic. Spec: [x#9](x#9)'
+    expect(extractSpecLink(body)).toBe('> Slice `#2` of the epic. Spec: [x#9](x#9)')
   })
 })
 
@@ -1457,22 +1465,22 @@ describe('mapGhIssue — an "area:"/"touches:" label with no value produces no c
 // by comparing the whole line, and it must go on doing so).
 describe('specTarget', () => {
   it('it returns what comes after "Spec: " in the link\u2019s current form', () => {
-    const line = '> Slice `#2` del epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)'
+    const line = '> Slice `#2` of the epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)'
     expect(specTarget(line)).toBe('[docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)')
   })
   it('the form from BEFORE F6 (with no backticks) gives the SAME target — that is the reason for comparing the target and not the line', () => {
     const target = '[docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)'
-    expect(specTarget(`> Slice #2 del epic. Spec: ${target}`)).toBe(target)
-    expect(specTarget(`> Slice \`#2\` del epic. Spec: ${target}`)).toBe(target)
+    expect(specTarget(`> Slice #2 of the epic. Spec: ${target}`)).toBe(target)
+    expect(specTarget(`> Slice \`#2\` of the epic. Spec: ${target}`)).toBe(target)
   })
   it('the slice\u2019s ORDER is not part of the target: two different slices of the same spec match', () => {
     const target = '`docs/spec.md` § `9. Slices` — sin enlace: el fichero no está publicado'
-    expect(specTarget(`> Slice \`#1\` del epic. Spec: ${target}`))
-      .toBe(specTarget(`> Slice \`#7\` del epic. Spec: ${target}`))
+    expect(specTarget(`> Slice \`#1\` of the epic. Spec: ${target}`))
+      .toBe(specTarget(`> Slice \`#7\` of the epic. Spec: ${target}`))
   })
   it('different specs give different targets', () => {
-    const a = specTarget('> Slice `#1` del epic. Spec: [docs/a.md](https://github.com/o/r/blob/main/docs/a.md)')
-    const b = specTarget('> Slice `#1` del epic. Spec: [docs/b.md](https://github.com/o/r/blob/main/docs/b.md)')
+    const a = specTarget('> Slice `#1` of the epic. Spec: [docs/a.md](https://github.com/o/r/blob/main/docs/a.md)')
+    const b = specTarget('> Slice `#1` of the epic. Spec: [docs/b.md](https://github.com/o/r/blob/main/docs/b.md)')
     expect(a).not.toBe(b)
   })
   it('with no "Spec: " separator → null (it does not invent a target)', () => {
@@ -1483,7 +1491,7 @@ describe('specTarget', () => {
     expect(specTarget(null)).toBeNull()
     expect(specTarget(undefined)).toBeNull()
     expect(specTarget('')).toBeNull()
-    expect(specTarget('> Slice `#1` del epic. Spec: ')).toBeNull()
+    expect(specTarget('> Slice `#1` of the epic. Spec: ')).toBeNull()
   })
 })
 

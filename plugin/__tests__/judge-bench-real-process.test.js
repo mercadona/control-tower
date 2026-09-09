@@ -38,7 +38,7 @@ describe('judge-bench.mjs --dry-run', () => {
       expect(command).toContain("'--strict-mcp-config'")
       expect(command).toContain("'--agent' 'ct-judge'")
     }
-    expect(r.stderr).toContain('dry-run: 1 caso(s) × 2 run(s) preparados en')
+    expect(r.stderr).toContain('dry-run: 1 case(s) × 2 run(s) prepared in')
     expect(r.stderr).not.toContain('fake-claude')
   })
 

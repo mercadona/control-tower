@@ -14,16 +14,16 @@ const F = '```'
 const REAL_FILE = 'export function sum(a, b) {\n  return a + b\n}\n'
 
 const VALID_PLAN = [
-  '# #7 — sum() devuelve la suma',
+  '# #7 — sum() returns the sum',
   '',
   '> **This plan is written to be executed by task-scoped subagents with zero context.**',
   '',
   '## 1. Context and goal',
-  'sum() existe y hay que cubrirla.',
+  'sum() exists and has to be covered.',
   '### Desired end state',
-  'sum() con test.',
+  'sum() with a test.',
   '### Out of scope',
-  'N/A — nada que excluir.',
+  'N/A — nothing to exclude.',
   '## 2. Closed decisions',
   '| Decision | Value |',
   '|---|---|',
@@ -31,14 +31,14 @@ const VALID_PLAN = [
   '## 3. Reference patterns',
   'src/math.js',
   '## 4. Inventory',
-  'src/math.js (modificar), tests/math.test.js (crear).',
+  'src/math.js (modify), tests/math.test.js (create).',
   '## 5. Interfaces',
   'Consumes: nothing. Produces: sum(a, b) -> number.',
   '## 6. Test strategy',
-  'Unit con vitest.',
+  'Unit with vitest.',
   '## 7. Tasks',
   '### Task 1 — cover sum',
-  '**Objective:** sum queda cubierta.',
+  '**Objective:** sum ends up covered.',
   '**Files:** tests/math.test.js',
   'Current state (src/math.js):',
   F,
@@ -48,14 +48,14 @@ const VALID_PLAN = [
   F,
   '**TDD:** red first: expect(sum(2, 2)).toBe(4)',
   '**Tests:** add tests/math.test.js',
-  '**Verification:** npm test, en verde.',
+  '**Verification:** npm test, green.',
   F + 'bash',
   'npm test',
   F,
   '## 8. Global verification',
   'N/A — fixture.',
   '## 9. Assumptions',
-  'Ninguna.',
+  'None.',
   '',
 ].join('\n')
 
@@ -80,11 +80,11 @@ const HEADER = (title) => [
   '> **This plan is written to be executed by task-scoped subagents with zero context.**',
   '',
   '## 1. Context and goal',
-  'Hay que exponer sum() por el barrel.',
+  'sum() has to be exposed through the barrel.',
   '### Desired end state',
-  'El barrel exporta sum().',
+  'The barrel exports sum().',
   '### Out of scope',
-  'N/A — nada que excluir.',
+  'N/A — nothing to exclude.',
   '## 2. Closed decisions',
   '| Decision | Value |',
   '|---|---|',
@@ -96,16 +96,16 @@ const HEADER = (title) => [
   '|---|---|---|',
   '| src/index.js | create | Contract |',
   '## 5. Interfaces',
-  'Consumes: N/A. Produces: sum(a, b) -> number desde src/index.js.',
+  'Consumes: N/A. Produces: sum(a, b) -> number from src/index.js.',
   '## 6. Test strategy',
-  'Unit con vitest.',
+  'Unit with vitest.',
 ]
 
 const TAIL = [
   '## 8. Global verification',
   'N/A — fixture.',
   '## 9. Assumptions',
-  'Ninguna.',
+  'None.',
   '',
 ]
 
@@ -113,17 +113,17 @@ const block = ([label, body, lang = '']) => [label, F + lang, ...body, F]
 
 // Builds a valid plan with one task per element of `tasks`. Each task is a
 // list of blocks [label, body, lang?]; a task with no block carrying a
-// role declares the escape `No code — <razón>`.
+// role declares the escape `No code — <reason>`.
 const planWithTasks = (tasks, { beforeTasks = [] } = {}) => [
-  ...HEADER('#9 — el análisis expone su contrato'),
+  ...HEADER('#9 — the analysis exposes its contract'),
   ...beforeTasks.flatMap(block),
   '## 7. Tasks',
   ...tasks.flatMap((blocks, i) => [
-    `### Task ${i + 1} — hacer el trabajo ${i + 1}`,
-    `**Objective:** el trabajo ${i + 1} queda hecho.`,
+    `### Task ${i + 1} — do job ${i + 1}`,
+    `**Objective:** job ${i + 1} is done.`,
     '**Files:** src/index.js',
     ...blocks.flatMap(block),
-    ...(blocks.length ? [] : ['No code — la configuración se describe en prosa con el valor inline.']),
+    ...(blocks.length ? [] : ['No code — the configuration is described in prose with the value inline.']),
     '**TDD:** No TDD — fixture.',
     '**Tests:** N/A — fixture.',
     '**Verification:** npm test',
@@ -139,7 +139,7 @@ const linesOf = (n) => Array.from({ length: n }, (_, i) => `export const c${i} =
 const REAL_CITATION = ['Current state (src/math.js):', ['export function sum(a, b) {', '  return a + b', '}']]
 const CONTRACT = ['Contract (src/index.js):', ["export { sum } from './math.js'"], 'js']
 const CALL_SITE = ['Call site (src/app.js):', ["import { sum } from './index.js'"], 'js']
-const TEXT = ['Final text (README.md):', ['## Uso', 'Importa `sum` desde `src/index.js`.']]
+const TEXT = ['Final text (README.md):', ['## Usage', 'Import `sum` from `src/index.js`.']]
 
 const PLAN_WITH_ROLES = planWithTasks([[REAL_CITATION, CONTRACT, CALL_SITE, TEXT], []])
 
@@ -177,7 +177,7 @@ describe('validatePlan — structure', () => {
 
 describe('validatePlan — placeholders', () => {
   it('a TBD outside a fence is a violation; inside a fence, it is not', () => {
-    const outside = validatePlan(VALID_PLAN.replace('Unit con vitest.', 'Unit con vitest. TBD'), { readFile })
+    const outside = validatePlan(VALID_PLAN.replace('Unit with vitest.', 'Unit with vitest. TBD'), { readFile })
     expect(outside.violations.some((v) => v.rule === 'placeholders')).toBe(true)
 
     const inside = VALID_PLAN.replace('  return a + b', '  return a + b // TBD')
@@ -200,7 +200,7 @@ describe('validatePlan — literality', () => {
   it('a label that does not match the convention does not check literality', () => {
     const relabelled = VALID_PLAN.replace(
       ['Current state (src/math.js):', F, 'export function sum(a, b) {', '  return a + b', '}', F].join('\n'),
-      ['Current state: does not exist.', F, 'nuevo contenido', F].join('\n'),
+      ['Current state: does not exist.', F, 'new content', F].join('\n'),
     )
     const r = validatePlan(relabelled, { readFile })
     expect(r.violations.filter((v) => v.rule === 'literality')).toEqual([])
@@ -217,7 +217,7 @@ describe('planFilesForIssue — the issue-<n>- convention', () => {
     const paths = [
       'docs/superpowers/plans/2026-08-12-issue-1-foo.md',
       'docs/superpowers/plans/2026-08-12-issue-12-bar.md',
-      'docs/otro/2026-08-12-issue-1-x.md',
+      'docs/other/2026-08-12-issue-1-x.md',
     ]
     expect(planFilesForIssue(1, paths)).toEqual(['docs/superpowers/plans/2026-08-12-issue-1-foo.md'])
     expect(planFilesForIssue(12, paths)).toEqual(['docs/superpowers/plans/2026-08-12-issue-12-bar.md'])
@@ -257,7 +257,7 @@ describe("checkPlans — the gate's decision", () => {
   it('reads the PLAN with readFile and the CITATIONS with readCitedFile', () => {
     const onlyThePlan = (path) => {
       if (path === PLAN_PATH) return VALID_PLAN
-      throw new Error(`el plan no está en la base: ${path}`)
+      throw new Error(`the plan is not in the base: ${path}`)
     }
     const onlyWhatIsCited = (path) => {
       if (path === 'src/math.js') return REAL_FILE
@@ -278,11 +278,11 @@ describe("checkPlans — the gate's decision", () => {
       issue: 7,
       candidates: [PLAN_PATH],
       readFile: fsOf(VALID_PLAN),
-      readCitedFile: () => { throw new Error('no existe en la base de la rama (abc123def456)') },
+      readCitedFile: () => { throw new Error('does not exist in the branch base (abc123def456)') },
     })
     expect(r.code).toBe(6)
     expect(r.message).toContain('src/math.js')
-    expect(r.message).toContain('no existe en la base de la rama')
+    expect(r.message).toContain('does not exist in the branch base')
   })
 
   it('a dump with no role label comes out with code 6 and the message carries the remedy (F-jjponz-4)', () => {
@@ -306,9 +306,9 @@ describe('validatePlan — block taxonomy', () => {
   })
 
   it('a block with no role label is a violation, and the message lists the four roles', () => {
-    const broken = PLAN_WITH_ROLES.replace('Contract (src/index.js):', 'Así queda el fichero:')
+    const broken = PLAN_WITH_ROLES.replace('Contract (src/index.js):', 'This is how the file ends up:')
     const [v] = violationsOf(broken, 'roles')
-    expect(v.detail).toContain('Así queda el fichero:')
+    expect(v.detail).toContain('This is how the file ends up:')
     for (const role of ['Current state (path):', 'Contract (path):', 'Call site (path):', 'Final text (path.md):']) {
       expect(v.detail).toContain(role)
     }
@@ -338,12 +338,12 @@ describe('validatePlan — block taxonomy', () => {
   })
 
   it('a command block needs no label: its language gives it away', () => {
-    const plan = planWithTasks([[CONTRACT, ['Y se comprueba así:', ['npm run build'], 'bash']]])
+    const plan = planWithTasks([[CONTRACT, ['And it is checked like this:', ['npm run build'], 'bash']]])
     expect(violationsOf(plan, 'roles')).toEqual([])
   })
 
   it('a heredoc in a command block is a file smuggled in through the back door', () => {
-    const plan = planWithTasks([[CONTRACT, ['Y se siembra así:', ['cat > f.txt <<EOF', 'hola', 'EOF'], 'bash']]])
+    const plan = planWithTasks([[CONTRACT, ['And it is seeded like this:', ['cat > f.txt <<EOF', 'hello', 'EOF'], 'bash']]])
     expect(violationsOf(plan, 'commands')).toHaveLength(1)
   })
 
@@ -381,7 +381,7 @@ describe('validatePlan — budget per role', () => {
     const half = Math.ceil(CODE_BUDGETS.task / 2) + 1
     const plan = planWithTasks([[
       ['Contract (src/index.js):', linesOf(Math.min(half, ROLE_BUDGETS.Contract))],
-      ['Contract (src/otro.js):', linesOf(Math.min(half, ROLE_BUDGETS.Contract))],
+      ['Contract (src/other.js):', linesOf(Math.min(half, ROLE_BUDGETS.Contract))],
     ]])
     const [v] = violationsOf(plan, 'budget')
     expect(v.detail).toContain('commit')
@@ -398,12 +398,12 @@ describe('validatePlan — budget per role', () => {
   })
 
   it('command blocks do not count towards the accumulated total', () => {
-    const commands = Array.from({ length: 40 }, (_, i) => [`Se comprueba (${i}):`, ['npm test'], 'bash'])
+    const commands = Array.from({ length: 40 }, (_, i) => [`Check (${i}):`, ['npm test'], 'bash'])
     expect(violationsOf(planWithTasks([[CONTRACT, ...commands]]), 'budget')).toEqual([])
   })
 
   it('a command block longer than its budget is a violation', () => {
-    const plan = planWithTasks([[CONTRACT, ['Se comprueba así:', linesOf(COMMAND_BUDGET + 1), 'bash']]])
+    const plan = planWithTasks([[CONTRACT, ['It is checked like this:', linesOf(COMMAND_BUDGET + 1), 'bash']]])
     expect(violationsOf(plan, 'commands')).toHaveLength(1)
   })
 })
@@ -415,7 +415,7 @@ describe('validatePlan — budget per role', () => {
 // that the check stayed green. It is ct's yardstick fighting a ct check, and
 // here is the only place where it can be stopped.
 describe('validatePlan — no check pins the suite total of tests', () => {
-  const withCheck = (command) => planWithTasks([[CONTRACT, ['Se comprueba así:', [command], 'bash']]])
+  const withCheck = (command) => planWithTasks([[CONTRACT, ['It is checked like this:', [command], 'bash']]])
 
   it('rejects the cargo test total', () => {
     expect(violationsOf(withCheck(`test "$(cargo test 2>&1 | grep -c 'test result: ok. 52 passed')" -eq 1`), 'commands'))
@@ -448,7 +448,7 @@ describe('validatePlan — no check pins the suite total of tests', () => {
   })
 
   it('it points at the line of the check, not at the one of the fence that opens it', () => {
-    const plan = planWithTasks([[CONTRACT, ['Se comprueba así:', ['cargo build', `grep -c '52 passed'`], 'bash']]])
+    const plan = planWithTasks([[CONTRACT, ['It is checked like this:', ['cargo build', `grep -c '52 passed'`], 'bash']]])
     const [violation] = violationsOf(plan, 'commands')
     const checkLine = plan.split('\n').findIndex((l) => l.includes('52 passed')) + 1
     expect(violation.detail).toMatch(new RegExp(`^line ${checkLine}:`))
@@ -497,13 +497,13 @@ describe('validatePlan — test files carry no final-state block', () => {
 describe('validatePlan — "at least one block with a role" per task', () => {
   it('a task whose only block is the bash verification is a violation', () => {
     const plan = planWithTasks([[CONTRACT], []]).replace(
-      'No code — la configuración se describe en prosa con el valor inline.', 'Aquí no hay nada.',
+      'No code — the configuration is described in prose with the value inline.', 'There is nothing here.',
     )
     const [v] = violationsOf(plan, 'tasks')
     expect(v.detail).toContain('No code — ')
   })
 
-  it('…unless it declares the exact line "No code — <razón>"', () => {
+  it('…unless it declares the exact line "No code — <reason>"', () => {
     expect(violationsOf(planWithTasks([[CONTRACT], []]), 'tasks')).toEqual([])
   })
 })
@@ -511,11 +511,11 @@ describe('validatePlan — "at least one block with a role" per task', () => {
 describe('validatePlan — every TASK fits on an A4 sheet', () => {
   const fatTask = (n) => [
     ['Contract (src/index.js):', ['export const x = 1']],
-    ...Array.from({ length: n }, (_, i) => [`Se comprueba (${i}):`, [`npm test -- caso-${i}`], 'bash']),
+    ...Array.from({ length: n }, (_, i) => [`Check (${i}):`, [`npm test -- case-${i}`], 'bash']),
   ]
 
   it(`a task of more than ${CODE_BUDGETS.chars} characters is a violation, it names it, says how many sheets it takes and that the task is two`, () => {
-    const filler = Array.from({ length: 100 }, (_, i) => `Detalle cerrado número ${i} de esta tarea.`)
+    const filler = Array.from({ length: 100 }, (_, i) => `Closed detail number ${i} of this task.`)
     const plan = planWithTasks([[CONTRACT]]).replace(
       '**TDD:** No TDD — fixture.', `${filler.join('\n')}\n**TDD:** No TDD — fixture.`,
     )
@@ -547,16 +547,16 @@ describe('validatePlan — every TASK fits on an A4 sheet', () => {
 // ===========================================================================
 describe('the **Verification:** commands go in a block, not in the sentence', () => {
   const planWith = (verification) => [
-    '# #7 — sum() devuelve la suma',
+    '# #7 — sum() returns the sum',
     '',
     '> **This plan is written to be executed by task-scoped subagents with zero context.**',
     '',
     '## 1. Context and goal',
-    'sum() existe y hay que cubrirla.',
+    'sum() exists and has to be covered.',
     '### Desired end state',
-    'sum() con test.',
+    'sum() with a test.',
     '### Out of scope',
-    'N/A — nada que excluir.',
+    'N/A — nothing to exclude.',
     '## 2. Closed decisions',
     '| Decision | Value |',
     '|---|---|',
@@ -564,23 +564,23 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
     '## 3. Reference patterns',
     'src/math.js',
     '## 4. Inventory',
-    'tests/math.test.js (crear).',
+    'tests/math.test.js (create).',
     '## 5. Interfaces',
     'Consumes: nothing. Produces: sum(a, b) -> number.',
     '## 6. Test strategy',
-    'Unit con vitest.',
+    'Unit with vitest.',
     '## 7. Tasks',
     '### Task 1 — cover sum',
-    '**Objective:** sum queda cubierta.',
+    '**Objective:** sum ends up covered.',
     '**Files:** tests/math.test.js',
-    'No code — el test se describe por nombre y aserción.',
+    'No code — the test is described by name and assertion.',
     '**TDD:** red first: expect(sum(2, 2)).toBe(4)',
     '**Tests:** add tests/math.test.js',
     ...verification,
     '## 8. Global verification',
     'N/A — fixture.',
     '## 9. Assumptions',
-    'Ninguna.',
+    'None.',
     '',
   ].join('\n')
 
@@ -597,7 +597,7 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
 
   it('the same task with the commands in a block does pass', () => {
     expect(rulesOf(planWith([
-      '**Verification:** los dos en verde.',
+      '**Verification:** both green.',
       F + 'bash',
       'npm test   # exit 0',
       'npm run lint   # exit 0',
@@ -611,7 +611,7 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
   // the rule has to reach ALL THE WAY HERE and not stop at the extractor.
   it("rust-monitoring's inverted check, block and all, does NOT pass the contract", () => {
     const plan = planWith([
-      '**Verification:** la sección protegida no se toca.',
+      '**Verification:** the protected section is not touched.',
       F + 'bash',
       "git diff HEAD -- AGENTS.md | grep -c 'ct-init:slices-contract'   # expected: 0",
       F,
@@ -622,7 +622,7 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
 
   it('the same check written as a predicate does pass', () => {
     expect(rulesOf(planWith([
-      '**Verification:** la sección protegida no se toca.',
+      '**Verification:** the protected section is not touched.',
       F + 'bash',
       'test "$(git diff HEAD -- AGENTS.md | grep -c \'ct-init:slices-contract\')" -eq 0',
       F,
@@ -631,7 +631,7 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
 
   it('it accepts the block even if the **Verification:** paragraph carries prose in front', () => {
     expect(rulesOf(planWith([
-      '**Verification:** primero `npm install`, y después:',
+      '**Verification:** first `npm install`, and then:',
       F + 'bash',
       'npm test   # exit 0',
       F,
@@ -657,13 +657,13 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
   it('a plan with several tasks names which ones fail, not how many', () => {
     const plan = planWith(['**Verification:** `npm test` → exit 0.'])
       .replace('## 8. Global verification', [
-        '### Task 2 — otra',
-        '**Objective:** otra cosa.',
-        '**Files:** tests/otra.test.js',
-        'No code — descrito en prosa.',
+        '### Task 2 — another',
+        '**Objective:** another thing.',
+        '**Files:** tests/other.test.js',
+        'No code — described in prose.',
         '**TDD:** No TDD — fixture.',
         '**Tests:** N/A — fixture.',
-        '**Verification:** `npm test` otra vez, en prosa.',
+        '**Verification:** `npm test` again, in prose.',
         '## 8. Global verification',
       ].join('\n'))
     expect(rulesOf(plan).map((v) => v.detail.match(/task (\d+)/)[1])).toEqual(['1', '2'])
@@ -672,12 +672,12 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
   // §3.7-A of the handoff: the same pair of rules (block / predicate), applied
   // to "## 8. Global verification" instead of to a task's **Verification:**.
   // Both come out through `verification` in the gate, just like the task ones.
-  const goodVerification = ['**Verification:** en verde.', F + 'bash', 'npm test   # exit 0', F]
+  const goodVerification = ['**Verification:** green.', F + 'bash', 'npm test   # exit 0', F]
   const withGlobal = (globalBlock) => planWith(goodVerification)
     .replace('## 8. Global verification\nN/A — fixture.', globalBlock)
 
   it('§8 in prose (not "N/A") is a "verification" violation', () => {
-    const plan = withGlobal('## 8. Global verification\nQue todo siga en verde.')
+    const plan = withGlobal('## 8. Global verification\nEverything stays green.')
     expect(rulesOf(plan)).toHaveLength(1)
     expect(rulesOf(plan)[0].detail).toMatch(/does not execute prose/)
   })
@@ -688,7 +688,7 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
   })
 
   it('§8 whose last stretch is `grep -c` is a predicate violation', () => {
-    const plan = withGlobal(['## 8. Global verification', '', F + 'bash', "grep -c 'algo' AGENTS.md", F].join('\n'))
+    const plan = withGlobal(['## 8. Global verification', '', F + 'bash', "grep -c 'something' AGENTS.md", F].join('\n'))
     expect(rulesOf(plan)).toHaveLength(1)
     expect(rulesOf(plan)[0].detail).toMatch(/cannot assert what the check says it measures/)
   })
@@ -734,7 +734,7 @@ describe('validatePlan — the §3 paths exist', () => {
   it('a token that is not a path is not looked at', () => {
     // §3 describes idioms, and describing them demands citing code: `test(...)`
     // and `describe` are technical prose, not files.
-    expect(violationsOf(withSection3('Files to imitate: `src/math.js` — tests planos con `test(...)`, sin `describe`'), 'reference-paths')).toEqual([])
+    expect(violationsOf(withSection3('Files to imitate: `src/math.js` — flat tests with `test(...)`, no `describe`'), 'reference-paths')).toEqual([])
   })
 
   it('a directory is skipped: the only port this module receives reads files', () => {
@@ -744,7 +744,7 @@ describe('validatePlan — the §3 paths exist', () => {
   it('the rule is scoped to §3: in the rest of the plan there are paths the slice is going to create', () => {
     // Demanding that they exist outside §3 would veto every plan: `## 4.
     // Inventory` names precisely the files the slice creates.
-    const plan = VALID_PLAN.replace('src/math.js (modificar), tests/math.test.js (crear).', '`src/aun-no-existe.js` (crear).')
+    const plan = VALID_PLAN.replace('src/math.js (modify), tests/math.test.js (create).', '`src/does-not-exist-yet.js` (create).')
     expect(violationsOf(plan, 'reference-paths')).toEqual([])
   })
 

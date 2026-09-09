@@ -11,7 +11,7 @@ import { makeSpecDir, specUrl } from './fixtures/spec-repo.js'
 // The defect it closes, reproduced before touching anything and verified
 // against the real GitHub (not against a reading of the markdown):
 //
-//   > Slice `#1` del epic. Spec: [docs/x-design.md#9](docs/x-design.md#9)
+//   > Slice `#1` of the epic. Spec: [docs/x-design.md#9](docs/x-design.md#9)
 //
 //   1. `gh api /markdown -X POST` with mode:gfm and context:owner/repo returns
 //      the href AS IS: `<a href="docs/x-design.md#9">`. On an issue's page

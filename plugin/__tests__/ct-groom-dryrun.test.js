@@ -1659,11 +1659,11 @@ const THREE_SLICES = (a, b, c) => `## Hipótesis\n\nApuesta del fixture.\n\n## 9
 // different check — what is tested here is the narrowing).
 const PREVIOUS_EPIC = [1, 2, 3, 4, 5, 6].map((n) => ({
   number: 450 + n,
-  title: `#${n} slice viejo`,
+  title: `#${n} old slice`,
   state: 'closed',
-  milestone: { number: 1, title: 'Epic anterior' },
+  milestone: { number: 1, title: 'Previous epic' },
   labels: [{ name: 'type:backend' }],
-  body: `> Slice \`#${n}\` del epic. Spec: [otro-spec.md](https://github.com/o/r/blob/main/otro-spec.md)\n\ncuerpo viejo\n\n<!-- ct-order:${n} -->`,
+  body: `> Slice \`#${n}\` of the epic. Spec: [other-spec.md](https://github.com/o/r/blob/main/other-spec.md)\n\nold body\n\n<!-- ct-order:${n} -->`,
 }))
 
 describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of the feedback)', () => {
@@ -1859,7 +1859,7 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     number,
     title: `#${order} uno`,
     state: 'open',
-    milestone: { number: 1, title: 'Epic anterior' },
+    milestone: { number: 1, title: 'Previous epic' },
     labels: [{ name: 'type:backend' }],
     body: buildIssueBody(
       { n: order, name: 'uno', type: 'backend', entrega: 'a', deps: [], ac: [`AC-${order}.1`], protected: '–' },
@@ -1874,7 +1874,7 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[sameSpecOtherEpic(452, 2)]]]) }) })
     expect(res.status).toBe(1)
     expect(res.stderr).toMatch(/#452\s+ct-order:2/)
-    expect(res.stderr).toMatch(/Epic anterior/)
+    expect(res.stderr).toMatch(/Previous epic/)
     expect(res.stderr).toMatch(/Epic nuevo/)
     expect(res.stderr).toMatch(/nothing has been created or modified/)
     expect(res.stdout).not.toMatch(/milestone created/)
@@ -1918,7 +1918,7 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[PREVIOUS_EPIC[1]]]]) }) })
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/^warning: slice #2 of this spec has an issue in another milestone with the same ct-order \(#452, "Epic anterior"\)/m)
+    expect(res.stderr).toMatch(/^warning: slice #2 of this spec has an issue in another milestone with the same ct-order \(#452, "Previous epic"\)/m)
     expect(res.stderr).toMatch(/its link to the spec does not match this spec's/)
     // Under --dry-run the verb is conditional: nothing is created here (the
     // same criterion as the status:backlog reminder,
@@ -1942,14 +1942,14 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
       number: 470,
       title: '#2 a mano',
       state: 'open',
-      milestone: { number: 1, title: 'Epic anterior' },
+      milestone: { number: 1, title: 'Previous epic' },
       labels: [],
       body: 'cuerpo escrito a mano, sin enlace al spec\n\n<!-- ct-order:2 -->',
     }
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[NO_LINK]]]) }) })
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/warning:.*#470, "Epic anterior"/)
+    expect(res.stderr).toMatch(/warning:.*#470, "Previous epic"/)
     expect(res.stderr).toMatch(/carries no link-to-the-spec line/)
     expect(res.stderr).not.toMatch(/nothing has been created or modified/)
     rmSync(dir, { recursive: true, force: true })

@@ -287,9 +287,15 @@ describe('F21 — the gate reaches GitHub, not just the kickoff', () => {
   })
 
   it('the gates section ALWAYS exists, also when there is none (a declared absence, not silence)', () => {
-    const body = buildIssueBody(bareBackend, {})
+    const body = buildIssueBody({ ...bareBackend, gate: '!plan' }, {})
     expect(body).toContain('## Gates')
-    expect(body.toLowerCase()).toMatch(/ninguno/)
+    // The declared absence, spelled out. It used to be asserted as a loose
+    // /ninguno/ over the WHOLE body, which the "Out of scope / Protected"
+    // line's own "(ninguno declarado)" satisfied on its own — so the assertion
+    // passed without the gates section saying anything, and it went on passing
+    // after F-jjponz-2 made `plan` universal and left this slice with a gate.
+    // The absence only happens with a waiver, and that is what is measured now.
+    expect(body).toContain('- (none) — this slice demands no human gate before merging.')
   })
 
   it('a WAIVER is written into the issue body, with the Tipo that implied it', () => {
