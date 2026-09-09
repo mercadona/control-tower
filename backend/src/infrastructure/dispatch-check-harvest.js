@@ -1,4 +1,4 @@
-import { Harvest } from '../domain/ports/harvest.js'
+import { Harvest } from '../domain/ports/harvest.ts'
 import { HarvestOutcome } from '../domain/value-objects/harvest-outcome.ts'
 import { HarvestNotRead, HarvestNotUnderstood } from '../domain/exceptions.ts'
 

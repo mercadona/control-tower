@@ -1,4 +1,4 @@
-import { Workbench } from '../domain/ports/workbench.js'
+import { Workbench } from '../domain/ports/workbench.ts'
 import { SliceNotReopened, ReopenNotUnderstood } from '../domain/exceptions.ts'
 
 export class DispatchCheckWorkbench extends Workbench {

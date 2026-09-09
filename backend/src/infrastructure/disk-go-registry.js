@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
-import { GoRegistry } from '../domain/ports/go-registry.js'
+import { GoRegistry } from '../domain/ports/go-registry.ts'
 import { GoNotRecorded } from '../domain/exceptions.ts'
 
 export class DiskGoRegistry extends GoRegistry {

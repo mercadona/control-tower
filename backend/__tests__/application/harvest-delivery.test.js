@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { HarvestDelivery, HarvestDeliveryParams } from '../../src/application/actions/harvest-delivery.js'
-import { Harvest } from '../../src/domain/ports/harvest.js'
+import { Harvest } from '../../src/domain/ports/harvest.ts'
 import { HarvestOutcome } from '../../src/domain/value-objects/harvest-outcome.ts'
 import { PreparedWorkspace } from '../../src/domain/value-objects/prepared-workspace.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'

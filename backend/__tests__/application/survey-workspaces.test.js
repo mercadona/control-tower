@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { SurveyWorkspaces, SurveyWorkspacesParams } from '../../src/application/queries/survey-workspaces.js'
-import { Workspace } from '../../src/domain/ports/workspace.js'
+import { Workspace } from '../../src/domain/ports/workspace.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { PreparedWorkspace } from '../../src/domain/value-objects/prepared-workspace.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'

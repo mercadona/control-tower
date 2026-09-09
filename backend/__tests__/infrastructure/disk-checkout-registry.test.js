@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DiskCheckoutRegistry } from '../../src/infrastructure/disk-checkout-registry.js'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
-import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.js'
+import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
 
 class StoredCheckouts {
   static A_FILE = { isFile: () => true }
