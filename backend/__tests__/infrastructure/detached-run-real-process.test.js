@@ -1,5 +1,6 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { execFileSync, spawn } from 'node:child_process'
+import { EventEmitter } from 'node:events'
 import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -97,6 +98,34 @@ class Child {
       if (Date.now() > deadline) throw new Error('timed out waiting for the condition')
       await new Promise((wake) => setTimeout(wake, everyMs))
     }
+  }
+}
+
+class ChildExitRace {
+  static beforeTheModuleAttachesItsOwnExitListener(startTheRun) {
+    const originalOn = EventEmitter.prototype.on
+    let child = null
+    EventEmitter.prototype.on = function (event, listener) {
+      if (event === 'exit' && child === null) child = this
+
+      return originalOn.call(this, event, listener)
+    }
+    try {
+      const started = startTheRun()
+
+      return { started, child }
+    } finally {
+      EventEmitter.prototype.on = originalOn
+    }
+  }
+
+  static onceTheChildExitsButBeforeTheModuleReactsToIt(child, act) {
+    return new Promise((resolve) => {
+      child.prependListener('exit', () => {
+        act()
+        resolve()
+      })
+    })
   }
 }
 
@@ -245,6 +274,40 @@ describe('DetachedRun', () => {
       expect(caught).toEqual([])
     } finally {
       process.off('uncaughtException', onUncaught)
+    }
+  })
+
+  it('the_cap_firing_on_a_group_that_is_already_gone_does_not_take_the_api_down_with_it', async () => {
+    const files = Files.named()
+    const budgetMs = 10_000
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    try {
+      const run = Child.running(budgetMs)
+      const { started, child } = ChildExitRace.beforeTheModuleAttachesItsOwnExitListener(() =>
+        run.start({ argv: Child.exitingCleanly(), cwd: process.cwd(), out: files.out, err: files.err })
+      )
+      Child.tracked(started)
+
+      let groupWasAlreadyGone = null
+      let firingTheCap = null
+      await ChildExitRace.onceTheChildExitsButBeforeTheModuleReactsToIt(child, () => {
+        try {
+          process.kill(-started.pid, 0)
+        } catch (probe) {
+          groupWasAlreadyGone = probe.code
+        }
+        try {
+          vi.advanceTimersByTime(budgetMs)
+        } catch (failure) {
+          firingTheCap = failure
+        }
+      })
+
+      expect(groupWasAlreadyGone).toBe('ESRCH')
+      expect(firingTheCap).toBeNull()
+    } finally {
+      vi.useRealTimers()
     }
   })
 
