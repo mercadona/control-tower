@@ -1,28 +1,30 @@
 import { describe, it, expect } from 'vitest'
-import { SurveyExternalTools } from '../../src/application/queries/survey-external-tools.js'
+import { SurveyExternalTools } from '../../src/application/queries/survey-external-tools.ts'
 import { ToolSessions } from '../../src/domain/ports/tool-sessions.ts'
 import { ToolSession, SessionState } from '../../src/domain/value-objects/tool-session.ts'
 
 class ToolSessionMother {
-  static ready(tool) {
+  static ready(tool: string) {
     return new ToolSession({ tool, installed: true, state: SessionState.READY, fix: null })
   }
 
-  static missing(tool) {
+  static missing(tool: string) {
     return new ToolSession({ tool, installed: true, state: SessionState.MISSING, fix: `${tool} auth login` })
   }
 
-  static unknown(tool) {
+  static unknown(tool: string) {
     return new ToolSession({ tool, installed: true, state: SessionState.UNKNOWN, fix: `${tool}, then /login` })
   }
 
-  static notInstalled(tool) {
+  static notInstalled(tool: string) {
     return new ToolSession({ tool, installed: false, state: SessionState.READY, fix: null })
   }
 }
 
 class ToolSessionsDouble extends ToolSessions {
-  constructor(sessions) {
+  readonly sessions: ToolSession[]
+
+  constructor(sessions: ToolSession[]) {
     super()
     this.sessions = sessions
   }
@@ -35,7 +37,7 @@ class ToolSessionsDouble extends ToolSessions {
     ])
   }
 
-  static with(sessions) {
+  static with(sessions: ToolSession[]) {
     return new ToolSessionsDouble(sessions)
   }
 

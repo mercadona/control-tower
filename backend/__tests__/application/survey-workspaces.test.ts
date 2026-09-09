@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { SurveyWorkspaces, SurveyWorkspacesParams } from '../../src/application/queries/survey-workspaces.js'
+import { SurveyWorkspaces, SurveyWorkspacesParams } from '../../src/application/queries/survey-workspaces.ts'
 import { Workspace } from '../../src/domain/ports/workspace.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { PreparedWorkspace } from '../../src/domain/value-objects/prepared-workspace.ts'
@@ -13,13 +13,16 @@ class WorkspaceDouble extends Workspace {
   static CHECKOUT = new CheckoutRoot(WorkspaceDouble.ROOT)
   static REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
 
-  constructor(answer) {
+  readonly answer: WorkspaceSurvey | WorkspaceNotRead
+  readonly surveys: CheckoutRoot[]
+
+  constructor(answer: WorkspaceSurvey | WorkspaceNotRead) {
     super()
     this.answer = answer
     this.surveys = []
   }
 
-  static preparedFor(issueNumber) {
+  static preparedFor(issueNumber: number) {
     return new PreparedWorkspace({
       issueNumber,
       located: new WorkspaceLocation({
@@ -30,25 +33,25 @@ class WorkspaceDouble extends Workspace {
     })
   }
 
-  static holding(...issueNumbers) {
+  static holding(...issueNumbers: number[]) {
     return new WorkspaceDouble(new WorkspaceSurvey({
       repository: WorkspaceDouble.REPOSITORY,
       prepared: issueNumbers.map((issueNumber) => WorkspaceDouble.preparedFor(issueNumber)),
     }))
   }
 
-  static unable(said) {
+  static unable(said: string) {
     return new WorkspaceDouble(new WorkspaceNotRead(said))
   }
 
-  async survey(root) {
+  async survey(root: CheckoutRoot): Promise<WorkspaceSurvey> {
     this.surveys.push(root)
     if (this.answer instanceof Error) throw this.answer
 
     return this.answer
   }
 
-  asked(root = WorkspaceDouble.CHECKOUT) {
+  asked(root: CheckoutRoot = WorkspaceDouble.CHECKOUT) {
     return new SurveyWorkspaces({ workspace: this }).execute(new SurveyWorkspacesParams({ root }))
   }
 
