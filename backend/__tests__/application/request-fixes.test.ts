@@ -1,39 +1,48 @@
 import { describe, it, expect } from 'vitest'
-import { RequestFixes, RequestFixesParams } from '../../src/application/actions/request-fixes.js'
+import { RequestFixes, RequestFixesParams } from '../../src/application/actions/request-fixes.ts'
 import { Workbench } from '../../src/domain/ports/workbench.ts'
 import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SliceNotReopened, PlanAgentNotResumed } from '../../src/domain/exceptions.ts'
 
+type ReopenSubject = Parameters<Workbench['reopen']>[0]
+type FixSubject = Parameters<PlanAgents['fix']>[0]
+
 class WorkbenchDouble extends Workbench {
-  constructor(failing = null) {
+  readonly failing: Error | null
+  readonly asked: ReopenSubject[]
+
+  constructor(failing: Error | null = null) {
     super()
     this.failing = failing
     this.asked = []
   }
 
-  static refusing(cause) {
+  static refusing(cause: Error) {
     return new WorkbenchDouble(cause)
   }
 
-  async reopen(subject) {
+  async reopen(subject: ReopenSubject): Promise<void> {
     this.asked.push(subject)
     if (this.failing !== null) throw this.failing
   }
 }
 
 class PlanAgentsDouble extends PlanAgents {
-  constructor(failing = null) {
+  readonly failing: Error | null
+  readonly asked: FixSubject[]
+
+  constructor(failing: Error | null = null) {
     super()
     this.failing = failing
     this.asked = []
   }
 
-  static refusing(cause) {
+  static refusing(cause: Error) {
     return new PlanAgentsDouble(cause)
   }
 
-  async fix(subject) {
+  async fix(subject: FixSubject): Promise<void> {
     this.asked.push(subject)
     if (this.failing !== null) throw this.failing
   }
@@ -45,7 +54,13 @@ class Flow {
   static REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static CHANGES = 'src/foo.js:42: revienta con []'
 
-  constructor({ workbench, planAgents } = {}) {
+  readonly workbench: WorkbenchDouble
+  readonly planAgents: PlanAgentsDouble
+
+  constructor({ workbench, planAgents }: {
+    workbench?: WorkbenchDouble,
+    planAgents?: PlanAgentsDouble,
+  } = {}) {
     this.workbench = workbench ?? new WorkbenchDouble()
     this.planAgents = planAgents ?? new PlanAgentsDouble()
   }

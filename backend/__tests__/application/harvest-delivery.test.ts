@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { HarvestDelivery, HarvestDeliveryParams } from '../../src/application/actions/harvest-delivery.js'
+import { HarvestDelivery, HarvestDeliveryParams } from '../../src/application/actions/harvest-delivery.ts'
 import { Harvest } from '../../src/domain/ports/harvest.ts'
-import { HarvestOutcome } from '../../src/domain/value-objects/harvest-outcome.ts'
+import { HarvestOutcome, type HarvestOutcomeValue } from '../../src/domain/value-objects/harvest-outcome.ts'
 import { PreparedWorkspace } from '../../src/domain/value-objects/prepared-workspace.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { HarvestNotRead } from '../../src/domain/exceptions.ts'
+
+type HarvestSubject = Parameters<Harvest['collect']>[0]
 
 class HarvestDouble extends Harvest {
   static ROOT = '/repo/checkout'
@@ -17,21 +19,24 @@ class HarvestDouble extends Harvest {
     }),
   })
 
-  constructor(answer) {
+  readonly answer: HarvestOutcomeValue | Error
+  readonly asked: HarvestSubject[]
+
+  constructor(answer: HarvestOutcomeValue | Error) {
     super()
     this.answer = answer
     this.asked = []
   }
 
-  static answering(outcome) {
+  static answering(outcome: HarvestOutcomeValue) {
     return new HarvestDouble(outcome)
   }
 
-  static unable(said) {
+  static unable(said: string) {
     return new HarvestDouble(new HarvestNotRead(said))
   }
 
-  async collect(subject) {
+  async collect(subject: HarvestSubject): Promise<HarvestOutcomeValue> {
     this.asked.push(subject)
     if (this.answer instanceof Error) throw this.answer
 
