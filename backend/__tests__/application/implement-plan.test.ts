@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ImplementPlan, ImplementPlanParams } from '../../src/application/actions/implement-plan.js'
+import { ImplementPlan, ImplementPlanParams } from '../../src/application/actions/implement-plan.ts'
 import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
 import { GoRegistry } from '../../src/domain/ports/go-registry.ts'
@@ -11,17 +11,23 @@ import {
 class GoRegistryDouble extends GoRegistry {
   static NONCE = '7f3a91c2'
 
-  constructor(answer = GoRegistryDouble.NONCE) {
+  readonly answer: string | Error
+  readonly asked: { issueNumber: number, repository: RepositoryName }[]
+
+  constructor(answer: string | Error = GoRegistryDouble.NONCE) {
     super()
     this.answer = answer
     this.asked = []
   }
 
-  static refusing(said) {
+  static refusing(said: string): GoRegistryDouble {
     return new GoRegistryDouble(new GoNotRecorded(said))
   }
 
-  async mint({ issueNumber, repository }) {
+  async mint({ issueNumber, repository }: {
+    issueNumber: number,
+    repository: RepositoryName,
+  }): Promise<string> {
     this.asked.push({ issueNumber, repository })
     if (this.answer instanceof Error) throw this.answer
     return this.answer
@@ -29,34 +35,48 @@ class GoRegistryDouble extends GoRegistry {
 }
 
 class PlanIssuesDouble extends PlanIssues {
-  constructor(failure = null) {
+  readonly failure: Error | null
+  readonly answered: { issueNumber: number, repository: RepositoryName, nonce: string }[]
+
+  constructor(failure: Error | null = null) {
     super()
     this.failure = failure
     this.answered = []
   }
 
-  static refusing(said) {
+  static refusing(said: string): PlanIssuesDouble {
     return new PlanIssuesDouble(new PlanGoNotAnswered(said))
   }
 
-  async answerGo({ issueNumber, repository, nonce }) {
+  async answerGo({ issueNumber, repository, nonce }: {
+    issueNumber: number,
+    repository: RepositoryName,
+    nonce: string,
+  }): Promise<void> {
     this.answered.push({ issueNumber, repository, nonce })
     if (this.failure !== null) throw this.failure
   }
 }
 
 class PlanAgentsDouble extends PlanAgents {
-  constructor(answer = null) {
+  readonly answer: Error | null
+  readonly asked: { agent: string, issue: number, repository: RepositoryName }[]
+
+  constructor(answer: Error | null = null) {
     super()
     this.answer = answer
     this.asked = []
   }
 
-  static refusing(cause) {
+  static refusing(cause: Error): PlanAgentsDouble {
     return new PlanAgentsDouble(cause)
   }
 
-  async resume({ agent, issue, repository }) {
+  async resume({ agent, issue, repository }: {
+    agent: string,
+    issue: number,
+    repository: RepositoryName,
+  }): Promise<void> {
     this.asked.push({ agent, issue, repository })
     if (this.answer instanceof Error) throw this.answer
   }
@@ -67,13 +87,21 @@ class Flow {
   static ISSUE = 33
   static REPOSITORY = new RepositoryName('jjponz/repo-pulse')
 
-  constructor({ goRegistry, planIssues, planAgents } = {}) {
+  readonly goRegistry: GoRegistryDouble
+  readonly planIssues: PlanIssuesDouble
+  readonly planAgents: PlanAgentsDouble
+
+  constructor({ goRegistry, planIssues, planAgents }: {
+    goRegistry?: GoRegistryDouble,
+    planIssues?: PlanIssuesDouble,
+    planAgents?: PlanAgentsDouble,
+  } = {}) {
     this.goRegistry = goRegistry ?? new GoRegistryDouble()
     this.planIssues = planIssues ?? new PlanIssuesDouble()
     this.planAgents = planAgents ?? new PlanAgentsDouble()
   }
 
-  async run() {
+  async run(): Promise<void> {
     return new ImplementPlan(this).execute(new ImplementPlanParams({
       agent: Flow.AGENT, issue: Flow.ISSUE, repository: Flow.REPOSITORY,
     }))

@@ -1,21 +1,29 @@
 import { describe, it, expect } from 'vitest'
-import { ReviewPlan, ReviewPlanParams } from '../../src/application/actions/review-plan.js'
+import { ReviewPlan, ReviewPlanParams } from '../../src/application/actions/review-plan.ts'
 import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanAgentNotResumed } from '../../src/domain/exceptions.ts'
 
 class PlanAgentsDouble extends PlanAgents {
-  constructor(answer = null) {
+  readonly answer: Error | null
+  readonly asked: { agent: string, issue: number, repository: RepositoryName, changes: string }[]
+
+  constructor(answer: Error | null = null) {
     super()
     this.answer = answer
     this.asked = []
   }
 
-  static refusing(cause) {
+  static refusing(cause: Error): PlanAgentsDouble {
     return new PlanAgentsDouble(cause)
   }
 
-  async review({ agent, issue, repository, changes }) {
+  async review({ agent, issue, repository, changes }: {
+    agent: string,
+    issue: number,
+    repository: RepositoryName,
+    changes: string,
+  }): Promise<void> {
     this.asked.push({ agent, issue, repository, changes })
     if (this.answer instanceof Error) throw this.answer
   }
@@ -27,11 +35,13 @@ class Flow {
   static REPOSITORY = new RepositoryName('jjponz/repo-pulse')
   static CHANGES = 'añade el caso de la issue sin descripción'
 
-  constructor({ planAgents } = {}) {
+  readonly planAgents: PlanAgentsDouble
+
+  constructor({ planAgents }: { planAgents?: PlanAgentsDouble } = {}) {
     this.planAgents = planAgents ?? new PlanAgentsDouble()
   }
 
-  async run() {
+  async run(): Promise<void> {
     return new ReviewPlan(this).execute(new ReviewPlanParams({
       agent: Flow.AGENT, issue: Flow.ISSUE, repository: Flow.REPOSITORY, changes: Flow.CHANGES,
     }))
