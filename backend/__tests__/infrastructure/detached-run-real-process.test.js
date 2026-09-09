@@ -1,7 +1,7 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { execFileSync, spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
-import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { closeSync, mkdtempSync, openSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -14,13 +14,22 @@ class Files {
 
     return { out: join(directory, 'out.log'), err: join(directory, 'err.log') }
   }
+
+  static lowestFreeDescriptorProbedAgainst(path) {
+    const fd = openSync(path, DetachedRun.APPEND)
+    closeSync(fd)
+
+    return fd
+  }
 }
 
 class Child {
   static SLOW_MS = 5_000
   static DEFAULT_BUDGET_MS = 30_000
   static MARKER = 'printed-by-the-child'
+  static INHERITED = 'CT_DETACHED_RUN_INHERITED'
   static #groupsStarted = []
+  static #soloProcessesStarted = []
 
   static running(budgetMs = Child.DEFAULT_BUDGET_MS) {
     return new DetachedRun({ bin: process.execPath, budgetMs })
@@ -90,6 +99,30 @@ class Child {
     }
   }
 
+  static trackedSolo(pid) {
+    Child.#soloProcessesStarted.push(pid)
+
+    return pid
+  }
+
+  static killEverySoloProcessStarted() {
+    for (const pid of Child.#soloProcessesStarted.splice(0)) {
+      try {
+        process.kill(pid, 'SIGKILL')
+      } catch {
+        continue
+      }
+    }
+  }
+
+  static inheritedByApi() {
+    process.env[Child.INHERITED] = 'from the api'
+  }
+
+  static forgotten() {
+    delete process.env[Child.INHERITED]
+  }
+
   static async eventually(check, { timeoutMs = 5_000, everyMs = 20 } = {}) {
     const deadline = Date.now() + timeoutMs
     for (;;) {
@@ -157,6 +190,9 @@ class Wrapper {
 describe('DetachedRun', () => {
   afterEach(() => {
     Child.killEveryGroupStarted()
+    Child.killEverySoloProcessStarted()
+    Child.forgotten()
+    vi.restoreAllMocks()
   })
 
   it('what_the_call_prints_lands_in_the_file_the_caller_named', async () => {
@@ -174,7 +210,16 @@ describe('DetachedRun', () => {
     })
 
     expect(printed).toBe(Child.MARKER)
-    expect(started.pid).toBeGreaterThan(0)
+  })
+
+  it('the_started_run_handed_back_to_the_caller_is_frozen_so_nothing_downstream_can_mutate_it', async () => {
+    const files = Files.named()
+    const run = Child.running()
+
+    const started = Child.tracked(
+      run.start({ argv: Child.sleeping(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+
     expect(Object.isFrozen(started)).toBe(true)
   })
 
@@ -253,36 +298,37 @@ describe('DetachedRun', () => {
 
   it('the_cap_timer_is_cleared_once_the_call_finishes_so_it_never_fires_later_on_a_pid_that_is_gone', async () => {
     const files = Files.named()
-    const run = Child.running(300)
-    const caught = []
-    const onUncaught = (error) => caught.push(error)
-    process.on('uncaughtException', onUncaught)
+    const budgetMs = 300
+    const run = Child.running(budgetMs)
+    const kill = vi.spyOn(process, 'kill')
 
-    try {
-      Child.tracked(
-        run.start({ argv: Child.exitingCleanly(), cwd: process.cwd(), out: files.out, err: files.err })
-      )
+    const started = Child.tracked(
+      run.start({ argv: Child.exitingCleanly(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
 
-      await Child.eventually(() => {
-        const text = readFileSync(files.out, 'utf8')
+    await Child.eventually(() => {
+      const text = readFileSync(files.out, 'utf8')
 
-        return text.length > 0 ? text : null
-      })
+      return text.length > 0 ? text : null
+    })
 
-      await new Promise((wake) => setTimeout(wake, 500))
+    await new Promise((wake) => setTimeout(wake, budgetMs + 500))
 
-      expect(caught).toEqual([])
-    } finally {
-      process.off('uncaughtException', onUncaught)
-    }
+    expect(kill).not.toHaveBeenCalledWith(-started.pid, DetachedRun.SIGNAL)
   })
 
-  it('the_cap_firing_on_a_group_that_is_already_gone_does_not_take_the_api_down_with_it', async () => {
-    const files = Files.named()
-    const budgetMs = 10_000
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  describe('when the cap races the child exiting on its own', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    })
 
-    try {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('the_cap_firing_on_a_group_that_is_already_gone_does_not_take_the_api_down_with_it', async () => {
+      const files = Files.named()
+      const budgetMs = 10_000
       const run = Child.running(budgetMs)
       const { started, child } = ChildExitRace.beforeTheModuleAttachesItsOwnExitListener(() =>
         run.start({ argv: Child.exitingCleanly(), cwd: process.cwd(), out: files.out, err: files.err })
@@ -306,9 +352,7 @@ describe('DetachedRun', () => {
 
       expect(groupWasAlreadyGone).toBe('ESRCH')
       expect(firingTheCap).toBeNull()
-    } finally {
-      vi.useRealTimers()
-    }
+    })
   })
 
   it('a_binary_that_is_not_installed_raises_without_taking_the_api_down_with_it', async () => {
@@ -331,7 +375,11 @@ describe('DetachedRun', () => {
       return text.length > 0 ? text : null
     })
 
-    expect(writtenToErr).toContain('ct-detached-run-missing-binary')
+    const nodeOwnDiagnosticForThatBinary = await new Promise((resolve) => {
+      spawn('ct-detached-run-missing-binary', []).once('error', (failure) => resolve(failure.message))
+    })
+
+    expect(writtenToErr).toBe(`${nodeOwnDiagnosticForThatBinary}\n`)
   })
 
   it('what_was_already_in_either_file_survives_because_the_call_opens_both_to_append', async () => {
@@ -340,7 +388,7 @@ describe('DetachedRun', () => {
     writeFileSync(files.err, 'already err\n')
     const run = Child.running()
 
-    const started = Child.tracked(
+    Child.tracked(
       run.start({ argv: Child.printingToBoth(Child.MARKER), cwd: process.cwd(), out: files.out, err: files.err })
     )
 
@@ -357,10 +405,10 @@ describe('DetachedRun', () => {
 
     expect(printedOut).toBe(`already out\n${Child.MARKER}`)
     expect(printedErr).toBe(`already err\n${Child.MARKER}`)
-    expect(started.pid).toBeGreaterThan(0)
   })
 
-  it('the_environment_the_caller_composed_is_what_the_child_reads', async () => {
+  it('the_environment_the_caller_composed_is_what_the_child_reads_and_the_one_the_api_inherited_is_gone', async () => {
+    Child.inheritedByApi()
     const files = Files.named()
     const run = new DetachedRun({
       bin: process.execPath, budgetMs: Child.DEFAULT_BUDGET_MS, env: { CT_DETACHED_RUN_GIVEN: 'from the caller' },
@@ -368,7 +416,9 @@ describe('DetachedRun', () => {
 
     Child.tracked(
       run.start({
-        argv: ['-e', 'process.stdout.write(String(process.env.CT_DETACHED_RUN_GIVEN))'],
+        argv: ['-e', `process.stdout.write(
+          String(process.env.CT_DETACHED_RUN_GIVEN) + '|' + String(process.env.${Child.INHERITED})
+        )`],
         cwd: process.cwd(),
         out: files.out,
         err: files.err,
@@ -381,7 +431,7 @@ describe('DetachedRun', () => {
       return text.length > 0 ? text : null
     })
 
-    expect(printed).toBe('from the caller')
+    expect(printed).toBe('from the caller|undefined')
   })
 
   it('the_directory_the_caller_names_is_where_the_child_runs_and_not_where_the_api_happens_to_run', async () => {
@@ -412,14 +462,15 @@ describe('DetachedRun', () => {
     const files = Files.named()
     const run = Child.running()
 
+    const beforeStart = Files.lowestFreeDescriptorProbedAgainst(files.out)
+
     Child.tracked(
       run.start({ argv: Child.sleeping(), cwd: process.cwd(), out: files.out, err: files.err })
     )
 
-    const openHere = execFileSync('lsof', ['-p', String(process.pid)]).toString()
+    const afterStart = Files.lowestFreeDescriptorProbedAgainst(files.out)
 
-    expect(openHere).not.toContain(files.out)
-    expect(openHere).not.toContain(files.err)
+    expect(afterStart).toBe(beforeStart)
   })
 
   it('the_process_that_called_start_is_free_to_exit_right_away_because_nothing_it_holds_keeps_its_loop_open', async () => {
@@ -429,6 +480,7 @@ describe('DetachedRun', () => {
       Wrapper.callingStartAndThenDoingNothingElse({ cap: 60_000, out: files.out, err: files.err }),
       { stdio: ['ignore', 'pipe', 'pipe'] }
     )
+    Child.trackedSolo(wrapper.pid)
     let stdout = ''
     let stderr = ''
     wrapper.stdout.on('data', (chunk) => { stdout += chunk })
@@ -442,7 +494,6 @@ describe('DetachedRun', () => {
       })
     })
 
-    if (!result.exited) wrapper.kill('SIGKILL')
     const launchedPid = Number(stdout.trim())
     if (Number.isInteger(launchedPid) && launchedPid > 0) Child.tracked({ pid: launchedPid })
 

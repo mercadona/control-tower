@@ -12,13 +12,13 @@ export class StartedRun {
 export class DetachedRun {
   static SIGNAL = 'SIGTERM'
   static APPEND = 'a'
-  static GROUP_ALREADY_GONE = 'ESRCH'
+  static #GROUP_ALREADY_GONE = 'ESRCH'
 
   static #killGroupUnlessAlreadyGone(pid) {
     try {
       process.kill(-pid, DetachedRun.SIGNAL)
     } catch (failure) {
-      if (failure.code !== DetachedRun.GROUP_ALREADY_GONE) throw failure
+      if (failure.code !== DetachedRun.#GROUP_ALREADY_GONE) throw failure
     }
   }
 
