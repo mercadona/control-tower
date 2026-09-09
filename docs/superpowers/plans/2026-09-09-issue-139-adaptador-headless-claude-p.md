@@ -241,7 +241,7 @@ the raise, and the suite alive past the tick `'error'` fires on.
 job.
 
 ```bash
-cd backend && npx vitest run __tests__/infrastructure/detached-run-real-process.test.js   # exit 0: the five cases
+cd backend && npx vitest run __tests__/infrastructure/detached-run-real-process.test.js   # exit 0: the six cases
 cd backend && test "$(grep -c "on('error'" src/infrastructure/detached-run.js)" -eq 1
 cd backend && test "$(grep -c 'process.kill(-' src/infrastructure/detached-run.js)" -eq 1
 cd backend && test -z "$(grep -l 'timeout:' src/infrastructure/detached-run.js)"
