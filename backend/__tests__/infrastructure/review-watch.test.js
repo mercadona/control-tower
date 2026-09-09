@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ReviewWatch } from '../../src/infrastructure/review-watch.js'
+import { MemoryReviewLog } from '../../src/infrastructure/memory-review-log.js'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.js'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
@@ -25,11 +26,15 @@ class WatchDouble {
   static STOPPING = { issue: WatchDouble.NUMBER, repository: WatchDouble.REPOSITORY }
 
   static A_CHANGE = new ChangeAsked({
-    id: 'IC_kwDOT9lB5c8AAAABRCF0GG', text: 'añade el caso de la issue sin descripción',
+    id: 'IC_kwDOT9lB5c8AAAABRCF0GG',
+    text: 'añade el caso de la issue sin descripción',
+    askedAt: '2026-09-09T09:00:00Z',
   })
 
   static ANOTHER_CHANGE = new ChangeAsked({
-    id: 'IC_kwDOT9lB5c8AAAABRCF0HH', text: WatchDouble.A_CHANGE.text,
+    id: 'IC_kwDOT9lB5c8AAAABRCF0HH',
+    text: WatchDouble.A_CHANGE.text,
+    askedAt: '2026-09-09T10:00:00Z',
   })
 
   constructor(soundings, { refusingTheDelivery = null, waits = null, stoppingOnDelivery = false, label = WatchDouble.LABEL } = {}) {
@@ -43,6 +48,7 @@ class WatchDouble {
     this.warnings = []
     this.slept = 0
     this.watch = null
+    this.log = new MemoryReviewLog()
   }
 
   static answering(...soundings) {
@@ -100,6 +106,7 @@ class WatchDouble {
       },
       stderr: (line) => this.warnings.push(line),
       label: this.label,
+      log: this.log,
     })
   }
 
@@ -468,5 +475,34 @@ describe('ReviewWatch delivering while the gate can close underneath it', () => 
 
     expect(race.reviewed).toHaveLength(2)
     expect(race.warnings).toEqual([])
+  })
+})
+
+describe('the watch notes when changes were asked for, so the plan state can be read without asking GitHub', () => {
+  it('the_newest_date_it_reads_is_noted_even_on_the_baseline_sweep_that_delivers_nothing', async () => {
+    const watched = WatchDouble.recovering([WatchDouble.A_CHANGE, WatchDouble.ANOTHER_CHANGE])
+
+    await watched.runRecovered()
+
+    expect(watched.reviewed).toEqual([])
+    expect(watched.log.lastAskedAt(WatchDouble.STOPPING)).toBe(WatchDouble.ANOTHER_CHANGE.askedAt)
+  })
+
+  it('a_sweep_that_delivers_a_change_notes_its_date_too', async () => {
+    const watched = WatchDouble.answering([WatchDouble.A_CHANGE])
+
+    await watched.run()
+
+    expect(watched.reviewed).toHaveLength(1)
+    expect(watched.log.lastAskedAt(WatchDouble.STOPPING)).toBe(WatchDouble.A_CHANGE.askedAt)
+  })
+
+  it('a_sweep_that_could_not_be_read_notes_nothing_instead_of_noting_a_gap', async () => {
+    const watched = WatchDouble.answering(new PlanChangesNotRead('HTTP 502'))
+
+    await watched.run()
+
+    expect(watched.log.lastAskedAt(WatchDouble.STOPPING)).toBeNull()
+    expect(watched.warnings).toHaveLength(1)
   })
 })
