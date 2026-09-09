@@ -1,6 +1,6 @@
 import { Answer, JsonBody, Refusal } from './http.js'
 import { Projection } from './projection.js'
-import { ImplementPlanParams } from '../application/actions/implement-plan.js'
+import { ImplementPlanParams } from '../application/actions/implement-plan.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { ActivePlanPhase } from './active-plans-route.js'
 import {

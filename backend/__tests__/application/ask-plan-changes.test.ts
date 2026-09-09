@@ -1,25 +1,36 @@
 import { describe, it, expect } from 'vitest'
-import { AskPlanChanges, AskPlanChangesParams } from '../../src/application/actions/ask-plan-changes.js'
+import { AskPlanChanges, AskPlanChangesParams } from '../../src/application/actions/ask-plan-changes.ts'
+import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanChangesNotAsked } from '../../src/domain/exceptions.ts'
 
-class PlanIssuesSpy {
+class PlanIssuesSpy extends PlanIssues {
+  readonly asked: { issue: number, repository: string, changes: string }[]
+
   constructor() {
+    super()
     this.asked = []
   }
 
-  async askChanges({ issue, repository, changes }) {
+  async askChanges({ issue, repository, changes }: {
+    issue: PlanIssue,
+    repository: RepositoryName,
+    changes: string,
+  }): Promise<void> {
     this.asked.push({ issue: issue.number, repository: repository.text, changes })
   }
 }
 
-class RejectingPlanIssues {
-  constructor(cause) {
+class RejectingPlanIssues extends PlanIssues {
+  readonly cause: Error
+
+  constructor(cause: Error) {
+    super()
     this.cause = cause
   }
 
-  async askChanges() {
+  async askChanges(): Promise<void> {
     throw this.cause
   }
 }
