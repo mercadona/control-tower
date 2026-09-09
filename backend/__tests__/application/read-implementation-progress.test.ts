@@ -1,38 +1,49 @@
 import { describe, it, expect } from 'vitest'
-import { ReadImplementationProgress, ReadImplementationProgressParams } from '../../src/application/queries/read-implementation-progress.js'
+import { ReadImplementationProgress, ReadImplementationProgressParams } from '../../src/application/queries/read-implementation-progress.ts'
 import { ImplementationProgress } from '../../src/domain/ports/implementation-progress.ts'
 import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
 import { ImplementationState, ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
+import type { ImplementationStepValue } from '../../src/domain/value-objects/implementation-state.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
+import type { PlanIssueStatusValue } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PullRequestNotRead, ImplementationProgressNotRead } from '../../src/domain/exceptions.ts'
 
+type ReviewedPullRequest = { readonly number: number, readonly url: string }
+
+type ProgressAsked = { root: CheckoutRoot, issue: number, repository?: RepositoryName }
+
+type PullRequestAsked = { issueNumber: number, repository: RepositoryName }
+
 class ImplementationProgressDouble extends ImplementationProgress {
-  constructor(answer) {
+  answer: ImplementationState | Error
+  asked: ProgressAsked[]
+
+  constructor(answer: ImplementationState | Error) {
     super()
     this.answer = answer
     this.asked = []
   }
 
-  static parkedAt(step) {
+  static parkedAt(step: ImplementationStepValue): ImplementationProgressDouble {
     return new ImplementationProgressDouble(ImplementationState.of({
       step, task: 3, totalTasks: 7, name: 'el lector del plan', attempt: 2, discards: 1,
     }))
   }
 
-  static delivered() {
+  static delivered(): ImplementationProgressDouble {
     return new ImplementationProgressDouble(ImplementationState.of({
       step: ImplementationStep.DELIVERED, task: null, totalTasks: 7, name: null, attempt: null, discards: 1,
     }))
   }
 
-  static refusing(cause) {
+  static refusing(cause: Error): ImplementationProgressDouble {
     return new ImplementationProgressDouble(cause)
   }
 
-  async of(subject) {
+  async of(subject: ProgressAsked): Promise<ImplementationState> {
     this.asked.push(subject)
     if (this.answer instanceof Error) throw this.answer
 
@@ -41,14 +52,21 @@ class ImplementationProgressDouble extends ImplementationProgress {
 }
 
 class PullRequestsDouble extends PullRequests {
-  constructor({ open = null, failing = null } = {}) {
+  open: ReviewedPullRequest | null
+  failing: Error | null
+  asked: PullRequestAsked[]
+
+  constructor({ open = null, failing = null }: {
+    open?: ReviewedPullRequest | null,
+    failing?: Error | null,
+  } = {}) {
     super()
     this.open = open
     this.failing = failing
     this.asked = []
   }
 
-  async openOf(subject) {
+  async openOf(subject: PullRequestAsked): Promise<ReviewedPullRequest | null> {
     this.asked.push(subject)
     if (this.failing !== null) throw this.failing
 
@@ -57,13 +75,16 @@ class PullRequestsDouble extends PullRequests {
 }
 
 class PlanIssuesDouble extends PlanIssues {
-  constructor(status) {
+  status: PlanIssueStatusValue
+  asked: PullRequestAsked[]
+
+  constructor(status: PlanIssueStatusValue) {
     super()
     this.status = status
     this.asked = []
   }
 
-  async statusOf(subject) {
+  async statusOf(subject: PullRequestAsked): Promise<PlanIssueStatusValue> {
     this.asked.push(subject)
 
     return this.status
@@ -74,27 +95,35 @@ class Flow {
   static ROOT = new CheckoutRoot('/checkout')
   static ISSUE = 42
   static REPOSITORY = new RepositoryName('owner/name')
-  static PULL_REQUEST = Object.freeze({ number: 7, url: 'https://github.com/owner/name/pull/7' })
+  static PULL_REQUEST: ReviewedPullRequest = Object.freeze({ number: 7, url: 'https://github.com/owner/name/pull/7' })
 
-  constructor({ implementationProgress, pullRequests, planIssues } = {}) {
+  implementationProgress: ImplementationProgressDouble
+  pullRequests: PullRequestsDouble
+  planIssues: PlanIssuesDouble
+
+  constructor({ implementationProgress, pullRequests, planIssues }: {
+    implementationProgress?: ImplementationProgressDouble,
+    pullRequests?: PullRequestsDouble,
+    planIssues?: PlanIssuesDouble,
+  } = {}) {
     this.implementationProgress = implementationProgress ?? ImplementationProgressDouble.delivered()
     this.pullRequests = pullRequests ?? new PullRequestsDouble({ open: Flow.PULL_REQUEST })
     this.planIssues = planIssues ?? new PlanIssuesDouble(PlanIssueStatus.IN_REVIEW)
   }
 
-  static stillWorking() {
+  static stillWorking(): Flow {
     return new Flow({ implementationProgress: ImplementationProgressDouble.parkedAt(ImplementationStep.JUDGE) })
   }
 
-  static deliveredWithNoPullRequestYet() {
+  static deliveredWithNoPullRequestYet(): Flow {
     return new Flow({ pullRequests: new PullRequestsDouble({ open: null }) })
   }
 
-  static standingAt(status) {
+  static standingAt(status: PlanIssueStatusValue): Flow {
     return new Flow({ planIssues: new PlanIssuesDouble(status) })
   }
 
-  async run() {
+  async run(): Promise<ImplementationState> {
     const read = await new ReadImplementationProgress(this)
       .execute(new ReadImplementationProgressParams({
         root: Flow.ROOT, issue: Flow.ISSUE, repository: Flow.REPOSITORY,
@@ -150,7 +179,7 @@ describe('ReadImplementationProgress', () => {
     expect(state.pullRequest).toEqual(Flow.PULL_REQUEST)
   })
 
-  it.each([
+  it.each<PlanIssueStatusValue>([
     PlanIssueStatus.READY,
     PlanIssueStatus.BACKLOG,
     PlanIssueStatus.NONE,

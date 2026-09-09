@@ -1,7 +1,15 @@
 import { DeliveryPolicy, DeliveryState } from '../../domain/policies/delivery-policy.ts'
+import type { ChangeAsked } from '../../domain/value-objects/change-asked.ts'
+import type { PlanIssue } from '../../domain/value-objects/plan-issue.ts'
+import type { PlanIssues } from '../../domain/ports/plan-issues.ts'
+import type { PullRequests } from '../../domain/ports/pull-requests.ts'
+import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
 
 export class ReadFixesAskedParams {
-  constructor({ issue, repository }) {
+  readonly issue: PlanIssue
+  readonly repository: RepositoryName
+
+  constructor({ issue, repository }: { issue: PlanIssue, repository: RepositoryName }) {
     this.issue = issue
     this.repository = repository
     Object.freeze(this)
@@ -9,19 +17,24 @@ export class ReadFixesAskedParams {
 }
 
 class ReadFixesAskedResult {
-  constructor({ changes }) {
+  readonly changes: ChangeAsked[]
+
+  constructor({ changes }: { changes: ChangeAsked[] }) {
     this.changes = changes
     Object.freeze(this)
   }
 }
 
 export class ReadFixesAsked {
-  constructor({ pullRequests, planIssues }) {
+  readonly pullRequests: PullRequests
+  readonly planIssues: PlanIssues
+
+  constructor({ pullRequests, planIssues }: { pullRequests: PullRequests, planIssues: PlanIssues }) {
     this.pullRequests = pullRequests
     this.planIssues = planIssues
   }
 
-  async execute(params) {
+  async execute(params: ReadFixesAskedParams): Promise<ReadFixesAskedResult> {
     const pullRequest = await this.pullRequests.openOf({
       issueNumber: params.issue.number, repository: params.repository,
     })

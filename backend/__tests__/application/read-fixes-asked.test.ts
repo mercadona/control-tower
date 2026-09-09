@@ -1,15 +1,32 @@
 import { describe, it, expect } from 'vitest'
-import { ReadFixesAsked, ReadFixesAskedParams } from '../../src/application/queries/read-fixes-asked.js'
+import { ReadFixesAsked, ReadFixesAskedParams } from '../../src/application/queries/read-fixes-asked.ts'
 import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
+import type { PlanIssueStatusValue } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PullRequestNotRead } from '../../src/domain/exceptions.ts'
 
+type ReviewedPullRequest = { readonly number: number, readonly url: string }
+
+type PullRequestAsked = { issueNumber: number, repository: RepositoryName }
+
+type FixesAskedFor = { pullRequest: ReviewedPullRequest, repository: RepositoryName }
+
 class PullRequestsDouble extends PullRequests {
-  constructor({ open = null, asked = [], failing = null } = {}) {
+  open: ReviewedPullRequest | null
+  answer: ChangeAsked[]
+  failing: Error | null
+  located: PullRequestAsked[]
+  read: FixesAskedFor[]
+
+  constructor({ open = null, asked = [], failing = null }: {
+    open?: ReviewedPullRequest | null,
+    asked?: ChangeAsked[],
+    failing?: Error | null,
+  } = {}) {
     super()
     this.open = open
     this.answer = asked
@@ -18,14 +35,14 @@ class PullRequestsDouble extends PullRequests {
     this.read = []
   }
 
-  async openOf(subject) {
+  async openOf(subject: PullRequestAsked): Promise<ReviewedPullRequest | null> {
     this.located.push(subject)
     if (this.failing !== null) throw this.failing
 
     return this.open
   }
 
-  async fixesAsked(subject) {
+  async fixesAsked(subject: FixesAskedFor): Promise<ChangeAsked[]> {
     this.read.push(subject)
 
     return this.answer
@@ -33,13 +50,16 @@ class PullRequestsDouble extends PullRequests {
 }
 
 class PlanIssuesDouble extends PlanIssues {
-  constructor(status = PlanIssueStatus.IN_REVIEW) {
+  status: PlanIssueStatusValue
+  asked: PullRequestAsked[]
+
+  constructor(status: PlanIssueStatusValue = PlanIssueStatus.IN_REVIEW) {
     super()
     this.status = status
     this.asked = []
   }
 
-  async statusOf(subject) {
+  async statusOf(subject: PullRequestAsked): Promise<PlanIssueStatusValue> {
     this.asked.push(subject)
 
     return this.status
@@ -51,12 +71,18 @@ class Flow {
     number: 7, url: 'https://github.com/josemerca/ct-loop-sandbox/issues/7',
   })
   static REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
-  static PULL_REQUEST = Object.freeze({
+  static PULL_REQUEST: ReviewedPullRequest = Object.freeze({
     number: 42, url: 'https://github.com/josemerca/ct-loop-sandbox/pull/42',
   })
   static A_CHANGE = new ChangeAsked({ id: '101', text: 'src/foo.js:42: revienta con []' })
 
-  constructor({ pullRequests, planIssues } = {}) {
+  pullRequests: PullRequestsDouble
+  planIssues: PlanIssuesDouble
+
+  constructor({ pullRequests, planIssues }: {
+    pullRequests?: PullRequestsDouble,
+    planIssues?: PlanIssuesDouble,
+  } = {}) {
     this.pullRequests = pullRequests ?? new PullRequestsDouble()
     this.planIssues = planIssues ?? new PlanIssuesDouble()
   }
@@ -65,7 +91,7 @@ class Flow {
     return new Flow({ pullRequests: new PullRequestsDouble({ open: null }) })
   }
 
-  static inReview(asked = [Flow.A_CHANGE]) {
+  static inReview(asked: ChangeAsked[] = [Flow.A_CHANGE]) {
     return new Flow({
       pullRequests: new PullRequestsDouble({ open: Flow.PULL_REQUEST, asked }),
       planIssues: new PlanIssuesDouble(PlanIssueStatus.IN_REVIEW),
