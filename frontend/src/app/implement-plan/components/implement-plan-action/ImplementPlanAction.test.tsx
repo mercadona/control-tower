@@ -58,7 +58,7 @@ describe('ImplementPlanAction', () => {
   })
 
   it('should tell the person to get a fresh agent when the remembered one is stale', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(ImplementPlanMother.noLiveSession().body, { status: 409 })))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(ImplementPlanMother.noLiveSession().body, { status: 400 })))
     const onImplementationStarted = vi.fn()
     const user = userEvent.setup()
     render(<ImplementPlanAction plan={ImplementPlanMother.plan()} onImplementationStarted={onImplementationStarted} />)
@@ -71,7 +71,7 @@ describe('ImplementPlanAction', () => {
   })
 
   it('should refuse an automatic retry when implementation phase is uncertain', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(ImplementPlanMother.implementationUncertain().body, { status: 409 })))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(ImplementPlanMother.implementationUncertain().body, { status: 400 })))
     const onImplementationStarted = vi.fn()
     const user = userEvent.setup()
     render(<ImplementPlanAction plan={ImplementPlanMother.plan()} onImplementationStarted={onImplementationStarted} />)

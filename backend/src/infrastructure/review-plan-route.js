@@ -126,17 +126,17 @@ export class ReviewRefusal {
       detail: `${ReviewRequest.CHANGES_FIELD} must say what to change`,
     })],
     [ReviewRequestOutcome.NO_LIVE_SESSION, () => new Refusal({
-      status: 409,
+      status: 400,
       code: ReviewRequestOutcome.NO_LIVE_SESSION,
       detail: 'no matching live planning session exists, so nobody would read the changes',
     })],
     [ReviewRequestOutcome.ALREADY_IMPLEMENTING, () => new Refusal({
-      status: 409,
+      status: 400,
       code: ReviewRequestOutcome.ALREADY_IMPLEMENTING,
       detail: 'the plan is already being implemented, so its review watch is gone',
     })],
     [ReviewRequestOutcome.UNCERTAIN_PHASE, () => new Refusal({
-      status: 409,
+      status: 400,
       code: ReviewRequestOutcome.UNCERTAIN_PHASE,
       detail: 'implementation may have started; inspect the plan before retrying',
     })],
