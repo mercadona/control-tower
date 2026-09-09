@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { CheckoutRegistry } from '../domain/ports/checkout-registry.js'
+import { CheckoutRegistry } from '../domain/ports/checkout-registry.ts'
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 
 export class DiskCheckoutRegistry extends CheckoutRegistry {
