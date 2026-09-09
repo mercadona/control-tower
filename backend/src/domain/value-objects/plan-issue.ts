@@ -1,6 +1,9 @@
 export class PlanIssue {
-  constructor({ number, url }) {
-    if (!Number.isInteger(number) || number < 1) {
+  readonly number: number
+  readonly url: string
+
+  constructor({ number, url }: { number: unknown, url: unknown }) {
+    if (typeof number !== 'number' || !Number.isInteger(number) || number < 1) {
       throw new Error(`an issue is numbered from one, got ${JSON.stringify(number)}`)
     }
     if (typeof url !== 'string' || url.length === 0) {
@@ -11,7 +14,7 @@ export class PlanIssue {
     Object.freeze(this)
   }
 
-  toString() {
+  toString(): string {
     return `#${this.number}`
   }
 }

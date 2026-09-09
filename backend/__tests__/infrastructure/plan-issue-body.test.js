@@ -3,7 +3,7 @@ import { PlanIssueBody, GhPlanIssues } from '../../src/infrastructure/gh-plan-is
 import { UserStory } from '../../src/domain/value-objects/user-story.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
-import { PlanComment } from '../../src/domain/value-objects/plan-comment.js'
+import { PlanComment } from '../../src/domain/value-objects/plan-comment.ts'
 import { mapGhIssue, extractAc, extractOrder } from '../../../plugin/scripts/gh-issue-map.js'
 import { parseScope } from '../../../plugin/scripts/scope.js'
 import { buildIssueBody } from '../../../plugin/scripts/groom.js'

@@ -4,10 +4,10 @@ import { StartPlanParams } from '../application/actions/start-plan.js'
 import { UserStoryKey } from '../domain/value-objects/user-story-key.ts'
 import { UserStoryUrl } from '../domain/value-objects/user-story-url.ts'
 import { UserStoryReference } from '../domain/value-objects/user-story-reference.ts'
-import { PlanComment } from '../domain/value-objects/plan-comment.js'
+import { PlanComment } from '../domain/value-objects/plan-comment.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
-import { PlanTarget } from '../domain/value-objects/plan-target.js'
+import { PlanTarget } from '../domain/value-objects/plan-target.ts'
 import {
   PlanFailure,
   UserStoryNotRead, UserStoryNotUnderstood, PlanIssueNotCreated, PlanIssueNotNamed,

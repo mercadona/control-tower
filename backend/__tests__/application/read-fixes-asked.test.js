@@ -3,8 +3,8 @@ import { ReadFixesAsked, ReadFixesAskedParams } from '../../src/application/quer
 import { PullRequests } from '../../src/domain/ports/pull-requests.js'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.js'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.js'
-import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
-import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.js'
+import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
+import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PullRequestNotRead } from '../../src/domain/exceptions.js'
 

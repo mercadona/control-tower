@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.js'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.js'
-import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.js'
+import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { Gh } from '../../src/infrastructure/gh.js'
 import { PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.js'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.js'
@@ -10,7 +10,7 @@ import { SleepDouble } from '../sleep-double.js'
 import { UserStory } from '../../src/domain/value-objects/user-story.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
+import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import {
   PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed, PlanGoNotAnswered, PlanIssueFailure,
   PlanChangesNotRead, PlanChangesNotUnderstood, PlanChangesNotAsked, PlanStoryNotRead, PlanStoryNotUnderstood,
