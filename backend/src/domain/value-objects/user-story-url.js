@@ -1,4 +1,4 @@
-import { RepositoryName } from './repository-name.js'
+import { RepositoryName } from './repository-name.ts'
 
 export class UserStoryUrl {
   static #SHAPE = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/([1-9]\d*)$/

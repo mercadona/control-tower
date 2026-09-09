@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { AskPlanChanges, AskPlanChangesParams } from '../../src/application/actions/ask-plan-changes.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanChangesNotAsked } from '../../src/domain/exceptions.js'
 
 class PlanIssuesSpy {

@@ -5,8 +5,8 @@ import { PullRequests } from '../../src/domain/ports/pull-requests.js'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.js'
 import { ImplementationState, ImplementationStep } from '../../src/domain/value-objects/implementation-state.js'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.js'
-import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PullRequestNotRead, ImplementationProgressNotRead } from '../../src/domain/exceptions.js'
 
 class ImplementationProgressDouble extends ImplementationProgress {

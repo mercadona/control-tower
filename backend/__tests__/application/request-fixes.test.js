@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { RequestFixes, RequestFixesParams } from '../../src/application/actions/request-fixes.js'
 import { Workbench } from '../../src/domain/ports/workbench.js'
 import { PlanAgents } from '../../src/domain/ports/plan-agents.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SliceNotReopened, PlanAgentNotResumed } from '../../src/domain/exceptions.js'
 
 class WorkbenchDouble extends Workbench {

@@ -1,7 +1,9 @@
 export class CheckoutRoot {
   static EXAMPLE = '/Users/you/repos/name'
 
-  constructor(text) {
+  readonly text: string
+
+  constructor(text: unknown) {
     if (!CheckoutRoot.isWellFormed(text)) {
       throw new Error(`a checkout root is an absolute path such as ${CheckoutRoot.EXAMPLE}, got ${JSON.stringify(text)}`)
     }
@@ -9,11 +11,11 @@ export class CheckoutRoot {
     Object.freeze(this)
   }
 
-  static isWellFormed(text) {
+  static isWellFormed(text: unknown): text is string {
     return typeof text === 'string' && text.startsWith('/')
   }
 
-  toString() {
+  toString(): string {
     return this.text
   }
 }

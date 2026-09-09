@@ -3,7 +3,7 @@ import { ImplementPlan, ImplementPlanParams } from '../../src/application/action
 import { PlanAgents } from '../../src/domain/ports/plan-agents.js'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.js'
 import { GoRegistry } from '../../src/domain/ports/go-registry.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import {
   PlanAgentNotResumed, PlanGoNotAnswered, GoNotRecorded,
 } from '../../src/domain/exceptions.js'

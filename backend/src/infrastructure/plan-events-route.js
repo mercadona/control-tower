@@ -1,7 +1,7 @@
 import { Answer, Refusal } from './http.js'
 import { Projection } from './projection.js'
 import { PlanFailure } from '../domain/exceptions.js'
-import { RepositoryName } from '../domain/value-objects/repository-name.js'
+import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
 export class PlanSessions {
   constructor() {

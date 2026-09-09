@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { PlanContractProgress } from '../../src/infrastructure/plan-contract-progress.js'
 import { PlanState } from '../../src/domain/value-objects/plan-state.js'
-import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanProgressNotRead } from '../../src/domain/exceptions.js'
 
 class ProgressDouble {

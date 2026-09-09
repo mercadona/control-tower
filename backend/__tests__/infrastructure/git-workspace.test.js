@@ -10,9 +10,9 @@ import { GitWorkspace, SliceSeed } from '../../src/infrastructure/git-workspace.
 import {
   WorkspaceFailure, WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood, CheckoutNotConfirmed,
 } from '../../src/domain/exceptions.js'
-import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
-import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.js'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
+import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 
 class BaselineDouble {
   constructor(result = BaselineDouble.green()) {

@@ -1,5 +1,5 @@
 import { CmuxPlanAgents } from './cmux-plan-agents.js'
-import { CheckoutRoot } from '../domain/value-objects/checkout-root.js'
+import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import { PlanIssue } from '../domain/value-objects/plan-issue.js'
 import { PlanWatch } from '../domain/value-objects/plan-watch.js'
 import { PlanStoryFailure, WorkspaceFailure } from '../domain/exceptions.js'
