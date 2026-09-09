@@ -97,6 +97,15 @@ describe('PlanIssueBody', () => {
     expect(body).toContain('MO_SHOP-42 no trae descripción en Jira')
   })
 
+  it('a_github_issue_with_no_body_and_no_comments_names_the_issue_instead_of_promising_jira', () => {
+    const body = PlanIssueBody.of({ story: Opened.githubStory({ description: '   ' }), comment: null })
+
+    expect(body).toContain(
+      '## Contexto del epic\n_El issue mercadona/control-tower#141 no trae cuerpo ni comentarios: ' +
+        'no hay nada escrito de donde partir._'
+    )
+  })
+
   it('the_scope_guard_finds_no_scope_declared_which_is_what_it_answers_when_it_cannot_check', () => {
     const scope = parseScope(PlanIssueBody.of({ story: Opened.story(), comment: null }))
 
@@ -245,16 +254,16 @@ describe('an issue with no user story is born from the comment alone', () => {
       .toBe(`${'a'.repeat(71)}…`)
   })
 
-  it('the_first_line_of_a_body_with_no_story_says_the_plan_was_asked_by_hand_instead_of_naming_a_key', () => {
+  it('the_first_line_of_a_body_with_no_story_says_the_plan_was_asked_by_hand_and_names_no_tracker', () => {
     const [firstLine] = PlanIssueBody.of(Opened.commentOnly()).split('\n')
 
-    expect(firstLine).toBe('> Plan pedido a mano: no hay historia de usuario en Jira.')
+    expect(firstLine).toBe('> Plan pedido a mano: no hay ticket detrás.')
   })
 
-  it('a_body_with_no_story_says_there_is_no_jira_story_where_the_epic_context_goes', () => {
+  it('a_body_with_no_story_says_there_is_no_ticket_where_the_epic_context_goes_and_names_no_tracker', () => {
     const body = PlanIssueBody.of(Opened.commentOnly())
 
-    expect(body).toContain('## Contexto del epic\n_El plan no viene de una historia de usuario de Jira._')
+    expect(body).toContain('## Contexto del epic\n_El plan no viene de ningún ticket._')
   })
 
   it('a_comment_whose_first_line_carries_no_words_says_so_instead_of_leaving_the_description_blank', () => {

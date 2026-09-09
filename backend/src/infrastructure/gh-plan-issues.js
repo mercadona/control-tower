@@ -318,10 +318,10 @@ export class PlanIssueBody {
   static AC_HEADING = '## Acceptance criteria (EARS, 1:1 con tests)'
   static COMMENT_SECTION = 'Comentario de quien pide el plan'
   static COMMENT_HEADING = `## ${PlanIssueBody.COMMENT_SECTION}`
-  static NO_STORY_LINE = '> Plan pedido a mano: no hay historia de usuario en Jira.'
+  static NO_STORY_LINE = '> Plan pedido a mano: no hay ticket detrás.'
   static STORY_LINE = '> Historia de usuario: '
   static ISSUE_LINE = '> Issue de GitHub: '
-  static NO_STORY_EPIC_CONTEXT = '_El plan no viene de una historia de usuario de Jira._'
+  static NO_STORY_EPIC_CONTEXT = '_El plan no viene de ningún ticket._'
   static NO_HEADLINE = '_El comentario no trae una primera línea que resuma lo que se pide._'
   static HEADLINE_LIMIT = 72
   static HEADLINE_CUT = '…'
@@ -392,12 +392,20 @@ export class PlanIssueBody {
     }
   }
 
+  static #EMPTY_EPIC_CONTEXT_BY_KIND = new Projection('plan issue empty epic context', [
+    [UserStoryKey, (story) =>
+      `_${story.key.text} no trae descripción en Jira: la historia de usuario está sin escribir._`],
+    [UserStoryUrl, (story) =>
+      `_El issue ${story.key.repository.text}#${story.key.number} no trae cuerpo ni comentarios: ` +
+      'no hay nada escrito de donde partir._'],
+  ])
+
   static #epicContextOf(story) {
     if (story === null) return PlanIssueBody.NO_STORY_EPIC_CONTEXT
 
     return story.hasDescription()
       ? PlanIssueBody.quieted(story.description)
-      : `_${story.key} no trae descripción en Jira: la historia de usuario está sin escribir._`
+      : PlanIssueBody.#EMPTY_EPIC_CONTEXT_BY_KIND.of(story.key.constructor)(story)
   }
 
   static quieted(text) {
