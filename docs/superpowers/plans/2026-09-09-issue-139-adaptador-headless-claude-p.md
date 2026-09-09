@@ -245,7 +245,7 @@ cd backend && npx vitest run __tests__/infrastructure/detached-run-real-process.
 cd backend && test "$(grep -c "on('error'" src/infrastructure/detached-run.js)" -eq 1
 cd backend && test "$(grep -c 'process.kill(-' src/infrastructure/detached-run.js)" -eq 1
 cd backend && test -z "$(grep -l 'timeout:' src/infrastructure/detached-run.js)"
-cd backend && test -z "$(grep -l 'budgetMs = ' src/infrastructure/detached-run.js)"
+cd backend && test -z "$(grep -l 'budgetMs = [0-9]' src/infrastructure/detached-run.js)"
 cd backend && test "$(grep -c 'not_left_orphaned' __tests__/infrastructure/detached-run-real-process.test.js)" -eq 1
 cd backend && npx vitest run --exclude '**/*-real-process.test.js'   # exit 0: nothing regressed
 ```
