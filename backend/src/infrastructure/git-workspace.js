@@ -3,7 +3,7 @@ import { SLICE_REL_PATH, excludeContentWith } from '../../../plugin/scripts/stat
 import { LOOP_BRANCH_PREFIX } from '../../../plugin/scripts/conventions.js'
 import { renderState } from '../../../plugin/scripts/state.js'
 import { BaselineOutcome, BaselineResult } from '../../../plugin/scripts/baseline.js'
-import { SownWorkspace } from '../domain/value-objects/sown-workspace.js'
+import { SownWorkspace } from '../domain/value-objects/sown-workspace.ts'
 import { GhPlanIssues } from './gh-plan-issues.js'
 import { Workspace } from '../domain/ports/workspace.js'
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.js'
