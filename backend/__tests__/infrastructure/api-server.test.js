@@ -189,6 +189,7 @@ class RunningApi {
   static STORY = 'ABC-123'
   static REPO = 'owner/name'
   static ACCEPTED_BODY = `{"id":"ABC-123","repo":"owner/name","path":"/repo/checkout"}`
+  static REVIEW_BODY = `{"issue":7,"repo":"owner/name","changes":"parte la tarea 2"}`
   static ANSWER =
     '{"status":"started","id":"ABC-123","repo":"owner/name",' +
     '"issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},"agent":"workspace:4",' +
@@ -1210,6 +1211,19 @@ describe('ApiServer', () => {
     expect(await response.json()).toEqual({
       code: 'foreign-origin', detail: 'this api only serves the page it hosts',
     })
+  })
+
+  it('review_plan_turns_away_a_foreign_browser_origin', async () => {
+    const askPlanChanges = { execute: vi.fn() }
+    const port = await RunningApi.listening({ askPlanChanges })
+
+    const response = await RunningApi.post(port, '/review-plan', RunningApi.REVIEW_BODY, {
+      Origin: 'https://evil.example',
+    })
+
+    expect(response.status).toBe(403)
+    expect(await response.text()).toBe('{"code":"foreign-origin","detail":"this api only serves the page it hosts"}')
+    expect(askPlanChanges.execute).not.toHaveBeenCalled()
   })
 
   it('active_plans_retries_inconclusive_recovery_and_refuses_unknown_state', async () => {

@@ -28,6 +28,7 @@ import { DiskImplementationStartRegistry } from './disk-implementation-start-reg
 import { CmuxWorkspaceQuery } from '../../../plugin/scripts/cmux.js'
 import { StartPlan } from '../application/actions/start-plan.js'
 import { ImplementPlan } from '../application/actions/implement-plan.js'
+import { AskPlanChanges } from '../application/actions/ask-plan-changes.js'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../application/queries/read-plan-progress.js'
 import { ReadImplementationProgress } from '../application/queries/read-implementation-progress.js'
 import { ReadChangesAsked, ReadChangesAskedParams } from '../application/queries/read-changes-asked.js'
@@ -367,6 +368,7 @@ class CtApi {
         story: async (subject) => (await readPlanStory.execute(new ReadPlanStoryParams(subject))).story,
         stderr: (line) => process.stderr.write(line),
       }),
+      checkouts,
       implementationStarts,
       goRegistry,
       implementationProgress: runFileProgress,
@@ -385,6 +387,7 @@ class CtApi {
         planIssues,
         planAgents,
       }),
+      askPlanChanges: new AskPlanChanges({ planIssues }),
       implementProgress: new ReadImplementationProgress({
         implementationProgress: runFileProgress,
         pullRequests,

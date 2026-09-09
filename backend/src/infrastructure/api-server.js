@@ -4,6 +4,7 @@ import { createServer } from 'node:http'
 import { Answer, Route, Browsers, JsonBody } from './http.js'
 import { StartPlanRoute } from './start-plan-route.js'
 import { ImplementPlanRoute } from './implement-plan-route.js'
+import { ReviewPlanRoute } from './review-plan-route.js'
 import { PlanEventsRoute } from './plan-events-route.js'
 import { ActivePlansRoute } from './active-plans-route.js'
 import { ImplementProgressRoute } from './implement-progress-route.js'
@@ -41,12 +42,13 @@ class Failures {
 
 export class ApiServer {
   constructor({
-    port, startPlan, implementPlan, implementProgress, reviews, pullRequestReviews, planEvents,
+    port, startPlan, implementPlan, askPlanChanges, implementProgress, reviews, pullRequestReviews, planEvents,
     sessions, activePlans, externalTools, implementationStarts, recovery = null, stderr, frontendRoot,
   }) {
     this.requestedPort = port
     this.startPlan = startPlan
     this.implementPlan = implementPlan
+    this.askPlanChanges = askPlanChanges
     this.implementProgress = implementProgress
     this.reviews = reviews
     this.pullRequestReviews = pullRequestReviews
@@ -86,6 +88,14 @@ export class ApiServer {
       )
     )
     app.all(ImplementPlanRoute.PATH, ImplementPlanRoute.refuseOtherMethods)
+    app.post(
+      ReviewPlanRoute.PATH,
+      Browsers.turnAwayForeign,
+      JsonBody.demandDeclared,
+      JsonBody.reader(),
+      ReviewPlanRoute.handledBy(this.askPlanChanges, this.activePlans)
+    )
+    app.all(ReviewPlanRoute.PATH, ReviewPlanRoute.refuseOtherMethods)
     app.get(
       PlanEventsRoute.PATH,
       Browsers.turnAwayForeign,

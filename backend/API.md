@@ -14,7 +14,7 @@ Every shape below was read from a running server, not from the source alone. The
 | Port | `CT_API_PORT`, default `8787` |
 | Interface | loopback only (`127.0.0.1`) |
 | Start | `make run-backend` |
-| Endpoints | 6 (`POST` 2, `GET` 4) |
+| Endpoints | 7 (`POST` 3, `GET` 4) |
 
 In development the vite dev server proxies these paths to the backend and strips
 the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
@@ -271,6 +271,68 @@ serialised.
 curl -s -X POST -H 'Content-Type: application/json' \
   http://127.0.0.1:8787/implement-plan \
   -d '{"agent":"workspace:20","issue":33,"repo":"owner/name"}'
+```
+
+---
+
+## `POST /review-plan`
+
+Asks the plan-writing agent for changes, from the web page instead of typing
+the `-REVIEW` token into GitHub by hand.
+
+**The call does not talk to the agent.** Its only effect is a comment on the
+plan's GitHub issue, of the shape `-REVIEW <changes>`. The agent reads it on
+the review watch's next sweep, up to 30 seconds after this call answers — not
+when it answers. A 202 means the comment was posted, not that the agent has
+seen it yet.
+
+**Request**
+
+| Field | Type | Shape |
+|---|---|---|
+| `issue` | number | whole, from 1 |
+| `repo` | string | `owner/name` |
+| `changes` | string | what to change, not blank, no control characters other than newline, carriage return or tab |
+
+The text is published quieted — mentions, `#123` and `owner/name#123`
+references and GitHub URLs are wrapped in backticks, so the text notifies
+nobody it would not already have notified by being a comment. Posting a comment
+at all still reaches the issue's author, its assignee, its subscribers and
+anyone watching the repository; quieting is about the text, not about the
+comment. Two forms still get through: a mention preceded by a dot
+(`.@someone`) and the `GH-123` form, which GitHub autolinks into a
+cross-reference that notifies that issue's subscribers.
+
+**202 Accepted**
+
+```json
+{"status":"changes-asked","issue":33}
+```
+
+**Refusals**
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `body-not-a-json-object` | 400 | `body must be a JSON object` |
+| `unknown-field` | 400 | `detail` names the fields, sorted |
+| `malformed-issue` | 400 | `issue must be a whole number from one` |
+| `malformed-repo` | 400 | `repo must be a repository such as owner/name` |
+| `malformed-changes` | 400 | `changes must say what to change` |
+| `no-live-planning-session` | **409** | `no matching live planning session exists, so nobody would read the changes` |
+| `plan-already-being-implemented` | **409** | `the plan is already being implemented, so its review watch is gone` |
+| `implementation-phase-uncertain` | **409** | `implementation may have started; inspect the plan before retrying` |
+| `plan-changes-not-asked` | 400 | `gh` refused to post the comment; `detail` carries its own message |
+
+The three 409s are three different states, and only `code` separates them:
+nothing is watching this issue, the plan moved on to being implemented, or this
+process cannot tell which. The last one is the same code `POST /implement-plan`
+emits, with the same meaning — a person has to look at the plan before
+retrying.
+
+```
+curl -s -X POST -H 'Content-Type: application/json' \
+  http://127.0.0.1:8787/review-plan \
+  -d '{"issue":33,"repo":"owner/name","changes":"parte la tarea 2"}'
 ```
 
 ---
