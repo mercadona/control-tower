@@ -1482,7 +1482,7 @@ describe('ct-init.sh', () => {
       escenarios.push(dir)
       const g = (...args) => execFileSync('git', args, { cwd: dir, stdio: 'ignore' })
       // An explicit `-b main`: without it `git init` uses the machine's
-      // init.defaultBranch (the same reason as in f22-estado-del-slice.test.js).
+      // init.defaultBranch (the same reason as in f22-slice-state.test.js).
       g('init', '-q', '-b', 'main', '.')
       g('config', 'user.email', 'test@test')
       g('config', 'user.name', 'test')
@@ -1647,7 +1647,7 @@ describe('ct-init.sh', () => {
   it('the seeded contract is, byte for byte, the block the script emits', () => {
     // Its being identical is not convenience: it is what makes the hash ledger
     // recognise a block seeded by any earlier version, and what keeps
-    // conventions.js's pruning and vara.js's discount seeing it by its markers
+    // conventions.js's pruning and repo-yardstick.js's discount seeing it by its markers
     // with no new rule. The file IS the block and nothing else.
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })

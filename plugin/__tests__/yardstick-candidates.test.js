@@ -2,8 +2,8 @@
 // proves that what §3 cited EXISTS (it catches invention) — nothing proved that
 // EVERYTHING relevant was cited (the omission). This file protects the sweep
 // that closes that asymmetry: `candidatosDeVara`, `declaradasEn`,
-// `pareceEsqueleto` and `formatCandidatos` in scripts/vara.js, plus the
-// executable wrapper scripts/detect-vara.mjs and its hook in scripts/ct-init.sh.
+// `pareceEsqueleto` and `formatCandidatos` in scripts/repo-yardstick.js, plus the
+// executable wrapper scripts/detect-yardstick.mjs and its hook in scripts/ct-init.sh.
 //
 // The property these tests protect, above any detail of format: THE SWEEP
 // PROPOSES AND NEVER DECLARES. It never writes to `.agent/conventions.md` —
@@ -23,10 +23,10 @@ import {
   declaradasEn,
   pareceEsqueleto,
   formatCandidatos,
-} from '../scripts/vara.js'
+} from '../scripts/repo-yardstick.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const detectVaraScript = join(root, 'scripts', 'detect-vara.mjs')
+const detectYardstickScript = join(root, 'scripts', 'detect-yardstick.mjs')
 const initScript = join(root, 'scripts', 'ct-init.sh')
 
 const dirs = []
@@ -190,7 +190,7 @@ describe('pareceEsqueleto', () => {
   // contract section to it (hundreds of lines of prose). This test runs the real
   // `ct-init.sh` and measures over its output, so that a regression in the
   // discounting of the contract block (see `sinBloquesDeCtInit` in
-  // scripts/vara.js) shows up here.
+  // scripts/repo-yardstick.js) shows up here.
   it('the AGENTS.md ct-init.sh REALLY leaves on disk is a skeleton, despite the sections the script itself adds to it', () => {
     const dir = tmp()
     execFileSync('bash', [initScript, dir], { encoding: 'utf8' })
@@ -257,21 +257,21 @@ describe('formatCandidatos', () => {
 })
 
 // ---------------------------------------------------------------------------
-// End to end: scripts/detect-vara.mjs
+// End to end: scripts/detect-yardstick.mjs
 // ---------------------------------------------------------------------------
-describe('detect-vara.mjs end to end', () => {
+describe('detect-yardstick.mjs end to end', () => {
   it('repository with docs/conventions/backend.md → exit 0 and stdout carrying that path', () => {
     const dir = tmp()
     mkdirSync(join(dir, 'docs', 'conventions'), { recursive: true })
     writeFileSync(join(dir, 'docs', 'conventions', 'backend.md'), '# reglas\nusa DI\n')
-    const r = spawnSync('node', [detectVaraScript, dir], { encoding: 'utf8' })
+    const r = spawnSync('node', [detectYardstickScript, dir], { encoding: 'utf8' })
     expect(r.status).toBe(0)
     expect(r.stdout).toContain('docs/conventions/backend.md')
   })
 
   it('repository with nothing → exit 0 and empty stdout', () => {
     const dir = tmp()
-    const r = spawnSync('node', [detectVaraScript, dir], { encoding: 'utf8' })
+    const r = spawnSync('node', [detectYardstickScript, dir], { encoding: 'utf8' })
     expect(r.status).toBe(0)
     expect(r.stdout.trim()).toBe('')
   })
@@ -282,7 +282,7 @@ describe('detect-vara.mjs end to end', () => {
     writeFileSync(join(dir, 'docs', 'conventions', 'backend.md'), '# reglas\nusa DI\n')
     mkdirSync(join(dir, '.agent'), { recursive: true })
     writeFileSync(join(dir, '.agent', 'conventions.md'), 'Rules to obey:\n- `docs/conventions/backend.md`\n')
-    const r = spawnSync('node', [detectVaraScript, dir], { encoding: 'utf8' })
+    const r = spawnSync('node', [detectYardstickScript, dir], { encoding: 'utf8' })
     expect(r.status).toBe(0)
     expect(r.stdout.trim()).toBe('')
   })
@@ -291,13 +291,13 @@ describe('detect-vara.mjs end to end', () => {
     const dir = tmp()
     const fichero = join(dir, 'no-es-dir.txt')
     writeFileSync(fichero, 'x')
-    const r = spawnSync('node', [detectVaraScript, fichero], { encoding: 'utf8' })
+    const r = spawnSync('node', [detectYardstickScript, fichero], { encoding: 'utf8' })
     expect(r.status).toBe(1)
     expect(r.stdout.trim()).toBe('')
     expect(r.stderr).toMatch(/no es un directorio/)
   })
 
-  // Round 2 of the judge's verdict: nothing proved that `detect-vara.mjs`
+  // Round 2 of the judge's verdict: nothing proved that `detect-yardstick.mjs`
   // really READ each candidate off disk and called `pareceEsqueleto` — the
   // `formatCandidatos` tests inject `esqueleto: true` by hand, so that wiring
   // could be deleted without the suite noticing. This test runs the real script
@@ -311,7 +311,7 @@ describe('detect-vara.mjs end to end', () => {
       join(dir, 'docs', 'conventions', 'real.md'),
       ['# Reglas', 'Usa siempre inyección de dependencias.', 'No importes infraestructura desde el dominio.', 'Los DTOs son inmutables.'].join('\n')
     )
-    const r = spawnSync('node', [detectVaraScript, dir], { encoding: 'utf8' })
+    const r = spawnSync('node', [detectYardstickScript, dir], { encoding: 'utf8' })
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/`docs\/conventions\/esqueleto\.md` — [^\n]*\[esqueleto: sólo encabezados\]/)
     expect(r.stdout).not.toMatch(/`docs\/conventions\/real\.md`[^\n]*\[esqueleto/)
@@ -381,7 +381,7 @@ describe('the sweep does not diverge from the texts that describe it', () => {
     expect(leer('commands', 'ct-init.md')).toContain(CANDIDATOS_HEADER)
   })
 
-  it('scripts/ct-init.sh mentions detect-vara.mjs', () => {
-    expect(leer('scripts', 'ct-init.sh')).toContain('detect-vara.mjs')
+  it('scripts/ct-init.sh mentions detect-yardstick.mjs', () => {
+    expect(leer('scripts', 'ct-init.sh')).toContain('detect-yardstick.mjs')
   })
 })

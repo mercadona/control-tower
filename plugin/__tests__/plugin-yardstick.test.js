@@ -264,7 +264,7 @@ describe('neither English text repeats the precedence rule: both point at the on
 
 describe("the sibling module that carries this repo's own yardstick is untouched", () => {
   it('keeps_transporting_the_repo_declaration_from_its_own_dot_agent_file', async () => {
-    const repoYardstick = await import('../scripts/vara.js')
+    const repoYardstick = await import('../scripts/repo-yardstick.js')
     expect(repoYardstick.CONVENTIONS_FILE).toBe('.agent/conventions.md')
     expect(typeof repoYardstick.seccionDeVara).toBe('function')
   })

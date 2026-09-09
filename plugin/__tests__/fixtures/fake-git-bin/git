@@ -38,7 +38,7 @@ function main() {
   // needs to simulate THIS particular query failing; the ones that exercise
   // the REAL precedence between `info/exclude` and a negation in `.gitignore`
   // (F22, Step 4) use the REAL git, never this stub — see
-  // __tests__/f22-estado-del-slice.test.js.
+  // __tests__/f22-slice-state.test.js.
   if (argv[0] === 'rev-parse' && argv[1] === '--git-common-dir') {
     process.stdout.write(`${process.env.FAKE_GIT_TOPLEVEL || '/tmp/fake-repo-root'}/.git\n`)
     process.exit(0)

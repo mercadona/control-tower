@@ -190,7 +190,7 @@ describe('H2 (CLI) — the slice that fell off the queue stops disappearing in s
 
 // F22, Task 6: the `blocked` is read from `.agent/SLICE.md`, not from `.agent/
 // STATE.md` (that one became the coordinator's file, frozen at the base — see
-// __tests__/f22-estado-del-slice.test.js). This block seeds SLICE.md, which is
+// __tests__/f22-slice-state.test.js). This block seeds SLICE.md, which is
 // the file a worktree of THIS version brings.
 describe('H3 (CLI) — a claim whose SLICE.md declares itself BLOCKED', () => {
   function repoConWorktree(n, sliceMd) {

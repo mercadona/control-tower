@@ -1,4 +1,4 @@
-// scripts/vara.js
+// scripts/repo-yardstick.js
 //
 // §3.3 of the handoff (docs/prompt-juez-lo-que-queda.md): the plan is per
 // slice, so `## 3. Reference patterns` was re-derived in every slice plan, and
@@ -26,7 +26,7 @@
 // The path, relative to the repo's root. A single constant so that seeder,
 // reader and the texts that explain it to agents and humans cannot diverge in
 // silence — the same decoupling JUDGE_TOOLS and VERDICT_RULES already suffered
-// in scripts/step-contracts.js. __tests__/vara.test.js ties this constant to
+// in scripts/step-contracts.js. __tests__/repo-yardstick.test.js ties this constant to
 // the six files that cite it.
 export const CONVENTIONS_FILE = '.agent/conventions.md'
 
@@ -55,7 +55,7 @@ export function seccionDeVara(contenido) {
 //
 // What follows is a deterministic, offline sweep (in the style of
 // agentic-skills' `discover_conventions.py`) that PROPOSES candidates for this
-// repo's yardstick. Its only consumer is `scripts/detect-vara.mjs`, invoked
+// repo's yardstick. Its only consumer is `scripts/detect-yardstick.mjs`, invoked
 // from `ct-init.sh` at the one moment when there is already a human in front of
 // it. NOTHING in this code ever writes to `.agent/conventions.md`: that
 // remains, without exception, the decision of the human who confirms. A

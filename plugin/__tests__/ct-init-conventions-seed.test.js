@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { CONVENTIONS_FILE } from '../scripts/vara.js'
+import { CONVENTIONS_FILE } from '../scripts/repo-yardstick.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const script = join(root, 'scripts', 'ct-init.sh')

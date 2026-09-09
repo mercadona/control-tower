@@ -1,6 +1,6 @@
 # The scope conformance gate (`ct-scope-gate`)
 
-> Moved out of `plugin/templates/scope-gate.yml` (sub-issue #93). No code ever copied that template —`ct-init` does not vendor it and no hook imports it—, so it travelled in every installation of the plugin without anyone reading it from there. The workflow is installed by hand, and the place for an instruction that is followed by hand is the repository's documentation, not the package that gets distributed. The bundle it runs, `plugin/dist/scope-check.js`, is still built and tracked as it always was (`plugin/scripts/build.mjs`, `plugin/__tests__/dist-coherente-con-fuentes.test.js`).
+> Moved out of `plugin/templates/scope-gate.yml` (sub-issue #93). No code ever copied that template —`ct-init` does not vendor it and no hook imports it—, so it travelled in every installation of the plugin without anyone reading it from there. The workflow is installed by hand, and the place for an instruction that is followed by hand is the repository's documentation, not the package that gets distributed. The bundle it runs, `plugin/dist/scope-check.js`, is still built and tracked as it always was (`plugin/scripts/build.mjs`, `plugin/__tests__/dist-matches-sources.test.js`).
 
 The content, in full:
 

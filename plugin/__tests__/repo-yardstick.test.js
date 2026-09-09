@@ -1,7 +1,7 @@
 // §3.3 of the handoff (docs/prompt-juez-lo-que-queda.md): the plan is per
 // slice, so `## 3. Reference patterns` was rewritten in every plan and nothing
 // guaranteed that slice 14 cited the same paths as slice 3. This test covers
-// `scripts/vara.js`, the module that turns the repo's yardstick into one file
+// `scripts/repo-yardstick.js`, the module that turns the repo's yardstick into one file
 // per repo (`.agent/conventions.md`) instead of a per-slice selection repeated
 // over and over.
 //
@@ -14,7 +14,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CONVENTIONS_FILE, seccionDeVara } from '../scripts/vara.js'
+import { CONVENTIONS_FILE, seccionDeVara } from '../scripts/repo-yardstick.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 

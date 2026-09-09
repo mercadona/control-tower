@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// IO wrapper around scripts/vara.js: it sweeps the target repository and writes
+// IO wrapper around scripts/repo-yardstick.js: it sweeps the target repository and writes
 // to stdout the candidates for its yardstick (`.agent/conventions.md`), if there
 // are any. ct-init.sh calls it, and prints it WITHOUT redirecting to stderr —
 // unlike its sibling `detect-conventions.mjs`.
@@ -33,11 +33,11 @@ import {
   declaradasEn,
   pareceEsqueleto,
   formatCandidatos,
-} from './vara.js'
+} from './repo-yardstick.js'
 
 const target = process.argv[2]
 if (!target) {
-  console.error('uso: detect-vara.mjs <dir-repo>')
+  console.error('uso: detect-yardstick.mjs <dir-repo>')
   process.exit(1)
 }
 

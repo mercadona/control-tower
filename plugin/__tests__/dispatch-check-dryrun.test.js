@@ -699,7 +699,7 @@ function mkStaleMainRepo({ issue = 9, sliceMd } = {}) {
 // satisfying it ALL of this would come out 9 before reaching what these tests
 // measure, which is where the base of the diff comes from and what the `base:`
 // guardrail warns about. Door 9 is not the object of this test: it is covered
-// in f38-el-go-del-gate-plan.test.js. The shared fixture is used and not a copy
+// in f38-the-plan-gate-go.test.js. The shared fixture is used and not a copy
 // because its own header asks for it («the day the format of the record
 // changes, a shared fixture breaks once and in one place»), and it is what the
 // other `--release` tests of this file and those of f22 already do.

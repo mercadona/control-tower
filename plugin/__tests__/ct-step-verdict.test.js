@@ -16,7 +16,7 @@ afterEach(() => { rmSyncBestEffort(repo) })
 describe('a veto leaves no trace to undo', () => {
   const veta = () => judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }]))
   // The adviser of the second veto, down the happy path: what this describe
-  // measures is the veto, not the advice (that is in ct-step-consejo.test.js).
+  // measures is the veto, not the advice (that is in ct-step-advice.test.js).
   const aconsejar = () => {
     ct('next')
     const p = join(repo, 'advice.json')

@@ -334,7 +334,7 @@ describe('ct-next --dry-run — the kickoff reads as PROSE (D4, defect 3)', () =
     // BEFORE F19 this was `--command "claude --dangerously-skip-permissions
     // …"`: the whole command travelled TYPED into the pty, which is exactly
     // what let an oh-my-zsh prompt eat the `c` of `claude` in the first real
-    // dispatch (see __tests__/f19-verificar-el-arranque.test.js). Now only a
+    // dispatch (see __tests__/f19-verify-the-start-up.test.js). Now only a
     // `. <path>` is typed and the command lives in the script. The property
     // this test defends does NOT change —the dry-run has to show literally what
     // would be executed, with no trimming— only where it lives changes.

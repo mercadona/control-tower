@@ -1,7 +1,7 @@
 // scripts/repo-walk.js pulls out the tree walk that used to live ONLY inside
 // scripts/detect-conventions.mjs. §3.12 of the handoff
 // (docs/prompt-juez-lo-que-queda.md) adds a SECOND sweep —the one for
-// candidates to the yardstick of the repository, scripts/detect-vara.mjs—
+// candidates to the yardstick of the repository, scripts/detect-yardstick.mjs—
 // which needs exactly the same walk: the same caps (`MAX_DEPTH`,
 // `MAX_ENTRIES`), the same exclusions (`SKIP_DIRS`), the same
 // do-not-descend-into-`worktrees` and the same do-not-follow-symlinks.
@@ -12,7 +12,7 @@
 //
 // The three odd rules (do not descend into `worktrees`, do not follow
 // symlinks, `.worktrees` in SKIP_DIRS) are measured against a real case from
-// the field (see detect-conventions.mjs / conventions-salida.test.js) and are
+// the field (see detect-conventions.mjs / conventions-output.test.js) and are
 // not "simplified" here.
 import { describe, it, expect, afterEach } from 'vitest'
 import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, chmodSync, rmSync } from 'node:fs'

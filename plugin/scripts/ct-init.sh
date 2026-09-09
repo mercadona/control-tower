@@ -1348,7 +1348,7 @@ slices_block_status() {
 #     `--update-slices-contract` and `--force`. Its being identical is not
 #     convenience: it is what makes the ledger of historical hashes go on
 #     recognising a block seeded by any earlier version, and what keeps
-#     `conventions.js`'s pruning and `vara.js`'s discount seeing it by its
+#     `conventions.js`'s pruning and `repo-yardstick.js`'s discount seeing it by its
 #     markers with no new rule. The file IS the block and nothing else.
 #   - `AGENTS.md`: a short section (`<!-- ct-init:loop -->`) with what an agent
 #     needs —the repo's commands, where the yardstick is, that a slice's state
@@ -1588,7 +1588,7 @@ fi
 VARA_STATUS=0
 VARA_OUT=''
 if command -v node >/dev/null 2>&1; then
-  VARA_OUT="$(node "$HERE/scripts/detect-vara.mjs" "$TARGET" 2>/dev/null)" || VARA_STATUS=$?
+  VARA_OUT="$(node "$HERE/scripts/detect-yardstick.mjs" "$TARGET" 2>/dev/null)" || VARA_STATUS=$?
 else
   VARA_STATUS=127
 fi
