@@ -12,9 +12,9 @@ describe('the `plan` gate — vocabulary', () => {
     expect(Object.hasOwn(GATES, 'plan')).toBe(true)
     expect(GATES.plan.kickoff).toContain('PARA')
     expect(GATES.plan.kickoff).toContain('--check-plan')
-    expect(GATES.plan.issue).toContain('comentario')
+    expect(GATES.plan.issue).toContain('comment')
     for (const text of [GATES.plan.kickoff, GATES.plan.issue]) {
-      expect(text.toLowerCase()).toContain('humano')
+      expect(text.toLowerCase()).toContain('human')
     }
   })
 

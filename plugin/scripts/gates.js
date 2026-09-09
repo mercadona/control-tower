@@ -78,7 +78,7 @@ export const GATE_LABEL_NONE = 'gate:none'
 export const GATES = {
   visual: {
     kickoff: 'GATE HUMANO `visual` (lo pide el spec para ESTE slice, esté o no en su `Tipo`): antes de que este PR se pueda mergear, un humano tiene que ver el cambio. Adjunta al PR una captura (o un vídeo corto) del estado ANTES y DESPUÉS, di desde qué pantalla/ruta se llega, y NO des el gate por cumplido tú: no lo cierras tú, lo cierra quien revisa.',
-    issue: '**`visual`** — antes de mergear, un humano tiene que VER el cambio: el PR debe traer captura (o vídeo) del antes/después y la ruta para reproducirlo. El agente no puede darlo por cumplido.',
+    issue: '**`visual`** — before merging, a human has to SEE the change: the PR must bring a screenshot (or video) of the before/after and the path to reproduce it. The agent cannot give it as met.',
   },
   apply: {
     // The text deliberately avoids the words
@@ -88,7 +88,7 @@ export const GATES = {
     // false positive (an `infra` slice "would contain backend markers"). The
     // gate explains itself just as well without them.
     kickoff: 'GATE HUMANO `apply` (lo pide el spec para ESTE slice, esté o no en su `Tipo`): no apliques nada contra un entorno real (`apply`, `deploy`, un script ejecutado sobre datos de verdad) por tu cuenta. Deja el plan/dry-run en el PR y PARA: el apply lo autoriza un humano después de revisarlo.',
-    issue: '**`apply`** — nada se aplica contra un entorno real hasta que un humano revise el plan/dry-run que trae el PR. El agente deja el plan y para.',
+    issue: '**`apply`** — nothing is applied against a real environment until a human reviews the plan/dry-run the PR brings. The agent leaves the plan and stops.',
   },
   plan: {
     // The only gate that cuts in BEFORE implementing, not before merging: its
@@ -99,7 +99,7 @@ export const GATES = {
     // TYPE_GATES because it is not a technical axis; the per-row waiver is
     // `!plan`, noisy like all of them.
     kickoff: 'GATE HUMANO `plan` (implicado por defecto en TODO slice, salvo renuncia `!plan` en el spec): con el plan del slice escrito, validado con --check-plan y commiteado, publícalo como comentario del issue y PARA — no implementes nada hasta que un humano conteste el go en un comentario de ese issue. El go es `-OK <nonce>`, y el nonce lo sorteó la coordinadora al despacharte: vive fuera de este kickoff, del issue y de tu worktree, y por eso es un permiso que sólo un humano puede darte: no puedes fabricarlo, y `dispatch-check --release` se niega (exit 9) sin un go válido, así que saltarte este gate no te deja entregar, sólo te deja rehacer el trabajo. Un vigilante que lanzó la coordinadora está mirando el issue y te teclea la línea cuando el go llegue, así que PARAR de verdad es lo correcto: no sondees tú el issue ni te des el gate por cumplido. En el comentario que publicas, di que el go es `-OK` seguido del nonce que `/ct-next` imprimió al despachar, y que si se perdió lo reemite quien despachó: escrito así, quien lo lea sabe de dónde sacar el nonce — con el literal `<nonce>` como formato entero acabaría probando el `-OK` pelado, que no arranca nada. No lo cierras tú: lo cierra quien revisa el plan.',
-    issue: '**`plan`** — antes de implementar, un humano tiene que revisar el PLAN del slice: el agente lo publica como comentario de este issue y se detiene. Para darle el go, contesta con un comentario que sea exactamente `-OK <nonce>`, con el nonce que /ct-next imprimió al despachar este slice (sin nada más: cualquier otra cosa no arranca nada, a propósito). Ese nonce no está escrito en este issue porque el agente lee el issue: es la parte del permiso que él no puede fabricar, y sin él `--release` se niega. Si se ha perdido, quien despachó lo reemite con `scripts/ct-go.mjs`. Quien vigila el issue es un proceso que la coordinadora lanzó al despachar y que espera unas horas: si contestas mucho más tarde puede haber caducado, y entonces hay que empujar la sesión a mano. El agente no puede darlo por cumplido.',
+    issue: '**`plan`** — before implementing, a human has to review the slice\'s PLAN: the agent publishes it as a comment on this issue and stops. To give it the go, answer with a comment that is exactly `-OK <nonce>`, with the nonce /ct-next printed when it dispatched this slice (and nothing else: anything else starts nothing, on purpose). That nonce is not written in this issue because the agent reads the issue: it is the part of the permission it cannot manufacture, and without it `--release` refuses. If it has been lost, whoever dispatched reissues it with `scripts/ct-go.mjs`. What watches the issue is a process the coordinator launched on dispatching and that waits a few hours: if you answer much later it may have expired, and then the session has to be pushed by hand. The agent cannot give it as met.',
   },
   e2e: {
     // The only gate whose CONTENT travels in a column of its own: the other
@@ -114,7 +114,7 @@ export const GATES = {
     // outcome is "could not be checked", never a red and never an improvised
     // journey.
     kickoff: 'GATE HUMANO `e2e` (lo pide el spec para ESTE slice, en la columna `E2E` de su fila): antes de abrir el PR, atraviesa los recorridos que trae la sección `## E2E` de tu issue — ésos y sólo ésos, no añadas ni quites ninguno. Cómo se levanta este repo lo dice la sección `## Cómo se atraviesa este repo (e2e)` de `AGENTS.md`: si no está rellenada, el veredicto es `no-verificado` con ese motivo, NUNCA rojo y nunca inventarse cómo arrancarlo. Escribe el informe en `docs/superpowers/e2e/<issue>.md` con el comando literal y su salida real por cada recorrido, commitéalo, y pégalo como comentario del PR. Si algún recorrido sale ROJO, PARA sin liberar. No lo cierras tú: lo cierra quien revisa.',
-    issue: '**`e2e`** — este slice declara recorridos en la columna `E2E` de su fila: el PR debe traer el informe de haberlos atravesado (`docs/superpowers/e2e/<issue>.md`, commiteado y pegado como comentario) con el comando y su salida por cada uno. Un recorrido en rojo impide el `--release`; uno que no se pudo comprobar libera, pero lo dice. El agente no puede darlo por cumplido.',
+    issue: '**`e2e`** — this slice declares journeys in the `E2E` column of its row: the PR must bring the report of having walked them (`docs/superpowers/e2e/<issue>.md`, committed and pasted as a comment) with the command and its output for each one. A journey in red blocks the `--release`; one that could not be checked releases, but says so. The agent cannot give it as met.',
   },
 }
 
