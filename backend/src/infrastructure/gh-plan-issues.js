@@ -11,7 +11,7 @@ import {
 import { gatesOf, LOOP_STATUS_LABELS } from '../../../plugin/scripts/groom.js'
 import { STATUS_LADDER } from '../../../plugin/scripts/harvest.js'
 import { gateLabels } from '../../../plugin/scripts/gates.js'
-import { PlanIssues } from '../domain/ports/plan-issues.js'
+import { PlanIssues } from '../domain/ports/plan-issues.ts'
 import { PlanIssue } from '../domain/value-objects/plan-issue.ts'
 import { PlanIssueStatus } from '../domain/value-objects/plan-issue-status.ts'
 import { ChangeAsked } from '../domain/value-objects/change-asked.ts'

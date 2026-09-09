@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   ReadChangesAsked, ReadChangesAskedParams,
 } from '../../src/application/queries/read-changes-asked.js'
-import { PlanIssues } from '../../src/domain/ports/plan-issues.js'
+import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 
 class PlanIssuesDouble extends PlanIssues {
