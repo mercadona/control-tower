@@ -1,27 +1,32 @@
 import { describe, it, expect } from 'vitest'
 import {
   ReadChangesAsked, ReadChangesAskedParams,
-} from '../../src/application/queries/read-changes-asked.js'
+} from '../../src/application/queries/read-changes-asked.ts'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
+import type { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
+import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 
 class PlanIssuesDouble extends PlanIssues {
-  constructor(answer = []) {
+  readonly answer: ChangeAsked[]
+  readonly asked: { issue: PlanIssue, repository: RepositoryName }[]
+
+  constructor(answer: ChangeAsked[] = []) {
     super()
     this.answer = answer
     this.asked = []
   }
 
-  async changesAsked(subject) {
+  async changesAsked(subject: { issue: PlanIssue, repository: RepositoryName }): Promise<ChangeAsked[]> {
     this.asked.push(subject)
     return this.answer
   }
 }
 
 describe('ReadChangesAsked', () => {
-  const issue = { number: 42 }
+  const issue = new PlanIssue({ number: 42, url: 'https://github.com/josemerca/ct-loop-sandbox/issues/42' })
   const repository = new RepositoryName('josemerca/ct-loop-sandbox')
-  const asking = (planIssues) => new ReadChangesAsked({ planIssues })
+  const asking = (planIssues: PlanIssues) => new ReadChangesAsked({ planIssues })
     .execute(new ReadChangesAskedParams({ issue, repository }))
 
   it('what_it_hands_back_is_every_change_asked_for_in_the_order_the_issue_holds_them', async () => {

@@ -1,18 +1,26 @@
 import { describe, it, expect } from 'vitest'
-import { ReadPlanProgress, ReadPlanProgressParams } from '../../src/application/queries/read-plan-progress.js'
+import { ReadPlanProgress, ReadPlanProgressParams } from '../../src/application/queries/read-plan-progress.ts'
 import { PlanProgress } from '../../src/domain/ports/plan-progress.ts'
-import { PlanState } from '../../src/domain/value-objects/plan-state.ts'
+import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
+import { PlanState, type PlanStateValue } from '../../src/domain/value-objects/plan-state.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 
 class PlanProgressDouble extends PlanProgress {
-  constructor(answer) {
+  readonly answer: PlanStateValue
+  readonly asked: { located: WorkspaceLocation, issue: PlanIssue, repository: RepositoryName }[]
+
+  constructor(answer: PlanStateValue) {
     super()
     this.answer = answer
     this.asked = []
   }
 
-  async of(subject) {
+  async of(subject: {
+    located: WorkspaceLocation,
+    issue: PlanIssue,
+    repository: RepositoryName,
+  }): Promise<PlanStateValue> {
     this.asked.push(subject)
     return this.answer
   }
@@ -20,7 +28,7 @@ class PlanProgressDouble extends PlanProgress {
 
 describe('ReadPlanProgress', () => {
   const located = new WorkspaceLocation({ path: '/repo/.worktrees/42', branch: 'feat/42' })
-  const issue = { number: 42 }
+  const issue = new PlanIssue({ number: 42, url: 'https://github.com/josemerca/ct-loop-sandbox/issues/42' })
   const repository = new RepositoryName('josemerca/ct-loop-sandbox')
 
   it('what_the_port_answers_is_what_the_caller_gets_without_being_reinterpreted', async () => {
