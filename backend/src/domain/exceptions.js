@@ -59,6 +59,8 @@ export class PlanChangesNotRead extends PlanChangesFailure {}
 
 export class PlanChangesNotUnderstood extends PlanChangesFailure {}
 
+export class PlanChangesNotAsked extends PlanChangesFailure {}
+
 export class GoFailure extends PlanFailure {}
 
 export class GoNotRecorded extends GoFailure {}

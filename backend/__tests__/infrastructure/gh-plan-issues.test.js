@@ -13,7 +13,7 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.j
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
 import {
   PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed, PlanGoNotAnswered, PlanIssueFailure,
-  PlanChangesNotRead, PlanChangesNotUnderstood, PlanStoryNotRead, PlanStoryNotUnderstood,
+  PlanChangesNotRead, PlanChangesNotUnderstood, PlanChangesNotAsked, PlanStoryNotRead, PlanStoryNotUnderstood,
 } from '../../src/domain/exceptions.js'
 
 class GhDouble {
@@ -672,6 +672,56 @@ describe('GhPlanIssues reading the changes asked for on the issue', () => {
 
     expect(refusal).toBeInstanceOf(PlanChangesNotUnderstood)
     expect(refusal).not.toBeInstanceOf(PlanChangesNotRead)
+  })
+})
+
+describe('asking for changes to the plan publishes them as a comment', () => {
+  it('the_comment_starts_with_the_changes_token_and_carries_what_was_asked_for', () => {
+    expect(GhPlanIssues.changesCommentArgvFor({
+      issueNumber: 33,
+      repository: new RepositoryName('jjponz/repo-pulse'),
+      changes: 'parte la tarea 2 en dos',
+    })).toEqual([
+      'issue', 'comment', '33',
+      '--repo', 'jjponz/repo-pulse',
+      '--body', '-REVIEW parte la tarea 2 en dos',
+    ])
+  })
+
+  it('what_is_published_is_quieted_so_publishing_on_your_behalf_pings_nobody', () => {
+    const argv = GhPlanIssues.changesCommentArgvFor({
+      issueNumber: 33,
+      repository: new RepositoryName('jjponz/repo-pulse'),
+      changes: 'lo que pidió @alcaptar en #162',
+    })
+
+    expect(argv[argv.length - 1]).toBe('-REVIEW lo que pidió `@alcaptar` en `#162`')
+  })
+
+  it('a_gh_that_refuses_is_told_apart_from_one_that_answered', async () => {
+    const gh = { run: async () => ({ failed: true, stdout: '', stderr: 'gh: not found\n' }) }
+    const issues = new GhPlanIssues({ gh, stderr: () => {} })
+
+    await expect(issues.askChanges({
+      issue: new PlanIssue({ number: 33, url: 'https://github.com/jjponz/repo-pulse/issues/33' }),
+      repository: new RepositoryName('jjponz/repo-pulse'),
+      changes: 'parte la tarea 2',
+    })).rejects.toThrow(PlanChangesNotAsked)
+  })
+
+  it('a_comment_is_never_repeated_because_a_repeated_comment_is_a_second_change_asked_for', async () => {
+    const asked = []
+    const gh = { run: async (argv, options) => { asked.push({ argv, options }); return { failed: false, stdout: '', stderr: '' } } }
+    const issues = new GhPlanIssues({ gh, stderr: () => {} })
+
+    await issues.askChanges({
+      issue: new PlanIssue({ number: 33, url: 'https://github.com/jjponz/repo-pulse/issues/33' }),
+      repository: new RepositoryName('jjponz/repo-pulse'),
+      changes: 'parte la tarea 2',
+    })
+
+    expect(asked).toHaveLength(1)
+    expect(asked[0].options).toEqual({ safeToRepeat: false })
   })
 })
 
