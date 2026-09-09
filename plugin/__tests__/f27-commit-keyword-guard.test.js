@@ -117,9 +117,9 @@ describe('F27 — the hook (end to end over the binary, via stdin)', () => {
     const reason = r.json.hookSpecificOutput.permissionDecisionReason
     expect(reason).toContain('Closes')
     expect(reason).toContain('#451')
-    // The uppercase emphasis of "CUERPO DEL PR" is deliberate -an agent that is
+    // The uppercase emphasis of "BODY OF THE PR" is deliberate -an agent that is
     // going to retry reads it- so the assertion is case insensitive.
-    expect(reason).toMatch(/cuerpo del PR/i)
+    expect(reason).toMatch(/body of the PR/i)
   })
 
   it('a NOT governed repo => no decision', () => {

@@ -46,10 +46,10 @@ const FORBIDDEN = [
   [/\bTBD\b/, 'TBD'],
   [/TODO:/, 'TODO:'],
   [/\bFIXME\b/, 'FIXME'],
-  [/similar to Task/i, '"similar to Task N" (repite el contenido)'],
+  [/similar to Task/i, '"similar to Task N" (it repeats the content)'],
   [/to be decided/i, '"to be decided"'],
-  [/<!--/, 'comentario HTML sin resolver'],
-  [/(^|[^$])\{\{/, 'placeholder {{...}} sin rellenar'],
+  [/<!--/, 'unresolved HTML comment'],
+  [/(^|[^$])\{\{/, 'unfilled {{...}} placeholder'],
 ]
 
 const TASK_HEADING = /^### Task (\d+) — /
@@ -106,13 +106,13 @@ const ROLE_LABELS = [
 ]
 
 const ROLE_MENU =
-  'Todo bloque va precedido por una de estas cuatro etiquetas: "Current state (path):" (el ' +
-  'tramo de hoy, que se comprueba verbatim), "Contract (path):" (tipos, firmas, errores ' +
-  'tipados y constantes que el implementador no puede deducir), "Call site (path):" (cómo ' +
-  'queda la llamada en el consumidor) o "Final text (path.md):" (texto cuyo valor literal ES ' +
-  'el entregable). Los comandos van con su lenguaje (```bash) o detrás de **Verification:**. ' +
-  'Un cuerpo de módulo no tiene etiqueta porque no va en el plan: lo escribe el implementador, ' +
-  'en rojo primero.'
+  'Every block is preceded by one of these four labels: "Current state (path):" (the ' +
+  'stretch as it stands today, which is checked verbatim), "Contract (path):" (types, ' +
+  'signatures, typed errors and constants the implementer cannot deduce), "Call site (path):" ' +
+  '(how the call is left in the consumer) or "Final text (path.md):" (text whose literal value ' +
+  'IS the deliverable). Commands go with their language (```bash) or after **Verification:**. ' +
+  'A module body has no label because it does not go in the plan: the implementer writes it, ' +
+  'in red first.'
 
 const TEXT_EXTENSIONS = ['.md', '.txt', '.rst', '.adoc']
 const CONFIG_EXTENSIONS = ['.json', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.lock', '.properties', '.env']
@@ -140,10 +140,10 @@ function roleOf(line) {
 }
 
 const BUDGET_REMEDY = {
-  'Current state': 'cita solo el tramo que cambia y acótalo en la etiqueta: "Current state (path, lines 40-58):".',
-  Contract: 'un contrato son declaraciones: tipos, firmas, errores tipados y constantes no deducibles. Si no cabe, lo que estás pegando es un cuerpo: quítalo y deja la firma — el cuerpo lo escribe el implementador con el test delante.',
-  'Call site': 'el call site es la llamada, no el consumidor entero: deja las líneas que cambian, antes → después.',
-  'Final text': 'parte el reemplazo en tramos, cada uno con su "Current state (path, lines A-B):".',
+  'Current state': 'quote only the stretch that changes and bound it in the label: "Current state (path, lines 40-58):".',
+  Contract: 'a contract is declarations: types, signatures, typed errors and constants that cannot be deduced. If it does not fit, what you are pasting is a body: take it out and leave the signature — the body is written by the implementer with the test in front.',
+  'Call site': 'the call site is the call, not the whole consumer: leave the lines that change, before → after.',
+  'Final text': 'split the replacement into stretches, each one with its "Current state (path, lines A-B):".',
 }
 
 function bodyAtFence(lines, openIdx) {
@@ -192,22 +192,22 @@ export function validatePlan(markdown, { readFile } = {}) {
   const lines = annotate(markdown)
 
   if (!lines.length || !lines[0].line.startsWith('# ')) {
-    push('title', 'la primera línea debe ser el título: "# <issue> — <qué>"')
+    push('title', 'the first line must be the title: "# <issue> — <what>"')
   }
   if (!lines.some((l) => l.structural && l.line.includes(BLOCKQUOTE_MARKER))) {
-    push('header', `falta el blockquote de cabecera (debe contener: "${BLOCKQUOTE_MARKER}")`)
+    push('header', `the header blockquote is missing (it must contain: "${BLOCKQUOTE_MARKER}")`)
   }
 
   let prev = -1
   for (const section of PLAN_SECTIONS) {
     const at = lines.findIndex((l) => l.structural && l.line.startsWith(section))
-    if (at === -1) { push('sections', `falta la sección "${section}" (si no aplica: "N/A — <reason>")`); continue }
-    if (at < prev) push('sections', `sección fuera de orden: "${section}"`)
+    if (at === -1) { push('sections', `the section "${section}" is missing (if it does not apply: "N/A — <reason>")`); continue }
+    if (at < prev) push('sections', `section out of order: "${section}"`)
     prev = at
   }
   for (const sub of SUBSECTIONS) {
     if (!lines.some((l) => l.structural && l.line.startsWith(sub))) {
-      push('sections', `falta la subsección "${sub}" dentro de "## 1. Context and goal"`)
+      push('sections', `the subsection "${sub}" is missing inside "## 1. Context and goal"`)
     }
   }
 
@@ -218,7 +218,7 @@ export function validatePlan(markdown, { readFile } = {}) {
       if (lines[i].structural && lines[i].line.startsWith('## ')) break
       if (lines[i].structural && lines[i].line.startsWith('|')) rows++
     }
-    if (rows < 3) push('decisions', 'la tabla de "Closed decisions" está vacía (cabecera + separador + al menos 1 fila)')
+    if (rows < 3) push('decisions', 'the "Closed decisions" table is empty (header + separator + at least 1 row)')
   }
 
   const tasks = []
@@ -227,9 +227,9 @@ export function validatePlan(markdown, { readFile } = {}) {
     const m = TASK_HEADING.exec(l.line)
     if (m) tasks.push({ n: parseInt(m[1], 10), name: l.line, at: i })
   })
-  if (!tasks.length) push('tasks', 'no hay ninguna "### Task N — <name>"')
+  if (!tasks.length) push('tasks', 'there is no "### Task N — <name>"')
   tasks.forEach((t, idx) => {
-    if (t.n !== idx + 1) push('tasks', `numeración no consecutiva: esperaba Task ${idx + 1} y encontré "${t.name}"`)
+    if (t.n !== idx + 1) push('tasks', `numbering is not consecutive: expected Task ${idx + 1} and found "${t.name}"`)
     const end = idx + 1 < tasks.length ? tasks[idx + 1].at : lines.length
     let boundary = end
     for (let i = t.at + 1; i < end; i++) {
@@ -239,7 +239,7 @@ export function validatePlan(markdown, { readFile } = {}) {
     const block = lines.slice(t.at + 1, boundary)
     for (const marker of TASK_MARKERS) {
       if (!block.some((l) => l.structural && l.line.includes(marker))) {
-        push('tasks', `${t.name}: falta ${marker}`)
+        push('tasks', `${t.name}: ${marker} is missing`)
       }
     }
   })
@@ -306,25 +306,25 @@ export function validatePlan(markdown, { readFile } = {}) {
       // For "Current state" that warning is already emitted by the literality
       // pass, which has owned it since F-jjponz-1: it is not duplicated.
       if (role !== 'Current state') {
-        push('roles', `línea ${i + 1}: "${l.line.trim()}" no lleva bloque de código a continuación.`)
+        push('roles', `line ${i + 1}: "${l.line.trim()}" is not followed by a code block.`)
       }
       return
     }
     const len = body === '' ? 0 : body.split('\n').length
     const task = taskOf(i)
     if (!task) {
-      push('roles', `línea ${i + 1}: "${l.line.trim()}" está fuera de una "### Task N". Los bloques viven DENTRO de la tarea que los usa: subagent-driven-development entrega al implementador su task brief (scripts/task-brief extrae la tarea, no el plan entero), así que un bloque escrito fuera no le llega nunca. Nombra las firmas en prosa aquí y pon el bloque en la tarea.`)
+      push('roles', `line ${i + 1}: "${l.line.trim()}" is outside a "### Task N". Blocks live INSIDE the task that uses them: subagent-driven-development hands the implementer its task brief (scripts/task-brief extracts the task, not the whole plan), so a block written outside never reaches it. Name the signatures in prose here and put the block in the task.`)
     }
     if (isConfig(path)) {
-      push('config', `línea ${i + 1}: "${l.line.trim()}" apunta a configuración (${path}). Las configuraciones NO llevan bloque: describe el cambio en prosa con el valor inline — p.ej. «el script \`build\` pasa a \`tsc -p tsconfig.build.json\`». Solo el código lleva bloque.`)
+      push('config', `line ${i + 1}: "${l.line.trim()}" points at configuration (${path}). Configuration carries NO block: describe the change in prose with the value inline — e.g. «the \`build\` script becomes \`tsc -p tsconfig.build.json\`». Only code carries a block.`)
     } else if (role !== 'Current state' && isTest(path)) {
-      push('tests', `línea ${i + 1}: "${l.line.trim()}" apunta a un fichero de test (${path}). El cuerpo del test lo escribe el implementador en rojo primero: en el plan van el NOMBRE literal del test y su aserción clave, en **TDD:** y **Tests:**. Si lo que citas es una aserción que YA existe y hay que cambiar, cítala con "Current state (${path}, lines A-B):".`)
+      push('tests', `line ${i + 1}: "${l.line.trim()}" points at a test file (${path}). The body of the test is written by the implementer in red first: what goes in the plan is the literal NAME of the test and its key assertion, in **TDD:** and **Tests:**. If what you are quoting is an assertion that ALREADY exists and has to change, quote it with "Current state (${path}, lines A-B):".`)
     }
     if (role === 'Final text' && !isText(path)) {
-      push('roles', `línea ${i + 1}: "Final text (${path})" solo vale para texto cuyo valor literal es el entregable (${TEXT_EXTENSIONS.join(', ')}). Para código, el plan lleva su contrato y el cuerpo lo escribe el implementador con TDD.`)
+      push('roles', `line ${i + 1}: "Final text (${path})" is only valid for text whose literal value is the deliverable (${TEXT_EXTENSIONS.join(', ')}). For code, the plan carries its contract and the body is written by the implementer with TDD.`)
     }
     if (len > ROLE_BUDGETS[role]) {
-      push('budget', `línea ${i + 1}: el bloque "${l.line.trim()}" tiene ${len} líneas y su presupuesto son ${ROLE_BUDGETS[role]}. ${BUDGET_REMEDY[role]}`)
+      push('budget', `line ${i + 1}: the block "${l.line.trim()}" has ${len} lines and its budget is ${ROLE_BUDGETS[role]}. ${BUDGET_REMEDY[role]}`)
     }
     roleBlocks.push({ role, path, at: i, len, task })
   })
@@ -335,7 +335,7 @@ export function validatePlan(markdown, { readFile } = {}) {
       if (b.role !== role || !b.task) continue
       const key = `${b.task.name}::${b.path}`
       if (seen.has(key)) {
-        push('roles', `${b.task.name}: dos bloques "${role} (${b.path})" (líneas ${seen.get(key) + 1} y ${b.at + 1}). El contrato de un fichero se escribe UNA vez por tarea: junta las declaraciones en un solo bloque — trocearlo no compra presupuesto.`)
+        push('roles', `${b.task.name}: two "${role} (${b.path})" blocks (lines ${seen.get(key) + 1} and ${b.at + 1}). The contract of a file is written ONCE per task: put the declarations together in a single block — chopping it up buys no budget.`)
         continue
       }
       seen.set(key, b.at)
@@ -360,16 +360,16 @@ export function validatePlan(markdown, { readFile } = {}) {
       // The menu of roles goes out ONCE: a plan with twenty dumps produced
       // twenty copies of the same paragraph, and a message that cannot be read
       // is not a remedy.
-      push('roles', `línea ${i + 1}: bloque de código sin etiqueta de rol${label ? ` (lo precede "${label}")` : ''}.${menuPending ? ` ${ROLE_MENU}` : ''}`)
+      push('roles', `line ${i + 1}: code block with no role label${label ? ` (it is preceded by "${label}")` : ''}.${menuPending ? ` ${ROLE_MENU}` : ''}`)
       menuPending = false
       return
     }
     if (body === null) return
     if (body.some((bodyLine) => bodyLine.includes('<<'))) {
-      push('commands', `línea ${i + 1}: el bloque de comandos lleva un heredoc (<<). Un heredoc es un fichero entero colado por la puerta de atrás: si su contenido importa, va como "Contract (path):"; si no, no va.`)
+      push('commands', `line ${i + 1}: the command block carries a heredoc (<<). A heredoc is a whole file smuggled in through the back door: if its content matters, it goes as "Contract (path):"; if it does not, it does not go.`)
     }
     if (body.length > COMMAND_BUDGET) {
-      push('commands', `línea ${i + 1}: el bloque de comandos tiene ${body.length} líneas y su presupuesto son ${COMMAND_BUDGET}. Un bloque de comandos son los comandos y su salida esperada, no un script: si hace falta un script, va al repo y el plan lo invoca.`)
+      push('commands', `line ${i + 1}: the command block has ${body.length} lines and its budget is ${COMMAND_BUDGET}. A command block is the commands and their expected output, not a script: if a script is needed, it goes into the repo and the plan invokes it.`)
     }
     // THE SUITE TOTAL NAILED DOWN. Measured in slice #7 of rust-monitoring: the
     // plan nailed `52 passed` into four checks, the judge rightly demanded one
@@ -390,7 +390,7 @@ export function validatePlan(markdown, { readFile } = {}) {
     for (const [j, bodyLine] of body.entries()) {
       const total = /\b\d+\s+pass(?:ed|ing)\b/i.exec(bodyLine)
       if (!total) continue
-      push('commands', `línea ${i + 2 + j}: el control clava el número de tests de la suite ("${total[0]}"). Es un proxy: el juez puede exigir con razón una aserción más, y entonces el número caduca en todos los controles que lo repiten; y mientras esté clavado no queda hueco para conducir en rojo la aserción que conventions/testing.md exige, así que una rama se entrega sin test para que el control siga verde. Cuenta los tests DE ESTA TAREA por su prefijo de módulo (por ejemplo: grep -c '^test <modulo>::'), no el total.`)
+      push('commands', `line ${i + 2 + j}: the check pins the suite's total of tests ("${total[0]}"). It is a proxy: the judge can rightly demand one more assertion, and then the number expires in every check that repeats it; and while it stays pinned there is no gap left to drive in red the assertion conventions/testing.md demands, so a branch gets delivered with no test just to keep the check green. Count the tests OF THIS TASK by their module prefix (for example: grep -c '^test <module>::'), not the total.`)
     }
   })
 
@@ -403,28 +403,28 @@ export function validatePlan(markdown, { readFile } = {}) {
       .slice(t.at + 1, t.boundary)
       .some((l) => l.structural && NO_CODE.test(l.line.trim()))
     if (!declares) {
-      push('tasks', `${t.name}: no lleva ningún bloque con etiqueta de rol (Current state / Contract / Call site / Final text), y un bloque de comandos no cuenta. Si la tarea de verdad no lleva código —configuración descrita en prosa, o documentación—, dilo con la línea exacta: "No code — <razón>".`)
+      push('tasks', `${t.name}: it carries no block with a role label (Current state / Contract / Call site / Final text), and a command block does not count. If the task really carries no code —configuration described in prose, or documentation—, say so with the exact line: "No code — <reason>".`)
     }
   }
 
   for (const t of tasks) {
     const total = roleBlocks.filter((b) => b.task === t).reduce((n, b) => n + b.len, 0)
     if (total > CODE_BUDGETS.task) {
-      push('budget', `${t.name}: acumula ${total} líneas de código en sus bloques y el presupuesto de una tarea son ${CODE_BUDGETS.task}. Una tarea es UN commit: si de verdad necesita más contrato que esto, o el commit son dos, o estás volcando cuerpos que escribe el implementador.`)
+      push('budget', `${t.name}: it accumulates ${total} lines of code across its blocks and the budget of one task is ${CODE_BUDGETS.task}. One task is ONE commit: if it really needs more contract than this, either the commit is two, or you are dumping bodies that the implementer writes.`)
     }
   }
   for (const t of tasks) {
     const length = lines.slice(t.at, t.boundary).map((l) => l.line).join('\n').length
     if (length > CODE_BUDGETS.chars) {
       const sheets = (length / CODE_BUDGETS.chars).toFixed(1)
-      push('size', `${t.name}: la tarea mide ${length} caracteres — ${sheets} folios — y el máximo es UN folio A4 (${CODE_BUDGETS.chars} caracteres, unas 50 líneas). Es lo que un humano lee de una sentada en el gate \`plan\`, y es también lo que el implementador recibe como task brief. Recorta a las decisiones (contrato, call site y el tramo que cambia) y, si aun así no cabe, la tarea son dos: una tarea es un commit, y partir un commit sí está en tu mano.`)
+      push('size', `${t.name}: the task measures ${length} characters — ${sheets} sheets — and the maximum is ONE A4 sheet (${CODE_BUDGETS.chars} characters, about 50 lines). It is what a human reads in one sitting at the \`plan\` gate, and it is also what the implementer receives as a task brief. Cut it down to the decisions (contract, call site and the stretch that changes) and, if it still does not fit, the task is two: one task is one commit, and splitting a commit IS within your reach.`)
     }
   }
 
   lines.forEach((l, i) => {
     if (!l.structural) return
     for (const [re, label] of FORBIDDEN) {
-      if (re.test(l.line)) push('placeholders', `línea ${i + 1}: token prohibido (${label})`)
+      if (re.test(l.line)) push('placeholders', `line ${i + 1}: forbidden token (${label})`)
     }
   })
 
@@ -434,17 +434,17 @@ export function validatePlan(markdown, { readFile } = {}) {
     if (!m) return
     const path = m[1].trim()
     const body = fenceBodyAfter(lines, i + 1)
-    if (body === null) { push('literality', `"Current state (${path})" sin bloque de código a continuación`); return }
+    if (body === null) { push('literality', `"Current state (${path})" is not followed by a code block`); return }
     if (!readFile) return
     let real
     try {
       real = readFile(path)
     } catch (e) {
-      push('literality', `no se pudo leer "${path}" para comprobar la cita: ${e.message}`)
+      push('literality', `"${path}" could not be read to check the citation: ${e.message}`)
       return
     }
     if (!String(real).includes(body)) {
-      push('literality', `el bloque "Current state (${path})" NO existe verbatim en ese fichero — cita de memoria`)
+      push('literality', `the block "Current state (${path})" does NOT exist verbatim in that file — quoted from memory`)
     }
   })
 
@@ -496,7 +496,7 @@ export function validatePlan(markdown, { readFile } = {}) {
           try {
             readFile(path)
           } catch {
-            push('reference-paths', `línea ${i + 1}: §3 nombra "${path}" y no se puede leer en el repo. §3 es la vara con la que el implementador escribe y el juez bloquea: una ruta citada de memoria deja a los dos midiendo contra un fichero que no está. Cita una ruta real, o quítala.`)
+            push('reference-paths', `line ${i + 1}: §3 names "${path}" and it cannot be read in the repo. §3 is the yardstick the implementer writes with and the judge blocks against: a path quoted from memory leaves both of them measuring against a file that is not there. Cite a real path, or drop it.`)
           }
         }
       }
@@ -535,10 +535,10 @@ export function checkPlans({ issue, candidates, readFile, readCitedFile }) {
       code: 6,
       files,
       message:
-        `no hay ningún plan prescriptivo para #${issue} entre los candidatos: falta un ` +
-        `docs/superpowers/plans/YYYY-MM-DD-issue-${issue}-<slug>.md. Escríbelo con ` +
-        `control-tower-loop:writing-plans-prescriptive, valídalo con --check-plan y commitéalo ` +
-        `(viaja en el PR). Si ya existe en tu árbol de trabajo pero no está commiteado, commitéalo.`,
+        `there is no prescriptive plan for #${issue} among the candidates: a ` +
+        `docs/superpowers/plans/YYYY-MM-DD-issue-${issue}-<slug>.md is missing. Write it with ` +
+        `control-tower-loop:writing-plans-prescriptive, validate it with --check-plan and commit it ` +
+        `(it travels in the PR). If it already exists in your working tree but is not committed, commit it.`,
     }
   }
   for (const file of files) {
@@ -550,7 +550,7 @@ export function checkPlans({ issue, candidates, readFile, readCitedFile }) {
         ok: false,
         code: 6,
         files,
-        message: `no se ha podido leer ${file} (${e.message}) — no se afirma que el plan sea inválido, pero tampoco se puede comprobar. Arregla la lectura y reintenta.`,
+        message: `${file} could not be read (${e.message}) — this does not claim the plan is invalid, but it cannot be checked either. Fix the read and retry.`,
       }
     }
     const result = validatePlan(content, { readFile: readCitedFile ?? readFile })
@@ -560,9 +560,9 @@ export function checkPlans({ issue, candidates, readFile, readCitedFile }) {
         ok: false,
         code: 6,
         files,
-        message: `${file} no cumple el contrato del plan (plan-contract.js):\n${detail}\nCorrige el plan, re-valida con --check-plan y vuelve a intentarlo.`,
+        message: `${file} does not comply with the plan contract (plan-contract.js):\n${detail}\nFix the plan, re-validate with --check-plan and try again.`,
       }
     }
   }
-  return { ok: true, code: 0, files, message: `plan ok: ${files.join(', ')} cumple el contrato` }
+  return { ok: true, code: 0, files, message: `plan ok: ${files.join(', ')} complies with the contract` }
 }

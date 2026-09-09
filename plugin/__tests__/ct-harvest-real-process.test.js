@@ -80,7 +80,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
   // vetoes (the verdict's contract does not admit a PASS with a high), a medium
   // buys a round trip to the implementer, a low is only noted down. Three
   // `alcance` findings without this are indistinguishable from three vetoes.
-  it('the three severities come out added up in a single cell, in the alta/media/baja order', () => {
+  it('the three severities come out added up in a single cell, in the high/medium/low order', () => {
     const b = bench()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': verdict({ ruling: 'FAIL', rubric_sin_vara: 0, findings_by_rule: { patrones: 2 }, findings_high: 1, findings_medium: 0, findings_low: 1 })
@@ -100,7 +100,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(none\) \| — \|/)
-    expect(res.stdout).toMatch(/`—` in `alta\/media\/baja`: no verdict of that slice carried the/)
+    expect(res.stdout).toMatch(/`—` in `high\/medium\/low`: no verdict of that slice carried the/)
     cleanup(b)
   })
 
@@ -122,7 +122,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 2 \(2 vetoes, 1 sin columna\) \|/)
+    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 2 \(2 vetoes, 1 no column\) \|/)
     cleanup(b)
   })
 
@@ -138,7 +138,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 2 \(2 vetoes\) \| 0 \| patrones 3 \| — \| 9 docs · 2 hallazgos \|/)
+    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 2 \(2 vetoes\) \| 0 \| patrones 3 \| — \| 9 docs · 2 findings \|/)
     cleanup(b)
   })
 
@@ -206,7 +206,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     cleanup(b)
   })
 
-  it('an implement attempt whose brief was not read (null) does not count as zero: it is noted as "sin columna"', () => {
+  it('an implement attempt whose brief was not read (null) does not count as zero: it is noted as "no column"', () => {
     const b = bench()
     const filesJson = JSON.stringify({
       'issue-12.jsonl':
@@ -216,13 +216,13 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/4 docs · 500B \(1 sin columna\) \|/)
+    expect(res.stdout).toMatch(/4 docs · 500B \(1 no column\) \|/)
     cleanup(b)
   })
 
   // MEASURE 3 (#92): how much fixed material each dispatched role read. Added
   // up over the four steps that call a subagent, not only over `implement`.
-  it('bytes por papel adds up the agent, the skills and the package of every dispatched role of the slice', () => {
+  it('bytes per role adds up the agent, the skills and the package of every dispatched role of the slice', () => {
     const b = bench()
     const bytes = { agent_bytes: 5000, skill_bytes: 18000, package_bytes: 1000 }
     const filesJson = JSON.stringify({
@@ -236,25 +236,25 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     cleanup(b)
   })
 
-  it('a slice whose roles are all older than the measure says «—» in bytes por papel, never 0, and says so out loud', () => {
+  it('a slice whose roles are all older than the measure says «—» in bytes per role, never 0, and says so out loud', () => {
     const b = bench()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': implementAttempt({ outcome: 'done' }) + verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/`—` in `bytes por papel`: no dispatched role of that slice carried `agent_bytes`\/`skill_bytes`\/`package_bytes`/)
+    expect(res.stdout).toMatch(/`—` in `bytes per role`: no dispatched role of that slice carried `agent_bytes`\/`skill_bytes`\/`package_bytes`/)
     cleanup(b)
   })
 
-  it('a slice with no telemetry file says «(sin telemetría)» and never a zero', () => {
+  it('a slice with no telemetry file says «(no telemetry)» and never a zero', () => {
     const b = bench()
     const filesJson = JSON.stringify({
       'issue-12.jsonl': verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/\| #13 \| Slice 2 \| — \| — \| \(sin telemetría\) \|/)
+    expect(res.stdout).toMatch(/\| #13 \| Slice 2 \| — \| — \| \(no telemetry\) \|/)
     expect(res.stdout).toMatch(/Nobody measured — it is not a zero/)
     cleanup(b)
   })
@@ -268,8 +268,8 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     })
     const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/\(1 sin columna\)/)
-    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \(1 sin columna\) \| — \|/)
+    expect(res.stdout).toMatch(/\(1 no column\)/)
+    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \(1 no column\) \| — \|/)
     expect(res.stdout).toMatch(/telemetry older than `rubric_sin_vara`/)
     cleanup(b)
   })
@@ -282,7 +282,7 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     const res = run(b, {})
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/could not list/)
-    expect(res.stdout).not.toMatch(/\| Veredictos \|/)
+    expect(res.stdout).not.toMatch(/\| Verdicts \|/)
     cleanup(b)
   })
 

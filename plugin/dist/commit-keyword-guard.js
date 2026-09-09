@@ -228,16 +228,16 @@ function decide(input, probe) {
   });
   const cited = findings.map((h) => `\`${h.keyword} ${h.ref}\``).join(", ");
   if (probeResult.error) {
-    return output("ask", `Este mensaje de commit lleva ${cited}, y NO se ha podido comprobar si el loop Control Tower gobierna los issues de este repo: ${probeResult.error}. Si los gobierna, ese commit cerrara ${findings.length > 1 ? "esos issues" : "ese issue"} al llegar a la rama por defecto, sin que nadie revise ni mergee nada. Decide tu: reformula la frase para que no lleve la cadena literal, o continua si sabes que este repo no esta gobernado.`);
+    return output("ask", `This commit message carries ${cited}, and it could NOT be checked whether the Control Tower loop governs the issues of this repo: ${probeResult.error}. If it does, that commit will close ${findings.length > 1 ? "those issues" : "that issue"} when it reaches the default branch, without anyone reviewing or merging anything. You decide: reword the sentence so that it does not carry the literal string, or carry on if you know this repo is not governed.`);
   }
   if (!probeResult.governed) return null;
   return output(
     "deny",
-    `Este mensaje de commit lleva ${cited}. GitHub aplica las closing keywords de CUALQUIER mensaje de commit que llegue a la rama por defecto, y LAS COMILLAS NO PROTEGEN: un commit de documentacion que solo MENCIONABA la cadena cerro el issue en un repo real. En este repo el loop Control Tower gobierna los issues, asi que cerrarlo asi lo daria por entregado sin que nadie haya revisado ni mergeado nada, y liberaria sus dependencias sobre trabajo que puede no existir.
+    `This commit message carries ${cited}. GitHub applies the closing keywords of ANY commit message that reaches the default branch, and QUOTES DO NOT PROTECT: a documentation commit that only MENTIONED the string closed the issue in a real repo. In this repo the Control Tower loop governs the issues, so closing it like that would give it up as delivered without anybody having reviewed or merged anything, and would release its dependencies over work that may not exist.
 
-El cierre del slice va en el CUERPO DEL PR, no en el mensaje del commit.
+The slice's closing goes in the BODY OF THE PR, not in the commit message.
 
-Que hacer: reescribe la frase sin la cadena literal (por ejemplo \xABel kickoff no lleva la keyword de cierre\xBB en vez de nombrarla). Si de verdad quieres cerrar el issue, hazlo explicito: \`gh issue close <n> --reason completed\`.`
+What to do: reword the sentence without the literal string (for example \xABthe kickoff does not carry the closing keyword\xBB instead of naming it). If you really do want to close the issue, make it explicit: \`gh issue close <n> --reason completed\`.`
   );
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {

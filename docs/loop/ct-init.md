@@ -42,7 +42,7 @@ yardstick: the documents of code rules, which `ct-step` pastes into every task's
 brief.
 **This is the moment of human confirmation**: the scaffolder prints, on STDOUT, a deterministic block that begins with the literal `Candidatos a la vara de este repo (barrido determinista — PROPONE, no declara):` — it is the §3.12 sweep (docs/prompt-juez-lo-que-queda.md), not a printout of yours.
 **Pass that list on to the user exactly as it is**, with its reasons and its
-`[esqueleto: sólo encabezados]` marks. If, exploring the repository, you see a
+`[skeleton: headings only]` marks. If, exploring the repository, you see a
 candidate the sweep did not bring, you may propose it too, but **saying that it
 is yours and not the sweep's**. Write in the file ONLY what the user confirms —
 do not fill it in on your own initiative, and if they confirm nothing, leave it

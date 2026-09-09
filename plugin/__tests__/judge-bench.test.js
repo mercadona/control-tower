@@ -399,7 +399,7 @@ describe('JudgeBench', () => {
     const { bench } = Benches.over({ root, answers: { 'tarea-correcta#1': JudgeAnswer.writingNothing() } })
     const [result] = bench.run({ cases: [benchCase], runs: 1 }).results
     expect(result.outcome).toBe(RunOutcome.DISCARDED)
-    expect(result.detail).toBe(`el juez no escribió el veredicto en ${join(root, 'tarea-correcta', '1', '.agent', 'run-52', 'task-3-verdict.json')}`)
+    expect(result.detail).toBe(`the judge did not write the verdict at ${join(root, 'tarea-correcta', '1', '.agent', 'run-52', 'task-3-verdict.json')}`)
     expect(result.costUsd).toBe(0.25)
   })
 
@@ -416,7 +416,7 @@ describe('JudgeBench', () => {
     const { bench } = Benches.over({ root, answers: { 'tarea-correcta#1': JudgeAnswer.writing('```json\n{"ruling":"PASS"}\n```') } })
     const [result] = bench.run({ cases: [benchCase], runs: 1 }).results
     expect(result.outcome).toBe(RunOutcome.DISCARDED)
-    expect(result.detail).toMatch(/^el veredicto no es JSON: /)
+    expect(result.detail).toMatch(/^the verdict is not JSON: /)
   })
 
   it('a verdict carrying another package token is a discard: it is not a verdict on this code', () => {
@@ -424,7 +424,7 @@ describe('JudgeBench', () => {
     const { bench } = Benches.over({ root, answers: { 'tarea-correcta#1': JudgeAnswer.writing(Verdicts.withAnotherToken()) } })
     const [result] = bench.run({ cases: [benchCase], runs: 1 }).results
     expect(result.outcome).toBe(RunOutcome.DISCARDED)
-    expect(result.detail).toMatch(/^el veredicto copia el token [0-9a-f]{12}… y el paquete declara [0-9a-f]{12}…$/)
+    expect(result.detail).toMatch(/^the verdict copies the token [0-9a-f]{12}… and the package declares [0-9a-f]{12}…$/)
   })
 
   it('a verdict without the token is judged like any other, because who writes that field is the program', () => {
@@ -440,7 +440,7 @@ describe('JudgeBench', () => {
     const [result] = bench.run({ cases: [benchCase], runs: 1 }).results
     expect(result.outcome).toBe(RunOutcome.NOT_RUN)
     expect(result.costUsd).toBe(null)
-    expect(result.detail).toBe('claude salió con 1 y stdout is not JSON; was --output-format json given?: Error: not logged in | run claude login')
+    expect(result.detail).toBe('claude exited with 1 and stdout is not JSON; was --output-format json given?: Error: not logged in | run claude login')
   })
 
   it('claude answering is_error keeps its cost and does not read whatever verdict is on disk', () => {
@@ -449,7 +449,7 @@ describe('JudgeBench', () => {
     const [result] = bench.run({ cases: [benchCase], runs: 1 }).results
     expect(result.outcome).toBe(RunOutcome.NOT_RUN)
     expect(result.costUsd).toBe(0.05)
-    expect(result.detail).toBe('claude salió con 0 e is_error: budget exceeded')
+    expect(result.detail).toBe('claude exited with 0 and is_error: budget exceeded')
   })
 
   it('every run is asked once, in case order and attempt order, and a run nobody scripted stops the bench', () => {
@@ -492,18 +492,18 @@ describe('BenchReport', () => {
       ],
     })
     const text = report.render()
-    expect(text).toContain('Banco del juez — agente: /p/agents/ct-judge.md')
-    expect(text).toMatch(/caso\s+runs\s+aciertos\s+descartes\s+no ejecutados\s+high\s+medium\s+low\s+coste USD/)
+    expect(text).toContain('Judge bench — agent: /p/agents/ct-judge.md')
+    expect(text).toMatch(/case\s+runs\s+hits\s+discards\s+not run\s+high\s+medium\s+low\s+cost USD/)
     expect(text).toMatch(/test-inexistente-en-verde\s+2\s+1 \(50%\)\s+1 \(50%\)\s+0 \(0%\)\s+1\s+0\s+2\s+1\.5000/)
     expect(text).toMatch(/tarea-correcta\s+2\s+2 \(100%\)\s+0 \(0%\)\s+0 \(0%\)\s+0\s+1\s+0\s+0\.5000/)
     expect(text).toMatch(/total\s+4\s+3 \(75%\)\s+1 \(25%\)\s+0 \(0%\)\s+1\s+1\s+2\s+2\.0000/)
-    expect(text).toContain('  - test-inexistente-en-verde #2: descartado — the verdict does not carry the walk of the rubric (/w/tarea-correcta/1)')
+    expect(text).toContain('  - test-inexistente-en-verde #2: discarded — the verdict does not carry the walk of the rubric (/w/tarea-correcta/1)')
   })
 
   it('a report where every run hit says so instead of listing nothing', () => {
     const text = new BenchReport({ agentPath: '/p/a.md', results: [result({})] }).render()
-    expect(text).toContain('Todos los runs aciertan.')
-    expect(text).not.toContain('Lo que no acertó')
+    expect(text).toContain('Every run is a hit.')
+    expect(text).not.toContain('What it did not get right')
   })
 
   it('a hit or a miss carries its verdict and anything else carries none', () => {

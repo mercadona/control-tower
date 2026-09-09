@@ -141,7 +141,7 @@ try {
     '--json', 'number,title,state,closedAt,labels,milestone,closedByPullRequestsReferences',
   ]))
 } catch (e) {
-  reasons.push(`no se pudieron listar los issues del milestone "${milestone}" en ${repo}: ${e.message}`)
+  reasons.push(`could not list the issues of the milestone "${milestone}" in ${repo}: ${e.message}`)
 }
 
 // `ghRunner`: the same `gh` as above but with the `{ code, stdout, stderr }`
@@ -250,7 +250,7 @@ if (asJson) {
   if (telemetryDir.status === 'no-leido') {
     console.log(`could not list \`${METRICS_REPO_DIR}\` in ${repo} (${telemetryDir.why}). This repo may have no judge telemetry, or the read may have failed: **nothing is counted**, and the gap is NOT a zero.`)
   } else {
-    console.log('| Issue | Slice | Veredictos | sin-vara | Hallazgos por regla | alta/media/baja | vara ct | brief | bytes por papel |')
+    console.log('| Issue | Slice | Verdicts | sin-vara | Findings by rule | high/medium/low | vara ct | brief | bytes per role |')
     console.log('|---|---|---|---|---|---|---|---|---|')
     for (const f of rows) {
       const t = f.telemetry
@@ -263,7 +263,7 @@ if (asJson) {
       // they are two numbers of the same measure and a column for each would
       // widen the table without adding a question.
       //
-      // They are read TOGETHER and in that order: `5 docs` with `0 hallazgos`
+      // They are read TOGETHER and in that order: `5 docs` with `0 findings`
       // slice after slice is the case to watch —either the code conformed, or
       // the yardstick is being named as decoration—, and that reading is
       // impossible with a single figure. It replaces `patrones-ct`, which only
@@ -290,7 +290,7 @@ if (asJson) {
       // same distribution and a column per severity would widen the table
       // without adding a question.
       let severities = '—'
-      if (t.status === 'sin-fichero') byRule = '(sin telemetría)'
+      if (t.status === 'sin-fichero') byRule = '(no telemetry)'
       else if (t.status === 'no-leido') byRule = '(could not be read)'
       else {
         // The cell's two notes fit together, separated by a comma: how many of
@@ -299,14 +299,14 @@ if (asJson) {
         // read at a glance, which is what the column is for.
         const notes = []
         if (t.fails > 0) notes.push(`${t.fails} ${t.fails === 1 ? 'veto' : 'vetoes'}`)
-        if (t.legacy > 0) notes.push(`${t.legacy} sin columna`)
+        if (t.legacy > 0) notes.push(`${t.legacy} no column`)
         verdicts = notes.length ? `${t.verdicts} (${notes.join(', ')})` : String(t.verdicts)
         // Same rule as everything else in this table: measuredSeverities === 0
         // prints «—» and never `0/0/0`, which would assert a distribution
         // nobody measured.
         if (t.measuredSeverities > 0) {
           severities = `${t.findingsHigh}/${t.findingsMedium}/${t.findingsLow}`
-          if (t.legacySeverities > 0) severities += ` (${t.legacySeverities} sin columna)`
+          if (t.legacySeverities > 0) severities += ` (${t.legacySeverities} no column)`
         }
         // measured === 0 prints «—» and NEVER «0»: no verdict of this slice
         // carried the column, so a zero would assert a measure that was never
@@ -320,21 +320,21 @@ if (asJson) {
         // reading the gap as a zero, which is exactly what this rule exists to
         // prevent.
         if (t.measuredVaraCtDocs > 0 && t.measuredFindingsVaraCt > 0) {
-          ctYardstick = `${t.varaCtDocs} docs · ${t.findingsVaraCt} hallazgos`
-          if (t.legacyVaraCtDocs > 0) ctYardstick += ` (${t.legacyVaraCtDocs} sin columna)`
+          ctYardstick = `${t.varaCtDocs} docs · ${t.findingsVaraCt} findings`
+          if (t.legacyVaraCtDocs > 0) ctYardstick += ` (${t.legacyVaraCtDocs} no column)`
         }
         // The same rule again: briefMeasured === 0 prints «—» — no `implement`
         // attempt of this slice carried both columns, so a zero would assert a
         // brief with no yardstick that nobody could measure.
         if (t.briefMeasured > 0) {
           brief = `${t.briefVaraCtDocs} docs · ${t.briefBytes}B`
-          if (t.briefLegacy > 0) brief += ` (${t.briefLegacy} sin columna)`
+          if (t.briefLegacy > 0) brief += ` (${t.briefLegacy} no column)`
         }
         // And the same one again: roleMeasured === 0 prints «—» and never
         // three zeros, which would assert dispatched roles with no material.
         if (t.roleMeasured > 0) {
           bytesPerRole = `agent ${t.agentBytes}B · skills ${t.skillBytes}B · package ${t.packageBytes}B`
-          if (t.roleLegacy > 0) bytesPerRole += ` (${t.roleLegacy} sin columna)`
+          if (t.roleLegacy > 0) bytesPerRole += ` (${t.roleLegacy} no column)`
         }
       }
       console.log(`| #${f.issue} | ${f.title ?? '—'} | ${verdicts} | ${withoutYardstick} | ${byRule} | ${severities} | ${ctYardstick} | ${brief} | ${bytesPerRole} |`)
@@ -344,7 +344,7 @@ if (asJson) {
       console.log('`—` in `sin-vara`: no verdict of that slice carried the column (telemetry older than `rubric_sin_vara`). It is not a zero.')
     }
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.verdicts > 0 && f.telemetry.measuredSeverities === 0)) {
-      console.log('`—` in `alta/media/baja`: no verdict of that slice carried the `findings_high`/`findings_medium`/`findings_low` severities (telemetry older than this measure). It is not a zero.')
+      console.log('`—` in `high/medium/low`: no verdict of that slice carried the `findings_high`/`findings_medium`/`findings_low` severities (telemetry older than this measure). It is not a zero.')
     }
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.verdicts > 0 && (f.telemetry.measuredVaraCtDocs === 0 || f.telemetry.measuredFindingsVaraCt === 0))) {
       console.log('`—` in `vara ct`: no verdict of that slice carried the `rubric_vara_ct_docs`/`findings_vara_ct` columns (telemetry older than this measure, or from the `findings_patrones_vara_ct` column they replaced). It is not a zero.')
@@ -353,10 +353,10 @@ if (asJson) {
       console.log('`—` in `brief`: no `implement` attempt of that slice carried `brief_vara_ct_docs`/`brief_bytes` (telemetry older than this measure, or the brief could not be read at the time). It is not a zero.')
     }
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.roleAttempts > 0 && f.telemetry.roleMeasured === 0)) {
-      console.log('`—` in `bytes por papel`: no dispatched role of that slice carried `agent_bytes`/`skill_bytes`/`package_bytes` (telemetry older than this measure). It is not a zero.')
+      console.log('`—` in `bytes per role`: no dispatched role of that slice carried `agent_bytes`/`skill_bytes`/`package_bytes` (telemetry older than this measure). It is not a zero.')
     }
     if (rows.some((f) => f.telemetry.status === 'sin-fichero')) {
-      console.log(`\`(sin telemetría)\`: the repo does not bring \`${METRICS_REPO_DIR}/issue-<n>.jsonl\` for that slice. Nobody measured — it is not a zero.`)
+      console.log(`\`(no telemetry)\`: the repo does not bring \`${METRICS_REPO_DIR}/issue-<n>.jsonl\` for that slice. Nobody measured — it is not a zero.`)
     }
     for (const f of rows.filter((x) => x.telemetry.status === 'ok' && x.telemetry.malformed > 0)) {
       console.log(`\`${f.telemetry.path}\`: ${f.telemetry.malformed} unreadable line(s), not counted (the rest are).`)

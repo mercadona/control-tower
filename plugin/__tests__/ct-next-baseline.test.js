@@ -89,7 +89,7 @@ describe('ct-next — the dispatcher measures the baseline in the worktree and s
 
     expect(ran.code).toBe(0)
     expect(ran.stderr).toMatch(/baseline of #42: no-verificado/)
-    expect(ran.stderr).toMatch(/test: `<comando>`/)
+    expect(ran.stderr).toMatch(/test: `<command>`/)
     const baseline = ran.seed().meta.baseline
     expect(baseline.outcome).toBe(BaselineOutcome.UNVERIFIED)
     expect(baseline.command).toBe(null)

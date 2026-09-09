@@ -34,7 +34,7 @@ class BaselineDouble {
   }
 
   static unverified() {
-    return BaselineResult.notMeasured('sin comando de test declarado en AGENTS.md ni en .agent/conventions.md')
+    return BaselineResult.notMeasured('no test command declared in AGENTS.md nor in .agent/conventions.md')
   }
 
   static answering(result) {
@@ -497,7 +497,7 @@ describe('GitWorkspace', () => {
     await git.prepared()
 
     expect(git.stderr.join('')).toContain(BaselineOutcome.UNVERIFIED)
-    expect(git.stderr.join('')).toContain('sin comando de test declarado')
+    expect(git.stderr.join('')).toContain('no test command declared')
   })
 
   it('a_green_baseline_says_nothing_because_a_line_that_is_always_printed_is_a_line_nobody_reads', async () => {

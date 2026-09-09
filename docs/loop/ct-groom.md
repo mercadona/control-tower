@@ -227,7 +227,7 @@ Now:
 When the verification does not pass, **no half-link is written**: the line stays as a text reference, with the reason inside it, and it warns through stderr:
 
 ```
-> Slice `#1` del epic. Spec: `docs/specs/plan-design.md` § `9. Slices` — sin enlace: el spec no está publicado en la rama por defecto del repositorio (owner/repo, rama main)
+> Slice `#1` del epic. Spec: `docs/specs/plan-design.md` § `9. Slices` — sin enlace: the spec is not published on the default branch of the repository (owner/repo, branch main)
 ```
 
 The possible reasons: the spec is not in a git repo, it falls outside the repo's tree, the repo has no `origin` remote, the remote is not a recognizable URL, the default branch could not be resolved, or **the spec is not pushed yet** (by far the most common one: you write it, you groom, and you push afterwards). Intermediate case: if the file is published but the anchor does not appear in the published copy (a spec edited locally and not pushed), the **file** is linked —which does work— with no fragment, and it warns.

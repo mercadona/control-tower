@@ -5,7 +5,7 @@ description: Harvest of the epic — the real cost of every slice, taken from Gi
 node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-harvest.mjs --repo "<owner/repo>" --milestone "<epic title>" [--json] [--bq <project:dataset.table>]
 ```
 
-One row per slice (`ready→claim`, `claim→release`, `release→merge`, reopens, requeues, `blocked`, PR size) plus the judge's telemetry per slice and, for every role the loop dispatches to a subagent, how much fixed material it read (`agent_bytes`, `skill_bytes`, `package_bytes`, summarised in the `bytes por papel` column). Everything comes out of the timeline GitHub writes on its own; it asks for no field by hand. **It mutates nothing.** A phase that did not happen prints `—`, never `0`; the summary goes by family (`Tipo`) and every family shows its N. The table or the JSON go to stdout; the reasons and everything about BigQuery, to stderr.
+One row per slice (`ready→claim`, `claim→release`, `release→merge`, reopens, requeues, `blocked`, PR size) plus the judge's telemetry per slice and, for every role the loop dispatches to a subagent, how much fixed material it read (`agent_bytes`, `skill_bytes`, `package_bytes`, summarised in the `bytes per role` column). Everything comes out of the timeline GitHub writes on its own; it asks for no field by hand. **It mutates nothing.** A phase that did not happen prints `—`, never `0`; the summary goes by family (`Tipo`) and every family shows its N. The table or the JSON go to stdout; the reasons and everything about BigQuery, to stderr.
 
 | Exit | Means | What to do |
 |---|---|---|

@@ -68,8 +68,8 @@ try {
 } catch (e) {
   if (e.code !== 'ENOENT') {
     readNote =
-      `  note: ${CONVENTIONS_FILE} existe y no se ha podido leer (${String(e.message).trim()}): ` +
-      'puede que alguno de los candidatos de abajo ya esté declarado.'
+      `  note: ${CONVENTIONS_FILE} exists and could not be read (${String(e.message).trim()}): ` +
+      'some of the candidates below may already be declared.'
   }
 }
 

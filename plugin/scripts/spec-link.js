@@ -119,7 +119,7 @@ export const SPEC_REF_REASONS = {
   noRemote: 'the repository of the spec has no "origin" remote',
   unparsableRemote: 'the "origin" remote of the spec repository is not a recognisable GitHub URL',
   noDefaultBranch: 'the default branch of the spec repository could not be resolved',
-  notPublished: 'el spec no está publicado en la rama por defecto del repositorio',
+  notPublished: 'the spec is not published on the default branch of the repository',
 }
 
 // resolveSpecRef: from "the path I was handed in argv" to "the reference that
@@ -193,7 +193,7 @@ export function resolveSpecRef({ specFile, displayPath, heading, run, relativize
     html = run('gh', ['api', `repos/${slug}/contents/${encodePath(relPath)}?ref=${encodeURIComponent(branch)}`,
       '-H', 'Accept: application/vnd.github.html'])
   } catch {
-    return degraded(`${SPEC_REF_REASONS.notPublished} (${slug}, rama ${branch})`, relPath)
+    return degraded(`${SPEC_REF_REASONS.notPublished} (${slug}, branch ${branch})`, relPath)
   }
 
   const url = buildBlobUrl({ ...remote, ref: branch, path: relPath, anchor })

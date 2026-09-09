@@ -30,7 +30,7 @@ const arg = (f) => {
   return (typeof v === 'string' && !v.startsWith('--')) ? v : true
 }
 
-const usage = 'usage: scope-check --repo <owner/repo> --pr <número> [--exempt <patrón,patrón>]'
+const usage = 'usage: scope-check --repo <owner/repo> --pr <number> [--exempt <pattern,pattern>]'
 const repo = arg('--repo')
 const pr = arg('--pr')
 // Exemptions OF THE TARGET REPO: its own bookkeeping (a ledger, a logbook)
@@ -61,7 +61,7 @@ let prData
 try {
   prData = JSON.parse(gh(['pr', 'view', pr, '--repo', repo, '--json', 'body,files,headRefName']))
 } catch (e) {
-  die(`no se pudo leer el PR #${pr} de ${repo}`, (e.stderr || e.message || '').toString().trim())
+  die(`could not read PR #${pr} of ${repo}`, (e.stderr || e.message || '').toString().trim())
 }
 
 const issueN = issueFromPrBody(prData.body)
@@ -83,13 +83,13 @@ if (!issueN) {
   // out red.
   if (isSliceBranch(prData.headRefName)) {
     die(
-      `el PR #${pr} viene de la rama de slice \`${prData.headRefName}\` pero no declara un único issue con una closing keyword en su CUERPO`,
-      'Añade `Closes #<issue>` al cuerpo del PR (no al título, no en un comentario). Sin él, además, el issue no se cierra al mergear y el slice retiene sus tokens de `area:`/`touches:` para siempre.',
+      `PR #${pr} comes from the slice branch \`${prData.headRefName}\` but does not declare a single issue with a closing keyword in its BODY`,
+      'Add `Closes #<issue>` to the BODY of the PR (not to the title, not in a comment). Without it, on top of that, the issue is not closed on merge and the slice holds its `area:`/`touches:` tokens forever.',
     )
   }
   // It is said out loud that nothing has been checked. A green and mute check
   // would be indistinguishable from a green check that did judge something.
-  console.log(`✅ scope-check: el PR #${pr} no es un slice del loop (rama \`${prData.headRefName}\`, sin closing keyword). No hay alcance de epic que comprobar.`)
+  console.log(`✅ scope-check: PR #${pr} is not a slice of the loop (branch \`${prData.headRefName}\`, no closing keyword). There is no epic scope to check.`)
   process.exit(0)
 }
 
@@ -97,14 +97,14 @@ let issueBody
 try {
   issueBody = JSON.parse(gh(['issue', 'view', String(issueN), '--repo', repo, '--json', 'body'])).body
 } catch (e) {
-  die(`no se pudo leer el issue #${issueN} de ${repo}`, (e.stderr || e.message || '').toString().trim())
+  die(`could not read issue #${issueN} of ${repo}`, (e.stderr || e.message || '').toString().trim())
 }
 
 const scope = parseScope(issueBody)
 if (!scope.declared) {
   die(
-    `el epic del issue #${issueN} no declara alcance`,
-    `${scope.reason}. Añade una línea \`Alcance: <rutas>\` a la sección \`## Contexto del epic\` del execution spec y re-groomea (o edita el issue). Se declara UNA vez por epic, en la congelación.`,
+    `the epic of issue #${issueN} declares no scope`,
+    `${scope.reason}. Add an \`Alcance: <paths>\` line to the \`## Contexto del epic\` section of the execution spec and re-groom it (or edit the issue). It is declared ONCE per epic, at the freeze.`,
   )
 }
 
@@ -112,12 +112,12 @@ const files = (prData.files || []).map((f) => f.path)
 const violations = scopeViolations(files, scope.patterns, exempt)
 
 if (violations.length) {
-  console.error(`🛑 scope-check: el PR #${pr} toca ${violations.length} fichero(s) FUERA del alcance declarado por su epic (issue #${issueN}).`)
+  console.error(`🛑 scope-check: PR #${pr} touches ${violations.length} file(s) OUTSIDE the scope its epic declared (issue #${issueN}).`)
   console.error('')
-  console.error('   Alcance declarado:')
+  console.error('   Declared scope:')
   for (const p of scope.patterns) console.error(`     ✓ ${p}`)
   console.error('')
-  console.error('   Fuera de alcance:')
+  console.error('   Out of scope:')
   for (const f of violations) console.error(`     ✗ ${f}`)
   console.error('')
   // The message does not accuse anybody of bad faith, and it must not: the
@@ -125,11 +125,11 @@ if (violations.length) {
   // agent that convinces itself it already asked. What is asked for is that
   // the decision go back to the human, which is exactly the step that agent
   // skipped.
-  console.error('   Esto NO se arregla editando el registro del PR. O el trabajo sale del PR,')
-  console.error('   o el alcance del epic cambia — y cambiar el alcance de un epic congelado es')
-  console.error('   una decisión humana, no del agente.')
+  console.error('   This is NOT fixed by editing the record of the PR. Either the work leaves')
+  console.error('   the PR, or the scope of the epic changes — and changing the scope of a frozen')
+  console.error("   epic is a human decision, not the agent's.")
   process.exit(1)
 }
 
-console.log(`✅ scope-check: los ${files.length} fichero(s) del PR #${pr} caben en el alcance del epic (issue #${issueN}).`)
+console.log(`✅ scope-check: the ${files.length} file(s) of PR #${pr} fit in the scope of the epic (issue #${issueN}).`)
 process.exit(0)

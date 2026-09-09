@@ -69,6 +69,6 @@ describe('the Global verification is run by the program (§3.7-A)', () => {
     writeFileSync(join(repo, 'plan.md'), PLAN.replace(GLOBAL_VERIFICATION, '## 8. Global verification\n\nQue todo siga en verde.\n'))
     const r = ct('next')
     expect(r.status).toBe(6)
-    expect(r.stderr).toMatch(/no ejecuta prosa/)
+    expect(r.stderr).toMatch(/does not execute prose/)
   })
 })

@@ -28,7 +28,7 @@ export class BaselineResult {
 export class TestCommandDeclaration {
   static FILES = ['AGENTS.md', '.agent/conventions.md']
   static LINE = /^[ \t]*(?:[-*+][ \t]+)?(?:\*\*)?tests?(?:\*\*)?[ \t]*:[ \t]*`([^`\n]+)`/im
-  static HOW_TO_DECLARE = 'test: `<comando>`'
+  static HOW_TO_DECLARE = 'test: `<command>`'
 
   static in(worktree, read) {
     for (const file of TestCommandDeclaration.FILES) {
@@ -83,9 +83,9 @@ export class Baseline {
   static SUMMARY_LINES = 3
   static ELLIPSIS = '…'
   static NO_COMMAND =
-    `sin comando de test declarado en ${TestCommandDeclaration.FILES.join(' ni en ')} — ` +
-    `decláralo con una línea «${TestCommandDeclaration.HOW_TO_DECLARE}» (p. ej. «test: \`npm test\`») ` +
-    'en la sección «## Build, test & lint» de AGENTS.md'
+    `no test command declared in ${TestCommandDeclaration.FILES.join(' nor in ')} — ` +
+    `declare it with a line «${TestCommandDeclaration.HOW_TO_DECLARE}» (e.g. «test: \`npm test\`») ` +
+    'in the «## Build, test & lint» section of AGENTS.md'
 
   constructor({ run, read = Baseline.readOrNull }) {
     this.run = run

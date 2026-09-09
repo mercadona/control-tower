@@ -73,7 +73,7 @@ export function buildState(input) {
     if (alive === false && ageMs === null) {
       // Unknown age: nobody is accused. The issue is named in sinComprobar
       // instead of deciding on its behalf.
-      unchecked.push(`#${n}: no se pudo determinar la antigüedad del claim`)
+      unchecked.push(`#${n}: the age of the claim could not be determined`)
     }
 
     return { n, nombre: name, hasWorktree, hasBranch, pid, vivo: alive, arrancando: startingUp, edadMs: ageMs }

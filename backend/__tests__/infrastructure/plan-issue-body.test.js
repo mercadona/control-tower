@@ -94,15 +94,15 @@ describe('PlanIssueBody', () => {
   it('a_story_with_no_description_says_the_user_story_is_unwritten_instead_of_leaving_a_blank', () => {
     const body = PlanIssueBody.of({ story: Opened.story({ description: '   ' }), comment: null })
 
-    expect(body).toContain('MO_SHOP-42 no trae descripción en Jira')
+    expect(body).toContain('MO_SHOP-42 brings no description in Jira')
   })
 
   it('a_github_issue_with_no_body_and_no_comments_names_the_issue_instead_of_promising_jira', () => {
     const body = PlanIssueBody.of({ story: Opened.githubStory({ description: '   ' }), comment: null })
 
     expect(body).toContain(
-      '## Contexto del epic\n_El issue mercadona/control-tower#141 no trae cuerpo ni comentarios: ' +
-        'no hay nada escrito de donde partir._'
+      '## Contexto del epic\n_Issue mercadona/control-tower#141 brings no body and no comments: ' +
+        'there is nothing written to start from._'
     )
   })
 
@@ -164,7 +164,7 @@ describe('PlanIssueBody', () => {
 
   it('a_story_with_no_summary_worth_the_name_says_so_instead_of_leaving_the_section_blank', () => {
     expect(PlanIssueBody.of({ story: Opened.story({ summary: '—' }), comment: null }))
-      .toContain('_MO_SHOP-42 no trae resumen en Jira._')
+      .toContain('_MO_SHOP-42 brings no summary in Jira._')
   })
 
   it('the_title_names_the_story_because_without_a_slice_table_there_is_no_order_to_name', () => {
@@ -257,19 +257,19 @@ describe('an issue with no user story is born from the comment alone', () => {
   it('the_first_line_of_a_body_with_no_story_says_the_plan_was_asked_by_hand_and_names_no_tracker', () => {
     const [firstLine] = PlanIssueBody.of(Opened.commentOnly()).split('\n')
 
-    expect(firstLine).toBe('> Plan pedido a mano: no hay ticket detrás.')
+    expect(firstLine).toBe('> Plan asked for by hand: there is no ticket behind it.')
   })
 
   it('a_body_with_no_story_says_there_is_no_ticket_where_the_epic_context_goes_and_names_no_tracker', () => {
     const body = PlanIssueBody.of(Opened.commentOnly())
 
-    expect(body).toContain('## Contexto del epic\n_El plan no viene de ningún ticket._')
+    expect(body).toContain('## Contexto del epic\n_This plan does not come from any ticket._')
   })
 
   it('a_comment_whose_first_line_carries_no_words_says_so_instead_of_leaving_the_description_blank', () => {
     const body = PlanIssueBody.of(Opened.commentOnly('—'))
 
-    expect(body).toContain('## Descripción\n_El comentario no trae una primera línea que resuma lo que se pide._')
+    expect(body).toContain('## Descripción\n_The comment brings no first line that sums up what is being asked for._')
   })
 })
 
