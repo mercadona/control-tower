@@ -4,7 +4,7 @@ import {
 } from '../../src/infrastructure/plan-events-route.js'
 import { PlanRequest, PlanRequestOutcome, PlanRefusal } from '../../src/infrastructure/start-plan-route.js'
 import { Refusal } from '../../src/infrastructure/http.js'
-import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
+import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'

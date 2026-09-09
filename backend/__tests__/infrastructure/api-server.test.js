@@ -8,7 +8,7 @@ import { ApiServer } from '../../src/infrastructure/api-server.js'
 import { ReviewsSpy } from '../reviews-spy.js'
 import { StartPlanResult, PlanStarted, PlanNotStarted } from '../../src/application/actions/start-plan.js'
 import { BaselineResult } from '../../../plugin/scripts/baseline.js'
-import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
+import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanEvents, EventsRefusal, PlanSessions } from '../../src/infrastructure/plan-events-route.js'
 import {
@@ -16,12 +16,12 @@ import {
   PlanProgressNotRead,
 } from '../../src/domain/exceptions.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
-import { PlanState } from '../../src/domain/value-objects/plan-state.js'
+import { PlanState } from '../../src/domain/value-objects/plan-state.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.js'
 import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.js'
-import { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.js'
+import { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.ts'
 import { SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.js'
 
 class StartPlanSpy {

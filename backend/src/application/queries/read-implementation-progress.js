@@ -1,4 +1,4 @@
-import { ImplementationStep } from '../../domain/value-objects/implementation-state.js'
+import { ImplementationStep } from '../../domain/value-objects/implementation-state.ts'
 import { DeliveryPolicy, DeliveryState } from '../../domain/policies/delivery-policy.js'
 
 export class ReadImplementationProgressParams {

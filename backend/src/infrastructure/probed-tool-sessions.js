@@ -1,5 +1,5 @@
 import { ToolSessions } from '../domain/ports/tool-sessions.js'
-import { SessionState, ToolSession } from '../domain/value-objects/tool-session.js'
+import { SessionState, ToolSession } from '../domain/value-objects/tool-session.ts'
 
 export class ProbedToolSessions extends ToolSessions {
   static PROBES = [

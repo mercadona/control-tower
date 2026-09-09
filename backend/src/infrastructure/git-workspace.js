@@ -7,10 +7,10 @@ import { SownWorkspace } from '../domain/value-objects/sown-workspace.ts'
 import { GhPlanIssues } from './gh-plan-issues.js'
 import { Workspace } from '../domain/ports/workspace.js'
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
-import { PreparedWorkspace } from '../domain/value-objects/prepared-workspace.js'
+import { PreparedWorkspace } from '../domain/value-objects/prepared-workspace.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../domain/value-objects/workspace-location.ts'
-import { WorkspaceSurvey } from '../domain/value-objects/workspace-survey.js'
+import { WorkspaceSurvey } from '../domain/value-objects/workspace-survey.ts'
 import {
   WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood, CheckoutNotConfirmed,
 } from '../domain/exceptions.js'

@@ -1,5 +1,5 @@
 import { Harvest } from '../domain/ports/harvest.js'
-import { HarvestOutcome } from '../domain/value-objects/harvest-outcome.js'
+import { HarvestOutcome } from '../domain/value-objects/harvest-outcome.ts'
 import { HarvestNotRead, HarvestNotUnderstood } from '../domain/exceptions.js'
 
 export class DispatchCheckHarvest extends Harvest {

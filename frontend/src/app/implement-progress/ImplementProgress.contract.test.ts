@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ImplementationStep } from 'app/implement-progress/ImplementProgress.types'
 
-const BACKEND_VOCABULARY = join(process.cwd(), '..', 'backend', 'src', 'domain', 'value-objects', 'implementation-state.js')
-const DECLARATION = /export const ImplementationStep = Object\.freeze\(\{([^}]*)\}\)/
+const BACKEND_VOCABULARY = join(process.cwd(), '..', 'backend', 'src', 'domain', 'value-objects', 'implementation-state.ts')
+const DECLARATION = /export const ImplementationStep = Object\.freeze\(\{([^}]*)\} as const\)/
 const MEMBER = /^\s*[A-Z0-9_]+:\s*'([^']+)',?\s*$/
 
 const backendSteps = (): string[] => {

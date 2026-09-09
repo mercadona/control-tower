@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { SurveyExternalTools } from '../../src/application/queries/survey-external-tools.js'
 import { ToolSessions } from '../../src/domain/ports/tool-sessions.js'
-import { ToolSession, SessionState } from '../../src/domain/value-objects/tool-session.js'
+import { ToolSession, SessionState } from '../../src/domain/value-objects/tool-session.ts'
 
 class ToolSessionMother {
   static ready(tool) {

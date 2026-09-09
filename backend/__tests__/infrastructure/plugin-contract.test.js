@@ -22,7 +22,7 @@ import { UserStory } from '../../src/domain/value-objects/user-story.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { Invocation, InvocationOutcome } from '../../src/infrastructure/invocation.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { ImplementationStep } from '../../src/domain/value-objects/implementation-state.js'
+import { ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 

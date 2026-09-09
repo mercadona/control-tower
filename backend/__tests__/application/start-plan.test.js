@@ -15,7 +15,7 @@ import { SownWorkspace } from '../../src/domain/value-objects/sown-workspace.ts'
 import { BaselineResult } from '../../../plugin/scripts/baseline.js'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { PlanTarget } from '../../src/domain/value-objects/plan-target.ts'
-import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
+import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import {
   PlanAgentNotLaunched, PlanIssueNotClaimed, PlanIssueNotCreated, UserStoryNotRead,
   WorkspaceNotPrepared,
