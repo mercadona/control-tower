@@ -32,9 +32,13 @@ class WatchDouble {
     id: 'IC_kwDOT9lB5c8AAAABRCF0HH', text: WatchDouble.A_CHANGE.text,
   })
 
-  constructor(soundings, { refusingTheDelivery = null, waits = null, stoppingOnDelivery = false, label = WatchDouble.LABEL } = {}) {
+  constructor(soundings, {
+    refusingTheDelivery = null, waits = null, stoppingOnDelivery = false,
+    label = WatchDouble.LABEL, refusalsLeft = Number.POSITIVE_INFINITY,
+  } = {}) {
     this.soundings = soundings
     this.refusingTheDelivery = refusingTheDelivery
+    this.refusalsLeft = refusalsLeft
     this.stoppingOnDelivery = stoppingOnDelivery
     this.waits = waits ?? soundings.length
     this.label = label
@@ -69,6 +73,13 @@ class WatchDouble {
     })
   }
 
+  static refusingTheFirstDeliveryOnly(cause) {
+    return new WatchDouble([[WatchDouble.A_CHANGE], [WatchDouble.A_CHANGE]], {
+      refusingTheDelivery: cause,
+      refusalsLeft: 1,
+    })
+  }
+
   static labelled(label) {
     return new WatchDouble([new PlanChangesNotRead('HTTP 502')], { label })
   }
@@ -88,7 +99,11 @@ class WatchDouble {
       review: (params) => {
         this.reviewed.push(params)
         if (this.stoppingOnDelivery) this.watch.stop(WatchDouble.STOPPING)
-        if (this.refusingTheDelivery !== null) return Promise.reject(this.refusingTheDelivery)
+        if (this.refusingTheDelivery !== null && this.refusalsLeft > 0) {
+          this.refusalsLeft -= 1
+
+          return Promise.reject(this.refusingTheDelivery)
+        }
 
         return Promise.resolve()
       },
@@ -174,14 +189,25 @@ describe('ReviewWatch', () => {
     expect(watched.reviewed.map(({ changes }) => changes)).toEqual([WatchDouble.A_CHANGE.text])
   })
 
-  it('a_delivery_that_failed_is_not_retried_forever_and_says_so', async () => {
+  it('a_change_that_could_not_be_typed_into_the_agent_is_tried_again_instead_of_being_lost', async () => {
     const watched = WatchDouble.refusingTheDelivery(new PlanAgentNotResumed('no such workspace'))
 
     await watched.run()
 
-    expect(watched.reviewed).toHaveLength(1)
-    expect(watched.warnings).toHaveLength(1)
+    expect(watched.reviewed).toHaveLength(2)
+    expect(watched.warnings).toHaveLength(2)
     expect(watched.warnings[0]).toContain('no such workspace')
+  })
+
+  it('a_change_that_failed_once_reaches_the_agent_on_the_next_round_and_is_not_handed_over_again', async () => {
+    const watched = WatchDouble.refusingTheFirstDeliveryOnly(new PlanAgentNotResumed('no such workspace'))
+
+    await watched.run()
+
+    expect(watched.reviewed).toHaveLength(2)
+    expect(watched.warnings).toHaveLength(1)
+    expect(watched.reviewed.map(({ changes }) => changes))
+      .toEqual([WatchDouble.A_CHANGE.text, WatchDouble.A_CHANGE.text])
   })
 
   it('a_watch_it_was_told_to_stop_asks_the_issue_nothing_else', async () => {

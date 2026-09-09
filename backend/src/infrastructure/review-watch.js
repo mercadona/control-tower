@@ -68,8 +68,7 @@ export class ReviewWatch {
     const change = read.changes.find((candidate) => !attended.has(candidate.id))
     if (change === undefined) return
     if (!this.live.has(key)) return
-    attended.add(change.id)
-    await this.#deliver(watch, change)
+    if (await this.#deliver(watch, change)) attended.add(change.id)
   }
 
   async #sound(watch) {
@@ -91,9 +90,17 @@ export class ReviewWatch {
         repository: watch.repository,
         changes: change.text,
       })
+
+      return true
     } catch (cause) {
       if (!(cause instanceof PlanFailure)) throw cause
-      this.#warn(watch, `the changes asked for in ${change.id} could not be typed into ${watch.agent}: ${cause.message}`)
+      this.#warn(
+        watch,
+        `the changes asked for in ${change.id} could not be typed into ${watch.agent}, ` +
+        `so they stay pending and will be tried again: ${cause.message}`
+      )
+
+      return false
     }
   }
 
