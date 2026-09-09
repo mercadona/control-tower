@@ -30,13 +30,13 @@ describe('Home · plan events', () => {
     expect(FakeEventSource.last().url).toBe(PlanEventsMother.PATH)
   })
 
-  it('should close the active plan when reopening the completed request', async () => {
+  it('keeps review current when reopening the completed request summary', async () => {
     const { user } = await planStarted()
 
     await user.click(screen.getByRole('button', { name: /Solicitud Completado/ }))
 
     expect(screen.getByRole('button', { name: /Solicitud Completado/ })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('button', { name: /Plan Activo/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('navigation', { name: 'Flujo del plan' }).querySelector('[aria-current="step"]')).toHaveTextContent('Revisar plan')
   })
 
   it('should say the plan is being written when the first frame arrives', async () => {
@@ -47,16 +47,16 @@ describe('Home · plan events', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Escribiendo el plan…')
   })
 
-  it('should say the plan is ready and stop listening', async () => {
+  it('keeps a ready plan in review and stops listening', async () => {
     await planStarted()
 
     await streamFrame(PlanEventsMother.writing())
     await streamFrame(PlanEventsMother.ready())
 
-    expect(screen.getByText('Plan listo')).toHaveAttribute('role', 'status')
-    expect(screen.getByText('Plan listo')).toHaveAttribute('aria-live', 'polite')
-    expect(screen.getByRole('button', { name: /Plan Completado/ })).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByRole('button', { name: /Implementación Activo/ })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('heading', { name: 'Revisar plan' })).toBeInTheDocument()
+    expect(screen.getByText('El plan está listo. Revísalo antes de decidir si quieres implementarlo.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Implementar plan' })).toBeEnabled()
+    expect(screen.getByRole('navigation', { name: 'Flujo del plan' }).querySelector('[aria-current="step"]')).toHaveTextContent('Revisar plan')
     expect(FakeEventSource.last().closes).toBe(1)
   })
 
@@ -75,7 +75,7 @@ describe('Home · plan events', () => {
     await streamFrame(PlanEventsMother.ready())
     await dropStream()
 
-    expect(screen.getByRole('button', { name: /Plan Completado/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('heading', { name: 'Revisar plan' })).toBeInTheDocument()
     expect(screen.queryByRole('alert')).toBeNull()
     expect(FakeEventSource.last().closes).toBe(1)
   })

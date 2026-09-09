@@ -9,6 +9,8 @@ import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
 import { FormField } from 'system-ui/form-field'
 import { Input } from 'system-ui/input'
+import { Loading } from 'system-ui/loading'
+import { TextArea } from 'system-ui/text-area'
 import './StartPlanForm.css'
 
 type StartPlanRefusal = Exclude<StartPlanOutcome, { kind: 'started' }>
@@ -18,10 +20,11 @@ type StartPlanFormProps = {
   onBackendUnreachable: (request: StartPlanRequest) => void
   onInteraction: () => void
   isLocked: boolean
+  isMutationBlocked?: boolean
   request?: StartPlanRequest
 }
 
-const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocked, request }: StartPlanFormProps) => {
+const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocked, isMutationBlocked = false, request }: StartPlanFormProps) => {
   const [ticketKey, setTicketKey] = useState('')
   const [userComment, setUserComment] = useState('')
   const [repository, setRepository] = useState('')
@@ -29,10 +32,14 @@ const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocke
   const [isSending, setIsSending] = useState(false)
   const isSendingRef = useRef(false)
   const [refusal, setRefusal] = useState<StartPlanRefusal | null>(null)
+  const [touched, setTouched] = useState({ ticket: false, repository: false, path: false })
 
   const hasWellFormedTicket = TicketKey.isWellFormed(ticketKey)
   const ticketBlocksStart = ticketKey !== '' && !hasWellFormedTicket
   const hasSomethingToPlan = hasWellFormedTicket || UserComment.isWellFormed(userComment)
+  const ticketError = touched.ticket && ticketKey !== '' && !hasWellFormedTicket
+  const repositoryError = touched.repository && !RepositoryName.isWellFormed(repository)
+  const pathError = touched.path && !LocalPath.isWellFormed(path)
 
   const canStart =
     !ticketBlocksStart &&
@@ -40,11 +47,11 @@ const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocke
     RepositoryName.isWellFormed(repository) &&
     LocalPath.isWellFormed(path) &&
     !isSending &&
-    !isLocked
+    !isLocked && !isMutationBlocked
 
   const startPlan = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (isSendingRef.current || isLocked) return
+    if (isSendingRef.current || isLocked || isMutationBlocked) return
     onInteraction()
     isSendingRef.current = true
     setIsSending(true)
@@ -55,7 +62,7 @@ const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocke
       repo: repository,
       path: LocalPath.normalize(path),
     }
-    const submitted: StartPlanRequest = { id: submission.id, repo: submission.repo, path: submission.path }
+    const submitted: StartPlanRequest = { id: submission.id, userComment: submission.userComment, repo: submission.repo, path: submission.path }
     const outcome = await StartPlanClient.start(submission)
     isSendingRef.current = false
     setIsSending(false)
@@ -69,28 +76,28 @@ const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocke
 
   if (isLocked) {
     const shownTicket = request?.id ?? (ticketKey !== '' ? ticketKey : null)
-    const shownComment = userComment.trim() !== '' ? userComment : null
+    const shownComment = request?.userComment ?? (userComment.trim() !== '' ? userComment : null)
 
     return (
       <dl className="start-plan-form__summary">
         {shownTicket !== null && (
           <div>
-            <dt>Ticket</dt>
+            <dt className="lg-caption1-regular">Ticket</dt>
             <dd>{shownTicket}</dd>
           </div>
         )}
         {shownComment !== null && (
           <div>
-            <dt>Comentario</dt>
+            <dt className="lg-caption1-regular">Qué quieres planificar</dt>
             <dd>{shownComment}</dd>
           </div>
         )}
         <div>
-          <dt>Repositorio</dt>
+          <dt className="lg-caption1-regular">Repositorio</dt>
           <dd><code>{request?.repo ?? repository}</code></dd>
         </div>
         <div>
-          <dt>Ruta local</dt>
+          <dt className="lg-caption1-regular">Ruta local</dt>
           <dd><code>{request?.path ?? LocalPath.normalize(path)}</code></dd>
         </div>
       </dl>
@@ -101,24 +108,26 @@ const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocke
     <form className="start-plan-form" onSubmit={startPlan}>
       <FormField
         label="Clave del ticket"
-        message={`Con la forma ${TicketKey.EXAMPLE}. Déjalo vacío si escribes un comentario`}
+        message={ticketError ? `Usa la forma ${TicketKey.EXAMPLE}` : `Con la forma ${TicketKey.EXAMPLE}`}
+        error={ticketError}
       >
         <Input
           placeholder={TicketKey.EXAMPLE}
           value={ticketKey}
-          disabled={isSending || isLocked}
+          disabled={isSending || isLocked || isMutationBlocked}
           autoComplete="off"
+          onBlur={() => setTouched((current) => ({ ...current, ticket: true }))}
           onChange={(event) => {
             onInteraction()
             setTicketKey(event.target.value)
           }}
         />
       </FormField>
-      <FormField label="Comentario" message="Qué hay que planificar. Déjalo vacío si das un ticket">
-        <Input
+      <FormField label="Qué quieres planificar" message="Da un ticket, una descripción o ambos" error={false}>
+        <TextArea
           placeholder="Qué hay que planificar"
           value={userComment}
-          disabled={isSending || isLocked}
+          disabled={isSending || isLocked || isMutationBlocked}
           autoComplete="off"
           onChange={(event) => {
             onInteraction()
@@ -126,24 +135,26 @@ const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocke
           }}
         />
       </FormField>
-      <FormField label="Repositorio" message={`Con la forma ${RepositoryName.EXAMPLE}`}>
+      <FormField label="Repositorio" required message={repositoryError ? `Indica un repositorio válido, como ${RepositoryName.EXAMPLE}` : `Con la forma ${RepositoryName.EXAMPLE}`} error={repositoryError}>
         <Input
           placeholder={RepositoryName.EXAMPLE}
           value={repository}
-          disabled={isSending || isLocked}
+          disabled={isSending || isLocked || isMutationBlocked}
           autoComplete="off"
+          onBlur={() => setTouched((current) => ({ ...current, repository: true }))}
           onChange={(event) => {
             onInteraction()
             setRepository(event.target.value)
           }}
         />
       </FormField>
-      <FormField label="Ruta local" message={`Con la forma ${LocalPath.EXAMPLE}`}>
+      <FormField label="Ruta local" required message={pathError ? `Indica una ruta absoluta válida, como ${LocalPath.EXAMPLE}` : `Con la forma ${LocalPath.EXAMPLE}`} error={pathError}>
         <Input
           placeholder={LocalPath.EXAMPLE}
           value={path}
-          disabled={isSending || isLocked}
+          disabled={isSending || isLocked || isMutationBlocked}
           autoComplete="off"
+          onBlur={() => setTouched((current) => ({ ...current, path: true }))}
           onChange={(event) => {
             onInteraction()
             setPath(event.target.value)
@@ -151,10 +162,12 @@ const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocke
         />
       </FormField>
       <div className="start-plan-form__actions">
-        <Button type="submit" disabled={!canStart}>
-          Arrancar plan
+        <Button type="submit" disabled={!canStart} aria-describedby={!canStart ? 'start-plan-help' : undefined}>
+          {isSending ? <><Loading aria-label="Enviando la solicitud" /> Enviando solicitud</> : 'Arrancar plan'}
         </Button>
       </div>
+      {!canStart && !isSending && <p id="start-plan-help" className="start-plan-form__help">{isMutationBlocked ? 'No puedes arrancar otro plan hasta confirmar el estado del backend.' : 'Da un ticket o una descripción válida, además del repositorio y su ruta local.'}</p>}
+      {isSending && <p className="start-plan-form__pending" role="status">Preparar el plan puede tardar varios minutos mientras se ejecutan las comprobaciones del repositorio. No cierres esta página ni vuelvas a enviarlo.</p>}
       {refusal?.kind === 'refused' && <Banner type="error" role="alert" title={refusal.error} />}
     </form>
   )

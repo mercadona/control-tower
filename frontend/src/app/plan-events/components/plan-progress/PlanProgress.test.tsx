@@ -1,4 +1,5 @@
 import { act, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { FakeEventSource } from 'pages/home/__tests__/FakeEventSource'
@@ -14,9 +15,9 @@ const plan: StartedPlan = {
   worktree: StartPlanMother.WORKTREE,
 }
 
-const renderProgress = async () => {
+const renderProgress = async (writeToClipboard?: (text: string) => Promise<void>) => {
   const onReady = vi.fn()
-  render(<PlanProgress plan={plan} onReady={onReady} />)
+  render(<PlanProgress plan={plan} onReady={onReady} writeToClipboard={writeToClipboard} />)
   await screen.findByRole('status')
 
   return { onReady }
@@ -67,5 +68,28 @@ describe('PlanProgress', () => {
     act(() => FakeEventSource.last().receive(PlanEventsMother.ready()))
 
     expect(onReady).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a readable plan summary and reports whether copying details worked', async () => {
+    const writeText = vi.fn(async () => undefined)
+    const user = userEvent.setup()
+
+    await renderProgress(writeText)
+
+    expect(screen.getByText('Solicitud:', { exact: false })).toHaveTextContent(StartPlanMother.REPO)
+    await user.click(screen.getByRole('button', { name: 'Copiar datos del plan' }))
+    expect(await screen.findByText('Datos del plan copiados')).toBeInTheDocument()
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining(`Issue #${StartPlanMother.ISSUE.number}`))
+  })
+
+  it('reports a failed copy without losing plan details', async () => {
+    const writeText = vi.fn(async () => { throw new Error('denied') })
+    const user = userEvent.setup()
+
+    await renderProgress(writeText)
+    await user.click(screen.getByRole('button', { name: 'Copiar datos del plan' }))
+
+    expect(await screen.findByText('No se pudieron copiar los datos del plan')).toBeInTheDocument()
+    expect(screen.getByText('Detalles del agente y del entorno')).toBeInTheDocument()
   })
 })

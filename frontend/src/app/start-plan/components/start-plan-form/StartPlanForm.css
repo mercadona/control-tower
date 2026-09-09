@@ -1,4 +1,6 @@
 .start-plan-form {
+  --form-control-width: 100%;
+
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -8,9 +10,15 @@
   display: flex;
 }
 
+.start-plan-form__help,
+.start-plan-form__pending {
+  margin: -12px 0 0;
+  color: var(--foreground-secondary);
+}
+
 .start-plan-form__summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
   gap: 16px;
   margin: 0;
 }
@@ -21,7 +29,6 @@
 
 .start-plan-form__summary dt {
   color: var(--foreground-secondary);
-  font: var(--typography-caption1-regular);
 }
 
 .start-plan-form__summary dd {
@@ -31,11 +38,4 @@
 
 .start-plan-form__summary code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-@media (max-width: 600px) {
-  .start-plan-form__summary {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
 }

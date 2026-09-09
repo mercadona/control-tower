@@ -11,10 +11,11 @@ type PlanProgress =
 
 const CONNECTING: PlanProgress = { phase: 'connecting' }
 
-const usePlanProgress = (issue: number, repo: string): PlanProgress => {
+const usePlanProgress = (issue: number, repo: string, enabled = true): PlanProgress => {
   const [progress, setProgress] = useState<PlanProgress>(CONNECTING)
 
   useEffect(() => {
+    if (!enabled) return
     setProgress(CONNECTING)
     let close: (() => void) | undefined
     const connection = window.setTimeout(() => {
@@ -30,7 +31,7 @@ const usePlanProgress = (issue: number, repo: string): PlanProgress => {
       window.clearTimeout(connection)
       close?.()
     }
-  }, [issue, repo])
+  }, [enabled, issue, repo])
 
   return progress
 }

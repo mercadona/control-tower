@@ -35,7 +35,7 @@ const activePlanWithoutStory = (): ActivePlan => ({
 describe('ActivePlansClient', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('should load a valid active plan', async () => {
+  it('should load a valid backend active plan without the optional description', async () => {
     const plan = activePlan()
     answerWith(plan)
 

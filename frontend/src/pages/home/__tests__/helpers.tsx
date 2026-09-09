@@ -10,6 +10,7 @@ type User = ReturnType<typeof userEvent.setup>
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 const NO_ACTIVE_PLANS = { status: 200, body: '{"plans":[]}' }
+const EXTERNAL_TOOLS_READY = { status: 200, body: '{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}' }
 const NO_IMPLEMENTATION_RUN_YET = {
   status: 400,
   body: '{"code":"implementation-progress-not-read","detail":"the worktree is not there yet"}',
@@ -25,6 +26,7 @@ const backendAnswering = (answer: Answer) => {
     'fetch',
     vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
+      if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
       if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
       return fetching(input, init)
     }),
@@ -35,7 +37,10 @@ const backendAnswering = (answer: Answer) => {
 
 const backendRecovering = (answer: Answer) => {
   const fetching = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => responseFor(answer))
-  vi.stubGlobal('fetch', fetching)
+  vi.stubGlobal('fetch', (input: string | URL | Request, init?: RequestInit) => {
+    if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
+    return init === undefined ? fetching(input) : fetching(input, init)
+  })
 
   return fetching
 }
@@ -45,16 +50,18 @@ const backendPending = () => {
   const pending = new Promise<Response>((resolve) => {
     answerWith = (answer) => resolve(responseFor(answer))
   })
-  vi.stubGlobal(
-    'fetch',
-    vi.fn((input: string | URL | Request) => {
+  const fetching = vi.fn((input: string | URL | Request) => {
       if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
+      if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
       if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
       return pending
-    }),
-  )
+    })
+  vi.stubGlobal('fetch', fetching)
 
-  return { answerWith: async (answer: Answer) => act(async () => answerWith(answer)) }
+  return {
+    answerWith: async (answer: Answer) => act(async () => answerWith(answer)),
+    fetching,
+  }
 }
 
 const backendUnreachable = () => {
@@ -81,15 +88,15 @@ const typeTicket = async (user: User, ticket: string) => {
 }
 
 const typeUserComment = async (user: User, comment: string) => {
-  await user.type(screen.getByLabelText('Comentario'), comment)
+  await user.type(screen.getByLabelText('Qué quieres planificar'), comment)
 }
 
 const typeRepository = async (user: User, repository: string) => {
-  await user.type(screen.getByLabelText('Repositorio'), repository)
+  await user.type(screen.getByLabelText(/Repositorio/), repository)
 }
 
 const typePath = async (user: User, path: string) => {
-  await user.type(screen.getByLabelText('Ruta local'), path)
+  await user.type(screen.getByLabelText(/Ruta local/), path)
 }
 
 const pressStart = async (user: User) => {

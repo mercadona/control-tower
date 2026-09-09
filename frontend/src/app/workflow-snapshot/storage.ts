@@ -8,12 +8,12 @@ type WorkflowSnapshot = {
 }
 
 type StoredWorkflowSnapshot = {
-  version: 1
+  version: 1 | 2
   workflow: WorkflowSnapshot
 }
 
 const KEY = 'control-tower.workflow'
-const VERSION = 1
+const VERSION = 2
 
 const isWorkflow = (value: unknown): value is WorkflowSnapshot =>
   isRecord(value) &&
@@ -24,7 +24,7 @@ const isWorkflow = (value: unknown): value is WorkflowSnapshot =>
 const load = (): WorkflowSnapshot | null => {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(KEY) ?? 'null')
-    if (!isRecord(value) || value.version !== VERSION || !isWorkflow(value.workflow)) return null
+    if (!isRecord(value) || (value.version !== 1 && value.version !== VERSION) || !isWorkflow(value.workflow)) return null
 
     return value.workflow
   } catch {

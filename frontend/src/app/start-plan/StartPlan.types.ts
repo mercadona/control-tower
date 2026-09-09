@@ -1,5 +1,6 @@
 export type StartPlanRequest = {
   id: string | null
+  userComment?: string | null
   repo: string
   path: string
 }
