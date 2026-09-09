@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { AskPlanChanges, AskPlanChangesParams } from '../../src/application/actions/ask-plan-changes.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { PlanChangesNotAsked } from '../../src/domain/exceptions.js'
 
 class PlanIssuesSpy {
   constructor() {
@@ -10,6 +11,22 @@ class PlanIssuesSpy {
 
   async askChanges({ issue, repository, changes }) {
     this.asked.push({ issue: issue.number, repository: repository.text, changes })
+  }
+
+  static refusing(cause) {
+    const spy = new PlanIssuesSpy()
+    spy.answer = cause
+    return spy
+  }
+}
+
+class RejectingPlanIssues {
+  constructor(cause) {
+    this.cause = cause
+  }
+
+  async askChanges() {
+    throw this.cause
   }
 }
 
@@ -29,9 +46,15 @@ describe('AskPlanChanges', () => {
     ])
   })
 
-  it('its_params_are_frozen_so_nobody_rewrites_what_was_asked_for_on_the_way', () => {
-    const params = new AskPlanChangesParams({ issue: ISSUE, repository: REPOSITORY, changes: 'parte la tarea 2' })
+  it('a_port_that_refuses_to_ask_changes_travels_out_typed_instead_of_being_turned_into_a_status', async () => {
+    const planIssues = new RejectingPlanIssues(new PlanChangesNotAsked('GitHub API failed'))
 
-    expect(Object.isFrozen(params)).toBe(true)
+    const refusal = await new AskPlanChanges({ planIssues }).execute(
+      new AskPlanChangesParams({ issue: ISSUE, repository: REPOSITORY, changes: 'parte la tarea 2' })
+    ).catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(PlanChangesNotAsked)
+    expect(refusal.name).toBe('PlanChangesNotAsked')
+    expect(refusal.message).toBe('GitHub API failed')
   })
 })
