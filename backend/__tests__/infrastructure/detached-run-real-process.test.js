@@ -304,7 +304,7 @@ describe('DetachedRun', () => {
     expect(printed).toBe('0')
   })
 
-  it('the_cap_timer_is_cleared_once_the_call_finishes_so_it_never_fires_later_on_a_pid_that_is_gone', async () => {
+  it('a_call_that_finished_is_never_signalled_once_its_cap_comes_round', async () => {
     const files = Files.named()
     const budgetMs = 300
     const run = Child.running(budgetMs)
