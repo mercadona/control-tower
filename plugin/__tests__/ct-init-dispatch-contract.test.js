@@ -20,14 +20,16 @@ const script = join(root, 'scripts', 'ct-init.sh')
 // the tests that close the file tie down the claims that have an executable
 // source of truth (the serialising touches) so that they cannot diverge in
 // silence.
-// #93 — the contract moved out of AGENTS.md into the governed repo's
-// `docs/superpowers/CONTRATO-SLICES.md`. What this file watches is the TEXT of
+// #93 — the contract moved out of AGENTS.md into the governed repo's own file.
+// #188 renamed that file to `docs/superpowers/SLICES-CONTRACT.md` for a fresh
+// repository (the Spanish name is still recognised in a repo that already
+// carries it, but never emitted again). What this file watches is the TEXT of
 // the contract, not which file it is pasted into, so the only thing that
 // changes is where it is read from.
 function seed() {
   const dir = mkdtempSync(join(tmpdir(), 'ct-'))
   execFileSync('bash', [script, dir], { encoding: 'utf8' })
-  const contractText = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
+  const contractText = readFileSync(join(dir, 'docs', 'superpowers', 'SLICES-CONTRACT.md'), 'utf8')
   rmSync(dir, { recursive: true, force: true })
   return contractText
 }
@@ -66,9 +68,9 @@ describe('contract §9: what /ct-next does with what you groom', () => {
     const a = seed()
     // The collision rule stated, not just its vocabulary.
     expect(a).toMatch(/status:in-progress/)
-    expect(a).toMatch(/no se despacha|se salta/i)
+    expect(a).toMatch(/is not dispatched/)
     // And that ONE shared token is enough.
-    expect(a).toMatch(/un solo token|un único token|UN token/i)
+    expect(a).toMatch(/a single\s+token/i)
   })
 
   it('it tells the token collision apart from the global serialisation, which are two rules acting at once', () => {
@@ -76,31 +78,31 @@ describe('contract §9: what /ct-next does with what you groom', () => {
     for (const t of SERIALIZING_TOUCHES) expect(a).toContain(t)
     // What makes it DIFFERENT: two slices with different serialising touches
     // share no token at all and even so cannot fly at the same time.
-    expect(a).toMatch(/no comparten ning[úu]n token|sin compartir ning[úu]n token/i)
+    expect(a).toMatch(/share no token at all/i)
   })
 
   it('it says `merge-after` means MERGED (the issue closed as completed), neither approved nor in review', () => {
     const a = seed()
     expect(a).toMatch(/merge-after/)
-    expect(a).toMatch(/cerrado/i)
-    expect(a).toMatch(/aprobad|en review|status:in-review/i)
+    expect(a).toMatch(/closed as\s+\*completed\*/i)
+    expect(a).toMatch(/approved PR|status:in-review/i)
     // And the consequence that changes decisions: who the bottleneck is.
-    expect(a).toMatch(/cuello de botella|bloquea a todos|nada.{0,40}avanza/i)
+    expect(a).toMatch(/\*\*bottleneck\*\*|nothing behind it advances/i)
   })
 
   it('it says how many slices one invocation dispatches and what it takes to get a window of parallelism', () => {
     const a = seed()
     expect(a).toMatch(/--cap/)
-    expect(a).toMatch(/por defecto\s*(es\s*)?`?1`?/i)
+    expect(a).toMatch(/the default is `?1`?/i)
     // The cap is GLOBAL (it counts what is already in flight), not a cap per
     // invocation: without this, a second /ct-next looks as if it "does nothing".
-    expect(a).toMatch(/en vuelo/i)
+    expect(a).toMatch(/already in\s+flight/i)
   })
 
   it('it says /ct-next does NOT narrow by epic: it sweeps every epic in the repo and picks by the lowest #', () => {
     const a = seed()
-    expect(a).toMatch(/no\s+(hay|tiene)\s+`?--milestone`?/i)
-    expect(a).toMatch(/dos epics|dos epic/i)
+    expect(a).toMatch(/there is no `--milestone`/i)
+    expect(a).toMatch(/two epics/i)
     // And which lever does exist for choosing which epic advances.
     expect(a).toMatch(/status:ready/)
   })
@@ -115,14 +117,14 @@ describe('contract §9: what /ct-next does with what you groom', () => {
     const mk = (n, order, t) => ({ n, order, status: 'ready', deps: [], touches: [t], name: `s${n}` })
     expect(selectNext([mk(10, 1, 'ui'), mk(20, 1, 'api')], { concurrencyCap: 1 })[0].n).toBe(10)
     expect(selectNext([mk(20, 1, 'api'), mk(10, 1, 'ui')], { concurrencyCap: 1 })[0].n).toBe(20)
-    expect(flat(seed())).toMatch(/no est[áa] definido|sin orden garantizado/i)
+    expect(flat(seed())).toMatch(/which one comes out first is undefined/i)
   })
 
   it('it documents cmux: what it is, that it is needed, and what happens if it is not there', () => {
     const a = seed()
     expect(a).toMatch(/cmux/)
     expect(a).toMatch(/PATH/)
-    expect(flat(a)).toMatch(/ning[úu]n slice|nada se lanza|no puede lanzar/i)
+    expect(flat(a)).toMatch(/no slice can be launched/i)
     // It is not a groom requirement: telling them apart avoids installing it
     // "just in case".
     expect(a).toMatch(/\/ct-groom/)
@@ -131,7 +133,7 @@ describe('contract §9: what /ct-next does with what you groom', () => {
   it('it says what happens if you interrupt /ct-next and whether re-invoking it is idempotent', () => {
     const a = seed()
     expect(a).toMatch(/Ctrl-C|SIGINT/)
-    expect(a).toMatch(/revierte|revertir/i)
+    expect(a).toMatch(/reverts to `status:ready`/i)
     expect(a).toMatch(/idempotent/i)
     // Orphaned worktree/branch: they are detected before claiming, not halfway.
     expect(a).toMatch(/\.worktrees\/<n>/)
@@ -141,22 +143,24 @@ describe('contract §9: what /ct-next does with what you groom', () => {
   it('it says the claim is a label with NO heartbeat: a dead slice blocks whoever shares its tokens', () => {
     const a = seed()
     expect(a).toMatch(/heartbeat|caduca|expira/i)
-    expect(a).toMatch(/a mano/i)
+    expect(a).toMatch(/\*\*by hand\*\*/)
     // The exact release command, which is what you need at 3 AM.
     expect(a).toMatch(/gh issue edit .*status:ready.*status:in-progress|gh issue edit .*status:in-progress/)
   })
 
   it('it says every slice in flight has ITS OWN .agent/STATE.md, the one in its worktree', () => {
     const a = seed()
-    expect(a).toMatch(/\.worktrees\/<n>\/\.agent\/STATE\.md|\.agent\/STATE\.md.{0,80}worktree/s)
-    expect(a).toMatch(/no se pisan|uno por worktree|no comparten/i)
+    // F22 moved the slice's state file to `.agent/SLICE.md`; the path in the
+    // worktree is the literal the contract prints, and it is what this pins.
+    expect(a).toMatch(/\.worktrees\/<n>\/\.agent\/SLICE\.md|\.agent\/SLICE\.md.{0,80}worktree/s)
+    expect(a).toMatch(/do not step on that file/i)
   })
 
   it('it says what context the dispatched agent receives — and what it does NOT receive', () => {
     const a = seed()
     expect(a).toMatch(/kickoff/i)
     // It hydrates from the ISSUE, not from the spec: what is not in the issue does not arrive.
-    expect(flat(a)).toMatch(/no recibe el spec|nunca lee el spec|no lee el spec/i)
+    expect(flat(a)).toMatch(/does not receive the spec/i)
     expect(a).toMatch(/Acceptance criteria|criterios de aceptaci/i)
   })
 
@@ -207,18 +211,18 @@ describe('contract §9 (F13): what it promises matches what the code does', () =
     // branch, another track, or a human doing it by hand are invisible — the
     // contract sold it as a global guarantee.
     const a = flat(seed())
-    expect(a).toMatch(/solo mira issues de ESTE repo/i)
+    expect(a).toMatch(/only looks at issues of THIS repo/)
     expect(a).toMatch(/status:in-progress/)
     expect(a).toMatch(/INVISIBLE|invisible/)
-    expect(a).toMatch(/global al flujo de issues de este repo/i)
+    expect(a).toMatch(/global to this repo's issue flow/i)
   })
 
   it('it says a token is held until the MERGE, and that in-review blocks too', () => {
     const a = flat(seed())
     expect(a).toMatch(/status:in-review/)
-    expect(a).toMatch(/hasta que el PR se mergea|retiene.{0,60}hasta el merge/i)
+    expect(a).toMatch(/until the PR is merged/i)
     // And the practical consequence that changes how you design the table.
-    expect(a).toMatch(/un PR sin mergear frena a sus vecinos de área/i)
+    expect(a).toMatch(/an unmerged PR holds back its area neighbours/i)
     // Check against the code: a ready that shares a token with an in-review is
     // NOT selected. If this stopped being true, the contract would be lying.
     const holder = { n: 1, order: 1, status: 'in-review', deps: [], touches: ['api'] }
@@ -228,7 +232,7 @@ describe('contract §9 (F13): what it promises matches what the code does', () =
 
   it('it says in-review does NOT take up cap, which is the other half of the rule', () => {
     const a = flat(seed())
-    expect(a).toMatch(/`?status:in-review`? \*?\*?no\*?\*? ocupa cap|no.{0,20}ocupa cap/i)
+    expect(a).toMatch(/`?status:in-review`? does not occupy cap/i)
     // Check against the code: with cap 1 and an in-review holding somebody
     // else's tokens, the ready DOES come out.
     const holder = { n: 1, order: 1, status: 'in-review', deps: [], touches: ['api'] }
@@ -239,29 +243,32 @@ describe('contract §9 (F13): what it promises matches what the code does', () =
   it('it enumerates the TWO traps of "cerrado ≠ mergeado" — and the second is no longer waved away as "no se detecta" (F18)', () => {
     const a = flat(seed())
     expect(a).toMatch(/not planned/)
-    expect(a).toMatch(/para siempre/i)
+    expect(a).toMatch(/waiting forever/i)
     // The opposite direction is still enumerated…
-    expect(a).toMatch(/completed.{0,200}sin que se haya mergeado|sin que se haya mergeado.{0,200}completed/i)
+    expect(a).toMatch(/completed.{0,200}without anything having been merged|without anything having been merged.{0,200}completed/i)
     // …but F18 falsified BOTH halves of the excuse with which v7 left it out
     // ("no se detecta" + "haría falta cruzar el grafo de PRs"): it happens by
     // accident (a closing keyword in ANY commit, quotes included) and a single
     // query resolves 97 issues. The contract can no longer say either of the
     // two.
-    expect(a).not.toMatch(/haría falta cruzar el grafo de PRs/i)
-    expect(a).toMatch(/cualquier mensaje de commit/i)
-    expect(a).toMatch(/las comillas no protegen/i)
+    // Both spellings of the excuse: the Spanish one the v7 carried (a repo
+    // could still paste it back) and the English one it would be re-authored
+    // as. The contract cannot claim the PR graph would have to be crossed.
+    expect(a).not.toMatch(/grafo de PRs|PR graph/i)
+    expect(a).toMatch(/any commit message/i)
+    expect(a).toMatch(/quotes do not protect/i)
   })
 
   it('it documents the exit from in-review for a rejected PR, with the command', () => {
     const a = seed()
     expect(a).toMatch(/--reopen/)
-    expect(flat(a)).toMatch(/no es un estado terminal|NO\*?\*? es un estado terminal/i)
+    expect(flat(a)).toMatch(/is not a terminal state/i)
     // The two paths with the worktree/branch that already exist — without this,
     // reopening "works" and the next /ct-next refuses without explaining why.
     expect(a).toMatch(/\.worktrees\/<n>/)
     expect(a).toMatch(/feat\/<n>/)
-    expect(flat(a)).toMatch(/corregir encima/i)
-    expect(flat(a)).toMatch(/empezar de cero/i)
+    expect(flat(a)).toMatch(/fixing on top/i)
+    expect(flat(a)).toMatch(/starting from scratch/i)
   })
 
   it('it admits the collision and the cap only hold for ONE dispatcher at a time', () => {
@@ -271,7 +278,7 @@ describe('contract §9 (F13): what it promises matches what the code does', () =
     // decides the tokens.
     const a = flat(seed())
     expect(a).toMatch(/compare-and-swap/i)
-    expect(a).toMatch(/no lances dos dispatchers a la vez/i)
+    expect(a).toMatch(/do not launch two dispatchers at once/i)
   })
 
   it('the footnote declares the SAME version as the marker of the block', () => {
@@ -280,7 +287,7 @@ describe('contract §9 (F13): what it promises matches what the code does', () =
     // script reads had been a whole version out of sync.
     const a = seed()
     const marker = a.match(/<!-- ct-init:slices-contract-version: (\d+) -->/)
-    const footer = a.match(/Este contrato lo mantiene `\/ct-init` \(contrato v(\d+)\)/)
+    const footer = a.match(/This contract is maintained by `\/ct-init` \(contract v(\d+)\)/)
     expect(marker).not.toBeNull()
     expect(footer).not.toBeNull()
     expect(footer[1]).toBe(marker[1])
@@ -310,9 +317,9 @@ describe('contract §9 (F15): the return of a rejected PR and the order of /ct-g
   it('it says --reopen leaves the slice at in-progress and that it STILL holds tokens', () => {
     const a = flat(seed())
     expect(a).toMatch(/in-review`? → `?in-progress/i)
-    expect(a).toMatch(/sigue reteniendo sus tokens/i)
+    expect(a).toMatch(/still holds its tokens/i)
     // The consequence that changes what you do: reopening frees nobody.
-    expect(a).toMatch(/no desbloquea a sus vecinos/i)
+    expect(a).toMatch(/does not unblock its neighbours/i)
     // Check against the code: a ready that shares a token with the reopened one
     // (already at in-progress) is NOT selected, not even with cap to spare.
     const reopened = { n: 1, order: 1, status: 'in-progress', deps: [], touches: ['api'] }
@@ -325,17 +332,17 @@ describe('contract §9 (F15): the return of a rejected PR and the order of /ct-g
     expect(a).toMatch(/--requeue/)
     const f = flat(a)
     expect(f).toMatch(/in-progress`? → `?ready/i)
-    expect(f).toMatch(/no se declara ausente lo que no se ha visto/i)
+    expect(f).toMatch(/what has not been seen is not declared absent/i)
     // And what it CANNOT check, said instead of kept quiet.
-    expect(f).toMatch(/la rama en el remoto y el PR abierto/i)
+    expect(f).toMatch(/the branch on the remote and the open PR/i)
   })
 
   it('it says /ct-groom validates the Project BEFORE creating anything, and that there is no transaction', () => {
     const f = flat(seed())
-    expect(f).toMatch(/aborta sin haber creado nada/i)
-    expect(f).toMatch(/Todo lo que .{0,20}ct-groom.{0,20} LEE ocurre antes de todo lo que ESCRIBE/i)
+    expect(f).toMatch(/aborts without having created anything/i)
+    expect(f).toMatch(/Everything .{0,20}ct-groom.{0,20} READS happens before everything it WRITES/i)
     // The other half, the one that is NOT promised: it has to be said too.
-    expect(f).toMatch(/no hay transacción/i)
-    expect(f).toMatch(/idempotente/i)
+    expect(f).toMatch(/there is no transaction/i)
+    expect(f).toMatch(/idempotent/i)
   })
 })

@@ -21,8 +21,8 @@ const groomScript = join(root, 'scripts', 'ct-groom.mjs')
 const fakeGhDir = join(root, '__tests__', 'fixtures', 'fake-gh-bin')
 const fakeGhEnv = { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}` }
 
-// extractWorkedExample: pulls out the markdown table block under "Ejemplo que
-// parsea tal cual" from the AGENTS.md seeded by ct-init.sh — the same lines
+// extractWorkedExample: pulls out the markdown table block under "An example
+// that parses as is" from the contract seeded by ct-init.sh — the same lines
 // that start with "|", contiguous, up to the first line that does not start
 // with "|" (the "Detalle completo..." prose that closes the section).
 // F6, minor 6 — the seeded section now carries a version, and there is an
@@ -358,7 +358,12 @@ function seedFreshAgentsMd() {
 // textual extractor of the history, the doctrine of versions— still holds
 // without touching a single entry: the only thing that changes is which file
 // gets searched.
-const CONTRACT_REL = ['docs', 'superpowers', 'CONTRATO-SLICES.md']
+// #188 — the emitted name is SLICES-CONTRACT.md. The Spanish one
+// (CONTRATO-SLICES.md) goes on being RECOGNISED in a repository that already
+// carries it and is upgraded in place, but it is never emitted again: a fresh
+// repository, which is what every test in this file bootstraps, gets the
+// English name.
+const CONTRACT_REL = ['docs', 'superpowers', 'SLICES-CONTRACT.md']
 const contractPath = (dir) => join(dir, ...CONTRACT_REL)
 const readContract = (dir) => readFileSync(contractPath(dir), 'utf8')
 
@@ -446,7 +451,7 @@ function withE2eAppended(before, { crlf = false, loop = true } = {}) {
 
 function extractWorkedExample(agentsMd) {
   const lines = agentsMd.split('\n')
-  const startIdx = lines.findIndex((l) => l.includes('Ejemplo que parsea tal cual'))
+  const startIdx = lines.findIndex((l) => l.includes('An example that parses as is'))
   const tableLines = []
   for (let i = startIdx + 1; i < lines.length; i++) {
     if (lines[i].trim().startsWith('|')) tableLines.push(lines[i])
@@ -550,9 +555,9 @@ describe('ct-init.sh', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = readContract(dir)
-    expect(agents).toMatch(/\*\*Slice\*\* \*\(obligatoria\)\*/)
-    expect(agents).toMatch(/T.TULO/i)
-    expect(agents).toMatch(/\*\*Entrega\*\* \*\(opcional\)\*/)
+    expect(agents).toMatch(/\*\*Slice\*\* \*\(required\)\*/)
+    expect(agents).toMatch(/issue TITLE/) // upper case on purpose: the contract shouts it
+    expect(agents).toMatch(/\*\*Entrega\*\* \*\(optional\)\*/)
     expect(agents).toContain('Descripción')
     rmSync(dir, { recursive: true, force: true })
   })
@@ -578,7 +583,7 @@ describe('ct-init.sh', () => {
   // An explicit requirement: the seeded example must keep really parsing — it is
   // extracted exactly as it is from the generated AGENTS.md (not a paraphrased
   // copy in the test) and run through ct-groom.mjs --dry-run.
-  it('the seeded example ("Ejemplo que parsea tal cual") really parses with ct-groom.mjs --dry-run: 3 issues, titles from "Slice"', () => {
+  it('the seeded example ("An example that parses as is") really parses with ct-groom.mjs --dry-run: 3 issues, titles from "Slice"', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = readContract(dir)
@@ -598,10 +603,10 @@ describe('ct-init.sh', () => {
     const out = execFileSync('node', [groomScript, specPath, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeGhEnv, stdio: ['ignore', 'pipe', 'pipe'] })
     const plan = JSON.parse(out)
     expect(plan.issues).toHaveLength(3)
-    expect(plan.issues[0].title).toBe('#1 modelo')
-    expect(plan.issues[1].title).toBe('#2 barra')
-    expect(plan.issues[2].title).toBe('#3 pantalla')
-    expect(plan.issues[0].body).toContain('tabla `medicamentos`') // Entrega -> Descripción
+    expect(plan.issues[0].title).toBe('#1 model')
+    expect(plan.issues[1].title).toBe('#2 bar')
+    expect(plan.issues[2].title).toBe('#3 screen')
+    expect(plan.issues[0].body).toContain('`medications` table') // Entrega -> Descripción
     // F21: the seeded example does not only parse — it DEMONSTRATES the Gate
     // column. Row 2 is `backend` with `Gate: visual` (the real case that
     // motivated the column) and row 3 is `ui` declaring nothing, which receives
@@ -617,8 +622,8 @@ describe('ct-init.sh', () => {
     // swapped the example for one that does not exercise the three paths, this
     // finds out.
     expect(plan.issues[1].body).toContain('## Señal de observabilidad')
-    expect(plan.issues[1].body).toContain('métrica `backfill_progress` con label `estado`')
-    expect(plan.issues[2].body).toContain('N/A — pantalla sin telemetría nueva que prometer')
+    expect(plan.issues[1].body).toContain('`backfill_progress` metric with a `status` label')
+    expect(plan.issues[2].body).toContain('N/A — screen with no new telemetry to promise')
     expect(plan.issues[0].body).not.toContain('## Señal de observabilidad')
     rmSync(dir, { recursive: true, force: true })
     rmSync(specDir, { recursive: true, force: true })
@@ -634,15 +639,15 @@ describe('ct-init.sh', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = readContract(dir)
-    expect(agents).toContain('**Señal** *(opcional)*')
-    expect(agents).toContain('N/A — <razón>')
-    expect(agents).toMatch(/exención sin razón|exención SIN razón/i)
+    expect(agents).toContain('**Señal** *(optional)*')
+    expect(agents).toContain('N/A — <reason>')
+    expect(agents).toMatch(/exemption WITHOUT a reason \*\*aborts\*\*/)
     expect(agents).toContain('## Señal de observabilidad')
     expect(agents).toContain('.agent/SLICE.md')
     expect(agents).toContain('`observabilidad`')
     expect(agents).toContain('`sin-vara`')
     // The line of "no value" markers names Señal too.
-    expect(agents).toContain('Marcadores de "sin valor" (`Dep`/`Acepta`/`Protegido`/`Área`/`Toca`/`Gate`/`Señal`):')
+    expect(agents).toContain('"No value" markers (`Dep`/`Acepta`/`Protegido`/`Área`/`Toca`/`Gate`/`Señal`):')
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -659,10 +664,10 @@ describe('ct-init.sh', () => {
     const agents = readContract(dir)
     // The sentence, on a single line (the bullet is wrapped at ~72 columns: if
     // the reflow broke it, this assert is what catches it).
-    expect(agents).toMatch(/no es un criterio de aceptación más/i)
+    expect(agents).toMatch(/IT IS NOT ONE MORE ACCEPTANCE CRITERION/)
     // And what the sentence promises: production against the functional, and the
     // item that is left measuring nothing new when the signal repeats an AC.
-    expect(agents).toMatch(/EN PRODUCCIÓN/)
+    expect(agents).toMatch(/WHAT WILL BE SEEN IN PRODUCTION/)
     expect(agents).toContain('`estado-final`')
     expect(agents).toContain('`observabilidad`')
     // A check: up to v21 the contract said none of this — this test does not
@@ -676,6 +681,10 @@ describe('ct-init.sh', () => {
       block.includes(`<!-- ct-init:slices-contract-version: ${VERSION_WITHOUT_THE_PHRASE} -->`)
     )
     expect(previous, `no hay ningún bloque v${VERSION_WITHOUT_THE_PHRASE} ni en la historia ni en SQUASHED_BLOCK_FIXTURES`).toBeDefined()
+    // v21 is a block from BEFORE the contract was translated, so the phrase it
+    // must not carry is the SPANISH one. Re-pinning this negative on the English
+    // sentence would make it pass by matching nothing, which is the one way a
+    // `not.toMatch` lies.
     expect(previous.block).not.toMatch(/no es un criterio de aceptación más/i)
     expect(previous.block).not.toContain('`estado-final`')
     // The other document that teaches the column cannot fall behind: whoever
@@ -684,13 +693,12 @@ describe('ct-init.sh', () => {
     // docs/loop/ct-groom.md (commands/ct-groom.md kept the invocation and the
     // exit codes), so it is read from there.
     // The sentence lives in three documents and the migration to English has
-    // reached only one of them: docs/loop/ct-groom.md is English, while the
-    // seeded contract and the slice judge are still Spanish (they move in their
-    // own steps, the contract with a version bump and the judge with a bench
-    // run). So each document is checked in the language it is actually written
-    // in. What the test is for does not change — neither of the three may fall
-    // behind — and the day the other two are translated the two constants below
-    // collapse back into one.
+    // reached two of them: docs/loop/ct-groom.md and the seeded contract (#188,
+    // contract v24) are English, while the slice judge is still Spanish (it
+    // moves in its own step, with a bench run). So each document is checked in
+    // the language it is actually written in. What the test is for does not
+    // change — neither of the three may fall behind — and the day the judge is
+    // translated the two constants below collapse back into one.
     const groom = readFileSync(join(root, '..', 'docs', 'loop', 'ct-groom.md'), 'utf8')
     expect(groom).toMatch(/is not one more acceptance criterion/i)
     expect(groom).toContain('`estado-final`')
@@ -700,12 +708,11 @@ describe('ct-init.sh', () => {
     // from the ACs still satisfied the item's three checks. Normalised because
     // the contract's bullet is wrapped at ~72 columns.
     const norm = (s) => s.replace(/\s+/g, ' ')
-    const RULE_ES = 'se puede comprobar corriendo los tests, es un criterio de aceptación, no una señal'
     const RULE_EN = 'can be checked by running the tests, it is an acceptance criterion, not a signal'
-    expect(norm(agents)).toContain(RULE_ES)
+    expect(norm(agents)).toContain(RULE_EN)
     expect(norm(groom)).toContain(RULE_EN)
     const judge = readFileSync(join(root, 'agents', 'ct-slice-judge.md'), 'utf8')
-    expect(norm(judge)).toContain(RULE_ES)
+    expect(norm(judge)).toContain(RULE_EN)
     // The token with which telemetry/`grep` tells this low apart from the item's
     // other lows, in the two texts that promise it.
     expect(norm(judge)).toContain('`señal redundante`')
@@ -758,7 +765,7 @@ describe('ct-init.sh', () => {
     const agents = readContract(dir)
     expect(agents).toContain('status:backlog')
     expect(agents).toContain('status:ready')
-    expect(agents).toMatch(/humano/i)
+    expect(agents).toMatch(/\*\*human and deliberate\*\* step/)
     expect(agents).toContain('gh issue edit')
     expect(agents).toMatch(/ct-next/)
     rmSync(dir, { recursive: true, force: true })
@@ -772,7 +779,7 @@ describe('ct-init.sh', () => {
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = readContract(dir)
     expect(agents).toContain('\\,')
-    expect(agents).toMatch(/Protegido[\s\S]{0,400}la coma\s+\*\*no\*\*/i) // and where it does NOT separate
+    expect(agents).toMatch(/Protegido[\s\S]{0,400}the comma\s+separates \*\*nothing\*\*/i) // and where it does NOT separate
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -786,8 +793,8 @@ describe('ct-init.sh', () => {
     expect(agents).toContain('--milestone')
     expect(agents).toContain('--section')
     expect(agents).toContain('--project')
-    expect(agents).toMatch(/únicos \*\*dentro de su milestone\*\*/i) // the real scope of the "#"s
-    expect(agents).toMatch(/cabecera/i) // the table is located by its header, not by the section number
+    expect(agents).toMatch(/unique \*\*within their milestone\*\*/i) // the real scope of the "#"s
+    expect(agents).toMatch(/located by its \*\*header\*\*/i) // the table is located by its header, not by the section number
     expect(agents).toContain('Sprint')
     rmSync(dir, { recursive: true, force: true })
   })
@@ -809,7 +816,7 @@ describe('ct-init.sh', () => {
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = readContract(dir)
     expect(agents).toContain('merge-after `#N`')
-    expect(agents).toMatch(/nunca un número de issue/i)
+    expect(agents).toMatch(/never an issue number/i)
     expect(agents).toContain('ct-order')
     rmSync(dir, { recursive: true, force: true })
   })
@@ -1637,9 +1644,9 @@ describe('ct-init.sh', () => {
     const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
     expect(
       Buffer.byteLength(agents),
-      'el AGENTS.md sembrado se ha pasado de 3 KB: es el fichero que cada agente de un repo gobernado relee en cada sesión, así que lo que crezca aquí se paga en cada hidratación. Si hace falta decir algo más, di si va en el contrato (docs/superpowers/CONTRATO-SLICES.md) o en la referencia del comando (docs/loop/), no aquí.'
+      'el AGENTS.md sembrado se ha pasado de 3 KB: es el fichero que cada agente de un repo gobernado relee en cada sesión, así que lo que crezca aquí se paga en cada hidratación. Si hace falta decir algo más, di si va en el contrato (docs/superpowers/SLICES-CONTRACT.md) o en la referencia del comando (docs/loop/), no aquí.'
     ).toBeLessThan(3 * 1024)
-    expect(agents).toContain('docs/superpowers/CONTRATO-SLICES.md')
+    expect(agents).toContain('docs/superpowers/SLICES-CONTRACT.md')
     expect(agents).not.toContain(MARKER_OPEN)
     rmSync(dir, { recursive: true, force: true })
   })

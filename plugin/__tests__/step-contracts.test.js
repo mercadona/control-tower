@@ -698,7 +698,7 @@ describe('the slice judge (§3.7-B)', () => {
     const item = observabilityItem()
     expect(item).not.toBe('')
     const norm = item.replace(/\s+/g, ' ')
-    expect(norm).toContain('se puede comprobar corriendo los tests, es un criterio de aceptación, no una señal')
+    expect(norm).toContain('can be checked by running the tests, it is an acceptance criterion, not a signal')
     expect(norm).toContain('`señal redundante`')
     // The two conditions of the trigger, both inside the item: the test of the
     // accumulated diff, and the cell naming nothing that can be read in

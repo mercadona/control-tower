@@ -35,7 +35,7 @@ function initIn(existingAgents) {
   // #93 — the contract moved out of AGENTS.md into its own file in the
   // governed repo. This suite looks at BOTH things: the traversal section,
   // which is still in AGENTS.md, and the contract version, which no longer is.
-  const contractText = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
+  const contractText = readFileSync(join(dir, 'docs', 'superpowers', 'SLICES-CONTRACT.md'), 'utf8')
   rmSync(dir, { recursive: true, force: true })
   return { r, agents, contractText }
 }

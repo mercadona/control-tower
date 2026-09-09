@@ -365,7 +365,7 @@ const ctInit = join(here, '..', 'scripts', 'ct-init.sh')
 function seedContract() {
   const dir = mkdtemp2(join(tmpdir(), 'ct-f18-init-'))
   execFileSync('bash', [ctInit, dir], { encoding: 'utf8' })
-  const contract = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
+  const contract = readFileSync(join(dir, 'docs', 'superpowers', 'SLICES-CONTRACT.md'), 'utf8')
   rmSync(dir, { recursive: true, force: true })
   return contract
 }
@@ -390,33 +390,36 @@ describe('§9 contract (F18): the falsified premise and the two states nobody st
 
   it('v8 says writing the keyword in any commit is enough, and that quotes do not protect', () => {
     const v8 = flat(seedContract())
-    expect(v8).toMatch(/no requiere que nadie se equivoque a propósito/)
-    expect(v8).toMatch(/cualquier mensaje de commit/)
-    expect(v8).toMatch(/las comillas no protegen/)
-    expect(v8).not.toMatch(/haría falta cruzar el grafo de PRs/)
+    expect(v8).toMatch(/does not require anyone to make a deliberate mistake/)
+    expect(v8).toMatch(/any commit message/)
+    expect(v8).toMatch(/quotes do not protect/)
+    // Both spellings of the v7 excuse: the Spanish one it was written in and
+    // the English one it would be re-authored as. A negative pinned on a
+    // language the contract no longer speaks tests nothing.
+    expect(v8).not.toMatch(/grafo de PRs|PR graph/i)
   })
 
   it('v8 does not turn the detector into a gate, and says why (86 of 97 closures are manual)', () => {
     const v8 = flat(seedContract())
-    expect(v8).toMatch(/86 de 97 cierres/)
-    expect(v8).toMatch(/avisa/)
+    expect(v8).toMatch(/86 of 97 completed closures/)
+    expect(v8).toMatch(/warns \(it does not block\)/)
   })
 
   it('v8 names the `closed + live status:` residue with its measured rate', () => {
     const v8 = flat(seedContract())
-    expect(v8).toMatch(/CERRADO que conserva su label `status:` no existe/)
-    expect(v8).toMatch(/10 cerrados con label viva de cada 99/)
+    expect(v8).toMatch(/A CLOSED issue that keeps its `status:` label does not exist/)
+    expect(v8).toMatch(/10 closed with a live label out of every 99/)
     // And it makes clear that in-review on a closed one is NOT an anomaly.
-    expect(v8).toMatch(/sobre un issue cerrado NO es anomalía/)
+    expect(v8).toMatch(/on a closed issue is NOT an anomaly/)
   })
 
   it('v8 names the deadlock of the blocked claim and the three transitions that do not release it', () => {
     const v8 = flat(seedContract())
-    expect(v8).toMatch(/BLOQUEADO retiene su claim/)
-    expect(v8).toMatch(/--requeue` se niega/)
-    expect(v8).toMatch(/--release` mentiría/)
+    expect(v8).toMatch(/A BLOCKED slice keeps its claim/)
+    expect(v8).toMatch(/--requeue` refuses/)
+    expect(v8).toMatch(/--release` would lie/)
     // It does not promise an automatic fix that does not exist.
-    expect(v8).toMatch(/no lo arregla/)
+    expect(v8).toMatch(/does not fix it/)
   })
 
   // F20: this test pins that the marker and the footnote declare the SAME
@@ -431,7 +434,7 @@ describe('§9 contract (F18): the falsified premise and the two states nobody st
     expect(declared).toBeDefined()
     const seeded = seedContract()
     expect(seeded).toMatch(new RegExp(`<!-- ct-init:slices-contract-version: ${declared} -->`))
-    expect(seeded).toMatch(new RegExp(`contrato v${declared}`))
+    expect(seeded).toMatch(new RegExp(`contract v${declared}`))
   })
 })
 
@@ -448,9 +451,10 @@ describe("§9 contract (F18): the cause the kickoff cannot guarantee", () => {
 
   it('v8 names the most likely cause: that the agent simply did not put it there', () => {
     const v8 = flat(seedContract())
-    expect(v8).not.toMatch(/solo aparece con PRs abiertos a mano/)
-    expect(v8).toMatch(/el kickoff es un PROMPT, no un gate/)
-    expect(v8).toMatch(/la causa más probable de este caso es simplemente que el agente no lo puso/)
+    // Negative in both languages, for the same reason as the one above.
+    expect(v8).not.toMatch(/solo aparece con PRs abiertos a mano|only shows up with PRs opened by hand/i)
+    expect(v8).toMatch(/the kickoff is a PROMPT, not a gate/)
+    expect(v8).toMatch(/the most likely cause of this case is simply that the agent did not put it there/)
   })
 
   it('v7 already contradicted itself: it admitted it cannot guarantee obedience', () => {

@@ -334,7 +334,7 @@ describe('F20/H3 — the division of roles lives in the state, not only in a kic
 
   it('the §9 contract /ct-init seeds names both sessions and where each role lives', () => {
     const src = readFileSync(join(here, '..', 'scripts', 'ct-init.sh'), 'utf8')
-    expect(src).toMatch(/Dos sesiones por repo, con papeles OPUESTOS/)
+    expect(src).toMatch(/Two sessions per repo, with OPPOSITE roles/)
     // F21: this pinned the EXACT version (`=9`), and that turned every later
     // round touching the contract into an edit of this test, which is not about
     // the number. What does matter is that F20's content travels in a version
