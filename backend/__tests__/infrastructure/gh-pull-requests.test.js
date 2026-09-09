@@ -160,6 +160,7 @@ describe('GhPullRequests', () => {
     expect(asked).toEqual([new ChangeAsked({
       id: '101',
       text: 'varias cosas\nsrc/foo.js:42: revienta con []\nsrc/bar.js:17: esto sobra',
+      askedAt: null,
     })])
   })
 
@@ -181,7 +182,7 @@ describe('GhPullRequests', () => {
 
     const asked = await gh.fixesAsked()
 
-    expect(asked).toEqual([new ChangeAsked({ id: '102', text: 'src/foo.js:9: esta linea sobra' })])
+    expect(asked).toEqual([new ChangeAsked({ id: '102', text: 'src/foo.js:9: esta linea sobra', askedAt: null })])
   })
 
   it('a_lone_comment_that_carries_the_state_of_the_review_before_it_is_a_change_all_the_same', async () => {
@@ -202,7 +203,7 @@ describe('GhPullRequests', () => {
 
     const asked = await gh.fixesAsked()
 
-    expect(asked).toEqual([new ChangeAsked({ id: '104', text: 'src/qux.js:3: y esto no se distingue' })])
+    expect(asked).toEqual([new ChangeAsked({ id: '104', text: 'src/qux.js:3: y esto no se distingue', askedAt: null })])
   })
 
   it('a_comment_with_no_line_is_anchored_to_its_file_alone', async () => {
@@ -223,7 +224,7 @@ describe('GhPullRequests', () => {
 
     const asked = await gh.fixesAsked()
 
-    expect(asked).toEqual([new ChangeAsked({ id: '103', text: 'src/foo.js: este fichero entero' })])
+    expect(asked).toEqual([new ChangeAsked({ id: '103', text: 'src/foo.js: este fichero entero', askedAt: null })])
   })
 
   it('an_approval_a_draft_and_a_dismissal_ask_for_nothing', async () => {
@@ -310,9 +311,10 @@ describe('GhPullRequests', () => {
       new ChangeAsked({
         id: '101',
         text: 'varias cosas que arreglar\nsrc/foo.js:42: revienta con []\nsrc/bar.js:17: esto sobra',
+        askedAt: null,
       }),
-      new ChangeAsked({ id: '102', text: 'src/baz.js:9: esta linea sobra' }),
-      new ChangeAsked({ id: '104', text: 'src/qux.js:3: y esto no se distingue' }),
+      new ChangeAsked({ id: '102', text: 'src/baz.js:9: esta linea sobra', askedAt: null }),
+      new ChangeAsked({ id: '104', text: 'src/qux.js:3: y esto no se distingue', askedAt: null }),
     ])
   })
 })

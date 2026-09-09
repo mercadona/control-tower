@@ -90,10 +90,12 @@ class GhDouble {
     return this.answerGoFor(nonce).catch((cause) => cause)
   }
 
+  static CREATED_AT = '2026-08-27T10:50:08Z'
+
   static #COMMENT = {
     author: { login: 'alcaptar' },
     authorAssociation: 'COLLABORATOR',
-    createdAt: '2026-08-27T10:50:08Z',
+    createdAt: GhDouble.CREATED_AT,
     includesCreatedEdit: false,
     isMinimized: false,
     minimizedReason: '',
@@ -549,6 +551,7 @@ describe('GhPlanIssues reading the changes asked for on the issue', () => {
     expect(asked).toEqual([
       new ChangeAsked({
         id: GhDouble.A_CHANGE.id, text: 'añade el caso de la issue sin descripción',
+        askedAt: GhDouble.CREATED_AT,
       }),
     ])
   })
@@ -558,7 +561,30 @@ describe('GhPlanIssues reading the changes asked for on the issue', () => {
 
     const asked = await gh.changesAskedFor()
 
-    expect(asked).toEqual([new ChangeAsked({ id: GhDouble.A_CHANGE.id, text: '' })])
+    expect(asked).toEqual([
+      new ChangeAsked({ id: GhDouble.A_CHANGE.id, text: '', askedAt: GhDouble.CREATED_AT }),
+    ])
+  })
+
+  it('a_change_asked_for_carries_the_date_the_comment_was_created', async () => {
+    const printed = JSON.stringify({ comments: [
+      { id: 'IC_1', body: '-REVIEW parte la tarea 2', createdAt: '2026-09-09T09:54:05Z' },
+    ] })
+    const gh = { run: async () => ({ failed: false, stdout: printed, stderr: '' }) }
+    const issues = new GhPlanIssues({ gh, stderr: () => {} })
+
+    const [change] = await issues.changesAsked({ issue: GhDouble.OPENED, repository: GhDouble.REPOSITORY })
+
+    expect(change.askedAt).toBe('2026-09-09T09:54:05Z')
+  })
+
+  it('a_comment_that_arrives_without_its_date_is_refused_because_the_review_state_is_read_from_it', async () => {
+    const printed = JSON.stringify({ comments: [{ id: 'IC_1', body: '-REVIEW parte la tarea 2' }] })
+    const gh = { run: async () => ({ failed: false, stdout: printed, stderr: '' }) }
+    const issues = new GhPlanIssues({ gh, stderr: () => {} })
+
+    await expect(issues.changesAsked({ issue: GhDouble.OPENED, repository: GhDouble.REPOSITORY }))
+      .rejects.toThrow(PlanChangesNotUnderstood)
   })
 
   it('a_token_in_the_middle_of_a_comment_asks_for_nothing_because_only_the_opening_counts', async () => {
@@ -569,12 +595,12 @@ describe('GhPlanIssues reading the changes asked for on the issue', () => {
     expect(await gh.changesAskedFor()).toEqual([])
   })
 
-  it('what_it_hands_back_carries_the_id_and_the_text_and_nothing_else_of_the_eleven_fields', async () => {
+  it('what_it_hands_back_carries_the_id_the_text_and_the_date_and_nothing_else_of_the_eleven_fields', async () => {
     const gh = GhDouble.commented(GhDouble.A_CHANGE)
 
     const [change] = await gh.changesAskedFor()
 
-    expect(Object.keys(change)).toEqual(['id', 'text'])
+    expect(Object.keys(change)).toEqual(['id', 'text', 'askedAt'])
     expect(Object.isFrozen(change)).toBe(true)
   })
 

@@ -83,7 +83,7 @@ export class GhPullRequests extends PullRequests {
       const carried = anchored.get(id) ?? []
       if (!GhPullRequests.#asksForAChange(review, carried, pullRequest)) continue
 
-      changes.push(new ChangeAsked({ id: String(id), text: GhPullRequests.#textOf(review, carried) }))
+      changes.push(new ChangeAsked({ id: String(id), text: GhPullRequests.#textOf(review, carried), askedAt: null }))
     }
 
     return changes
