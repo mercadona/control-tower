@@ -121,7 +121,7 @@ describe('ct-next — warns when the repo AGENTS.md contradicts the kickoff', ()
     })
     expect(r.code).toBe(0)
     expect(r.out).not.toMatch(/ATTENTION: el repo/)
-    expect(r.out).not.toMatch(/no se ha podido leer la documentación/)
+    expect(r.out).not.toMatch(/documentation could not be read/)
   })
 
   it('if AGENTS.md cannot be READ (it is not ENOENT), it is said — it does not pass as "no conflict"', () => {
@@ -137,8 +137,8 @@ describe('ct-next — warns when the repo AGENTS.md contradicts the kickoff', ()
       FAKE_GIT_LOG_FILE: join(repoRoot, 'git-log'),
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/no se ha podido leer la documentación del repo/)
-    expect(r.out).toMatch(/no se ha mirado/)
+    expect(r.out).toMatch(/the repo documentation could not be read/)
+    expect(r.out).toMatch(/it has not been looked at/)
   })
 
   it('--dry-run with a fixture scans NOTHING (a synthetic repoRoot): it does not invent a warning about a repo that does not exist', () => {

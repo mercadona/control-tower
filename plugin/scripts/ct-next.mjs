@@ -1787,7 +1787,7 @@ let ackCache = null
 function repoAckOnce() {
   if (ackCache) return ackCache
   if (fx) {
-    ackCache = { acks: new Map(), problems: [], unreadable: null, prosaSinAcuses: false }
+    ackCache = { acks: new Map(), problems: [], unreadable: null, proseWithoutAcks: false }
     return ackCache
   }
   try {
@@ -1796,7 +1796,7 @@ function repoAckOnce() {
     // Same as in formatConventionWarnings: the read blowing up cannot bring a
     // dispatch down, and it cannot pass for "there are no acknowledgements"
     // either — the `unreadable` travels and whoever prints it says so.
-    ackCache = { acks: new Map(), problems: [], unreadable: e.message, prosaSinAcuses: false }
+    ackCache = { acks: new Map(), problems: [], unreadable: e.message, proseWithoutAcks: false }
   }
   return ackCache
 }
@@ -2107,26 +2107,26 @@ function formatConventionWarnings() {
   let acks = new Map()
   let ackProblems = []
   let ackUnreadable = null
-  let ackProsaSinAcuses = false
+  let ackProseWithoutAcks = false
   try {
     ;({ docs, failures } = readRepoDocs(repoRoot))
     // F19/H2: the SAME read the residue warning uses (memoized in
     // repoAckOnce) — one file, one criterion.
-    ;({ acks, problems: ackProblems, unreadable: ackUnreadable, prosaSinAcuses: ackProsaSinAcuses } = repoAckOnce())
+    ;({ acks, problems: ackProblems, unreadable: ackUnreadable, proseWithoutAcks: ackProseWithoutAcks } = repoAckOnce())
   } catch (e) {
     // The read blowing up CANNOT bring a dispatch down nor pass for "there is
     // no conflict": it is said and we carry on.
-    out.push(`warning: no se ha podido leer la documentación del repo para comprobar si contradice al kickoff (${e.message}). NO lo leas como "no hay conflicto": no se ha mirado.`)
+    out.push(`warning: the repo documentation could not be read to check whether it contradicts the kickoff (${e.message}). Do NOT read that as "there is no conflict": it has not been looked at.`)
   }
   for (const f of failures) {
-    out.push(`warning: no se ha podido leer la documentación del repo para comprobar si contradice al kickoff (${f}). NO lo leas como "no hay conflicto": no se ha mirado.`)
+    out.push(`warning: the repo documentation could not be read to check whether it contradicts the kickoff (${f}). Do NOT read that as "there is no conflict": it has not been looked at.`)
   }
   // `files: []` on purpose — with no walk of the disk, the rule about other
   // people's worktree directories and the one about state files do not fire
   // here. The ones that DO matter in a dispatch (the claim instruction, `git
   // worktree add <another path>`) come entirely out of the documents.
   const findings = detectConventions({ docs, files: [], acks }).filter((f) => f.id === 'claim' || f.id === 'worktrees')
-  const text = formatFindings(findings, { where: `el repo ${repo}`, ackProblems, ackUnreadable, ackProsaSinAcuses })
+  const text = formatFindings(findings, { where: `the ${repo} repo`, ackProblems, ackUnreadable, ackProseWithoutAcks })
   if (text) {
     const live = findings.some((f) => !f.silenced)
     out.push(

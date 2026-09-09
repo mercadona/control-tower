@@ -387,7 +387,7 @@ describe('F19/H2 — acknowledgement PER CASE: keep quiet about these numbers, g
     writeAck(repoRoot, 'residuo-status: 2026-07-01 — #101 descartado.\nresiduo-status: 2026-07-28 — #102 también.\n')
     const r = runResidue(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'ready')])
     expect(residueLine(r)).toBe('')
-    expect(r.err).not.toMatch(/ya estaba acusada más arriba/)
+    expect(r.err).not.toMatch(/was already acknowledged further up/)
   })
 
   it('an acknowledgement with NO numbers silences nothing and says so: believing you have silenced something and not having done it is the failure we cannot afford', () => {
@@ -395,7 +395,7 @@ describe('F19/H2 — acknowledgement PER CASE: keep quiet about these numbers, g
     writeAck(repoRoot, 'residuo-status: 2026-07-28 — ya lo he mirado todo, da igual.\n')
     const r = runResidue(repoRoot, [closedWith(101, 'ready')])
     expect(residueLine(r)).toMatch(/^warning: 1 issue\(s\) CERRADOS/)
-    expect(r.err).toMatch(/no silencia nada/)
+    expect(r.err).toMatch(/silences nothing/)
   })
 
   it('the warning teaches how to acknowledge: without that, the way out exists but nobody finds it', () => {

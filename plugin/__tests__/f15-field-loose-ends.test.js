@@ -317,10 +317,10 @@ describe('F15/H3 — the acknowledgement admits a human explanation without ceas
   ].join('\n')
 
   it('a prose preamble no longer produces a single warning, and the acknowledgements still hold', () => {
-    const { acks, problems, prosaSinAcuses } = parseAcks(withPreamble)
+    const { acks, problems, proseWithoutAcks } = parseAcks(withPreamble)
     expect(problems).toEqual([])
     expect([...acks.keys()]).toEqual(['claim', 'worktrees'])
-    expect(prosaSinAcuses).toBe(false)
+    expect(proseWithoutAcks).toBe(false)
   })
 
   it('a multi-line HTML comment is skipped WHOLE, the closing line included', () => {
@@ -335,25 +335,25 @@ describe('F15/H3 — the acknowledgement admits a human explanation without ceas
     const { acks, problems } = parseAcks('Prosa de contexto cualquiera.\nclim: 2026-07-28 — motivo\n')
     expect(acks.size).toBe(0)
     expect(problems).toHaveLength(1)
-    expect(problems[0].why).toMatch(/desconocida/)
+    expect(problems[0].why).toMatch(/unknown signal/)
   })
 
   it('an acknowledgement with no colon (broken outright) still warns', () => {
     const { problems } = parseAcks('Prosa de contexto cualquiera.\nclaim - 2026-07-28 — motivo\n')
     expect(problems).toHaveLength(1)
-    expect(problems[0].why).toMatch(/forma/)
+    expect(problems[0].why).toMatch(/is not shaped like/)
   })
 
   it('an unknown signal with the exact shape of an acknowledgement still warns', () => {
     const { problems } = parseAcks('worktree: 2026-07-28 — motivo\n')
     expect(problems).toHaveLength(1)
-    expect(problems[0].why).toMatch(/desconocida/)
+    expect(problems[0].why).toMatch(/unknown signal/)
   })
 
   it('the bias when in doubt is to WARN: a known signal with no date does not pass as prose', () => {
     const { problems } = parseAcks('claim: manda el del plugin\n')
     expect(problems).toHaveLength(1)
-    expect(problems[0].why).toMatch(/fecha/)
+    expect(problems[0].why).toMatch(/the date is missing/)
   })
 
   it('looksLikeAck: the boundary between prose and a broken acknowledgement', () => {
@@ -378,21 +378,21 @@ describe('F15/H3 — the acknowledgement admits a human explanation without ceas
   // file exists, has content, and silences nothing — the only one in which the
   // human can believe they already decided it. It gets said.
   it('a file that is prose THROUGHOUT silences nothing, and that is said out loud', () => {
-    const { acks, problems, prosaSinAcuses } = parseAcks('Decidimos retirar el script del repo.\nY ya está.\n')
+    const { acks, problems, proseWithoutAcks } = parseAcks('Decidimos retirar el script del repo.\nY ya está.\n')
     expect(acks.size).toBe(0)
     expect(problems).toEqual([])
-    expect(prosaSinAcuses).toBe(true)
+    expect(proseWithoutAcks).toBe(true)
 
     const docs = [{ path: 'AGENTS.md', content: '## Claim\nPrimer paso del agente: `./scripts/dispatch-check.sh <issue#>`\n' }]
-    const text = formatFindings(detectConventions({ docs, files: [] }), { ackProsaSinAcuses: true })
+    const text = formatFindings(detectConventions({ docs, files: [] }), { ackProseWithoutAcks: true })
     expect(text).toContain(ACK_PATH)
-    expect(text).toMatch(/NO silencia ninguna señal/)
-    expect(text).toMatch(/todo lo que hay dentro se ha leído como prosa/)
+    expect(text).toMatch(/silences NO signal/)
+    expect(text).toMatch(/everything inside it has been read as prose/)
   })
 
   it('an empty file, or one with headings only, does NOT fire that warning (there is nobody to mislead)', () => {
-    expect(parseAcks('').prosaSinAcuses).toBe(false)
-    expect(parseAcks('# Acuses\n\n').prosaSinAcuses).toBe(false)
+    expect(parseAcks('').proseWithoutAcks).toBe(false)
+    expect(parseAcks('# Acuses\n\n').proseWithoutAcks).toBe(false)
   })
 
   // A finding while attacking this very implementation: an acknowledgement
@@ -404,13 +404,13 @@ describe('F15/H3 — the acknowledgement admits a human explanation without ceas
     const r = parseAcks('```\nclaim: 2026-07-28 — motivo\n```\n')
     expect(r.acks.size).toBe(0)
     expect(r.problems).toEqual([])
-    expect(r.prosaSinAcuses).toBe(true)
+    expect(r.proseWithoutAcks).toBe(true)
   })
 
   it('a fence opened and never closed swallows the rest — and it gets said', () => {
     const r = parseAcks('```\nclaim: 2026-07-28 — motivo\n')
     expect(r.acks.size).toBe(0)
-    expect(r.prosaSinAcuses).toBe(true)
+    expect(r.proseWithoutAcks).toBe(true)
   })
 
   it('with no live signal to silence, the warning does NOT come out: it would be pure noise', () => {
@@ -418,19 +418,19 @@ describe('F15/H3 — the acknowledgement admits a human explanation without ceas
     // "you could believe you have hushed THIS and you have not". Without a
     // THIS, there is nobody to mislead.
     const clean = [{ path: 'AGENTS.md', content: '# Repo\nNada que choque con el loop.\n' }]
-    const text = formatFindings(detectConventions({ docs: clean, files: [] }), { ackProsaSinAcuses: true })
-    expect(text).not.toMatch(/NO silencia ninguna señal/)
+    const text = formatFindings(detectConventions({ docs: clean, files: [] }), { ackProseWithoutAcks: true })
+    expect(text).not.toMatch(/silences NO signal/)
   })
 
   it('a file that only has the reasoning commented out silences nothing either, and it gets said', () => {
     const r = parseAcks('<!--\nlo decidimos en julio\n-->\n')
     expect(r.acks.size).toBe(0)
-    expect(r.prosaSinAcuses).toBe(true)
+    expect(r.proseWithoutAcks).toBe(true)
   })
 
   it('the live warning invites writing prose (otherwise nobody knows it is now allowed)', () => {
     const docs = [{ path: 'AGENTS.md', content: '## Claim\nPrimer paso del agente: `./scripts/dispatch-check.sh <issue#>`\n' }]
     const text = formatFindings(detectConventions({ docs, files: [] }))
-    expect(text).toMatch(/prosa libre/)
+    expect(text).toMatch(/is free prose/)
   })
 })

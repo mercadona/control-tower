@@ -117,7 +117,7 @@ export function readRepoDocs(root, { follow = true } = {}) {
 // the file EXISTS and the read failed — if it does not exist there simply are
 // no acknowledgements, which is the normal state. The difference matters: "you
 // acknowledged nothing" and "you acknowledged and I could not read it" take the
-// human to different places. `prosaSinAcuses` (F15/H3) travels just like
+// human to different places. `proseWithoutAcks` (F15/H3) travels just like
 // `problems`: it is the file's third state — it exists, it was read, and it
 // silences nothing. When the file does not exist it is `false` (there is
 // nothing to mislead anyone), not `undefined`.
@@ -125,7 +125,7 @@ export function readAck(root) {
   try {
     return { ...parseAcks(readFileSync(join(root, ACK_PATH), 'utf8')), unreadable: null }
   } catch (e) {
-    if (e.code === 'ENOENT') return { acks: new Map(), problems: [], prosaSinAcuses: false, unreadable: null }
-    return { acks: new Map(), problems: [], prosaSinAcuses: false, unreadable: e.message }
+    if (e.code === 'ENOENT') return { acks: new Map(), problems: [], proseWithoutAcks: false, unreadable: null }
+    return { acks: new Map(), problems: [], proseWithoutAcks: false, unreadable: e.message }
   }
 }

@@ -141,7 +141,7 @@ describe('F22 — the hooks read by precedence', () => {
     writeFileSync(join(dir, STATE_REL_PATH), `---\ntask: coordinadora\nlast_commit: ${newHead}\n---\n# c\n`)
     const out = runHook(stopHook, dir)
     expect(out.decision).toBe('block')
-    expect(out.reason).toContain('se ha quedado atrás')
+    expect(out.reason).toContain('has fallen behind')
     rmSync(dir, { recursive: true, force: true })
   })
 })

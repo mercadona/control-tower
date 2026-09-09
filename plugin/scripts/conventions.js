@@ -438,14 +438,14 @@ export function detectConventions({ docs = [], files = [], acks = null } = {}) {
         ...claimFiles.map((p) => ({ path: p, line: null, text: 'a claim script belonging to this repo' })),
       ],
       decision:
-        'El plugin trae su propio `dispatch-check.mjs` y `/ct-next` lo invoca EN CÓDIGO ' +
-        '(status:ready → status:in-progress) antes de crear el worktree. Con los dos vivos hay ' +
-        'DOS protocolos sobre el mismo espacio de labels y nadie arbitrando: /ct-next reclama, el ' +
-        'agente arranca, obedece la línea vieja de tu AGENTS.md, y tu script se encuentra un claim ' +
-        'activo sobre su propio issue. Decide cuál manda: (a) quedarte con el del plugin y borrar ' +
-        'la instrucción vieja de AGENTS.md/CLAUDE.md, (b) quedarte con el tuyo y no usar /ct-next ' +
-        'para despachar, o (c) hacer que el tuyo sea un envoltorio del otro. Lo que no puede ' +
-        'quedarse es la contradicción.',
+        'The plugin brings its own `dispatch-check.mjs` and `/ct-next` invokes it IN CODE ' +
+        '(status:ready → status:in-progress) before creating the worktree. With both alive there are ' +
+        'TWO protocols over the same label space and nobody arbitrating: /ct-next claims, the ' +
+        'agent starts up, obeys the old line in your AGENTS.md, and your script finds an active claim ' +
+        "on its own issue. Decide which one rules: (a) keep the plugin's and delete " +
+        'the old instruction from AGENTS.md/CLAUDE.md, (b) keep yours and do not use /ct-next ' +
+        'to dispatch, or (c) make yours a wrapper around the other one. What cannot ' +
+        'stay is the contradiction.',
     })
   }
 
@@ -605,7 +605,7 @@ export function linkedDocPaths(docs) {
 // (comment it out, or rewrite it); an acknowledgement silenced by mistake has
 // no remedy, because nobody finds out. And for the case in which the WHOLE file
 // was read as prose —the one that really does deceive— there is a voice of its
-// own: see `formatFindings` and the `prosaSinAcuses` field returned here.
+// own: see `formatFindings` and the `proseWithoutAcks` field returned here.
 const ACK_ID_HEAD_RE = /^(?:[-*+]\s+)?[`"'*_]*([A-Za-zÁ-Úá-ú][\w-]*)/
 
 // editDistanceAtMost1: can you get from `a` to `b` with ONE single insertion,
@@ -652,7 +652,7 @@ export function looksLikeAck(text) {
 // acknowledgement is no good) or the other way round. What does not mean to be
 // one is prose, and prose is the reason this file exists.
 //
-// Returns `{ acks, problems, prosaSinAcuses }`. The third field is true only
+// Returns `{ acks, problems, proseWithoutAcks }`. The third field is true only
 // when the file did bring real content (something more than blanks, headings
 // and comments) and produced NEITHER an acknowledgement NOR a problem — the
 // only state in which this parser's silence can deceive anybody.
@@ -680,7 +680,7 @@ export function parseAcks(content) {
     // Attacking this very implementation: an acknowledgement INSIDE a code
     // block (or inside a fence somebody opened and did not close, which
     // swallows everything that comes behind it) was ignored, and since it was
-    // not "prose" it did not fire the `prosaSinAcuses` warning either — total
+    // not "prose" it did not fire the `proseWithoutAcks` warning either — total
     // silence about a file the human believes silences something. It counts as
     // content: it is not parsed (a fence is a fence), but it stops being
     // invisible.
@@ -698,23 +698,23 @@ export function parseAcks(content) {
     if (!looksLikeAck(t)) { sawProse = true; return }
     const m = /^(?:[-*+]\s+)?([A-Za-zÁ-Úá-ú][\w-]*)\s*:\s*(.*)$/.exec(t)
     if (!m) {
-      problems.push({ line: n, text: t, why: 'no tiene la forma `señal: YYYY-MM-DD — motivo`' })
+      problems.push({ line: n, text: t, why: 'is not shaped like `signal: YYYY-MM-DD — reason`' })
       return
     }
     const id = m[1].toLowerCase()
     const rest = m[2].trim()
     if (!ACK_IDS.includes(id)) {
-      problems.push({ line: n, text: t, why: `señal desconocida \`${m[1]}\` (las válidas: ${ACK_IDS.join(', ')})` })
+      problems.push({ line: n, text: t, why: `unknown signal \`${m[1]}\` (the valid ones: ${ACK_IDS.join(', ')})` })
       return
     }
     const d = /^(\d{4}-\d{2}-\d{2})\b[\s—–-]*(.*)$/.exec(rest)
     if (!d) {
-      problems.push({ line: n, text: t, why: 'falta la fecha en formato YYYY-MM-DD justo después de los dos puntos' })
+      problems.push({ line: n, text: t, why: 'the date is missing, in YYYY-MM-DD format and right after the colon' })
       return
     }
     const reason = d[2].trim()
     if (!reason) {
-      problems.push({ line: n, text: t, why: 'falta el motivo: qué se decidió y por qué' })
+      problems.push({ line: n, text: t, why: 'the reason is missing: what was decided, and why' })
       return
     }
     // F19/H2: the PER-CASE acknowledgements (`ACK_SET_IDS`) carry the numbers
@@ -724,7 +724,7 @@ export function parseAcks(content) {
     if (ACK_SET_IDS.includes(id)) {
       const refs = [...reason.matchAll(/#(\d+)\b/g)].map((m) => Number(m[1])).filter((x) => Number.isInteger(x) && x > 0)
       if (!refs.length) {
-        problems.push({ line: n, text: t, why: `\`${id}\` es un acuse POR CASO: tiene que nombrar los números concretos que calla (p.ej. «${id}: ${d[1]} — #101, #102 revisados: …»). Sin números no silencia nada, y no hay comodín para "todos" a propósito` })
+        problems.push({ line: n, text: t, why: `\`${id}\` is a PER-CASE acknowledgement: it has to name the specific numbers it keeps quiet about (e.g. «${id}: ${d[1]} — #101, #102 reviewed: …»). With no numbers it silences nothing, and there is deliberately no wildcard for "all of them"` })
         return
       }
       const prev = acks.get(id)
@@ -733,7 +733,7 @@ export function parseAcks(content) {
       return
     }
     if (acks.has(id)) {
-      problems.push({ line: n, text: t, why: `la señal \`${id}\` ya estaba acusada más arriba; esta línea no añade nada` })
+      problems.push({ line: n, text: t, why: `signal \`${id}\` was already acknowledged further up; this line adds nothing` })
       return
     }
     acks.set(id, { id, date: d[1], reason, line: n })
@@ -741,7 +741,7 @@ export function parseAcks(content) {
   // The only way for the new silence to deceive: the human wrote something, it
   // was neither an acknowledgement nor anything resembling one, and the file
   // silences nothing.
-  return { acks, problems, prosaSinAcuses: sawProse && acks.size === 0 && problems.length === 0 }
+  return { acks, problems, proseWithoutAcks: sawProse && acks.size === 0 && problems.length === 0 }
 }
 
 // formatFindings: the warning, ready for stderr. One function and not two
@@ -753,15 +753,15 @@ export function parseAcks(content) {
 // found» and «it was decided not to look at this» are not the same thing and
 // confusing them is the lie this file has been trying not to tell since F11),
 // and the problems of the acknowledgement file itself.
-export function formatFindings(findings, { where = 'este repo', ackProblems = [], ackUnreadable = null, ackProsaSinAcuses = false } = {}) {
+export function formatFindings(findings, { where = 'this repo', ackProblems = [], ackUnreadable = null, ackProseWithoutAcks = false } = {}) {
   const live = (findings || []).filter((f) => !f.silenced)
   const silenced = (findings || []).filter((f) => f.silenced)
   const out = []
   if (live.length) {
     out.push(
-      `ATTENTION: ${where} ya tenía convenciones propias en el terreno que ocupa el loop de Control Tower. ` +
-        'No se ha cambiado nada por ti — pero esto NO se resuelve solo, y dejarlo así es como se llega a ' +
-        'un AGENTS.md que se contradice consigo mismo y a dos protocolos de claim sobre las mismas labels.'
+      `ATTENTION: ${where} already had conventions of its own on the ground the Control Tower loop occupies. ` +
+        'Nothing has been changed for you — but this does NOT sort itself out, and leaving it like this is how you get to ' +
+        'an AGENTS.md that contradicts itself and to two claim protocols over the same labels.'
     )
     for (const f of live) {
       out.push(`  · [${f.id}] ${f.title}`)
@@ -769,8 +769,8 @@ export function formatFindings(findings, { where = 'este repo', ackProblems = []
         const via = e.via ? ` (enlazado desde ${e.via})` : ''
         out.push(`      ${e.path}${e.line ? `:${e.line}` : ''}${via} — ${e.text}`)
       }
-      if (f.evidence.length > 6) out.push(`      (+${f.evidence.length - 6} más)`)
-      out.push(`      decisión: ${f.decision}`)
+      if (f.evidence.length > 6) out.push(`      (+${f.evidence.length - 6} more)`)
+      out.push(`      decision: ${f.decision}`)
     }
     // THE WAY OUT. It goes with the live warnings and not in a README, because
     // the moment it is needed is this one. Without it the warning becomes a
@@ -782,33 +782,33 @@ export function formatFindings(findings, { where = 'este repo', ackProblems = []
     )
     out.push(`      ${live[0].id}: 2026-01-31 — <what was decided and why>`)
     out.push(
-      '  Esa señal —y solo esa— deja de avisar; las demás siguen. No hace falta borrar documentación ' +
-        'correcta para callar el warning: si lo que documentas es el uso manual fuera del loop, acúsalo y ya.'
+      '  That signal —and only that one— stops warning; the rest carry on. There is no need to delete correct ' +
+        'documentation to silence the warning: if what you are documenting is manual use outside the loop, acknowledge it and be done.'
     )
     // F15/H3: the rest of the file is yours. It is said HERE, next to the
     // example, because that is where somebody decides what they are going to
     // write — finding out after having fought the parser comes too late.
     out.push(
-      `  El resto de \`${ACK_PATH}\` es prosa libre: escribe el razonamiento largo que haga falta alrededor ` +
-        'de esas líneas. Solo se leen como acuse las líneas que lo parecen, y una que lo parezca y esté mal ' +
-        'escrita se te dice; la prosa no.'
+      `  The rest of \`${ACK_PATH}\` is free prose: write around those lines whatever long reasoning ` +
+        'is needed. Only the lines that look like an acknowledgement are read as one, and one that looks like it and is ' +
+        'badly written is reported to you; prose is not.'
     )
   }
   for (const f of silenced) {
     const n = f.evidence.length
     out.push(
-      `  note: [${f.id}] silenciado por ${ACK_PATH} (${f.silenced.date}: ${f.silenced.reason}) — ` +
-        `${n} señal${n === 1 ? '' : 'es'} sin revisar.`
+      `  note: [${f.id}] silenced by ${ACK_PATH} (${f.silenced.date}: ${f.silenced.reason}) — ` +
+        `${n} signal${n === 1 ? '' : 's'} left unreviewed.`
     )
   }
   if (ackUnreadable) {
     out.push(
-      `  warning: existe \`${ACK_PATH}\` pero no se ha podido leer (${ackUnreadable}). Ningún acuse está ` +
-        'aplicándose: lo que veas arriba puede ser algo que ya habías decidido.'
+      `  warning: \`${ACK_PATH}\` exists but could not be read (${ackUnreadable}). No acknowledgement is ` +
+        'being applied: what you see above may be something you had already decided.'
     )
   }
   for (const p of ackProblems || []) {
-    out.push(`  warning: ${ACK_PATH}:${p.line} no silencia nada — ${p.why}: «${p.text}»`)
+    out.push(`  warning: ${ACK_PATH}:${p.line} silences nothing — ${p.why}: «${p.text}»`)
   }
   // F15/H3 — the voice of the new silence. Ever since prose is ignored, a
   // WHOLE file of prose produces neither acknowledgements nor warnings:
@@ -819,11 +819,11 @@ export function formatFindings(findings, { where = 'este repo', ackProblems = []
   // the file silences nothing does not matter, and saying it on every dispatch
   // would be noise in a repo that has no problem at all. The condition that
   // matters is "you might believe you have kept THIS quiet, and you have not".
-  if (ackProsaSinAcuses && live.length) {
+  if (ackProseWithoutAcks && live.length) {
     out.push(
-      `  warning: \`${ACK_PATH}\` existe y tiene contenido, pero NO silencia ninguna señal — todo lo que hay ` +
-        'dentro se ha leído como prosa. Un acuse es una línea que empieza por el nombre de la señal: ' +
-        `\`${ACK_IDS[0]}: 2026-01-31 — <motivo>\` (señales válidas: ${ACK_IDS.join(', ')}).`
+      `  warning: \`${ACK_PATH}\` exists and has content, but it silences NO signal — everything inside ` +
+        'it has been read as prose. An acknowledgement is a line that starts with the name of the signal: ' +
+        `\`${ACK_IDS[0]}: 2026-01-31 — <reason>\` (valid signals: ${ACK_IDS.join(', ')}).`
     )
   }
   return out.join('\n')

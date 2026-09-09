@@ -263,11 +263,11 @@ describe('F20/H2 — the residue of a FINISHED slice gets named', () => {
     })
     // Verified against the UNFIXED code: not a single mention of #451, of
     // `.worktrees/451` or of `feat/451` in the whole output.
-    expect(r.all).toMatch(/cosecha pendiente: 1 slice\(s\)/)
+    expect(r.all).toMatch(/pending harvest: 1 slice\(s\)/)
     expect(r.all).toMatch(/#451: worktree .*\.worktrees\/451, branch feat\/451/)
     expect(r.all).toMatch(/git worktree remove --force .*\.worktrees\/451 && git branch -D feat\/451/)
     // The added edge: that residue blocks the redispatch of the SAME number.
-    expect(r.all).toMatch(/se NEGARÁ a redespachar/)
+    expect(r.all).toMatch(/will REFUSE to redispatch/)
   })
 
   it('a repo with no residue says nothing (and does not invent a harvest)', () => {
@@ -277,7 +277,7 @@ describe('F20/H2 — the residue of a FINISHED slice gets named', () => {
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[], [{ number: 451, state_reason: 'completed', body: '' }]]),
       FAKE_GH_COUNTER_FILE: join(repoRoot, 'gh-list-count'),
     })
-    expect(r.all).not.toMatch(/cosecha pendiente/)
+    expect(r.all).not.toMatch(/pending harvest/)
   })
 
   it('the cmux session still open on an already merged slice is named separately: that `claude` has been alive for hours', () => {

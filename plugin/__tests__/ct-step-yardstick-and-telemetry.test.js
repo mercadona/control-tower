@@ -272,7 +272,7 @@ describe('the ct yardstick travels in the brief, and goes ahead of the repo one'
       })
       expect(r.status).toBe(8)
       expect(r.stderr).toMatch(/defects\.md/)
-      expect(r.stderr).toMatch(/instalación/)
+      expect(r.stderr).toMatch(/incomplete plugin installation/)
       expect(existsSync(join(repo, '.agent', 'run-7', 'task-1-brief.md'))).toBe(false)
     } finally {
       rmSyncBestEffort(fake)

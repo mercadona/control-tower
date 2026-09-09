@@ -197,7 +197,7 @@ describe('F14/B — the explicit acknowledgement gives a way out for ONE signal,
     const { acks } = parseAcks('claim: 2026-07-28 — manda el del plugin\nworktrees: 2026-07-28 — el hook admite feat/\nestado: 2026-07-28 — el otro es histórico\n')
     const text = formatFindings(detectConventions({ ...noisy, acks }))
     expect(text).not.toMatch(/ATTENTION/)
-    expect(text).toMatch(/note: \[claim\] silenciado por \.agent\/conventions-ack\.md \(2026-07-28: manda el del plugin\)/)
+    expect(text).toMatch(/note: \[claim\] silenced by \.agent\/conventions-ack\.md \(2026-07-28: manda el del plugin\)/)
     expect(text.split('\n')).toHaveLength(3)
   })
 
@@ -205,7 +205,7 @@ describe('F14/B — the explicit acknowledgement gives a way out for ONE signal,
     const text = formatFindings(detectConventions(noisy))
     expect(text).toContain(ACK_PATH)
     expect(text).toMatch(/claim: \d{4}-\d{2}-\d{2} —/)
-    expect(text).toMatch(/No hace falta borrar documentación correcta/)
+    expect(text).toMatch(/There is no need to delete correct/)
   })
 
   // F15/H3: the last line ('esto es prosa suelta') is NO LONGER a problem —
@@ -223,14 +223,14 @@ describe('F14/B — the explicit acknowledgement gives a way out for ONE signal,
     )
     expect(acks.size).toBe(0)
     expect(problems.map((p) => p.line)).toEqual([2, 3, 4])
-    expect(problems[0].why).toMatch(/fecha/)
-    expect(problems[1].why).toMatch(/motivo/)
-    expect(problems[2].why).toMatch(/desconocida/)
+    expect(problems[0].why).toMatch(/date/)
+    expect(problems[1].why).toMatch(/reason/)
+    expect(problems[2].why).toMatch(/unknown/)
     // And the warning prints it: an acknowledgement that neither silences nor
     // complains is the worst combination — the human believes they have
     // already decided it and keeps seeing the warning.
     const text = formatFindings(detectConventions(noisy), { ackProblems: problems })
-    expect(text).toMatch(/no silencia nada/)
+    expect(text).toMatch(/silences nothing/)
     expect(text).toContain('claims')
   })
 
@@ -238,7 +238,7 @@ describe('F14/B — the explicit acknowledgement gives a way out for ONE signal,
     const { acks, problems } = parseAcks('claim: 2026-07-01 — a\nclaim: 2026-07-28 — b\n')
     expect(acks.get('claim').date).toBe('2026-07-01')
     expect(problems).toHaveLength(1)
-    expect(problems[0].why).toMatch(/ya estaba acusada/)
+    expect(problems[0].why).toMatch(/was already acknowledged/)
   })
 
   it('CRLF, BOM, a bullet in front and upper case: the acknowledgement still holds', () => {
@@ -261,7 +261,7 @@ describe('F14/B — the explicit acknowledgement gives a way out for ONE signal,
     expect(acks.size).toBe(0)
     expect(unreadable).toBeTruthy()
     expect(formatFindings(detectConventions(noisy), { ackUnreadable: unreadable })).toMatch(
-      /existe .* pero no se ha podido leer/
+      /`.*` exists but could not be read/
     )
   })
 
@@ -290,7 +290,7 @@ describe('F14/B — the explicit acknowledgement gives a way out for ONE signal,
     const after = spawnSync('node', [detectScript, root], { encoding: 'utf8' })
     expect(after.status).toBe(0)
     expect(after.stdout).not.toMatch(/ATTENTION/)
-    expect(after.stdout).toMatch(/note: \[claim\] silenciado/)
+    expect(after.stdout).toMatch(/note: \[claim\] silenced/)
     // And the documentation is exactly the same: nobody has had to delete anything.
     expect(spawnSync('cat', [join(root, 'AGENTS.md')], { encoding: 'utf8' }).stdout).toBe(docsBefore)
   })
@@ -305,7 +305,7 @@ describe('F14/B — the explicit acknowledgement gives a way out for ONE signal,
     writeFileSync(join(root, ACK_PATH), 'estado: 2026-07-28 — el otro STATE.md era histórico y ya se borró\n')
     const r = spawnSync('node', [detectScript, root], { encoding: 'utf8' })
     expect(r.status).toBe(0)
-    expect(r.stdout).toMatch(/acusa `estado` pero ya no hay ninguna señal/)
+    expect(r.stdout).toMatch(/acknowledges `estado` but there is no longer any signal/)
   })
 
   it('ct-init respects the acknowledgement (the same detection in the bootstrap as in the dispatch)', () => {
@@ -316,8 +316,8 @@ describe('F14/B — the explicit acknowledgement gives a way out for ONE signal,
     writeFileSync(join(root, ACK_PATH), 'claim: 2026-07-28 — decidido: manda el del plugin\n')
     const r = spawnSync('bash', [initScript, root], { encoding: 'utf8' })
     expect(r.status).toBe(0)
-    expect(r.stderr).not.toMatch(/ATTENTION: este repo ya tenía convenciones/)
-    expect(r.stderr).toMatch(/note: \[claim\] silenciado/)
+    expect(r.stderr).not.toMatch(/ATTENTION: this repo already had conventions/)
+    expect(r.stderr).toMatch(/note: \[claim\] silenced/)
   })
 })
 
@@ -405,7 +405,7 @@ describe('F14/C — the detector follows the trail the guide itself declares aut
     expect(truncated).toBe(true)
     expect(docs).toHaveLength(1 + MAX_LINKED_DOCS)
     const r = spawnSync('node', [detectScript, root], { encoding: 'utf8' })
-    expect(r.stdout).toMatch(/solo se han mirado los primeros/)
+    expect(r.stdout).toMatch(/only the first ones have been looked at/)
   })
 
   it('a broken link says nothing, but an unreadable AGENTS.md does', () => {

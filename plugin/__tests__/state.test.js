@@ -482,12 +482,12 @@ describe('classifyStopState', () => {
   it('behind with a single commit does not say "1 commits"', () => {
     // F15/H4: the count is now of WORK commits (the ones that only touch
     // .agent/STATE.md do not count), and the text says so.
-    expect(verdict('behind', { count: 1 }).reason).toMatch(/hay 1 commit de trabajo en/)
+    expect(verdict('behind', { count: 1 }).reason).toMatch(/is 1 commit of work in/)
   })
   it('behind with entries in between names them separately, so that the count squares with git log', () => {
     const v = verdict('behind', { count: 1, bookkeeping: 2 })
-    expect(v.reason).toMatch(/1 commit de trabajo/)
-    expect(v.reason).toMatch(/2 commits que solo tocan/)
+    expect(v.reason).toMatch(/1 commit of work/)
+    expect(v.reason).toMatch(/2 commits that only touch/)
   })
   it('behind-bookkeeping neither blocks nor warns: it is the normal state of a registered turn', () => {
     const v = verdict('behind-bookkeeping', { count: 0, bookkeeping: 1 })

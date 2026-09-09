@@ -675,7 +675,7 @@ function loadCtYardstick() {
   })
   const missing = PluginYardstick.missingDocuments(ctDocs)
   if (missing.length) {
-    die(`la vara de ct no se puede leer: falta o está vacío ${missing.join(', ')} en ${join(PLUGIN_ROOT, PluginYardstick.DIRECTORY)}. Es una instalación del plugin incompleta, no una propiedad de este repo: sin esos documentos quien implementa, juzga o reconcilia mide contra nada, y eso no se distingue en silencio de un diff conforme. Reinstala el plugin.`, EXIT.PRECONDITION)
+    die(`ct's yardstick cannot be read: ${missing.join(', ')} is missing or empty in ${join(PLUGIN_ROOT, PluginYardstick.DIRECTORY)}. That is an incomplete plugin installation, not a property of this repo: without those documents whoever implements, judges or reconciles measures against nothing, and that is not silently distinguishable from a conforming diff. Reinstall the plugin.`, EXIT.PRECONDITION)
   }
   return ctDocs
 }

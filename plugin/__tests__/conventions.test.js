@@ -52,7 +52,7 @@ describe('ct-init: conventions the repository already has on the turf the loop c
     const res = runInit(dir)
     expect(res.status).toBe(0)
     // The warning goes out on stderr, like every other warning of ct-init.
-    expect(res.stderr).toMatch(/convenci/i)
+    expect(res.stderr).toMatch(/convention/i)
     expect(res.stderr).toContain('scripts/dispatch-check.sh')
     // And it does not stop at naming it: it says which decision has to be taken.
     expect(res.stderr).toMatch(/dispatch-check\.mjs/)
@@ -80,7 +80,7 @@ describe('ct-init: conventions the repository already has on the turf the loop c
     const dir = mkdtempSync(join(tmpdir(), 'ct-conv-'))
     const res = runInit(dir)
     expect(res.status).toBe(0)
-    expect(res.stderr).not.toMatch(/convenci/i)
+    expect(res.stderr).not.toMatch(/convention/i)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -92,7 +92,7 @@ describe('ct-init: conventions the repository already has on the turf the loop c
     // (if it stopped doing so, this test would stop proving anything).
     expect(agents).toMatch(/\.worktrees\/|dispatch-check|status:in-progress/)
     const res = runInit(dir)
-    expect(res.stderr).not.toMatch(/convenci/i)
+    expect(res.stderr).not.toMatch(/convention/i)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -128,7 +128,7 @@ describe('ct-init: conventions the repository already has on the turf the loop c
     mkdirSync(join(dir, 'node_modules', 'pkg'), { recursive: true })
     writeFileSync(join(dir, 'node_modules', 'pkg', 'dispatch-check.sh'), '#!/bin/sh\n')
     const res = runInit(dir)
-    expect(res.stderr).not.toMatch(/convenci/i)
+    expect(res.stderr).not.toMatch(/convention/i)
     rmSync(dir, { recursive: true, force: true })
   })
 })

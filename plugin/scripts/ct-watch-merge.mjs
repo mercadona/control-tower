@@ -269,7 +269,7 @@ for (;;) {
       // warning does not get read as lost work.
       log(`ERROR: el merge de ${branch} se vio, pero cmux dice que no existe ninguna workspace cuyo directorio sea ${coordinatorCwd}, así que no hay a quién entregárselo.`)
       log(`La regla que no se cumplió: la sesión coordinadora tiene que ser una workspace de cmux abierta EN ${coordinatorCwd} — este vigilante la localiza por su directorio porque no hay ningún nombre de sesión que el loop pueda derivar (a ella no la crea el loop, la abres tú).`)
-      log(`No se ha perdido trabajo: el próximo \`/ct-next\` en ese checkout emitirá \`cosecha pendiente:\` para el #${issue} con los comandos exactos. Lo que se ha perdido es enterarte ahora.`)
+      log(`No work has been lost: the next \`/ct-next\` in that checkout will emit \`pending harvest:\` for #${issue} with the exact commands. What has been lost is finding out now.`)
       finish(1)
     }
     // The coordinator could not be ASKED about. Nothing follows from that, and

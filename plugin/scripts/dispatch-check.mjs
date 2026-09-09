@@ -235,7 +235,7 @@ const dryRun = has('--dry-run')
 // does not relax it: the five gates are checked the same and the issue moves
 // the same. The only thing lost is the warning, which is precisely what the
 // watcher contributes —the MOMENT, not the knowledge— because `/ct-next`
-// keeps emitting `cosecha pendiente:` on every run. And in the flow that asks
+// keeps emitting `pending harvest:` on every run. And in the flow that asks
 // for this flag even less is lost: there the one who collects is a clock that
 // calls `--collect` on its own, so the warning is not left without a
 // recipient, it is left without a function. It is said out loud when

@@ -123,12 +123,12 @@ describe('formatFindings', () => {
   it('it truncates the evidence list but says how many it left out', () => {
     const files = Array.from({ length: 9 }, (_, i) => `pkg${i}/dispatch-check.sh`)
     const text = formatFindings(detectConventions({ docs: [], files }))
-    expect(text).toContain('(+3 más)')
+    expect(text).toContain('(+3 more)')
   })
 
   it('every finding carries the decision to be taken, not just what was found', () => {
     const text = formatFindings(detectConventions({ docs: [], files: ['scripts/dispatch-check.sh'] }))
-    expect(text).toMatch(/decisión:/)
-    expect(text).toMatch(/Decide cuál manda/)
+    expect(text).toMatch(/decision:/)
+    expect(text).toMatch(/Decide which one rules/)
   })
 })
