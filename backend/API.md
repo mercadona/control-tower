@@ -201,20 +201,30 @@ stream stays open until the client disconnects, and polls in the meantime.
 It only serves an issue whose plan **this process** started or recovered. A
 restarted backend has forgotten every session it did not recover from cmux.
 
-**200** with `Content-Type: text/event-stream`. Two frame kinds:
+**200** with `Content-Type: text/event-stream`. Three frame kinds:
 
 ```
 data: {"state":"writing"}
 
 data: {"state":"ready"}
 
+data: {"state":"reviewing"}
+
 event: error
 data: {"code":"plan-progress-not-read","detail":"git status refused"}
 ```
 
-`state` is `writing` or `ready`. A frame is only sent when the state **changes**,
-so expect nothing on the wire while the agent works. An `error` frame does not
-close the stream; the next poll may succeed.
+`state` is `writing`, `ready` or `reviewing`. A frame is only sent when the
+state **changes**, so expect nothing on the wire while the agent works. An
+`error` frame does not close the stream; the next poll may succeed.
+
+`reviewing` means changes were asked for on the plan and the agent has not
+recommitted the reworked plan yet. It comes from comparing the newest
+`-REVIEW` comment's date against the plan file's last commit, and the
+endpoint asks GitHub nothing of its own: the date is recorded by the review
+watch on its own 30-second sweep, so a `-REVIEW` just commented can take up
+to that sweep to show as `reviewing`. It returns to `ready` by itself when
+the agent recommits.
 
 **Refusals** (before the stream opens, as JSON)
 
