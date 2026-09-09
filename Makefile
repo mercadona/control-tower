@@ -6,7 +6,7 @@
 #   make test-plugin    | test-backend    | test-frontend    | test-all
 #   make build-plugin                                          build plugin/dist (the hook bundles)
 #   make build-frontend                                        build frontend/dist
-#   make run-backend                                           install backend deps, then start the API on CT_API_PORT (8787); serves frontend/dist if built; CT_HARVEST_BQ_TABLE=proyecto:dataset.tabla carga cada slice recogido en BigQuery
+#   make run-backend                                           install backend deps, then start the API on CT_API_PORT (8787); serves frontend/dist if built; CT_HARVEST_BQ_TABLE=project:dataset.table loads every harvested slice into BigQuery
 #   make run-frontend                                          build the frontend, then run-backend
 #   make dev-frontend                                          vite dev server (run `make run-backend` in another terminal)
 #   make clean-frontend | clean-all

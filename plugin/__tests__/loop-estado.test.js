@@ -8,8 +8,8 @@ const base = {
   edadClaimMs: new Map(), ventanaArranqueMs: 15000,
 }
 
-describe('construirEstado — en vuelo', () => {
-  it('un slice con proceso vivo sale vivo y con su pid', () => {
+describe('construirEstado — in flight', () => {
+  it('a slice with a live process comes out alive and with its pid', () => {
     const e = construirEstado({
       ...base,
       enProgreso: [{ n: 7, nombre: 'refresh' }],
@@ -21,7 +21,7 @@ describe('construirEstado — en vuelo', () => {
     expect(e.hayHallazgos).toBe(false)
   })
 
-  it('sin proceso y con claim VIEJO: es un hallazgo', () => {
+  it('with no process and an OLD claim: it is a finding', () => {
     const e = construirEstado({
       ...base,
       enProgreso: [{ n: 7, nombre: 'refresh' }],
@@ -32,7 +32,7 @@ describe('construirEstado — en vuelo', () => {
     expect(e.hayHallazgos).toBe(true)
   })
 
-  it('sin proceso pero con claim RECIÉN puesto: arrancando, y NO es hallazgo', () => {
+  it('with no process but a JUST placed claim: starting up, and NOT a finding', () => {
     const e = construirEstado({
       ...base,
       enProgreso: [{ n: 7, nombre: 'refresh' }],
@@ -43,7 +43,7 @@ describe('construirEstado — en vuelo', () => {
     expect(e.hayHallazgos).toBe(false)
   })
 
-  it('sin proceso y con la edad del claim DESCONOCIDA: no se acusa, y va a sinComprobar', () => {
+  it('with no process and an UNKNOWN claim age: nobody is accused, and it goes into sinComprobar', () => {
     const e = construirEstado({
       ...base,
       enProgreso: [{ n: 7, nombre: 'refresh' }],
@@ -53,12 +53,13 @@ describe('construirEstado — en vuelo', () => {
     expect(e.enVuelo[0].arrancando).toBe(false)
     expect(e.enVuelo[0].vivo).toBe(false)
     expect(e.sinComprobar.join(' ')).toMatch(/#7/)
-    // Edad desconocida no es lo mismo que claim viejo: si TAMBIÉN contara
-    // como hallazgo, saldría idéntico a un claim abandonado de tres horas.
+    // An unknown age is not the same as an old claim: if it counted as a
+    // finding TOO, it would come out identical to a three-hour abandoned
+    // claim.
     expect(e.hayHallazgos).toBe(false)
   })
 
-  it('procesos no comprobados: NADIE sale como muerto, y el motivo viaja', () => {
+  it('unchecked processes: NOBODY comes out as dead, and the reason travels', () => {
     const e = construirEstado({
       ...base,
       enProgreso: [{ n: 7, nombre: 'refresh' }],
@@ -68,13 +69,13 @@ describe('construirEstado — en vuelo', () => {
     })
     expect(e.enVuelo[0].vivo).toBeNull()
     expect(e.sinComprobar.join(' ')).toMatch(/lsof no está/)
-    // Con `vivo: null` no hay base para acusar: si un `null` se leyera como
-    // `false` en cualquier punto, esto se dispararía como hallazgo aunque
-    // nadie haya comprobado si el proceso sigue vivo.
+    // With `vivo: null` there is no ground to accuse: if a `null` were read as
+    // a `false` at any point, this would fire as a finding even though nobody
+    // has checked whether the process is still alive.
     expect(e.hayHallazgos).toBe(false)
   })
 
-  it('procesos no comprobados y claim recién puesto: NO sale arrancando (eso también sería afirmar algo no comprobado)', () => {
+  it('unchecked processes and a just placed claim: it does NOT come out as starting up (that would also be asserting something unchecked)', () => {
     const e = construirEstado({
       ...base,
       enProgreso: [{ n: 7, nombre: 'refresh' }],
@@ -86,7 +87,7 @@ describe('construirEstado — en vuelo', () => {
     expect(e.enVuelo[0].arrancando).toBe(false)
   })
 
-  it('procesos no comprobados y edad desconocida: sinComprobar sólo lleva el motivo real, sin mensaje contradictorio de edad', () => {
+  it('unchecked processes and an unknown age: sinComprobar carries only the real reason, with no contradictory age message', () => {
     const e = construirEstado({
       ...base,
       enProgreso: [{ n: 7, nombre: 'refresh' }],
@@ -98,24 +99,24 @@ describe('construirEstado — en vuelo', () => {
   })
 })
 
-describe('construirEstado — cosecha y residuo', () => {
-  it('un mergeado que deja worktree o rama va a cosecha', () => {
+describe('construirEstado — harvest and residue', () => {
+  it('a merged slice that leaves a worktree or a branch goes into the harvest', () => {
     const e = construirEstado({ ...base, mergeados: [5], worktreesEnDisco: ['5'] })
     expect(e.cosecha).toEqual([{ n: 5, hasWorktree: true, hasBranch: false }])
     expect(e.hayHallazgos).toBe(true)
   })
 
-  it('un worktree que NINGÚN issue reclama sale como huérfano', () => {
+  it('a worktree NO issue claims comes out as an orphan', () => {
     const e = construirEstado({ ...base, worktreesEnDisco: ['9'] })
     expect(e.residuo.worktreesHuerfanos).toEqual(['9'])
     expect(e.hayHallazgos).toBe(true)
   })
 
-  it('sin poder atribuir, ningún worktree es huérfano — pero el que está en disco SIGUE estándolo', () => {
-    // Las dos preguntas son distintas: «¿existe .worktrees/N?» es una lectura
-    // de disco, y «¿lo reclama alguien?» necesita los issues. Apagar la
-    // segunda no puede borrar la respuesta de la primera, o el bloque en vuelo
-    // acaba negando un directorio que el aviso de al lado acaba de nombrar.
+  it('with no attribution possible, no worktree is an orphan — but the one on disk IS STILL on disk', () => {
+    // The two questions are different: "does .worktrees/N exist?" is a disk
+    // read, and "does anybody claim it?" needs the issues. Turning the second
+    // one off cannot wipe the answer to the first, or the in-flight block ends
+    // up denying a directory the warning next to it has just named.
     const e = construirEstado({
       ...base,
       enProgreso: [{ n: 7, nombre: 'x' }],
@@ -127,7 +128,7 @@ describe('construirEstado — cosecha y residuo', () => {
     expect(e.enVuelo[0].hasWorktree).toBe(true)
   })
 
-  it('el worktree de un slice EN VUELO no es huérfano', () => {
+  it('the worktree of an IN-FLIGHT slice is not an orphan', () => {
     const e = construirEstado({
       ...base,
       enProgreso: [{ n: 9, nombre: 'x' }], worktreesEnDisco: ['9'],
@@ -137,42 +138,42 @@ describe('construirEstado — cosecha y residuo', () => {
     expect(e.residuo.worktreesHuerfanos).toEqual([])
   })
 
-  it('un mergeado que dejó SÓLO la rama (worktree ya borrado a mano) también va a cosecha', () => {
+  it('a merged slice that left ONLY the branch (worktree already deleted by hand) goes into the harvest too', () => {
     const e = construirEstado({ ...base, mergeados: [5], ramasEnDisco: ['feat/5'] })
     expect(e.cosecha).toEqual([{ n: 5, hasWorktree: false, hasBranch: true }])
   })
 
-  it('el worktree de un MERGEADO sale por cosecha y NO se duplica en huérfanos', () => {
+  it('the worktree of a MERGED slice comes out through the harvest and is NOT duplicated among the orphans', () => {
     const e = construirEstado({ ...base, mergeados: [5], worktreesEnDisco: ['5'] })
     expect(e.residuo.worktreesHuerfanos).toEqual([])
     expect(e.cosecha).toHaveLength(1)
   })
 
-  it('labels status: sobre issues cerrados van a residuo', () => {
+  it('status: labels on closed issues go into the residue', () => {
     const e = construirEstado({ ...base, cerradosConStatus: [{ n: 3, statusLabels: ['status:in-review'] }] })
     expect(e.residuo.labels).toHaveLength(1)
     expect(e.hayHallazgos).toBe(true)
   })
 })
 
-describe('construirEstado — entregado, esperando merge', () => {
-  it('un in-review sale en su propio cubo y NO cuenta como hallazgo', () => {
+describe('construirEstado — delivered, waiting for a merge', () => {
+  it('an in-review comes out in its own bucket and does NOT count as a finding', () => {
     const e = construirEstado({ ...base, enRevision: [{ n: 11, nombre: 'refresh' }] })
     expect(e.enRevision).toEqual([{ n: 11, nombre: 'refresh', hasWorktree: false, hasBranch: false }])
-    // Un loop sano con PRs abiertos devolvía 3 de forma permanente: el
-    // coordinador aprende a ignorar el código de salida y un vigilante que
-    // gatee sobre él queda inservible.
+    // A healthy loop with open PRs used to return 3 permanently: the
+    // coordinator learns to ignore the exit code and a watcher that gates on it
+    // becomes useless.
     expect(e.hayHallazgos).toBe(false)
   })
 
-  it('el worktree de un in-review NO es huérfano: su dueño está vivo y esperando merge', () => {
+  it('the worktree of an in-review is NOT an orphan: its owner is alive and waiting for a merge', () => {
     const e = construirEstado({ ...base, enRevision: [{ n: 11, nombre: 'refresh' }], worktreesEnDisco: ['11'], ramasEnDisco: ['feat/11'] })
     expect(e.residuo.worktreesHuerfanos).toEqual([])
     expect(e.enRevision[0]).toMatchObject({ hasWorktree: true, hasBranch: true })
     expect(e.hayHallazgos).toBe(false)
   })
 
-  it('no se confunde con la cosecha: un in-review y un mergeado con restos salen por cubos distintos, a la vez', () => {
+  it('it is not confused with the harvest: an in-review and a merged slice with remains come out through different buckets, at once', () => {
     const e = construirEstado({
       ...base,
       enRevision: [{ n: 11, nombre: 'refresh' }],
@@ -182,18 +183,18 @@ describe('construirEstado — entregado, esperando merge', () => {
     expect(e.enRevision.map((r) => r.n)).toEqual([11])
     expect(e.cosecha.map((c) => c.n)).toEqual([5])
     expect(e.residuo.worktreesHuerfanos).toEqual([])
-    // La cosecha sí es un hallazgo; el in-review no la anula.
+    // The harvest IS a finding; the in-review does not cancel it out.
     expect(e.hayHallazgos).toBe(true)
   })
 
-  it('sin `enRevision` en la entrada, el cubo sale vacío y nada más cambia', () => {
+  it('with no `enRevision` in the input, the bucket comes out empty and nothing else changes', () => {
     const e = construirEstado(base)
     expect(e.enRevision).toEqual([])
   })
 })
 
-describe('construirEstado — un loop limpio', () => {
-  it('sin nada que revisar: cero hallazgos y cero motivos sin comprobar', () => {
+describe('construirEstado — a clean loop', () => {
+  it('with nothing to review: zero findings and zero unchecked reasons', () => {
     const e = construirEstado(base)
     expect(e.hayHallazgos).toBe(false)
     expect(e.sinComprobar).toEqual([])

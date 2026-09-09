@@ -1,5 +1,5 @@
-// Un trozo de la máquina de estados de scripts/ct-step.mjs. El preámbulo —y
-// por qué son nueve ficheros y no uno— está en fixtures/ct-step-harness.js.
+// A slice of the state machine of scripts/ct-step.mjs. The preamble —and why
+// there are nine files and not one— is in fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { writeFileSync, readFileSync, existsSync } from 'node:fs'
@@ -7,105 +7,107 @@ import { join } from 'node:path'
 
 import { deliveredRun } from '../scripts/run-machine.js'
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
-import { crearHelpers, montarRepo, PLAN } from './fixtures/ct-step-harness.js'
+import { makeHelpers, makeRepo, PLAN } from './fixtures/ct-step-harness.js'
 
 let repo
-const { ct, informe, veredicto, crudo, log, commits, estado, juzgar, tareaOk, sliceOk } = crearHelpers(() => repo)
+const { ct, writeReport, writeVerdict, writeRaw, log, commits, runState, judgeTask, taskOk, sliceOk } = makeHelpers(() => repo)
 
-beforeEach(() => { repo = montarRepo() })
+beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
 
-describe('el camino feliz', () => {
-  it('dos tareas, dos commits, y los comitea el PROGRAMA', () => {
-    tareaOk('uno.txt')
-    const r = tareaOk('dos.txt')
+describe('the happy path', () => {
+  it('two tasks, two commits, and it is the PROGRAM that commits them', () => {
+    taskOk('uno.txt')
+    const r = taskOk('dos.txt')
     expect(r.status).toBe(0)
-    // §3.7: el último commit ya NO entrega — abre la Fase B (Tarea 8): antes
-    // de la global verification, la rama tiene que reconciliarse con su base.
+    // §3.7: the last commit no longer delivers — it opens Phase B (Task 8):
+    // before the global verification, the branch has to be reconciled with its
+    // base.
     expect(r.stdout).toMatch(/paso reconcile/)
     expect(commits()).toBe(3)
-    expect(log()).toMatch(/la primera \(#7, tarea 1\/2\)/)
-    expect(log()).toMatch(/la segunda \(#7, tarea 2\/2\)/)
+    expect(log()).toMatch(/the first one \(#7, tarea 1\/2\)/)
+    expect(log()).toMatch(/the second one \(#7, tarea 2\/2\)/)
   })
 
-  it('el slice entero: tareas + global + juicio del slice, y entrega', () => {
+  it('the whole slice: tasks + global + slice judging, and it delivers', () => {
     const r = sliceOk()
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/run delivered/)
     expect(r.stdout).toMatch(/lista para la pull request/)
-    // 1 base + 2 tareas + 1 del veredicto de slice, que estrena commit propio.
+    // 1 base + 2 tasks + 1 for the slice verdict, which gets a commit of its own.
     expect(commits()).toBe(4)
     expect(log()).toMatch(/Veredicto del slice entero \(#7\)/)
   })
 
-  // Lo que entra en el commit es lo que la tarea TOCÓ, medido por el programa:
-  // el fichero de la tarea 2 no está escrito todavía, así que no puede colarse
-  // en el commit de la 1 por mucho que el plan lo nombre más abajo.
-  it('sólo entra en el commit lo que esta tarea tocó', () => {
-    tareaOk('uno.txt')
+  // What goes into the commit is what the task TOUCHED, measured by the
+  // program: task 2's file is not written yet, so it cannot slip into task 1's
+  // commit however much the plan names it further down.
+  it('only what this task touched goes into the commit', () => {
+    taskOk('uno.txt')
     const primero = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
     expect(primero).toMatch(/uno\.txt/)
     expect(primero).not.toMatch(/dos\.txt/)
   })
 
-  // LA DECLARACIÓN ES UNA COMPROBACIÓN CRUZADA: si difiere de lo que el árbol
-  // dice, se avisa y se stagea lo medido. Antes decidía ella, así que una ruta
-  // olvidada en la lista se quedaba fuera del commit sin que nada lo dijera.
-  it('una ruta tocada y no declarada entra en el commit, y el desajuste se avisa', () => {
+  // THE DECLARATION IS A CROSS-CHECK: if it differs from what the tree says, a
+  // warning is issued and what was measured is staged. Before, the declaration
+  // decided, so a path forgotten from the list was left out of the commit
+  // without anything saying so.
+  it('a path that was touched and not declared goes into the commit, and the mismatch is warned about', () => {
     writeFileSync(join(repo, 'uno.txt'), 'uno\n')
     writeFileSync(join(repo, 'olvidado.txt'), 'esto lo toqué y no lo dije\n')
-    const r = ct('report', informe([]))
+    const r = ct('report', writeReport([]))
     expect(r.status).toBe(0)
     expect(r.stderr).toMatch(/Tocado y no declarado: olvidado\.txt, uno\.txt/)
     expect(execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: repo, encoding: 'utf8' }))
       .toMatch(/olvidado\.txt/)
   })
 
-  // El otro lado del cruce: una ruta que se declara y no se tocó. Antes el
-  // programa hacía `git add` de ella y el paso moría por excepción; ahora se
-  // avisa y no se stagea nada por ella. El informe se escribe con `crudo`
-  // porque `informe` crea los ficheros que declara, y aquí el caso es
-  // justamente que no existe.
-  it('una ruta declarada y no tocada se avisa, y no tumba el paso', () => {
+  // The other side of the cross-check: a path that is declared and was not
+  // touched. Before, the program did a `git add` of it and the step died with
+  // an exception; now a warning is issued and nothing is staged for it. The
+  // report is written with `crudo` because `informe` creates the files it
+  // declares, and here the case is precisely that it does not exist.
+  it('a path that is declared and was not touched is warned about, and does not bring the step down', () => {
     writeFileSync(join(repo, 'uno.txt'), 'uno\n')
-    const r = ct('report', crudo(JSON.stringify({ paths: ['uno.txt', 'inventado.txt'], summary: 'hecho' })))
+    const r = ct('report', writeRaw(JSON.stringify({ paths: ['uno.txt', 'inventado.txt'], summary: 'hecho' })))
     expect(r.status).toBe(0)
     expect(r.stderr).toMatch(/Declarado y no tocado: inventado\.txt/)
     expect(execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: repo, encoding: 'utf8' }).trim())
       .toBe('uno.txt')
   })
 
-  it('el mensaje no lleva closing keywords aunque el plan las traiga', () => {
-    // El plan se COMITEA tras cambiarlo: en un run de verdad viene commiteado
-    // desde antes, y desde que `ct-step report` mide el árbol un plan
-    // modificado y sin commitear sería trabajo sin declarar de esta tarea.
-    writeFileSync(join(repo, 'plan.md'), PLAN.replace('### Task 1 — la primera', '### Task 1 — fixes #451 la primera'))
+  it('the message carries no closing keywords even if the plan does', () => {
+    // The plan is COMMITTED after being changed: in a real run it comes
+    // committed from before, and since `ct-step report` measures the tree, a
+    // modified and uncommitted plan would be undeclared work of this task.
+    writeFileSync(join(repo, 'plan.md'), PLAN.replace('### Task 1 — the first one', '### Task 1 — fixes #451 the first one'))
     execFileSync('git', ['add', 'plan.md'], { cwd: repo })
     execFileSync('git', ['commit', '-q', '-m', 'el plan con la palabra de cierre dentro'], { cwd: repo })
-    tareaOk('uno.txt')
+    taskOk('uno.txt')
     expect(log()).not.toMatch(/fixes\s*#451/i)
     expect(log()).toMatch(/issue 451/)
   })
 
-  it('rechaza rutas de fuera del worktree: la lista la escribe un modelo', () => {
-    const r = ct('report', crudo(JSON.stringify({ paths: ['/etc/passwd'], summary: 'ups' })))
+  it('it rejects paths from outside the worktree: the list is written by a model', () => {
+    const r = ct('report', writeRaw(JSON.stringify({ paths: ['/etc/passwd'], summary: 'ups' })))
     expect(r.stdout).toMatch(/informe descartado.*fuera del worktree/)
-    expect(estado().discards).toBe(1)
+    expect(runState().discards).toBe(1)
   })
 })
 
 // ---------------------------------------------------------------------------
-// LA COLA ENTERA CON RECORRIDOS. Ningún fichero la recorría: éste nunca ponía
-// `e2e` en el SLICE.md (así que el commit de la última tarea cerraba en la rama
-// sin travesía) y __tests__/e2e-ct-step.test.js siembra el run ya parado en
-// `e2e` con exactamente `tasksTotal` commits, sin pasar por `slice-verdict`.
-// En el hueco entre los dos cabía el defecto: el veredicto de slice estrena
-// commit propio, el proceso siguiente relee el fichero y la cuenta de commits
-// no cuadraba — TODO slice con recorridos moría en PRECONDITION (exit 8) sin
-// llegar nunca a DELIVERED, y `dispatch-check --release` lo rechazaba con el 7
-// para siempre.
+// THE WHOLE QUEUE WITH JOURNEYS. No file walked it: this one never put `e2e`
+// in the SLICE.md (so the last task's commit closed on the branch with no
+// traversal) and __tests__/e2e-ct-step.test.js seeds the run already stopped
+// at `e2e` with exactly `tasksTotal` commits, without going through
+// `slice-verdict`. The defect fitted in the gap between the two: the slice
+// verdict gets a commit of its own, the next process re-reads the file and the
+// commit count did not add up — EVERY slice with journeys died in PRECONDITION
+// (exit 8) without ever reaching DELIVERED, and `dispatch-check --release`
+// rejected it with the 7 forever.
 // ---------------------------------------------------------------------------
-describe('la cola completa: commit → global → slice-verdict → e2e → DELIVERED', () => {
+describe('the complete queue: commit → global → slice-verdict → e2e → DELIVERED', () => {
   const RECORRIDO = 'levantado con el example, curl -i :9115/metrics responde 200'
   const informeE2e = (nombre = 'e2e.json') => {
     const p = join(repo, nombre)
@@ -120,52 +122,52 @@ describe('la cola completa: commit → global → slice-verdict → e2e → DELI
 
   beforeEach(() => {
     rmSyncBestEffort(repo)
-    repo = montarRepo({ e2e: [RECORRIDO] })
+    repo = makeRepo({ e2e: [RECORRIDO] })
   })
 
-  it('un slice con recorridos atraviesa el e2e y ENTREGA', () => {
+  it('a slice with journeys traverses the e2e and DELIVERS', () => {
     expect(sliceOk().status).toBe(0)
-    // El veredicto de slice no entrega aquí: abre el paso e2e.
-    expect(estado().step).toBe('e2e')
-    expect(estado().closed).toBeUndefined()
-    // Preguntar ya no muere en PRECONDITION: es el síntoma exacto del defecto.
+    // The slice verdict does not deliver here: it opens the e2e step.
+    expect(runState().step).toBe('e2e')
+    expect(runState().closed).toBeUndefined()
+    // Asking no longer dies in PRECONDITION: that is the defect's exact symptom.
     const n = ct('next')
     expect(n.status).toBe(0)
     expect(n.stdout).toContain(RECORRIDO)
 
     const r = ct('e2e', informeE2e())
     expect(r.status).toBe(0)
-    expect(estado().closed).toBe('delivered')
+    expect(runState().closed).toBe('delivered')
     expect(deliveredRun(readFileSync(join(repo, '.agent', 'run-7.json'), 'utf8'), 7)).toEqual({ ok: true })
-    // 1 base + 2 tareas + veredicto de slice + informe de e2e.
+    // 1 base + 2 tasks + slice verdict + e2e report.
     expect(commits()).toBe(5)
     expect(log()).toMatch(/informe de e2e del issue #7/)
-    // Y el commit del veredicto de slice quedó CONTADO: es lo que permite que
-    // el proceso siguiente cruce los commits sin descuadrarse.
-    expect(estado().sliceCommits).toBe(1)
+    // And the slice verdict's commit was COUNTED: that is what lets the next
+    // process cross the commits without the sums going wrong.
+    expect(runState().sliceCommits).toBe(1)
   })
 
-  it('un `git add` antes del e2e no entra en el commit del informe (slice 12)', () => {
+  it('a `git add` before the e2e does not go into the writeReport commit (slice 12)', () => {
     sliceOk()
     writeFileSync(join(repo, 'colado.txt'), 'nadie ha visto esto\n')
     execFileSync('git', ['add', 'colado.txt'], { cwd: repo })
     const r = ct('e2e', informeE2e())
-    expect(r.status).toBe(0)                      // el informe es válido: entrega
-    expect(estado().closed).toBe('delivered')
+    expect(r.status).toBe(0)                      // the report is valid: it delivers
+    expect(runState().closed).toBe('delivered')
     expect(r.stderr).toMatch(/ajenas a la maquinaria \(colado\.txt\)/)
     expect(execFileSync('git', ['log', '--oneline', '--', 'colado.txt'], { cwd: repo, encoding: 'utf8' }).trim()).toBe('')
     expect(log()).not.toMatch(/informe de e2e del issue #7/)
-    // El informe queda STAGEADO, como en el camino rojo: espera a quien lo comitee.
+    // The report is left STAGED, as on the red path: it waits for whoever commits it.
     expect(execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: repo, encoding: 'utf8' }))
       .toMatch(/docs\/superpowers\/e2e\/7\.md/)
   })
 })
 
-// Review de capde (2026-08-19), punto 3 / criterio de cierre de F37: el PR de
-// un slice trae un VEREDICTO, no una frase del mensaje de commit afirmándolo.
-describe('el veredicto viaja en la pull request', () => {
-  it('el PASS de cada tarea acaba trackeado y dentro del commit de su tarea', () => {
-    tareaOk('uno.txt')
+// capde's review (2026-08-19), point 3 / F37's closing criterion: a slice's PR
+// brings a VERDICT, not a sentence in the commit message asserting it.
+describe('the verdict travels in the pull request', () => {
+  it("each task's PASS ends up tracked and inside that task's commit", () => {
+    taskOk('uno.txt')
     const ruta = join('docs', 'superpowers', 'verdicts', 'issue-7-task-1.json')
     expect(existsSync(join(repo, ruta))).toBe(true)
     const files = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
@@ -175,10 +177,10 @@ describe('el veredicto viaja en la pull request', () => {
     expect(guardado.task).toBe(1)
   })
 
-  it('un FAIL no deja veredicto trackeado: solo viaja el que aprueba', () => {
-    ct('report', informe(['uno.txt']))
+  it('a FAIL leaves no tracked verdict: only the one that passes travels', () => {
+    ct('report', writeReport(['uno.txt']))
     ct('controls')
-    juzgar(veredicto('FAIL', [{ severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }]))
+    judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }]))
     expect(existsSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-task-1.json'))).toBe(false)
   })
 })

@@ -1,106 +1,106 @@
-// Un trozo de la máquina de estados de scripts/ct-step.mjs. El preámbulo —y
-// por qué son nueve ficheros y no uno— está en fixtures/ct-step-harness.js.
+// A slice of the state machine of scripts/ct-step.mjs. The preamble —and why
+// there are nine files and not one— is in fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { writeFileSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
-import { crearHelpers, montarRepo, PLAN, F } from './fixtures/ct-step-harness.js'
+import { makeHelpers, makeRepo, PLAN, F } from './fixtures/ct-step-harness.js'
 
 let repo
-const { ct, informe, commits, estado } = crearHelpers(() => repo)
+const { ct, writeReport, commits, runState } = makeHelpers(() => repo)
 
-beforeEach(() => { repo = montarRepo() })
+beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
 
-describe('el alcance de la tarea lo decide el plan', () => {
-  it('una ruta tocada que el plan no declara para esa tarea es rojo', () => {
-    // La tarea 1 declara sólo uno.txt; el informe trae también dos.txt.
-    ct('report', informe(['uno.txt', 'dos.txt']))
+describe("the task's scope is decided by the plan", () => {
+  it('a touched path that the plan does not declare for that task is red', () => {
+    // Task 1 declares only uno.txt; the report also brings dos.txt.
+    ct('report', writeReport(['uno.txt', 'dos.txt']))
     const r = ct('controls')
     expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(estado().lastControlsLog, 'utf8')).toMatch(/dos\.txt.*sobra/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/dos\.txt.*sobra/)
   })
 
-  it('una ruta declarada que la tarea no tocó es rojo', () => {
-    // El informe no trae nada: uno.txt, que la tarea 1 declara, se queda sin tocar.
-    ct('report', informe([]))
+  it('a declared path that the task did not touch is red', () => {
+    // The report brings nothing: uno.txt, which task 1 declares, is left untouched.
+    ct('report', writeReport([]))
     const r = ct('controls')
     expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(estado().lastControlsLog, 'utf8')).toMatch(/uno\.txt.*no está entre lo que tocó/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/uno\.txt.*no está entre lo que tocó/)
   })
 
-  it('(create) sobre un fichero que ya existía es rojo', () => {
+  it('(create) over a file that already existed is red', () => {
     writeFileSync(join(repo, 'existente.txt'), 'ya estaba\n')
     execFileSync('git', ['add', 'existente.txt'], { cwd: repo, stdio: 'ignore' })
     execFileSync('git', ['commit', '-q', '-m', 'ya existía'], { cwd: repo, stdio: 'ignore' })
     writeFileSync(join(repo, 'plan.md'), PLAN.replace('`uno.txt` (create)', '`existente.txt` (create)'))
-    // El implementador lo cambia de verdad: el alcance se mide sobre el
-    // ÍNDICE, y un fichero declarado pero sin cambios no stagea nada.
+    // The implementer really changes it: the scope is measured over the
+    // INDEX, and a declared file with no changes stages nothing.
     writeFileSync(join(repo, 'existente.txt'), 'ya estaba, y ahora cambia\n')
-    ct('report', informe(['existente.txt']))
+    ct('report', writeReport(['existente.txt']))
     const r = ct('controls')
     expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(estado().lastControlsLog, 'utf8')).toMatch(/existente\.txt.*ya existía en el commit anterior/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/existente\.txt.*ya existía en el commit anterior/)
   })
 })
 
-describe('lo que los bloques del plan prometen tiene que estar', () => {
-  it('un fichero que un bloque nombra y la tarea no tocó es rojo', () => {
+describe("what the plan's blocks promise has to be there", () => {
+  it('a file that a block names and the task did not touch is red', () => {
     const conBloque = PLAN.replace(
       '**Files:** `uno.txt` (create).\n**TDD:** No TDD — fixture.',
       ['**Files:** `uno.txt` (create).', '', 'Contract (falta.txt):', '', F + 'ts', 'function foo(): void', F, '', '**TDD:** No TDD — fixture.'].join('\n'),
     )
     writeFileSync(join(repo, 'plan.md'), conBloque)
-    ct('report', informe(['uno.txt']))
+    ct('report', writeReport(['uno.txt']))
     const r = ct('controls')
     expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(estado().lastControlsLog, 'utf8')).toMatch(/bloque Contract \(falta\.txt\).*no está entre lo que tocó/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/bloque Contract \(falta\.txt\).*no está entre lo que tocó/)
   })
 
-  it('el test que declara el TDD tiene que estar en lo stageado', () => {
+  it('the test the TDD declares has to be in what was staged', () => {
     writeFileSync(join(repo, 'plan.md'), PLAN.replace(
       '**TDD:** No TDD — fixture.',
       "**TDD:** `it('uno se sabe de memoria')`",
     ))
-    ct('report', informe(['uno.txt']))
+    ct('report', writeReport(['uno.txt']))
     const r = ct('controls')
     expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(estado().lastControlsLog, 'utf8')).toMatch(/dijo que añadía el test 'uno se sabe de memoria' y no está en lo stageado/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/dijo que añadía el test 'uno se sabe de memoria' y no está en lo stageado/)
   })
 
-  it('el texto de Final text tiene que aparecer verbatim', () => {
+  it('the Final text text has to appear verbatim', () => {
     const conFinalText = PLAN.replace(
       '**Files:** `uno.txt` (create).\n**TDD:** No TDD — fixture.',
       ['**Files:** `uno.txt` (create), `doc.md` (create).', '', 'Final text (doc.md):', '', F + 'md', 'línea uno', 'línea dos', F, '', '**TDD:** No TDD — fixture.'].join('\n'),
     )
     writeFileSync(join(repo, 'plan.md'), conFinalText)
-    // El implementador stagea doc.md con una de las dos líneas cambiada.
+    // The implementer stages doc.md with one of the two lines changed.
     writeFileSync(join(repo, 'doc.md'), 'línea uno\nlínea distinta\n')
-    ct('report', informe(['uno.txt', 'doc.md']))
+    ct('report', writeReport(['uno.txt', 'doc.md']))
     const r = ct('controls')
     expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(estado().lastControlsLog, 'utf8')).toMatch(/Final text \(doc\.md\).*'línea dos'.*no está verbatim/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/Final text \(doc\.md\).*'línea dos'.*no está verbatim/)
   })
 
   // ==========================================================================
-  // EL CASO ADVERSARIAL de la comprobación anterior. `git show :<path>`
-  // devuelve contenido para CUALQUIER fichero del índice, esté o no entre lo
-  // que la tarea tocó — así que por sí sola esa comprobación no cierra el
-  // hueco: un `Final text` que cite un fichero ya comiteado, con el texto ya
-  // verbatim ahí desde antes, la pasaría aunque la tarea no lo haya tocado.
-  // Lo que cierra el hueco es que todo bloque `Final text (path):` entra
-  // TAMBIÉN en `blockPaths`, y ese bucle sí exige pertenencia a `run.lastPaths`
-  // (ver la nota sobre `bloquesDeclarados` en ct-step.mjs). La garantía es
-  // real pero implícita: nada la fijaba hasta este test, así que simplificar
-  // ese bucle por parecer redundante con `finalTexts` reintroduciría en
-  // silencio el fallo que este test existe para cazar — el mismo tipo de
-  // falso negativo que ya sufrió `testsDeclarados` (ver `planComiteado` más
-  // abajo): el plan vive comiteado en `docs/`, así que buscar en el repo es
-  // buscar en el plan.
+  // THE ADVERSARIAL CASE of the previous check. `git show :<path>` returns
+  // content for ANY file in the index, whether or not it is among what the
+  // task touched — so on its own that check does not close the gap: a
+  // `Final text` citing an already-committed file, with the text already
+  // verbatim there from before, would pass it even though the task never
+  // touched it. What closes the gap is that every `Final text (path):` block
+  // ALSO goes into `blockPaths`, and that loop does require membership of
+  // `run.lastPaths` (see the note about `bloquesDeclarados` in ct-step.mjs).
+  // The guarantee is real but implicit: nothing pinned it until this test, so
+  // simplifying that loop for looking redundant with `finalTexts` would
+  // silently reintroduce the failure this test exists to catch — the same kind
+  // of false negative `testsDeclarados` already suffered (see `planComiteado`
+  // below): the plan lives committed in `docs/`, so searching the repo is
+  // searching the plan.
   // ==========================================================================
-  it('un Final text que cita un fichero YA COMITEADO, y la tarea no lo toca, es rojo aunque el contenido ya esté verbatim', () => {
+  it('a Final text citing an ALREADY COMMITTED file, which the task does not touch, is red even though the content is already verbatim', () => {
     writeFileSync(join(repo, 'ya-existe.md'), 'línea uno\nlínea dos\n')
     execFileSync('git', ['add', 'ya-existe.md'], { cwd: repo, stdio: 'ignore' })
     execFileSync('git', ['commit', '-q', '-m', 'ya existía con el texto'], { cwd: repo, stdio: 'ignore' })
@@ -113,52 +113,53 @@ describe('lo que los bloques del plan prometen tiene que estar', () => {
     execFileSync('git', ['add', 'plan.md'], { cwd: repo, stdio: 'ignore' })
     execFileSync('git', ['commit', '-q', '-m', 'el plan del slice'], { cwd: repo, stdio: 'ignore' })
 
-    // La tarea sólo declara y toca uno.txt: ya-existe.md queda fuera.
-    ct('report', informe(['uno.txt']))
+    // The task only declares and touches uno.txt: ya-existe.md is left out.
+    ct('report', writeReport(['uno.txt']))
     const r = ct('controls')
     expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(estado().lastControlsLog, 'utf8')).toMatch(/bloque Final text \(ya-existe\.md\).*no está entre lo que tocó/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/bloque Final text \(ya-existe\.md\).*no está entre lo que tocó/)
   })
 })
 
-describe('los controles los mide el programa, no el implementador', () => {
-  it('un control en rojo devuelve la tarea y, agotado, sale por 4', () => {
+describe('the checks are measured by the program, not by the implementer', () => {
+  it('a check in the red sends the task back and, once exhausted, exits with 4', () => {
     writeFileSync(join(repo, 'plan.md'), PLAN.replace('test -f uno.txt', 'test -f no-existe.txt'))
     for (let i = 0; i < 3; i++) {
-      ct('report', informe(['uno.txt']))
+      ct('report', writeReport(['uno.txt']))
       var r = ct('controls')
     }
     expect(r.status).toBe(4)
     expect(commits()).toBe(1)
   })
 
-  it('un control que no se pudo MEDIR cierra a la primera, por 5', () => {
+  it('a check that could not be MEASURED closes on the first try, with 5', () => {
     writeFileSync(join(repo, 'plan.md'), PLAN.replace('test -f uno.txt', 'comando-que-no-existe-en-esta-maquina'))
-    ct('report', informe(['uno.txt']))
+    ct('report', writeReport(['uno.txt']))
     expect(ct('controls').status).toBe(5)
   })
 
-  it('los tests que la tarea prometió tienen que existir en lo stageado', () => {
+  it('the tests the task promised have to exist in what was staged', () => {
     writeFileSync(join(repo, 'plan.md'), PLAN.replace(
-      '**Tests:** N/A — fixture.\n**Verification:** el fichero está.',
-      "**Tests:** añade `'uno pinta uno'`.\n**Verification:** el fichero está.",
+      '**Tests:** N/A — fixture.\n**Verification:** the file is there.',
+      "**Tests:** añade `'uno pinta uno'`.\n**Verification:** the file is there.",
     ))
-    ct('report', informe(['uno.txt']))
+    ct('report', writeReport(['uno.txt']))
     const r = ct('controls')
     expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(estado().lastControlsLog, 'utf8')).toMatch(/dijo que añadía el test 'uno pinta uno'/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/dijo que añadía el test 'uno pinta uno'/)
   })
 
   // ==========================================================================
-  // EL ÁMBITO DE ESA COMPROBACIÓN — los dos de abajo son el mismo bug por sus
-  // dos caras, y el de arriba no cazaba ninguna: reescribe el plan SIN
-  // comitearlo, así que el nombre del test no llega al índice y
-  // `git grep --cached` no lo encuentra mire donde mire.
+  // THE SCOPE OF THAT CHECK — the two below are the same bug seen from its two
+  // sides, and the one above caught neither: it rewrites the plan WITHOUT
+  // committing it, so the test's name never reaches the index and
+  // `git grep --cached` does not find it wherever it looks.
   //
-  // En la vida real el plan SÍ está comiteado —lo exige el gate— y un plan
-  // prescriptivo CITA el código verbatim. Medido en el slice #5 de repo-pulse:
-  // el nombre de cada test de cada tarea vive dentro de `docs/`. Por eso el
-  // plan de estos dos se comitea: sin eso, el test pasa con el bug puesto.
+  // In real life the plan IS committed —the gate requires it— and a
+  // prescriptive plan CITES the code verbatim. Measured on repo-pulse's slice
+  // #5: the name of every test of every task lives inside `docs/`. That is why
+  // the plan of these two is committed: without that, the test passes with the
+  // bug in place.
   // ==========================================================================
   const planComiteado = (texto) => {
     writeFileSync(join(repo, 'plan.md'), texto)
@@ -166,25 +167,25 @@ describe('los controles los mide el programa, no el implementador', () => {
     execFileSync('git', ['commit', '-q', '-m', 'el plan del slice'], { cwd: repo, stdio: 'ignore' })
   }
   const conLineaDeTests = (linea) => PLAN.replace(
-    '**Tests:** N/A — fixture.\n**Verification:** el fichero está.',
-    `**Tests:** ${linea}\n**Verification:** el fichero está.`,
+    '**Tests:** N/A — fixture.\n**Verification:** the file is there.',
+    `**Tests:** ${linea}\n**Verification:** the file is there.`,
   )
 
-  it('un test RETIRADO que sigue nombrado en el plan comiteado no es un test que siga estando', () => {
-    // El falso positivo: el trabajo bien hecho y los controles en rojo, así que
-    // la tarea no se podía cerrar por mucho que el implementador insistiera.
+  it('a WITHDRAWN test that is still named in the committed plan is not a test that is still there', () => {
+    // The false positive: the work done properly and the checks in the red, so
+    // the task could not be closed however much the implementer insisted.
     planComiteado(conLineaDeTests("retira `'uno pinta uno'`."))
-    ct('report', informe(['uno.txt']))
+    ct('report', writeReport(['uno.txt']))
     expect(ct('controls').stdout).toMatch(/controles: done/)
   })
 
-  it('un test PROMETIDO que sólo está en el plan, y no en lo que la tarea tocó, es rojo', () => {
-    // El falso negativo, que es el grave: sin acotar el ámbito, esta
-    // comprobación aprueba una tarea que prometió un test y no lo escribió
-    // —exactamente el fallo para el que existe— porque el nombre está en el plan.
+  it('a PROMISED test that is only in the plan, and not in what the task touched, is red', () => {
+    // The false negative, which is the serious one: without bounding the
+    // scope, this check passes a task that promised a test and did not write
+    // it —exactly the failure it exists for— because the name is in the plan.
     planComiteado(conLineaDeTests("añade `'uno pinta uno'`."))
-    ct('report', informe(['uno.txt']))
+    ct('report', writeReport(['uno.txt']))
     expect(ct('controls').stdout).toMatch(/controles: failed/)
-    expect(readFileSync(estado().lastControlsLog, 'utf8')).toMatch(/dijo que añadía el test 'uno pinta uno'/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/dijo que añadía el test 'uno pinta uno'/)
   })
 })

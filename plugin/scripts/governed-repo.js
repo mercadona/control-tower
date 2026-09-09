@@ -1,41 +1,43 @@
 // ============================================================================
-// governed-repo.js — ¿CORRE ESTE LOOP EN EL REPO DE ESTE cwd?
+// governed-repo.js — DOES THIS LOOP RUN IN THE REPO OF THIS cwd?
 //
-// Es el único sitio de la puerta de closing keywords que toca el disco, y por
-// eso vive aparte de closing-keywords.js, que es puro y se testea sin ficheros.
+// It is the only place in the closing-keywords gate that touches the disk, and
+// that is why it lives apart from closing-keywords.js, which is pure and is
+// tested without files.
 //
-// La señal es el marcador que /ct-init siembra en el AGENTS.md del repo: si
-// está, este repo tiene el contrato del loop y sus issues los gobierna el loop.
-// No se usa `git rev-parse`: subir con `fs` no depende de que `git` esté en el
-// PATH ni paga un subproceso.
+// The signal is the marker /ct-init seeds into the repo's AGENTS.md: if it is
+// there, this repo has the loop's contract and the loop governs its issues.
+// `git rev-parse` is not used: walking up with `fs` does not depend on `git`
+// being in the PATH, nor does it pay for a subprocess.
 // ============================================================================
 import { readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 
 export const CONTRACT_MARKER = '<!-- ct-init:slices-contract -->'
-// #93 — el contrato salió de AGENTS.md a su propio fichero, y en su sitio quedó
-// la sección corta del loop con SU marcador. La señal de «este repo lo gobierna
-// el loop» pasa a ser cualquiera de los dos, no uno: con solo el nuevo, todos
-// los repos bootstrapeados hasta hoy dejarían de estar gobernados y la puerta
-// de closing keywords se apagaría en ellos sin que nadie lo pidiera; con solo
-// el viejo, se apagaría en todos los que se bootstrapeen a partir de ahora.
+// #93 — the contract moved out of AGENTS.md into its own file, and in its place
+// the loop's short section stayed, with ITS marker. The signal for «the loop
+// governs this repo» becomes either of the two, not one: with only the new one,
+// every repo bootstrapped up to today would stop being governed and the
+// closing-keywords gate would switch off in them with nobody asking for it;
+// with only the old one, it would switch off in every repo bootstrapped from
+// now on.
 export const LOOP_MARKER = '<!-- ct-init:loop -->'
 export const GOVERNED_MARKERS = [CONTRACT_MARKER, LOOP_MARKER]
 
 const AGENTS = 'AGENTS.md'
 
-// Describe un valor para un mensaje de error sin arriesgarse a lanzar: un
-// `cwd` invalido llega de fuera y puede traer un `toString` que lance, o ser
-// circular. `String(...)` ya evita el problema de `JSON.stringify` con los
-// ciclos, pero un `toString` hostil sigue pudiendo lanzar, así que se atrapa.
+// Describes a value for an error message without risking a throw: an invalid
+// `cwd` arrives from outside and may carry a `toString` that throws, or be
+// circular. `String(...)` already avoids `JSON.stringify`'s problem with
+// cycles, but a hostile `toString` can still throw, so it is caught.
 function describirValor(v) {
   try { return String(v) } catch { return '<no se pudo describir>' }
 }
 
-// `.git` puede ser un DIRECTORIO (checkout normal) o un FICHERO con un
-// `gitdir:` dentro (worktree). Los agentes despachados trabajan SIEMPRE en un
-// worktree, así que mirar sólo directorios dejaría fuera la mitad de la
-// cobertura de la puerta, y en silencio.
+// `.git` can be a DIRECTORY (a normal checkout) or a FILE with a `gitdir:`
+// inside it (a worktree). Dispatched agents ALWAYS work in a worktree, so
+// looking only at directories would leave out half of the gate's coverage, and
+// silently.
 function isRepoRoot(dir) {
   try { statSync(join(dir, '.git')); return true } catch (e) {
     if (e && (e.code === 'ENOENT' || e.code === 'ENOTDIR')) return false
@@ -44,19 +46,19 @@ function isRepoRoot(dir) {
 }
 
 /**
- * probeGovernedRepo: `{ governed }` cuando se puede afirmar, `{ error }` cuando
- * no se ha podido mirar.
+ * probeGovernedRepo: `{ governed }` when it can be asserted, `{ error }` when
+ * it could not be looked at.
  *
- * La distinción es la que importa: quien llama tiene que poder tratar «no lo
- * sé» distinto de «no». Un `{ governed: false }` inventado sobre una lectura
- * que falló dejaría pasar exactamente el commit que esta puerta existe para
- * parar.
+ * The distinction is what matters: the caller has to be able to treat «I don't
+ * know» differently from «no». A `{ governed: false }` invented on top of a
+ * read that failed would let through exactly the commit this gate exists to
+ * stop.
  */
 export function probeGovernedRepo(cwd) {
-  // `cwd` que no es una cadena no puede coercionarse en silencio: `String(cwd
-  // || '')` sobre `undefined`, `null` o `''` cae al cwd del PROCESO, y
-  // contestaria sobre un directorio que quien llama nunca nombro. Eso es peor
-  // que inventar un `false`: es responder sobre otra pregunta.
+  // A `cwd` that is not a string cannot be coerced silently: `String(cwd ||
+  // '')` over `undefined`, `null` or `''` falls back to the PROCESS's cwd, and
+  // would answer about a directory the caller never named. That is worse than
+  // inventing a `false`: it is answering a different question.
   if (typeof cwd !== 'string' || cwd.length === 0) {
     return { error: `cwd invalido: se esperaba una cadena no vacia y llego ${typeof cwd} (${describirValor(cwd)})` }
   }
@@ -74,8 +76,8 @@ export function probeGovernedRepo(cwd) {
         try {
           texto = readFileSync(join(dir, AGENTS), 'utf8')
         } catch (e) {
-          // Que no HAYA AGENTS.md es una respuesta: este repo no lleva el
-          // contrato. Que no se pueda LEER no lo es.
+          // AGENTS.md NOT BEING THERE is an answer: this repo does not carry
+          // the contract. Not being able to READ it is not.
           if (e && (e.code === 'ENOENT' || e.code === 'ENOTDIR')) return { governed: false }
           return { error: `no se ha podido leer ${AGENTS} (${e.code || e.message})` }
         }

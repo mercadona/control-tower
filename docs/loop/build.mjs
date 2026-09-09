@@ -1,20 +1,20 @@
 #!/usr/bin/env node
-// build.mjs — genera las dos salidas compartibles del documento del loop a
-// partir de la ÚNICA fuente, `loop.body.html`.
+// build.mjs — generates the two shareable outputs of the loop document from
+// the SINGLE source, `loop.body.html`.
 //
-// Por qué hay una fuente y dos derivados, y no tres ficheros a mano: la fuente
-// es también el cuerpo que se publica como Artifact (la herramienta lo envuelve
-// en su propio <!doctype>/<head>/<body>, así que ese fichero no puede traerlos).
-// El HTML autocontenido y el PDF son lo que se comparte fuera. Mismo criterio
-// que `dist/` en este repo: el derivado va TRACKEADO, y todo cambio en la
-// fuente tiene que llevar los derivados reconstruidos en el mismo commit — si
-// no, se distribuye una versión vieja mientras la fuente ya dice otra cosa.
+// Why there is one source and two derivatives, and not three files by hand: the
+// source is also the body that gets published as an Artifact (the tool wraps it
+// in its own <!doctype>/<head>/<body>, so that file cannot carry them).
+// The self-contained HTML and the PDF are what gets shared outside. Same
+// criterion as `dist/` in this repo: the derivative is TRACKED, and every change
+// to the source has to carry the derivatives rebuilt in the same commit — if
+// not, an old version ships while the source already says something else.
 //
 //   node docs/loop/build.mjs            → HTML + PDF
-//   node docs/loop/build.mjs --html     → sólo HTML (no necesita navegador)
+//   node docs/loop/build.mjs --html     → HTML only (needs no browser)
 //
-// El PDF se imprime con Chrome/Brave en headless. Si no hay ninguno instalado
-// se dice y se sale con 1: no se emite un PDF a medias ni se finge que se pudo.
+// The PDF is printed with Chrome/Brave in headless mode. If none is installed
+// it says so and exits with 1: it does not emit half a PDF nor pretend it could.
 
 import { readFileSync, writeFileSync, existsSync, statSync, rmSync } from 'node:fs'
 import { spawn } from 'node:child_process'
@@ -36,9 +36,9 @@ const CHROMES = [
   '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
 ]
 
-// La hoja de impresión. Vive aquí y no en la fuente porque la fuente se publica
-// como página web y no se imprime nunca: mezclarlas obligaría a leer reglas de
-// paginación a quien sólo edita el contenido.
+// The print stylesheet. It lives here and not in the source because the source
+// is published as a web page and is never printed: mixing them would force
+// whoever only edits the content to read pagination rules.
 const PRINT_CSS = `
   /* ---------- impresión ---------- */
   @page { size: A4 portrait; margin: 11mm 10mm 13mm; }
@@ -145,18 +145,19 @@ function findBrowser() {
   return CHROMES.find((p) => existsSync(p)) || null
 }
 
-// buildPdf NO espera a que el navegador termine: espera al FICHERO.
+// buildPdf does NOT wait for the browser to finish: it waits for the FILE.
 //
-// Medido en esta máquina: `--print-to-pdf` deja el PDF completo en disco a los
-// ~2 s, pero el proceso sigue vivo dos minutos largos (despierta el updater,
-// que además hereda los descriptores y hace esperar a execFileSync aunque su
-// padre ya haya acabado). Esperar la salida del proceso convertía un build de
-// dos segundos en uno de dos minutos, y luego en un ETIMEDOUT con el PDF
-// perfectamente escrito — un fallo reportado sobre un éxito.
+// Measured on this machine: `--print-to-pdf` leaves the complete PDF on disk
+// after ~2 s, but the process stays alive for a good two minutes (it wakes the
+// updater, which on top of that inherits the descriptors and makes
+// execFileSync wait even though its parent has already finished). Waiting for
+// the process to exit turned a two-second build into a two-minute one, and then
+// into an ETIMEDOUT with the PDF perfectly written — a failure reported over a
+// success.
 //
-// Así que se sondea el tamaño del fichero: cuando deja de crecer entre dos
-// lecturas consecutivas, la impresión terminó y se mata al navegador. La
-// condición de éxito es el artefacto, que es lo que de verdad importa aquí.
+// So the file's size is polled: when it stops growing between two consecutive
+// reads, printing has finished and the browser is killed. The success condition
+// is the artefact, which is what really matters here.
 async function buildPdf(htmlPath) {
   const bin = findBrowser()
   if (!bin) {
@@ -164,13 +165,13 @@ async function buildPdf(htmlPath) {
     console.error('       El HTML autocontenido SÍ se ha generado: ábrelo e imprime a PDF desde el navegador.')
     process.exit(1)
   }
-  // Se borra el PDF anterior ANTES de imprimir: sin esto, un fallo de
-  // impresión dejaría el de la corrida pasada en disco y el sondeo lo daría
-  // por bueno al instante — publicando una versión vieja como si fuera nueva.
+  // The previous PDF is deleted BEFORE printing: without this, a printing
+  // failure would leave the one from the past run on disk and the polling would
+  // take it for good instantly — publishing an old version as if it were new.
   rmSync(OUT_PDF, { force: true })
 
-  // --user-data-dir en un temporal: sin él, headless reutiliza el perfil real
-  // del usuario y falla si ese Chrome ya está abierto.
+  // --user-data-dir in a temporary directory: without it, headless reuses the
+  // user's real profile and fails if that Chrome is already open.
   const profile = mkdtempSync(join(tmpdir(), 'ct-loop-pdf-'))
   const child = spawn(bin, [
     '--headless=new',
@@ -198,13 +199,13 @@ async function buildPdf(htmlPath) {
     const size = existsSync(OUT_PDF) ? statSync(OUT_PDF).size : 0
     if (size > 0 && size === prev) {
       stableSince += 400
-      if (stableSince >= 800) break   // dos lecturas seguidas sin crecer
+      if (stableSince >= 800) break   // two reads in a row without growing
     } else {
       stableSince = 0
     }
     prev = size
   }
-  try { process.kill(-child.pid, 'SIGKILL') } catch { /* ya no está */ }
+  try { process.kill(-child.pid, 'SIGKILL') } catch { /* it is gone already */ }
   rmSync(profile, { recursive: true, force: true })
   return { bin, out: OUT_PDF, seconds: (elapsed() / 1000).toFixed(1) }
 }

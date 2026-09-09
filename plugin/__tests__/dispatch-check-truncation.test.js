@@ -1,20 +1,20 @@
-// Finding 4 (auditoría de interrupción/staleness): `console.error(grande)`
-// seguido INMEDIATAMENTE de `process.exit()` puede perder texto —
-// `process.stdout`/`process.stderr` son ASÍNCRONOS hacia una tubería en
-// POSIX, y `process.exit()` no espera a que un `write()` en vuelo termine de
-// vaciarse (documentado en los propios docs de Node; el mismo razonamiento
-// que ya motivó el `writeSync` de `attemptClaim` en ct-next.mjs, y que un
-// sibling task usó para diagnosticar el mismo patrón en otro fichero). Los
-// diagnósticos "ATENCIÓN … libéralo a mano" de dispatch-check.mjs son
-// EXACTAMENTE los que un humano necesita íntegros cuando algo salió mal — y
-// el mensaje `COLLISION: ...` puede crecer arbitrariamente con el número de
-// issues en vuelo que comparten un token.
+// Finding 4 (interruption/staleness audit): `console.error(big)` followed
+// IMMEDIATELY by `process.exit()` can lose text —
+// `process.stdout`/`process.stderr` are ASYNCHRONOUS towards a pipe on POSIX,
+// and `process.exit()` does not wait for an in-flight `write()` to finish
+// flushing (documented in Node's own docs; the same reasoning that already
+// motivated the `writeSync` in `attemptClaim` in ct-next.mjs, and that a
+// sibling task used to diagnose the same pattern in another file). The
+// "ATENCIÓN … libéralo a mano" diagnostics of dispatch-check.mjs are EXACTLY
+// the ones a human needs whole when something went wrong — and the
+// `COLLISION: ...` message can grow arbitrarily with the number of in-flight
+// issues that share a token.
 //
-// Este test reproduce el escenario adversarial directamente: miles de
-// issues en vuelo compartiendo el token del candidato, de forma que el
-// mensaje COLLISION supere ampliamente el tamaño típico de buffer de pipe
-// en POSIX (~64 KiB en macOS) — y comprueba que el ÚLTIMO issue de la lista
-// (el que se perdería primero si algo se trunca) sigue apareciendo íntegro.
+// This test reproduces the adversarial scenario directly: thousands of
+// in-flight issues sharing the candidate's token, so that the COLLISION
+// message goes well past the typical POSIX pipe buffer size (~64 KiB on
+// macOS) — and it checks that the LAST issue of the list (the one that would
+// be lost first if something truncates) still shows up whole.
 import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
@@ -31,7 +31,7 @@ function runReal(args, envOverrides = {}) {
     const out = execFileSync('node', [script, ...args], {
       encoding: 'utf8',
       stdio: QUIET_STDIO,
-      maxBuffer: 64 * 1024 * 1024, // el LADO QUE LEE no es el problema — solo nos aseguramos de no truncar nosotros mismos al capturar.
+      maxBuffer: 64 * 1024 * 1024, // the READING SIDE is not the problem — we are just making sure we do not truncate ourselves while capturing.
       env: { ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}`, ...envOverrides },
     })
     return { code: 0, out }
@@ -40,21 +40,21 @@ function runReal(args, envOverrides = {}) {
   }
 }
 
-describe('dispatch-check.mjs — el diagnóstico COLLISION no se trunca aunque sea enorme (finding 4)', () => {
-  it('miles de issues en vuelo colisionando: el ÚLTIMO de la lista (el primero en perderse si algo trunca) llega íntegro', () => {
+describe('dispatch-check.mjs — the COLLISION diagnostic is not truncated however huge it gets (finding 4)', () => {
+  it('thousands of in-flight issues colliding: the LAST of the list (the first to be lost if something truncates) arrives whole', () => {
     const N = 10000
     const inFlight = []
     for (let i = 1; i <= N; i++) {
       inFlight.push({ number: 1000 + i, labels: [{ name: 'status:in-progress' }, { name: 'touches:db' }] })
     }
-    // La secuencia viaja por FICHERO y no inline en la variable de entorno.
-    // Linux limita CADA cadena de argv/entorno a MAX_ARG_STRLEN (32 páginas,
-    // 128 KiB); estos 10.000 issues pasan de 700 KiB, así que el `execve`
-    // fallaba y `r.code` llegaba como `null` — el proceso no arrancaba, y el
-    // test no medía el truncamiento que dice medir. macOS no tiene ese tope
-    // por cadena, y por eso pasaba en local y no en la integración continua.
-    // El fake gh ya trae este camino (FAKE_GH_LIST_SEQUENCE_FILE), añadido
-    // por el mismo motivo de tamaño.
+    // The sequence travels through a FILE and not inline in the environment
+    // variable. Linux caps EACH argv/environment string at MAX_ARG_STRLEN (32
+    // pages, 128 KiB); these 10,000 issues go past 700 KiB, so the `execve`
+    // failed and `r.code` arrived as `null` — the process did not start, and
+    // the test was not measuring the truncation it claims to measure. macOS
+    // has no such per-string cap, and that is why it passed locally and not in
+    // continuous integration. The fake gh already carries this path
+    // (FAKE_GH_LIST_SEQUENCE_FILE), added for the same size reason.
     const seqDir = mkdtempSync(join(tmpdir(), 'ct-truncation-'))
     const seqFile = join(seqDir, 'list-sequence.json')
     writeFileSync(seqFile, JSON.stringify([inFlight]))
@@ -68,13 +68,14 @@ describe('dispatch-check.mjs — el diagnóstico COLLISION no se trunca aunque s
       rmSync(seqDir, { recursive: true, force: true })
     }
     expect(r.code).toBe(1)
-    expect(r.out.length).toBeGreaterThan(100 * 1024) // confirma que el escenario SÍ es lo bastante grande para superar un buffer de pipe típico (~64 KiB)
+    expect(r.out.length).toBeGreaterThan(100 * 1024) // confirms the scenario IS big enough to go past a typical pipe buffer (~64 KiB)
     expect(r.out).toMatch(/^COLLISION: #5 choca con/)
-    // El último issue de la lista es el candidato más probable a perderse
-    // si algo se trunca — debe seguir estando presente, íntegro.
-    // F13/H2: cada colisionante lleva ahora su status dentro del corchete
-    // (`#N[touches:db status:in-progress]`) — "choca con #N" ya no implica que
-    // haya un agente vivo ahí, y el remedio depende de cuál de los dos sea.
+    // The last issue of the list is the likeliest candidate to be lost if
+    // something truncates — it must still be present, whole.
+    // F13/H2: each collider now carries its status inside the bracket
+    // (`#N[touches:db status:in-progress]`) — "choca con #N" no longer implies
+    // there is a live agent there, and the remedy depends on which of the two
+    // it is.
     expect(r.out).toMatch(new RegExp(`#${1000 + N}\\[touches:db status:in-progress\\]`))
   })
 })

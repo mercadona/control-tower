@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { cargarIssues } from '../scripts/loop-issues.js'
 
 describe('cargarIssues', () => {
-  it('aplana las páginas, descarta PRs y normaliza state_reason a mayúsculas', () => {
+  it('flattens the pages, discards PRs and normalises state_reason to upper case', () => {
     const gh = (args) => {
       const abierto = args.includes('state=open')
       return JSON.stringify([[
@@ -18,7 +18,7 @@ describe('cargarIssues', () => {
     expect(cerrados[0].stateReason).toBe('COMPLETED')
   })
 
-  it('nunca pasa --limit: la paginación es real', () => {
+  it('never passes --limit: the pagination is real', () => {
     const vistos = []
     const gh = (args) => { vistos.push(args.join(' ')); return '[[]]' }
     cargarIssues({ repo: 'o/r', gh })
@@ -28,17 +28,17 @@ describe('cargarIssues', () => {
     }
   })
 
-  it('devuelve el motivo cuando falla una lectura, nombrando cuál — no lanza ni sale del proceso', () => {
+  it('returns the reason when a read fails, naming which one — it neither throws nor exits the process', () => {
     const gh = (args) => { if (args.includes('state=open')) throw new Error('rate limit'); return '[[]]' }
     const { motivos } = cargarIssues({ repo: 'o/r', gh })
     expect(motivos).toHaveLength(1)
     expect(motivos[0]).toMatch(/abiertos.*rate limit/s)
   })
 
-  it('si fallan los CERRADOS, los abiertos ya leídos NO se tiran', () => {
-    // Lanzar al fallar la segunda lectura descartaba la primera, que ya estaba
-    // entera en memoria: /ct-status imprimía un informe VACÍO bajo «lo de
-    // arriba es sólo lo que sí se ha podido comprobar», sin nada arriba.
+  it('when the CLOSED ones fail, the open ones already read are NOT thrown away', () => {
+    // Throwing when the second read failed discarded the first one, which was
+    // already whole in memory: /ct-status printed an EMPTY report under «lo de
+    // arriba es sólo lo que sí se ha podido comprobar», with nothing above.
     const gh = (args) => {
       if (args.includes('state=closed')) throw new Error('rate limit')
       return JSON.stringify([[{ number: 42, body: '', labels: [] }]])
@@ -50,7 +50,7 @@ describe('cargarIssues', () => {
     expect(motivos[0]).toMatch(/cerrados/)
   })
 
-  it('si fallan LAS DOS lecturas se dicen las dos, y ninguna se degrada a "no hay issues"', () => {
+  it('when BOTH reads fail both are said, and neither degrades into "there are no issues"', () => {
     const gh = () => { throw new Error('sin red') }
     const { abiertos, cerrados, motivos } = cargarIssues({ repo: 'o/r', gh })
     expect(abiertos).toEqual([])
@@ -58,7 +58,7 @@ describe('cargarIssues', () => {
     expect(motivos.map((m) => /abiertos/.test(m) ? 'abiertos' : 'cerrados')).toEqual(['abiertos', 'cerrados'])
   })
 
-  it('con las dos lecturas buenas, `motivos` viene vacío', () => {
+  it('with both reads good, `motivos` comes back empty', () => {
     const { motivos } = cargarIssues({ repo: 'o/r', gh: () => '[[]]' })
     expect(motivos).toEqual([])
   })

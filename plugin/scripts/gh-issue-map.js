@@ -1,30 +1,29 @@
-// Mapeo puro de issues de GitHub (forma cruda de `gh issue list --json
-// number,title,labels,body` / `--json number,stateReason`) a la forma que
-// consumen selectNext/renderKickoff/buildStateSeed. Extraído de ct-next.mjs
-// (review round 1, Important/Minor 1) para poder testearlo sin red y sin
-// pasar por `gh`: antes de este cambio el único camino de test entraba por
-// CT_NEXT_FIXTURE, así que este mapeo nunca se ejecutaba en la suite — una
-// deriva en el formato de groom.js#buildIssueBody (p.ej. renombrar el
-// encabezado "## Acceptance criteria") podía romperlo en silencio hasta el
-// dispatch real contra un repo de verdad.
+// Pure mapping of GitHub issues (the raw shape of `gh issue list --json
+// number,title,labels,body` / `--json number,stateReason`) onto the shape
+// selectNext/renderKickoff/buildStateSeed consume. Extracted out of
+// ct-next.mjs (review round 1, Important/Minor 1) so that it can be tested
+// without a network and without going through `gh`: before this change the
+// only test path came in through CT_NEXT_FIXTURE, so this mapping never ran in
+// the suite — a drift in groom.js#buildIssueBody's format (e.g. renaming the
+// "## Acceptance criteria" heading) could break it silently until the real
+// dispatch against a real repo.
 import { gatesFromLabels } from './gates.js'
 
-// detectLineEnding / normalizeToLF (review round 4, menor: CRLF): un issue
-// editado en Windows (o pegado desde un editor que usa CRLF) deja un '\r'
-// al final de cada línea. Sin normalizar, ese '\r' se cuela en cualquier
-// comparación de igualdad (la línea de enlace al spec, una cabecera
-// "exact") y en el contenido multi-línea de Descripción/Protegido —
-// haciendo que dos textos VISUALMENTE idénticos se reporten como
-// divergentes. Y sin denormalizar de vuelta, un splice (que genera su
-// propio contenido con '\n' desnudo) deja el body resultante con finales de
-// línea mezclados (parte CRLF original, parte LF nuestro).
+// detectLineEnding / normalizeToLF (review round 4, minor: CRLF): an issue
+// edited on Windows (or pasted from an editor that uses CRLF) leaves a '\r'
+// at the end of every line. Without normalising, that '\r' sneaks into any
+// equality comparison (the link line to the spec, an "exact" heading) and into
+// the multi-line content of Descripción/Protegido — making two VISUALLY
+// identical texts get reported as drifting. And without denormalising back, a
+// splice (which generates its own content with a bare '\n') leaves the
+// resulting body with mixed line endings (part original CRLF, part our LF).
 //
-// Estrategia: todo el procesamiento (detección Y aplicación) trabaja SIEMPRE
-// sobre texto normalizado a LF puro; quien vaya a devolver un body para
-// escribir de vuelta (buildReconcileBody) detecta el final de línea
-// DOMINANTE del original con `detectLineEnding` y, si era CRLF, reconvierte
-// el resultado entero antes de devolverlo — así el body escrito nunca queda
-// con finales mezclados.
+// Strategy: all the processing (detection AND application) ALWAYS works over
+// text normalised to pure LF; whoever is going to return a body to write back
+// (buildReconcileBody) detects the original's DOMINANT line ending with
+// `detectLineEnding` and, if it was CRLF, converts the whole result back
+// before returning it — that way the body written never ends up with mixed
+// endings.
 export function detectLineEnding(text) {
   return /\r\n/.test(text || '') ? '\r\n' : '\n'
 }
@@ -32,86 +31,84 @@ export function normalizeToLF(text) {
   return (text || '').replace(/\r\n/g, '\n').replace(/\r/g, '')
 }
 
-// FENCE_LINE_RE: delimitador de un bloque de código cercado (CommonMark:
-// hasta 3 espacios de indentación, luego 3+ backticks o 3+ tildes). Captura
-// la serie completa (grupo 1) para que quien la use pueda comparar carácter
-// Y longitud — ver stepFence más abajo.
+// FENCE_LINE_RE: the delimiter of a fenced code block (CommonMark: up to 3
+// spaces of indentation, then 3+ backticks or 3+ tildes). It captures the
+// whole run (group 1) so that whoever uses it can compare character AND
+// length — see stepFence below.
 const FENCE_LINE_RE = /^ {0,3}(`{3,}|~{3,})/
 
-// ATX_HEADING_RE (review round 5, Critical 2 — el reviewer atacó su propio
-// terminador del round 4 y encontró que solo reconocía "## " literal a
-// columna 0): CommonMark considera cabecera ATX cualquier línea con 1 a 6
-// "#", indentada hasta 3 espacios, seguida de un espacio/tabulador o de fin
-// de línea. Antes, un "#", "###", "####", un "##" separado por TABULADOR, o
-// uno indentado 1-3 espacios — los cinco, cabeceras reales en GitHub — no
-// terminaban ninguna sección: todo lo que hubiera debajo (hasta la
-// siguiente "## " exacta) se consideraba parte del CONTENIDO de la sección
-// anterior. Verificado con el ejemplo del reviewer: un "### Notas de
-// implementación" con una advertencia real ("no tocar sin hablar con Ana")
-// desaparecía al reconciliar porque quedaba "dentro" de la sección previa,
-// y el splice de --reconcile lo sustituía sin más.
+// ATX_HEADING_RE (review round 5, Critical 2 — the reviewer attacked their
+// own terminator from round 4 and found that it only recognised a literal
+// "## " at column 0): CommonMark considers an ATX heading any line with 1 to 6
+// "#", indented up to 3 spaces, followed by a space/tab or by the end of the
+// line. Before, a "#", "###", "####", a "##" separated by a TAB, or one
+// indented 1-3 spaces — all five real headings on GitHub — terminated no
+// section at all: everything below (up to the next exact "## ") was considered
+// part of the CONTENT of the previous section. Verified with the reviewer's
+// example: a "### Notas de implementación" with a real warning ("no tocar sin
+// hablar con Ana") disappeared on reconciling because it fell "inside" the
+// previous section, and --reconcile's splice replaced it without further
+// ado.
 const ATX_HEADING_RE = /^ {0,3}#{1,6}([ \t]|$)/
 
-// COMMENT_OPEN_TOKEN / COMMENT_CLOSE_TOKEN: los delimitadores de un
-// comentario HTML — ver stepLine más abajo (Critical 1, review round 5).
+// COMMENT_OPEN_TOKEN / COMMENT_CLOSE_TOKEN: the delimiters of an HTML
+// comment — see stepLine below (Critical 1, review round 5).
 const COMMENT_OPEN_TOKEN = '<!--'
 const COMMENT_CLOSE_TOKEN = '-->'
 
-// stepFence (review round 4, Critical 1 — el reviewer atacó su propio
-// escáner del round 3 y encontró que CUALQUIER delimitador conmutaba el
-// estado, sin mirar tipo ni longitud): CommonMark solo cierra una valla con
-// una serie del MISMO carácter (backtick cierra backtick, tilde cierra
-// tilde — nunca cruzado) y de longitud >= la de apertura. La versión
-// anterior alternaba `inFence` con CUALQUIER línea que matcheara
-// FENCE_LINE_RE — un ``` (3 backticks) dentro de un bloque abierto con
-// ```` (4 backticks) "cerraba" el estado en falso, así que el contenido
-// posterior (incluido el cierre real ````) se trataba como estructura del
-// documento. Reproducido con el ejemplo exacto que este propio proyecto
-// documenta de sí mismo: un bloque de 4 backticks mostrando, como ejemplo,
-// un bloque de 3 backticks con "## Dependencias" dentro.
+// stepFence (review round 4, Critical 1 — the reviewer attacked their own
+// scanner from round 3 and found that ANY delimiter toggled the state,
+// without looking at type or length): CommonMark only closes a fence with a
+// run of the SAME character (a backtick closes a backtick, a tilde closes a
+// tilde — never crossed) and of length >= the opening one. The previous
+// version flipped `inFence` on ANY line that matched FENCE_LINE_RE — a ``` (3
+// backticks) inside a block opened with ```` (4 backticks) falsely "closed"
+// the state, so the content after it (the real ```` closing included) was
+// treated as structure of the document. Reproduced with the exact example
+// this very project documents about itself: a 4-backtick block showing, as an
+// example, a 3-backtick block with "## Dependencias" inside.
 //
-// Recibe el estado previo `{ inFence, fenceChar, fenceLen }` y la línea
-// actual; devuelve `{ state, isFenceDelim }` — `isFenceDelim` es cierto
-// cuando la línea EN SÍ es un delimitador real (abre o cierra), y esas
-// líneas nunca cuentan como cabecera/terminador por sí mismas,
-// independientemente del nuevo valor de `inFence`.
+// It receives the previous state `{ inFence, fenceChar, fenceLen }` and the
+// current line; it returns `{ state, isFenceDelim }` — `isFenceDelim` is true
+// when the line ITSELF is a real delimiter (it opens or closes), and those
+// lines never count as a heading/terminator in their own right, regardless of
+// the new value of `inFence`.
 //
-// Menor (review round 5): además de carácter y longitud, CommonMark exige
-// que una línea de CIERRE no lleve nada detrás salvo espacio en blanco — un
-// "info string" (p.ej. el "js" de "```js") solo es válido en la APERTURA.
-// Antes, una línea como "```js" dentro de un bloque YA abierto (pensada
-// como CONTENIDO de ejemplo — p.ej. mostrando otro fence con lenguaje —, no
-// como cierre) se leía igualmente como cierre en falso porque solo se
-// miraba el carácter+longitud del delimitador, ignorando el resto de la
-// línea. Fallaba seguro (no corrompía nada: como mucho hacía localizable de
-// más una cabecera que en realidad seguía "dentro" del ejemplo), pero el
-// mensaje de error que dependiera de dónde termina esa sección podía culpar
-// a una cabecera que sigue visiblemente presente más abajo, en vez de
-// explicar que el cierre nunca fue tal.
+// Minor (review round 5): besides the character and the length, CommonMark
+// demands that a CLOSING line carry nothing behind it but whitespace — an
+// "info string" (e.g. the "js" of "```js") is only valid on the OPENING.
+// Before, a line like "```js" inside an ALREADY open block (meant as example
+// CONTENT — e.g. showing another fence with a language —, not as a closing)
+// was read as a false closing all the same because only the delimiter's
+// character+length was looked at, ignoring the rest of the line. It failed
+// safe (it corrupted nothing: at worst it made locatable a heading that was in
+// fact still "inside" the example), but an error message that depended on
+// where that section ends could blame a heading that is still visibly present
+// further down, instead of explaining that the closing was never one.
 function stepFence(line, state) {
   const m = FENCE_LINE_RE.exec(line)
   if (!m) return { state, isFenceDelim: false }
   const char = m[1][0]
   const len = m[1].length
   if (!state.inFence) {
-    // Fuera de cualquier valla: esta línea SIEMPRE abre una nueva,
-    // recordando su carácter y longitud exactos. Un info string detrás (la
-    // apertura SÍ lo tolera) no importa aquí.
+    // Outside any fence: this line ALWAYS opens a new one, remembering its
+    // exact character and length. An info string behind it (the opening DOES
+    // tolerate one) does not matter here.
     return { state: { inFence: true, fenceChar: char, fenceLen: len }, isFenceDelim: true }
   }
   const rest = line.slice(m[0].length)
   if (char === state.fenceChar && len >= state.fenceLen && /^\s*$/.test(rest)) {
-    // Cierra: mismo carácter, longitud igual o mayor que la apertura, y
-    // nada más que espacio en blanco detrás del delimitador.
+    // It closes: same character, length equal to or greater than the
+    // opening, and nothing but whitespace behind the delimiter.
     return { state: { inFence: false, fenceChar: null, fenceLen: 0 }, isFenceDelim: true }
   }
-  // Un delimitador de OTRO carácter (p.ej. "~~~" dentro de un bloque abierto
-  // con "```"), del mismo carácter pero más corto, o con texto detrás
-  // (info string, p.ej. "```js") NO cierra la valla — es contenido normal
-  // dentro de ella (`state` no cambia; `isFenceDelim` false porque, a
-  // efectos de este escáner, esta línea no delimita nada por sí sola —
-  // sigue dentro de la valla ya abierta, que es justo lo que decide si
-  // predicate() se evalúa o no en el llamador).
+  // A delimiter of ANOTHER character (e.g. "~~~" inside a block opened with
+  // "```"), of the same character but shorter, or with text behind it (an info
+  // string, e.g. "```js") does NOT close the fence — it is ordinary content
+  // inside it (`state` does not change; `isFenceDelim` is false because, as
+  // far as this scanner is concerned, this line delimits nothing on its own —
+  // it is still inside the already-open fence, which is exactly what decides
+  // whether predicate() gets evaluated in the caller).
   return { state, isFenceDelim: false }
 }
 
@@ -119,37 +116,36 @@ function initLineState() {
   return { inFence: false, fenceChar: null, fenceLen: 0, inComment: false }
 }
 
-// stepLine (review round 5, Critical 1 — "endureciste las vallas a fondo y
-// dejaste intactas las otras dos cosas con forma de delimitador que viven
-// en el mismo body"): un comentario HTML multilínea es EXACTAMENTE el mismo
-// tipo de riesgo que una valla de código sin cerrar — nada rastreaba su
-// INTERIOR, así que una cabecera conocida "comentada" dentro de un
-// `<!-- ... -->` que abre en una línea y cierra varias líneas después (p.ej.
-// unas deps viejas comentadas "mientras decidimos") se leía como si fuera
-// estructura real del documento. Con eso, `locateSection` devolvía la copia
-// comentada, `--reconcile` escribía DENTRO del comentario, y como el fin de
-// contenido llega hasta la siguiente cabecera real, el splice se comía el
-// propio `-->` de cierre — en GitHub, un comentario sin cerrar se traga
-// todo hasta EOF.
+// stepLine (review round 5, Critical 1 — "you hardened the fences
+// thoroughly and left untouched the other two delimiter-shaped things that
+// live in the same body"): a multi-line HTML comment is EXACTLY the same kind
+// of risk as an unclosed code fence — nothing tracked its INSIDE, so a known
+// heading "commented out" inside a `<!-- ... -->` that opens on one line and
+// closes several lines later (e.g. some old deps commented out "while we
+// decide") was read as if it were real structure of the document. With that,
+// `locateSection` returned the commented-out copy, `--reconcile` wrote INSIDE
+// the comment, and since the end of content reaches as far as the next real
+// heading, the splice ate the closing `-->` itself — on GitHub, an unclosed
+// comment swallows everything up to EOF.
 //
-// La distinción que importa: el marcador `<!-- ct-order:N -->` (y
-// cualquier comentario que ABRE y CIERRA en la MISMA línea) es una línea
-// real y autocontenida — SIGUE siendo válida como terminador de sección,
-// igual que antes. Lo que NO puede seguir pasando es que la mera presencia
-// de "<!--" en una línea (sin "-->" detrás, EN ESA MISMA línea) se trate
-// como el marcador: eso es la APERTURA de un comentario multilínea, cuyo
-// interior (hasta la línea que por fin trae "-->") queda tan invisible para
-// el escáner como el interior de una valla.
+// The distinction that matters: the `<!-- ct-order:N -->` marker (and any
+// comment that OPENS and CLOSES on the SAME line) is a real, self-contained
+// line — it is STILL valid as a section terminator, just as before. What can
+// NOT go on happening is that the mere presence of "<!--" on a line (with no
+// "-->" behind it, ON THAT SAME line) is treated as the marker: that is the
+// OPENING of a multi-line comment, whose inside (as far as the line that
+// finally brings a "-->") is as invisible to the scanner as the inside of a
+// fence.
 //
-// Devuelve `{ state, wasHidden }` — `wasHidden` es cierto cuando, ANTES de
-// procesar esta línea, el escáner ya estaba dentro de una valla o de un
-// comentario multilínea abiertos por una línea ANTERIOR: es lo que decide,
-// en cada llamador, si esta línea es candidata a heading/terminador. La
-// propia línea que ABRE la valla/el comentario nunca es `wasHidden` (era
-// visible cuando se alcanzó), pero tampoco necesita serlo a propósito: ni
-// un delimitador de valla ni un "<!--" se parecen nunca a una cabecera ATX
-// o a un marcador autocontenido, así que da igual si se evalúan o no contra
-// esos predicados — nunca matchean por accidente.
+// It returns `{ state, wasHidden }` — `wasHidden` is true when, BEFORE
+// processing this line, the scanner was already inside a fence or a multi-line
+// comment opened by an EARLIER line: that is what decides, in each caller,
+// whether this line is a candidate heading/terminator. The very line that
+// OPENS the fence/the comment is never `wasHidden` (it was visible when it was
+// reached), but it does not need to be either: neither a fence delimiter nor a
+// "<!--" ever looks like an ATX heading or a self-contained marker, so it does
+// not matter whether they get evaluated against those predicates — they never
+// match by accident.
 function stepLine(line, state) {
   const wasHidden = state.inFence || state.inComment
   if (state.inComment) {
@@ -170,15 +166,15 @@ function stepLine(line, state) {
   return { state, wasHidden }
 }
 
-// scanLines: recorre `body` línea a línea, llevando el estado combinado de
-// valla+comentario con `stepLine`, y devuelve la primera línea (índice +
-// offset absoluto en la cadena) que satisface `predicate`, IGNORANDO por
-// completo las líneas ocultas dentro de una valla o de un comentario
-// multilínea. Es el mecanismo compartido detrás de locateSection/locateLine
-// — review round 3 (Critical 1): antes, tanto la cabecera como el
-// terminador de sección se buscaban con una regex sobre la cadena COMPLETA,
-// sin distinguir "dentro de una valla de código" (y, desde la ronda 5,
-// "dentro de un comentario HTML") de "estructura real del documento".
+// scanLines: walks `body` line by line, carrying the combined
+// fence+comment state with `stepLine`, and returns the first line (index +
+// absolute offset into the string) that satisfies `predicate`, IGNORING
+// entirely the lines hidden inside a fence or a multi-line comment. It is the
+// shared mechanism behind locateSection/locateLine — review round 3 (Critical
+// 1): before, both the heading and the section terminator were looked for with
+// a regex over the WHOLE string, with no distinction between "inside a code
+// fence" (and, since round 5, "inside an HTML comment") and "real structure of
+// the document".
 function scanLines(body, predicate) {
   const src = body || ''
   const lines = src.split('\n')
@@ -196,55 +192,56 @@ function scanLines(body, predicate) {
   return null
 }
 
-// outsideOf (review final de rama, C2): el predicado "esta coincidencia NO
-// cae dentro de un rango prohibido del propio body". Una sola implementación,
-// compartida por locateSection y locateLine, porque el problema es el mismo
-// en las dos: ambas se quedan con la PRIMERA aparición sobre el body ENTERO,
-// sin ninguna noción de "esto de aquí es de otro dueño y no se toca".
+// outsideOf (final branch review, C2): the predicate "this match does NOT
+// fall inside a forbidden range of the body itself". A single implementation,
+// shared by locateSection and locateLine, because the problem is the same in
+// both: both keep the FIRST appearance over the WHOLE body, with no notion of
+// "this bit here belongs to someone else and is not to be touched".
 //
-// El caso real: la sesión coordinadora pega en "## Contexto heredado" el
-// contexto del issue del slice anterior — que lleva las MISMAS cabeceras y la
-// MISMA línea de enlace al spec que todo issue del epic, porque las escribe el
-// mismo generador. Sin este filtro, su texto se convierte en el objetivo del
-// splice, y el placeholder con el que se crea la sección («`/ct-groom` no
-// escribe aquí ni reescribe lo que escribas») pasa a ser mentira.
+// The real case: the coordinator session pastes into "## Contexto heredado"
+// the context of the previous slice's issue — which carries the SAME headings
+// and the SAME link line to the spec as every issue of the epic, because the
+// same generator writes them. Without this filter, its text becomes the
+// splice's target, and the placeholder the section is created with («`/ct-groom`
+// no escribe aquí ni reescribe lo que escribas») becomes a lie.
 //
-// `range` es `{ start, end }` en offsets absolutos del body, o null/undefined
-// (sin zona prohibida — el comportamiento de siempre). Intervalo semiabierto
-// [start, end): el carácter en `end` ya está fuera.
+// `range` is `{ start, end }` in absolute offsets of the body, or
+// null/undefined (no forbidden zone — the behaviour of always). A half-open
+// interval [start, end): the character at `end` is already outside.
 //
-// QUÉ PROTEGE ESTO DEPENDE ENTERAMENTE DEL RANGO QUE SE LE PASE, y conviene
-// decirlo aquí porque la primera versión de este filtro se quedó corta por no
-// verlo. Si el rango es el de la sección heredada tal cual la devuelve
-// `locateSection`, no protege de ninguna cabecera: esa función TERMINA la
-// sección en la primera cabecera ATX (endurecimiento de F5, ronda 5), así que
-// la cabecera que alguien pegue dentro es justamente la que cierra el rango y
-// queda FUERA de él. El caller decide dónde acaba la zona — ver `zonaHeredada`
-// en reconcile.js, que la lleva hasta "## Acceptance criteria" precisamente
-// para que las cabeceras pegadas sí caigan dentro. Este helper no opina sobre
-// eso: sólo aplica el intervalo que recibe.
+// WHAT THIS PROTECTS DEPENDS ENTIRELY ON THE RANGE IT IS HANDED, and it is
+// worth saying so here because the first version of this filter fell short for
+// not seeing it. If the range is that of the inherited section exactly as
+// `locateSection` returns it, it protects against no heading at all: that
+// function TERMINATES the section at the first ATX heading (F5's hardening,
+// round 5), so the heading somebody pastes inside is precisely the one that
+// closes the range and ends up OUTSIDE it. The caller decides where the zone
+// ends — see `zonaHeredada` in reconcile.js, which takes it as far as "##
+// Acceptance criteria" precisely so that pasted headings do fall inside. This
+// helper has no opinion about that: it only applies the interval it
+// receives.
 function outsideOf(range) {
   if (!range) return () => true
   return (offset) => offset < range.start || offset >= range.end
 }
 
-// unterminatedDelimiter (review final de rama, C3): recorre `text` con el
-// MISMO escáner de estado que scanLines/locateSection (stepLine) y dice si al
-// llegar al final quedaba una valla de código o un comentario HTML ABIERTOS.
-// Devuelve `'valla'`, `'comentario'` o `null`.
+// unterminatedDelimiter (final branch review, C3): walks `text` with the SAME
+// state scanner as scanLines/locateSection (stepLine) and says whether, on
+// reaching the end, a code fence or an HTML comment was left OPEN. It returns
+// `'valla'`, `'comentario'` or `null`.
 //
-// Es la mitad que faltaba del guardarraíl de secciones. `locateSection` y
-// `groom.js#truncationLine` sólo pueden cazar lo que termina una sección
-// ANTES de tiempo; un delimitador sin cerrar hace justo lo contrario: esconde
-// todas las líneas siguientes, así que deja de haber terminador y la sección
-// se traga todo lo que venga detrás. Sin ruido, sin aviso, y con un splice
-// posterior que borra desde la cabecera hasta el final del cuerpo.
+// It is the missing half of the section guardrail. `locateSection` and
+// `groom.js#truncationLine` can only catch what ends a section TOO EARLY; an
+// unclosed delimiter does exactly the opposite: it hides every following line,
+// so there stops being a terminator and the section swallows whatever comes
+// after it. With no noise, no warning, and with a later splice that deletes
+// from the heading to the end of the body.
 //
-// Vive aquí, y no en groom.js, por la misma razón por la que se reusa
-// `locateSection` sobre el texto del spec en vez de escribir un segundo
-// escáner: el de este fichero lleva encima el endurecimiento de vallas
-// (carácter, longitud, info string) y de comentarios multilínea de las rondas
-// 4 y 5 de F5, y una segunda implementación divergiría de él.
+// It lives here, and not in groom.js, for the same reason `locateSection` is
+// reused over the spec's text instead of writing a second scanner: the one in
+// this file carries the hardening of fences (character, length, info string)
+// and of multi-line comments from rounds 4 and 5 of F5, and a second
+// implementation would drift from it.
 export function unterminatedDelimiter(text) {
   let state = initLineState()
   for (const line of (text || '').split('\n')) {
@@ -255,57 +252,55 @@ export function unterminatedDelimiter(text) {
   return null
 }
 
-// headingMatcher: `headings` es un string (la cabecera exacta) o un array
-// de strings (un conjunto CERRADO de cabeceras aceptables — ver AC_HEADING_FORMS
-// más abajo, review round 5, Importante 4). Siempre igualdad exacta módulo
-// espacios finales (`trimEnd()`, que también absorbe un `\r` de CRLF ya que
-// `trim`/`trimEnd` lo tratan como whitespace) contra CUALQUIERA de las
-// alternativas — nunca prefijo abierto (ver el porqué en locateSection).
+// headingMatcher: `headings` is a string (the exact heading) or an array of
+// strings (a CLOSED set of acceptable headings — see AC_HEADING_FORMS below,
+// review round 5, Important 4). Always exact equality modulo trailing spaces
+// (`trimEnd()`, which also absorbs a CRLF's `\r` since `trim`/`trimEnd` treat
+// it as whitespace) against ANY of the alternatives — never an open prefix
+// (see why in locateSection).
 function headingMatcher(headings) {
   const list = Array.isArray(headings) ? headings : [headings]
   return (line) => list.includes(line.trimEnd())
 }
 
-// locateSection: encuentra dónde vive una sección del body (buildIssueBody
-// en groom.js genera un puñado de secciones con cabecera fija: "##
+// locateSection: finds where a section of the body lives (buildIssueBody in
+// groom.js generates a handful of sections with a fixed heading: "##
 // Acceptance criteria…", "## Dependencias", "## Out of scope / Protected",
-// "## Descripción") — delimitada por su propia cabecera y por el mismo
-// criterio de "fin de sección" que ya usaba extractAc: la siguiente
-// cabecera ATX, el marcador autocontenido `<!-- ct-order -->`, o el fin del
-// body. Devuelve `null` si la cabecera no aparece en absoluto.
+// "## Descripción") — delimited by its own heading and by the same "end of
+// section" criterion extractAc already used: the next ATX heading, the
+// self-contained `<!-- ct-order -->` marker, or the end of the body. It
+// returns `null` if the heading does not appear at all.
 //
-// `headingText` acepta un string o un array de strings (ver headingMatcher)
-// — review round 5, Importante 4: hasta ahora "## Acceptance criteria" era
-// el ÚNICO caso con `{ exact: false }` (prefijo abierto), porque es la única
-// de las cuatro cabeceras con un sufijo legítimo ("(EARS, 1:1 con tests)").
-// Pero buildIssueBody (groom.js) SOLO emite dos cadenas fijas para esa
-// cabecera (la actual y, en bodies más antiguos, la de antes de que EARS se
-// añadiera) — el hueco legítimo es un CONJUNTO CERRADO de dos elementos, no
-// un prefijo abierto. Con prefijo abierto, un "## Acceptance criteria
-// propuestos por QA (borrador)" escrito por un humano POR ENCIMA de la
-// sección real se reclamaba como si fuera ella: el dispatcher inyectaba
-// CERO criterios reales en el prompt del agente, y --reconcile habría
-// sustituido la prosa de QA. Ver AC_HEADING_FORMS más abajo.
+// `headingText` accepts a string or an array of strings (see headingMatcher)
+// — review round 5, Important 4: until now "## Acceptance criteria" was the
+// ONLY case with `{ exact: false }` (an open prefix), because it is the only
+// one of the four headings with a legitimate suffix ("(EARS, 1:1 con
+// tests)"). But buildIssueBody (groom.js) emits ONLY two fixed strings for
+// that heading (the current one and, in older bodies, the one from before EARS
+// was added) — the legitimate gap is a CLOSED SET of two elements, not an open
+// prefix. With an open prefix, a "## Acceptance criteria propuestos por QA
+// (borrador)" written by a human ABOVE the real section was claimed as if it
+// were it: the dispatcher injected ZERO real criteria into the agent's prompt,
+// and --reconcile would have replaced QA's prose. See AC_HEADING_FORMS below.
 //
-// Las OTRAS tres cabeceras (Descripción/Dependencias/Out of scope) siguen
-// exigiendo igualdad exacta con un ÚNICO string: con `startsWith` genérico
-// (round 3), un humano escribiendo `## Dependencias externas (notas del
-// equipo)` — una sección propia, sobre OTRA cosa — se reclamaba como SI
-// FUERA la sección de dependencias real: --reconcile sustituía esa prosa
-// humana por `- merge-after #N` y dejaba la sección real (si la había, en
-// otro punto del body) obsoleta e invisible, exit 0 estable para siempre.
+// The OTHER three headings (Descripción/Dependencias/Out of scope) still
+// demand exact equality with a SINGLE string: with a generic `startsWith`
+// (round 3), a human writing `## Dependencias externas (notas del equipo)` — a
+// section of their own, about ANOTHER thing — was claimed AS IF IT WERE the
+// real dependencies section: --reconcile replaced that human prose with `-
+// merge-after #N` and left the real section (if there was one, somewhere else
+// in the body) obsolete and invisible, a stable exit 0 forever.
 //
-// Se usa tanto para EXTRAER contenido (comparar spec vs. issue — F5) como
-// para REEMPLAZARLO quirúrgicamente (F5 --reconcile, ver
-// scripts/reconcile.js#buildReconcileBody): las posiciones `headingStart`/
-// `headingEnd`/`contentEnd` permiten hacer un `body.slice(...)` que toca
-// SOLO esa sección, dejando intacto cualquier contenido humano antes,
-// después, o en cualquier sección nueva que el humano haya añadido en otro
-// punto del body.
-// `forbidden` (opcional, review final de rama C2): rango `{start, end}` del
-// body cuyo contenido pertenece a otro dueño. Una cabecera que caiga dentro
-// se DESCARTA y la búsqueda sigue con la siguiente aparición fuera del rango
-// — ver `outsideOf` arriba, incluido su límite medido.
+// It is used both to EXTRACT content (comparing spec vs. issue — F5) and to
+// REPLACE it surgically (F5 --reconcile, see
+// scripts/reconcile.js#buildReconcileBody): the positions `headingStart`/
+// `headingEnd`/`contentEnd` allow a `body.slice(...)` that touches ONLY that
+// section, leaving intact any human content before it, after it, or in any new
+// section the human has added elsewhere in the body.
+// `forbidden` (optional, final branch review C2): a `{start, end}` range of
+// the body whose content belongs to another owner. A heading that falls inside
+// is DISCARDED and the search carries on with the next appearance outside the
+// range — see `outsideOf` above, its measured limit included.
 export function locateSection(body, headingText, forbidden = null) {
   const src = body || ''
   const matches = headingMatcher(headingText)
@@ -313,28 +308,27 @@ export function locateSection(body, headingText, forbidden = null) {
   const heading = scanLines(src, (line, _i, offset) => matches(line) && allowed(offset))
   if (!heading) return null
   const headingStart = heading.offset
-  // headingEnd: justo después del '\n' que cierra la línea de cabecera (si
-  // el body termina justo ahí, sin más líneas, headingEnd es src.length).
+  // headingEnd: just after the '\n' that closes the heading line (if the body
+  // ends right there, with no further lines, headingEnd is src.length).
   const headingEnd = Math.min(headingStart + heading.line.length + 1, src.length)
 
-  // Terminador: primera línea (a partir de la siguiente a la cabecera),
-  // ignorando líneas ocultas (dentro de una valla O de un comentario
-  // multilínea — ver stepLine, review round 5, Critical 1), que sea otra
-  // cabecera ATX (review round 5, Critical 2: cualquier nivel "#" a
-  // "######", no solo "## " literal — ver ATX_HEADING_RE) o un comentario
-  // AUTOCONTENIDO (abre Y cierra en la misma línea — el marcador
-  // `<!-- ct-order:N -->` real). La apertura de un comentario MULTILÍNEA
-  // (un "<!--" sin "-->" en esa misma línea) NUNCA termina la sección por sí
-  // sola: en vez de eso, hace que las líneas siguientes queden ocultas
-  // (`wasHidden`) hasta que el propio comentario cierre — el terminador
-  // real sigue siendo lo que venga DESPUÉS de ese cierre. `consumed`
-  // acumula, línea a línea, la posición (relativa a headingEnd) de INICIO
-  // de la línea que se está evaluando — al encontrar el terminador en la
-  // línea `i`, `consumed` todavía NO incluye esa línea, así que apunta al
-  // carácter '\n' que la precede inmediatamente (o a headingEnd si no hay
-  // ninguna línea de contenido en medio), para que el formato de "línea en
-  // blanco antes de la siguiente cabecera" que genera buildIssueBody se
-  // preserve al reconstruir el empalme (ver buildReconcileBody).
+  // Terminator: the first line (from the one after the heading onwards),
+  // ignoring hidden lines (inside a fence OR a multi-line comment — see
+  // stepLine, review round 5, Critical 1), that is another ATX heading (review
+  // round 5, Critical 2: any level from "#" to "######", not only a literal
+  // "## " — see ATX_HEADING_RE) or a SELF-CONTAINED comment (it opens AND
+  // closes on the same line — the real `<!-- ct-order:N -->` marker). The
+  // opening of a MULTI-LINE comment (a "<!--" with no "-->" on that same line)
+  // NEVER terminates the section on its own: instead, it makes the following
+  // lines hidden (`wasHidden`) until the comment itself closes — the real
+  // terminator is still whatever comes AFTER that closing. `consumed`
+  // accumulates, line by line, the START position (relative to headingEnd) of
+  // the line being evaluated — on finding the terminator on line `i`,
+  // `consumed` does NOT yet include that line, so it points at the '\n'
+  // character immediately preceding it (or at headingEnd if there is no
+  // content line in between), so that the "blank line before the next heading"
+  // format buildIssueBody generates is preserved when rebuilding the splice
+  // (see buildReconcileBody).
   const restLines = src.slice(headingEnd).split('\n')
   let state = initLineState()
   let consumed = 0
@@ -358,25 +352,25 @@ export function extractSectionContent(body, headingText) {
   return loc ? loc.content.trim() : null
 }
 
-// locateLine / extractLine: como locateSection, pero para una entidad de
-// UNA SOLA línea (sin cabecera + contenido delimitado) — usado para la
-// línea de enlace al spec que buildIssueBody escribe como primera línea del
-// body (`> Slice #N del epic. Spec: […]`). Mismo criterio de anclaje a
-// columna 0 y de ignorar líneas ocultas dentro de una valla de código o de
-// un comentario HTML multilínea (scanLines/stepLine, review round 5).
-// `prefix` acepta un string o un array de strings (F6): la línea de enlace al
-// spec tiene DOS formas válidas — la de siempre ("> Slice #N …") y la que
-// evita el autoenlace falso ("> Slice `#N` …", ver SPEC_LINK_PREFIXES). Un
-// array es un conjunto CERRADO de alternativas, nunca un prefijo más corto
-// que las englobe a las dos ("> Slice ", que también reclamaría una línea
-// citada cualquiera que empiece por esas palabras) — mismo criterio que
+// locateLine / extractLine: like locateSection, but for a SINGLE-line entity
+// (no heading + delimited content) — used for the link line to the spec that
+// buildIssueBody writes as the body's first line (`> Slice #N del epic. Spec:
+// […]`). The same criterion of anchoring at column 0 and of ignoring lines
+// hidden inside a code fence or a multi-line HTML comment
+// (scanLines/stepLine, review round 5).
+// `prefix` accepts a string or an array of strings (F6): the link line to the
+// spec has TWO valid forms — the usual one ("> Slice #N …") and the one that
+// avoids the false autolink ("> Slice `#N` …", see SPEC_LINK_PREFIXES). An
+// array is a CLOSED set of alternatives, never a shorter prefix that
+// encompasses both ("> Slice ", which would also claim any quoted line that
+// starts with those words) — the same criterion as
 // headingMatcher/AC_HEADING_FORMS.
 //
-// `forbidden` (opcional, review final de rama C2): mismo rango y mismo
-// criterio que en locateSection — ver `outsideOf`. Aquí es donde de verdad
-// muerde: la línea de enlace al spec NO es una cabecera, así que no cierra la
-// sección heredada y puede vivir dentro de ella (la coordinadora pega el
-// contexto del issue anterior, enlace incluido).
+// `forbidden` (optional, final branch review C2): the same range and the same
+// criterion as in locateSection — see `outsideOf`. Here is where it really
+// bites: the link line to the spec is NOT a heading, so it does not close the
+// inherited section and can live inside it (the coordinator pastes the
+// previous issue's context, link included).
 export function locateLine(body, prefix, forbidden = null) {
   const prefixes = Array.isArray(prefix) ? prefix : [prefix]
   const allowed = outsideOf(forbidden)
@@ -389,96 +383,99 @@ export function extractLine(body, prefix) {
   return loc ? loc.line : null
 }
 
-// extractSpecLink: la línea `> Slice #N del epic. Spec: […]` que
-// buildIssueBody (groom.js) escribe siempre como primera línea del body —
-// review round 3, importante 5: es contenido que el spec posee de verdad
-// (F10: deriva de la ruta del propio spec dentro de su repo y del encabezado
-// bajo el que vive la tabla §9), no bookkeeping como el marcador `ct-order` —
-// así que F5 la compara igual que el título.
-// SPEC_LINK_PREFIXES: las dos formas que buildIssueBody ha emitido para esa
-// línea — con el orden entre backticks (F6, la actual: evita que GitHub
-// enlace el ORDEN de slice al ISSUE con ese número) y sin ellos (los issues
-// ya creados, que no se migran). Conjunto CERRADO, igual que AC_HEADING_FORMS
-// y por el mismo motivo: el prefijo "> Slice " a secas reclamaría como enlace
-// al spec cualquier línea citada que empiece por esas dos palabras.
+// extractSpecLink: the line `> Slice #N del epic. Spec: […]` that
+// buildIssueBody (groom.js) always writes as the body's first line — review
+// round 3, important 5: it is content the spec genuinely owns (F10: it derives
+// from the spec's own path inside its repo and from the heading under which
+// the §9 table lives), not bookkeeping like the `ct-order` marker — so F5
+// compares it just like the title.
+// SPEC_LINK_PREFIXES: the two forms buildIssueBody has emitted for that line —
+// with the order between backticks (F6, the current one: it stops GitHub
+// linking the slice ORDER to the ISSUE with that number) and without them (the
+// already-created issues, which are not migrated). A CLOSED set, just like
+// AC_HEADING_FORMS and for the same reason: the bare prefix "> Slice " would
+// claim as a link to the spec any quoted line that starts with those two
+// words.
 export const SPEC_LINK_PREFIXES = ['> Slice `#', '> Slice #']
 export function extractSpecLink(body) {
   return extractLine(body, SPEC_LINK_PREFIXES)
 }
 
-// normalizeSpecLink (F10, sustituye a specLinkAnchor): la forma canónica de
-// una línea de enlace al spec, para compararla contra otra.
+// normalizeSpecLink (F10, replaces specLinkAnchor): the canonical form of a
+// link line to the spec, for comparing it against another.
 //
-// specLinkAnchor extraía SOLO el ancla "#sección" y descartaba la ruta a
-// propósito (review round 4, importante 4): hasta F10, ct-groom.mjs componía
-// la línea con `process.argv[2]` tal cual, así que la MISMA §9 producía
-// "docs/spec.md#9" desde un slash command y "/Users/.../docs/spec.md#9" desde
-// un cron — comparar la línea entera habría hecho que cada invocación
-// reescribiera la de la otra, para siempre. El precio era no detectar que el
-// spec se hubiera movido de fichero.
+// specLinkAnchor extracted ONLY the "#section" anchor and discarded the path
+// on purpose (review round 4, important 4): until F10, ct-groom.mjs composed
+// the line with `process.argv[2]` as it came, so the SAME §9 produced
+// "docs/spec.md#9" from a slash command and "/Users/.../docs/spec.md#9" from a
+// cron — comparing the whole line would have made each invocation rewrite the
+// other's, forever. The price was not detecting that the spec had moved to
+// another file.
 //
-// F10 quita la causa: la línea se compone ahora de la ruta relativa a la raíz
-// del repo + el remoto + la rama por defecto (scripts/spec-link.js), tres
-// propiedades del REPOSITORIO, no de quien invoca. Ya no hay dos notaciones
-// posibles de la misma cosa, así que se compara la línea completa y se gana
-// lo que antes no se detectaba: spec movido de fichero, enlace apuntando a
-// otro repo, y (lo más inmediato) los issues creados antes de F10, cuyo
-// enlace relativo roto ahora sale reportado como divergencia en vez de pasar
-// por bueno porque el "9" coincidía.
+// F10 removes the cause: the line is now composed of the path relative to the
+// repo root + the remote + the default branch (scripts/spec-link.js), three
+// properties of the REPOSITORY, not of whoever invokes. There are no longer
+// two possible notations of the same thing, so the whole line is compared and
+// what used to go undetected is gained: a spec moved to another file, a link
+// pointing at another repo, and (most immediately) the issues created before
+// F10, whose broken relative link now gets reported as drift instead of
+// passing as good because the "9" happened to match.
 //
-// Lo único que se normaliza es el espacio de los extremos: un editor que
-// añade o quita un espacio al final de la línea no es un cambio de contenido.
+// The only thing that is normalised is the whitespace at the ends: an editor
+// that adds or removes a space at the end of the line is not a change of
+// content.
 export function normalizeSpecLink(specLinkLine) {
   if (specLinkLine === null || specLinkLine === undefined) return null
   return String(specLinkLine).trim()
 }
 
-// specTarget (F23): el DESTINO del enlace al spec — lo que renderSpecLink
-// (scripts/groom.js) escribe después de "Spec: ". Responde a una pregunta
-// distinta de la de diffIssue, y por eso no reutiliza su comparación:
+// specTarget (F23): the TARGET of the link to the spec — what renderSpecLink
+// (scripts/groom.js) writes after "Spec: ". It answers a different question
+// from diffIssue's, and that is why it does not reuse its comparison:
 //
-//   diffIssue pregunta "¿la línea del enlace de ESTE issue ha cambiado
-//   respecto a lo que el spec produce hoy?" — es contenido del spec, su
-//   divergencia es reportable, y desde F10 se compara ENTERA a propósito
-//   (detecta que el spec se ha movido de fichero o de repo).
+//   diffIssue asks "has THIS issue's link line changed with respect to what
+//   the spec produces today?" — it is content of the spec, its drift is
+//   reportable, and since F10 it is compared IN FULL on purpose (it detects
+//   that the spec has moved file or repo).
 //
-//   specTarget pregunta "¿estos dos issues apuntan al MISMO documento?",
-//   para decidir si un issue de otro milestone es en realidad este mismo
-//   epic bajo otro título. Ahí el prefijo estorba: la línea empieza por
-//   "> Slice `#N` del epic. " y ese prefijo (a) lleva el orden del slice y
-//   (b) cambió de formato en F6 (`#N` con backticks, ver
-//   SPEC_LINK_PREFIXES), así que comparar la línea entera daría un falso
-//   negativo sobre cualquier issue creado antes de F6.
+//   specTarget asks "do these two issues point at the SAME document?", in
+//   order to decide whether an issue from another milestone is really this
+//   very epic under another title. There the prefix gets in the way: the line
+//   starts with "> Slice `#N` del epic. " and that prefix (a) carries the
+//   slice's order and (b) changed format in F6 (`#N` with backticks, see
+//   SPEC_LINK_PREFIXES), so comparing the whole line would give a false
+//   negative on any issue created before F6.
 //
-// Falla en ABIERTO por diseño, y el precio de ese fallo hay que decirlo
-// entero, porque NO es el statu quo. La premisa va delante: si el epic está
-// renombrado en GitHub, `inEpic` sale vacío —esa corrida no ve ninguno de sus
-// issues— y va a recrear el epic entero. Lo único que puede pararla es la
-// puerta B del caller (ct-groom.mjs), y para dispararla hace falta reconocer
-// que el issue de ese otro milestone apunta al mismo documento. Lo que se
-// compara aquí, en ese call-site, es el issue EXISTENTE contra lo que el spec
-// produce HOY para ese mismo orden (`specTargetPorOrden`) — no un issue
-// contra otro issue. Si esos dos destinos no coinciden, la puerta no dispara
-// y el epic se duplica entero con exit 0: no lo causa esta función, pero es
-// lo que deja que ocurra. Antes de F23, con el emparejado global, esos mismos
-// issues se encontraban por marcador y salía divergencia con exit 3 sin crear
-// nada. O sea: el falso negativo no restaura ningún comportamiento previo,
-// deja pasar un agujero que antes no existía. Es un riesgo
-// ACEPTADO a cambio de no ladrillar el caso normal — un falso positivo
-// pararía en seco dos epics distintos reusando números de orden, que es justo
-// lo que F23 viene a habilitar. El caller compensa avisando por stderr de
-// cada descarte que pueda acabar en duplicación —el de un slice que todavía
-// no tiene issue en el epic de la corrida—, sin bloquear.
+// It fails OPEN by design, and the price of that failure has to be said in
+// full, because it is NOT the status quo. The premise comes first: if the epic
+// is renamed on GitHub, `inEpic` comes out empty —that run sees none of its
+// issues— and it will recreate the whole epic. The only thing that can stop it
+// is the caller's door B (ct-groom.mjs), and to fire it one has to recognise
+// that the issue of that other milestone points at the same document. What is
+// compared here, at that call site, is the EXISTING issue against what the
+// spec produces TODAY for that same order (`specTargetPorOrden`) — not one
+// issue against another issue. If those two targets do not match, the door
+// does not fire and the epic is duplicated in full with exit 0: this function
+// does not cause that, but it is what lets it happen. Before F23, with the
+// global pairing, those same issues were found by marker and drift came out
+// with exit 3 without creating anything. That is: the false negative restores
+// no previous behaviour, it lets through a hole that did not exist before. It
+// is a risk ACCEPTED in exchange for not bricking the normal case — a false
+// positive would stop dead two different epics reusing order numbers, which is
+// precisely what F23 comes to enable. The caller compensates by warning on
+// stderr about every discard that could end in duplication —that of a slice
+// that does not yet have an issue in the run's epic—, without blocking.
 //
-// Las dos formas reales de que dos destinos difieran para el MISMO documento
-// (la tercera —"dos costumbres de invocación, relativa vs. absoluta"— la
-// eliminó F10: la línea ya no se compone de argv, sino de la ruta dentro del
-// repo, el remoto y la rama por defecto; ver normalizeSpecLink arriba):
-//   (a) issues groomeados ANTES de F10, que llevan el enlace en la forma
-//       relativa vieja ("[docs/x.md#9](docs/x.md#9)");
-//   (b) la forma degradada "— sin enlace: <motivo>" que emite
-//       groom.js#renderSpecLink cuando el spec no estaba publicado al
-//       groomear (scripts/spec-link.js#SPEC_REF_REASONS enumera los motivos).
+// The two real ways two targets can differ for the SAME document (the third
+// —"two invocation habits, relative vs. absolute"— was eliminated by F10: the
+// line is no longer composed of argv, but of the path inside the repo, the
+// remote and the default branch; see normalizeSpecLink above):
+//   (a) issues groomed BEFORE F10, which carry the link in the old relative
+//       form ("[docs/x.md#9](docs/x.md#9)");
+//   (b) the degraded form "— sin enlace: <motivo>" that
+//       groom.js#renderSpecLink emits when the spec was not published at
+//       grooming time (scripts/spec-link.js#SPEC_REF_REASONS enumerates the
+//       reasons).
 const SPEC_TARGET_SEPARATOR = 'Spec: '
 export function specTarget(specLinkLine) {
   const line = normalizeSpecLink(specLinkLine)
@@ -489,17 +486,17 @@ export function specTarget(specLinkLine) {
   return target.length > 0 ? target : null
 }
 
-// countHeadingLines: cuántas veces aparece una cabecera (mismo criterio de
-// igualdad exacta/conjunto y de líneas ocultas — valla o comentario — que
-// locateSection) en todo el body — no solo si aparece, sino CUÁNTAS veces.
-// Review round 3 (menor): locateSection siempre encuentra/empalma la
-// PRIMERA aparición; si un humano duplicó una sección a mano (copiar-pegar,
-// un merge conflictivo mal resuelto…), la segunda copia queda invisible
-// tanto para la comparación como para --reconcile. Se usa para avisar de
-// esa situación, no para decidir qué se aplica (eso sigue siendo, a
-// propósito, "la primera"). `headingText` acepta array (ver headingMatcher)
-// — para AC, las dos formas de AC_HEADING_FORMS cuentan como la MISMA
-// sección conceptual: una de cada forma también es "duplicado".
+// countHeadingLines: how many times a heading appears (the same criterion of
+// exact/set equality and of hidden lines — fence or comment — as
+// locateSection) in the whole body — not just whether it appears, but HOW MANY
+// times. Review round 3 (minor): locateSection always finds/splices the FIRST
+// appearance; if a human duplicated a section by hand (copy-paste, a badly
+// resolved merge conflict…), the second copy is invisible both to the
+// comparison and to --reconcile. It is used to warn about that situation, not
+// to decide what gets applied (that is still, on purpose, "the first one").
+// `headingText` accepts an array (see headingMatcher) — for AC, the two forms
+// of AC_HEADING_FORMS count as the SAME conceptual section: one of each form
+// is also a "duplicate".
 export function countHeadingLines(body, headingText) {
   const src = body || ''
   const matches = headingMatcher(headingText)
@@ -514,21 +511,20 @@ export function countHeadingLines(body, headingText) {
   return count
 }
 
-// AC_HEADING_FORMS (review round 5, Importante 4): buildIssueBody
-// (groom.js) emite una ÚNICA cadena fija para la cabecera de AC — pero esa
-// cadena cambió una vez en la historia del proyecto (se le añadió el
-// sufijo "(EARS, 1:1 con tests)"), así que un issue creado con la versión
-// vieja del generador sigue trayendo la forma anterior. El hueco legítimo
-// es, por tanto, un CONJUNTO CERRADO de exactamente dos cadenas — nunca un
-// prefijo abierto (`{ exact: false }`, la versión de antes de esta ronda):
-// con prefijo, un "## Acceptance criteria propuestos por QA (borrador)"
-// escrito por un humano por encima de la sección real se reclamaba como si
-// fuera ella — el dispatcher inyectaba CERO criterios reales en el prompt
-// del agente, y --reconcile habría sustituido la prosa de QA.
+// AC_HEADING_FORMS (review round 5, Important 4): buildIssueBody (groom.js)
+// emits a SINGLE fixed string for the AC heading — but that string changed
+// once in the project's history (the suffix "(EARS, 1:1 con tests)" was added
+// to it), so an issue created with the old version of the generator still
+// carries the earlier form. The legitimate gap is therefore a CLOSED SET of
+// exactly two strings — never an open prefix (`{ exact: false }`, the version
+// from before this round): with a prefix, a "## Acceptance criteria propuestos
+// por QA (borrador)" written by a human above the real section was claimed as
+// if it were it — the dispatcher injected ZERO real criteria into the agent's
+// prompt, and --reconcile would have replaced QA's prose.
 export const AC_HEADING_FORMS = ['## Acceptance criteria', '## Acceptance criteria (EARS, 1:1 con tests)']
 
-// extractAc: localiza la sección de AC contra el conjunto cerrado
-// AC_HEADING_FORMS (ver arriba) — nunca por prefijo.
+// extractAc: locates the AC section against the closed set AC_HEADING_FORMS
+// (see above) — never by prefix.
 export function extractAc(body) {
   const section = extractSectionContent(body, AC_HEADING_FORMS)
   if (section == null) return []
@@ -539,39 +535,38 @@ export function extractAc(body) {
     .filter((l) => l && l !== '(rellenar desde el spec)')
 }
 
-// E2E_HEADING (TAREA 9): la sección de recorridos del cuerpo del issue.
-// Vive AQUÍ, junto a sus hermanas AC_HEADING_FORMS/DEPS_HEADING (arriba), y
-// no en groom.js: este fichero ya es quien centraliza las cabeceras que
-// tanto ESCRIBE groom.js#buildIssueBody como LEE el dispatcher real
-// (mapGhIssue, más abajo) — la dependencia siempre corrió en esa dirección
-// (groom.js importa `locateSection`/`unterminatedDelimiter`/`normalizeToLF`
-// DE AQUÍ). Definirla en groom.js y re-importarla habría cerrado un ciclo
-// entre los dos módulos por una constante de texto; groom.js la importa de
-// vuelta y la re-exporta, para no mover el import de sus otros dos
-// consumidores (reconcile.js y los tests).
+// E2E_HEADING (TASK 9): the runs section of the issue body. It lives HERE,
+// alongside its sisters AC_HEADING_FORMS/DEPS_HEADING (above), and not in
+// groom.js: this file is already the one that centralises the headings that
+// groom.js#buildIssueBody WRITES and the real dispatcher (mapGhIssue, below)
+// READS — the dependency always ran in that direction (groom.js imports
+// `locateSection`/`unterminatedDelimiter`/`normalizeToLF` FROM HERE). Defining
+// it in groom.js and re-importing it would have closed a cycle between the two
+// modules over a text constant; groom.js imports it back and re-exports it, so
+// as not to move the import of its other two consumers (reconcile.js and the
+// tests).
 export const E2E_HEADING = '## E2E'
 
-// extractE2eRuns (TAREA 9): los recorridos de la sección "## E2E" del issue,
-// con el MISMO patrón que extractAc — `extractSectionContent`
-// (locateSection por debajo), no un parser nuevo, y las líneas "- <recorrido>"
-// leídas VERBATIM (groom.js#renderE2eContent las escribió así a propósito,
-// para que el informe del gate pueda citarlas tal cual).
+// extractE2eRuns (TASK 9): the runs of the issue's "## E2E" section, with the
+// SAME pattern as extractAc — `extractSectionContent` (locateSection
+// underneath), not a new parser, and the "- <run>" lines read VERBATIM
+// (groom.js#renderE2eContent wrote them that way on purpose, so that the
+// gate's report can quote them as they are).
 //
-// El dispatcher (/ct-next) reconstruye el slice DESDE EL ISSUE — nunca abre
-// el spec — así que esta es la ÚNICA vía por la que `slice.e2eRuns` llega
-// poblado en el camino real de despacho; `resolveE2e(slice.e2e)` (gates.js)
-// sigue siendo el camino de /ct-groom, que sí tiene la celda cruda de la
-// tabla §9.
+// The dispatcher (/ct-next) rebuilds the slice FROM THE ISSUE — it never opens
+// the spec — so this is the ONLY way `slice.e2eRuns` arrives populated on the
+// real dispatch path; `resolveE2e(slice.e2e)` (gates.js) is still /ct-groom's
+// path, which does have the raw cell of the §9 table.
 //
-// `groom.js#buildIssueBody` omite la sección ENTERA cuando no hay ningún
-// recorrido (a diferencia de "## Gates", que siempre se emite) — así que su
-// ausencia es indistinguible de "cero recorridos", y las dos dan `[]`, nunca
-// `undefined`: un slice sin e2e tiene que decir "sin e2e" con un dato, no
-// con un campo que falta.
-// Exportada (Task 10): `dispatch-check.mjs#--release` la reutiliza para la
-// puerta F-e2e (exit 8) — la misma función que usa `/ct-next` para sembrar
-// el worktree, así que las dos lecturas de la sección "## E2E" nunca pueden
-// discrepar entre sí por un parseo distinto.
+// `groom.js#buildIssueBody` omits the WHOLE section when there is no run at
+// all (unlike "## Gates", which is always emitted) — so its absence is
+// indistinguishable from "zero runs", and both give `[]`, never `undefined`: a
+// slice with no e2e has to say "no e2e" with a datum, not with a missing
+// field.
+// Exported (Task 10): `dispatch-check.mjs#--release` reuses it for the F-e2e
+// door (exit 8) — the very function `/ct-next` uses to seed the worktree, so
+// the two readings of the "## E2E" section can never disagree with each other
+// through a different parse.
 export function extractE2eRuns(body) {
   const section = extractSectionContent(body, E2E_HEADING)
   if (section == null) return []
@@ -582,200 +577,199 @@ export function extractE2eRuns(body) {
     .filter(Boolean)
 }
 
-// extractDeps: lee TODAS las referencias `merge-after #N` de la cadena que
-// se le pase, sin anclarse a ninguna sección por sí misma — el ALCANCE (todo
-// el body, o solo el contenido de una sección) lo decide el llamador. Sigue
-// siendo una regex desnuda a propósito: `extractDepsInSection` (más abajo)
-// es la única fuente de verdad de "qué sección mirar", compartida entre
-// mapGhIssue (el dispatcher real) y reconcile.js.
+// extractDeps: reads ALL the `merge-after #N` references from whatever string
+// it is handed, without anchoring itself to any section — the SCOPE (the whole
+// body, or only a section's content) is decided by the caller. It is still a
+// bare regex on purpose: `extractDepsInSection` (below) is the single source
+// of truth of "which section to look at", shared between mapGhIssue (the real
+// dispatcher) and reconcile.js.
 //
-// D1 finding 2 (hardening del dispatch — historial de esta decisión): hasta
-// esta ronda, mapGhIssue llamaba a extractDeps sobre el body ENTERO
-// (dispatch.js necesitaba ver cualquier `merge-after`, viviera donde
-// viviera), mientras scripts/reconcile.js (F5, review round 3, Critical 3)
-// ya la llamaba SOLO sobre el contenido de "## Dependencias" — la única
-// sección que --reconcile puede tocar con seguridad vía splice. Esa
-// divergencia deliberada tenía un coste real: un "merge-after #N" citado en
-// la prosa de un Acceptance Criteria (nunca pensado como dependencia) SÍ
-// bloqueaba al dispatcher, pero --reconcile jamás podía "resolverlo" (no
-// hay splice seguro fuera de la sección reconocida) — mismo dato, dos
-// comportamientos irreconciliables entre sí. El auditor además encontró que
-// la ausencia de anclaje a sección escondía una segunda clase de bug: una
-// reescritura humana de la línea de dependencia ("Depende de #1 (merge
-// primero)", o un simple guion perdido en "merge after #1") no matchea la
-// regex — cero deps extraídas, indistinguible de "este slice no tiene
-// dependencias". El gate se abre en silencio.
+// D1 finding 2 (hardening of the dispatch — the history of this decision):
+// until this round, mapGhIssue called extractDeps over the WHOLE body
+// (dispatch.js needed to see any `merge-after`, wherever it lived), while
+// scripts/reconcile.js (F5, review round 3, Critical 3) already called it ONLY
+// over the content of "## Dependencias" — the only section --reconcile can
+// safely touch through a splice. That deliberate divergence had a real cost: a
+// "merge-after #N" quoted in the prose of an Acceptance Criterion (never meant
+// as a dependency) DID block the dispatcher, but --reconcile could never
+// "resolve" it (there is no safe splice outside the recognised section) — the
+// same datum, two behaviours irreconcilable with each other. The auditor also
+// found that the absence of a section anchor hid a second class of bug: a
+// human rewrite of the dependency line ("Depende de #1 (merge primero)", or a
+// simple lost hyphen in "merge after #1") does not match the regex — zero deps
+// extracted, indistinguishable from "this slice has no dependencies". The gate
+// opens in silence.
 //
-// D1 unifica el dominio: mapGhIssue ahora usa `extractDepsInSection`, EXACTAMENTE
-// la misma función (y por tanto el mismo alcance) que reconcile.js. Coste
-// aceptado explícitamente: un issue creado/editado a mano con un
-// "merge-after" en texto libre, fuera de "## Dependencias", deja de ser
-// honrado por el dispatcher — igual que ya dejaba de serlo por --reconcile.
-// Ganancia: el mismo body produce la MISMA lectura para cualquiera que lo
-// lea, y la sección presente-pero-sin-matches deja de ser un `[]` silencioso
-// (ver `malformed` en extractDepsInSection) — dispatch.js ya no la trata
-// como "sin dependencias".
+// D1 unifies the domain: mapGhIssue now uses `extractDepsInSection`, EXACTLY
+// the same function (and therefore the same scope) as reconcile.js. Cost
+// explicitly accepted: an issue created/edited by hand with a "merge-after" in
+// free text, outside "## Dependencias", stops being honoured by the dispatcher
+// — just as it had already stopped being honoured by --reconcile. Gain: the
+// same body produces the SAME reading for anyone who reads it, and the
+// section-present-but-with-no-matches stops being a silent `[]` (see
+// `malformed` in extractDepsInSection) — dispatch.js no longer treats it as
+// "no dependencies".
 //
-// F6 (grave 1) — el formato EMITIDO cambia a código inline (``merge-after
-// `#N` ``) para que GitHub deje de autoenlazar el orden de slice al issue con
-// ese número (ver groom.js#DEPS_ORDER_NOTE). El LECTOR acepta las dos formas,
-// para siempre: los issues ya creados en repos reales llevan el formato viejo
-// y NO se migran (nadie reescribe un body existente solo por esto; un body
-// viejo solo adopta el formato nuevo si `--reconcile` ya iba a reescribir esa
-// sección por una divergencia real). El backtick de cierre no se exige: lo
-// que identifica la referencia es el número que sigue a "merge-after".
+// F6 (serious 1) — the EMITTED format changes to inline code (``merge-after
+// `#N` ``) so that GitHub stops autolinking the slice order to the issue with
+// that number (see groom.js#DEPS_ORDER_NOTE). The READER accepts both forms,
+// forever: the issues already created in real repos carry the old format and
+// are NOT migrated (nobody rewrites an existing body just for this; an old
+// body only adopts the new format if `--reconcile` was already going to
+// rewrite that section over a real drift). The closing backtick is not
+// demanded: what identifies the reference is the number that follows
+// "merge-after".
 export function extractDeps(body) {
   return [...(body || '').matchAll(/merge-after `?#(\d+)/g)].map((m) => parseInt(m[1], 10))
 }
 
-// SENAL_HEADING (Slice 10): la sección del cuerpo del issue que declara la
-// señal de observabilidad del slice (o su exención razonada `N/A — <razón>`).
-// La constante NACE aquí y no en groom.js, aunque sea groom quien la escribe:
-// este fichero es la capa inferior (groom.js ya importa de aquí) y mapGhIssue
-// también la necesita para extraerla del body — ponerla en groom.js crearía
-// un import circular. groom.js la re-exporta para que sus consumidores no
-// tengan que saber dónde nació, el mismo trato que sus cabeceras hermanas.
+// SENAL_HEADING (Slice 10): the section of the issue body that declares the
+// slice's observability signal (or its reasoned exemption `N/A — <reason>`).
+// The constant is BORN here and not in groom.js, even though groom is the one
+// that writes it: this file is the lower layer (groom.js already imports from
+// here) and mapGhIssue needs it too, to extract it from the body — putting it
+// in groom.js would create a circular import. groom.js re-exports it so that
+// its consumers do not have to know where it was born, the same treatment as
+// its sister headings.
 export const SENAL_HEADING = '## Señal de observabilidad'
 
-// extractSenal (Slice 10): section-scoped con extractSectionContent — la
-// primera aparición gana, misma postura que extractAc (locateSection siempre
-// devuelve la primera copia; un duplicado es un merge mal resuelto y la
-// primera es la que compara y obedece todo el mundo). Devuelve el contenido
-// trimmed verbatim, o null sin sección — mapGhIssue colapsa además el
-// contenido vacío a null (sección presente pero en blanco = ausente).
+// extractSenal (Slice 10): section-scoped with extractSectionContent — the
+// first appearance wins, the same stance as extractAc (locateSection always
+// returns the first copy; a duplicate is a badly resolved merge and the first
+// one is the one everybody compares against and obeys). It returns the trimmed
+// content verbatim, or null with no section — mapGhIssue additionally
+// collapses empty content to null (section present but blank = absent).
 export function extractSenal(body) {
   return extractSectionContent(body, SENAL_HEADING)
 }
 
-// DEPS_HEADING / extractDepsInSection: fuente ÚNICA de "qué deps ve
-// cualquiera que lea este body" — mapGhIssue (dispatcher real) y
-// reconcile.js#depsInSection la comparten (D1 finding 2). `malformed: true`
-// es la señal que antes se desperdiciaba: la sección existe (algo se
-// intentó declarar) pero ningún "merge-after #N" matcheó dentro de ella —
-// nunca puede pasar con un body que buildIssueBody generó de verdad (solo
-// emite la cabecera cuando `deps.length > 0`, y siempre como
-// "merge-after #N"), así que si pasa es porque un humano reescribió la
-// línea a mano de una forma que la regex ya no reconoce. Quien consuma esto
-// (mapGhIssue) trata `malformed` como "el estado real de este gate es
-// DESCONOCIDO" — nunca como "sin dependencias" (fail-closed, igual que un
-// orden no mapeable se traduce a `null` en vez de a "satisfecho").
+// DEPS_HEADING / extractDepsInSection: the SINGLE source of "which deps
+// anyone reading this body sees" — mapGhIssue (the real dispatcher) and
+// reconcile.js#depsInSection share it (D1 finding 2). `malformed: true` is the
+// signal that used to be wasted: the section exists (something was attempted
+// as a declaration) but no "merge-after #N" matched inside it — it can never
+// happen with a body buildIssueBody really generated (it only emits the
+// heading when `deps.length > 0`, and always as "merge-after #N"), so if it
+// happens it is because a human rewrote the line by hand in a way the regex no
+// longer recognises. Whoever consumes this (mapGhIssue) treats `malformed` as
+// "the real state of this gate is UNKNOWN" — never as "no dependencies"
+// (fail-closed, just as an unmappable order is translated to `null` instead of
+// to "satisfied").
 export const DEPS_HEADING = '## Dependencias'
 export function extractDepsInSection(body) {
   const content = extractSectionContent(body, DEPS_HEADING)
   if (content == null) return { deps: [], malformed: false }
   const deps = extractDeps(content)
-  // `malformed` (round 2 de la review de D1 — el primer heurístico, contar
-  // viñetas "- " contra deps extraídas, NO era el eje correcto): lo derrota
-  // cualquier línea BUENA con dos "merge-after" en una sola viñeta (infla
-  // deps sin inflar viñetas → falso negativo) y cualquier línea ROTA que no
-  // use "- " (viñeta "*", una lista numerada, o ninguna viñeta en absoluto →
-  // falso negativo también), y dispara en falso ante una NOTA sin ninguna
-  // relación con dependencias que solo casualmente comparte hueco con una
-  // real ya leída bien (falso positivo).
+  // `malformed` (round 2 of D1's review — the first heuristic, counting "- "
+  // bullets against extracted deps, was NOT the right axis): it is defeated by
+  // any GOOD line with two "merge-after" in a single bullet (it inflates deps
+  // without inflating bullets → false negative) and by any BROKEN line that
+  // does not use "- " (a "*" bullet, a numbered list, or no bullet at all →
+  // false negative too), and it fires falsely on a NOTE with no relation
+  // whatsoever to dependencies that merely happens to share space with a real
+  // one already read correctly (false positive).
   //
-  // La señal que de verdad distingue "esta línea pretendía declarar una
-  // dependencia y está mal escrita" de "esta línea es una nota" es otra:
-  // CUALQUIER referencia "#N" en el contenido de la sección — sea o no parte
-  // de un "merge-after #N" reconocido — que mencione un número que
-  // `merge-after` NUNCA capturó. Una nota real ("ojo: revisar con Ana") no
-  // menciona ningún "#N" en absoluto, así que nunca dispara esto. Comparación
-  // por VALOR (el número), no por posición ni por forma de viñeta: da igual
-  // si la línea rota usa "-", "*", numeración o ninguna viñeta, y una MISMA
-  // referencia repetida en prosa (p.ej. "ver también #1 en el spec", con #1
-  // YA reconocido como dependencia) no cuenta como problema — solo un NÚMERO
-  // que no aparece entre las deps ya extraídas señala una reescritura humana
-  // real.
+  // The signal that really tells "this line meant to declare a dependency and
+  // is badly written" from "this line is a note" is another one: ANY "#N"
+  // reference in the section's content — whether or not it is part of a
+  // recognised "merge-after #N" — that mentions a number `merge-after` NEVER
+  // captured. A real note ("ojo: revisar con Ana") mentions no "#N" at all, so
+  // it never fires this. Comparison by VALUE (the number), not by position nor
+  // by bullet shape: it does not matter whether the broken line uses "-", "*",
+  // numbering or no bullet, and the SAME reference repeated in prose (e.g.
+  // "ver también #1 en el spec", with #1 ALREADY recognised as a dependency)
+  // does not count as a problem — only a NUMBER that does not appear among the
+  // already-extracted deps signals a real human rewrite.
   //
-  // `deps.length === 0` se mantiene como caso base aparte: buildIssueBody
-  // NUNCA emite la cabecera sin al menos un "merge-after #N" real, así que
-  // CERO deps extraídas (incluida una sección completamente vacía, sin
-  // ninguna referencia "#N" siquiera) ya es, por sí sola, una divergencia
-  // del invariante — independientemente de si hay o no un "#N" suelto que
-  // lo confirme.
+  // `deps.length === 0` is kept as a separate base case: buildIssueBody NEVER
+  // emits the heading without at least one real "merge-after #N", so ZERO deps
+  // extracted (including a completely empty section, with no "#N" reference at
+  // all) is already, on its own, a divergence from the invariant —
+  // independently of whether there is a loose "#N" to confirm it.
   const hashRefs = [...content.matchAll(/#(\d+)/g)].map((m) => parseInt(m[1], 10))
   const depsSet = new Set(deps)
   const hasUncoveredRef = hashRefs.some((n) => !depsSet.has(n))
   return { deps, malformed: deps.length === 0 || hasUncoveredRef }
 }
 
-// extractStrayDeps (D1 finding 1, seguimiento de review): estrechar el
-// dominio de deps del dispatcher a "## Dependencias" (D1 finding 2) abrió
-// una puerta que `main` mantenía cerrada — un `merge-after #N` que vive
-// FUERA de la sección reconocida (p.ej. bajo "## Descripción", o en la
-// prosa de un AC) ya NO cuenta como dependencia real para nadie (ni el
-// dispatcher ni --reconcile, ver el historial en reconcile.js). Ese
-// estrechamiento es correcto y deseado — pero es invisible si nada lo dice:
-// un issue cuyo autor escribió su dependencia en el sitio equivocado se
-// despacha en silencio, sin que nadie sepa que su intento de bloqueo dejó
-// de aplicar. `extractStrayDeps` expone esas referencias ignoradas — MISMA
-// función que usan tanto mapGhIssue (para que ct-next.mjs pueda avisar)
-// como reconcile.js#diffIssue (que ya calculaba exactamente esto para su
-// propio reporte de "nota" — una sola implementación compartida, no dos que
-// puedan divergir).
+// extractStrayDeps (D1 finding 1, review follow-up): narrowing the
+// dispatcher's deps domain to "## Dependencias" (D1 finding 2) opened a door
+// `main` kept shut — a `merge-after #N` that lives OUTSIDE the recognised
+// section (e.g. under "## Descripción", or in an AC's prose) no longer counts
+// as a real dependency for anyone (neither the dispatcher nor --reconcile, see
+// the history in reconcile.js). That narrowing is correct and wanted — but it
+// is invisible if nothing says so: an issue whose author wrote their
+// dependency in the wrong place gets dispatched silently, with nobody knowing
+// that their attempted block stopped applying. `extractStrayDeps` exposes
+// those ignored references — the SAME function used both by mapGhIssue (so
+// that ct-next.mjs can warn) and by reconcile.js#diffIssue (which already
+// computed exactly this for its own "note" report — one shared implementation,
+// not two that can drift).
 export function extractStrayDeps(body, sectionDeps) {
   const wholeBodyDeps = extractDeps(body || '')
   const sectionDepsSet = new Set(sectionDeps || [])
   return [...new Set(wholeBodyDeps)].filter((d) => !sectionDepsSet.has(d)).sort((a, b) => a - b)
 }
 
-// extractOrder: lee el marcador `<!-- ct-order:N -->` que groom.js#buildIssueBody
-// escribe en TODO issue, usando el número de ORDEN del slice (slice.n, la
-// posición en la tabla §9 del spec) — no el número de issue de GitHub. Es el
-// único puente fiable entre los dos espacios de IDs: el número de issue lo
-// asigna GitHub al crear el issue (no se controla), el orden lo decide el
-// spec. Ver buildOrderIndex/buildDispatchInput más abajo para la traducción.
+// extractOrder: reads the `<!-- ct-order:N -->` marker that
+// groom.js#buildIssueBody writes into EVERY issue, using the slice's ORDER
+// number (slice.n, the position in the spec's §9 table) — not the GitHub issue
+// number. It is the only reliable bridge between the two ID spaces: the issue
+// number is assigned by GitHub when the issue is created (it is not
+// controlled), the order is decided by the spec. See
+// buildOrderIndex/buildDispatchInput below for the translation.
 export function extractOrder(body) {
-  // Anclado al marcador REAL y ENTERO: una línea que sea exactamente
-  // "<!-- ct-order:N -->" (apertura <!-- + cierre -->, con /m para línea a
-  // línea). No basta exigir solo "-->": una decisión congelada que escriba
-  // "ct-order:99 -->" en su prosa lo burlaría. Sin este ancla, cualquier texto
-  // por DELANTE del marcador real (p.ej. una sección "## Decisiones congeladas"
-  // que hable de ct-order) se leería como el orden del issue, colisionaría en
-  // buildOrderIndex y sacaría el epic entero del despacho.
+  // Anchored to the REAL, WHOLE marker: a line that is exactly
+  // "<!-- ct-order:N -->" (an opening <!-- + a closing -->, with /m for line by
+  // line). Demanding only "-->" is not enough: a frozen decision that writes
+  // "ct-order:99 -->" in its prose would fool it. Without this anchor, any text
+  // AHEAD of the real marker (e.g. a "## Decisiones congeladas" section that
+  // talks about ct-order) would be read as the issue's order, would collide in
+  // buildOrderIndex and would take the whole epic out of the dispatch.
   const m = (body || '').match(/^<!--\s*ct-order:(\d+)\s*-->\s*$/m)
   return m ? parseInt(m[1], 10) : null
 }
 
-// STATUS_PRECEDENCE / resolveStatus (D1 finding 3): una edición de label a
-// medias (se añade `status:X` nuevo sin quitar el `status:Y` viejo) deja DOS
-// labels `status:` en el mismo issue. El código anterior usaba
-// `Array.prototype.find`, que se queda con la PRIMERA del array que `gh`
-// devuelve — el auditor verificó que el orden de ESE array cambia el
-// resultado (`['status:in-progress','status:ready']` resuelve distinto que
-// el mismo array invertido) y no pudo determinar offline qué orden usa
-// GitHub de verdad. La instrucción explícita es no adivinarlo: el criterio
-// tiene que ser independiente del orden del array.
+// STATUS_PRECEDENCE / resolveStatus (D1 finding 3): a half-finished label
+// edit (a new `status:X` is added without removing the old `status:Y`) leaves
+// TWO `status:` labels on the same issue. The previous code used
+// `Array.prototype.find`, which keeps the FIRST of the array `gh` returns —
+// the auditor verified that THAT array's order changes the result
+// (`['status:in-progress','status:ready']` resolves differently from the same
+// array reversed) and could not determine offline which order GitHub really
+// uses. The explicit instruction is not to guess it: the criterion has to be
+// independent of the array's order.
 //
-// En vez de intentar averiguar CUÁL de las dos labels es "la real" (hay dos
-// consecuencias observadas si se elige mal: en el sentido "ready gana", un
-// issue ya reclamado (in-progress de verdad) se trata como despachable Y no
-// cuenta en el cómputo de in-flight contra el cap — las dos peores
-// consecuencias posibles a la vez), se aplica SIEMPRE la lectura más
-// conservadora: in-progress > in-review > ready > backlog. Es la que menos
-// probabilidad tiene de re-despachar dos veces el mismo trabajo o de
-// dejarlo fuera del cap — no es "adivinar cuál label es correcta", es
-// "asumir el estado que menos daño hace si nos equivocamos". `statusLabels`
-// se expone para que quien detecte `statusAmbiguous` pueda avisar con el
-// detalle exacto de qué labels chocaban (ver ct-next.mjs).
-// Exportada (F6): ct-groom.mjs la necesita para decir, al terminar, cuántos
-// issues del epic siguen sin ser despachables — con EXACTAMENTE el mismo
-// criterio que aplica el dispatcher, no con una segunda lectura de labels
-// que pudiera discrepar de él.
+// Instead of trying to work out WHICH of the two labels is "the real one"
+// (there are two observed consequences if it is chosen wrong: in the "ready
+// wins" direction, an issue already claimed (really in-progress) is treated as
+// dispatchable AND does not count in the in-flight tally against the cap — the
+// two worst possible consequences at once), the most conservative reading is
+// ALWAYS applied: in-progress > in-review > ready > backlog. It is the one
+// least likely to redispatch the same work twice or to leave it outside the
+// cap — it is not "guessing which label is correct", it is "assuming the state
+// that does least harm if we are wrong". `statusLabels` is exposed so that
+// whoever detects `statusAmbiguous` can warn with the exact detail of which
+// labels clashed (see ct-next.mjs).
+// Exported (F6): ct-groom.mjs needs it in order to say, when it finishes, how
+// many issues of the epic are still not dispatchable — with EXACTLY the same
+// criterion the dispatcher applies, not with a second reading of labels that
+// could disagree with it.
 const STATUS_PRECEDENCE = ['in-progress', 'in-review', 'ready', 'backlog']
 export function resolveStatus(labels) {
   const statusLabels = labels.filter((l) => l.startsWith('status:')).map((l) => l.slice('status:'.length))
   if (statusLabels.length === 0) return { status: 'backlog', statusAmbiguous: false, statusLabels }
   if (statusLabels.length === 1) return { status: statusLabels[0], statusAmbiguous: false, statusLabels }
-  // Menor (review de D1): si NINGUNA de las labels en conflicto es una de
-  // las cuatro conocidas (p.ej. dos labels custom como "status:blocked" y
-  // "status:paused" — ninguna gatea nada en dispatch.js, así que la
-  // DECISIÓN de despacho no cambia pase lo que pase aquí), el `?? statusLabels[0]`
-  // de antes seguía devolviendo la PRIMERA del array tal cual llega de
-  // GitHub — el mismo orden no verificable que esta función existe para no
-  // depender. El TEXTO del aviso (ct-next.mjs) sí depende de este valor, y
-  // era justo la garantía que se pidió que fuera independiente del orden:
-  // se ordena alfabéticamente antes de tomar la primera como fallback
-  // determinista.
+  // Minor (D1's review): if NONE of the clashing labels is one of the four
+  // known ones (e.g. two custom labels like "status:blocked" and
+  // "status:paused" — neither gates anything in dispatch.js, so the dispatch
+  // DECISION does not change whatever happens here), the earlier `??
+  // statusLabels[0]` still returned the FIRST of the array exactly as it
+  // arrives from GitHub — the same unverifiable order this function exists in
+  // order not to depend on. The warning's TEXT (ct-next.mjs) does depend on
+  // this value, and that was precisely the guarantee that was asked to be
+  // independent of the order: it is sorted alphabetically before taking the
+  // first one as a deterministic fallback.
   const resolved = STATUS_PRECEDENCE.find((s) => statusLabels.includes(s)) ?? [...statusLabels].sort()[0]
   return { status: resolved, statusAmbiguous: true, statusLabels }
 }
@@ -783,62 +777,63 @@ export function resolveStatus(labels) {
 export function mapGhIssue(i) {
   const labels = (i.labels || []).map((l) => l.name)
   const { status, statusAmbiguous, statusLabels } = resolveStatus(labels)
-  // touches: incluye TANTO `touches:` como `area:` (fix de la review final,
-  // finding 5): claim.js#tokensOf ya trataba ambos prefijos como
-  // igual-de-relevantes para colisión (y el spec §14 define el conflicto como
-  // un token `area:` O `touches:` compartido), pero este mapeo solo miraba
-  // `touches:` — así que `selectNext` (selección/co-dispatch en ct-next.mjs)
-  // podía lanzar dos slices que comparten SOLO un `area:` (p.ej. `area:api`
-  // en ambos) sin detectar la colisión, y solo dispatch-check.mjs la
-  // detectaba después, con los worktrees y agentes ya lanzados. Se despoja el
-  // prefijo (el que sea) igual que antes para no romper la convención ya
-  // testeada de tokens "pelados" que usan SERIALIZING_TOUCHES/runningTouches
-  // en dispatch.js.
+  // touches: it includes BOTH `touches:` and `area:` (fix from the final
+  // review, finding 5): claim.js#tokensOf already treated both prefixes as
+  // equally relevant for a collision (and §14 of the spec defines the conflict
+  // as a shared `area:` OR `touches:` token), but this mapping only looked at
+  // `touches:` — so `selectNext` (selection/co-dispatch in ct-next.mjs) could
+  // launch two slices that share ONLY an `area:` (e.g. `area:api` in both)
+  // without detecting the collision, and only dispatch-check.mjs detected it
+  // afterwards, with the worktrees and agents already launched. The prefix
+  // (whichever it is) is stripped as before so as not to break the
+  // already-tested convention of "bare" tokens that
+  // SERIALIZING_TOUCHES/runningTouches use in dispatch.js.
   //
-  // D1 finding 4: una label "area:"/"touches:" SIN VALOR (el colon presente,
-  // nada detrás — p.ej. creada por accidente en el editor de GitHub) pela a
-  // la cadena VACÍA. Sin filtrar, dos issues con esa label rota "colisionan"
-  // sobre '' en dispatch.js#touchesConflict aunque no compartan ningún
-  // área/touch real — un token vacío no representa nada, se descarta antes
-  // de entrar en la maquinaria de colisión. `.trim()` ANTES de filtrar por
-  // longitud (ataque adversarial: "area: ", colon seguido de un espacio en
-  // blanco sin contenido real, pela a ' ' — no la cadena vacía — y un filtro
-  // que solo mirara `.length > 0` dejaría pasar el MISMO bug con un
-  // carácter distinto).
+  // D1 finding 4: an "area:"/"touches:" label WITH NO VALUE (the colon
+  // present, nothing behind it — e.g. created by accident in GitHub's editor)
+  // strips to the EMPTY string. Unfiltered, two issues with that broken label
+  // "collide" over '' in dispatch.js#touchesConflict even though they share no
+  // real area/touch — an empty token represents nothing, it is discarded
+  // before entering the collision machinery. `.trim()` BEFORE filtering by
+  // length (adversarial attack: "area: ", a colon followed by whitespace with
+  // no real content, strips to ' ' — not the empty string — and a filter that
+  // only looked at `.length > 0` would let the SAME bug through with a
+  // different character).
   const touches = labels
     .filter((l) => l.startsWith('touches:') || l.startsWith('area:'))
     .map((l) => l.slice(l.indexOf(':') + 1).trim())
     .filter((t) => t.length > 0)
   const type = (labels.find((l) => l.startsWith('type:')) || 'type:').slice('type:'.length)
-  // gates (F21): el gate humano vuelve del ISSUE, no del spec — que es lo que
-  // hace que sobreviva a un redespacho, a un `--reopen` y a cualquier sesión
-  // que se re-hidrate. `gatesDeclared` distingue "este slice no tiene gates"
-  // (label `gate:none`) de "este issue es anterior a los gates" (ninguna label
-  // `gate:`), y esa distinción no es cosmética: en el segundo caso
-  // kickoff.js cae al `Tipo`, de modo que los issues `type:ui` ya groomeados
-  // no pierden su gate de screenshot el día que esto se despliega. Los
-  // `gate:` que no estén en el vocabulario se descartan (gates.js) — nunca se
-  // le anuncia al agente un gate cuyo texto nadie sabe escribir.
+  // gates (F21): the human gate comes back from the ISSUE, not from the spec
+  // — which is what makes it survive a redispatch, a `--reopen` and any
+  // session that rehydrates. `gatesDeclared` tells "this slice has no gates"
+  // (a `gate:none` label) from "this issue predates the gates" (no `gate:`
+  // label at all), and that distinction is not cosmetic: in the second case
+  // kickoff.js falls back to the `Tipo`, so that the already-groomed `type:ui`
+  // issues do not lose their screenshot gate the day this is deployed. The
+  // `gate:` values that are not in the vocabulary are discarded (gates.js) —
+  // the agent is never announced a gate whose text nobody knows how to
+  // write.
   const { gates, declared: gatesDeclared } = gatesFromLabels(labels)
   const body = i.body || ''
   const order = extractOrder(body)
-  // deps aquí quedan en ESPACIO DE ORDEN (groom.js#buildIssueBody escribe
-  // `merge-after #<orden>`, no `#<issue>`) — ver buildDispatchInput para la
-  // traducción a espacio de número-de-issue antes de comparar con
-  // mergedIssues (que sí son números de issue reales).
+  // deps here stay in ORDER SPACE (groom.js#buildIssueBody writes
+  // `merge-after #<order>`, not `#<issue>`) — see buildDispatchInput for the
+  // translation into issue-number space before comparing against mergedIssues
+  // (which are real issue numbers).
   //
-  // D1 finding 2: extractDepsInSection (arriba) — no extractDeps sobre el
-  // body entero — es quien decide el alcance ahora: solo "## Dependencias".
-  // `depsMalformed` viaja tal cual hasta dispatch.js#computeReadyCandidates,
-  // que trata un issue así como NO listo para despachar (nunca como "sin
-  // dependencias" — ver el comentario de extractDepsInSection).
+  // D1 finding 2: extractDepsInSection (above) — not extractDeps over the
+  // whole body — is what decides the scope now: only "## Dependencias".
+  // `depsMalformed` travels as it is all the way to
+  // dispatch.js#computeReadyCandidates, which treats an issue like that as NOT
+  // ready to dispatch (never as "no dependencies" — see the comment on
+  // extractDepsInSection).
   const { deps, malformed: depsMalformed } = extractDepsInSection(body)
-  // strayDeps (D1 finding 1, seguimiento de review): referencias
-  // "merge-after #N" que existen en el body pero FUERA de la sección
-  // reconocida — el estrechamiento de finding 2 hace que ya NO cuenten como
-  // dependencia real, así que se exponen aparte para que ct-next.mjs pueda
-  // avisar en vez de despachar en silencio un issue cuya dependencia
-  // pretendida vive en el sitio equivocado.
+  // strayDeps (D1 finding 1, review follow-up): "merge-after #N" references
+  // that exist in the body but OUTSIDE the recognised section — finding 2's
+  // narrowing means they no longer count as a real dependency, so they are
+  // exposed separately so that ct-next.mjs can warn instead of silently
+  // dispatching an issue whose intended dependency lives in the wrong place.
   const strayDeps = extractStrayDeps(body, deps)
   return {
     n: i.number,
@@ -853,82 +848,86 @@ export function mapGhIssue(i) {
     type,
     gates,
     gatesDeclared,
-    // name: viene del TÍTULO del issue (columna Slice del spec, F3) — no
-    // confundir con `slice.entrega` (columna Entrega) que usa slices.js/
-    // groom.js para la sección "Descripción" del cuerpo. Mismo nombre de
-    // campo que slices.js#name (la columna Slice) a propósito: ambos
-    // structs representan el mismo concepto, así que usan la misma palabra.
+    // name: it comes from the issue's TITLE (the spec's Slice column, F3) —
+    // not to be confused with `slice.entrega` (the Entrega column) that
+    // slices.js/groom.js use for the body's "Descripción" section. The same
+    // field name as slices.js#name (the Slice column) on purpose: both structs
+    // represent the same concept, so they use the same word.
     name: (i.title || '').replace(/^#\d+\s*/, ''),
     ac: extractAc(body),
-    // senal (Slice 10): la señal de observabilidad que el issue declara —
-    // sección "## Señal de observabilidad" del body, primera aparición gana
-    // (misma postura que extractAc). Contenido vacío = ausente: `null` y no
-    // '' para que buildStateSeed (kickoff.js) pueda declarar la ausencia con
-    // SENAL_AUSENTE sin distinguir dos formas de "nada".
+    // senal (Slice 10): the observability signal the issue declares — the
+    // body's "## Señal de observabilidad" section, first appearance wins (the
+    // same stance as extractAc). Empty content = absent: `null` and not '' so
+    // that buildStateSeed (kickoff.js) can declare the absence with
+    // SENAL_AUSENTE without telling two forms of "nothing" apart.
     senal: extractSenal(body) || null,
-    // e2eRuns (TAREA 9): ver extractE2eRuns arriba. Es lo que
-    // kickoff.js#resolveE2eRunsForAgent consume para sembrar el campo `e2e`
-    // de .agent/SLICE.md y para nombrar los recorridos en el kickoff.
+    // e2eRuns (TASK 9): see extractE2eRuns above. It is what
+    // kickoff.js#resolveE2eRunsForAgent consumes to seed the `e2e` field of
+    // .agent/SLICE.md and to name the runs in the kickoff.
     e2eRuns: extractE2eRuns(body),
     issue: `#${i.number}`,
   }
 }
 
-// mergedIssues: issues cerrados cuyo PR se mergeó (aproximación explícita del
-// brief: "cerrado" no es lo mismo que "mergeado", pero es lo único observable
-// sin cruzar con el grafo de PRs). Verificado contra gh 2.86 (`gh issue list
-// --json bogusField` lista los campos válidos sin tocar red): el campo se
-// llama `stateReason`, tal cual, y gh expone el valor en el casing del enum
-// GraphQL `IssueStateReason` (mayúsculas: "COMPLETED", "NOT_PLANNED",
-// "REOPENED"). No existe una variante real en minúsculas — no la toleramos
-// aquí a propósito (review round 1, Minor 3: rama muerta eliminada).
+// mergedIssues: closed issues whose PR was merged (an explicit approximation
+// from the brief: "closed" is not the same as "merged", but it is the only
+// thing observable without crossing with the PR graph). Verified against gh
+// 2.86 (`gh issue list --json bogusField` lists the valid fields without
+// touching the network): the field is called `stateReason`, exactly so, and gh
+// exposes the value in the casing of the GraphQL enum `IssueStateReason`
+// (upper case: "COMPLETED", "NOT_PLANNED", "REOPENED"). No real lower-case
+// variant exists — we do not tolerate one here on purpose (review round 1,
+// Minor 3: dead branch removed).
 export function filterMergedIssues(closedIssues) {
   return (closedIssues || []).filter((i) => i.stateReason === 'COMPLETED').map((i) => i.number)
 }
 
 // ============================================================================
-// F13/H4 — LA APROXIMACIÓN "CERRADO = MERGEADO" TIENE DOS TRAMPAS OPUESTAS, Y
-// NINGUNA ERA VISIBLE DESDE FUERA.
+// F13/H4 — THE "CLOSED = MERGED" APPROXIMATION HAS TWO OPPOSITE TRAPS, AND
+// NEITHER WAS VISIBLE FROM OUTSIDE.
 //
-// El comentario de `filterMergedIssues` (arriba) ya reconocía que "cerrado no
-// es lo mismo que mergeado, pero es lo único observable sin cruzar con el
-// grafo de PRs". Eso era honesto cuando se escribió; lo que faltaba era
-// enumerar las CONSECUENCIAS, que son dos y van en direcciones contrarias:
+// `filterMergedIssues`'s comment (above) already acknowledged that "closed is
+// not the same as merged, but it is the only thing observable without crossing
+// with the PR graph". That was honest when it was written; what was missing
+// was enumerating the CONSEQUENCES, which are two and run in opposite
+// directions:
 //
-//   (1) FALSO NEGATIVO, silencioso y permanente. Cerrar un slice descartado
-//       como **not planned** —lo semánticamente correcto— deja `stateReason
-//       = 'NOT_PLANNED'`, así que NO entra en `mergedIssues` y TODOS sus
-//       dependientes quedan esperando para siempre. Verificado contra el
-//       código sin arreglar: `/ct-next` respondía "falta mergear #7", con
-//       #7 cerrado — una instrucción a esperar algo que ya no va a ocurrir,
-//       indistinguible de "#7 sigue en curso".
+//   (1) FALSE NEGATIVE, silent and permanent. Closing a discarded slice as
+//       **not planned** —the semantically correct thing— leaves `stateReason
+//       = 'NOT_PLANNED'`, so it does NOT enter `mergedIssues` and ALL its
+//       dependents wait forever. Verified against the unfixed code:
+//       `/ct-next` answered "falta mergear #7", with #7 closed — an
+//       instruction to wait for something that is not going to happen any
+//       more, indistinguishable from "#7 is still in progress".
 //
-//   (2) FALSO POSITIVO. Cerrar a mano como **completed** sin haber mergeado
-//       nada satisface la dep igualmente, y el dependiente se despacha sobre
-//       trabajo que no existe.
+//   (2) FALSE POSITIVE. Closing by hand as **completed** without having
+//       merged anything satisfies the dep all the same, and the dependent gets
+//       dispatched on top of work that does not exist.
 //
-// QUÉ SE ARREGLA Y QUÉ NO, Y POR QUÉ. Se arregla (1): es el caso que deja al
-// loop atascado en silencio, y es DETECTABLE con datos que ya se traen (el
-// `state_reason` de cada issue cerrado viaja en la misma llamada REST que ya
-// se hace, coste de red CERO). `closedNotCompleted` lo expone y ct-next.mjs
-// lo nombra en el mensaje de deps sin satisfacer, con el remedio exacto.
+// WHAT IS FIXED AND WHAT IS NOT, AND WHY. (1) is fixed: it is the case that
+// leaves the loop stuck in silence, and it is DETECTABLE with data that is
+// already fetched (each closed issue's `state_reason` travels in the same REST
+// call that is already made, network cost ZERO). `closedNotCompleted` exposes
+// it and ct-next.mjs names it in the unsatisfied-deps message, with the exact
+// remedy.
 //
-// NO se arregla (2) cruzando el grafo de PRs, y es una decisión, no un
-// olvido: distinguir "cerrado como completed por un merge" de "cerrado como
-// completed a mano" exige el timeline del issue (GraphQL, una llamada por
-// issue cerrado) para blindar un caso que requiere que alguien cierre a mano
-// como completed un slice sin mergear — mientras que (1) ocurre al hacer LO
-// CORRECTO. El coste no se justifica; lo que sí se hace es dejar de PROMETER
-// lo que no se comprueba: el contrato de la §9 (ct-init.sh) decía
-// "`merge-after` significa MERGEADO" y ahora dice qué se mira de verdad y
-// qué no. Una promesa retirada vale más que una comprobación cara a medias.
+// (2) is NOT fixed by crossing the PR graph, and that is a decision, not an
+// oversight: telling "closed as completed by a merge" from "closed as
+// completed by hand" demands the issue's timeline (GraphQL, one call per
+// closed issue) in order to armour a case that requires somebody to close by
+// hand as completed a slice that was not merged — whereas (1) happens on doing
+// THE RIGHT THING. The cost is not justified; what is done instead is to stop
+// PROMISING what is not checked: the §9 contract (ct-init.sh) said
+// "`merge-after` significa MERGEADO" and now says what is really looked at and
+// what is not. A promise withdrawn is worth more than an expensive half-made
+// check.
 //
-// 'REOPENED' aparece aquí por completitud del enum `IssueStateReason`: un
-// issue reabierto normalmente vuelve a estar ABIERTO (y entonces ni siquiera
-// llega a esta lista), pero si apareciera cerrado con ese motivo tampoco
-// cuenta como mergeado, y el mismo mensaje sirve. `null`/ausente (issues
-// cerrados antes de que GitHub tuviera `state_reason`) también entra: no
-// consta que se completara, y afirmar lo contrario sería inventarlo.
+// 'REOPENED' appears here for completeness of the `IssueStateReason` enum: a
+// reopened issue is normally OPEN again (and then it does not even reach this
+// list), but if it did appear closed with that reason it would not count as
+// merged either, and the same message serves. `null`/absent (issues closed
+// before GitHub had `state_reason`) also enters: there is no record that it
+// was completed, and asserting otherwise would be inventing it.
 export function closedNotCompleted(closedIssues) {
   const out = {}
   for (const i of (closedIssues || [])) {
@@ -939,40 +938,44 @@ export function closedNotCompleted(closedIssues) {
 }
 
 // ============================================================================
-// F18/H2 — UN ISSUE CERRADO QUE CONSERVA SU LABEL `status:` DESAPARECE DEL
-// DISPATCHER SIN UNA PALABRA.
+// F18/H2 — A CLOSED ISSUE THAT KEEPS ITS `status:` LABEL DISAPPEARS FROM THE
+// DISPATCHER WITHOUT A WORD.
 //
-// `/ct-next` solo enumera issues ABIERTOS (state=open). Un issue cerrado con
-// `status:ready` todavía puesta deja de existir para el dispatcher: no se
-// selecciona, no cuenta en vuelo, y —lo grave— no se NOMBRA en ninguna parte.
+// `/ct-next` only enumerates OPEN issues (state=open). A closed issue with
+// `status:ready` still on it stops existing for the dispatcher: it is not
+// selected, it does not count as in flight, and —the serious part— it is NAMED
+// nowhere.
 //
-// Lo que pasó en campo: el único slice despachable se cerró por accidente, y
-// la corrida siguiente cayó al siguiente `status:ready` del repo (otro epic,
-// sin milestone) y explicó con detalle por qué ÉSE no era despachable. El
-// operador leyó una explicación cuidadosa de algo irrelevante, sin una sola
-// pista de que su trabajo se había caído de la cola.
+// What happened in the field: the only dispatchable slice was closed by
+// accident, and the next run fell through to the repo's next `status:ready`
+// (another epic, with no milestone) and explained in detail why THAT one was
+// not dispatchable. The operator read a careful explanation of something
+// irrelevant, without a single hint that their work had fallen out of the
+// queue.
 //
-// LA TASA, medida (28-jul-2026, repo de producción, consulta paginada
-// COMPLETA — no una lista escrita a mano): 10 de 99 issues cerrados conservan
-// una label `status:` viva. Uno de cada diez. No es un accidente puntual:
-// cerrar el issue y quitarle su label son dos actos separados y NADA comprueba
-// el segundo, así que el residuo se acumula solo.
+// THE RATE, measured (28-jul-2026, production repo, a COMPLETE paginated query
+// — not a hand-written list): 10 of 99 closed issues keep a live `status:`
+// label. One in ten. It is not a one-off accident: closing the issue and
+// removing its label are two separate acts and NOTHING checks the second, so
+// the residue accumulates on its own.
 //
 //   53, 54, 58, 63   COMPLETED  status:in-review
 //   155, 245         COMPLETED  status:in-progress
 //   156, 157, 161    COMPLETED  status:ready
 //   158              COMPLETED  status:blocked
 //
-// Esta función devuelve TODOS (incluidos los `in-review`) y no clasifica: la
-// separación entre "contradicción" y "final normal de un slice" es una
-// decisión de PRESENTACIÓN y vive en ct-next.mjs, donde está el mensaje. Aquí
-// solo se mira el dato, que además viaja YA en la misma llamada REST de
-// issues cerrados que `filterMergedIssues`/`closedNotCompleted` ya consumen:
-// coste de red CERO.
+// This function returns ALL of them (the `in-review` ones included) and does
+// not classify: the separation between "contradiction" and "a slice's normal
+// ending" is a PRESENTATION decision and lives in ct-next.mjs, where the
+// message is. Here only the datum is looked at, and it already travels in the
+// same REST call for closed issues that
+// `filterMergedIssues`/`closedNotCompleted` already consume: network cost
+// ZERO.
 //
-// Una label `status:` SIN valor (`status:` a secas, o `status: ` con espacio)
-// se descarta, con el mismo criterio y por el mismo motivo que `area:`/
-// `touches:` vacías en mapGhIssue: un token vacío no representa ningún estado.
+// A `status:` label WITH NO value (a bare `status:`, or `status: ` with a
+// space) is discarded, with the same criterion and for the same reason as
+// empty `area:`/`touches:` in mapGhIssue: an empty token represents no
+// state.
 export function closedWithLiveStatus(closedIssues) {
   const out = []
   for (const i of (closedIssues || [])) {

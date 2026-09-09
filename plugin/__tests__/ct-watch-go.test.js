@@ -1,15 +1,15 @@
-// El vigilante del `-OK` (scripts/ct-watch-go.mjs), contra `gh` y `cmux` de
-// mentira.
+// The watcher of the `-OK` (scripts/ct-watch-go.mjs), against a fake `gh` and a
+// fake `cmux`.
 //
-// Lo que este fichero fija es la propiedad entera de la ronda: que el go se dé
-// UNA vez, en el issue, y que el trabajo arranque solo. Antes el «ok» de GitHub
-// no lo leía nadie y el que reanudaba el trabajo era el que la persona teclaba a
-// mano en la ventana de cmux.
+// What this file pins down is the whole property of the round: that the go is
+// given ONCE, on the issue, and that the work starts on its own. Before, nobody
+// read GitHub's «ok» and the thing that resumed the work was what the person
+// typed by hand into the cmux window.
 //
-// Se ejecuta el script DE VERDAD como subproceso: la lógica de decidir ya está
-// probada aparte (go-response.test.js) y lo que queda aquí es la costura —
-// hablar con `gh`, encontrar la sesión por su título y teclearle la línea—, que
-// es justo lo que un test con dobles en memoria no comprobaría.
+// The REAL script is executed as a subprocess: the deciding logic is already
+// tested apart (go-response.test.js) and what is left here is the seam —
+// talking to `gh`, finding the session by its title and typing the line into
+// it—, which is exactly what a test with in-memory doubles would not check.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
@@ -18,9 +18,9 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { GO_TOKEN, goBody, goCommitment, newGoNonce, GO_FORMAT_REPLY } from '../scripts/go-response.js'
 
-// F38 — el go que este vigilante reconoce es `-OK <nonce>`, con el nonce de SU
-// despacho. Lo que le llega por argv es el sha256 (`--go-hash`): su argv lo
-// enseña `ps` a cualquier proceso del mismo uid, el agente incluido.
+// F38 — the go this watcher recognises is `-OK <nonce>`, with the nonce of ITS
+// OWN dispatch. What reaches it through argv is the sha256 (`--go-hash`): `ps`
+// shows its argv to any process of the same uid, the agent included.
 const NONCE = newGoNonce(Buffer.from([0x3f, 0x9a, 0x1c, 0x04]))
 const GO_HASH = goCommitment(NONCE)
 const GO = goBody(NONCE)
@@ -36,14 +36,15 @@ let stateFile
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'watch-go-'))
   stateFile = join(dir, 'cmux-state.json')
-  // Una sesión ya "lanzada" con el título que el vigilante va a buscar. El stub
-  // la expone por `workspace list` con su `ref` y acepta `send` sobre ella.
+  // A session already "launched" with the title the watcher is going to look
+  // for. The stub exposes it through `workspace list` with its `ref` and accepts
+  // `send` on it.
   writeFileSync(stateFile, JSON.stringify([{ title: SESION, cwd: dir }]))
 })
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
-// El vigilante corre hasta que decide, así que cada caso le pone plazos cortos:
-// lo que se prueba es la decisión, no el reloj.
+// The watcher runs until it decides, so every case gives it short deadlines:
+// what is being tested is the decision, not the clock.
 function correr(env = {}, { timeoutMs = 800, pollMs = 40 } = {}) {
   try {
     const stdout = execFileSync(process.execPath, [
@@ -56,8 +57,8 @@ function correr(env = {}, { timeoutMs = 800, pollMs = 40 } = {}) {
         ...process.env,
         PATH: `${STUBS}:${process.env.PATH}`,
         FAKE_CMUX_STATE_FILE: stateFile,
-        // La línea que se teclea es prosa, no un comando: sin esto el stub
-        // intentaría ejecutarla con `sh -c`.
+        // The line that gets typed is prose, not a command: without this the
+        // stub would try to run it with `sh -c`.
         FAKE_CMUX_SKIP_COMMAND_SUBSTR: '#5',
         CT_WATCH_GO_TIMEOUT_MS: String(timeoutMs),
         CT_WATCH_GO_POLL_MS: String(pollMs),
@@ -70,19 +71,20 @@ function correr(env = {}, { timeoutMs = 800, pollMs = 40 } = {}) {
   }
 }
 
-// Los comentarios se identifican por `id` (`gh` lo da: `IC_kwDO…`), que es la
-// ventana: cuenta lo que no estaba en la foto inicial. `createdAt` va también
-// porque `gh` lo devuelve, pero NADIE lo mira — y hay un test del módulo puro
-// que impide volver a cortar por tiempo.
+// Comments are identified by `id` (`gh` gives it: `IC_kwDO…`), and that is the
+// window: what was not in the initial snapshot counts. `createdAt` goes along
+// too because `gh` returns it, but NOBODY looks at it — and there is a test of
+// the pure module that prevents cutting by time again.
 let n = 0
 const comentario = (body, id = null) => ({ id: id ?? `IC_${++n}`, body, createdAt: new Date().toISOString() })
 const pendienteDe = () => JSON.parse(readFileSync(stateFile, 'utf8'))[0].pending
 
-// El go tiene que LLEGAR después de que el vigilante saque su foto inicial: un
-// payload FIJO que ya trae el `-OK` está, por definición, dentro de esa foto, y
-// entonces no cuenta — que es exactamente la propiedad de la ventana. Así que
-// los casos de entrega van en secuencia: primer sondeo sin go (la foto), el
-// siguiente con él. Es además más fiel a lo que pasa de verdad.
+// The go has to ARRIVE after the watcher takes its initial snapshot: a FIXED
+// payload that already carries the `-OK` is, by definition, inside that
+// snapshot, and then it does not count — which is exactly the window's
+// property. So the delivery cases go in a sequence: first poll without a go
+// (the snapshot), the next one with it. It is also truer to what really
+// happens.
 let secuencias = 0
 const conGo = (extra = {}) => ({
   FAKE_GH_VIEW_COMMENTS_SEQUENCE: JSON.stringify([
@@ -93,34 +95,36 @@ const conGo = (extra = {}) => ({
   ...extra,
 })
 
-// PATH sin `cmux` — pero CON `node`, o el stub de `gh` (que es un script con
-// shebang `env node`) tampoco arrancaría y el test mediría otra cosa.
+// PATH without `cmux` — but WITH `node`, or the `gh` stub (which is a script
+// with an `env node` shebang) would not start either and the test would be
+// measuring something else.
 const sinCmux = () => [join(AQUI, 'fixtures', 'fake-gh-bin'), dirname(process.execPath), '/usr/bin', '/bin'].join(':')
 
-describe('el vigilante entrega el go', () => {
-  it('ve el token y teclea la línea en la sesión del slice', () => {
+describe('the watcher delivers the go', () => {
+  it('sees the token and types the line into the slice session', () => {
     const r = correr(conGo())
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/línea enviada/)
-    // El `send-key Enter` consume el pendiente: que esté a null es la prueba de
-    // que la línea se ENVIÓ y se ejecutó, no que se quedó en la línea de
-    // edición. Los dos pasos van separados porque `cmux send` no añade Enter.
+    // The `send-key Enter` consumes the pending one: its being null is the
+    // proof that the line was SENT and executed, not that it was left on the
+    // edit line. The two steps go separately because `cmux send` adds no Enter.
     expect(pendienteDe()).toBe(null)
   })
 
-  it('espera mientras no hay token, y arranca en el tick en que aparece', () => {
-    // Lo que de verdad importa: que no se rinda en el primer sondeo. El primer
-    // payload no trae go; el segundo sí.
+  it('waits while there is no token, and starts on the tick it appears', () => {
+    // What really matters: that it does not give up on the first poll. The first
+    // payload carries no go; the second one does.
     const r = correr(conGo())
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/línea enviada/)
   })
 })
 
-describe('el vigilante no entrega lo que no es un go', () => {
-  it('un comentario que no es el token exacto agota el plazo sin tocar la sesión', () => {
-    // El modo de fallo asimétrico: «-OK pero cambia el nombre» tiene que dejar
-    // el trabajo parado, porque arrancarlo es justo lo que esa persona frenaba.
+describe('the watcher does not deliver what is not a go', () => {
+  it('a comment that is not the exact token exhausts the deadline without touching the session', () => {
+    // The asymmetric failure mode: «-OK but change the name» has to leave the
+    // work stopped, because starting it is exactly what that person was
+    // holding back.
     const r = correr({
       FAKE_GH_VIEW_COMMENTS: JSON.stringify({ comments: [comentario(`${GO} pero cambia el nombre`)] }),
     })
@@ -129,10 +133,11 @@ describe('el vigilante no entrega lo que no es un go', () => {
     expect(pendienteDe()).toBeUndefined()
   })
 
-  it('un go que ya estaba al arrancar no cuenta: es el de un despacho previo', () => {
-    // Sin ventana, redespachar un slice cuyo issue ya llevaba un go heredaría
-    // ese go y el gate se saltaría en silencio. El payload es FIJO, así que el
-    // `-OK` está ya en la foto inicial que el vigilante saca antes de buscar.
+  it('a go that was already there at start-up does not count: it belongs to an earlier dispatch', () => {
+    // Without the window, re-dispatching a slice whose issue already carried a
+    // go would inherit that go and the gate would be skipped in silence. The
+    // payload is FIXED, so the `-OK` is already in the initial snapshot the
+    // watcher takes before it starts looking.
     const r = correr({
       FAKE_GH_VIEW_COMMENTS: JSON.stringify({ comments: [comentario(GO, 'IC_heredado')] }),
     })
@@ -142,17 +147,17 @@ describe('el vigilante no entrega lo que no es un go', () => {
   })
 })
 
-describe('lo que no puede tumbar la vigilancia', () => {
-  it('un fallo de `gh` se anota y se reintenta en el próximo tick', () => {
-    // La red se cae y el token caduca. Lo que no puede pasar es que un fallo
-    // transitorio se lea como «no hay go» de forma permanente.
+describe('what cannot knock down the watch', () => {
+  it('a `gh` failure is noted down and retried on the next tick', () => {
+    // The network goes down and the token expires. What cannot happen is for a
+    // transient failure to be read as «there is no go» permanently.
     const r = correr({ FAKE_GH_VIEW_FAIL: '1' })
     expect(r.status).toBe(3)
     expect(r.stdout).toMatch(/no se pudo leer el issue/)
     expect(r.stdout).toMatch(/se reintenta/)
   })
 
-  it('si la sesión no existe lo dice y muere, en vez de fingir que sigue vigilando', () => {
+  it('if the session does not exist it says so and dies, instead of pretending it is still watching', () => {
     writeFileSync(stateFile, JSON.stringify([]))
     const r = correr(conGo())
     expect(r.status).toBe(1)
@@ -161,32 +166,34 @@ describe('lo que no puede tumbar la vigilancia', () => {
   })
 
   // -------------------------------------------------------------------------
-  // EL HALLAZGO QUE MÁS DOLÍA de la revisión adversarial: `consultarSesion`
-  // distingue «cmux contestó que no está» de «no se pudo preguntar», y el
-  // camino de ENTREGA tiraba esa distinción. O sea que un timeout de cmux justo
-  // en el tick en que llegaba el `-OK` mataba una vigilancia de ocho horas en
-  // el único instante que importaba, y encima diagnosticaba lo contrario de lo
-  // que había pasado. Cuando no hay nada que perder se reintentaba; con el go
-  // ya en la mano, se abandonaba.
+  // THE FINDING THAT HURT MOST in the adversarial review: `consultarSesion`
+  // distinguishes «cmux answered that it is not there» from «it could not be
+  // asked», and the DELIVERY path threw that distinction away. Which means a
+  // cmux timeout right on the tick the `-OK` arrived killed an eight-hour watch
+  // at the one instant that mattered, and on top of that diagnosed the opposite
+  // of what had happened. When there was nothing to lose it retried; with the
+  // go already in hand, it gave up.
   // -------------------------------------------------------------------------
-  it('si el go llega y justo entonces no se puede preguntar a cmux, NO se abandona', () => {
+  it('if the go arrives and right then cmux cannot be asked, it does NOT give up', () => {
     const r = correr(conGo({ PATH: sinCmux() }), { timeoutMs: 500, pollMs: 40 })
-    // Sale por plazo (nunca puede entregar, porque cmux no está), NO por el
-    // exit 1 de «no hay sesión»: la diferencia es que sigue intentándolo.
+    // It exits on the deadline (it can never deliver, because cmux is not
+    // there), NOT on the exit 1 of «there is no session»: the difference is that
+    // it keeps trying.
     expect(r.status).toBe(3)
     expect(r.stdout).toMatch(/el go está visto pero no se pudo consultar cmux/)
     expect(r.stdout).toMatch(/se reintenta la entrega/)
   })
 
   // -------------------------------------------------------------------------
-  // LA COTA QUE DE VERDAD ACOTA. El plazo de ocho horas cubre que la persona
-  // esté durmiendo; no cubre que la sesión desaparezca, y entonces el vigilante
-  // sondearía horas para entregarle una línea a algo que ya no existe. Se vio a
-  // la primera: la primera corrida de la suite completa dejó 42 procesos así.
+  // THE BOUND THAT ACTUALLY BOUNDS. The eight-hour deadline covers the person
+  // being asleep; it does not cover the session disappearing, and then the
+  // watcher would poll for hours to deliver a line to something that no longer
+  // exists. It showed up on the very first try: the first run of the full suite
+  // left 42 processes like that.
   // -------------------------------------------------------------------------
-  it('si la sesión desaparece se apaga solo, sin esperar a agotar el plazo', () => {
-    // Plazo largo a propósito: si el vigilante esperara al plazo, este test
-    // tardaría un minuto. Que termine rápido ES la aserción.
+  it('if the session disappears it shuts itself down, without waiting out the deadline', () => {
+    // A long deadline on purpose: if the watcher waited for the deadline, this
+    // test would take a minute. Finishing fast IS the assertion.
     writeFileSync(stateFile, JSON.stringify([]))
     const antes = Date.now()
     const r = correr({}, { timeoutMs: 60_000, pollMs: 40 })
@@ -196,60 +203,61 @@ describe('lo que no puede tumbar la vigilancia', () => {
   })
 
   // -------------------------------------------------------------------------
-  // EL MISMO FALLO QUE LA REVISIÓN ADVERSARIAL DE LA #37 encontró en el
-  // vigilante del merge, y que este fichero arrastraba desde antes: el recorrido
-  // de cmux se leía a pelo. `custom_title` es un nombre de campo OBSERVADO, sin
-  // garantía de esquema; si cmux lo renombrara, ninguna entrada casaría, se
-  // devolvía «cmux contestó y la sesión no está», y este vigilante se APAGABA con
-  // exit 4 declarando muerta una sesión que estaba ahí delante — tirando el go de
-  // la persona que lo había dado.
+  // THE SAME FAILURE THE ADVERSARIAL REVIEW OF #37 found in the merge watcher,
+  // and which this file had been carrying since before: cmux's listing was read
+  // raw. `custom_title` is an OBSERVED field name, with no schema guarantee; if
+  // cmux renamed it, no entry would match, «cmux answered and the session is not
+  // there» was returned, and this watcher SHUT DOWN with exit 4 declaring dead a
+  // session that was right in front of it — throwing away the go of the person
+  // who had given it.
   //
-  // Aquí duele más que en el del merge: allí se pierde un aviso que /ct-next
-  // vuelve a calcular; aquí se pierde el permiso de un humano y el slice se queda
-  // parado sin que nadie lo sepa. `ct-next.mjs` ya lo había resuelto (D5,
-  // hallazgo B) y desde esta ronda los tres consumidores comparten esa guarda.
+  // It hurts more here than in the merge one: there a warning is lost that
+  // /ct-next recomputes; here a human's permission is lost and the slice stays
+  // stopped without anybody knowing. `ct-next.mjs` had already solved it (D5,
+  // finding B) and as of this round the three consumers share that guard.
   // -------------------------------------------------------------------------
-  it('si cmux renombra el campo del título, NO declara muerta la sesión', () => {
+  it('if cmux renames the title field, it does NOT declare the session dead', () => {
     const r = correr({ FAKE_CMUX_SCHEMA_MISMATCH: '1' }, { timeoutMs: 400, pollMs: 40 })
-    // Por plazo (exit 3), NO por el exit 4 de «la sesión ya no existe»: la
-    // vigilancia sigue en pie en vez de suicidarse con un diagnóstico falso.
+    // On the deadline (exit 3), NOT on the exit 4 of «the session no longer
+    // exists»: the watch stays standing instead of killing itself with a false
+    // diagnosis.
     expect(r.status).toBe(3)
     expect(r.stdout).toMatch(/no se pudo consultar cmux/)
     expect(r.stdout).not.toMatch(/ya no existe/)
   })
 
-  it('pero si no se pudo PREGUNTAR por la sesión, sigue esperando', () => {
-    // La distinción que ct-next.mjs sostiene con tanto cuidado: "cmux contestó
-    // que no está" y "no se pudo preguntar" no significan lo mismo, y de la
-    // segunda no se sigue nada. Se quita `cmux` del PATH —no se le pide al stub
-    // que finja— porque lo que hay que ejercer es que la consulta no se puede
-    // hacer, no que conteste otra cosa.
+  it('but if the session could not be ASKED about, it goes on waiting', () => {
+    // The distinction ct-next.mjs holds so carefully: "cmux answered that it is
+    // not there" and "it could not be asked" do not mean the same thing, and
+    // nothing follows from the second. `cmux` is taken off the PATH —the stub is
+    // not asked to pretend— because what has to be exercised is the query being
+    // impossible to make, not it answering something else.
     const r = correr({ PATH: sinCmux() }, { timeoutMs: 400, pollMs: 40 })
     expect(r.status).toBe(3)
     expect(r.stdout).toMatch(/no se pudo consultar cmux/)
     expect(r.stdout).toMatch(/plazo agotado/)
   })
 
-  it('si el tecleo falla lo dice y muere: el go se vio y no se pudo entregar', () => {
+  it('if the typing fails it says so and dies: the go was seen and could not be delivered', () => {
     const r = correr(conGo({ FAKE_CMUX_SEND_FAIL: '1' }))
     expect(r.status).toBe(1)
     expect(r.stdout).toMatch(/no se pudo escribir/)
   })
 })
 
-describe('la foto inicial', () => {
-  // Si la primera lectura falla y se diera la foto por vacía, un `-OK`
-  // heredado de un despacho anterior contaría como nuevo y saltaría el gate en
-  // silencio — justo lo que la ventana existe para impedir. Así que se
-  // reintenta hasta conseguirla, y si no se consigue no se entrega nada.
-  it('no se da por vacía: si no se puede leer ni una vez, no se entrega nada', () => {
+describe('the initial snapshot', () => {
+  // If the first read fails and the snapshot were taken as empty, an `-OK`
+  // inherited from an earlier dispatch would count as new and would open the
+  // gate in silence — exactly what the window exists to prevent. So it is
+  // retried until it succeeds, and if it never succeeds nothing is delivered.
+  it('it is not taken as empty: if it cannot be read even once, nothing is delivered', () => {
     const r = correr({ FAKE_GH_VIEW_FAIL: '1' }, { timeoutMs: 300, pollMs: 40 })
     expect(r.status).toBe(3)
     expect(r.stdout).toMatch(/sin poder leer ni una vez/)
     expect(r.stdout).not.toMatch(/foto inicial/)
   })
 
-  it('se anuncia cuántos comentarios no van a contar', () => {
+  it('it announces how many comments are not going to count', () => {
     const r = correr({
       FAKE_GH_VIEW_COMMENTS: JSON.stringify({ comments: [comentario('hola'), comentario('qué tal')] }),
     }, { timeoutMs: 300, pollMs: 40 })
@@ -257,8 +265,8 @@ describe('la foto inicial', () => {
   })
 })
 
-describe('los argumentos y los plazos', () => {
-  it('sin issue, repo o sesión no arranca', () => {
+describe('the arguments and the deadlines', () => {
+  it('without an issue, a repo or a session it does not start', () => {
     let r
     try {
       execFileSync(process.execPath, [SCRIPT, '--issue', '5'], { encoding: 'utf8', timeout: 10_000 })
@@ -270,21 +278,22 @@ describe('los argumentos y los plazos', () => {
     expect(r.stderr).toMatch(/uso:/)
   })
 
-  it('un plazo que no se entiende aborta en vez de caer al defecto en silencio', () => {
-    // Mismo criterio que CT_NEXT_LAUNCH_TIMEOUT_MS: un plazo mal escrito cambia
-    // lo que este proceso significa, y no querrías descubrirlo ocho horas
-    // después.
+  it('a deadline that cannot be understood aborts instead of falling back to the default in silence', () => {
+    // Same criterion as CT_NEXT_LAUNCH_TIMEOUT_MS: a badly written deadline
+    // changes what this process means, and you would not want to find that out
+    // eight hours later.
     const r = correr({ CT_WATCH_GO_POLL_MS: 'un rato' })
     expect(r.status).toBe(2)
     expect(r.stderr).toMatch(/CT_WATCH_GO_POLL_MS inválido/)
   })
 })
 
-// El intento que no arranca nada, contestado donde la persona está mirando.
-// Medido en jjponz/rust-monitoring#7: `-OK` pelado, silencio, y ocho minutos
-// hasta el go bueno. El gate NO se mueve por esto — sigue abriéndose sólo con el
-// token exacto—; lo que cambia es que quien lo intenta se entera del formato.
-describe('un intento de go que no arranca nada recibe el formato en el issue', () => {
+// The attempt that starts nothing, answered where the person is looking.
+// Measured in jjponz/rust-monitoring#7: a bare `-OK`, silence, and eight minutes
+// until the good go. The gate does NOT move because of this — it still only
+// opens with the exact token—; what changes is that whoever tries finds out the
+// format.
+describe('a go attempt that starts nothing gets the format on the issue', () => {
   const conIntento = (cuerpo) => {
     const contador = join(dir, `contador-intento-${++secuencias}`)
     return {
@@ -295,11 +304,11 @@ describe('un intento de go que no arranca nada recibe el formato en el issue', (
       FAKE_GH_VIEW_COMMENTS_COUNTER_FILE: contador,
     }
   }
-  // El registro SE LEE CRUDO y no partido por saltos de línea. El cuerpo que se
-  // publica es multilínea, así que partirlo dejaba `publicados()[0]` en el
-  // primer fragmento del cuerpo y la aserción del nonce miraba donde el nonce
-  // nunca iba a estar. Salió mutando: interpolar el hash al FINAL del cuerpo
-  // dejaba el test en verde.
+  // The log IS READ RAW and not split on newlines. The body that gets published
+  // is multiline, so splitting it left `publicados()[0]` on the first fragment
+  // of the body and the nonce assertion looked where the nonce was never going
+  // to be. It came out of mutating: interpolating the hash at the END of the
+  // body left the test green.
   const registro = () => {
     try {
       return readFileSync(join(dir, 'argv.log'), 'utf8')
@@ -309,13 +318,13 @@ describe('un intento de go que no arranca nada recibe el formato en el issue', (
   }
   const cuantosPublicados = () => registro().split('issue comment').length - 1
 
-  it('publica el formato cuando el comentario nuevo es el token pelado', () => {
+  it('it publishes the format when the new comment is the bare token', () => {
     correr({ ...conIntento(GO_TOKEN), FAKE_GH_ARGV_LOG_FILE: join(dir, 'argv.log') }, { timeoutMs: 1500, pollMs: 40 })
     expect(cuantosPublicados()).toBe(1)
     expect(registro()).toContain('jjponz/repo-pulse')
   })
 
-  it('el cuerpo publicado es el texto del módulo, y NO lleva el nonce ni su hash', () => {
+  it("the published body is the module's text, and carries NEITHER the nonce nor its hash", () => {
     correr({ ...conIntento(`${GO_TOKEN} deadbeef`), FAKE_GH_ARGV_LOG_FILE: join(dir, 'argv.log') }, { timeoutMs: 1500, pollMs: 40 })
     expect(cuantosPublicados()).toBe(1)
     expect(registro()).toContain(GO_FORMAT_REPLY)
@@ -323,7 +332,7 @@ describe('un intento de go que no arranca nada recibe el formato en el issue', (
     expect(registro()).not.toContain(GO_HASH)
   })
 
-  it('lo publica UNA vez aunque el intento siga ahí tick tras tick', () => {
+  it('it publishes it ONCE even though the attempt is still there tick after tick', () => {
     correr({
       FAKE_GH_VIEW_COMMENTS_SEQUENCE: JSON.stringify([
         { comments: [] },
@@ -337,17 +346,17 @@ describe('un intento de go que no arranca nada recibe el formato en el issue', (
     expect(cuantosPublicados()).toBe(1)
   })
 
-  it('un go VÁLIDO no recibe explicación: se contestaría a quien acertó', () => {
+  it('a VALID go gets no explanation: it would be answering whoever got it right', () => {
     correr({ ...conGo(), FAKE_GH_ARGV_LOG_FILE: join(dir, 'argv.log') })
     expect(cuantosPublicados()).toBe(0)
   })
 
-  it('un comentario que no intenta dar el go no recibe explicación', () => {
+  it('a comment that is not trying to give the go gets no explanation', () => {
     correr({ ...conIntento('me parece bien el plan'), FAKE_GH_ARGV_LOG_FILE: join(dir, 'argv.log') }, { timeoutMs: 1500, pollMs: 40 })
     expect(cuantosPublicados()).toBe(0)
   })
 
-  it('si publicar falla, la vigilancia sigue: el go posterior se entrega igual', () => {
+  it('if publishing fails, the watch goes on: the later go is delivered just the same', () => {
     const r = correr({
       FAKE_GH_VIEW_COMMENTS_SEQUENCE: JSON.stringify([
         { comments: [] },
@@ -356,12 +365,13 @@ describe('un intento de go que no arranca nada recibe el formato en el issue', (
       ]),
       FAKE_GH_VIEW_COMMENTS_COUNTER_FILE: join(dir, `contador-fallo-${++secuencias}`),
       FAKE_GH_ISSUE_COMMENT_FAIL: '1',
-      // Plazo HOLGADO y no ajustado, y el motivo es una regresión medida: con
-      // 600 ms este caso pasaba suelto y fallaba en la suite completa, porque
-      // el go llega en el TERCER sondeo y con la máquina cargada un tick tarda
-      // más que su presupuesto. Aquí el plazo no es el sujeto —el sujeto es que
-      // un fallo al publicar no mata la vigilancia— y el proceso sale solo en
-      // cuanto entrega, así que sobrar plazo no cuesta tiempo cuando pasa.
+      // A ROOMY deadline and not a tight one, and the reason is a measured
+      // regression: at 600 ms this case passed on its own and failed in the full
+      // suite, because the go arrives on the THIRD poll and with a loaded
+      // machine a tick takes longer than its budget. Here the deadline is not
+      // the subject —the subject is that a failure to publish does not kill the
+      // watch— and the process exits by itself as soon as it delivers, so
+      // deadline to spare costs no time when it passes.
     }, { timeoutMs: 8000, pollMs: 40 })
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/no se pudo publicar el formato/)

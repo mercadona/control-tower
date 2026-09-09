@@ -1,22 +1,22 @@
-// Finding 4 (auditoría de interrupción/staleness), segunda mitad: antes,
-// ct-next.mjs#classifyClaimOutcome distinguía las causas de un exit 1 de
-// dispatch-check.mjs PARSEANDO SU TEXTO libre — frágil ante cualquier
-// cambio de wording futuro en ese fichero. Con el contrato de exit code
-// ensanchado (1='skip', 3='infra', 4='stuck'; ver la cabecera de
-// dispatch-check.mjs y de classifyClaimOutcome en ct-next.mjs), la decisión
-// de ct-next.mjs ya no depende de reconocer ninguna frase concreta.
+// Finding 4 (interruption/staleness audit), second half: before this,
+// ct-next.mjs#classifyClaimOutcome told the causes of an exit 1 of
+// dispatch-check.mjs apart by PARSING ITS FREE TEXT — fragile against any
+// future wording change in that file. With the exit code contract widened
+// (1='skip', 3='infra', 4='stuck'; see the header of dispatch-check.mjs and
+// of classifyClaimOutcome in ct-next.mjs), ct-next.mjs's decision no longer
+// depends on recognising any particular phrase.
 //
-// Estos tests verifican el comportamiento de EXTREMO A EXTREMO (ct-next.mjs
-// invocando el dispatch-check.mjs real) para los dos casos que antes SOLO
-// se podían distinguir parseando texto: 'infra' (sigue con el resto de la
-// tanda) y 'stuck' (aborta la tanda entera).
+// These tests verify the END-TO-END behaviour (ct-next.mjs invoking the real
+// dispatch-check.mjs) for the two cases that previously could ONLY be told
+// apart by parsing text: 'infra' (carries on with the rest of the batch) and
+// 'stuck' (aborts the whole batch).
 import { describe, it, expect, afterEach } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-// D4: entorno hermético (dirs de cuenta + stubs de cmux/claude) — ver fixtures/hermetic-env.js
+// D4: hermetic environment (account dirs + cmux/claude stubs) — see fixtures/hermetic-env.js
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'ct-next.mjs')
@@ -44,8 +44,8 @@ function makeRepoRoot() {
   return d
 }
 
-describe('ct-next — clasifica el claim por el CÓDIGO de dispatch-check, no por su texto (finding 4)', () => {
-  it('exit 3 (infra: fallo al leer labels del candidato) → salta #42 y SIGUE con #43, exit 0 final', () => {
+describe('ct-next — classifies the claim by the dispatch-check CODE, not by its text (finding 4)', () => {
+  it('exit 3 (infra: reading the candidate labels failed) → skips #42 and CARRIES ON with #43, final exit 0', () => {
     const repoRoot = makeRepoRoot()
     const openIssue42 = { number: 42, title: '#42 algo', labels: [{ name: 'status:ready' }], body: '' }
     const openIssue43 = { number: 43, title: '#43 otro', labels: [{ name: 'status:ready' }], body: '' }
@@ -55,11 +55,11 @@ describe('ct-next — clasifica el claim por el CÓDIGO de dispatch-check, no po
     const r = runReal(['--repo', 'o/r', '--cap', '2'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
       // idx0: ct-next open ; idx1: ct-next closed ; idx2: dispatch-check(#42)
-      // colisión-check (lectura de labels del candidato) FALLA ; idx3/4:
-      // dispatch-check(#43) colisión-check + readback, limpios.
+      // collision check (reading the candidate labels) FAILS ; idx3/4:
+      // dispatch-check(#43) collision check + readback, both clean.
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue42, openIssue43], [], []]),
       FAKE_GH_COUNTER_FILE: counterFile,
-      FAKE_GH_VIEW_FAIL_AT: '0', // la PRIMERA llamada a `issue view` (labelsOf del candidato #42) falla
+      FAKE_GH_VIEW_FAIL_AT: '0', // the FIRST call to `issue view` (labelsOf of candidate #42) fails
       FAKE_GH_VIEW_COUNTER_FILE: viewCounterFile,
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:zzz']),
       FAKE_GIT_LOG_FILE: gitLog,
@@ -74,35 +74,35 @@ describe('ct-next — clasifica el claim por el CÓDIGO de dispatch-check, no po
     expect(gitLogTxt).toMatch(/worktree add -b feat\/43/)
   })
 
-  it('exit 4 (huérfano: carrera perdida y el revert también falla) → aborta TODA la tanda con exit 1, aunque quedara otro candidato', () => {
+  it('exit 4 (orphan: race lost and the revert fails too) → aborts the WHOLE batch with exit 1, even with another candidate left', () => {
     const repoRoot = makeRepoRoot()
     const openIssue42 = { number: 42, title: '#42 algo', labels: [{ name: 'status:ready' }], body: '' }
     const openIssue43 = { number: 43, title: '#43 otro', labels: [{ name: 'status:ready' }], body: '' }
-    // El readback (idx3) tiene que incluir NUESTRO PROPIO #42 (ya con el
-    // claim recién escrito) además del rival de número menor — claimLost()
-    // busca `mine` en el propio readback; si #42 no apareciera ahí, el
-    // resultado sería "ambiguo, no bloqueamos" en vez de la pérdida real de
-    // carrera que este test necesita reproducir.
+    // The readback (idx3) has to include OUR OWN #42 (already carrying the
+    // freshly written claim) as well as the lower-numbered rival — claimLost()
+    // looks for `mine` in the readback itself; if #42 did not show up there,
+    // the result would be "ambiguous, we do not block" instead of the real
+    // lost race this test needs to reproduce.
     const readbackConPerdida = [
       { number: 42, labels: [{ name: 'status:in-progress' }, { name: 'touches:zzz' }] },
-      { number: 5, labels: [{ name: 'status:in-progress' }, { name: 'touches:zzz' }] }, // menor número → gana, nosotros perdemos
+      { number: 5, labels: [{ name: 'status:in-progress' }, { name: 'touches:zzz' }] }, // lower number → it wins, we lose
     ]
     const counterFile = join(repoRoot, 'gh-list-count')
     const gitLog = join(repoRoot, 'git-log')
     const r = runReal(['--repo', 'o/r', '--cap', '2'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
       // idx0: ct-next open ; idx1: ct-next closed ; idx2: dispatch-check(#42)
-      // colisión-check (limpio) ; idx3: readback CON pérdida (#5 < #42).
+      // collision check (clean) ; idx3: readback WITH a loss (#5 < #42).
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue42, openIssue43], [], [], readbackConPerdida]),
       FAKE_GH_COUNTER_FILE: counterFile,
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:zzz']),
       FAKE_GIT_LOG_FILE: gitLog,
-      FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready --remove-label status:in-progress', // el revert de #42 falla
+      FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready --remove-label status:in-progress', // the revert of #42 fails
     })
     expect(r.out).toMatch(/dispatch-check devolvió exit 4 para #42/)
     expect(r.out).toMatch(/bloqueado en status:in-progress sin nadie trabajándolo/)
     expect(r.out).toMatch(/Abortando toda la tanda/)
-    expect(r.out).not.toMatch(/lanzado #43/) // NUNCA llega a intentar el siguiente candidato
+    expect(r.out).not.toMatch(/lanzado #43/) // it NEVER gets as far as trying the next candidate
     expect(r.code).toBe(1)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
@@ -110,32 +110,33 @@ describe('ct-next — clasifica el claim por el CÓDIGO de dispatch-check, no po
 })
 
 // ===========================================================================
-// D5, hallazgo A — AMPLIACIÓN EXPLÍCITA DEL CONTRATO DE EXIT CODES.
+// D5, finding A — EXPLICIT WIDENING OF THE EXIT CODE CONTRACT.
 //
-// El exit 3 significaba dos cosas distintas y su mensaje solo describía una:
-// desde que un lanzamiento sin verificar dejó de contar como lanzado, se
-// podía llegar al exit 3 con el claim escrito, la rama y el worktree creados
-// y `cmux new-workspace` en exit 0 — mientras el texto afirmaba "Nada quedó
-// a medias ni bloqueado — reintenta más tarde".
+// Exit 3 meant two different things and its message described only one of
+// them: ever since an unverified launch stopped counting as launched, exit 3
+// could be reached with the claim written, the branch and the worktree
+// created and `cmux new-workspace` at exit 0 — while the text asserted
+// "Nada quedó a medias ni bloqueado — reintenta más tarde".
 //
-// El contrato queda así, y estos tests lo fijan:
-//   3 = hubo tanda, cero lanzamientos, y NADA quedó a medias (todos los
-//       candidatos se saltaron AL RECLAMAR, sin mutar nada). Reintentable.
-//   1 = se AMPLÍA a "al menos un slice quedó lanzado sin verificar" — hay
-//       estado a medias que un humano tiene que resolver. Se aplica aunque
-//       otros slices de la misma tanda sí se lanzaran bien.
-// La tabla de commands/ct-next.md se actualizó en el mismo cambio.
-describe('ct-next — el exit 3 y el exit 1 se distinguen por si QUEDÓ ALGO A MEDIAS (D5, hallazgo A)', () => {
+// The contract now reads like this, and these tests pin it down:
+//   3 = there was a batch, zero launches, and NOTHING was left half done (all
+//       the candidates were skipped AT CLAIM TIME, mutating nothing).
+//       Retryable.
+//   1 = WIDENED to "at least one slice was left launched without being
+//       verified" — there is half-done state a human has to resolve. It
+//       applies even if other slices of the same batch did launch fine.
+// The table in commands/ct-next.md was updated in the same change.
+describe('ct-next — exit 3 and exit 1 are told apart by whether ANYTHING WAS LEFT HALF DONE (D5, finding A)', () => {
   const openIssue42 = { number: 42, title: '#42 algo', labels: [{ name: 'status:ready' }], body: '' }
 
-  it('cero lanzamientos SIN residuo → 3, y el mensaje afirma que no hay nada que limpiar', () => {
+  it('zero launches WITHOUT residue → 3, and the message states there is nothing to clean up', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
       FAKE_GH_COUNTER_FILE: join(repoRoot, 'gh-list-count'),
       FAKE_GH_ARGV_LOG_FILE: join(repoRoot, 'gh-argv'),
       FAKE_GIT_LOG_FILE: join(repoRoot, 'git-log'),
-      // Colisión detectada por dispatch-check ANTES de escribir nada.
+      // Collision detected by dispatch-check BEFORE writing anything.
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:zzz']),
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([
         [openIssue42],
@@ -148,7 +149,7 @@ describe('ct-next — el exit 3 y el exit 1 se distinguen por si QUEDÓ ALGO A M
     expect(r.out).not.toMatch(/LANZADOS SIN VERIFICAR/)
   })
 
-  it('cero lanzamientos CON residuo (lanzamiento sin verificar) → 1, nunca 3', () => {
+  it('zero launches WITH residue (a launch that was never verified) → 1, never 3', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
@@ -160,7 +161,7 @@ describe('ct-next — el exit 3 y el exit 1 se distinguen por si QUEDÓ ALGO A M
     })
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/1 de los 1 slice\(s\) seleccionados quedaron LANZADOS SIN VERIFICAR/)
-    // El claim y el worktree SÍ existen: por eso no puede ser un 3.
+    // The claim and the worktree DO exist: that is why it cannot be a 3.
     expect(readFileSync(join(repoRoot, 'gh-argv'), 'utf8')).toMatch(/issue edit 42 .*--add-label status:in-progress/)
     expect(readFileSync(join(repoRoot, 'git-log'), 'utf8')).toMatch(/worktree add -b feat\/42/)
   })

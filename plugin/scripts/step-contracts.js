@@ -1,228 +1,234 @@
 // ============================================================================
-// STEP-CONTRACTS — lo que cruza la frontera entre la sesión y sus subagentes.
+// STEP-CONTRACTS — what crosses the boundary between the session and its
+// subagents.
 //
-// La sesión despacha un implementador y un juez; lo que vuelve de ellos son
-// ficheros. Este módulo dice qué se acepta como respuesta y qué escribe el
-// plugin, y es PURO: no lanza procesos, no lee disco.
+// The session dispatches an implementer and a judge; what comes back from them
+// are files. This module says what is accepted as an answer and what the plugin
+// writes, and it is PURE: it launches no processes, it reads no disk.
 //
-// Antes esto construía además el argv de `claude -p` —el conductor-programa que
-// hacía las dos llamadas él mismo—, y eso se fue con D-4: la decisión de que el
-// orquestador deje de ser una sesión de chat está aplazada y su dueño es José.
-// Lo que sobrevive es la parte que vale igual con un subagente al otro lado: el
-// ESQUEMA de lo que se acepta.
+// This used to build the argv of `claude -p` as well —the conductor-program
+// that made the two calls itself—, and that went with D-4: the decision to stop
+// the orchestrator being a chat session is deferred and its owner is José. What
+// survives is the part that holds just the same with a subagent on the other
+// side: the SCHEMA of what is accepted.
 //
-// Y el esquema importa más ahora, no menos. Con `claude -p` lo imponía el
-// binario (`--json-schema`, que sólo existe en modo `--print`); con un subagente
-// lo impone esta validación, y un veredicto que no cumple es un descarte — se
-// vuelve a preguntar en vez de interpretar hacia el lado que convenga.
+// And the schema matters more now, not less. With `claude -p` the binary
+// imposed it (`--json-schema`, which only exists in `--print` mode); with a
+// subagent this validation imposes it, and a verdict that does not comply is a
+// discard — the question is asked again instead of interpreting it towards
+// whichever side suits.
 // ============================================================================
 
 import { findClosingKeywords } from './closing-keywords.js'
 import { CtStepCommit } from './ct-step-commit.js'
 import { OUTCOMES } from './run-machine.js'
-// `node:crypto` no rompe el «módulo PURO» de la cabecera, y el precedente está
-// escrito en go-response.js: `createHash` es una función determinista de su
-// argumento —sin disco, sin red y sin reloj—, «lo mismo que un String.trim más
-// caro».
+// `node:crypto` does not break the «PURE module» of the header, and the
+// precedent is written in go-response.js: `createHash` is a deterministic
+// function of its argument —no disk, no network and no clock—, «the same as a
+// more expensive String.trim».
 import { createHash } from 'node:crypto'
 
 export const SEVERITIES = ['high', 'medium', 'low']
 
-// Las nueve reglas de la rúbrica del juez, en el orden en que la recorre (la
-// rúbrica en sí se escribe en una tarea posterior de este mismo plan; aquí
-// sólo se fija el vocabulario). Enum CERRADO, y no por la validación por la
-// validación: la telemetría cuenta hallazgos por regla (`findings_by_rule` en
-// run-metrics.js), y una regla inventada por el juez convertiría esa cuenta en
-// ruido. Un `rule` que no está aquí descarta el veredicto igual que ya
-// descarta un `ruling` inventado — el descarte no es un error, es "vuelve a
-// preguntar": un hallazgo que no encaja en ninguna regla es un hallazgo que el
-// juez no ha sabido justificar.
+// The nine rules of the judge's rubric, in the order it walks them (the rubric
+// itself is written in a later task of this same plan; here only the vocabulary
+// is fixed). A CLOSED enum, and not for validation's own sake: the telemetry
+// counts findings per rule (`findings_by_rule` in run-metrics.js), and a rule
+// invented by the judge would turn that count into noise. A `rule` that is not
+// here discards the verdict just as an invented `ruling` already does — the
+// discard is not an error, it is "ask again": a finding that fits no rule is a
+// finding the judge has not managed to justify.
 //
-// El noveno entra DETRÁS de `alcance` y no intercalado entre los ítems de
-// test: el orden de este array ES el orden en que el juez recorre la rúbrica
-// —`reglasDelAgente()` lo ata encabezado a encabezado en
-// step-contracts.test.js—, así que meterlo en medio renumera seis encabezados
-// de `ct-judge.md` sin cambiar nada que se pueda medir.
+// The ninth goes in BEHIND `alcance` and not interleaved among the test items:
+// the order of this array IS the order in which the judge walks the rubric
+// —`reglasDelAgente()` ties it heading by heading in step-contracts.test.js—,
+// so putting it in the middle renumbers six headings of `ct-judge.md` without
+// changing anything measurable.
 //
-// `test-desiderata` juzga los tests NUEVOS de la tarea como instrumento
-// (determinista, aislado, y que verifique comportamiento real) y bloquea sólo
-// con esas tres; lo demás avisa en `low` y nunca en `medium`, porque un
-// `medium` compra una vuelta pagada al implementador sobre una tarea cuya
-// suite ya está verde. Es el único ítem cuya vara NO la pone el plan: las tres
-// son propiedades de un test, no gusto del repo, así que no puede volver
-// `sin-vara` — un noveno ítem que en un repo sin convenciones saliera siempre
-// sin vara inflaría justo la columna (`rubric_sin_vara`) que se añadió para
-// medir si la vara llega. Los tests PREEXISTENTES debilitados siguen siendo de
-// `manipulacion-tests`: un assert relajado en un test que ya existía es UN
-// defecto y no dos, y duplicarlo falsearía `findings_by_rule`.
+// `test-desiderata` judges the task's NEW tests as an instrument (deterministic,
+// isolated, and verifying real behaviour) and blocks only on those three;
+// everything else warns at `low` and never at `medium`, because a `medium` buys
+// the implementer a paid round on a task whose suite is already green. It is the
+// only item whose yardstick is NOT set by the plan: the three are properties of
+// a test, not the repo's taste, so it cannot come back `sin-vara` — a ninth item
+// that in a repo without conventions always came out without a yardstick would
+// inflate precisely the column (`rubric_sin_vara`) that was added to measure
+// whether the yardstick arrives. WEAKENED PRE-EXISTING tests still belong to
+// `manipulacion-tests`: a relaxed assert in a test that already existed is ONE
+// defect and not two, and duplicating it would falsify `findings_by_rule`.
 export const VERDICT_RULES = [
   'objetivo', 'asercion-tdd', 'contrato', 'decisiones-cerradas',
   'patrones', 'manipulacion-tests', 'fixture-theater', 'alcance',
   'test-desiderata',
 ]
 
-// La rúbrica del juez de SLICE (§3.7-B del handoff
-// docs/prompt-juez-lo-que-queda.md), TRES ítems y no nueve — el argumento es el
-// mismo que ya cerró `boundaries` y `rollout` como absorbidos: todo lo que se
-// añade compite por la atención del juez, y `agents/ct-slice-judge.md` no
-// hereda ninguno de los nueve de `ct-judge.md` (ésos son por-tarea: marcadores,
-// brief, paquete stageado de UNA tarea; aquí el sujeto es el slice entero, ya
-// comiteado). Los dos primeros son exactamente los dos agujeros que §3.7
-// nombra:
+// The SLICE judge's rubric (§3.7-B of the handoff
+// docs/prompt-juez-lo-que-queda.md), THREE items and not nine — the argument is
+// the same one that already settled `boundaries` and `rollout` as absorbed:
+// everything added competes for the judge's attention, and
+// `agents/ct-slice-judge.md` inherits none of `ct-judge.md`'s nine (those are
+// per-task: markers, brief, the staged package of ONE task; here the subject is
+// the whole slice, already committed). The first two are exactly the two gaps
+// §3.7 names:
 //
-//   `estado-final`  — si las tareas juntas entregan el `### Desired end
-//     state` del plan. Nadie lo miraba: el juez de tarea tiene ese mismo
-//     texto en el brief y una línea que dice explícitamente que NO es su
-//     vara (decisión cerrada del §4 del handoff, que este ítem no reabre).
-//   `coherencia`    — si una tarea posterior deshace lo que estableció una
-//     anterior, o si las tres dejan andamiaje de un estado intermedio que
-//     alguna debía retirar. `ct-judge` juzga UNA tarea; esto no lo miraba
-//     nadie.
+//   `estado-final`  — whether the tasks together deliver the plan's
+//     `### Desired end state`. Nobody was looking at it: the task judge has
+//     that same text in the brief and a line saying explicitly that it is NOT
+//     its yardstick (a closed decision from §4 of the handoff, which this item
+//     does not reopen).
+//   `coherencia`    — whether a later task undoes what an earlier one
+//     established, or whether the three leave behind scaffolding of an
+//     intermediate state that one of them should have withdrawn. `ct-judge`
+//     judges ONE task; nobody was looking at this.
 //
-// `observabilidad` (Slice 10, §3.9) es el tercero, y entra DETRÁS — el mismo
-// argumento con el que `test-desiderata` entró noveno en VERDICT_RULES: el
-// orden del array ES el orden del recorrido, los encabezados de la rúbrica
-// están atados por test, e intercalarlo renumeraría sin medir nada. Mide las
-// tres comprobaciones del §3.9 sobre la SEÑAL que la slice declaró (sección
-// `## Señal` del paquete, pegada por el programa desde el SLICE.md del
-// despacho) contra el diff ACUMULADO: que lo prometido lo emita código de
-// producción, con la instrumentación que EL REPO ya usa, sin labels de
-// cardinalidad ilimitada. Vive AQUÍ y no en `ct-judge` por tres razones
-// cerradas: (a) el sujeto es la señal DE LA SLICE — una tarea puede
-// legítimamente no emitirla porque la emite la siguiente, y el único diff con
-// el sujeto completo es el acumulado, que solo ve este juez; (b) el argumento
-// del §3.6: todo ítem compite por la atención, y `ct-judge` ya recorre 9 por
-// CADA tarea y reintento mientras aquí son 3 una vez por slice; (c) es donde
-// lo tiene `agentic-skills` (su ítem 9 juzga la slice entera). No se absorbe
-// en `estado-final` porque mide OTRA fuente (la señal declarada, no el
-// `### Desired end state`) con su propio `no-aplica`/`sin-vara`, y la
-// telemetría necesita contarlo por regla.
+// `observabilidad` (Slice 10, §3.9) is the third, and it goes in BEHIND — the
+// same argument with which `test-desiderata` went in ninth in VERDICT_RULES: the
+// order of the array IS the order of the walk, the rubric's headings are tied by
+// a test, and interleaving it would renumber without measuring anything. It
+// measures §3.9's three checks over the SIGNAL the slice declared (the package's
+// `## Señal` section, pasted by the program from the dispatch's SLICE.md)
+// against the ACCUMULATED diff: that what was promised is emitted by production
+// code, with the instrumentation THE REPO already uses, without labels of
+// unbounded cardinality. It lives HERE and not in `ct-judge` for three closed
+// reasons: (a) the subject is THE SLICE's signal — a task can legitimately not
+// emit it because the next one does, and the only diff with the complete subject
+// is the accumulated one, which only this judge sees; (b) §3.6's argument: every
+// item competes for attention, and `ct-judge` already walks 9 for EVERY task and
+// retry while here they are 3 once per slice; (c) it is where `agentic-skills`
+// has it (its item 9 judges the whole slice). It is not absorbed into
+// `estado-final` because it measures ANOTHER source (the declared signal, not
+// the `### Desired end state`) with its own `no-aplica`/`sin-vara`, and the
+// telemetry needs to count it per rule.
 //
-// Mismo enum CERRADO que VERDICT_RULES, y por el mismo motivo: la telemetría
-// cuenta hallazgos por regla, y una regla inventada por este juez ensuciaría
-// esa cuenta igual que ensuciaría la del juez de tarea.
+// The same CLOSED enum as VERDICT_RULES, and for the same reason: the telemetry
+// counts findings per rule, and a rule invented by this judge would dirty that
+// count just as it would dirty the task judge's.
 export const SLICE_VERDICT_RULES = ['estado-final', 'coherencia', 'observabilidad']
 
-// Lo que un ítem del recorrido pudo hacer. El recorrido ya distinguía "no se
-// miró" de "se miró", pero dentro de "se miró" seguía habiendo dos cosas que
-// se leían igual, y una de ellas es un agujero:
+// What an item of the walk was able to do. The walk already told "it was not
+// looked at" from "it was looked at", but inside "it was looked at" there were
+// still two things that read the same, and one of them is a gap:
 //
-//   `no-aplica` — el ítem no tiene SUJETO. No hay tests previos que debilitar,
-//     no hay símbolos que comparar, la tarea es prosa. Es la rúbrica
-//     funcionando: no hay nada que mirar y se dice.
-//   `sin-vara`  — el ítem tiene sujeto pero le falta el INSUMO con el que
-//     medirlo. El plan no nombró ningún patrón, o la sección que tenía que
-//     llegar en el brief no llegó. El juez no juzgó: juzgó a ciegas.
+//   `no-aplica` — the item has no SUBJECT. There are no previous tests to
+//     weaken, there are no symbols to compare, the task is prose. It is the
+//     rubric working: there is nothing to look at and it gets said.
+//   `sin-vara`  — the item has a subject but is missing the INPUT to measure it
+//     with. The plan named no pattern, or the section that had to arrive in the
+//     brief did not arrive. The judge did not judge: it judged blind.
 //
-// Sin este campo las dos salen como un `result` en prosa que nadie agrega, y
-// `patrones: N/A` es indistinguible de `patrones: conforme`. Es la mitad de H5
-// del informe de la corrida en repo ajeno, y la razón por la que dos personas
-// mirando veredictos a mano sospechaban que el juez no miraba: no había forma
-// de saberlo. `run-metrics.js` cuenta los `sin-vara` por intento, así que el
-// agujero pasa de sospecha a columna.
+// Without this field the two come out as a `result` in prose that nobody
+// aggregates, and `patrones: N/A` is indistinguishable from
+// `patrones: conforme`. It is half of H5 of the report of the run in somebody
+// else's repo, and the reason two people looking at verdicts by hand suspected
+// the judge was not looking: there was no way to know. `run-metrics.js` counts
+// the `sin-vara` per attempt, so the gap goes from suspicion to a column.
 //
-// Enum CERRADO por el mismo motivo que VERDICT_RULES: lo que no se puede contar
-// no se puede leer, y un cuarto valor inventado por el juez convierte la cuenta
-// en ruido.
+// A CLOSED enum for the same reason as VERDICT_RULES: what cannot be counted
+// cannot be read, and a fourth value invented by the judge turns the count into
+// noise.
 export const RUBRIC_OUTCOMES = ['conforme', 'no-aplica', 'sin-vara']
 
-// El veredicto: el fallo, el RECORRIDO de la rúbrica y los hallazgos. La
-// severidad es lo que separa un veto de un refunfuño, y el resto de la prosa
-// del juez no la lee ningún programa.
+// The verdict: the ruling, the WALK of the rubric and the findings. The
+// severity is what separates a veto from a grumble, and the rest of the judge's
+// prose is read by no program.
 //
-// Cada hallazgo lleva además su REGLA: cuál de las nueve de la rúbrica incumple.
-// Antes de esto un hallazgo decía severidad, qué y dónde, pero no POR QUÉ es un
-// hallazgo — y sin eso, la telemetría no puede contar cuántos vetos vienen de
-// cada regla, que es justo el dato que dice si la rúbrica está bien calibrada.
+// Each finding also carries its RULE: which of the nine of the rubric it
+// breaks. Before this a finding said severity, what and where, but not WHY it
+// is a finding — and without that, the telemetry cannot count how many vetoes
+// come from each rule, which is exactly the datum that says whether the rubric
+// is well calibrated.
 //
-// Y `rubric` es el paseo por los nueve ítems, cada uno exactamente una vez con
-// lo que dio. La rúbrica ya lo pedía, pero lo pedía en PROSA y para la
-// respuesta conversacional del subagente, que nadie captura: lo que se validaba
-// y se persistía era sólo `{ruling, findings}`. Medido en
-// jjponz/rust-monitoring#10, donde los tres veredictos que viajaron
-// commiteados en la pull request eran `{"ruling": "PASS", "findings": []}` —
-// exactamente el artefacto que la propia rúbrica declara indistinguible de ocho
-// ítems que nadie abrió. Lo peor de aquel caso es que el PASS vacío era
-// CORRECTO: cuatro de los ocho ítems no tenían sujeto (un esqueleto sobre un
-// repo vacío, sin patrones que citar, sin tests previos, sin contratos), y no
-// había forma de saberlo leyendo el fichero. El recorrido es lo que distingue
-// "no aplicaba, y por esto" de "no se miró"; por eso entra en el esquema y no
-// en una línea que nadie valida.
+// And `rubric` is the walk through the nine items, each exactly once with what
+// it gave. The rubric already asked for it, but it asked for it in PROSE and
+// for the subagent's conversational answer, which nobody captures: what was
+// validated and persisted was only `{ruling, findings}`. Measured in
+// jjponz/rust-monitoring#10, where the three verdicts that travelled committed
+// in the pull request were `{"ruling": "PASS", "findings": []}` — exactly the
+// artefact the rubric itself declares indistinguishable from eight items nobody
+// opened. The worst of that case is that the empty PASS was CORRECT: four of
+// the eight items had no subject (a skeleton over an empty repo, with no
+// patterns to cite, no previous tests, no contracts), and there was no way of
+// knowing that by reading the file. The walk is what tells "it did not apply,
+// and here is why" from "it was not looked at"; that is why it goes into the
+// schema and not into a line nobody validates.
 //
-// Y cada hallazgo lleva `evidence`: la CITA literal que lo sostiene — la frase
-// del plan que se incumple, o la línea del diff que lo prueba. No es `what`
-// (que narra el defecto) ni `path`/`line` (que ubican): es el texto que alguien
-// puede contrastar sin abrir nada. La rúbrica ya exigía citar antes de bloquear
-// ("evidence before blocking"), pero lo exigía en PROSA, en un fichero de
-// doscientas cuarenta líneas donde compite con ocho ítems que hay que recorrer
-// de verdad. Un campo obligatorio del esquema no se olvida; una frase sí. Y se
-// exige en las tres severidades y no sólo en `high`: un campo condicional se
-// olvida igual que la prosa, y un `medium` sin cita manda al implementador a
-// una vuelta pagada sin decirle qué mirar.
+// And each finding carries `evidence`: the literal QUOTE that sustains it — the
+// sentence of the plan that is broken, or the line of the diff that proves it.
+// It is not `what` (which narrates the defect) nor `path`/`line` (which
+// locate): it is the text somebody can check against without opening anything.
+// The rubric already demanded citing before blocking ("evidence before
+// blocking"), but it demanded it in PROSE, in a two-hundred-and-forty-line file
+// where it competes with eight items that really have to be walked. A mandatory
+// field of the schema is not forgotten; a sentence is. And it is demanded at all
+// three severities and not only at `high`: a conditional field is forgotten just
+// like prose, and a `medium` without a quote sends the implementer on a paid
+// round without telling them what to look at.
 //
-// El enum del ítem es el MISMO array VERDICT_RULES, no una copia: dos listas de
-// nueve identificadores divergen al primer renombrado, que es el desacople que
-// este módulo ya pagó con JUDGE_TOOLS.
+// The item's enum is the SAME VERDICT_RULES array, not a copy: two lists of nine
+// identifiers diverge at the first rename, which is the decoupling this module
+// already paid for with JUDGE_TOOLS.
 //
-// Y la ubicación son DOS campos, `path` y `line`, y no la cadena `"path:line"`
-// que llevaba hasta aquí. Lo que impedía la cadena es agregar: la telemetría
-// cuenta hallazgos por regla (`findings_by_rule`) y no puede contarlos por
-// fichero, porque partir por el último `:` una cadena que escribió un modelo es
-// adivinar — un `C:\` de Windows, un `a.js:10-14`, un `src/a.js` sin línea y un
-// `toda la clase Foo` son la misma cadena para el programa. Es el §3.13 del
-// handoff, y es la forma que ya tiene el `Finding` de `agentic-skills`.
+// And the location is TWO fields, `path` and `line`, and not the `"path:line"`
+// string it carried up to here. What the string prevented is aggregating: the
+// telemetry counts findings per rule (`findings_by_rule`) and cannot count them
+// per file, because splitting on the last `:` a string a model wrote is guessing
+// — a Windows `C:\`, an `a.js:10-14`, a `src/a.js` with no line and a
+// `toda la clase Foo` are the same string to the program. It is §3.13 of the
+// handoff, and it is the shape `agentic-skills`' `Finding` already has.
 //
-// `path` es obligatorio y `line` NO, y la asimetría es deliberada: un hallazgo
-// del fichero entero (un import que sobra en todo el módulo, un fichero que no
-// debería existir) no tiene línea que citar, y exigírsela al juez sólo compra
-// dos cosas malas — un número inventado, o un descarte más de los seis que
-// matan el run (§3.2). Ausente y `null` son lo mismo. Lo que sí se rechaza es
-// una línea que no se puede leer como número: `"12"` y `12` no se agregan
-// igual, y tolerar la cadena hoy es telemetría sucia mañana.
-// LA FORMA DEL TOKEN, en una constante y no tecleada dos veces. El `pattern` del
-// esquema es lo que el objeto DICE de sí mismo —y es el bloque que la rúbrica le
-// enseña al juez— y el regex de `readVerdict` es lo que de verdad se aplica: dos
-// copias a mano de la misma forma son documentación que puede mentir sin que nada
-// se ponga rojo. El resto de campos de `schemaFor` ya derivan de una constante
-// compartida (`enum: rules`, `enum: SEVERITIES`, `enum: RUBRIC_OUTCOMES`)
-// exactamente por esto, y el slice 11 exportó REVIEW_TOKEN_LABEL para que la
-// ETIQUETA no divergiera; la FORMA se quedó fuera de ese criterio.
+// `path` is mandatory and `line` is NOT, and the asymmetry is deliberate: a
+// finding about the whole file (an import that is redundant across the whole
+// module, a file that should not exist) has no line to cite, and demanding one
+// from the judge only buys two bad things — an invented number, or one more of
+// the six discards that kill the run (§3.2). Absent and `null` are the same.
+// What is rejected is a line that cannot be read as a number: `"12"` and `12` do
+// not aggregate the same, and tolerating the string today is dirty telemetry
+// tomorrow.
+// THE TOKEN'S SHAPE, in a constant and not typed twice. The schema's `pattern`
+// is what the object SAYS about itself —and it is the block the rubric teaches
+// the judge— and `readVerdict`'s regex is what is really applied: two hand-made
+// copies of the same shape are documentation that can lie without anything
+// going red. The rest of `schemaFor`'s fields already derive from a shared
+// constant (`enum: rules`, `enum: SEVERITIES`, `enum: RUBRIC_OUTCOMES`) for
+// exactly this reason, and slice 11 exported REVIEW_TOKEN_LABEL so that the
+// LABEL would not diverge; the SHAPE was left out of that criterion.
 //
-// Vive aquí arriba, lejos del bloque del token, por una razón mecánica:
-// VERDICT_SCHEMA se construye al CARGAR el módulo, así que un `const` declarado
-// más abajo daría ReferenceError por la zona muerta.
+// It lives up here, far from the token's block, for a mechanical reason:
+// VERDICT_SCHEMA is built when the module LOADS, so a `const` declared further
+// down would give a ReferenceError through the dead zone.
 //
-// La tercera copia de la forma —la de RE_REVIEW_TOKEN, en el bloque del token— NO
-// es una divergencia y no se toca: allí es sólo minúsculas a propósito (es lo que
-// `reviewToken` produce) y va dentro de una línea con etiqueta y captura.
+// The third copy of the shape —RE_REVIEW_TOKEN's, in the token's block— is NOT
+// a divergence and is not touched: there it is lowercase only, on purpose (it is
+// what `reviewToken` produces) and it goes inside a line with a label and a
+// capture.
 const REVIEW_TOKEN_PATTERN = '^[0-9a-fA-F]{64}$'
 const RE_REVIEW_TOKEN_FORM = new RegExp(REVIEW_TOKEN_PATTERN)
 
-// FACTORY, no un objeto suelto: el juez de slice valida contra el MISMO
-// esquema con otra rúbrica dentro (§3.7-B), y dos copias a mano de esta forma
-// divergerían al primer campo añadido — el mismo desacople que ya sufrieron
-// JUDGE_TOOLS y VERDICT_RULES. `rules` decide sólo el enum de `rule` y la
-// cardinalidad del recorrido; el resto de la forma —`ruling`, `outcome`,
-// `evidence`, la ubicación en dos campos— es la misma para un veredicto de
-// tarea y uno de slice: es el mismo esquema de RESPUESTA, no una rúbrica
-// distinta por dentro.
+// A FACTORY, not a loose object: the slice judge validates against the SAME
+// schema with another rubric inside it (§3.7-B), and two hand-made copies of
+// this shape would diverge at the first field added — the same decoupling
+// JUDGE_TOOLS and VERDICT_RULES already suffered. `rules` decides only the enum
+// of `rule` and the cardinality of the walk; the rest of the shape —`ruling`,
+// `outcome`, `evidence`, the location in two fields— is the same for a task
+// verdict and a slice one: it is the same ANSWER schema, not a different rubric
+// on the inside.
 const schemaFor = (rules) => ({
   type: 'object',
   additionalProperties: false,
   required: ['ruling', 'rubric', 'findings'],
   properties: {
     ruling: { type: 'string', enum: ['PASS', 'FAIL'] },
-    // EL TOKEN LO ESCRIBE EL PROGRAMA, no el juez. `ct-step verdict` lo
-    // inyecta antes de validar, con el valor que él mismo acaba de calcular
-    // del paquete y del corte de ahora, así que aquí NO es obligatorio: un
-    // veredicto que no lo trae se acepta. Lo que se sigue rechazando es uno
-    // que trae OTRO —defensa en profundidad, por si el fichero es de un juicio
-    // anterior— y por eso el campo sigue en el esquema con su forma.
+    // THE PROGRAM WRITES THE TOKEN, not the judge. `ct-step verdict` injects
+    // it before validating, with the value it has just computed itself from the
+    // package and from the current cut, so here it is NOT mandatory: a verdict
+    // that does not carry it is accepted. What is still rejected is one that
+    // carries ANOTHER —defence in depth, in case the file is from an earlier
+    // judgement— and that is why the field stays in the schema with its shape.
     //
-    // Era obligatorio y lo copiaba el juez a mano: 64 hex tecleados por un
-    // modelo, y un error de copia descartaba un veredicto entero de opus y
-    // gastaba uno de los seis descartes que matan el run. Un valor que el
-    // programa conoce no se le pide al modelo.
+    // It used to be mandatory and the judge copied it by hand: 64 hex
+    // characters typed by a model, and a copying error discarded a whole opus
+    // verdict and spent one of the six discards that kill the run. A value the
+    // program knows is not asked of the model.
     review_token: { type: 'string', pattern: REVIEW_TOKEN_PATTERN },
     rubric: {
       type: 'array',
@@ -259,25 +265,26 @@ const schemaFor = (rules) => ({
 })
 
 export const VERDICT_SCHEMA = Object.freeze(schemaFor(VERDICT_RULES))
-// El esquema del veredicto de SLICE: misma forma, la rúbrica de dos ítems.
+// The SLICE verdict's schema: the same shape, the two-item rubric.
 export const SLICE_VERDICT_SCHEMA = Object.freeze(schemaFor(SLICE_VERDICT_RULES))
 
-// El informe del implementador también lleva esquema, y el spec no lo pedía.
-// La razón es la misma que hizo falta un `plan-tasks.js`: el programa necesita
-// las RUTAS que se tocaron para stagearlas, y sacar rutas de un informe en
-// prosa es la trampa del §2.5 otra vez, en el otro extremo del bucle.
+// The implementer's report carries a schema too, and the spec did not ask for
+// it. The reason is the same one that made a `plan-tasks.js` necessary: the
+// program needs the PATHS that were touched in order to stage them, and pulling
+// paths out of a report in prose is §2.5's trap again, at the other end of the
+// loop.
 //
-// Aquí hubo un KIND por ruta ('production' o 'test'). La idea era que el
-// juez —vía `escribirPaquete` en `scripts/ct-step.mjs`— viera de un vistazo si
-// un diff con la suite en verde no tocaba ningún fichero de producción. Se
-// quitó: el juez tiene el diff delante y distingue un fichero de test de uno
-// de producción sin que nadie se lo diga, así que la etiqueta no le aportaba
-// nada que no pudiera ver por sí mismo. La producía además el propio agente al
-// que se juzga, no la verificaba nadie, y cuando venía mal no degradaba el
-// juicio: lo DESACTIVABA — el ítem de la rúbrica que mira los ficheros de test
-// dejaba de mirar un test mal etiquetado. Una capa de indirección entre el
-// juez y la evidencia que sólo podía introducir error. No se vuelva a añadir
-// sin resolver antes ese problema de raíz.
+// There used to be a KIND per path here ('production' or 'test'). The idea was
+// that the judge —via `escribirPaquete` in `scripts/ct-step.mjs`— would see at a
+// glance whether a diff with a green suite touched no production file. It was
+// removed: the judge has the diff in front of it and tells a test file from a
+// production one without anyone saying so, so the label added nothing it could
+// not see for itself. On top of that it was produced by the very agent being
+// judged, nobody verified it, and when it came in wrong it did not degrade the
+// judgement: it DISABLED it — the rubric item that looks at test files stopped
+// looking at a mislabelled test. A layer of indirection between the judge and
+// the evidence that could only introduce error. Do not add it again without
+// first solving that problem at the root.
 export const REPORT_SCHEMA = Object.freeze({
   type: 'object',
   additionalProperties: false,
@@ -293,42 +300,44 @@ export const REPORT_SCHEMA = Object.freeze({
 
 export const E2E_VERDICTS = ['verde', 'rojo', 'no-verificado']
 
-// E2E_REQUIRED_BY_VERDICT: lo que cada veredicto exige ADEMÁS de `run` y
-// `verdict`. Vive aquí, exportado y en un solo sitio, porque lo consumen DOS:
-// `readE2eReport` (más abajo, que valida contra esta tabla) y
-// `ct-step.mjs#verboNext` (que se lo dice al agente antes de que escriba el
-// informe). Hasta la review final de rama sólo existía dentro de las ramas de
-// `readE2eReport`, y `next` anunciaba únicamente `run` y `verdict`: el
-// programa instruía al agente con un contrato que él mismo rechazaba, y cada
-// slice pagaba al menos una vuelta de DISCARDED — que además sale del
-// presupuesto de descartes de la slice entera (MAX_DISCARDS).
+// E2E_REQUIRED_BY_VERDICT: what each verdict demands BESIDES `run` and
+// `verdict`. It lives here, exported and in a single place, because TWO
+// consume it: `readE2eReport` (below, which validates against this table) and
+// `ct-step.mjs#verboNext` (which tells the agent about it before it writes the
+// report). Until the final branch review it only existed inside
+// `readE2eReport`'s branches, and `next` announced only `run` and `verdict`:
+// the program instructed the agent with a contract it rejected itself, and
+// every slice paid at least one DISCARDED round — which comes out of the whole
+// slice's discard budget (MAX_DISCARDS) on top of that.
 //
-// `brought_up` es obligatorio en `verde` y en `rojo` (§8.1 del diseño). La
-// evidencia de un informe de e2e es falsificable y el diseño lo dice; su ÚNICA
-// mitigación es que el comando sea REPRODUCIBLE por un humano ("una salida
-// inventada se cae en cuanto alguien la pega"). Un verde que documenta el
-// `curl` pero no cómo se puso el sistema en pie NO es reproducible, así que la
-// mitigación se evaporaba justo en el camino que importa. En `no-verificado`
-// no se exige, y no es una excepción caprichosa: el motivo típico de ese
-// veredicto es precisamente que no se pudo levantar.
+// `brought_up` is mandatory in `verde` and in `rojo` (§8.1 of the design). The
+// evidence of an e2e report is falsifiable and the design says so; its ONLY
+// mitigation is that the command be REPRODUCIBLE by a human ("an invented
+// output falls apart the moment somebody pastes it"). A green that documents
+// the `curl` but not how the system was brought up is NOT reproducible, so the
+// mitigation evaporated on exactly the path that matters. In `no-verificado` it
+// is not demanded, and that is not a capricious exception: the typical reason
+// for that verdict is precisely that it could not be brought up.
 export const E2E_REQUIRED_BY_VERDICT = Object.freeze({
   verde: Object.freeze(['brought_up', 'evidence']),
   rojo: Object.freeze(['brought_up', 'expected', 'actual', 'repro', 'refuted_by']),
-  // El formato de `blocked` (state.js), no el campo: "por qué" y "qué haría
-  // falta". Sin las dos, un no-verificado es un encogimiento de hombros que
-  // libera el slice sin dejar a nadie sabiendo qué arreglar.
+  // The format of `blocked` (state.js), not the field: "why" and "what it
+  // would take". Without both, a no-verificado is a shrug that releases the
+  // slice leaving nobody knowing what to fix.
   'no-verificado': Object.freeze(['reason', 'unblock']),
 })
 
-// E2E_SCHEMA: lo que se le pide al agente que atraviesa. Declarativo y
-// exportado por el mismo motivo que VERDICT_SCHEMA: el prompt lo cita, y dos
-// copias a mano de la misma forma divergen (pasó con JUDGE_TOOLS).
+// E2E_SCHEMA: what is asked of the agent that walks the run through.
+// Declarative and exported for the same reason as VERDICT_SCHEMA: the prompt
+// cites it, and two hand-made copies of the same shape diverge (it happened
+// with JUDGE_TOOLS).
 //
-// `required` es lo que lleva TODA entrada; lo condicional viaja en
-// `requiredByVerdict` (la misma constante de arriba, no una copia) porque el
-// validador es a mano y una tabla se lee mejor que un `if/then/else` de JSON
-// Schema. Que esté DENTRO del esquema importa: quien lo cite —el prompt, el
-// `next`— se lleva el contrato entero, no la mitad incondicional.
+// `required` is what EVERY entry carries; the conditional part travels in
+// `requiredByVerdict` (the same constant from above, not a copy) because the
+// validator is hand-written and a table reads better than an `if/then/else` of
+// JSON Schema. That it is INSIDE the schema matters: whoever cites it —the
+// prompt, the `next`— takes the whole contract with them, not the
+// unconditional half.
 export const E2E_SCHEMA = Object.freeze({
   type: 'object',
   additionalProperties: false,
@@ -366,157 +375,159 @@ export const E2E_SCHEMA = Object.freeze({
   },
 })
 
-// `Skill` está aquí porque la rúbrica del implementador
-// (`prompts/task-implementer.md`) ya no lleva el ciclo TDD dentro: manda cargar
-// `control-tower-loop:test-driven-development`, la copia que trae el plugin. Sin
-// esta herramienta esa primera línea es imposible de cumplir y el implementador
-// se queda sin el oficio que la rúbrica delega.
+// `Skill` is here because the implementer's rubric
+// (`prompts/task-implementer.md`) no longer carries the TDD cycle inside it: it
+// orders it to load `control-tower-loop:test-driven-development`, the copy the
+// plugin ships. Without this tool that first line is impossible to obey and the
+// implementer is left without the craft the rubric delegates.
 export const IMPLEMENTER_TOOLS = 'Read, Write, Edit, Grep, Glob, Bash, Skill'
-// Con qué modelo se despacha. Omitirlo NO es neutral: el subagente hereda el
-// modelo de la sesión, que es el más caro, y el implementador es el paso que
-// más veces se despacha en un run —una vez por tarea, y otra por cada vuelta
-// que le devuelve el juez—. Los tres agentes declarados (`agents/*.md`) fijan
-// el suyo en su frontmatter y ahí lo impone el harness; al implementador no se
-// le dio fichero propio, así que su modelo viaja por la línea que `ct-step
-// next` imprime, y sostenerlo depende de que la sesión la obedezca.
+// Which model it is dispatched with. Omitting it is NOT neutral: the subagent
+// inherits the session's model, which is the most expensive one, and the
+// implementer is the step dispatched most often in a run —once per task, and
+// once more for each round the judge sends back—. The three declared agents
+// (`agents/*.md`) fix theirs in their frontmatter and there the harness imposes
+// it; the implementer was not given a file of its own, so its model travels on
+// the line `ct-step next` prints, and holding it up depends on the session
+// obeying that line.
 //
-// Fijo, y no escalado por complejidad como pide la costura 5 del fork
-// (`skills/subagent-driven-development/SKILL.md`, "Model Selection"): esa skill
-// ya no conduce aquí —lo dice `scripts/kickoff.js`—, y quien elegiría el tier
-// por tarea sería la misma sesión que se ahorra el gasto. El suelo se fija a
-// propósito.
+// Fixed, and not scaled by complexity as seam 5 of the fork asks
+// (`skills/subagent-driven-development/SKILL.md`, "Model Selection"): that skill
+// no longer drives here —`scripts/kickoff.js` says so—, and whoever would pick
+// the tier per task would be the same session that saves the money. The floor is
+// fixed on purpose.
 export const IMPLEMENTER_MODEL = 'sonnet'
-// El juez no puede EJECUTAR, y no es una promesa en prosa: se lo quita la
-// declaración del agente (`agents/ct-judge.md`), igual que antes se lo quitaba
-// el binario. Tampoco ve la SALIDA de los controles —se le pasan rutas— porque
-// un lint sucio no debe ensuciarle el criterio al único agente cuyo valor es el
-// juicio.
+// The judge cannot EXECUTE, and that is not a promise in prose: the agent's
+// declaration takes it away (`agents/ct-judge.md`), just as the binary used to
+// take it away before. Nor does it see the OUTPUT of the checks —it is handed
+// paths— because a dirty lint must not dirty the criterion of the one agent
+// whose value is judgement.
 //
-// `Write` SÍ, y no debilita lo anterior: el canal por el que entrega su
-// veredicto es un fichero, así que sin `Write` el paso `judge` no se puede
-// cerrar —medido en la tarea 1 del slice #5 de repo-pulse, la primera vez que
-// este agente juzgó algo—. Lo que podría escribir de más no llega a ninguna
-// parte: `ct-step commit` comitea las rutas que declaró el IMPLEMENTADOR, no lo
-// que haya en el árbol.
+// `Write` YES, and it does not weaken the above: the channel through which it
+// delivers its verdict is a file, so without `Write` the `judge` step cannot be
+// closed —measured on task 1 of repo-pulse's slice #5, the first time this agent
+// judged anything—. What it could write in excess reaches nowhere: `ct-step
+// commit` commits the paths the IMPLEMENTER declared, not whatever is in the
+// tree.
 //
-// `Skill` SÍ, y por la misma razón por la que la tiene el implementador: la
-// rúbrica le manda ejercerla. Desde `e473c97`, el `Rules to obey:` de `## 3.
-// Reference patterns` admite declarar una skill como vara secundaria, y el ítem
-// `patrones` manda abrirla («any skill named there — open them and read the
-// rules»). Pero un nombre de skill (`backend-engineering:backend-best-practices`)
-// no es una ruta: `Read` no lo abre, y `plan-contract.js` tampoco lo comprueba en
-// disco A PROPÓSITO. Sin esta herramienta la vara secundaria era inalcanzable, y
-// en silencio: el juez contestaría `conforme` sobre un documento que nunca pudo
-// abrir, que es justo el agujero que `sin-vara` existe para cerrar. Es el defecto
-// §3.1 de `docs/prompt-juez-lo-que-queda.md`, y es lo que hace `agentic-skills`
-// en su `slice_verifier_judge.py`: TOOLS = ("Read", "Grep", "Glob", "Skill").
+// `Skill` YES, and for the same reason the implementer has it: the rubric orders
+// it to exercise it. Since `e473c97`, the `Rules to obey:` of `## 3. Reference
+// patterns` allows declaring a skill as a secondary yardstick, and the
+// `patrones` item orders it to open it («any skill named there — open them and
+// read the rules»). But a skill name
+// (`backend-engineering:backend-best-practices`) is not a path: `Read` does not
+// open it, and `plan-contract.js` does not check it on disk either, ON PURPOSE.
+// Without this tool the secondary yardstick was unreachable, and silently: the
+// judge would answer `conforme` about a document it could never open, which is
+// exactly the gap `sin-vara` exists to close. It is defect §3.1 of
+// `docs/prompt-juez-lo-que-queda.md`, and it is what `agentic-skills` does in
+// its `slice_verifier_judge.py`: TOOLS = ("Read", "Grep", "Glob", "Skill").
 //
-// No debilita el «sin shell»: `Skill` carga instrucciones, no ejecuta procesos.
-// Lo que el juez no puede hacer sigue decidiéndolo la ausencia de `Bash` en la
-// declaración del agente.
+// It does not weaken the «no shell»: `Skill` loads instructions, it does not
+// execute processes. What the judge cannot do is still decided by the absence of
+// `Bash` in the agent's declaration.
 //
-// Esta constante es una COPIA del frontmatter de `agents/ct-judge.md`, y quien
-// las ata es `step-contracts.test.js`: se duplica porque este módulo es puro y
-// no lee disco, no porque dé igual que divergan. Divergieron una vez, y el
-// resultado fue que `ct-step next` anunciaba unas herramientas que no eran las
-// del juez que se iba a despachar.
+// This constant is a COPY of `agents/ct-judge.md`'s frontmatter, and what ties
+// them together is `step-contracts.test.js`: it is duplicated because this
+// module is pure and does not read disk, not because it does not matter if they
+// diverge. They diverged once, and the result was that `ct-step next` announced
+// tools that were not those of the judge about to be dispatched.
 export const JUDGE_TOOLS = 'Read, Grep, Glob, Write, Skill'
 
-// Los tres encabezados del paquete de revisión que escribe `escribirPaquete`
-// en `scripts/ct-step.mjs`, en el orden en que aparecen en el fichero. La
-// rúbrica del juez (`agents/ct-judge.md`) los cita por su nombre entre
-// comillas invertidas en "What you are given" para decirle al juez qué trae
-// cada sección — y ese cruce es el mismo desacople que ya sufrieron
-// JUDGE_TOOLS y VERDICT_RULES: dos copias a mano de la misma cadena, sin nada
-// que las ate. Aquí es peor que con JUDGE_TOOLS porque tampoco hay un error
-// de ejecución que lo delate — un encabezado renombrado en el script deja a
-// la rúbrica señalando una sección que no existe, y el juez sigue
-// contestando como si la hubiera leído.
+// The three headings of the review package `escribirPaquete` writes in
+// `scripts/ct-step.mjs`, in the order in which they appear in the file. The
+// judge's rubric (`agents/ct-judge.md`) cites them by name in backticks under
+// "What you are given" to tell the judge what each section carries — and that
+// crossing is the same decoupling JUDGE_TOOLS and VERDICT_RULES already
+// suffered: two hand-made copies of the same string, with nothing tying them
+// together. Here it is worse than with JUDGE_TOOLS because there is not even a
+// runtime error to betray it — a heading renamed in the script leaves the rubric
+// pointing at a section that does not exist, and the judge goes on answering as
+// if it had read it.
 //
-// `Vara de ct` abre el paquete y la escribe `PluginYardstick.composePathSection`
-// (scripts/plugin-yardstick.js), no `escribirPaquete`: son las RUTAS de los
-// documentos que alcanzan a esta tarea, para un juez que tiene `Read`. Va
-// primero por lo mismo que `Señal` en el paquete de slice — detrás de un diff
-// `-U10` quedaría enterrada.
+// `Vara de ct` opens the package and is written by
+// `PluginYardstick.composePathSection` (scripts/plugin-yardstick.js), not by
+// `escribirPaquete`: they are the PATHS of the documents that reach this task,
+// for a judge that has `Read`. It goes first for the same reason as `Señal` in
+// the slice package — behind a `-U10` diff it would be buried.
 export const PACKAGE_SECTIONS = ['Vara de ct', 'Files changed', 'Rutas tocadas', 'Diff']
 
-// El juez de SLICE (§3.7-B, `agents/ct-slice-judge.md`), SIN `Skill`: sus dos
-// ítems miden contra el plan (comiteado) y el diff acumulado de la slice
-// entera, y ninguno de los dos carga una rúbrica de skill — a diferencia de
-// `patrones`/`test-desiderata` en el juez de tarea, aquí no hay vara de repo
-// que abrir. Menos herramientas, menos deriva: dárselas «por si acaso» sería
-// la misma indirección que ya se quitó del `kind` de `REPORT_SCHEMA`.
+// The SLICE judge (§3.7-B, `agents/ct-slice-judge.md`), WITHOUT `Skill`: its
+// two items measure against the plan (committed) and the accumulated diff of
+// the whole slice, and neither of the two loads a skill rubric — unlike
+// `patrones`/`test-desiderata` in the task judge, here there is no repo
+// yardstick to open. Fewer tools, less drift: giving them to it «just in case»
+// would be the same indirection already removed from `REPORT_SCHEMA`'s `kind`.
 //
-// Copia del frontmatter de `agents/ct-slice-judge.md`, atada por
-// `step-contracts.test.js` con el mismo criterio que `JUDGE_TOOLS`: este
-// módulo es puro y no lee disco, así que lo que impide que las dos diverjan
-// es el test, no el código.
+// A copy of `agents/ct-slice-judge.md`'s frontmatter, tied by
+// `step-contracts.test.js` with the same criterion as `JUDGE_TOOLS`: this module
+// is pure and does not read disk, so what stops the two from diverging is the
+// test, not the code.
 export const SLICE_JUDGE_TOOLS = 'Read, Grep, Glob, Write'
 
-// El reconciliador (Reconciliación de ramas, Tarea 9, `agents/ct-reconciler.md`)
-// invierte la asimetría de los dos jueces de arriba en vez de repetirla:
-// `Edit` en lugar de `Write`, y ni `Bash` ni `Write`. Git no da por resuelto un
-// fichero en conflicto hasta que alguien corre `git add`, y el único que corre
-// ese comando es el programa (`BranchReconciliation.conclude()`,
-// `scripts/branch-reconciliation.js`) — nunca el agente. Sin `Write` no puede
-// crear un fichero nuevo para rodear un conflicto que no quiso tocar
-// directamente, y sin `Bash` no puede stagear, comitear ni abortar la fusión
-// por su cuenta. Lo único que puede hacer es abrir los ficheros que git ya
-// marcó en conflicto y editar su contenido: la higiene deja de ser una
-// comprobación y pasa a ser una propiedad de lo que el agente puede alcanzar.
+// The reconciler (Branch reconciliation, Task 9, `agents/ct-reconciler.md`)
+// inverts the asymmetry of the two judges above instead of repeating it: `Edit`
+// instead of `Write`, and neither `Bash` nor `Write`. Git does not consider a
+// conflicted file resolved until somebody runs `git add`, and the only one who
+// runs that command is the program (`BranchReconciliation.conclude()`,
+// `scripts/branch-reconciliation.js`) — never the agent. Without `Write` it
+// cannot create a new file to work around a conflict it did not want to touch
+// directly, and without `Bash` it cannot stage, commit or abort the merge on its
+// own. All it can do is open the files git already marked as conflicted and edit
+// their content: hygiene stops being a check and becomes a property of what the
+// agent can reach.
 //
-// Copia del frontmatter de `agents/ct-reconciler.md`, atada por
-// `step-contracts.test.js` con el mismo criterio que `JUDGE_TOOLS` y
-// `SLICE_JUDGE_TOOLS`: este módulo es puro y no lee disco, así que lo que
-// impide que las dos diverjan es el test, no el código.
+// A copy of `agents/ct-reconciler.md`'s frontmatter, tied by
+// `step-contracts.test.js` with the same criterion as `JUDGE_TOOLS` and
+// `SLICE_JUDGE_TOOLS`: this module is pure and does not read disk, so what stops
+// the two from diverging is the test, not the code.
 export const RECONCILER_TOOLS = 'Read, Grep, Glob, Edit'
 
-// Los cinco encabezados del paquete de SLICE que escribe `escribirPaqueteDeSlice`
-// en `scripts/ct-step.mjs`. El juez de slice mide estado final, coherencia y
-// señal — no código regla a regla, y a propósito tiene menos herramientas —
-// así que no recibe la vara entera: recibe UNA sola ruta, la de
-// `simplicity.md`, porque es exactamente la regla que su ítem
-// `observabilidad` mide (una traza nombra a su lector). `Vara` PRIMERA, por
-// el mismo motivo que `Señal` va delante del diff `-U10`: enterrada detrás de
-// un diff así no la lee nadie. Le siguen la señal de observabilidad que el
-// issue del slice declaró, el registro de commits de la slice (que no existe
-// en el paquete por tarea, porque una tarea es UN commit sin historia propia
-// que mostrar), el resumen de ficheros tocados y el diff acumulado desde la
-// base. Mismo cruce que `PACKAGE_SECTIONS`: la rúbrica de
-// `agents/ct-slice-judge.md` los cita por su nombre, y sin este test un
-// encabezado renombrado deja al juez señalando una sección que no existe — el
-// test que los ata obliga a que paquete y agente cambien en la MISMA tarea.
+// The five headings of the SLICE package `escribirPaqueteDeSlice` writes in
+// `scripts/ct-step.mjs`. The slice judge measures final state, coherence and
+// signal — not code rule by rule, and it deliberately has fewer tools — so it
+// does not receive the whole yardstick: it receives ONE single path, that of
+// `simplicity.md`, because it is exactly the rule its `observabilidad` item
+// measures (a trace names its reader). `Vara` FIRST, for the same reason `Señal`
+// goes ahead of the `-U10` diff: buried behind a diff like that nobody reads it.
+// It is followed by the observability signal the slice's issue declared, the
+// slice's commit log (which does not exist in the per-task package, because a
+// task is ONE commit with no history of its own to show), the summary of touched
+// files and the accumulated diff since the base. The same crossing as
+// `PACKAGE_SECTIONS`: `agents/ct-slice-judge.md`'s rubric cites them by name,
+// and without this test a renamed heading leaves the judge pointing at a section
+// that does not exist — the test that ties them together forces package and
+// agent to change in the SAME task.
 export const SLICE_PACKAGE_SECTIONS = ['Vara', 'Señal', 'Commits', 'Files changed', 'Diff']
 
-// EL CONSEJERO (H9, `agents/ct-advisor.md`), con UNA sola herramienta: `Read`.
-// No escribe su respuesta a un fichero como los dos jueces —la devuelve por
-// `structured_output`, que es todo lo que `ct-step advice` necesita leer— así
-// que darle `Write` sería concederle alcance sobre el árbol justo en el paso
-// cuyo sentido es que el árbol vuelva a estar limpio. Sin `Grep` ni `Glob` por
-// el mismo motivo por el que el juez de slice no lleva `Skill`: lo que tiene
-// que mirar se lo pone delante el paquete, y darle más «por si acaso» es la
-// indirección que este módulo ya se quitó del `kind` del informe.
+// THE ADVISOR (H9, `agents/ct-advisor.md`), with ONE single tool: `Read`. It
+// does not write its answer to a file like the two judges —it returns it through
+// `structured_output`, which is all `ct-step advice` needs to read— so giving it
+// `Write` would be granting it reach over the tree in precisely the step whose
+// whole point is that the tree becomes clean again. No `Grep` or `Glob` for the
+// same reason the slice judge does not carry `Skill`: what it has to look at is
+// put in front of it by the package, and giving it more «just in case» is the
+// indirection this module already removed from the report's `kind`.
 //
-// Copia del frontmatter de `agents/ct-advisor.md`, atada por
-// `step-contracts.test.js` con el mismo criterio que JUDGE_TOOLS: este módulo
-// es puro y no lee disco, así que lo que impide que las dos diverjan es el
+// A copy of `agents/ct-advisor.md`'s frontmatter, tied by
+// `step-contracts.test.js` with the same criterion as JUDGE_TOOLS: this module
+// is pure and does not read disk, so what stops the two from diverging is the
 // test.
 export const ADVISOR_TOOLS = 'Read'
 
-// Los tres encabezados del paquete del consejero que escribe
-// `escribirPaqueteDeConsejo` en `scripts/ct-step.mjs`, en el orden en que
-// aparecen: el brief de la tarea (lo que se pidió), los informes de los dos
-// intentos vetados (lo que se hizo) y los dos veredictos (por qué no valió).
-// Mismo cruce y mismo test que `PACKAGE_SECTIONS`: la rúbrica del agente los
-// cita por su nombre, y sin la atadura un encabezado renombrado deja al
-// consejero señalando una sección que no existe.
+// The three headings of the advisor's package `escribirPaqueteDeConsejo` writes
+// in `scripts/ct-step.mjs`, in the order in which they appear: the task's brief
+// (what was asked for), the reports of the two vetoed attempts (what was done)
+// and the two verdicts (why it did not do). The same crossing and the same test
+// as `PACKAGE_SECTIONS`: the agent's rubric cites them by name, and without the
+// tie a renamed heading leaves the advisor pointing at a section that does not
+// exist.
 export const ADVICE_PACKAGE_SECTIONS = ['Brief', 'Intentos', 'Veredictos']
 
-// EL CONSEJO. Dos campos y ninguno más: el ENFOQUE, que es lo que el brief del
-// tercer intento va a llevar dentro, y las RUTAS a reconsiderar, que es lo que
-// hace accionable el enfoque. Nada de severidades ni de rúbrica: el consejero
-// no juzga —de eso ya hay dos veredictos en su paquete— y no se le pide un
-// diagnóstico que nadie consumiría.
+// THE ADVICE. Two fields and no more: the APPROACH, which is what the third
+// attempt's brief is going to carry inside it, and the PATHS to reconsider,
+// which is what makes the approach actionable. No severities and no rubric: the
+// advisor does not judge —there are already two verdicts in its package for that
+// — and it is not asked for a diagnosis nobody would consume.
 export const ADVICE_SCHEMA = Object.freeze({
   type: 'object',
   additionalProperties: false,
@@ -530,19 +541,19 @@ export const ADVICE_SCHEMA = Object.freeze({
   },
 })
 
-// Validación a mano, como las otras tres de este módulo y por lo mismo: cero
-// dependencias nuevas y cabe aquí.
+// Hand-written validation, like the other three in this module and for the same
+// reason: zero new dependencies and it fits here.
 //
-// La lista VACÍA vale y no descarta: «ninguna ruta que reconsiderar» es una
-// respuesta —el enfoque puede ser rehacer lo mismo por otro camino sobre los
-// mismos ficheros— y gastar por ella uno de los seis descartes que matan el
-// run sería el precio más caro por el defecto más barato, que es el
-// razonamiento que `readReport` ya escribió para la ruta repetida.
+// The EMPTY list is valid and does not discard: «no path to reconsider» is an
+// answer —the approach may be to redo the same thing by another route over the
+// same files— and spending one of the six discards that kill the run on it would
+// be the highest price for the cheapest defect, which is the reasoning
+// `readReport` already wrote for the repeated path.
 //
-// Las rutas se deduplican y se comprueban igual que en `readReport`: aquí no
-// se stagea nada con ellas, pero viajan al brief del tercer intento, y una
-// ruta absoluta o que sube de directorio ahí sólo puede mandar al
-// implementador fuera de su alcance.
+// The paths are deduplicated and checked just as in `readReport`: nothing is
+// staged with them here, but they travel to the third attempt's brief, and an
+// absolute path or one that climbs out of the directory there can only send the
+// implementer outside its scope.
 export function readAdvice(structured) {
   if (!structured || typeof structured !== 'object' || Array.isArray(structured)) {
     return { why: 'el consejero no devolvió structured_output' }
@@ -558,65 +569,68 @@ export function readAdvice(structured) {
 }
 
 // ---------------------------------------------------------------------------
-// EL TOKEN DEL PAQUETE — el paquete ata su PRODUCTO, no sólo su insumo.
+// THE PACKAGE'S TOKEN — the package ties its PRODUCT, not only its input.
 //
-// EL DEFECTO QUE CIERRA. El slice 6 hizo el paquete de un solo uso, así que un
-// veredicto no puede volver a gastar un insumo ya gastado. Lo que seguía sin
-// atar nada es el otro sentido: NADA ligaba el `verdict.json` al paquete.
-// Reproducido en dos vías, las dos MUDAS en la telemetría:
+// THE DEFECT IT CLOSES. Slice 6 made the package single-use, so a verdict
+// cannot spend an already spent input again. What still tied nothing is the
+// other direction: NOTHING bound the `verdict.json` to the package. Reproduced
+// along two routes, both MUTE in the telemetry:
 //
-//   (a) el veredicto RECICLADO. Tras un veredicto aceptado que devuelve la
-//       tarea, el mensaje manda volver a `next` — y no dice «y redespacha al
-//       juez». Obedeciendo esa mitad, `next` regenera el paquete y el fichero
-//       del juicio ANTERIOR (misma ruta: `task-<N>-verdict.json`) se acepta.
-//       Medido: tres filas de juez indistinguibles, `correctionRetries`
-//       agotado, y la tarea COMITEADA con el veredicto de otro diff dentro.
-//   (b) el HUECO DEL DESCARTE. El descarte por JSON ilegible no consume el
-//       paquete —bien: el reintento tiene que poder repreguntar— y eso se
-//       justificaba con «el reintento juzga el mismo diff», que es una
-//       asunción sobre la conducta del agente. Si el índice cambia en ese
-//       hueco, el `PASS` siguiente entra sobre código no revisado.
+//   (a) the RECYCLED verdict. After an accepted verdict that sends the task
+//       back, the message orders a return to `next` — and it does not say «and
+//       redispatch the judge». Obeying that half, `next` regenerates the
+//       package and the file of the PREVIOUS judgement (same path:
+//       `task-<N>-verdict.json`) is accepted. Measured: three indistinguishable
+//       judge rows, `correctionRetries` exhausted, and the task COMMITTED with
+//       another diff's verdict inside it.
+//   (b) the DISCARD GAP. A discard for unreadable JSON does not consume the
+//       package —rightly so: the retry has to be able to ask again— and that
+//       was justified with «the retry judges the same diff», which is an
+//       assumption about the agent's behaviour. If the index changes in that
+//       gap, the next `PASS` comes in over unreviewed code.
 //
-// LA FORMA. El paquete declara en su cabecera el sha256 del DIFF QUE CAPTURÓ;
-// el juez lo copia en `review_token`; el verbo del veredicto exige que
-// coincidan el del veredicto, el del paquete y el recomputado del corte de ese
-// instante. (a) muere porque un veredicto reciclado trae el token de otro
-// paquete; (b) muere porque el código cambiado no reproduce el sha capturado.
+// THE SHAPE. The package declares in its header the sha256 of the DIFF IT
+// CAPTURED; the judge copies it into `review_token`; the verdict's verb demands
+// that the verdict's, the package's and the one recomputed from the cut at that
+// instant all match. (a) dies because a recycled verdict carries another
+// package's token; (b) dies because changed code does not reproduce the
+// captured sha.
 //
-// CONTENT-ADDRESSED Y NO UN NONCE SORTEADO, y la diferencia con el nonce del
-// `go` (go-response.js) es la razón: aquél es SECRETO y no adivinable, y su
-// propiedad es que el agente no pueda fabricar el permiso. Éste es público y
-// derivable —está en el fichero que el juez lee, y cualquiera con shell lo
-// recomputa—, así que NO autentica al juez: ata el veredicto a un estado del
-// código. Un nonce aleatorio cerraría (a) y no (b) (en el hueco el paquete no
-// se regenera, así que el nonce sigue valiendo), y además castigaría al
-// obediente: un veredicto reemitido sobre un paquete regenerado con el MISMO
-// diff se descartaría por traer el nonce viejo. Con el contenido como
-// dirección, «no cambió el código» y «vale el veredicto» son la misma frase.
+// CONTENT-ADDRESSED AND NOT A DRAWN NONCE, and the difference with the `go`
+// nonce (go-response.js) is the reason: that one is SECRET and unguessable, and
+// its property is that the agent cannot fabricate the permission. This one is
+// public and derivable —it is in the file the judge reads, and anyone with a
+// shell recomputes it—, so it does NOT authenticate the judge: it ties the
+// verdict to a state of the code. A random nonce would close (a) and not (b)
+// (in the gap the package is not regenerated, so the nonce is still valid), and
+// on top of that it would punish the obedient: a verdict reissued over a package
+// regenerated with the SAME diff would be discarded for carrying the old nonce.
+// With the content as the address, «the code did not change» and «the verdict is
+// valid» are the same sentence.
 //
-// La ETIQUETA se exporta y el lector se construye con ella: quien escribe la
-// línea (`escribirPaquete`), quien la lee (`reviewTokenOf`), las dos rúbricas
-// que se la citan al juez y los tests son cuatro copias de la misma cadena, y
-// eso es exactamente lo que ya divergió con JUDGE_TOOLS, VERDICT_RULES y
-// PACKAGE_SECTIONS. Aquí el fallo sería mudo por partida doble: el juez copia
-// de una línea que no existe, y todo veredicto se descarta.
+// The LABEL is exported and the reader is built from it: whoever writes the line
+// (`escribirPaquete`), whoever reads it (`reviewTokenOf`), the two rubrics that
+// quote it to the judge and the tests are four copies of the same string, and
+// that is exactly what already diverged with JUDGE_TOOLS, VERDICT_RULES and
+// PACKAGE_SECTIONS. Here the failure would be mute twice over: the judge copies
+// from a line that does not exist, and every verdict is discarded.
 // ---------------------------------------------------------------------------
 export const REVIEW_TOKEN_LABEL = 'Review token'
 
-// El token: sha256 hex del texto del diff. Función del ARGUMENTO y de nada
-// más — quien decide QUÉ diff es el sujeto es ct-step.mjs, que es quien tiene
-// git delante.
+// The token: the sha256 hex of the diff's text. A function of the ARGUMENT and
+// of nothing else — whoever decides WHICH diff is the subject is ct-step.mjs,
+// which is the one with git in front of it.
 export const reviewToken = (diff) => createHash('sha256').update(String(diff ?? ''), 'utf8').digest('hex')
 
-// La línea, en una sola función: la pantalla que se la dicta al juez (la
-// rúbrica) y el matcher que la reconoce no pueden divergir en un espacio.
+// The line, in a single function: the screen that dictates it to the judge (the
+// rubric) and the matcher that recognises it cannot diverge by a single space.
 export const reviewTokenLine = (token) => `${REVIEW_TOKEN_LABEL}: ${token}`
 
-// La RegExp se construye con la etiqueta y no se teclea: la etiqueta no lleva
-// metacaracteres, así que interpolarla es seguro y ata el lector al escritor.
-// Minúsculas y 64 exactos: es lo que `reviewToken` produce, y un paquete cuya
-// línea no cumpla eso NO declara ningún token (null), que es lo que el verbo
-// trata como «paquete de una versión anterior o editado a mano».
+// The RegExp is built from the label and not typed: the label carries no
+// metacharacters, so interpolating it is safe and it ties the reader to the
+// writer. Lowercase and exactly 64: it is what `reviewToken` produces, and a
+// package whose line does not comply declares NO token at all (null), which is
+// what the verb treats as «a package from an earlier version, or hand-edited».
 const RE_REVIEW_TOKEN = new RegExp(`^${REVIEW_TOKEN_LABEL}: ([0-9a-f]{64})$`, 'm')
 export function reviewTokenOf(textoDelPaquete) {
   const m = RE_REVIEW_TOKEN.exec(String(textoDelPaquete ?? ''))
@@ -625,15 +639,15 @@ export function reviewTokenOf(textoDelPaquete) {
 
 const esTexto = (v) => typeof v === 'string' && v.trim() !== ''
 
-// Validación a mano y no con una librería de esquemas: el spec exige cero
-// dependencias nuevas, y lo que hay que comprobar cabe en veinte líneas.
+// Hand-written validation and not a schema library: the spec demands zero new
+// dependencies, and what has to be checked fits in twenty lines.
 //
-// `rules` es el segundo parámetro, no un módulo aparte: el veredicto de tarea
-// y el de slice comparten TODA esta validación —esquema, cardinalidad,
-// coherencia PASS/high— y sólo difieren en qué enum de `rule` aceptan y
-// cuántos pasos exige el recorrido. Parametrizar es lo que evita una segunda
-// función que copiara estas veinte líneas y divergiera en el primer arreglo
-// que se aplicara a una sola de las dos.
+// `rules` is the second parameter, not a separate module: the task verdict and
+// the slice verdict share ALL of this validation —schema, cardinality, PASS/high
+// coherence— and differ only in which enum of `rule` they accept and how many
+// steps the walk demands. Parameterising is what avoids a second function that
+// would copy these twenty lines and diverge at the first fix applied to only one
+// of the two.
 export function readVerdict(structured, rules = VERDICT_RULES) {
   if (!structured || typeof structured !== 'object') return { why: 'el juez no devolvió structured_output' }
   const { ruling, rubric, findings, review_token: token } = structured
@@ -643,78 +657,80 @@ export function readVerdict(structured, rules = VERDICT_RULES) {
     if (!f || typeof f !== 'object') return { why: `el hallazgo ${i} no es un objeto` }
     if (!SEVERITIES.includes(f.severity)) return { why: `el hallazgo ${i} tiene una severidad desconocida: ${JSON.stringify(f.severity)}` }
     if (!esTexto(f.what) || !esTexto(f.path)) return { why: `el hallazgo ${i} no dice qué o dónde: hacen falta 'what' y 'path'` }
-    // `line` es opcional y `null` vale: un hallazgo del fichero entero no tiene
-    // línea, y exigirla sería pedir un número inventado o gastar un descarte de
-    // los seis que matan el run. Lo que no vale es una línea que no es un
-    // número: la cadena `"12"` pasa el `typeof` y rompe cualquier agregación.
+    // `line` is optional and `null` is valid: a finding about the whole file
+    // has no line, and demanding one would be asking for an invented number or
+    // spending one of the six discards that kill the run. What is not valid is
+    // a line that is not a number: the string `"12"` passes the `typeof` and
+    // breaks any aggregation.
     if (f.line !== undefined && f.line !== null && !(Number.isInteger(f.line) && f.line > 0)) {
       return { why: `el hallazgo ${i} trae una línea que no es un número: ${JSON.stringify(f.line)} — un entero, o null (u omitida) si el hallazgo es del fichero entero` }
     }
-    // La cita, con el mismo trato que el qué y el dónde: sin ella el hallazgo
-    // no se puede contrastar, y un veto que no se puede contrastar es el veto
-    // defensivo que la calibración de la rúbrica existe para impedir.
+    // The quote, given the same treatment as the what and the where: without
+    // it the finding cannot be checked against anything, and a veto that cannot
+    // be checked is the defensive veto the rubric's calibration exists to
+    // prevent.
     if (!esTexto(f.evidence)) return { why: `el hallazgo ${i} no cita la evidencia que lo sostiene` }
-    // La regla es el enum CERRADO: no se asume ninguna por defecto, porque una
-    // regla inventada por el juez ensuciaría el conteo por regla de la
-    // telemetría tanto como un `rule` ausente.
+    // The rule is the CLOSED enum: none is assumed by default, because a rule
+    // invented by the judge would dirty the telemetry's per-rule count just as
+    // much as a missing `rule`.
     if (!rules.includes(f.rule)) return { why: `el hallazgo ${i} incumple una regla desconocida: ${JSON.stringify(f.rule)}` }
   }
-  // El recorrido de la rúbrica, con el mismo criterio que el `rule` de un
-  // hallazgo: enum CERRADO y descarte, no interpretación. Aquí el descarte
-  // cubre además la CARDINALIDAD, que en un hallazgo no aplica — la rúbrica se
-  // recorre entera y se contesta entera, así que un recorrido corto, uno con un
-  // ítem repetido y uno con un identificador que nadie reconoce son el mismo
-  // fallo: un veredicto del que no se puede afirmar que la rúbrica se recorrió.
+  // The walk of the rubric, with the same criterion as a finding's `rule`: a
+  // CLOSED enum and a discard, not interpretation. Here the discard also covers
+  // CARDINALITY, which does not apply to a finding — the rubric is walked whole
+  // and answered whole, so a short walk, one with a repeated item and one with
+  // an identifier nobody recognises are the same failure: a verdict of which it
+  // cannot be asserted that the rubric was walked.
   if (!Array.isArray(rubric)) return { why: 'el veredicto no trae el recorrido de la rúbrica' }
   const recorridos = []
   for (const [i, paso] of rubric.entries()) {
     if (!paso || typeof paso !== 'object') return { why: `el paso ${i} del recorrido no es un objeto` }
     if (!rules.includes(paso.rule)) return { why: `el recorrido nombra un ítem desconocido de la rúbrica: ${JSON.stringify(paso.rule)}` }
-    // Un ítem nombrado sin resultado son los identificadores sin nada
-    // detrás: el mismo PASS vacío de rust-monitoring#10, sólo más largo.
+    // An item named with no result is identifiers with nothing behind them:
+    // the same empty PASS of rust-monitoring#10, only longer.
     if (!esTexto(paso.result)) return { why: `el ítem ${paso.rule} del recorrido no dice lo que dio` }
-    // El resultado en prosa dice lo que dio; `outcome` dice de qué CLASE fue,
-    // que es lo único agregable. Sin él, "no había con qué medir" y "medí y
-    // está bien" son el mismo dato.
+    // The result in prose says what it gave; `outcome` says what CLASS it was,
+    // which is the only aggregable part. Without it, "there was nothing to
+    // measure with" and "I measured and it is fine" are the same datum.
     if (!RUBRIC_OUTCOMES.includes(paso.outcome)) return { why: `el ítem ${paso.rule} del recorrido no dice de qué clase fue su resultado: ${JSON.stringify(paso.outcome)}` }
     if (recorridos.includes(paso.rule)) return { why: `el recorrido repite el ítem ${paso.rule} de la rúbrica` }
     recorridos.push(paso.rule)
   }
   const sinRecorrer = rules.filter((regla) => !recorridos.includes(regla))
-  // El número sale del array y no de la prosa: el noveno ítem dejó obsoleto de
-  // golpe un "ocho" escrito a mano, y este `why` es el texto que el juez lee
-  // para volver a contestar tras un descarte.
+  // The number comes from the array and not from the prose: the ninth item made
+  // a hand-written "eight" obsolete in one go, and this `why` is the text the
+  // judge reads in order to answer again after a discard.
   if (sinRecorrer.length) return { why: `el recorrido no pasa por ${sinRecorrer.join(', ')}: la rúbrica son ${rules.length} ítems y se contestan los ${rules.length}` }
-  // La coherencia que el original comprueba en el propio agregado: un PASA con
-  // un hallazgo grave se contradice a sí mismo. No se "interpreta" hacia el
-  // lado prudente — se descarta y se vuelve a preguntar, porque un juez que no
-  // se entiende a sí mismo no ha juzgado.
+  // The coherence the original checks on the aggregate itself: a PASS with a
+  // serious finding contradicts itself. It is not "interpreted" towards the
+  // prudent side — it is discarded and asked again, because a judge that does
+  // not understand itself has not judged.
   if (ruling === 'PASS' && findings.some((f) => f.severity === 'high')) {
     return { why: 'un PASS con un hallazgo de severidad high contradice la rúbrica: un hallazgo grave es FAIL' }
   }
-  // EL TOKEN DEL PAQUETE, copiado — y LA ÚLTIMA de las comprobaciones a
-  // propósito. Las de arriba deciden si esto es un veredicto; ésta decide de
-  // QUÉ es. Un recorrido incompleto o un ruling inventado tienen que seguir
-  // leyendo el `why` de su propio defecto: es el texto con el que el juez
-  // vuelve a contestar, y adelantarla lo mandaría a arreglar el campo
-  // equivocado.
+  // THE PACKAGE'S TOKEN, copied — and deliberately THE LAST of the checks. The
+  // ones above decide whether this is a verdict; this one decides what it is a
+  // verdict OF. An incomplete walk or an invented ruling have to go on reading
+  // the `why` of their own defect: it is the text with which the judge answers
+  // again, and bringing this check forward would send it off to fix the wrong
+  // field.
   //
-  // Se acepta en mayúsculas y se devuelve en minúsculas, con el precedente
-  // literal de `matchesGo`: quien copia un hex de 64 caracteres puede
-  // reformatearlo, y «el peor rato de todos es teclear el permiso correcto y
-  // que no pase nada». Lo que este módulo NO puede decidir es si el token es
-  // EL DEL PAQUETE: eso exige leer el paquete y volver a medir el corte, y lo
-  // hace ct-step.mjs (`tokenVigente`).
-  // AUSENTE VALE, porque quien lo escribe es el programa: `ct-step verdict` lo
-  // inyecta con el valor que acaba de calcular antes de llamar aquí, así que
-  // en el camino real este campo llega siempre. Un veredicto que llega hasta
-  // aquí sin él es uno que nadie ató a ningún corte, y quien puede decidir eso
-  // no es este módulo (no lee el paquete): se devuelve `null` y lo resuelve
-  // ct-step, que es el que compara.
+  // It is accepted in uppercase and returned in lowercase, with the literal
+  // precedent of `matchesGo`: whoever copies a 64-character hex may reformat it,
+  // and «the worst moment of all is typing the right permission and nothing
+  // happening». What this module CANNOT decide is whether the token is THE
+  // PACKAGE'S: that demands reading the package and measuring the cut again, and
+  // ct-step.mjs does that (`tokenVigente`).
+  // ABSENT IS VALID, because whoever writes it is the program: `ct-step verdict`
+  // injects it with the value it has just computed before calling here, so on
+  // the real path this field always arrives. A verdict that reaches here without
+  // it is one nobody tied to any cut, and the one who can decide that is not
+  // this module (it does not read the package): `null` is returned and ct-step
+  // resolves it, which is the one that compares.
   //
-  // Lo que sigue descartándose es un token con FORMA de token que no lo es:
-  // una cadena que no son 64 hex no se puede comparar con nada, y tolerarla
-  // sería telemetría sucia mañana.
+  // What is still discarded is a token with the SHAPE of a token that is not
+  // one: a string that is not 64 hex characters cannot be compared with
+  // anything, and tolerating it would be dirty telemetry tomorrow.
   if (token === undefined || token === null) {
     return { verdict: { ruling, rubric, findings, review_token: null } }
   }
@@ -724,41 +740,42 @@ export function readVerdict(structured, rules = VERDICT_RULES) {
   return { verdict: { ruling, rubric, findings, review_token: token.toLowerCase() } }
 }
 
-// El veredicto del SLICE entero (§3.7-B): misma validación, la rúbrica de
-// `agents/ct-slice-judge.md`. Una función con nombre propio y no una llamada
-// suelta a `readVerdict(x, SLICE_VERDICT_RULES)` en cada sitio que lo usa: es
-// lo que hace que `ct-step.mjs` no tenga que importar `SLICE_VERDICT_RULES`
-// sólo para pasarla, y lo que deja un único punto donde "leer un veredicto de
-// slice" significa una cosa.
+// The verdict of the WHOLE slice (§3.7-B): the same validation, the rubric of
+// `agents/ct-slice-judge.md`. A function with a name of its own and not a loose
+// call to `readVerdict(x, SLICE_VERDICT_RULES)` at every site that uses it: it
+// is what keeps `ct-step.mjs` from having to import `SLICE_VERDICT_RULES` just
+// to pass it along, and what leaves a single point where "reading a slice
+// verdict" means one thing.
 export const readSliceVerdict = (structured) => readVerdict(structured, SLICE_VERDICT_RULES)
 
-// De veredicto a resultado de la tabla. Las tres salidas son las tres que
-// `run-machine.js` sabe atender desde el paso `judge`.
+// From a verdict to a result of the table. The three outputs are the three
+// `run-machine.js` knows how to attend to from the `judge` step.
 export function outcomeOfVerdict(verdict) {
   if (verdict.ruling === 'FAIL') return 'failed'
-  // Un PASA con hallazgos que no son de severidad baja no bloquea, pero tampoco
-  // se ignora: vuelve al implementador con presupuesto propio.
+  // A PASS with findings that are not of low severity does not block, but it is
+  // not ignored either: it goes back to the implementer with a budget of its
+  // own.
   return verdict.findings.some((f) => f.severity !== 'low') ? 'corrections-ordered' : 'done'
 }
 
-// De veredicto de SLICE a resultado de la tabla — sólo DOS salidas, las que
-// `trasElJuezDeSlice` sabe atender. `PASS` es SIEMPRE `done`, con hallazgos o
-// sin ellos: a diferencia de una tarea, aquí no queda ningún implementador con
-// trabajo stageado al que devolver — el slice entero ya está comiteado, tarea
-// a tarea. Un medium no compra una vuelta pagada que no hay a quién cobrarle:
-// viaja DENTRO del veredicto que este mismo verbo comitea, y lo lee quien
-// revisa la pull request — una puerta que YA existe, no una cuarta.
+// From a SLICE verdict to a result of the table — only TWO outputs, the ones
+// `trasElJuezDeSlice` knows how to attend to. `PASS` is ALWAYS `done`, with or
+// without findings: unlike a task, here no implementer is left with staged work
+// to send back to — the whole slice is already committed, task by task. A medium
+// does not buy a paid round there is nobody to charge for: it travels INSIDE the
+// verdict this very verb commits, and it is read by whoever reviews the pull
+// request — a gate that ALREADY exists, not a fourth one.
 export function outcomeOfSliceVerdict(verdict) {
   return verdict.ruling === 'FAIL' ? 'failed' : 'done'
 }
 
-// `path:line` a partir de los dos campos, en UN solo sitio. El hallazgo los
-// lleva separados para que un programa pueda agrupar por fichero, pero quien
-// lee el aviso de corrección quiere la ubicación de una pieza. Vive aquí,
-// pegado al esquema, para que el próximo lector no invente su propia
-// recomposición: dos formatos de la misma ubicación es la divergencia que este
-// módulo ya pagó con JUDGE_TOOLS. Sin línea imprime sólo el fichero, que es
-// exactamente lo que ese hallazgo dice.
+// `path:line` out of the two fields, in ONE single place. The finding carries
+// them separately so that a program can group by file, but whoever reads the
+// correction warning wants the location in one piece. It lives here, glued to
+// the schema, so that the next reader does not invent their own recomposition:
+// two formats of the same location is the divergence this module already paid
+// for with JUDGE_TOOLS. With no line it prints only the file, which is exactly
+// what that finding says.
 export function findingLocation(finding) {
   const { path, line } = finding || {}
   return line === undefined || line === null ? String(path ?? '') : `${path}:${line}`

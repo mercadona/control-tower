@@ -1,84 +1,83 @@
 #!/usr/bin/env node
 // ============================================================================
-// commit-keyword-guard.js — LA PUERTA: UN COMMIT NO SE LLEVA POR DELANTE UN
-// ISSUE POR MENCIONAR UNA CLOSING KEYWORD.
+// commit-keyword-guard.js — THE DOOR: A COMMIT DOES NOT RUN OVER AN ISSUE BY
+// MENTIONING A CLOSING KEYWORD.
 //
-// GitHub cierra un issue con una closing keyword que aparezca en CUALQUIER
-// mensaje de commit que llegue a la rama por defecto, y las comillas NO
-// protegen. En un repo real, un commit de DOCUMENTACIÓN cuyo cuerpo mencionaba
-// `Closes #451` —dentro de una frase que explicaba que el kickoff no la
-// llevaba— cerró ese issue. Nadie quiso cerrar nada.
+// GitHub closes an issue on a closing keyword appearing in ANY commit message
+// that reaches the default branch, and quotes do NOT protect. In a real
+// repository, a DOCUMENTATION commit whose body mentioned `Closes #451`
+// —inside a sentence explaining that the kickoff did not carry it— closed that
+// issue. Nobody meant to close anything.
 //
-// ES UNA PUERTA Y NO UN AVISO, a propósito: una comprobación cuyo resultado no
-// puede detener la acción siguiente es decoración. Y no hay caso legítimo que
-// se pierda — el contrato del loop manda el cierre al CUERPO DEL PR, nunca a un
-// mensaje de commit.
+// IT IS A DOOR AND NOT A WARNING, on purpose: a check whose result cannot stop
+// the next action is decoration. And no legitimate case is lost — the loop's
+// contract sends the closure to the PR BODY, never to a commit message.
 //
-// Y SIGUE SIENDO UNA PUERTA BAJO `--dangerously-skip-permissions`, que es el
-// flag con el que arrancan TODOS los agentes despachados. Las dos decisiones
-// que emite se midieron por EFECTO —un `touch CENTINELA.txt` y después la
-// pregunta de si el fichero existe—, no por exit code, y con el
-// `permission_mode` que recibe el hook escrito a fichero para no suponerlo a
-// partir del flag:
-//   `deny` (repo gobernado)     no se creó el centinela  — F27, spec §2.2
-//   `ask`  (no se pudo mirar)   no se creó el centinela  — F28, `bypassPermissions`
-// El control —el mismo montaje sin ningún hook— SÍ crea el fichero, así que la
-// ausencia mide el bloqueo y no un modelo que no lo intentó. La escalada a
-// `ask` es lo que sostiene que esta puerta nunca se degrade a silencio, y esa
-// propiedad está medida, no supuesta.
+// AND IT IS STILL A DOOR UNDER `--dangerously-skip-permissions`, which is the
+// flag ALL dispatched agents start with. The two decisions it emits were
+// measured by EFFECT —a `touch CENTINELA.txt` and then the question of whether
+// the file exists—, not by exit code, and with the `permission_mode` the hook
+// receives written to a file so as not to assume it from the flag:
+//   `deny` (governed repo)      the sentinel was not created  — F27, spec §2.2
+//   `ask`  (could not look)     the sentinel was not created  — F28, `bypassPermissions`
+// The control —the same set-up with no hook at all— DOES create the file, so
+// the absence measures the block and not a model that never tried. The
+// escalation to `ask` is what holds up the claim that this door never degrades
+// into silence, and that property is measured, not assumed.
 //
-// Lo que esas dos medidas NO dicen: que la puerta CUBRA a un agente despachado
-// sigue dependiendo de que el plugin esté instalado bajo la cuenta con la que
-// ese agente arranca (`resolveAccount`, scripts/dispatch.js). Y se midieron en
-// `-p`, sin humano a quien preguntar, así que el `ask` se resolvió BLOQUEANDO;
-// en una sesión interactiva lo esperable es que pregunte y se quede parada.
-// Las dos cosas son «no silencio»; no son la misma cosa.
+// What those two measurements do NOT say: whether the door COVERS a dispatched
+// agent still depends on the plugin being installed under the account that
+// agent starts with (`resolveAccount`, scripts/dispatch.js). And they were
+// measured under `-p`, with no human to ask, so the `ask` resolved by
+// BLOCKING; in an interactive session what to expect is that it asks and stays
+// stopped. Both things are «not silence»; they are not the same thing.
 //
-// EL ORDEN DE EVALUACIÓN DE `decidir` NO ES COSMÉTICO. Este hook corre en CADA
-// comando Bash de CADA sesión con el plugin cargado. Las dos primeras
-// preguntas son parseo puro, sin una sola lectura de disco; sólo el comando que
-// ya resultó ser un commit CON keyword paga el I/O de averiguar si el repo está
-// gobernado. `decidir` es una función PURA que no toca disco por sí misma —
-// el único I/O posible es el que haga el `probe` que recibe, y sólo se le
-// llama en ese tercer paso — precisamente para que esta propiedad se pueda
-// medir sin trucos de permisos de fichero: un `probe` espía que cuenta sus
-// invocaciones basta.
+// THE EVALUATION ORDER OF `decidir` IS NOT COSMETIC. This hook runs on EVERY
+// Bash command of EVERY session with the plugin loaded. The first two
+// questions are pure parsing, without a single read from disk; only the
+// command that already turned out to be a commit WITH a keyword pays the I/O
+// of finding out whether the repository is governed. `decidir` is a PURE
+// function that does not touch disk by itself — the only possible I/O is
+// whatever the `probe` it receives does, and it is only called at that third
+// step — precisely so that this property can be measured without file
+// permission tricks: a spy `probe` that counts its invocations is enough.
 //
-// LO QUE NO VE, y el principio del que sale toda la lista: este hook engancha
-// en el tool `Bash`, así que cubre lo que ejecuta CLAUDE y nunca lo que teclea
-// el humano. Ni en su terminal, ni con el prefijo `!` de la propia sesión de
-// Claude — un `!` no llega al tool, así que ningún `PreToolUse` lo ve. Medido
-// en un repo gobernado con el MISMO mensaje: `deny` desde el tool `Bash`,
-// limpio con `!`. Esa asimetría importa más de lo que parece, porque el
-// commit que originó esta puerta lo lanzó el COORDINADOR, y el `!` es
-// precisamente su vía más cómoda.
+// WHAT IT DOES NOT SEE, and the principle the whole list comes out of: this
+// hook hooks into the `Bash` tool, so it covers what CLAUDE executes and never
+// what the human types. Not in their terminal, and not with the `!` prefix of
+// Claude's own session — a `!` never reaches the tool, so no `PreToolUse` sees
+// it. Measured in a governed repository with the SAME message: `deny` from the
+// `Bash` tool, clean with `!`. That asymmetry matters more than it looks,
+// because the commit that gave rise to this door was launched by the
+// COORDINATOR, and `!` is precisely their most comfortable route.
 //
-// Y dentro ya de lo que Claude sí ejecuta, tampoco ve: un `git commit` sin
-// `-m` (abre el editor), un `-F <fichero>`, un `--amend --no-edit`,
-// `eval "..."`, `bash -c "..."` y subshell `( ... )`. Ni una invocación
-// ENVUELTA donde `git` deja de ser el primer token — `sudo git commit`,
-// `env FOO=1 git commit`, `command git commit` — porque entonces el paso (1)
-// ni siquiera reconoce el `git commit` que hay detrás.
+// And within what Claude does execute, it also does not see: a `git commit`
+// without `-m` (it opens the editor), a `-F <file>`, an `--amend --no-edit`,
+// `eval "..."`, `bash -c "..."` and a subshell `( ... )`. Nor a WRAPPED
+// invocation where `git` stops being the first token — `sudo git commit`,
+// `env FOO=1 git commit`, `command git commit` — because then step (1) does
+// not even recognise the `git commit` behind it.
 //
-// CON `-C <ruta>` O `cd <ruta> && git commit` NO HAY CEGUERA, HAY UN REPO
-// EQUIVOCADO: el paso (3) juzga el repo del `cwd` de la SESIÓN, nunca el que
-// señala `<ruta>`, y eso corta en las dos direcciones — medido en los dos
-// sentidos. Con la sesión dentro de un repo gobernado y `<ruta>` apuntando a
-// uno que no lo es, `deny` de más sobre un commit que no le compete. Con la
-// sesión fuera de todo repo gobernado y `<ruta>` apuntando a uno que sí lo
-// es, ninguna protección sobre el commit que sí le competía.
+// WITH `-C <path>` OR `cd <path> && git commit` THERE IS NO BLINDNESS, THERE
+// IS A WRONG REPOSITORY: step (3) judges the repository of the SESSION's
+// `cwd`, never the one `<path>` points at, and that cuts both ways — measured
+// in both directions. With the session inside a governed repository and
+// `<path>` pointing at one that is not, an excess `deny` over a commit that is
+// none of its business. With the session outside every governed repository and
+// `<path>` pointing at one that is governed, no protection at all over the
+// commit that was its business.
 //
-// Lo que SÍ ve, y no hay que confundir con lo de arriba: closing-keywords.js
-// no interpreta `$(...)` ni backticks, sólo copia caracteres — así que un
-// mensaje construido con `-m "$MSG"` (expansión de variable) o
-// `-m "$(cat fichero)"` (contenido en disco) es invisible, PERO el heredoc
-// citado dentro de las propias comillas del `-m` —
-// `-m "$(cat <<'EOF' ... EOF)"`, la forma multilínea por defecto de Claude
-// Code— viaja entero, keyword incluida, en el mismo token, y SÍ se ve.
+// What it DOES see, and must not be confused with the above: closing-keywords.js
+// does not interpret `$(...)` or backticks, it only copies characters — so a
+// message built with `-m "$MSG"` (variable expansion) or
+// `-m "$(cat file)"` (content on disk) is invisible, BUT the heredoc quoted
+// inside the `-m`'s own quotes —
+// `-m "$(cat <<'EOF' ... EOF)"`, Claude Code's default multiline form— travels
+// whole, keyword included, in the same token, and IS seen.
 //
-// Para todo lo que de verdad se escapa sigue estando el aviso de /ct-next
-// sobre issues cerrados por un commit suelto: esto caza la CAUSA, aquello el
-// EFECTO, y ninguno de los dos afirma ser completo.
+// For everything that genuinely escapes, /ct-next's warning about issues closed
+// by a stray commit is still there: this catches the CAUSE, that one the
+// EFFECT, and neither of the two claims to be complete.
 // ============================================================================
 import { readFileSync, realpathSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
@@ -86,18 +85,18 @@ import { extractCommitMessages, findClosingKeywords } from '../scripts/closing-k
 import { probeGovernedRepo } from '../scripts/governed-repo.js'
 
 /**
- * decidir: toda la lógica de la puerta, como función PURA.
+ * decidir: the whole logic of the door, as a PURE function.
  *
- * No hace I/O por sí misma, y tampoco lee estado ambiente: el único I/O
- * posible es el que haga `probe` (recibe el `cwd` TAL COMO LLEGÓ en el
- * payload y devuelve `{governed}` o `{error}`), y `probe` sólo se invoca en
- * el paso (3), cuando el comando ya resultó ser un commit CON closing
- * keyword. Esa es la propiedad que le importa a esta puerta, y al ser
- * `decidir` pura se puede comprobar pasándole un `probe` espía, sin
- * necesitar ningún directorio ilegible.
+ * It does no I/O by itself, and it does not read ambient state either: the
+ * only possible I/O is whatever `probe` does (it receives the `cwd` EXACTLY AS
+ * IT ARRIVED in the payload and returns `{governed}` or `{error}`), and
+ * `probe` is only invoked at step (3), once the command has already turned out
+ * to be a commit WITH a closing keyword. That is the property this door cares
+ * about, and because `decidir` is pure it can be checked by passing it a spy
+ * `probe`, without needing any unreadable directory.
  *
- * Devuelve `null` cuando no hay decisión que emitir, o el objeto de salida
- * completo del hook.
+ * Returns `null` when there is no decision to emit, or the hook's complete
+ * output object.
  */
 export function decidir(input, probe) {
   if (input?.hook_event_name !== 'PreToolUse') return null
@@ -105,17 +104,17 @@ export function decidir(input, probe) {
   const command = input?.tool_input?.command
   if (typeof command !== 'string' || !command) return null
 
-  // (1) y (2): parseo puro, cero I/O.
+  // (1) and (2): pure parsing, zero I/O.
   const mensajes = extractCommitMessages(command)
   if (!mensajes.length) return null
   const hallazgos = mensajes.flatMap(findClosingKeywords)
   if (!hallazgos.length) return null
 
-  // (3): la única lectura de disco, y sólo para un comando que ya es
-  // peligroso. `input.cwd` viaja TAL CUAL, sin sustituirlo por el cwd del
-  // PROCESO del hook cuando falta: eso contestaría sobre un directorio que
-  // quien invocó nunca nombró, y `probeGovernedRepo` ya sabe convertir un
-  // cwd ausente/nulo/vacío en `{error}` en vez de inventar una respuesta.
+  // (3): the only read from disk, and only for a command that is already
+  // dangerous. `input.cwd` travels AS IS, without substituting the hook
+  // PROCESS's cwd when it is missing: that would answer about a directory the
+  // caller never named, and `probeGovernedRepo` already knows how to turn an
+  // absent/null/empty cwd into `{error}` instead of inventing an answer.
   const sonda = probe(input.cwd)
 
   const salida = (permissionDecision, permissionDecisionReason) => ({
@@ -138,32 +137,33 @@ export function decidir(input, probe) {
   )
 }
 
-// El cuerpo ejecutable sólo corre cuando el fichero se invoca como script
-// (`node hooks/commit-keyword-guard.js`), no cuando un test importa
-// `decidir`: un `readFileSync(0, ...)` sin stdin real bloquearía la carga
-// del módulo.
+// The executable body only runs when the file is invoked as a script
+// (`node hooks/commit-keyword-guard.js`), not when a test imports `decidir`: a
+// `readFileSync(0, ...)` without a real stdin would block the module from
+// loading.
 //
-// `realpathSync` NO es cosmético: `process.argv[1]` conserva la ruta TAL
-// COMO SE INVOCÓ, mientras que `import.meta.url` llega con los symlinks YA
-// RESUELTOS. Sin resolver también `argv[1]`, invocar este hook a través de
-// un symlink de directorio (o siendo el propio fichero un symlink) hace que
-// la comparación falle en abierto: el cuerpo no corre, `exit 0`, `stdout`
-// vacío — indistinguible de «no había nada que denegar». La guarda
-// `process.argv[1] &&` no es defensiva de más: bajo `node -e` ese valor es
-// `undefined`, y `realpathSync(undefined)` lanzaría en vez de,
-// sencillamente, no ejecutar el cuerpo.
+// `realpathSync` is NOT cosmetic: `process.argv[1]` keeps the path EXACTLY AS
+// IT WAS INVOKED, whereas `import.meta.url` arrives with symlinks ALREADY
+// RESOLVED. Without resolving `argv[1]` too, invoking this hook through a
+// directory symlink (or with the file itself being a symlink) makes the
+// comparison fail wide open: the body does not run, `exit 0`, empty `stdout` —
+// indistinguishable from «there was nothing to deny». The
+// `process.argv[1] &&` guard is not defensive excess: under `node -e` that
+// value is `undefined`, and `realpathSync(undefined)` would throw instead of,
+// simply, not running the body.
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
-  // Un stdin que no es JSON no permite saber ni qué comando es. Salir en
-  // silencio es lo único honesto: bloquear cada Bash por un fallo de parseo
-  // dejaría la sesión inservible por un motivo que no es el de esta puerta.
+  // A stdin that is not JSON does not even allow knowing which command it is.
+  // Exiting in silence is the only honest thing: blocking every Bash over a
+  // parse failure would leave the session useless for a reason that is not
+  // this door's.
   let input
   try { input = JSON.parse(readFileSync(0, 'utf8')) } catch { process.exit(0) }
 
   const resultado = decidir(input, probeGovernedRepo)
-  // El `exit` espera al callback de `write`: sin él, un mensaje grande puede
-  // quedar a medio escribir en una tubería (el buffer por defecto de un pipe
-  // ronda 64 KB) y el host recibe un JSON cortado que descarta en vez de un
-  // `deny` — el mismo silencio que esta puerta existe para evitar.
+  // The `exit` waits for `write`'s callback: without it, a large message can
+  // be left half written into a pipe (a pipe's default buffer is around 64 KB)
+  // and the host receives a truncated JSON that it discards instead of a
+  // `deny` — the very silence this door exists to prevent.
   if (resultado) process.stdout.write(JSON.stringify(resultado), () => process.exit(0))
   else process.exit(0)
 }

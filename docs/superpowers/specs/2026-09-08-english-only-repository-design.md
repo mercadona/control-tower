@@ -39,7 +39,7 @@ filenames outside `docs/` and about 45 inside it.
 The baseline this migration must not break: **5,465 tests across 205 files, all
 green**.
 
-## Four couplings that shape the scope
+## Five couplings that shape the scope
 
 These are not cosmetic, and each one decides part of the sequence below.
 
@@ -57,6 +57,28 @@ These are not cosmetic, and each one decides part of the sequence below.
 4. **Some `docs/` paths are contract.** `plan-contract-progress.js` validates
    against `docs/superpowers/plans`, and `task-brief.test.js` reads a plan from
    there. Those paths are not free names and do not move.
+5. **Ten Spanish markdown headings are parsed anchors, not prose.** Found while
+   translating the open issues, and the most awkward coupling of the five,
+   because each of these strings lives in three places at once: the code that
+   writes and parses it, the body of every live GitHub issue, and the spec
+   documents of governed repositories.
+
+   | Heading | Pinned at |
+   |---|---|
+   | `## Contexto del epic` | `groom.js:54` `EPIC_CONTEXT_HEADING` |
+   | `## Contexto heredado` | `groom.js:55` `INHERITED_CONTEXT_HEADING` |
+   | `## Decisiones congeladas` | `groom.js:64` `FROZEN_DECISIONS_HEADING` |
+   | `## Dependencias` | `gh-issue-map.js:659` `DEPS_HEADING` |
+   | `## Acceptance criteria (EARS, 1:1 con tests)` | `gh-plan-issues.js:279` `AC_HEADING` |
+   | `## Descripción`, `## Hipótesis`, `## Señal de observabilidad`, `## Telemetría del juez — sólo lo que el repo trae escrito`, `## Current State\n(slice recién despachado, sin trabajo aún)` | literals in `plugin/scripts` and `backend/src` |
+
+   Renaming one means changing the constant, every issue body that already
+   carries it, and every governed repository's spec, in one coordinated move —
+   otherwise `/ct-groom --reconcile` stops finding the section and dispatch
+   breaks. It gets its own step, next to the `ct-init` contract, and until then
+   these headings stay in Spanish wherever they appear. The plan's own sections
+   (`## 7. Tasks`, `## 8. Global verification`) are already English and are
+   unaffected.
 
 ## The rule
 
@@ -157,7 +179,8 @@ which carries the open pull request #155.
 | 13 | Living docs | `docs/loop/*` + regenerated HTML/PDF, `judge-bench.md`, `medicion-slices.md`, `README.md`, `Makefile` | low |
 | 14 | **`ct-init` contract** | Block translated, version 23 → 24, new hash appended to the ledger, `CONTRATO-SLICES.md` → `SLICES-CONTRACT.md` with the old name still recognised | **outside this repo** |
 | 15 | **The judge** | `ct-judge.md`, `ct-slice-judge.md` + an N=5 run published beside the baseline | **behavioural** |
-| 16 | GitHub | The 17 open issues | none |
+| 16 | GitHub | The open issues | none |
+| 17 | **Parsed headings** | The ten Spanish anchors of coupling 5: the constants, every live issue body that carries them, and the governed repositories' specs — in one move | **outside this repo** |
 
 ## How each change is verified
 

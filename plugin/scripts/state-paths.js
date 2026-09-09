@@ -1,30 +1,31 @@
 // ============================================================================
-// F22 — DÓNDE VIVE EL ESTADO DE UNA SESIÓN, Y POR QUÉ SON DOS FICHEROS.
+// F22 — WHERE A SESSION'S STATE LIVES, AND WHY THERE ARE TWO FILES.
 //
-// El worktree de un slice tiene DOS ficheros de estado:
+// A slice's worktree has TWO state files:
 //
-//   .agent/STATE.md  TRACKEADO. El de la sesión coordinadora, tal como venía
-//                    en la base desde la que se cortó el worktree. A CERO
-//                    DIFF: el dispatcher ya no lo toca.
-//   .agent/SLICE.md  IGNORADO. El estado del slice, sembrado por /ct-next.
+//   .agent/STATE.md  TRACKED. The coordinator session's one, exactly as it came
+//                    in the base the worktree was cut from. AT ZERO DIFF: the
+//                    dispatcher no longer touches it.
+//   .agent/SLICE.md  IGNORED. The slice's state, seeded by /ct-next.
 //
-// La precedencia de abajo es carga estructural, no comodidad. Sin ella, un
-// agente que se re-hidrata tras un /clear leería el STATE.md trackeado del
-// worktree —que no es su semilla sino el estado de la COORDINADORA congelado
-// en la base: el epic, no el slice— y se hidrataría creyendo que es la
-// coordinadora. Es el mismo defecto que esta ronda arregla, con el vector
-// invertido.
+// The precedence below is structural, not a convenience. Without it, an agent
+// that re-hydrates after a /clear would read the worktree's tracked STATE.md
+// —which is not its seed but the COORDINATOR's state frozen in the base: the
+// epic, not the slice— and would hydrate itself believing it is the
+// coordinator. It is the same defect this round fixes, with the vector
+// inverted.
 //
-// Y la presencia del fichero ES la señal de "estoy en un worktree de slice":
-// no hace falta una variable de entorno, ni mirar si el cwd cuelga de
-// .worktrees/, ni preguntarle a git si esto es un worktree enlazado. Un
-// worktree de slice siempre tiene SLICE.md porque lo siembra el dispatcher; el
-// checkout de la coordinadora no lo tiene nunca.
+// And the presence of the file IS the signal for "I am in a slice worktree":
+// no environment variable is needed, nor looking at whether the cwd hangs off
+// .worktrees/, nor asking git whether this is a linked worktree. A slice
+// worktree always has SLICE.md because the dispatcher seeds it; the
+// coordinator's checkout never has it.
 //
-// MÓDULO PROPIO Y SIN DEPENDENCIAS, a propósito: lo consumen los dos hooks
-// (que se bundlean a dist/), ct-next.mjs y dispatch-check.mjs. Este último NO
-// importa state.js, y hacerlo sólo por una constante de path le metería `yaml`
-// en el grafo de dependencias a cambio de nada.
+// A MODULE OF ITS OWN AND WITH NO DEPENDENCIES, on purpose: it is consumed by
+// the two hooks (which are bundled into dist/), ct-next.mjs and
+// dispatch-check.mjs. The latter does NOT import state.js, and doing so just
+// for one path constant would drag `yaml` into its dependency graph in exchange
+// for nothing.
 // ============================================================================
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -32,19 +33,19 @@ import { join } from 'node:path'
 export const STATE_REL_PATH = '.agent/STATE.md'
 export const SLICE_REL_PATH = '.agent/SLICE.md'
 
-// Los dos paths que el PR de un slice no puede introducir NUNCA. NO es
-// `.agent/` entero: `conventions-ack.md` vive ahí y es un registro de
-// decisiones que sí puede cambiar legítimamente dentro de un slice.
+// The two paths a slice's PR can NEVER introduce. It is NOT the whole
+// `.agent/`: `conventions-ack.md` lives there and is a record of decisions that
+// can legitimately change inside a slice.
 export const NEVER_IN_A_SLICE_PR = [STATE_REL_PATH, SLICE_REL_PATH]
 
 /**
- * `rel` es la MISMA ruta que `path`, pero relativa — y no es un adorno: es lo
- * que los mensajes tienen que nombrar. Quien los lee (un agente, o una persona)
- * está DENTRO de ese directorio, así que un absoluto de 90 caracteres con el
- * tmpdir de la máquina no le dice qué fichero abrir mejor que `.agent/SLICE.md`.
- * Se devuelve desde aquí en vez de dejar que cada hook lo derive de `kind`:
- * dos derivaciones son dos sitios donde pueden divergir, y son exactamente los
- * dos hooks que tienen que decir lo mismo.
+ * `rel` is the SAME path as `path`, but relative — and it is not an ornament: it
+ * is what the messages have to name. Whoever reads them (an agent, or a person)
+ * is INSIDE that directory, so a 90-character absolute carrying the machine's
+ * tmpdir does not tell them which file to open better than `.agent/SLICE.md`.
+ * It is returned from here instead of letting each hook derive it from `kind`:
+ * two derivations are two places where they can diverge, and they are exactly
+ * the two hooks that have to say the same thing.
  *
  * @param {string} cwd
  * @returns {{ path: string|null, kind: 'slice'|'coordinator'|'none', rel: string|null }}
@@ -58,14 +59,14 @@ export function resolveStatePath(cwd) {
 }
 
 /**
- * Añade `rule` al contenido de un fichero de exclusión, una sola vez.
+ * Appends `rule` to the content of an exclusion file, exactly once.
  *
- * Idempotente por línea exacta (comparando sin espacios alrededor), mismo
- * criterio que el bloque de `.worktrees/` de ct-init.sh. Y normaliza el salto
- * de línea final ANTES de concatenar: si el fichero existe y no termina en
- * `\n`, un append pegaría la regla nueva a la última línea del usuario y
- * corrompería las dos —la regla previa dejaría de aplicarse y la nuestra
- * tampoco existiría—. Es el mismo bug que ct-init.sh evita en el `.gitignore`.
+ * Idempotent by exact line (compared without the surrounding whitespace), the
+ * same criterion as the `.worktrees/` block of ct-init.sh. And it normalises the
+ * trailing newline BEFORE concatenating: if the file exists and does not end in
+ * `\n`, an append would glue the new rule onto the user's last line and corrupt
+ * them both —the previous rule would stop applying and ours would not exist
+ * either—. It is the same bug ct-init.sh avoids in the `.gitignore`.
  *
  * @param {string} current
  * @param {string} rule

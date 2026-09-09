@@ -1,19 +1,19 @@
-// task-brief es la frontera con la decisión de José (D-4, aplazada): el
-// camino por defecto de subagent-driven-development llama a este script SIN
-// el flag, así que sin `--with-plan-context` su salida no puede cambiar ni un
-// byte. Por eso el primer test no compara contra una expectativa escrita a
-// mano, sino contra la salida del propio script en un punto fijo del
-// historial — es la única vara que no puede mentir si alguien toca el script
-// sin querer romper ese contrato.
+// task-brief is the boundary with José's decision (D-4, deferred): the default
+// path of subagent-driven-development calls this script WITHOUT the flag, so
+// without `--with-plan-context` its output cannot change by a single byte.
+// That is why the first test does not compare against a hand-written
+// expectation, but against the output of the script itself at a fixed point in
+// history — it is the only yardstick that cannot lie if someone touches the
+// script without meaning to break that contract.
 //
-// Ese punto fijo es el sha `2f30f9a` (el último commit anterior a esta ronda,
-// justo antes de que `1c2fc61` metiera el script y este test en el MISMO
-// commit) y no HEAD. Un baseline en HEAD es un baseline móvil: el script y su
-// test entraron juntos, así que en un checkout limpio HEAD:script ES el
-// fichero bajo prueba — se puede romper el camino sin flag y el test
-// comparándose consigo mismo sigue en verde. Fijarlo a un commit anterior al
-// de la introducción del contrato es lo único que deja al test comparar
-// contra algo que no es el propio cambio que podría romperlo.
+// That fixed point is the sha `2f30f9a` (the last commit before this round,
+// right before `1c2fc61` put the script and this test in the SAME commit) and
+// not HEAD. A baseline on HEAD is a moving baseline: the script and its test
+// went in together, so in a clean checkout HEAD:script IS the file under test
+// — the flagless path can be broken and the test, comparing itself against
+// itself, stays green. Pinning it to a commit earlier than the one that
+// introduced the contract is the only thing that lets the test compare against
+// something that is not the very change that could break it.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync, readFileSync, chmodSync, rmSync } from 'node:fs'
@@ -22,16 +22,16 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
-// Dos raíces desde que el plugin vive en plugin/: el script bajo prueba está
-// dentro del plugin, pero el plan que hace de input fijo es documentación del
-// REPO (docs/ no se distribuye, a propósito) y queda un nivel más arriba.
+// Two roots ever since the plugin lives in plugin/: the script under test is
+// inside the plugin, but the plan that acts as the fixed input is REPO
+// documentation (docs/ is deliberately not distributed) and sits one level up.
 const PLUGIN_ROOT = join(here, '..')
 const REPO_ROOT = join(PLUGIN_ROOT, '..')
 const SCRIPT = join(PLUGIN_ROOT, 'skills', 'subagent-driven-development', 'scripts', 'task-brief')
 const PLAN = join(REPO_ROOT, 'docs', 'superpowers', 'plans', '2026-08-18-los-dos-agentes-y-la-vara-del-plan.md')
 const TASK = '7'
-// El último commit anterior a esta ronda, anterior también a `1c2fc61` (que
-// metió el script y este test en el mismo commit). Ver la nota de cabecera.
+// The last commit before this round, earlier as well than `1c2fc61` (which
+// put the script and this test in the same commit). See the header note.
 const BASELINE_SHA = '2f30f9a'
 
 let dir
@@ -49,7 +49,7 @@ const run = (args) => {
 }
 
 describe('task-brief', () => {
-  it('sin el flag la salida es byte a byte la de antes de esta ronda', () => {
+  it('without the flag the output is, byte for byte, the one from before this round', () => {
     const baselineScript = join(dir, 'task-brief-baseline')
     writeFileSync(baselineScript, execFileSync('git', ['show', `${BASELINE_SHA}:skills/subagent-driven-development/scripts/task-brief`], { cwd: REPO_ROOT, encoding: 'utf8' }))
     chmodSync(baselineScript, 0o755)
@@ -63,7 +63,7 @@ describe('task-brief', () => {
     expect(readFileSync(outNew)).toEqual(readFileSync(outBaseline))
   })
 
-  it('con el flag añade el fin del slice y las tres secciones de vara', () => {
+  it("with the flag it adds the slice's end and the three yardstick sections", () => {
     const out = join(dir, 'con-flag.md')
     const r = run(['--with-plan-context', PLAN, TASK, out])
     expect(r.status).toBe(0)
@@ -76,8 +76,8 @@ describe('task-brief', () => {
     expect(texto).toMatch(/vara/i)
     expect(texto).toMatch(/ganan/i)
 
-    // Las cuatro secciones van delante de la tarea, en el orden del plan, y la
-    // tarea sigue entera.
+    // The four sections go ahead of the task, in the plan's order, and the
+    // task is still whole.
     const idxDesired = texto.indexOf('### Desired end state')
     const idxOutOfScope = texto.indexOf('### Out of scope')
     const idxClosed = texto.indexOf('## 2. Closed decisions')
@@ -90,19 +90,20 @@ describe('task-brief', () => {
     expect(idxTask).toBeGreaterThan(idxReference)
     expect(texto).toContain('el brief lleva la vara, detrás de un flag')
 
-    // Cada sección se corta antes de la siguiente, no se traga el plan entero.
+    // Each section is cut before the next one; it does not swallow the whole plan.
     expect(texto).not.toContain('## 4. Inventory')
   })
 
   // -------------------------------------------------------------------------
-  // LAS CUATRO SECCIONES NO TIENEN LA MISMA AUTORIDAD. El fin del slice viaja
-  // para que quien implementa y quien juzga sepan a qué sirve la tarea —era lo
-  // único que la ataba a los criterios de aceptación del issue y no llegaba—,
-  // pero darle autoridad de vara sería una licencia para ensanchar la tarea
-  // ("sirve al fin del slice"), y eso debilita el ítem `alcance`, que hoy
-  // funciona. Por eso van bajo dos líneas distintas, y por eso hay un test.
+  // THE FOUR SECTIONS DO NOT CARRY THE SAME AUTHORITY. The slice's end travels
+  // so that whoever implements and whoever judges know what the task serves —it
+  // was the only thing tying it to the issue's acceptance criteria and it was
+  // not arriving—, but giving it yardstick authority would be a licence to
+  // widen the task ("it serves the slice's end"), and that weakens the
+  // `alcance` item, which works today. That is why they go under two different
+  // lines, and that is why there is a test.
   // -------------------------------------------------------------------------
-  it('el fin del slice no viaja como vara: dice que no amplía el alcance de la tarea', () => {
+  it("the slice's end does not travel as yardstick: it says it does not widen the task's scope", () => {
     const out = join(dir, 'autoridades.md')
     expect(run(['--with-plan-context', PLAN, TASK, out]).status).toBe(0)
 
@@ -110,19 +111,20 @@ describe('task-brief', () => {
     const idxDesired = texto.indexOf('### Desired end state')
     const cabecera = texto.slice(0, idxDesired)
 
-    // La línea que precede al fin del slice lo desmarca de la vara.
+    // The line preceding the slice's end unmarks it as yardstick.
     expect(cabecera).toMatch(/no amplía/i)
     expect(cabecera).toMatch(/\*\*Files:\*\*/)
-    // Y la línea de "ganan ellas" NO cubre al fin del slice: va después, con
-    // las tres que sí son vara.
+    // And the "they win" line does NOT cover the slice's end: it comes after,
+    // with the three that are yardstick.
     expect(cabecera).not.toMatch(/ganan/i)
     expect(texto.indexOf('ganan')).toBeGreaterThan(idxDesired)
   })
 
-  it('si al plan le falta una sección de vara, lo dice en vez de dejar un hueco mudo', () => {
-    // Un plan sin "### Out of scope" ni "## 3. Reference patterns" (pero con
-    // su "## 2. Closed decisions"): las dos ausentes tienen que declararse,
-    // no dejar dos líneas en blanco indistinguibles de una sección vacía.
+  it('when the plan is missing a yardstick section, it says so instead of leaving a mute gap', () => {
+    // A plan without "### Out of scope" nor "## 3. Reference patterns" (but
+    // with its "## 2. Closed decisions"): the two absent ones have to be
+    // declared, not leave two blank lines indistinguishable from an empty
+    // section.
     const planIncompleto = join(dir, 'plan-incompleto.md')
     writeFileSync(planIncompleto, [
       '# Plan de prueba',
@@ -143,11 +145,11 @@ describe('task-brief', () => {
     const texto = readFileSync(out, 'utf8')
     expect(texto).toMatch(/### Out of scope.*no encontrada en el plan/)
     expect(texto).toMatch(/## 3\. Reference patterns.*no encontrada en el plan/)
-    // La línea que dice que son la vara sigue imprimiéndose igual.
+    // The line that says they are the yardstick is still printed all the same.
     expect(texto).toMatch(/vara/i)
   })
 
-  it('el flag desconocido sale por 2', () => {
+  it('an unknown flag exits with 2', () => {
     const out = join(dir, 'flag-desconocido.md')
     const r = run(['--nope', PLAN, TASK, out])
     expect(r.status).toBe(2)

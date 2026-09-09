@@ -1,57 +1,60 @@
 #!/usr/bin/env node
 // ============================================================================
-// ct-step.mjs — LA MÁQUINA DE ESTADOS COMO ORÁCULO, NO COMO CONDUCTOR.
+// ct-step.mjs — THE STATE MACHINE AS AN ORACLE, NOT AS A CONDUCTOR.
 //
-// El orquestador sigue siendo una sesión de chat (la pregunta literal de D-4
-// —"¿deja de serlo?"— sigue contestándose NO): la sesión despachada por
-// /ct-next sigue conduciendo, sigue despachando subagentes y sigue abriendo la
-// pull request. Lo que cambia es que YA NO DECIDE LA SECUENCIA: la pregunta.
+// The orchestrator is still a chat session (D-4's literal question —"does it
+// stop being one?"— still answers NO): the session dispatched by /ct-next is
+// still driving, still dispatching subagents and still opening the pull
+// request. What changes is that IT NO LONGER DECIDES THE SEQUENCE: it asks.
 //
-// Lo que este fork SÍ tomó (commit 3071d8a; en upstream lo reservaba a José el
-// test d4-sigue-siendo-de-jose, borrado en ese mismo commit) es el camino por
-// defecto: el kickoff de /ct-next manda conducir consultando este fichero, y
-// `dispatch-check --release` exige el run entregado (exit 7 si no).
+// What this fork DID take (commit 3071d8a; upstream reserved it for José with
+// the test d4-sigue-siendo-de-jose, deleted in that same commit) is the default
+// path: the kickoff of /ct-next orders it to drive by consulting this file, and
+// `dispatch-check --release` demands the run delivered (exit 7 if not).
 //
 //   ct-step next                    → "toca implementar la tarea 3; el brief está en X"
-//   ct-step report informe.json     → valida las rutas, las stagea, transiciona
-//   ct-step controls                → ejecuta los comandos del plan y MIDE
-//   ct-step verdict veredicto.json  → valida contra el esquema, transiciona
-//   ct-step commit                  → valida el mensaje y comitea
+//   ct-step report informe.json     → validates the paths, stages them, transitions
+//   ct-step controls                → runs the plan's commands and MEASURES
+//   ct-step verdict veredicto.json  → validates against the schema, transitions
+//   ct-step commit                  → validates the message and commits
 //
-// Aquí no hay bucle y no hay una sola llamada al modelo. Este programa no
-// conduce nada: contesta preguntas y aplica una tabla (`run-machine.js`).
+// There is no loop here and there is not one single call to the model. This
+// program conducts nothing: it answers questions and applies a table
+// (`run-machine.js`).
 //
 // ---------------------------------------------------------------------------
-// LO QUE SE GANA IGUAL, SIN PROGRAMA CONDUCTOR
+// WHAT IS GAINED ALL THE SAME, WITH NO CONDUCTOR PROGRAM
 //
-// 1. La secuencia deja de ser prosa. La decide la tabla, y **cada verbo rechaza
-//    lo que no sea el paso que toca** (código 9). La sesión no puede pedir
-//    `commit` estando en `controls`, ni saltarse el juez, ni volver a
-//    implementar una tarea ya comiteada. La obediencia de la SECUENCIA pasa a
-//    ser estructural aunque el conductor sea un agente.
-// 2. El sitio en el que va deja de vivir en la conversación. Está en
-//    `.agent/run-<issue>.json`, así que una compactación no lo borra y el
-//    ledger de `subagent-driven-development` deja de hacer falta.
-// 3. La tarea la mide el programa, no el implementador: `ct-step controls`
-//    ejecuta los comandos que el plan declara y comprueba que los tests que la
-//    tarea prometió existen de verdad.
-// 4. Comitea el programa, no el implementador: un veto no deja rastro que
-//    deshacer. Y el mensaje se valida con `closing-keywords.js`, porque el hook
-//    `commit-keyword-guard` es un PreToolUse sobre la Bash de una SESIÓN y un
-//    `git commit` lanzado por un script no pasa por esa puerta.
+// 1. The sequence stops being prose. The table decides it, and **every verb
+//    refuses whatever is not the step that is due** (code 9). The session
+//    cannot ask for `commit` while at `controls`, nor skip the judge, nor go
+//    back and implement a task that is already committed. Obedience of the
+//    SEQUENCE becomes structural even though the conductor is an agent.
+// 2. Where it has got to stops living in the conversation. It is in
+//    `.agent/run-<issue>.json`, so a compaction does not erase it and the
+//    ledger of `subagent-driven-development` is no longer needed.
+// 3. The task is measured by the program, not by the implementer: `ct-step
+//    controls` runs the commands the plan declares and checks that the tests
+//    the task promised really do exist.
+// 4. The program commits, not the implementer: a veto leaves no trace to
+//    undo. And the message is validated with `closing-keywords.js`, because the
+//    hook `commit-keyword-guard` is a PreToolUse over the Bash of a SESSION and
+//    a `git commit` launched by a script does not go through that gate.
 //
-// LO QUE SE PIERDE, Y HAY QUE DECIRLO
+// WHAT IS LOST, AND IT HAS TO BE SAID
 //
-// - **El esquema del veredicto ya no lo impone el binario.** `--json-schema`
-//   sólo existe en modo `--print` (medido, §2.1 del spec), y aquí no hay
-//   llamadas headless. Se recupera casi todo pidiéndole al juez que escriba su
-//   veredicto a un JSON y validándolo aquí: si no cumple, es un descarte igual.
-//   Pero lo impone una validación posterior, no la herramienta.
-// - **No hay presupuesto en dinero.** El coste de una llamada lo devuelve
-//   `claude -p` en `total_cost_usd`; un subagente de la sesión no lo reporta. De
-//   rebote, esto deja de tocar el alcance de F38, que es de José.
-// - El juez no puede ejecutar porque se despacha como `ct-judge`
-//   (`agents/ct-judge.md`, declarado sin `Bash`), no porque un flag se lo quite.
+// - **The verdict's schema is no longer imposed by the binary.**
+//   `--json-schema` only exists in `--print` mode (measured, §2.1 of the spec),
+//   and there are no headless calls here. Almost all of it is recovered by
+//   asking the judge to write its verdict to a JSON and validating it here: if
+//   it does not comply, it is a discard all the same. But it is a later
+//   validation that imposes it, not the tool.
+// - **There is no budget in money.** The cost of a call is returned by
+//   `claude -p` in `total_cost_usd`; a subagent of the session does not report
+//   it. As a knock-on, this stops touching the scope of F38, which is José's.
+// - The judge cannot execute because it is dispatched as `ct-judge`
+//   (`agents/ct-judge.md`, declared without `Bash`), not because a flag takes it
+//   away.
 // ============================================================================
 
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, unlinkSync, writeSync, readdirSync, statSync } from 'node:fs'
@@ -77,11 +80,12 @@ import {
 } from './step-contracts.js'
 import { metricRow, metricLine, metricsPath, planSha256, verdictMeasures, metricsRepoRelPath, briefVaraCtMeasures } from './run-metrics.js'
 import { RoleBytes } from './role-bytes.js'
-// Slice 10: parseStateSafe lee el campo `senal:` del SLICE.md (ver
-// senalDelSlice, abajo, para por qué NO vale la regex de `epic:`), y
-// SENAL_AUSENTE es la constante ÚNICA con la que los dos escritores del canal
-// (buildStateSeed al sembrar, este módulo al empaquetar el fallback) declaran
-// que no hay señal — importada, no copiada, para que no diverjan.
+// Slice 10: parseStateSafe reads the `senal:` field of the SLICE.md (see
+// senalDelSlice, below, for why the `epic:` regex will not do), and
+// SENAL_AUSENTE is the ONE constant with which the two writers of the channel
+// (buildStateSeed when seeding, this module when packaging the fallback)
+// declare that there is no signal — imported, not copied, so that they cannot
+// diverge.
 import { parseStateSafe } from './state.js'
 import { SENAL_AUSENTE } from './kickoff.js'
 import { SLICE_REL_PATH } from './state-paths.js'
@@ -92,35 +96,36 @@ import { StepSeal } from './dispatch-gate.js'
 
 const PLUGIN_ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
 
-// Uno por DECISIÓN, no uno por excepción: cada fila dice qué hacer después.
+// One per DECISION, not one per exception: every row says what to do next.
 const EXIT = {
-  OK: 0,                  // el paso se aplicó; `next` dice cuál toca ahora
-  VETOED: 1,              // el juez veta y se agotaron los reintentos
-  USAGE: 2,               // error de uso
-  NO_VERDICT: 3,          // no hay veredicto de fiar tras los descartes
-  CONTROLS_RED: 4,        // los controles siguen en rojo tras los reintentos
-  CONTROLS_UNMEASURED: 5, // no se pudieron MEDIR
-  PLAN_NOT_EXECUTABLE: 6, // el plan no declara comandos ejecutables
-  E2E_RED: 7,             // algún recorrido de e2e no se completa
-  PRECONDITION: 8,        // entorno: no es un worktree de slice, falta el plan
-  WRONG_STEP: 9,          // se pidió un paso que no es el que toca
-  UNNAMED: 10,            // excepción que el programa no sabe nombrar
-  // §3.7-A: la Global verification en rojo o inmedible cierra el run A LA
-  // PRIMERA (sin reintentos — todo está comiteado). Códigos propios y no los
-  // de controls (4/5): la acción siguiente no es la de una tarea con trabajo
-  // stageado que corregir, es "no abras la pull request".
+  OK: 0,                  // the step was applied; `next` says which one is due now
+  VETOED: 1,              // the judge vetoes and the retries ran out
+  USAGE: 2,               // a usage error
+  NO_VERDICT: 3,          // no verdict to trust after the discards
+  CONTROLS_RED: 4,        // the checks are still red after the retries
+  CONTROLS_UNMEASURED: 5, // they could not be MEASURED
+  PLAN_NOT_EXECUTABLE: 6, // the plan declares no executable commands
+  E2E_RED: 7,             // some e2e journey does not complete
+  PRECONDITION: 8,        // environment: not a slice worktree, the plan is missing
+  WRONG_STEP: 9,          // a step was asked for that is not the one due
+  UNNAMED: 10,            // an exception the program does not know how to name
+  // §3.7-A: a Global verification that is red or unmeasurable closes the run ON
+  // THE FIRST GO (with no retries — everything is committed). Codes of their
+  // own and not those of controls (4/5): the next action is not that of a task
+  // with staged work to correct, it is "do not open the pull request".
   GLOBAL_RED: 11,
   GLOBAL_UNMEASURED: 12,
-  // Fase B: el reconciliador y, tras él, el propio agente del slice agotaron
-  // sus rondas contra la base — la misma forma que GLOBAL_RED, código propio
-  // porque lo que sigue no es "corrige la tarea", es "resuelve el conflicto".
+  // Phase B: the reconciler and, after it, the slice's own agent ran out of
+  // their rounds against the base — the same shape as GLOBAL_RED, a code of its
+  // own because what follows is not "correct the task", it is "resolve the
+  // conflict".
   RECONCILE_BLOCKED: 13,
 }
 
 const MAX_DISCARDS = 6
 
 function safeWrite(fd, text) {
-  try { writeSync(fd, text) } catch { /* tubería cerrada: la línea se pierde, el exit code no cambia */ }
+  try { writeSync(fd, text) } catch { /* the pipe is closed: the line is lost, the exit code does not change */ }
 }
 const out = (msg) => safeWrite(1, msg + '\n')
 const err = (msg) => safeWrite(2, msg + '\n')
@@ -177,7 +182,7 @@ const git = (argv, { allowFail = false } = {}) => {
 }
 
 // ---------------------------------------------------------------------------
-// Precondiciones
+// Preconditions
 // ---------------------------------------------------------------------------
 const repoRoot = (git(['rev-parse', '--show-toplevel'], { allowFail: true }) || '').trim()
 if (!repoRoot) die('no estamos dentro de un repositorio git', EXIT.PRECONDITION)
@@ -197,15 +202,15 @@ if (problems.length) {
   process.exit(EXIT.PLAN_NOT_EXECUTABLE)
 }
 
-// Los pasos que son de la SLICE y no de ninguna tarea. Una sola lista y no dos:
-// la usan el cruce de commits (abajo) y la telemetría (`medir`), y cuando el
-// mismo concepto estaba escrito dos veces la segunda copia se quedó atrás al
-// llegar `e2e` — con el resultado de que cada fila de e2e se le atribuía a la
-// última tarea del plan.
+// The steps that belong to the SLICE and to no task. One single list and not
+// two: it is used by the cross-check of commits (below) and by the telemetry
+// (`medir`), and when the same concept was written twice the second copy fell
+// behind when `e2e` arrived — with the result that every e2e row was attributed
+// to the last task of the plan.
 const PASOS_DE_SLICE = [STEPS.RECONCILE, STEPS.GLOBAL, STEPS.SLICE_JUDGE, STEPS.E2E]
 
 // ---------------------------------------------------------------------------
-// El estado del run
+// The state of the run
 // ---------------------------------------------------------------------------
 const stateFile = join(repoRoot, '.agent', `run-${issue}.json`)
 const workDir = join(repoRoot, '.agent', `run-${issue}`)
@@ -213,54 +218,55 @@ mkdirSync(workDir, { recursive: true })
 
 const headSha = () => (git(['rev-parse', 'HEAD']) || '').trim()
 
-// Reconciliación de ramas, tarea 3 — el ORIGEN del rango sigue siendo
-// `run.baseSha`; lo que se quita es lo que la base aportó.
+// Branch reconciliation, task 3 — the ORIGIN of the range is still
+// `run.baseSha`; what gets taken away is what the base contributed.
 //
-// `ct-step` no hace la misma pregunta que las puertas de `dispatch-check`.
-// Aquéllas preguntan "¿qué ficheros aporta esta rama?" y su respuesta es el
-// merge-base. Ésta pregunta "¿cuántos commits ha hecho ESTE run?", y ahí el
-// merge-base es la respuesta equivocada: `run.baseSha` NO es el corte de la
-// rama, es `headSha()` en el momento en que se crea el fichero del run (más
-// abajo), y para entonces el kickoff ya ha ordenado commitear el plan
+// `ct-step` does not ask the same question as the gates of `dispatch-check`.
+// Those ask "which files does this branch contribute?" and their answer is the
+// merge-base. This one asks "how many commits has THIS run made?", and there
+// the merge-base is the wrong answer: `run.baseSha` is NOT where the branch was
+// cut, it is `headSha()` at the moment the run's file is created (further
+// down), and by then the kickoff has already ordered the plan to be committed
 // (`kickoff.js`: «commitéalo: viaja en el PR» … «Con el plan commiteado…
-// Pregunta el paso con ct-step next»). La historia real en producción es
-// `B (corte) → P (commit del plan) → nace el run`, con `run.baseSha = P`
-// mientras que el merge-base es `B`. Medir desde `B` mete el commit del plan
-// dentro de la cuenta, `hechos` sale permanentemente uno de más, y todo run
-// muere en PRECONDITION en su segundo verbo sin que haya ninguna fusión de
-// por medio.
+// Pregunta el paso con ct-step next»). The real history in production is
+// `B (the cut) → P (the plan's commit) → the run is born`, with
+// `run.baseSha = P` while the merge-base is `B`. Measuring from `B` puts the
+// plan's commit inside the count, `hechos` comes out permanently one too many,
+// and every run dies at PRECONDITION on its second verb without any merge being
+// involved at all.
 //
-// De ahí la forma:
+// Hence the shape:
 //
 //   git rev-list --count --no-merges run.baseSha..HEAD ^origin/<rama-base>
 //
-// `run.baseSha..HEAD` deja fuera lo anterior al run —el commit del plan
-// incluido—, `^origin/<rama-base>` deja fuera lo que trajo una fusión de la
-// base avanzada (cada commit ajeno contaba como si fuera de una tarea), y
-// `--no-merges` deja fuera el propio commit de fusión.
+// `run.baseSha..HEAD` leaves out everything before the run —the plan's commit
+// included—, `^origin/<rama-base>` leaves out what an advanced base brought in
+// through a merge (every foreign commit counted as if it belonged to a task),
+// and `--no-merges` leaves out the merge commit itself.
 //
-// El nombre de la rama sale de `.agent/SLICE.md` con `parseStateSafe` — el
-// mismo parser que este fichero ya usa para `epic:` y `senal:` (ver abajo) —
-// y NO con una regex propia: `dispatch-check.mjs` sí tiene la suya para este
-// mismo campo (`campoBaseDeLaSemilla`), deuda anterior a esta tarea y fuera
-// de su alcance. Qué rama remota es cuando la semilla no la nombra lo decide
-// `BaseBranch` (scripts/slice-base.js), el mismo resolutor que consume
-// `dispatch-check.mjs`: esa cadena de reserva vivía escrita dos veces y ya
-// contestaba distinto en cada fichero.
+// The branch name comes out of `.agent/SLICE.md` with `parseStateSafe` — the
+// same parser this file already uses for `epic:` and `senal:` (see below) — and
+// NOT with a regex of its own: `dispatch-check.mjs` does have its own for this
+// same field (`campoBaseDeLaSemilla`), debt older than this task and outside
+// its scope. Which remote branch it is when the seed does not name it is
+// decided by `BaseBranch` (scripts/slice-base.js), the same resolver
+// `dispatch-check.mjs` consumes: that fallback chain used to be written twice
+// and already answered differently in each file.
 //
-// Sin rama base resoluble, o con un `origin/<rama>` que no existe en este
-// worktree, se mide sin la exclusión: el peor caso es contar como se contaba
-// hasta hoy, nunca "sin contar".
+// With no resolvable base branch, or with an `origin/<rama>` that does not
+// exist in this worktree, the measurement is made without the exclusion: the
+// worst case is counting the way it was counted until today, never "not
+// counting".
 const refRemotaResuelve = (nombre) =>
   git(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${nombre}`], { allowFail: true }) !== null
 
-// La resolución en sí —qué rama es "la base"— vive en una sola función, y no
-// una por consumidor: `reconcile` (Tarea 8) necesita el NOMBRE para pasárselo
-// a `BranchReconciliation.merge({ baseBranch })`, y esta exclusión necesita el
-// nombre para construir el filtro de `git rev-list`. Es la misma pregunta
-// hecha dos veces por dos motivos distintos, y el reviewer de la fase
-// anterior avisó por escrito de que una segunda copia aquí sería "la tercera
-// copia divergente" de esta misma decisión.
+// The resolution itself —which branch is "the base"— lives in one single
+// function, and not one per consumer: `reconcile` (Task 8) needs the NAME to
+// pass it to `BranchReconciliation.merge({ baseBranch })`, and this exclusion
+// needs the name to build the `git rev-list` filter. It is the same question
+// asked twice for two different reasons, and the reviewer of the previous phase
+// warned in writing that a second copy here would be "the third divergent copy"
+// of this same decision.
 function resolverRamaBase() {
   const { meta } = parseStateSafe(readFileSync(join(repoRoot, SLICE_REL_PATH), 'utf8'))
   return new BaseBranch({ remoteRefExists: refRemotaResuelve }).resolve({ declared: meta.base })
@@ -282,18 +288,18 @@ const commitsDelRun = (desde, exclusion) => {
 let run
 if (existsSync(stateFile)) {
   run = JSON.parse(readFileSync(stateFile, 'utf8'))
-  // Fase B: un run ABIERTO antes de que `reconcileRetries` existiera no trae
-  // el campo, y `undefined < 2` es `false` — el presupuesto se leería como
-  // agotado y el primer conflicto cerraría en BLOCKED_RECONCILE sin haber
-  // despachado al reconciliador ni una vez. Justo los runs más viejos, que son
-  // los que más se ha movido su base. Mismo remedio y mismo motivo que el
-  // `sliceCommits || 0` de unas líneas más abajo: ningún estado persistido
-  // gana un campo obligatorio.
+  // Phase B: a run OPENED before `reconcileRetries` existed does not carry the
+  // field, and `undefined < 2` is `false` — the budget would be read as spent
+  // and the first conflict would close at BLOCKED_RECONCILE without having
+  // dispatched the reconciler even once. Precisely the oldest runs, which are
+  // the ones whose base has moved the most. The same remedy and the same reason
+  // as the `sliceCommits || 0` a few lines further down: no persisted state ever
+  // gains a mandatory field.
   run = { ...run, reconcileRetries: run.reconcileRetries || 0 }
-  // Un run entregado no tiene paso siguiente, y se sabe SIN reconstruir la
-  // tabla: el cierre bueno se persiste como `closed` (es lo que lee el gate
-  // de `dispatch-check --release`). `next` contesta "ya está" y sale bien;
-  // cualquier verbo que transicione es el error de secuencia de siempre.
+  // A delivered run has no next step, and that is known WITHOUT rebuilding the
+  // table: the good closure is persisted as `closed` (it is what the gate of
+  // `dispatch-check --release` reads). `next` answers "it is done" and exits
+  // well; any verb that transitions is the usual sequence error.
   if (run.closed === RUN_STATES.DELIVERED) {
     if (verbo === 'next') {
       out(`run delivered: las ${run.tasksTotal} tareas del issue ${issue} están comiteadas con veredicto, la Global verification en verde y el slice juzgado. No queda paso — abre la pull request y libera con dispatch-check --release.`)
@@ -301,9 +307,9 @@ if (existsSync(stateFile)) {
     }
     die(`el run del issue ${issue} ya está entregado: no queda paso que dar`, EXIT.WRONG_STEP)
   }
-  // No se cree el fichero a solas: cruza la tarea que dice el estado con los
-  // commits que hay desde la referencia de medida. Adivinar aquí es
-  // reimplementar encima de una tarea ya comiteada.
+  // The file is not believed on its own: it cross-checks the task the state
+  // names against the commits there are since the measuring reference. Guessing
+  // here means reimplementing on top of a task that is already committed.
   const exclusion = exclusionDeLaBase()
   const rango = [`${run.baseSha}..HEAD`, exclusion].filter(Boolean).join(' ')
   const rangoCorto = [`${run.baseSha.slice(0, 7)}..HEAD`, exclusion].filter(Boolean).join(' ')
@@ -311,24 +317,24 @@ if (existsSync(stateFile)) {
   if (hechos === null) {
     die(`git no pudo contar los commits del run: no resuelve \`${rango}\` en este worktree. Borra ${stateFile} si el run es de otra rama.`, EXIT.PRECONDITION)
   }
-  // En `global`/`slice-judge`/`e2e` las `tasksTotal` tareas YA están
-  // comiteadas — `run.task` se queda en la última y no en `tasksTotal + 1`,
-  // así que la cuenta que toca no es `run.task - 1` sino `tasksTotal` commits
-  // enteros. Son pasos de la SLICE, no de una tarea. Sin esta rama, cada verbo
-  // de esas fases (proceso nuevo, sin estado en memoria) muere aquí en
-  // PRECONDITION antes de llegar a ejecutar nada.
+  // At `global`/`slice-judge`/`e2e` the `tasksTotal` tasks are ALREADY
+  // committed — `run.task` stays on the last one and not on `tasksTotal + 1`,
+  // so the count that applies is not `run.task - 1` but `tasksTotal` whole
+  // commits. They are steps of the SLICE, not of a task. Without this branch,
+  // every verb of those phases (a new process, with no state in memory) dies
+  // here at PRECONDITION before it gets to run anything.
   //
-  // Y `tasksTotal` a secas NO basta: los pasos de slice también comitean. El
-  // veredicto de slice estrena commit propio al aprobar (`verboSliceVerdict`),
-  // así que al llegar a `e2e` —proceso nuevo, el fichero releído— hay
-  // `tasksTotal + 1` commits desde `baseSha` y la cuenta fija tumbaba TODOS los
-  // verbos con PRECONDITION: ningún slice con recorridos podía cerrar, el run
-  // no llegaba nunca a DELIVERED y `dispatch-check --release` lo rechazaba con
-  // el 7 para siempre. Este fichero ya tenía escrito ese mismo razonamiento
-  // para el commit SIGUIENTE (ver `comprometerInformeE2e`, que por eso comitea
-  // sólo en DELIVERED); nadie lo aplicó al que se le puso delante. Por eso los
-  // commits de slice se CUENTAN en el estado (`sliceCommits`) en vez de darlos
-  // por cero: `|| 0` cubre los runs escritos antes de que el campo existiera.
+  // And `tasksTotal` on its own is NOT enough: the slice steps commit too. The
+  // slice verdict opens a commit of its own on approval (`verboSliceVerdict`),
+  // so on reaching `e2e` —a new process, the file read again— there are
+  // `tasksTotal + 1` commits since `baseSha` and the fixed count brought down
+  // EVERY verb with PRECONDITION: no slice with journeys could close, the run
+  // never reached DELIVERED and `dispatch-check --release` rejected it with the
+  // 7 for ever. This file already had that very reasoning written down for the
+  // NEXT commit (see `comprometerInformeE2e`, which is why it only commits at
+  // DELIVERED); nobody applied it to the one placed in front of it. That is why
+  // the slice commits are COUNTED in the state (`sliceCommits`) instead of being
+  // taken for zero: `|| 0` covers the runs written before the field existed.
   const esperados = PASOS_DE_SLICE.includes(run.step)
     ? run.tasksTotal + (run.sliceCommits || 0)
     : run.task - 1
@@ -339,14 +345,15 @@ if (existsSync(stateFile)) {
   if ((git(['diff', '--cached', '--name-only']) || '').trim()) {
     die('el índice tiene cambios stageados y este run es nuevo. ct-step comitea el índice tarea a tarea: vacíalo (git reset) o comitéalo tú.', EXIT.PRECONDITION)
   }
-  // e2eRuns — ct-step no habla con GitHub (ver run-machine.js#newRun), así que
-  // los recorridos que la columna E2E del spec declaró para esta slice sólo
-  // pueden llegar por el fichero que /ct-next sembró: .agent/SLICE.md. Se lee
-  // con el parser que ya existe para ese fichero (scripts/state.js) en vez de
-  // teclear otro YAML a mano — dos parsers del mismo frontmatter divergen
-  // igual que ya divergieron JUDGE_TOOLS y VERDICT_RULES antes de unificarse.
-  // Ausente o no-lista: `newRun` ya normaliza eso a `[]` ("sin e2e"), y no lo
-  // confunde con `undefined` ("versión vieja que no escribió el campo").
+  // e2eRuns — ct-step does not talk to GitHub (see run-machine.js#newRun), so
+  // the journeys the spec's E2E column declared for this slice can only arrive
+  // through the file /ct-next seeded: .agent/SLICE.md. It is read with the
+  // parser that already exists for that file (scripts/state.js) instead of
+  // typing another YAML one by hand — two parsers of the same frontmatter
+  // diverge just as JUDGE_TOOLS and VERDICT_RULES already diverged before being
+  // unified. Absent or not-a-list: `newRun` already normalises that to `[]` ("no
+  // e2e"), and does not confuse it with `undefined` ("an old version that did
+  // not write the field").
   const { meta: sliceMeta } = parseStateSafe(readFileSync(join(repoRoot, SLICE_REL_PATH), 'utf8'))
   run = newRun({ plan: planPath, issue, baseSha: headSha(), tasksTotal: tasks.length, e2eRuns: sliceMeta.e2e })
   writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\n')
@@ -356,29 +363,31 @@ const guardar = () => writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\
 const tarea = () => tasks.find((t) => t.n === run.task)
 
 // ---------------------------------------------------------------------------
-// La telemetría: append-only, DOS destinos, y un fallo suyo NO tumba nada.
+// The telemetry: append-only, TWO destinations, and a failure of its own brings
+// NOTHING down.
 //
-// El diseño la puso solo fuera del repo, con el motivo de `agentic-skills`
-// copiado tal cual: "para que ningún `git add` de la slice se lleve la
-// telemetría dentro de la pull request". La primera corrida en un repo ajeno
-// (jjponz/rust-monitoring#10) refutó la conclusión sin tocar el motivo: las doce
-// filas de aquel run existen en `~/.claude/control-tower/log/ct-step.jsonl` DE
-// LA MÁQUINA DE QUIEN DESPACHÓ, y en ningún otro sitio. El veredicto del juez
-// viajó y se puede leer; las métricas del mismo run, no. Para un loop que se
-// evalúa entre dos personas y dos repositorios, unas métricas que solo existen
-// en el portátil del que implementó son unas métricas que no existen.
+// The design put it only outside the repo, with the reason copied verbatim from
+// `agentic-skills`: "so that no `git add` of the slice takes the telemetry
+// inside the pull request". The first run in a foreign repo
+// (jjponz/rust-monitoring#10) refuted the conclusion without touching the
+// reason: the twelve rows of that run exist in
+// `~/.claude/control-tower/log/ct-step.jsonl` ON THE MACHINE OF WHOEVER
+// DISPATCHED, and nowhere else. The judge's verdict travelled and can be read;
+// the metrics of the same run cannot. For a loop that is evaluated between two
+// people and two repositories, metrics that only exist on the laptop of the one
+// who implemented are metrics that do not exist.
 //
-// El motivo original era evitar que la telemetría entrara en el diff POR
-// ACCIDENTE, arrastrada por un `git add` del implementador. Eso ya tiene
-// respuesta, la misma que se le dio al veredicto: la escribe y la stagea el
-// PROGRAMA, en una ruta que decide el programa, y se stagea en `commit` —
-// después de los controles y del juez. Si estuviera en el índice cuando corren
-// los controles, `alcanceDeclarado` la vería como una ruta que el plan no
-// declara y vetaría la tarea.
+// The original reason was to keep the telemetry out of the diff BY ACCIDENT,
+// dragged in by a `git add` of the implementer's. That already has an answer,
+// the same one given to the verdict: it is written and staged by the PROGRAM,
+// at a path the program decides, and it is staged at `commit` — after the
+// checks and after the judge. If it were in the index while the checks run,
+// `alcanceDeclarado` would see it as a path the plan does not declare and would
+// veto the task.
 //
-// El fichero local sigue siendo el acumulado de la máquina (todos los repos,
-// todos los epics); el del repo es el de este slice, y es el que se lee en la
-// pull request.
+// The local file is still the machine's accumulated record (every repo, every
+// epic); the one in the repo is this slice's, and it is the one that gets read
+// in the pull request.
 // ---------------------------------------------------------------------------
 const PLAN_SHA = planSha256(planText)
 const repoSlug = (() => {
@@ -390,48 +399,48 @@ const epicDelSlice = (() => {
   const m = /^epic:\s*(.+)$/m.exec(readFileSync(join(repoRoot, '.agent', 'SLICE.md'), 'utf8'))
   return m ? m[1].trim() : null
 })()
-// Slice 10: la señal de observabilidad que el despacho sembró en el SLICE.md
-// (campo `senal:`, buildStateSeed). Se parsea con `parseStateSafe` y NO con
-// la regex de `epic:` porque el YAML de `renderState` pliega y entrecomilla
-// los valores largos —y una señal es una frase, no un token— así que una
-// regex de línea única la truncaría: la vara del ítem `observabilidad`
-// llegaría a medias al juez de slice sin que nadie lo viera. `parseStateSafe`
-// ya existe en state.js y nunca lanza; un SLICE.md sin el campo (sembrado por
-// un plugin anterior a la columna) sale null y el paquete declara la ausencia
-// con SENAL_AUSENTE.
+// Slice 10: the observability signal the dispatch seeded into the SLICE.md
+// (the `senal:` field, buildStateSeed). It is parsed with `parseStateSafe` and
+// NOT with the `epic:` regex because the YAML of `renderState` folds and quotes
+// long values —and a signal is a sentence, not a token— so a single-line regex
+// would truncate it: the yardstick of the `observabilidad` item would reach the
+// slice judge half-finished without anybody seeing it. `parseStateSafe` already
+// exists in state.js and never throws; a SLICE.md without the field (seeded by
+// a plugin older than the column) comes out null and the package declares the
+// absence with SENAL_AUSENTE.
 const senalDelSlice = (() => {
   const { meta } = parseStateSafe(readFileSync(join(repoRoot, '.agent', 'SLICE.md'), 'utf8'))
   return typeof meta.senal === 'string' && meta.senal.trim() ? meta.senal.trim() : null
 })()
 const intento = () => StepSeal.attemptOf(run)
-// Los dos campos de identidad que el módulo de la fila NO puede ir a buscar (es
-// puro): los aporta quien escribe. La versión sale del manifiesto del plugin —un
-// `ct-step` reescrito hace incomparables dos runs, igual que un plan reescrito— y
-// el actor de la configuración local de git, que es de quien es el coste en
-// cuanto las filas de dos máquinas se mezclen en la misma pull request. Los dos
-// degradan a su centinela si no se pueden leer: la fila sale igual, con la
-// ausencia declarada.
+// The two identity fields the row's module CANNOT go and look up (it is pure):
+// whoever writes provides them. The version comes out of the plugin's manifest
+// —a rewritten `ct-step` makes two runs incomparable, just as a rewritten plan
+// does— and the actor out of the local git configuration, which is whose the
+// cost is as soon as rows from two machines get mixed in the same pull request.
+// Both degrade to their sentinel if they cannot be read: the row comes out all
+// the same, with the absence declared.
 const PLUGIN_VERSION = PluginManifest.installed().version
 const ACTOR = (git(['config', 'user.email'], { allowFail: true }) || '').trim() || null
 
-// La ruta la dicta run-metrics.js, que es quien también se la enseña a
-// /ct-harvest: el escritor y el lector no pueden divergir.
+// The path is dictated by run-metrics.js, which is also what teaches it to
+// /ct-harvest: the writer and the reader cannot diverge.
 const METRICS_REL = metricsRepoRelPath(issue)
 
 function medir(step, measures) {
-  // `global`, `slice-judge` y `e2e` no son de ninguna tarea: un `task: 3` en esa
-  // fila sería un hueco leído como una afirmación (la misma doctrina que ya
-  // impide rellenar con `null` disfrazado de cero en el resto de este fichero).
-  // En esos pasos `run.task` se queda clavado en la última tarea, así que
-  // atribuirle el coste sería una afirmación falsa, no un dato de más.
+  // `global`, `slice-judge` and `e2e` belong to no task: a `task: 3` on that row
+  // would be a gap read as an assertion (the same doctrine that already forbids
+  // filling in with `null` disguised as zero throughout the rest of this file).
+  // In those steps `run.task` stays nailed to the last task, so attributing the
+  // cost to it would be a false assertion, not one datum too many.
   const esDeSlice = PASOS_DE_SLICE.includes(step)
   const linea = metricLine(metricRow({
     repo: repoSlug, epic: epicDelSlice, issue, plan: planPath, plan_sha256: PLAN_SHA,
     task: esDeSlice ? null : run.task, task_name: esDeSlice ? null : (tarea()?.name ?? null), tasks_total: run.tasksTotal,
     step, attempt: intento(), plugin_version: PLUGIN_VERSION, actor: ACTOR,
   }, measures, { now: new Date().toISOString() }))
-  // Los dos destinos se intentan por separado: que el disco de la cuenta esté
-  // lleno no puede costarle al repo la fila que viaja, ni al revés.
+  // The two destinations are attempted separately: the account's disk being
+  // full cannot cost the repo the row that travels, nor the other way round.
   for (const destino of [metricsPath('ct-step', { configDir: process.env.CLAUDE_CONFIG_DIR }), join(repoRoot, METRICS_REL)]) {
     try {
       mkdirSync(dirname(destino), { recursive: true })
@@ -443,15 +452,15 @@ function medir(step, measures) {
 }
 
 // ---------------------------------------------------------------------------
-// LA GUARDIA DEL PASO. Es lo que convierte la secuencia en mecanismo: pedir un
-// paso que no toca no se corrige con un aviso, se rechaza.
+// THE GUARD OF THE STEP. It is what turns the sequence into a mechanism: asking
+// for a step that is not due is not corrected with a warning, it is refused.
 // ---------------------------------------------------------------------------
-// El verbo `slice-verdict` no se llama igual que su paso (`slice-judge`), al
-// revés que `global`/`global` y `e2e`/`e2e`: el paso nombra a QUIEN juzga (el
-// juez de slice, como `judge`) y el verbo nombra lo que la sesión ENTREGA (un
-// fichero de veredicto, como `verdict`). Las dos familias ya existían con esos
-// nombres y renombrar cualquiera de los dos rompería estado en vuelo, así que
-// se deja la asimetría dicha en vez de arreglada.
+// The verb `slice-verdict` is not called the same as its step (`slice-judge`),
+// unlike `global`/`global` and `e2e`/`e2e`: the step names WHO judges (the
+// slice judge, like `judge`) and the verb names what the session DELIVERS (a
+// verdict file, like `verdict`). Both families already existed under those
+// names and renaming either of the two would break state in flight, so the
+// asymmetry is left stated rather than fixed.
 const VERBO_DE = {
   report: STEPS.IMPLEMENT, controls: STEPS.CONTROLS, verdict: STEPS.JUDGE, advice: STEPS.ADVISE, commit: STEPS.COMMIT,
   reconcile: STEPS.RECONCILE, global: STEPS.GLOBAL, 'slice-verdict': STEPS.SLICE_JUDGE, e2e: STEPS.E2E,
@@ -463,12 +472,13 @@ function exigirPaso(v) {
 }
 
 // ---------------------------------------------------------------------------
-// next — no transiciona: informa, y prepara lo que el paso necesita.
+// next — it does not transition: it reports, and prepares what the step needs.
 // ---------------------------------------------------------------------------
 function verboNext() {
   const t = tarea()
-  // §3.7: `global` y `slice-judge` corren DESPUÉS de la última tarea — no hay
-  // "tarea N/M" que anunciar, sino el slice entero con sus tareas ya comiteadas.
+  // §3.7: `global` and `slice-judge` run AFTER the last task — there is no
+  // "task N/M" to announce, but the whole slice with its tasks already
+  // committed.
   if (run.step === STEPS.RECONCILE || run.step === STEPS.GLOBAL || run.step === STEPS.SLICE_JUDGE) {
     out(`slice del issue ${issue} — las ${run.tasksTotal} tareas comiteadas`)
   } else {
@@ -480,9 +490,9 @@ function verboNext() {
     case STEPS.IMPLEMENT: {
       const brief = escribirBrief()
       const informe = join(workDir, `task-${run.task}-report.json`)
-      // La lista sale de la constante y no se teclea otra vez: la copia a mano
-      // de las del juez ya divergió una vez, y `ct-step next` acabó anunciando
-      // unas herramientas que no eran las del agente que se despachaba.
+      // The list comes out of the constant and is not typed again: the hand copy
+      // of the judge's already diverged once, and `ct-step next` ended up
+      // announcing tools that were not those of the agent being dispatched.
       out(`DESPACHA UN IMPLEMENTADOR (subagente con modelo ${IMPLEMENTER_MODEL} — herramientas: ${IMPLEMENTER_TOOLS}) con:`)
       out(`  - la rúbrica de ${join(PLUGIN_ROOT, 'prompts', 'task-implementer.md')}`)
       out(`  - el brief de la tarea: ${brief}`)
@@ -512,19 +522,19 @@ function verboNext() {
       out(`  - el brief de la tarea: ${join(workDir, `task-${run.task}-brief.md`)}`)
       out(`  - los logs de los controles, YA en verde, por si los quiere: ${run.lastControlsLog ?? '(ninguno)'}`)
       out(`  - que escriba su veredicto en: ${veredicto}`)
-      // El `review_token` NO se le pide: lo escribe este programa al leer el
-      // veredicto, con el valor que él mismo calculó. Pedírselo al juez era
-      // pedirle que copiara 64 hex de una línea que el programa acaba de
-      // escribir, y un error de copia costaba un veredicto de opus entero.
+      // The `review_token` is NOT asked of it: this program writes it when it
+      // reads the verdict, with the value it computed itself. Asking the judge
+      // for it meant asking it to copy 64 hex characters from a line the program
+      // had just written, and one copying slip cost a whole opus verdict.
       out('')
       out(`Cuando vuelva:  ct-step verdict ${veredicto} --plan ${planPath} --issue ${issue}`)
       out('No le pases la SALIDA de los controles: un lint sucio no debe ensuciarle el criterio.')
       break
     }
-    // H9: el SEGUNDO veto. Entre él y el tercer intento no va otro
-    // implementador leyendo el mismo veredicto, va un consejero de tier
-    // superior que ve los DOS intentos y los DOS vetos a la vez — que es lo
-    // único que ninguno de los dos implementadores pudo ver.
+    // H9: the SECOND veto. Between it and the third attempt there does not go
+    // another implementer reading the same verdict, there goes an adviser of a
+    // higher tier that sees BOTH attempts and BOTH vetoes at once — which is the
+    // one thing neither of the two implementers could see.
     case STEPS.ADVISE: {
       const paquete = escribirPaqueteDeConsejo()
       const consejo = join(workDir, `task-${run.task}-advice.json`)
@@ -540,28 +550,29 @@ function verboNext() {
       out('COMITEA LA TAREA:')
       out(`  ct-step commit --plan ${planPath} --issue ${issue}`)
       out('El mensaje lo compone el plugin y lo valida contra las closing keywords.')
-      // Se repite aquí y no solo en `report` porque este es el momento en el que
-      // la sesión escribe la pull request: un aviso dado veinte minutos antes,
-      // dos subagentes atrás, ya se ha ido de su contexto.
+      // It is repeated here and not only at `report` because this is the moment
+      // the session writes the pull request: a warning given twenty minutes
+      // earlier, two subagents ago, has already left its context.
       if (run.lastSummary) {
         out('')
         out(`Lo que dijo el implementador de esta tarea, por si va en la pull request: ${run.lastSummary}`)
       }
       break
-    // Fase B: la rama al día con su base, tras el último commit y ANTES de la
-    // punta a punta — verificar antes de reconciliar mediría un árbol que ya
-    // no es el que se entrega (ver el comentario de STEPS.RECONCILE en
-    // run-machine.js). Idempotente por MERGE_HEAD: el propio verbo decide si
-    // toca fusionar o concluir una fusión a medias, así que no hay nada más
-    // que decirle aquí — y si hay conflicto, es el verbo el que dice a quién
-    // despachar, no `next`.
+    // Phase B: the branch up to date with its base, after the last commit and
+    // BEFORE the end to end — verifying before reconciling would measure a tree
+    // that is no longer the one being delivered (see the comment on
+    // STEPS.RECONCILE in run-machine.js). Idempotent through MERGE_HEAD: the
+    // verb itself decides whether what is due is to merge or to conclude a
+    // half-finished merge, so there is nothing more to tell it here — and if
+    // there is a conflict, it is the verb that says who to dispatch, not
+    // `next`.
     case STEPS.RECONCILE:
       out('RECONCILIA LA RAMA CON SU BASE (idempotente: decide solo, según MERGE_HEAD, si toca fusionar o concluir una fusión a medias):')
       out(`  ct-step reconcile --plan ${planPath} --issue ${issue}`)
       out('Si hay conflicto, el propio verbo dice a quién despachar.')
       break
-    // §3.7-A: la punta a punta del plan, tras el último commit. La ejecuta el
-    // PROGRAMA — nunca un agente que se autoevalúe.
+    // §3.7-A: the plan's end to end, after the last commit. It is run by the
+    // PROGRAM — never by an agent evaluating itself.
     case STEPS.GLOBAL:
       out('EJECUTA LA GLOBAL VERIFICATION DEL PLAN (no la corre ningún agente, la corre el programa):')
       if (globalVerification.commands.length) {
@@ -572,8 +583,8 @@ function verboNext() {
       out('')
       out(`Ejecútalo con:  ct-step global --plan ${planPath} --issue ${issue}`)
       break
-    // §3.7-B: la coherencia entre tareas, y si juntas entregan el fin del
-    // slice — lo que ningún juez de tarea mira.
+    // §3.7-B: the coherence between tasks, and whether together they deliver
+    // the end of the slice — what no task judge ever looks at.
     case STEPS.SLICE_JUDGE: {
       const paquete = escribirPaqueteDeSlice()
       const veredicto = join(workDir, 'slice-verdict.json')
@@ -588,25 +599,26 @@ function verboNext() {
       break
     }
     case STEPS.E2E:
-      // No hay brief ni paquete que escribir: aquí no se despacha un
-      // subagente de tarea, se atraviesa la slice entera con el entorno ya
-      // levantado por quien conduce. `AGENTS.md` es el sitio con el "Levantar"
-      // y el "Listo cuando" de cada recorrido — este verbo no los repite.
+      // There is no brief and no package to write: no task subagent is
+      // dispatched here, the whole slice is crossed with the environment already
+      // brought up by whoever is driving. `AGENTS.md` is the place with the
+      // "Levantar" and the "Listo cuando" of each journey — this verb does not
+      // repeat them.
       out('ATRAVIESA LA SLICE DE PUNTA A PUNTA (todas las tareas están comiteadas):')
       for (const r of run.e2eRuns) out(`  - ${r}`)
       out('')
-      // La sección se NOMBRA, no se alude. `GATES.e2e.kickoff` ya la nombra, y
-      // el §3.3 del diseño insiste en nombrarla también cuando falta ("con el
-      // nombre de la sección que falta. No se adivina"): éste es justo el
-      // momento en que el agente la necesita, y "está en AGENTS.md" lo manda a
-      // buscarla entre las de build/test/lint.
+      // The section is NAMED, not alluded to. `GATES.e2e.kickoff` already names
+      // it, and §3.3 of the design insists on naming it when it is missing too
+      // ("con el nombre de la sección que falta. No se adivina"): this is
+      // precisely the moment the agent needs it, and "it is in AGENTS.md" sends
+      // it hunting among the build/test/lint ones.
       out('El entorno para levantarla está en la sección "## Cómo se atraviesa este repo (e2e)" de AGENTS.md ("Levantar" y "Listo cuando" de cada recorrido). Si esa sección no está rellenada, el veredicto es `no-verificado` con ese motivo: nunca rojo, y nunca inventarse cómo arrancarlo.')
-      // El contrato se dice ENTERO, y salido del mismo módulo que lo valida
-      // (E2E_SCHEMA/E2E_REQUIRED_BY_VERDICT, step-contracts.js). Anunciar sólo
-      // `run` y `verdict` —lo incondicional— era instruir al agente con un
-      // contrato que este mismo programa rechaza: costaba al menos una vuelta
-      // de DISCARDED por slice, y los descartes salen del presupuesto de la
-      // slice entera.
+      // The contract is stated WHOLE, and comes out of the same module that
+      // validates it (E2E_SCHEMA/E2E_REQUIRED_BY_VERDICT, step-contracts.js).
+      // Announcing only `run` and `verdict` —the unconditional part— meant
+      // instructing the agent with a contract this same program rejects: it cost
+      // at least one DISCARDED round per slice, and the discards come out of the
+      // budget of the whole slice.
       out(`Escribe el informe cumpliendo E2E_SCHEMA (scripts/step-contracts.js): cada recorrido lleva ${E2E_SCHEMA.properties.runs.items.required.join(' y ')}, y además, según su veredicto:`)
       for (const [veredicto, campos] of Object.entries(E2E_SCHEMA.properties.runs.items.requiredByVerdict)) {
         out(`  - ${veredicto}: ${campos.join(', ')}`)
@@ -617,20 +629,22 @@ function verboNext() {
     default:
       die(`el estado tiene un paso que esta versión no conoce: ${run.step}`, EXIT.UNNAMED)
   }
-  // EL SELLO DEL PASO. `next` acaba de escribir la entrada que el subagente de
-  // este paso va a leer —el brief, o el paquete del juez—, y eso es justo lo
-  // que un despacho que se salta este verbo deja sin escribir: medido dos veces
-  // en campo, con el implementador y con el juez. El sello lo lee el hook del
-  // tool `Task` (hooks/dispatch-guard.js), que sin él DENIEGA el despacho.
+  // THE SEAL OF THE STEP. `next` has just written the input the subagent of
+  // this step is going to read —the brief, or the judge's package—, and that is
+  // exactly what a dispatch that skips this verb leaves unwritten: measured
+  // twice in the field, with the implementer and with the judge. The seal is
+  // read by the hook of the `Task` tool (hooks/dispatch-guard.js), which without
+  // it DENIES the dispatch.
   //
-  // La condición sale de la misma constante que nombra la entrada de cada paso,
-  // así que un paso al que `next` no le escribe nada no se sella: sellarlo
-  // afirmaría que allí hay un despacho protegido.
+  // The condition comes out of the same constant that names the input of each
+  // step, so a step `next` writes nothing for is not sealed: sealing it would
+  // assert that there is a protected dispatch there.
   //
-  // El sello NO cuenta los descartes, y por eso sobrevive a uno: al descartar,
-  // `consumirPaquete` no corre y el artefacto de ese intento sigue en disco, así
-  // que obligar a pasar otra vez por aquí sería pedir que se regenere lo que ya
-  // está. Los tres autobucles de `discarded` son los de run-machine.js.
+  // The seal does NOT count the discards, and that is why it survives one: on a
+  // discard, `consumirPaquete` does not run and that attempt's artefact is still
+  // on disk, so forcing another pass through here would be asking for what is
+  // already there to be regenerated. The three self-loops of `discarded` are
+  // those of run-machine.js.
   if (StepSeal.inputWrittenFor(run.step) !== null) {
     run = { ...run, nextSeal: StepSeal.of(run) }
     guardar()
@@ -638,16 +652,17 @@ function verboNext() {
   process.exit(EXIT.OK)
 }
 
-// La vara de CT, comprobada ANTES de construir nada: su ausencia NO es un
-// estado del repo sino una instalación rota del plugin, de ahí que se aborte
-// en vez de avisar — lo contrario de lo que se hace con la del repo más abajo.
-// Un brief o un paquete sin ella deja a quien lo lee midiendo con nada, y en
-// silencio eso no se distingue de un ítem conforme.
+// The CT yardstick, checked BEFORE anything is built: its absence is NOT a
+// state of the repo but a broken installation of the plugin, hence the abort
+// instead of a warning — the opposite of what is done with the repo's one
+// further down. A brief or a package without it leaves whoever reads it
+// measuring against nothing, and in silence that does not differ from a
+// conforming item.
 //
-// Reconciliación de ramas, Tarea 9: la comparte `escribirBrief` (el brief del
-// implementador y del juez) y `escribirPaqueteDeReconciliacion` (el paquete
-// del reconciliador) — una sola lectura y un solo mensaje de aborto, en vez de
-// dos copias que ya avisó de que divergen (ver JUDGE_TOOLS en
+// Branch reconciliation, Task 9: it is shared by `escribirBrief` (the brief of
+// the implementer and of the judge) and `escribirPaqueteDeReconciliacion` (the
+// reconciler's package) — one single read and one single abort message, instead
+// of two copies which it already warned diverge (see JUDGE_TOOLS in
 // step-contracts.js).
 function cargarVaraDeCt() {
   const deCt = PluginYardstick.FILES.map((nombre) => {
@@ -665,12 +680,12 @@ function cargarVaraDeCt() {
   return deCt
 }
 
-// §3.3: la vara del repo cruza el embudo AQUÍ, leída directo del disco y sin
-// ningún agente en medio. Su ausencia no avisa: es el estado normal de casi
-// todo repo hoy, y el juez lo mide como `sin-vara`, no como un error.
-// `nombreDelArtefacto` sólo entra en el aviso de fallo de lectura, para que el
-// mismo mensaje sirva al brief y al paquete de reconciliación sin mentir sobre
-// cuál de los dos se quedó corto.
+// §3.3: the repo's yardstick crosses the funnel HERE, read straight off disk
+// and with no agent in between. Its absence does not warn: it is the normal
+// state of almost every repo today, and the judge measures it as `sin-vara`,
+// not as an error. `nombreDelArtefacto` only enters the read-failure warning,
+// so that the same message serves the brief and the reconciliation package
+// without lying about which of the two came up short.
 function seccionVaraDelRepo(nombreDelArtefacto) {
   try {
     const ruta = join(repoRoot, CONVENTIONS_FILE)
@@ -684,8 +699,8 @@ function seccionVaraDelRepo(nombreDelArtefacto) {
 
 function escribirBrief() {
   const brief = join(workDir, `task-${run.task}-brief.md`)
-  // Se comprueba antes de llamar a `task-brief` para no dejar en disco un
-  // brief que nadie va a usar.
+  // It is checked before calling `task-brief` so as not to leave a brief on
+  // disk that nobody is going to use.
   const deCt = cargarVaraDeCt()
   try {
     execFileSync(join(PLUGIN_ROOT, 'skills', 'subagent-driven-development', 'scripts', 'task-brief'),
@@ -695,18 +710,19 @@ function escribirBrief() {
   }
   appendFileSync(brief, PluginYardstick.composeSection(deCt))
   appendFileSync(brief, seccionVaraDelRepo('el brief'))
-  // H9: el consejo del tercer intento, dentro del brief y no en una línea suelta
-  // de `next`. El brief es lo que el subagente recibe —lo dice el propio
-  // mensaje del despacho—, así que un enfoque anunciado fuera de él es un
-  // enfoque que depende de que la sesión lo copie. Va AL FINAL, después de la
-  // vara: es lo último que se decidió sobre esta tarea.
+  // H9: the advice for the third attempt, inside the brief and not on a loose
+  // line of `next`. The brief is what the subagent receives —the dispatch
+  // message says so itself—, so an approach announced outside it is an approach
+  // that depends on the session copying it. It goes AT THE END, after the
+  // yardstick: it is the last thing decided about this task.
   if (run.lastAdvice) appendFileSync(brief, seccionDeConsejo(run.lastAdvice))
   return brief
 }
 
-// El consejo, en la lengua del brief (el resto lo escribe `task-brief` desde un
-// plan en inglés). Las rutas se listan aunque el enfoque ya las nombre: es lo
-// que hace accionable el párrafo sin releerlo.
+// The advice, in the language of the brief (the rest is written by `task-brief`
+// out of a plan in English). The paths are listed even when the approach
+// already names them: it is what makes the paragraph actionable without
+// re-reading it.
 function seccionDeConsejo(advice) {
   const rutas = advice.files_to_reconsider.length
     ? advice.files_to_reconsider.map((p) => `- \`${p}\``).join('\n')
@@ -728,70 +744,71 @@ function seccionDeConsejo(advice) {
   ].join('\n')
 }
 
-// LOS DOS DIFFS, cada uno en una expresión y no en dos. Los llaman el escritor
-// del paquete y el verbo que comprueba el token, y si divergieran en un flag
-// (`-U10`, el `|| ''` de un diff vacío) el síntoma sería un token que nunca
-// coincide: todo veredicto descartado, seis descartes, run muerto — y ninguna
-// pista de por qué. Es el mismo motivo por el que PACKAGE_SECTIONS es una
-// constante y no una cadena tecleada dos veces.
+// THE TWO DIFFS, each one in a single expression and not in two. They are
+// called by the writer of the package and by the verb that checks the token,
+// and if they diverged on a flag (`-U10`, the `|| ''` of an empty diff) the
+// symptom would be a token that never matches: every verdict discarded, six
+// discards, a dead run — and no clue at all as to why. It is the same reason
+// PACKAGE_SECTIONS is a constant and not a string typed twice.
 //
-// El de la tarea sale del ÍNDICE, que es la superficie exacta que el juez ve y
-// que `commit` se lleva: una edición sin stagear no llega al commit, así que no
-// tiene por qué invalidar el juicio. El del slice sale del RANGO, porque a esas
-// alturas todo está comiteado (ver `escribirPaqueteDeSlice`).
+// The task's one comes out of the INDEX, which is the exact surface the judge
+// sees and the one `commit` takes away: an unstaged edit does not reach the
+// commit, so it has no reason to invalidate the judgement. The slice's one
+// comes out of the RANGE, because by then everything is committed (see
+// `escribirPaqueteDeSlice`).
 const diffDeTarea = () => git(['diff', '--cached', '-U10']) || ''
 const diffDeSlice = () => git(['diff', '-U10', run.baseSha, 'HEAD']) || ''
 
-// EL ÁRBOL DEL ÍNDICE — la identidad de lo que se va a comitear, y git ya la
-// tiene: `write-tree` escribe el árbol del índice y devuelve su sha. Dos índices
-// con el mismo contenido dan el mismo árbol, así que comparar dos shas es
-// comparar los dos índices entero a entero —rutas, contenidos y modos— sin
-// depender de HEAD ni de cómo se formatee un diff.
+// THE TREE OF THE INDEX — the identity of what is about to be committed, and
+// git already has it: `write-tree` writes the index's tree and returns its sha.
+// Two indexes with the same content give the same tree, so comparing two shas
+// is comparing the two indexes whole against whole —paths, contents and modes—
+// without depending on HEAD nor on how a diff happens to be formatted.
 //
-// Y NO un sha256 del diff como el token del paquete, aunque para comparar
-// valdría igual: el árbol además se puede DEVOLVER. `git read-tree <sha>` pone
-// ese índice de vuelta sin tocar el worktree, así que el mensaje del fallo puede
-// llevar el comando exacto que repara el estado — y aquí eso no es un lujo: el
-// ataque típico SOBREESCRIBE una ruta que ya estaba en alcance (`git add
-// uno.txt`), y entonces el contenido que el juez aprobó no está en ningún sitio
-// del que el conductor pueda sacarlo a mano. Un hash de un diff no repara nada.
+// And NOT a sha256 of the diff like the package's token, even though for
+// comparison it would do just as well: the tree can also be GIVEN BACK. `git
+// read-tree <sha>` puts that index back without touching the worktree, so the
+// failure message can carry the exact command that repairs the state — and here
+// that is no luxury: the typical attack OVERWRITES a path that was already in
+// scope (`git add uno.txt`), and then the content the judge approved is nowhere
+// the conductor could get it out of by hand. A hash of a diff repairs nothing.
 //
-// El objeto que escribe queda sin referenciar hasta que el commit lo usa; un
-// `git gc --prune=now` DENTRO de la ventana se lo llevaría y el `read-tree` del
-// mensaje fallaría (la comprobación no: ésa sólo compara dos shas). No se
-// referencia a propósito: un ref por tarea se vería en `git for-each-ref` y
-// podría acabar empujado.
+// The object it writes stays unreferenced until the commit uses it; a
+// `git gc --prune=now` INSIDE the window would take it away and the message's
+// `read-tree` would fail (the check would not: that one only compares two
+// shas). It is deliberately not referenced: a ref per task would show up in
+// `git for-each-ref` and could end up pushed.
 const arbolDelIndice = () => git(['write-tree']).trim()
 
-// El paquete sale del ÍNDICE y no de un rango de commits: el implementador no
-// comitea, así que lo que hay que juzgar todavía no es un commit.
+// The package comes out of the INDEX and not out of a range of commits: the
+// implementer does not commit, so what has to be judged is not a commit yet.
 function escribirPaquete() {
   const paquete = join(workDir, `task-${run.task}-review.diff`)
-  // Esta sección llevaba, junto a cada ruta, si era código de producción o de
-  // test (el `kind` que declaraba el informe del implementador). Se quitó: el
-  // juez tiene el diff delante y distingue un test de un fichero de
-  // producción sin que nadie se lo diga, así que la etiqueta no le aportaba
-  // nada que no pudiera ver por sí mismo. La producía además el propio agente
-  // al que se juzga, no la verificaba nadie, y cuando venía mal no degradaba
-  // el juicio: lo desactivaba. No se vuelva a añadir.
+  // This section used to carry, alongside each path, whether it was production
+  // or test code (the `kind` the implementer's report declared). It was removed:
+  // the judge has the diff in front of it and tells a test from a production
+  // file apart without anyone saying so, so the label brought it nothing it
+  // could not see for itself. On top of that it was produced by the very agent
+  // being judged, nobody verified it, and when it came out wrong it did not
+  // degrade the judgement: it disabled it. Do not add it back.
   const rutas = (run.lastPaths || []).map((p) => `- ${p}`).join('\n') || '(ninguna)'
-  // El primer encabezado de PACKAGE_SECTIONS lo escribe `composePathSection`
-  // (es `PluginYardstick.PATH_SECTION`), así que aquí no se teclea: lo que se
-  // destructura son los tres que escribe este verbo.
+  // The first heading of PACKAGE_SECTIONS is written by `composePathSection`
+  // (it is `PluginYardstick.PATH_SECTION`), so it is not typed here: what gets
+  // destructured are the three this verb writes.
   const [, SECCION_FILES, SECCION_RUTAS, SECCION_DIFF] = PACKAGE_SECTIONS
   const diff = diffDeTarea()
-  // LA VARA DE CT, POR RUTA y con el mismo alcance que el brief: el juez tiene
-  // `Read` (JUDGE_TOOLS), y lo que necesita para citar una regla es saber qué
-  // documentos alcanzan a esta tarea y dónde están. La sección va DELANTE del
-  // diff por lo mismo que `Señal` en el paquete de slice: detrás de un `-U10`
-  // quedaría enterrada.
+  // THE CT YARDSTICK, BY PATH and with the same scope as the brief: the judge
+  // has `Read` (JUDGE_TOOLS), and what it needs in order to cite a rule is to
+  // know which documents reach this task and where they are. The section goes
+  // AHEAD of the diff for the same reason as `Señal` in the slice package:
+  // behind a `-U10` it would be buried.
   const varaDeCt = PluginYardstick.composePathSection(cargarVaraDeCt())
   writeFileSync(paquete, [
     `# Review package: task ${run.task}/${run.tasksTotal} of issue #${issue} (staged, not yet committed)`,
-    // La CABECERA lleva el token: el sha256 de exactamente el diff que va
-    // debajo. Segunda línea y no una sección `##`, para no tocar
-    // PACKAGE_SECTIONS (que la rúbrica cita encabezado a encabezado) ni el
-    // orden que el slice 10 decidió para el paquete de slice.
+    // The HEADER carries the token: the sha256 of exactly the diff that goes
+    // below. A second line and not a `##` section, so as not to touch
+    // PACKAGE_SECTIONS (which the rubric cites heading by heading) nor the order
+    // slice 10 decided on for the slice package.
     reviewTokenLine(reviewToken(diff)),
     varaDeCt,
     '', `## ${SECCION_FILES}`, git(['diff', '--cached', '--stat']) || '',
@@ -801,30 +818,30 @@ function escribirPaquete() {
   return paquete
 }
 
-// El paquete del SLICE entero sale de un RANGO DE COMMITS y no del índice: a
-// diferencia de una tarea, aquí todo está ya comiteado — no hay nada stageado
-// que juzgar, y el "índice" de la última tarea comiteada está vacío. `##
-// Commits` es la pieza que el paquete por tarea no tiene ni necesita (una
-// tarea es UN commit sin historia propia que mostrar): la secuencia importa
-// para juzgar `coherencia` — una tarea posterior deshaciendo la anterior sólo
-// se ve en el orden de los commits, no en el diff acumulado por sí solo.
+// The package of the WHOLE SLICE comes out of a RANGE OF COMMITS and not out of
+// the index: unlike a task, here everything is already committed — there is
+// nothing staged to judge, and the "index" of the last committed task is empty.
+// `## Commits` is the piece the per-task package neither has nor needs (a task
+// is ONE commit with no history of its own to show): the sequence matters for
+// judging `coherencia` — a later task undoing the earlier one is only visible in
+// the order of the commits, not in the accumulated diff on its own.
 function escribirPaqueteDeSlice() {
   const paquete = join(workDir, 'slice-review.diff')
   const [SECCION_VARA, SECCION_SENAL, SECCION_COMMITS, SECCION_FILES, SECCION_DIFF] = SLICE_PACKAGE_SECTIONS
   const diff = diffDeSlice()
-  // Tarea 8: el juez de slice mide estado final, coherencia y señal — no
-  // código regla a regla —, así que no se le pega la vara entera: se le da
-  // UNA sola ruta, la de `simplicity.md`, que es exactamente la regla que su
-  // ítem `observabilidad` mide (una traza nombra a su lector). PRIMERA
-  // sección, delante incluso de `Señal`, por el mismo motivo que `Señal` va
-  // delante del diff: detrás de un `-U10` quedaría enterrada.
+  // Task 8: the slice judge measures end state, coherence and signal — not code
+  // rule by rule —, so the whole yardstick is not pasted onto it: it is given
+  // ONE single path, that of `simplicity.md`, which is exactly the rule its
+  // `observabilidad` item measures (a trace names its reader). The FIRST
+  // section, ahead even of `Señal`, for the same reason `Señal` goes ahead of
+  // the diff: behind a `-U10` it would be buried.
   const rutaSimplicity = join(PLUGIN_ROOT, PluginYardstick.DIRECTORY, 'simplicity.md')
-  // Slice 10: la señal cruza el embudo AQUÍ, leída del disco (el campo
-  // `senal:` que el despacho sembró en el SLICE.md) y sin agente en medio —
-  // la misma doctrina del §3.3 con la que la vara del repo viaja en el brief.
-  // El fallback SENAL_AUSENTE cubre un SLICE.md sembrado por un plugin
-  // anterior a la columna: la ausencia se declara, no se omite, y su texto es
-  // exactamente lo que la rúbrica lee como sin-vara.
+  // Slice 10: the signal crosses the funnel HERE, read off disk (the `senal:`
+  // field the dispatch seeded into the SLICE.md) and with no agent in between —
+  // the same doctrine of §3.3 by which the repo's yardstick travels in the
+  // brief. The SENAL_AUSENTE fallback covers a SLICE.md seeded by a plugin older
+  // than the column: the absence is declared, not omitted, and its text is
+  // exactly what the rubric reads as sin-vara.
   writeFileSync(paquete, [
     `# Slice review package: issue #${issue} — ${run.tasksTotal} tasks committed since ${run.baseSha.slice(0, 7)}`,
     reviewTokenLine(reviewToken(diff)),
@@ -837,16 +854,16 @@ function escribirPaqueteDeSlice() {
   return paquete
 }
 
-// EL PAQUETE DEL CONSEJERO (H9). Lo que ninguno de los dos implementadores
-// vetados pudo ver: lo que se PIDIÓ (el brief), lo que se HIZO las dos veces
-// (los informes archivados de cada intento) y POR QUÉ no valió ninguna (los dos
-// veredictos). Sin diff: el consejero tiene `Read` y el brief nombra los
-// ficheros, y pegarle el diff de un árbol que este mismo paso va a tirar sería
-// darle de leer justo lo que no debe continuar.
+// THE ADVISER'S PACKAGE (H9). What neither of the two vetoed implementers could
+// see: what was ASKED FOR (the brief), what was DONE on both occasions (the
+// archived reports of each attempt) and WHY neither of them did (the two
+// verdicts). With no diff: the adviser has `Read` and the brief names the files,
+// and pasting it the diff of a tree this very step is going to throw away would
+// be giving it exactly what it must not continue to read.
 //
-// UNA AUSENCIA SE DECLARA, NUNCA SE OMITE: un intento cuyo artefacto no está en
-// disco sale nombrado y con el motivo, porque un apartado que falta en silencio
-// se lee como "no hubo tal intento".
+// AN ABSENCE IS DECLARED, NEVER OMITTED: an attempt whose artefact is not on
+// disk comes out named and with the reason, because a section missing in silence
+// reads as "there was no such attempt".
 function escribirPaqueteDeConsejo() {
   const paquete = join(workDir, `task-${run.task}-advice.md`)
   const [SECCION_BRIEF, SECCION_INTENTOS, SECCION_VEREDICTOS] = ADVICE_PACKAGE_SECTIONS
@@ -867,12 +884,12 @@ const leerOAusente = (ruta, que) => {
   }
 }
 
-// Los artefactos que este run archivó por intento, del primero al último. La
-// numeración sale del propio nombre y no de `intento()`: los intentos vetados
-// no son necesariamente el 1 y el 2 —un rojo de controles o una corrección los
-// desplazan— así que se lee lo que hay, en el orden en que se escribió. Mismo
-// criterio que `paquetesDeReconciliacion`, y por el mismo motivo: una lista y
-// no dos recorridos del directorio con la misma expresión.
+// The artefacts this run archived per attempt, from the first to the last. The
+// numbering comes out of the name itself and not out of `intento()`: the vetoed
+// attempts are not necessarily 1 and 2 —a red from the checks or a correction
+// shifts them— so what is there gets read, in the order it was written. The same
+// criterion as `paquetesDeReconciliacion`, and for the same reason: one list and
+// not two walks of the directory with the same expression.
 const RE_INTENTO_ARCHIVADO = /-(\d+)\.json$/
 function archivadosDeLaTarea(clase) {
   const prefijo = `task-${run.task}-${clase}-`
@@ -895,12 +912,12 @@ function apartadosPorIntento(clase, que) {
   ].join('\n')).join('\n\n')
 }
 
-// LO QUE CADA INTENTO DEJÓ ESCRITO, archivado por el programa y no por quien
-// despacha. Las rutas que `next` dicta al implementador y al juez son la MISMA
-// en cada intento (`task-<N>-report.json`), así que el intento 2 pisa al 1 y
-// para cuando el consejero hace falta ya no queda rastro del primero. Se archiva
-// lo que el verbo ACEPTÓ —no el fichero que llegó por argv— porque es lo único
-// de lo que este programa responde.
+// WHAT EACH ATTEMPT LEFT WRITTEN, archived by the program and not by whoever
+// dispatches. The paths `next` dictates to the implementer and to the judge are
+// the SAME on every attempt (`task-<N>-report.json`), so attempt 2 overwrites 1
+// and by the time the adviser is needed there is no trace left of the first. What
+// gets archived is what the verb ACCEPTED —not the file that arrived through
+// argv— because it is the only thing this program answers for.
 function archivar(clase, contenido) {
   try {
     writeFileSync(join(workDir, `task-${run.task}-${clase}-${intento()}.json`), JSON.stringify(contenido, null, 2) + '\n')
@@ -910,14 +927,14 @@ function archivar(clase, contenido) {
 }
 
 // ---------------------------------------------------------------------------
-// EL PAQUETE SIGUE DESCRIBIENDO EL CORTE QUE CAPTURÓ, y el veredicto es DE ESE
-// paquete. Las dos comprobaciones que atan el producto al insumo (slice 11);
-// ver step-contracts.js#REVIEW_TOKEN_LABEL para las dos vías que cierran.
+// THE PACKAGE STILL DESCRIBES THE CUT IT CAPTURED, and the verdict is OF THAT
+// package. The two checks that tie the product to its input (slice 11); see
+// step-contracts.js#REVIEW_TOKEN_LABEL for the two routes they close.
 //
-// Una función y no dos copias en los dos verbos: lo único que cambia entre la
-// tarea y el slice es QUÉ diff se recomputa, y eso entra por parámetro. La
-// alternativa —el mismo razonamiento escrito dos veces— es el desacople que
-// este fichero ya pagó con la lista de PASOS_DE_SLICE.
+// One function and not two copies in the two verbs: the only thing that changes
+// between the task and the slice is WHICH diff gets recomputed, and that comes
+// in as a parameter. The alternative —the same reasoning written twice— is the
+// decoupling this file already paid for with the PASOS_DE_SLICE list.
 // ---------------------------------------------------------------------------
 function tokenVigente(paquete, diffAhora) {
   let texto
@@ -928,12 +945,13 @@ function tokenVigente(paquete, diffAhora) {
   }
   const declarado = reviewTokenOf(texto)
   if (declarado === null) {
-    // Un paquete sin la línea: lo escribió una versión del plugin anterior a
-    // este campo (un run en vuelo cuando se actualizó el plugin), o alguien lo
-    // editó. Un descarte lo cura en una vuelta —`next` lo regenera con su
-    // token— y no hay camino de vuelta al paquete sin token: tolerarlo sería
-    // un modo «sin barandilla» que se activa BORRANDO una línea, que es
-    // exactamente lo que este arreglo quita del repertorio.
+    // A package without the line: it was written by a version of the plugin
+    // older than this field (a run in flight when the plugin was updated), or
+    // somebody edited it. A discard cures it in one round —`next` regenerates it
+    // with its token— and there is no way back to the package with no token:
+    // tolerating it would be a «no guardrail» mode that is switched on by
+    // DELETING a line, which is exactly what this fix takes out of the
+    // repertoire.
     return { why: `el paquete de revisión (${paquete}) no declara su "${REVIEW_TOKEN_LABEL}": lo escribió una versión anterior del plugin, o se editó a mano. Vuelve a "ct-step next", que lo regenera con su token, y REDESPACHA al juez` }
   }
   const ahora = reviewToken(diffAhora)
@@ -943,54 +961,56 @@ function tokenVigente(paquete, diffAhora) {
   return { token: declarado }
 }
 
-// El veredicto trae el token DE ESTE paquete. `verdict.review_token` ya viene
-// validado en forma y en minúsculas por `readVerdict`, así que aquí sólo se
-// compara.
+// The verdict carries the token OF THIS package. `verdict.review_token` already
+// arrives validated in shape and in lower case by `readVerdict`, so all that
+// happens here is the comparison.
 function whyTokenAjeno(delVeredicto, delPaquete) {
   return `el veredicto no es de este paquete: copia el token ${String(delVeredicto).slice(0, 12)}… y el paquete declara ${delPaquete.slice(0, 12)}… — es el veredicto de OTRO juicio, sobre un diff que ya no es el que hay delante. No hace falta volver a "ct-step next" (el paquete de disco es el bueno): REDESPACHA al juez con él`
 }
 
-// EL PAQUETE ES DE UN SOLO USO: lo gasta el veredicto que lo lee.
+// THE PACKAGE IS SINGLE USE: the verdict that reads it spends it.
 //
-// Hallazgo ALTO del review de la PR #36, reproducido con un ataque real. La
-// guarda del slice 3 (el `existsSync` de los dos verbos de veredicto) cubría el
-// intento 1 y dejaba abierto el 2: intento 1 por el flujo real → FAIL del juez;
-// intento 2, el implementador cambia el fichero y el conductor encadena
-// report→controls→verdict SIN volver a `next`. La guarda pasaba —el `.diff` del
-// intento 1 seguía en disco—, el PASS entraba, y se comiteaba código que ningún
-// juez había visto, con la fila de telemetría apuntando a un paquete que existe
-// y es EL EQUIVOCADO. Peor que el fallo que el slice 3 arregló: aquél era
-// ruidoso (una fila nombrando un fichero inexistente, detectable con `test -f`)
-// y éste es MUDO — indistinguible de un juicio legítimo en el JSONL. Y la
-// confesión que salvó la corrida de campo (el juez declarando que no encontraba
-// el paquete) queda desarmada: en el caso rancio el juez SÍ encuentra un
-// paquete, no tiene Bash y no puede saber que es viejo.
+// A HIGH finding of the review of PR #36, reproduced with a real attack. The
+// slice 3 guard (the `existsSync` of the two verdict verbs) covered attempt 1
+// and left 2 open: attempt 1 through the real flow → FAIL from the judge;
+// attempt 2, the implementer changes the file and the conductor chains
+// report→controls→verdict WITHOUT going back to `next`. The guard passed —the
+// `.diff` of attempt 1 was still on disk—, the PASS went in, and code no judge
+// had ever seen got committed, with the telemetry row pointing at a package that
+// exists and is THE WRONG ONE. Worse than the failure slice 3 fixed: that one
+// was noisy (a row naming a file that does not exist, detectable with `test -f`)
+// and this one is MUTE — indistinguishable from a legitimate judgement in the
+// JSONL. And the confession that saved the field run (the judge declaring it
+// could not find the package) is disarmed: in the stale case the judge DOES find
+// a package, has no Bash and cannot know that it is old.
 //
-// El insumo se CONSUME, y con una regla que sale de run-machine.js y no de una
-// lista de casos: el paquete vale exactamente mientras el paso siga siendo el
-// del juez. Todo veredicto ACEPTADO (PASS, FAIL y el PASS que ordena
-// correcciones) saca el run de `judge`, así que su paquete ya no le sirve a
-// nadie: se gasta. Un DESCARTE deja el paso donde estaba —se le vuelve a
-// preguntar al juez— así que ahí NO se llama a esto: el reintento por JSON
-// ilegible tiene que poder repreguntar con el mismo insumo, sin obligar a
-// regenerarlo. Y el intento 2 del ataque se topa con la ausencia y se descarta,
-// que es lo que la guarda del slice 3 quería hacer y no llegaba a hacer.
+// The input is CONSUMED, and with a rule that comes out of run-machine.js and
+// not out of a list of cases: the package holds exactly as long as the step is
+// still the judge's. Every ACCEPTED verdict (PASS, FAIL and the PASS that orders
+// corrections) takes the run out of `judge`, so its package is of no use to
+// anybody any more: it gets spent. A DISCARD leaves the step where it was —the
+// judge gets asked again— so this is NOT called there: the retry over an
+// unreadable JSON has to be able to ask again with the same input, without
+// forcing it to be regenerated. And attempt 2 of the attack runs into the
+// absence and is discarded, which is what the slice 3 guard meant to do and did
+// not manage to do.
 //
-// Lo que NO puede pasar es que esto tumbe el run: el veredicto ya está medido y,
-// si aprobó, escrito y stageado. Un fallo aquí se avisa y sigue — el criterio de
-// este fichero para toda operación auxiliar (los `git add` del veredicto y de la
-// telemetría, el `git commit` del veredicto de slice y el del informe de e2e,
-// todos con `allowFail` y su aviso). El aviso es RUIDOSO a propósito: un paquete
-// que sobrevive a su veredicto reabre exactamente la ventana que esto cierra.
+// What must NOT happen is that this brings the run down: the verdict is already
+// measured and, if it approved, written and staged. A failure here is warned
+// about and carries on — this file's criterion for every auxiliary operation
+// (the `git add` of the verdict and of the telemetry, the `git commit` of the
+// slice verdict and of the e2e report, all with `allowFail` and their warning).
+// The warning is NOISY on purpose: a package that survives its verdict reopens
+// exactly the window this closes.
 //
-// SLICE 11 — Y EL DESCARTE SIGUE SIN CONSUMIR, ahora por una propiedad y no por
-// una asunción. La justificación de arriba («el reintento juzga el mismo diff»)
-// era una afirmación sobre la conducta del agente; desde el token del paquete es
-// comprobable en el momento de usarlo: si el corte cambió, `tokenVigente` lo
-// descarta antes de leer el veredicto. Conservar el paquete tras un descarte
-// deja de ser un hueco —lo que sobrevive es un insumo que se AUTOVERIFICA— y
-// sigue comprando lo que compraba: repreguntarle al juez por un JSON ilegible
-// sin obligar a regenerar nada.
+// SLICE 11 — AND THE DISCARD STILL DOES NOT CONSUME, now because of a property
+// and not because of an assumption. The justification above («the retry judges
+// the same diff») was an assertion about the agent's conduct; from the package's
+// token it is checkable at the moment of use: if the cut changed, `tokenVigente`
+// discards it before reading the verdict. Keeping the package after a discard
+// stops being a gap —what survives is an input that VERIFIES ITSELF— and it
+// still buys what it bought: asking the judge again over an unreadable JSON
+// without forcing anything to be regenerated.
 function consumirPaquete(paquete) {
   try {
     unlinkSync(paquete)
@@ -1000,7 +1020,7 @@ function consumirPaquete(paquete) {
 }
 
 // ---------------------------------------------------------------------------
-// Los verbos que transicionan
+// The verbs that transition
 // ---------------------------------------------------------------------------
 function leerJson(ruta, quien) {
   if (typeof ruta !== 'string' || !ruta || ruta.startsWith('--')) {
@@ -1009,22 +1029,22 @@ function leerJson(ruta, quien) {
   try {
     return { valor: JSON.parse(readFileSync(ruta, 'utf8')) }
   } catch (e) {
-    // Un JSON que no se puede leer es un DESCARTE, no un error de uso: el
-    // subagente contestó, y lo que contestó no vale.
+    // A JSON that cannot be read is a DISCARD, not a usage error: the subagent
+    // answered, and what it answered is no good.
     return { why: `no se pudo leer el ${quien} en ${ruta}: ${e.message}` }
   }
 }
 
-// Si la vara de ct llegó al brief, y cuánto pesó — medido sobre el BRIEF QUE HAY
-// EN DISCO, no sobre lo que `escribirBrief` pretendía escribir: esa función
-// corrió en una invocación ANTERIOR del proceso (la de `ct-step next`), así que
-// aquí no hay nada en memoria que arrastrar, y medir el artefacto que existe de
-// verdad es mejor instrumentación que medir una ruta de código. La ruta se
-// deriva IGUAL que en `escribirBrief`.
+// Whether the ct yardstick reached the brief, and how much it weighed —
+// measured on the BRIEF THAT IS ON DISK, not on what `escribirBrief` meant to
+// write: that function ran in an EARLIER invocation of the process (the one of
+// `ct-step next`), so there is nothing in memory here to drag along, and
+// measuring the artefact that really exists is better instrumentation than
+// measuring a code path. The path is derived JUST AS in `escribirBrief`.
 //
-// Si el brief no se puede leer, los dos campos van a `null`, nunca a `0`: un
-// cero afirmaría un brief sin vara, y lo que ha pasado es que no se ha podido
-// mirar.
+// If the brief cannot be read, the two fields go to `null`, never to `0`: a zero
+// would assert a brief with no yardstick, and what has happened is that it could
+// not be looked at.
 function rutaDelBrief() {
   return join(workDir, `task-${run.task}-brief.md`)
 }

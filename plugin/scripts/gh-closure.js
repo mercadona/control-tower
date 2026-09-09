@@ -1,97 +1,99 @@
 // ============================================================================
-// gh-closure.js — QUIÉN CERRÓ CADA ISSUE, Y QUÉ RAMA SE MERGEÓ DE VERDAD.
+// gh-closure.js — WHO CLOSED EACH ISSUE, AND WHICH BRANCH WAS REALLY MERGED.
 //
-// F18/H1. Hasta esta ronda, el contrato de la §9 (ct-init.sh) justificaba NO
-// comprobar el cierre de un issue así:
+// F18/H1. Until this round, the §9 contract (ct-init.sh) justified NOT checking
+// how an issue was closed like this:
 //
 //   «cerrar a mano como *completed* sin haber mergeado nada SÍ satisface la
 //    dep […] Eso no se detecta — haría falta cruzar el grafo de PRs (GraphQL,
 //    UNA LLAMADA POR ISSUE CERRADO) para blindar un caso que requiere una
 //    ACCIÓN ERRÓNEA DELIBERADA.»
 //
-// Los dos términos de ese cálculo eran falsos, y los dos se han medido, no
-// deducido:
+// Both terms of that calculation were false, and both have been measured, not
+// deduced:
 //
-//   (a) NO REQUIERE ACCIÓN DELIBERADA. Un commit de DOCUMENTACIÓN cuyo cuerpo
-//       contenía la cadena `Closes #451` —dentro de una frase que explicaba
-//       precisamente que el kickoff NO llevaba esa keyword— cerró el issue
-//       #451 de un repo de producción. GitHub parsea closing keywords en los
-//       mensajes de commit que llegan a la rama por defecto, y las comillas
-//       NO protegen. Verificado en el timeline del propio issue: el
-//       `ClosedEvent` tiene `closer.__typename = "Commit"`, oid c4b0da66,
-//       headline «docs(loop): #37-#46 cerrados como completed…». Nadie quiso
-//       cerrar nada.
+//   (a) IT DOES NOT REQUIRE A DELIBERATE ACTION. A DOCUMENTATION commit whose
+//       body contained the string `Closes #451` —inside a sentence that
+//       explained precisely that the kickoff did NOT carry that keyword—
+//       closed issue #451 of a production repo. GitHub parses closing keywords
+//       in the commit messages that reach the default branch, and quotes do
+//       NOT protect. Verified in the issue's own timeline: the `ClosedEvent`
+//       has `closer.__typename = "Commit"`, oid c4b0da66, headline
+//       «docs(loop): #37-#46 cerrados como completed…». Nobody meant to close
+//       anything.
 //
-//   (b) NO CUESTA UNA LLAMADA POR ISSUE. Una sola query GraphQL con alias
-//       resuelve N issues de golpe. Medido contra ese mismo repo el
-//       28-jul-2026: 97 issues cerrados en UNA llamada, query de 18,8 KB,
-//       2,8 s de reloj (10 issues: 0,87 s). El coste era una suposición.
+//   (b) IT DOES NOT COST ONE CALL PER ISSUE. A single GraphQL query with
+//       aliases resolves N issues in one go. Measured against that same repo
+//       on 28-jul-2026: 97 closed issues in ONE call, an 18.8 KB query, 2.8 s
+//       of wall clock (10 issues: 0.87 s). The cost was an assumption.
 //
-// PERO la misma medición mató la idea obvia (usar el closer como GATE de
-// `merge-after`), y esto es lo importante: de esos 97 issues cerrados como
-// *completed*, **86 no tienen closer en absoluto** — los cerró una persona a
-// mano. Solo 11 los cerró un PR. Cerrar a mano NO es la anomalía: es la
-// práctica mayoritaria, y además es un paso PRESCRITO por el propio contrato
-// (con `--base <otra-rama>`, el `Closes #N` no cierra nada y el contrato
-// manda cerrar a mano con `gh issue close --reason completed`). Un gate sobre
-// "cerrado por PR mergeado" habría dejado 86 dependencias sin satisfacer de
-// golpe en ese repo: habría ladrillado el epic entero por hacer lo correcto.
+// BUT the same measurement killed the obvious idea (using the closer as a GATE
+// for `merge-after`), and this is what matters: of those 97 issues closed as
+// *completed*, **86 have no closer at all** — a person closed them by hand.
+// Only 11 were closed by a PR. Closing by hand is NOT the anomaly: it is the
+// majority practice, and it is moreover a step PRESCRIBED by the contract
+// itself (with `--base <another-branch>`, the `Closes #N` closes nothing and
+// the contract orders closing by hand with
+// `gh issue close --reason completed`). A gate on "closed by a merged PR"
+// would have left 86 dependencies unsatisfied in one stroke in that repo: it
+// would have bricked the whole epic for doing the right thing.
 //
-// LO QUE SÍ SE PUEDE AFIRMAR, y es lo único que se afirma aquí: un issue
-// cerrado por un COMMIT que no pertenece a ningún PR mergeado es un cierre
-// que NADIE revisó — nadie mergeó nada, no hubo gate humano, y basta con que
-// la cadena `Closes #N` aparezca en cualquier mensaje de commit que llegue a
-// la rama por defecto. Es exactamente el caso de campo. Discriminante
-// verificado sobre datos reales: el commit del accidente tiene
-// `associatedPullRequests: []`, mientras que un cierre normal del mismo repo
-// (#54) trae `closer.__typename = "PullRequest", merged: true`.
+// WHAT CAN BE ASSERTED, and it is the only thing asserted here: an issue closed
+// by a COMMIT that belongs to no merged PR is a closure NOBODY reviewed —
+// nobody merged anything, there was no human gate, and it is enough for the
+// string `Closes #N` to appear in any commit message that reaches the default
+// branch. That is exactly the field case. Discriminator verified against real
+// data: the accident's commit has `associatedPullRequests: []`, whereas a
+// normal closure in the same repo (#54) carries
+// `closer.__typename = "PullRequest", merged: true`.
 //
-// Y ES UN AVISO, NUNCA UN GATE. No cambia ninguna decisión de despacho: si la
-// consulta falla, se dice y se sigue. Un detector que puede equivocarse no
-// puede tener poder de veto sobre el trabajo.
+// AND IT IS A WARNING, NEVER A GATE. It changes no dispatch decision: if the
+// query fails, that is said and the run goes on. A detector that can be wrong
+// cannot hold a veto over the work.
 //
-// Este módulo mira el EFECTO, después de que el commit ya está en la rama por
-// defecto: no hay forma de evitarlo desde aquí, solo de nombrarlo. Existe
-// además una puerta (`hooks/commit-keyword-guard.js`) que ataca la CAUSA,
-// denegando el `git commit` antes de que la keyword llegue a existir en el
-// historial — pero solo ve lo que pasa por un `git commit -m` de una sesión
-// de Claude. Lo que se le escapa a esa puerta (un commit tecleado fuera de
-// Claude, uno sin `-m`, un `-F <fichero>`, un `--amend --no-edit`) sigue sin
-// tener más red que este aviso. Ninguno de los dos afirma cazarlo todo.
+// This module looks at the EFFECT, after the commit is already on the default
+// branch: there is no way to prevent it from here, only to name it. There is
+// also a gate (`hooks/commit-keyword-guard.js`) that attacks the CAUSE, denying
+// the `git commit` before the keyword ever gets to exist in the history — but
+// it only sees what goes through a `git commit -m` of a Claude session. What
+// escapes that gate (a commit typed outside Claude, one without `-m`, a
+// `-F <file>`, an `--amend --no-edit`) still has no net other than this
+// warning. Neither of the two claims to catch everything.
 //
-// F18/H4 va en la MISMA llamada, con coste de red marginal CERO: la rama de
-// un slice es determinista (`feat/<n>`), así que un alias más por cada issue
-// en `status:in-review` convierte la disyuntiva que hoy dice el dispatcher
-// («o el PR se mergeó y nadie cerró el issue, o…») en un hecho comprobado.
-// Ojo con la dirección: esta comprobación CONFIRMA, no refuta — que no haya
-// PR mergeado con head `feat/<n>` no prueba que no se mergeara el trabajo
-// (pudo salir por una rama con otro nombre), así que el silencio no se
-// reporta como "no se mergeó".
+// F18/H4 travels in the SAME call, at ZERO marginal network cost: a slice's
+// branch is deterministic (`feat/<n>`), so one more alias per issue in
+// `status:in-review` turns the either-or the dispatcher says today («o el PR se
+// mergeó y nadie cerró el issue, o…») into a checked fact. Mind the direction:
+// this check CONFIRMS, it does not refute — the absence of a merged PR with
+// head `feat/<n>` does not prove the work was not merged (it may have gone out
+// on a branch with another name), so silence is not reported as "it was not
+// merged".
 // ============================================================================
 
-// Tope de issues por consulta. La medición real (97 alias, 18,8 KB, 2,8 s)
-// dice que 60 va sobrado; el tope existe para que un repo con cientos de
-// slices no construya una query desmesurada en el camino crítico del
-// dispatcher. Lo que queda fuera se DICE (ver formatClosureCoverageNote):
-// nunca se recorta en silencio.
+// The cap of issues per query. The real measurement (97 aliases, 18.8 KB,
+// 2.8 s) says 60 is plenty; the cap exists so that a repo with hundreds of
+// slices does not build an outsized query on the dispatcher's critical path.
+// What is left out is SAID (see formatClosureCoverageNote): it is never
+// trimmed in silence.
 export const CLOSURE_PROBE_MAX = 60
 
-// Prefijos de alias. GraphQL no admite alias que empiecen por dígito.
+// Alias prefixes. GraphQL does not accept aliases starting with a digit.
 const DEP_ALIAS = 'dep'
 const REVIEW_ALIAS = 'rev'
 
 /**
- * planClosureProbe: decide QUÉ preguntar, a partir de lo que ya se sabe sin
- * red. Dos conjuntos, ninguno de ellos "todos los issues cerrados":
+ * planClosureProbe: decides WHAT to ask, out of what is already known without
+ * a network. Two sets, neither of them "every closed issue":
  *
- *   - `deps`: issues cerrados que AHORA MISMO están satisfaciendo un
- *     `merge-after` de algún issue abierto. Preguntar por un issue cerrado
- *     del que no cuelga nada no cambiaría ninguna decisión de nadie.
- *   - `inReview`: issues abiertos en `status:in-review`, para el backstop de
- *     "PR mergeado, issue abierto" (H4).
+ *   - `deps`: closed issues that RIGHT NOW are satisfying a `merge-after` of
+ *     some open issue. Asking about a closed issue nothing hangs off would not
+ *     change anybody's decision.
+ *   - `inReview`: open issues in `status:in-review`, for the "merged PR, open
+ *     issue" backstop (H4).
  *
- * `dependents` conserva quién depende de cada dep: sin eso, el aviso diría
- * "ojo con #451" sin decir a quién le afecta, que es la mitad que importa.
+ * `dependents` keeps who depends on each dep: without that, the warning would
+ * say "watch out for #451" without saying whom it affects, which is the half
+ * that matters.
  */
 export function planClosureProbe({ issues, mergedIssues } = {}) {
   const merged = new Set(mergedIssues || [])
@@ -109,15 +111,15 @@ export function planClosureProbe({ issues, mergedIssues } = {}) {
 }
 
 /**
- * buildClosureQuery: la query, o `null` si no hay nada que preguntar (repo
- * sin deps satisfechas y sin nada en revisión) — en ese caso NO se hace
- * ninguna llamada.
+ * buildClosureQuery: the query, or `null` if there is nothing to ask (a repo
+ * with no satisfied deps and nothing under review) — in that case NO call is
+ * made at all.
  *
- * `owner`/`name` se interpolan entre comillas: `parseRepoSlug` (dispatch.js)
- * ya ha rechazado cualquier slug que no sea `owner/repo` con ambas mitades no
- * vacías antes de llegar aquí, y ese formato no admite comillas ni barras
- * invertidas. Aun así se escapan, porque una query GraphQL rota por una
- * comilla es un fallo silencioso de red y no un error de uso.
+ * `owner`/`name` are interpolated between quotes: `parseRepoSlug`
+ * (dispatch.js) has already rejected any slug that is not `owner/repo` with
+ * both halves non-empty before reaching here, and that format admits neither
+ * quotes nor backslashes. They are escaped all the same, because a GraphQL
+ * query broken by a quote is a silent network failure and not a usage error.
  */
 export function buildClosureQuery(repo, plan, limit = CLOSURE_PROBE_MAX) {
   const [owner, name] = String(repo || '').split('/')
@@ -132,16 +134,18 @@ export function buildClosureQuery(repo, plan, limit = CLOSURE_PROBE_MAX) {
 }
 
 /**
- * parseClosureProbe: la respuesta → dos mapas, sin inventar nada.
+ * parseClosureProbe: the answer → two maps, inventing nothing.
  *
- *   closers[n] = { kind, ... } con kind ∈
+ *   closers[n] = { kind, ... } with kind ∈
  *     'pull-request' (+ pr, merged) | 'commit' (+ oid, headline, prs[])
- *     | 'manual'  (hubo ClosedEvent pero sin closer: lo cerró una persona)
- *     | 'unknown' (el alias no vino, o vino sin ClosedEvent: NO se afirma nada)
- *   mergedPr[n] = { number, mergedAt }  — solo si de verdad hay uno.
+ *     | 'manual'  (there was a ClosedEvent but no closer: a person closed it)
+ *     | 'unknown' (the alias did not come, or came with no ClosedEvent:
+ *                  NOTHING is asserted)
+ *   mergedPr[n] = { number, mergedAt }  — only if there really is one.
  *
- * Un alias ausente es 'unknown' y NO 'manual': la diferencia es toda la
- * diferencia entre "consta que lo cerró una persona" y "no lo sabemos".
+ * An absent alias is 'unknown' and NOT 'manual': the difference is the whole
+ * difference between "it is on record that a person closed it" and "we do not
+ * know".
  */
 export function parseClosureProbe(raw, plan) {
   const repoData = raw?.data?.repository ?? null
@@ -179,16 +183,16 @@ export function parseClosureProbe(raw, plan) {
 const shortOid = (oid) => (typeof oid === 'string' ? oid.slice(0, 8) : '')
 
 /**
- * formatSuspectClosureWarnings: SOLO los cierres que nadie revisó.
+ * formatSuspectClosureWarnings: ONLY the closures nobody reviewed.
  *
- * Qué NO sale por aquí, y por qué:
- *   - `manual` (86 de 97 en el repo medido): cerrar a mano es la práctica
- *     mayoritaria Y un paso prescrito por el contrato cuando la base no es la
- *     rama por defecto. Avisar de eso sería avisar de lo normal, y un aviso
- *     que sale 86 veces no lo lee nadie;
- *   - `pull-request` con `merged: true`: el camino feliz;
- *   - `unknown`: no se afirma lo que no se ha visto. La cobertura incompleta
- *     se dice aparte (formatClosureCoverageNote), no como sospecha.
+ * What does NOT come out of here, and why:
+ *   - `manual` (86 out of 97 in the measured repo): closing by hand is the
+ *     majority practice AND a step prescribed by the contract when the base is
+ *     not the default branch. Warning about that would be warning about the
+ *     normal case, and a warning that comes out 86 times is read by nobody;
+ *   - `pull-request` with `merged: true`: the happy path;
+ *   - `unknown`: what has not been seen is not asserted. Incomplete coverage is
+ *     said separately (formatClosureCoverageNote), not as suspicion.
  */
 export function formatSuspectClosureWarnings(closers, dependents) {
   const out = []
@@ -206,12 +210,12 @@ export function formatSuspectClosureWarnings(closers, dependents) {
 }
 
 /**
- * formatMergedButOpenWarnings (H4): la disyuntiva convertida en hecho.
+ * formatMergedButOpenWarnings (H4): the either-or turned into a fact.
  *
- * Los mensajes de bloqueo de ct-next.mjs dicen «mergea su PR — o, si el PR ya
- * se mergeó y el issue sigue abierto, ciérralo». Cuál de las dos es cierta lo
- * tenía que averiguar el humano mirando GitHub. Cuando la rama determinista
- * `feat/<n>` SÍ tiene un PR mergeado, aquí se dice cuál y desde cuándo.
+ * ct-next.mjs's blocking messages say «mergea su PR — o, si el PR ya se mergeó
+ * y el issue sigue abierto, ciérralo». Which of the two was true is something
+ * the human had to find out by looking at GitHub. When the deterministic branch
+ * `feat/<n>` DOES have a merged PR, here it is said which one and since when.
  */
 export function formatMergedButOpenWarnings(mergedPr, repo) {
   return Object.entries(mergedPr || {}).map(([key, pr]) => {
@@ -222,10 +226,10 @@ export function formatMergedButOpenWarnings(mergedPr, repo) {
 }
 
 /**
- * formatClosureCoverageNote: si el tope recortó la consulta, se dice qué
- * quedó SIN mirar. Un detector que calla su propia cobertura se lee como
- * "todo comprobado, nada que reportar", que es justo la mentira que esta
- * ronda persigue.
+ * formatClosureCoverageNote: if the cap trimmed the query, what was left
+ * UNLOOKED-AT is said. A detector that keeps quiet about its own coverage reads
+ * as "everything checked, nothing to report", which is exactly the lie this
+ * round is after.
  */
 export function formatClosureCoverageNote(plan, limit = CLOSURE_PROBE_MAX) {
   const fuera = Math.max(0, (plan?.deps || []).length - limit) + Math.max(0, (plan?.inReview || []).length - limit)

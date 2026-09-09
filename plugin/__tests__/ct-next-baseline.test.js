@@ -59,7 +59,7 @@ class Dispatch {
   }
 }
 
-describe('ct-next — el baseline lo mide el dispatcher en el worktree y lo siembra en SLICE.md (#96)', () => {
+describe('ct-next — the dispatcher measures the baseline in the worktree and sows it into SLICE.md (#96)', () => {
   afterEach(() => {
     Dispatch.sweep()
   })

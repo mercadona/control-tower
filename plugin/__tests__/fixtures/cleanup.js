@@ -1,37 +1,38 @@
-// F8 — el borrado del directorio temporal de un test es HIGIENE, no una
-// aserción, y no puede tumbar un test que ya había pasado.
+// F8 — deleting a test's temporary directory is HYGIENE, not an assertion, and
+// it cannot take down a test that had already passed.
 //
-// Observado (main @ b0799f3, con otra suite de vitest corriendo a la vez):
+// Observed (main @ b0799f3, with another vitest suite running at the same time):
 //
 //   Error: ENOTEMPTY, Directory not empty: /var/folders/…/ct-next-sig-jUC9MS
 //    ❯ __tests__/ct-next-signal-interrupt.test.js:42:35
 //
-// Causa: cuando ct-next.mjs mata a un hijo con SIGKILL (su cota de tiempo), el
-// SIGKILL alcanza al hijo pero NO a sus nietos — los stubs de `gh` que ese hijo
-// había lanzado siguen vivos unos milisegundos más, y siguen escribiendo en los
-// ficheros de log del directorio temporal que el `afterEach` está borrando en
-// ese mismo instante. `rmSync` recorre el árbol, borra, y al intentar quitar el
-// directorio se lo encuentra otra vez con contenido. `force: true` NO cubre
-// esto: solo ignora "no existe", no "alguien acaba de crear algo aquí".
+// Cause: when ct-next.mjs kills a child with SIGKILL (its time cap), the
+// SIGKILL reaches the child but NOT its grandchildren — the `gh` stubs that
+// child had launched stay alive a few milliseconds longer, and they keep
+// writing to the log files of the very temporary directory that `afterEach` is
+// deleting at that same instant. `rmSync` walks the tree, deletes, and on
+// trying to remove the directory finds it populated again. `force: true` does
+// NOT cover this: it only ignores "does not exist", not "someone just created
+// something here".
 //
-// No hay handshake posible con un proceso al que ya nadie tiene un descriptor:
-// son nietos huérfanos por definición. Y no hay nada que ganar reintentando
-// para siempre — el directorio vive bajo `os.tmpdir()`, así que un residuo se
-// lo lleva el sistema. Lo único que importa es que un fallo de LIMPIEZA no se
-// presente como un fallo del código bajo prueba.
+// No handshake is possible with a process nobody holds a descriptor to any
+// more: they are orphaned grandchildren by definition. And there is nothing to
+// gain from retrying forever — the directory lives under `os.tmpdir()`, so the
+// system carries any residue away. The only thing that matters is that a
+// CLEANUP failure does not present itself as a failure of the code under test.
 //
-// (Nota colateral sobre el producto, no sobre los tests: que el SIGKILL de
-// ct-next.mjs no alcance a los nietos significa que un `gh issue edit` lanzado
-// por dispatch-check puede completarse DESPUÉS de que ct-next haya dado al hijo
-// por muerto. El mensaje de ct-next ya dice exactamente eso — "no se puede
-// saber si el claim llegó a escribirse" — así que el producto no miente; pero
-// conviene que quede escrito dónde se observó.)
+// (A side note about the product, not about the tests: that ct-next.mjs's
+// SIGKILL does not reach the grandchildren means a `gh issue edit` launched by
+// dispatch-check can complete AFTER ct-next has given the child up for dead.
+// ct-next's message already says exactly that — "there is no way to know
+// whether the claim made it to disk" — so the product does not lie; but it is
+// worth writing down where it was observed.)
 import { rmSync } from 'node:fs'
 
 export function rmSyncBestEffort(dir) {
   try {
     rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 20 })
   } catch {
-    // Residuo bajo os.tmpdir(): irrelevante para el veredicto del test.
+    // Residue under os.tmpdir(): irrelevant to the test's verdict.
   }
 }

@@ -1,62 +1,63 @@
-# El documento del loop — fuente y derivados
+# The loop document — source and derivatives
 
-Documento de referencia del ciclo de desarrollo de Control Tower: los 16 pasos,
-las 3 puertas humanas, la máquina de estados de un slice, y el formato exacto de
-los 11 artefactos que viajan entre pasos.
+Reference document for Control Tower's development cycle: the 16 steps, the 3
+human gates, the state machine of a slice, and the exact format of the 11
+artefacts that travel between steps.
 
-## Los ficheros
+## The files
 
-| Fichero | Qué es | ¿Se edita a mano? |
+| File | What it is | Edited by hand? |
 |---|---|---|
-| `loop.body.html` | **La fuente.** Fragmento HTML (sin `<html>`/`<head>`/`<body>`) — es también lo que se publica como Artifact, y por eso no puede traerlos | **sí, es el único que se edita** |
-| `build.mjs` | El generador de los dos derivados | sí |
-| `control-tower-loop.html` | Derivado: página autocontenida, un solo fichero, sin dependencias de red | **no** — se regenera |
-| `control-tower-loop.pdf` | Derivado: 29 páginas A4, para compartir e imprimir | **no** — se regenera |
+| `loop.body.html` | **The source.** HTML fragment (no `<html>`/`<head>`/`<body>`) — it is also what gets published as an Artifact, and that is why it cannot carry them | **yes, it is the only one that gets edited** |
+| `build.mjs` | The generator of the two derivatives | yes |
+| `control-tower-loop.html` | Derivative: self-contained page, a single file, with no network dependencies | **no** — it is regenerated |
+| `control-tower-loop.pdf` | Derivative: 29 A4 pages, for sharing and printing | **no** — it is regenerated |
 
-Los derivados están **trackeados**, mismo criterio que `dist/` en este repo:
-todo cambio en `loop.body.html` tiene que llevarlos reconstruidos **en el mismo
-commit**, o se distribuye una versión vieja mientras la fuente ya dice otra cosa.
+The derivatives are **tracked**, the same criterion as `dist/` in this repo:
+every change to `loop.body.html` has to carry them rebuilt **in the same
+commit**, or an old version ships while the source already says something else.
 
-## Reconstruir
+## Rebuilding
 
 ```bash
 node docs/loop/build.mjs          # HTML + PDF   (~14 s)
-node docs/loop/build.mjs --html   # sólo HTML    (no necesita navegador)
+node docs/loop/build.mjs --html   # HTML only    (needs no browser)
 ```
 
-El PDF se imprime con Chrome/Brave/Chromium/Edge en headless. Si no hay ninguno
-instalado, el HTML sí se genera y el script lo dice — no emite un PDF a medias.
+The PDF is printed with Chrome/Brave/Chromium/Edge in headless mode. If none is
+installed, the HTML is still generated and the script says so — it does not emit
+half a PDF.
 
-**Por qué el script espera al fichero y no al navegador:** medido en esta
-máquina, `--print-to-pdf` deja el PDF completo en disco a los ~2 s pero el
-proceso sigue vivo dos minutos largos (despierta el updater, que hereda los
-descriptores). Esperar la salida del proceso daba un `ETIMEDOUT` sobre un PDF
-perfectamente escrito — un fallo reportado sobre un éxito. Ahora se sondea el
-tamaño del fichero hasta que deja de crecer, y entonces se mata al navegador.
+**Why the script waits for the file and not for the browser:** measured on this
+machine, `--print-to-pdf` leaves the complete PDF on disk after ~2 s but the
+process stays alive for a good two minutes (it wakes the updater, which inherits
+the descriptors). Waiting for the process to exit gave an `ETIMEDOUT` over a
+perfectly written PDF — a failure reported over a success. Now the file's size
+is polled until it stops growing, and then the browser is killed.
 
-La hoja de impresión vive en `build.mjs`, no en la fuente: la fuente se publica
-como página web y no se imprime nunca, así que mezclarlas obligaría a leer
-reglas de paginación a quien sólo edita contenido.
+The print stylesheet lives in `build.mjs`, not in the source: the source is
+published as a web page and is never printed, so mixing them would force whoever
+only edits content to read pagination rules.
 
-## El Artifact
+## The Artifact
 
-La misma fuente está publicada como página privada en claude.ai:
+The same source is published as a private page on claude.ai:
 
 <https://claude.ai/code/artifact/d06f6ba2-d67a-4c23-a113-15c782690759>
 
-Para actualizarla sin cambiar la URL, hay que publicar **pasando esa URL**
-explícitamente: publicar sin ella crea un artifact nuevo en vez de actualizar el
-que ya se ha compartido.
+To update it without changing the URL, you have to publish **passing that URL**
+explicitly: publishing without it creates a new artifact instead of updating the
+one that has already been shared.
 
-## Las referencias por comando
+## The per-command references
 
-Desde la sub-issue #93 cada `plugin/commands/*.md` se queda con lo que el modelo
-necesita al invocar el comando —la invocación, una tabla de códigos de salida y
-un enlace aquí— y la prosa larga (los mecanismos, sus límites y la historia de
-las decisiones, rondas F5…F38) vive en este directorio, un fichero por comando,
-movida íntegra y sin resumir:
+Since sub-issue #93 each `plugin/commands/*.md` keeps only what the model needs
+when invoking the command —the invocation, a table of exit codes and a link
+here— and the long prose (the mechanisms, their limits and the history of the
+decisions, rounds F5…F38) lives in this directory, one file per command, moved
+whole and unsummarised:
 
-| Comando | Referencia |
+| Command | Reference |
 |---|---|
 | `/ct-init` | [`ct-init.md`](ct-init.md) |
 | `/ct-groom` | [`ct-groom.md`](ct-groom.md) |
@@ -64,33 +65,33 @@ movida íntegra y sin resumir:
 | `/ct-status` | [`ct-status.md`](ct-status.md) |
 | `/ct-harvest` | [`ct-harvest.md`](ct-harvest.md) |
 
-Son documentos de este repo, no del plugin: no se distribuyen ni se cargan en el
-contexto de ninguna sesión. `__tests__/ct-init.test.js` lee `ct-groom.md` para
-comprobar que la regla de la columna `Señal` dice lo mismo aquí, en el contrato
-sembrado y en el juez de slice.
+They are documents of this repo, not of the plugin: they do not ship and they
+are not loaded into any session's context. `__tests__/ct-init.test.js` reads
+`ct-groom.md` to check that the rule for the `Señal` column says the same thing
+here, in the seeded contract and in the slice judge.
 
-## Procedencia del contenido
+## Provenance of the content
 
-Cada formato de la página sale de la fuente que lo emite, no de una descripción
-de segunda mano:
+Every format on the page comes from the source that emits it, not from a
+second-hand description:
 
-- los `commands/*.md` y, desde #93, sus referencias largas en este directorio
+- the `commands/*.md` and, since #93, their long references in this directory
   (`ct-init`, `ct-groom`, `ct-next`, `ct-status`, `ct-harvest`);
-- los skills forkados de `skills/` (`brainstorming`, `writing-plans`,
-  `finishing-a-development-branch`, `subagent-driven-development`) y `skills/FORK.md`;
+- the skills forked from `skills/` (`brainstorming`, `writing-plans`,
+  `finishing-a-development-branch`, `subagent-driven-development`) and `skills/FORK.md`;
 - `scripts/groom.js` — `buildIssueTitle`, `buildLabels`, `buildIssueBody`;
 - `scripts/kickoff.js` — `renderKickoff`, `buildStateSeed`, `ADDENDA`;
-- `scripts/ct-init.sh` — el contrato de la tabla de slices (v16 cuando se
-  escribió el documento; desde #93 se siembra en
-  `docs/superpowers/CONTRATO-SLICES.md` del repo destino, no en `AGENTS.md`);
+- `scripts/ct-init.sh` — the slices table contract (v16 when the document was
+  written; since #93 it is seeded into
+  `docs/superpowers/CONTRATO-SLICES.md` of the target repo, not into `AGENTS.md`);
 - `skills/state-template/STATE.template.md`;
 - `hooks/hooks.json`;
-- `templates/_TEMPLATE-execution-spec.md` — la plantilla del execution spec.
-  Ya viaja con el plugin: `ct-init` la siembra en
-  `docs/superpowers/specs/_TEMPLATE-execution-spec.md` del repo destino, que es
-  donde `skills/brainstorming/SKILL.md` la busca. Antes vivía suelta en
-  menoplus, y el paso 8 del brainstorming se quedaba sin fuente en cualquier
-  otro repo.
+- `templates/_TEMPLATE-execution-spec.md` — the execution spec template.
+  It already travels with the plugin: `ct-init` seeds it into
+  `docs/superpowers/specs/_TEMPLATE-execution-spec.md` of the target repo, which
+  is where `skills/brainstorming/SKILL.md` looks for it. It used to live loose in
+  menoplus, and step 8 of brainstorming was left without a source in any other
+  repo.
 
-**Al cambiar cualquiera de esas fuentes, este documento queda desactualizado y
-nada lo comprueba.** No hay test que lo vigile; es un documento, no código.
+**When any of those sources changes, this document goes stale and nothing checks
+it.** There is no test watching it; it is a document, not code.

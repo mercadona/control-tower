@@ -1,14 +1,13 @@
-// §3.12 del handoff (docs/prompt-juez-lo-que-queda.md): `reference-paths`
-// prueba que lo que §3 citó EXISTE (caza la invención) — nada probaba que se
-// citara TODO lo relevante (la omisión). Este fichero protege el barrido que
-// cierra esa asimetría: `candidatosDeVara`, `declaradasEn`, `pareceEsqueleto`
-// y `formatCandidatos` en scripts/vara.js, más el envoltorio ejecutable
-// scripts/detect-vara.mjs y su enganche en scripts/ct-init.sh.
+// §3.12 of the handoff (docs/prompt-juez-lo-que-queda.md): `reference-paths`
+// proves that what §3 cited EXISTS (it catches invention) — nothing proved that
+// EVERYTHING relevant was cited (the omission). This file protects the sweep
+// that closes that asymmetry: `candidatosDeVara`, `declaradasEn`,
+// `pareceEsqueleto` and `formatCandidatos` in scripts/vara.js, plus the
+// executable wrapper scripts/detect-vara.mjs and its hook in scripts/ct-init.sh.
 //
-// La propiedad que estos tests protegen, por encima de cualquier detalle de
-// formato: EL BARRIDO PROPONE Y JAMÁS DECLARA. No escribe nunca en
-// `.agent/conventions.md` — sólo el humano que corre `/ct-init` decide qué
-// entra ahí.
+// The property these tests protect, above any detail of format: THE SWEEP
+// PROPOSES AND NEVER DECLARES. It never writes to `.agent/conventions.md` —
+// only the human who runs `/ct-init` decides what goes in there.
 import { describe, it, expect, afterEach } from 'vitest'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -44,10 +43,10 @@ function tmp(prefix = 'vara-cand-') {
 const rutas = (r) => r.candidatos.map((c) => c.ruta)
 
 // ---------------------------------------------------------------------------
-// candidatosDeVara (puro)
+// candidatosDeVara (pure)
 // ---------------------------------------------------------------------------
 describe('candidatosDeVara', () => {
-  it('propone las guías de la raíz y no un homónimo bajo un subdirectorio', () => {
+  it('proposes the guides at the root and not a namesake under a subdirectory', () => {
     const r = candidatosDeVara({
       entradas: ['AGENTS.md', 'CLAUDE.md', 'CONTRIBUTING.md', 'CONTRIBUTING', 'docs/', 'docs/AGENTS.md'],
     })
@@ -59,7 +58,7 @@ describe('candidatosDeVara', () => {
     expect(agents.motivo).toBe('guía del repo en la raíz')
   })
 
-  it('de un directorio que casa "convention|rules" propone SUS FICHEROS y no el directorio', () => {
+  it('from a directory matching "convention|rules" it proposes ITS FILES and not the directory', () => {
     const r = candidatosDeVara({
       entradas: [
         'docs/', 'docs/conventions/', 'docs/conventions/backend.md', 'docs/conventions/frontend.md',
@@ -69,21 +68,21 @@ describe('candidatosDeVara', () => {
     expect(rutas(r)).toContain('docs/conventions/backend.md')
     expect(rutas(r)).toContain('docs/conventions/frontend.md')
     expect(rutas(r)).toContain('.cursor/rules/style.md')
-    // el directorio en sí NUNCA es candidato: una ruta acabada en "/" no se puede leer
+    // the directory itself is NEVER a candidate: a path ending in "/" cannot be read
     expect(rutas(r).some((x) => x.endsWith('/'))).toBe(false)
     const m = r.candidatos.find((c) => c.ruta === 'docs/conventions/backend.md').motivo
     expect(m).toContain('docs/conventions/')
     expect(m).toContain('convention|rules')
   })
 
-  it('propone skills de proyecto por su SKILL.md', () => {
+  it('proposes project skills by their SKILL.md', () => {
     const r = candidatosDeVara({ entradas: ['.claude/', '.claude/skills/', '.claude/skills/oc-review/', '.claude/skills/oc-review/SKILL.md'] })
     expect(rutas(r)).toContain('.claude/skills/oc-review/SKILL.md')
     const m = r.candidatos.find((c) => c.ruta === '.claude/skills/oc-review/SKILL.md').motivo
     expect(m).toContain('Skills')
   })
 
-  it('nunca propone nada bajo .agent/ — ni la propia declaración ni el acuse, ni aunque un subdirectorio case la regla de reglas', () => {
+  it('never proposes anything under .agent/ — neither the declaration itself nor the acknowledgement, not even when a subdirectory matches the rules rule', () => {
     const r = candidatosDeVara({
       entradas: [
         '.agent/', '.agent/conventions.md', '.agent/conventions-ack.md',
@@ -93,7 +92,7 @@ describe('candidatosDeVara', () => {
     expect(rutas(r)).toEqual([])
   })
 
-  it('filtra los que ya están declarados', () => {
+  it('filters out the ones already declared', () => {
     const r = candidatosDeVara({
       entradas: ['AGENTS.md', 'CLAUDE.md'],
       declaradas: new Set(['AGENTS.md']),
@@ -101,7 +100,7 @@ describe('candidatosDeVara', () => {
     expect(rutas(r)).toEqual(['CLAUDE.md'])
   })
 
-  it('orden determinista: da igual el orden de entrada, y no hay duplicados aunque una ruta case dos reglas', () => {
+  it('deterministic order: the input order makes no difference, and there are no duplicates even when a path matches two rules', () => {
     const entradas = [
       'CLAUDE.md', 'AGENTS.md', 'CONTRIBUTING.md',
       'docs/', 'docs/conventions/', 'docs/conventions/rules/',
@@ -111,12 +110,12 @@ describe('candidatosDeVara', () => {
     const a = candidatosDeVara({ entradas })
     const b = candidatosDeVara({ entradas: [...entradas].reverse() })
     expect(a).toEqual(b)
-    // docs/conventions/rules/x.md casa DOS directorios que casan la regla
-    // (docs/conventions/ Y docs/conventions/rules/) — una sola vez en la lista.
+    // docs/conventions/rules/x.md matches TWO directories that match the rule
+    // (docs/conventions/ AND docs/conventions/rules/) — once only in the list.
     expect(rutas(a).filter((x) => x === 'docs/conventions/rules/x.md').length).toBe(1)
   })
 
-  it('omitidos cuenta lo que no cupo en MAX_POR_DIRECTORIO, y lo ya declarado no cuenta como omitido', () => {
+  it('omitidos counts what did not fit in MAX_POR_DIRECTORIO, and what is already declared does not count as omitted', () => {
     const ficheros = Array.from({ length: 15 }, (_, i) => `docs/conventions/f${String(i + 1).padStart(2, '0')}.md`)
     const entradas = ['docs/', 'docs/conventions/', ...ficheros]
     const sinDeclarar = candidatosDeVara({ entradas })
@@ -126,11 +125,11 @@ describe('candidatosDeVara', () => {
     const conUnoDeclarado = candidatosDeVara({ entradas, declaradas: new Set(['docs/conventions/f01.md']) })
     expect(rutas(conUnoDeclarado)).not.toContain('docs/conventions/f01.md')
     expect(rutas(conUnoDeclarado).length).toBe(MAX_POR_DIRECTORIO)
-    // quedan 14 candidatas tras filtrar la declarada; se cortan a 12 → 2 omitidas
+    // 14 candidates are left after filtering the declared one; cut to 12 → 2 omitted
     expect(conUnoDeclarado.omitidos).toBe(14 - MAX_POR_DIRECTORIO)
   })
 
-  it('MAX_CANDIDATOS corta la lista global ya agrupada, y cuenta el resto como omitidos', () => {
+  it('MAX_CANDIDATOS cuts the global list once grouped, and counts the rest as omitted', () => {
     const skills = Array.from({ length: 50 }, (_, i) => {
       const n = String(i + 1).padStart(2, '0')
       return [`.claude/skills/s${n}/`, `.claude/skills/s${n}/SKILL.md`]
@@ -145,7 +144,7 @@ describe('candidatosDeVara', () => {
 // declaradasEn
 // ---------------------------------------------------------------------------
 describe('declaradasEn', () => {
-  it('extrae los tokens entre backticks y normaliza "./" y la barra final', () => {
+  it('extracts the tokens between backticks and normalises "./" and the trailing slash', () => {
     const s = declaradasEn('- `AGENTS.md`\n- `./docs/CONTRIBUTING.md`\n- `docs/conventions/`\n- ``\n- prosa sin backticks')
     expect(s.has('AGENTS.md')).toBe(true)
     expect(s.has('docs/CONTRIBUTING.md')).toBe(true)
@@ -153,7 +152,7 @@ describe('declaradasEn', () => {
     expect(s.size).toBe(3)
   })
 
-  it('la semilla que siembra ct-init.sh no declara nada — el conjunto sale vacío', () => {
+  it('the seed ct-init.sh sows declares nothing — the set comes out empty', () => {
     const dir = tmp()
     execFileSync('bash', [initScript, dir], { encoding: 'utf8' })
     const contenido = readFileSync(join(dir, CONVENTIONS_FILE), 'utf8')
@@ -165,7 +164,7 @@ describe('declaradasEn', () => {
 // pareceEsqueleto
 // ---------------------------------------------------------------------------
 describe('pareceEsqueleto', () => {
-  it('un AGENTS.md de solo encabezados, en el vacío, es esqueleto', () => {
+  it('an AGENTS.md of headings only, in a vacuum, is a skeleton', () => {
     const soloEncabezados = [
       '# AGENTS.md',
       '<!-- Guía durable del repo (≤150 líneas). Procedimientos → Skills. -->',
@@ -185,23 +184,24 @@ describe('pareceEsqueleto', () => {
     expect(pareceEsqueleto(soloEncabezados)).toBe(true)
   })
 
-  // Ronda 2 del veredicto del juez: el test de arriba mide un literal escrito
-  // a mano, no el fichero que `ct-init.sh` deja REALMENTE en disco — y ese
-  // fichero real no se queda en "solo encabezados": el propio script le
-  // añade siempre la sección del contrato de slices (cientos de líneas de
-  // prosa). Este test corre `ct-init.sh` de verdad y mide sobre su salida,
-  // para que una regresión en el descuento del bloque del contrato (ver
-  // `sinBloquesDeCtInit` en scripts/vara.js) se note aquí.
-  it('el AGENTS.md que ct-init.sh deja REALMENTE en disco es esqueleto, pese a las secciones que el propio script le añade', () => {
+  // Round 2 of the judge's verdict: the test above measures a literal written by
+  // hand, not the file `ct-init.sh` REALLY leaves on disk — and that real file
+  // does not stay at "headings only": the script itself always adds the slices
+  // contract section to it (hundreds of lines of prose). This test runs the real
+  // `ct-init.sh` and measures over its output, so that a regression in the
+  // discounting of the contract block (see `sinBloquesDeCtInit` in
+  // scripts/vara.js) shows up here.
+  it('the AGENTS.md ct-init.sh REALLY leaves on disk is a skeleton, despite the sections the script itself adds to it', () => {
     const dir = tmp()
     execFileSync('bash', [initScript, dir], { encoding: 'utf8' })
     const contenido = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
-    // Confirma que el escenario es el real y no un caso degenerado: el fichero
-    // de verdad trae prosa del plugin —desde #93, la sección corta del loop y
-    // la de travesía; antes, además, el contrato entero— y no un puñado de
-    // encabezados sueltos. El umbral bajó de 100 líneas a 20 justamente por ese
-    // reparto: lo que se mide aquí es que el descuento de `sinBloquesDeCtInit`
-    // sigue cubriendo TODOS los bloques que ct-init siembra, y hoy son tres.
+    // Confirms that the scenario is the real one and not a degenerate case: the
+    // real file carries prose from the plugin —since #93, the short loop section
+    // and the crossing one; before that, the whole contract as well— and not a
+    // handful of loose headings. The threshold dropped from 100 lines to 20
+    // precisely because of that split: what is measured here is that
+    // `sinBloquesDeCtInit`'s discounting still covers ALL the blocks ct-init
+    // sows, and today there are three.
     expect(contenido.split('\n').length).toBeGreaterThan(20)
     for (const marcador of ['<!-- ct-init:loop -->', '<!-- ct-init:e2e-howto -->']) {
       expect(contenido, marcador).toContain(marcador)
@@ -209,7 +209,7 @@ describe('pareceEsqueleto', () => {
     expect(pareceEsqueleto(contenido)).toBe(true)
   })
 
-  it('un documento con tres reglas de verdad no es esqueleto', () => {
+  it('a document with three real rules is not a skeleton', () => {
     const conReglas = [
       '# Convenciones',
       'Usa siempre inyección de dependencias en el constructor.',
@@ -224,11 +224,11 @@ describe('pareceEsqueleto', () => {
 // formatCandidatos
 // ---------------------------------------------------------------------------
 describe('formatCandidatos', () => {
-  it('sin candidatos, devuelve la cadena vacía', () => {
+  it('with no candidates, it returns the empty string', () => {
     expect(formatCandidatos([])).toBe('')
   })
 
-  it('con candidatos, trae la cabecera, cada ruta entre backticks y la frase de que propone y no declara — y nunca "aviso"/"ATENCIÓN"/"unblock"', () => {
+  it('with candidates, it carries the header, every path between backticks and the sentence saying it proposes and does not declare — and never "aviso"/"ATENCIÓN"/"unblock"', () => {
     const texto = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz' }])
     expect(texto).toContain(CANDIDATOS_HEADER)
     expect(texto).toContain('`AGENTS.md`')
@@ -238,29 +238,29 @@ describe('formatCandidatos', () => {
     expect(texto).not.toContain('unblock')
   })
 
-  it('con un candidato marcado esqueleto, explica que declararlo es peor que no declararlo — le da al juez un documento vacío que sí cuenta como vara del repo', () => {
+  it("with a candidate marked as a skeleton, it explains that declaring it is worse than not declaring it — it hands the judge an empty document that does count as the repository's yardstick", () => {
     const texto = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz', esqueleto: true }])
     expect(texto).toContain('[esqueleto: sólo encabezados]')
     expect(texto).toMatch(/documento vacío/)
     expect(texto).toMatch(/peor que no declararlos/)
   })
 
-  it('con omitidos, dice cuántos candidatos más hay sin listar', () => {
+  it('with omitted ones, it says how many more candidates are left unlisted', () => {
     const texto = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz' }], { omitidos: 5 })
     expect(texto).toMatch(/\+5 candidatos más/)
   })
 
-  it('con truncated, avisa de que la ausencia no es prueba de ausencia', () => {
+  it('with truncated, it warns that absence is not proof of absence', () => {
     const texto = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz' }], { truncated: true })
     expect(texto).toContain('Ausencia aquí no es prueba de ausencia')
   })
 })
 
 // ---------------------------------------------------------------------------
-// De punta a punta: scripts/detect-vara.mjs
+// End to end: scripts/detect-vara.mjs
 // ---------------------------------------------------------------------------
-describe('detect-vara.mjs de punta a punta', () => {
-  it('repo con docs/conventions/backend.md → exit 0 y stdout con esa ruta', () => {
+describe('detect-vara.mjs end to end', () => {
+  it('repository with docs/conventions/backend.md → exit 0 and stdout carrying that path', () => {
     const dir = tmp()
     mkdirSync(join(dir, 'docs', 'conventions'), { recursive: true })
     writeFileSync(join(dir, 'docs', 'conventions', 'backend.md'), '# reglas\nusa DI\n')
@@ -269,14 +269,14 @@ describe('detect-vara.mjs de punta a punta', () => {
     expect(r.stdout).toContain('docs/conventions/backend.md')
   })
 
-  it('repo sin nada → exit 0 y stdout vacío', () => {
+  it('repository with nothing → exit 0 and empty stdout', () => {
     const dir = tmp()
     const r = spawnSync('node', [detectVaraScript, dir], { encoding: 'utf8' })
     expect(r.status).toBe(0)
     expect(r.stdout.trim()).toBe('')
   })
 
-  it('la misma ruta ya declarada entre backticks en .agent/conventions.md → stdout vacío', () => {
+  it('the same path already declared between backticks in .agent/conventions.md → empty stdout', () => {
     const dir = tmp()
     mkdirSync(join(dir, 'docs', 'conventions'), { recursive: true })
     writeFileSync(join(dir, 'docs', 'conventions', 'backend.md'), '# reglas\nusa DI\n')
@@ -287,7 +287,7 @@ describe('detect-vara.mjs de punta a punta', () => {
     expect(r.stdout.trim()).toBe('')
   })
 
-  it('target que no es un directorio → exit 1, stderr lo explica, stdout vacío', () => {
+  it('a target that is not a directory → exit 1, stderr explains it, empty stdout', () => {
     const dir = tmp()
     const fichero = join(dir, 'no-es-dir.txt')
     writeFileSync(fichero, 'x')
@@ -297,13 +297,13 @@ describe('detect-vara.mjs de punta a punta', () => {
     expect(r.stderr).toMatch(/no es un directorio/)
   })
 
-  // Ronda 2 del veredicto del juez: nada probaba que `detect-vara.mjs`
-  // realmente LEYERA cada candidato del disco y llamara a `pareceEsqueleto` —
-  // los tests de `formatCandidatos` inyectan `esqueleto: true` a mano, así
-  // que ese cableado se podía borrar sin que la suite se enterara. Este test
-  // corre el script de verdad contra ficheros de verdad, uno esqueleto y uno
-  // con reglas, para que mutar esa línea (o borrarla) SÍ tumbe algo.
-  it('lee cada candidato del disco y marca [esqueleto: sólo encabezados] SOLO al que de verdad lo es', () => {
+  // Round 2 of the judge's verdict: nothing proved that `detect-vara.mjs`
+  // really READ each candidate off disk and called `pareceEsqueleto` — the
+  // `formatCandidatos` tests inject `esqueleto: true` by hand, so that wiring
+  // could be deleted without the suite noticing. This test runs the real script
+  // against real files, one a skeleton and one with rules, so that mutating
+  // that line (or deleting it) DOES knock something down.
+  it('reads each candidate off disk and marks [esqueleto: sólo encabezados] ONLY on the one that really is', () => {
     const dir = tmp()
     mkdirSync(join(dir, 'docs', 'conventions'), { recursive: true })
     writeFileSync(join(dir, 'docs', 'conventions', 'esqueleto.md'), '# Reglas\n## Sección\n')
@@ -319,10 +319,10 @@ describe('detect-vara.mjs de punta a punta', () => {
 })
 
 // ---------------------------------------------------------------------------
-// De punta a punta: scripts/ct-init.sh — los dos que de verdad protegen el diseño
+// End to end: scripts/ct-init.sh — the two that really protect the design
 // ---------------------------------------------------------------------------
-describe('ct-init.sh invoca el barrido de candidatos', () => {
-  it('con docs/conventions/x.md en el repo: el bloque de candidatos sale por STDOUT, y .agent/conventions.md sigue siendo la semilla byte a byte', () => {
+describe('ct-init.sh invokes the candidate sweep', () => {
+  it('with docs/conventions/x.md in the repository: the candidate block goes out on STDOUT, and .agent/conventions.md is still the seed byte for byte', () => {
     const dir = tmp()
     mkdirSync(join(dir, 'docs', 'conventions'), { recursive: true })
     writeFileSync(join(dir, 'docs', 'conventions', 'x.md'), '# reglas\n')
@@ -336,7 +336,7 @@ describe('ct-init.sh invoca el barrido de candidatos', () => {
     expect(conventions).not.toContain('docs/conventions/x.md')
   })
 
-  it('idempotencia: la segunda corrida sigue proponiendo lo mismo sin tocar el fichero; declararla a mano hace que la tercera corrida ya no la proponga y no pise la edición', () => {
+  it('idempotence: the second run goes on proposing the same thing without touching the file; declaring it by hand makes the third run stop proposing it and not trample the edit', () => {
     const dir = tmp()
     mkdirSync(join(dir, 'docs', 'conventions'), { recursive: true })
     writeFileSync(join(dir, 'docs', 'conventions', 'x.md'), '# reglas\n')
@@ -357,12 +357,12 @@ describe('ct-init.sh invoca el barrido de candidatos', () => {
     expect(readFileSync(conventionsPath, 'utf8')).toBe(editado)
   })
 
-  // Ronda 2 del veredicto del juez: el caso que motiva `pareceEsqueleto`
-  // (decisión 11 del diseño) es exactamente este — un repo nuevo, corriendo
-  // `/ct-init` por primera vez, donde el AGENTS.md que el propio scaffolder
-  // acaba de crear se propone como candidato. Tiene que salir marcado, o el
-  // humano lo declararía creyendo que trae reglas de verdad.
-  it('en un repo nuevo, el AGENTS.md que el propio ct-init.sh acaba de crear sale marcado [esqueleto: sólo encabezados]', () => {
+  // Round 2 of the judge's verdict: the case that motivates `pareceEsqueleto`
+  // (decision 11 of the design) is exactly this one — a new repository, running
+  // `/ct-init` for the first time, where the AGENTS.md the scaffolder itself has
+  // just created is proposed as a candidate. It has to come out marked, or the
+  // human would declare it believing it carries real rules.
+  it('in a new repository, the AGENTS.md ct-init.sh itself has just created comes out marked [esqueleto: sólo encabezados]', () => {
     const dir = tmp()
     const r = spawnSync('bash', [initScript, dir], { encoding: 'utf8' })
     expect(r.status).toBe(0)
@@ -371,17 +371,17 @@ describe('ct-init.sh invoca el barrido de candidatos', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Ties: el texto que le dice al agente qué buscar no puede divergir del
-// bloque que el script realmente imprime.
+// Ties: the text that tells the agent what to look for cannot diverge from the
+// block the script actually prints.
 // ---------------------------------------------------------------------------
-describe('el barrido no diverge de los textos que lo describen', () => {
+describe('the sweep does not diverge from the texts that describe it', () => {
   const leer = (...partes) => readFileSync(join(root, ...partes), 'utf8')
 
-  it('commands/ct-init.md contiene CANDIDATOS_HEADER literal', () => {
+  it('commands/ct-init.md contains CANDIDATOS_HEADER verbatim', () => {
     expect(leer('commands', 'ct-init.md')).toContain(CANDIDATOS_HEADER)
   })
 
-  it('scripts/ct-init.sh menciona detect-vara.mjs', () => {
+  it('scripts/ct-init.sh mentions detect-vara.mjs', () => {
     expect(leer('scripts', 'ct-init.sh')).toContain('detect-vara.mjs')
   })
 })

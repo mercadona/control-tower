@@ -71,7 +71,7 @@ here with the reason, so the implementer knows it is deliberate.}}
 
 Current state (path/to/file.ext, lines A-B):
 
-{{ONLY the tramo that changes, max 12 lines, copied verbatim from the repo — the validator
+{{ONLY the stretch that changes, max 12 lines, copied verbatim from the repo — the validator
 greps it.}}
 
 Contract (path/to/file.ext):

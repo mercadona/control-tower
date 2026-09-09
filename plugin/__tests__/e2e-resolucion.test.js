@@ -1,19 +1,19 @@
 // ============================================================================
-// Los TRES estados de la celda E2E, y por qué son tres y no dos.
+// The THREE states of the E2E cell, and why there are three and not two.
 //
-// Una celda vacía significaría dos cosas incompatibles: (a) se pensó y este
-// slice no tiene nada que atravesar, y (b) nadie rellenó la columna. Mismo
-// resultado, indistinguibles — y con (b) la feature queda inerte sin que nadie
-// se entere. Es la ambigüedad que GATE_LABEL_NONE ya resolvió para el caso
-// gemelo, con una diferencia que decide el diseño: gate:none lo DERIVA el
-// plugin, y aquí la distinción sólo la sabe quien escribe el spec. No hay
-// forma de derivarla, así que se declara.
+// An empty cell would mean two incompatible things: (a) it was thought about
+// and this slice has nothing to walk through, and (b) nobody filled the column
+// in. Same outcome, indistinguishable — and with (b) the feature ends up inert
+// without anyone noticing. It is the ambiguity GATE_LABEL_NONE already
+// resolved for the twin case, with one difference that decides the design:
+// gate:none is DERIVED by the plugin, and here only whoever writes the spec
+// knows the distinction. There is no way to derive it, so it is declared.
 // ============================================================================
 import { describe, it, expect } from 'vitest'
 import { resolveE2e, resolveGates, GATES, gateLabels, gatesFromLabels } from '../scripts/gates.js'
 
-describe('resolveE2e — los tres estados', () => {
-  it('recorridos: declarado, con e2e', () => {
+describe('resolveE2e — the three states', () => {
+  it('runs: declared, with e2e', () => {
     const r = resolveE2e('levantado con el example\\, curl -i :9115/metrics responde 200')
     expect(r.runs).toEqual(['levantado con el example, curl -i :9115/metrics responde 200'])
     expect(r.declared).toBe(true)
@@ -21,11 +21,11 @@ describe('resolveE2e — los tres estados', () => {
     expect(r.contradiction).toBe(false)
   })
 
-  it('dos recorridos separados por coma no escapada son dos', () => {
+  it('two runs separated by an unescaped comma are two', () => {
     expect(resolveE2e('recorrido uno, recorrido dos').runs).toEqual(['recorrido uno', 'recorrido dos'])
   })
 
-  it('el token `no` es declarado y sin e2e', () => {
+  it('the `no` token is declared and with no e2e', () => {
     for (const cell of ['no', 'NO', ' no ', '`no`', '**no**', 'n/a', 'N/A']) {
       const r = resolveE2e(cell)
       expect(r.declared, cell).toBe(true)
@@ -34,7 +34,7 @@ describe('resolveE2e — los tres estados', () => {
     }
   })
 
-  it('un marcador de sin-valor es NO DECLARADO, no un `no`', () => {
+  it('a no-value marker is NOT DECLARED, not a `no`', () => {
     for (const cell of ['', '-', '–', '—', '―', '−', '--', '   ']) {
       const r = resolveE2e(cell)
       expect(r.declared, cell).toBe(false)
@@ -43,58 +43,58 @@ describe('resolveE2e — los tres estados', () => {
     }
   })
 
-  it('un recorrido que EMPIEZA por "no" es un recorrido, no el token', () => {
+  it('a run that STARTS with "no" is a run, not the token', () => {
     const r = resolveE2e('no se puede acceder a /metrics sin levantar el server')
     expect(r.none).toBe(false)
     expect(r.runs).toEqual(['no se puede acceder a /metrics sin levantar el server'])
   })
 
-  it('el token junto a un recorrido es una contradicción', () => {
+  it('the token alongside a run is a contradiction', () => {
     const r = resolveE2e('no, curl -i :9115/metrics responde 200')
     expect(r.contradiction).toBe(true)
     expect(r.declared).toBe(true)
   })
 
-  it('un recorrido vacío entre comas se descarta en silencio', () => {
+  it('an empty run between commas is silently discarded', () => {
     expect(resolveE2e('uno,, dos').runs).toEqual(['uno', 'dos'])
   })
 })
 
-describe('el gate e2e derivado', () => {
-  it('con recorridos, resolveGates añade e2e', () => {
+describe('the derived e2e gate', () => {
+  it('with runs, resolveGates adds e2e', () => {
     expect(resolveGates('backend', '–', 'curl -i :9115/metrics').gates).toEqual(['plan', 'e2e'])
   })
 
-  it('con el token `no`, no lo añade', () => {
+  it('with the `no` token, it does not add it', () => {
     expect(resolveGates('backend', '–', 'no').gates).toEqual(['plan'])
   })
 
-  it('sin celda E2E (tercer argumento ausente), el comportamiento es el de hoy', () => {
+  it('with no E2E cell (third argument absent), the behaviour is the one of today', () => {
     expect(resolveGates('ui', '–').gates).toEqual(['visual', 'plan'])
     expect(resolveGates('backend', '–').gates).toEqual(['plan'])
   })
 
-  it('ningún Tipo implica e2e por sí solo', () => {
+  it('no Tipo implies e2e on its own', () => {
     for (const t of ['ui', 'infra', 'backend', '']) {
       expect(resolveGates(t, '–', '–').gates, t).not.toContain('e2e')
     }
   })
 
-  it('e2e va ÚLTIMO en el orden canónico', () => {
+  it('e2e goes LAST in the canonical order', () => {
     expect(resolveGates('ui', 'apply', 'un recorrido').gates).toEqual(['visual', 'apply', 'plan', 'e2e'])
   })
 
-  it('el vocabulario incluye e2e con sus dos textos', () => {
+  it('the vocabulary includes e2e with its two texts', () => {
     expect(Object.keys(GATES)).toEqual(['visual', 'apply', 'plan', 'e2e'])
     expect(GATES.e2e.kickoff).toMatch(/## E2E/)
     expect(GATES.e2e.kickoff).toMatch(/AGENTS\.md/)
     expect(GATES.e2e.issue).toMatch(/e2e/)
   })
 
-  // El canal por el que el gate SOBREVIVE: /ct-next reconstruye el slice que
-  // despacha a partir del ISSUE, así que un gate que no vuelva de sus labels
-  // se pierde en un redespacho, en un --reopen y tras un /clear.
-  it('la label sobrevive la ida y vuelta', () => {
+  // The channel through which the gate SURVIVES: /ct-next rebuilds the slice
+  // it dispatches out of the ISSUE, so a gate that does not come back from its
+  // labels is lost on a redispatch, on a --reopen and after a /clear.
+  it('the label survives the round trip', () => {
     const gates = resolveGates('ui', '–', 'un recorrido').gates
     const labels = gateLabels(gates)
     expect(labels).toEqual(['gate:visual', 'gate:plan', 'gate:e2e'])

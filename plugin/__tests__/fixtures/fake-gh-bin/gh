@@ -1,21 +1,21 @@
 #!/usr/bin/env node
-// Stub de `gh` para tests: NUNCA toca la red ni ningún repo real. Controlado
-// enteramente por variables de entorno para que los tests de
-// dispatch-check-dryrun.test.js puedan simular fallos de `gh` (auth, rate
-// limit, red) en puntos concretos de la secuencia de claim sin llamar al `gh`
-// real. Ver ese fichero de test para el uso de cada variable.
+// Stub of `gh` for tests: it NEVER touches the network nor any real
+// repository. Driven entirely by environment variables so that the tests in
+// dispatch-check-dryrun.test.js can simulate `gh` failures (auth, rate limit,
+// network) at specific points of the claim sequence without calling the real
+// `gh`. See that test file for the use of each variable.
 import { readFileSync, writeFileSync, existsSync, appendFileSync } from 'node:fs'
 import { waitForReleaseFile } from '../stub-wait.js'
 
 const argv = process.argv.slice(2)
 const joined = argv.join(' ')
 
-// FAKE_GH_ARGV_LOG_FILE (review final, finding 2): registra el argv exacto de
-// cada invocación para que los tests puedan comprobar que la enumeración de
-// issues usa `--paginate` (paginación real) y NUNCA `--limit` (el tope fijo
-// que reintroduce el bug de truncado silencioso) — sin esto no hay forma de
-// distinguir, desde un stub que ignora los flags, si el comando real seguiría
-// truncando contra GitHub de verdad.
+// FAKE_GH_ARGV_LOG_FILE (final review, finding 2): records the exact argv of
+// every invocation so that the tests can check that the enumeration of issues
+// uses `--paginate` (real pagination) and NEVER `--limit` (the fixed cap that
+// reintroduces the silent truncation bug) — without this there is no way to
+// tell, from a stub that ignores the flags, whether the real command would
+// still be truncating against the real GitHub.
 if (process.env.FAKE_GH_ARGV_LOG_FILE) {
   appendFileSync(process.env.FAKE_GH_ARGV_LOG_FILE, joined + '\n')
 }
@@ -28,16 +28,16 @@ function nextCallIndex(counterFile) {
   return n
 }
 
-// FAKE_GH_LIST_SEQUENCE_FILE (D2 review, menor 4/maxBuffer): lee la secuencia
-// desde un FICHERO en vez del contenido inline de FAKE_GH_LIST_SEQUENCE —
-// necesario para reproducir una respuesta de varios MiB (p.ej. una colisión
-// con miles de issues en vuelo) sin pasarla por una variable de entorno: en
-// macOS ARG_MAX (`getconf ARG_MAX`) es ~1 MiB para todo el argv+environ
-// combinado, así que un solo env var de varios MiB directamente revienta el
-// propio `spawnSync` del test (no llega ni a ejecutar el hijo). Un fichero,
-// en cambio, no tiene ese límite — solo la RUTA viaja por env. Si no se
-// define, se sigue leyendo FAKE_GH_LIST_SEQUENCE inline como hasta ahora (sin
-// cambio de comportamiento por defecto).
+// FAKE_GH_LIST_SEQUENCE_FILE (D2 review, minor 4/maxBuffer): reads the sequence
+// from a FILE instead of the inline content of FAKE_GH_LIST_SEQUENCE —
+// necessary to reproduce a response of several MiB (e.g. a collision with
+// thousands of issues in flight) without passing it through an environment
+// variable: on macOS ARG_MAX (`getconf ARG_MAX`) is ~1 MiB for the whole
+// argv+environ combined, so a single env var of several MiB blows up the test's
+// own `spawnSync` outright (it does not even get to run the child). A file, on
+// the other hand, has no such limit — only the PATH travels through env. If it
+// is not defined, FAKE_GH_LIST_SEQUENCE keeps being read inline as before (no
+// change of default behaviour).
 function loadSequence() {
   if (process.env.FAKE_GH_LIST_SEQUENCE_FILE) {
     return JSON.parse(readFileSync(process.env.FAKE_GH_LIST_SEQUENCE_FILE, 'utf8'))
@@ -45,54 +45,52 @@ function loadSequence() {
   return JSON.parse(process.env.FAKE_GH_LIST_SEQUENCE || '[[]]')
 }
 
-// main(): TODA la lógica de despacho vive aquí, con `return` en vez de
-// `process.exit(N)` en cada rama (D2 review, menor 4 — hallazgo colateral al
-// construir el test de maxBuffer): `process.stdout`/`process.stderr` son
-// ASÍNCRONOS hacia una tubería en POSIX (documentado explícitamente en los
-// propios docs de Node: "Pipes (and sockets): asynchronous on POSIX"), que es
-// exactamente cómo execFileSync conecta con este script. `process.exit(N)`
-// termina el proceso YA, sin esperar a que un `write()` grande en vuelo
-// termine de vaciarse — un payload de varios MiB (como el que exige un test
-// real del `maxBuffer` de ct-next.mjs) se trunca en silencio a un múltiplo
-// del tamaño del buffer del pipe del SO (64 KiB en este Mac), con independen
-// cia de cualquier `maxBuffer` que fije el LADO QUE LEE. Verificado por
-// construcción: con la versión vieja (`process.exit()` inmediato tras el
-// `write`), un payload de ~11 MB de JSON llegaba truncado a 64 KiB al otro
-// lado. Fijar `process.exitCode` y dejar que el script termine solo (sin
-// `process.exit()`) permite que Node vacíe la tubería antes de salir de
-// verdad — ver la variante de este mismo experimento en
-// /private/tmp/.../node-repro/parent-nobuf.js vs parent-withbuf.js. Esto es
-// puramente una propiedad del STUB (nunca tocó al `gh` real ni a
-// dispatch-check.mjs/ct-next.mjs), así que no cambia el comportamiento de
-// NINGÚN test existente con payloads pequeños — solo hace correcto (en vez
-// de "funciona por casualidad porque nunca se probó con algo grande") el
-// caso de un payload grande. (D1+D2: el mismo `return`-en-vez-de-`exit`
-// aplica ahora también a los bloques de milestones/label-create que D1
-// (`fix/dispatch-graph-hardening`) añadió para F5/ct-groom.mjs — no tenían
-// razón para quedar fuera de esta protección solo por venir de la otra rama.)
+// main(): ALL the dispatch logic lives here, with `return` instead of
+// `process.exit(N)` in every branch (D2 review, minor 4 — a collateral finding
+// while building the maxBuffer test): `process.stdout`/`process.stderr` are
+// ASYNCHRONOUS towards a pipe on POSIX (documented explicitly in Node's own
+// docs: "Pipes (and sockets): asynchronous on POSIX"), which is exactly how
+// execFileSync connects with this script. `process.exit(N)` ends the process
+// NOW, without waiting for a large in-flight `write()` to finish draining — a
+// payload of several MiB (like the one a real test of ct-next.mjs's `maxBuffer`
+// demands) is silently truncated to a multiple of the size of the OS pipe
+// buffer (64 KiB on this Mac), regardless of any `maxBuffer` the READING SIDE
+// may set. Verified by construction: with the old version (`process.exit()`
+// immediately after the `write`), a payload of ~11 MB of JSON arrived truncated
+// to 64 KiB on the other side. Setting `process.exitCode` and letting the
+// script end on its own (with no `process.exit()`) lets Node drain the pipe
+// before really exiting — see the variant of this very experiment in
+// /private/tmp/.../node-repro/parent-nobuf.js vs parent-withbuf.js. This is
+// purely a property of the STUB (it never touched the real `gh` nor
+// dispatch-check.mjs/ct-next.mjs), so it changes the behaviour of NO existing
+// test with small payloads — it only makes the large-payload case correct
+// (instead of "it works by accident because it was never tried with anything
+// big"). (D1+D2: the same `return`-instead-of-`exit` now applies as well to the
+// milestones/label-create blocks that D1 (`fix/dispatch-graph-hardening`) added
+// for F5/ct-groom.mjs — they had no reason to stay out of this protection just
+// for coming from the other branch.)
 function main() {
   if (argv[0] === 'issue' && argv[1] === 'edit') {
-    // FAKE_GH_EDIT_WAIT_FILE (F8): se queda DENTRO de este `issue edit` hasta
-    // que el test cree el fichero centinela. Sustituye a la ventana de tiempo
-    // de FAKE_GH_EDIT_DELAY_MS en los tests que necesitan mandar una señal
-    // "mientras el claim se está escribiendo": el argv ya quedó registrado
-    // arriba (appendFileSync, síncrono), así que el test puede detectar por
-    // fichero que estamos aquí dentro, mandar la señal con toda la calma del
-    // mundo, y solo entonces soltarnos. Ver __tests__/fixtures/stub-wait.js
-    // para el razonamiento completo.
+    // FAKE_GH_EDIT_WAIT_FILE (F8): it stays INSIDE this `issue edit` until the
+    // test creates the sentinel file. It replaces the time window of
+    // FAKE_GH_EDIT_DELAY_MS in the tests that need to send a signal "while the
+    // claim is being written": the argv was already recorded above
+    // (appendFileSync, synchronous), so the test can detect by file that we are
+    // in here, send the signal at its leisure, and only then let us go. See
+    // __tests__/fixtures/stub-wait.js for the full reasoning.
     //
-    // OJO al alcance: esto bloquea TODO `issue edit`, incluido el revert
-    // automático posterior. Es intencionado y no molesta — cuando ct-next
-    // llega al revert, el centinela ya existe desde hace rato y la espera es
-    // un no-op.
+    // MIND THE SCOPE: this blocks EVERY `issue edit`, the later automatic
+    // revert included. That is intentional and it does no harm — by the time
+    // ct-next reaches the revert, the sentinel has existed for a good while and
+    // the wait is a no-op.
     waitForReleaseFile('FAKE_GH_EDIT_WAIT_FILE')
-    // FAKE_GH_EDIT_DELAY_MS (finding 1, test de reentrada de señal): ensancha
-    // de forma determinista la ventana en la que ct-next.mjs está bloqueado
-    // DENTRO del propio revert automático (gh() es una llamada síncrona) —
-    // necesaria para poder enviar una SEGUNDA señal mientras la primera
-    // todavía se está gestionando, sin depender de ganar una carrera contra
-    // el scheduler del SO bajo carga variable. Síncrono a propósito (este
-    // es el HIJO simulando latencia real de gh, no el propio ct-next.mjs).
+    // FAKE_GH_EDIT_DELAY_MS (finding 1, signal re-entry test): deterministically
+    // widens the window in which ct-next.mjs is blocked INSIDE the automatic
+    // revert itself (gh() is a synchronous call) — needed in order to send a
+    // SECOND signal while the first is still being handled, without depending on
+    // winning a race against the OS scheduler under variable load. Synchronous
+    // on purpose (this is the CHILD simulating gh's real latency, not
+    // ct-next.mjs itself).
     const delayMs = Number(process.env.FAKE_GH_EDIT_DELAY_MS || 0)
     if (delayMs > 0) {
       const sab = new Int32Array(new SharedArrayBuffer(4))
@@ -109,14 +107,13 @@ function main() {
   }
 
   // `gh issue create --repo <r> --title … --body … --milestone … --label …`
-  // (ct-groom.mjs). Devuelve por stdout la URL del issue creado, que es lo
-  // que gh imprime de verdad y lo que ct-groom.mjs pasa después a `gh project
-  // item-add --url`. F6: hasta ahora NINGÚN test de CLI llegaba a esta rama —
-  // todos los tests de corrida real de ct-groom partían de issues ya
-  // existentes, así que el camino de CREACIÓN (el más común en producción:
-  // groomear un epic nuevo) no se ejecutaba nunca en la suite. Numera desde
-  // el 900 para que ningún número creado se confunda con los fixtures de
-  // issues existentes (501/502…).
+  // (ct-groom.mjs). It returns on stdout the URL of the created issue, which is
+  // what gh really prints and what ct-groom.mjs then passes to `gh project
+  // item-add --url`. F6: until now NO CLI test reached this branch — every real
+  // run test of ct-groom started from issues that already existed, so the
+  // CREATION path (the most common one in production: grooming a new epic) was
+  // never exercised in the suite. It numbers from 900 so that no created number
+  // can be confused with the fixtures of existing issues (501/502…).
   if (argv[0] === 'issue' && argv[1] === 'create') {
     if (process.env.FAKE_GH_ISSUE_CREATE_FAIL) {
       console.error('fake-gh: issue create failed (simulado)')
@@ -129,10 +126,10 @@ function main() {
     return
   }
 
-  // `issue comment` — lo usa el vigilante del `-OK` para explicar el formato
-  // cuando alguien intenta dar el go y su comentario no lo abre. El cuerpo va
-  // al registro de argv (FAKE_GH_ARGV_LOG_FILE), que es donde el test lo lee:
-  // lo que hay que poder comprobar es que ese cuerpo NO lleva el nonce.
+  // `issue comment` — used by the `-OK` watcher to explain the format when
+  // someone tries to give the go and their comment does not open it. The body
+  // goes to the argv log (FAKE_GH_ARGV_LOG_FILE), which is where the test reads
+  // it: what has to be checkable is that that body does NOT carry the nonce.
   if (argv[0] === 'issue' && argv[1] === 'comment') {
     if (process.env.FAKE_GH_ISSUE_COMMENT_FAIL) {
       console.error('fake-gh: issue comment failed (simulado)')
@@ -145,22 +142,21 @@ function main() {
   }
 
   if (argv[0] === 'issue' && argv[1] === 'view') {
-    // FAKE_GH_VIEW_FAIL (D2, finding 3): simula que `labelsOf()` (la lectura
-    // de labels del propio candidato en dispatch-check.mjs) falla — auth
-    // caída, rate limit, red — ANTES de cualquier escritura. Sin esto no
-    // había forma de distinguir, desde un stub, "no se pudo leer el estado
-    // del candidato" (fallo de infraestructura) de "colisión detectada"
-    // (resultado normal del protocolo): ambos casos, antes de este fix,
-    // terminaban en el mismo exit 1 de dispatch-check que ct-next trataba
-    // siempre como "salta y sigue".
-    // FAKE_GH_VIEW_FAIL_AT (D2 review, menor 3): variante indexada de
-    // FAKE_GH_VIEW_FAIL — falla solo la N-ésima llamada a `issue view`
-    // (0-based, contador PROPIO vía FAKE_GH_VIEW_COUNTER_FILE, independiente
-    // del contador de FAKE_GH_LIST_SEQUENCE) en vez de TODAS. Necesario para
-    // probar que un fallo de infraestructura en UN candidato de la tanda no
-    // impide intentar el SIGUIENTE — con FAKE_GH_VIEW_FAIL (sin índice)
-    // fallarían los dos por igual y no se podría distinguir "aborta toda la
-    // tanda" de "sigue con el resto".
+    // FAKE_GH_VIEW_FAIL (D2, finding 3): simulates `labelsOf()` (the read of
+    // the candidate's own labels in dispatch-check.mjs) failing — auth down,
+    // rate limit, network — BEFORE any write. Without this there was no way to
+    // tell apart, from a stub, "the state of the candidate could not be read"
+    // (an infrastructure failure) from "collision detected" (a normal outcome
+    // of the protocol): both cases, before this fix, ended in the same exit 1
+    // of dispatch-check that ct-next always treated as "skip and carry on".
+    // FAKE_GH_VIEW_FAIL_AT (D2 review, minor 3): an indexed variant of
+    // FAKE_GH_VIEW_FAIL — it fails only the Nth call to `issue view` (0-based,
+    // with its OWN counter via FAKE_GH_VIEW_COUNTER_FILE, independent of the
+    // FAKE_GH_LIST_SEQUENCE counter) instead of ALL of them. Necessary to test
+    // that an infrastructure failure on ONE candidate of the batch does not
+    // prevent trying the NEXT one — with FAKE_GH_VIEW_FAIL (no index) both
+    // would fail alike and there would be no telling "it aborts the whole
+    // batch" from "it carries on with the rest".
     const viewCallIndex = nextCallIndex(process.env.FAKE_GH_VIEW_COUNTER_FILE)
     const viewFailAt = process.env.FAKE_GH_VIEW_FAIL_AT !== undefined ? Number(process.env.FAKE_GH_VIEW_FAIL_AT) : null
     if (process.env.FAKE_GH_VIEW_FAIL || (viewFailAt !== null && viewCallIndex === viewFailAt)) {
@@ -168,22 +164,23 @@ function main() {
       process.exitCode = 1
       return
     }
-    // FAKE_GH_VIEW_COMMENTS — el camino de `--json comments`, que es el que usa
-    // el vigilante del `-OK` (scripts/ct-watch-go.mjs). Va aparte del de labels
-    // porque son dos preguntas distintas al mismo subcomando: sin separarlas,
-    // el vigilante recibiría la lista de labels y no encontraría `comments` en
-    // ella nunca.
+    // FAKE_GH_VIEW_COMMENTS — the `--json comments` path, which is the one the
+    // `-OK` watcher uses (scripts/ct-watch-go.mjs). It goes apart from the
+    // labels one because they are two different questions to the same
+    // subcommand: without separating them, the watcher would receive the list
+    // of labels and would never find `comments` in it.
     //
-    // FAKE_GH_VIEW_COMMENTS_SEQUENCE (opcional) es una lista de payloads, uno
-    // por llamada, para poder probar lo que de verdad importa del vigilante:
-    // que en el primer tick NO hay go y sigue esperando, y que en un tick
-    // POSTERIOR sí lo hay y entonces empuja. Con un payload fijo sólo se puede
-    // probar uno de los dos.
+    // FAKE_GH_VIEW_COMMENTS_SEQUENCE (optional) is a list of payloads, one per
+    // call, so that what really matters about the watcher can be tested: that
+    // on the first tick there is NO go and it keeps waiting, and that on a
+    // LATER tick there is one and then it pushes. With a fixed payload only one
+    // of the two can be tested.
     if (joined.includes('--json comments')) {
-      // FAKE_GH_VIEW_COMMENTS_FAIL (F38): falla SÓLO la lectura de comentarios,
-      // no la de labels ni la del body. Con FAKE_GH_VIEW_FAIL (que tumba todo
-      // `issue view`) no se puede probar la puerta 9 del `--release`: la puerta
-      // 8, que lee el body, gana antes y el test mediría otra cosa.
+      // FAKE_GH_VIEW_COMMENTS_FAIL (F38): fails ONLY the read of comments, not
+      // the one of labels nor the one of the body. With FAKE_GH_VIEW_FAIL
+      // (which brings down every `issue view`) door 9 of `--release` cannot be
+      // tested: door 8, which reads the body, wins first and the test would be
+      // measuring something else.
       if (process.env.FAKE_GH_VIEW_COMMENTS_FAIL) {
         console.error('fake-gh: issue view --json comments failed (simulado)')
         process.exitCode = 1
@@ -201,22 +198,22 @@ function main() {
       process.exitCode = 0
       return
     }
-    // FAKE_GH_VIEW_BODY (TAREA 10) — el camino de `--json body`, que es el
-    // que usa la puerta F-e2e de `dispatch-check.mjs --release` para leer el
-    // cuerpo del issue y cruzarlo contra el run entregado. Va aparte del de
-    // labels y del de comments por la misma razón que ellos: misma
-    // subcomando, pregunta distinta — sin separarla, la puerta F-e2e
-    // recibiría la lista de labels y nunca encontraría un body que parsear.
+    // FAKE_GH_VIEW_BODY (TASK 10) — the `--json body` path, which is the one
+    // the F-e2e door of `dispatch-check.mjs --release` uses to read the body of
+    // the issue and cross it against the delivered run. It goes apart from the
+    // labels one and the comments one for the same reason as they do: same
+    // subcommand, different question — without separating it, the F-e2e door
+    // would receive the list of labels and would never find a body to parse.
     if (joined.includes('--json body')) {
       process.stdout.write(process.env.FAKE_GH_VIEW_BODY ?? '')
       process.exitCode = 0
       return
     }
-    // FAKE_GH_ISSUE_VIEW_JSON (F20/cosecha, Task 6) — el camino de `--json
-    // number,title,state,closedAt,labels,milestone,closedByPullRequestsReferences`,
-    // que es la fila entera del slice que `SliceHarvest` lee en `--collect`. Va
-    // aparte de labels/comments/body por la misma razón que ellos: mismo
-    // subcomando, pregunta distinta.
+    // FAKE_GH_ISSUE_VIEW_JSON (F20/harvest, Task 6) — the `--json
+    // number,title,state,closedAt,labels,milestone,closedByPullRequestsReferences`
+    // path, which is the whole row of the slice that `SliceHarvest` reads in
+    // `--collect`. It goes apart from labels/comments/body for the same reason
+    // as they do: same subcommand, different question.
     if (joined.includes('--json number,title')) {
       process.stdout.write(process.env.FAKE_GH_ISSUE_VIEW_JSON || '{}')
       process.exitCode = 0
@@ -242,15 +239,14 @@ function main() {
     return
   }
 
-  // `gh api repos/<owner>/<repo>/issues ... --paginate --slurp` (review
-  // final, finding 2): ct-next.mjs y dispatch-check.mjs enumeran issues
-  // abiertos/cerrados por este endpoint REST en vez de `gh issue list --limit
-  // N`, para no reintroducir el truncado silencioso. Reutiliza EXACTAMENTE la
-  // misma secuenciación por contador que el bloque `issue list` de arriba,
-  // para que los tests existentes (que ya orquestan una llamada de
-  // "abiertos" seguida de una de "cerrados"/readback vía
-  // FAKE_GH_LIST_SEQUENCE) sigan funcionando sin cambios tras el cambio de
-  // comando subyacente.
+  // `gh api repos/<owner>/<repo>/issues ... --paginate --slurp` (final review,
+  // finding 2): ct-next.mjs and dispatch-check.mjs enumerate open/closed issues
+  // through this REST endpoint instead of `gh issue list --limit N`, so as not
+  // to reintroduce the silent truncation. It reuses EXACTLY the same
+  // counter-based sequencing as the `issue list` block above, so that the
+  // existing tests (which already orchestrate one "open" call followed by one
+  // "closed"/readback call via FAKE_GH_LIST_SEQUENCE) keep working unchanged
+  // after the change of the underlying command.
   if (argv[0] === 'api' && /^repos\/[^/]+\/[^/]+\/issues$/.test(argv[1] || '')) {
     const callIndex = nextCallIndex(process.env.FAKE_GH_COUNTER_FILE)
     const failAt = process.env.FAKE_GH_LIST_FAIL_AT !== undefined ? Number(process.env.FAKE_GH_LIST_FAIL_AT) : null
@@ -267,20 +263,21 @@ function main() {
   }
 
   // `gh api repos/<owner>/<repo>/issues/<n>/timeline --paginate`
-  // (ct-status.mjs, F25): el timeline de UN issue, que es de donde sale la
-  // EDAD del claim — el evento `labeled` más reciente para
-  // `status:in-progress`. Sin esa edad no se puede distinguir un slice que
-  // acaba de arrancar (todavía sin proceso `claude`, y perfectamente sano) de
-  // uno abandonado hace tres horas.
+  // (ct-status.mjs, F25): the timeline of ONE issue, which is where the AGE of
+  // the claim comes from — the most recent `labeled` event for
+  // `status:in-progress`. Without that age there is no telling a slice that has
+  // just started (still with no `claude` process, and perfectly healthy) from
+  // one abandoned three hours ago.
   //
-  // FAKE_GH_TIMELINE_JSON es la respuesta completa, tal cual (`--paginate`
-  // sobre un endpoint de array devuelve UN array ya fusionado, no un array de
-  // páginas: no lleva `--slurp`). El default "[]" —un timeline sin ningún
-  // evento— es deliberado y es el caso "no se pudo determinar la antigüedad":
-  // ningún test preexistente llega aquí, y los que lleguen sin fijar la
-  // variable no deben recibir una edad inventada.
-  // FAKE_GH_TIMELINE_FAIL simula que la lectura falla (auth/red/rate limit),
-  // que es el caso en el que el comando NO puede acusar a nadie de abandono.
+  // FAKE_GH_TIMELINE_JSON is the complete response, as is (`--paginate` over an
+  // array endpoint returns ONE already merged array, not an array of pages: it
+  // carries no `--slurp`). The default "[]" —a timeline with no event at all—
+  // is deliberate and is the "the age could not be determined" case: no
+  // pre-existing test reaches here, and those that do reach it without setting
+  // the variable must not receive an invented age.
+  // FAKE_GH_TIMELINE_FAIL simulates the read failing (auth/network/rate limit),
+  // which is the case in which the command can NOT accuse anyone of
+  // abandonment.
   if (argv[0] === 'api' && /^repos\/[^/]+\/[^/]+\/issues\/\d+\/timeline$/.test(argv[1] || '')) {
     if (process.env.FAKE_GH_TIMELINE_FAIL) {
       console.error('fake-gh: api issue timeline failed (simulado)')
@@ -292,18 +289,18 @@ function main() {
     return
   }
 
-  // `gh api repos/<owner>/<repo>/milestones ...` (ct-groom.mjs, F5): el
-  // listado (GET explícito, `--method GET -f state=all --paginate`) y la
-  // creación (POST implícito, sin `--method`, solo `-f title=<t>`) comparten
-  // el mismo endpoint REST — se distinguen por la presencia de `--method` en
-  // argv (el listado SIEMPRE lo pasa explícito; la creación nunca).
-  // FAKE_GH_MILESTONES_LIST controla la respuesta del listado (default: "[]",
-  // ningún milestone existente); FAKE_GH_MILESTONE_CREATE_NUMBER controla el
-  // número devuelto al "crear" uno (default: 1). Los tests de F5 (detección de
-  // divergencia / --reconcile) siempre dan por hecho un milestone YA
-  // existente que matchea el título del plan, precisamente para no tener que
-  // ejercitar la rama de creación — es una feature ortogonal, ya cableada y
-  // sin tests de CLI propios antes de F5.
+  // `gh api repos/<owner>/<repo>/milestones ...` (ct-groom.mjs, F5): the
+  // listing (explicit GET, `--method GET -f state=all --paginate`) and the
+  // creation (implicit POST, with no `--method`, only `-f title=<t>`) share the
+  // same REST endpoint — they are told apart by the presence of `--method` in
+  // argv (the listing ALWAYS passes it explicitly; the creation never does).
+  // FAKE_GH_MILESTONES_LIST drives the response of the listing (default: "[]",
+  // no existing milestone); FAKE_GH_MILESTONE_CREATE_NUMBER drives the number
+  // returned when "creating" one (default: 1). The F5 tests (divergence
+  // detection / --reconcile) always take for granted a milestone that ALREADY
+  // exists and matches the title of the plan, precisely so as not to have to
+  // exercise the creation branch — it is an orthogonal feature, already wired
+  // up and with no CLI tests of its own before F5.
   if (argv[0] === 'api' && /^repos\/[^/]+\/[^/]+\/milestones$/.test(argv[1] || '')) {
     if (argv.includes('--method')) {
       process.stdout.write(process.env.FAKE_GH_MILESTONES_LIST || '[]')
@@ -316,14 +313,16 @@ function main() {
   }
 
   // `gh api repos/<owner>/<repo>/labels --method GET --paginate --slurp`
-  // (ct-groom.mjs, F6 menor 5): las labels que YA existen en el repo, para
-  // poder distinguir "reutilicé una" de "me inventé una nueva" y para no
-  // reescribir con --force las que ya estaban. FAKE_GH_LABELS_LIST trae la
-  // respuesta YA en forma de --slurp (array de páginas: [[{name},…]]);
-  // default "[[]]" (repo sin ninguna label), que es lo correcto para los
-  // tests anteriores a F6 — con él, todas las labels del plan salen como
-  // "creadas nuevas", igual que hacía el `--force` incondicional de antes.
-  // FAKE_GH_LABELS_FAIL simula que el listado falla (auth/red/rate limit).
+  // (ct-groom.mjs, F6 minor 5): the labels that ALREADY exist in the
+  // repository, so as to be able to tell "I reused one" from "I invented a new
+  // one" and so as not to rewrite with --force the ones that were already
+  // there. FAKE_GH_LABELS_LIST brings the response ALREADY in --slurp form (an
+  // array of pages: [[{name},…]]); the default is "[[]]" (a repository with no
+  // label at all), which is the right thing for the tests older than F6 — with
+  // it, every label of the plan comes out as "newly created", just as the
+  // unconditional `--force` of before did.
+  // FAKE_GH_LABELS_FAIL simulates the listing failing (auth/network/rate
+  // limit).
   if (argv[0] === 'api' && /^repos\/[^/]+\/[^/]+\/labels$/.test(argv[1] || '')) {
     if (process.env.FAKE_GH_LABELS_FAIL) {
       console.error('fake-gh: api labels failed (simulado)')
@@ -335,14 +334,14 @@ function main() {
     return
   }
 
-  // `gh api repos/<o>/<r>/contents/docs/superpowers/metrics[...]` (ct-harvest.mjs,
-  // §3.4): el LISTADO del directorio de telemetría y la lectura RAW de un
-  // fichero. Va antes de la rama genérica de `contents/` (la del spec
-  // renderizado en HTML de ct-groom) porque aquélla casa con cualquier ruta.
+  // `gh api repos/<o>/<r>/contents/docs/superpowers/metrics[...]`
+  // (ct-harvest.mjs, §3.4): the LISTING of the telemetry directory and the RAW
+  // read of a file. It goes before the generic `contents/` branch (the one of
+  // ct-groom's spec rendered as HTML) because that one matches any path.
   //
-  // Sin FAKE_GH_METRICS_DIR_JSON el listado FALLA, que es la vida real de todo
-  // repo anterior a la telemetría del juez: el default no puede ser un
-  // directorio vacío inventado.
+  // Without FAKE_GH_METRICS_DIR_JSON the listing FAILS, which is the real life
+  // of every repository older than the judge's telemetry: the default cannot be
+  // an invented empty directory.
   if (argv[0] === 'api' && /^repos\/[^/]+\/[^/]+\/contents\/docs\/superpowers\/metrics/.test(argv[1] || '')) {
     const ruta = argv[1]
     const esDirectorio = /\/contents\/docs\/superpowers\/metrics$/.test(ruta)
@@ -374,24 +373,26 @@ function main() {
     return
   }
 
-  // `gh api repos/<o>/<r>/contents/<ruta>?ref=<rama> -H "Accept:
-  // application/vnd.github.html"` (ct-groom.mjs, F10): el spec RENDERIZADO por
-  // GitHub. ct-groom.mjs lo pide por dos cosas a la vez — que el fichero
-  // exista de verdad en esa rama (si no, no hay enlace que escribir) y que el
-  // ancla que ha calculado del encabezado esté de verdad en el HTML.
+  // `gh api repos/<o>/<r>/contents/<path>?ref=<branch> -H "Accept:
+  // application/vnd.github.html"` (ct-groom.mjs, F10): the spec RENDERED by
+  // GitHub. ct-groom.mjs asks for it for two things at once — that the file
+  // really does exist on that branch (if it does not, there is no link to
+  // write) and that the anchor it has computed from the heading really is in
+  // the HTML.
   //
-  // FAKE_GH_CONTENTS_FAIL simula el 404 del caso más común de la vida real:
-  // el spec escrito pero todavía sin empujar.
-  // FAKE_GH_CONTENTS_ANCHORS es la lista (separada por espacios) de anclas
-  // que "tiene" el documento publicado. El default cubre los dos encabezados
-  // §9 que usan los specs de esta suite ("## 9. Slices" -> "9-slices" y
-  // "## 9. Algo" -> "9-algo"); un test que quiera ejercer "el ancla no está
-  // en la copia publicada" lo fija a otra cosa (o a vacío).
+  // FAKE_GH_CONTENTS_FAIL simulates the 404 of the most common case in real
+  // life: the spec written but not pushed yet.
+  // FAKE_GH_CONTENTS_ANCHORS is the list (space separated) of anchors the
+  // published document "has". The default covers the two §9 headings the specs
+  // of this suite use ("## 9. Slices" -> "9-slices" and "## 9. Algo" ->
+  // "9-algo"); a test that wants to exercise "the anchor is not in the
+  // published copy" sets it to something else (or to empty).
   //
-  // El HTML es deliberadamente mínimo y ESCRITO A MANO, no generado con
-  // scripts/anchor.js: si el stub calculara el ancla con el mismo código que
-  // la produce, el test no comprobaría nada. La forma (`<a id="user-content-…"
-  // class="anchor">`) es la real, copiada de una respuesta de GitHub.
+  // The HTML is deliberately minimal and WRITTEN BY HAND, not generated with
+  // scripts/anchor.js: if the stub computed the anchor with the same code that
+  // produces it, the test would be checking nothing. The shape (`<a
+  // id="user-content-…" class="anchor">`) is the real one, copied from a GitHub
+  // response.
   if (argv[0] === 'api' && /^repos\/[^/]+\/[^/]+\/contents\//.test(argv[1] || '')) {
     if (process.env.FAKE_GH_CONTENTS_FAIL) {
       console.error('fake-gh: api contents failed (simulado: 404 Not Found)')
@@ -406,19 +407,20 @@ function main() {
   }
 
   // ---- Project v2 (ct-groom.mjs --project) --------------------------------
-  // F15/H2: hasta ahora el stub NO soportaba ninguna llamada de `project`, así
-  // que todo test con --project moría en "comando no soportado" — es decir, la
-  // única forma de ejercitar --project era que fallara. Sin poder simular un
-  // project SANO no se puede comprobar el ORDEN de las mutaciones (que es lo
-  // que H2 pone en el contrato), solo el camino de error.
+  // F15/H2: until now the stub supported NO `project` call at all, so every
+  // test with --project died in "unsupported command" — that is, the only way
+  // to exercise --project was for it to fail. Without being able to simulate a
+  // HEALTHY project there is no checking the ORDER of the mutations (which is
+  // what H2 puts in the contract), only the error path.
   //
-  //   FAKE_GH_PROJECT_VIEW_FAIL   → `gh project view` falla (project inexistente/auth).
-  //   FAKE_GH_PROJECT_FIELDS      → JSON de `data.node.fields.nodes` para la query de
-  //                                 campos. Default: un campo "Sprint" con una iteración
-  //                                 que empieza HOY y dura 14 días (o sea, vigente).
-  //                                 `[]` simula "no hay campo Sprint"; un Sprint con una
-  //                                 iteración vieja simula "ninguna iteración cubre hoy".
-  //   FAKE_GH_PROJECT_ITEMS       → JSON de `.items` para `project item-list` (default []).
+  //   FAKE_GH_PROJECT_VIEW_FAIL   → `gh project view` fails (project missing/auth).
+  //   FAKE_GH_PROJECT_FIELDS      → JSON of `data.node.fields.nodes` for the fields
+  //                                 query. Default: a "Sprint" field with an iteration
+  //                                 starting TODAY and lasting 14 days (that is, current).
+  //                                 `[]` simulates "there is no Sprint field"; a Sprint
+  //                                 with an old iteration simulates "no iteration covers
+  //                                 today".
+  //   FAKE_GH_PROJECT_ITEMS       → JSON of `.items` for `project item-list` (default []).
   if (argv[0] === 'project' && argv[1] === 'view') {
     if (process.env.FAKE_GH_PROJECT_VIEW_FAIL) {
       console.error('fake-gh: project view failed (simulado)')
@@ -430,14 +432,14 @@ function main() {
     return
   }
   if (argv[0] === 'project' && argv[1] === 'item-list') {
-    // F18/H6: el stub honra `--limit` y devuelve `totalCount`, como el gh
-    // real (verificado contra gh 2.86 sobre un project de verdad: `--limit 2`
-    // sobre 3 items devuelve `items.length = 2, totalCount = 3`). Antes
-    // devolvía SIEMPRE la lista entera y sin `totalCount`, así que el truncado
-    // —el fallo que produce duplicados en el Project— era literalmente
-    // insimulable desde los tests.
-    // FAKE_GH_PROJECT_ITEMS_NO_TOTALCOUNT simula una versión de gh que no lo
-    // expone.
+    // F18/H6: the stub honours `--limit` and returns `totalCount`, like the
+    // real gh (verified against gh 2.86 over a real project: `--limit 2` over 3
+    // items returns `items.length = 2, totalCount = 3`). Before, it ALWAYS
+    // returned the whole list and with no `totalCount`, so the truncation —the
+    // failure that produces duplicates in the Project— was literally
+    // unsimulatable from the tests.
+    // FAKE_GH_PROJECT_ITEMS_NO_TOTALCOUNT simulates a version of gh that does
+    // not expose it.
     const all = JSON.parse(process.env.FAKE_GH_PROJECT_ITEMS || '[]')
     const li = argv.indexOf('--limit')
     const limit = li >= 0 ? Number(argv[li + 1]) : 30
@@ -453,14 +455,15 @@ function main() {
     return
   }
   if (argv[0] === 'api' && argv[1] === 'graphql') {
-    // Listado de issues de /ct-groom (GROOM_ISSUES_QUERY). Se reconoce por
-    // `states:[OPEN,CLOSED]`, único de esa query. Traduce la MISMA
-    // FAKE_GH_LIST_SEQUENCE que servía la rama REST `issues` a la forma GraphQL
-    // (`--paginate --slurp` = array de objetos-respuesta, uno por página),
-    // FILTRANDO los items con `pull_request` — el server real nunca los
-    // devuelve por la conexión issues, y ése es justo el punto del fix.
-    // FAKE_GH_GRAPHQL_PAGE_SIZE parte la respuesta en varias páginas para
-    // probar que la paginación no pierde issues (review #45, punto 4).
+    // The issue listing of /ct-groom (GROOM_ISSUES_QUERY). It is recognised by
+    // `states:[OPEN,CLOSED]`, unique to that query. It translates the SAME
+    // FAKE_GH_LIST_SEQUENCE that the REST `issues` branch served into the
+    // GraphQL shape (`--paginate --slurp` = an array of response objects, one
+    // per page), FILTERING OUT the items with `pull_request` — the real server
+    // never returns those through the issues connection, and that is precisely
+    // the point of the fix.
+    // FAKE_GH_GRAPHQL_PAGE_SIZE splits the response into several pages to test
+    // that the pagination loses no issues (review #45, point 4).
     if (joined.includes('states:[OPEN,CLOSED]') || joined.includes('states: [OPEN, CLOSED]')) {
       const callIndex = nextCallIndex(process.env.FAKE_GH_COUNTER_FILE)
       const failAt = process.env.FAKE_GH_LIST_FAIL_AT !== undefined ? Number(process.env.FAKE_GH_LIST_FAIL_AT) : null
@@ -470,10 +473,11 @@ function main() {
         return
       }
       const seq = loadSequence()
-      // La entrada de la secuencia puede venir como lista plana de issues o
-      // como array-de-páginas (`[[...],[...]]`), igual que servía la rama REST
-      // —que ct-groom aplanaba con flattenIssuePages—. Se aplana aquí (.flat(),
-      // misma profundidad) para aceptar las dos formas sin tocar los fixtures.
+      // The sequence entry may come as a flat list of issues or as an
+      // array-of-pages (`[[...],[...]]`), just as the REST branch served it
+      // —which ct-groom flattened with flattenIssuePages—. It is flattened here
+      // (.flat(), same depth) so as to accept both shapes without touching the
+      // fixtures.
       const flat = (seq[Math.min(callIndex, seq.length - 1)] || []).flat()
       const issues = flat.filter((e) => !(e && Object.prototype.hasOwnProperty.call(e, 'pull_request')))
       const toNode = (i) => ({
@@ -495,18 +499,18 @@ function main() {
       process.exitCode = 0
       return
     }
-    // F18/H1+H4: la consulta de CIERRES de ct-next.mjs (quién cerró cada dep
-    // ya satisfecha, y si la rama feat/<n> de un in-review está mergeada). Se
-    // reconoce por el tipo de item de timeline que pide, que ninguna otra
-    // query del plugin usa.
+    // F18/H1+H4: the CLOSURES query of ct-next.mjs (who closed each already
+    // satisfied dep, and whether the feat/<n> branch of an in-review one is
+    // merged). It is recognised by the kind of timeline item it asks for, which
+    // no other query of the plugin uses.
     //
-    // El DEFAULT es deliberado: `{"data":{"repository":{}}}`, o sea "ningún
-    // alias vino" → todo queda como 'unknown' y NO se emite ningún aviso. Sin
-    // ese default, cada test preexistente que llegue aquí (los que enumeran
-    // issues de verdad con FAKE_GH_LIST_SEQUENCE) empezaría a ver avisos
-    // nuevos que no ha pedido.
-    //   FAKE_GH_CLOSURE_JSON → la respuesta completa, tal cual.
-    //   FAKE_GH_CLOSURE_FAIL → la consulta falla (red/auth/rate limit).
+    // The DEFAULT is deliberate: `{"data":{"repository":{}}}`, that is "no
+    // alias came back" → everything stays as 'unknown' and NO warning is
+    // emitted. Without that default, every pre-existing test that reaches here
+    // (the ones that really enumerate issues with FAKE_GH_LIST_SEQUENCE) would
+    // start seeing new warnings it never asked for.
+    //   FAKE_GH_CLOSURE_JSON → the complete response, as is.
+    //   FAKE_GH_CLOSURE_FAIL → the query fails (network/auth/rate limit).
     if (joined.includes('CLOSED_EVENT') || joined.includes('headRefName')) {
       if (process.env.FAKE_GH_CLOSURE_FAIL) {
         console.error('fake-gh: api graphql (cierres) failed (simulado)')
@@ -517,8 +521,8 @@ function main() {
       process.exitCode = 0
       return
     }
-    // Query de campos vs mutación de iteración: se distinguen por el texto de
-    // la propia query, igual que ct-groom.mjs las emite.
+    // Fields query vs iteration mutation: they are told apart by the text of
+    // the query itself, just as ct-groom.mjs emits them.
     const isFieldsQuery = joined.includes('ProjectV2IterationField')
     if (!isFieldsQuery) {
       process.stdout.write(JSON.stringify({ data: { updateProjectV2ItemFieldValue: { projectV2Item: { id: 'PVTI_fake' } } } }))
@@ -532,10 +536,11 @@ function main() {
       const today = new Date().toISOString().slice(0, 10)
       nodes = [{ id: 'PVTIF_fake', name: 'Sprint', configuration: { iterations: [{ id: 'ITER_fake', title: 'Sprint actual', startDate: today, duration: 14 }] } }]
     }
-    // F18/H6: `totalCount` también aquí — `fields(first: 50)` es una lectura
-    // acotada, y sin este dato ct-groom no puede distinguir "este project no
-    // tiene campo Sprint" de "no he visto todos sus campos".
-    // FAKE_GH_PROJECT_FIELDS_TOTALCOUNT fuerza un total mayor que lo devuelto.
+    // F18/H6: `totalCount` here too — `fields(first: 50)` is a bounded read,
+    // and without this datum ct-groom cannot tell "this project has no Sprint
+    // field" from "I have not seen all of its fields".
+    // FAKE_GH_PROJECT_FIELDS_TOTALCOUNT forces a total greater than what is
+    // returned.
     const totalCount = process.env.FAKE_GH_PROJECT_FIELDS_TOTALCOUNT !== undefined
       ? Number(process.env.FAKE_GH_PROJECT_FIELDS_TOTALCOUNT)
       : nodes.length
@@ -544,32 +549,30 @@ function main() {
     return
   }
 
-  // `gh label create <name> --repo <repo> --force` (ct-groom.mjs): una
-  // llamada por cada label distinta que el plan produce Y que el repo no
-  // tenía ya (F6), antes de crear/actualizar ningún issue. Siempre éxito —
-  // ningún test existente necesita simular su fallo (label create con
-  // --force no tiene, en la práctica, un caso "ya existe" que tratar como
-  // error).
+  // `gh label create <name> --repo <repo> --force` (ct-groom.mjs): one call
+  // per distinct label the plan produces AND that the repository did not
+  // already have (F6), before creating or updating any issue. Always a success
+  // — no existing test needs to simulate it failing (label create with --force
+  // has, in practice, no "it already exists" case to treat as an error).
   if (argv[0] === 'label' && argv[1] === 'create') {
     process.exitCode = 0
     return
   }
 
   // `gh repo view <repo> --json defaultBranchRef -q .defaultBranchRef.name`
-  // (W-D): ct-next.mjs resuelve la rama por defecto real del repo en vez de
-  // asumir "main" a ciegas. FAKE_GH_DEFAULT_BRANCH controla el valor
-  // devuelto (default: "main", para que los tests existentes que no fijan
-  // esta variable — y que no les importa qué rama base se use — sigan
-  // pasando sin cambios). FAKE_GH_REPO_VIEW_FAIL simula que gh no puede
-  // resolverlo (repo no encontrado, auth caída, sin red, etc.).
+  // (W-D): ct-next.mjs resolves the real default branch of the repository
+  // instead of blindly assuming "main". FAKE_GH_DEFAULT_BRANCH drives the value
+  // returned (default: "main", so that the existing tests that do not set this
+  // variable — and that do not care which base branch is used — keep passing
+  // unchanged). FAKE_GH_REPO_VIEW_FAIL simulates gh not being able to resolve
+  // it (repository not found, auth down, no network, etc.).
   //
-  // Fix round 1, Minor 3 (review de W-D): `??` en vez de `||` — con `||`,
-  // fijar FAKE_GH_DEFAULT_BRANCH a la cadena vacía ('') seguía cayendo a
-  // 'main' ('' es falsy), así que la rama de "gh repo view no devolvió nada"
-  // de detectDefaultBranch en ct-next.mjs era intestable con este stub. `??`
-  // solo cae al default cuando la variable no está definida en absoluto —
-  // una cadena vacía explícita se propaga tal cual, alcanzando de verdad esa
-  // rama.
+  // Fix round 1, Minor 3 (W-D review): `??` instead of `||` — with `||`,
+  // setting FAKE_GH_DEFAULT_BRANCH to the empty string ('') still fell back to
+  // 'main' ('' is falsy), so the "gh repo view returned nothing" branch of
+  // detectDefaultBranch in ct-next.mjs was untestable with this stub. `??`
+  // falls back to the default only when the variable is not defined at all — an
+  // explicit empty string propagates as is, really reaching that branch.
   if (argv[0] === 'repo' && argv[1] === 'view') {
     if (process.env.FAKE_GH_REPO_VIEW_FAIL) {
       console.error('fake-gh: repo view failed (simulado)')
@@ -582,21 +585,21 @@ function main() {
   }
 
   // `gh pr list --repo <r> --head feat/<n> --state merged --json number,mergedAt`
-  // (ct-watch-merge.mjs): la única pregunta del vigilante del merge. La rama de
-  // un slice es determinista (`feat/<n>`), así que "¿está mergeado?" no
-  // necesita ninguna heurística — sale de `gh` directamente.
+  // (ct-watch-merge.mjs): the merge watcher's only question. The branch of a
+  // slice is deterministic (`feat/<n>`), so "is it merged?" needs no heuristic
+  // at all — it comes straight out of `gh`.
   //
-  // FAKE_GH_PR_LIST es el payload fijo (default: `[]`, ningún PR mergeado, que
-  // es el estado en el que el vigilante empieza a esperar).
-  // FAKE_GH_PR_LIST_SEQUENCE es una lista de payloads, uno por llamada, con
-  // contador propio en FAKE_GH_PR_LIST_COUNTER_FILE — necesaria para el caso
-  // que importa de verdad: los primeros sondeos no ven nada y uno posterior sí,
-  // que es cómo se ve un merge en el mundo real. La última entrada se repite
-  // cuando la secuencia se agota, para que el vigilante pueda seguir sondeando
-  // sin que el stub se quede sin respuestas.
-  // FAKE_GH_PR_LIST_FAIL simula que la lectura falla (red caída, token
-  // caducado, un 502): lo que este stub tiene que poder ejercer es que un fallo
-  // transitorio NO se lea como "no está mergeado" de forma permanente.
+  // FAKE_GH_PR_LIST is the fixed payload (default: `[]`, no merged PR, which is
+  // the state in which the watcher starts waiting).
+  // FAKE_GH_PR_LIST_SEQUENCE is a list of payloads, one per call, with its own
+  // counter in FAKE_GH_PR_LIST_COUNTER_FILE — necessary for the case that
+  // really matters: the first polls see nothing and a later one does, which is
+  // how a merge looks in the real world. The last entry repeats once the
+  // sequence runs out, so that the watcher can keep polling without the stub
+  // running out of answers.
+  // FAKE_GH_PR_LIST_FAIL simulates the read failing (network down, an expired
+  // token, a 502): what this stub has to be able to exercise is that a
+  // transient failure is NOT read as "it is not merged" permanently.
   if (argv[0] === 'pr' && argv[1] === 'list') {
     if (process.env.FAKE_GH_PR_LIST_FAIL) {
       console.error('fake-gh: pr list failed (simulado)')

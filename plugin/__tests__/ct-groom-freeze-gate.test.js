@@ -6,17 +6,17 @@ import { fileURLToPath } from 'node:url'
 import { makeSpecDir } from './fixtures/spec-repo.js'
 import { analyzeSpecFreeze } from '../scripts/groom.js'
 
-// F32 §4.1 — groom gana UNA comprobación (la única línea de código nueva de
-// todo el diseño de la congelación): exit 2 si el spec tiene
-// `[NEEDS CLARIFICATION` pendientes o si `## Hipótesis` falta o está vacía.
+// F32 §4.1 — groom gains ONE check (the only new line of code in the whole
+// design of the freeze): exit 2 if the spec has pending
+// `[NEEDS CLARIFICATION` or if `## Hipótesis` is missing or empty.
 //
-// Por qué es dura y sin flag: José no lee los specs — la puerta de
-// congelación (15 líneas) es su única lectura del ciclo. Si groom aceptara
-// un spec sin hipótesis o con huecos sin resolver, el "lavado de decisiones"
-// que la congelación cierra volvería a entrar por la puerta de al lado.
-// La CALIDAD de la hipótesis la juzga el humano al congelar; groom solo
-// mira PRESENCIA. Decisión de José 2026-08-07, cerrada — sin apuesta
-// falsable no es un epic y no entra por groom.
+// Why it is hard and has no flag: José does not read the specs — the freeze
+// gate (15 lines) is his only reading of the cycle. If groom accepted a spec
+// with no hypothesis or with unresolved gaps, the "decision laundering" that
+// the freeze closes would come straight back in through the door next to it.
+// The QUALITY of the hypothesis is judged by the human when freezing; groom
+// only looks at PRESENCE. José's decision 2026-08-07, closed — without a
+// falsifiable bet it is not an epic and it does not get in through groom.
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'ct-groom.mjs')
 const QUIET_STDIO = ['ignore', 'pipe', 'pipe']
@@ -45,40 +45,40 @@ function runGroom(specMd) {
   }
 }
 
-describe('analyzeSpecFreeze — el módulo puro (dos greps)', () => {
-  it('spec congelable: hipótesis presente y con contenido, cero pendientes', () => {
+describe('analyzeSpecFreeze — the pure module (two greps)', () => {
+  it('freezable spec: hypothesis present and with content, zero pending items', () => {
     const r = analyzeSpecFreeze(HYPOTHESIS + TABLE)
     expect(r.hypothesis).toBe('ok')
     expect(r.clarifications).toEqual([])
   })
 
-  it('acepta el heading corto «## Hipótesis» además del largo', () => {
+  it('accepts the short «## Hipótesis» heading as well as the long one', () => {
     expect(analyzeSpecFreeze('## Hipótesis\n\nApuesta.\n' + TABLE).hypothesis).toBe('ok')
   })
 
-  it('hipótesis ausente', () => {
+  it('hypothesis absent', () => {
     expect(analyzeSpecFreeze(TABLE).hypothesis).toBe('ausente')
   })
 
-  it('hipótesis vacía (solo blancos)', () => {
+  it('empty hypothesis (whitespace only)', () => {
     expect(analyzeSpecFreeze('## Hipótesis\n\n   \n' + TABLE).hypothesis).toBe('vacia')
   })
 
-  it('hipótesis vacía: un comentario HTML residual de la plantilla NO cuenta como contenido', () => {
+  it('empty hypothesis: a leftover HTML comment from the template does NOT count as content', () => {
     const r = analyzeSpecFreeze('## Hipótesis\n\n<!-- escribe aquí la apuesta falsable -->\n' + TABLE)
     expect(r.hypothesis).toBe('vacia')
   })
 
-  it('la sección de la hipótesis termina en el siguiente heading (el contenido de OTRA sección no la rellena)', () => {
+  it('the hypothesis section ends at the next heading (the content of ANOTHER section does not fill it)', () => {
     const r = analyzeSpecFreeze('## Hipótesis\n## Enfoque técnico\n\nMucho contenido aquí.\n' + TABLE)
     expect(r.hypothesis).toBe('vacia')
   })
 
-  it('un «### Hipótesis» de nivel 3 no es la sección (el grep pre-registrado es «## Hipótesis»)', () => {
+  it('a level-3 «### Hipótesis» is not the section (the pre-registered grep is «## Hipótesis»)', () => {
     expect(analyzeSpecFreeze('### Hipótesis\n\nApuesta.\n' + TABLE).hypothesis).toBe('ausente')
   })
 
-  it('recoge cada [NEEDS CLARIFICATION pendiente con su línea', () => {
+  it('collects every pending [NEEDS CLARIFICATION with its line', () => {
     const md = HYPOTHESIS + '[NEEDS CLARIFICATION: ¿qué pasa con X?]\n' + TABLE + '\nOtro [NEEDS CLARIFICATION: ¿e Y?]\n'
     const r = analyzeSpecFreeze(md)
     expect(r.clarifications).toHaveLength(2)
@@ -87,43 +87,43 @@ describe('analyzeSpecFreeze — el módulo puro (dos greps)', () => {
   })
 })
 
-describe('ct-groom — la puerta de congelación (exit 2, antes de tocar nada, también bajo --dry-run)', () => {
-  it('spec sin «## Hipótesis» → exit 2 y el remedio en el mensaje', () => {
+describe('ct-groom — the freeze gate (exit 2, before touching anything, under --dry-run too)', () => {
+  it('spec with no «## Hipótesis» → exit 2 and the remedy in the message', () => {
     const r = runGroom(TABLE)
     expect(r.status).toBe(2)
     expect(r.stderr).toContain('## Hipótesis')
-    // el mensaje dice a dónde va el trabajo sin apuesta: fuera del ciclo de epics
+    // the message says where work with no bet goes: outside the epic cycle
     expect(r.stderr).toMatch(/issue suelto|sin apuesta/i)
   })
 
-  it('«## Hipótesis» vacía → exit 2 (presencia sin contenido no es presencia)', () => {
+  it('empty «## Hipótesis» → exit 2 (presence with no content is not presence)', () => {
     const r = runGroom('## Hipótesis\n\n\n' + TABLE)
     expect(r.status).toBe(2)
     expect(r.stderr).toContain('vacía')
   })
 
-  it('[NEEDS CLARIFICATION pendiente → exit 2, nombrando cuántos y dónde', () => {
+  it('pending [NEEDS CLARIFICATION → exit 2, naming how many and where', () => {
     const r = runGroom(HYPOTHESIS + TABLE + '\n[NEEDS CLARIFICATION: ¿tabla o lista?]\n')
     expect(r.status).toBe(2)
     expect(r.stderr).toContain('[NEEDS CLARIFICATION')
     expect(r.stderr).toMatch(/línea \d+/)
   })
 
-  it('las dos averías a la vez → los dos mensajes, un solo exit 2 (sin noria de arregla-uno-corre-otra-vez)', () => {
+  it('both faults at once → both messages, a single exit 2 (no fix-one-run-again merry-go-round)', () => {
     const r = runGroom(TABLE + '\n[NEEDS CLARIFICATION: ¿?]\n')
     expect(r.status).toBe(2)
     expect(r.stderr).toContain('## Hipótesis')
     expect(r.stderr).toContain('[NEEDS CLARIFICATION')
   })
 
-  it('la puerta se agrega a los errores de tabla: hipótesis ausente + tabla rota se reportan JUNTOS', () => {
+  it('the gate aggregates with the table errors: absent hypothesis + broken table are reported TOGETHER', () => {
     const r = runGroom('nada de tabla aquí\n')
     expect(r.status).toBe(2)
     expect(r.stderr).toContain('## Hipótesis')
     expect(r.stderr).toContain('tabla')
   })
 
-  it('spec congelable → la puerta no dispara y el dry-run imprime su plan (exit 0)', () => {
+  it('freezable spec → the gate does not fire and the dry-run prints its plan (exit 0)', () => {
     const r = runGroom(HYPOTHESIS + TABLE)
     expect(r.status).toBe(0)
     const plan = JSON.parse(r.stdout)

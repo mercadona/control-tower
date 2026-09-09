@@ -4,20 +4,22 @@
 # through the controller's context.
 #
 # usage: task-brief [--with-plan-context] PLAN_FILE TASK_NUMBER [OUTFILE]
-# El flag va PRIMERO y es opcional. Con él, y solo con él, el fichero de salida
-# lleva delante de la tarea las secciones "### Desired end state", "### Out of
-# scope", "## 2. Closed decisions" y "## 3. Reference patterns", cada una con su
-# encabezado.
+# The flag goes FIRST and is optional. With it, and only with it, the output
+# file carries, ahead of the task, the sections "### Desired end state",
+# "### Out of scope", "## 2. Closed decisions" and "## 3. Reference patterns",
+# each under its own heading.
 #
-# LAS CUATRO SECCIONES NO TIENEN LA MISMA AUTORIDAD, y van bajo dos líneas
-# distintas por eso. Las tres últimas son la VARA: si contradicen la tarea,
-# ganan ellas. "### Desired end state" no lo es — es el fin del slice, y viaja
-# para que quien implementa y quien juzga sepan a qué sirve la tarea, que es lo
-# único que ataba la tarea a los criterios de aceptación del issue y no llegaba.
-# Darle autoridad de vara sería una licencia para ensanchar la tarea ("sirve al
-# fin del slice"), y eso debilita justo el ítem `alcance`, que hoy funciona.
-# Sin el flag la salida es la de siempre, byte a byte: el camino por defecto de
-# subagent-driven-development llama a este script y esa decisión es de José.
+# THE FOUR SECTIONS DO NOT CARRY THE SAME AUTHORITY, and that is why they go
+# under two different lines. The last three are the YARDSTICK: if they
+# contradict the task, they win. "### Desired end state" is not — it is the
+# slice's end, and it travels so that whoever implements and whoever judges
+# know what the task serves, which was the only thing tying the task to the
+# issue's acceptance criteria and it was not arriving. Giving it yardstick
+# authority would be a licence to widen the task ("it serves the slice's end"),
+# and that weakens precisely the `alcance` item, which works today.
+# Without the flag the output is the same as always, byte for byte: the default
+# path of subagent-driven-development calls this script and that decision is
+# José's.
 #
 # Default OUTFILE: <repo-root>/.superpowers/sdd/task-<N>-brief.md
 # (per worktree; concurrent runs in the same working tree share it).
@@ -48,10 +50,9 @@ else
   out="$dir/task-${n}-brief.md"
 fi
 
-# Extrae una sección por su encabezado literal (con su nivel de "#"), hasta el
-# siguiente encabezado de igual o menor nivel, respetando los cercados de
-# código para no confundir un comentario "# ..." de un bloque con un
-# encabezado real.
+# Extracts a section by its literal heading (with its "#" level), up to the
+# next heading of equal or lower level, respecting code fences so that a
+# "# ..." comment inside a block is not mistaken for a real heading.
 extract_section() {
   local heading=$1
   awk -v hdr="$heading" '
@@ -67,10 +68,10 @@ extract_section() {
   ' "$plan"
 }
 
-# Envuelve extract_section: si el plan no trae esa sección, un hueco en
-# blanco se lee como "existe y está vacía", que no es lo mismo que "no
-# existe" — y la línea de arriba ya dice que estas secciones son la vara.
-# Declararlo ausente es lo único que no miente.
+# Wraps extract_section: if the plan does not carry that section, a blank gap
+# reads as "it exists and it is empty", which is not the same as "it does not
+# exist" — and the line above already says these sections are the yardstick.
+# Declaring it absent is the only thing that does not lie.
 print_section() {
   local heading=$1
   local contenido

@@ -5,46 +5,46 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { shQuote } from '../scripts/shquote.js'
-// D4: entorno hermético (dirs de cuenta + stubs de cmux/claude) — ver fixtures/hermetic-env.js
+// D4: hermetic environment (account dirs + cmux/claude stubs) — see fixtures/hermetic-env.js
 import {hermeticEnv} from './fixtures/hermetic-env.js'
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'ct-next.mjs')
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 
-// stdio explícito (finding 11 de la review final): sin esto, execFileSync
-// además de capturar el stderr del hijo en `e.stderr` (lo que ya usan las
-// aserciones de abajo) también lo reenvía al proceso padre — es decir, a la
-// salida de `npm test`. Todas las líneas que aparecían así son la salida
-// ESPERADA de rutas de fallo deliberadas (tests de error de uso, colisión,
-// etc.), pero un lector no puede distinguir ese ruido esperado de un fallo
-// real sin leer el código. `stdio: ['ignore','pipe','pipe']` mantiene stdout/
-// stderr disponibles vía `e.stdout`/`e.stderr` sin ecoarlos al padre.
-// F16/H2: `spawnSync`, no `execFileSync`. `execFileSync` solo DEVUELVE stdout
-// cuando el hijo sale con 0 — el stderr aparecía únicamente por el `catch`, o
-// sea solo cuando la corrida fallaba. Mientras los avisos iban por stdout eso
-// no se notaba; desde el criterio de canal (ct-next.mjs), una corrida
-// CORRECTA con avisos perdía el stderr entero y estos tests medían media
-// transcripción.
+// explicit stdio (finding 11 of the final review): without this, execFileSync
+// not only captures the child's stderr in `e.stderr` (which the assertions
+// below already use) but also forwards it to the parent process — that is, to
+// the output of `npm test`. Every line that showed up that way is the EXPECTED
+// output of deliberate failure paths (usage-error tests, collision, etc.), but
+// a reader cannot tell that expected noise from a real failure without reading
+// the code. `stdio: ['ignore','pipe','pipe']` keeps stdout/stderr available
+// via `e.stdout`/`e.stderr` without echoing them to the parent.
+// F16/H2: `spawnSync`, not `execFileSync`. `execFileSync` only RETURNS stdout
+// when the child exits with 0 — stderr showed up only through the `catch`,
+// that is, only when the run failed. While the warnings went on stdout that
+// went unnoticed; since the channel criterion (ct-next.mjs), a CORRECT run
+// with warnings lost the whole of stderr and these tests were measuring half a
+// transcript.
 function run(args, envOverrides = {}) {
-  // hermeticEnv() (D4): además de los dirs de cuenta, mete los stubs de
-  // `cmux`/`claude` por delante del PATH real — el preflight los BUSCA (no
-  // los ejecuta), y sin esto la suite dependería de que la máquina que la
-  // corre los tenga instalados.
+  // hermeticEnv() (D4): besides the account dirs, it puts the `cmux`/`claude`
+  // stubs ahead of the real PATH — the preflight LOOKS them up (it does not
+  // run them), and without this the suite would depend on the machine running
+  // it having them installed.
   const r = spawnSync('node', [script, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...hermeticEnv(), ...envOverrides } })
   return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }
 }
 
-// El wrapper acepta CT_NEXT_FIXTURE (JSON de {issues, mergedIssues}) para test sin red.
-// F13: este fixture describía un estado IMPOSIBLE — #1 aparecía a la vez en
-// `mergedIssues` (o sea, cerrado y mergeado) y dentro de `issues`, que es la
-// lista de issues ABIERTOS (buildDispatchInput solo mapea `rawOpenIssues`).
-// Era inocuo mientras `status:in-review` no hiciera nada; desde F13/H2 un
-// in-review retiene sus tokens, así que ese #1 fantasma bloqueaba a #2 por
-// `touches:api` y el fixture dejaba de despachar nada. Se corrige la
-// contradicción, no el comportamiento: un issue mergeado no está abierto, así
-// que desaparece de `issues` y sigue en `mergedIssues` — que es justo lo que
-// este fixture quería decir (la dep de #2 está mergeada).
+// The wrapper accepts CT_NEXT_FIXTURE (JSON of {issues, mergedIssues}) for tests without network.
+// F13: this fixture described an IMPOSSIBLE state — #1 appeared at the same
+// time in `mergedIssues` (that is, closed and merged) and inside `issues`,
+// which is the list of OPEN issues (buildDispatchInput only maps
+// `rawOpenIssues`). It was harmless while `status:in-review` did nothing;
+// since F13/H2 an in-review retains its tokens, so that phantom #1 blocked #2
+// through `touches:api` and the fixture stopped dispatching anything. The
+// contradiction is fixed, not the behaviour: a merged issue is not open, so it
+// disappears from `issues` and stays in `mergedIssues` — which is exactly what
+// this fixture meant to say (#2's dep is merged).
 const FIXTURE = JSON.stringify({
   issues: [
     { n: 2, order: 2, status: 'ready', deps: [1], touches: ['api'], name: 'refresh', type: 'backend' },
@@ -53,59 +53,61 @@ const FIXTURE = JSON.stringify({
 })
 
 describe('ct-next --dry-run', () => {
-  it('elige #2 e imprime worktree + cmux', () => {
+  it('picks #2 and prints worktree + cmux', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE })
     expect(r.code).toBe(0)
     expect(r.out).toContain('#2')
     expect(r.out).toContain('git worktree add')
     expect(r.out).toContain('cmux')
     expect(r.out).toContain('new-workspace')
-    // F35: aquí se comprobaba que el argv de cmux llevara
-    // `--env CLAUDE_CONFIG_DIR=<dir de la cuenta resuelta>` (hallazgo T10: el
-    // daemon de cmux solo recibe el entorno por --env, no del proceso
-    // cliente). Sin resolución de cuenta no hay nada que exportar, y el pin
-    // pasa a ser el contrario: la línea de cmux no lleva ningún --env, y la
-    // sesión hereda la configuración ambiente de quien lanza.
+    // F35: this used to check that cmux's argv carried
+    // `--env CLAUDE_CONFIG_DIR=<dir of the resolved account>` (finding T10:
+    // cmux's daemon only receives the environment through --env, not from the
+    // client process). With no account resolution there is nothing to export,
+    // and the pin becomes the opposite one: the cmux line carries no --env at
+    // all, and the session inherits the ambient configuration of whoever
+    // launches it.
     expect(r.out).not.toMatch(/--env/)
     expect(r.out).not.toMatch(/\.claude-personal/)
   })
 
-  it('no reproduce la garantía de fixture con un slice sin ac/issue (defensivo: no crashea)', () => {
-    // La forma del fixture del brief NO trae `ac`/`issue` — igual que un issue
-    // real sin cuerpo de acceptance-criteria reconocible. renderKickoff/
-    // buildStateSeed indexan slice.ac como array; si el wrapper no lo
-    // normaliza, esto revienta con un TypeError en vez de imprimir el plan.
+  it('does not reproduce the fixture guarantee with a slice that has no ac/issue (defensive: it does not crash)', () => {
+    // The shape of the brief's fixture does NOT carry `ac`/`issue` — just like
+    // a real issue with no recognisable acceptance-criteria body.
+    // renderKickoff/buildStateSeed index slice.ac as an array; if the wrapper
+    // does not normalise it, this blows up with a TypeError instead of
+    // printing the plan.
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '2', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE })
     expect(r.code).toBe(0)
     expect(r.out).not.toMatch(/TypeError/)
   })
 })
 
-describe('ct-next — fixture atado a --dry-run', () => {
-  it('CT_NEXT_FIXTURE puesto SIN --dry-run → exit 2, no decide ni lanza nada real', () => {
+describe('ct-next — fixture tied to --dry-run', () => {
+  it('CT_NEXT_FIXTURE set WITHOUT --dry-run → exit 2, it decides nothing and launches nothing real', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1'], { CT_NEXT_FIXTURE: FIXTURE })
     expect(r.code).toBe(2)
     expect(r.out).toMatch(/CT_NEXT_FIXTURE.*--dry-run/is)
   })
 })
 
-describe('ct-next — nada despachable', () => {
-  // W-B (§8): este test existía antes de W-B y esperaba el mensaje genérico
-  // "no hay slices despachables". El brief de W-B pide explícitamente que ese
-  // mensaje deje de ser genérico y distinga la causa (nada ready / deps sin
-  // mergear / colisión con trabajo en vuelo / cap lleno) — este escenario
-  // concreto (un #2 ready cuya única dep, #1, no está mergeada) es EXACTAMENTE
-  // el caso "deps-unmet", así que la aserción se actualiza para reflejar el
-  // mensaje nuevo, más específico, en vez del genérico que este cambio retira
-  // a propósito. Los casos restantes (none-ready/collision/cap-full) se
-  // cubren en el describe de abajo.
-  it('imprime el motivo "deps sin mergear" y exit 0 cuando el único ready tiene una dep sin mergear', () => {
+describe('ct-next — nothing dispatchable', () => {
+  // W-B (§8): this test existed before W-B and expected the generic message
+  // "no hay slices despachables". W-B's brief explicitly asks that message to
+  // stop being generic and to distinguish the cause (nothing ready / unmerged
+  // deps / collision with in-flight work / cap full) — this particular
+  // scenario (a ready #2 whose only dep, #1, is not merged) is EXACTLY the
+  // "deps-unmet" case, so the assertion is updated to reflect the new, more
+  // specific message, instead of the generic one this change withdraws on
+  // purpose. The remaining cases (none-ready/collision/cap-full) are covered
+  // in the describe below.
+  it('prints the reason "unmerged deps" and exit 0 when the only ready one has an unmerged dep', () => {
     const fixtureNadaReady = JSON.stringify({
       issues: [
         { n: 1, order: 1, status: 'in-review', deps: [], touches: ['api'], name: 'login', type: 'backend' },
         { n: 2, order: 2, status: 'ready', deps: [1], touches: ['api'], name: 'refresh', type: 'backend' },
       ],
-      mergedIssues: [], // #1 no mergeado todavía → #2 bloqueado por deps
+      mergedIssues: [], // #1 not merged yet → #2 blocked by deps
     })
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: fixtureNadaReady })
     expect(r.code).toBe(0)
@@ -114,14 +116,15 @@ describe('ct-next — nada despachable', () => {
     expect(r.out).toMatch(/#1/)
   })
 
-  // D1 finding 5: una dependencia de ORDEN no mapeable (ningún issue, abierto
-  // o cerrado, lleva ese `<!-- ct-order:N -->`) se traduce a `null` en
-  // gh-issue-map.js#buildDispatchInput — correcto (fail-closed: nunca se
-  // satisface por accidente), pero el mensaje anterior imprimía literalmente
-  // "falta mergear #null", instruyendo a esperar algo que no existe y nunca
-  // se va a mergear. El mensaje nuevo tiene que explicar la causa real (un
-  // orden que no corresponde a ningún issue) y NUNCA mostrar el string "#null".
-  it('dep de orden no mapeable (null) → el mensaje explica la causa real, nunca imprime "#null"', () => {
+  // D1 finding 5: an ORDER dependency that cannot be mapped (no issue, open
+  // or closed, carries that `<!-- ct-order:N -->`) translates to `null` in
+  // gh-issue-map.js#buildDispatchInput — correct (fail-closed: it is never
+  // satisfied by accident), but the previous message printed literally
+  // "falta mergear #null", instructing you to wait for something that does not
+  // exist and is never going to be merged. The new message has to explain the
+  // real cause (an order that corresponds to no issue) and NEVER show the
+  // string "#null".
+  it('unmappable order dep (null) → the message explains the real cause, it never prints "#null"', () => {
     const fx = JSON.stringify({
       issues: [{ n: 5, order: 5, status: 'ready', deps: [null], touches: [], name: 'x', type: 'backend' }],
       mergedIssues: [],
@@ -133,12 +136,12 @@ describe('ct-next — nada despachable', () => {
     expect(r.out).toMatch(/no (corresponde|existe)/i)
   })
 
-  // D1 finding 2: un issue ready con `depsMalformed: true` (la sección "##
-  // Dependencias" existe pero no se reconoció ningún "merge-after #N" —
-  // probable reescritura humana) se reporta como bloqueado, con un mensaje
-  // que deja claro que el estado es DESCONOCIDO — nunca "sin dependencias"
-  // (que es lo que una lista vacía de unmetDeps sugeriría sin este mensaje).
-  it('issue con depsMalformed:true → mensaje explica que la sección "## Dependencias" es ilegible, no que no tiene deps', () => {
+  // D1 finding 2: a ready issue with `depsMalformed: true` (the section "##
+  // Dependencias" exists but no "merge-after #N" was recognised — probably a
+  // human rewrite) is reported as blocked, with a message that makes it clear
+  // that the state is UNKNOWN — never "no dependencies" (which is what an
+  // empty unmetDeps list would suggest without this message).
+  it('issue with depsMalformed:true → the message explains that the "## Dependencias" section is unreadable, not that it has no deps', () => {
     const fx = JSON.stringify({
       issues: [{ n: 9, order: 9, status: 'ready', deps: [], depsMalformed: true, touches: [], name: 'x', type: 'backend' }],
       mergedIssues: [],
@@ -151,13 +154,13 @@ describe('ct-next — nada despachable', () => {
   })
 })
 
-// D1 finding 3: dos labels "status:" en el mismo issue (edición a medias) se
-// resuelven de forma conservadora e independiente del orden del array (ver
-// gh-issue-map.js#resolveStatus), pero eso NUNCA debe pasar en silencio: un
-// aviso explícito, siempre impreso (no solo en --dry-run), es lo que permite
-// a un humano corregir las labels antes de que la ambigüedad se repita.
-describe('ct-next — aviso de status: ambiguo (D1 finding 3)', () => {
-  it('un issue con statusAmbiguous:true produce un aviso explícito, nombrando las labels en conflicto y a qué se resolvió', () => {
+// D1 finding 3: two "status:" labels on the same issue (a half-finished edit)
+// are resolved conservatively and independently of the array's order (see
+// gh-issue-map.js#resolveStatus), but that must NEVER happen in silence: an
+// explicit warning, always printed (not only in --dry-run), is what lets a
+// human fix the labels before the ambiguity happens again.
+describe('ct-next — warning about an ambiguous status: (D1 finding 3)', () => {
+  it('an issue with statusAmbiguous:true produces an explicit warning, naming the conflicting labels and what it resolved to', () => {
     const fx = JSON.stringify({
       issues: [
         { n: 1, order: 1, status: 'in-progress', statusAmbiguous: true, statusLabels: ['in-progress', 'ready'], deps: [], touches: ['api'], name: 'x', type: 'backend' },
@@ -172,22 +175,22 @@ describe('ct-next — aviso de status: ambiguo (D1 finding 3)', () => {
     expect(r.out).toMatch(/avis/i)
   })
 
-  it('sin ningún statusAmbiguous → sin aviso', () => {
+  it('with no statusAmbiguous at all → no warning', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE })
     expect(r.code).toBe(0)
     expect(r.out).not.toMatch(/avis/i)
   })
 })
 
-// Review de D1, finding 1 (parte "falta el aviso"): estrechar el dominio de
-// deps a "## Dependencias" (D1 finding 2) abrió una puerta que `main`
-// mantenía cerrada — un `merge-after #N` fuera de la sección ya no gatea el
-// dispatch (correcto y deseado), pero antes de este fix nada lo decía. El
-// aviso usa la MISMA forma que el de statusAmbiguous (arriba): siempre
-// impreso (console.log, no console.error — no aborta nada), listando el
-// issue y la referencia ignorada.
-describe('ct-next — aviso de deps fuera de la sección "## Dependencias" (D1 finding 1, seguimiento de review)', () => {
-  it('un issue con strayDeps:[1] produce un aviso explícito nombrando el issue y la referencia ignorada', () => {
+// D1's review, finding 1 (the "the warning is missing" part): narrowing the
+// domain of deps to "## Dependencias" (D1 finding 2) opened a door that `main`
+// kept shut — a `merge-after #N` outside the section no longer gates the
+// dispatch (correct and desired), but before this fix nothing said so. The
+// warning uses the SAME shape as the statusAmbiguous one (above): always
+// printed (console.log, not console.error — it aborts nothing), listing the
+// issue and the ignored reference.
+describe('ct-next — warning about deps outside the "## Dependencias" section (D1 finding 1, review follow-up)', () => {
+  it('an issue with strayDeps:[1] produces an explicit warning naming the issue and the ignored reference', () => {
     const fx = JSON.stringify({
       issues: [{ n: 8, order: 2, status: 'ready', deps: [], strayDeps: [1], touches: [], name: 'x', type: 'backend' }],
       mergedIssues: [],
@@ -200,20 +203,20 @@ describe('ct-next — aviso de deps fuera de la sección "## Dependencias" (D1 f
     expect(r.out).toMatch(/avis/i)
   })
 
-  it('sin ningún strayDeps → sin aviso', () => {
+  it('with no strayDeps at all → no warning', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE })
     expect(r.code).toBe(0)
     expect(r.out).not.toMatch(/avis/i)
   })
 })
 
-// W-B (§8): un mensaje único ("nada ready con deps mergeadas y sin colisión")
-// obligaba a adivinar entre cuatro causas con remedios distintos. Cada test
-// de abajo fija, contra el wrapper real (vía CT_NEXT_FIXTURE), el mensaje
-// exacto para una causa — usando planDispatch/explainNoSelection (ya
-// probados sin red en dispatch.test.js) por debajo.
-describe('ct-next — motivo de bloqueo distinguible (W-B, §8)', () => {
-  it('nada en status:ready → mensaje "none-ready"', () => {
+// W-B (§8): a single message ("nada ready con deps mergeadas y sin colisión")
+// forced you to guess between four causes with different remedies. Each test
+// below pins, against the real wrapper (via CT_NEXT_FIXTURE), the exact
+// message for one cause — using planDispatch/explainNoSelection (already
+// tested without network in dispatch.test.js) underneath.
+describe('ct-next — distinguishable reason for blocking (W-B, §8)', () => {
+  it('nothing in status:ready → "none-ready" message', () => {
     const fx = JSON.stringify({
       issues: [{ n: 1, order: 1, status: 'in-review', deps: [], touches: [], name: 'x', type: 'backend' }],
       mergedIssues: [],
@@ -223,7 +226,7 @@ describe('ct-next — motivo de bloqueo distinguible (W-B, §8)', () => {
     expect(r.out).toMatch(/no hay ningún issue en status:ready/i)
   })
 
-  it('ready + deps mergeadas pero colisiona con touches en vuelo → nombra el issue en vuelo y el token compartido', () => {
+  it('ready + merged deps but it collides with in-flight touches → it names the in-flight issue and the shared token', () => {
     const fx = JSON.stringify({
       issues: [
         { n: 1, order: 1, status: 'in-progress', deps: [], touches: ['api'], name: 'en curso', type: 'backend' },
@@ -239,7 +242,7 @@ describe('ct-next — motivo de bloqueo distinguible (W-B, §8)', () => {
     expect(r.out).toMatch(/en vuelo/i)
   })
 
-  it('ready + deps mergeadas pero colisiona con serialización (migration en vuelo vs. ci ready) → nombra ambos tokens', () => {
+  it('ready + merged deps but it collides with serialisation (migration in flight vs. ci ready) → it names both tokens', () => {
     const fx = JSON.stringify({
       issues: [
         { n: 1, order: 1, status: 'in-progress', deps: [], touches: ['migration'], name: 'en curso', type: 'backend' },
@@ -255,7 +258,7 @@ describe('ct-next — motivo de bloqueo distinguible (W-B, §8)', () => {
     expect(r.out).toMatch(/ci/)
   })
 
-  it('cap ya copado por trabajo en vuelo → dice cuántos hay en vuelo y cuál es el cap, aunque haya ready sin colisión', () => {
+  it('cap already hogged by in-flight work → it says how many are in flight and what the cap is, even though there is a ready one with no collision', () => {
     const fx = JSON.stringify({
       issues: [
         { n: 1, order: 1, status: 'in-progress', deps: [], touches: ['db'], name: 'en curso', type: 'backend' },
@@ -267,49 +270,49 @@ describe('ct-next — motivo de bloqueo distinguible (W-B, §8)', () => {
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/cap.*1/i)
     expect(r.out).toMatch(/#1/)
-    expect(r.out).not.toContain('#2 (') // #2 nunca llega a evaluarse/lanzarse: el cap ya está lleno
-    // Aquí subir --cap SÍ resolvería algo (#2 no colisiona con nada en
-    // vuelo), así que el mensaje sigue sugiriéndolo tal cual (fix Minor 1: no
-    // se toca el mensaje para el caso en que subir --cap SÍ ayuda).
+    expect(r.out).not.toContain('#2 (') // #2 never gets evaluated/launched: the cap is already full
+    // Here raising --cap WOULD solve something (#2 collides with nothing in
+    // flight), so the message still suggests it as it was (fix Minor 1: the
+    // message is not touched for the case where raising --cap DOES help).
     expect(r.out).toMatch(/sube --cap/i)
     expect(r.out).not.toMatch(/no bastaría/i)
   })
 
-  // Fix Minor 1 de la review de W-B: antes, "cap lleno" siempre sugería
-  // "sube --cap" — incluso cuando el único candidato que quedaría también
-  // estaría bloqueado por otra causa (aquí, deps sin mergear). Subir el cap
-  // en ese caso no cambiaría nada; el mensaje ahora lo dice explícitamente en
-  // vez de prometer en falso.
-  it('cap ya copado Y el ready también tiene deps sin mergear → dice que subir --cap no bastaría, y por qué', () => {
+  // Fix Minor 1 from W-B's review: before, "cap full" always suggested
+  // "sube --cap" — even when the only candidate that would be left was also
+  // blocked by another cause (here, unmerged deps). Raising the cap in that
+  // case would change nothing; the message now says so explicitly instead of
+  // promising falsely.
+  it('cap already hogged AND the ready one also has unmerged deps → it says that raising --cap would not be enough, and why', () => {
     const fx = JSON.stringify({
       issues: [
         { n: 1, order: 1, status: 'in-progress', deps: [], touches: ['x'], name: 'en curso', type: 'backend' },
         { n: 2, order: 2, status: 'ready', deps: [1], touches: [], name: 'con dep pendiente', type: 'backend' },
       ],
-      mergedIssues: [], // la dep de #2 (orden 1, o sea #1) no está mergeada
+      mergedIssues: [], // #2's dep (order 1, that is #1) is not merged
     })
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: fx })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/cap.*1/i)
     expect(r.out).toMatch(/no bastaría/i)
     expect(r.out).toMatch(/dependencias sin mergear/i)
-    expect(r.out).not.toMatch(/sube --cap, o espera/i) // no promete que subir el cap resuelva nada
+    expect(r.out).not.toMatch(/sube --cap, o espera/i) // it does not promise that raising the cap solves anything
   })
 })
 
-// W-B (§8), punto 4 del brief: "el dry-run tiene que hacer visible el estado
-// en vuelo: qué está in-progress y qué tokens tiene retenidos por eso" — sin
-// esto, un --dry-run que SÍ selecciona algo podía dar la falsa impresión de
-// que no hay nada corriendo ya, cuando en realidad el cap ya estaba parcialmente
-// ocupado por invocaciones anteriores.
-describe('ct-next --dry-run — visibilidad del trabajo en vuelo (W-B, §8)', () => {
-  it('sin nada en vuelo → lo dice explícitamente ("ninguno")', () => {
+// W-B (§8), point 4 of the brief: "the dry run has to make the in-flight state
+// visible: what is in-progress and which tokens it holds because of that" —
+// without this, a --dry-run that DOES select something could give the false
+// impression that nothing is running already, when in fact the cap was already
+// partly occupied by earlier invocations.
+describe('ct-next --dry-run — visibility of in-flight work (W-B, §8)', () => {
+  it('with nothing in flight → it says so explicitly ("ninguno")', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/en vuelo.*ninguno/is)
   })
 
-  it('con algo en vuelo (y aun así se despacha otro) → lista el issue en vuelo y sus tokens retenidos', () => {
+  it('with something in flight (and another one dispatched anyway) → it lists the in-flight issue and the tokens it holds', () => {
     const fx = JSON.stringify({
       issues: [
         { n: 1, order: 1, status: 'in-progress', deps: [], touches: ['migration'], name: 'en curso', type: 'backend' },
@@ -322,45 +325,44 @@ describe('ct-next --dry-run — visibilidad del trabajo en vuelo (W-B, §8)', ()
     expect(r.out).toMatch(/en vuelo/i)
     expect(r.out).toMatch(/#1/)
     expect(r.out).toMatch(/migration/)
-    // y el segundo slice se despacha igual, sin colisión
+    // and the second slice is dispatched all the same, with no collision
     expect(r.out).toContain('#2')
     expect(r.out).toContain('git worktree add')
   })
 })
 
-describe('ct-next — errores de uso', () => {
-  it('sin --repo → exit 2', () => {
+describe('ct-next — usage errors', () => {
+  it('with no --repo → exit 2', () => {
     const r = run(['--dry-run'])
     expect(r.code).toBe(2)
     expect(r.out).toMatch(/uso:/)
   })
 
-  it('--repo colgante (último token, sin valor) → exit 2', () => {
+  it('dangling --repo (last token, with no value) → exit 2', () => {
     const r = run(['--cap', '1', '--dry-run', '--repo'])
     expect(r.code).toBe(2)
     expect(r.out).toMatch(/uso:/)
   })
 
-  it('--repo seguido de otro flag (sin valor real) → exit 2', () => {
+  it('--repo followed by another flag (with no real value) → exit 2', () => {
     const r = run(['--repo', '--dry-run'])
     expect(r.code).toBe(2)
   })
 
-  it('--cap no numérico → exit 2', () => {
+  it('non-numeric --cap → exit 2', () => {
     const r = run(['--repo', 'o/r', '--cap', 'nope', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE })
     expect(r.code).toBe(2)
     expect(r.out).toMatch(/--cap/i)
   })
 })
 
-describe('shQuote (Override 1: escapado POSIX del prompt de kickoff)', () => {
-  // Verifica, contra un shell POSIX real, que el valor que le llega al
-  // programa tras el round-trip de parseo de shell es byte-idéntico al
-  // original — no una aproximación visual. Usamos `set --` para fijar los
-  // argumentos posicionales a partir del valor citado y comprobamos que
-  // produce EXACTAMENTE un argumento (si el citado estuviera roto y el shell
-  // partiera la palabra, $# sería > 1 y lo detectaríamos aquí en vez de
-  // limitarnos a leer $1 y enmascarar el bug).
+describe('shQuote (Override 1: POSIX escaping of the kickoff prompt)', () => {
+  // Verifies, against a real POSIX shell, that the value reaching the program
+  // after the shell-parsing round trip is byte-identical to the original — not
+  // a visual approximation. We use `set --` to set the positional arguments
+  // from the quoted value and check that it produces EXACTLY one argument (if
+  // the quoting were broken and the shell split the word, $# would be > 1 and
+  // we would catch it here instead of merely reading $1 and masking the bug).
   function shellRoundTrip(value) {
     const quoted = shQuote(value)
     const script = `set -- ${quoted}\nif [ "$#" -ne 1 ]; then echo "ARGC:$#"; exit 1; fi\nprintf '%s' "$1"`
@@ -368,31 +370,31 @@ describe('shQuote (Override 1: escapado POSIX del prompt de kickoff)', () => {
   }
 
   const cases = {
-    'cadena vacía': '',
-    'texto plano': 'hola mundo',
-    'variable de entorno': 'no expandas $HOME por favor',
+    'empty string': '',
+    'plain text': 'hola mundo',
+    'environment variable': 'no expandas $HOME por favor',
     backticks: 'esto `no` es un comando',
-    'comilla simple literal': "el valor tiene una comilla ' suelta",
+    'literal single quote': "el valor tiene una comilla ' suelta",
     backslash: 'una barra \\ invertida literal',
-    'salto de línea': 'primera línea\nsegunda línea',
-    'todo junto (caso trampa)': "cd $HOME && echo `whoami` && rm -rf ' \\ \n fin",
+    'line break': 'primera línea\nsegunda línea',
+    'everything at once (trap case)': "cd $HOME && echo `whoami` && rm -rf ' \\ \n fin",
   }
 
   for (const [label, value] of Object.entries(cases)) {
-    it(`round-trip byte-idéntico a través de un shell POSIX real: ${label}`, () => {
+    it(`byte-identical round trip through a real POSIX shell: ${label}`, () => {
       expect(shellRoundTrip(value)).toBe(value)
     })
   }
 })
 
-// Review round 1, finding Important: si `git worktree add` funciona pero un
-// paso posterior (seed de STATE.md o lanzamiento de cmux) falla, el worktree
-// y la rama quedan huérfanos. Estos tests ejercitan la ruta REAL (no fixture,
-// no --dry-run) con stubs de `git`/`gh`/`cmux` (nunca un repo real, nunca un
-// worktree fuera de un directorio temporal, nunca un cmux real) para
-// verificar que ct-next.mjs intenta limpiar y distingue "limpiado" de "no
-// pude limpiar, hazlo a mano".
-describe('ct-next — worktree huérfano en fallo parcial (review round 1, Important)', () => {
+// Review round 1, Important finding: if `git worktree add` works but a later
+// step (seeding STATE.md or launching cmux) fails, the worktree and the branch
+// are left orphaned. These tests exercise the REAL path (no fixture, no
+// --dry-run) with stubs of `git`/`gh`/`cmux` (never a real repo, never a
+// worktree outside a temporary directory, never a real cmux) to verify that
+// ct-next.mjs tries to clean up and distinguishes "cleaned" from "I could not
+// clean up, do it by hand".
+describe('ct-next — orphaned worktree on a partial failure (review round 1, Important)', () => {
   const fakePath = [
     join(fixturesDir, 'fake-git-bin'),
     join(fixturesDir, 'fake-gh-bin'),
@@ -406,23 +408,23 @@ describe('ct-next — worktree huérfano en fallo parcial (review round 1, Impor
     for (const d of dirs.splice(0)) rmSyncBestEffort(d)
   })
 
-  // F16/H2: ver el comentario del `runReal` gemelo de más abajo — `spawnSync`
-  // para no perder el stderr de una corrida que sale con 0.
+  // F16/H2: see the comment on the twin `runReal` further below — `spawnSync`
+  // so as not to lose the stderr of a run that exits with 0.
   function runReal(args, envOverrides = {}) {
     const r = spawnSync('node', [script, ...args], {
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'], // finding 11: no ecoar el ruido esperado al padre
+      stdio: ['ignore', 'pipe', 'pipe'], // finding 11: do not echo the expected noise to the parent
       env: { ...process.env, PATH: fakePath, ...envOverrides },
     })
     return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }
   }
 
-  // combinedOutputOf (F8): stdout y stderr del hijo van AL MISMO descriptor de
-  // fichero, así que lo que queda escrito es la transcripción en el orden REAL
-  // de emisión — lo único con lo que se puede afirmar honestamente que una
-  // línea salió antes que otra cuando las dos van por streams distintos.
-  // Concatenar `e.stdout + e.stderr`, que es lo que hace `runReal`, ordena por
-  // stream, no por tiempo.
+  // combinedOutputOf (F8): the child's stdout and stderr go to THE SAME file
+  // descriptor, so what ends up written is the transcript in the REAL order of
+  // emission — the only thing with which you can honestly assert that one line
+  // came out before another when the two travel on different streams.
+  // Concatenating `e.stdout + e.stderr`, which is what `runReal` does, orders
+  // by stream, not by time.
   function combinedOutputOf(args, envOverrides = {}) {
     const logPath = join(mkdtempSync(join(tmpdir(), 'ct-next-combined-')), 'combined.log')
     dirs.push(dirname(logPath))
@@ -446,16 +448,16 @@ describe('ct-next — worktree huérfano en fallo parcial (review round 1, Impor
 
   const openIssue42 = { number: 42, title: '#42 algo', labels: [{ name: 'status:ready' }], body: '' }
 
-  // FAKE_GIT_WORKTREE_ADD_AS_FILE (D4): el stub de `git worktree add` crea la
-  // ruta del worktree COMO FICHERO, así que el `mkdirSync(`${wt}/.agent`)`
-  // posterior de ct-next.mjs revienta con ENOTDIR de forma determinista, sin
-  // depender de permisos. Antes, estos tests pre-creaban ese fichero ANTES de
-  // arrancar ct-next.mjs; desde D4 (defecto 3) eso ya no sirve — ct-next.mjs
-  // comprueba que el destino esté libre ANTES de reclamar, así que un
-  // worktree pre-existente se detecta en el preflight y nunca llega al seed
-  // (que es exactamente el arreglo). Crear el fichero DURANTE el `worktree
-  // add` reproduce el mismo fallo del seed sin desactivar esa comprobación.
-  it('el seed de SLICE.md falla (el worktree resultó no ser un directorio) → limpia y avisa que se puede reintentar', () => {
+  // FAKE_GIT_WORKTREE_ADD_AS_FILE (D4): the `git worktree add` stub creates
+  // the worktree's path AS A FILE, so ct-next.mjs's later
+  // `mkdirSync(`${wt}/.agent`)` blows up with ENOTDIR deterministically,
+  // without depending on permissions. Before, these tests pre-created that
+  // file BEFORE starting ct-next.mjs; since D4 (defect 3) that no longer works
+  // — ct-next.mjs checks that the destination is free BEFORE claiming, so a
+  // pre-existing worktree is detected in the preflight and never reaches the
+  // seed (which is exactly the fix). Creating the file DURING the `worktree
+  // add` reproduces the same seeding failure without disabling that check.
+  it('the SLICE.md seed fails (the worktree turned out not to be a directory) → it cleans up and says you can retry', () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
@@ -471,12 +473,12 @@ describe('ct-next — worktree huérfano en fallo parcial (review round 1, Impor
     expect(r.out).not.toMatch(/ATENCIÓN/)
   })
 
-  // Finding 10 de la review final: los dos pasos de limpieza se intentan por
-  // SEPARADO, así que el hint manual nunca junta ambos comandos con `&&` — si
-  // lo hiciera, y solo uno de los dos pasos hubiera fallado de verdad, el
-  // hint sería inejecutable tal cual (el paso que sí tuvo éxito volvería a
-  // fallar al reintentarlo, y por el `&&` el otro nunca llegaría a correr).
-  it('el worktree remove falla pero el branch -D (intentado por separado) sí tiene éxito → ATENCIÓN solo con el comando de worktree, sin && y sin mencionar la rama', () => {
+  // Finding 10 of the final review: the two cleanup steps are attempted
+  // SEPARATELY, so the manual hint never joins both commands with `&&` — if it
+  // did, and only one of the two steps had really failed, the hint would be
+  // unrunnable as written (the step that did succeed would fail again on
+  // retrying it, and because of the `&&` the other would never get to run).
+  it('the worktree remove fails but the branch -D (attempted separately) does succeed → ATENCIÓN with the worktree command only, with no && and no mention of the branch', () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const wtPath = join(repoRoot, '.worktrees', '42')
@@ -490,11 +492,11 @@ describe('ct-next — worktree huérfano en fallo parcial (review round 1, Impor
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/ATENCIÓN.*no se pudo limpiar automáticamente el worktree/s)
     expect(r.out).toMatch(new RegExp(`git worktree remove --force ${wtPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
-    expect(r.out).not.toMatch(/&&/) // nunca encadenado
-    expect(r.out).not.toMatch(/git branch -D feat\/42/) // la rama ya se borró de verdad, no hace falta el hint
+    expect(r.out).not.toMatch(/&&/) // never chained
+    expect(r.out).not.toMatch(/git branch -D feat\/42/) // the branch really was deleted, the hint is not needed
   })
 
-  it('el branch -D falla pero el worktree remove (intentado por separado) sí tiene éxito → ATENCIÓN solo con el comando de rama, sin && y sin mencionar el worktree', () => {
+  it('the branch -D fails but the worktree remove (attempted separately) does succeed → ATENCIÓN with the branch command only, with no && and no mention of the worktree', () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
@@ -508,10 +510,10 @@ describe('ct-next — worktree huérfano en fallo parcial (review round 1, Impor
     expect(r.out).toMatch(/ATENCIÓN.*no se pudo limpiar automáticamente la rama/s)
     expect(r.out).toMatch(/git branch -D feat\/42/)
     expect(r.out).not.toMatch(/&&/)
-    expect(r.out).not.toMatch(/git worktree remove --force/) // el worktree ya se borró de verdad, no hace falta el hint
+    expect(r.out).not.toMatch(/git worktree remove --force/) // the worktree really was deleted, the hint is not needed
   })
 
-  it('worktree remove Y branch -D fallan los dos → ATENCIÓN con ambos comandos, separados (nunca con &&)', () => {
+  it('worktree remove AND branch -D both fail → ATENCIÓN with both commands, separately (never with &&)', () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const wtPath = join(repoRoot, '.worktrees', '42')
@@ -530,11 +532,11 @@ describe('ct-next — worktree huérfano en fallo parcial (review round 1, Impor
     expect(r.out).not.toMatch(/&&/)
   })
 
-  it('el lanzamiento de cmux falla (seed ya escrito de verdad) → limpia y avisa que se puede reintentar', () => {
+  it('the cmux launch fails (the seed really was written) → it cleans up and says you can retry', () => {
     const repoRoot = makeRepoRoot()
-    // Aquí el wt es un directorio real y escribible: mkdirSync/writeFileSync
-    // (Override 2) escriben de verdad un STATE.md bajo un directorio temporal
-    // (permitido — nunca fuera de un tmp dir), y es cmux quien falla.
+    // Here the wt is a real, writable directory: mkdirSync/writeFileSync
+    // (Override 2) really write a STATE.md under a temporary directory
+    // (allowed — never outside a tmp dir), and it is cmux that fails.
     const counterFile = join(repoRoot, 'gh-list-count')
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
@@ -548,7 +550,7 @@ describe('ct-next — worktree huérfano en fallo parcial (review round 1, Impor
     expect(r.out).toMatch(/puedes reintentar/)
   })
 
-  it('cap 2, el primer slice se lanza con éxito y el segundo falla en cmux → el mensaje deja claro dónde se paró y qué sigue vivo', () => {
+  it('cap 2, the first slice launches successfully and the second fails in cmux → the message makes clear where it stopped and what is still alive', () => {
     const repoRoot = makeRepoRoot()
     const openIssue43 = { number: 43, title: '#43 otro', labels: [{ name: 'status:ready' }], body: '' }
     const counterFile = join(repoRoot, 'gh-list-count')
@@ -557,24 +559,24 @@ describe('ct-next — worktree huérfano en fallo parcial (review round 1, Impor
       FAKE_GIT_TOPLEVEL: repoRoot,
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue42, openIssue43], []]),
       FAKE_GH_COUNTER_FILE: counterFile,
-      FAKE_CMUX_FAIL_NAME_SUBSTR: '#43', // solo falla el segundo slice
+      FAKE_CMUX_FAIL_NAME_SUBSTR: '#43', // only the second slice fails
       FAKE_GIT_LOG_FILE: logFile,
     })
     expect(r.code).toBe(1)
-    // #42 se lanzó con éxito ANTES del fallo de #43 — su línea de éxito debe
-    // aparecer, y el mensaje de #43 debe dejar explícito que lo ya lanzado
-    // sigue corriendo sin tocarse.
+    // #42 launched successfully BEFORE #43's failure — its success line must
+    // appear, and #43's message must make it explicit that what has already
+    // been launched keeps running untouched.
     //
-    // F8 — ESTA COMPROBACIÓN DE ORDEN ANTES NO COMPROBABA NADA. `runReal`
-    // devuelve `e.stdout + e.stderr`: dos búferes CONCATENADOS, no una
-    // transcripción intercalada. "lanzado #42" sale por console.log (stdout) y
-    // "no se pudo lanzar cmux" por console.error (stderr), así que el primero
-    // aparecía antes que el segundo en esa concatenación SIEMPRE — aunque el
-    // proceso los hubiera emitido en el orden contrario. Una aserción de orden
-    // sobre cosas que la propia captura ya ha ordenado por ti es verde por
-    // construcción. `combinedOutputOf` corre el mismo comando con stdout y
-    // stderr apuntando AL MISMO descriptor de fichero, que es lo único que da
-    // el orden real de emisión.
+    // F8 — THIS ORDER CHECK USED TO CHECK NOTHING. `runReal` returns
+    // `e.stdout + e.stderr`: two CONCATENATED buffers, not an interleaved
+    // transcript. "lanzado #42" comes out on console.log (stdout) and
+    // "no se pudo lanzar cmux" on console.error (stderr), so the first
+    // appeared before the second in that concatenation ALWAYS — even if the
+    // process had emitted them in the opposite order. An order assertion over
+    // things the capture itself has already ordered for you is green by
+    // construction. `combinedOutputOf` runs the same command with stdout and
+    // stderr pointing at THE SAME file descriptor, which is the only thing
+    // that gives the real order of emission.
     const idxLanzado42 = r.out.indexOf('lanzado #42')
     const idxFallo43 = r.out.indexOf('no se pudo lanzar cmux')
     expect(idxLanzado42).toBeGreaterThan(-1)
@@ -589,23 +591,23 @@ describe('ct-next — worktree huérfano en fallo parcial (review round 1, Impor
     expect(interleaved.indexOf('no se pudo lanzar cmux')).toBeGreaterThan(-1)
     expect(interleaved.indexOf('lanzado #42')).toBeLessThan(interleaved.indexOf('no se pudo lanzar cmux'))
     expect(r.out).toMatch(/ya lanzados con éxito antes de este fallo.*siguen corriendo.*no se han tocado/is)
-    // El log de git confirma que SOLO se intentó limpiar el worktree/rama de
-    // #43 (el segundo), nunca el de #42 (el primero, que sí tuvo éxito).
+    // git's log confirms that ONLY #43's worktree/branch (the second one) was
+    // attempted for cleanup, never #42's (the first, which did succeed).
     const gitLog = readFileSync(logFile, 'utf8')
     expect(gitLog).toMatch(/worktree remove --force .*\/43/)
     expect(gitLog).not.toMatch(/worktree remove --force .*\/42/)
   })
 })
 
-// Finding 1 de la review final (el más grave de toda la revisión): `repoRoot`
-// sale de `git rev-parse --show-toplevel` en el cwd de la sesión, que puede
-// no tener nada que ver con `--repo`. Sin guarda, `/ct-next --repo
-// otro-org/otro-repo` corrido desde una sesión de control-tower crearía el
-// worktree/rama/STATE.md/cmux DENTRO de control-tower. fake-git-bin resuelve
-// `git remote get-url origin` a "https://github.com/o/r.git" por defecto (para
-// no romper el resto de la suite, que usa `--repo o/r`); estos tests fijan
-// FAKE_GIT_REMOTE_ORIGIN/FAKE_GIT_REMOTE_FAIL para ejercitar el mismatch.
-describe('ct-next — guarda de identidad de repo (review final, finding 1)', () => {
+// Finding 1 of the final review (the most serious of the whole review):
+// `repoRoot` comes from `git rev-parse --show-toplevel` in the session's cwd,
+// which may have nothing to do with `--repo`. With no guard, `/ct-next --repo
+// other-org/other-repo` run from a control-tower session would create the
+// worktree/branch/STATE.md/cmux INSIDE control-tower. fake-git-bin resolves
+// `git remote get-url origin` to "https://github.com/o/r.git" by default (so
+// as not to break the rest of the suite, which uses `--repo o/r`); these tests
+// set FAKE_GIT_REMOTE_ORIGIN/FAKE_GIT_REMOTE_FAIL to exercise the mismatch.
+describe('ct-next — repo identity guard (final review, finding 1)', () => {
   const fakePath = [
     join(fixturesDir, 'fake-git-bin'),
     join(fixturesDir, 'fake-gh-bin'),
@@ -619,12 +621,12 @@ describe('ct-next — guarda de identidad de repo (review final, finding 1)', ()
     for (const d of dirs.splice(0)) rmSyncBestEffort(d)
   })
 
-  // F16/H2: `spawnSync`, NO `execFileSync`. `execFileSync` solo DEVUELVE
-  // stdout cuando el hijo sale con 0 — el stderr únicamente aparecía por la
-  // rama `catch`, es decir, solo cuando la corrida fallaba. Mientras los
-  // avisos iban por stdout eso no se notaba; desde que van por stderr
-  // (criterio de canal de ct-next.mjs), una corrida CORRECTA con avisos
-  // perdía el stderr entero y estos tests medían media transcripción.
+  // F16/H2: `spawnSync`, NOT `execFileSync`. `execFileSync` only RETURNS
+  // stdout when the child exits with 0 — stderr showed up only through the
+  // `catch` branch, that is, only when the run failed. While the warnings went
+  // on stdout that went unnoticed; since they go on stderr (ct-next.mjs's
+  // channel criterion), a CORRECT run with warnings lost the whole of stderr
+  // and these tests were measuring half a transcript.
   function runReal(args, envOverrides = {}) {
     const r = spawnSync('node', [script, ...args], {
       encoding: 'utf8',
@@ -640,7 +642,7 @@ describe('ct-next — guarda de identidad de repo (review final, finding 1)', ()
     return d
   }
 
-  it('--repo no coincide con el remote origin del checkout local → exit 1, mensaje claro, ningún worktree creado', () => {
+  it('--repo does not match the local checkout\'s origin remote → exit 1, clear message, no worktree created', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'menoplus-app/menoplus', '--cap', '1'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
@@ -653,7 +655,7 @@ describe('ct-next — guarda de identidad de repo (review final, finding 1)', ()
     expect(existsSync(join(repoRoot, '.worktrees'))).toBe(false)
   })
 
-  it('checkout sin remote "origin" → exit 1, mensaje claro (no crash sin capturar), ningún worktree creado', () => {
+  it('checkout with no "origin" remote → exit 1, clear message (not an uncaught crash), no worktree created', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
@@ -664,7 +666,7 @@ describe('ct-next — guarda de identidad de repo (review final, finding 1)', ()
     expect(existsSync(join(repoRoot, '.worktrees'))).toBe(false)
   })
 
-  it('--repo SÍ coincide con el remote origin (distintas formas de URL) → pasa la guarda', () => {
+  it('--repo DOES match the origin remote (different URL forms) → it passes the guard', () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const r = runReal(['--repo', 'menoplus-app/menoplus', '--cap', '1'], {
@@ -674,12 +676,12 @@ describe('ct-next — guarda de identidad de repo (review final, finding 1)', ()
       FAKE_GH_COUNTER_FILE: counterFile,
     })
     expect(r.code).toBe(0)
-    // W-B: sin issues abiertos, el motivo pasa a ser "none-ready" (el mensaje
-    // genérico que este test comprobaba antes ya no se emite).
+    // W-B: with no open issues, the reason becomes "none-ready" (the generic
+    // message this test used to check is no longer emitted).
     expect(r.out).toMatch(/no hay ningún issue en status:ready/i)
   })
 
-  it('la guarda también se aplica en --dry-run sin fixture: un --repo que no coincide aborta igual, no solo en la corrida real', () => {
+  it('the guard also applies in --dry-run with no fixture: a --repo that does not match aborts just the same, not only in the real run', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
@@ -690,12 +692,12 @@ describe('ct-next — guarda de identidad de repo (review final, finding 1)', ()
   })
 })
 
-// Finding 2 de la review final: `gh issue list --limit 200` devuelve más
-// nuevo primero, así que un tope fijo deja fuera justo los issues VIEJOS de
-// los que dependen otros. fake-gh-bin no simula HTTP-pagination de verdad,
-// pero SÍ registra el argv exacto que ct-next.mjs le pasa — la forma correcta
-// de comprobar, sin red, que el comando ya no lleva el tope fijo.
-describe('ct-next — enumeración de issues sin --limit fijo (review final, finding 2)', () => {
+// Finding 2 of the final review: `gh issue list --limit 200` returns newest
+// first, so a fixed cap leaves out precisely the OLD issues that others depend
+// on. fake-gh-bin does not really simulate HTTP pagination, but it DOES record
+// the exact argv ct-next.mjs passes it — the right way to check, without
+// network, that the command no longer carries the fixed cap.
+describe('ct-next — enumerating issues with no fixed --limit (final review, finding 2)', () => {
   const fakePath = [
     join(fixturesDir, 'fake-git-bin'),
     join(fixturesDir, 'fake-gh-bin'),
@@ -707,12 +709,12 @@ describe('ct-next — enumeración de issues sin --limit fijo (review final, fin
   afterEach(() => {
     for (const d of dirs.splice(0)) rmSyncBestEffort(d)
   })
-  // F16/H2: `spawnSync`, NO `execFileSync`. `execFileSync` solo DEVUELVE
-  // stdout cuando el hijo sale con 0 — el stderr únicamente aparecía por la
-  // rama `catch`, es decir, solo cuando la corrida fallaba. Mientras los
-  // avisos iban por stdout eso no se notaba; desde que van por stderr
-  // (criterio de canal de ct-next.mjs), una corrida CORRECTA con avisos
-  // perdía el stderr entero y estos tests medían media transcripción.
+  // F16/H2: `spawnSync`, NOT `execFileSync`. `execFileSync` only RETURNS
+  // stdout when the child exits with 0 — stderr showed up only through the
+  // `catch` branch, that is, only when the run failed. While the warnings went
+  // on stdout that went unnoticed; since they go on stderr (ct-next.mjs's
+  // channel criterion), a CORRECT run with warnings lost the whole of stderr
+  // and these tests were measuring half a transcript.
   function runReal(args, envOverrides = {}) {
     const r = spawnSync('node', [script, ...args], {
       encoding: 'utf8',
@@ -722,7 +724,7 @@ describe('ct-next — enumeración de issues sin --limit fijo (review final, fin
     return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }
   }
 
-  it('la enumeración de issues abiertos y cerrados usa --paginate y nunca --limit', () => {
+  it('enumerating open and closed issues uses --paginate and never --limit', () => {
     const repoRoot = mkdtempSync(join(tmpdir(), 'ct-next-nolimit-'))
     dirs.push(repoRoot)
     const counterFile = join(repoRoot, 'gh-list-count')
@@ -741,18 +743,17 @@ describe('ct-next — enumeración de issues sin --limit fijo (review final, fin
     expect(log).toMatch(/state=closed/)
   })
 
-  // Re-review: el normalizado `state_reason` (REST, minúsculas) →
-  // `stateReason` (lo que espera filterMergedIssues, mayúsculas) no tenía NI
-  // UN test — exactamente la superficie de regresión señalada en el finding
-  // 2. Sin este normalizado, TODO issue cerrado deja de contar como
-  // mergeado, y cualquier slice con dependencias queda permanentemente sin
-  // despachar (el bug que esta rama ya tuvo una vez). Escenario: el issue
-  // cerrado #1 (orden 1) tiene `state_reason: 'completed'` tal cual lo
-  // devuelve el endpoint REST; el issue abierto #2 (orden 2, ready) declara
-  // `merge-after #1` (orden). Si el normalizado se rompe (se borra el
-  // `.toUpperCase()`, o se vuelve a leer `i.stateReason`), #1 deja de contar
-  // como mergeado y #2 nunca se selecciona.
-  it('normaliza state_reason (REST, minúsculas) a stateReason (mayúsculas) — un dep mergeada vía state_reason:"completed" desbloquea el slice', () => {
+  // Re-review: the normalisation of `state_reason` (REST, lowercase) →
+  // `stateReason` (what filterMergedIssues expects, uppercase) did not have A
+  // SINGLE test — exactly the regression surface pointed out in finding 2.
+  // Without this normalisation, EVERY closed issue stops counting as merged,
+  // and any slice with dependencies is left permanently undispatched (the bug
+  // this branch already had once). Scenario: the closed issue #1 (order 1) has
+  // `state_reason: 'completed'` exactly as the REST endpoint returns it; the
+  // open issue #2 (order 2, ready) declares `merge-after #1` (order). If the
+  // normalisation breaks (the `.toUpperCase()` is deleted, or `i.stateReason`
+  // is read again), #1 stops counting as merged and #2 is never selected.
+  it('normalises state_reason (REST, lowercase) to stateReason (uppercase) — a dep merged via state_reason:"completed" unblocks the slice', () => {
     const repoRoot = mkdtempSync(join(tmpdir(), 'ct-next-statereason-'))
     dirs.push(repoRoot)
     const counterFile = join(repoRoot, 'gh-list-count')
@@ -772,17 +773,17 @@ describe('ct-next — enumeración de issues sin --limit fijo (review final, fin
   })
 })
 
-// D1 finding 1 (el más grave del hardening del dispatch): reproducción
-// END-TO-END, contra el CAMINO REAL de ct-next.mjs (gh api repos/.../issues,
-// nunca CT_NEXT_FIXTURE), del escenario exacto que verificó el auditor: epic
-// A groomeado y mergeado por completo (milestone 100), epic B groomeado
-// DESPUÉS en el MISMO repo (milestone 200) — ambos numeran sus slices 1..N
-// desde 1. #8 (slice 2 de epic B) declara "merge-after #1" (orden 1 DE SU
-// PROPIO epic), que es #7. Antes de este fix, el índice de orden era global
-// al repo y `[...open, ...closed]` hacía que el #1 de epic A (ya mergeado)
-// ganara el slot — #8 se habría despachado junto a #7 en la misma tanda, sin
-// haber esperado nunca a #7 de verdad, y sin que nada se imprimiera.
-describe('ct-next — D1 finding 1: alcance del orden por epic (milestone), camino real (gh api)', () => {
+// D1 finding 1 (the most serious one of the dispatch hardening): END-TO-END
+// reproduction, against ct-next.mjs's REAL PATH (gh api repos/.../issues,
+// never CT_NEXT_FIXTURE), of the exact scenario the auditor verified: epic A
+// groomed and merged in full (milestone 100), epic B groomed AFTERWARDS in the
+// SAME repo (milestone 200) — both number their slices 1..N from 1. #8 (slice
+// 2 of epic B) declares "merge-after #1" (order 1 OF ITS OWN epic), which is
+// #7. Before this fix, the order index was global to the repo and
+// `[...open, ...closed]` made epic A's #1 (already merged) win the slot — #8
+// would have been dispatched alongside #7 in the same batch, without ever
+// having really waited for #7, and without anything being printed.
+describe('ct-next — D1 finding 1: per-epic (milestone) scope of the order, real path (gh api)', () => {
   const fakePath = [
     join(fixturesDir, 'fake-git-bin'),
     join(fixturesDir, 'fake-gh-bin'),
@@ -794,12 +795,12 @@ describe('ct-next — D1 finding 1: alcance del orden por epic (milestone), cami
   afterEach(() => {
     for (const d of dirs.splice(0)) rmSyncBestEffort(d)
   })
-  // F16/H2: `spawnSync`, NO `execFileSync`. `execFileSync` solo DEVUELVE
-  // stdout cuando el hijo sale con 0 — el stderr únicamente aparecía por la
-  // rama `catch`, es decir, solo cuando la corrida fallaba. Mientras los
-  // avisos iban por stdout eso no se notaba; desde que van por stderr
-  // (criterio de canal de ct-next.mjs), una corrida CORRECTA con avisos
-  // perdía el stderr entero y estos tests medían media transcripción.
+  // F16/H2: `spawnSync`, NOT `execFileSync`. `execFileSync` only RETURNS
+  // stdout when the child exits with 0 — stderr showed up only through the
+  // `catch` branch, that is, only when the run failed. While the warnings went
+  // on stdout that went unnoticed; since they go on stderr (ct-next.mjs's
+  // channel criterion), a CORRECT run with warnings lost the whole of stderr
+  // and these tests were measuring half a transcript.
   function runReal(args, envOverrides = {}) {
     const r = spawnSync('node', [script, ...args], {
       encoding: 'utf8',
@@ -809,7 +810,7 @@ describe('ct-next — D1 finding 1: alcance del orden por epic (milestone), cami
     return { code: r.status, out: (r.stdout || '') + (r.stderr || '') }
   }
 
-  it('reproducción del auditor: epic A mergeado + epic B en curso, mismos números de orden, milestones DISTINTOS → #8 espera a su hermano real (#7), nunca al #1 ya mergeado de epic A', () => {
+  it("the auditor's reproduction: epic A merged + epic B under way, same order numbers, DIFFERENT milestones → #8 waits for its real sibling (#7), never for epic A's already-merged #1", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), 'ct-next-epics-'))
     dirs.push(repoRoot)
     const counterFile = join(repoRoot, 'gh-list-count')
@@ -830,26 +831,26 @@ describe('ct-next — D1 finding 1: alcance del orden por epic (milestone), cami
       FAKE_GH_COUNTER_FILE: counterFile,
     })
     expect(r.code).toBe(0)
-    // Solo #7 se despacha. #8 nunca aparece como slice lanzado — el fix hace
-    // que su dep resuelva contra #7 (su propio epic), que sigue sin mergear.
+    // Only #7 is dispatched. #8 never appears as a launched slice — the fix
+    // makes its dep resolve against #7 (its own epic), which is still
+    // unmerged.
     expect(r.out).toContain('slice #7')
     expect(r.out).not.toContain('slice #8')
   })
 
-  // Review de D1, finding 4: el aborto ANTERIOR (exit 1, batch entero) tenía
-  // un radio demasiado ancho — una colisión de orden solo hace sospechoso el
-  // EPIC en el que vive, pero bloqueaba TODO el repo, incluidos epics sanos
-  // y sin ninguna relación. Peor: como buildOrderIndex indexa también los
-  // CERRADOS, una colisión que solo exista entre issues mergeados hace
-  // tiempo (un epic ya terminado, del que a nadie le importa nada hoy)
-  // ladrillaría el repo ENTERO para siempre, sin más remedio que editar
-  // GitHub a mano. Abortar en vez de resolver en silencio sigue siendo la
-  // dirección correcta — lo que cambia es el RADIO: ahora solo el/los
-  // epic(s) cuyo propio orden colisiona quedan excluidos de la selección
-  // (ni se despachan ni cuentan en vuelo) — el resto del repo se despacha
-  // con normalidad, exit 0, con un aviso explícito de qué epic quedó fuera y
-  // por qué.
-  it('si dos epics comparten milestone por error → SOLO ese epic queda excluido de la tanda (aviso explícito), un epic sano y sin relación se despacha con normalidad', () => {
+  // D1's review, finding 4: the PREVIOUS abort (exit 1, the whole batch) had
+  // too wide a radius — an order collision only makes the EPIC it lives in
+  // suspect, but it blocked the WHOLE repo, healthy and entirely unrelated
+  // epics included. Worse: since buildOrderIndex also indexes the CLOSED ones,
+  // a collision that exists only between issues merged long ago (an epic
+  // already finished, that nobody cares about today) would brick the ENTIRE
+  // repo forever, with no remedy other than editing GitHub by hand. Aborting
+  // instead of resolving in silence is still the right direction — what
+  // changes is the RADIUS: now only the epic(s) whose own order collides are
+  // excluded from the selection (they are neither dispatched nor counted as in
+  // flight) — the rest of the repo is dispatched as normal, exit 0, with an
+  // explicit warning about which epic was left out and why.
+  it('if two epics share a milestone by mistake → ONLY that epic is excluded from the batch (explicit warning), a healthy, unrelated epic is dispatched as normal', () => {
     const repoRoot = mkdtempSync(join(tmpdir(), 'ct-next-collision-'))
     dirs.push(repoRoot)
     const counterFile = join(repoRoot, 'gh-list-count')
@@ -859,10 +860,10 @@ describe('ct-next — D1 finding 1: alcance del orden por epic (milestone), cami
     }
     const openIssue8 = {
       number: 8, title: '#8 b', labels: [{ name: 'status:ready' }],
-      milestone: { number: 100 }, body: '<!-- ct-order:1 -->', // MISMO milestone, MISMO orden, issue distinto
+      milestone: { number: 100 }, body: '<!-- ct-order:1 -->', // SAME milestone, SAME order, different issue
     }
-    // Epic totalmente sano y sin relación (milestone 300): tiene que
-    // despacharse igual, sin que la colisión de otro epic lo bloquee.
+    // A completely healthy, unrelated epic (milestone 300): it has to be
+    // dispatched all the same, without another epic's collision blocking it.
     const openIssue20 = {
       number: 20, title: '#20 sano', labels: [{ name: 'status:ready' }],
       milestone: { number: 300 }, body: '<!-- ct-order:1 -->',
@@ -877,26 +878,26 @@ describe('ct-next — D1 finding 1: alcance del orden por epic (milestone), cami
     expect(r.out).toMatch(/#7/)
     expect(r.out).toMatch(/#8/)
     expect(r.out).toMatch(/avis/i)
-    // #7/#8 (el epic colisionado) nunca se despachan...
+    // #7/#8 (the collided epic) are never dispatched…
     expect(r.out).not.toContain('slice #7')
     expect(r.out).not.toContain('slice #8')
-    // ...pero #20 (epic sano, sin ninguna relación) SÍ, sin que la colisión
-    // ajena se lo impida.
+    // …but #20 (a healthy epic, entirely unrelated) IS, without somebody
+    // else's collision preventing it.
     expect(r.out).toContain('slice #20')
   })
 
-  // Reproducción del escenario que preocupaba a la review: la colisión vive
-  // SOLO entre issues YA CERRADOS de un epic viejo y terminado — nadie tiene
-  // trabajo pendiente ahí. Un epic nuevo, sano, sin relación, tiene que
-  // despacharse con total normalidad; el aviso de la colisión histórica
-  // puede seguir imprimiéndose (información real), pero nunca debe impedir
-  // nada del resto del repo.
-  it('una colisión que vive SOLO entre issues cerrados hace tiempo no bloquea un epic nuevo y sano', () => {
+  // Reproduction of the scenario the review was worried about: the collision
+  // lives ONLY between ALREADY CLOSED issues of an old, finished epic — nobody
+  // has pending work there. A new, healthy, unrelated epic has to be
+  // dispatched entirely as normal; the warning about the historical collision
+  // may keep being printed (it is real information), but it must never prevent
+  // anything in the rest of the repo.
+  it('a collision that lives ONLY between issues closed long ago does not block a new, healthy epic', () => {
     const repoRoot = mkdtempSync(join(tmpdir(), 'ct-next-collision-closed-'))
     dirs.push(repoRoot)
     const counterFile = join(repoRoot, 'gh-list-count')
     const closedIssueOld1 = { number: 50, state_reason: 'completed', milestone: { number: 100 }, body: '<!-- ct-order:1 -->' }
-    const closedIssueOld2 = { number: 51, state_reason: 'completed', milestone: { number: 100 }, body: '<!-- ct-order:1 -->' } // mismo (epic,orden) que #50 → colisión histórica
+    const closedIssueOld2 = { number: 51, state_reason: 'completed', milestone: { number: 100 }, body: '<!-- ct-order:1 -->' } // same (epic,order) as #50 → historical collision
     const openIssueNew = {
       number: 60, title: '#60 nuevo y sano', labels: [{ name: 'status:ready' }],
       milestone: { number: 400 }, body: '<!-- ct-order:1 -->',
@@ -910,13 +911,13 @@ describe('ct-next — D1 finding 1: alcance del orden por epic (milestone), cami
     expect(r.out).toContain('slice #60')
   })
 
-  // Reproducción EXACTA de la review para el finding 1 (parte "falta el
-  // aviso"): #8 depende, por texto, de un `#1` escrito bajo "## Descripción"
-  // en vez de "## Dependencias" — el estrechamiento (D1 finding 2) hace que
-  // ya no cuente como dependencia real, así que #7 Y #8 se despachan los dos
-  // (decisión correcta, sin cambios), pero AHORA se avisa explícitamente de
-  // que la referencia de #8 fuera de sección se ignoró.
-  it('merge-after fuera de "## Dependencias" (bajo "## Descripción") → ambos #7 y #8 se despachan igual (estrechamiento correcto), pero se avisa de la referencia ignorada', () => {
+  // EXACT reproduction of the review's finding 1 (the "the warning is
+  // missing" part): #8 depends, textually, on a `#1` written under "##
+  // Descripción" instead of "## Dependencias" — the narrowing (D1 finding 2)
+  // makes it no longer count as a real dependency, so #7 AND #8 are both
+  // dispatched (the correct decision, unchanged), but NOW the out-of-section
+  // reference of #8 is explicitly warned about.
+  it('merge-after outside "## Dependencias" (under "## Descripción") → both #7 and #8 are dispatched all the same (correct narrowing), but the ignored reference is warned about', () => {
     const repoRoot = mkdtempSync(join(tmpdir(), 'ct-next-straydeps-'))
     dirs.push(repoRoot)
     const counterFile = join(repoRoot, 'gh-list-count')
@@ -936,7 +937,7 @@ describe('ct-next — D1 finding 1: alcance del orden por epic (milestone), cami
     })
     expect(r.code).toBe(0)
     expect(r.out).toContain('slice #7')
-    expect(r.out).toContain('slice #8') // el estrechamiento es correcto: NO se bloquea
+    expect(r.out).toContain('slice #8') // the narrowing is correct: it is NOT blocked
     expect(r.out).toMatch(/avis/i)
     expect(r.out).toMatch(/#8/)
     expect(r.out).toMatch(/Dependencias/)

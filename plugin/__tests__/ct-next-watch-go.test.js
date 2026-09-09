@@ -1,18 +1,18 @@
-// Que la COORDINADORA lance el vigilante del `-OK` al despachar, y sólo cuando
-// hay algo que vigilar.
+// That the COORDINATOR launches the `-OK` watcher when dispatching, and only
+// when there is something to watch.
 //
-// Por qué el vigilante vive en este lado y no en el del agente: la doctrina de
-// este repo lo dice cinco veces —«el kickoff es un prompt, no un gate. Un agente
+// Why the watcher lives on this side and not on the agent's: this repo's
+// doctrine says it five times —«el kickoff es un prompt, no un gate. Un agente
 // que no lo llame se salta esta puerta» (dispatch-check.mjs), «ninguna exigencia
 // que el spec le haga al agente puede depender de que el agente lea el spec»
-// (kickoff.js)—. Pedirle al agente que se vigile su propio gate sería una
-// obligación creada por una línea de prompt. Y el reparto de papeles lo remata:
-// la coordinadora «groomea, despacha, REVISA y mergea»; la despachada
+// (kickoff.js)—. Asking the agent to watch its own gate would be an obligation
+// created by a line of prompt. And the division of roles settles it: the
+// coordinator «groomea, despacha, REVISA y mergea»; the dispatched one
 // «implementa lo suyo Y PARA» (README).
 //
-// El vigilante de verdad se sustituye por una grabadora vía CT_WATCH_GO_BIN: sin
-// eso, cada test que despacha un slice dejaría un proceso sondeando GitHub
-// durante ocho horas.
+// The real watcher is replaced by a recorder via CT_WATCH_GO_BIN: without that,
+// every test that dispatches a slice would leave a process polling GitHub for
+// eight hours.
 import { describe, it, expect, afterEach } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, existsSync, readFileSync } from 'node:fs'
@@ -49,16 +49,17 @@ function repoRootNuevo() {
   return d
 }
 
-// El hijo va DESPRENDIDO y sin `unref` no se espera a nadie, así que ct-next
-// puede terminar antes de que la grabadora escriba. Se sondea el fichero en vez
-// de leerlo una vez: si no, el test sería intermitente por construcción.
+// The child goes DETACHED and without an `unref` nobody is waited for, so
+// ct-next can finish before the recorder writes. The file is polled instead of
+// read once: otherwise the test would be flaky by construction.
 //
-// Y la condición que se espera es que el log esté COMPLETO, no que exista. Un
-// `appendFileSync` es abrir, escribir y cerrar: entre lo primero y lo segundo el
-// fichero existe con cero bytes, y ahí `JSON.parse('')` reventaba con «Unexpected
-// end of JSON input» — el rojo intermitente de #109, que se veía en la CI y no en
-// local porque depende de cómo caiga la carga. La línea sólo se da por buena
-// cuando el salto de línea que la cierra ya está escrito Y parsea.
+// And the condition being waited for is that the log be COMPLETE, not that it
+// exist. An `appendFileSync` is open, write and close: between the first and the
+// second the file exists with zero bytes, and there `JSON.parse('')` blew up with
+// «Unexpected end of JSON input» — the intermittent red of #109, which showed up
+// in CI and not locally because it depends on how the load falls. The line is
+// only taken as good once the newline that closes it is already written AND it
+// parses.
 function argvCompleto(ruta) {
   if (!existsSync(ruta)) return null
   const crudo = readFileSync(ruta, 'utf8')
@@ -90,9 +91,9 @@ function despachar(repoRoot, issue, envExtra = {}) {
       FAKE_GIT_TOPLEVEL: repoRoot,
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[issue], []]),
       FAKE_GH_COUNTER_FILE: join(repoRoot, 'gh-list-count'),
-      // El log del vigilante va a ~/.claude/control-tower/log/. En un test eso
-      // sería el $HOME de quien lo corre, así que se redirige con la variable
-      // REAL que el código ya consulta, no con una trampa de test.
+      // The watcher's log goes to ~/.claude/control-tower/log/. In a test that
+      // would be the $HOME of whoever runs it, so it is redirected with the REAL
+      // variable the code already consults, not with a test trick.
       CLAUDE_CONFIG_DIR: join(repoRoot, 'claude-config'),
       CT_WATCH_GO_BIN: RECORDER,
       FAKE_WATCH_GO_LOG: join(repoRoot, 'watch-go-argv.log'),
@@ -104,12 +105,13 @@ function despachar(repoRoot, issue, envExtra = {}) {
 
 const issueCon = (labels) => ({ number: 90, title: '#90 el cliente tipado', labels, body: '' })
 
-describe('la coordinadora lanza el vigilante del -OK', () => {
-  it('lo lanza al despachar, con el issue, el repo y el título exacto de la sesión', async () => {
+describe('the coordinator launches the -OK watcher', () => {
+  it('launches it when dispatching, with the issue, the repo and the exact title of the session', async () => {
     const repoRoot = repoRootNuevo()
-    // Sin ninguna label `gate:`, resolveGatesForAgent cae al Tipo — y el gate
-    // `plan` está implicado en TODO slice (gates.js#gatesForType). O sea que el
-    // caso por defecto SÍ para a esperar, y por tanto SÍ estrena vigilante.
+    // With no `gate:` label at all, resolveGatesForAgent falls back to the Tipo
+    // — and the `plan` gate is implied in EVERY slice (gates.js#gatesForType).
+    // Which means the default case DOES stop to wait, and therefore DOES bring a
+    // watcher into play.
     const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]))
     expect(r.code).toBe(0)
     expect(r.out).toContain(`vigilante del ${GO_TOKEN} de #90 lanzado`)
@@ -120,35 +122,35 @@ describe('la coordinadora lanza el vigilante del -OK', () => {
     expect(argv).toContain('--issue')
     expect(argv[argv.indexOf('--issue') + 1]).toBe('90')
     expect(argv[argv.indexOf('--repo') + 1]).toBe('o/r')
-    // El título es el HANDLE con el que el vigilante encontrará la sesión: no
-    // hay identificador estable que cmux devuelva al crearla. Se compara contra
-    // cmuxSessionName y no contra una cadena escrita a mano, porque una segunda
-    // copia de esa plantilla divergiría y entonces el vigilante se apagaría en su
-    // primer sondeo diciendo que la sesión ya no existe — el go de esa persona
-    // sin entregar, y el mensaje culpando a la sesión en vez al desajuste.
-    // El nombre del slice llega ya sin el `#90 ` del título del issue: lo quita
-    // el mapeo del issue, no esta ronda.
+    // The title is the HANDLE by which the watcher will find the session: there
+    // is no stable identifier cmux returns when creating it. It is compared
+    // against cmuxSessionName and not against a hand-written string, because a
+    // second copy of that template would diverge and then the watcher would shut
+    // down on its first poll saying the session no longer exists — that person's
+    // go undelivered, and the message blaming the session instead of the
+    // mismatch. The slice's name arrives already without the `#90 ` of the
+    // issue's title: the issue mapping strips it, not this round.
     expect(argv[argv.indexOf('--session') + 1]).toBe(
       cmuxSessionName({ repoName: 'r', issue: 90, sliceName: 'el cliente tipado' }),
     )
-    // El log lo abre el VIGILANTE, no ct-next: cuando lo abría ct-next, la
-    // suite creaba ficheros en el $HOME real de quien la corriera. Aquí sólo
-    // viaja la ruta.
+    // The log is opened by the WATCHER, not by ct-next: when ct-next opened it,
+    // the suite created files in the real $HOME of whoever ran it. Here only the
+    // path travels.
     expect(argv[argv.indexOf('--log') + 1]).toMatch(/watch-go-90\.log$/)
   })
 
-  it('dice dónde está el log, porque un proceso que corre cuando no miras y no deja rastro es indepurable', () => {
+  it('says where the log is, because a process that runs when you are not looking and leaves no trace is undebuggable', () => {
     const repoRoot = repoRootNuevo()
     const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]))
     expect(r.out).toMatch(/Log: .*watch-go-90\.log/)
   })
 
-  it('NO lo lanza si el slice no tiene el gate `plan`: no hay nada que vigilar', async () => {
+  it('does NOT launch it if the slice has no `plan` gate: there is nothing to watch', async () => {
     const repoRoot = repoRootNuevo()
-    // `gate:none` es una declaración explícita de "ningún gate" (gates.js:
-    // existe precisamente para distinguirla de "este issue es viejo"). Un slice
-    // así no para a esperar a nadie, y un proceso sondeando GitHub ocho horas
-    // para nada es peor que su ausencia.
+    // `gate:none` is an explicit declaration of "no gate at all" (gates.js: it
+    // exists precisely to tell it apart from "this issue is old"). A slice like
+    // that does not stop to wait for anyone, and a process polling GitHub for
+    // eight hours for nothing is worse than its absence.
     const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }, { name: 'gate:none' }]))
     expect(r.code).toBe(0)
     expect(r.out).not.toContain('vigilante del')
@@ -156,20 +158,21 @@ describe('la coordinadora lanza el vigilante del -OK', () => {
   })
 })
 
-describe('el vigilante no puede tumbar el despacho', () => {
+describe('the watcher cannot bring the dispatch down', () => {
   // -------------------------------------------------------------------------
-  // `spawn(process.execPath, [bin, …])` con un `bin` que NO EXISTE no falla: el
-  // ejecutable es siempre `node`. El proceso nace, muere al instante con un
-  // error de módulo, y antes de este arreglo se anunciaba «vigilante lanzado»
-  // con un pid ya muerto. Lo cazó una revisión adversarial, y señaló que el test
-  // que decía cubrirlo fijaba a la vez un bin roto y un log imposible, así que
-  // pasaba por el fallo del log y el bin roto no se probaba nunca.
+  // `spawn(process.execPath, [bin, …])` with a `bin` that DOES NOT EXIST does
+  // not fail: the executable is always `node`. The process is born, dies
+  // instantly with a module error, and before this fix «vigilante lanzado» was
+  // announced with an already dead pid. An adversarial review caught it, and
+  // pointed out that the test that claimed to cover it pinned both a broken bin
+  // and an impossible log at once, so it passed through the log failure and the
+  // broken bin was never tested.
   //
-  // Es la misma clase de defecto que F19/H1 cerró en el despacho —«cmux devolvió
-  // 0» no es «el comando corrió»— con una evidencia aún más débil: lo único
-  // comprobado sería que `node` existe.
+  // It is the same class of defect F19/H1 closed in the dispatch —«cmux returned
+  // 0» is not «the command ran»— with even weaker evidence: the only thing
+  // checked would be that `node` exists.
   // -------------------------------------------------------------------------
-  it('un programa de vigilante que no existe se avisa, y NO se anuncia como lanzado', async () => {
+  it('a watcher program that does not exist is warned about, and is NOT announced as launched', async () => {
     const repoRoot = repoRootNuevo()
     const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]), {
       CT_WATCH_GO_BIN: join(repoRoot, 'no-existe', 'ni-de-broma.mjs'),
@@ -183,19 +186,20 @@ describe('el vigilante no puede tumbar el despacho', () => {
     expect(await esperarArgv(join(repoRoot, 'watch-go-argv.log'), 600)).toBe(null)
   })
 
-  it('si no se sabe dónde vive el estado de la coordinadora, se avisa y el slice sigue lanzado', () => {
-    // El trabajo ya está en marcha cuando esto corre. No poder vigilar el go
-    // significa volver al modo de antes —empujar la sesión a mano—, no perder
-    // el slice. Misma regla que el `git add` de la telemetría en ct-step: el
-    // termómetro no es parte del motor.
+  it('if where the coordinator state lives is not known, it warns and the slice stays launched', () => {
+    // The work is already under way when this runs. Not being able to watch the
+    // go means going back to the old way —pushing the session by hand—, not
+    // losing the slice. Same rule as the telemetry's `git add` in ct-step: the
+    // thermometer is not part of the engine.
     //
-    // F38 — CON `HOME` Y `CLAUDE_CONFIG_DIR` VACÍOS, LO PRIMERO QUE FALLA YA NO
-    // ES EL LOG: es el REGISTRO DEL GO, que sin una ruta absoluta se niega a
-    // escribir (go-registry.js) en vez de dejar el compromiso en el cwd, donde
-    // nadie lo leería. Se asertan las dos mitades del aviso a propósito: antes
-    // este test sólo miraba el exit code, así que habría seguido verde con el
-    // aviso hablando de otra cosa — que es exactamente lo que pasó al construir
-    // esta ronda.
+    // F38 — WITH `HOME` AND `CLAUDE_CONFIG_DIR` EMPTY, THE FIRST THING THAT
+    // FAILS IS NO LONGER THE LOG: it is the GO REGISTRY, which without an
+    // absolute path refuses to write (go-registry.js) instead of leaving the
+    // commitment in the cwd, where nobody would read it. Both halves of the
+    // warning are asserted on purpose: before, this test only looked at the exit
+    // code, so it would have stayed green with the warning talking about
+    // something else — which is exactly what happened while building this
+    // round.
     const repoRoot = repoRootNuevo()
     const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]), {
       CLAUDE_CONFIG_DIR: '',
@@ -205,22 +209,22 @@ describe('el vigilante no puede tumbar el despacho', () => {
     expect(r.out).toMatch(/lanzado #90/)
     expect(r.out).toMatch(/no se ha lanzado el vigilante/)
     expect(r.out).toMatch(/no se ha podido registrar el go/)
-    // El remedio, nombrado: sin registro la puerta 9 se negará, y hay un comando
-    // para salir de ahí.
+    // The remedy, named: with no registry, gate 9 will refuse, and there is a
+    // command to get out of there.
     expect(r.out).toMatch(/ct-go\.mjs --issue 90 --repo o\/r/)
-    // Y no se anuncia ningún vigilante lanzado: sin compromiso registrado, un go
-    // que arrancara el trabajo no se podría honrar al liberar.
+    // And no launched watcher is announced: with no registered commitment, a go
+    // that started the work could not be honoured at release time.
     expect(r.out).not.toMatch(/vigilante del .* lanzado \(pid/)
   })
 
   // -------------------------------------------------------------------------
-  // El único handle del vigilante es el TÍTULO de la sesión. Si cmux acaba de
-  // contestar que no hay ninguna sesión con ese título, lanzarlo era anunciar
-  // «la sesión arranca sola» en la misma corrida en la que se dice que esa
-  // sesión no se localiza. El repo tiene un fichero de tests entero contra esta
-  // clase de mensaje (ct-next-honest-messages.test.js).
+  // The watcher's only handle is the session's TITLE. If cmux has just answered
+  // that there is no session with that title, launching it was announcing «the
+  // session starts on its own» in the very same run in which that session is
+  // said not to be findable. The repo has a whole test file against this class
+  // of message (ct-next-honest-messages.test.js).
   // -------------------------------------------------------------------------
-  it('NO se lanza cuando cmux no encuentra la sesión que se acaba de crear', async () => {
+  it('is NOT launched when cmux cannot find the session that has just been created', async () => {
     const repoRoot = repoRootNuevo()
     const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]), {
       FAKE_CMUX_SKIP_STATE_SUBSTR: '#90',
@@ -232,19 +236,20 @@ describe('el vigilante no puede tumbar el despacho', () => {
 })
 
 // ---------------------------------------------------------------------------
-// F38 — EL NONCE DEL GO SALE POR LA PANTALLA Y POR NINGÚN OTRO SITIO.
+// F38 — THE GO'S NONCE COMES OUT ON THE SCREEN AND NOWHERE ELSE.
 //
-// Es la propiedad entera de la ronda: el agente no puede FABRICAR el go porque
-// el nonce no está en su contexto, ni en el issue, ni en su worktree, ni en el
-// argv de un proceso que él puede leer con `ps`, ni en el log del vigilante. Lo
-// que viaja a todos esos sitios es el sha256. Si un cambio futuro filtrara el
-// nonce al argv, esta ronda dejaría de valer para nada Y NADA MÁS FALLARÍA — de
-// ahí que estos tests miren dónde NO está.
+// It is the whole property of the round: the agent cannot FABRICATE the go
+// because the nonce is not in its context, nor in the issue, nor in its
+// worktree, nor in the argv of a process it can read with `ps`, nor in the
+// watcher's log. What travels to all those places is the sha256. If a future
+// change leaked the nonce into the argv, this round would stop being worth
+// anything AND NOTHING ELSE WOULD FAIL — hence these tests look at where it is
+// NOT.
 // ---------------------------------------------------------------------------
-describe('el nonce del go: dónde aparece y dónde no', () => {
+describe('the go nonce: where it shows up and where it does not', () => {
   const nonceDe = (out) => (out.match(/-OK ([0-9a-f]{8})/) || [])[1]
 
-  it('se dicta por pantalla, y al vigilante le llega sólo su sha256', async () => {
+  it('it is dictated on the screen, and only its sha256 reaches the watcher', async () => {
     const repoRoot = repoRootNuevo()
     const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]))
     expect(r.code).toBe(0)
@@ -255,29 +260,30 @@ describe('el nonce del go: dónde aparece y dónde no', () => {
 
     const argv = (await esperarArgv(join(repoRoot, 'watch-go-argv.log')))[0]
     const hash = argv[argv.indexOf('--go-hash') + 1]
-    // El hash es EL del nonce dictado: si divergieran, la persona tecleraría el
-    // permiso correcto y no arrancaría nada.
+    // The hash is THE one of the dictated nonce: if they diverged, the person
+    // would type the right permission and nothing would start.
     expect(hash).toBe(goCommitment(nonce))
-    // Y el nonce NO está en el argv, que es lo que `ps` enseña al agente.
+    // And the nonce is NOT in the argv, which is what `ps` shows the agent.
     expect(argv.join(' ')).not.toContain(nonce)
   })
 
-  it('el compromiso queda registrado fuera del repo, y sin el nonce dentro', () => {
+  it('the commitment is registered outside the repo, and without the nonce inside', () => {
     const repoRoot = repoRootNuevo()
     const configDir = join(repoRoot, 'claude-config')
     const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]))
     const nonce = nonceDe(r.out)
 
     const ruta = goPath({ repo: 'o/r', issue: 90, configDir })
-    // Fuera del repo a propósito: en GitHub todo lo escribe el agente, que tiene
-    // `gh`; un compromiso en una label lo convertiría en un juego de una jugada.
+    // Outside the repo on purpose: on GitHub everything is written by the agent,
+    // which has `gh`; a commitment in a label would turn it into a one-move
+    // game.
     expect(ruta.startsWith(configDir)).toBe(true)
     const dato = JSON.parse(readFileSync(ruta, 'utf8'))
     expect(dato.commitment).toBe(goCommitment(nonce))
     expect(readFileSync(ruta, 'utf8')).not.toContain(nonce)
   })
 
-  it('con CT_GO_CHANNEL=notify el nonce no pasa por stdout: no entra en el contexto de NINGÚN agente', () => {
+  it('with CT_GO_CHANNEL=notify the nonce does not pass through stdout: it enters NO agent context', () => {
     const repoRoot = repoRootNuevo()
     const log = join(repoRoot, 'osascript.log')
     const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]), {
@@ -287,13 +293,14 @@ describe('el nonce del go: dónde aparece y dónde no', () => {
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/enviado por notificación del sistema/)
     expect(r.out).not.toMatch(/-OK [0-9a-f]{8}/)
-    // El go sí va en la notificación, y en un ARGUMENTO aparte: nada se
-    // interpola dentro del AppleScript, así que no hay nada que escapar.
+    // The go does travel in the notification, and in a SEPARATE ARGUMENT:
+    // nothing is interpolated inside the AppleScript, so there is nothing to
+    // escape.
     const llamada = JSON.parse(readFileSync(log, 'utf8').trim().split('\n')[0])
     expect(llamada[llamada.length - 1]).toMatch(new RegExp(`^\\${GO_TOKEN} [0-9a-f]{8}$`))
   })
 
-  it('si la notificación falla, cae a pantalla DICIÉNDOLO — callarse dejaría el gate sin go', () => {
+  it('if the notification fails, it falls back to the screen SAYING SO — staying quiet would leave the gate with no go', () => {
     const repoRoot = repoRootNuevo()
     const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }]), {
       CT_GO_CHANNEL: 'notify',
@@ -301,12 +308,13 @@ describe('el nonce del go: dónde aparece y dónde no', () => {
     })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/la notificación del go de #90 falló/)
-    // Y avisa de la consecuencia real: el nonce SÍ acaba en este contexto.
+    // And it warns of the real consequence: the nonce DOES end up in this
+    // context.
     expect(r.out).toMatch(/SÍ entra en el contexto de esta sesión/)
     expect(r.out).toMatch(/-OK [0-9a-f]{8}/)
   })
 
-  it('sin gate `plan` no se registra ningún go: no hay nada que autorizar', () => {
+  it('with no `plan` gate no go is registered: there is nothing to authorise', () => {
     const repoRoot = repoRootNuevo()
     const configDir = join(repoRoot, 'claude-config')
     const r = despachar(repoRoot, issueCon([{ name: 'status:ready' }, { name: 'gate:none' }]))

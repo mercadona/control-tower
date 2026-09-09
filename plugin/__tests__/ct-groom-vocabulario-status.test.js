@@ -1,29 +1,28 @@
-// EL VOCABULARIO `status:` TIENE QUE EXISTIR EN GITHUB ANTES DE QUE ALGUIEN LO
-// ESCRIBA.
+// THE `status:` VOCABULARY HAS TO EXIST IN GITHUB BEFORE ANYONE WRITES IT.
 //
-// EL FALLO REAL, medido en un repo recién bootstrapeado (behavior-map-studio):
-// tras el primer /ct-groom, el paso humano que el propio contrato de AGENTS.md
-// manda ejecutar —`gh issue edit <n> --add-label status:ready`— fallaba, y si
-// creabas esa label a mano el siguiente en caer era el claim
-// (`--add-label status:in-progress`), que sale por dispatch-check.mjs#setStatus
-// y muere en `dieErr(…, 3)`: /ct-next reportaba exit 3, «fallo de
-// infraestructura, reintenta más tarde» — un consejo que NUNCA puede funcionar,
-// porque no es una carrera perdida sino una label que no existe.
+// THE REAL FAILURE, measured on a freshly bootstrapped repository
+// (behavior-map-studio): after the first /ct-groom, the human step that the
+// AGENTS.md contract itself orders to be run —`gh issue edit <n> --add-label
+// status:ready`— failed, and if you created that label by hand the next one to
+// fall was the claim (`--add-label status:in-progress`), which goes out through
+// dispatch-check.mjs#setStatus and dies in `dieErr(…, 3)`: /ct-next reported
+// exit 3, «fallo de infraestructura, reintenta más tarde» — advice that can
+// NEVER work, because this is not a race lost but a label that does not exist.
 //
-// LA CAUSA: `wantedLabels` (ct-groom.mjs) sale de las labels que los issues
-// LLEVAN, y buildLabels (groom.js) solo pone una del vocabulario:
-// `status:backlog`. Las otras tres nunca las creaba nadie.
+// THE CAUSE: `wantedLabels` (ct-groom.mjs) comes out of the labels the issues
+// CARRY, and buildLabels (groom.js) only puts one of the vocabulary:
+// `status:backlog`. Nobody ever created the other three.
 //
-// POR QUÉ NO SE PUEDEN CREAR AL ESCRIBIRLAS: `gh issue edit --add-label`
-// resuelve nombre -> id para la mutación GraphQL `addLabelsToLabelable`, que
-// toma ids y no nombres. Verificado read-only contra la API: un nombre que no
-// existe resuelve a `null`, así que el comando no puede crearla — falla.
+// WHY THEY CANNOT BE CREATED BY WRITING THEM: `gh issue edit --add-label`
+// resolves name -> id for the GraphQL mutation `addLabelsToLabelable`, which
+// takes ids and not names. Verified read-only against the API: a name that does
+// not exist resolves to `null`, so the command cannot create it — it fails.
 //
-// ALCANCE DELIBERADO: las CUATRO de STATUS_LADDER (harvest.js), no siete.
-// `status:blocked`, `status:paused` y `status:rejected` no los escribe nada del
-// plugin: gh-issue-map.js las llama «labels custom, ninguna gatea nada» y
-// dispatch-check.mjs documenta por qué `status:rejected` se descartó como
-// diseño. Crearlas sería inventar vocabulario que el plugin decidió no tener.
+// DELIBERATE SCOPE: the FOUR of STATUS_LADDER (harvest.js), not seven. Nothing
+// in the plugin writes `status:blocked`, `status:paused` or `status:rejected`:
+// gh-issue-map.js calls them «custom labels, none of them gates anything» and
+// dispatch-check.mjs documents why `status:rejected` was discarded as a design.
+// Creating them would be inventing vocabulary the plugin decided not to have.
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { rmSync, writeFileSync } from 'node:fs'
@@ -42,19 +41,19 @@ const SPEC = '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices\n' +
   '|---|---|---|---|---|---|---|---|---|\n' +
   '| 1 | login | backend | modelo | – | – | – | `area:web` | – |\n'
 
-describe('el vocabulario status: del loop', () => {
-  // Se DERIVA de STATUS_LADDER, no se reescribe a mano: dos listas del mismo
-  // vocabulario divergen en cuanto alguien toca una sola.
-  it('LOOP_STATUS_LABELS es exactamente STATUS_LADDER con el prefijo', () => {
+describe('the status: vocabulary of the loop', () => {
+  // It is DERIVED from STATUS_LADDER, not rewritten by hand: two lists of the
+  // same vocabulary diverge the moment anyone touches a single one.
+  it('LOOP_STATUS_LABELS is exactly STATUS_LADDER with the prefix', () => {
     expect(LOOP_STATUS_LABELS).toEqual(STATUS_LADDER.map((s) => `status:${s}`))
   })
 
-  it('cubre las cuatro que el plugin escribe de verdad, y ninguna más', () => {
+  it('it covers the four the plugin really writes, and no more', () => {
     expect(LOOP_STATUS_LABELS).toEqual(['status:backlog', 'status:ready', 'status:in-progress', 'status:in-review'])
   })
 })
 
-describe('/ct-groom crea el vocabulario status:, no solo las labels que aplica', () => {
+describe('/ct-groom creates the status: vocabulary, not only the labels it applies', () => {
   const groom = (extra = []) => {
     const dir = makeSpecDir('ctg-vocab-')
     const spec = join(dir, 'spec.md')
@@ -64,10 +63,11 @@ describe('/ct-groom crea el vocabulario status:, no solo las labels que aplica',
     return res
   }
 
-  // El síntoma que el usuario vio: groom termina, y las labels que el paso
-  // siguiente necesita no están. El reporte de labels nuevas es la ventana a
-  // qué se va a crear, y se calcula igual en dry-run que en la corrida real.
-  it('el dry-run anuncia las cuatro como labels a crear', () => {
+  // The symptom the user saw: groom finishes, and the labels the next step
+  // needs are not there. The report of new labels is the window onto what is
+  // going to be created, and it is computed the same in a dry-run as in the
+  // real run.
+  it('the dry-run announces the four as labels to create', () => {
     const res = groom(['--dry-run'])
     expect(res.status).toBe(0)
     for (const l of LOOP_STATUS_LABELS) {
@@ -75,9 +75,9 @@ describe('/ct-groom crea el vocabulario status:, no solo las labels que aplica',
     }
   })
 
-  // Las que el issue SÍ lleva siguen creándose: este arreglo AÑADE al conjunto,
-  // no lo sustituye.
-  it('no se lleva por delante las labels que el issue aplica', () => {
+  // The ones the issue DOES carry go on being created: this fix ADDS to the
+  // set, it does not replace it.
+  it('it does not wipe out the labels the issue applies', () => {
     const res = groom(['--dry-run'])
     const plan = JSON.parse(res.stdout)
     expect(plan.issues[0].labels).toContain('area:web')
@@ -86,9 +86,9 @@ describe('/ct-groom crea el vocabulario status:, no solo las labels que aplica',
     expect(res.stderr).toContain('type:backend')
   })
 
-  // El vocabulario tiene que EXISTIR, pero el issue nace en backlog: crear
-  // status:ready no puede significar aplicárselo a nadie.
-  it('crear el vocabulario NO cambia el status con el que nace el issue', () => {
+  // The vocabulary has to EXIST, but the issue is born in backlog: creating
+  // status:ready cannot mean applying it to anyone.
+  it('creating the vocabulary does NOT change the status the issue is born with', () => {
     const plan = JSON.parse(groom(['--dry-run']).stdout)
     const status = plan.issues[0].labels.filter((l) => l.startsWith('status:'))
     expect(status).toEqual(['status:backlog'])

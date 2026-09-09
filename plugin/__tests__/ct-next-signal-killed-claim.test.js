@@ -1,27 +1,27 @@
-// IMPORTANTE (revisión externa): un Ctrl-C de terminal NORMAL (que sí llega
-// también al hijo — a diferencia del escenario adversarial de finding 1,
-// donde el hijo lo ignora) durante attemptClaim mata a dispatch-check.mjs
-// por señal: Node deja `status` a `null` y `signal` con el nombre. Antes de
-// este fix, ct-next.mjs culpaba esto, sin distinción, de "probablemente un
-// bug o una mala configuración (p.ej. --repo mal formado)" — activamente
-// engañoso justo cuando el usuario sabe perfectamente qué pasó (él mismo
-// interrumpió), y sin mencionar lo más importante: dispatch-check.mjs pudo
-// haber escrito el claim ANTES de morir, y no hay forma de saberlo desde
-// aquí.
+// IMPORTANT (external review): a NORMAL terminal Ctrl-C (one that does reach
+// the child too — unlike the adversarial scenario of finding 1, where the
+// child ignores it) during attemptClaim kills dispatch-check.mjs by signal:
+// Node leaves `status` at `null` and `signal` with the name. Before this fix,
+// ct-next.mjs blamed this, without distinction, on "probablemente un bug o
+// una mala configuración (p.ej. --repo mal formado)" — actively misleading
+// precisely when the user knows perfectly well what happened (they
+// interrupted it themselves), and without mentioning what matters most:
+// dispatch-check.mjs may have written the claim BEFORE dying, and from here
+// there is no way to know.
 //
-// CT_CLAIM_TEST_SELF_KILL_SIGNAL (hook exclusivo de test en
-// dispatch-check.mjs) hace que el propio subproceso se envíe la señal a sí
-// mismo justo tras validar su uso — misma syscall subyacente que una señal
-// externa, pero determinista: evita tener que coordinar el PID de un
-// subproceso lanzado dentro de otro subproceso (frágil, con las mismas
-// carreras de temporización de finding 1).
+// CT_CLAIM_TEST_SELF_KILL_SIGNAL (a test-only hook in dispatch-check.mjs)
+// makes the subprocess send the signal to itself right after validating its
+// usage — the same underlying syscall as an external signal, but
+// deterministic: it avoids having to coordinate the PID of a subprocess
+// launched inside another subprocess (fragile, with the same timing races as
+// finding 1).
 import { describe, it, expect, afterEach } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-// D4: entorno hermético (dirs de cuenta + stubs de cmux/claude) — ver fixtures/hermetic-env.js
+// D4: hermetic environment (account dirs + cmux/claude stubs) — see fixtures/hermetic-env.js
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'ct-next.mjs')
@@ -46,8 +46,8 @@ function makeRepoRoot() {
 
 const openIssue77 = { number: 77, title: '#77 algo', labels: [{ name: 'status:ready' }], body: '' }
 
-describe('ct-next — dispatch-check muerto por señal durante el claim (IMPORTANTE, revisión externa)', () => {
-  it('SIGTERM: el mensaje nombra la señal, avisa de que el claim puede haberse escrito, y da el comando manual — nunca culpa a una "mala configuración"', () => {
+describe('ct-next — dispatch-check killed by a signal during the claim (IMPORTANT, external review)', () => {
+  it('SIGTERM: the message names the signal, warns that the claim may already have been written, and gives the manual command — it never blames a "bad configuration"', () => {
     const repoRoot = makeRepoRoot()
     const r = spawnSync('node', [script, '--repo', 'o/r', '--cap', '1'], {
       encoding: 'utf8',
@@ -59,7 +59,7 @@ describe('ct-next — dispatch-check muerto por señal durante el claim (IMPORTA
     })
     const out = (r.stdout || '') + (r.stderr || '')
     expect(r.status).toBe(1)
-    expect(r.signal).toBeNull() // ct-next.mjs mismo termina limpio (process.exit), no matado en seco
+    expect(r.signal).toBeNull() // ct-next.mjs itself finishes cleanly (process.exit), not killed outright
     expect(out).toMatch(/dispatch-check para #77 terminó por la señal SIGTERM/)
     expect(out).toMatch(/no se puede saber si el claim llegó a escribirse antes de morir/)
     expect(out).toMatch(/gh issue edit 77 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
@@ -67,7 +67,7 @@ describe('ct-next — dispatch-check muerto por señal durante el claim (IMPORTA
     expect(out).toMatch(/Abortando toda la tanda/)
   })
 
-  it('SIGINT: mismo tratamiento — nombra la señal correcta', () => {
+  it('SIGINT: same treatment — it names the right signal', () => {
     const repoRoot = makeRepoRoot()
     const r = spawnSync('node', [script, '--repo', 'o/r', '--cap', '1'], {
       encoding: 'utf8',

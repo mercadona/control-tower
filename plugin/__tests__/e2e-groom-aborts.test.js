@@ -1,11 +1,12 @@
 // ============================================================================
-// Las CINCO condiciones de abort de la columna E2E. Las cinco son la misma
-// familia: el spec dice dos cosas incompatibles sobre la MISMA fila, y no se
-// elige un ganador en silencio.
+// The FIVE abort conditions of the E2E column. All five are the same family:
+// the spec says two incompatible things about the SAME row, and no winner gets
+// picked in silence.
 //
-// Por qué ABORTA y no avisa: un aviso dejaría viva la ambigüedad que el token
-// `no` existe para quitar (los avisos se ignoran, y F14 documenta lo que pasa
-// con los que se ignoran), y entonces el token no habría servido para nada.
+// Why it ABORTS instead of warning: a warning would leave alive the very
+// ambiguity the `no` token exists to remove (warnings get ignored, and F14
+// documents what happens to the ones that get ignored), and then the token
+// would have been good for nothing.
 // ============================================================================
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
@@ -16,10 +17,10 @@ import { fileURLToPath } from 'node:url'
 
 const GROOM = fileURLToPath(new URL('../scripts/ct-groom.mjs', import.meta.url))
 
-// --dry-run enumera issues existentes de `--repo` (F5, lectura pura para
-// detectar divergencia) ANTES de imprimir el plan — sin un `gh` de mentira en
-// el PATH, eso invocaría el `gh` real contra un repo "o/r" que no existe.
-// Mismo stub y mismo criterio que ct-groom-dryrun.test.js.
+// --dry-run enumerates the existing issues of `--repo` (F5, a pure read to
+// detect drift) BEFORE printing the plan — without a fake `gh` on the PATH,
+// that would invoke the real `gh` against an "o/r" repo that does not exist.
+// Same stub and same criterion as ct-groom-dryrun.test.js.
 const fakeGhDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-gh-bin')
 const fakeEnv = () => ({ ...process.env, PATH: `${fakeGhDir}:${process.env.PATH}` })
 
@@ -37,15 +38,15 @@ Que esto funcione.
 | 1 | uno | backend | algo | – | un criterio | – | core | – | ${gateCell} | ${e2eCell} |
 `
 
-// specSinColumnaE2e: la MISMA tabla, pero sin la columna "E2E" en absoluto
-// (ni cabecera ni celda). Existe para el abort 4 en solitario: con la
-// columna presente, cualquier celda "E2E" sin declarar dispara YA el abort 1
-// (celda sin declarar), así que un test con la columna puesta no puede
-// distinguir "abort 4 funciona" de "abort 1 lo está enmascarando" — pasaría
-// igual aunque abort 4 no existiera. La condición del abort 4
+// specSinColumnaE2e: the SAME table, but with no "E2E" column at all (neither
+// header nor cell). It exists for abort 4 on its own: with the column present,
+// any undeclared "E2E" cell already fires abort 1 (undeclared cell), so a test
+// with the column in place cannot tell "abort 4 works" from "abort 1 is
+// masking it" — it would pass just the same even if abort 4 did not exist. The
+// condition of abort 4
 // (`parseGateCell(s.gate).add.includes('e2e') && r.runs.length === 0`)
-// deliberadamente NO mira `e2eColumnPresent`, así que la única forma de
-// probarlo de verdad es un spec donde el abort 1 no pueda dispararse nunca.
+// deliberately does NOT look at `e2eColumnPresent`, so the only way to test it
+// for real is a spec where abort 1 can never fire.
 const specSinColumnaE2e = (gateCell) => `# Spec
 
 Estado: CONGELADA
@@ -73,8 +74,8 @@ function run(spec) {
 const groom = (gateCell, e2eCell) => run(specWith(gateCell, e2eCell))
 const groomSinE2e = (gateCell) => run(specSinColumnaE2e(gateCell))
 
-describe('aborts de la columna E2E', () => {
-  it('celda sin declarar (guion) aborta y nombra la fila', () => {
+describe('aborts of the E2E column', () => {
+  it('an undeclared cell (a dash) aborts and names the row', () => {
     const r = groom('–', '–')
     expect(r.status).not.toBe(0)
     expect(r.stderr).toMatch(/E2E/)
@@ -82,71 +83,71 @@ describe('aborts de la columna E2E', () => {
     expect(r.stderr).toMatch(/"no"/)
   })
 
-  it('el token junto a un recorrido aborta', () => {
+  it('the token next to a traversal aborts', () => {
     const r = groom('–', 'no, curl -i :9115/metrics')
     expect(r.status).not.toBe(0)
     expect(r.stderr).toMatch(/#1/)
   })
 
-  it('Gate: e2e con la celda diciendo `no` aborta', () => {
+  it('Gate: e2e with the cell saying `no` aborts', () => {
     const r = groom('e2e', 'no')
     expect(r.status).not.toBe(0)
     expect(r.stderr).toMatch(/#1/)
   })
 
-  it('Gate: e2e sin columna "E2E" en la tabla aborta (abort 4 en solitario, sin que abort 1 lo enmascare)', () => {
+  it('Gate: e2e with no "E2E" column in the table aborts (abort 4 on its own, with abort 1 unable to mask it)', () => {
     const r = groomSinE2e('e2e')
     expect(r.status).not.toBe(0)
     expect(r.stderr).toMatch(/#1/)
     expect(r.stderr).toMatch(/e2e/)
   })
 
-  // El quinto abort (review final de rama). Antes de ella esto era un AVISO,
-  // sobre la premisa —falsa, verificada ejecutando la cadena— de que la
-  // renuncia se llevaba por delante el trabajo. No se lleva nada: la sección
-  // "## E2E" se emite igual, /ct-next siembra igual, ct-step exige igual el
-  // paso y --release exige igual la correspondencia. Lo único que la renuncia
-  // quita es la label, o sea la señal para el humano — y una renuncia que no
-  // renuncia a nada es la misma contradicción entre dos celdas que los otros
-  // cuatro aborts se niegan a resolver en silencio.
-  it('Gate: !e2e sobre una fila con recorridos aborta, y manda a la celda "E2E"', () => {
+  // The fifth abort (final branch review). Before it, this was a WARNING, on
+  // the premise —false, verified by running the chain— that the waiver took the
+  // work down with it. It takes nothing down: the "## E2E" section is emitted
+  // just the same, /ct-next seeds just the same, ct-step demands the step just
+  // the same and --release demands the correspondence just the same. The only
+  // thing the waiver removes is the label, that is, the signal for the human —
+  // and a waiver that waives nothing is the very same contradiction between two
+  // cells that the other four aborts refuse to resolve in silence.
+  it('Gate: !e2e on a row with traversals aborts, and sends you to the "E2E" cell', () => {
     const r = groom('!e2e', 'curl -i :9115/metrics responde 200')
     expect(r.status).toBe(2)
     expect(r.stderr).toMatch(/#1/)
     expect(r.stderr).toMatch(/celda "E2E" declara recorridos/)
-    // El remedio es la celda, no la columna "Gate": el gate se DERIVA de ahí.
+    // The remedy is the cell, not the "Gate" column: the gate is DERIVED from there.
     expect(r.stderr).toMatch(/escribe "no" en su celda "E2E"/)
-    // Y aborta ANTES de imprimir el plan, como los otros cuatro.
+    // And it aborts BEFORE printing the plan, like the other four.
     expect(r.stdout.trim()).toBe('')
   })
 
-  it('celda `no` sin nada más NO aborta', () => {
+  it('a `no` cell with nothing else does NOT abort', () => {
     const r = groom('–', 'no')
     expect(r.status).toBe(0)
   })
 
-  it('celda con un recorrido NO aborta', () => {
+  it('a cell with a traversal does NOT abort', () => {
     const r = groom('–', 'curl -i :9115/metrics responde 200')
     expect(r.status).toBe(0)
   })
 })
 
 // ============================================================================
-// El gate "e2e", dicho en voz alta (task "e2e al cierre del slice", adición
-// 2). `resolveGates` nunca clasifica este caso como `g.added` — `e2e` no
-// viene de ningún `Tipo` (no vive en TYPE_GATES), así que con una fila que
-// sólo trae recorridos (sin nada escrito a mano en "Gate") lo mete en
-// `implied`. El aviso tiene que salir igual: si no sale, la label
-// "gate:e2e" llega al issue y el reporte de groom se queda callado, que es
-// la MISMA fuga que F21 cerró para la columna "Gate".
+// The "e2e" gate, said out loud (task "e2e at the close of the slice",
+// addition 2). `resolveGates` never classifies this case as `g.added` — `e2e`
+// comes from no `Tipo` (it does not live in TYPE_GATES), so with a row that
+// only carries traversals (with nothing written by hand in "Gate") it goes into
+// `implied`. The warning has to come out all the same: if it does not, the
+// "gate:e2e" label reaches the issue and groom's report stays quiet, which is
+// the SAME leak F21 closed for the "Gate" column.
 //
-// Y tiene que nombrar la columna correcta: el mensaje genérico de "added"
-// dice "es deliberado (para eso está la columna Gate)", que aquí es FALSO —
-// declarar "e2e" a mano en "Gate" es uno de los cinco aborts de arriba. Un
-// aviso que manda al autor a la columna equivocada es peor que ninguno.
+// And it has to name the right column: the generic "added" message says "it is
+// deliberate (that is what the Gate column is for)", which here is FALSE —
+// declaring "e2e" by hand in "Gate" is one of the five aborts above. A warning
+// that sends the author to the wrong column is worse than none.
 // ============================================================================
-describe('el gate "e2e" se anuncia por stderr, y nombra la columna correcta', () => {
-  it('una fila con recorridos produce el aviso y nombra "E2E", nunca "Gate"', () => {
+describe('the "e2e" gate is announced on stderr, and names the right column', () => {
+  it('a row with traversals produces the warning and names "E2E", never "Gate"', () => {
     const r = groom('–', 'curl -i :9115/metrics responde 200')
     expect(r.status).toBe(0)
     expect(r.stderr).toMatch(/gate/i)
@@ -157,7 +158,7 @@ describe('el gate "e2e" se anuncia por stderr, y nombra la columna correcta', ()
     expect(plan.issues[0].labels).toContain('gate:e2e')
   })
 
-  it('una fila sin recorridos (`no`) no lleva ningún aviso de "e2e"', () => {
+  it('a row with no traversals (`no`) carries no "e2e" warning at all', () => {
     const r = groom('–', 'no')
     expect(r.status).toBe(0)
     expect(r.stderr).not.toContain('"e2e"')
@@ -165,29 +166,30 @@ describe('el gate "e2e" se anuncia por stderr, y nombra la columna correcta', ()
 })
 
 // ============================================================================
-// Review de la adición 2: `redundant`/`inertWaivers` también
-// atribuían el gate "e2e" al `Tipo` ("que su Tipo ... implica/ya implica/no
-// implica ese gate"), que es FALSO exactamente por el mismo motivo que
-// "added" — `e2e` no vive en TYPE_GATES, nunca lo implica ningún Tipo: lo
-// implica la fila, vía la columna "E2E". El caso más grave (finding 1): con
-// `Gate: e2e` MÁS recorridos reales (fila legítima, no aborta — los aborts de
-// la columna E2E exigen CERO recorridos), un `--dry-run` real imprimía a la
-// vez el aviso correcto de "added"/"implied" y el genérico de "redundant",
-// que decía "su Tipo ya implica" el gate: dos afirmaciones sobre el MISMO
-// gate que se contradecían tres líneas aparte.
+// Review of addition 2: `redundant`/`inertWaivers` also attributed the "e2e"
+// gate to the `Tipo` ("that its Tipo ... implies/already implies/does not imply
+// that gate"), which is FALSE for exactly the same reason as "added" — `e2e`
+// does not live in TYPE_GATES, no Tipo ever implies it: the row implies it, via
+// the "E2E" column. The worst case (finding 1): with `Gate: e2e` PLUS real
+// traversals (a legitimate row, it does not abort — the aborts of the E2E
+// column require ZERO traversals), a real `--dry-run` printed both the correct
+// "added"/"implied" warning and the generic "redundant" one, which said "its
+// Tipo already implies" the gate: two claims about the SAME gate contradicting
+// each other three lines apart.
 // ============================================================================
-// (`waived` ya no tiene caso: con recorridos declarados, `!e2e` aborta — ver
-// el quinto abort de arriba —, y sin ellos la renuncia cae en `inertWaivers`.)
-describe('review adición 2 — redundant/inertWaivers también nombran "E2E", no "Tipo"', () => {
-  it('Gate: e2e + recorridos reales: no aborta, y "redundante" ya no contradice al aviso de arriba', () => {
+// (`waived` no longer has a case: with declared traversals, `!e2e` aborts —
+// see the fifth abort above —, and without them the waiver falls into
+// `inertWaivers`.)
+describe('review of addition 2 — redundant/inertWaivers also name "E2E", not "Tipo"', () => {
+  it('Gate: e2e + real traversals: it does not abort, and "redundante" no longer contradicts the warning above', () => {
     const r = groom('e2e', 'curl -i :9115/metrics responde 200')
     expect(r.status).toBe(0)
-    // El aviso "el gate ya viene de la fila" (el mismo que dispara con sólo
-    // recorridos) sigue presente...
+    // The "the gate already comes from the row" warning (the same one that
+    // fires with traversals alone) is still there...
     expect(r.stderr).toMatch(/columna "E2E"/)
-    // ...y "redundante" ya no dice que lo implica el Tipo: las dos líneas que
-    // mencionan "e2e" están de acuerdo en que la fuente es la fila/columna
-    // E2E, ninguna nombra "Tipo" como causa.
+    // ...and "redundante" no longer says the Tipo implies it: the two lines
+    // that mention "e2e" agree that the source is the row/E2E column, and
+    // neither names "Tipo" as the cause.
     expect(r.stderr).toMatch(/redundante/)
     expect(r.stderr).not.toMatch(/Tipo\s*"?backend"?\s*ya implica/)
     const e2eLines = r.stderr.split('\n').filter((l) => l.includes('"e2e"'))
@@ -197,7 +199,7 @@ describe('review adición 2 — redundant/inertWaivers también nombran "E2E", n
     expect(plan.issues[0].labels).toContain('gate:e2e')
   })
 
-  it('Gate: !e2e + sin recorridos: la renuncia inerte nombra "E2E", no "Tipo"', () => {
+  it('Gate: !e2e + no traversals: the inert waiver names "E2E", not "Tipo"', () => {
     const r = groom('!e2e', 'no')
     expect(r.status).toBe(0)
     expect(r.stderr).toMatch(/no había nada que quitar/)

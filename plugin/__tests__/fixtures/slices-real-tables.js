@@ -1,21 +1,24 @@
-// Fixtures compartidos entre __tests__/slices.test.js (parser puro) y
-// __tests__/ct-groom-dryrun.test.js (CLI end-to-end). Su valor entero como
-// regresión es ser byte-exactos a las tablas reales que dispararon cada
-// incidente — vivían duplicados literalmente en ambos ficheros, lo que
-// garantiza que con el tiempo divergieran (alguien retoca una copia para
-// que pase un test nuevo y la otra queda parafraseada sin que nadie lo
-// note). Una sola fuente de verdad.
+// Fixtures shared between __tests__/slices.test.js (the pure parser) and
+// __tests__/ct-groom-dryrun.test.js (the end-to-end CLI). Their entire value as
+// a regression is being byte-exact to the real tables that triggered each
+// incident — they used to live duplicated literally in both files, which
+// guarantees they would diverge over time (someone tweaks one copy to make a
+// new test pass and the other is left paraphrased without anyone noticing). One
+// single source of truth.
+//
+// The table contents below are NOT translated and are not to be paraphrased:
+// they are the exact rows of the incident reports, and the moment they are
+// reworded they stop testing what they exist to test.
 
-// F1 — la tabla real que disparó el incidente original: alguien que no
-// había leído commands/ct-groom.md escribió "#" como "**S1**"/"**S2**"
-// (numeración con prefijo de letra y negrita markdown en vez de un entero a
-// secas), el Dep de S1 como un em dash "—" (que SÍ significa "sin
-// dependencias", ver CRITICAL 1 de la review de F1) y el de S2 como "S1"
-// (sin "#"), y el valor de Área/Toca como el nombre completo de la label
-// ("`area:medicacion`"/"`touches:pbxproj`", con backticks) en vez del token
-// pelado. Con el parser viejo esto producía `parseSlices() -> []` en
-// absoluto silencio. No se parafrasea: son las filas exactas del informe
-// del incidente.
+// F1 — the real table that triggered the original incident: someone who had
+// not read commands/ct-groom.md wrote "#" as "**S1**"/"**S2**" (numbering with
+// a letter prefix and markdown bold instead of a plain integer), S1's Dep as an
+// em dash "—" (which DOES mean "no dependencies", see CRITICAL 1 of the F1
+// review) and S2's as "S1" (without "#"), and the value of Area/Touches as the
+// label's full name ("`area:medicacion`"/"`touches:pbxproj`", with backticks)
+// instead of the bare token. With the old parser this produced
+// `parseSlices() -> []` in complete silence. Not paraphrased: these are the
+// exact rows of the incident report.
 export const REAL_FAILING_TABLE = [
   '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices',
   '| # | Slice | Qué entrega (visible) | Área | Toca | Depende de |',
@@ -25,10 +28,10 @@ export const REAL_FAILING_TABLE = [
   '',
 ].join('\n')
 
-// F2 — la tabla con la que el coordinador verificó el fix de F1 y encontró
-// el hueco adyacente: con "#" ya corregido (1, 2, 3), "Dep" sigue usando
-// "S1"/"S2" en vez de "#1"/"#2" — deps: [] en silencio, exit 0, grafo de
-// dependencias borrado.
+// F2 — the table the coordinator verified the F1 fix with, and where they found
+// the adjacent gap: with "#" already corrected (1, 2, 3), "Dep" still uses
+// "S1"/"S2" instead of "#1"/"#2" — deps: [] in silence, exit 0, dependency
+// graph erased.
 export const REAL_DEP_TABLE = [
   '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices',
   '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |',
@@ -39,16 +42,15 @@ export const REAL_DEP_TABLE = [
   '',
 ].join('\n')
 
-// F1 CRITICAL 1 (review) — REAL_FAILING_TABLE con el "#" ya corregido a un
-// entero a secas (1, 2), tal como pide nuestro propio mensaje de error, sin
-// tocar nada más. La fila 1 sigue usando el em dash "—" en Dep (que
-// siempre significó "sin dependencias" correctamente) y la fila 2 sigue
-// usando "S1" (que sigue siendo un Dep malformado de verdad). El fix debe
-// dejar pasar la fila 1 sin abortar por Dep y seguir abortando por la fila
-// 2 — la reproducción exacta de la secuencia que describió el coordinador:
-// "la sesión de menoplus arregla la columna # exactamente como le decimos,
-// vuelve a ejecutar → aborta en una celda que significa correctamente
-// «ninguna dependencia»".
+// F1 CRITICAL 1 (review) — REAL_FAILING_TABLE with "#" already corrected to a
+// plain integer (1, 2), exactly as our own error message asks, without touching
+// anything else. Row 1 still uses the em dash "—" in Dep (which always
+// correctly meant "no dependencies") and row 2 still uses "S1" (which really is
+// still a malformed Dep). The fix has to let row 1 through without aborting on
+// Dep and go on aborting on row 2 — the exact reproduction of the sequence the
+// coordinator described: "the menoplus session fixes the # column exactly as we
+// tell them to, runs again → aborts on a cell that correctly means «no
+// dependencies»".
 export const REAL_TABLE_WITH_HASH_FIXED = [
   '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices',
   '| # | Slice | Qué entrega (visible) | Área | Toca | Depende de |',

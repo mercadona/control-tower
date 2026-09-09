@@ -1,32 +1,32 @@
-// #99 — LOS TEXTOS QUE LEEN LOS AGENTES, ESCRITOS EN POSITIVO.
+// #99 — THE TEXTS AGENTS READ, WRITTEN IN THE POSITIVE.
 //
-// El obstáculo `negative-bleedthrough` (Kassner & Schütze 2020) dice que
-// nombrar lo prohibido activa sus tokens: un texto que enumera lo que no debe
-// haber le está enseñando al modelo justo eso. El patrón `point-the-target`
-// propone lo contrario — describir el objetivo — y es lo que la reescritura de
-// #99 aplicó a las nueve reglas del juez de tarea, a las tres del juez de
-// slice, al kickoff y al prompt del implementador.
+// The `negative-bleedthrough` obstacle (Kassner & Schütze 2020) says that
+// naming what is forbidden activates its tokens: a text that enumerates what
+// must not be there is teaching the model exactly that. The `point-the-target`
+// pattern proposes the opposite — describing the target — and that is what the
+// #99 rewrite applied to the nine rules of the task judge, to the three of the
+// slice judge, to the kickoff and to the implementer's prompt.
 //
-// Este test es lo único que fija el resultado. La reescritura es prosa: nada
-// la protege de volver a llenarse de negaciones una ronda tras otra, porque
-// cada frase negativa nueva parece inofensiva por separado. Un umbral por
-// fichero convierte esa deriva en un fallo de test la primera vez que ocurre.
+// This test is the only thing that pins the result. The rewrite is prose:
+// nothing protects it from filling up with negations again round after round,
+// because each new negative sentence looks harmless on its own. A per-file
+// threshold turns that drift into a test failure the first time it happens.
 //
-// LOS UMBRALES SON EL RECUENTO MEDIDO MÁS UN MARGEN CORTO. No son un objetivo
-// («bajar de 30»): son una barandilla contra la subida. Bajarlos cuando un
-// cambio deje el texto más limpio es correcto; subirlos exige que quien lo
-// haga escriba por qué esa negación es MECANISMO y no una prohibición al
-// modelo — que es la distinción que esta reescritura tuvo que hacer una por
-// una.
+// THE THRESHOLDS ARE THE MEASURED COUNT PLUS A SHORT MARGIN. They are not a
+// target («get below 30»): they are a guardrail against the count going up.
+// Lowering them when a change leaves the text cleaner is correct; raising them
+// demands that whoever does it write down why that negation is MECHANISM and
+// not a prohibition aimed at the model — which is the distinction this rewrite
+// had to make one by one.
 //
-// QUÉ CUENTA COMO NEGACIÓN, y por qué no cuenta todo lo demás:
-//   - Se cuentan las cuatro palabras del criterio de #99: `not`, `never`,
+// WHAT COUNTS AS A NEGATION, and why nothing else does:
+//   - The four words of #99's criterion are counted: `not`, `never`,
 //     `cannot`, `no`.
-//   - Se descuentan DOS literales que no son prosa: `no-aplica`, que es un
-//     miembro del enum `RUBRIC_OUTCOMES` que el juez tiene que escribir con
-//     esa ortografía exacta, y `No TDD`, que es el marcador literal de la
-//     línea `**TDD:**` del plan. Contarlos obligaría a elegir entre el umbral
-//     y el contrato.
+//   - TWO literals that are not prose are discounted: `no-aplica`, which is a
+//     member of the `RUBRIC_OUTCOMES` enum that the judge has to write with
+//     that exact spelling, and `No TDD`, which is the literal marker of the
+//     plan's `**TDD:**` line. Counting them would force a choice between the
+//     threshold and the contract.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -36,7 +36,7 @@ import { renderKickoff } from '../scripts/kickoff.js'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 class ConteoDeNegaciones {
-  // Literales de contrato: se descuentan antes de contar (ver cabecera).
+  // Contract literals: discounted before counting (see the header).
   static LITERALES_DE_CONTRATO = [/no-aplica/g, /No TDD/g]
 
   static PALABRAS_INGLESAS = /\b(not|never|cannot|no)\b/gi
@@ -62,10 +62,10 @@ class ConteoDeNegaciones {
   }
 }
 
-// El slice de referencia: uno que declara TODO lo que el kickoff sabe
-// renderizar —señal, recorridos e2e, addendum de tipo— para que el conteo
-// mida el kickoff más largo que el dispatcher puede llegar a teclear, y no
-// una versión corta que esconda las líneas condicionales.
+// The reference slice: one that declares EVERYTHING the kickoff knows how to
+// render —signal, e2e runs, type addendum— so that the count measures the
+// longest kickoff the dispatcher can end up typing, and not a short version
+// that hides the conditional lines.
 class SliceDeReferencia {
   static conTodoDeclarado() {
     return {
@@ -92,24 +92,25 @@ class SliceDeReferencia {
 
 const leer = (...partes) => readFileSync(join(ROOT, ...partes), 'utf8')
 
-// Los umbrales, en un solo sitio, con el recuento del día en que se midieron.
-// La columna «medido» es documentación: lo que rompe el test es el umbral.
+// The thresholds, in a single place, with the count of the day they were
+// measured. The «measured» column is documentation: what breaks the test is
+// the threshold.
 const UMBRALES = [
-  ['agents/ct-judge.md', ['agents', 'ct-judge.md'], 50], // medido: 40 (antes de #99: 151)
-  ['agents/ct-slice-judge.md', ['agents', 'ct-slice-judge.md'], 40], // medido: 29 (antes: 88)
-  ['prompts/task-implementer.md', ['prompts', 'task-implementer.md'], 25], // medido: 17 (antes: 56)
+  ['agents/ct-judge.md', ['agents', 'ct-judge.md'], 50], // measured: 40 (before #99: 151)
+  ['agents/ct-slice-judge.md', ['agents', 'ct-slice-judge.md'], 40], // measured: 29 (before: 88)
+  ['prompts/task-implementer.md', ['prompts', 'task-implementer.md'], 25], // measured: 17 (before: 56)
 ]
 
-describe('#99 — los textos del juez y del implementador describen el objetivo', () => {
-  it.each(UMBRALES)('%s se queda por debajo de su umbral de negaciones', (_, partes, umbral) => {
+describe("#99 — the judge's and the implementer's texts describe the target", () => {
+  it.each(UMBRALES)('%s stays below its negation threshold', (_, partes, umbral) => {
     expect(ConteoDeNegaciones.enIngles(leer(...partes))).toBeLessThanOrEqual(umbral)
   })
 
-  // La reescritura conserva a propósito las negaciones que son MECANISMO, y
-  // este test las nombra para que nadie las tome por deriva y las borre: el
-  // campo que el programa escribe, y los dos ítems cuyo vocabulario está
-  // cerrado por el esquema.
-  it('las negaciones que son mecanismo siguen en pie', () => {
+  // The rewrite deliberately keeps the negations that are MECHANISM, and this
+  // test names them so that nobody takes them for drift and deletes them: the
+  // field the program writes, and the two items whose vocabulary is closed by
+  // the schema.
+  it('the negations that are mechanism are still standing', () => {
     const juez = leer('agents', 'ct-judge.md')
     expect(juez).toContain('There is no `review_token` for you to write')
     expect(juez).toContain('never `sin-vara`')
@@ -118,24 +119,24 @@ describe('#99 — los textos del juez y del implementador describen el objetivo'
   })
 })
 
-describe('#99 — el kickoff es una secuencia de lo que se hace', () => {
+describe('#99 — the kickoff is a sequence of what gets done', () => {
   const kickoff = () => renderKickoff(SliceDeReferencia.conTodoDeclarado(), SliceDeReferencia.opciones())
 
-  // El criterio literal de #99. Las mayúsculas eran el énfasis con el que el
-  // kickoff gritaba sus prohibiciones —«NO mergees», «NO crees worktrees», «NO
-  // está en este kickoff»— y son también lo que más pesa en el bleedthrough.
-  it('ninguna negación en mayúsculas, ni en las líneas de gate', () => {
+  // #99's literal criterion. Uppercase was the emphasis with which the kickoff
+  // shouted its prohibitions —«NO mergees», «NO crees worktrees», «NO está en
+  // este kickoff»— and it is also what weighs most in the bleedthrough.
+  it('no uppercase negation, not even in the gate lines', () => {
     expect(ConteoDeNegaciones.enMayusculas(kickoff())).toBe(0)
   })
 
-  it('el kickoff entero se queda por debajo de su umbral de negaciones', () => {
-    // medido: 19 (el kickoff más largo, con señal, e2e y los cuatro gates).
+  it('the whole kickoff stays below its negation threshold', () => {
+    // measured: 19 (the longest kickoff, with signal, e2e and the four gates).
     expect(ConteoDeNegaciones.enCastellano(kickoff())).toBeLessThanOrEqual(25)
   })
 
-  // Lo que el kickoff dice AHORA en el sitio donde antes prohibía: la
-  // secuencia la dicta la máquina, y cada acto tiene dueño.
-  it('la secuencia la dicta ct-step y cada acto dice de quién es', () => {
+  // What the kickoff says NOW where it used to forbid: the machine dictates
+  // the sequence, and every act has an owner.
+  it('ct-step dictates the sequence and every act says whose it is', () => {
     const k = kickoff()
     expect(k).toMatch(/la secuencia de la implementación la dicta la máquina/)
     expect(k).toMatch(/quien comitea es ct-step/)

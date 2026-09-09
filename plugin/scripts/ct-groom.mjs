@@ -1,71 +1,71 @@
 #!/usr/bin/env node
-// CANAL DE SALIDA (F16/H2) — el criterio es común a los TRES ejecutables del
-// plugin (ct-next.mjs, ct-groom.mjs, dispatch-check.mjs) y está escrito entero
-// en ct-next.mjs, junto a su `warn()`:
+// OUTPUT CHANNEL (F16/H2) — the criterion is common to the THREE executables of
+// the plugin (ct-next.mjs, ct-groom.mjs, dispatch-check.mjs) and it is written
+// out in full in ct-next.mjs, next to its `warn()`:
 //
-//   STDOUT = el PRODUCTO. Aquí: el JSON del plan en --dry-run, y el acta de lo
-//            que se creó/reconcilió de verdad (milestone, issues, project).
-//   STDERR = el DIAGNÓSTICO. `aviso:`, `recordatorio:`, el informe de drift,
-//            y todos los abortos.
+//   STDOUT = the PRODUCT. Here: the plan's JSON under --dry-run, and the record
+//            of what was really created/reconciled (milestone, issues, project).
+//   STDERR = the DIAGNOSIS. `aviso:`, `recordatorio:`, the drift report, and
+//            every abort.
 //
-// Este fichero YA cumplía el criterio (es el que sirvió de referencia cuando
-// se descubrió que ct-next.mjs mandaba sus avisos por stdout). Queda dicho
-// aquí para que el siguiente que añada una línea de salida sepa a qué canal
-// va sin tener que inferirlo del vecindario.
+// This file ALREADY met the criterion (it is the one that served as the
+// reference when it was discovered that ct-next.mjs sent its warnings through
+// stdout). It is said here so that the next person who adds an output line
+// knows which channel it goes to without having to infer it from the
+// neighbourhood.
 import { readFileSync, realpathSync } from 'node:fs'
 import { resolve as resolvePath, relative as relativePath } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { analyzeSlicesTable, isNoValueCell } from './slices.js'
-// parseSenalCell (Slice 10): el MISMO clasificador con el que groom.js decide
-// qué renderiza — aquí se usa para abortar ANTES de cualquier render o
-// mutación cuando una fila declara una exención sin razón.
+// parseSenalCell (Slice 10): the SAME classifier with which groom.js decides
+// what it renders — here it is used to abort BEFORE any render or mutation when
+// a row declares an exemption with no reason.
 import { groomPlan, readEpicContext, readFrozenDecisions, EPIC_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, analyzeSpecFreeze, HYPOTHESIS_REASONS, parseSenalCell, LOOP_STATUS_LABELS } from './groom.js'
-// F10: de "la ruta que me pasaron en argv + --section" a una URL absoluta
-// verificada contra GitHub (o a una referencia honesta sin enlace, diciendo
-// por qué). Ver scripts/spec-link.js para las tres decisiones que toma y por
-// qué las toma así.
+// F10: from "the path I was given in argv + --section" to an absolute URL
+// verified against GitHub (or to an honest reference with no link, saying why).
+// See scripts/spec-link.js for the three decisions it takes and why it takes
+// them the way it does.
 import { resolveSpecRef } from './spec-link.js'
 import { flattenPages, realIssuesOnly, findByMarker, partitionByEpic, epicTitleOf, GROOM_ISSUES_QUERY, normalizeGraphqlIssues } from './gh-issues.js'
 import { pickCurrentIteration, hasProjectItem } from './project-fields.js'
 import { parseStrictInt } from './argnum.js'
-// extractOrder (F5, importante 4): para detectar issues huérfanos — un issue
-// con marcador ct-order:N cuyo slice N ya no está en la tabla §9 actual.
-// resolveStatus (F6, grave 2): el MISMO criterio con el que el dispatcher
-// decide en qué estado está un issue (incluida la precedencia cuando hay más
-// de una label `status:`, y el "sin ninguna label status: = backlog") — es lo
-// que hace verdadero, y no una suposición, el recordatorio de "esto todavía
-// no lo va a despachar nadie" que este script imprime al final.
+// extractOrder (F5, important 4): to detect orphan issues — an issue with a
+// ct-order:N marker whose slice N is no longer in the current §9 table.
+// resolveStatus (F6, serious 2): the SAME criterion with which the dispatcher
+// decides which status an issue is in (including the precedence when there is
+// more than one `status:` label, and the "with no status: label at all =
+// backlog") — it is what makes true, and not a guess, the reminder of "nobody
+// is going to dispatch this yet" that this script prints at the end.
 import { extractOrder, resolveStatus, extractSpecLink, specTarget } from './gh-issue-map.js'
-// F5: capa pura de reconciliación — decide QUÉ cuenta como divergencia entre
-// un issue existente y lo que el plan produce hoy, CÓMO se reporta, y CÓMO
-// se traduce a los flags de `gh issue edit`/`--body` para aplicarla. Ver
-// scripts/reconcile.js para la justificación completa de cada decisión (qué
-// se compara, qué se excluye a propósito, y por qué).
+// F5: the pure reconciliation layer — it decides WHAT counts as a divergence
+// between an existing issue and what the plan produces today, HOW it is
+// reported, and HOW it is translated into the `gh issue edit`/`--body` flags to
+// apply it. See scripts/reconcile.js for the full justification of every
+// decision (what is compared, what is excluded on purpose, and why).
 import { diffIssue, hasDrift, formatDrift, buildReconcileEditArgs, buildReconcileBody, reconcileGaps, hasReconcileGap } from './reconcile.js'
-// ADDENDA (F3): única fuente de verdad de qué valores de "Tipo" tienen un
-// addendum de kickoff — ver el aviso de "Tipo" no reconocido más abajo.
+// ADDENDA (F3): the single source of truth of which "Tipo" values have a
+// kickoff addendum — see the unrecognized "Tipo" warning further down.
 import { ADDENDA } from './kickoff.js'
-// F21: los gates humanos, separados del `Tipo` técnico. `resolveGates` es la
-// única fuente de verdad de qué gates tiene un slice y de todo lo que hay que
-// decir en voz alta sobre ellos (un gate que el Tipo no implica, una renuncia,
-// una renuncia inerte, un token que no existe).
+// F21: the human gates, separated from the technical `Tipo`. `resolveGates` is
+// the single source of truth of which gates a slice has and of everything that
+// has to be said out loud about them (a gate the Tipo does not imply, a waiver,
+// an inert waiver, a token that does not exist).
 import { GATES, TYPE_GATES, resolveGates, resolveE2e, parseGateCell } from './gates.js'
 
-// `arg()` solo devuelve un string cuando el flag realmente trae un valor: si
-// el flag es el último token de argv, o el token siguiente es a su vez otro
-// flag (empieza por `--`), devolvemos `true` (presente-sin-valor) en vez de
-// colarlo como valor. Mismo patrón que dispatch-check.mjs/ct-next.mjs — fix de
-// la review final (finding 3): la versión anterior de este `arg()` tomaba
-// literalmente `process.argv[i + 1]`, sin comprobar que fuera un valor real.
-// Verificado en vivo contra el sandbox: `--milestone` como último token de
-// argv hacía que `milestone` fuera el booleano `true`, y una corrida real
-// entonces CREABA un milestone en GitHub literalmente titulado "true" y le
-// enganchaba todos los issues del epic; `--milestone --dry-run` se comía el
-// `--dry-run` como si fuera el valor del milestone; `--project` sin valor se
-// convertía en `1` en el JSON del dry-run (`Number(true) === 1`). Los
-// call-sites de milestone/project de más abajo, además de este endurecimiento
-// del propio `arg()`, validan explícitamente que el valor recibido no sea
-// `true` (presente-sin-valor) antes de usarlo.
+// `arg()` only returns a string when the flag really carries a value: if the
+// flag is the last token of argv, or the next token is itself another flag
+// (starting with `--`), we return `true` (present-with-no-value) instead of
+// sneaking it in as a value. Same pattern as dispatch-check.mjs/ct-next.mjs —
+// a fix from the final review (finding 3): the previous version of this `arg()`
+// took `process.argv[i + 1]` literally, without checking that it was a real
+// value. Verified live against the sandbox: `--milestone` as the last token of
+// argv made `milestone` the boolean `true`, and a real run then CREATED a
+// milestone in GitHub literally titled "true" and hooked all the epic's issues
+// onto it; `--milestone --dry-run` ate the `--dry-run` as if it were the
+// milestone's value; `--project` with no value turned into `1` in the dry-run's
+// JSON (`Number(true) === 1`). The milestone/project call sites further down,
+// on top of this hardening of `arg()` itself, explicitly validate that the
+// value received is not `true` (present-with-no-value) before using it.
 const arg = (f, d) => {
   const i = process.argv.indexOf(f)
   if (i === -1) return d
@@ -80,88 +80,85 @@ const repo = arg('--repo')
 const milestone = arg('--milestone', 'Epic')
 const project = arg('--project')
 const dryRun = has('--dry-run')
-// F5: opt-in, NUNCA por defecto — un issue existente puede haber sido
-// editado a propósito, llevar discusión, o estar cerrado; el comportamiento
-// por defecto es detectar y reportar divergencia, nunca tocar nada sin que
-// se pida explícitamente (ver el bloque de reconciliación más abajo).
+// F5: opt-in, NEVER by default — an existing issue may have been edited on
+// purpose, carry discussion, or be closed; the default behaviour is to detect
+// and report divergence, never to touch anything unless it is explicitly asked
+// for (see the reconciliation block further down).
 const reconcileFlag = has('--reconcile')
-// Decisión de producto (review round 5): --reconcile se marca EXPERIMENTAL.
-// Cinco rondas de review, cada una encontrando una forma NUEVA de corromper
-// un body real (vallas de código con longitud/carácter equivocados,
-// comentarios HTML multilínea, encabezados que no son "## " literal,
-// secciones duplicadas) son evidencia de que la relación entre "markdown
-// que un humano puede escribir de verdad" y "lo que el escáner cubre" no
-// se conoce todavía por completo. La mitad de DETECCIÓN de esta feature
-// (todo lo de arriba, sin --reconcile) nunca escribe nada — es segura por
-// construcción. La mitad de APLICACIÓN sí escribe en datos reales del
-// usuario, así que el aviso se imprime en cuanto se sabe que el flag está
-// presente — ANTES de cualquier validación o mutación, con o sin
-// --dry-run (el aviso es sobre el RIESGO del flag, no sobre si esta
-// corrida en concreto llega a mutar algo) — y NUNCA aparece sin el flag:
-// el comportamiento por defecto (detectar, reportar, exit 3) no cambia ni
-// gana avisos nuevos.
+// Product decision (review round 5): --reconcile is marked EXPERIMENTAL. Five
+// rounds of review, each one finding a NEW way of corrupting a real body (code
+// fences with the wrong length/character, multi-line HTML comments, headings
+// that are not a literal "## ", duplicated sections) are evidence that the
+// relationship between "markdown a human can really write" and "what the
+// scanner covers" is not yet fully known. This feature's DETECTION half
+// (everything above, without --reconcile) never writes anything — it is safe by
+// construction. The APPLICATION half does write into the user's real data, so
+// the warning is printed as soon as the flag is known to be present — BEFORE
+// any validation or mutation, with or without --dry-run (the warning is about
+// the flag's RISK, not about whether this particular run gets as far as
+// mutating anything) — and it NEVER appears without the flag: the default
+// behaviour (detect, report, exit 3) neither changes nor gains new warnings.
 if (reconcileFlag) {
   console.error('aviso: --reconcile es EXPERIMENTAL — en las pruebas de esta feature ha corrompido bodies de issues reales de cuatro formas distintas ya encontradas y arregladas (vallas de código con el carácter/longitud de cierre equivocados, comentarios HTML multilínea, encabezados que no son "## " literal, secciones duplicadas que no se pueden resolver solas) — revisa el diff del issue en GitHub después de cada corrida, no confíes en el mensaje "reconciliado" a ciegas.')
 }
 
-// Validación explícita: con el `arg()` endurecido de arriba, un `--milestone`
-// colgante (último token, o seguido de otro flag) devuelve `true` en vez de
-// colar el flag siguiente como valor — pero sigue siendo responsabilidad del
-// call-site rechazarlo en vez de dejarlo fluir hacia `gh` como si fuera un
-// título de milestone real.
+// Explicit validation: with the hardened `arg()` above, a dangling
+// `--milestone` (the last token, or followed by another flag) returns `true`
+// instead of sneaking the next flag in as a value — but it is still the call
+// site's responsibility to reject it rather than letting it flow towards `gh`
+// as if it were a real milestone title.
 if (milestone === true || typeof milestone !== 'string' || milestone.length === 0) {
   console.error(`--milestone requiere un valor: recibido "${milestone === true ? '(sin valor)' : milestone}"`)
   process.exit(2)
 }
-// --section: OBSOLETO desde F10, y se dice en voz alta en vez de aceptarlo
-// callando.
+// --section: OBSOLETE since F10, and it is said out loud instead of being
+// accepted in silence.
 //
-// Nunca sirvió para localizar nada: la tabla §9 se encuentra por su CABECERA
-// DE COLUMNAS ("Slice" + "Dep"), no por ningún número de sección — así ha
-// sido siempre (ver slices.js#analyzeSlicesTable), y el propio contrato que
-// siembra /ct-init ya lo admitía. Lo único que hacía `--section N` era
-// componer el ancla del enlace al spec como "#N"... un ancla que en GitHub no
-// existe: el encabezado real "## 9. Slices" tiene el id "9-slices". O sea que
-// el único trabajo del flag era producir un enlace roto.
+// It never served to locate anything: the §9 table is found by its COLUMN
+// HEADER ("Slice" + "Dep"), not by any section number — that has always been so
+// (see slices.js#analyzeSlicesTable), and the very contract /ct-init seeds
+// already admitted it. The only thing `--section N` did was compose the spec
+// link's anchor as "#N"… an anchor that does not exist in GitHub: the real
+// heading "## 9. Slices" has the id "9-slices". Which is to say the flag's only
+// job was to produce a broken link.
 //
-// F6 le había puesto una validación de call-site (rechazar `--section`
-// colgante, que renderizaba "spec.md#true") — correcta para lo que el flag
-// hacía entonces, pero ahora sería exigir un valor para algo que no se usa.
-// Se acepta el flag en cualquier forma, se ignora, y se avisa: quien tenga el
-// comando escrito en un script, un alias o un slash command (commands/
-// ct-groom.md lo llevaba) no ve su invocación romperse de golpe, pero tampoco
-// se queda creyendo que sigue decidiendo algo.
+// F6 had put a call-site validation on it (rejecting a dangling `--section`,
+// which rendered "spec.md#true") — correct for what the flag did back then, but
+// now it would mean demanding a value for something that is not used. The flag
+// is accepted in any form, ignored, and warned about: whoever has the command
+// written into a script, an alias or a slash command (commands/ct-groom.md
+// carried it) does not see their invocation break all at once, but neither are
+// they left believing it still decides anything.
 if (process.argv.includes('--section')) {
   console.error('aviso: --section está obsoleto y se IGNORA — el ancla del enlace al spec sale ahora del encabezado real bajo el que vive la tabla (p.ej. "## 9. Slices" → "#9-slices"), y la tabla se localiza, como siempre, por su cabecera de columnas ("Slice" + "Dep"), no por ningún número de sección. Puedes quitarlo de la invocación.')
 }
-// Mismo criterio para --project: si se pasó el flag pero sin valor numérico
-// real, abortamos en vez de dejar que `Number(true) === 1` decida en
-// silencio contra qué Project v2 operar.
-// D4 (revisión de los argumentos numéricos de todo el plugin): `Number(...)`
-// es fiel con la basura de cola (`Number('7x')` es NaN, se rechazaba bien),
-// pero aceptaba valores que NO son enteros — `--project 2.9` pasaba
-// `Number.isFinite(...) && > 0` y viajaba tal cual a `gh project view 2.9`,
-// que falla tarde y de forma confusa. parseStrictInt exige dígitos decimales
-// a secas, el mismo criterio que `--cap` en ct-next.mjs y que el `<issue#>`
-// de dispatch-check.mjs.
-// `projectNum` (no `project`) es lo que usa TODO el camino posterior — el
-// dry-run, `gh project view/item-add/item-list`, y las guardas `if (...)`.
-// Validar un valor y usar otro es el mismo defecto que esta tanda arregla en
-// otros sitios: `--project +7` pasaba la validación y luego llamaba a
-// `gh project view +7`.
+// Same criterion for --project: if the flag was passed but with no real numeric
+// value, we abort instead of letting `Number(true) === 1` decide silently which
+// Project v2 to operate against.
+// D4 (review of the numeric arguments of the whole plugin): `Number(...)` is
+// faithful with trailing garbage (`Number('7x')` is NaN, it was rejected
+// properly), but it accepted values that are NOT integers — `--project 2.9`
+// passed `Number.isFinite(...) && > 0` and travelled as it was to
+// `gh project view 2.9`, which fails late and confusingly. parseStrictInt
+// demands bare decimal digits, the same criterion as `--cap` in ct-next.mjs and
+// as dispatch-check.mjs's `<issue#>`.
+// `projectNum` (not `project`) is what the WHOLE later path uses — the dry run,
+// `gh project view/item-add/item-list`, and the `if (...)` guards. Validating
+// one value and using another is the same defect this batch fixes elsewhere:
+// `--project +7` passed the validation and then called `gh project view +7`.
 const projectNum = typeof project === 'string' ? parseStrictInt(project) : null
 if (project !== undefined && (projectNum === null || projectNum <= 0)) {
   console.error(`--project inválido: "${project === true ? '(sin valor)' : project}" — debe ser un entero positivo en dígitos decimales a secas (sin signo "+"/"-", sin espacios, sin punto ni exponente)`)
   process.exit(2)
 }
-// --repo: un `--repo` colgante (arg() endurecido) da `true`, no un string —
-// `if (!repo)` de más abajo no lo detecta porque `true` es truthy. Menos
-// peligroso que milestone/project (acaba en `gh api repos/true/...`, 404,
-// aborta antes de mutar nada), pero inconsistente con ct-next.mjs/
-// dispatch-check.mjs, que ya validan `typeof !== 'string'` en vez de un
-// check solo-falsy. No exigimos --repo aquí (sigue siendo opcional en
-// --dry-run, ver más abajo): solo rechazamos el caso "se pasó el flag pero
-// sin valor real".
+// --repo: a dangling `--repo` (hardened arg()) gives `true`, not a string — the
+// `if (!repo)` further down does not detect it because `true` is truthy. Less
+// dangerous than milestone/project (it ends up in `gh api repos/true/...`, 404,
+// aborting before mutating anything), but inconsistent with ct-next.mjs/
+// dispatch-check.mjs, which already validate `typeof !== 'string'` instead of a
+// falsy-only check. We do not demand --repo here (it is still optional under
+// --dry-run, see further down): we only reject the "the flag was passed but
+// with no real value" case.
 if (repo !== undefined && typeof repo !== 'string') {
   console.error('--repo inválido: "(sin valor)" — usa --repo <owner/repo>')
   process.exit(2)
@@ -174,33 +171,31 @@ try {
   console.error(`no se pudo leer el spec: ${specFile} (${e.code || e.message})`)
   process.exit(2)
 }
-// F1 (informe del incidente): un spec real, escrito por alguien que no había
-// leído commands/ct-groom.md, produjo una tabla §9 que parseSlices() convertía
-// en 0 slices — en total silencio. `/ct-groom --dry-run` imprimía
-// `{"issues": [], ...}` y salía 0; una corrida real habría creado el
-// milestone, cero issues, y reportado éxito. `analyzeSlicesTable` (a
-// diferencia de `parseSlices`, que sigue devolviendo solo `Slice[]` para no
-// romper el contrato del que dependen otros módulos/tests) trae el reporte
-// completo de qué se pudo y qué NO se pudo parsear, y por qué. Todas las
-// comprobaciones de abajo corren ANTES de `--dry-run` y ANTES de cualquier
-// mutación de GitHub — un dry-run que valida menos que la corrida real es una
-// trampa.
+// F1 (incident report): a real spec, written by somebody who had not read
+// commands/ct-groom.md, produced a §9 table that parseSlices() turned into 0
+// slices — in total silence. `/ct-groom --dry-run` printed `{"issues": [], ...}`
+// and exited 0; a real run would have created the milestone, zero issues, and
+// reported success. `analyzeSlicesTable` (unlike `parseSlices`, which still
+// returns only `Slice[]` so as not to break the contract other modules/tests
+// depend on) brings the complete report of what could and what could NOT be
+// parsed, and why. Every check below runs BEFORE `--dry-run` and BEFORE any
+// GitHub mutation — a dry run that validates less than the real run is a trap.
 const report = analyzeSlicesTable(specMd)
 
-// Mejora de uso (review round 2): con varios defectos a la vez, abortar en
-// el PRIMERO que se encuentra fuerza hasta ocho ejecuciones para verlos
-// todos — la misma noria de "arregla uno, vuelve a correr, descubre el
-// siguiente" que convirtió el em dash en una trampa. Cada comprobación de
-// abajo ya agrega TODAS las filas de su propia clase (no solo la primera);
-// aquí se agregan además TODAS las clases que disparan, y se imprimen
-// juntas antes de un único `process.exit(2)`.
+// Usability improvement (review round 2): with several defects at once,
+// aborting at the FIRST one found forces up to eight executions to see them
+// all — the same treadmill of "fix one, run again, discover the next" that
+// turned the em dash into a trap. Each check below already aggregates ALL the
+// rows of its own class (not just the first); here ALL the classes that fire
+// are aggregated too, and they are printed together before a single
+// `process.exit(2)`.
 const hardErrors = []
 
-// F32 — la puerta de congelación (ver groom.js#analyzeSpecFreeze): corre
-// sobre el spec ENTERO, antes de cualquier mutación y también bajo --dry-run
-// (misma doctrina que F1: un dry-run que valida menos que la corrida real es
-// una trampa). Se agrega a hardErrors como todo lo demás — las averías de
-// congelación y las de tabla se reportan JUNTAS, un solo exit 2.
+// F32 — the freeze gate (see groom.js#analyzeSpecFreeze): it runs over the
+// WHOLE spec, before any mutation and also under --dry-run (the same doctrine
+// as F1: a dry run that validates less than the real run is a trap). It is
+// aggregated into hardErrors like everything else — freeze breakages and table
+// breakages are reported TOGETHER, one single exit 2.
 const freeze = analyzeSpecFreeze(specMd)
 if (freeze.clarifications.length) {
   const first = freeze.clarifications[0]
@@ -213,42 +208,40 @@ if (freeze.hypothesis === HYPOTHESIS_REASONS.ABSENT) {
 }
 
 if (!report.tableFound) {
-  // Distingue "no hay ninguna tabla markdown en el spec" de "hay tabla(s),
-  // pero ninguna con cabecera Slice/Dep" (review de F1): son causas y
-  // arreglos distintos, y el propio detector ya sabe cuál de las dos pasó
-  // (report.pipeRowsFound).
+  // It tells "there is no markdown table in the spec at all" apart from "there
+  // are table(s), but none with a Slice/Dep header" (F1 review): they are
+  // different causes with different fixes, and the detector itself already
+  // knows which of the two happened (report.pipeRowsFound).
   if (report.pipeRowsFound) {
     hardErrors.push('se encontraron filas de tabla markdown en el spec, pero ninguna cabecera con columnas "Slice" y "Dep" — añade (o corrige) la fila de cabecera de la tabla §9 con esas columnas (p.ej. "| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |")')
   } else {
     hardErrors.push('no se encontró ninguna tabla markdown (ninguna línea empieza por "|") en el spec — añade la tabla §9 de slices bajo su sección (ver commands/ct-groom.md)')
   }
 } else if (report.missingRequiredColumns.length) {
-  // F3: "Entrega" salió de esta lista — ya no es obligatoria (el título del
-  // issue ahora sale de "Slice"; "Entrega" pasó a ser una descripción
-  // opcional del cuerpo, ver OPTIONAL_COLUMN_CONSEQUENCE más abajo). "Slice"
-  // no puede faltar como columna sin que la tabla entera deje de
-  // reconocerse como la tabla §9 (ver el comentario en
-  // slices.js#analyzeSlicesTable), así que "#" queda como el único caso real
-  // de esta rama.
+  // F3: "Entrega" came off this list — it is no longer mandatory (the issue's
+  // title now comes from "Slice"; "Entrega" became an optional description in
+  // the body, see OPTIONAL_COLUMN_CONSEQUENCE further down). "Slice" cannot be
+  // missing as a column without the whole table ceasing to be recognized as
+  // the §9 table (see the comment in slices.js#analyzeSlicesTable), so "#" is
+  // left as the only real case of this branch.
   for (const missing of report.missingRequiredColumns) {
     if (missing === '#') {
       hardErrors.push('la tabla §9 no tiene columna "#" — sin ella no hay orden de slice ni se pueden resolver las dependencias (merge-after); añade una columna de cabecera "#" con un entero puro por fila (1, 2, 3…)')
     }
   }
 } else {
-  // Los checks de aquí abajo son a nivel de FILA, y solo tienen sentido si
-  // la cabecera ya es estructuralmente válida (si faltara "#" como columna,
-  // cada fila heredaría ese problema de forma derivada — p.ej. todas
-  // aparecerían en skippedRows con valor "" — y mostrarlo junto al mensaje
-  // de columna ausente sería ruido, no señal nueva).
+  // The checks below here are at ROW level, and they only make sense if the
+  // header is already structurally valid (if "#" were missing as a column,
+  // every row would inherit that problem derivatively — e.g. they would all
+  // turn up in skippedRows with the value "" — and showing that next to the
+  // absent-column message would be noise, not new signal).
 
-  // Punto 3 de la review de F1: una línea en blanco (o cualquier otra sin
-  // "|") a mitad de la tabla truncaba el escaneo en silencio — las filas
-  // posteriores desaparecían, medio epic se creaba igualmente, y el
-  // proceso salía con éxito. analyzeSlicesTable ya no trunca (escanea todo
-  // el bloque hasta la siguiente cabecera markdown, o hasta la cabecera de
-  // una tabla nueva), pero reporta el hueco para que se arregle en vez de
-  // dejarlo pasar.
+  // Point 3 of the F1 review: a blank line (or any other one without "|")
+  // halfway through the table truncated the scan silently — the later rows
+  // vanished, half the epic got created all the same, and the process exited
+  // successfully. analyzeSlicesTable no longer truncates (it scans the whole
+  // block up to the next markdown heading, or up to a new table's header), but
+  // it reports the gap so that it gets fixed instead of being let through.
   if (report.rowsAfterGap.length) {
     const first = report.rowsAfterGap[0]
     hardErrors.push(`${report.rowsAfterGap.length} fila(s) de datos de la tabla §9 aparecen después de una interrupción (línea en blanco, o una línea sin "|") dentro del bloque de la tabla (ejemplo: "${first.raw}") — la tabla debe ser un único bloque markdown contiguo, sin líneas en blanco entre las filas; une las filas en un solo bloque y vuelve a intentarlo`)
@@ -257,13 +250,13 @@ if (!report.tableFound) {
     const first = report.skippedRows[0]
     hardErrors.push(`${report.skippedRows.length} fila(s) de la tabla §9 tienen "#" que no es un entero a secas (ejemplo: "${first.value}") — "#" debe ser un entero puro como "1", nunca "S1" ni "**1**"; corrige esas filas (quita cualquier letra o negrita) y vuelve a intentarlo`)
   }
-  // Punto 4 de la review de F1 (y puntos a/b de la review round 2): solo
-  // se validaba la CABECERA, nunca las celdas — una fila con "Slice" vacía
-  // (o con un marcador de "sin valor" como "–"), o con un número de celdas
-  // distinto al de la cabecera (de menos, o de más por un "|" sin escapar),
-  // parseaba igual y producía un issue titulado "#N" a secas (o con
-  // columnas desplazadas), sin AC ni deps, exit 0. F3: el exigido pasó de
-  // "Entrega" a "Slice" — el título del issue ahora sale de ahí.
+  // Point 4 of the F1 review (and points a/b of review round 2): only the
+  // HEADER was validated, never the cells — a row with an empty "Slice" (or
+  // with a "no value" marker such as "–"), or with a number of cells different
+  // from the header's (fewer, or more because of an unescaped "|"), parsed all
+  // the same and produced an issue titled a bare "#N" (or with shifted
+  // columns), with no AC and no deps, exit 0. F3: the required one went from
+  // "Entrega" to "Slice" — the issue's title now comes from there.
   if (report.invalidRows.length) {
     const first = report.invalidRows[0]
     hardErrors.push(`${report.invalidRows.length} fila(s) de la tabla §9 están incompletas (ejemplo, slice #${first.n}: ${first.reason}) — sin "Slice" no hay título de issue; completa esas filas con todas las columnas de la cabecera y vuelve a intentarlo`)
@@ -271,54 +264,51 @@ if (!report.tableFound) {
   if (report.totalDataRows === 0) {
     hardErrors.push('la tabla §9 no tiene ninguna fila de datos — añade al menos una fila con "#" y "Slice"')
   }
-  // F2 (señalado tras verificar F1 contra el spec real): una celda "Dep"
-  // con contenido (que no sea un marcador de "sin dependencias" —
-  // "-"/"–"/"—"/etc., ver isNoValueCell en slices.js) de la que no se
-  // extrajo ninguna "#N" — p.ej. "S1" en vez de "#1" — es MÁS grave que el
-  // caso de 0 filas de arriba: no rompe el índice de orden, así que la
-  // fila se parsea igual, el groom sale con exit 0, crea milestone e
-  // issues... pero sin ninguna línea `merge-after`. El grafo de
-  // dependencias se borra en silencio mientras todo aparenta funcionar —
-  // /ct-next despacharía un slice dependiente sin esperar al merge del que
-  // dependía. Mismo criterio que las filas con "#" malformado: abortar
-  // fuerte, nombrando cuántas filas, un valor ofensor, el formato
-  // correcto, Y (CRITICAL 1 de la review: la mitad que faltaba) qué
-  // escribir si de verdad no hay dependencias.
+  // F2 (flagged after verifying F1 against the real spec): a "Dep" cell with
+  // content (that is not a "no dependencies" marker — "-"/"–"/"—"/etc., see
+  // isNoValueCell in slices.js) out of which no "#N" was extracted — e.g. "S1"
+  // instead of "#1" — is MORE serious than the 0-rows case above: it does not
+  // break the order index, so the row parses all the same, the groom exits 0,
+  // creates milestone and issues… but with no `merge-after` line at all. The
+  // dependency graph is erased silently while everything appears to work —
+  // /ct-next would dispatch a dependent slice without waiting for the merge of
+  // the one it depended on. Same criterion as the rows with a malformed "#":
+  // abort hard, naming how many rows, one offending value, the correct format,
+  // AND (CRITICAL 1 of the review: the missing half) what to write if there
+  // really are no dependencies.
   if (report.malformedDepRows.length) {
     const first = report.malformedDepRows[0]
     hardErrors.push(`${report.malformedDepRows.length} fila(s) de la tabla §9 tienen "Dep" con contenido pero sin ninguna dependencia reconocible (ejemplo, slice #${first.n}: "${first.raw}") — el formato es #N (p.ej. "#1", "#2, #3"), no "S1"; si no hay dependencias, escribe "–"; corrige esas filas y vuelve a intentarlo`)
   }
-  // Punto 5 de la review de F1: las deps no se contrastaban contra los
-  // slices que existen de verdad en la tabla. "#99" en una tabla de 2
-  // slices, o "#3" en el propio slice 3 (auto-referencia, nunca
-  // legítima), parseaban sin problema y llegarían a GitHub como
-  // `merge-after` — un grafo equivocado escrito en los issues (el
-  // dispatcher lo acaba reportando como deps-unmet, así que no es del todo
-  // silencioso, pero sigue siendo un grafo equivocado que no hacía falta
-  // escribir).
+  // Point 5 of the F1 review: the deps were not checked against the slices that
+  // really exist in the table. "#99" in a 2-slice table, or "#3" on slice 3
+  // itself (a self-reference, never legitimate), parsed with no problem and
+  // would reach GitHub as `merge-after` — a wrong graph written into the issues
+  // (the dispatcher does end up reporting it as deps-unmet, so it is not
+  // entirely silent, but it is still a wrong graph that did not need writing).
   // ==========================================================================
-  // F21 — LA COLUMNA `Gate`. Dos condiciones de abort, y las dos son
-  // deliberadamente DUROS (no avisos) por el mismo motivo, que es distinto del
-  // que aplica a `Tipo`:
+  // F21 — THE `Gate` COLUMN. Two abort conditions, and both are deliberately
+  // HARD (not warnings) for the same reason, which is different from the one
+  // that applies to `Tipo`:
   //
-  //   - un `Tipo` desconocido sigue siendo una label legítima para un humano
-  //     (`type:ios` se entiende), y lo único que se pierde es un addendum. Por
-  //     eso se avisa y se sigue.
-  //   - un `Gate` desconocido no produce NADA: ni label, ni línea en el
-  //     kickoff, ni línea en el cuerpo del issue. Escribir `Gate: seguridad` y
-  //     que el groom siga adelante en silencio dejaría al autor convencido de
-  //     que ha puesto un gate donde no hay ninguno — que es EXACTAMENTE la
-  //     avería que esta ronda cierra, reintroducida por la puerta de al lado.
-  //     Y aceptarlo emitiendo la label igual sería peor: un `gate:seguridad`
-  //     que nadie sabe cómo cerrar, y que el kickoff no puede explicarle al
-  //     agente.
+  //   - an unknown `Tipo` is still a legitimate label for a human (`type:ios`
+  //     is understandable), and the only thing lost is an addendum. That is why
+  //     it warns and carries on.
+  //   - an unknown `Gate` produces NOTHING: no label, no line in the kickoff,
+  //     no line in the issue's body. Writing `Gate: seguridad` and having the
+  //     groom carry on silently would leave the author convinced that they have
+  //     put a gate where there is none — which is EXACTLY the breakage this
+  //     round closes, reintroduced through the next door along. And accepting
+  //     it by emitting the label anyway would be worse: a `gate:seguridad` that
+  //     nobody knows how to close, and that the kickoff cannot explain to the
+  //     agent.
   //
-  // Esto ESTRECHA lo que el sistema acepta, así que crea una categoría nueva
-  // de rechazo — y esa categoría necesita voz propia: los dos mensajes nombran
-  // el vocabulario ENTERO (derivado de `GATES`, no de una lista repetida aquí)
-  // y la sintaxis de renuncia, para que el remedio esté en el propio mensaje.
-  // Van en `hardErrors`, es decir ANTES de la primera mutación: un spec con un
-  // gate mal escrito no crea milestone, ni labels, ni issues.
+  // This NARROWS what the system accepts, so it creates a new category of
+  // rejection — and that category needs a voice of its own: both messages name
+  // the WHOLE vocabulary (derived from `GATES`, not from a list repeated here)
+  // and the waiver syntax, so that the remedy is in the message itself. They go
+  // into `hardErrors`, that is to say BEFORE the first mutation: a spec with a
+  // badly written gate creates no milestone, no labels and no issues.
   const unknownGateRows = []
   const contradictoryGateRows = []
   for (const s of report.slices) {

@@ -1,10 +1,10 @@
-// §3.3 del handoff (docs/prompt-juez-lo-que-queda.md): la semilla de
-// `.agent/conventions.md` que `scripts/ct-init.sh` escribe. Fichero NUEVO a
-// propósito — separado de __tests__/ct-init.test.js — para no rozar el test
-// rojo deliberado de ese fichero (`SLICES_PRISTINE_HASHES`, decisión humana,
-// no se toca ni se cuenta).
+// §3.3 of the handoff (docs/prompt-juez-lo-que-queda.md): the seed of
+// `.agent/conventions.md` that `scripts/ct-init.sh` writes. A NEW file on
+// purpose — separate from __tests__/ct-init.test.js — so as not to brush
+// against that file's deliberately red test (`SLICES_PRISTINE_HASHES`, a human
+// decision, neither touched nor counted).
 //
-// Mismo idiom que ct-init.test.js: `mkdtempSync` + `execFileSync('bash', [script, dir])`.
+// Same idiom as ct-init.test.js: `mkdtempSync` + `execFileSync('bash', [script, dir])`.
 import { describe, it, expect } from 'vitest'
 import { mkdtempSync, existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -16,8 +16,8 @@ import { CONVENTIONS_FILE } from '../scripts/vara.js'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const script = join(root, 'scripts', 'ct-init.sh')
 
-describe('ct-init.sh siembra .agent/conventions.md', () => {
-  it('en un dir vacío, crea el fichero y lo anuncia con "creado"', () => {
+describe('ct-init.sh seeds .agent/conventions.md', () => {
+  it('in an empty dir, it creates the file and announces it with "creado"', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-conv-'))
     const out = execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const ruta = join(dir, CONVENTIONS_FILE)
@@ -26,7 +26,7 @@ describe('ct-init.sh siembra .agent/conventions.md', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('es idempotente: un fichero ya existente no se pisa', () => {
+  it('is idempotent: an already existing file is not overwritten', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-conv-'))
     mkdirSync(join(dir, '.agent'), { recursive: true })
     writeFileSync(join(dir, CONVENTIONS_FILE), 'MÍO')
@@ -36,7 +36,7 @@ describe('ct-init.sh siembra .agent/conventions.md', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('la semilla se distingue de conventions-ack.md (comentario propio)', () => {
+  it('the seed sets itself apart from conventions-ack.md (a comment of its own)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-conv-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const contenido = readFileSync(join(dir, CONVENTIONS_FILE), 'utf8')
@@ -44,7 +44,7 @@ describe('ct-init.sh siembra .agent/conventions.md', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('la semilla no declara ninguna vara — sigue midiéndose sin-vara hasta que un humano confirme', () => {
+  it('the seed declares no yardstick — it keeps measuring sin-vara until a human confirms', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-conv-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const contenido = readFileSync(join(dir, CONVENTIONS_FILE), 'utf8')

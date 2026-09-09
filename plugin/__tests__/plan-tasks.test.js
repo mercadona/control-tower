@@ -1,10 +1,10 @@
-// El plan leído como lista de tareas EJECUTABLE (scripts/plan-tasks.js).
+// The plan read as an EXECUTABLE task list (scripts/plan-tasks.js).
 //
-// La fixture principal NO es la plantilla: es el plan REAL del slice #5 de
-// repo-pulse, 534 líneas y 8 tareas, tal y como lo escribió un agente
-// despachado. Es deliberado — las tres trampas que este parser esquiva no
-// aparecen ni una en `plan-template.md`, así que un test contra la plantilla
-// pasaría en verde con un parser roto.
+// The main fixture is NOT the template: it is the REAL plan of slice #5 of
+// repo-pulse, 534 lines and 8 tasks, exactly as a dispatched agent wrote it.
+// That is deliberate — not one of the three traps this parser dodges appears in
+// `plan-template.md`, so a test against the template would go green with a
+// broken parser.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -14,26 +14,26 @@ import { extractTasks, stripParenthesised } from '../scripts/plan-tasks.js'
 const here = dirname(fileURLToPath(import.meta.url))
 const fixture = (name) => readFileSync(join(here, 'fixtures', name), 'utf8')
 
-// Tres backticks en runtime, como en plan-contract.test.js: ninguna línea de
-// este fichero puede empezar por un fence real.
+// Three backticks at runtime, as in plan-contract.test.js: no line of this
+// file may start with a real fence.
 const F = '```'
 
-// El plan real tal cual se escribió: su **Verification:** es prosa en línea.
+// The real plan exactly as it was written: its **Verification:** is inline prose.
 const REAL = fixture('plan-real-issue-5.md')
-// El mismo plan con los comandos ya en bloque, que es lo que la regla nueva
-// del contrato pide a los planes de ahora en adelante.
+// The same plan with the commands already in a block, which is what the new
+// rule of the contract asks of the plans from now on.
 const EJECUTABLE = fixture('plan-real-issue-5-ejecutable.md')
 
 const taskOf = (plan, n) => extractTasks(plan).tasks.find((t) => t.n === n)
 
-describe('las tareas del plan', () => {
-  it('encuentra las ocho tareas del plan real, numeradas y con nombre', () => {
+describe('the tasks of the plan', () => {
+  it('it finds the eight tasks of the real plan, numbered and named', () => {
     const { tasks } = extractTasks(REAL)
     expect(tasks.map((t) => t.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
     expect(tasks[0].name).toBe('el entorno de test DOM y el proxy de dev')
   })
 
-  it('un texto sin tareas lo dice en vez de devolver una lista vacía y callar', () => {
+  it('a text with no tasks says so instead of returning an empty list and keeping quiet', () => {
     const { tasks, problems } = extractTasks('# un plan sin tareas\n')
     expect(tasks).toEqual([])
     expect(problems.map((p) => p.rule)).toContain('tasks')
@@ -41,56 +41,57 @@ describe('las tareas del plan', () => {
 })
 
 // ---------------------------------------------------------------------------
-// TRAMPA 1 — los comandos viven en el bloque cercado, no en la línea
+// TRAP 1 — the commands live in the fenced block, not on the line
 // ---------------------------------------------------------------------------
-describe('la vara de la tarea: el bloque de comandos', () => {
-  it('saca los comandos del bloque que va detrás de **Verification:**', () => {
+describe('the yardstick of the task: the block of commands', () => {
+  it('it takes the commands out of the block that goes after **Verification:**', () => {
     expect(taskOf(EJECUTABLE, 2).commands).toEqual([
       'npm test -w web   # exit 0',
       'npm run build && npm run lint   # exit 0',
     ])
   })
 
-  it('acepta el bloque aunque el párrafo de **Verification:** lleve texto en línea delante', () => {
-    // La tarea 1 del plan real dice: "**Verification:** `npm install` y después:"
-    // y sólo entonces abre el bloque.
+  it('it accepts the block even when the **Verification:** paragraph carries inline text in front', () => {
+    // Task 1 of the real plan says: "**Verification:** `npm install` y después:"
+    // and only then opens the block.
     expect(taskOf(REAL, 1).commands).toEqual([
       'npm test -w web   # exit 0, 1 test',
       'npm run build && npm run lint   # exit 0',
     ])
   })
 
-  it('acepta el bloque aunque el párrafo de **Verification:** ocupe dos líneas', () => {
-    // La tarea 8 del plan real ocupa dos líneas antes de terminar el párrafo.
+  it('it accepts the block even when the **Verification:** paragraph spans two lines', () => {
+    // Task 8 of the real plan spans two lines before the paragraph ends.
     expect(taskOf(EJECUTABLE, 8).commands).toEqual([
       'npm test && npm run lint && npm run build   # exit 0',
       'test "$(wc -l < AGENTS.md)" -le 150',
     ])
   })
 
-  it('NO confunde el bloque de comandos con los bloques Contract y Current state de la tarea', () => {
-    // Las tareas reales llevan sus propios cercados de código citado. Sólo
-    // cuenta el que va inmediatamente detrás de **Verification:**, y por eso
-    // ninguna tarea del plan ejecutable trae TypeScript entre sus comandos.
+  it('it does NOT confuse the block of commands with the Contract and Current state blocks of the task', () => {
+    // Real tasks carry their own fences of quoted code. Only the one that goes
+    // immediately after **Verification:** counts, and that is why no task of
+    // the executable plan brings TypeScript among its commands.
     for (const t of extractTasks(EJECUTABLE).tasks) {
       expect(t.commands.every((c) => /^(npm|test|git|node|npx)\b/.test(c))).toBe(true)
     }
   })
 
-  it('el plan REAL no es ejecutable: siete de sus ocho tareas verifican con prosa', () => {
-    // Ésta es la medida que justifica la regla nueva del contrato. El plan real
-    // es fiel a `plan-template.md` ("**Verification:** {{exact command and
-    // expected output}}", en línea), y aun así ningún programa puede ejecutarlo.
+  it('the REAL plan is not executable: seven of its eight tasks verify with prose', () => {
+    // This is the measurement that justifies the new rule of the contract. The
+    // real plan is faithful to `plan-template.md` ("**Verification:** {{exact
+    // command and expected output}}", inline), and even so no program can
+    // execute it.
     const { problems } = extractTasks(REAL)
     const sinBloque = problems.filter((p) => p.rule === 'verification-block')
     expect(sinBloque.map((p) => p.task)).toEqual([2, 3, 4, 5, 6, 7, 8])
   })
 
-  it('el mismo plan con los comandos en bloque no tiene un solo problema', () => {
+  it('the same plan with the commands in a block does not have a single problem', () => {
     expect(extractTasks(EJECUTABLE).problems).toEqual([])
   })
 
-  it('un bloque de comandos vacío es un problema, no una tarea sin vara', () => {
+  it('an empty block of commands is a problem, not a task without a yardstick', () => {
     const plan = [
       '### Task 1 — vacía',
       '**Tests:** N/A — nada.',
@@ -106,16 +107,15 @@ describe('la vara de la tarea: el bloque de comandos', () => {
 })
 
 // ---------------------------------------------------------------------------
-// TRAMPA 2 — los paréntesis se barren POR PROFUNDIDAD
+// TRAP 2 — the parentheses are swept BY DEPTH
 // ---------------------------------------------------------------------------
-describe('los nombres de test', () => {
-  it('el paréntesis explicativo con paréntesis dentro no cuela un nombre de test falso', () => {
-    // El plan real, tarea 6:
+describe('the test names', () => {
+  it('the explanatory parenthesis with parentheses inside does not sneak in a false test name', () => {
+    // The real plan, task 6:
     //   'a zero series sits on the baseline' (polylinePoints([0, 0], 1) es
     //   '0.0,199.0 600.0,199.0')
-    // Con un barrido de un solo nivel, `0.0,199.0 600.0,199.0` entra como
-    // nombre de test, no existe en ningún fichero y bloquea la tarea con un
-    // falso positivo.
+    // With a single-level sweep, `0.0,199.0 600.0,199.0` goes in as a test
+    // name, exists in no file and blocks the task with a false positive.
     const t6 = taskOf(REAL, 6)
     expect(t6.testsAdded).toEqual([
       'both series share one scale',
@@ -127,16 +127,16 @@ describe('los nombres de test', () => {
     expect(t6.testsAdded).not.toContain('0.0,199.0 600.0,199.0')
   })
 
-  it('el barrido de un solo nivel —el que NO vale— sí dejaría pasar el nombre falso', () => {
-    // La prueba de que la trampa es real y no una precaución imaginaria.
+  it('the single-level sweep —the one that does NOT hold— would let the false name through', () => {
+    // The proof that the trap is real and not an imaginary precaution.
     const linea = "'a zero series sits on the baseline' (polylinePoints([0, 0], 1) es '0.0,199.0 600.0,199.0')"
     const unNivel = linea.replace(/\([^()]*\)/g, '')
     expect(unNivel).toContain('0.0,199.0 600.0,199.0')
     expect(stripParenthesised(linea)).not.toContain('0.0,199.0 600.0,199.0')
   })
 
-  it('lo que va entre backticks sin comillas simples son identificadores, no tests', () => {
-    // La tarea 2 menciona `window=all` y la 6 menciona `pulse-previous`.
+  it('what goes between backticks with no single quotes are identifiers, not tests', () => {
+    // Task 2 mentions `window=all` and task 6 mentions `pulse-previous`.
     expect(taskOf(REAL, 2).testsAdded).not.toContain('window=all')
     expect(taskOf(REAL, 6).testsAdded).not.toContain('pulse-previous')
     expect(taskOf(REAL, 2).testsAdded).toEqual([
@@ -147,12 +147,12 @@ describe('los nombres de test', () => {
     ])
   })
 
-  it('junta la línea de **Tests:** cuando ocupa varias líneas', () => {
+  it('it joins up the **Tests:** line when it spans several lines', () => {
     expect(taskOf(REAL, 3).testsAdded).toHaveLength(5)
     expect(taskOf(REAL, 3).testsAdded).toContain('a day ago reads hace 1 día')
   })
 
-  it('"N/A — <razón>" es una declaración legítima: ni añade ni retira', () => {
+  it('"N/A — <reason>" is a legitimate declaration: it neither adds nor removes', () => {
     for (const n of [4, 8]) {
       expect(taskOf(REAL, n).testsAdded).toEqual([])
       expect(taskOf(REAL, n).testsRemoved).toEqual([])
@@ -161,16 +161,16 @@ describe('los nombres de test', () => {
 })
 
 // ---------------------------------------------------------------------------
-// TRAMPA 3 — el marcador de retirada tiene tres formas
+// TRAP 3 — the removal marker has three forms
 // ---------------------------------------------------------------------------
-describe('los tests que la tarea retira a propósito', () => {
-  it('parte por "retira a propósito" (la forma del plan real)', () => {
+describe('the tests the task removes on purpose', () => {
+  it('it splits on "retira a propósito" (the form of the real plan)', () => {
     const t1 = taskOf(REAL, 1)
     expect(t1.testsAdded).toEqual(['renders the app title in a DOM'])
     expect(t1.testsRemoved).toEqual(['App exporta un componente de React'])
   })
 
-  it('parte por "removed on purpose:" (la forma de la plantilla, en inglés)', () => {
+  it('it splits on "removed on purpose:" (the form of the template, in English)', () => {
     const plan = [
       '### Task 1 — dos formas',
       "**Tests:** added `'el que entra'`; removed on purpose: `'el que sale'`",
@@ -184,7 +184,7 @@ describe('los tests que la tarea retira a propósito', () => {
     expect(t.testsRemoved).toEqual(['el que sale'])
   })
 
-  it('parte por "retira" a secas', () => {
+  it('it splits on a bare "retira"', () => {
     const plan = [
       '### Task 1 — forma corta',
       "**Tests:** añade `'el que entra'`; retira `'el que sale'`",
@@ -198,14 +198,14 @@ describe('los tests que la tarea retira a propósito', () => {
     expect(t.testsRemoved).toEqual(['el que sale'])
   })
 
-  it('sin marcador de retirada, todos los nombres son añadidos', () => {
+  it('with no removal marker, every name is an addition', () => {
     expect(taskOf(REAL, 2).testsRemoved).toEqual([])
   })
 
-  it('un test que una tarea retira puede haberlo añadido otra anterior', () => {
-    // La tarea 5 del plan real retira el test que añadió la 1. Si el marcador
-    // no partiera, ese nombre entraría en la lista de los que DEBEN existir
-    // después de la tarea 5: exactamente lo contrario de lo correcto.
+  it('a test one task removes may have been added by an earlier one', () => {
+    // Task 5 of the real plan removes the test task 1 added. If the marker did
+    // not split, that name would go into the list of the ones that MUST exist
+    // after task 5: exactly the opposite of what is right.
     expect(taskOf(REAL, 1).testsAdded).toContain('renders the app title in a DOM')
     expect(taskOf(REAL, 5).testsRemoved).toContain('renders the app title in a DOM')
     expect(taskOf(REAL, 5).testsAdded).not.toContain('renders the app title in a DOM')
@@ -213,11 +213,11 @@ describe('los tests que la tarea retira a propósito', () => {
 })
 
 // ---------------------------------------------------------------------------
-// LAS RUTAS QUE EL PLAN DECLARA — **Files:**
+// THE PATHS THE PLAN DECLARES — **Files:**
 // ---------------------------------------------------------------------------
-describe('las rutas que la tarea declara en **Files:**', () => {
-  it('lee las rutas de **Files:** con su acción', () => {
-    // La tarea 1 del plan ejecutable:
+describe('the paths the task declares in **Files:**', () => {
+  it('it reads the paths of **Files:** with their action', () => {
+    // Task 1 of the executable plan:
     //   **Files:** `web/package.json` (modify), `web/vite.config.ts` (modify),
     //   `web/src/testing/setup.ts` (create), `web/src/App.test.tsx` (modify)
     expect(taskOf(EJECUTABLE, 1).files).toEqual([
@@ -228,7 +228,7 @@ describe('las rutas que la tarea declara en **Files:**', () => {
     ])
   })
 
-  it('una ruta sin acción declarada la deja en null', () => {
+  it('a path with no declared action is left at null', () => {
     const plan = [
       '### Task 1 — sin acción',
       '**Files:** `web/src/App.test.tsx`',
@@ -242,10 +242,10 @@ describe('las rutas que la tarea declara en **Files:**', () => {
     expect(t.files).toEqual([{ path: 'web/src/App.test.tsx', action: null }])
   })
 
-  it('una acción que no es "create" ni "modify" también deja la ruta en null', () => {
-    // `alcanceDeclarado`, en ct-step.mjs, sólo tiene ramas para 'create' y
-    // 'modify'. Un valor distinto ("renombra", un typo, lo que sea) no debe
-    // colarse tal cual: se trata como si no hubiera acción declarada.
+  it('an action that is neither "create" nor "modify" also leaves the path at null', () => {
+    // `alcanceDeclarado`, in ct-step.mjs, only has branches for 'create' and
+    // 'modify'. A different value ("renombra", a typo, whatever it is) must not
+    // sneak through as it is: it is treated as if no action had been declared.
     const plan = [
       '### Task 1 — acción rara',
       '**Files:** `web/src/App.test.tsx` (renombra)',
@@ -259,10 +259,10 @@ describe('las rutas que la tarea declara en **Files:**', () => {
     expect(t.files).toEqual([{ path: 'web/src/App.test.tsx', action: null }])
   })
 
-  it('un párrafo de **Files:** con texto que no rinde ninguna ruta es un problema del plan', () => {
-    // Formato incorrecto (sin backticks): `splitFiles` no extrae nada, y sin
-    // este aviso `alcanceDeclarado` reportaría TODAS las rutas tocadas como
-    // fuera de alcance sin decir por qué.
+  it('a **Files:** paragraph with text that yields no path at all is a problem of the plan', () => {
+    // The wrong format (with no backticks): `splitFiles` extracts nothing, and
+    // without this warning `alcanceDeclarado` would report ALL the paths
+    // touched as out of scope without saying why.
     const plan = [
       '### Task 1 — sin backticks',
       '**Files:** uno.txt (create)',
@@ -277,33 +277,33 @@ describe('las rutas que la tarea declara en **Files:**', () => {
     expect(problems.map((p) => p.rule)).toContain('files-line')
   })
 
-  it('los dos planes reales siguen sin un solo problema de "files-line"', () => {
+  it('the two real plans are still without a single "files-line" problem', () => {
     expect(extractTasks(REAL).problems.map((p) => p.rule)).not.toContain('files-line')
     expect(extractTasks(EJECUTABLE).problems.map((p) => p.rule)).not.toContain('files-line')
   })
 })
 
 // ---------------------------------------------------------------------------
-// EL NOMBRE DE TEST QUE DECLARA **TDD:**
+// THE TEST NAME THAT **TDD:** DECLARES
 // ---------------------------------------------------------------------------
-describe('el nombre del test que declara **TDD:**', () => {
-  it('lee el nombre del test que declara **TDD:**', () => {
-    // La tarea 1 del plan ejecutable: **TDD:** `test('renders the app title in a DOM')` — ...
+describe('the name of the test that **TDD:** declares', () => {
+  it('it reads the name of the test that **TDD:** declares', () => {
+    // Task 1 of the executable plan: **TDD:** `test('renders the app title in a DOM')` — ...
     expect(taskOf(EJECUTABLE, 1).tddName).toBe('renders the app title in a DOM')
   })
 
-  it('un No TDD no declara ningún test', () => {
-    // La tarea 4 dice "No TDD — son los tokens de marca..." y la 8 "No TDD — es documentación...".
+  it('a No TDD declares no test at all', () => {
+    // Task 4 says "No TDD — son los tokens de marca..." and task 8 "No TDD — es documentación.
     expect(taskOf(EJECUTABLE, 4).tddName).toBeNull()
     expect(taskOf(EJECUTABLE, 8).tddName).toBeNull()
   })
 })
 
 // ---------------------------------------------------------------------------
-// LAS ETIQUETAS DE ROL DE LOS BLOQUES — Current state / Contract / Call site / Final text
+// THE ROLE LABELS OF THE BLOCKS — Current state / Contract / Call site / Final text
 // ---------------------------------------------------------------------------
-describe('las etiquetas de rol de los bloques de la tarea', () => {
-  it('lee los ficheros que nombra cada etiqueta de rol', () => {
+describe('the role labels of the blocks of the task', () => {
+  it('it reads the files each role label names', () => {
     expect(taskOf(EJECUTABLE, 5).blockPaths).toEqual([
       { role: 'Current state', path: 'web/src/App.tsx' },
       { role: 'Contract', path: 'web/src/Header.tsx' },
@@ -318,7 +318,7 @@ describe('las etiquetas de rol de los bloques de la tarea', () => {
     ])
   })
 
-  it('lee el texto literal de un bloque Final text', () => {
+  it('it reads the literal text of a Final text block', () => {
     const plan = [
       '### Task 1 — reescribe una nota',
       '**Files:** `docs/nota.md` (modify)',
@@ -339,10 +339,10 @@ describe('las etiquetas de rol de los bloques de la tarea', () => {
     expect(t.finalTexts).toEqual([{ path: 'docs/nota.md', text: 'primera línea\nsegunda línea' }])
   })
 
-  it('extrae íntegro, sin recortar, el Final text (AGENTS.md) de la tarea 8 del plan real', () => {
-    // La única prueba de finalTexts hasta ahora era un markdown sintético de
-    // dos líneas. La tarea 8 del plan real es el caso de verdad: multilínea,
-    // con backticks dentro del propio texto.
+  it('it extracts whole, untrimmed, the Final text (AGENTS.md) of task 8 of the real plan', () => {
+    // The only test of finalTexts so far was a synthetic markdown of two
+    // lines. Task 8 of the real plan is the real case: multi-line, with
+    // backticks inside the text itself.
     const t8 = taskOf(EJECUTABLE, 8)
     expect(t8.finalTexts).toEqual([
       {
@@ -362,21 +362,22 @@ describe('las etiquetas de rol de los bloques de la tarea', () => {
   })
 })
 
-// Paso 2 del spec de la primera corrida en un repo ajeno: LA VARA TIENE QUE
-// PODER MEDIR LO QUE DICE MEDIR.
+// Step 2 of the spec of the first run in somebody else's repo: THE YARDSTICK
+// HAS TO BE ABLE TO MEASURE WHAT IT SAYS IT MEASURES.
 //
-// `verification-block` (5b97fdd) cerró "la verificación es prosa". Queda el
-// agujero de al lado, medido en jjponz/rust-monitoring#10: la verificación es
-// un comando ejecutable, está en su bloque, y su código de salida dice lo
-// CONTRARIO de lo que su comentario dice medir. `ct-step controls` puntúa solo
-// por exit code, y `grep -c` sale con 1 cuando no encuentra nada y con 0 cuando
-// encuentra: aquel control solo podía ponerse verde en el caso MALO. Ninguna
-// implementación podía superarlo, y pasó `--check-plan` y pasó el gate humano.
+// `verification-block` (5b97fdd) closed "the verification is prose". The hole
+// right next to it is left, measured in jjponz/rust-monitoring#10: the
+// verification is an executable command, it is in its block, and its exit code
+// says the OPPOSITE of what its comment says it measures. `ct-step controls`
+// scores only by exit code, and `grep -c` exits with 1 when it finds nothing
+// and with 0 when it finds something: that check could only go green in the BAD
+// case. No implementation could pass it, and it passed `--check-plan` and it
+// passed the human gate.
 //
-// La regla no adivina intenciones: nombra una lista cerrada de últimos tramos
-// cuyo código de salida es DEMOSTRABLEMENTE independiente de lo que el plan
-// afirma, y para cada uno dice cómo se escribe el predicado equivalente.
-describe('la vara tiene que poder medir lo que dice medir (verification-predicate)', () => {
+// The rule does not guess intentions: it names a closed list of last stages
+// whose exit code is DEMONSTRABLY independent of what the plan claims, and for
+// each one it says how the equivalent predicate is written.
+describe('the yardstick has to be able to measure what it says it measures (verification-predicate)', () => {
   const planCon = (comandos) => [
     '### Task 1 — una tarea',
     '',
@@ -398,134 +399,134 @@ describe('la vara tiene que poder medir lo que dice medir (verification-predicat
 
   const reglas = (comandos) => extractTasks(planCon(comandos)).problems.filter((p) => p.rule === 'verification-predicate')
 
-  it('el control invertido de rust-monitoring, verbatim: `grep -c` cerrando la tubería', () => {
+  it('the inverted check of rust-monitoring, verbatim: `grep -c` closing the pipeline', () => {
     const r = reglas(["git diff HEAD -- AGENTS.md | grep -c 'ct-init:slices-contract'   # expected: 0"])
     expect(r).toHaveLength(1)
     expect(r[0].detail).toMatch(/grep -c/)
     expect(r[0].detail).toMatch(/test "\$\(/)
   })
 
-  it('`grep -c` sin tubería tampoco vale: su exit code dice "encontré algo", nunca cuántos', () => {
+  it('`grep -c` without a pipeline does not hold either: its exit code says "I found something", never how many', () => {
     expect(reglas(["grep -c '^      - run: cargo ' .github/workflows/ci.yml   # expected: 4"])).toHaveLength(1)
   })
 
-  it('el arreglo SÍ valida: el predicado que envuelve la cuenta, con su tubería dentro de `$(...)`', () => {
+  it('the fix DOES validate: the predicate that wraps the count, with its pipeline inside `$(...)`', () => {
     expect(reglas(['test "$(git diff HEAD -- AGENTS.md | grep -c \'ct-init:slices-contract\')" -eq 0'])).toEqual([])
   })
 
-  it('el caso del slice 35 de repo-pulse, verbatim: `grep -c` con DOS ficheros dentro del predicado', () => {
+  it('the case of slice 35 of repo-pulse, verbatim: `grep -c` with TWO files inside the predicate', () => {
     const r = reglas(['test "$(grep -c \'Cargando…\' web/src/App.tsx web/src/App.test.tsx)" -eq 0'])
     expect(r).toHaveLength(1)
     expect(r[0].detail).toMatch(/dos o más ficheros/)
     expect(r[0].detail).toMatch(/grep -l/)
   })
 
-  it('un fichero dentro del predicado es la forma buena y sigue validando', () => {
+  it('one file inside the predicate is the good form and still validates', () => {
     expect(reglas(['test "$(grep -c \'^test(\' web/src/screen.test.ts)" -eq 7'])).toEqual([])
   })
 
-  it('la frontera son dos: con uno vale, con dos no, y da igual que la cuenta sea cero o siete', () => {
+  it('the boundary is two: with one it holds, with two it does not, and it makes no difference whether the count is zero or seven', () => {
     expect(reglas(['test "$(grep -c \'x\' a.ts)" -eq 7'])).toEqual([])
     expect(reglas(['test "$(grep -c \'x\' a.ts b.ts)" -eq 7'])).toHaveLength(1)
     expect(reglas(['test "$(grep -c \'x\' a.ts b.ts c.ts)" -eq 0'])).toHaveLength(1)
   })
 
-  it('un `grep -c` tras una tubería, sobre lo que llega por stdin, no tiene ficheros que contar', () => {
+  it('a `grep -c` after a pipeline, over what arrives on stdin, has no files to count', () => {
     expect(reglas(['test "$(git diff --name-only | grep -c \'web/src/App.tsx\')" -eq 1'])).toEqual([])
   })
 
-  it('la sustitución SÍ se trocea por tubería antes de contar: sin partir, el tramo de delante confundiría la cuenta', () => {
+  it('the substitution IS split by pipeline before counting: unsplit, the stage in front would confuse the count', () => {
     expect(reglas(['test "$(cat a.ts | grep -c \'x\' b.ts c.ts)" -eq 0'])).toHaveLength(1)
   })
 
-  it('los patrones de `-e` no se cuentan como ficheros, o dos patrones y un fichero parecerían dos ficheros', () => {
+  it('the patterns of `-e` are not counted as files, or two patterns and one file would look like two files', () => {
     expect(reglas(['test "$(grep -c -e p1 -e p2 a.ts)" -eq 0'])).toEqual([])
     expect(reglas(['test "$(grep -c -e p1 a.ts b.ts)" -eq 0'])).toHaveLength(1)
   })
 
-  it('las banderas de grep no se confunden con ficheros', () => {
+  it('the flags of grep are not mistaken for files', () => {
     expect(reglas(['test "$(grep -cE \'a|b\' --color=never web/src/screen.ts)" -eq 0'])).toEqual([])
   })
 
-  it('una redirección tras el fichero no cuenta como un segundo fichero', () => {
+  it('a redirection after the file does not count as a second file', () => {
     expect(reglas(['test "$(grep -c \'x\' a.ts 2>/dev/null)" -eq 0'])).toEqual([])
     expect(reglas(['test "$(grep -c \'x\' a.ts 2>&1)" -eq 0'])).toEqual([])
   })
 
-  it('el argumento de una bandera con valor (`-m N`) no se cuenta como fichero', () => {
+  it('the argument of a flag that takes a value (`-m N`) is not counted as a file', () => {
     expect(reglas(['test "$(grep -c -m 1 \'x\' a.ts)" -eq 0'])).toEqual([])
   })
 
-  it('un patrón entre comillas con un espacio dentro sigue siendo UN operando, no dos', () => {
+  it('a quoted pattern with a space inside is still ONE operand, not two', () => {
     expect(reglas(['test "$(grep -c \'dos palabras\' a.ts)" -eq 0'])).toEqual([])
   })
 
-  it('un patrón con un paréntesis dentro y dos ficheros de verdad sigue acusándose', () => {
+  it('a pattern with a parenthesis inside and two real files is still accused', () => {
     expect(reglas(['test "$(grep -c \'a)b\' a.ts b.ts)" -eq 0'])).toHaveLength(1)
   })
 
-  it('un `$(...)` que es texto literal dentro de comillas simples no se lee como una sustitución real', () => {
+  it('a `$(...)` that is literal text inside single quotes is not read as a real substitution', () => {
     expect(reglas(["grep -Fq '$(grep -c mark a.ts b.ts)' incidencias.md"])).toEqual([])
   })
 
-  it('un `$(...)` dentro de comillas dobles SÍ se expande, porque en esa comilla el shell lo expande también', () => {
+  it('a `$(...)` inside double quotes IS expanded, because in that quote the shell expands it too', () => {
     expect(reglas(['test -n "$(grep -c \'x\' a.ts b.ts)"'])).toHaveLength(1)
   })
 
-  it('`rg -c` y `grep --count` con dos ficheros los caza la MISMA decisión que caza `grep -c`, no una copia que puede desentenderse', () => {
+  it('`rg -c` and `grep --count` with two files are caught by the SAME decision that catches `grep -c`, not by a copy that can drift away', () => {
     expect(reglas(['test "$(rg -c \'x\' a.ts b.ts)" -eq 0'])).toHaveLength(1)
     expect(reglas(['test "$(grep --count \'x\' a.ts b.ts)" -eq 0'])).toHaveLength(1)
   })
 
-  it('unas comillas dobles que se cierran dejan de suprimir, y una simple que abre justo después SÍ suprime lo que trae dentro', () => {
+  it('double quotes that close stop suppressing, and a single one that opens right after DOES suppress what it carries inside', () => {
     expect(reglas(['grep -Fq "prefix" \'$(grep -c mark a.ts b.ts)\' incidencias.md'])).toEqual([])
   })
 
-  it('unas comillas simples que se cierran dejan de suprimir, y una sustitución real que viene después SÍ se inspecciona', () => {
+  it('single quotes that close stop suppressing, and a real substitution that comes afterwards IS inspected', () => {
     expect(reglas(['grep -Fq \'note\' "$(grep -c \'x\' a.ts b.ts)" file.md'])).toHaveLength(1)
   })
 
-  it('`grep -q` y el `grep` pelado no se tocan: ahí el exit code ES la aserción', () => {
+  it('`grep -q` and the bare `grep` are not touched: there the exit code IS the assertion', () => {
     expect(reglas(["grep -q 'cargo clippy' AGENTS.md"])).toEqual([])
     expect(reglas(["grep 'cargo clippy' AGENTS.md"])).toEqual([])
   })
 
-  it('`wc` nunca es un control: sale por 0 con doce líneas y con doce mil — y lo trae el plan real', () => {
+  it('`wc` is never a check: it exits with 0 with twelve lines and with twelve thousand — and the real plan carries one', () => {
     expect(reglas(['wc -l AGENTS.md'])).toHaveLength(1)
   })
 
-  it('`| tail` cierra la tubería con el exit code de tail, no con el del comando que importa', () => {
+  it('`| tail` closes the pipeline with the exit code of tail, not with that of the command that matters', () => {
     expect(reglas(['make check 2>&1 | tail -80'])).toHaveLength(1)
-    // Suelto, sobre un fichero, sí asserta algo (que el fichero se puede leer).
+    // On its own, over a file, it does assert something (that the file can be read).
     expect(reglas(['tail -5 CHANGELOG.md'])).toEqual([])
   })
 
-  it('`git status` sale por 0 con el árbol sucio y con el árbol limpio', () => {
+  it('`git status` exits with 0 with the tree dirty and with the tree clean', () => {
     expect(reglas(['git status --short   # expected: vacío'])).toHaveLength(1)
   })
 
-  it('un `#` o un `|` entre comillas no son comentario ni tubería', () => {
+  it('a `#` or a `|` between quotes are neither a comment nor a pipeline', () => {
     expect(reglas(["grep -c '#ct-init' AGENTS.md"])).toHaveLength(1)
     expect(reglas(['grep -q "a|b" AGENTS.md'])).toEqual([])
   })
 
-  it('con `&&`, `||` o `;` no se pronuncia: el exit code depende de qué llegó a correr', () => {
+  it('with `&&`, `||` or `;` it does not pronounce: the exit code depends on what got to run', () => {
     expect(reglas(['npm test && npm run lint && npm run build   # exit 0'])).toEqual([])
     expect(reglas(['cargo test || wc -l x'])).toEqual([])
   })
 
-  it('el plan real ejecutable sigue sin problemas, con su `wc -l` convertido en predicado', () => {
+  it('the real executable plan is still without problems, with its `wc -l` turned into a predicate', () => {
     expect(extractTasks(EJECUTABLE).problems).toEqual([])
   })
 })
 
 // ---------------------------------------------------------------------------
-// §3.7-A DEL HANDOFF — "## 8. Global verification" TAMBIÉN TIENE QUE SER
-// EJECUTABLE. `ct-step` no ejecutaba ni una línea de esta sección; esto es lo
-// que la vuelve una lista de comandos, con la misma vara que ya mide el bloque
-// por tarea.
+// §3.7-A OF THE HANDOFF — "## 8. Global verification" HAS TO BE EXECUTABLE
+// TOO. `ct-step` did not execute a single line of this section; this is what
+// turns it into a list of commands, with the same yardstick that already
+// measures the per-task block.
 // ---------------------------------------------------------------------------
-describe('la Global verification es del programa (§3.7-A)', () => {
+describe('the Global verification belongs to the program (§3.7-A)', () => {
   const conTareaY = (bloqueGlobal) => [
     '### Task 1 — una tarea',
     '**Objective:** algo.',
@@ -541,7 +542,7 @@ describe('la Global verification es del programa (§3.7-A)', () => {
     '',
   ].join('\n')
 
-  it('extrae los comandos del primer fence de §8, con prosa antes y después', () => {
+  it('it extracts the commands of the first fence of §8, with prose before and after', () => {
     const plan = conTareaY([
       '## 8. Global verification',
       '',
@@ -558,34 +559,34 @@ describe('la Global verification es del programa (§3.7-A)', () => {
     expect(problems.filter((p) => p.rule.startsWith('global-verification'))).toEqual([])
   })
 
-  it('"N/A — <razón>" deja el global sin comandos y sin problema', () => {
+  it('"N/A — <reason>" leaves the global with no commands and no problem', () => {
     const plan = conTareaY(['## 8. Global verification', '', 'N/A — no hay punta a punta que correr.'])
     const { global, problems } = extractTasks(plan)
     expect(global.commands).toEqual([])
     expect(problems.filter((p) => p.rule.startsWith('global-verification'))).toEqual([])
   })
 
-  it('§8 en prosa, sin bloque de comandos, es un problema', () => {
+  it('a §8 in prose, with no block of commands, is a problem', () => {
     const plan = conTareaY(['## 8. Global verification', '', 'Que todo siga en verde.'])
     const { global, problems } = extractTasks(plan)
     expect(global.commands).toEqual([])
     expect(problems.map((p) => p.rule)).toContain('global-verification-block')
   })
 
-  it('un plan sin "## 8." trae el mismo problema', () => {
+  it('a plan with no "## 8." brings the same problem', () => {
     const plan = conTareaY([])
     const { global, problems } = extractTasks(plan)
     expect(global.commands).toEqual([])
     expect(problems.map((p) => p.rule)).toContain('global-verification-block')
   })
 
-  it('§8 cuyo último tramo es `wc -l` es un problema de predicado, igual que en una tarea', () => {
+  it('a §8 whose last stage is `wc -l` is a predicate problem, just as in a task', () => {
     const plan = conTareaY(['## 8. Global verification', '', F + 'bash', 'wc -l AGENTS.md', F])
     const { problems } = extractTasks(plan)
     expect(problems.map((p) => p.rule)).toContain('global-verification-predicate')
   })
 
-  it('§8 con `grep -c` de dos ficheros también es un problema de predicado: la regla del slice 35 no es sólo de las tareas', () => {
+  it('a §8 with a `grep -c` over two files is a predicate problem too: the rule of slice 35 is not only for the tasks', () => {
     const plan = conTareaY([
       '## 8. Global verification', '', F + 'bash', 'test "$(grep -c \'x\' a.ts b.ts)" -eq 0', F,
     ])
@@ -593,7 +594,7 @@ describe('la Global verification es del programa (§3.7-A)', () => {
     expect(problems.map((p) => p.rule)).toContain('global-verification-predicate')
   })
 
-  it('§8 también trocea sus palabras respetando comillas: un `-c` dentro de un literal no confunde a la regla de cabecera', () => {
+  it('§8 also splits its words respecting quotes: a `-c` inside a literal does not confuse the head rule', () => {
     const plan = conTareaY([
       '## 8. Global verification', '', F + 'bash',
       "grep -Fq '$(grep -c mark a.ts b.ts)' incidencias.md", F,
@@ -602,7 +603,7 @@ describe('la Global verification es del programa (§3.7-A)', () => {
     expect(problems.map((p) => p.rule)).not.toContain('global-verification-predicate')
   })
 
-  it('el fixture real extrae el único comando de su Global verification', () => {
+  it('the real fixture extracts the single command of its Global verification', () => {
     const { global } = extractTasks(EJECUTABLE)
     expect(global.commands).toEqual(['npm run build && npm test && npm run lint   # exit 0'])
   })

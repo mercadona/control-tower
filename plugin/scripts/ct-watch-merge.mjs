@@ -1,120 +1,125 @@
 #!/usr/bin/env node
 // ============================================================================
-// CT-WATCH-MERGE — el vigilante del merge, para que la cosecha no espere a que
-// alguien se acuerde de contarla.
+// CT-WATCH-MERGE — the merge watcher, so that the harvest does not wait for
+// somebody to remember to tell it about it.
 //
-// QUÉ ARREGLA. La Puerta 3 del loop es humana: cerrar los gates y mergear. Y
-// mergear no producía NINGUNA señal mecánica. El PR se mergeaba, el issue se
-// cerraba, y `.worktrees/<n>` + `feat/<n>` se quedaban en disco con su `claude`
-// vivo —trece horas, en el caso que dio origen a F20— hasta que la misma persona
-// que había mergeado iba a la ventana de la coordinadora a decírselo. O sea que
-// el evento existía en GitHub y el que disparaba la cosecha era un recado.
+// WHAT IT FIXES. Gate 3 of the loop is human: closing the gates and merging. And
+// merging produced NO mechanical signal at all. The PR got merged, the issue got
+// closed, and `.worktrees/<n>` + `feat/<n>` stayed on disk with their `claude`
+// alive —thirteen hours, in the case that gave rise to F20— until the very
+// person who had merged walked over to the coordinator's window to tell it. So
+// the event existed in GitHub and what fired the harvest was an errand.
 //
-// Este proceso cierra el hueco: sondea el PR de la rama del slice y, en cuanto
-// lo ve mergeado, teclea la línea en la sesión coordinadora.
+// This process closes the gap: it polls the PR of the slice's branch and, as
+// soon as it sees it merged, it types the line into the coordinator session.
 //
-// LO LANZA EL PROPIO SLICE, AL ENTREGAR. `dispatch-check.mjs --release` lo
-// arranca con `spawn(..., { detached: true }).unref()` justo después de mover el
-// issue a `status:in-review`, que es el instante EXACTO en que existe un PR
-// abierto esperando un merge humano. Lanzarlo antes (en el despacho, junto al
-// vigilante del `-OK`) sería poner un proceso a preguntar por un PR que todavía
-// no existe durante todo lo que dure la implementación.
+// THE SLICE ITSELF LAUNCHES IT, ON DELIVERY. `dispatch-check.mjs --release`
+// starts it with `spawn(..., { detached: true }).unref()` right after moving the
+// issue to `status:in-review`, which is the EXACT instant at which there is an
+// open PR waiting for a human merge. Launching it earlier (at dispatch, next to
+// the `-OK` watcher) would mean putting a process to ask about a PR that does
+// not exist yet for as long as the implementation lasts.
 //
-// CÓMO LOCALIZA A LA COORDINADORA: POR SU DIRECTORIO, NO POR SU NOMBRE. El
-// vigilante del `-OK` busca la sesión del slice por su TÍTULO, y puede porque
-// ese título lo CALCULA el propio loop: `dispatch.js#cmuxSessionName` es una
-// función pura que `/ct-next` llama para crear la workspace y que el vigilante
-// llama para encontrarla. Una derivación, dos consumidores. Y encima `/ct-next`
-// verifica con su centinela que esa sesión arrancó de verdad antes de lanzar
-// nada.
+// HOW IT LOCATES THE COORDINATOR: BY ITS DIRECTORY, NOT BY ITS NAME. The `-OK`
+// watcher looks for the slice's session by its TITLE, and it can because that
+// title is CALCULATED by the loop itself: `dispatch.js#cmuxSessionName` is a
+// pure function that `/ct-next` calls to create the workspace and that the
+// watcher calls to find it. One derivation, two consumers. And on top of that
+// `/ct-next` verifies with its sentinel that that session really started before
+// launching anything.
 //
-// Aquí no hay nada de eso, y no por haber elegido peor: PORQUE NO HAY NADA QUE
-// ELEGIR. A la sesión coordinadora no la crea el loop — la abre una persona en
-// la ventana que le apetezca. No hay título que derivar, ni creación que
-// verificar, ni garantía sobre la que apoyarse. La única propiedad observable
-// que queda es DÓNDE corre —el checkout principal, el mismo del que
-// `git worktree list --porcelain` devuelve la primera entrada— así que se
-// compara contra `current_directory`.
+// Here there is none of that, and not because a worse option was chosen:
+// BECAUSE THERE IS NOTHING TO CHOOSE. The coordinator session is not created by
+// the loop — a person opens it in whatever window they feel like. There is no
+// title to derive, no creation to verify, no guarantee to lean on. The only
+// observable property left is WHERE it runs —the main checkout, the same one
+// `git worktree list --porcelain` returns as its first entry— so it is compared
+// against `current_directory`.
 //
-// LA PRECONDICIÓN QUE ESO IMPONE, Y QUE ES UNA REGLA DE USO, NO UN DETALLE: la
-// sesión coordinadora tiene que ser una workspace de cmux abierta EN EL CHECKOUT
-// PRINCIPAL del repo que coordina. Si la tienes abierta en otro sitio, este
-// proceso no la encuentra y el aviso se pierde.
+// THE PRECONDITION THAT IMPOSES, AND IT IS A RULE OF USE, NOT A DETAIL: the
+// coordinator session has to be a cmux workspace opened IN THE MAIN CHECKOUT of
+// the repo it coordinates. If you have it open somewhere else, this process does
+// not find it and the warning is lost.
 //
-// Medido en campo el 2026-08-26 con el PR #16 de jjponz/rust-monitoring: el
-// merge se vio 34 segundos después de ocurrir, y no hubo a quién decírselo
-// porque la ventana de quien coordinaba estaba abierta en OTRO repo. El
-// vigilante hizo lo correcto y lo dijo; la regla no estaba escrita en ninguna
-// parte, que es el defecto de verdad de aquel episodio.
+// Measured in the field on 2026-08-26 with PR #16 of jjponz/rust-monitoring: the
+// merge was seen 34 seconds after it happened, and there was nobody to tell it
+// to, because the window of whoever was coordinating was open in ANOTHER repo.
+// The watcher did the right thing and said so; the rule was not written down
+// anywhere, which is the real defect of that episode.
 //
-// POR QUÉ SE ACEPTA LA REGLA EN VEZ DE HACER LA DIRECCIÓN ROBUSTA. La
-// alternativa es que la coordinadora se REGISTRE —que al hidratarse apunte en
-// algún sitio cuál es su workspace de cmux— y que esto lea ese registro en vez
-// de inferir. Es la mitad simétrica de lo que el loop ya hace con los slices, y
-// se descartó a propósito: sería una pieza nueva de estado, con su caducidad y
-// su «¿sigue vivo eso?», construida para UN solo consumidor. Decisión tomada:
-// se mantiene la inferencia y se escribe la regla. Si algún día hay un segundo
-// consumidor que necesite alcanzar a la coordinadora, el registro es lo que hay
-// que construir, y entonces este bloque es el que sobra.
+// WHY THE RULE IS ACCEPTED INSTEAD OF MAKING THE ADDRESSING ROBUST. The
+// alternative is that the coordinator REGISTERS itself —that on hydrating it
+// writes down somewhere which cmux workspace it is— and that this reads that
+// register instead of inferring. It is the symmetric half of what the loop
+// already does with the slices, and it was discarded on purpose: it would be a
+// new piece of state, with its expiry and its "is that still alive?", built for
+// ONE single consumer. Decision taken: the inference stays and the rule gets
+// written down. If some day there is a second consumer that needs to reach the
+// coordinator, the register is what has to be built, and then this block is the
+// one that becomes redundant.
 //
-// LÍMITE HEREDADO, DICHO SIN ADORNOS: para ENTREGAR la línea se usa el camino
-// frágil de este plugin (`cmux send` + `send-key`), y no hay centinela que
-// pruebe que la sesión la recibió. Lo único que se sabe es que los dos comandos
-// devolvieron 0, y así se dice en el log — no «la cosecha ha arrancado». Es
-// exactamente el mismo límite que acepta ct-watch-go.mjs, por el mismo motivo:
-// un centinela de verdad exigiría que la coordinadora escribiera algo, o sea
-// depender del agente al que se le entrega.
+// AN INHERITED LIMIT, SAID WITHOUT ORNAMENT: to DELIVER the line, this plugin's
+// fragile path is used (`cmux send` + `send-key`), and there is no sentinel that
+// proves the session received it. The only thing that is known is that the two
+// commands returned 0, and that is what the log says — not "the harvest has
+// started". It is exactly the same limit ct-watch-go.mjs accepts, for the same
+// reason: a real sentinel would demand that the coordinator wrote something,
+// that is, depending on the agent the line is delivered to.
 //
-// LA DIVERGENCIA DELIBERADA RESPECTO A ct-watch-go.mjs, que es la única, y no es
-// un descuido: AQUÍ NO SE MUERE PORQUE LA SESIÓN DESTINO NO ESTÉ.
+// THE DELIBERATE DIVERGENCE FROM ct-watch-go.mjs, which is the only one, and is
+// no oversight: HERE IT DOES NOT DIE BECAUSE THE TARGET SESSION IS NOT THERE.
 //
-// Aquél se apaga en cuanto cmux contesta que la sesión del slice no existe, y
-// hace bien: sin esa sesión no hay nada que vigilar, y un proceso vivo
-// vigilándola parecería que el gate sigue cubierto. Aquí la ausencia de la
-// coordinadora no significa lo mismo, porque no es evidencia de que el trabajo
-// haya terminado: el merge puede seguir llegando.
+// That one shuts down as soon as cmux answers that the slice's session does not
+// exist, and it is right to: without that session there is nothing to watch, and
+// a live process watching it would make it look as if the gate were still
+// covered. Here the absence of the coordinator does not mean the same thing,
+// because it is not evidence that the work has finished: the merge can still
+// arrive.
 //
-// LO QUE ESA DIVERGENCIA COMPRA, Y LO QUE NO — y la distinción es la corrección
-// de una frase que este bloque decía antes y que el episodio del 2026-08-26
-// desmintió. Compra sobrevivir a una ausencia MIENTRAS ESPERA: cierras la
-// ventana, la vuelves a abrir, y la vigilancia sigue en pie. NO compra una
-// ausencia EN EL INSTANTE DE ENTREGAR: si en ese tick no hay coordinadora, el
-// aviso se pierde y punto. Este bloque afirmaba cubrir «te vas a dormir y el
-// merge llega después», y eso sólo es cierto si la ventana está donde toca
-// cuando el merge llega — o sea, no era una cobertura, era la misma
-// precondición dicha como si fuera una garantía.
+// WHAT THAT DIVERGENCE BUYS, AND WHAT IT DOES NOT — and the distinction is the
+// correction of a sentence this block used to say and that the episode of
+// 2026-08-26 disproved. It buys surviving an absence WHILE IT WAITS: you close
+// the window, you open it again, and the watch is still standing. It does NOT
+// buy an absence AT THE INSTANT OF DELIVERING: if there is no coordinator on
+// that tick, the warning is lost and that is that. This block used to claim it
+// covered "you go to sleep and the merge arrives later", and that is only true
+// if the window is where it should be when the merge arrives — that is, it was
+// not a coverage, it was the same precondition said as if it were a guarantee.
 //
-// EL AVISO PERDIDO NO ES UN AGUJERO, y ésta es la razón de fondo por la que la
-// regla se acepta: `/ct-next` ya cruza en CADA corrida los issues mergeados
-// contra `.worktrees/` y `git branch --list 'feat/*'` y emite `cosecha
-// pendiente:` con los comandos exactos (F20, dispatch.js#collectFinishedResidue).
-// Así que este vigilante no aporta conocimiento que no exista: aporta el
-// MOMENTO. Cuando falla, se degrada exactamente al modo de antes —te enteras en
-// el siguiente `/ct-next`—, no a que nadie se entere nunca.
+// A LOST WARNING IS NOT A HOLE, and this is the underlying reason why the rule
+// is accepted: `/ct-next` already crosses, on EVERY run, the merged issues
+// against `.worktrees/` and `git branch --list 'feat/*'` and emits `cosecha
+// pendiente:` with the exact commands (F20, dispatch.js#collectFinishedResidue).
+// So this watcher contributes no knowledge that does not already exist: it
+// contributes the MOMENT. When it fails, it degrades exactly to the old mode
+// —you find out on the next `/ct-next`—, not to nobody ever finding out.
 //
-// Lo que sí se hace es no fingir: si el merge se ve y no hay a quién
-// entregárselo, se dice, se nombra la regla que no se cumplió, y se sale con 1.
-// Se pierde el aviso; no se disfraza de entregado.
+// What it does do is not pretend: if the merge is seen and there is nobody to
+// deliver it to, it says so, it names the rule that was not met, and it exits
+// with 1. The warning is lost; it is not dressed up as delivered.
 //
-// LO QUE DELIBERADAMENTE NO TIENE, heredado de ct-watch-go y por sus motivos:
+// WHAT IT DELIBERATELY DOES NOT HAVE, inherited from ct-watch-go and for its
+// reasons:
 //
-//   - NI PIDFILE NI COMPROBACIÓN DE VIDA. Un `--reopen` seguido de un segundo
-//     `--release` nace un segundo vigilante; el primero caduca. Lo peor que pasa
-//     es que la línea se teclee dos veces, que es molesto y nada más.
-//   - NI BORRAR NADA. El vigilante avisa; la cosecha la recoge la coordinadora.
-//     Es la decisión de F20 intacta: «mergeado» no es «nadie está tocando eso»
-//     —puede haber cambios sin pushear— y borrar un worktree es irreversible.
-//     Ningún camino de éxito de este plugin borra nada, y este tampoco.
-//   - NI VIGILAR EL CIERRE DEL ISSUE. Lo que libera los tokens es el merge, y lo
-//     que deja residuo en disco es el merge. El cierre del issue es su
-//     consecuencia, no un segundo evento que valga la pena esperar aparte.
+//   - NEITHER A PIDFILE NOR A LIVENESS CHECK. A `--reopen` followed by a second
+//     `--release` gives birth to a second watcher; the first one expires. The
+//     worst that happens is that the line gets typed twice, which is annoying
+//     and nothing more.
+//   - NO DELETING ANYTHING. The watcher warns; the coordinator picks up the
+//     harvest. It is F20's decision intact: "merged" is not "nobody is touching
+//     that" —there may be unpushed changes— and deleting a worktree is
+//     irreversible. No success path of this plugin deletes anything, and this
+//     one does not either.
+//   - NO WATCHING THE ISSUE'S CLOSURE. What frees the tokens is the merge, and
+//     what leaves residue on disk is the merge. The issue's closure is its
+//     consequence, not a second event worth waiting for separately.
 //
-// EL LOG LO ABRE ESTE PROCESO, no quien lo lanza, y va fuera del repo
-// (`~/.claude/control-tower/log/`), junto a la telemetría y al log del vigilante
-// del `-OK`. Los tres por el mismo motivo escrito en run-metrics.js: para que
-// ningún `git add` de la slice lo meta en la PR. Lo abre ÉL porque, cuando
-// ct-next lo abría por su vigilante, la suite acabó creando ficheros en el $HOME
-// real de quien la corriera.
+// THE LOG IS OPENED BY THIS PROCESS, not by whoever launches it, and it goes
+// outside the repo (`~/.claude/control-tower/log/`), next to the telemetry and
+// the log of the `-OK` watcher. All three for the same reason written in
+// run-metrics.js: so that no `git add` of the slice puts it into the PR. IT
+// opens it because, when ct-next opened it on behalf of its watcher, the suite
+// ended up creating files in the real $HOME of whoever ran it.
 // ============================================================================
 
 import { execFileSync } from 'node:child_process'
@@ -122,13 +127,13 @@ import { buildCmuxSendArgv, buildCmuxSendKeyArgv } from './dispatch.js'
 import { findWorkspaceByCwd } from './cmux.js'
 import { arg, sleep, plazo, abrirLog } from './watch-common.js'
 
-// 60 segundos de tick y 48 horas de plazo. Los dos números son distintos de los
-// del vigilante del `-OK` (30 s / 8 h) porque el evento es distinto: aquél cubre
-// que una persona esté durmiendo, y éste cubre que un PR espere revisión — que
-// en la medida de F33 es lo que más reloj de epic consume, y se cuenta en días,
-// no en horas. Un tick más lento no cuesta nada: la cosecha no es urgente al
-// segundo, y 48 h a un sondeo por minuto son ~2880 llamadas a `gh` por slice,
-// 60 a la hora, contra un límite de 5000.
+// A 60-second tick and a 48-hour deadline. The two numbers are different from
+// the ones of the `-OK` watcher (30 s / 8 h) because the event is different:
+// that one covers a person being asleep, and this one covers a PR waiting for
+// review — which, in F33's measurement, is what consumes the most epic clock,
+// and is counted in days, not in hours. A slower tick costs nothing: the harvest
+// is not urgent to the second, and 48 h at one poll a minute is ~2880 calls to
+// `gh` per slice, 60 an hour, against a limit of 5000.
 const DEFAULT_POLL_MS = 60_000
 const DEFAULT_TIMEOUT_MS = 48 * 60 * 60 * 1000
 const GH_TIMEOUT_MS = 30_000
@@ -148,15 +153,16 @@ const { log, terminar } = abrirLog(logPath)
 const pollMs = plazo('CT_WATCH_MERGE_POLL_MS', DEFAULT_POLL_MS)
 const timeoutMs = plazo('CT_WATCH_MERGE_TIMEOUT_MS', DEFAULT_TIMEOUT_MS)
 
-// ¿Hay un PR MERGEADO cuya rama sea la del slice? Devuelve el PR, `null` si no
-// hay ninguno, o `undefined` si no se pudo preguntar — las tres son cosas
-// distintas y de la tercera no se sigue nada.
+// Is there a MERGED PR whose branch is the slice's? Returns the PR, `null` if
+// there is none, or `undefined` if it could not be asked — the three are
+// different things and nothing follows from the third.
 //
-// No hay heurística que valga aquí y por eso no la hay: la rama de un slice es
-// determinista, así que se pregunta por ella y punto. `--state merged` lo filtra
-// GitHub, no este fichero. Es deliberadamente lo contrario de lo que hacía la
-// primera versión de la cosecha de métricas, que deducía el PR escaneando
-// `cross-referenced` y ataba slices a PRs equivocados (ver commands/ct-harvest.md).
+// No heuristic is worth anything here and that is why there is none: a slice's
+// branch is deterministic, so it is asked about and that is that. `--state
+// merged` is filtered by GitHub, not by this file. It is deliberately the
+// opposite of what the first version of the metrics harvest did, which deduced
+// the PR by scanning `cross-referenced` and tied slices to the wrong PRs (see
+// commands/ct-harvest.md).
 function leerPrMergeado() {
   try {
     const raw = execFileSync('gh', [
@@ -170,53 +176,55 @@ function leerPrMergeado() {
     const pr = parsed[0]
     return Number.isInteger(pr?.number) ? pr : null
   } catch (e) {
-    // Un fallo de `gh` NO termina la vigilancia: la red se cae, el token caduca
-    // y se renueva, GitHub devuelve un 502. Lo que no puede pasar es que un
-    // fallo transitorio se lea como «no está mergeado» de forma permanente — el
-    // vigilante se apagaría con el trabajo entregado y la cosecha sin recoger.
+    // A failure of `gh` does NOT end the watch: the network goes down, the token
+    // expires and is renewed, GitHub returns a 502. What cannot happen is that a
+    // transient failure gets read as "it is not merged" permanently — the watcher
+    // would shut down with the work delivered and the harvest uncollected.
     log(`aviso: no se pudo consultar el PR de ${branch} (${String(e.message).trim()}) — se reintenta en el próximo tick`)
     return undefined
   }
 }
 
-// La búsqueda vive en scripts/cmux.js, que es el ÚNICO sitio del repo que lee
-// `custom_title`/`current_directory` y el único que sabe que esos nombres de
-// campo no son un esquema garantizado. Antes se leía aquí a pelo, y eso tenía
-// una consecuencia concreta que cazó una revisión adversarial: si cmux renombra
-// ese campo, ninguna entrada casa, esto devolvía "cmux contestó y no está", y el
-// mensaje de abajo —que desde la ronda anterior NOMBRA LA REGLA y le dice a la
-// persona qué hizo mal— se convertía en una acusación específica, segura y
-// falsa. La mejora de honestidad del mensaje empeoró el modo de fallo.
+// The lookup lives in scripts/cmux.js, which is the ONLY place in the repo that
+// reads `custom_title`/`current_directory` and the only one that knows those
+// field names are not a guaranteed schema. It used to be read here raw, and that
+// had a concrete consequence that an adversarial review caught: if cmux renames
+// that field, no entry matches, this returned "cmux answered and it is not
+// there", and the message below —which since the previous round NAMES THE RULE
+// and tells the person what they did wrong— turned into a specific, confident
+// and false accusation. Making the message more honest made the failure mode
+// worse.
 //
-// `findWorkspaceByCwd` traduce eso a `consultado: false` (no se pudo saber), que
-// es la rama que ya existía aquí para el caso de "cmux no responde" y que
-// reintenta en el próximo tick. O sea que la guarda no añade un camino nuevo:
-// mete el cambio de esquema por el camino correcto de los que ya había.
+// `findWorkspaceByCwd` translates that into `consultado: false` (it could not be
+// known), which is the branch that already existed here for the "cmux does not
+// answer" case and that retries on the next tick. So the guard adds no new path:
+// it routes the schema change through the right one of the paths already there.
 const consultarCoordinadora = () => {
   const r = findWorkspaceByCwd(coordinatorCwd, { timeoutMs: CMUX_TIMEOUT_MS })
   if (!r.consultado) log('aviso: no se pudo consultar cmux (o su respuesta no trae el campo del directorio que este plugin sabe leer)')
   return r
 }
 
-// La línea que se teclea en la coordinadora. Nombra el PR, el slice y LOS DOS
-// ARTEFACTOS que quedan en disco, porque el aviso tiene que bastar para actuar:
-// un "ya está mergeado" a secas dejaría a la persona siendo otra vez el bus de
-// mensajes, que es el problema entero.
+// The line that gets typed into the coordinator. It names the PR, the slice and
+// THE TWO ARTEFACTS left on disk, because the warning has to be enough to act
+// on: a bare "it is already merged" would leave the person being the message bus
+// again, which is the whole problem.
 //
-// Y dice «comprueba que no queda trabajo sin pushear» a propósito: el que borra
-// es un agente, y lo que le falta saber al recibir esta línea es exactamente lo
-// que F20 se negó a asumir.
+// And it says "comprueba que no queda trabajo sin pushear" on purpose: the one
+// who deletes is an agent, and what it is missing when it receives this line is
+// exactly what F20 refused to assume.
 const linea = (pr) => `El PR #${pr} del slice #${issue} está mergeado: la cosecha del #${issue} está pendiente. \`.worktrees/${issue}\` y la rama \`${branch}\` siguen en disco. Comprueba que no queda trabajo sin pushear y recógelos.`
 
 log(`vigilando el merge de ${repo} ${branch} (slice #${issue}) para la coordinadora en ${coordinatorCwd} — tick ${pollMs} ms, plazo ${timeoutMs} ms`)
 
-// No hay foto inicial que sacar, y esa asimetría con ct-watch-go es real, no un
-// olvido. Allí la ventana existe porque un `-OK` heredado de un despacho
-// anterior arrancaría el trabajo sin que nadie diera permiso. Aquí el evento no
-// es una respuesta de nadie sino un hecho del repositorio, y ese hecho no
-// caduca: si la rama del slice YA tiene un PR mergeado en el primer sondeo, la
-// cosecha está pendiente igual y hay que decirlo. Un vigilante que se callara
-// por eso sería un vigilante que se calla justo cuando ya hay residuo en disco.
+// There is no initial snapshot to take, and that asymmetry with ct-watch-go is
+// real, not an oversight. There the window exists because an `-OK` inherited
+// from an earlier dispatch would start the work without anybody granting
+// permission. Here the event is nobody's answer but a fact of the repository,
+// and that fact does not expire: if the slice's branch ALREADY has a merged PR
+// on the first poll, the harvest is pending all the same and it has to be said.
+// A watcher that kept quiet because of that would be a watcher that keeps quiet
+// precisely when there is already residue on disk.
 const limite = Date.now() + timeoutMs
 
 for (;;) {
@@ -238,32 +246,33 @@ for (;;) {
           stdio: ['ignore', 'ignore', 'pipe'], timeout: CMUX_TIMEOUT_MS, killSignal: 'SIGKILL',
         })
       } catch (e) {
-        // `send` sin `send-key` deja el texto en la línea de edición SIN
-        // ejecutar (medido en F20/H1), así que hay que decir eso y no "no se
-        // pudo teclear": quien lo lea va a encontrarse la línea escrita en la
-        // ventana y tiene que saber que sólo le falta el Enter.
+        // `send` without `send-key` leaves the text on the edit line WITHOUT
+        // executing it (measured in F20/H1), so that is what has to be said and
+        // not "it could not be typed": whoever reads it is going to find the
+        // line written in the window and has to know that all it is missing is
+        // the Enter.
         log(`ERROR: el texto quedó escrito en la línea de edición de la coordinadora (${ref}) pero el Enter falló: ${String(e.message).trim()}. Ve a esa ventana y pulsa Enter.`)
         terminar(1)
       }
-      // Lo que se sabe es esto y no más: los dos comandos devolvieron 0. No hay
-      // centinela que pruebe que la coordinadora lo recibió y actuó (ver la
-      // cabecera), así que el mensaje no afirma que la cosecha haya arrancado.
+      // What is known is this and no more: the two commands returned 0. There is
+      // no sentinel that proves the coordinator received it and acted (see the
+      // header), so the message does not claim the harvest has started.
       log(`línea enviada a la coordinadora (${ref}): \`cmux send\` y \`send-key Enter\` devolvieron 0. No hay forma de comprobar desde aquí que la sesión la haya procesado. Vigilancia terminada.`)
       terminar(0)
     }
     if (consultado) {
-      // Se nombra LA REGLA, no sólo el hecho. El mensaje anterior decía «no
-      // existe ninguna sesión en <cwd>», que es verdad y no sirve: quien lo lee
-      // no puede deducir de ahí qué tenía que haber hecho distinto. Y se dice
-      // que la cosecha se sigue detectando sola, para que un aviso perdido no se
-      // lea como trabajo perdido.
+      // THE RULE is named, not just the fact. The previous message said "no
+      // session exists in <cwd>", which is true and useless: whoever reads it
+      // cannot deduce from that what they should have done differently. And it
+      // says that the harvest is still detected on its own, so that a lost
+      // warning does not get read as lost work.
       log(`ERROR: el merge de ${branch} se vio, pero cmux dice que no existe ninguna workspace cuyo directorio sea ${coordinatorCwd}, así que no hay a quién entregárselo.`)
       log(`La regla que no se cumplió: la sesión coordinadora tiene que ser una workspace de cmux abierta EN ${coordinatorCwd} — este vigilante la localiza por su directorio porque no hay ningún nombre de sesión que el loop pueda derivar (a ella no la crea el loop, la abres tú).`)
       log(`No se ha perdido trabajo: el próximo \`/ct-next\` en ese checkout emitirá \`cosecha pendiente:\` para el #${issue} con los comandos exactos. Lo que se ha perdido es enterarte ahora.`)
       terminar(1)
     }
-    // No se pudo PREGUNTAR por la coordinadora. De eso no se sigue nada, y menos
-    // con el merge ya en la mano: se reintenta en el próximo tick.
+    // The coordinator could not be ASKED about. Nothing follows from that, and
+    // less so with the merge already in hand: it retries on the next tick.
     log(`el merge está visto pero no se pudo consultar cmux para localizar la coordinadora — se reintenta la entrega en el próximo tick`)
   }
   if (Date.now() >= limite) {

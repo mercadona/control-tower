@@ -1,33 +1,33 @@
-// Entorno HERMÉTICO para los tests que invocan ct-next.mjs.
+// A HERMETIC environment for the tests that invoke ct-next.mjs.
 //
-// El preflight de ct-next comprueba cosas del ENTORNO REAL de la máquina: que
-// `cmux` y el binario del agente estén en el PATH. Sin estos stubs la suite
-// dependería de lo que tenga instalado quien la corre — y, peor, un test podría
-// lanzar un workspace de cmux DE VERDAD (ya pasó una vez en este proyecto).
+// ct-next's preflight checks things about the machine's REAL environment: that
+// `cmux` and the agent's binary are on the PATH. Without these stubs the suite
+// would depend on what whoever runs it happens to have installed — and, worse,
+// a test could launch a REAL cmux workspace (it happened once in this project).
 //
-// Los tests que quieren ejercer la AUSENCIA de un binario fijan su propio PATH
-// (ver ct-next-preconditions.test.js) — nunca omitiendo el stub y confiando en
-// que el binario real no esté.
+// Tests that want to exercise the ABSENCE of a binary set their own PATH (see
+// ct-next-preconditions.test.js) — never by omitting the stub and trusting the
+// real binary is not there.
 //
-// F35: aquí vivían además dos directorios de cuenta (TEST_PERSONAL_DIR /
-// TEST_WORK_DIR) y el ACCOUNT_ENV que los inyectaba, porque el preflight
-// exigía que el CLAUDE_CONFIG_DIR resuelto existiera en disco. Al irse la
-// resolución de cuenta se fueron con ella: no queda nada que apuntar.
+// F35: two account directories used to live here as well (TEST_PERSONAL_DIR /
+// TEST_WORK_DIR) plus the ACCOUNT_ENV that injected them, because the preflight
+// demanded the resolved CLAUDE_CONFIG_DIR exist on disk. When account
+// resolution left, they left with it: there is nothing left to point at.
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const fixturesDir = dirname(fileURLToPath(import.meta.url))
 
-// Stubs de binarios que el preflight solo BUSCA en el PATH (statSync +
-// accessSync), nunca ejecuta.
+// Stubs of binaries the preflight only LOOKS UP on the PATH (statSync +
+// accessSync), never executes.
 export const FAKE_BIN_DIRS = [
   join(fixturesDir, 'fake-cmux-bin'),
   join(fixturesDir, 'fake-claude-bin'),
 ]
 
-// hermeticEnv: base de entorno para cualquier invocación de ct-next.mjs en los
-// tests. `pathPrefix` son los directorios de stubs que ese test ya quisiera
-// poner delante (git/gh/cmux).
+// hermeticEnv: the environment base for any invocation of ct-next.mjs in the
+// tests. `pathPrefix` is whichever stub directories that test wants in front
+// (git/gh/cmux).
 export function hermeticEnv(pathPrefix = []) {
   return { PATH: [...pathPrefix, ...FAKE_BIN_DIRS, process.env.PATH].join(':') }
 }

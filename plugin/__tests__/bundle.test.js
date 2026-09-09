@@ -6,22 +6,21 @@ import { describe, it, expect } from 'vitest'
 import { buildOptions } from '../scripts/build.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-// Derivada de buildOptions.entryPoints, no repetida a mano: una tercera lista
-// de los mismos bundles se habría quedado atrás en silencio en cuanto el
-// build ganase un entry point, tal como ya les pasó a otras dos listas de
-// este mismo tipo en este repo. esbuild, sin `outbase`, nombra cada salida
-// por el basename de su entrada dentro de `outdir` — importar este módulo no
-// dispara ningún build (ver la guarda de `process.argv[1]` en build.mjs).
-// entryPoints es un MAPA (nombre de salida → fuente) desde que scope-check
-// entró desde `scripts/`: con la forma de lista, esbuild calculaba un outbase
-// común y anidaba las salidas en `dist/hooks/` y `dist/scripts/`. La derivación
-// sigue siendo derivación —las claves SON los nombres de salida—, que es lo que
-// esta línea protege: una tercera lista escrita a mano se quedaría atrás en
-// silencio en cuanto el build ganase un entry point, como ya les pasó a otras
-// dos listas de este mismo repo.
+// Derived from buildOptions.entryPoints, not repeated by hand: a third list
+// of the same bundles would have silently fallen behind the moment the build
+// gained an entry point, exactly as already happened to two other lists of
+// this same kind in this repo. esbuild, with no `outbase`, names each output
+// by the basename of its input inside `outdir` — importing this module fires
+// no build (see the `process.argv[1]` guard in build.mjs). entryPoints is a
+// MAP (output name → source) ever since scope-check came in from `scripts/`:
+// with the list form, esbuild computed a common outbase and nested the outputs
+// under `dist/hooks/` and `dist/scripts/`. The derivation is still a derivation
+// —the keys ARE the output names—, which is what this line protects: a third
+// list written by hand would silently fall behind the moment the build gained
+// an entry point, as already happened to two other lists of this same repo.
 const bundles = Object.keys(buildOptions.entryPoints).map((nombre) => `${buildOptions.outdir}/${nombre}.js`)
 
-// Extrae los especificadores de módulo externos de un bundle ESM.
+// Extracts the external module specifiers of an ESM bundle.
 function externalSpecifiers(code) {
   const out = []
   for (const re of [
@@ -35,17 +34,17 @@ function externalSpecifiers(code) {
   return out
 }
 
-describe('dist bundles autocontenidos', () => {
+describe('self-contained dist bundles', () => {
   for (const b of bundles) {
-    it(`${b} existe`, () => {
+    it(`${b} exists`, () => {
       expect(existsSync(join(root, b))).toBe(true)
     })
-    it(`${b} solo importa builtins node: (yaml/state inlineados)`, () => {
+    it(`${b} only imports node: builtins (yaml/state inlined)`, () => {
       const specs = externalSpecifiers(readFileSync(join(root, b), 'utf8'))
-      // Acepta tanto "node:xxx" como el nombre "xxx" sin prefijo: ambos
-      // resuelven a builtins de Node (p.ej. esbuild emite require("process")
-      // sin prefijo dentro del shim __commonJS al inlinear yaml). isBuiltin
-      // cubre ambas formas; lo que NO debe aparecer es un paquete npm real.
+      // Accepts both "node:xxx" and the bare name "xxx": both resolve to
+      // Node builtins (e.g. esbuild emits require("process") with no prefix
+      // inside the __commonJS shim when it inlines yaml). isBuiltin covers
+      // both forms; what must NOT appear is a real npm package.
       const nonBuiltin = specs.filter((s) => !isBuiltin(s))
       expect(nonBuiltin).toEqual([])
     })

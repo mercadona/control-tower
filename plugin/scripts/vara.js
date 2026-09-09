@@ -1,44 +1,45 @@
 // scripts/vara.js
 //
-// §3.3 del handoff (docs/prompt-juez-lo-que-queda.md): el plan es por slice, así
-// que `## 3. Reference patterns` se re-derivaba en cada plan de slice, y nada
-// garantizaba que el slice 14 citara las mismas rutas que el slice 3 — trabajo
-// re-derivado, y una inconsistencia posible en la vara misma.
+// §3.3 of the handoff (docs/prompt-juez-lo-que-queda.md): the plan is per
+// slice, so `## 3. Reference patterns` was re-derived in every slice plan, and
+// nothing guaranteed that slice 14 cited the same paths as slice 3 — re-derived
+// work, and a possible inconsistency in the yardstick itself.
 //
-// Este módulo es la VARA DEL REPO cruzando el embudo de `ct-step` SIN NINGÚN
-// AGENTE EN MEDIO: `.agent/conventions.md` lo siembra `scripts/ct-init.sh`, lo
-// confirma el humano que corre `/ct-init` (la puerta que ya existía — no se
-// añade una cuarta), y `ct-step.mjs` lo lee del disco y lo pega, verbatim, al
-// final de cada task brief. `## 3. Reference patterns` del plan sigue
-// seleccionando por slice; este fichero declara por repo. El juez mide contra
-// la UNIÓN de los dos (ver `agents/ct-judge.md`, ítem `patrones`): si §3 omite
-// un documento que el repo declara aquí, la vara llega igual.
+// This module is the REPO'S YARDSTICK crossing `ct-step`'s funnel WITH NO AGENT
+// IN BETWEEN: `.agent/conventions.md` is seeded by `scripts/ct-init.sh`,
+// confirmed by the human who runs `/ct-init` (the gate that already existed — a
+// fourth one is not added), and `ct-step.mjs` reads it from disk and pastes it,
+// verbatim, at the end of every task brief. The plan's
+// `## 3. Reference patterns` still selects per slice; this file declares per
+// repo. The judge measures against the UNION of the two (see
+// `agents/ct-judge.md`, item `patrones`): if §3 omits a document the repo
+// declares here, the yardstick arrives all the same.
 //
-// OJO, TRAMPA DOCUMENTADA — esto NO es `scripts/conventions.js` ni
-// `conventions-io.js`. Esos dos ficheros (785 líneas) van de COLISIONES DE
-// PROTOCOLO entre el loop y el repo destino (claim, worktrees, el fichero de
-// estado) — un sujeto completamente distinto, con su propio
-// `.agent/conventions-ack.md`. Este módulo declara CÓMO SE ESCRIBE CÓDIGO en
-// este repo, no cómo conviven el loop y el repo. No lo confundas por el
-// nombre.
+// CAREFUL, DOCUMENTED TRAP — this is NOT `scripts/conventions.js` nor
+// `conventions-io.js`. Those two files (785 lines) are about PROTOCOL
+// COLLISIONS between the loop and the target repo (claim, worktrees, the state
+// file) — a completely different subject, with its own
+// `.agent/conventions-ack.md`. This module declares HOW CODE IS WRITTEN in this
+// repo, not how the loop and the repo live together. Do not confuse it by the
+// name.
 
-// La ruta, relativa a la raíz del repo. Una única constante para que
-// sembrador, lector y los textos que se lo explican a agentes y humanos no
-// puedan divergir en silencio — el mismo desacople que ya sufrieron
-// JUDGE_TOOLS y VERDICT_RULES en scripts/step-contracts.js. __tests__/vara.test.js
-// ata esta constante a los seis ficheros que la citan.
+// The path, relative to the repo's root. A single constant so that seeder,
+// reader and the texts that explain it to agents and humans cannot diverge in
+// silence — the same decoupling JUDGE_TOOLS and VERDICT_RULES already suffered
+// in scripts/step-contracts.js. __tests__/vara.test.js ties this constant to
+// the six files that cite it.
 export const CONVENTIONS_FILE = '.agent/conventions.md'
 
-// seccionDeVara: la sección que `ct-step.mjs` pega al final de cada task
-// brief, o `''` si no hay nada que inyectar.
+// seccionDeVara: the section `ct-step.mjs` pastes at the end of every task
+// brief, or `''` if there is nothing to inject.
 //
-// `contenido` es lo que hay HOY en `.agent/conventions.md` (o null/undefined si
-// el llamador no llegó a leerlo). Una declaración en blanco (fichero vacío o
-// solo espacios) no es vara — es el mismo estado que "el fichero no existe": el
-// llamador no escribe nada al brief en ese caso, y el diff se mide sólo contra
-// la vara de ct (agents/ct-judge.md, ítem `patrones`: ese ítem nunca es
-// `sin-vara`, porque la de ct viaja con el plugin); la del repo, aquí, no
-// aporta nada (F14: la ausencia se mide, no se rellena).
+// `contenido` is what is in `.agent/conventions.md` TODAY (or null/undefined if
+// the caller never got to read it). A blank declaration (empty file or only
+// whitespace) is not a yardstick — it is the same state as "the file does not
+// exist": the caller writes nothing to the brief in that case, and the diff is
+// measured only against ct's yardstick (agents/ct-judge.md, item `patrones`:
+// that item is never `sin-vara`, because ct's travels with the plugin); the
+// repo's, here, adds nothing (F14: absence is measured, not filled in).
 export function seccionDeVara(contenido) {
   if (contenido == null || contenido.trim() === '') return ''
   const cuerpo = contenido.endsWith('\n') ? contenido : `${contenido}\n`
@@ -46,20 +47,20 @@ export function seccionDeVara(contenido) {
 }
 
 // ============================================================================
-// §3.12 del handoff (docs/prompt-juez-lo-que-queda.md): `reference-paths`
-// (scripts/plan-contract.js) prueba que lo que §3 CITÓ existe — caza la
-// INVENCIÓN. Nada probaba que §3 citara TODO lo relevante: un
-// `docs/conventions/` que sí está en el repo pasaba el validador limpio por
-// OMISIÓN, y esa es la asimetría que cierra lo de aquí abajo.
+// §3.12 of the handoff (docs/prompt-juez-lo-que-queda.md): `reference-paths`
+// (scripts/plan-contract.js) proves that what §3 CITED exists — it hunts
+// INVENTION. Nothing proved that §3 cited EVERYTHING relevant: a
+// `docs/conventions/` that really is in the repo passed the validator clean by
+// OMISSION, and that is the asymmetry what follows below closes.
 //
-// Lo de abajo es un barrido determinista y offline (al estilo
-// `discover_conventions.py` de agentic-skills) que PROPONE candidatos a la
-// vara de este repo. Su único consumidor es `scripts/detect-vara.mjs`,
-// invocado desde `ct-init.sh` en el único momento en que ya hay un humano
-// delante. NADA de este código escribe nunca en `.agent/conventions.md`: eso
-// sigue siendo, sin excepción, decisión del humano que confirma. Un candidato
-// es una PROPUESTA, no una declaración — igual que un semáforo en ámbar no es
-// un cruce.
+// What follows is a deterministic, offline sweep (in the style of
+// agentic-skills' `discover_conventions.py`) that PROPOSES candidates for this
+// repo's yardstick. Its only consumer is `scripts/detect-vara.mjs`, invoked
+// from `ct-init.sh` at the one moment when there is already a human in front of
+// it. NOTHING in this code ever writes to `.agent/conventions.md`: that
+// remains, without exception, the decision of the human who confirms. A
+// candidate is a PROPOSAL, not a declaration — just as an amber light is not a
+// crossing.
 // ============================================================================
 
 export const CANDIDATOS_HEADER =
@@ -67,39 +68,40 @@ export const CANDIDATOS_HEADER =
 export const MAX_CANDIDATOS = 40
 export const MAX_POR_DIRECTORIO = 12
 
-// Guías del repo, EN LA RAÍZ únicamente: un `docs/AGENTS.md` no es la guía
-// que herramientas y humanos buscan por convención en la raíz del repo, así
-// que no casa aquí (candidatosDeVara sólo aplica esta regla a rutas sin `/`).
+// Repo guides, AT THE ROOT only: a `docs/AGENTS.md` is not the guide tools and
+// humans look for by convention at the repo's root, so it does not match here
+// (candidatosDeVara only applies this rule to paths with no `/`).
 const RAIZ_RE = /^(CLAUDE|AGENTS|CONTRIBUTING|CONVENTIONS)(\.md|\.markdown|\.rst|\.txt)?$/i
-// Se aplica al BASENAME del directorio (sin la barra final).
+// Applied to the directory's BASENAME (without the trailing slash).
 const DIR_REGLAS_RE = /(conventions?|convenciones|rules|reglas)/i
 const SKILL_PROYECTO_RE = /^\.claude\/skills\/[^/]+\/SKILL\.md$/
 const TEXTO_RE = /\.(md|markdown|mdc|rst|txt)$/i
-// Nada de lo que vive bajo `.agent/` es candidato: es el terreno del PROPIO
-// loop (la declaración misma, `conventions.md`, y el acuse de otro sujeto,
-// `conventions-ack.md`) — proponerlo sería el barrido citándose a sí mismo.
+// Nothing living under `.agent/` is a candidate: it is the loop's OWN ground
+// (the declaration itself, `conventions.md`, and another subject's
+// acknowledgement, `conventions-ack.md`) — proposing it would be the sweep
+// citing itself.
 const DEL_LOOP_RE = /^\.agent\//
-// Determinista y sin depender del locale de la máquina que lo ejecute.
+// Deterministic and independent of the locale of the machine that runs it.
 const orden = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
 
-// candidatosDeVara: recibe el resultado plano de un recorrido del repo
-// (`entradas`, formato `repo-walk.js`: directorios con `/` final) y el
-// conjunto de rutas ya declaradas (`declaradasEn`), y devuelve
+// candidatosDeVara: takes the flat result of a walk over the repo
+// (`entradas`, `repo-walk.js` format: directories with a trailing `/`) and the
+// set of already declared paths (`declaradasEn`), and returns
 // `{ candidatos: [{ ruta, motivo }], omitidos }`.
 //
-// Tres grupos, cada uno ordenado con `orden` para que el resultado sea
-// determinista pase lo que pase con el orden del recorrido:
-//   1. guías de la raíz (RAIZ_RE);
-//   2. ficheros de texto dentro de un directorio cuyo nombre casa
+// Three groups, each sorted with `orden` so that the result is deterministic
+// whatever happens to the order of the walk:
+//   1. root guides (RAIZ_RE);
+//   2. text files inside a directory whose name matches
 //      "convention(s)|convenciones|rules|reglas" (DIR_REGLAS_RE);
-//   3. `SKILL.md` de skills de proyecto (SKILL_PROYECTO_RE).
+//   3. `SKILL.md` of project skills (SKILL_PROYECTO_RE).
 //
-// `MAX_POR_DIRECTORIO` topa cada directorio del grupo 2 por separado —un
-// `docs/conventions/` con cien ficheros no debe ahogar a los otros dos
-// grupos—, y `MAX_CANDIDATOS` topa la lista entera ya agrupada y ordenada.
-// Lo que no cabe por cualquiera de los dos topes cuenta en `omitidos`; lo que
-// se descarta por ser del loop o por estar ya declarado NO cuenta ahí: no se
-// ha callado, es que no tocaba proponerlo.
+// `MAX_POR_DIRECTORIO` caps each directory of group 2 separately —a
+// `docs/conventions/` with a hundred files must not drown the other two
+// groups—, and `MAX_CANDIDATOS` caps the whole list once grouped and sorted.
+// Whatever does not fit under either cap counts in `omitidos`; whatever is
+// discarded for being the loop's or for being declared already does NOT count
+// there: it has not been kept quiet, it was simply not up for proposing.
 export function candidatosDeVara({ entradas = [], declaradas = new Set() } = {}) {
   const vistos = new Set()
   let omitidos = 0
@@ -115,14 +117,14 @@ export function candidatosDeVara({ entradas = [], declaradas = new Set() } = {})
   const ficheros = entradas.filter((e) => !e.endsWith('/'))
   const directorios = entradas.filter((e) => e.endsWith('/'))
 
-  // Grupo 1 — guías de la raíz.
+  // Group 1 — root guides.
   const grupoRaiz = ficheros
     .filter((f) => !f.includes('/') && RAIZ_RE.test(f))
     .sort(orden)
     .filter((f) => admite(f))
     .map((ruta) => (marcar(ruta), { ruta, motivo: 'guía del repo en la raíz' }))
 
-  // Grupo 2 — ficheros de texto dentro de directorios que casan "reglas".
+  // Group 2 — text files inside directories that match "rules".
   const grupoDirectorios = []
   const dirsQueCasan = directorios
     .filter((d) => DIR_REGLAS_RE.test(d.slice(0, -1).split('/').pop()))
@@ -140,7 +142,7 @@ export function candidatosDeVara({ entradas = [], declaradas = new Set() } = {})
     }
   }
 
-  // Grupo 3 — skills de proyecto.
+  // Group 3 — project skills.
   const grupoSkills = ficheros
     .filter((f) => SKILL_PROYECTO_RE.test(f))
     .sort(orden)
@@ -158,19 +160,19 @@ export function candidatosDeVara({ entradas = [], declaradas = new Set() } = {})
   return { candidatos, omitidos }
 }
 
-// declaradasEn: el conjunto de rutas que `.agent/conventions.md` YA declara
-// hoy — todo lo que aparezca entre backticks simples, normalizado (sin `./`
-// inicial ni `/` final).
+// declaradasEn: the set of paths `.agent/conventions.md` ALREADY declares
+// today — everything appearing between single backticks, normalised (no leading
+// `./` and no trailing `/`).
 //
-// La semilla que siembra `ct-init.sh` no lleva ningún backtick, así que un
-// repo recién bootstrapeado devuelve el conjunto vacío y `candidatosDeVara`
-// propone TODO lo que encuentre — es la conducta buscada (F14: la ausencia se
-// mide, no se rellena; aquí, "nada declarado" no debe leerse como "nada que
-// proponer"). Y un DIRECTORIO declarado (p.ej. `docs/conventions/`) no
-// suprime sus ficheros: una ruta acabada en `/` no es una ruta legible, así
-// que seguir proponiendo los ficheros de dentro es la corrección, no el
-// ruido — el humano decidirá si esa declaración ya cubre el directorio o si
-// hace falta declarar los ficheros uno a uno.
+// The seed `ct-init.sh` sows carries no backtick at all, so a freshly
+// bootstrapped repo returns the empty set and `candidatosDeVara` proposes
+// EVERYTHING it finds — that is the intended behaviour (F14: absence is
+// measured, not filled in; here, "nothing declared" must not be read as
+// "nothing to propose"). And a declared DIRECTORY (e.g. `docs/conventions/`)
+// does not suppress its files: a path ending in `/` is not a readable path, so
+// going on proposing the files inside is the correct thing, not the noise — the
+// human will decide whether that declaration already covers the directory or
+// whether the files need declaring one by one.
 export function declaradasEn(contenido) {
   const out = new Set()
   for (const m of String(contenido ?? '').matchAll(/`([^`\n]+)`/g)) {
@@ -183,39 +185,38 @@ export function declaradasEn(contenido) {
   return out
 }
 
-// Los mismos marcadores que `scripts/ct-init.sh` usa para delimitar el
-// bloque "Formato de la tabla de slices" que él mismo inyecta en AGENTS.md.
-// Se duplican aquí como literal, igual que ya hacen de forma independiente
-// `scripts/conventions.js` (CONTRACT_MARKER_OPEN/CLOSE) y
-// `scripts/governed-repo.js` (CONTRACT_MARKER) — cada módulo que necesita
-// reconocer este bloque lleva su propia copia del literal en vez de importar
-// entre módulos de sujetos distintos (conventions.js es OTRO sujeto:
-// colisiones de protocolo, no la vara de código).
+// The same markers `scripts/ct-init.sh` uses to delimit the "Formato de la
+// tabla de slices" block it injects into AGENTS.md itself. They are duplicated
+// here as a literal, just as `scripts/conventions.js`
+// (CONTRACT_MARKER_OPEN/CLOSE) and `scripts/governed-repo.js`
+// (CONTRACT_MARKER) already do independently — every module that needs to
+// recognise this block carries its own copy of the literal instead of importing
+// between modules about different subjects (conventions.js is ANOTHER subject:
+// protocol collisions, not the code yardstick).
 //
-// Por qué hace falta aquí: el AGENTS.md que `ct-init.sh` CREA de cero no se
-// queda en "solo encabezados" — el propio script le añade SIEMPRE esta
-// sección de proceso (el contrato de la tabla de slices con `/ct-groom`,
-// cientos de líneas de prosa real). Esa sección es sustancia de verdad, pero
-// no es una CONVENCIÓN DE CÓDIGO: es el formato que consume `/ct-groom`, no
-// una regla de estilo del repo. Sin descontarla, `pareceEsqueleto` vería
-// sobrada sustancia y jamás marcaría el AGENTS.md recién creado — que es
-// justo el caso que motiva esta función.
+// Why it is needed here: the AGENTS.md `ct-init.sh` CREATES from scratch does
+// not stay at "headings only" — the script itself ALWAYS adds this process
+// section to it (the slices-table contract with `/ct-groom`, hundreds of lines
+// of real prose). That section is real substance, but it is not a CODE
+// CONVENTION: it is the format `/ct-groom` consumes, not a style rule of the
+// repo. Without discounting it, `pareceEsqueleto` would see substance to spare
+// and would never flag the freshly created AGENTS.md — which is exactly the
+// case that motivates this function.
 //
-// Y el mismo razonamiento, palabra por palabra, vale para el SEGUNDO bloque
-// que `ct-init.sh` inyecta desde la feature del e2e al cierre del slice: la
-// sección "Cómo se atraviesa este repo (e2e)". Se siembra como PLANTILLA con
-// sus campos vacíos (`Levantar:`, `Listo cuando:`…), que son media docena de
-// líneas con sustancia formal y cero contenido real — sin descontarla, el
-// AGENTS.md recién creado dejaría de parecer esqueleto por culpa de unos
-// campos que nadie ha rellenado todavía. Tampoco es una convención de código:
-// es cómo se levanta el repo, que es lo que consume el paso `e2e` de
-// `ct-step`.
-// Y el mismo razonamiento otra vez para el TERCER bloque, el que #93 puso en
-// el sitio que dejó el contrato: la sección corta del loop. Es prosa del
-// plugin, no una convención de código de este repo — y sus huecos (los comandos
-// de build/test/lint) los rellena el usuario, así que sin descontarla un
-// AGENTS.md recién creado dejaría de parecer esqueleto por un texto que no
-// escribió nadie de aquí.
+// And the same reasoning, word for word, holds for the SECOND block
+// `ct-init.sh` injects since the e2e-at-slice-closure feature: the section
+// "Cómo se atraviesa este repo (e2e)". It is seeded as a TEMPLATE with its
+// fields empty (`Levantar:`, `Listo cuando:`…), which are half a dozen lines
+// with formal substance and zero real content — without discounting it, the
+// freshly created AGENTS.md would stop looking like a skeleton because of some
+// fields nobody has filled in yet. It is not a code convention either: it is
+// how the repo is brought up, which is what `ct-step`'s `e2e` step consumes.
+// And the same reasoning again for the THIRD block, the one #93 put in the spot
+// the contract left behind: the loop's short section. It is the plugin's prose,
+// not a code convention of this repo — and its gaps (the build/test/lint
+// commands) are filled in by the user, so without discounting it a freshly
+// created AGENTS.md would stop looking like a skeleton because of a text nobody
+// from here wrote.
 const CT_INIT_BLOCKS = [
   ['<!-- ct-init:slices-contract -->', '<!-- /ct-init:slices-contract -->'],
   ['<!-- ct-init:e2e-howto -->', '<!-- /ct-init:e2e-howto -->'],
@@ -239,20 +240,20 @@ function sinBloquesDeCtInit(contenido) {
   return out.join('\n')
 }
 
-// pareceEsqueleto: aproximación deliberada, no un parser de markdown — cuenta
-// líneas "con sustancia" (no vacías, que no empiecen por `#` y que no sean un
-// comentario HTML de una sola línea), DESCONTANDO antes el bloque del
-// contrato de slices que `ct-init.sh` inyecta (ver arriba), y dice esqueleto
-// si hay MENOS de 3.
+// pareceEsqueleto: a deliberate approximation, not a markdown parser — it
+// counts lines "with substance" (non-empty, not starting with `#` and not a
+// single-line HTML comment), FIRST DISCOUNTING the slices-contract block
+// `ct-init.sh` injects (see above), and says skeleton if there are FEWER than
+// 3.
 //
-// Sirve para lo único que tiene que servir: distinguir el `AGENTS.md` de solo
-// encabezados que `ct-init` acaba de crear (candidato real, pero sin ninguna
-// regla dentro) de un documento con reglas de verdad — y DECIRLO, no
-// filtrarlo. Declarar el esqueleto como vara pone al juez a medir contra un
-// documento vacío y a devolver `conforme` sin serlo: es el guard imposible de
-// F14 con otro nombre. Un comentario HTML multilínea cuenta por dentro (sus
-// líneas internas no empiezan por `<!--` ni acaban en `-->`) — aceptado: es
-// una aproximación, no una prueba formal.
+// It serves the one thing it has to serve: telling the headings-only
+// `AGENTS.md` that `ct-init` has just created (a real candidate, but with no
+// rule inside) apart from a document with real rules — and SAYING SO, not
+// filtering it out. Declaring the skeleton as a yardstick sets the judge to
+// measure against an empty document and to return `conforme` without being so:
+// it is F14's impossible guard under another name. A multiline HTML comment
+// counts on the inside (its inner lines neither start with `<!--` nor end with
+// `-->`) — accepted: this is an approximation, not a formal proof.
 export function pareceEsqueleto(contenido) {
   const lineas = sinBloquesDeCtInit(contenido).split('\n')
   let sustancia = 0
@@ -266,18 +267,17 @@ export function pareceEsqueleto(contenido) {
   return sustancia < 3
 }
 
-// formatCandidatos: el bloque de texto listo para stdout de `ct-init.sh`, o
-// `''` si no hay nada que proponer (silencio = nada que proponer; ver el
-// comentario de `declaradasEn` sobre por qué eso es benigno).
+// formatCandidatos: the block of text ready for `ct-init.sh`'s stdout, or `''`
+// if there is nothing to propose (silence = nothing to propose; see the comment
+// on `declaradasEn` about why that is benign).
 //
-// Indentación de dos espacios en el detalle, igual que `formatFindings` en
-// `conventions.js`. Deliberadamente SIN las palabras "aviso" ni "ATENCIÓN" ni
-// "unblock": esto no es una alarma sobre un conflicto (eso es
-// `detect-conventions.mjs`), es material para una decisión — y
-// `__tests__/ct-init.test.js` exige que la segunda corrida de un repo
-// bootstrapeado no traiga la palabra "aviso" por stderr, corrida en la que
-// este bloque SÍ tiene candidato (el `AGENTS.md` que `ct-init` acaba de
-// crear).
+// Two-space indentation in the detail, just like `formatFindings` in
+// `conventions.js`. Deliberately WITHOUT the words "aviso", "ATENCIÓN" or
+// "unblock": this is not an alarm about a conflict (that is
+// `detect-conventions.mjs`), it is material for a decision — and
+// `__tests__/ct-init.test.js` demands that the second run of a bootstrapped
+// repo carry no word "aviso" on stderr, a run in which this block DOES have a
+// candidate (the `AGENTS.md` `ct-init` has just created).
 export function formatCandidatos(candidatos, { omitidos = 0, truncated = false } = {}) {
   if (!candidatos || candidatos.length === 0) return ''
   const out = [CANDIDATOS_HEADER]

@@ -1,5 +1,5 @@
-// Un trozo de la máquina de estados de scripts/ct-step.mjs. El preámbulo —y
-// por qué son nueve ficheros y no uno— está en fixtures/ct-step-harness.js.
+// A slice of the state machine of scripts/ct-step.mjs. The preamble —and why
+// it is nine files and not one— is in fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { writeFileSync, readFileSync, existsSync } from 'node:fs'
@@ -8,41 +8,41 @@ import { join } from 'node:path'
 import { renderState } from '../scripts/state.js'
 import { SENAL_AUSENTE } from '../scripts/kickoff.js'
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
-import { crearHelpers, montarRepo, recorridoDeSlice } from './fixtures/ct-step-harness.js'
+import { makeHelpers, makeRepo, sliceRubric } from './fixtures/ct-step-harness.js'
 
 let repo
-const { ct, veredictoDeSlice, commits, estado, juzgarSlice, tareaOk } = crearHelpers(() => repo)
+const { ct, writeSliceVerdict, commits, runState, judgeSlice, taskOk } = makeHelpers(() => repo)
 
-beforeEach(() => { repo = montarRepo() })
+beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
 
-// §3.7-B del handoff: el slice entero tiene juez. Los dos ítems que ningún
-// juez de tarea mira — si las tareas juntas entregan el fin del slice, y si
-// son coherentes entre sí.
-describe('el juicio del slice entero (§3.7-B)', () => {
-  const enJuezDeSlice = () => { tareaOk('uno.txt'); tareaOk('dos.txt'); ct('reconcile'); ct('global') }
+// §3.7-B of the handoff: the whole slice has a judge. The two items no task
+// judge ever looks at — whether the tasks together deliver the slice's end, and
+// whether they are coherent with each other.
+describe('the judgement of the whole slice (§3.7-B)', () => {
+  const enJuezDeSlice = () => { taskOk('uno.txt'); taskOk('dos.txt'); ct('reconcile'); ct('global') }
 
-  it('next despacha ct-slice-judge con el paquete del RANGO de commits', () => {
+  it('next dispatches ct-slice-judge with the package of the commit RANGE', () => {
     enJuezDeSlice()
     const r = ct('next')
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/ct-slice-judge/)
     expect(r.stdout).toMatch(/SIN Bash/)
     const paquete = readFileSync(join(repo, '.agent', 'run-7', 'slice-review.diff'), 'utf8')
-    // La secuencia de commits es la pieza que el paquete por tarea no tiene:
-    // `coherencia` sólo se ve en el orden.
+    // The commit sequence is the piece the per-task package does not have:
+    // `coherencia` is only visible in the order.
     expect(paquete).toMatch(/## Commits/)
-    expect(paquete.indexOf('la primera (#7, tarea 1/2)')).toBeLessThan(paquete.indexOf('la segunda (#7, tarea 2/2)'))
+    expect(paquete.indexOf('the first one (#7, tarea 1/2)')).toBeLessThan(paquete.indexOf('the second one (#7, tarea 2/2)'))
     expect(paquete).toMatch(/## Files changed/)
     expect(paquete).toMatch(/## Diff/)
   })
 
-  it('un PASS entrega el run y el veredicto viaja en su PROPIO commit', () => {
+  it('a PASS delivers the run and the verdict travels in its OWN commit', () => {
     enJuezDeSlice()
-    const r = juzgarSlice(veredictoDeSlice('PASS'))
+    const r = judgeSlice(writeSliceVerdict('PASS'))
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/run delivered/)
-    expect(estado().closed).toBe('delivered')
+    expect(runState().closed).toBe('delivered')
     expect(commits()).toBe(4)
     const files = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
     expect(files).toMatch(/issue-7-slice\.json/)
@@ -51,37 +51,37 @@ describe('el juicio del slice entero (§3.7-B)', () => {
     expect(guardado.tasks_total).toBe(2)
   })
 
-  it('un PASS con hallazgos medium entrega igual: no queda implementador al que devolver', () => {
+  it('a PASS with medium findings delivers all the same: there is no implementer left to send it back to', () => {
     enJuezDeSlice()
-    const r = juzgarSlice(veredictoDeSlice('PASS', [{ severity: 'medium', what: 'andamiaje sin retirar', path: 'uno.txt', line: 1 }]))
+    const r = judgeSlice(writeSliceVerdict('PASS', [{ severity: 'medium', what: 'andamiaje sin retirar', path: 'uno.txt', line: 1 }]))
     expect(r.status).toBe(0)
-    expect(estado().closed).toBe('delivered')
-    // El hallazgo viaja DENTRO del veredicto commiteado, para quien revise la PR.
+    expect(runState().closed).toBe('delivered')
+    // The finding travels INSIDE the committed verdict, for whoever reviews the pull request.
     const guardado = JSON.parse(execFileSync('git', ['show', 'HEAD:docs/superpowers/verdicts/issue-7-slice.json'], { cwd: repo, encoding: 'utf8' }))
     expect(guardado.verdict.findings).toHaveLength(1)
   })
 
-  it('un FAIL cierra el run por 1 y NO deja veredicto trackeado: solo viaja el que aprueba', () => {
+  it('a FAIL closes the run with 1 and leaves NO tracked verdict: only the one that approves travels', () => {
     enJuezDeSlice()
-    const r = juzgarSlice(veredictoDeSlice('FAIL', [{ severity: 'high', what: 'la tarea 2 deshace la 1', path: 'uno.txt', line: 1 }]))
+    const r = judgeSlice(writeSliceVerdict('FAIL', [{ severity: 'high', what: 'la tarea 2 deshace la 1', path: 'uno.txt', line: 1 }]))
     expect(r.status).toBe(1)
     expect(commits()).toBe(3)
     expect(existsSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-slice.json'))).toBe(false)
   })
 
-  it('un veredicto con regla de TAREA se descarta y se vuelve a preguntar', () => {
+  it('a verdict with a TASK rule is discarded and the question is asked again', () => {
     enJuezDeSlice()
     const p = join(repo, 'sv.json')
-    writeFileSync(p, JSON.stringify({ ruling: 'PASS', rubric: recorridoDeSlice(), findings: [{ rule: 'alcance', severity: 'low', what: 'x', path: 'y', evidence: 'z' }] }))
-    const r = juzgarSlice(p)
+    writeFileSync(p, JSON.stringify({ ruling: 'PASS', rubric: sliceRubric(), findings: [{ rule: 'alcance', severity: 'low', what: 'x', path: 'y', evidence: 'z' }] }))
+    const r = judgeSlice(p)
     expect(r.stdout).toMatch(/descartado/)
-    expect(estado().step).toBe('slice-judge')
-    expect(estado().discards).toBe(1)
+    expect(runState().step).toBe('slice-judge')
+    expect(runState().discards).toBe(1)
   })
 
-  it('las filas de global y slice-judge no son de ninguna tarea, y viajan en el commit del veredicto', () => {
+  it('the global and slice-judge rows belong to no task, and travel in the verdict commit', () => {
     enJuezDeSlice()
-    juzgarSlice(veredictoDeSlice('PASS'))
+    judgeSlice(writeSliceVerdict('PASS'))
     const commiteado = execFileSync('git', ['show', 'HEAD:docs/superpowers/metrics/issue-7.jsonl'], { cwd: repo, encoding: 'utf8' })
     const filas = commiteado.trim().split('\n').map((l) => JSON.parse(l))
     const global = filas.find((f) => f.step === 'global')
@@ -92,36 +92,35 @@ describe('el juicio del slice entero (§3.7-B)', () => {
     expect(juez.ruling).toBe('PASS')
   })
 
-  // Slice 10 — la señal cruza el embudo en el paquete: ct-step la lee del
-  // campo `senal:` del SLICE.md (disco, sin agente en medio — la doctrina del
-  // §3.3) y la pega en `## Señal`, delante del diff -U10 donde quedaría
-  // enterrada (Tarea 8: delante de ella sólo va `## Vara`). El fallback
-  // SENAL_AUSENTE cubre un SLICE.md sembrado por un plugin anterior a la
-  // columna.
+  // Slice 10 — the signal crosses the funnel inside the package: ct-step reads
+  // it from the `senal:` field of SLICE.md (disk, with no agent in between —
+  // the doctrine of §3.3) and pastes it into `## Señal`, ahead of the -U10 diff
+  // where it would be buried (Task 8: the only thing ahead of it is `## Vara`).
+  // The SENAL_AUSENTE fallback covers a SLICE.md seeded by a plugin older than
+  // the column.
   const sembrarSenalEnSliceMd = (senal) => {
     const g = (...a) => execFileSync('git', a, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
-    // Por el MISMO camino que buildStateSeed (renderState): es lo que hace
-    // que un valor largo llegue plegado/entrecomillado por YAML, como en un
-    // despacho real.
+    // Through the SAME path as buildStateSeed (renderState): that is what makes
+    // a long value arrive folded/quoted by YAML, as in a real dispatch.
     writeFileSync(join(repo, '.agent', 'SLICE.md'), renderState({ meta: { issue: 7, epic: 12, senal }, body: '# slice de mentira' }))
     g('add', '.agent/SLICE.md')
     g('commit', '-q', '-m', 'siembra la senal del slice')
   }
 
-  it('el paquete de slice trae "## Señal" delante de Commits/Files changed/Diff, con el texto del campo senal: del SLICE.md', () => {
+  it('the slice package carries "## Señal" ahead of Commits/Files changed/Diff, with the text of the senal: field of SLICE.md', () => {
     sembrarSenalEnSliceMd('métrica `backfill_progress` con label `estado`')
     enJuezDeSlice()
     ct('next')
     const paquete = readFileSync(join(repo, '.agent', 'run-7', 'slice-review.diff'), 'utf8')
     expect(paquete).toMatch(/## Señal/)
     expect(paquete).toContain('métrica `backfill_progress` con label `estado`')
-    // Primera: antes de Commits/Files changed/Diff.
+    // First: ahead of Commits/Files changed/Diff.
     expect(paquete.indexOf('## Señal')).toBeLessThan(paquete.indexOf('## Commits'))
   })
 
-  it('sin campo senal: en el SLICE.md, la sección declara la ausencia con SENAL_AUSENTE', () => {
-    // El fixture de montarRepo siembra un SLICE.md SIN campo senal — el caso
-    // de un plugin anterior a la columna.
+  it('with no senal: field in the SLICE.md, the section declares the absence with SENAL_AUSENTE', () => {
+    // The montarRepo fixture seeds a SLICE.md WITHOUT a senal field — the case
+    // of a plugin older than the column.
     enJuezDeSlice()
     ct('next')
     const paquete = readFileSync(join(repo, '.agent', 'run-7', 'slice-review.diff'), 'utf8')
@@ -130,11 +129,11 @@ describe('el juicio del slice entero (§3.7-B)', () => {
     expect(paquete.indexOf('## Señal')).toBeLessThan(paquete.indexOf('## Commits'))
   })
 
-  it('una señal larga (plegada por YAML) llega entera al paquete', () => {
-    // > 100 caracteres en una sola pieza: renderState (yaml.stringify) la
-    // pliega en varias líneas del frontmatter — una regex de línea única (la
-    // de `epic:`) la truncaría y la vara del ítem llegaría a medias sin que
-    // nadie lo viera. Esta es la razón de parseStateSafe.
+  it('a long signal (folded by YAML) arrives whole in the package', () => {
+    // > 100 characters in a single piece: renderState (yaml.stringify) folds it
+    // across several frontmatter lines — a single-line regex (the one for
+    // `epic:`) would truncate it and the item's yardstick would arrive half
+    // there with nobody seeing it. This is the reason for parseStateSafe.
     const larga = 'métrica `harvest_rows_total` con label `estado` acotado a los valores enumerados del contrato, emitida por el worker de cosecha en cada lote confirmado'
     expect(larga.length).toBeGreaterThan(100)
     sembrarSenalEnSliceMd(larga)

@@ -1,30 +1,31 @@
-// Señales de vida de un slice.
+// Signs of life of a slice.
 //
-// `assessLocalLiveness` responde si queda RASTRO de un slice en esta máquina
-// —worktree, rama, ventana de cmux—, que no es lo mismo que si alguien está
-// TRABAJANDO en él. La diferencia es justamente la razón de que un slice
-// muerto pudiera pasar desapercibido para siempre: al morir deja el worktree y
-// la rama en su sitio, así que "queda rastro" responde que sí.
+// `assessLocalLiveness` answers whether any TRACE of a slice is left on this
+// machine —worktree, branch, cmux window—, which is not the same as whether
+// anyone is WORKING on it. That difference is precisely the reason a dead slice
+// could go unnoticed forever: on dying it leaves the worktree and the branch
+// where they were, so "a trace is left" answers yes.
 //
-// `liveSliceProcesses` responde la otra pregunta: ¿hay un proceso `claude`
-// trabajando AHORA MISMO dentro del worktree de cada slice? Es la señal que
-// falta en `assessLocalLiveness`, y por eso vive en el mismo módulo.
+// `liveSliceProcesses` answers the other question: is there a `claude` process
+// working RIGHT NOW inside each slice's worktree? It is the signal missing from
+// `assessLocalLiveness`, and that is why it lives in the same module.
 
 import { existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 
-// `getCmuxTitles` es un THUNK, no el valor ya calculado (F13): la consulta a
-// cmux (list-windows + un workspace list por ventana, hasta
-// CMUX_QUERY_TIMEOUT_MS) solo se dispara si las DOS señales baratas y locales
-// —worktree en disco, rama en este checkout— han fallado ya. Antes el valor
-// llegaba precalculado, así que preguntar por la vida de un issue costaba
-// siempre la consulta completa aunque su worktree estuviera ahí delante.
+// `getCmuxTitles` is a THUNK, not the already computed value (F13): the query
+// to cmux (list-windows + one workspace list per window, up to
+// CMUX_QUERY_TIMEOUT_MS) only fires if the TWO cheap and local signals
+// —worktree on disk, branch in this checkout— have already failed. Before, the
+// value arrived precomputed, so asking about the life of an issue always cost
+// the full query even when its worktree was sitting right there.
 //
-// Importa desde F13/H3, que amplía la comprobación al caso "cap lleno" — el
-// resultado MÁS COMÚN de un /ct-next con algo corriendo. Sin esta inversión,
-// cada invocación rutinaria pagaría la consulta a cmux para no decir nada.
-// La semántica no cambia en absoluto: basta UNA señal de vida para no emitir
-// nota, y el orden en que se comprueban no altera esa conjunción.
+// It matters from F13/H3 on, which widens the check to the "cap full" case —
+// the MOST COMMON outcome of a /ct-next with something running. Without this
+// inversion, every routine invocation would pay for the cmux query only to say
+// nothing. The semantics do not change at all: ONE sign of life is enough for
+// no note to be emitted, and the order in which they are checked does not
+// alter that conjunction.
 export function assessLocalLiveness(n, getCmuxTitles, { repoRoot, timeoutMs }) {
   const wt = `${repoRoot}/.worktrees/${n}`
   const hasWorktree = existsSync(wt)
@@ -37,11 +38,11 @@ export function assessLocalLiveness(n, getCmuxTitles, { repoRoot, timeoutMs }) {
   } catch {
     hasBranch = false
   }
-  // Corto aquí: con worktree o rama ya sabemos que NO hay nota que emitir, y
-  // `cmuxChecked` es irrelevante en ese camino (stalenessNote sale por el
-  // primer `return null`). Afirmar `cmuxChecked: false` sin haber preguntado
-  // sería correcto pero engañoso si alguien leyera el struct fuera de aquí,
-  // así que se marca explícitamente como no consultado.
+  // Cut short here: with a worktree or a branch we already know there is NO
+  // note to emit, and `cmuxChecked` is irrelevant on that path (stalenessNote
+  // leaves through the first `return null`). Asserting `cmuxChecked: false`
+  // without having asked would be correct but misleading if anyone read the
+  // struct outside here, so it is explicitly marked as not consulted.
   if (hasWorktree || hasBranch) return { hasWorktree, hasBranch, hasCmuxWorkspace: false, cmuxChecked: false }
   const cmuxTitles = getCmuxTitles()
   const cmuxChecked = cmuxTitles !== null
@@ -49,123 +50,127 @@ export function assessLocalLiveness(n, getCmuxTitles, { repoRoot, timeoutMs }) {
   return { hasWorktree, hasBranch, hasCmuxWorkspace, cmuxChecked }
 }
 
-// SEÑAL_TIMEOUT_MS: ni `ps` ni `lsof` pueden dejar este comando colgado para
-// siempre. `lsof` es el caso clásico —un montaje de red muerto lo bloquea
-// indefinidamente al estatear el cwd de un proceso— y /ct-status se vende como
-// invocable en bucle por un vigilante externo: un cuelgue ahí no devuelve ni
-// código de salida. Mismo criterio que sus vecinas (`gh` y `git` en
-// ct-status.mjs, y el `execFileSync` de `assessLocalLiveness` aquí arriba):
-// `timeout` + `killSignal: 'SIGKILL'`, porque un SIGTERM a un proceso atascado
-// en una llamada al sistema no lo mata. El tope es holgado a propósito: medido
-// en esta máquina, `ps` tarda 26 ms y un `lsof` agrupado sobre 400 PID tarda
-// 180 ms, así que 10 s son ~55x el peor caso medido — no se dispara por carga,
-// sólo por un cuelgue de verdad. Un timeout llega aquí con `status: null` (no
-// 1), así que cae por la rama de "no se pudo comprobar" con su motivo, nunca
-// por la de la lista vacía.
+// SEÑAL_TIMEOUT_MS: neither `ps` nor `lsof` may leave this command hanging
+// forever. `lsof` is the classic case —a dead network mount blocks it
+// indefinitely while stat-ing a process's cwd— and /ct-status is sold as
+// invokable in a loop by an external watcher: a hang there does not even return
+// an exit code. Same criterion as its neighbours (`gh` and `git` in
+// ct-status.mjs, and the `execFileSync` of `assessLocalLiveness` just above):
+// `timeout` + `killSignal: 'SIGKILL'`, because a SIGTERM to a process stuck in
+// a system call does not kill it. The cap is generous on purpose: measured on
+// this machine, `ps` takes 26 ms and a grouped `lsof` over 400 PIDs takes
+// 180 ms, so 10 s is ~55x the worst measured case — it does not fire because of
+// load, only because of a real hang. A timeout arrives here with `status: null`
+// (not 1), so it falls through the "could not be checked" branch with its
+// reason, never through the empty-list one.
 const SEÑAL_TIMEOUT_MS = 10_000
 const ejecutar = (cmd, args, opciones) => execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opciones })
 
-// basename exacto de la RUTA con la que se invocó un proceso. Sin `path.basename`
-// a propósito: aquí no se normaliza nada, se corta por la última barra y se
-// compara tal cual.
+// Exact basename of the PATH a process was invoked with. No `path.basename` on
+// purpose: nothing is normalised here, it is cut at the last slash and compared
+// as it is.
 const nombreInvocado = (ruta) => ruta.slice(ruta.lastIndexOf('/') + 1)
 
-// liveSliceProcesses: ¿qué slices tienen AHORA MISMO un proceso `claude`
-// trabajando dentro de su worktree? Es la pregunta que ninguna otra señal del
-// loop responde: al morir, un agente deja worktree, rama y ventana de cmux en
-// su sitio, así que todo lo demás sigue diciendo "vivo".
+// liveSliceProcesses: which slices have, RIGHT NOW, a `claude` process working
+// inside their worktree? It is the question no other signal of the loop
+// answers: on dying, an agent leaves worktree, branch and cmux window where
+// they were, so everything else keeps saying "alive".
 //
-// SE IDENTIFICA POR LA RUTA INVOCADA, NO POR `pgrep -x`, y no es una cuestión
-// de gusto: `pgrep -x claude` NO ve al Claude Code que te está ejecutando.
+// IT IS IDENTIFIED BY THE INVOKED PATH, NOT BY `pgrep -x`, and it is not a
+// matter of taste: `pgrep -x claude` does NOT see the Claude Code that is
+// running you.
 //
-// ANTES DE LOS DOS HECHOS, EL QUE LOS DESAMBIGUA, porque sin él es fácil sacar
-// de aquí una conclusión falsa: en macOS `pgrep -x` NO casa contra el nombre
-// del proceso, casa contra el basename de `argv[0]`. Comprobado en aislado con
-// un symlink `falsoclaude` → `/bin/sleep` ejecutado como `./falsoclaude`:
-//   $ pgrep -x falsoclaude  → lo lista     (basename de argv[0])
-//   $ pgrep -x sleep        → NO lo lista  (y "sleep" es su ucomm)
-// O sea que `pgrep -x claude` sí encuentra procesos de Claude Code — todos
-// menos sus propios ancestros, que es justo la excepción que lo rompía aquí.
-// No es que no encuentre ninguno; es que no encuentra EL que importa. Y el
-// hecho 1 de abajo es lo que hace que la alternativa obvia —matchear por
-// nombre de proceso— tampoco sirva.
+// BEFORE THE TWO FACTS, THE ONE THAT DISAMBIGUATES THEM, because without it it
+// is easy to take a false conclusion out of here: on macOS `pgrep -x` does NOT
+// match against the process name, it matches against the basename of `argv[0]`.
+// Checked in isolation with a symlink `falsoclaude` → `/bin/sleep` run as
+// `./falsoclaude`:
+//   $ pgrep -x falsoclaude  → lists it      (basename of argv[0])
+//   $ pgrep -x sleep        → does NOT      (and "sleep" is its ucomm)
+// So `pgrep -x claude` does find Claude Code processes — all of them but its
+// own ancestors, which is exactly the exception that broke it here. It is not
+// that it finds none; it is that it does not find THE one that matters. And
+// fact 1 below is what makes the obvious alternative —matching by process
+// name— useless too.
 //
-// Dos hechos medidos en esta máquina, los dos hoy:
+// Two facts measured on this machine, both today:
 //
-//   1. El nombre de proceso no es "claude". El instalador nativo deja
-//      `~/.local/bin/claude` como symlink a
-//      `~/.local/share/claude/versions/<versión>`, y el kernel toma el nombre
-//      del proceso del ejecutable YA RESUELTO:
+//   1. The process name is not "claude". The native installer leaves
+//      `~/.local/bin/claude` as a symlink to
+//      `~/.local/share/claude/versions/<version>`, and the kernel takes the
+//      process name from the ALREADY RESOLVED executable:
 //        $ ps -u <uid> -o pid=,ucomm=  →  18539  2.1.220
-//      El nombre del proceso ES el número de versión, y cambia con cada
-//      actualización. Cualquier matcheo por NOMBRE persigue un blanco móvil.
-//   2. LA CAUSA DOMINANTE: `pgrep` excluye a sus propios ancestros. `man
-//      pgrep`, flag `-a`: «By default, the current pgrep or pkill process and
-//      all of its ancestors are excluded». Como /ct-status se invoca DESDE una
-//      sesión de Claude Code, el `claude` de esa sesión es ancestro del
-//      `pgrep` y queda fuera:
-//        $ pgrep -x claude   → no lista el pid 18539, que sí está en `ps`
-//      Con una sola sesión abierta la salida es vacía y rc=1 — que este código
-//      interpretaba como «ninguna coincidencia, respuesta normal» y por tanto
-//      `comprobado: true`. Resultado: TODO slice sano en vuelo salía «← SIN
-//      SEÑAL DE VIDA» con exit 3 y sin un solo `aviso:`, y el bloque de
-//      residuo afirmaba «no hay ningún proceso trabajando dentro» sobre un
-//      worktree con un agente dentro. La degradación segura no se activaba
-//      porque, desde dentro, la lectura «había sido un éxito». Es el peor
-//      fallo posible de esta feature. No vuelvas a `pgrep`.
+//      The process name IS the version number, and it changes with every
+//      update. Any matching by NAME chases a moving target.
+//   2. THE DOMINANT CAUSE: `pgrep` excludes its own ancestors. `man pgrep`,
+//      flag `-a`: «By default, the current pgrep or pkill process and all of
+//      its ancestors are excluded». Since /ct-status is invoked FROM a Claude
+//      Code session, the `claude` of that session is an ancestor of the
+//      `pgrep` and is left out:
+//        $ pgrep -x claude   → does not list pid 18539, which `ps` does
+//      With a single session open the output is empty and rc=1 — which this
+//      code read as «no match at all, a normal answer» and therefore
+//      `comprobado: true`. Result: EVERY healthy in-flight slice came out as
+//      «← SIN SEÑAL DE VIDA» with exit 3 and without a single `aviso:`, and
+//      the residue block asserted «no hay ningún proceso trabajando dentro»
+//      about a worktree with an agent inside it. The safe degradation did not
+//      kick in because, from the inside, the read «had been a success». It is
+//      the worst possible failure of this feature. Do not go back to `pgrep`.
 //
-// Lo que sí identifica es la RUTA con la que se invocó el proceso, que `ps`
-// da en la columna `comm` y que sobrevive a los cambios de versión:
+// What does identify it is the PATH the process was invoked with, which `ps`
+// gives in the `comm` column and which survives the version changes:
 //   $ ps -o comm= -p 18539  →  /Users/jpereag/.local/bin/claude
-// Se acepta sólo si su basename es EXACTAMENTE `claude`, comparando string
-// contra string. El matcheo exacto no es celo: deja fuera la app de escritorio
-// sin ninguna regla extra —`/Applications/Claude.app/Contents/MacOS/Claude`
-// tiene basename `Claude` con mayúscula, y sus helpers `Claude Helper`,
-// `Claude Helper (Renderer)`, `Claude Helper (Plugin)`—, y una ventana abierta
-// del escritorio no es un agente trabajando en ningún worktree.
+// It is accepted only if its basename is EXACTLY `claude`, comparing string
+// against string. The exact match is not zeal: it leaves the desktop app out
+// with no extra rule at all —`/Applications/Claude.app/Contents/MacOS/Claude`
+// has basename `Claude` with a capital letter, and its helpers `Claude Helper`,
+// `Claude Helper (Renderer)`, `Claude Helper (Plugin)`—, and an open desktop
+// window is not an agent working in any worktree.
 //
-// `ps -u <uid>` acota al usuario actual, igual que hacía el `-U` de `pgrep` y
-// por el mismo motivo: es lo que hace segura la lectura del `stdout` parcial
-// de `lsof` de más abajo. Y `ps`, a diferencia de `pgrep`, NO excluye
-// ancestros: por eso este camino sí ve la sesión desde la que se le llama.
-// Comprobado en aislado: un proceso invocado como `<dir>/claude` que ejecuta
-// `pgrep -x claude` NO se ve a sí mismo en la salida; el filtro de aquí abajo
-// sí lo lista.
+// `ps -u <uid>` narrows to the current user, just as `pgrep`'s `-U` did and for
+// the same reason: it is what makes reading the partial `stdout` of `lsof`
+// further down safe. And `ps`, unlike `pgrep`, does NOT exclude ancestors:
+// that is why this path does see the session it is called from. Checked in
+// isolation: a process invoked as `<dir>/claude` that runs `pgrep -x claude`
+// does NOT see itself in the output; the filter down here does list it.
 //
-// LÍMITE CONOCIDO, y ya PARCIALMENTE MEDIDO. Todo lo de arriba está medido en
-// macOS: que la columna `comm` de `ps` traiga la RUTA invocada es lo que hace
-// funcionar esto, y en otro sistema operativo esa columna puede significar
-// otra cosa.
+// KNOWN LIMIT, and already PARTIALLY MEASURED. Everything above is measured on
+// macOS: that the `comm` column of `ps` carries the invoked PATH is what makes
+// this work, and on another operating system that column may mean something
+// else.
 //
-// Lo que se pedía verificar «si alguien lleva el loop a Linux» ya tiene
-// respuesta, y la dio la primera corrida de la integración continua sobre
-// ubuntu-latest (ver el canario de __tests__/ct-status.test.js): en Linux
-// `comm` —y su alias `ucomm`— dan el basename INVOCADO, no la ruta completa ni
-// el ejecutable resuelto. Para el filtro de aquí abajo eso da igual: toma el
-// basename de lo que devuelva `comm`, y el basename de 'claude' es 'claude'.
-// Así que la señal funciona en los dos sistemas, por caminos distintos.
+// What was to be verified «if anyone takes the loop to Linux» already has an
+// answer, and it was given by the first continuous integration run on
+// ubuntu-latest (see the canary of __tests__/ct-status.test.js): on Linux
+// `comm` —and its alias `ucomm`— give the INVOKED basename, not the full path
+// nor the resolved executable. For the filter down here that makes no
+// difference: it takes the basename of whatever `comm` returns, and the
+// basename of 'claude' is 'claude'. So the signal works on both systems, by
+// different routes.
 //
-// Lo que NO está medido en Linux, y conviene saberlo antes de fiarse: `comm`
-// está TRUNCADO a 15 caracteres (TASK_COMM_LEN). A `claude` no le afecta, pero
-// cualquier futuro binario con un nombre más largo se compararía contra una
-// cadena cortada. Y el resto del camino —el agrupado de `lsof`, sus códigos de
-// salida, los topes de tiempo— sigue medido sólo en macOS.
+// What is NOT measured on Linux, and is worth knowing before trusting it:
+// `comm` is TRUNCATED to 15 characters (TASK_COMM_LEN). It does not affect
+// `claude`, but any future binary with a longer name would be compared against
+// a cut string. And the rest of the path —the grouping of `lsof`, its exit
+// codes, the time caps— is still measured only on macOS.
 //
-// Una sola llamada a `lsof` para todos los PID (medido: 180 ms sobre 400 PID).
-// Un PID que muera entre el `ps` y el `lsof` no rompe nada, pero no porque
-// `lsof` "salga con 0 y lo omita" —eso es falso, medido—: `lsof` sale con **1**
-// en cuanto falta UNO de los PID pedidos, aunque el resto se resuelva bien y
-// venga en `stdout`. Leer ese `stdout` parcial sólo es seguro PORQUE la lista
-// está acotada al usuario actual: todo PID de la lista es propio y legible,
-// así que la única razón de que falte en la salida de `lsof` es que haya
-// muerto —y un proceso muerto no trabaja en ningún worktree. Sin el acotado
-// por usuario, un PID ajeno (no legible por permisos) produciría el mismo rc=1
-// y aquí se leería como "muerto" pudiendo seguir vivo: sería la única vía de
-// acusar en falso a un slice sano. No lo quites.
+// A single call to `lsof` for every PID (measured: 180 ms over 400 PIDs). A PID
+// that dies between the `ps` and the `lsof` breaks nothing, but not because
+// `lsof` "exits with 0 and omits it" —that is false, measured—: `lsof` exits
+// with **1** as soon as ONE of the requested PIDs is missing, even when the
+// rest resolve fine and come in `stdout`. Reading that partial `stdout` is only
+// safe BECAUSE the list is narrowed to the current user: every PID in the list
+// is our own and readable, so the only reason for one to be missing from the
+// output of `lsof` is that it has died —and a dead process is not working in
+// any worktree. Without the narrowing by user, someone else's PID (not readable
+// for permission reasons) would produce the same rc=1 and would be read here as
+// "dead" while it could still be alive: it would be the only way to falsely
+// accuse a healthy slice. Do not take it out.
 export function liveSliceProcesses(repoRoot, { run = ejecutar } = {}) {
-  // `process.getuid` no existe en Windows. Sin uid no hay acotado posible, y
-  // un listado sin acotar rompe la premisa que hace segura la lectura parcial
-  // de `lsof` de más abajo, así que se degrada aquí en vez de arriesgarse.
+  // `process.getuid` does not exist on Windows. Without a uid no narrowing is
+  // possible, and an unnarrowed listing breaks the premise that makes the
+  // partial read of `lsof` further down safe, so it degrades here instead of
+  // taking the risk.
   if (typeof process.getuid !== 'function') {
     return { porSlice: new Map(), comprobado: false, motivo: 'no se pudo determinar el usuario actual: process.getuid no está disponible en esta plataforma' }
   }
@@ -175,44 +180,45 @@ export function liveSliceProcesses(repoRoot, { run = ejecutar } = {}) {
   try {
     listado = run('ps', ['-u', String(uid), '-o', 'pid=,comm='], { timeout: SEÑAL_TIMEOUT_MS, killSignal: 'SIGKILL' })
   } catch (e) {
-    // Un `ps` que falla es una lectura que NO se pudo hacer. Nunca una lista
-    // vacía presentada como hecho: ese es exactamente el fallo que este módulo
-    // acaba de arreglar.
+    // A `ps` that fails is a read that could NOT be made. Never an empty list
+    // presented as a fact: that is exactly the failure this module has just
+    // fixed.
     return { porSlice: new Map(), comprobado: false, motivo: `no se pudo listar procesos con ps: ${e && e.message}` }
   }
   const pids = []
   for (const linea of listado.split('\n')) {
-    // El PID es el primer campo y TODO el resto de la línea es la ruta. No se
-    // parte por espacios: las rutas de la app de escritorio los llevan dentro
-    // (`.../Claude Helper.app/Contents/MacOS/Claude Helper`), y partir por
-    // espacios convertiría esa línea en el token suelto `Helper`.
+    // The PID is the first field and ALL the rest of the line is the path. It
+    // is not split on spaces: the desktop app's paths carry them inside
+    // (`.../Claude Helper.app/Contents/MacOS/Claude Helper`), and splitting on
+    // spaces would turn that line into the loose token `Helper`.
     const m = /^\s*(\d+)\s+(.*)$/.exec(linea)
     if (!m) continue
     if (nombreInvocado(m[2]) !== 'claude') continue
     pids.push(m[1])
   }
-  // Sin PID no se llama a lsof, y no es una optimización: medido, `lsof -a -p ""
-  // -d cwd -Fpn` no devuelve nada vacío — devuelve el cwd de TODOS los procesos
-  // legibles de la máquina con rc=0 (cientos de entradas: 399 en la corrida
-  // medida), porque una lista de PID vacía no restringe nada. La lista vacía
-  // produciría entonces un falso positivo por cada worktree.
+  // With no PIDs lsof is not called, and it is not an optimisation: measured,
+  // `lsof -a -p "" -d cwd -Fpn` does not return anything empty — it returns the
+  // cwd of ALL the readable processes on the machine with rc=0 (hundreds of
+  // entries: 399 in the measured run), because an empty PID list restricts
+  // nothing. The empty list would then produce one false positive per
+  // worktree.
   if (!pids.length) return { porSlice: new Map(), comprobado: true, motivo: null }
 
   let salida
   try {
     salida = run('lsof', ['-a', '-p', pids.join(','), '-d', 'cwd', '-Fpn'], { timeout: SEÑAL_TIMEOUT_MS, killSignal: 'SIGKILL' })
   } catch (e) {
-    // rc=1 con `stdout` legible es la carrera ps→lsof, no un fallo: ver el
-    // comentario de cabecera de esta función sobre por qué acotar por usuario
-    // es lo que hace segura esta lectura parcial.
+    // rc=1 with a readable `stdout` is the ps→lsof race, not a failure: see
+    // this function's header comment on why narrowing by user is what makes
+    // this partial read safe.
     //
-    // `status === 1` es la mitad que NO se puede quitar, y no está ahí de
-    // adorno: rc=1 es el único código que significa "faltaba algún PID". Un
-    // `lsof` que no existe sale con 127, y un `lsof` matado por el `timeout`
-    // de arriba llega con `status: null` — los dos pueden traer un `stdout`
-    // string (vacío, o cortado a la mitad). Sin esta mitad de la condición,
-    // esos dos casos se leerían como una lectura BUENA y parcial: el informe
-    // afirmaría "no hay nadie vivo" sobre un `stdout` que se quedó a medias.
+    // `status === 1` is the half that can NOT be taken out, and it is not there
+    // for decoration: rc=1 is the only code that means "some PID was missing".
+    // An `lsof` that does not exist exits with 127, and an `lsof` killed by the
+    // `timeout` above arrives with `status: null` — both can carry a `stdout`
+    // string (empty, or cut in half). Without this half of the condition, those
+    // two cases would be read as a GOOD, partial read: the report would assert
+    // "nobody is alive" over a `stdout` that stopped halfway.
     if (e && e.status === 1 && typeof e.stdout === 'string') {
       salida = e.stdout
     } else {
@@ -220,7 +226,7 @@ export function liveSliceProcesses(repoRoot, { run = ejecutar } = {}) {
     }
   }
 
-  // `-Fpn` emite tripletes: p<pid> / fcwd / n<ruta>.
+  // `-Fpn` emits triplets: p<pid> / fcwd / n<path>.
   const porSlice = new Map()
   const prefijo = `${repoRoot}/.worktrees/`
   let pidActual = null
@@ -231,8 +237,8 @@ export function liveSliceProcesses(repoRoot, { run = ejecutar } = {}) {
     const pid = pidActual
     pidActual = null
     if (!cwd.startsWith(prefijo)) continue
-    // El agente puede haberse metido MÁS ADENTRO del worktree, así que se toma
-    // el primer segmento tras `.worktrees/`, no la ruta entera.
+    // The agent may have gone DEEPER INSIDE the worktree, so the first segment
+    // after `.worktrees/` is taken, not the whole path.
     const slice = cwd.slice(prefijo.length).split('/')[0]
     if (slice && !porSlice.has(slice)) porSlice.set(slice, pid)
   }

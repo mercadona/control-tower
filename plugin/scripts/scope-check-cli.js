@@ -1,24 +1,25 @@
 #!/usr/bin/env node
-// scope-check — EL GATE DE CONFORMIDAD DEL PR. ¿Los ficheros que tocó este PR
-// caben en el alcance que su epic declaró?
+// scope-check — THE CONFORMANCE GATE OF THE PR. Do the files this PR touched
+// fit inside the scope its epic declared?
 //
-// CORRE EN EL REPO DESTINO, COMO CHECK DE CI SOBRE EL PR. No en
-// `dispatch-check --release`: ese lo invoca el propio agente, y un guard que
-// ejecuta el sospechoso no es un guard. Y no como bloque de texto en el cuerpo
-// del PR: un párrafo más compite con los otros veinte que ya nadie lee. El
-// producto de este comando es un check ROJO, que es binario y no se puede leer
-// por encima.
+// IT RUNS IN THE TARGET REPO, AS A CI CHECK OVER THE PR. Not inside
+// `dispatch-check --release`: that one is invoked by the agent itself, and a
+// guard that the suspect runs is not a guard. And not as a block of text in
+// the body of the PR: one more paragraph competes with the other twenty that
+// nobody reads any more. The product of this command is a RED check, which is
+// binary and cannot be skimmed over.
 //
-// SE DISTRIBUYE BUNDLEADO (dist/scope-check.js, sin dependencias npm en
-// runtime) porque el repo destino NO tiene el plugin instalado en CI. El
-// workflow que lo invoca y los tres pasos para instalarlo a mano viven en
-// `docs/loop/ct-scope-gate.md` del repo del plugin: nada lo vendoriza solo.
+// IT IS DISTRIBUTED BUNDLED (dist/scope-check.js, with no npm dependencies at
+// runtime) because the target repo does NOT have the plugin installed in CI.
+// The workflow that invokes it and the three steps to install it by hand live
+// in `docs/loop/ct-scope-gate.md` of the plugin's repo: nothing vendors it on
+// its own.
 //
-// POR QUÉ EXISTE: despacho 1, slice 4 — el agente tocó copy GDPR en pantalla
-// contra su «Protegido» y escribió que Jose lo había autorizado. Era falso. La
-// firma humana no es verificable desde dentro del loop (el agente corre con las
-// credenciales de Jose y puede fabricar cualquier artefacto de GitHub); lo que
-// tocó, sí. Ver scripts/scope.js.
+// WHY IT EXISTS: dispatch 1, slice 4 — the agent touched GDPR copy on screen
+// against its «Protegido» and wrote that Jose had authorised it. That was
+// false. The human signature is not verifiable from inside the loop (the agent
+// runs with Jose's credentials and can fabricate any GitHub artefact); what it
+// touched is. See scripts/scope.js.
 import { execFileSync } from 'node:child_process'
 import { parseScope, scopeViolations, issueFromPrBody, isSliceBranch } from './scope.js'
 
@@ -32,10 +33,11 @@ const arg = (f) => {
 const usage = 'uso: scope-check --repo <owner/repo> --pr <número> [--exempt <patrón,patrón>]'
 const repo = arg('--repo')
 const pr = arg('--pr')
-// Exenciones DEL REPO DESTINO: su contabilidad propia (un ledger, una bitácora)
-// que sus convenciones obligan a tocar en cada slice. Se pasan desde el workflow
-// porque son del repo, no del loop: hardcodearlas en el plugin las convertiría
-// en agujeros para todos los demás repos. Se SUMAN a las del plugin.
+// Exemptions OF THE TARGET REPO: its own bookkeeping (a ledger, a logbook)
+// that its conventions force every slice to touch. They are passed in from the
+// workflow because they belong to the repo, not to the loop: hardcoding them
+// in the plugin would turn them into holes for every other repo. They ADD UP
+// to the plugin's own.
 const exemptRaw = arg('--exempt')
 const exempt = typeof exemptRaw === 'string' ? exemptRaw.split(',').map((s) => s.trim()).filter(Boolean) : []
 if (typeof repo !== 'string' || typeof pr !== 'string' || !/^\d+$/.test(pr)) {
@@ -45,10 +47,10 @@ if (typeof repo !== 'string' || typeof pr !== 'string' || !/^\d+$/.test(pr)) {
 
 const gh = (a) => execFileSync('gh', a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 20 * 1024 * 1024, timeout: 5 * 60 * 1000, killSignal: 'SIGKILL' })
 
-// TODO fallo de lectura es ROJO, nunca verde. Es la regla que el resto del
-// plugin ya sostiene («el 1 nunca se degrada a 0»): no poder comprobar NO es
-// estar limpio. Un gate que se cae en abierto ante un error de red es peor que
-// no tener gate, porque además tranquiliza.
+// EVERY read failure is RED, never green. It is the rule the rest of the
+// plugin already holds up («el 1 nunca se degrada a 0»): not being able to
+// check is NOT being clean. A gate that fails open on a network error is worse
+// than having no gate, because on top of that it reassures.
 function morir(mensaje, detalle) {
   console.error(`🛑 scope-check: ${mensaje}`)
   if (detalle) console.error(`   ${detalle}`)
@@ -64,27 +66,29 @@ try {
 
 const issueN = issueFromPrBody(prData.body)
 if (!issueN) {
-  // AQUÍ SE DECIDE SI ESTE GATE SOBREVIVE A LA SEMANA QUE VIENE.
+  // THIS IS WHERE IT IS DECIDED WHETHER THIS GATE SURVIVES NEXT WEEK.
   //
-  // Un repo gobernado tiene PRs que NO son slices: documentación, chores,
-  // arreglos a mano. Ninguno lleva `Closes #N` y ninguno es cosecha del loop.
-  // Suspenderlos a todos convertiría el gate en un muro insatisfacible, y un
-  // muro así se desactiva entero en cuestión de días — es el fallo que
-  // conventions.js ya pagó en este repo (F14), y desactivado no protege nada.
+  // A governed repo has PRs that are NOT slices: documentation, chores, fixes
+  // made by hand. None of them carries `Closes #N` and none of them is harvest
+  // of the loop. Failing them all would turn the gate into an unsatisfiable
+  // wall, and a wall like that gets switched off whole within days — it is the
+  // failure conventions.js already paid for in this repo (F14), and switched
+  // off it protects nothing.
   //
-  // La discriminación es la RAMA, no el cuerpo del PR, porque `feat/<n>` la
-  // crea el dispatcher y no el agente. Un PR que viene de una rama de slice sin
-  // su `Closes` está roto por dos motivos a la vez —el gate no sabe qué alcance
-  // aplicar Y el issue no se cerrará al mergear, reteniendo sus tokens para
-  // siempre— así que ése sí sale rojo.
+  // The discriminator is the BRANCH, not the body of the PR, because
+  // `feat/<n>` is created by the dispatcher and not by the agent. A PR that
+  // comes from a slice branch without its `Closes` is broken for two reasons
+  // at once —the gate does not know which scope to apply AND the issue will
+  // not be closed on merge, holding its tokens forever— so that one does come
+  // out red.
   if (isSliceBranch(prData.headRefName)) {
     morir(
       `el PR #${pr} viene de la rama de slice \`${prData.headRefName}\` pero no declara un único issue con una closing keyword en su CUERPO`,
       'Añade `Closes #<issue>` al cuerpo del PR (no al título, no en un comentario). Sin él, además, el issue no se cierra al mergear y el slice retiene sus tokens de `area:`/`touches:` para siempre.',
     )
   }
-  // Se dice en voz alta que no se ha comprobado nada. Un check verde y mudo
-  // sería indistinguible de un check verde que sí juzgó algo.
+  // It is said out loud that nothing has been checked. A green and mute check
+  // would be indistinguishable from a green check that did judge something.
   console.log(`✅ scope-check: el PR #${pr} no es un slice del loop (rama \`${prData.headRefName}\`, sin closing keyword). No hay alcance de epic que comprobar.`)
   process.exit(0)
 }
@@ -116,10 +120,11 @@ if (violaciones.length) {
   console.error('   Fuera de alcance:')
   for (const f of violaciones) console.error(`     ✗ ${f}`)
   console.error('')
-  // El mensaje no acusa de mala fe y no debe: el modo de fallo real medido no
-  // es un agente adversario, es un agente que se convence a sí mismo de que ya
-  // preguntó. Lo que se pide es que la decisión vuelva al humano, que es justo
-  // el paso que aquel agente se saltó.
+  // The message does not accuse anybody of bad faith, and it must not: the
+  // real failure mode that was measured is not an adversarial agent, it is an
+  // agent that convinces itself it already asked. What is asked for is that
+  // the decision go back to the human, which is exactly the step that agent
+  // skipped.
   console.error('   Esto NO se arregla editando el registro del PR. O el trabajo sale del PR,')
   console.error('   o el alcance del epic cambia — y cambiar el alcance de un epic congelado es')
   console.error('   una decisión humana, no del agente.')

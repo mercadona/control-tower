@@ -1,29 +1,30 @@
 // ===========================================================================
-// F19/H1 — EL DISPATCHER INFORMÓ DE ÉXITO SOBRE UN AGENTE QUE NUNCA ARRANCÓ.
+// F19/H1 — THE DISPATCHER REPORTED SUCCESS OVER AN AGENT THAT NEVER STARTED.
 //
-// Primer despacho real del loop contra un repo de producción. `/ct-next
-// --cap 1` salió con exit 0, dijo «lanzados 1/1» y añadió «verificado: la
-// sesión cmux está corriendo en ese directorio». Esto es lo que había de
-// verdad en esa terminal:
+// First real dispatch of the loop against a production repository. `/ct-next
+// --cap 1` exited with 0, said «lanzados 1/1» and added «verificado: la
+// sesión cmux está corriendo en ese directorio». This is what was really in
+// that terminal:
 //
 //     [oh-my-zsh] Would you like to update? [Y/n] laude --dangerously-skip-…
 //     zsh: command not found: laude
 //
-// El `read` de un solo carácter del prompt de oh-my-zsh se comió la `c` de
-// `claude` mientras cmux tecleaba el comando. Quedó un shell inactivo, en el
-// directorio correcto y con el título correcto. Consecuencia medida: veinte
-// minutos en `status:in-progress` reclamado por nadie, reteniendo `area:plan`
-// y el carril serializante `pbxproj` de todo el repo; cero commits, cero PRs.
+// The single-character `read` of the oh-my-zsh prompt ate the `c` of `claude`
+// while cmux was typing the command. What was left was an idle shell, in the
+// right directory and with the right title. Measured consequence: twenty
+// minutes in `status:in-progress` claimed by nobody, holding `area:plan` and
+// the serialising `pbxproj` lane of the whole repository; zero commits, zero
+// PRs.
 //
-// LA RAÍZ: se comprobaba el CONTINENTE (existe una ventana de cmux con el
-// título y el cwd pedidos) en vez del CONTENIDO (el comando llegó a
-// ejecutarse). La ventana la abre el propio dispatcher — igual que el
-// `.agent/STATE.md` "modificado" que también engañó a los humanos era su
-// propia semilla. Rastro de la herramienta tomado por prueba del efecto.
+// THE ROOT: what was checked was the CONTAINER (a cmux window exists with the
+// title and the cwd that were asked for) instead of the CONTENT (the command
+// got to run). The window is opened by the dispatcher itself — just as the
+// "modified" `.agent/STATE.md` that also fooled the humans was its own seed. A
+// trace of the tool taken for proof of the effect.
 //
-// Estos tests fijan la propiedad que importa por encima del arreglo concreto:
-// **si no se puede confirmar que el agente arrancó, el resultado no puede ser
-// "lanzado" con exit 0.**
+// These tests pin the property that matters above the concrete fix: **if it
+// cannot be confirmed that the agent started up, the result cannot be
+// "launched" with exit 0.**
 // ===========================================================================
 import { describe, it, expect, afterEach } from 'vitest'
 import { spawnSync } from 'node:child_process'
@@ -80,14 +81,15 @@ function dispatchOne(repoRoot, envOverrides = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// El hallazgo, reproducido tal cual
+// The finding, reproduced exactly as it was
 // ---------------------------------------------------------------------------
-describe('F19/H1 — el shell se come el primer carácter del comando', () => {
-  it('NUNCA dice "lanzado" ni sale con 0 cuando el comando no llegó a ejecutarse', () => {
+describe('F19/H1 — the shell eats the first character of the command', () => {
+  it('it NEVER says "launched" nor exits with 0 when the command never got to run', () => {
     const repoRoot = makeRepoRoot()
-    // Verificado contra el código SIN arreglar (con este mismo stub, que ya
-    // ejecuta el comando): exit 0, «lanzados 1/1» y «verificado: la sesión
-    // cmux está corriendo en ese directorio» — la mentira exacta del campo.
+    // Verified against the code with the fix NOT applied (with this very
+    // stub, which does run the command): exit 0, «lanzados 1/1» and
+    // «verificado: la sesión cmux está corriendo en ese directorio» — the
+    // exact lie from the field.
     const r = dispatchOne(repoRoot, {
       FAKE_CMUX_EAT_FIRST_CHAR_SUBSTR: '#90',
       CT_NEXT_LAUNCH_TIMEOUT_MS: '600',
@@ -96,17 +98,17 @@ describe('F19/H1 — el shell se come el primer carácter del comando', () => {
     expect(r.all).not.toMatch(/verificado: la sesión cmux está corriendo/)
     expect(r.all).toMatch(/lanzados 0\/1 slice\(s\)/)
     expect(r.all).toMatch(/NO se puede confirmar que el comando llegara a ejecutarse/)
-    // Los DOS casos indistinguibles se nombran: nunca se afirma cuál fue.
+    // The TWO indistinguishable cases are named: it never claims which one.
     expect(r.all).toMatch(/el comando nunca corrió/)
     expect(r.all).toMatch(/ese shell sigue arrancando/)
-    // Y el residuo se declara, con los comandos exactos.
+    // And the residue is declared, with the exact commands.
     expect(r.all).toMatch(/quedaron LANZADOS SIN VERIFICAR/)
     expect(r.all).toMatch(/git worktree remove --force .*\.worktrees\/90/)
     expect(r.all).toMatch(/gh issue edit 90 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
     expect(r.all).not.toMatch(/Nada quedó a medias/)
   })
 
-  it('el camino feliz sí lo dice, y dice POR QUÉ puede decirlo', () => {
+  it('the happy path does say it, and says WHY it can say it', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot)
     expect(r.code).toBe(0)
@@ -115,7 +117,7 @@ describe('F19/H1 — el shell se come el primer carácter del comando', () => {
     expect(r.all).toMatch(/lanzados 1\/1 slice\(s\)/)
   })
 
-  it('el comando que se TECLEA ya no lleva el kickoff dentro: la superficie expuesta al pty pasa de KB a una línea', () => {
+  it('the command that is TYPED no longer carries the kickoff inside: the surface exposed to the pty goes from KB to one line', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1', '--dry-run'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
@@ -124,12 +126,12 @@ describe('F19/H1 — el shell se come el primer carácter del comando', () => {
     })
     const cmuxLine = r.out.split('\n').find((l) => l.startsWith('cmux new-workspace'))
     expect(cmuxLine).toBeTruthy()
-    // El kickoff es de varios KB; la línea de cmux entera tiene que caber
-    // holgadamente por debajo de eso ahora que solo lleva un `. <ruta>`.
+    // The kickoff is several KB; the whole cmux line has to fit comfortably
+    // below that now that it only carries a `. <path>`.
     expect(cmuxLine.length).toBeLessThan(600)
     expect(cmuxLine).not.toMatch(/dangerously-skip-permissions/)
-    // …pero el dry-run NO puede esconder lo que se va a ejecutar: el script
-    // entero se imprime, con el `claude` dentro.
+    // …but the dry-run CANNOT hide what is going to be run: the whole script
+    // is printed, with the `claude` inside.
     expect(r.out).toMatch(/script de arranque que cmux sourcearía/)
     expect(r.out).toMatch(/claude --dangerously-skip-permissions/)
     expect(r.out).toMatch(/se espera hasta \d+ ms a que aparezca .*started/)
@@ -137,10 +139,10 @@ describe('F19/H1 — el shell se come el primer carácter del comando', () => {
 })
 
 // ---------------------------------------------------------------------------
-// "no ha aparecido todavía" vs "no va a aparecer"
+// "it has not appeared yet" vs "it is not going to appear"
 // ---------------------------------------------------------------------------
-describe('F19/H1 — un centinela lento no es un centinela ausente', () => {
-  it('el shell tarda, pero dentro de la cota: cuenta como lanzado', () => {
+describe('F19/H1 — a slow sentinel is not an absent sentinel', () => {
+  it('the shell takes its time, but within the cap: it counts as launched', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot, {
       FAKE_CMUX_COMMAND_DELAY_MS: '700',
@@ -150,7 +152,7 @@ describe('F19/H1 — un centinela lento no es un centinela ausente', () => {
     expect(r.all).toMatch(/lanzado #90 en .*centinela de arranque escrito/)
   })
 
-  it('el mismo shell lento con una cota corta: NO se cuenta, y el mensaje nombra la variable con la que se ajusta', () => {
+  it('the same slow shell with a short cap: it does NOT count, and the message names the variable it is tuned with', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot, {
       FAKE_CMUX_COMMAND_DELAY_MS: '3000',
@@ -162,7 +164,7 @@ describe('F19/H1 — un centinela lento no es un centinela ausente', () => {
     expect(r.all).not.toMatch(/verificado: la sesión cmux está corriendo/)
   })
 
-  it('CT_NEXT_LAUNCH_TIMEOUT_MS inválido aborta con exit 2 antes de tocar nada, en vez de elegir una cota por su cuenta', () => {
+  it('an invalid CT_NEXT_LAUNCH_TIMEOUT_MS aborts with exit 2 before touching anything, instead of picking a cap on its own', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot, { CT_NEXT_LAUNCH_TIMEOUT_MS: 'un rato' })
     expect(r.code).toBe(2)
@@ -172,21 +174,21 @@ describe('F19/H1 — un centinela lento no es un centinela ausente', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Lo que el centinela sabe y la ventana no
+// What the sentinel knows and the window does not
 // ---------------------------------------------------------------------------
-describe('F19/H1 — el centinela ve lo que ninguna consulta a cmux puede ver', () => {
-  it('`claude` no resuelve en el shell de login: certeza negativa → se deshace TODO (claim incluido)', () => {
+describe('F19/H1 — the sentinel sees what no query to cmux can see', () => {
+  it('`claude` does not resolve in the login shell: negative certainty → EVERYTHING is undone (the claim included)', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot, { FAKE_CMUX_NO_CLAUDE_IN_SHELL: '1', CT_NEXT_LAUNCH_TIMEOUT_MS: '4000' })
     expect(r.code).toBe(1)
     expect(r.all).toMatch(/`claude` NO resuelve en ese shell de login/)
-    // Este es el ÚNICO caso con certeza de que no habrá agente, así que es el
-    // único donde revertir el claim no puede destruir trabajo vivo.
+    // This is the ONLY case with certainty that there will be no agent, so it
+    // is the only one where reverting the claim cannot destroy live work.
     expect(r.all).toMatch(/claim revertido automáticamente a status:ready|worktree y rama de #90 limpiados automáticamente/)
     expect(r.all).not.toMatch(/lanzado #90/)
   })
 
-  it('el shell arrancó en OTRO directorio: lo delata su propio $PWD, no lo que cmux diga de su ventana — y no se borra nada', () => {
+  it('the shell started up in ANOTHER directory: its own $PWD gives it away, not what cmux says about its window — and nothing is deleted', () => {
     const repoRoot = makeRepoRoot()
     const otro = mkdtempSync(join(tmpdir(), 'ct-f19-otro-'))
     dirs.push(otro)
@@ -195,11 +197,11 @@ describe('F19/H1 — el centinela ve lo que ninguna consulta a cmux puede ver', 
     expect(r.all).toMatch(/el shell que lo ejecutó estaba en/)
     expect(r.all).toMatch(/NO se cuenta como lanzado con éxito, y NO se borra nada/)
     expect(r.all).toMatch(/quedaron LANZADOS SIN VERIFICAR/)
-    // Un agente vivo en el sitio equivocado NO se limpia solo.
+    // A live agent in the wrong place is NOT cleaned up on its own.
     expect(r.all).not.toMatch(/claim revertido automáticamente/)
   })
 
-  it('cmux no se puede consultar, pero el centinela sí está: eso ya no es "beneficio de la duda", es evidencia', () => {
+  it('cmux cannot be queried, but the sentinel is there: that is no longer "the benefit of the doubt", it is evidence', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot, { FAKE_CMUX_LIST_WINDOWS_FAIL: '1' })
     expect(r.code).toBe(0)
@@ -209,53 +211,54 @@ describe('F19/H1 — el centinela ve lo que ninguna consulta a cmux puede ver', 
 })
 
 // ---------------------------------------------------------------------------
-// El formato del centinela, en unitario
+// The format of the sentinel, in a unit test
 // ---------------------------------------------------------------------------
-describe('F19/H1 — formato del centinela (unitario)', () => {
+describe('F19/H1 — format of the sentinel (unit)', () => {
   const q = shQuote
-  it('el script escribe el centinela ANTES de lanzar al agente: si fuera después solo aparecería al terminar', () => {
+  it('the script writes the sentinel BEFORE launching the agent: were it after, it would only appear once it had finished', () => {
     const s = buildLauncherScript({ sentinelPath: '/tmp/s', agentCommand: 'claude --x', agentBin: 'claude', issue: 7, worktree: '/wt' }, q)
     expect(s.indexOf('/tmp/s')).toBeLessThan(s.indexOf('claude --x'))
     expect(s).toMatch(/command -v claude/)
   })
 
-  it('lo que se teclea es una sola línea corta, y sourcea (no ejecuta) para conservar alias/funciones del usuario', () => {
+  it('what gets typed is a single short line, and it sources (does not execute) so the aliases/functions of the user survive', () => {
     const t = buildTypedCommand('/tmp/x/launch.sh', q)
     expect(t).toBe(". '/tmp/x/launch.sh'")
     expect(t).not.toMatch(/\n/)
   })
 
-  it('un centinela de otra versión, truncado, o con basura NO se interpreta: se devuelve null', () => {
+  it('a sentinel of another version, truncated, or with garbage is NOT interpreted: null is returned', () => {
     expect(parseSentinel(`${SENTINEL_MAGIC}\t1\tok\t/wt`)).toEqual({ version: '1', claudeResolved: true, cwd: '/wt' })
     expect(parseSentinel(`${SENTINEL_MAGIC}\t1\tmissing\t/wt`).claudeResolved).toBe(false)
-    expect(parseSentinel(`${SENTINEL_MAGIC}\t2\tok\t/wt`)).toBe(null) // versión futura
+    expect(parseSentinel(`${SENTINEL_MAGIC}\t2\tok\t/wt`)).toBe(null) // a future version
     expect(parseSentinel(`otra-cosa\t1\tok\t/wt`)).toBe(null)
-    expect(parseSentinel(`${SENTINEL_MAGIC}\t1\tok`)).toBe(null) // truncado
+    expect(parseSentinel(`${SENTINEL_MAGIC}\t1\tok`)).toBe(null) // truncated
     expect(parseSentinel(`${SENTINEL_MAGIC}\t1\tquizá\t/wt`)).toBe(null)
     expect(parseSentinel('')).toBe(null)
   })
 
-  it('una ruta con tabuladores dentro sobrevive: el $PWD es el ÚLTIMO campo a propósito', () => {
+  it('a path with tabs inside survives: the $PWD is the LAST field on purpose', () => {
     expect(parseSentinel(`${SENTINEL_MAGIC}\t1\tok\t/a\tb/c`).cwd).toBe('/a\tb/c')
   })
 
-  it('sameDir tolera symlinks (en macOS /tmp es /private/tmp): comparar cadenas a secas daría falsos "directorio equivocado"', () => {
+  it('sameDir tolerates symlinks (on macOS /tmp is /private/tmp): comparing bare strings would give false "wrong directory"', () => {
     const real = (p) => (p === '/tmp/x' ? '/private/tmp/x' : p)
     expect(sameDir('/tmp/x', '/private/tmp/x', real)).toBe(true)
     expect(sameDir('/tmp/x', '/otro', real)).toBe(false)
-    expect(sameDir('/a', '/a', () => null)).toBe(true) // igualdad literal, sin tocar disco
+    expect(sameDir('/a', '/a', () => null)).toBe(true) // literal equality, without touching disk
   })
 
-  it('el kickoff viaja por DISCO, escapado, no tecleado: un kickoff con comillas y `$` no rompe el script', () => {
+  it('the kickoff travels by DISK, escaped, not typed: a kickoff with quotes and `$` does not break the script', () => {
     const nasty = `no "toques" $HOME ni \`esto\` ni 'aquello'`
     const d = mkdtempSync(join(tmpdir(), 'ct-f19-sh-'))
     dirs.push(d)
-    // `printf` en el sitio del agente — NUNCA `claude`: este test corre en la
-    // máquina de quien lo ejecute, y un stub que se cuele por PATH invocaría
-    // el `claude` de verdad. (Ocurrió al escribir este mismo test, con un
-    // `replace('claude ', …)` que casó antes con el `command -v claude ` del
-    // propio script: el shell acabó ejecutando el Claude real.) Lo que se está
-    // probando es el ESCAPADO, y para eso el programa da igual.
+    // `printf` in the slot of the agent — NEVER `claude`: this test runs on
+    // the machine of whoever executes it, and a stub slipping in through PATH
+    // would invoke the real `claude`. (It happened while writing this very
+    // test, with a `replace('claude ', …)` that matched first against the
+    // `command -v claude ` of the script itself: the shell ended up running
+    // the real Claude.) What is being tested is the ESCAPING, and for that the
+    // program does not matter.
     const s = buildLauncherScript(
       { sentinelPath: join(d, 'out'), agentCommand: `printf '%s' ${q(nasty)}`, agentBin: 'claude', issue: 1, worktree: '/wt' },
       q
@@ -267,42 +270,43 @@ describe('F19/H1 — formato del centinela (unitario)', () => {
     expect(readFileSync(join(d, 'arg'), 'utf8')).toBe(nasty)
   })
 
-  it('el script NO se escribe ejecutable, y eso es parte de la detección: si lo fuera, comerse el `.` seguiría lanzando el agente y la corrupción sería invisible', () => {
+  it('the script is NOT written executable, and that is part of the detection: were it so, eating the `.` would still launch the agent and the corruption would be invisible', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot)
     expect(r.code).toBe(0)
-    // El directorio de arranque lleva el pid de ct-next.mjs y el número de
-    // issue, más un sufijo aleatorio (F20: los PID se reciclan y estos
-    // directorios no se borran nunca — un nombre determinista colisionaba).
-    // `spawnSync` nos da el pid, así que se localiza por prefijo y se mira el
-    // fichero que ct-next.mjs escribió de verdad, no una reconstrucción.
+    // The start-up directory carries the pid of ct-next.mjs and the issue
+    // number, plus a random suffix (F20: PIDs get recycled and these
+    // directories are never deleted — a deterministic name collided).
+    // `spawnSync` gives us the pid, so it is located by prefix and what is
+    // read is the file ct-next.mjs really wrote, not a reconstruction.
     const prefix = `ct-next-launch-${r.pid}-90-`
     const dirName = readdirSync(tmpdir()).find((n) => n.startsWith(prefix))
     expect(dirName, `no se encontró ningún directorio de arranque ${prefix}*`).toBeDefined()
     const f = join(tmpdir(), dirName, LAUNCHER_FILENAME)
     dirs.push(dirname(f))
     const mode = statSync(f).mode & 0o777
-    expect(mode & 0o111).toBe(0) // ni user, ni group, ni other
+    expect(mode & 0o111).toBe(0) // neither user, nor group, nor other
     expect(mode).toBe(0o600)
-    // Y el centinela que el shell escribió está a su lado, con la magia dentro.
+    // And the sentinel the shell wrote is beside it, with the magic inside.
     expect(readFileSync(join(dirname(f), SENTINEL_FILENAME), 'utf8')).toMatch(new RegExp(`^${SENTINEL_MAGIC}\t`))
   })
 })
 
 // ===========================================================================
-// F19/H2 — EL AVISO AGREGADO ES CORRECTO PERO ESTÁTICO.
+// F19/H2 — THE AGGREGATE WARNING IS CORRECT BUT STATIC.
 //
-// F18 añadió un aviso agregado de issues CERRADOS que conservan una label
-// `status:` viva. La forma es la correcta (un párrafo, agrupado por estado,
-// con los `in-review` contados aparte por no ser anomalía) y aun así se lo va
-// a saltar cualquiera a partir de la tercera corrida: esos diez casos no
-// cambian solos, así que el aviso imprime el MISMO párrafo para siempre. Una
-// tercera forma de que un aviso deje de servir, distinta del muro
-// insatisfacible (F14) y del ruido por volumen (F16): la repetición sin
-// novedad. Y entonces el día que aparezca uno nuevo, no se ve.
+// F18 added an aggregate warning of CLOSED issues that keep a live `status:`
+// label. The shape is the right one (one paragraph, grouped by status, with
+// the `in-review` ones counted apart for not being an anomaly) and even so
+// anybody will skip it from the third run on: those ten cases do not change on
+// their own, so the warning prints the SAME paragraph for ever. A third way
+// for a warning to stop being of use, different from the unsatisfiable wall
+// (F14) and from noise by volume (F16): repetition with no news. And then, the
+// day a new one turns up, it is not seen.
 //
-// Dos arreglos: (1) el gradiente de severidad que estaba aplastado dentro del
-// agregado, y (2) un acuse POR CASO reusando `.agent/conventions-ack.md`.
+// Two fixes: (1) the severity gradient that was flattened inside the
+// aggregate, and (2) an acknowledgement PER CASE reusing
+// `.agent/conventions-ack.md`.
 // ===========================================================================
 function closedWith(n, status) {
   return { number: n, state_reason: 'completed', body: `<!-- ct-order:${n} -->`, labels: [{ name: `status:${status}` }] }
@@ -324,21 +328,21 @@ function escribirAck(repoRoot, texto) {
   writeFileSync(join(repoRoot, '.agent', 'conventions-ack.md'), texto)
 }
 
-describe('F19/H2 — el gradiente de severidad que estaba aplastado', () => {
-  it('un cerrado con status:blocked es inerte: no entra en el recuento de anomalías, se cuenta aparte', () => {
+describe('F19/H2 — the severity gradient that was flattened', () => {
+  it('a closed one with status:blocked is inert: it does not enter the anomaly count, it is counted apart', () => {
     const repoRoot = makeRepoRoot()
     const r = runResiduo(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'blocked')])
     const l = lineaResiduo(r)
-    // Verificado contra el código sin arreglar: decía «2 issue(s) CERRADOS»,
-    // metiendo en el mismo saco al que se cayó de la cola de despacho y al
-    // que no le importa a nadie.
+    // Verified against the unfixed code: it said «2 issue(s) CERRADOS»,
+    // throwing into the same sack the one that fell out of the dispatch queue
+    // and the one nobody cares about.
     expect(l).toMatch(/^aviso: 1 issue\(s\) CERRADOS/)
     expect(l).toMatch(/#101/)
-    expect(l).toMatch(/#102/) // sale, pero como recuento inerte, no como anomalía
+    expect(l).toMatch(/#102/) // it shows up, but as an inert count, not as an anomaly
     expect(l).toMatch(/inerte|no bloquea|no le pasa nada/i)
   })
 
-  it('ready va primero y se dice que es el grave; in-progress después', () => {
+  it('ready comes first and is said to be the serious one; in-progress after it', () => {
     const repoRoot = makeRepoRoot()
     const r = runResiduo(repoRoot, [closedWith(101, 'in-progress'), closedWith(102, 'ready')])
     const l = lineaResiduo(r)
@@ -346,7 +350,7 @@ describe('F19/H2 — el gradiente de severidad que estaba aplastado', () => {
     expect(l.indexOf('#102')).toBeLessThan(l.indexOf('#101'))
   })
 
-  it('si TODO lo que queda es inerte o terminal, no hay anomalía y no se grita', () => {
+  it('if EVERYTHING left over is inert or terminal, there is no anomaly and nobody shouts', () => {
     const repoRoot = makeRepoRoot()
     const r = runResiduo(repoRoot, [closedWith(101, 'blocked'), closedWith(102, 'in-review')])
     expect(lineaResiduo(r)).toBe('')
@@ -354,8 +358,8 @@ describe('F19/H2 — el gradiente de severidad que estaba aplastado', () => {
   })
 })
 
-describe('F19/H2 — acuse POR CASO: cállate sobre estos números, sigue avisando de los nuevos', () => {
-  it('los números acusados desaparecen del aviso y los nuevos siguen saliendo', () => {
+describe('F19/H2 — acknowledgement PER CASE: keep quiet about these numbers, go on warning about the new ones', () => {
+  it('the acknowledged numbers disappear from the warning and the new ones go on coming out', () => {
     const repoRoot = makeRepoRoot()
     escribirAck(repoRoot, 'residuo-status: 2026-07-28 — #101, #102 revisados: slices descartados, las labels se quedan.\n')
     const r = runResiduo(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'ready'), closedWith(103, 'ready')])
@@ -364,12 +368,13 @@ describe('F19/H2 — acuse POR CASO: cállate sobre estos números, sigue avisan
     expect(l).toMatch(/#103/)
     expect(l).not.toMatch(/#101/)
     expect(l).not.toMatch(/#102/)
-    // El acuse se reconoce, y se dice cuántos calla — pero solo cuando hay
-    // algo vivo que decir; si no, sería el mismo ruido estático otra vez.
+    // The acknowledgement is recognised, and how many it silences is said —
+    // but only when there is something live to say; otherwise it would be the
+    // same static noise all over again.
     expect(l).toMatch(/2 más ya acusados/)
   })
 
-  it('con TODOS acusados el aviso desaparece entero: ése es el punto', () => {
+  it('with ALL of them acknowledged the warning disappears entirely: that is the point', () => {
     const repoRoot = makeRepoRoot()
     escribirAck(repoRoot, '# decisiones\n\nresiduo-status: 2026-07-28 — #101, #102 son slices descartados.\n')
     const r = runResiduo(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'in-progress')])
@@ -377,7 +382,7 @@ describe('F19/H2 — acuse POR CASO: cállate sobre estos números, sigue avisan
     expect(r.err).not.toMatch(/2 más ya acusados/)
   })
 
-  it('el acuse acumula entre líneas (una decisión por fecha), en vez de tratarlas como duplicadas', () => {
+  it('the acknowledgement accumulates across lines (one decision per date), instead of treating them as duplicates', () => {
     const repoRoot = makeRepoRoot()
     escribirAck(repoRoot, 'residuo-status: 2026-07-01 — #101 descartado.\nresiduo-status: 2026-07-28 — #102 también.\n')
     const r = runResiduo(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'ready')])
@@ -385,7 +390,7 @@ describe('F19/H2 — acuse POR CASO: cállate sobre estos números, sigue avisan
     expect(r.err).not.toMatch(/ya estaba acusada más arriba/)
   })
 
-  it('un acuse SIN números no silencia nada y se dice: creer haber callado algo y no haberlo hecho es el fallo que no nos podemos permitir', () => {
+  it('an acknowledgement with NO numbers silences nothing and says so: believing you have silenced something and not having done it is the failure we cannot afford', () => {
     const repoRoot = makeRepoRoot()
     escribirAck(repoRoot, 'residuo-status: 2026-07-28 — ya lo he mirado todo, da igual.\n')
     const r = runResiduo(repoRoot, [closedWith(101, 'ready')])
@@ -393,7 +398,7 @@ describe('F19/H2 — acuse POR CASO: cállate sobre estos números, sigue avisan
     expect(r.err).toMatch(/no silencia nada/)
   })
 
-  it('el aviso enseña cómo acusar: sin eso, la salida existe pero nadie la encuentra', () => {
+  it('the warning teaches how to acknowledge: without that, the way out exists but nobody finds it', () => {
     const repoRoot = makeRepoRoot()
     const r = runResiduo(repoRoot, [closedWith(101, 'ready')])
     expect(lineaResiduo(r)).toMatch(/\.agent\/conventions-ack\.md/)

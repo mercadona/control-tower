@@ -1,26 +1,27 @@
-// LA REGLA DE PRECEDENCIA, UNA SOLA VEZ EN TODO EL REPO.
+// THE PRECEDENCE RULE, ONCE ONLY IN THE WHOLE REPOSITORY.
 //
-// Estaba escrita en cinco ficheros —`plugin-yardstick.js`, `kickoff.js`,
-// `prompts/task-implementer.md`, `agents/ct-judge.md` y, en el backend,
-// `plan-agent-brief.js`— y el juez la leía tres veces en una sola llamada. Lo
-// que dos copias compran es que diverjan, y ésa no es una hipótesis: la del
-// backend acabó diciendo que `architecture.md` se aplica SIEMPRE, justo lo
-// contrario de lo que dice la cabecera del plugin y de lo que declara la
-// cabecera `Applies to:` del propio documento.
+// It was written in five files —`plugin-yardstick.js`, `kickoff.js`,
+// `prompts/task-implementer.md`, `agents/ct-judge.md` and, in the backend,
+// `plan-agent-brief.js`— and the judge read it three times in a single call.
+// What two copies buy is that they diverge, and that is not a hypothesis: the
+// one in the backend ended up saying that `architecture.md` applies ALWAYS,
+// exactly the opposite of what the header of the plugin says and of what the
+// `Applies to:` header of the document itself declares.
 //
-// Este test es lo único que impide que vuelva a pasar: `conventions/decisions.md`
-// dice que una regla se escribe una vez, y una regla escrita en prosa no la caza
-// ningún detector de duplicados por parecido — sólo la caza quien busque su frase.
+// This test is the only thing that keeps it from happening again:
+// `conventions/decisions.md` says that a rule is written once, and a rule
+// written in prose is caught by no duplicate detector that works by
+// resemblance — it is caught only by whoever looks for its sentence.
 //
-// LA FRASE NO SE TECLEA AQUÍ: se extrae de la propia cabecera, que es la
-// fuente. Escribirla a mano sería la segunda copia, y encima la que decide si
-// hay segunda copia.
+// THE SENTENCE IS NOT TYPED HERE: it is extracted from the header itself,
+// which is the source. Writing it by hand would be the second copy, and on top
+// of that the one that decides whether there is a second copy.
 //
-// SE RECORREN `plugin/` Y `backend/src/`, que es donde vive el texto que leen
-// los agentes. Los `__tests__` quedan fuera a propósito: un test que fija la
-// frase —el de la cabecera, o el del kickoff que comprueba que ya NO la
-// enuncia— la contiene por necesidad, y contarlos haría este test imposible de
-// pasar.
+// `plugin/` AND `backend/src/` ARE WALKED, which is where the text the agents
+// read lives. The `__tests__` are left out on purpose: a test that pins the
+// sentence —the one of the header, or the one of the kickoff that checks it
+// does NOT state it any more— contains it of necessity, and counting them
+// would make this test impossible to pass.
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
@@ -30,12 +31,13 @@ import { PluginYardstick } from '../scripts/plugin-yardstick.js'
 const pluginRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = join(pluginRoot, '..')
 
-// SOLO LAS PALABRAS. Se tira todo lo que no es letra o espacio y se colapsa el
-// resto: las marcas de cita del markdown, los asteriscos del énfasis y —esto es
-// lo que obliga a llegar tan lejos— las comillas y las comas con las que el
-// propio módulo parte la frase en las líneas de un array. Buscar el texto en
-// crudo no encontraría la regla ni en el fichero que la escribe, y una copia en
-// otro sitio con otra puntuación tampoco.
+// THE WORDS ONLY. Everything that is not a letter or a space is thrown away
+// and the rest is collapsed: the quote marks of the markdown, the asterisks of
+// the emphasis and —this is what forces going this far— the quotes and the
+// commas with which the module itself breaks the sentence into the lines of an
+// array. Searching for the raw text would not find the rule even in the file
+// that writes it, and neither would a copy somewhere else with different
+// punctuation.
 const soloPalabras = (texto) => String(texto)
   .toLowerCase()
   .replace(/[^\p{L}\p{N}\s]/gu, ' ')
@@ -83,18 +85,18 @@ class TextoDelRepo {
   }
 }
 
-describe('la regla de precedencia se escribe en un solo sitio de todo el repo', () => {
-  it('la frase que la enuncia se extrae de la cabecera, no se teclea en este test', () => {
+describe('the precedence rule is written in a single place in the whole repository', () => {
+  it('the sentence that states it is extracted from the header, it is not typed in this test', () => {
     expect(ReglaDePrecedencia.frase()).not.toBeNull()
     expect(ReglaDePrecedencia.frase().length).toBeGreaterThan(60)
   })
 
-  it('sólo el módulo que compone la cabecera la escribe: ni plugin/ ni backend/src/ la repiten', () => {
+  it('only the module that composes the header writes it: neither plugin/ nor backend/src/ repeat it', () => {
     expect(TextoDelRepo.losQueContienen(ReglaDePrecedencia.frase()))
       .toEqual(['plugin/scripts/plugin-yardstick.js'])
   })
 
-  it('el recorrido mira de verdad los dos árboles, o lo de arriba pasaría por vacío', () => {
+  it('the walk really looks at both trees, or the one above would be passing on emptiness', () => {
     const todos = TextoDelRepo.todos()
     expect(todos).toContain('plugin/agents/ct-judge.md')
     expect(todos).toContain('plugin/prompts/task-implementer.md')

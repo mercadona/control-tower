@@ -33,222 +33,217 @@ import { readRepoDocs, readAck, ACK_PATH } from './conventions-io.js'
 import { PluginYardstick } from './plugin-yardstick.js'
 import { assessLocalLiveness } from './liveness.js'
 
-// W-C: dispatch-check.mjs implementa el protocolo de claim completo (colisión
-// + escritura + claim-then-verify) y ya está testeado en solitario, pero
-// hasta ahora nada en el plugin lo invocaba — ningún issue llegaba nunca a
-// status:in-progress en el loop real, así que el `runningTouches` del que
-// depende W-B (para el cap y la colisión con trabajo en vuelo) estaba siempre
-// vacío. Se resuelve la ruta SIEMPRE relativa a la propia ubicación de este
-// fichero (import.meta.url, la URL real de ESTE módulo) — nunca una ruta
-// absoluta fija ni un string de shell — porque dispatch-check.mjs vive al
-// lado de ct-next.mjs dentro del plugin, con independencia de dónde esté
-// instalado.
+// W-C: dispatch-check.mjs implements the complete claim protocol (collision +
+// write + claim-then-verify) and is already tested on its own, but until now
+// nothing in the plugin invoked it — no issue ever reached status:in-progress
+// in the real loop, so the `runningTouches` that W-B depends on (for the cap
+// and for the collision with in-flight work) was always empty. The path is
+// ALWAYS resolved relative to this file's own location (import.meta.url, THIS
+// module's real URL) — never a fixed absolute path and never a shell string —
+// because dispatch-check.mjs lives next to ct-next.mjs inside the plugin, no
+// matter where it is installed.
 const dispatchCheckPath = join(dirname(fileURLToPath(import.meta.url)), 'dispatch-check.mjs')
-// La misma resolución para ct-step.mjs: el kickoff interpola la ruta absoluta
-// real, nunca el token ${CLAUDE_PLUGIN_ROOT} (que en un prompt de texto plano
-// no lo sustituye nadie).
+// The same resolution for ct-step.mjs: the kickoff interpolates the real
+// absolute path, never the ${CLAUDE_PLUGIN_ROOT} token (which, in a plain-text
+// prompt, nobody substitutes).
 const ctStepPath = join(dirname(fileURLToPath(import.meta.url)), 'ct-step.mjs')
-// La misma resolución que sus dos hermanas, y por el mismo motivo: el kickoff es
-// texto plano y el token ${CLAUDE_PLUGIN_ROOT} no existe ahí. El agente que
-// escribe el plan tiene que poder abrir los documentos de la vara por su ruta.
+// The same resolution as its two siblings, and for the same reason: the
+// kickoff is plain text and the ${CLAUDE_PLUGIN_ROOT} token does not exist
+// there. The agent that writes the plan has to be able to open the yardstick's
+// documents by their path.
 const conventionsDir = join(dirname(fileURLToPath(import.meta.url)), '..', PluginYardstick.DIRECTORY)
-// El vigilante del `-OK`: se lanza desprendido tras despachar un slice con gate
-// `plan`. Ver lanzarVigilanteDelGo.
+// The `-OK` watcher: it is launched detached after dispatching a slice with
+// the `plan` gate. See lanzarVigilanteDelGo.
 const ctWatchGoPath = join(dirname(fileURLToPath(import.meta.url)), 'ct-watch-go.mjs')
 
 // ============================================================================
-// D5, hallazgo F (segunda mitad) — QUE EL DESTINO DE LA SALIDA SE ROMPA NO
-// PUEDE CAMBIAR NI LO QUE SE DECIDE NI EL EXIT CODE.
+// D5, finding F (second half) — THE OUTPUT'S DESTINATION BREAKING CANNOT
+// CHANGE EITHER WHAT IS DECIDED OR THE EXIT CODE.
 //
-// `process.stdout`/`process.stderr` hacia una tubería emiten un evento
-// 'error' (EPIPE) cuando el lector cierra — `ct-next | head`, un `/loop` que
-// deja de leer, una sesión de cmux que se cierra a media corrida. Sin un
-// manejador, ese evento sube como excepción no capturada y MATA el proceso
-// en el punto exacto en que se intentó imprimir. Verificado por construcción
-// con el extremo de lectura de stdout cerrado: el `console.log` de "lanzado
-// #90" —posterior al claim, al worktree y al lanzamiento de cmux, o sea con
-// TODO el trabajo ya hecho y bien— lanzaba EPIPE y la corrida terminaba con
-// exit 1 y un volcado de pila, como si el despacho hubiera fallado.
+// `process.stdout`/`process.stderr` towards a pipe emit an 'error' event
+// (EPIPE) when the reader closes — `ct-next | head`, a `/loop` that stops
+// reading, a cmux session that closes mid-run. Without a handler, that event
+// comes up as an uncaught exception and KILLS the process at the exact point
+// where it tried to print. Verified by construction with stdout's read end
+// closed: the `console.log` of "lanzado #90" —after the claim, the worktree
+// and the cmux launch, that is, with ALL the work already done and done well—
+// threw EPIPE and the run ended with exit 1 and a stack dump, as if the
+// dispatch had failed.
 //
-// El exit code de este script describe qué le pasó al TRABAJO (se despachó,
-// no se despachó, quedó algo a medias), nunca si el terminal de quien lo
-// llamó seguía escuchando. Perder líneas de log hacia un destino que ya no
-// las acepta es un límite real y aceptable —no hay adónde entregarlas— y
-// queda escrito aquí; convertirlo en un fallo del despacho, no.
+// This script's exit code describes what happened to the WORK (it was
+// dispatched, it was not dispatched, something was left half-done), never
+// whether the caller's terminal was still listening. Losing log lines towards
+// a destination that no longer accepts them is a real and acceptable limit
+// —there is nowhere to deliver them— and it is written down here; turning it
+// into a dispatch failure is not.
 process.stdout.on('error', () => {})
 process.stderr.on('error', () => {})
 // ============================================================================
 
-// Fix round 1 (review de W-C), finding 2 — IMPORTANT: Node sale con exit 1
-// (MODULE_NOT_FOUND) cuando el fichero que se le pide ejecutar no existe —
-// el MISMO código que dispatch-check.mjs usa para "colisión/carrera
-// perdida" (ver el contrato de exit codes en su cabecera). Sin este guard,
-// un dispatch-check.mjs ausente o renombrado (plugin mal instalado o
-// incompleto) haría que attemptClaim() lo clasificara como un resultado
-// ESPERADO del protocolo: TODOS los slices de la tanda se saltarían
-// ("saltando #N...") y el proceso terminaría con exit 0 sin haber
-// despachado nada — un no-op silencioso, además de contradecir el propio
-// mensaje de "fallo inesperado" de más abajo (que ya afirma cubrir este
-// caso). Se comprueba UNA vez al arrancar, antes de tocar `gh` o crear nada.
+// Fix round 1 (W-C's review), finding 2 — IMPORTANT: Node exits with 1
+// (MODULE_NOT_FOUND) when the file it is asked to run does not exist — the
+// SAME code dispatch-check.mjs uses for "collision/lost race" (see the exit
+// code contract in its header). Without this guard, an absent or renamed
+// dispatch-check.mjs (a badly installed or incomplete plugin) would make
+// attemptClaim() classify it as an EXPECTED outcome of the protocol: EVERY
+// slice of the batch would be skipped ("saltando #N…") and the process would
+// end with exit 0 without having dispatched anything — a silent no-op, on top
+// of contradicting the "unexpected failure" message below (which already
+// claims to cover this case). It is checked ONCE at start-up, before touching
+// `gh` or creating anything.
 if (!existsSync(dispatchCheckPath)) {
   console.error(`no se encontró dispatch-check.mjs en ${dispatchCheckPath} — el plugin parece estar incompleto o mal instalado (¿se movió/borró el fichero?). Abortando antes de intentar ningún claim: sin él, cada slice se leería en falso como "colisión" y la tanda entera terminaría en un no-op silencioso.`)
   process.exit(1)
 }
 
 // ============================================================================
-// Finding 1 (auditoría, ronda de endurecimiento de interrupción/staleness):
-// SIGINT/SIGTERM tras un claim confirmado. Antes de este cambio no había NI UN
-// SOLO manejador de señal en este fichero — un Ctrl-C durante un `git worktree
-// add` lento (repo grande) dejaba el issue reclamado (status:in-progress)
-// PARA SIEMPRE: sin revert, sin worktree, sin agente, sin ni un mensaje. La
-// reproducción del auditor (dispatch-check real que escribe el label y sale
-// 0, `git` fake que se cuelga en `worktree add`, SIGINT a los 3s) confirma
-// exactamente esto: EXIT=130 y el claim huérfano.
+// Finding 1 (audit, interruption/staleness hardening round): SIGINT/SIGTERM
+// after a confirmed claim. Before this change there was not a SINGLE signal
+// handler in this file — a Ctrl-C during a slow `git worktree add` (a big
+// repo) left the issue claimed (status:in-progress) FOREVER: no revert, no
+// worktree, no agent, not even a message. The auditor's reproduction (a real
+// dispatch-check that writes the label and exits 0, a fake `git` that hangs on
+// `worktree add`, SIGINT after 3s) confirms exactly this: EXIT=130 and the
+// orphaned claim.
 //
-// DOS HALLAZGOS EMPÍRICOS que determinan el diseño (verificados por
-// construcción, no asumidos — ver el informe de esta tarea para el
-// experimento exacto):
+// TWO EMPIRICAL FINDINGS that determine the design (verified by construction,
+// not assumed — see this task's report for the exact experiment):
 //
-//   (a) Un manejador `process.on('SIGINT', fn)` NUNCA se ejecuta mientras el
-//       hilo principal está bloqueado dentro de una llamada síncrona a un
-//       hijo (execFileSync/spawnSync) — ni durante el bloqueo, ni siquiera
-//       DESPUÉS de que ese bloqueo termine (verificado: un hijo colgado que
-//       ignora la señal, con la señal enviada solo al proceso node, deja el
-//       callback SIN EJECUTAR incluso mucho después de que el propio timeout
-//       de spawnSync lo desbloquee). El bucle síncrono de spawn_sync.cc vive
-//       fuera del event loop de libuv; el callback de JS solo se procesa
-//       cuando el event loop recupera el control.
-//   (b) Un script 100% síncrono (sin ningún `await` real) TAMPOCO da nunca esa
-//       oportunidad al event loop — verificado con un bucle ocupado puramente
-//       en JS de 8s: el manejador jamás corre, ni durante el bucle ni después
-//       de que termine, porque el proceso llega a su fin (y a su
-//       `process.exit()`) sin haber cedido el control al event loop ni una
-//       sola vez. Un `Atomics.wait` síncrono (el patrón que ya usa
-//       dispatch-check.mjs para su propio hook de pruebas) tiene EXACTAMENTE
-//       el mismo problema — no es un yield real.
+//   (a) A `process.on('SIGINT', fn)` handler NEVER runs while the main thread
+//       is blocked inside a synchronous call to a child
+//       (execFileSync/spawnSync) — neither during the block, nor even AFTER
+//       that block ends (verified: a hung child that ignores the signal, with
+//       the signal sent only to the node process, leaves the callback
+//       UNEXECUTED even long after spawnSync's own timeout unblocks it).
+//       spawn_sync.cc's synchronous loop lives outside libuv's event loop; the
+//       JS callback is only processed when the event loop regains control.
+//   (b) A 100% synchronous script (with no real `await`) NEVER gives the event
+//       loop that opportunity either — verified with a purely-JS 8s busy loop:
+//       the handler never runs, neither during the loop nor after it ends,
+//       because the process reaches its end (and its `process.exit()`) without
+//       having yielded control to the event loop even once. A synchronous
+//       `Atomics.wait` (the pattern dispatch-check.mjs already uses for its own
+//       test hook) has EXACTLY the same problem — it is not a real yield.
 //
-// Consecuencia directa: instalar un manejador SIN, además, introducir puntos
-// de cesión real (un `await` sobre un temporizador de verdad, `setTimeout`,
-// NUNCA `Atomics.wait`) sería PEOR que no instalar nada — cambiaría la
-// disposición por defecto de "el kernel mata el proceso al instante" (lo que
-// hoy produce el EXIT=130 inmediato del auditor, sin limpieza pero sin
-// cuelgue) a "la señal se encola y no se procesa nunca", es decir, un cuelgue
-// silencioso e indefinido en vez de una muerte instantánea — el escenario que
-// el propio encargo advierte explícitamente ("un manejador que se cuelgue él
-// mismo sería peor que ninguno").
+// Direct consequence: installing a handler WITHOUT also introducing real yield
+// points (an `await` over a genuine timer, `setTimeout`, NEVER
+// `Atomics.wait`) would be WORSE than installing nothing — it would change the
+// default disposition from "the kernel kills the process instantly" (which
+// today produces the auditor's immediate EXIT=130, with no cleanup but with no
+// hang either) to "the signal is queued and never processed", that is, a
+// silent, indefinite hang instead of an instant death — the scenario the brief
+// itself warns about explicitly ("a handler that hangs itself would be worse
+// than none").
 //
-// Verificado también (mismo experimento, con un yield real vía
-// `await new Promise(r => setTimeout(r, 0))`): con un punto de cesión real
-// colocado justo después de un checkpoint seguro, una señal YA pendiente se
-// procesa con una latencia de un puñado de milisegundos — no hay coste
-// perceptible en el camino feliz (nada de esto se ejecuta mientras el proceso
-// está bloqueado dentro de `git worktree add`/`gh`/dispatch-check: esos
-// siguen siendo síncronos, y es ahí donde entra la segunda pata del diseño).
+// Also verified (same experiment, with a real yield via
+// `await new Promise(r => setTimeout(r, 0))`): with a real yield point placed
+// right after a safe checkpoint, an ALREADY pending signal is processed with a
+// latency of a handful of milliseconds — there is no perceptible cost on the
+// happy path (none of this runs while the process is blocked inside
+// `git worktree add`/`gh`/dispatch-check: those are still synchronous, and
+// that is where the design's second leg comes in).
 //
-// DISEÑO (dos defensas independientes, ninguna basta por sí sola):
+// DESIGN (two independent defences, neither of which is enough on its own):
 //
-//   1. Puntos de cesión reales (`await sleep(ms)`, más abajo) en los dos
-//      checkpoints seguros del bucle de despacho: justo antes de intentar un
-//      nuevo claim (para no arrancar un claim más si ya se pidió parar), y
-//      justo DESPUÉS de confirmar un claim y ANTES de crear su worktree (la
-//      ventana exacta que describe el hallazgo: "el claim se escribió, el
-//      worktree no existe todavía"). Esto atrapa una señal real en el caso
-//      común: el proceso no está bloqueado en ESE instante exacto.
-//   2. Una cota de tiempo (`timeout`+`killSignal:'SIGKILL'`) en TODA llamada
-//      bloqueante a un subproceso que este script podría quedarse esperando
-//      indefinidamente (dispatch-check.mjs, `git worktree add/remove`,
-//      `git branch -D`, y el propio `gh()`): si un hijo está genuinamente
-//      atascado y la señal solo llega a este proceso (nunca al hijo — el
-//      caso más adverso, y el que reproduce el auditor), NINGÚN manejador de
-//      JS puede rescatarnos (hallazgo (a) de arriba) — la única salida real es que
-//      la propia llamada se rinda sola. Cuando expira, el hijo se mata
-//      (SIGKILL: un hijo verdaderamente atascado puede estar ignorando
-//      SIGTERM) y la excepción resultante cae en el catch YA EXISTENTE de
-//      cada sitio (que ya revierte el claim) — sin este cambio, ese catch
-//      nunca se alcanzaría.
+//   1. Real yield points (`await sleep(ms)`, below) at the dispatch loop's two
+//      safe checkpoints: right before attempting a new claim (so as not to
+//      start one more claim if a stop has already been asked for), and right
+//      AFTER confirming a claim and BEFORE creating its worktree (the exact
+//      window the finding describes: "the claim was written, the worktree does
+//      not exist yet"). This catches a real signal in the common case: the
+//      process is not blocked at THAT exact instant.
+//   2. A time bound (`timeout`+`killSignal:'SIGKILL'`) on EVERY blocking call
+//      to a subprocess this script could end up waiting on indefinitely
+//      (dispatch-check.mjs, `git worktree add/remove`, `git branch -D`, and
+//      `gh()` itself): if a child is genuinely stuck and the signal only
+//      reaches this process (never the child — the most adverse case, and the
+//      one the auditor reproduces), NO JS handler can rescue us (finding (a)
+//      above) — the only real way out is for the call itself to give up. When
+//      it expires, the child is killed (SIGKILL: a truly stuck child may be
+//      ignoring SIGTERM) and the resulting exception falls into the ALREADY
+//      EXISTING catch at each site (which already reverts the claim) — without
+//      this change, that catch would never be reached.
 //
-// LÍMITE HONESTO que queda, documentado y no resuelto por este cambio: si la
-// señal llega EXACTAMENTE en la microventana entre que el proceso retoma tras
-// un `await sleep(...)` y el siguiente `execFileSync` arranca, puede perderse
-// la carrera y el proceso entrar en la llamada bloqueante de todos modos —
-// en ese caso, la defensa 2 (la cota de tiempo) es la que actúa, no la 1. No
-// hay forma de cerrar esa microventana con JS puro contra un hijo que puede
-// no cooperar; el objetivo aquí es acotarla (milisegundos, no segundos) y
-// garantizar que, en el peor caso, el cuelgue tiene un techo, nunca "para
-// siempre".
+// AN HONEST LIMIT that remains, documented and not solved by this change: if
+// the signal arrives EXACTLY in the micro-window between the process resuming
+// after an `await sleep(...)` and the next `execFileSync` starting, it can
+// lose the race and the process can enter the blocking call anyway — in that
+// case it is defence 2 (the time bound) that acts, not defence 1. There is no
+// way to close that micro-window with pure JS against a child that may not
+// cooperate; the goal here is to bound it (milliseconds, not seconds) and to
+// guarantee that, in the worst case, the hang has a ceiling, never "forever".
 //
-// REGRESIÓN DE UX EXPLÍCITA (revisión externa, IMPORTANTE — no descubierta
-// por mí, y no "resuelta": solo declarada con honestidad porque el diseño no
-// tiene forma de evitarla del todo sin una reescritura mucho mayor). Antes
-// de instalar CUALQUIER manejador, un Ctrl-C contra un `git worktree add`
-// genuinamente colgado moría al INSTANTE (disposición por defecto del
-// kernel, EXIT=130, sin limpieza pero también sin espera). Con el manejador
-// instalado, ese mismo escenario ahora se comporta así: el usuario pulsa
-// Ctrl-C (una vez, o varias — mientras el proceso sigue bloqueado dentro de
-// la llamada síncrona, CUALQUIER señal es, en la práctica, un no-op: no hay
-// manejador que pueda correr, ver el hallazgo (a) de arriba), no pasa NADA
-// visible — ni mensaje, ni salida — hasta que se cumple `childTimeoutMs`
-// (10 minutos por defecto), momento en el que recién entonces el catch
-// existente revierte el claim y el proceso termina. Es decir: se cambia
-// "muere al instante, sin limpieza" por "tarda hasta 10 minutos en salir,
-// pero limpia bien" — un terminal retenido varios minutos SIN ninguna señal
-// de vida es, en sí mismo, el escenario que finding 1 describe (una
-// divergencia entre lo que el usuario cree — "esto no responde, algo está
-// mal" — y lo que el sistema hace de verdad — "está esperando, y limpiará
-// al final"). No hay mitigación de código para la ausencia total de
-// feedback mientras el hilo principal está genuinamente bloqueado: eso
-// exigiría convertir las llamadas de riesgo (como `git worktree add`) a
-// `spawn` asíncrono con el hijo registrado para poder matarlo DIRECTAMENTE
-// en cuanto la señal se procese (en vez de esperar su propio timeout) — una
-// reestructuración mayor, fuera del alcance acometido en esta ronda. Lo que
-// SÍ cambió para mejor, sin ambigüedad: antes, ese mismo Ctrl-C nunca
-// revertía el claim (quedaba huérfano para siempre); ahora sí, aunque tarde.
+// AN EXPLICIT UX REGRESSION (external review, IMPORTANT — not discovered by
+// me, and not "solved": only honestly declared, because the design has no way
+// of avoiding it entirely without a much bigger rewrite). Before installing
+// ANY handler, a Ctrl-C against a genuinely hung `git worktree add` died
+// INSTANTLY (the kernel's default disposition, EXIT=130, with no cleanup but
+// also with no wait). With the handler installed, that same scenario now
+// behaves like this: the user presses Ctrl-C (once, or several times — while
+// the process is still blocked inside the synchronous call, ANY signal is, in
+// practice, a no-op: there is no handler that can run, see finding (a) above),
+// NOTHING visible happens — no message, no exit — until `childTimeoutMs` is
+// reached (10 minutes by default), at which point the existing catch finally
+// reverts the claim and the process ends. That is: "dies instantly, with no
+// cleanup" is traded for "takes up to 10 minutes to exit, but cleans up
+// properly" — a terminal held for several minutes with NO sign of life is, in
+// itself, the scenario finding 1 describes (a divergence between what the user
+// believes — "this is not responding, something is wrong" — and what the
+// system is really doing — "it is waiting, and it will clean up at the end").
+// There is no code mitigation for the total absence of feedback while the main
+// thread is genuinely blocked: that would require converting the risky calls
+// (such as `git worktree add`) to asynchronous `spawn` with the child
+// registered so it can be killed DIRECTLY as soon as the signal is processed
+// (instead of waiting for its own timeout) — a major restructuring, outside
+// the scope taken on in this round. What DID change for the better, without
+// ambiguity: before, that same Ctrl-C never reverted the claim (it was left
+// orphaned forever); now it does, however late.
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 // ============================================================================
-// D5 (hallazgo colateral al C, no estaba en el encargo) — `sleep(0)` NO ES UN
-// PUNTO DE CESIÓN FIABLE PARA UNA SEÑAL, y los dos checkpoints del bucle
-// dependían solo de él.
+// D5 (a finding collateral to C, it was not in the brief) — `sleep(0)` IS NOT
+// A RELIABLE YIELD POINT FOR A SIGNAL, and the loop's two checkpoints depended
+// on it alone.
 //
-// El diseño de arriba da por bueno que un `await sleep(ms)` le da al event
-// loop "la oportunidad de procesar una señal ya pendiente". Es cierto a
-// veces, no siempre: libuv despacha las señales en la fase de POLL (el
-// self-pipe del manejador de señal es un watcher de esa fase), y la fase de
-// TIMERS —donde se resuelve un `setTimeout`— corre ANTES que poll en la
-// misma vuelta del bucle. Si el temporizador ya está vencido cuando el loop
-// entra en timers, la continuación del `await` se ejecuta SIN que la señal
-// pendiente se haya despachado todavía.
+// The design above takes for granted that an `await sleep(ms)` gives the event
+// loop "the opportunity to process an already-pending signal". That is true
+// sometimes, not always: libuv dispatches signals in the POLL phase (the
+// signal handler's self-pipe is a watcher of that phase), and the TIMERS phase
+// —where a `setTimeout` resolves— runs BEFORE poll in the same turn of the
+// loop. If the timer has already expired when the loop enters timers, the
+// `await`'s continuation runs WITHOUT the pending signal having been
+// dispatched yet.
 //
-// Medido, no supuesto (mismo experimento, 8 rondas, señal enviada al proceso
-// mientras estaba bloqueado dentro de un `execFileSync` con un hijo que
-// ignora la señal): tras el PRIMER `await sleep(0)` el manejador seguía sin
-// ejecutarse en 2 de 8 rondas — y en esas dos sí se había ejecutado tras el
-// segundo. Con `setImmediate` (fase de CHECK, inmediatamente DESPUÉS de
-// poll) el manejador ya había corrido en 8 de 8. A valor de PRODUCCIÓN
-// (CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS ausente, o sea 0) eso significaba que
-// ~1 de cada 4 Ctrl-C llegados durante `dispatch-check` se colaba por el
-// checkpoint post-claim y el bucle seguía creando el worktree y lanzando el
-// agente — justo el hueco que el checkpoint existe para cerrar.
+// Measured, not assumed (same experiment, 8 rounds, signal sent to the process
+// while it was blocked inside an `execFileSync` with a child that ignores the
+// signal): after the FIRST `await sleep(0)` the handler still had not run in 2
+// of 8 rounds — and in those two it had run after the second. With
+// `setImmediate` (the CHECK phase, immediately AFTER poll) the handler had
+// already run in 8 out of 8. At the PRODUCTION value
+// (CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS absent, that is 0) that meant that ~1 in
+// every 4 Ctrl-C arriving during `dispatch-check` slipped through the
+// post-claim checkpoint and the loop went on creating the worktree and
+// launching the agent — exactly the gap the checkpoint exists to close.
 //
-// `yieldToSignals()` cruza la fase de poll a propósito. Se usa DESPUÉS del
-// `sleep(...)` de cada checkpoint (no en su lugar: el sleep sigue siendo el
-// que ensancha la ventana de forma determinista para los tests) y una última
-// vez al final del proceso (hallazgo C).
+// `yieldToSignals()` crosses the poll phase on purpose. It is used AFTER each
+// checkpoint's `sleep(...)` (not in its place: the sleep is still what widens
+// the window deterministically for the tests) and one last time at the end of
+// the process (finding C).
 function yieldToSignals() {
   return new Promise((resolve) => setImmediate(resolve))
 }
 
-// CT_NEXT_CHILD_TIMEOUT_MS: cota de tiempo para dispatch-check.mjs, `git
-// worktree add/remove`, `git branch -D` y `gh()` (ver el razonamiento arriba,
-// defensa 2). Generosa por defecto (10 minutos): de sobra para un listado de
-// miles de issues o un worktree contra un repo grande, sin ser "sin límite"
-// de verdad — un cuelgue real (el escenario de este finding) sigue acotado.
-// Configurable para tests (necesitan poder ejercer el timeout sin esperar 10
-// minutos de verdad); mismo patrón de validación (número finito, > 0, con
-// techo para atrapar un typo tipo "1e12") que CT_CLAIM_PRECLAIM_DELAY_MS en
-// dispatch-check.mjs.
+// CT_NEXT_CHILD_TIMEOUT_MS: the time bound for dispatch-check.mjs, `git
+// worktree add/remove`, `git branch -D` and `gh()` (see the reasoning above,
+// defence 2). Generous by default (10 minutes): plenty for a listing of
+// thousands of issues or a worktree against a big repo, without really being
+// "no limit" — a real hang (this finding's scenario) is still bounded.
+// Configurable for tests (they need to be able to exercise the timeout without
+// really waiting 10 minutes); the same validation pattern (a finite number,
+// > 0, with a ceiling to catch a typo like "1e12") as
+// CT_CLAIM_PRECLAIM_DELAY_MS in dispatch-check.mjs.
 const DEFAULT_CHILD_TIMEOUT_MS = 10 * 60 * 1000
 const CHILD_TIMEOUT_CAP_MS = 24 * 60 * 60 * 1000
 let childTimeoutMs = DEFAULT_CHILD_TIMEOUT_MS
@@ -264,34 +259,33 @@ if (childTimeoutRaw !== undefined) {
 
 // CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE — exclusivamente para tests: limita a QUÉ
 // hijo se le aplica CT_NEXT_CHILD_TIMEOUT_MS. Todos los demás siguen con el
-// default de producción (DEFAULT_CHILD_TIMEOUT_MS).
+// production default (DEFAULT_CHILD_TIMEOUT_MS).
 //
-// F8 — por qué hizo falta. Dos tests ejercitan la cota de tiempo con un valor
-// CORTO (800 ms y 1000 ms) porque nadie va a esperar diez minutos a que
-// salte. Con una cota GLOBAL, ese valor tenía que cumplir dos cosas a la vez:
-// ser MÁS LARGO que todos los pasos legítimos de la corrida (leer los issues,
-// resolver la rama base, reclamar) y MÁS CORTO que el cuelgue simulado. Eso
-// no es una propiedad del código: es una propiedad de lo ocupada que esté la
-// máquina.
+// F8 — why it was needed. Two tests exercise the time bound with a SHORT value
+// (800 ms and 1000 ms) because nobody is going to wait ten minutes for it to
+// fire. With a GLOBAL bound, that value had to satisfy two things at once: be
+// LONGER than every legitimate step of the run (reading the issues, resolving
+// the base branch, claiming) and SHORTER than the simulated hang. That is not
+// a property of the code: it is a property of how busy the machine is.
 //
-// Medido, no supuesto: con otra suite de vitest corriendo a la vez, en 2 de 6
-// corridas contra main sin tocar, el `dispatch-check` LEGÍTIMO del test del
-// "git worktree add colgado" tardó más de 800 ms, así que la cota saltaba
-// sobre el hijo EQUIVOCADO — el test fallaba buscando "no se pudo crear el
-// worktree" en una salida que hablaba de dispatch-check, y de paso dejaba
-// nietos `gh` huérfanos escribiendo en el directorio temporal que el
-// `afterEach` estaba borrando (ENOTEMPTY).
+// Measured, not assumed: with another vitest suite running at the same time,
+// in 2 of 6 runs against an untouched main, the LEGITIMATE `dispatch-check` of
+// the "hung git worktree add" test took more than 800 ms, so the bound fired
+// on the WRONG child — the test failed looking for "no se pudo crear el
+// worktree" in an output that talked about dispatch-check, and along the way
+// left orphaned `gh` grandchildren writing into the temporary directory the
+// `afterEach` was deleting (ENOTEMPTY).
 //
-// Acotar el ALCANCE elimina la carrera por construcción en vez de ensancharla:
-// el único hijo que puede agotar la cota corta es el que el test cuelga a
-// propósito. Cero dependencia del reloj de pared.
+// Bounding the SCOPE removes the race by construction instead of widening it:
+// the only child that can exhaust the short bound is the one the test hangs on
+// purpose. Zero dependence on the wall clock.
 //
-// Se valida con el mismo criterio que los hooks de autoseñal (hallazgo G, más
-// abajo): el conjunto de alcances es CERRADO y cualquier otro valor aborta con
-// exit 2 antes de tocar nada. Un typo aquí no puede dejar en silencio la cota
-// de PRODUCCIÓN (10 min) donde un test creía haber puesto una de 800 ms — el
-// test pasaría a esperar diez minutos por un cuelgue simulado, o peor, a
-// aprobar sin ejercitar nada.
+// It is validated with the same criterion as the self-signal hooks (finding G,
+// below): the set of scopes is CLOSED and any other value aborts with exit 2
+// before touching anything. A typo here cannot silently leave the PRODUCTION
+// bound (10 min) where a test believed it had set one of 800 ms — the test
+// would end up waiting ten minutes for a simulated hang, or worse, passing
+// without exercising anything.
 const CHILD_TIMEOUT_SCOPES = ['dispatch-check', 'worktree-add']
 let childTimeoutScope = null
 const childTimeoutScopeRaw = process.env.CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE
@@ -302,26 +296,25 @@ if (childTimeoutScopeRaw !== undefined && childTimeoutScopeRaw !== '') {
   }
   childTimeoutScope = childTimeoutScopeRaw
 }
-// childTimeoutFor(step): la cota que le toca a cada llamada bloqueante. Sin
-// alcance fijado (producción y la inmensa mayoría de los tests) devuelve
-// siempre `childTimeoutMs`, exactamente igual que antes de F8. Con alcance
-// fijado, solo el paso nombrado recibe la cota configurada. `step` se omite en
-// las llamadas que no son escopables.
+// childTimeoutFor(step): the bound each blocking call gets. With no scope set
+// (production and the vast majority of the tests) it always returns
+// `childTimeoutMs`, exactly as before F8. With a scope set, only the named
+// step receives the configured bound. `step` is omitted in the calls that are
+// not scopable.
 const childTimeoutFor = (step = null) => (
   childTimeoutScope === null || childTimeoutScope === step ? childTimeoutMs : DEFAULT_CHILD_TIMEOUT_MS
 )
 
-// CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS — exclusivamente para tests: ensancha de
-// forma determinista (en vez de depender del scheduler del SO) la ventana
-// real entre "claim confirmado" y "worktree creado" — normalmente solo un
-// puñado de instrucciones JS — para poder enviar una señal DENTRO de ella de
-// forma reproducible. Con la variable ausente (producción, y todos los tests
-// que no la fijan) el valor es 0: el checkpoint sigue existiendo (sigue
-// cediendo el control una vez al event loop, ver el razonamiento de arriba),
-// pero sin ninguna espera añadida. No cambia qué se decide ni qué se
-// escribe — solo ensancha una ventana que de por sí ya existe. Mismo patrón
-// y mismo criterio de seguridad que CT_CLAIM_PRECLAIM_DELAY_MS en
-// dispatch-check.mjs.
+// CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS — for tests only: it deterministically
+// widens (instead of depending on the OS scheduler) the real window between
+// "claim confirmed" and "worktree created" — normally just a handful of JS
+// instructions — so that a signal can be sent INSIDE it reproducibly. With the
+// variable absent (production, and every test that does not set it) the value
+// is 0: the checkpoint still exists (it still yields control to the event loop
+// once, see the reasoning above), but with no added wait. It changes neither
+// what is decided nor what is written — it only widens a window that already
+// exists in its own right. Same pattern and same safety criterion as
+// CT_CLAIM_PRECLAIM_DELAY_MS in dispatch-check.mjs.
 const TEST_DELAY_CAP_MS = 60_000
 let testDelayAfterClaimMs = 0
 const testDelayRaw = process.env.CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS
@@ -335,78 +328,80 @@ if (testDelayRaw !== undefined) {
 }
 
 // ============================================================================
-// F19/H1 — CUÁNTO SE ESPERA AL CENTINELA DE ARRANQUE.
+// F19/H1 — HOW LONG THE START-UP SENTINEL IS WAITED FOR.
 //
-// El centinela (ver scripts/launch-sentinel.js) lo escribe el shell de login
-// que cmux abre, así que el retraso que hay que absorber NO es el de arrancar
-// el agente: es el de arrancar EL SHELL (zsh + oh-my-zsh + nvm + lo que el
-// usuario tenga en su rc) más el tiempo que cmux tarde en teclear el texto.
-// En el camino feliz la espera termina en cuanto el fichero aparece —
-// típicamente unos pocos cientos de milisegundos— no cuando se agota la cota:
-// esto NO añade 8 segundos a cada despacho.
+// The sentinel (see scripts/launch-sentinel.js) is written by the login shell
+// cmux opens, so the delay that has to be absorbed is NOT that of starting the
+// agent: it is that of starting THE SHELL (zsh + oh-my-zsh + nvm + whatever
+// the user has in their rc) plus the time cmux takes to type the text. On the
+// happy path the wait ends as soon as the file appears —typically a few
+// hundred milliseconds— not when the bound runs out: this does NOT add 8
+// seconds to every dispatch.
 //
-// La cota existe porque un centinela que no aparece TIENE que distinguirse de
-// uno que aún no ha aparecido, y solo el tiempo los separa. Quedarse esperando
-// para siempre convertiría un shell lento en un dispatcher colgado; cortar
-// demasiado pronto convertiría un shell lento en una falsa alarma. 8 s es
-// deliberadamente generoso para un arranque de shell (que en una máquina sana
-// es de décimas) y deliberadamente corto para un humano mirando la salida.
+// The bound exists because a sentinel that does not appear HAS to be
+// distinguished from one that has not appeared yet, and only time separates
+// them. Waiting forever would turn a slow shell into a hung dispatcher;
+// cutting too early would turn a slow shell into a false alarm. 8 s is
+// deliberately generous for a shell start-up (which on a healthy machine is a
+// fraction of a second) and deliberately short for a human watching the
+// output.
 //
-// Subir esta cota es la respuesta correcta si un repo/máquina legítimamente
-// lento produce falsos «no se pudo confirmar»; bajarla a 0 NO desactiva la
-// comprobación (no hay interruptor para eso, a propósito: sería reintroducir
-// la mentira), solo la hace inútilmente estricta.
+// Raising this bound is the right answer if a legitimately slow repo/machine
+// produces false «could not confirm» reports; lowering it to 0 does NOT
+// disable the check (there is no switch for that, on purpose: it would be
+// reintroducing the lie), it only makes it uselessly strict.
 //
 // ============================================================================
-// F20/H1 — LOS 8000 ms, YA MEDIDOS. Y LO QUE LA MEDIDA DESMONTÓ.
+// F20/H1 — THE 8000 ms, NOW MEASURED. AND WHAT THE MEASUREMENT DISMANTLED.
 //
-// F19 eligió 8000 ms sin medir nada, y su propio mensaje de fallo sugería
-// subirlos «si tu shell de login tarda de verdad tanto». F20 los midió contra
-// el cmux y el zsh REALES de esta máquina, lanzando y cerrando workspaces de
-// prueba (nunca contra un repo de trabajo):
+// F19 chose 8000 ms without measuring anything, and its own failure message
+// suggested raising them «if your login shell really takes that long». F20
+// measured them against this machine's REAL cmux and zsh, launching and
+// closing test workspaces (never against a working repo):
 //
-//   - Un shell de login que arranca limpio ejecuta la línea tecleada a los
-//     ~723 ms desde que `cmux new-workspace` devuelve.
-//   - Un reenvío posterior se ejecuta ~250–400 ms después de mandarlo.
-//   - Y el dato que lo cambia todo: en 6 lanzamientos consecutivos con el
-//     mecanismo de F19 tal cual, el centinela apareció 0 VECES. La causa,
-//     leída en la pantalla de la sesión, es la misma de siempre:
+//   - A login shell that starts clean runs the typed line at ~723 ms from
+//     `cmux new-workspace` returning.
+//   - A later resend runs ~250–400 ms after being sent.
+//   - And the fact that changes everything: in 6 consecutive launches with
+//     F19's mechanism as it was, the sentinel appeared 0 TIMES. The cause,
+//     read off the session's screen, is the same one as always:
 //
 //         [oh-my-zsh] Would you like to update? [Y/n]
 //         … >  '/…/launch.sh'
 //         zsh: permission denied: /…/launch.sh
 //
-//     El `read` de un carácter del prompt de oh-my-zsh se comió el `.` de
-//     `. '/…/launch.sh'`, y lo que quedó fue un intento de EJECUTAR el
-//     launcher (que no es ejecutable, a propósito — ver el `mode: 0o600` del
-//     bucle de despacho — así que muere ahí en vez de arrancar un agente sin
-//     alias).
+//     The one-character `read` of oh-my-zsh's prompt ate the `.` of
+//     `. '/…/launch.sh'`, and what was left was an attempt to EXECUTE the
+//     launcher (which is not executable, on purpose — see the `mode: 0o600` in
+//     the dispatch loop — so it dies there instead of starting an agent with
+//     no aliases).
 //
-// La conclusión operativa: esperar más NUNCA iba a arreglarlo. 8000 ms son
-// diez veces el arranque real del shell; el problema no es lentitud, es un
-// carácter perdido. Por eso la cota deja de ser «lo único que se hace» y pasa
-// a ser el PRESUPUESTO TOTAL, repartido en intentos: se espera un rato, y si
-// el centinela no está, se REENVÍA la línea a la misma sesión.
+// The operational conclusion: waiting longer was NEVER going to fix it. 8000
+// ms is ten times the shell's real start-up; the problem is not slowness, it
+// is a lost character. That is why the bound stops being «the only thing that
+// is done» and becomes the TOTAL BUDGET, split into attempts: it waits a
+// while, and if the sentinel is not there, it RESENDS the line to the same
+// session.
 //
-// Los tres números, y por qué:
-//   - `LAUNCH_ATTEMPT_MS` = 2500 → 3,5x el arranque medido (723 ms). Corto
-//     para que el reenvío llegue pronto; largo para no reenviar encima de un
-//     shell que simplemente va lento.
-//   - el presupuesto total, `CT_NEXT_LAUNCH_TIMEOUT_MS`, SÍ sube: de 8000 a
-//     15000. Y el motivo es exactamente el contrario del que F19 rechazaba.
-//     Con una sola espera, más tiempo no compraba nada (el carácter perdido
-//     no vuelve); con reenvíos, cada 2500 ms más son UN INTENTO más. La
-//     medida que lo pide: el camino validado end-to-end contra el cmux real
-//     con este mismo código (launcher con guarda, `send` + `send-key`)
-//     arrancó 5 de 5 con UN reenvío, a los ~2,9 s — pero repitiendo la
-//     medición con la máquina cargada (la suite entera del plugin corriendo
-//     en paralelo) hicieron falta DOS reenvíos, ~6,8–7,0 s, y 1 de 3 se pasó
-//     de los 8000. 15000 da seis intentos y ~2x de margen sobre el peor caso
-//     medido; el coste es que un lanzamiento de verdad muerto tarda 15 s en
-//     declararse, UNA vez. En el camino feliz no cuesta nada: la espera
-//     termina en cuanto aparece el centinela.
-//   - un presupuesto MENOR que un intento (los tests que fijan 400 ms) hace
-//     simplemente que no haya reenvíos, y el comportamiento es el de F19.
+// The three numbers, and why:
+//   - `LAUNCH_ATTEMPT_MS` = 2500 → 3.5x the measured start-up (723 ms). Short
+//     enough for the resend to arrive soon; long enough not to resend on top
+//     of a shell that is simply slow.
+//   - the total budget, `CT_NEXT_LAUNCH_TIMEOUT_MS`, DOES go up: from 8000 to
+//     15000. And the reason is exactly the opposite of the one F19 rejected.
+//     With a single wait, more time bought nothing (the lost character does
+//     not come back); with resends, every extra 2500 ms is ONE MORE ATTEMPT.
+//     The measurement that asks for it: the path validated end-to-end against
+//     the real cmux with this very code (launcher with a guard, `send` +
+//     `send-key`) started 5 out of 5 with ONE resend, at ~2.9 s — but
+//     repeating the measurement with the machine loaded (the plugin's whole
+//     suite running in parallel) took TWO resends, ~6.8–7.0 s, and 1 in 3 went
+//     past the 8000. 15000 gives six attempts and ~2x margin over the worst
+//     measured case; the cost is that a genuinely dead launch takes 15 s to
+//     declare itself, ONCE. On the happy path it costs nothing: the wait ends
+//     as soon as the sentinel appears.
+//   - a budget SMALLER than one attempt (the tests that set 400 ms) simply
+//     means there are no resends, and the behaviour is F19's.
 const DEFAULT_LAUNCH_SENTINEL_TIMEOUT_MS = 15000
 const LAUNCH_SENTINEL_TIMEOUT_CAP_MS = 600_000
 const LAUNCH_SENTINEL_POLL_MS = 100
@@ -423,30 +418,30 @@ if (launchTimeoutRaw !== undefined && launchTimeoutRaw !== '') {
 }
 
 // ============================================================================
-// D5, hallazgo G — LOS HOOKS DE AUTOSEÑAL SE VALIDAN AQUÍ, ANTES DE TOCAR
-// NADA.
+// D5, finding G — THE SELF-SIGNAL HOOKS ARE VALIDATED HERE, BEFORE TOUCHING
+// ANYTHING.
 //
-// `CT_NEXT_TEST_SELF_SIGINT_AFTER_CLAIM` y
-// `CT_NEXT_TEST_SELF_SIGINT_BEFORE_IDLE_CHECKPOINT` llegan crudos a un
-// `process.kill(process.pid, <valor>)` en mitad del bucle. `process.kill`
-// LANZA `ERR_UNKNOWN_SIGNAL` con un nombre de señal que no reconoce, y el
-// primero de esos dos sitios está DENTRO de la ventana peligrosa: claim ya
-// escrito, worktree todavía no. Verificado por construcción con
-// `CT_NEXT_TEST_SELF_SIGINT_AFTER_CLAIM=pepe`: `claimed #90 → in-progress`
-// en la salida, ni un solo revert en el log de `gh`, una traza de
-// ERR_UNKNOWN_SIGNAL, y el issue huérfano en status:in-progress.
+// `CT_NEXT_TEST_SELF_SIGINT_AFTER_CLAIM` and
+// `CT_NEXT_TEST_SELF_SIGINT_BEFORE_IDLE_CHECKPOINT` reach a
+// `process.kill(process.pid, <value>)` raw, in the middle of the loop.
+// `process.kill` THROWS `ERR_UNKNOWN_SIGNAL` with a signal name it does not
+// recognise, and the first of those two sites is INSIDE the dangerous window:
+// claim already written, worktree not yet. Verified by construction with
+// `CT_NEXT_TEST_SELF_SIGINT_AFTER_CLAIM=pepe`: `claimed #90 → in-progress` in
+// the output, not a single revert in `gh`'s log, an ERR_UNKNOWN_SIGNAL trace,
+// and the issue orphaned in status:in-progress.
 //
-// Son hooks de test, sí — pero viven en el script de PRODUCCIÓN y se leen
-// del entorno, que es exactamente el sitio del que llega un valor con un
-// typo. Se validan con el mismo criterio que las otras dos variables de
-// arriba (forma conocida → seguir; cualquier otra cosa → exit 2 antes de
-// leer un solo issue), y contra el conjunto EXACTO de señales que este
-// script maneja: instalar un hook para una señal sin manejador no probaría
-// lo que dice probar.
+// They are test hooks, yes — but they live in the PRODUCTION script and are
+// read from the environment, which is exactly where a value with a typo comes
+// from. They are validated with the same criterion as the other two variables
+// above (a known shape → carry on; anything else → exit 2 before reading a
+// single issue), and against the EXACT set of signals this script handles:
+// installing a hook for a signal with no handler would not test what it says
+// it tests.
 //
-// Esto NO es, ni pretende ser, la red de seguridad completa: cualquier otro
-// `throw` inesperado en esa misma ventana dejaría el issue igual de
-// huérfano. Esa parte se resuelve de raíz más abajo (ver `bailOutOnCrash`).
+// This is NOT, and does not claim to be, the complete safety net: any other
+// unexpected `throw` in that same window would leave the issue just as
+// orphaned. That part is solved at the root below (see `bailOutOnCrash`).
 const HANDLED_SIGNALS = ['SIGINT', 'SIGTERM']
 for (const varName of ['CT_NEXT_TEST_SELF_SIGINT_AFTER_CLAIM', 'CT_NEXT_TEST_SELF_SIGINT_BEFORE_IDLE_CHECKPOINT']) {
   const raw = process.env[varName]
@@ -458,13 +453,13 @@ for (const varName of ['CT_NEXT_TEST_SELF_SIGINT_AFTER_CLAIM', 'CT_NEXT_TEST_SEL
 }
 // ============================================================================
 
-// `arg()` solo devuelve un string cuando el flag realmente trae un valor: si
-// el flag es el último token de argv, o el token siguiente es a su vez otro
-// flag (empieza por `--`), devolvemos `true` (presente-sin-valor) en vez de
-// colarlo como valor. Mismo patrón que dispatch-check.mjs — ct-groom.mjs
-// ahora también lo copia (fix de la review final: tenía el `arg()` sin
-// endurecer, ver ct-groom.mjs) — un `--repo` colgante nunca llega a
-// `execFileSync` como valor real.
+// `arg()` only returns a string when the flag really carries a value: if the
+// flag is argv's last token, or the next token is itself another flag (it
+// starts with `--`), we return `true` (present-without-value) instead of
+// slipping it in as a value. Same pattern as dispatch-check.mjs — ct-groom.mjs
+// now copies it too (a fix from the final review: it had the un-hardened
+// `arg()`, see ct-groom.mjs) — a dangling `--repo` never reaches
+// `execFileSync` as a real value.
 const arg = (f, d) => {
   const i = process.argv.indexOf(f)
   if (i === -1) return d
@@ -473,87 +468,85 @@ const arg = (f, d) => {
 }
 const has = (f) => process.argv.includes(f)
 
-// formatReason: traduce el `blockReason` que devuelve planDispatch
-// (scripts/dispatch.js, lógica pura y testeada sin red) a un mensaje para el
-// humano, para las causas que NO son "cap lleno" (ver formatBlockReason para
-// esa). W-B (§8): antes había un único mensaje genérico ("nada ready con
-// deps mergeadas y sin colisión") para cuatro causas muy distintas con
-// remedios distintos — obligaba a adivinar. Este wrapper solo formatea
-// texto; la DECISIÓN de cuál es la causa ya la tomó planDispatch. Extraída
-// de formatBlockReason (fix Minor 1 de la review) para poder reutilizarla
-// también dentro del mensaje de "cap lleno", cuando subir --cap tampoco
-// bastaría (ver más abajo).
+// formatReason: translates the `blockReason` planDispatch returns
+// (scripts/dispatch.js, pure logic tested without network) into a message for
+// the human, for the causes that are NOT "cap full" (see formatBlockReason for
+// that one). W-B (§8): before there was a single generic message ("nada ready
+// con deps mergeadas y sin colisión") for four very different causes with
+// different remedies — it forced you to guess. This wrapper only formats text;
+// the DECISION about which the cause is was already taken by planDispatch.
+// Extracted from formatBlockReason (fix Minor 1 of the review) so it can also
+// be reused inside the "cap full" message, when raising --cap would not be
+// enough either (see below).
 // ============================================================================
-// Finding 2 (auditoría de interrupción/staleness): sin esto, el mensaje de
-// "colisión con trabajo en vuelo" SIEMPRE dice "espera a que termine" — una
-// afirmación que solo es cierta si de verdad hay algo corriendo. Nada en el
-// dispatch cruzaba nunca un issue en status:in-progress contra evidencia
-// local de que ALGO lo está trabajando de verdad — un claim huérfano
-// (dejado así por una interrupción, ver finding 1, o por cualquier otra
-// causa: un `gh` que falló a medias, un humano que mató el proceso a mano)
-// es indistinguible de trabajo real desde la sola lectura de labels, y el
-// usuario no tiene forma de saberlo desde la salida de /ct-next.
+// Finding 2 (interruption/staleness audit): without this, the "collision with
+// in-flight work" message ALWAYS says "wait for it to finish" — an assertion
+// that is only true if something really is running. Nothing in the dispatch
+// ever crossed an issue in status:in-progress against local evidence that
+// SOMETHING is really working on it — an orphaned claim (left that way by an
+// interruption, see finding 1, or by any other cause: a `gh` that failed
+// half-way, a human who killed the process by hand) is indistinguishable from
+// real work by reading the labels alone, and the user has no way of knowing
+// from /ct-next's output.
 //
-// SEÑALES QUE SE CONFÍAN, y por qué (todas puramente LOCALES — a esta
-// máquina y a este checkout — nunca red, salvo la consulta local a cmux por
-// su socket Unix):
-//   - `<repoRoot>/.worktrees/<n>` existe como directorio.
-//   - la rama `feat/<n>` existe en ESTE checkout local.
-//   - una sesión cmux VIVA (en cualquier ventana de este cmux, consultada de
-//     SOLO LECTURA vía `cmux list-windows` + `cmux workspace list --json` —
-//     JAMÁS `new-workspace`: no se lanza nada) cuyo título contiene `#<n>`
-//     como token completo (límite de palabra: `#41` no debe casar con
-//     `#410`).
+// THE SIGNALS THAT ARE TRUSTED, and why (all of them purely LOCAL — to this
+// machine and this checkout — never network, except the local query to cmux
+// over its Unix socket):
+//   - `<repoRoot>/.worktrees/<n>` exists as a directory.
+//   - the branch `feat/<n>` exists in THIS local checkout.
+//   - a LIVE cmux session (in any window of this cmux, queried READ-ONLY via
+//     `cmux list-windows` + `cmux workspace list --json` — NEVER
+//     `new-workspace`: nothing is launched) whose title contains `#<n>` as a
+//     whole token (word boundary: `#41` must not match `#410`).
 //
-// CÓMO SE EVITA UN FALSO "esto está abandonado" — el riesgo explícito del
-// encargo: llevaría a alguien a romper el claim de un agente que SÍ está
-// trabajando, lo cual es peor que el silencio actual: "sin evidencia local"
-// es la CONJUNCIÓN de las tres ausencias. Basta con que UNA sola señal
-// indique vida (worktree, rama, o sesión cmux con ese número) para que NO
-// se diga nada de staleness y el mensaje original quede intacto.
+// HOW A FALSE "this is abandoned" IS AVOIDED — the brief's explicit risk: it
+// would lead somebody to break the claim of an agent that IS working, which is
+// worse than the current silence: "no local evidence" is the CONJUNCTION of
+// the three absences. It is enough for ONE single signal to indicate life (the
+// worktree, the branch, or a cmux session with that number) for NOTHING to be
+// said about staleness and the original message to be left intact.
 //
-// Y aun cuando las tres estén ausentes, el mensaje NUNCA afirma
-// "abandonado" sin matices: estas señales son solo de ESTA MÁQUINA — el
-// mismo claim pudo hacerse desde otra máquina, o desde otra sesión de este
-// mismo cmux que ya se cerró sin liberar el label; esta comprobación no
-// puede verlo. El mensaje se limita a decir lo que se sabe (ausencia local)
-// y lo que no se sabe (si sigue vivo en otro sitio) — nunca "espera a que
-// termine" cuando no hay ninguna base local para afirmarlo.
+// And even when all three are absent, the message NEVER asserts "abandoned"
+// without qualification: these signals are only about THIS MACHINE — the same
+// claim could have been made from another machine, or from another session of
+// this very cmux that has since closed without releasing the label; this check
+// cannot see that. The message limits itself to saying what is known (local
+// absence) and what is not known (whether it is still alive somewhere else) —
+// never "wait for it to finish" when there is no local basis for asserting it.
 //
-// Si la propia consulta a cmux falla (no instalado, daemon caído, timeout)
-// se trata como NO CONCLUYENTE, nunca como "no hay sesión": una consulta
-// fallida no es evidencia de ausencia, y afirmar staleness con un tercio de
-// la evidencia sin comprobar sería exactamente el tipo de aserción no
-// verificada que esta tarea pide dejar de hacer.
-// queryAllCmuxWorkspaces: consulta de solo lectura compartida por finding 2
-// (staleness: ¿hay una sesión viva para un issue en vuelo?) y finding 3
-// (¿la sesión que ACABAMOS de lanzar está de verdad en el directorio que le
-// pedimos? — ver verifyCmuxLaunch, más abajo).
+// If the cmux query itself fails (not installed, daemon down, timeout) it is
+// treated as NOT CONCLUSIVE, never as "there is no session": a failed query is
+// not evidence of absence, and asserting staleness with a third of the
+// evidence unchecked would be exactly the kind of unverified assertion this
+// task asks us to stop making.
+// queryAllCmuxWorkspaces: a read-only query shared by finding 2 (staleness: is
+// there a live session for an in-flight issue?) and finding 3 (is the session
+// we HAVE JUST launched really in the directory we asked for? — see
+// verifyCmuxLaunch, below).
 //
-// EL RECORRIDO Y SU GUARDA DE ESQUEMA VIVEN AHORA EN scripts/cmux.js, y lo que
-// queda aquí es lo que sí es de ct-next: la guarda del fixture. Se extrajo
-// porque la misma consulta estaba copiada en los dos vigilantes SIN la guarda —
-// tres copias y sólo ésta bien—, así que el comentario largo que explicaba por
-// qué `custom_title`/`current_directory` no son un esquema garantizado está en
-// ese módulo, que es el único sitio que los lee. Aquí no se ha relajado nada:
-// devuelve exactamente lo mismo, `{title, cwd, cwdKnown, ref}` o `null`.
+// THE WALK AND ITS SCHEMA GUARD NOW LIVE IN scripts/cmux.js, and what remains
+// here is what really is ct-next's: the fixture guard. It was extracted
+// because the same query was copied into both watchers WITHOUT the guard
+// —three copies and only this one right—, so the long comment explaining why
+// `custom_title`/`current_directory` are not a guaranteed schema is in that
+// module, which is the only place that reads them. Nothing has been relaxed
+// here: it returns exactly the same, `{title, cwd, cwdKnown, ref}` or `null`.
 function queryAllCmuxWorkspaces() {
-  // CT_NEXT_FIXTURE (`fx`) promete NUNCA tocar nada real — ver el comentario
-  // de cabecera de esa variable, más arriba en este fichero ("no se decide
-  // ni se lanza nada real con datos de fixture"). Sin esta guarda, un
-  // --dry-run con fixture que colisiona (`formatReason`, caso 'collision')
-  // dispararía una llamada real a `cmux list-windows` — de solo lectura,
-  // pero real, y exactamente la clase de fuga que ese comentario existe
-  // para evitar. Verificado por construcción: dos tests existentes
-  // (ct-next-dryrun.test.js, colisión por token y por serialización) usan
-  // `run()` — sin PATH con stubs — precisamente porque hasta ahora nada en
-  // la ruta de fixture tocaba un subproceso real; sin esta guarda pasarían
-  // a invocar el `cmux` DE VERDAD de la máquina que corra los tests. En
-  // modo fixture, la consulta se trata como "no concluyente" — igual que
-  // cuando cmux no está disponible — nunca como "no hay sesión".
+  // CT_NEXT_FIXTURE (`fx`) promises NEVER to touch anything real — see that
+  // variable's header comment, further up in this file ("nothing real is
+  // decided or launched with fixture data"). Without this guard, a --dry-run
+  // with a fixture that collides (`formatReason`, the 'collision' case) would
+  // fire a real call to `cmux list-windows` — read-only, but real, and exactly
+  // the kind of leak that comment exists to prevent. Verified by construction:
+  // two existing tests (ct-next-dryrun.test.js, collision by token and by
+  // serialisation) use `run()` — with no stubbed PATH — precisely because
+  // until now nothing on the fixture path touched a real subprocess; without
+  // this guard they would start invoking the REAL `cmux` of whichever machine
+  // runs the tests. In fixture mode, the query is treated as "not conclusive"
+  // — just as when cmux is unavailable — never as "there is no session".
   //
-  // NO se delega en cmux.js: ese módulo no sabe de fixtures, y no debe. La
-  // guarda tiene que estar ANTES de la llamada, no dentro de ella.
+  // It is NOT delegated to cmux.js: that module knows nothing about fixtures,
+  // and must not. The guard has to be BEFORE the call, not inside it.
   if (fx) return null
   return listCmuxWorkspaces({ timeoutMs: CMUX_QUERY_TIMEOUT_MS })
 }
@@ -572,19 +565,18 @@ function stalenessNote(n, liveness) {
   return `no se encontró worktree, rama local, ni sesión cmux para #${n} EN ESTA MÁQUINA — el claim puede estar huérfano (interrumpido a medias, o reclamado desde otra máquina/sesión que ya no sigue aquí). Esta comprobación es solo local: no puede confirmar que nadie lo esté trabajando en otro sitio, así que tampoco afirmamos que esté abandonado — pero "espera a que termine" ya no es una afirmación segura con lo que se ve desde aquí. Verifica a mano antes de tocar el label.`
 }
 
-// stalenessCtxFor: helper perezoso y memoizado para formatReason/
-// formatBlockReason — la consulta a cmux (list-windows + workspace list por
-// cada ventana) solo se dispara la PRIMERA vez que de verdad hace falta (un
-// motivo de bloqueo por colisión), nunca en los casos 'none-ready'/
-// 'deps-unmet'/cap-full-con-hueco, para no pagar ese coste (acotado a
-// CMUX_QUERY_TIMEOUT_MS, pero aun así una llamada real a un subproceso) en
-// el camino común.
+// stalenessCtxFor: a lazy, memoised helper for formatReason/formatBlockReason
+// — the cmux query (list-windows + workspace list for each window) only fires
+// the FIRST time it is really needed (a blocking reason of collision), never
+// in the 'none-ready'/'deps-unmet'/cap-full-with-a-slot cases, so as not to
+// pay that cost (bounded to CMUX_QUERY_TIMEOUT_MS, but still a real call to a
+// subprocess) on the common path.
 function stalenessCtxFor() {
   let cmuxTitlesCache
   let queried = false
-  // Memoizado Y perezoso: el thunk se le pasa a assessLocalLiveness, que solo
-  // lo invoca si ni el worktree ni la rama existen (ver su comentario). Una
-  // sola consulta por corrida como mucho, cero si ningún issue la necesita.
+  // Memoised AND lazy: the thunk is passed to assessLocalLiveness, which only
+  // invokes it if neither the worktree nor the branch exists (see its
+  // comment). One query per run at most, zero if no issue needs it.
   const getCmuxTitles = () => {
     if (!queried) {
       cmuxTitlesCache = queryCmuxWorkspaceTitles()
@@ -600,41 +592,42 @@ function stalenessCtxFor() {
 }
 // ============================================================================
 
-// Finding 3 (auditoría): la forma de comando de cmux es
+// Finding 3 (audit): cmux's command form is
 // `/bin/zsh -lc '{ cd -- '\''<cwd>'\'' 2>/dev/null || [ ! -d '\''<cwd>'\'' ]; }
-// && ...'` — TOLERA un cwd inexistente y arranca el agente en el directorio
-// por defecto del shell de login de todas formas, saliendo con exit 0.
-// ct-next.mjs imprimía "lanzado #N en <wt>" basándose SOLO en que
-// `new-workspace` devolviera exit 0 — es decir, infería "está corriendo en
-// el sitio correcto" de "el comando no falló", que es exactamente lo que
-// este hallazgo dice que NO se puede inferir.
+// && ...'` — it TOLERATES a non-existent cwd and starts the agent in the login
+// shell's default directory anyway, exiting with 0. ct-next.mjs printed
+// "lanzado #N en <wt>" based ONLY on `new-workspace` returning exit 0 — that
+// is, it inferred "it is running in the right place" from "the command did not
+// fail", which is exactly what this finding says CANNOT be inferred.
 //
-// verifyCmuxLaunch reutiliza la MISMA consulta de solo lectura que finding 2
-// (queryAllCmuxWorkspaces — `list-windows` + `workspace list --json`, jamás
-// `new-workspace`) para comprobar, DESPUÉS de que `new-workspace` ya
-// devolvió éxito, si existe una sesión con el título exacto que se pidió y,
-// si existe, si su `current_directory` coincide con el worktree esperado.
-// Esto es lo MÁXIMO que se puede verificar sin lanzar nada nuevo: no dice
-// nada sobre si el agente DENTRO de esa sesión está haciendo algo útil, pero
-// sí distingue con evidencia real "está en el directorio correcto" de "cmux
-// aceptó el comando pero acabó en otro sitio" — que es precisamente la
-// mentira que este hallazgo pide dejar de contar.
+// verifyCmuxLaunch reuses the SAME read-only query as finding 2
+// (queryAllCmuxWorkspaces — `list-windows` + `workspace list --json`, never
+// `new-workspace`) to check, AFTER `new-workspace` has already returned
+// success, whether a session exists with the exact title that was asked for
+// and, if it does, whether its `current_directory` matches the expected
+// worktree. This is the MOST that can be verified without launching anything
+// new: it says nothing about whether the agent INSIDE that session is doing
+// anything useful, but it does distinguish, with real evidence, "it is in the
+// right directory" from "cmux accepted the command but ended up somewhere
+// else" — which is precisely the lie this finding asks us to stop telling.
 //
-// Cuatro estados, no tres (D5, hallazgo B):
-//   'confirmed'    → la sesión existe con el título pedido Y su directorio
-//                    coincide. Única forma de afirmar "está donde le dijimos".
-//   'wrong-cwd'    → la sesión existe y cmux SÍ nos dio un directorio, y NO
-//                    es el pedido. Evidencia positiva de un problema.
-//   'cwd-unknown'  → la sesión existe con el título pedido, pero cmux no
-//                    expuso ningún directorio legible para ella (campo
-//                    ausente, renombrado, o de otro tipo). Sabemos MÁS que
-//                    con 'unverifiable' (la sesión existe) y MENOS que con
-//                    'confirmed' (no se pudo comprobar el directorio) — y
-//                    desde luego no es 'wrong-cwd': no hay ninguna evidencia
-//                    de que esté en el sitio equivocado.
-//   'not-found'    → cmux respondió, con esquema reconocido, y no hay
-//                    ninguna sesión con ese título.
-//   'unverifiable' → la consulta a cmux no se pudo completar en absoluto.
+// Four states, not three (D5, finding B):
+//   'confirmed'    → the session exists with the requested title AND its
+//                    directory matches. The only way to assert "it is where we
+//                    told it to be".
+//   'wrong-cwd'    → the session exists and cmux DID give us a directory, and
+//                    it is NOT the one requested. Positive evidence of a
+//                    problem.
+//   'cwd-unknown'  → the session exists with the requested title, but cmux
+//                    exposed no readable directory for it (field absent,
+//                    renamed, or of another type). We know MORE than with
+//                    'unverifiable' (the session exists) and LESS than with
+//                    'confirmed' (the directory could not be checked) — and it
+//                    is certainly not 'wrong-cwd': there is no evidence at all
+//                    that it is in the wrong place.
+//   'not-found'    → cmux answered, with a recognised schema, and there is no
+//                    session with that title.
+//   'unverifiable' → the query to cmux could not be completed at all.
 function verifyCmuxLaunch(expectedTitle, expectedCwd) {
   const all = queryAllCmuxWorkspaces()
   if (all === null) return { status: 'unverifiable' }
@@ -646,105 +639,111 @@ function verifyCmuxLaunch(expectedTitle, expectedCwd) {
 }
 
 // ============================================================================
-// F19/H1 — LA ESPERA AL CENTINELA, Y LOS CINCO VEREDICTOS QUE SALEN DE ELLA.
+// F19/H1 — THE WAIT FOR THE SENTINEL, AND THE FIVE VERDICTS THAT COME OUT OF
+// IT.
 //
-// `verifyCmuxLaunch` (arriba) responde «¿existe la ventana?». Esta pieza
-// responde la pregunta que de verdad importaba y que nadie estaba haciendo:
-// «¿llegó el comando a EJECUTARSE?». Ver la cabecera de
-// scripts/launch-sentinel.js para el hallazgo de campo completo.
+// `verifyCmuxLaunch` (above) answers «does the window exist?». This piece
+// answers the question that really mattered and that nobody was asking: «did
+// the command get EXECUTED?». See scripts/launch-sentinel.js's header for the
+// complete field finding.
 //
-// Estados, y qué evidencia sostiene cada uno:
-//   'ran'          → el centinela existe, parsea, `$PWD` coincide con el
-//                    worktree y `claude` resolvía en ese shell. Es la ÚNICA
-//                    forma de afirmar que el comando corrió.
-//   'wrong-cwd'    → el comando corrió, pero en OTRO directorio. Evidencia
-//                    positiva de un problema: el agente puede estar tocando un
-//                    repo que no es.
-//   'no-claude'    → el comando corrió y `claude` NO resuelve en ese shell.
-//                    Certeza de que no va a haber agente: la línea siguiente
-//                    del script muere con "command not found". Es el único
-//                    veredicto con certeza NEGATIVA, y por eso es el único que
-//                    autoriza a deshacer el claim (ver el bucle de despacho).
-//   'garbled'      → el fichero existe pero no es un centinela de este formato.
-//                    No se adivina: se dice.
-//   'never'        → no apareció dentro de la cota. NO es lo mismo que
-//                    'no-claude': aquí no se sabe si el comando nunca corrió
-//                    (el caso de campo) o si el shell sigue arrancando. Sin
-//                    saberlo NO se puede decir «lanzado», y TAMPOCO se puede
-//                    revertir el claim: un revert con un agente que arranca
-//                    tres segundos tarde es peor que el residuo.
+// The states, and what evidence holds each one up:
+//   'ran'          → the sentinel exists, it parses, `$PWD` matches the
+//                    worktree and `claude` resolved in that shell. It is the
+//                    ONLY way to assert that the command ran.
+//   'wrong-cwd'    → the command ran, but in ANOTHER directory. Positive
+//                    evidence of a problem: the agent may be touching the
+//                    wrong repo.
+//   'no-claude'    → the command ran and `claude` does NOT resolve in that
+//                    shell. Certainty that there will be no agent: the
+//                    script's next line dies with "command not found". It is
+//                    the only verdict with NEGATIVE certainty, and that is why
+//                    it is the only one that authorises undoing the claim (see
+//                    the dispatch loop).
+//   'garbled'      → the file exists but it is not a sentinel of this format.
+//                    Nothing is guessed: it is said.
+//   'never'        → it did not appear within the bound. This is NOT the same
+//                    as 'no-claude': here we do not know whether the command
+//                    never ran (the field case) or whether the shell is still
+//                    starting. Without knowing, we CANNOT say «launched», and
+//                    we ALSO cannot revert the claim: a revert with an agent
+//                    that starts three seconds late is worse than the residue.
 // ============================================================================
-// EL VIGILANTE DEL `-OK` — un solo go, y en el issue.
+// THE `-OK` WATCHER — one single go, and on the issue.
 //
-// El gate `plan` manda al agente publicar su plan como comentario del issue y
-// PARAR hasta que un humano conteste. Hasta esta ronda esa respuesta no la leía
-// nadie: el trabajo se reanudaba cuando la persona iba a la ventana de cmux y
-// empujaba la sesión a mano. O sea que el permiso se daba dos veces y el que
-// contaba no era el que queda escrito.
+// The `plan` gate orders the agent to publish its plan as a comment on the
+// issue and STOP until a human answers. Until this round nobody read that
+// answer: work resumed when the person went to the cmux window and pushed the
+// session by hand. Which means the permission was given twice and the one that
+// counted was not the one that stays written.
 //
-// Se lanza DESPRENDIDO (`detached` + `unref`) porque tiene que sobrevivir a que
-// se cierre esta sesión coordinadora. Si sólo viviera mientras alguien mira, no
-// serviría para el caso que motiva todo esto: en la medida de F33, el 54% del
-// reloj de un epic fue un gate pedido de noche esperando a que alguien se
-// despertara.
+// It is launched DETACHED (`detached` + `unref`) because it has to survive
+// this coordinator session being closed. If it only lived while somebody was
+// watching, it would be no use for the case that motivates all of this: in
+// F33's measurement, 54% of an epic's clock was a gate asked for at night,
+// waiting for somebody to wake up.
 //
-// SÓLO SI EL SLICE LLEVA EL GATE `plan`. Un slice que lo renunció (`!plan` en la
-// tabla §9) no para a esperar a nadie, así que no hay nada que vigilar y un
-// proceso sondeando GitHub durante ocho horas para nada es peor que su ausencia.
+// ONLY IF THE SLICE CARRIES THE `plan` GATE. A slice that opted out (`!plan` in
+// the §9 table) does not stop to wait for anybody, so there is nothing to watch
+// and a process polling GitHub for eight hours for nothing is worse than its
+// absence.
 //
-// Y SÓLO SI EL SLICE CONTÓ COMO LANZADO. El único handle del vigilante es el
-// TÍTULO de la sesión, así que en los dos caminos que no cuentan —'not-found'
-// (cmux contestó y no hay ninguna sesión con ese título) y 'wrong-cwd' (la hay,
-// pero en otro directorio, y el slice se apunta en `unverifiedLaunches`)—
-// lanzarlo era anunciar «la sesión arranca sola» en la misma corrida en la que
-// se acaba de decir que esa sesión no se localiza. Lo cazó una revisión
-// adversarial, y el repo tiene un fichero de tests entero contra esta clase de
-// mensaje (`ct-next-honest-messages.test.js`).
+// AND ONLY IF THE SLICE COUNTED AS LAUNCHED. The watcher's only handle is the
+// session's TITLE, so on the two paths that do not count —'not-found' (cmux
+// answered and there is no session with that title) and 'wrong-cwd' (there is
+// one, but in another directory, and the slice is noted in
+// `unverifiedLaunches`)— launching it was announcing «the session starts on
+// its own» in the very run that has just said that session cannot be located.
+// An adversarial review caught it, and the repo has a whole test file against
+// this class of message (`ct-next-honest-messages.test.js`).
 //
-// NO ROMPE EL DESPACHO. Va después de que el claim esté resuelto y el slice
-// contado como lanzado, y cualquier fallo aquí se AVISA y sigue: el trabajo ya
-// está en marcha, y no poder vigilar el go significa volver al modo de antes
-// —empujar a mano—, no perder el slice. Es la misma regla que el `git add` de la
-// telemetría en ct-step: el termómetro no es parte del motor. Por eso hay
-// además un manejador de `error`: un fallo ASÍNCRONO de `spawn` (EAGAIN, EMFILE)
-// no lo ve el `try/catch`, y sin manejador sería un `'error'` sin atender que
-// tumbaría ct-next entero — perdiéndose el resumen de la tanda y su exit code.
+// IT DOES NOT BREAK THE DISPATCH. It goes after the claim is resolved and the
+// slice counted as launched, and any failure here is WARNED about and carries
+// on: the work is already under way, and not being able to watch the go means
+// going back to the old mode —pushing by hand—, not losing the slice. It is
+// the same rule as the telemetry's `git add` in ct-step: the thermometer is not
+// part of the engine. That is why there is also an `error` handler: an
+// ASYNCHRONOUS `spawn` failure (EAGAIN, EMFILE) is not seen by the
+// `try/catch`, and with no handler it would be an unattended `'error'` that
+// would bring the whole of ct-next down — losing the batch's summary and its
+// exit code.
 //
-// EL LOG LO ABRE EL VIGILANTE, no esta función. Cuando lo abría aquí, la suite
-// creaba directorios y ficheros en el `$HOME` real de quien la corriera (los
-// tests sustituyen el BINARIO, no el disco) — justo lo que
-// `__tests__/fixtures/hermetic-env.js` existe para evitar—, y además quedaba un
-// descriptor sin cerrar por slice. Aquí sólo se calcula la ruta, para poder
-// decirla y para pasársela.
+// THE LOG IS OPENED BY THE WATCHER, not by this function. When it was opened
+// here, the suite created directories and files in the real `$HOME` of whoever
+// ran it (the tests substitute the BINARY, not the disk) — exactly what
+// `__tests__/fixtures/hermetic-env.js` exists to prevent—, and on top of that
+// a descriptor was left unclosed per slice. Here only the path is computed, so
+// it can be said and passed along.
 //
-// CT_WATCH_GO_BIN sigue el patrón de CT_ACCOUNT_*_DIR: no cambia NINGUNA
-// decisión, sólo qué programa se lanza. Existe para que los tests puedan
-// comprobar que el vigilante se lanza con los argumentos correctos sin poner un
-// proceso real a sondear GitHub durante ocho horas.
+// CT_WATCH_GO_BIN follows the CT_ACCOUNT_*_DIR pattern: it changes NO decision,
+// only which program is launched. It exists so that the tests can check that
+// the watcher is launched with the right arguments without putting a real
+// process to poll GitHub for eight hours.
 // ============================================================================
 function lanzarVigilanteDelGo(slice, sessionName) {
-  // Los gates salen del slice tal cual lo mapeó el issue: `resolveGatesForAgent`
-  // sólo mira `gatesDeclared`/`gates`/`type`, y la normalización que hace
-  // `sliceForKickoff` es de `ac`/`issue`/`epic`. Así esto no obliga a ensanchar
-  // el objeto de `plans`.
+  // The gates come out of the slice exactly as the issue mapped it:
+  // `resolveGatesForAgent` only looks at `gatesDeclared`/`gates`/`type`, and
+  // the normalisation `sliceForKickoff` does is of `ac`/`issue`/`epic`. This
+  // way it does not force the `plans` object to be widened.
   if (!resolveGatesForAgent(slice).includes('plan')) return
   const aviso = (por) => console.error(`  aviso: no se ha lanzado el vigilante del ${GO_TOKEN} de #${slice.n} (${por}) — el slice está lanzado y el gate sigue en pie, pero tendrás que empujar su sesión a mano tras dar el go.`)
   try {
     const bin = process.env.CT_WATCH_GO_BIN || ctWatchGoPath
-    // `spawn(process.execPath, [bin, …])` con un `bin` que no existe NO falla:
-    // el ejecutable es siempre `node`, así que el proceso nace, muere al
-    // instante con un error de módulo, y sin esta comprobación se anunciaba
-    // «vigilante lanzado» con un pid que ya no existía. Es la misma clase de
-    // defecto que F19/H1 cerró en el despacho —«cmux devolvió 0» no es «el
-    // comando corrió»— con una evidencia todavía más débil: aquí lo único
-    // comprobado sería que `node` existe.
+    // `spawn(process.execPath, [bin, …])` with a `bin` that does not exist
+    // does NOT fail: the executable is always `node`, so the process is born,
+    // dies instantly with a module error, and without this check «watcher
+    // launched» was announced with a pid that no longer existed. It is the
+    // same class of defect F19/H1 closed in the dispatch —«cmux returned 0» is
+    // not «the command ran»— with even weaker evidence: here the only thing
+    // checked would be that `node` exists.
     if (!existsSync(bin)) return aviso(`el programa del vigilante no existe: ${bin}`)
-    // EL NONCE SE SORTEA AQUÍ Y EN NINGÚN OTRO SITIO (F38). Este es el único
-    // proceso del loop que corre en la sesión de quien despacha, así que es el
-    // único que puede entregarle el nonce sin escribirlo en un sitio que el
-    // agente lea. Se registra ANTES de lanzar el vigilante: si el registro falla
-    // no se vigila nada, porque un vigilante sin compromiso registrado sería un
-    // go que arranca el trabajo y que `--release` no podrá honrar después.
+    // THE NONCE IS DRAWN HERE AND NOWHERE ELSE (F38). This is the only process
+    // of the loop that runs in the session of whoever dispatches, so it is the
+    // only one that can hand them the nonce without writing it somewhere the
+    // agent reads. It is registered BEFORE launching the watcher: if the
+    // registration fails nothing is watched, because a watcher with no
+    // registered commitment would be a go that starts the work and that
+    // `--release` will not be able to honour afterwards.
     const nonce = newGoNonce(randomBytes(4))
     const goHash = goCommitment(nonce)
     const ctHome = { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() }
@@ -768,16 +767,16 @@ function lanzarVigilanteDelGo(slice, sessionName) {
 
 async function waitForLaunchSentinel(sentinelPath, expectedCwd, budgetMs = launchSentinelTimeoutMs) {
   const deadline = Date.now() + budgetMs
-  // Bucle ASÍNCRONO (no un `Atomics.wait` síncrono como el de los stubs): cada
-  // vuelta cede el control al event loop, así que un Ctrl-C durante la espera
-  // se despacha en vez de quedarse pendiente hasta el final de la tanda —
-  // mismo criterio que los checkpoints de D5.
+  // An ASYNCHRONOUS loop (not a synchronous `Atomics.wait` like the stubs'):
+  // every turn yields control to the event loop, so a Ctrl-C during the wait
+  // is dispatched instead of staying pending until the end of the batch — the
+  // same criterion as D5's checkpoints.
   for (;;) {
     let raw = null
     try {
       raw = readFileSync(sentinelPath, 'utf8')
     } catch {
-      raw = null // ENOENT es el caso normal mientras el shell arranca.
+      raw = null // ENOENT is the normal case while the shell starts up.
     }
     if (raw !== null) {
       const parsed = parseSentinel(raw)
@@ -787,10 +786,11 @@ async function waitForLaunchSentinel(sentinelPath, expectedCwd, budgetMs = launc
         if (!sameDir(parsed.cwd, expectedCwd, realpathOf)) return { status: 'wrong-cwd', cwd: parsed.cwd }
         return { status: 'ran', cwd: parsed.cwd }
       }
-      // Un centinela a MEDIO escribir es indistinguible de uno corrupto en una
-      // sola lectura, y el `printf` de una sola llamada lo hace muy improbable
-      // — pero no imposible. Mientras quede presupuesto se reintenta; si se
-      // agota con el fichero ahí y sin parsear, eso es 'garbled' y se dice.
+      // A HALF-written sentinel is indistinguishable from a corrupt one in a
+      // single read, and the single-call `printf` makes it very unlikely — but
+      // not impossible. While there is budget left it retries; if the budget
+      // runs out with the file there and unparsed, that is 'garbled' and it is
+      // said.
       if (Date.now() >= deadline) return { status: 'garbled', raw: raw.slice(0, 200) }
     }
     if (Date.now() >= deadline) return { status: 'never' }
@@ -799,36 +799,36 @@ async function waitForLaunchSentinel(sentinelPath, expectedCwd, budgetMs = launc
 }
 
 // ============================================================================
-// F20/H1 — EL REENVÍO: LO ÚNICO QUE, MEDIDO, CONVIERTE 0/6 EN 5/5.
+// F20/H1 — THE RESEND: THE ONLY THING THAT, MEASURED, TURNS 0/6 INTO 5/5.
 //
-// Medición completa en el bloque de constantes de arriba. El resumen: con el
-// mecanismo de F19 tal cual, seis lanzamientos consecutivos contra el cmux
-// real dieron CERO centinelas (el prompt de oh-my-zsh se comía el `.`). Con
-// este reenvío —misma línea, misma sesión, tras esperar un intento— cinco de
-// cinco arrancaron, todos en el segundo intento, y el agente se lanzó UNA sola
-// vez en cada uno (contado en disco por el propio launcher).
+// The full measurement is in the block of constants above. The summary: with
+// F19's mechanism as it was, six consecutive launches against the real cmux
+// gave ZERO sentinels (oh-my-zsh's prompt ate the `.`). With this resend —same
+// line, same session, after waiting one attempt— five out of five started, all
+// on the second attempt, and the agent was launched ONCE in each (counted on
+// disk by the launcher itself).
 //
-// Qué se manda y qué NO:
-//   - Se manda EXACTAMENTE la misma línea (`. '<launcher>'`) más un Enter.
-//     No se manda Ctrl-C, ni Escape, ni ninguna otra tecla de "limpieza":
-//     cmux ya envió Enter con el primer tecleo, así que la línea corrupta ya
-//     se ejecutó (y muere en "permission denied", porque el launcher no es
-//     ejecutable). Mandar señales a ciegas a una sesión que PODRÍA tener un
-//     agente vivo es justo el daño irreversible que esta ronda evita.
-//   - Antes de cada reenvío se vuelve a mirar el centinela. Y si aun así las
-//     dos líneas llegaran, la guarda de idempotencia del launcher hace que
-//     solo la primera lance al agente.
+// What is sent and what is NOT:
+//   - EXACTLY the same line (`. '<launcher>'`) plus an Enter is sent. No
+//     Ctrl-C, no Escape, no other "cleanup" key: cmux already sent Enter with
+//     the first typing, so the corrupted line already ran (and dies in
+//     "permission denied", because the launcher is not executable). Sending
+//     signals blindly to a session that COULD have a live agent is exactly the
+//     irreversible damage this round avoids.
+//   - Before each resend the sentinel is looked at again. And if both lines
+//     did arrive anyway, the launcher's idempotency guard means only the first
+//     launches the agent.
 //
-// Cuándo NO se reenvía, y se dice por qué:
-//   - si no queda presupuesto (`CT_NEXT_LAUNCH_TIMEOUT_MS` corto);
-//   - si el veredicto ya es CONCLUYENTE ('ran', 'no-claude', 'wrong-cwd'):
-//     reenviar ahí no aclararía nada y sí podría duplicar;
-//   - si no se puede localizar la sesión por su título, o cmux no da un
-//     `ref` para ella. Eso NO se traga: viaja en `retypeProblem` y sale en el
-//     mensaje, porque «no se pudo reenviar» y «se reenvió y no sirvió» llevan
-//     a mirar sitios distintos.
+// When it does NOT resend, and it says why:
+//   - if there is no budget left (a short `CT_NEXT_LAUNCH_TIMEOUT_MS`);
+//   - if the verdict is already CONCLUSIVE ('ran', 'no-claude', 'wrong-cwd'):
+//     resending there would clarify nothing and could duplicate;
+//   - if the session cannot be located by its title, or cmux gives no `ref`
+//     for it. That is NOT swallowed: it travels in `retypeProblem` and comes
+//     out in the message, because «the resend could not be addressed» and «it
+//     was resent and it did not help» lead you to look in different places.
 //
-// Devuelve `{ ...veredicto, retypes, retypeProblem }`.
+// Returns `{ ...verdict, retypes, retypeProblem }`.
 async function awaitLaunchSentinelWithRetypes({ sentinelPath, expectedCwd, title, typedCommand }) {
   const totalDeadline = Date.now() + launchSentinelTimeoutMs
   let retypes = 0
@@ -838,9 +838,9 @@ async function awaitLaunchSentinelWithRetypes({ sentinelPath, expectedCwd, title
     const verdict = await waitForLaunchSentinel(sentinelPath, expectedCwd, Math.min(LAUNCH_ATTEMPT_MS, remaining))
     if (verdict.status !== 'never') return { ...verdict, retypes, retypeProblem }
     if (Date.now() >= totalDeadline) return { ...verdict, retypes, retypeProblem }
-    // Localizar la sesión por su título es la única forma de dirigir el
-    // reenvío: `cmux send` necesita un handle, y el que tenemos es el nombre
-    // que nosotros mismos le pusimos.
+    // Locating the session by its title is the only way of addressing the
+    // resend: `cmux send` needs a handle, and the one we have is the name we
+    // gave it ourselves.
     const all = queryAllCmuxWorkspaces()
     const match = all === null ? null : all.find((w) => w.title === title)
     if (all === null) {
@@ -868,11 +868,11 @@ async function awaitLaunchSentinelWithRetypes({ sentinelPath, expectedCwd, title
   }
 }
 
-// retypeNote: la frase que acompaña a un lanzamiento que necesitó reenvíos.
-// Se dice SIEMPRE que haya habido alguno, también en el camino feliz: un
-// despacho que arrancó al tercer intento arrancó bien, pero el shell de login
-// de esa máquina se está comiendo lo que se le teclea, y eso es exactamente el
-// dato que dejó de existir cuando el problema se volvió recuperable.
+// retypeNote: the sentence that accompanies a launch that needed resends. It
+// is said WHENEVER there was one, on the happy path too: a dispatch that
+// started on the third attempt started fine, but that machine's login shell is
+// eating what is typed at it, and that is exactly the fact that stopped
+// existing when the problem became recoverable.
 function retypeNote(retypes, retypeProblem) {
   const partes = []
   if (retypes > 0) {
@@ -882,10 +882,10 @@ function retypeNote(retypes, retypeProblem) {
   return partes.length ? ` ${partes.join(' ')}` : ''
 }
 
-// stateReasonLabel (F13/H4): cómo se llama, en el idioma del usuario, el
-// motivo de cierre que GitHub devuelve. `null` (issue cerrado antes de que
-// GitHub tuviera `state_reason`, o sin él) NO se traduce a "not planned": se
-// dice que no consta.
+// stateReasonLabel (F13/H4): what the closure reason GitHub returns is called
+// in the user's language. `null` (an issue closed before GitHub had
+// `state_reason`, or without it) is NOT translated to "not planned": it is
+// said that there is no record of it.
 function stateReasonLabel(sr) {
   if (sr === 'NOT_PLANNED') return 'cerrado como "not planned"'
   if (sr === 'REOPENED') return 'cerrado con motivo "reopened"'
@@ -894,36 +894,36 @@ function stateReasonLabel(sr) {
 }
 
 // ============================================================================
-// F16/H1 — LA MEDIDA DE UN MENSAJE DE BLOQUEO NO ES SI ES CIERTO, ES SI LLEVA
-// A HACER ALGO QUE SIRVA.
+// F16/H1 — THE MEASURE OF A BLOCKING MESSAGE IS NOT WHETHER IT IS TRUE, IT IS
+// WHETHER IT LEADS TO DOING SOMETHING USEFUL.
 //
-// El hallazgo de campo: cinco issues ocupaban el carril serializante global y
-// el dispatcher nombró uno. Cada frase era literalmente cierta, y aun así el
-// mensaje entero era una instrucción equivocada — un lector razonable deduce
-// "quito ese y sale", resuelve, vuelve a correr, y se encuentra igual de
-// bloqueado. Cuatro veces seguidas.
+// The field finding: five issues occupied the global serialising lane and the
+// dispatcher named one. Every sentence was literally true, and even so the
+// whole message was a wrong instruction — a reasonable reader deduces "I
+// remove that one and it goes", resolves it, runs again, and finds themselves
+// just as blocked. Four times running.
 //
-// La regla que sale de ahí, y que se aplica a TODAS las explicaciones de este
-// fichero: si para descubrir los N bloqueantes hubiera que repetir el ciclo N
-// veces, hay que decirlos de una vez. Con el cuidado opuesto: cuarenta issues
-// listados tampoco son accionables. Cuando la lista crece, lo que hace falta
-// para DECIDIR es el recuento (¿es una pared o un guijarro?), no los cuarenta
-// nombres — así que se lista una muestra y NUNCA se calla el total.
+// The rule that comes out of that, and which applies to EVERY explanation in
+// this file: if discovering the N blockers would take repeating the cycle N
+// times, they have to be said all at once. With the opposite care: forty
+// issues listed are not actionable either. When the list grows, what is needed
+// in order to DECIDE is the count (is it a wall or a pebble?), not the forty
+// names — so a sample is listed and the total is NEVER kept quiet.
 const MAX_BLOQUEANTES_LISTADOS = 8
 
-// refsAcotadas: "#1, #2, #3" o "#1, …, #8 y 22 más". El total siempre sale.
+// refsAcotadas: "#1, #2, #3" or "#1, …, #8 y 22 más". The total always comes out.
 function refsAcotadas(ns) {
   const shown = ns.slice(0, MAX_BLOQUEANTES_LISTADOS).map((n) => `#${n}`)
   const rest = ns.length - shown.length
   return rest > 0 ? `${shown.join(', ')} y ${rest} más` : shown.join(', ')
 }
 
-// detalleDeHolders: el mismo acotado, para los inventarios de --dry-run ("En
-// vuelo", "Sin mergear, reteniendo tokens"). Antes se volcaban ENTEROS: con
-// treinta slices en revisión al final de un epic, esas dos líneas eran un
-// muro que empujaba fuera de pantalla justo el mensaje que explica el
-// bloqueo. El recuento va en la propia etiqueta de la línea, así que
-// recortar la enumeración no esconde el tamaño del problema.
+// detalleDeHolders: the same capping, for --dry-run's inventories ("En
+// vuelo", "Sin mergear, reteniendo tokens"). Before, they were dumped WHOLE:
+// with thirty slices in review at the end of an epic, those two lines were a
+// wall that pushed the very message explaining the block off the screen. The
+// count goes in the line's own label, so trimming the enumeration does not
+// hide the size of the problem.
 function detalleDeHolders(holders) {
   const shown = holders
     .slice(0, MAX_BLOQUEANTES_LISTADOS)
@@ -932,15 +932,15 @@ function detalleDeHolders(holders) {
   return rest > 0 ? `${shown.join(', ')} … y ${rest} más` : shown.join(', ')
 }
 
-// motivoDeBloqueante: por qué ESTE issue impide despachar al candidato. Los
-// dos motivos no son excluyentes (un holder puede compartir token Y ocupar el
-// carril con otro token distinto), así que se dicen los dos cuando los dos
-// aplican — es exactamente el caso en el que resolver "el token" deja al
-// usuario chocando con el carril en la vuelta siguiente.
-// La explicación de QUÉ es el carril serializante se dice UNA vez, en la
-// nota de cabecera — no pegada a cada línea. Repetida cinco veces (el caso
-// real que originó esto) empuja fuera de pantalla lo único que hay que leer:
-// los números y el recuento.
+// motivoDeBloqueante: why THIS issue prevents the candidate from being
+// dispatched. The two reasons are not mutually exclusive (a holder can share a
+// token AND occupy the lane with a different token), so both are said when
+// both apply — it is exactly the case in which resolving "the token" leaves
+// the user hitting the lane on the next turn.
+// The explanation of WHAT the serialising lane is is said ONCE, in the header
+// note — not stuck to every line. Repeated five times (the real case that gave
+// rise to this) it pushes off the screen the only thing that has to be read:
+// the numbers and the count.
 function motivoDeBloqueante(b, candN) {
   const partes = []
   if (b.sharedTokens.length) {
@@ -953,18 +953,18 @@ function motivoDeBloqueante(b, candN) {
   return `  - #${b.n} (${estado}) — ${partes.join('; y además ')}`
 }
 
-// formatColisionMultiple: el mensaje cuando bloquean DOS O MÁS. No es el
-// mensaje de uno repetido N veces: la lista de bloqueantes de un candidato es
-// una CONJUNCIÓN (hay que despejarlos todos), y eso hay que decirlo en la
-// primera línea, antes que ningún detalle — es la parte que cambia lo que
-// alguien va a hacer a continuación.
+// formatColisionMultiple: the message when TWO OR MORE block. It is not the
+// one-blocker message repeated N times: a candidate's list of blockers is a
+// CONJUNCTION (they all have to be cleared), and that has to be said on the
+// first line, before any detail — it is the part that changes what somebody is
+// going to do next.
 //
-// El remedio se agrupa por ESTADO y no por bloqueante, porque el remedio
-// depende del estado y no del issue: los `in-review` se sacan mergeando (no
-// hay agente a quien esperar), los `in-progress` se sacan esperando (y ahí sí
-// tiene sentido la nota de claim rancio). Un carril con cuatro in-review y un
-// in-progress necesita las DOS instrucciones, y el mensaje viejo solo podía
-// dar una.
+// The remedy is grouped by STATUS and not by blocker, because the remedy
+// depends on the status and not on the issue: the `in-review` ones are cleared
+// by merging (there is no agent to wait for), the `in-progress` ones are
+// cleared by waiting (and there the stale-claim note does make sense). A lane
+// with four in-review and one in-progress needs BOTH instructions, and the old
+// message could only give one.
 function formatColisionMultiple(reason, ctx) {
   const blockers = reason.blockers
   const candN = reason.issue
@@ -989,19 +989,19 @@ function formatColisionMultiple(reason, ctx) {
     remedios.push(`${sinEstado.length} sin estado conocido (${refsAcotadas(sinEstado)}): compruébalos a mano.`)
   }
 
-  // La nota de claim rancio SOLO para los que dicen tener un agente vivo (o
-  // no dicen nada): en un in-review, no tener worktree/rama/sesión es lo
-  // NORMAL y pedirla convertiría cada PR en revisión en una falsa alarma —
-  // el mismo criterio que ya aplicaba el caso de un solo bloqueante. Se
-  // acota al mismo número que la lista para no disparar cuarenta consultas
-  // a git/cmux por un mensaje.
+  // The stale-claim note ONLY for those that say they have a live agent (or
+  // say nothing): in an in-review, having no worktree/branch/session is the
+  // NORMAL thing and asking for it would turn every PR in review into a false
+  // alarm — the same criterion the single-blocker case already applied. It is
+  // capped at the same number as the list so as not to fire forty queries to
+  // git/cmux for one message.
   const notas = ctx
     ? [...enCurso, ...sinEstado].slice(0, MAX_BLOQUEANTES_LISTADOS).map((n) => ctx.stalenessNoteFor(n)).filter(Boolean)
     : []
   const cola = notas.length ? `\nATENCIÓN, alguno de esos claims puede estar muerto: ${notas.join(' ')}` : ''
 
-  // La nota del carril solo aparece si alguien bloquea POR carril: si todos
-  // los bloqueantes comparten token literal, explicar el carril es ruido.
+  // The lane note only appears if somebody blocks BY lane: if every blocker
+  // shares a literal token, explaining the lane is noise.
   const hayCarril = blockers.some((b) => b.laneTokens.length)
   const notaCarril = hayCarril
     ? ` El carril serializante (migration/ci/pbxproj) es GLOBAL: basta con que #${candN} toque uno cualquiera de esos tres para chocar con TODO el que tenga otro, sin compartir token con nadie.`
@@ -1013,25 +1013,27 @@ function formatColisionMultiple(reason, ctx) {
 function formatReason(reason, ctx) {
   switch (reason?.reason) {
     case 'none-ready': {
-      // F13: el mensaje callaba los slices parados en `status:in-review`. Al
-      // final de un epic ese es el estado NORMAL —todo entregado, nada
-      // mergeado— y "no hay nada que despachar todavía" lo pinta como si no
-      // se hubiera empezado. Además, desde F13/H2 esos issues RETIENEN sus
-      // tokens: son la causa de que lo siguiente no salga, no un detalle.
-      // F16/H1, con la misma lente: "no hay nada que despachar TODAVÍA" es
-      // una instrucción a ESPERAR, y con todo el epic en `status:backlog` no
-      // hay nada que esperar — promover backlog → ready es el gate HUMANO
-      // del loop (ct-groom hasta lo recuerda al terminar un groom). Nadie va
-      // a abrir ese gate si el dispatcher dice que aún no toca. Verificado
-      // sin arreglar: tres issues en backlog y CERO issues abiertos producían
-      // el mismo texto palabra por palabra, y sus remedios son opuestos.
+      // F13: the message kept quiet about the slices stopped in
+      // `status:in-review`. At the end of an epic that is the NORMAL state
+      // —everything delivered, nothing merged— and "there is nothing to
+      // dispatch yet" paints it as if nothing had been started. Besides, since
+      // F13/H2 those issues RETAIN their tokens: they are the reason the next
+      // thing does not come out, not a detail.
+      // F16/H1, through the same lens: "there is nothing to dispatch YET" is
+      // an instruction to WAIT, and with the whole epic in `status:backlog`
+      // there is nothing to wait for — promoting backlog → ready is the loop's
+      // HUMAN gate (ct-groom even reminds you of it when a groom finishes).
+      // Nobody is going to open that gate if the dispatcher says it is not
+      // time yet. Verified without fixing: three issues in backlog and ZERO
+      // open issues produced the same text word for word, and their remedies
+      // are opposite.
       const inReview = reason.inReview || []
       const backlog = reason.backlog || []
       const inProgress = reason.inProgress || []
       const total = reason.total
-      // El prefijo se conserva literal en todas las ramas: es lo que hace
-      // que la causa siga siendo reconocible de un vistazo (y lo que fijan
-      // los tests preexistentes de W-B).
+      // The prefix is kept literal in every branch: it is what keeps the
+      // cause recognisable at a glance (and what W-B's pre-existing tests
+      // pin down).
       const cabeza = 'No hay ningún issue en status:ready'
       if (total === 0) {
         return `${cabeza} — de hecho no hay NINGÚN issue abierto en este repo. Eso no es "el loop está al día", es "no hay nada que mirar": o el epic todavía no se ha groomeado (\`/ct-groom <spec> --repo <owner/repo>\`), o --repo apunta a un repo distinto del que crees. Comprueba las dos cosas antes de darlo por terminado.`
@@ -1047,41 +1049,41 @@ function formatReason(reason, ctx) {
         partes.push(`Hay ${inProgress.length} en status:in-progress (${refsAcotadas(inProgress)}): con agente vivo, ahí sí toca esperar.`)
       }
       if (!partes.length) {
-        // Ni backlog, ni in-review, ni in-progress, y sin embargo hay issues
-        // abiertos: están fuera del loop. Decirlo, en vez de dejar que la
-        // frase corta se lea como "ya no queda trabajo".
+        // Neither backlog, nor in-review, nor in-progress, and yet there are
+        // open issues: they are outside the loop. Say so, instead of letting
+        // the short sentence read as "there is no work left".
         return `${cabeza}, y ninguno de los ${total} issue(s) abiertos está en ningún otro estado del loop (backlog/in-progress/in-review): están FUERA del loop, probablemente sin ninguna label \`status:\` — /ct-next no los ve. Si alguno debería despacharse, etiquétalo; si no, no hay nada que hacer aquí.`
       }
       return `${cabeza}. ${partes.join(' ')}`
     }
     case 'deps-unmet': {
-      // D1 finding 2/5: dos causas MUY distintas terminaban antes en el mismo
-      // mensaje genérico ("falta mergear #X"), una de ellas imprimiendo
-      // directamente el string "#null" — instruyendo a esperar algo que no
-      // existe y nunca se va a mergear.
-      //   - `malformed` (finding 2): la sección "## Dependencias" del issue
-      //     existe pero no se reconoció ningún "merge-after #N" — casi
-      //     seguro una reescritura humana. El estado del gate es
-      //     DESCONOCIDO, no "sin dependencias" (unmetDeps llega vacío a
-      //     propósito desde dispatch.js — ver su comentario).
-      //   - una dependencia que tradujo a `null` (finding 5,
-      //     gh-issue-map.js#buildDispatchInput): el orden declarado no
-      //     corresponde a NINGÚN issue existente (ni abierto ni cerrado, ni
-      //     en el propio epic del issue) — nunca se va a resolver solo con
-      //     esperar, hace falta corregir el dato.
+      // D1 finding 2/5: two VERY different causes used to end up in the same
+      // generic message ("falta mergear #X"), one of them printing the string
+      // "#null" outright — instructing you to wait for something that does not
+      // exist and is never going to be merged.
+      //   - `malformed` (finding 2): the issue's "## Dependencias" section
+      //     exists but no "merge-after #N" was recognised — almost certainly a
+      //     human rewrite. The gate's state is UNKNOWN, not "no dependencies"
+      //     (unmetDeps arrives empty on purpose from dispatch.js — see its
+      //     comment).
+      //   - a dependency that translated to `null` (finding 5,
+      //     gh-issue-map.js#buildDispatchInput): the declared order
+      //     corresponds to NO existing issue (neither open nor closed, nor in
+      //     the issue's own epic) — it is never going to resolve itself by
+      //     waiting, the data has to be fixed.
       const list = reason.blocked.map((b) => {
         if (b.malformed) {
           return `#${b.n} (la sección "## Dependencias" existe pero no se reconoció ningún "merge-after #N" en su contenido — probablemente reescrita a mano; tratado como NO despachable hasta que se corrija el texto, nunca como "sin dependencias")`
         }
-        //   - F13/H4: una dependencia cuyo issue está CERRADO pero NO como
-        //     "completed" (típicamente "not planned", que es lo correcto para
-        //     un slice descartado). `filterMergedIssues` solo cuenta
-        //     'COMPLETED', así que esa dep NUNCA se va a satisfacer sola —
-        //     pero el mensaje decía "falta mergear #7" igual que si el
-        //     trabajo siguiera en curso, y el dependiente esperaba para
-        //     siempre en silencio. Ahora se nombra el estado real y el
-        //     remedio, que aquí NO es esperar sino decidir: quitar la dep, o
-        //     reabrir y cerrar como completed si el trabajo sí se hizo.
+        //   - F13/H4: a dependency whose issue is CLOSED but NOT as
+        //     "completed" (typically "not planned", which is the correct thing
+        //     for a discarded slice). `filterMergedIssues` only counts
+        //     'COMPLETED', so that dep is NEVER going to satisfy itself — but
+        //     the message said "falta mergear #7" just as if the work were
+        //     still under way, and the dependant waited forever in silence.
+        //     Now the real state is named along with the remedy, which here is
+        //     NOT to wait but to decide: drop the dep, or reopen and close as
+        //     completed if the work really was done.
         const depStates = reason.depStates || {}
         const deps = b.unmetDeps.map((d) => {
           if (d == null) {
@@ -1094,15 +1096,15 @@ function formatReason(reason, ctx) {
         })
         return `#${b.n} (falta mergear ${deps.join(', ')})`
       }).join('; ')
-      // La coletilla final NO puede decir "espera a que se mergeen" cuando
-      // NINGUNA de las deps pendientes puede mergearse ya. Observado en una
-      // corrida real contra el sandbox: el detalle decía "ESTA NO SE VA A
-      // SATISFACER NUNCA" y el cierre, tres palabras después, "espera a que
-      // se mergeen esas dependencias" — el mensaje se contradecía a sí mismo
-      // y la última frase es la que se queda. `waitable` es cierto solo si
-      // queda al menos una dep que de verdad pueda satisfacerse esperando:
-      // un issue todavía abierto (ni traducida a null, ni cerrada sin
-      // completar, ni con la sección de deps ilegible).
+      // The closing line CANNOT say "wait for them to be merged" when NONE of
+      // the pending deps can be merged any more. Observed in a real run
+      // against the sandbox: the detail said "ESTA NO SE VA A SATISFACER
+      // NUNCA" and the closing line, three words later, "espera a que se
+      // mergeen esas dependencias" — the message contradicted itself and the
+      // last sentence is the one that sticks. `waitable` is true only if there
+      // is at least one dep that really can be satisfied by waiting: an issue
+      // still open (neither translated to null, nor closed without completing,
+      // nor with an unreadable deps section).
       const depStatesTail = reason.depStates || {}
       const waitable = reason.blocked.some((b) => !b.malformed && (b.unmetDeps || []).some(
         (d) => d != null && !Object.prototype.hasOwnProperty.call(depStatesTail, d)
@@ -1113,45 +1115,45 @@ function formatReason(reason, ctx) {
       return `Hay slice(s) en status:ready pero con dependencias sin mergear o sin resolver: ${list} — ${tail}`
     }
     case 'collision': {
-      // F13/H2 — DOS BLOQUEOS DISTINTOS BAJO EL MISMO NOMBRE. Desde que
-      // `status:in-review` retiene tokens (dispatch.js#collectTokenHolders),
-      // "colisiona con trabajo en vuelo" puede significar dos cosas con dos
-      // remedios opuestos:
-      //   - contra un `in-progress`: hay (o debería haber) un agente vivo.
-      //     "Espera a que termine" es un consejo correcto, y la nota de
-      //     staleness sirve para decir cuándo NO lo es.
-      //   - contra un `in-review`: NO hay ningún agente. El trabajo está
-      //     entregado y esperando merge. "Espera a que termine" sería
-      //     absurdo — lo que hay que hacer es mergear el PR (o cerrar el
-      //     issue si el PR ya se mergeó y nadie lo cerró, o reabrir el slice
-      //     si la revisión lo rechazó).
+      // F13/H2 — TWO DIFFERENT BLOCKS UNDER THE SAME NAME. Ever since
+      // `status:in-review` retains tokens (dispatch.js#collectTokenHolders),
+      // "it collides with in-flight work" can mean two things with two
+      // opposite remedies:
+      //   - against an `in-progress`: there is (or should be) a live agent.
+      //     "Wait for it to finish" is correct advice, and the staleness note
+      //     serves to say when it is NOT.
+      //   - against an `in-review`: there is NO agent. The work is delivered
+      //     and waiting to be merged. "Wait for it to finish" would be absurd
+      //     — what has to be done is merge the PR (or close the issue if the
+      //     PR was merged already and nobody closed it, or reopen the slice if
+      //     the review rejected it).
       //
-      // Y la nota de staleness NO se pide para un `in-review` (ver
-      // `holderStatus` abajo): esa comprobación busca worktree/rama/sesión de
-      // cmux, y en un slice ya entregado su ausencia es lo NORMAL, no una
-      // anomalía. Pedirla ahí convertiría cada PR en revisión en una falsa
-      // alarma de "claim huérfano" — exactamente el falso positivo que la
-      // detección de staleness se diseñó para no producir.
+      // And the staleness note is NOT asked for on an `in-review` (see
+      // `holderStatus` below): that check looks for a worktree/branch/cmux
+      // session, and on an already-delivered slice their absence is NORMAL,
+      // not an anomaly. Asking for it there would turn every PR in review into
+      // a false "orphaned claim" alarm — exactly the false positive staleness
+      // detection was designed not to produce.
       //
-      // `withIssueStatus` puede ser `null` cuando quien llamó no aportó el
-      // estado (llamadas unitarias antiguas): en ese caso se mantiene el
-      // comportamiento de antes (nota de staleness incluida) en vez de
-      // afirmar un estado que no se conoce.
-      // F16/H1: si bloquean DOS O MÁS, ningún mensaje que nombre a uno solo
-      // puede ser honesto — se va por la rama que los dice todos. Con UNO,
-      // el mensaje de siempre se conserva palabra por palabra: añadir "hay
-      // que despejarlos todos" cuando "todos" es uno sería ruido, y los
-      // tests de F13/staleness fijan ese texto literal.
-      // `blockers` puede faltar en llamadas unitarias antiguas a esta
-      // función (que solo conocían la atribución de un issue): en ese caso
-      // se mantiene exactamente el comportamiento anterior.
+      // `withIssueStatus` can be `null` when the caller did not supply the
+      // status (old unit calls): in that case the previous behaviour is kept
+      // (staleness note included) instead of asserting a status that is not
+      // known.
+      // F16/H1: if TWO OR MORE block, no message that names only one can be
+      // honest — it goes down the branch that says them all. With ONE, the
+      // usual message is kept word for word: adding "they all have to be
+      // cleared" when "all" is one would be noise, and the F13/staleness tests
+      // pin that literal text.
+      // `blockers` may be missing in old unit calls to this function (which
+      // only knew the attribution of one issue): in that case exactly the
+      // previous behaviour is kept.
       if ((reason.blockers || []).length > 1) return formatColisionMultiple(reason, ctx)
       const holderStatus = reason.withIssueStatus ?? null
       const inReviewHolder = holderStatus === 'in-review'
-      // Finding 2: `ctx?.stalenessNoteFor(reason.withIssue)` solo hace algo
-      // cuando `ctx` viene informado (siempre, desde el call site real de
-      // más abajo) — se deja opcional para que las pruebas unitarias de esta
-      // función sigan pudiendo llamarla sin un contexto, sin reventar.
+      // Finding 2: `ctx?.stalenessNoteFor(reason.withIssue)` only does
+      // something when `ctx` is supplied (always, from the real call site
+      // below) — it is left optional so that this function's unit tests can
+      // still call it with no context, without blowing up.
       const note = (ctx && !inReviewHolder) ? ctx.stalenessNoteFor(reason.withIssue) : null
       // El remedio del caso in-review, en un solo sitio: el mismo texto vale
       // para la colisión por token y para la serializante.

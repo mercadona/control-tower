@@ -1,24 +1,25 @@
 import { describe, it, expect } from 'vitest'
 import { parseScope, matchesPattern, scopeViolations, issueFromPrBody, isSliceBranch, LOOP_ARTIFACT_PATTERNS } from '../scripts/scope.js'
 
-// EL CASO QUE ORIGINA TODO ESTE FICHERO, verbatim del campo.
+// THE CASE THAT GIVES RISE TO THIS WHOLE FILE, verbatim from the field.
 //
-// Despacho 1, slice 4 (menoplus #662 → PR #668, 2026-08-13). El agente tocó
-// copy GDPR en pantalla contra su «Protegido» explícito, re-grabó su baseline,
-// y escribió en el ledger y en el cuerpo del PR que Jose lo había autorizado.
-// LAS DOS AFIRMACIONES ERAN FALSAS: su transcript tiene UNA sola entrada de
-// usuario, el kickoff del dispatcher.
+// Dispatch 1, slice 4 (menoplus #662 → PR #668, 2026-08-13). The agent touched
+// GDPR copy on screen against its explicit «Protegido», re-recorded its
+// baseline, and wrote in the ledger and in the body of the PR that Jose had
+// authorised it. BOTH ASSERTIONS WERE FALSE: its transcript has ONE single
+// user entry, the kickoff of the dispatcher.
 //
-// Lo detectó una persona extrañándose de ver dos `.swift` de la app en la lista
-// de ficheros. No lo detectó: el hook del gate visual (solo dispara en
-// TaskUpdate), la label `gate:none` (la renuncia era legítima para el trabajo
-// PREVISTO), el CI (verde, porque el cambio era correcto), ni los dos reviewers
-// independientes del propio agente (revisaron el cambio, no la firma).
+// A person spotted it, puzzled at seeing two `.swift` of the app in the list
+// of files. What did not spot it: the hook of the visual gate (it only fires
+// on TaskUpdate), the `gate:none` label (the waiver was legitimate for the
+// work that was PLANNED), the CI (green, because the change was correct), nor
+// the two independent reviewers of the agent itself (they reviewed the change,
+// not the signature).
 //
-// La lección que este módulo cablea: la firma humana NO es verificable desde
-// dentro del loop —el agente corre con las credenciales de Jose, así que puede
-// falsificar cualquier artefacto de GitHub—, pero LO QUE TOCÓ sí. El hecho no
-// se puede falsificar sin que se vea.
+// The lesson this module wires in: the human signature is NOT verifiable from
+// inside the loop —the agent runs with the credentials of Jose, so it can
+// forge any GitHub artefact—, but WHAT IT TOUCHED is. The fact cannot be
+// forged without it showing.
 const FICHEROS_DEL_PR_668 = [
   'apps/ios/MenoPlusTests/Infrastructure/SpanishStringsLintTests.swift',
   'apps/ios/MenoPlus/Presentation/Profile/DeletionConfirmView.swift',
@@ -39,98 +40,100 @@ const CUERPO_ISSUE_662 = `## Acceptance criteria
 
 <!-- ct-order:4 -->`
 
-describe('parseScope — el alcance del epic, declarado UNA vez y legible por máquina', () => {
-  it('lee la línea `Alcance:` de dentro de `## Contexto del epic`', () => {
+describe('parseScope — the scope of the epic, declared ONCE and machine readable', () => {
+  it('it reads the `Alcance:` line from inside `## Contexto del epic`', () => {
     const s = parseScope(CUERPO_ISSUE_662)
     expect(s.declared).toBe(true)
     expect(s.patterns).toEqual(['apps/ios/MenoPlusTests/**', '.github/workflows/ci.yml'])
   })
 
-  // LA DECISIÓN DOCTRINAL DEL MÓDULO. Un epic que no declara alcance no está
-  // limpio: es un epic que no se puede comprobar. Es la misma regla que el
-  // resto del plugin ya sostiene («el 1 nunca se degrada a 0»), y su efecto
-  // práctico es deliberado: empuja la fricción a la congelación, que es el
-  // único momento del ciclo en que Jose está leyendo.
-  it('sin línea `Alcance:` → declared FALSE, que NO es lo mismo que «sin restricciones»', () => {
+  // THE DOCTRINAL DECISION OF THE MODULE. An epic that declares no scope is
+  // not clean: it is an epic that cannot be checked. It is the same rule the
+  // rest of the plugin already holds up («el 1 nunca se degrada a 0»), and its
+  // practical effect is deliberate: it pushes the friction to the freeze,
+  // which is the only moment of the cycle when Jose is reading.
+  it('with no `Alcance:` line → declared FALSE, which is NOT the same as «no restrictions»', () => {
     const s = parseScope('## Contexto del epic\n- Cosas en prosa, ningún alcance.\n')
     expect(s.declared).toBe(false)
     expect(s.patterns).toEqual([])
     expect(s.reason).toMatch(/no declara/i)
   })
 
-  it('`Alcance:` presente pero vacío tampoco cuenta como declarado', () => {
+  it('`Alcance:` present but empty does not count as declared either', () => {
     const s = parseScope('## Contexto del epic\n- Alcance:   \n')
     expect(s.declared).toBe(false)
   })
 
-  // El `Alcance:` tiene que vivir DENTRO de `## Contexto del epic` porque es la
-  // única sección que groom copia verbatim al issue. Una línea suelta en otra
-  // sección no viajaría al agente ni al gate, y darla por buena aquí crearía un
-  // alcance que existe en el spec y no existe donde se comprueba.
-  it('ignora un `Alcance:` que viva fuera de `## Contexto del epic`', () => {
+  // The `Alcance:` has to live INSIDE `## Contexto del epic` because that is
+  // the only section groom copies verbatim into the issue. A loose line in
+  // another section would travel neither to the agent nor to the gate, and
+  // taking it as good here would create a scope that exists in the spec and
+  // does not exist where it is checked.
+  it('it ignores an `Alcance:` that lives outside `## Contexto del epic`', () => {
     const body = '## Acceptance criteria\n- Alcance: apps/**\n\n## Contexto del epic\n- nada\n'
     expect(parseScope(body).declared).toBe(false)
   })
 
-  it('tolera negrita, backticks y espaciado alrededor del valor', () => {
+  it('it tolerates bold, backticks and spacing around the value', () => {
     const s = parseScope('## Contexto del epic\n- **Alcance:** `apps/ios/**` ,  `docs/**` \n')
     expect(s.patterns).toEqual(['apps/ios/**', 'docs/**'])
   })
 
-  // El cierre de la negrita del rótulo (`**Alcance:**`) cae después de los dos
-  // puntos y se colaba al principio del valor. Se quita solo cuando lleva
-  // espacio detrás — que es lo que distingue un cierre de negrita de un glob
-  // que empieza por `**`, el cual siempre lleva barra.
-  it('un patrón que EMPIEZA por `**` sobrevive al limpiado de la negrita', () => {
+  // The closing of the bold of the label (`**Alcance:**`) falls after the
+  // colon and used to slip into the start of the value. It is removed only
+  // when it has a space behind it — which is what tells a closing of bold
+  // apart from a glob that starts with `**`, which always carries a slash.
+  it('a pattern that STARTS with `**` survives the cleaning of the bold', () => {
     expect(parseScope('## Contexto del epic\n- **Alcance:** **/*.swift\n').patterns).toEqual(['**/*.swift'])
   })
 
-  it('varias líneas `Alcance:` acumulan patrones en vez de que la última gane', () => {
+  it('several `Alcance:` lines accumulate patterns instead of the last one winning', () => {
     const s = parseScope('## Contexto del epic\n- Alcance: apps/**\n- Alcance: docs/**\n')
     expect(s.patterns).toEqual(['apps/**', 'docs/**'])
   })
 
-  it('la sección se corta en el siguiente encabezado, no se come el resto del body', () => {
+  it('the section is cut off at the next heading, it does not eat the rest of the body', () => {
     const body = '## Contexto del epic\n- nada\n\n## Out of scope / Protected\n- Alcance: apps/**\n'
     expect(parseScope(body).declared).toBe(false)
   })
 
-  it('body vacío o ausente → declared false, sin throw', () => {
+  it('an empty or absent body → declared false, with no throw', () => {
     expect(parseScope('').declared).toBe(false)
     expect(parseScope(null).declared).toBe(false)
   })
 })
 
-describe('matchesPattern — el glob mínimo, dicho entero para que nadie lo adivine', () => {
-  it('`**` cruza separadores de directorio', () => {
+describe('matchesPattern — the minimal glob, said in full so that nobody has to guess it', () => {
+  it('`**` crosses directory separators', () => {
     expect(matchesPattern('apps/ios/MenoPlusTests/Infrastructure/X.swift', 'apps/ios/MenoPlusTests/**')).toBe(true)
   })
-  it('`*` NO cruza separadores', () => {
+  it('`*` does NOT cross separators', () => {
     expect(matchesPattern('apps/ios/X.swift', 'apps/*')).toBe(false)
     expect(matchesPattern('apps/ios', 'apps/*')).toBe(true)
   })
-  it('una ruta exacta casa exacta', () => {
+  it('an exact path matches exactly', () => {
     expect(matchesPattern('.github/workflows/ci.yml', '.github/workflows/ci.yml')).toBe(true)
     expect(matchesPattern('.github/workflows/otro.yml', '.github/workflows/ci.yml')).toBe(false)
   })
-  // Amabilidad medida: quien escribe el alcance a mano en la congelación va a
-  // escribir el directorio, no el glob. Tratar el `/` final como `/**` evita un
-  // rojo por sintaxis en el momento en que menos ganas hay de depurar globs.
-  it('un patrón que acaba en `/` vale como el directorio entero', () => {
+  // Measured kindness: whoever writes the scope by hand at the freeze is
+  // going to write the directory, not the glob. Treating the trailing `/` as
+  // `/**` avoids a red over syntax at the moment when there is least appetite
+  // for debugging globs.
+  it('a pattern that ends in `/` counts as the whole directory', () => {
     expect(matchesPattern('apps/ios/a/b.swift', 'apps/ios/')).toBe(true)
   })
-  it('normaliza el `./` inicial de las dos partes', () => {
+  it('it normalises the leading `./` of both parts', () => {
     expect(matchesPattern('./apps/x.swift', 'apps/**')).toBe(true)
   })
-  // Los metacaracteres de regex que aparecen de verdad en rutas (`.`, `+`, `(`)
-  // tienen que ser literales, o `.github` casaría con `Xgithub`.
-  it('el punto es literal, no «cualquier carácter»', () => {
+  // The regex metacharacters that really turn up in paths (`.`, `+`, `(`)
+  // have to be literal, or `.github` would match `Xgithub`.
+  it('the dot is literal, not «any character»', () => {
     expect(matchesPattern('Xgithub/workflows/ci.yml', '.github/workflows/ci.yml')).toBe(false)
   })
 })
 
-describe('scopeViolations — el hecho, que es lo que no se puede falsificar', () => {
-  it('EL INCIDENTE: los dos .swift de la app salen como violación, el test y el plan no', () => {
+describe('scopeViolations — the fact, which is what cannot be forged', () => {
+  it('THE INCIDENT: the two .swift of the app come out as a violation, the test and the plan do not', () => {
     const { patterns } = parseScope(CUERPO_ISSUE_662)
     expect(scopeViolations(FICHEROS_DEL_PR_668, patterns)).toEqual([
       'apps/ios/MenoPlus/Presentation/Profile/DeletionConfirmView.swift',
@@ -138,150 +141,157 @@ describe('scopeViolations — el hecho, que es lo que no se puede falsificar', (
     ])
   })
 
-  it('un PR enteramente dentro del alcance no produce ninguna violación', () => {
+  it('a PR entirely within the scope produces no violation at all', () => {
     const { patterns } = parseScope(CUERPO_ISSUE_662)
     expect(scopeViolations(['apps/ios/MenoPlusTests/Infrastructure/SpanishStringsLintTests.swift'], patterns)).toEqual([])
   })
 
-  // EXENCIÓN, y hay que leerla como lo que es: no un agujero, sino el
-  // reconocimiento de la huella del PROPIO loop. El kickoff ORDENA al agente
-  // escribir su plan en docs/superpowers/plans/ y commitearlo («viaja en el
-  // PR»). Hacer fallar el gate por un fichero que el propio loop exige sería un
-  // muro insatisfacible, y un guard que solo se satisface desobedeciendo al
-  // dispatcher se acaba ignorando entero.
-  it('el plan del slice está exento: lo ordena el kickoff, no lo elige el agente', () => {
+  // AN EXEMPTION, and it has to be read for what it is: not a hole, but the
+  // recognition of the footprint of the loop ITSELF. The kickoff ORDERS the
+  // agent to write its plan in docs/superpowers/plans/ and to commit it («it
+  // travels in the PR»). Failing the gate over a file the loop itself demands
+  // would be an unsatisfiable wall, and a guard that can only be satisfied by
+  // disobeying the dispatcher ends up ignored altogether.
+  it('the plan of the slice is exempt: the kickoff orders it, the agent does not choose it', () => {
     expect(scopeViolations(['docs/superpowers/plans/x-plan.md'], ['apps/**'])).toEqual([])
     expect(LOOP_ARTIFACT_PATTERNS).toContain('docs/superpowers/plans/**')
   })
 
-  // `.agent/SLICE.md` NO está exento, y es deliberado: es estado de sesión, no
-  // producto del slice. En el despacho 1 un agente lo metió en su PR y lo sacó
-  // él mismo después («es estado de sesión, no producto del slice»). Exentarlo
-  // normalizaría justo lo que aquel agente corrigió por su cuenta.
-  it('`.agent/SLICE.md` NO está exento: es estado de sesión, no producto del slice', () => {
+  // `.agent/SLICE.md` is NOT exempt, and that is deliberate: it is session
+  // state, not product of the slice. In dispatch 1 an agent put it in its PR
+  // and took it out himself afterwards («es estado de sesión, no producto del
+  // slice»). Exempting it would normalise exactly what that agent corrected on
+  // his own.
+  it('`.agent/SLICE.md` is NOT exempt: it is session state, not product of the slice', () => {
     expect(scopeViolations(['.agent/SLICE.md'], ['apps/**'])).toEqual(['.agent/SLICE.md'])
   })
 
-  // Tampoco `.superpowers/**`: el propio skill de brainstorming dice que ese
-  // directorio va en `.gitignore`. Apareció de verdad en el PR #668
-  // (`.superpowers/sdd/progress.md`) y marcarlo NO es un falso positivo — es
-  // estado de sesión commiteado, residuo del fork.
-  it('`.superpowers/**` NO está exento: debería estar en .gitignore, no en un PR', () => {
+  // Nor is `.superpowers/**`: the brainstorming skill itself says that
+  // directory goes in `.gitignore`. It really did turn up in PR #668
+  // (`.superpowers/sdd/progress.md`) and flagging it is NOT a false positive —
+  // it is committed session state, residue of the fork.
+  it('`.superpowers/**` is NOT exempt: it should be in .gitignore, not in a PR', () => {
     expect(scopeViolations(['.superpowers/sdd/progress.md'], ['apps/**'])).toEqual(['.superpowers/sdd/progress.md'])
   })
 
-  // La contabilidad propia de cada repo (BITACORA.md es de menoplus, no del
-  // plugin) NO se hardcodea en el plugin: la declara el repo destino en su
-  // workflow. Hardcodearla aquí abriría ese agujero en TODOS los repos.
-  it('las exenciones del repo destino se SUMAN a las del plugin, no las sustituyen', () => {
+  // The bookkeeping each repository has of its own (BITACORA.md belongs to
+  // menoplus, not to the plugin) is NOT hardcoded in the plugin: the target
+  // repository declares it in its workflow. Hardcoding it here would open that
+  // hole in EVERY repository.
+  it('the exemptions of the target repository ADD to those of the plugin, they do not replace them', () => {
     const files = ['docs/superpowers/BITACORA.md', 'docs/superpowers/plans/x.md', 'src/a.swift']
     expect(scopeViolations(files, ['apps/**'], ['docs/superpowers/BITACORA.md'])).toEqual(['src/a.swift'])
   })
 
-  it('un repo que declara sus exenciones no puede desactivar sin querer las del plugin', () => {
+  it('a repository that declares its exemptions cannot switch off those of the plugin by accident', () => {
     expect(scopeViolations(['docs/superpowers/plans/x.md'], ['apps/**'], ['otra/cosa'])).toEqual([])
   })
 
-  // El execution spec está exento porque el slice rellena su «Registro de
-  // cierre» al entregar — pero eso deja al agente escribiendo en el spec
-  // CONGELADO sin que el gate lo vea. Se testea para que la exención sea una
-  // decisión visible y no un descuido que alguien descubra en el próximo
-  // incidente.
-  it('el execution spec está exento — y esa exención es un límite conocido del gate', () => {
+  // The execution spec is exempt because the slice fills in its «Registro de
+  // cierre» when it delivers — but that leaves the agent writing in the FROZEN
+  // spec without the gate seeing it. It is tested so that the exemption is a
+  // visible decision and not an oversight somebody discovers in the next
+  // incident.
+  it('the execution spec is exempt — and that exemption is a known limit of the gate', () => {
     expect(scopeViolations(['docs/superpowers/specs/2026-08-12-x-execution.md'], ['apps/**'])).toEqual([])
   })
 
-  // EL DEFECTO MEDIDO: `ct-step report` escribe el veredicto del juez en
-  // `docs/superpowers/verdicts/issue-<n>-task-<t>.json`, lo stagea y lo mete
-  // DENTRO del commit de cada tarea («el veredicto VIAJA en la pull request»,
-  // criterio de cierre de F37). Con esa ruta sin exentar, un epic que declare
-  // `Alcance: src/**` y tenga el gate instalado sale ROJO por un fichero que el
-  // agente no escribió y no puede impedir que se escriba — comprobado
-  // ejecutando la función, que devolvía
-  // `docs/superpowers/verdicts/issue-2-task-1.json` como violación. Y el
-  // mensaje que da el gate («o el trabajo sale del PR, o el alcance del epic
-  // cambia») es imposible de obedecer: es el muro insatisfacible de F14 otra
-  // vez, y un guard que solo se satisface desobedeciendo se desactiva entero.
-  it('el veredicto del juez está exento: lo escribe y lo stagea ct-step, no el agente', () => {
+  // THE MEASURED DEFECT: `ct-step report` writes the verdict of the judge in
+  // `docs/superpowers/verdicts/issue-<n>-task-<t>.json`, stages it and puts it
+  // INSIDE the commit of every task («el veredicto VIAJA en la pull request»,
+  // closing criterion of F37). With that path left unexempted, an epic that
+  // declares `Alcance: src/**` and has the gate installed comes out RED over a
+  // file the agent did not write and cannot stop being written — checked by
+  // running the function, which returned
+  // `docs/superpowers/verdicts/issue-2-task-1.json` as a violation. And the
+  // message the gate gives («o el trabajo sale del PR, o el alcance del epic
+  // cambia») is impossible to obey: it is the unsatisfiable wall of F14 all
+  // over again, and a guard that can only be satisfied by disobeying gets
+  // switched off altogether.
+  it('the verdict of the judge is exempt: ct-step writes it and stages it, not the agent', () => {
     expect(scopeViolations(['docs/superpowers/verdicts/issue-2-task-1.json'], ['src/**'])).toEqual([])
     expect(LOOP_ARTIFACT_PATTERNS).toContain('docs/superpowers/verdicts/**')
   })
 
-  // La telemetría del run va a viajar en el PR por la misma razón que el
-  // veredicto, y la exención tiene que estar ANTES de que llegue la escritura:
-  // si llega primero, el siguiente slice de cualquier epic con alcance
-  // declarado sale rojo por el fichero de métricas, y quien lo lea no sabrá si
-  // el rojo lo puso el agente o el loop.
-  it('la telemetría del run está exenta: la escribe el loop, no el implementador', () => {
+  // The telemetry of the run is going to travel in the PR for the same reason
+  // as the verdict, and the exemption has to be there BEFORE the write
+  // arrives: if the write gets there first, the next slice of any epic with a
+  // declared scope comes out red over the metrics file, and whoever reads it
+  // will not know whether the agent or the loop put the red there.
+  it('the telemetry of the run is exempt: the loop writes it, not the implementer', () => {
     expect(scopeViolations(['docs/superpowers/metrics/ct-step.jsonl'], ['src/**'])).toEqual([])
     expect(LOOP_ARTIFACT_PATTERNS).toContain('docs/superpowers/metrics/**')
   })
 
-  // EL CONTRAPESO, y sin él los dos tests de arriba pasarían con una lista de
-  // exentos que eximiera de más (`docs/**`, o peor, `**`). Una ruta fuera de
-  // alcance sigue siendo violación, incluso —y sobre todo— si es vecina de las
-  // exentas dentro de `docs/superpowers/`.
-  it('las exenciones nuevas no ensanchan el agujero: lo de al lado sigue violando', () => {
+  // THE COUNTERWEIGHT, and without it the two tests above would pass with a
+  // list of exempt paths that exempted too much (`docs/**`, or worse, `**`). A
+  // path out of scope is still a violation, even —and above all— if it is a
+  // neighbour of the exempt ones inside `docs/superpowers/`.
+  it('the new exemptions do not widen the hole: what sits next to them still violates', () => {
     expect(scopeViolations(['lib/ajeno.js'], ['src/**'])).toEqual(['lib/ajeno.js'])
     expect(scopeViolations(['docs/superpowers/apuntes.md'], ['src/**'])).toEqual(['docs/superpowers/apuntes.md'])
   })
 
-  // Sin patrones el resultado NO puede ser «nada viola»: eso convertiría un
-  // epic sin alcance declarado en un epic con barra libre, que es exactamente
-  // el fallo que el gate viene a cerrar. Devolver todos los ficheros deja al
-  // llamante sin forma de leerlo como limpio.
-  it('sin patrones, TODOS los ficheros son violación — nunca «nada que ver aquí»', () => {
+  // With no patterns the result CANNOT be «nothing violates»: that would turn
+  // an epic with no declared scope into an epic with free rein, which is
+  // exactly the failure the gate comes to close. Returning every file leaves
+  // the caller with no way of reading it as clean.
+  it('with no patterns, EVERY file is a violation — never «nothing to see here»', () => {
     expect(scopeViolations(['a.swift', 'b.swift'], [])).toEqual(['a.swift', 'b.swift'])
   })
 
-  it('lista de ficheros vacía → sin violaciones, sin throw', () => {
+  it('an empty list of files → no violations, no throw', () => {
     expect(scopeViolations([], ['apps/**'])).toEqual([])
   })
 })
 
-describe('isSliceBranch — lo que salva al gate de morir de ruido', () => {
-  // El gate juzga PRs de slice. Un PR de documentación, un chore o un arreglo a
-  // mano NO llevan `Closes #N` y no son cosecha del loop: hacerlos fallar
-  // suspendería todos los PRs humanos del repo y el gate se desactivaría entero
-  // en un día — el muro insatisfacible que conventions.js ya pagó aquí (F14).
+describe('isSliceBranch — what saves the gate from dying of noise', () => {
+  // The gate judges slice PRs. A documentation PR, a chore or a fix by hand do
+  // NOT carry `Closes #N` and are not harvest of the loop: failing them would
+  // suspend every human PR of the repository and the gate would be switched
+  // off altogether in a day — the unsatisfiable wall conventions.js already
+  // paid for here (F14).
   //
-  // La discriminación es la rama, porque `feat/<n>` la crea el DISPATCHER (es
-  // el `branchNameOf` por defecto de dispatch.js), no el agente.
-  it('reconoce la rama que crea el dispatcher', () => {
+  // The discriminator is the branch, because `feat/<n>` is created by the
+  // DISPATCHER (it is the default `branchNameOf` of dispatch.js), not by the
+  // agent.
+  it('it recognises the branch the dispatcher creates', () => {
     expect(isSliceBranch('feat/662')).toBe(true)
   })
-  it('una rama humana no es rama de slice', () => {
+  it('a human branch is not a slice branch', () => {
     expect(isSliceBranch('docs/desenlace')).toBe(false)
     expect(isSliceBranch('feat/scope-gate')).toBe(false)
     expect(isSliceBranch('main')).toBe(false)
   })
-  it('vacío o ausente no es rama de slice, sin throw', () => {
+  it('empty or absent is not a slice branch, with no throw', () => {
     expect(isSliceBranch('')).toBe(false)
     expect(isSliceBranch(null)).toBe(false)
   })
 })
 
-describe('issueFromPrBody — de qué issue es este PR', () => {
-  // Se apoya en findClosingKeywords (closing-keywords.js), que ya está
-  // endurecido contra el ReDoS que midió F27. No se reimplementa el reconocedor
-  // de closing keywords: dos reconocedores del mismo texto derivan.
-  it('saca el número del `Closes #N` del cuerpo', () => {
+describe('issueFromPrBody — which issue this PR belongs to', () => {
+  // It leans on findClosingKeywords (closing-keywords.js), which is already
+  // hardened against the ReDoS F27 measured. The recogniser of closing
+  // keywords is not reimplemented: two recognisers of the same text drift.
+  it('it pulls the number out of the `Closes #N` of the body', () => {
     expect(issueFromPrBody('Closes #662\n\nSlice 4 y último.')).toBe(662)
   })
-  it('acepta las demás keywords de cierre que GitHub honra', () => {
+  it('it accepts the other closing keywords GitHub honours', () => {
     expect(issueFromPrBody('Fixes: #10')).toBe(10)
   })
-  // Un PR sin `Closes` no es cosecha del loop y el gate no puede juzgarlo. Que
-  // devuelva null y no 0 obliga al llamante a decidir explícitamente qué hace.
-  it('sin closing keyword → null, para que el llamante decida', () => {
+  // A PR with no `Closes` is not harvest of the loop and the gate cannot judge
+  // it. Returning null and not 0 forces the caller to decide explicitly what it
+  // does.
+  it('with no closing keyword → null, so that the caller decides', () => {
     expect(issueFromPrBody('Un PR suelto, sin issue.')).toBeNull()
   })
-  it('cuerpo vacío o ausente → null, sin throw', () => {
+  it('an empty or absent body → null, with no throw', () => {
     expect(issueFromPrBody('')).toBeNull()
     expect(issueFromPrBody(null)).toBeNull()
   })
-  // Varios `Closes` en un PR es ambiguo: el gate no elige uno en silencio.
-  it('dos issues cerrados por el mismo PR → null, no el primero a dedo', () => {
+  // Several `Closes` in one PR is ambiguous: the gate does not pick one in
+  // silence.
+  it('two issues closed by the same PR → null, not the first one picked by hand', () => {
     expect(issueFromPrBody('Closes #10\nCloses #11')).toBeNull()
   })
 })

@@ -11,61 +11,61 @@ const slice = (e2e) => ({
   gates: ['plan', 'e2e'], gatesDeclared: true,
 })
 
-describe('la semilla lleva los recorridos', () => {
-  it('el campo e2e es una LISTA, no una frase', () => {
+describe('the seed carries the journeys', () => {
+  it('the e2e field is a LIST, not a sentence', () => {
     const md = buildStateSeed(slice('uno, dos'), { branch: 'feat/5', base: 'main', baseSha: 'abc' })
     const { meta } = parseStateSafe(md)
     expect(meta.e2e).toEqual(['uno', 'dos'])
   })
 
-  it('sin recorridos, el campo es una lista vacía y no desaparece', () => {
+  it('with no journeys, the field is an empty list and does not disappear', () => {
     const { meta } = parseStateSafe(buildStateSeed(slice('no'), { branch: 'feat/5', base: 'main', baseSha: 'abc' }))
     expect(meta.e2e).toEqual([])
   })
 
-  it('el kickoff nombra los recorridos y manda cerrarlos con ct-step e2e', () => {
+  it('the kickoff names the journeys and orders them closed with ct-step e2e', () => {
     const k = renderKickoff(slice('curl -i :9115/metrics responde 200'), { repo: 'o/r', dispatchCheckPath: 'd.mjs', base: 'main' , conventionsDir: '/plugin/conventions' })
     expect(k).toContain('curl -i :9115/metrics responde 200')
     expect(k).toMatch(/ct-step e2e/)
   })
 
-  it('sin recorridos, el kickoff no habla de e2e', () => {
+  it('with no journeys, the kickoff does not talk about e2e', () => {
     const k = renderKickoff(slice('no'), { repo: 'o/r', dispatchCheckPath: 'd.mjs', base: 'main' , conventionsDir: '/plugin/conventions' })
     expect(k).not.toMatch(/ct-step e2e/)
   })
 })
 
-// Propiedad end-to-end (T9, el brief la pide explícitamente): la cadena
-// entera "celda del spec -> sección del issue -> .agent/SLICE.md ->
-// newRun({e2eRuns})" no tenía ningún test que la recorriera de un tirón.
-// Cualquiera de sus tres primeros tramos (resolveE2e, buildIssueBody/
-// mapGhIssue, buildStateSeed) puede renombrar su campo sin que ningún test de
-// unidad se entere — este es el que sí lo notaría.
+// An end-to-end property (T9, the brief asks for it explicitly): the whole
+// chain "spec cell -> issue section -> .agent/SLICE.md -> newRun({e2eRuns})"
+// had no test walking it in one go. Any of its first three legs (resolveE2e,
+// buildIssueBody/mapGhIssue, buildStateSeed) can rename its field without any
+// unit test noticing — this is the one that would notice.
 //
-// EL CUARTO TRAMO, OJO: el test de abajo llama a `newRun` DIRECTAMENTE con
-// `e2eRuns: meta.e2e` — comprueba que `newRun` acepta y guarda ese parámetro,
-// no que `ct-step.mjs` (línea 221, `newRun({ ..., e2eRuns: sliceMeta.e2e })`)
-// siga leyendo el campo correcto de `sliceMeta`. Un renombrado de ESA línea no
-// lo detectaría este test: haría falta ejecutar el binario, no la función.
-describe('cadena completa: celda del spec -> sección del issue -> SLICE.md -> newRun (T9, propiedad end-to-end)', () => {
-  it('un recorrido con coma escapada en el spec sobrevive el viaje entero hasta run.e2eRuns', () => {
-    // 1. La celda cruda del spec, con una coma ESCAPADA dentro del propio
-    // recorrido (no separando dos recorridos) — el caso que resolveE2e/
-    // splitEscapedCommas existen para no partir en dos.
+// MIND THE FOURTH LEG: the test below calls `newRun` DIRECTLY with
+// `e2eRuns: meta.e2e` — it checks that `newRun` accepts and stores that
+// parameter, not that `ct-step.mjs` (line 221,
+// `newRun({ ..., e2eRuns: sliceMeta.e2e })`) still reads the right field of
+// `sliceMeta`. A rename on THAT line would not be detected by this test: it
+// would take running the binary, not the function.
+describe('the complete chain: spec cell -> issue section -> SLICE.md -> newRun (T9, end-to-end property)', () => {
+  it('a journey with an escaped comma in the spec survives the whole trip as far as run.e2eRuns', () => {
+    // 1. The raw spec cell, with an ESCAPED comma inside the journey itself
+    // (not separating two journeys) — the case resolveE2e/splitEscapedCommas
+    // exist so as not to split in two.
     const specSlice = {
       n: 9, entrega: 'expone métricas', ac: ['AC-9.1 expone /metrics'], deps: [], protected: '–',
       e2e: 'curl -i :9115/metrics responde 200\\, sin auth',
     }
     const specRef = { path: 'spec.md', heading: '9. Slices', url: 'https://github.com/o/r/blob/main/spec.md#9-slices', reason: null }
 
-    // 2. /ct-groom escribe el body del issue: la sección "## E2E" con el
-    // recorrido YA resuelto (la coma escapada, ya una coma literal).
+    // 2. /ct-groom writes the issue's body: the "## E2E" section with the
+    // journey ALREADY resolved (the escaped comma, now a literal comma).
     const body = buildIssueBody(specSlice, specRef)
     expect(body).toContain('## E2E')
     expect(body).toContain('- curl -i :9115/metrics responde 200, sin auth')
 
-    // 3. /ct-next reconstruye el slice DESDE EL ISSUE (nunca abre el spec):
-    // mapGhIssue extrae esa misma sección a `e2eRuns`.
+    // 3. /ct-next rebuilds the slice FROM THE ISSUE (it never opens the spec):
+    // mapGhIssue extracts that same section into `e2eRuns`.
     const issueSlice = mapGhIssue({
       number: 9, title: '#9 expone métricas',
       labels: [{ name: 'status:ready' }, { name: 'type:backend' }],
@@ -73,23 +73,23 @@ describe('cadena completa: celda del spec -> sección del issue -> SLICE.md -> n
     })
     expect(issueSlice.e2eRuns).toEqual(['curl -i :9115/metrics responde 200, sin auth'])
 
-    // 4. buildStateSeed siembra ese array en .agent/SLICE.md — parseStateSafe
-    // es el mismo lector que usa ct-step.mjs.
+    // 4. buildStateSeed seeds that array into .agent/SLICE.md — parseStateSafe
+    // is the same reader ct-step.mjs uses.
     const seed = buildStateSeed(issueSlice, { branch: 'feat/9', base: 'main', baseSha: 'deadbeef' })
     const { meta } = parseStateSafe(seed)
     expect(meta.e2e).toEqual(['curl -i :9115/metrics responde 200, sin auth'])
 
-    // 5. ct-step.mjs (línea 221) pasa `sliceMeta.e2e` como `e2eRuns` a
-    // newRun — el punto de consumo real que Task 8 ya dejó construido.
+    // 5. ct-step.mjs (line 221) passes `sliceMeta.e2e` as `e2eRuns` to
+    // newRun — the real consumption point Task 8 already left built.
     const run = newRun({ plan: 'docs/plan.md', issue: 9, baseSha: 'deadbeef', tasksTotal: 1, e2eRuns: meta.e2e })
     expect(run.e2eRuns).toEqual(['curl -i :9115/metrics responde 200, sin auth'])
   })
 
-  it('sin recorridos en el spec, la cadena entera da `[]` en cada tramo (nunca `undefined`)', () => {
+  it('with no journeys in the spec, the whole chain gives `[]` at every leg (never `undefined`)', () => {
     const specSlice = { n: 10, entrega: 'x', ac: ['AC-10.1'], deps: [], protected: '–', e2e: 'no' }
     const specRef = { path: 'spec.md', heading: '9. Slices', url: 'https://github.com/o/r/blob/main/spec.md#9-slices', reason: null }
     const body = buildIssueBody(specSlice, specRef)
-    // groom.js#buildIssueBody omite la sección ENTERA cuando no hay recorridos.
+    // groom.js#buildIssueBody omits the WHOLE section when there are no journeys.
     expect(body).not.toContain('## E2E')
 
     const issueSlice = mapGhIssue({

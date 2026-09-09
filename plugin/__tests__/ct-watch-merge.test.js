@@ -1,17 +1,17 @@
-// El vigilante del MERGE (scripts/ct-watch-merge.mjs), contra `gh` y `cmux` de
-// mentira.
+// The MERGE watcher (scripts/ct-watch-merge.mjs), against a fake `gh` and a
+// fake `cmux`.
 //
-// Lo que este fichero fija: que el merge de la PR de un slice llegue a la
-// sesión coordinadora sin que nadie se lo cuente. Hasta esta ronda, mergear era
-// un acto que no producía ninguna señal mecánica — la cosecha (F20: el worktree
-// `.worktrees/<n>`, la rama `feat/<n>` y su `claude` zombi) se quedaba en disco
-// hasta que la misma persona que había mergeado iba a la ventana de la
-// coordinadora a decírselo.
+// What this file pins: that the merge of a slice's PR reaches the coordinator
+// session without anybody telling it about it. Until this round, merging was an
+// act that produced no mechanical signal at all — the harvest (F20: the
+// `.worktrees/<n>` worktree, the `feat/<n>` branch and its zombie `claude`)
+// stayed on disk until the very person who had merged walked over to the
+// coordinator's window to tell it.
 //
-// Se ejecuta el script DE VERDAD como subproceso, igual que ct-watch-go.test.js
-// y por el mismo motivo: lo que queda por probar aquí es la costura —hablar con
-// `gh`, encontrar la coordinadora por su DIRECTORIO y teclearle la línea—, que
-// es justo lo que un test con dobles en memoria no comprobaría.
+// The REAL script is executed as a subprocess, the same as ct-watch-go.test.js
+// and for the same reason: what is left to test here is the seam —talking to
+// `gh`, finding the coordinator by its DIRECTORY and typing the line into it—,
+// which is precisely what a test with in-memory doubles would not check.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
@@ -30,17 +30,17 @@ let contadores = 0
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'watch-merge-'))
   stateFile = join(dir, 'cmux-state.json')
-  // La coordinadora, expuesta por el stub con su `ref` y su `cwd`. El vigilante
-  // la va a localizar por el DIRECTORIO (el checkout principal), no por el
-  // título: así no hay ningún nombre de sesión que configurar en ningún sitio.
-  // El título es distinto del cwd a propósito — si el vigilante buscara por
-  // título, este test fallaría.
+  // The coordinator, exposed by the stub with its `ref` and its `cwd`. The
+  // watcher is going to locate it by the DIRECTORY (the main checkout), not by
+  // the title: that way there is no session name to configure anywhere. The
+  // title is different from the cwd on purpose — if the watcher looked by
+  // title, this test would fail.
   writeFileSync(stateFile, JSON.stringify([{ title: 'coordinadora de repo-pulse', cwd: dir }]))
 })
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
-// El vigilante corre hasta que decide, así que cada caso le pone plazos cortos:
-// lo que se prueba es la decisión, no el reloj.
+// The watcher runs until it decides, so each case gives it short deadlines:
+// what is being tested is the decision, not the clock.
 function correr(env = {}, { timeoutMs = 800, pollMs = 40, coordinatorCwd = null } = {}) {
   try {
     const stdout = execFileSync(process.execPath, [
@@ -53,8 +53,8 @@ function correr(env = {}, { timeoutMs = 800, pollMs = 40, coordinatorCwd = null 
         ...process.env,
         PATH: `${STUBS}:${process.env.PATH}`,
         FAKE_CMUX_STATE_FILE: stateFile,
-        // La línea que se teclea es prosa, no un comando: sin esto el stub
-        // intentaría ejecutarla con `sh -c`.
+        // The line that gets typed is prose, not a command: without this the
+        // stub would try to run it with `sh -c`.
         FAKE_CMUX_SKIP_COMMAND_SUBSTR: 'coordinadora',
         CT_WATCH_MERGE_TIMEOUT_MS: String(timeoutMs),
         CT_WATCH_MERGE_POLL_MS: String(pollMs),
@@ -69,10 +69,10 @@ function correr(env = {}, { timeoutMs = 800, pollMs = 40, coordinatorCwd = null 
 
 const pendienteDe = () => JSON.parse(readFileSync(stateFile, 'utf8'))[0].pending
 
-// El merge tiene que LLEGAR, no estar ya ahí: el vigilante nace justo cuando el
-// PR se abre, así que el primer sondeo ve el PR sin mergear. Los casos de
-// entrega van en secuencia — primeros sondeos vacíos, el siguiente con el PR
-// mergeado — que es además cómo se ve de verdad.
+// The merge has to ARRIVE, not be there already: the watcher is born exactly
+// when the PR opens, so the first poll sees the PR unmerged. The delivery cases
+// go in sequence — first polls empty, the next one with the PR merged — which
+// is also how it really looks.
 const conMerge = (extra = {}) => ({
   FAKE_GH_PR_LIST_SEQUENCE: JSON.stringify([
     [],
@@ -82,30 +82,31 @@ const conMerge = (extra = {}) => ({
   ...extra,
 })
 
-// PATH sin `cmux` — pero CON `node`, o el stub de `gh` (que es un script con
-// shebang `env node`) tampoco arrancaría y el test mediría otra cosa.
+// A PATH without `cmux` — but WITH `node`, or the `gh` stub (which is a script
+// with an `env node` shebang) would not start either and the test would be
+// measuring something else.
 const sinCmux = () => [join(AQUI, 'fixtures', 'fake-gh-bin'), dirname(process.execPath), '/usr/bin', '/bin'].join(':')
 
-describe('el vigilante entrega el aviso del merge', () => {
-  it('ve el PR mergeado y teclea la línea en la coordinadora', () => {
+describe('the watcher delivers the merge warning', () => {
+  it('sees the merged PR and types the line into the coordinator', () => {
     const r = correr(conMerge())
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/línea enviada/)
-    // El `send-key Enter` consume el pendiente: que esté a null es la prueba de
-    // que la línea se ENVIÓ y se ejecutó, no que se quedó en la línea de
-    // edición. Los dos pasos van separados porque `cmux send` no añade Enter.
+    // The `send-key Enter` consumes the pending one: its being null is the
+    // proof that the line was SENT and executed, not that it stayed on the edit
+    // line. The two steps go separately because `cmux send` adds no Enter.
     expect(pendienteDe()).toBe(null)
   })
 
-  it('la línea nombra el PR, el slice y los dos artefactos de la cosecha', () => {
-    // Lo que la coordinadora recibe tiene que bastarle para actuar sin volver a
-    // preguntar: qué PR, qué slice, y qué hay en disco. Si el mensaje sólo
-    // dijera "mergeado", el humano seguiría siendo el bus de mensajes.
+  it('the line names the PR, the slice and the two artefacts of the harvest', () => {
+    // What the coordinator receives has to be enough for it to act without
+    // asking again: which PR, which slice, and what is on disk. If the message
+    // only said "merged", the human would still be the message bus.
     //
-    // Se lee del REGISTRO de invocaciones de cmux, no del `pending` del stub:
-    // `send-key Enter` consume el pendiente (lo pone a null), que es justo lo
-    // que el test de arriba usa como prueba de que la línea se ejecutó. Las dos
-    // aserciones necesitan fuentes distintas.
+    // It is read from the RECORD of cmux invocations, not from the stub's
+    // `pending`: `send-key Enter` consumes the pending one (sets it to null),
+    // which is precisely what the test above uses as proof that the line was
+    // executed. The two assertions need different sources.
     const invocaciones = join(dir, 'cmux-argv.log')
     const r = correr(conMerge({ FAKE_CMUX_INVOKED_LOG_FILE: invocaciones }))
     expect(r.status).toBe(0)
@@ -116,17 +117,17 @@ describe('el vigilante entrega el aviso del merge', () => {
     expect(linea).toMatch(/feat\/5/)
   })
 
-  it('espera mientras el PR no está mergeado, y avisa en el tick en que lo está', () => {
-    // Lo que de verdad importa: que no se rinda en el primer sondeo. Un PR se
-    // mergea horas o días después de abrirse.
+  it('waits while the PR is not merged, and warns on the tick in which it is', () => {
+    // What really matters: that it does not give up on the first poll. A PR
+    // gets merged hours or days after it opens.
     const r = correr(conMerge())
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/línea enviada/)
   })
 })
 
-describe('el vigilante no avisa de lo que no es un merge', () => {
-  it('un PR abierto y sin mergear agota el plazo sin tocar la coordinadora', () => {
+describe('the watcher does not warn about what is not a merge', () => {
+  it('an open, unmerged PR runs out the deadline without touching the coordinator', () => {
     const r = correr({ FAKE_GH_PR_LIST: '[]' })
     expect(r.status).toBe(3)
     expect(r.stdout).toMatch(/plazo agotado/)
@@ -134,18 +135,18 @@ describe('el vigilante no avisa de lo que no es un merge', () => {
   })
 })
 
-describe('lo que no puede tumbar la vigilancia', () => {
-  it('un fallo de `gh` se anota y se reintenta en el próximo tick', () => {
-    // La red se cae y el token caduca. Lo que no puede pasar es que un fallo
-    // transitorio se lea como «no está mergeado» de forma permanente: el
-    // vigilante se apagaría con el trabajo entregado y sin cosechar.
+describe('what cannot bring the watch down', () => {
+  it('a failure of `gh` is written down and retried on the next tick', () => {
+    // The network goes down and the token expires. What cannot happen is that a
+    // transient failure gets read as "it is not merged" permanently: the watcher
+    // would shut down with the work delivered and unharvested.
     const r = correr({ FAKE_GH_PR_LIST_FAIL: '1' })
     expect(r.status).toBe(3)
     expect(r.stdout).toMatch(/no se pudo consultar el PR/)
     expect(r.stdout).toMatch(/se reintenta/)
   })
 
-  it('si el merge llega y no hay coordinadora, lo dice y muere', () => {
+  it('if the merge arrives and there is no coordinator, it says so and dies', () => {
     writeFileSync(stateFile, JSON.stringify([]))
     const r = correr(conMerge())
     expect(r.status).toBe(1)
@@ -153,68 +154,70 @@ describe('lo que no puede tumbar la vigilancia', () => {
   })
 
   // -------------------------------------------------------------------------
-  // Este caso ocurrió en campo (2026-08-26, PR #16 de jjponz/rust-monitoring) y
-  // el defecto no fue del vigilante: hizo lo correcto y lo dijo. El defecto fue
-  // que su mensaje nombraba el HECHO ("no hay ninguna sesión en <cwd>") y no la
-  // REGLA, así que quien lo leyó no podía deducir qué tenía que haber hecho
-  // distinto — y encima parecía que se había perdido trabajo, cuando el residuo
-  // lo sigue detectando `/ct-next` solo.
+  // This case happened in the field (2026-08-26, PR #16 of
+  // jjponz/rust-monitoring) and the defect was not the watcher's: it did the
+  // right thing and said so. The defect was that its message named the FACT
+  // ("there is no session in <cwd>") and not the RULE, so whoever read it could
+  // not deduce what they should have done differently — and on top of that it
+  // looked as if work had been lost, when `/ct-next` still detects the residue
+  // on its own.
   //
-  // Es el mismo criterio que sostiene ct-next-honest-messages.test.js: un
-  // mensaje que describe correctamente un estado sin decir qué hacer con él es
-  // la mitad de un diagnóstico.
+  // It is the same criterion that holds up ct-next-honest-messages.test.js: a
+  // message that correctly describes a state without saying what to do about it
+  // is half a diagnosis.
   // -------------------------------------------------------------------------
-  it('cuando no la encuentra, nombra la REGLA y dice que no se ha perdido trabajo', () => {
+  it('when it does not find it, it names the RULE and says no work has been lost', () => {
     writeFileSync(stateFile, JSON.stringify([]))
     const r = correr(conMerge())
     expect(r.status).toBe(1)
-    // La regla: la coordinadora vive en el checkout principal, y el directorio
-    // concreto tiene que aparecer para que sea accionable.
+    // The rule: the coordinator lives in the main checkout, and the concrete
+    // directory has to appear for it to be actionable.
     expect(r.stdout).toMatch(/coordinadora tiene que ser una workspace de cmux abierta EN/)
     expect(r.stdout).toContain(dir)
-    // Y por qué es por directorio y no por nombre: a ella no la crea el loop.
+    // And why it is by directory and not by name: it is not created by the loop.
     expect(r.stdout).toMatch(/no la crea el loop/)
-    // La red de seguridad, dicha: el aviso se pierde, el trabajo no.
+    // The safety net, said out loud: the warning is lost, the work is not.
     expect(r.stdout).toMatch(/cosecha pendiente/)
     expect(r.stdout).toMatch(/No se ha perdido trabajo/)
   })
 
   // -------------------------------------------------------------------------
-  // EL TEST QUE FALTABA, y que habría cazado el hallazgo de la revisión
-  // adversarial sobre la #37.
+  // THE TEST THAT WAS MISSING, and that would have caught the finding of the
+  // adversarial review on #37.
   //
-  // `custom_title` y `current_directory` son nombres de campo OBSERVADOS contra
-  // la versión de cmux instalada; no hay garantía de esquema. Con la lectura
-  // cruda que este vigilante tenía, un renombrado de ese campo hacía que ninguna
-  // entrada casara, se devolvía «cmux contestó y no está», y el mensaje de error
-  // —que desde la ronda anterior NOMBRA LA REGLA y le dice a la persona qué hizo
-  // mal— se convertía en una acusación específica, segura y FALSA. La mejora de
-  // honestidad del mensaje empeoró el modo de fallo, que es lo que lo hacía
-  // difícil de ver.
+  // `custom_title` and `current_directory` are field names OBSERVED against the
+  // installed version of cmux; there is no schema guarantee. With the raw read
+  // this watcher used to have, a rename of that field made no entry match, "cmux
+  // answered and it is not there" was returned, and the error message —which
+  // since the previous round NAMES THE RULE and tells the person what they did
+  // wrong— turned into a specific, confident and FALSE accusation. Making the
+  // message more honest made the failure mode worse, which is what made it hard
+  // to see.
   //
-  // `ct-next.mjs` ya se había peleado con esto (D5, hallazgo B). Lo que ahora
-  // comparten los tres consumidores es la conclusión de esa pelea: un campo cuyo
-  // esquema no reconocemos degrada a NO CONCLUYENTE, jamás a "verificado que no
-  // está".
+  // `ct-next.mjs` had already fought this one (D5, finding B). What the three
+  // consumers now share is the conclusion of that fight: a field whose schema we
+  // do not recognise degrades to INCONCLUSIVE, never to "verified that it is not
+  // there".
   // -------------------------------------------------------------------------
-  it('si cmux renombra el campo del directorio, NO acusa: degrada a no concluyente', () => {
-    // El stub responde con entradas de verdad, pero sin `current_directory`.
+  it('if cmux renames the directory field, it does NOT accuse: it degrades to inconclusive', () => {
+    // The stub answers with real entries, but with no `current_directory`.
     const r = correr(conMerge({ FAKE_CMUX_CWD_FIELD_RENAMED: '1' }), { timeoutMs: 500, pollMs: 40 })
-    // Sale por PLAZO (nunca puede entregar), no por el exit 1 de «no está»: la
-    // diferencia es que sigue intentándolo en vez de culpar a nadie.
+    // It exits by DEADLINE (it can never deliver), not by the exit 1 of "it is
+    // not there": the difference is that it keeps trying instead of blaming
+    // anybody.
     expect(r.status).toBe(3)
     expect(r.stdout).toMatch(/no se pudo consultar cmux/)
     expect(r.stdout).toMatch(/se reintenta la entrega/)
-    // Y lo que NO puede aparecer: la acusación.
+    // And what CANNOT appear: the accusation.
     expect(r.stdout).not.toMatch(/La regla que no se cumplió/)
     expect(r.stdout).not.toMatch(/no existe ninguna workspace/)
   })
 
-  it('si el merge llega y justo entonces no se puede preguntar a cmux, NO se abandona', () => {
-    // El hallazgo que ct-watch-go pagó con una revisión adversarial: «cmux
-    // contestó que no está» y «no se pudo preguntar» no significan lo mismo, y
-    // tirar la distinción en el camino de ENTREGA mata la vigilancia en el
-    // único instante que importa.
+  it('if the merge arrives and cmux cannot be asked right then, it does NOT give up', () => {
+    // The finding ct-watch-go paid for with an adversarial review: "cmux
+    // answered that it is not there" and "it could not be asked" do not mean the
+    // same thing, and throwing that distinction away on the DELIVERY path kills
+    // the watch at the only instant that matters.
     const r = correr(conMerge({ PATH: sinCmux() }), { timeoutMs: 500, pollMs: 40 })
     expect(r.status).toBe(3)
     expect(r.stdout).toMatch(/el merge está visto pero no se pudo consultar cmux/)
@@ -222,34 +225,35 @@ describe('lo que no puede tumbar la vigilancia', () => {
   })
 
   // -------------------------------------------------------------------------
-  // LA DIVERGENCIA DELIBERADA RESPECTO A ct-watch-go.
+  // THE DELIBERATE DIVERGENCE FROM ct-watch-go.
   //
-  // Aquél se apaga en cuanto cmux contesta que la sesión del slice no existe, y
-  // hace bien: sin esa sesión no hay nada que vigilar. Aquí NO, y el motivo es
-  // que la ausencia de la coordinadora no significa lo mismo: cerrar su ventana
-  // es lo normal —te vas a dormir y el merge llega por la mañana— y es justo el
-  // caso que este vigilante existe para cubrir. Apagarse entonces sería
-  // apagarse siempre en el escenario que motiva todo esto.
+  // That one shuts down as soon as cmux answers that the slice's session does
+  // not exist, and it is right to: without that session there is nothing to
+  // watch. Here it does NOT, and the reason is that the absence of the
+  // coordinator does not mean the same thing: closing its window is the normal
+  // thing —you go to sleep and the merge arrives in the morning— and that is
+  // exactly the case this watcher exists to cover. Shutting down then would be
+  // shutting down always in the very scenario that motivates all of this.
   // -------------------------------------------------------------------------
-  it('si la coordinadora no está mientras espera, sigue vigilando', () => {
+  it('if the coordinator is not there while it waits, it keeps watching', () => {
     writeFileSync(stateFile, JSON.stringify([]))
     const r = correr({ FAKE_GH_PR_LIST: '[]' }, { timeoutMs: 400, pollMs: 40 })
     expect(r.status).toBe(3)
     expect(r.stdout).toMatch(/plazo agotado/)
-    // Y no se ha inventado un exit 4 «la sesión ya no existe» como el del
-    // vigilante del go: aquí eso no es una cota, es el caso normal.
+    // And no exit 4 "the session no longer exists" has been invented like the
+    // go watcher's: here that is not a bound, it is the normal case.
     expect(r.stdout).not.toMatch(/ya no existe/)
   })
 
-  it('si el tecleo falla lo dice y muere: el merge se vio y no se pudo entregar', () => {
+  it('if the typing fails it says so and dies: the merge was seen and could not be delivered', () => {
     const r = correr(conMerge({ FAKE_CMUX_SEND_FAIL: '1' }))
     expect(r.status).toBe(1)
     expect(r.stdout).toMatch(/no se pudo escribir/)
   })
 })
 
-describe('los argumentos y los plazos', () => {
-  it('sin issue, repo o cwd de la coordinadora no arranca', () => {
+describe('the arguments and the deadlines', () => {
+  it("without an issue, a repo or the coordinator's cwd it does not start", () => {
     let r
     try {
       execFileSync(process.execPath, [SCRIPT, '--issue', '5'], { encoding: 'utf8', timeout: 10_000 })
@@ -261,10 +265,10 @@ describe('los argumentos y los plazos', () => {
     expect(r.stderr).toMatch(/uso:/)
   })
 
-  it('un plazo que no se entiende aborta en vez de caer al defecto en silencio', () => {
-    // Mismo criterio que CT_WATCH_GO_POLL_MS y CT_NEXT_LAUNCH_TIMEOUT_MS: un
-    // plazo mal escrito cambia lo que este proceso significa, y no querrías
-    // descubrirlo dos días después.
+  it('a deadline that cannot be understood aborts instead of silently falling back to the default', () => {
+    // Same criterion as CT_WATCH_GO_POLL_MS and CT_NEXT_LAUNCH_TIMEOUT_MS: a
+    // badly written deadline changes what this process means, and you would not
+    // want to discover that two days later.
     const r = correr({ CT_WATCH_MERGE_POLL_MS: 'un rato' })
     expect(r.status).toBe(2)
     expect(r.stderr).toMatch(/CT_WATCH_MERGE_POLL_MS inválido/)

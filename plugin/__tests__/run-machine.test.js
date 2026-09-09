@@ -1,11 +1,11 @@
-// La tabla que decide el paso siguiente (scripts/run-machine.js).
+// The table that decides the next step (scripts/run-machine.js).
 //
-// Este fichero es EXHAUSTIVO a propósito: recorre los 42 pares (paso,
-// resultado) que existen — 7 pasos x 6 resultados — y comprueba, uno a uno, o
-// bien a dónde va el run, o bien que la transición LANZA. La razón es que el
-// valor entero del diseño está en que la secuencia no la decida un modelo: una
-// tabla con un hueco no es una tabla, es una tabla y una decisión implícita
-// tomada por omisión.
+// This file is EXHAUSTIVE on purpose: it walks the 42 (step, outcome) pairs
+// that exist — 7 steps x 6 outcomes — and checks, one by one, either where the
+// run goes, or that the transition THROWS. The reason is that the whole value
+// of the design lies in the sequence not being decided by a model: a table
+// with a gap is not a table, it is a table plus an implicit decision taken by
+// omission.
 import { describe, it, expect } from 'vitest'
 import { after, newRun, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile } from '../scripts/run-machine.js'
 import { ReconcileOutcome } from '../scripts/reconcile-outcome.js'
@@ -15,27 +15,27 @@ const run = (over = {}) => ({ ...newRun({ plan: 'p.md', issue: 7, baseSha: 'abc'
 const PASOS = Object.values(STEPS)
 const RESULTADOS = Object.values(OUTCOMES)
 
-// Los pares que la tabla SÍ describe. Todo lo demás tiene que lanzar.
+// The pairs the table DOES describe. Everything else has to throw.
 const DESCRITOS = new Set([
   'implement/done', 'implement/discarded',
   'controls/done', 'controls/failed', 'controls/indeterminate',
   'judge/done', 'judge/failed', 'judge/corrections-ordered', 'judge/discarded',
-  // H9: el segundo veto no vuelve a implementar a ciegas — pasa por el consejero.
+  // H9: the second veto does not implement again blindly — it goes through the adviser.
   'advise/done', 'advise/discarded',
   'commit/done', 'commit/failed',
-  // §3.7: los pasos que corren tras la última tarea comiteada.
+  // §3.7: the steps that run after the last task is committed.
   'reconcile/done', 'reconcile/failed', 'reconcile/discarded',
   'global/done', 'global/failed', 'global/indeterminate',
   'slice-judge/done', 'slice-judge/failed', 'slice-judge/discarded',
-  // El e2e cierra la cola, y sólo si la slice declara recorridos.
+  // The e2e closes the queue, and only if the slice declares runs.
   'e2e/done', 'e2e/failed', 'e2e/indeterminate', 'e2e/discarded',
-  // over-budget lo entiende cualquier paso.
+  // over-budget is understood by every step.
   ...PASOS.map((p) => `${p}/over-budget`),
 ])
 
-describe('la tabla, entera', () => {
+describe('the table, entire', () => {
   it.each(PASOS.flatMap((step) => RESULTADOS.map((outcome) => [step, outcome])))(
-    'el par (%s, %s) está descrito o lanza, nunca decide en silencio',
+    'the pair (%s, %s) is described or it throws, it never decides in silence',
     (step, outcome) => {
       const llamada = () => after(run({ step }), outcome)
       if (DESCRITOS.has(`${step}/${outcome}`)) {
@@ -47,7 +47,7 @@ describe('la tabla, entera', () => {
     },
   )
 
-  it('el mensaje del imposible nombra el paso y el resultado, para que se pueda arreglar', () => {
+  it('the impossible message names the step and the outcome, so that it can be fixed', () => {
     expect(() => after(run({ step: STEPS.IMPLEMENT }), OUTCOMES.FAILED))
       .toThrow(/paso "implement".*resultado "failed"/)
   })
@@ -58,7 +58,7 @@ describe('implement', () => {
     expect(after(run(), OUTCOMES.DONE).run.step).toBe(STEPS.CONTROLS)
   })
 
-  it('discarded → implement otra vez, con un descarte más y SIN gastar reintento', () => {
+  it('discarded → implement again, with one more discard and WITHOUT spending a retry', () => {
     const { run: r } = after(run({ discards: 1, controlRetries: 1 }), OUTCOMES.DISCARDED)
     expect(r.step).toBe(STEPS.IMPLEMENT)
     expect(r.discards).toBe(2)
@@ -73,7 +73,7 @@ describe('controls', () => {
     expect(after(enControles(), OUTCOMES.DONE).run.step).toBe(STEPS.JUDGE)
   })
 
-  it('failed vuelve a implement mientras queden reintentos, contándolos', () => {
+  it('failed goes back to implement while retries remain, counting them', () => {
     const primero = after(enControles(), OUTCOMES.FAILED)
     expect(primero.run.step).toBe(STEPS.IMPLEMENT)
     expect(primero.run.controlRetries).toBe(1)
@@ -84,13 +84,13 @@ describe('controls', () => {
     expect(segundo.state).toBe(RUN_STATES.OPEN)
   })
 
-  it('failed con los reintentos agotados cierra en blocked-controls', () => {
+  it('failed with the retries spent closes in blocked-controls', () => {
     const { state } = after(enControles({ controlRetries: DEFAULT_BUDGETS.controlRetries }), OUTCOMES.FAILED)
     expect(state).toBe(RUN_STATES.BLOCKED_CONTROLS)
   })
 
-  it('indeterminate cierra A LA PRIMERA, sin gastar los reintentos', () => {
-    // No se pudo medir. Reintentar a ciegas repite el coste sin cambiar nada.
+  it('indeterminate closes ON THE FIRST GO, without spending the retries', () => {
+    // It could not be measured. Retrying blindly repeats the cost without changing anything.
     const { run: r, state } = after(enControles(), OUTCOMES.INDETERMINATE)
     expect(state).toBe(RUN_STATES.BLOCKED_CONTROLS)
     expect(r.controlRetries).toBe(0)
@@ -104,39 +104,39 @@ describe('judge', () => {
     expect(after(enJuez(), OUTCOMES.DONE).run.step).toBe(STEPS.COMMIT)
   })
 
-  it('failed —el veto— vuelve a implement, y agotado cierra en blocked-judge', () => {
+  it('failed —the veto— goes back to implement, and spent it closes in blocked-judge', () => {
     expect(after(enJuez(), OUTCOMES.FAILED).run.judgeRetries).toBe(1)
     expect(after(enJuez(), OUTCOMES.FAILED).run.step).toBe(STEPS.IMPLEMENT)
     expect(after(enJuez({ judgeRetries: 2 }), OUTCOMES.FAILED).state).toBe(RUN_STATES.BLOCKED_JUDGE)
   })
 
-  it('el SEGUNDO veto no vuelve a implementar a ciegas: abre advise, gastando su reintento', () => {
-    // H9. El reintento que este veto concede es el ÚLTIMO, y es el que el
-    // patrón advisor-strategy manda escalar en vez de repetir.
+  it('the SECOND veto does not implement again blindly: it opens advise, spending its retry', () => {
+    // H9. The retry this veto grants is the LAST one, and it is the one the
+    // advisor-strategy pattern says to escalate instead of repeat.
     const { run: r, state } = after(enJuez({ judgeRetries: 1 }), OUTCOMES.FAILED)
     expect(r.step).toBe(STEPS.ADVISE)
     expect(r.judgeRetries).toBe(2)
     expect(state).toBe(RUN_STATES.OPEN)
   })
 
-  it('corrections-ordered —el refunfuño— vuelve a implement con presupuesto PROPIO', () => {
+  it('corrections-ordered —the grumble— goes back to implement with a budget of ITS OWN', () => {
     const { run: r } = after(enJuez(), OUTCOMES.CORRECTIONS_ORDERED)
     expect(r.step).toBe(STEPS.IMPLEMENT)
     expect(r.correctionRetries).toBe(1)
-    // No gasta reintento de veto: son dos presupuestos distintos.
+    // It does not spend a veto retry: they are two different budgets.
     expect(r.judgeRetries).toBe(0)
   })
 
-  it('corrections-ordered agotado ENTREGA IGUAL: sigue a commit, no bloquea', () => {
-    // Ésta es la diferencia entre un juez que veta y un juez que refunfuña. Si
-    // agotar las correcciones bloqueara, tres quejas menores pararían una tarea
-    // que el juez había aprobado.
+  it('corrections-ordered spent DELIVERS ALL THE SAME: it moves on to commit, it does not block', () => {
+    // This is the difference between a judge that vetoes and a judge that
+    // grumbles. If spending the corrections blocked, three minor complaints
+    // would stop a task the judge had approved.
     const { run: r, state } = after(enJuez({ correctionRetries: 2 }), OUTCOMES.CORRECTIONS_ORDERED)
     expect(r.step).toBe(STEPS.COMMIT)
     expect(state).toBe(RUN_STATES.OPEN)
   })
 
-  it('discarded → juzgar otra vez, con un descarte más y sin gastar reintento', () => {
+  it('discarded → judge again, with one more discard and without spending a retry', () => {
     const { run: r } = after(enJuez({ judgeRetries: 1 }), OUTCOMES.DISCARDED)
     expect(r.step).toBe(STEPS.JUDGE)
     expect(r.discards).toBe(1)
@@ -144,10 +144,10 @@ describe('judge', () => {
   })
 })
 
-describe('el paso advise', () => {
+describe('the advise step', () => {
   const enConsejo = (over) => run({ step: STEPS.ADVISE, judgeRetries: 2, ...over })
 
-  it('done → el tercer intento de implement, sin gastar nada más', () => {
+  it('done → the third implement attempt, without spending anything more', () => {
     const { run: r, state } = after(enConsejo(), OUTCOMES.DONE)
     expect(r.step).toBe(STEPS.IMPLEMENT)
     expect(r.judgeRetries).toBe(2)
@@ -155,10 +155,10 @@ describe('el paso advise', () => {
     expect(state).toBe(RUN_STATES.OPEN)
   })
 
-  it('discarded → volver a preguntar al consejero, con un descarte más y SIN gastar reintento', () => {
-    // Un consejo que incumple el esquema no costó un intento de implementación:
-    // el árbol no se tocó. Mismo trato que el veredicto ilegible del juez, y con
-    // el mismo respaldo — el tope de descartes de la slice.
+  it('discarded → ask the adviser again, with one more discard and WITHOUT spending a retry', () => {
+    // An advice that breaks the schema did not cost an implementation attempt:
+    // the tree was not touched. Same treatment as the judge's illegible
+    // verdict, and with the same backing — the slice's discard cap.
     const { run: r, state } = after(enConsejo({ discards: 1 }), OUTCOMES.DISCARDED)
     expect(r.step).toBe(STEPS.ADVISE)
     expect(r.discards).toBe(2)
@@ -170,31 +170,31 @@ describe('el paso advise', () => {
 describe('commit', () => {
   const enCommit = (over) => run({ step: STEPS.COMMIT, ...over })
 
-  it('done avanza de tarea y devuelve el run a implement', () => {
+  it('done advances the task and returns the run to implement', () => {
     const { run: r, state } = after(enCommit({ task: 1 }), OUTCOMES.DONE)
     expect(r.task).toBe(2)
     expect(r.step).toBe(STEPS.IMPLEMENT)
     expect(state).toBe(RUN_STATES.OPEN)
   })
 
-  it('done en la última tarea NO entrega: abre la reconciliación con los reintentos a cero', () => {
-    // Fase B: tras el último commit el run ya no cierra en delivered — falta
-    // reconciliar la rama con su base, correr la punta a punta (global) y
-    // juzgar el slice entero (slice-judge).
+  it('done on the last task does NOT deliver: it opens the reconciliation with the retries at zero', () => {
+    // Phase B: after the last commit the run no longer closes in delivered —
+    // the branch still has to be reconciled with its base, the end-to-end has
+    // to be run (global) and the whole slice has to be judged (slice-judge).
     const { run: r, state } = after(enCommit({ task: 3, tasksTotal: 3 }), OUTCOMES.DONE)
     expect(state).toBe(RUN_STATES.OPEN)
     expect(r.step).toBe(STEPS.RECONCILE)
     expect([r.controlRetries, r.judgeRetries, r.correctionRetries]).toEqual([0, 0, 0])
-    // Los descartes y el dinero son de la slice entera: no se tocan aquí.
+    // The discards and the money belong to the whole slice: they are not touched here.
     expect(r.discards).toBe(0)
   })
 
-  it('failed cierra en blocked-commit sin reintentar', () => {
+  it('failed closes in blocked-commit without retrying', () => {
     expect(after(enCommit(), OUTCOMES.FAILED).state).toBe(RUN_STATES.BLOCKED_COMMIT)
   })
 })
 
-describe('el paso reconcile', () => {
+describe('the reconcile step', () => {
   const enReconcile = (over = {}) => run({ step: STEPS.RECONCILE, ...over })
 
   it('a_branch_that_is_up_to_date_moves_on_to_the_global_verification', () => {
@@ -215,10 +215,10 @@ describe('el paso reconcile', () => {
     expect(after(agotado, OUTCOMES.FAILED).state).toBe(RUN_STATES.BLOCKED_RECONCILE)
   })
 
-  // El descarte de reconcile NO es el de implement ni el del juez: allí la
-  // respuesta no se pudo leer y el árbol quedó como estaba; aquí el conflicto
-  // persiste (el descarte no aborta la fusión), así que sin gastar reintento
-  // toda ronda posterior vuelve a descartar y la escalera nunca baja.
+  // Reconcile's discard is NOT implement's nor the judge's: there the answer
+  // could not be read and the tree stayed as it was; here the conflict
+  // persists (the discard does not abort the merge), so without spending a
+  // retry every later round discards again and the ladder never comes down.
   it('a_discarded_round_spends_a_retry_because_the_conflict_survives_it_and_the_dispatch_was_paid', () => {
     const { run: siguiente } = after(enReconcile({ reconcileRetries: 0 }), OUTCOMES.DISCARDED)
     expect(siguiente.step).toBe(STEPS.RECONCILE)
@@ -246,7 +246,7 @@ describe('el paso reconcile', () => {
   })
 })
 
-describe('la proyeccion del vocabulario de reconcile', () => {
+describe('the projection of reconcile vocabulary', () => {
   it.each([
     [ReconcileOutcome.UP_TO_DATE, OUTCOMES.DONE],
     [ReconcileOutcome.MERGED, OUTCOMES.DONE],
@@ -255,13 +255,13 @@ describe('la proyeccion del vocabulario de reconcile', () => {
     [ReconcileOutcome.UNMERGEABLE_TREE, OUTCOMES.FAILED],
     [ReconcileOutcome.ROUND_DISCARDED, OUTCOMES.DISCARDED],
     [ReconcileOutcome.MARKERS_COMMITTED, OUTCOMES.FAILED],
-  ])('%s se proyecta a %s', (miembro, esperado) => {
+  ])('%s projects to %s', (miembro, esperado) => {
     expect(outcomeOfReconcile(miembro)).toBe(esperado)
   })
 
-  // La lista de arriba está tecleada a mano, así que un miembro nuevo podría
-  // no aparecer en ella y el despacho seguiría sin cubrirse. Esto la ata al
-  // vocabulario: todo miembro se proyecta, lo hayan escrito arriba o no.
+  // The list above is typed by hand, so a new member could fail to appear in
+  // it and the dispatch would still go uncovered. This ties it to the
+  // vocabulary: every member projects, whether it was written above or not.
   it('todo_miembro_del_vocabulario_tiene_proyeccion_y_ninguno_se_queda_sin_recorrer', () => {
     for (const miembro of Object.values(ReconcileOutcome)) {
       expect(() => outcomeOfReconcile(miembro), miembro).not.toThrow()
@@ -273,38 +273,38 @@ describe('la proyeccion del vocabulario de reconcile', () => {
   })
 })
 
-describe('global (§3.7-A: la punta a punta del plan la corre el programa)', () => {
+describe('global (§3.7-A: the plan end-to-end is run by the program)', () => {
   const enGlobal = (over) => run({ step: STEPS.GLOBAL, ...over })
 
   it('done → slice-judge', () => {
     expect(after(enGlobal(), OUTCOMES.DONE).run.step).toBe(STEPS.SLICE_JUDGE)
   })
 
-  it('failed cierra blocked-global A LA PRIMERA, sin reintentar', () => {
-    // Todo está comiteado: reintentar mide el mismo árbol y repite el coste
-    // sin cambiar nada.
+  it('failed closes blocked-global ON THE FIRST GO, without retrying', () => {
+    // Everything is committed: retrying measures the same tree and repeats the
+    // cost without changing anything.
     expect(after(enGlobal(), OUTCOMES.FAILED).state).toBe(RUN_STATES.BLOCKED_GLOBAL)
   })
 
-  it('indeterminate cierra blocked-global igual que failed', () => {
+  it('indeterminate closes blocked-global just like failed', () => {
     expect(after(enGlobal(), OUTCOMES.INDETERMINATE).state).toBe(RUN_STATES.BLOCKED_GLOBAL)
   })
 })
 
-describe('slice-judge (§3.7-B: la coherencia entre tareas sí tiene juez)', () => {
+describe('slice-judge (§3.7-B: the coherence between tasks does have a judge)', () => {
   const enJuezDeSlice = (over) => run({ step: STEPS.SLICE_JUDGE, ...over })
 
-  it('done cierra en delivered', () => {
+  it('done closes in delivered', () => {
     expect(after(enJuezDeSlice(), OUTCOMES.DONE).state).toBe(RUN_STATES.DELIVERED)
   })
 
-  it('failed cierra blocked-slice-judge sin reintentos ni corrections-ordered', () => {
-    // Aquí no queda un implementador con trabajo stageado al que devolver:
-    // todo es commit. Un FAIL cierra el run.
+  it('failed closes blocked-slice-judge with no retries and no corrections-ordered', () => {
+    // There is no implementer left here with staged work to hand it back to:
+    // everything is a commit. A FAIL closes the run.
     expect(after(enJuezDeSlice(), OUTCOMES.FAILED).state).toBe(RUN_STATES.BLOCKED_SLICE_JUDGE)
   })
 
-  it('discarded vuelve a slice-judge con un descarte más, sin gastar reintento', () => {
+  it('discarded goes back to slice-judge with one more discard, without spending a retry', () => {
     const { run: r, state } = after(enJuezDeSlice({ discards: 2 }), OUTCOMES.DISCARDED)
     expect(state).toBe(RUN_STATES.OPEN)
     expect(r.step).toBe(STEPS.SLICE_JUDGE)
@@ -312,8 +312,8 @@ describe('slice-judge (§3.7-B: la coherencia entre tareas sí tiene juez)', () 
   })
 })
 
-describe('qué se reinicia al avanzar de tarea y qué no', () => {
-  it('los tres reintentos vuelven a cero; los descartes y el dinero siguen', () => {
+describe('what is reset when the task advances and what is not', () => {
+  it('the three retries go back to zero; the discards and the money carry on', () => {
     const gastado = enCurso()
     const { run: r } = after(gastado, OUTCOMES.DONE)
     expect([r.controlRetries, r.judgeRetries, r.correctionRetries]).toEqual([0, 0, 0])
@@ -330,34 +330,34 @@ describe('qué se reinicia al avanzar de tarea y qué no', () => {
   }
 })
 
-describe('el dinero corta por encima de todo', () => {
-  it.each(PASOS)('over-budget cierra el run en aborted-budget desde %s', (step) => {
+describe('the money cuts above everything else', () => {
+  it.each(PASOS)('over-budget closes the run in aborted-budget from %s', (step) => {
     expect(after(run({ step }), OUTCOMES.OVER_BUDGET).state).toBe(RUN_STATES.ABORTED_BUDGET)
   })
 })
 
-describe('el run que entra no se toca nunca', () => {
-  it('la transición devuelve una copia y deja el original intacto', () => {
+describe('the run that goes in is never touched', () => {
+  it('the transition returns a copy and leaves the original intact', () => {
     const antes = run()
     const { run: despues } = after(antes, OUTCOMES.DONE)
     expect(antes.step).toBe(STEPS.IMPLEMENT)
     expect(despues).not.toBe(antes)
   })
 
-  it('el run está congelado: escribirle encima no cuela un estado a espaldas de la tabla', () => {
+  it('the run is frozen: writing over it does not sneak a state past the table', () => {
     const r = newRun({ plan: 'p.md', issue: 7, baseSha: 'abc', tasksTotal: 2 })
     expect(Object.isFrozen(r)).toBe(true)
     expect(() => { 'use strict'; r.task = 99 }).toThrow()
   })
 })
 
-describe('presupuestos a medida', () => {
-  it('con cero reintentos de control, el primer rojo ya bloquea', () => {
+describe('bespoke budgets', () => {
+  it('with zero control retries, the first red already blocks', () => {
     const { state } = after(run({ step: STEPS.CONTROLS }), OUTCOMES.FAILED, { ...DEFAULT_BUDGETS, controlRetries: 0 })
     expect(state).toBe(RUN_STATES.BLOCKED_CONTROLS)
   })
 
-  it('con más presupuesto de correcciones, el refunfuño sigue volviendo a implement', () => {
+  it('with more corrections budget, the grumble keeps going back to implement', () => {
     const { run: r } = after(run({ step: STEPS.JUDGE, correctionRetries: 2 }), OUTCOMES.CORRECTIONS_ORDERED,
       { ...DEFAULT_BUDGETS, correctionRetries: 5 })
     expect(r.step).toBe(STEPS.IMPLEMENT)

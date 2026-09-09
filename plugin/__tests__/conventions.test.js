@@ -8,24 +8,24 @@ import { fileURLToPath } from 'node:url'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const script = join(root, 'scripts', 'ct-init.sh')
 
-// F11, parte B. El caso REAL que originó esto (menoplus, verificado leyendo
-// ese repo): antes de que llegara el plugin ya existían
-//   - `scripts/dispatch-check.sh` (script propio del repo) y una línea en
-//     AGENTS.md que ordena ejecutarlo antes de implementar y con `--release`
-//     al abrir PR;
-//   - una convención de worktrees: `git worktree add .claude/worktrees/<slug>`,
-//     con un hook (`menoplus-branch-isolation-guard.sh`) que la vigila.
-// El plugin trae SU PROPIO `dispatch-check.mjs` y usa `.worktrees/<n>`, y
-// `ct-init` escribía su bloque al lado del que ya había sin mirar: el
-// AGENTS.md acaba contradiciéndose y hay dos protocolos de claim operando
-// sobre el mismo espacio de labels. Estos tests exigen que ct-init NO pueda
-// dejar un repo así en silencio.
+// F11, part B. The REAL case that started this (menoplus, verified by reading
+// that repository): before the plugin arrived there already were
+//   - `scripts/dispatch-check.sh` (a script of the repository itself) and a
+//     line in AGENTS.md that orders it to be run before implementing and with
+//     `--release` when the PR is opened;
+//   - a worktree convention: `git worktree add .claude/worktrees/<slug>`, with
+//     a hook (`menoplus-branch-isolation-guard.sh`) that watches it.
+// The plugin brings ITS OWN `dispatch-check.mjs` and uses `.worktrees/<n>`, and
+// `ct-init` used to write its block next to the one already there without
+// looking: AGENTS.md ends up contradicting itself and two claim protocols
+// operate over the same label space. These tests demand that ct-init CANNOT
+// leave a repository like that in silence.
 function menoplusLikeRepo() {
   const dir = mkdtempSync(join(tmpdir(), 'ct-conv-'))
   mkdirSync(join(dir, 'scripts'), { recursive: true })
   mkdirSync(join(dir, '.claude', 'hooks'), { recursive: true })
   mkdirSync(join(dir, '.claude', 'worktrees'), { recursive: true })
-  writeFileSync(join(dir, 'scripts', 'dispatch-check.sh'), '#!/usr/bin/env bash\n# claim propio del repo\n')
+  writeFileSync(join(dir, 'scripts', 'dispatch-check.sh'), '#!/usr/bin/env bash\n# claim of the repository itself\n')
   writeFileSync(join(dir, '.claude', 'hooks', 'branch-isolation-guard.sh'), '#!/usr/bin/env bash\n')
   writeFileSync(
     join(dir, 'AGENTS.md'),
@@ -46,21 +46,21 @@ function runInit(dir, args = []) {
   return spawnSync('bash', [script, dir, ...args], { encoding: 'utf8' })
 }
 
-describe('ct-init: convenciones propias del repo en el terreno del loop', () => {
-  it('avisa de que el repo YA tiene su propio claim (script + orden en AGENTS.md) que choca con el del plugin', () => {
+describe('ct-init: conventions the repository already has on the turf the loop claims', () => {
+  it('warns that the repository ALREADY has a claim of its own (script + instruction in AGENTS.md) that collides with the plugin one', () => {
     const dir = menoplusLikeRepo()
     const res = runInit(dir)
     expect(res.status).toBe(0)
-    // Se avisa por stderr, como el resto de avisos de ct-init.
+    // The warning goes out on stderr, like every other warning of ct-init.
     expect(res.stderr).toMatch(/convenci/i)
     expect(res.stderr).toContain('scripts/dispatch-check.sh')
-    // Y no se limita a nombrarlo: dice cuál es la decisión que hay que tomar.
+    // And it does not stop at naming it: it says which decision has to be taken.
     expect(res.stderr).toMatch(/dispatch-check\.mjs/)
     expect(res.stderr).toMatch(/status:/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('avisa de la convención de worktrees ajena (`.claude/worktrees/`) frente a `.worktrees/<n>` del dispatcher', () => {
+  it('warns about the worktree convention that is not ours (`.claude/worktrees/`) against `.worktrees/<n>` of the dispatcher', () => {
     const dir = menoplusLikeRepo()
     const res = runInit(dir)
     expect(res.stderr).toContain('.claude/worktrees')
@@ -69,14 +69,14 @@ describe('ct-init: convenciones propias del repo en el terreno del loop', () => 
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('nombra el hook que vigila ramas/worktrees: es quien puede tumbar cada despacho', () => {
+  it('names the hook that watches branches/worktrees: it is the one that can knock down every dispatch', () => {
     const dir = menoplusLikeRepo()
     const res = runInit(dir)
     expect(res.stderr).toContain('branch-isolation-guard.sh')
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('un repo limpio NO recibe ningún aviso de convenciones (sin falsos positivos de partida)', () => {
+  it('a clean repository gets NO conventions warning at all (no false positives to start with)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-conv-'))
     const res = runInit(dir)
     expect(res.status).toBe(0)
@@ -84,19 +84,19 @@ describe('ct-init: convenciones propias del repo en el terreno del loop', () => 
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('la SEGUNDA corrida no se detecta a sí misma: el bloque que siembra ct-init no cuenta como convención ajena', () => {
+  it('the SECOND run does not detect itself: the block ct-init seeds does not count as a convention of someone else', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-conv-'))
     runInit(dir)
     const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
-    // Control: el bloque sembrado SÍ habla del terreno que la detección mira
-    // (si dejara de hacerlo, este test dejaría de probar nada).
+    // Check: the seeded block DOES speak of the ground the detection looks at
+    // (if it stopped doing so, this test would stop proving anything).
     expect(agents).toMatch(/\.worktrees\/|dispatch-check|status:in-progress/)
     const res = runInit(dir)
     expect(res.stderr).not.toMatch(/convenci/i)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('un AGENTS.md con saltos CRLF también se escanea (los marcadores del bloque propio se reconocen igual)', () => {
+  it('an AGENTS.md with CRLF line breaks is scanned too (the markers of our own block are recognised all the same)', () => {
     const dir = menoplusLikeRepo()
     const lf = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
     writeFileSync(join(dir, 'AGENTS.md'), lf.split('\n').join('\r\n'))
@@ -105,10 +105,11 @@ describe('ct-init: convenciones propias del repo en el terreno del loop', () => 
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('si la detección no puede correr (sin node), se dice — no se pasa por "no hay nada"', () => {
+  it('if the detection cannot run (no node), it says so — it does not pass for "there is nothing"', () => {
     const dir = menoplusLikeRepo()
-    // PATH sin node: el detector no puede ejecutarse. El silencio aquí sería
-    // indistinguible de "repo limpio", que es justo el falso negativo caro.
+    // A PATH with no node: the detector cannot run. Silence here would be
+    // indistinguishable from "clean repository", which is exactly the expensive
+    // false negative.
     const emptyBin = mkdtempSync(join(tmpdir(), 'ct-nobin-'))
     const res = spawnSync('bash', [script, dir], {
       encoding: 'utf8',
@@ -120,7 +121,7 @@ describe('ct-init: convenciones propias del repo en el terreno del loop', () => 
     rmSync(emptyBin, { recursive: true, force: true })
   })
 
-  it('no desciende a .worktrees/ ni a node_modules (worktrees del propio loop y dependencias no son convenciones del repo)', () => {
+  it('it does not descend into .worktrees/ or node_modules (worktrees of the loop itself and dependencies are not conventions of the repository)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-conv-'))
     mkdirSync(join(dir, '.worktrees', '7', 'scripts'), { recursive: true })
     writeFileSync(join(dir, '.worktrees', '7', 'scripts', 'dispatch-check.sh'), '#!/bin/sh\n')

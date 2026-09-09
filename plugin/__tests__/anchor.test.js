@@ -2,22 +2,22 @@ import { describe, it, expect } from 'vitest'
 import { githubSlug, inlineText, documentHeadings, headingAbove } from '../scripts/anchor.js'
 import { analyzeSlicesTable } from '../scripts/slices.js'
 
-// Todos los pares de este fichero salen de una corrida de verificación contra
-// el renderizador REAL de GitHub, no de leer su documentación: tres ficheros
-// markdown empujados a josemerca/ct-loop-sandbox y recuperados con
-// `gh api repos/<o>/<r>/contents/<ruta> -H "Accept: application/vnd.github.html"`,
-// que devuelve el HTML tal cual lo pinta GitHub, con el
-// `<a id="user-content-<slug>" class="anchor">` de cada encabezado. Los ~50
-// encabezados de esa corrida coinciden hoy uno a uno con lo que produce
-// scripts/anchor.js.
+// Every pair in this file comes out of a verification run against GitHub's
+// REAL renderer, not out of reading its documentation: three markdown files
+// pushed to josemerca/ct-loop-sandbox and fetched back with
+// `gh api repos/<o>/<r>/contents/<path> -H "Accept: application/vnd.github.html"`,
+// which returns the HTML exactly as GitHub paints it, with the
+// `<a id="user-content-<slug>" class="anchor">` of every heading. The ~50
+// headings of that run match today, one by one, what scripts/anchor.js
+// produces.
 //
-// Se guardan como pares literales A PROPÓSITO: si mañana alguien "simplifica"
-// el slug, lo que falla es la comparación contra lo que GitHub hizo de verdad,
-// no contra otra implementación nuestra.
+// They are kept as literal pairs ON PURPOSE: if tomorrow somebody
+// "simplifies" the slug, what fails is the comparison against what GitHub
+// really did, not against another implementation of our own.
 
-describe('githubSlug — el ancla que GitHub genera para el texto de un encabezado (pares observados contra el renderizador real)', () => {
+describe('githubSlug — the anchor GitHub generates for the text of a heading (pairs observed against the real renderer)', () => {
   const OBSERVADOS = [
-    // el caso que origina F10: el enlace decía "#9", el ancla real es otra
+    // the case that F10 comes from: the link said "#9", the real anchor is another
     ['9. Slices', '9-slices'],
     ['10. Riesgos & Mitigaciones', '10-riesgos--mitigaciones'],
     ['Desglose en slices (§9) — tabla', 'desglose-en-slices-9--tabla'],
@@ -25,15 +25,15 @@ describe('githubSlug — el ancla que GitHub genera para el texto de un encabeza
     ['¿Qué entrega? Diseño técnico', 'qué-entrega-diseño-técnico'],
     ['9.1. Sub-slices / detalle', '91-sub-slices--detalle'],
     ['Ámbito, límites y "excepciones"', 'ámbito-límites-y-excepciones'],
-    // el espacio NO se colapsa: cada uno deja su guion
+    // the space is NOT collapsed: each one leaves its own hyphen
     ['Sección con  dobles   espacios', 'sección-con--dobles---espacios'],
-    // fuera: emoji, símbolos, puntuación
+    // out: emoji, symbols, punctuation
     ['Emoji 🚀 en cabecera', 'emoji--en-cabecera'],
     ['a+b', 'ab'], ['a=b', 'ab'], ['a~b', 'ab'], ['a·b', 'ab'], ['a°b', 'ab'],
     ['100%', '100'], ['v1.2.3', 'v123'], ["a's b", 'as-b'], ['$var', 'var'],
     ['9 – Slices', '9--slices'], ['9 — Slices', '9--slices'],
-    // dentro: guion bajo, guion (incluso al principio o al final), letras y
-    // dígitos de cualquier alfabeto, y la ª (que es letra, no símbolo)
+    // in: underscore, hyphen (even leading or trailing), letters and digits
+    // of any alphabet, and the ª (which is a letter, not a symbol)
     ['a_b c', 'a_b-c'],
     ['-leading hyphen', '-leading-hyphen'],
     ['trailing hyphen -', 'trailing-hyphen--'],
@@ -41,7 +41,7 @@ describe('githubSlug — el ancla que GitHub genera para el texto de un encabeza
     ['Sección с кириллицей', 'sección-с-кириллицей'],
     ['ñ Ñ Ü', 'ñ-ñ-ü'],
     ['ªb', 'ªb'],
-    // ni el tabulador ni el NBSP cuentan como espacio: se caen enteros
+    // neither the tab nor the NBSP counts as a space: they fall out whole
     ['a\tb', 'ab'],
     ['9. Slices', '9slices'],
   ]
@@ -51,112 +51,112 @@ describe('githubSlug — el ancla que GitHub genera para el texto de un encabeza
     })
   }
 
-  // El caso que obliga a que "sin ancla" sea un resultado de primera clase:
-  // GitHub emitió `id=""` y `href="#"` para "## ...". Emitir "#" a secas en un
-  // enlace sería exactamente el enlace roto que F10 arregla, con otra cara.
-  it('un encabezado sin ningún carácter que sobreviva ("...") → cadena vacía, NUNCA "#"', () => {
+  // The case that forces "no anchor" to be a first-class result: GitHub
+  // emitted `id=""` and `href="#"` for "## ...". Emitting a bare "#" in a link
+  // would be exactly the broken link F10 fixes, wearing another face.
+  it('a heading with no surviving character at all ("...") → empty string, NEVER "#"', () => {
     expect(githubSlug('...')).toBe('')
     expect(githubSlug('')).toBe('')
     expect(githubSlug(null)).toBe('')
   })
 
-  // Un texto en NFD (macOS lo produce con facilidad) conserva su marca
-  // combinante en el id de GitHub — comprobado byte a byte en el HTML real.
-  // Normalizar a NFC aquí produciría un ancla que no está en el documento.
-  it('texto en NFD conserva la marca combinante (el id de GitHub también la conserva)', () => {
+  // A text in NFD (macOS produces one easily) keeps its combining mark in
+  // GitHub's id — checked byte by byte in the real HTML. Normalising to NFC
+  // here would produce an anchor that is not in the document.
+  it('text in NFD keeps the combining mark (the id GitHub emits keeps it too)', () => {
     const nfd = 'Śeccion'.normalize('NFD')
     expect(githubSlug(nfd)).toContain('́')
     expect(githubSlug(nfd)).toBe(nfd.toLowerCase())
   })
 })
 
-describe('inlineText — el texto que GitHub pinta dentro del <h2>, no el markdown crudo', () => {
-  it('enlace: se queda el texto, se va el destino (observado: "link-heading")', () => {
+describe('inlineText — the text GitHub paints inside the <h2>, not the raw markdown', () => {
+  it('link: the text stays, the destination goes (observed: "link-heading")', () => {
     expect(githubSlug(inlineText('[link](https://example.com) heading'))).toBe('link-heading')
   })
-  it('imagen: no aporta NADA, ni siquiera el alt — y el espacio que deja delante sí cuenta (observado: "-alt-heading")', () => {
+  it('image: it contributes NOTHING, not even the alt — and the space it leaves in front does count (observed: "-alt-heading")', () => {
     expect(githubSlug(inlineText('![img](https://example.com/a.png) alt heading'))).toBe('-alt-heading')
   })
-  it('HTML crudo: la etiqueta desaparece sin dejar hueco (observado: "html-heading", "ab")', () => {
+  it('raw HTML: the tag disappears without leaving a gap (observed: "html-heading", "ab")', () => {
     expect(githubSlug(inlineText('<b>html</b> heading'))).toBe('html-heading')
     expect(githubSlug(inlineText('a<br>b'))).toBe('ab')
   })
-  it('entidad: se resuelve al carácter, que luego puede caerse (observado: "a--b")', () => {
+  it('entity: it resolves to the character, which can then fall out (observed: "a--b")', () => {
     expect(githubSlug(inlineText('a &amp; b'))).toBe('a--b')
   })
-  it('code span: el contenido se conserva y los backticks se caen (observado: "slices-parseo--validación")', () => {
+  it('code span: the content is kept and the backticks fall out (observed: "slices-parseo--validación")', () => {
     expect(githubSlug(inlineText('Slices: `parseo` + validación'))).toBe('slices-parseo--validación')
   })
-  it('code span protege su contenido del barrido de HTML (una etiqueta citada como código no se borra)', () => {
+  it('a code span protects its content from the HTML sweep (a tag quoted as code is not erased)', () => {
     expect(githubSlug(inlineText('etiqueta `<br>` citada'))).toBe('etiqueta-br-citada')
   })
-  it('negrita/cursiva con asteriscos (observado: "bold-heading")', () => {
+  it('bold/italics with asterisks (observed: "bold-heading")', () => {
     expect(githubSlug(inlineText('**bold** heading'))).toBe('bold-heading')
   })
-  // El guion bajo es el único marcador de énfasis que SOBREVIVE al slug, así
-  // que es el único que hay que resolver de verdad — y hay que resolverlo sin
-  // romper los nombres de fichero que empiezan o terminan por guion bajo, el
-  // mismo cuidado que slices.js tiene con los tokens de label.
-  it('guion bajo de énfasis emparejado → fuera', () => {
+  // The underscore is the only emphasis marker that SURVIVES the slug, so it
+  // is the only one that really has to be resolved — and it has to be resolved
+  // without breaking the file names that begin or end with an underscore, the
+  // same care slices.js takes with the label tokens.
+  it('a paired emphasis underscore → out', () => {
     expect(githubSlug(inlineText('__negrita__ y _cursiva_'))).toBe('negrita-y-cursiva')
   })
-  // OJO: esta era una suposición mía, y GitHub la desmintió. Yo daba por
-  // hecho que "__init__.py" se conservaba entero (es lo que hace
-  // cells.js#PAIRED_UNDERSCORE_RE con los tokens de label, y por buenas
-  // razones). El HTML real dice otra cosa: "__init__.py y _layout.tsx"
-  // produce `id="initpy-y-_layouttsx"` — el "__init__" SÍ es énfasis fuerte
-  // para CommonMark (el "__" de cierre va seguido de un punto, que es
-  // puntuación, así que puede cerrar), mientras que el "_" de "_layout.tsx",
-  // sin pareja, se queda. Se deja el par tal cual lo observó GitHub, no tal
-  // como yo esperaba que fuera.
-  it('guion bajo: "__init__" SÍ es énfasis (observado), "_layout.tsx" sin pareja se conserva', () => {
+  // MIND THIS: it was an assumption of mine, and GitHub contradicted it. I
+  // took for granted that "__init__.py" was kept whole (it is what
+  // cells.js#PAIRED_UNDERSCORE_RE does with the label tokens, and for good
+  // reasons). The real HTML says otherwise: "__init__.py y _layout.tsx"
+  // produces `id="initpy-y-_layouttsx"` — the "__init__" IS strong emphasis
+  // for CommonMark (the closing "__" is followed by a full stop, which is
+  // punctuation, so it can close), while the "_" of "_layout.tsx", with no
+  // pair, stays. The pair is left exactly as GitHub observed it, not as I
+  // expected it to be.
+  it('underscore: "__init__" IS emphasis (observed), an unpaired "_layout.tsx" is kept', () => {
     expect(githubSlug(inlineText('__init__.py y _layout.tsx'))).toBe('initpy-y-_layouttsx')
   })
 })
 
-describe('documentHeadings — orden, sufijo de colisión, y qué NO es un encabezado', () => {
-  it('el contador de colisión es del DOCUMENTO y común a todos los niveles (observado: 9-slices, -1, -2)', () => {
+describe('documentHeadings — order, collision suffix, and what is NOT a heading', () => {
+  it('the collision counter belongs to the DOCUMENT and is shared by every level (observed: 9-slices, -1, -2)', () => {
     const md = '## 9. Slices\n\n### 9. Slices\n\n#### 9. Slices\n'
     expect(documentHeadings(md).map((h) => h.anchor)).toEqual(['9-slices', '9-slices-1', '9-slices-2'])
   })
-  it('un encabezado dentro de una valla de código NI genera ancla NI consume número de colisión (observado)', () => {
+  it('a heading inside a code fence generates NO anchor NOR consumes a collision number (observed)', () => {
     const md = '## 9. Slices\n\n```\n## 9. Slices\n```\n\n## 9. Slices\n'
     expect(documentHeadings(md).map((h) => h.anchor)).toEqual(['9-slices', '9-slices-1'])
   })
-  it('un encabezado dentro de un comentario HTML multilínea, igual (observado)', () => {
+  it('a heading inside a multi-line HTML comment, the same (observed)', () => {
     const md = '## 9. Slices\n\n<!--\n## 9. Slices\n-->\n\n## 9. Slices\n'
     expect(documentHeadings(md).map((h) => h.anchor)).toEqual(['9-slices', '9-slices-1'])
   })
-  it('cabecera setext (subrayada) también genera ancla (observado: "setext-nueve-slices")', () => {
+  it('a setext heading (underlined) also generates an anchor (observed: "setext-nueve-slices")', () => {
     const md = 'Setext nueve. Slices\n--------------------\n'
     expect(documentHeadings(md)).toEqual([{ line: 0, text: 'Setext nueve. Slices', anchor: 'setext-nueve-slices' }])
   })
-  it('indentación de hasta 3 espacios sigue siendo cabecera; "##foo" sin espacio NO lo es', () => {
+  it('an indentation of up to 3 spaces is still a heading; "##foo" with no space is NOT', () => {
     expect(documentHeadings('   ## Indentada tres espacios\n').map((h) => h.anchor)).toEqual(['indentada-tres-espacios'])
     expect(documentHeadings('##foo\n')).toEqual([])
   })
-  it('la serie de cierre de una cabecera ATX no entra en el ancla (observado: "## 9. Slices ##" → "9-slices")', () => {
+  it('the closing sequence of an ATX heading does not go into the anchor (observed: "## 9. Slices ##" → "9-slices")', () => {
     expect(documentHeadings('## 9. Slices ##\n').map((h) => h.anchor)).toEqual(['9-slices'])
   })
-  // El front matter YAML no es markdown: GitHub lo pinta como metadatos. Su
-  // "---" de cierre, si se contara como subrayado setext, inventaría una
-  // cabecera y desplazaría el contador de colisión de TODO el documento —
-  // un ancla válida apuntando al sitio equivocado.
-  it('el front matter YAML no produce cabeceras fantasma', () => {
+  // YAML front matter is not markdown: GitHub paints it as metadata. Its
+  // closing "---", if it were counted as a setext underline, would invent a
+  // heading and would shift the collision counter of the WHOLE document — a
+  // valid anchor pointing at the wrong place.
+  it('YAML front matter produces no phantom headings', () => {
     const md = '---\ntitle: Plan\n---\n\n## 9. Slices\n'
     expect(documentHeadings(md).map((h) => h.anchor)).toEqual(['9-slices'])
   })
-  it('un "---" que NO cierra front matter (sin apertura en la línea 0) sigue siendo un subrayado setext normal', () => {
+  it('a "---" that does NOT close front matter (with no opening on line 0) is still an ordinary setext underline', () => {
     const md = 'Intro\n\nNueve\n-----\n'
     expect(documentHeadings(md).map((h) => h.anchor)).toEqual(['nueve'])
   })
-  it('una fila separadora de tabla ("|---|---|") no es un subrayado setext', () => {
+  it('a table separator row ("|---|---|") is not a setext underline', () => {
     const md = '## 9. Slices\n\n| # | Slice |\n|---|---|\n| 1 | x |\n'
     expect(documentHeadings(md).map((h) => h.anchor)).toEqual(['9-slices'])
   })
 })
 
-describe('headingAbove — bajo qué encabezado vive una línea concreta', () => {
+describe('headingAbove — which heading a given line lives under', () => {
   const MD = [
     '# Plan',            // 0
     '',                  // 1
@@ -166,18 +166,18 @@ describe('headingAbove — bajo qué encabezado vive una línea concreta', () =>
     '',                  // 5
     '| # | Slice |',     // 6
   ].join('\n')
-  it('devuelve el encabezado inmediatamente anterior, no el primero del documento', () => {
+  it('it returns the immediately preceding heading, not the first one of the document', () => {
     expect(headingAbove(MD, 6)).toEqual({ line: 4, text: '9. Slices', anchor: '9-slices' })
   })
-  it('una línea por encima de cualquier encabezado → null', () => {
+  it('a line above every heading → null', () => {
     expect(headingAbove('| # | Slice |\n## 9. Slices\n', 0)).toBeNull()
   })
 })
 
-describe('analyzeSlicesTable — el reporte trae el encabezado real bajo el que vive la tabla §9 (F10)', () => {
-  // El parser SIEMPRE localizó la tabla por su cabecera de columnas, nunca
-  // por un número de sección. Lo que le faltaba era saber bajo qué
-  // encabezado estaba — la única forma de construir un ancla que exista.
+describe('analyzeSlicesTable — the report carries the real heading the §9 table lives under (F10)', () => {
+  // The parser ALWAYS located the table by its column header, never by a
+  // section number. What it was missing was knowing which heading it sat
+  // under — the only way to build an anchor that exists.
   const SPEC = [
     '# Plan actual vs propuestas',
     '',
@@ -194,22 +194,22 @@ describe('analyzeSlicesTable — el reporte trae el encabezado real bajo el que 
     '## 10. Riesgos',
   ].join('\n')
 
-  it('encuentra "9. Slices" y su ancla real "9-slices" (no "9")', () => {
+  it('it finds "9. Slices" and its real anchor "9-slices" (not "9")', () => {
     expect(analyzeSlicesTable(SPEC).sectionHeading).toEqual({ line: 6, text: '9. Slices', anchor: '9-slices' })
   })
-  it('el encabezado NO tiene por qué llamarse "9" ni ser el noveno: la tabla se localiza por su cabecera de columnas', () => {
+  it('the heading does NOT have to be called "9" nor be the ninth: the table is located by its column header', () => {
     const otro = SPEC.replace('## 9. Slices', '## Desglose en slices')
     expect(analyzeSlicesTable(otro).sectionHeading.anchor).toBe('desglose-en-slices')
   })
-  it('tabla sin ningún encabezado encima → sectionHeading null (no se inventa un ancla)', () => {
+  it('a table with no heading above it at all → sectionHeading null (no anchor is invented)', () => {
     const sinCabecera = '| # | Slice | Dep |\n|---|---|---|\n| 1 | login | – |\n'
     expect(analyzeSlicesTable(sinCabecera).sectionHeading).toBeNull()
   })
-  it('encabezado sin ancla utilizable ("## ...") → anchor cadena vacía, nunca "#"', () => {
+  it('a heading with no usable anchor ("## ...") → anchor is the empty string, never "#"', () => {
     const raro = SPEC.replace('## 9. Slices', '## ...')
     expect(analyzeSlicesTable(raro).sectionHeading).toEqual({ line: 6, text: '...', anchor: '' })
   })
-  it('sin tabla §9 no hay encabezado que reportar', () => {
+  it('with no §9 table there is no heading to report', () => {
     expect(analyzeSlicesTable('# Solo prosa\n\nnada.').sectionHeading).toBeNull()
   })
 })
