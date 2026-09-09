@@ -362,6 +362,7 @@ class CtApi {
         story: async (subject) => (await readPlanStory.execute(new ReadPlanStoryParams(subject))).story,
         stderr: (line) => process.stderr.write(line),
       }),
+      checkouts,
       implementationStarts,
       goRegistry,
       implementationProgress: runFileProgress,

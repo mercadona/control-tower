@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { execFileSync, spawn } from 'node:child_process'
+import { realpathSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -95,6 +96,68 @@ class ACmuxWithNoWindows {
   }
 }
 
+class ACheckoutReachableByTwoPaths {
+  static ISSUE = 33
+  static REPOSITORY = 'acme/widget'
+  static TITLE = `ct-plan-acme__widget-issue-${ACheckoutReachableByTwoPaths.ISSUE}`
+
+  static #git(cwd, ...argv) {
+    execFileSync('git', argv, { cwd, stdio: 'ignore' })
+  }
+
+  static async cut() {
+    const base = await mkdtemp(join(tmpdir(), 'ct-api-two-paths-'))
+    const physical = join(base, 'physical')
+    await mkdir(physical, { recursive: true })
+    const clone = join(physical, 'repo')
+    await mkdir(clone, { recursive: true })
+    ACheckoutReachableByTwoPaths.#git(clone, 'init', '-q')
+    ACheckoutReachableByTwoPaths.#git(clone, 'config', 'user.email', 'smoke@test')
+    ACheckoutReachableByTwoPaths.#git(clone, 'config', 'user.name', 'smoke')
+    ACheckoutReachableByTwoPaths.#git(clone, 'remote', 'add', 'origin', 'git@github.com:acme/widget.git')
+    ACheckoutReachableByTwoPaths.#git(clone, 'commit', '-q', '--allow-empty', '-m', 'base')
+    ACheckoutReachableByTwoPaths.#git(clone, 'branch', '-M', 'main')
+    ACheckoutReachableByTwoPaths.#git(
+      clone, 'worktree', 'add', '-q', '-b', `feat/${ACheckoutReachableByTwoPaths.ISSUE}`,
+      join('.worktrees', String(ACheckoutReachableByTwoPaths.ISSUE)), 'main'
+    )
+    execFileSync('ln', ['-s', 'physical', join(base, 'logical')], { stdio: 'ignore' })
+
+    return {
+      base,
+      logical: join(base, 'logical', 'repo'),
+      physical: realpathSync(clone),
+    }
+  }
+}
+
+class ACmuxAttendingOnePlan {
+  static SCRIPT = [
+    '#!/bin/sh',
+    'if [ "$1" = "list-windows" ]; then echo \'[{"id":"w1"}]\'; exit 0; fi',
+    'if [ "$1" = "workspace" ]; then printf %s "$CMUX_FAKE"; exit 0; fi',
+    'exit 1',
+  ].join('\n')
+
+  static async attending(worktree, ref = 'workspace:97') {
+    const directory = await mkdtemp(join(tmpdir(), 'ct-api-cmux-plan-'))
+    await writeFile(join(directory, 'cmux'), `${ACmuxAttendingOnePlan.SCRIPT}\n`, { mode: 0o755 })
+
+    return {
+      directory,
+      path: `${directory}:${process.env.PATH}`,
+      said: JSON.stringify({
+        workspaces: [{
+          custom_title: ACheckoutReachableByTwoPaths.TITLE,
+          current_directory: worktree,
+          has_custom_title: true,
+          ref,
+        }],
+      }),
+    }
+  }
+}
+
 class RunFileFixture {
   static ISSUE = 7
 
@@ -145,6 +208,30 @@ describe('ct-api entrypoint', () => {
     await RunFileFixture.remove(state)
     await RunFileFixture.remove(orphan)
     await RunFileFixture.remove(answering.directory)
+  })
+
+  it('a_plan_whose_session_names_one_path_and_git_the_other_is_served_with_its_agent_and_its_clone_remembered', async () => {
+    const checkout = await ACheckoutReachableByTwoPaths.cut()
+    const state = await mkdtemp(join(tmpdir(), 'ct-api-two-paths-state-'))
+    const cmux = await ACmuxAttendingOnePlan.attending(
+      join(checkout.logical, '.worktrees', String(ACheckoutReachableByTwoPaths.ISSUE))
+    )
+
+    const port = await Entrypoint.listening({
+      CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state, PATH: cmux.path, CMUX_FAKE: cmux.said,
+    })
+    const served = await (await fetch(`http://127.0.0.1:${port}/active-plans`)).json()
+
+    expect(served.plans).toHaveLength(1)
+    expect(served.plans[0].plan).toMatchObject({
+      issue: { number: ACheckoutReachableByTwoPaths.ISSUE },
+      agent: 'workspace:97',
+      repo: ACheckoutReachableByTwoPaths.REPOSITORY,
+      worktree: join(checkout.physical, '.worktrees', String(ACheckoutReachableByTwoPaths.ISSUE)),
+    })
+    await RunFileFixture.remove(checkout.base)
+    await RunFileFixture.remove(state)
+    await RunFileFixture.remove(cmux.directory)
   })
 
   it('prints_the_port_it_bound_so_whoever_started_it_knows_where_to_knock', async () => {
