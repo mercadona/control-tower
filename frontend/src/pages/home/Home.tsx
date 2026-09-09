@@ -5,6 +5,7 @@ import { ToolsStatus } from 'app/external-tools/components/tools-status'
 import { ImplementPlanAction } from 'app/implement-plan/components/implement-plan-action'
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { PlanProgress } from 'app/plan-events/components/plan-progress'
+import { AskPlanChanges } from 'app/review-plan/components/ask-plan-changes'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartedPlan, StartPlanRequest } from 'app/start-plan/StartPlan.types'
 import { WorkflowSnapshot, WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
@@ -396,6 +397,7 @@ const Home = () => {
                   <a href={workflow.plan.issue.url} target="_blank" rel="noreferrer" className="home__issue-link lg-body-medium">
                     Abrir el plan en GitHub
                   </a>
+                  <AskPlanChanges plan={workflow.plan} />
                   <ImplementPlanAction
                     plan={workflow.plan}
                     onImplementationStarted={implementationStarted}
