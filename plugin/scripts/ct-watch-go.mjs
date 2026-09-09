@@ -124,7 +124,7 @@ function readComments() {
     // token expires and is renewed, GitHub returns a 502. What cannot happen is
     // for a transient failure to be read as "there is no go" permanently, so it
     // gets noted down and tried again on the next tick.
-    log(`warning: no se pudo leer el issue (${String(e.message).trim()}) — se reintenta en el próximo tick`)
+    log(`warning: could not read the issue (${String(e.message).trim()}) — it is retried on the next tick`)
     return null
   }
 }
@@ -153,7 +153,7 @@ function readComments() {
 // do not recognise degrades to NOT CONCLUSIVE, never to "verified not there".
 function querySession() {
   const r = findWorkspaceByTitle(session, { timeoutMs: CMUX_TIMEOUT_MS })
-  if (!r.consultado) log('warning: no se pudo consultar cmux (o su respuesta no trae el campo del título que este plugin sabe leer)')
+  if (!r.consultado) log('warning: cmux could not be asked (or its answer does not carry the title field this plugin knows how to read)')
   return r
 }
 
@@ -178,12 +178,12 @@ while (previousIds === null) {
   const initialComments = readComments()
   if (initialComments !== null) { previousIds = commentIds(initialComments); break }
   if (Date.now() >= deadline) {
-    log(`plazo agotado sin poder leer ni una vez los comentarios de ${repo}#${issue}: no se puede distinguir un go nuevo de uno heredado, así que no se entrega nada. Empuja la sesión a mano tras dar el go.`)
+    log(`deadline exhausted without managing to read the comments of ${repo}#${issue} even once: a new go cannot be told apart from an inherited one, so nothing is delivered. Push the session by hand after giving the go.`)
     terminar(3)
   }
   await sleep(Math.min(pollMs, Math.max(0, deadline - Date.now())))
 }
-log(`foto inicial: ${previousIds.size} comentario(s) ya presentes, que no cuentan como respuesta`)
+log(`initial snapshot: ${previousIds.size} comment(s) already there, which do not count as an answer`)
 
 // ONCE per watch, and once only. The format does not change between one attempt
 // and the next, so answering each one would be noise on the issue of somebody
@@ -198,19 +198,19 @@ function explainTheFormat(attemptId) {
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: GH_TIMEOUT_MS, killSignal: 'SIGKILL',
     })
     attemptAnswered = true
-    log(`intento de go que no arranca nada (${attemptId}): publicado el formato en ${repo}#${issue}`)
+    log(`go attempt that starts nothing (${attemptId}): the format has been published on ${repo}#${issue}`)
   } catch (e) {
     // It is neither retried nor marked as answered: the next tick sees it again
     // and tries again. Failing to publish an explanation cannot cost the watch,
     // which is the only thing this process exists to do.
-    log(`warning: se vio un intento de go (${attemptId}) y no se pudo publicar el formato (${String(e.message).trim()}) — se reintenta en el próximo tick`)
+    log(`warning: a go attempt was seen (${attemptId}) and the format could not be published (${String(e.message).trim()}) — it is retried on the next tick`)
   }
 }
 
 for (;;) {
   const comments = readComments()
   if (comments && hasGo(comments, previousIds, goHash)) {
-    log(`${GO_TOKEN} visto en ${repo}#${issue}`)
+    log(`${GO_TOKEN} seen on ${repo}#${issue}`)
     const { consultado, ref } = querySession()
     if (ref) {
       try {
@@ -237,7 +237,7 @@ for (;;) {
       // What is known is this and no more: the two commands returned 0. There is
       // no sentinel proving the session received it and acted (see the header),
       // so the message does not claim that it has started.
-      log(`línea enviada a "${session}" (${ref}): \`cmux send\` y \`send-key Enter\` devolvieron 0. No hay forma de comprobar desde aquí que la sesión la haya procesado. Vigilancia terminada.`)
+      log(`line sent to "${session}" (${ref}): \`cmux send\` and \`send-key Enter\` returned 0. There is no way to check from here that the session has processed it. Watch finished.`)
       terminar(0)
     }
     if (consultado) {
@@ -246,7 +246,7 @@ for (;;) {
     }
     // The session could not be ASKED about. Nothing follows from that, least of
     // all with the go already in hand: it is retried on the next tick.
-    log(`el go está visto pero no se pudo consultar cmux para localizar la sesión — se reintenta la entrega en el próximo tick`)
+    log(`the go is seen but cmux could not be asked to locate the session — the delivery is retried on the next tick`)
   } else if (comments && !attemptAnswered) {
     // Somebody is trying to give the go and their comment does not open it. The
     // gate does NOT move because of this —the only thing that opens it is still
@@ -273,11 +273,11 @@ for (;;) {
   // ---------------------------------------------------------------------------
   const sessionNow = querySession()
   if (sessionNow.consultado && !sessionNow.ref) {
-    log(`la sesión "${session}" ya no existe, así que no hay a quién entregarle el go. Vigilancia terminada.`)
+    log(`the session "${session}" no longer exists, so there is nobody to deliver the go to. Watch finished.`)
     terminar(4)
   }
   if (Date.now() >= deadline) {
-    log(`plazo agotado sin ver ningún ${GO_TOKEN} válido en ${repo}#${issue}. La sesión sigue parada en el gate: dale el go en el issue y empújala a mano, o vuelve a lanzar este vigilante.`)
+    log(`deadline exhausted without seeing any valid ${GO_TOKEN} on ${repo}#${issue}. The session is still stopped at the gate: give the go on the issue and push it by hand, or launch this watcher again.`)
     terminar(3)
   }
   await sleep(Math.min(pollMs, Math.max(0, deadline - Date.now())))

@@ -579,19 +579,19 @@ export function hasReconcileGap(gaps) {
 export function formatDrift(diff) {
   const lines = []
   const head = `slice #${diff.order} (issue #${diff.issueNumber})`
-  if (diff.title) lines.push(`drift: ${head}: título difiere — issue: "${diff.title.current}", spec: "${diff.title.wanted}"`)
-  if (diff.milestone) lines.push(`drift: ${head}: milestone difiere — issue: "${diff.milestone.current ?? '(ninguno)'}", spec: "${diff.milestone.wanted}"`)
-  if (diff.specLink) lines.push(`drift: ${head}: el enlace al spec difiere — issue: "${diff.specLink.current ?? '(ausente)'}", spec: "${diff.specLink.wanted}"`)
-  for (const l of diff.labels.missing) lines.push(`drift: ${head}: falta la label "${l}" (la pide el spec, el issue no la tiene)`)
-  for (const l of diff.labels.extra) lines.push(`drift: ${head}: sobra la label "${l}" (la tiene el issue, el spec ya no la produce)`)
+  if (diff.title) lines.push(`drift: ${head}: title differs — issue: "${diff.title.current}", spec: "${diff.title.wanted}"`)
+  if (diff.milestone) lines.push(`drift: ${head}: milestone differs — issue: "${diff.milestone.current ?? '(none)'}", spec: "${diff.milestone.wanted}"`)
+  if (diff.specLink) lines.push(`drift: ${head}: the link to the spec differs — issue: "${diff.specLink.current ?? '(absent)'}", spec: "${diff.specLink.wanted}"`)
+  for (const l of diff.labels.missing) lines.push(`drift: ${head}: the label "${l}" is missing (the spec asks for it, the issue does not have it)`)
+  for (const l of diff.labels.extra) lines.push(`drift: ${head}: the label "${l}" is left over (the issue has it, the spec no longer produces it)`)
   // F6: the number named here is the slice's ORDER in the §9 table, never an
   // issue number — saying so in the message itself keeps whoever reads the
   // report from going off to look for "issue #3", which has nothing to do with
   // it.
-  for (const d of diff.deps.missing) lines.push(`drift: ${head}: falta la dependencia "merge-after \`#${d}\`" (orden de slice de la tabla §9, no un número de issue; la pide el spec, el issue no la tiene)`)
-  for (const d of diff.deps.extra) lines.push(`drift: ${head}: sobra la dependencia "merge-after \`#${d}\`" (orden de slice de la tabla §9, no un número de issue; la tiene el issue, el spec ya no la produce)`)
-  for (const a of diff.ac.missing) lines.push(`drift: ${head}: falta el criterio de aceptación "${a}" (lo pide el spec, el issue no lo tiene)`)
-  for (const a of diff.ac.extra) lines.push(`drift: ${head}: sobra el criterio de aceptación "${a}" (lo tiene el issue, el spec ya no lo produce)`)
+  for (const d of diff.deps.missing) lines.push(`drift: ${head}: the dependency "merge-after \`#${d}\`" is missing (a slice order from the §9 table, not an issue number; the spec asks for it, the issue does not have it)`)
+  for (const d of diff.deps.extra) lines.push(`drift: ${head}: the dependency "merge-after \`#${d}\`" is left over (a slice order from the §9 table, not an issue number; the issue has it, the spec no longer produces it)`)
+  for (const a of diff.ac.missing) lines.push(`drift: ${head}: the acceptance criterion "${a}" is missing (the spec asks for it, the issue does not have it)`)
+  for (const a of diff.ac.extra) lines.push(`drift: ${head}: the acceptance criterion "${a}" is left over (the issue has it, the spec no longer produces it)`)
   for (const section of diff.duplicateMachineSections || []) {
     // Minor (review round 5): "the dispatcher does not tell the first one
     // apart" was accurate for Dependencias (it unites both copies, a scan of
@@ -601,14 +601,14 @@ export function formatDrift(diff) {
     // message no longer asserts a single mechanism for both: it names the real
     // risk, which is enough for reviewing by hand to make sense without having
     // to know which mechanism applies.
-    lines.push(`drift: ${head}: la sección "## ${section}" aparece más de una vez en el body — el dispatcher no reconstruye la intención de un humano a partir de "la primera" ni de "la unión": revisa y une o elimina la copia sobrante a mano`)
+    lines.push(`drift: ${head}: the "## ${section}" section appears more than once in the body — the dispatcher does not reconstruct a human's intent out of "the first one" or out of "the union": review it and merge or delete the spare copy by hand`)
   }
-  if (diff.descripcionDiffers) lines.push(`note: ${head}: la sección "## Descripción" difiere del spec (prosa — no cuenta para el exit code; --reconcile no la reescribe)`)
+  if (diff.descripcionDiffers) lines.push(`note: ${head}: the "## Descripción" section differs from the spec (prose — it does not count towards the exit code; --reconcile does not rewrite it)`)
   // Slice 10: the signal, like Descripción, is only noted. The half sentence
   // about "the one the judge obeys" exists so that whoever reads the note knows
   // WHY it is not rewritten: at runtime the authority is the dispatch's issue,
   // not today's spec — the same contract as the gates.
-  if (diff.senalDiffers) lines.push(`note: ${head}: la sección "${SIGNAL_HEADING}" difiere del spec (no cuenta para el exit code; --reconcile no la reescribe — la señal que obedece el juez de slice es la que el issue tenía al despachar, igual que los gates)`)
+  if (diff.senalDiffers) lines.push(`note: ${head}: the "${SIGNAL_HEADING}" section differs from the spec (it does not count towards the exit code; --reconcile does not rewrite it — the signal the slice judge obeys is the one the issue carried at dispatch, the same as the gates)`)
   // Task 4 deliberately left this note without saying who rewrites the section:
   // in that commit "with --reconcile it is rewritten from the spec" was still
   // false (buildReconcileBody did not touch it). Task 5 made it true.
@@ -622,20 +622,20 @@ export function formatDrift(diff) {
   // cases applies, so it cannot promise the rewrite — it says what the normal
   // case is and where the exception comes from, which is exactly what it
   // knows.
-  if (diff.epicContextDiffers) lines.push(`note: ${head}: la sección "${EPIC_CONTEXT_HEADING}" difiere del spec (no cuenta para el exit code; con --reconcile se reescribe desde el spec salvo que el body no deje hacerlo con seguridad, en cuyo caso se dice aquí mismo con otra nota y el motivo). La sección "${INHERITED_CONTEXT_HEADING}" de al lado no se toca nunca`)
-  if (diff.frozenDecisionsDiffers) lines.push(`note: ${head}: la sección "${FROZEN_DECISIONS_HEADING}" difiere del spec (no cuenta para el exit code; con --reconcile se reescribe desde el spec salvo que el body no deje hacerlo con seguridad, en cuyo caso se dice aquí mismo con otra nota y el motivo)`)
-  if (diff.protectedDiffers) lines.push(`note: ${head}: la sección "## Out of scope / Protected" difiere del spec (prosa — no cuenta para el exit code; --reconcile no la reescribe)`)
+  if (diff.epicContextDiffers) lines.push(`note: ${head}: the "${EPIC_CONTEXT_HEADING}" section differs from the spec (it does not count towards the exit code; with --reconcile it is rewritten from the spec unless the body does not allow doing so safely, in which case that is said right here in another note, with the reason). The "${INHERITED_CONTEXT_HEADING}" section next door is never touched`)
+  if (diff.frozenDecisionsDiffers) lines.push(`note: ${head}: the "${FROZEN_DECISIONS_HEADING}" section differs from the spec (it does not count towards the exit code; with --reconcile it is rewritten from the spec unless the body does not allow doing so safely, in which case that is said right here in another note, with the reason)`)
+  if (diff.protectedDiffers) lines.push(`note: ${head}: the "## Out of scope / Protected" section differs from the spec (prose — it does not count towards the exit code; --reconcile does not rewrite it)`)
   // F21: the label is named as the channel that DOES count, so that whoever
   // reads this note knows where to look if a gate really worries them — without
   // that sentence, "it does not count towards the exit code" reads as "gates do
   // not matter".
-  if (diff.gatesDiffers) lines.push(`note: ${head}: la sección "${GATES_HEADING}" difiere del spec (no cuenta para el exit code; --reconcile no la reescribe). El gate que obedece el dispatcher son las labels "gate:" de este issue, que sí se comparan arriba — si un issue es anterior a los gates, esta sección le falta entera y basta con re-groomear su body a mano`)
+  if (diff.gatesDiffers) lines.push(`note: ${head}: the "${GATES_HEADING}" section differs from the spec (it does not count towards the exit code; --reconcile does not rewrite it). The gate the dispatcher obeys is this issue's "gate:" labels, which ARE compared above — if an issue predates the gates, this section is missing from it entirely and it is enough to re-groom its body by hand`)
   // Unlike the Gates note next door, this one is a DRIFT: the section is the
   // only place that says WHAT to traverse, and both /ct-next (the worktree's
   // seed) and `--release` (the exit-8 door) feed off it. An issue with the label
   // and without the section is a slice that traverses nothing — see the
   // `e2eDiffers` block in diffIssue.
-  if (diff.e2eDiffers) lines.push(`drift: ${head}: la sección "${E2E_HEADING}" difiere del spec — de ella salen los recorridos que /ct-next siembra en el worktree y los que "dispatch-check --release" exige haber atravesado, así que un issue sin ella (o con otra cosa) no atraviesa lo que el spec pide; con --reconcile se reescribe desde el spec`)
+  if (diff.e2eDiffers) lines.push(`drift: ${head}: the "${E2E_HEADING}" section differs from the spec — out of it come the journeys /ct-next seeds in the worktree and the ones "dispatch-check --release" demands to have been traversed, so an issue without it (or with something else) does not traverse what the spec asks for; with --reconcile it is rewritten from the spec`)
   for (const section of diff.duplicateSections || []) {
     if ((diff.duplicateMachineSections || []).includes(section)) continue // already reported above as drift:
     // Only the first one is COMPARED (locateSection always returns that one),
@@ -644,12 +644,12 @@ export function formatDrift(diff) {
     // first one", because one of the copies may be text pasted inside
     // "## Contexto heredado". The sections in this list are never rewritten
     // anyway, except the epic's context one.
-    lines.push(`note: ${head}: la sección "## ${section}" aparece más de una vez en el body — solo la primera se compara, y ninguna se reescribe mientras haya dos; revisa la(s) copia(s) sobrante(s) a mano`)
+    lines.push(`note: ${head}: the "## ${section}" section appears more than once in the body — only the first one is compared, and none of them is rewritten while there are two; review the spare copy (or copies) by hand`)
   }
   for (const d of diff.strayDeps || []) {
-    lines.push(`note: ${head}: "merge-after #${d}" aparece fuera de la sección "## Dependencias" — desde el hardening del dispatch (D1), ya NO lo obedece nadie (ni el dispatcher real ni --reconcile); si se pretendía como dependencia real, muévelo dentro de la sección`)
+    lines.push(`note: ${head}: "merge-after #${d}" appears outside the "## Dependencias" section — since the dispatch hardening (D1), NOBODY obeys it any more (neither the real dispatcher nor --reconcile); if it was meant as a real dependency, move it inside the section`)
   }
-  if (diff.closed && lines.length) lines.push(`note: ${head}: el issue está cerrado — revisa antes de aplicar --reconcile`)
+  if (diff.closed && lines.length) lines.push(`note: ${head}: the issue is closed — review before applying --reconcile`)
   return lines
 }
 
@@ -813,7 +813,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
   // deletes human text with no way back; the other is a noisy refusal that gets
   // fixed by restoring a heading. The cost is measured and it is paid in full:
   // over a body like that, --reconcile stops being able to apply Dependencias
-  // (see the test "con la sección heredada y sin cabecera de AC…" in
+  // (see the test "with the inherited section and with no AC heading…" in
   // reconcile.test.js).
   const inheritedZone = () => {
     const loc = locateSection(body, INHERITED_CONTEXT_HEADING)

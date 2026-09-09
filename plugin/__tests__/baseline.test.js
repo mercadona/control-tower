@@ -121,7 +121,7 @@ describe('Baseline', () => {
     expect(result.command).toBe(null)
     expect(result.summary).toContain('AGENTS.md')
     expect(result.summary).toContain('.agent/conventions.md')
-    expect(result.summary).toContain('test: `<comando>`')
+    expect(result.summary).toContain('test: `<command>`')
     expect(runner.asked).toEqual([])
   })
 

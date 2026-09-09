@@ -115,11 +115,11 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], { ...baseEnv(spec), FAKE_GH_ARGV_LOG_FILE: argvLog })
     expect(res.status).toBe(3)
     expect(res.stderr).toMatch(/drift.*slice #1.*issue #501/)
-    expect(res.stderr).toMatch(/t.tulo difiere/i)
+    expect(res.stderr).toMatch(/title differs/i)
     expect(res.stderr).toMatch(/"#1 iniciar sesión"/)
     expect(res.stderr).toMatch(/"#1 login"/)
-    expect(res.stderr).toMatch(/falta la label "area:api"/)
-    expect(res.stderr).toMatch(/falta la label "touches:db"/)
+    expect(res.stderr).toMatch(/the label "area:api" is missing/)
+    expect(res.stderr).toMatch(/the label "touches:db" is missing/)
     // What this test defends is that the DIVERGENCE REPORT does not mention
     // `status:in-progress`: it is a label of the issue that the spec does not
     // own, and reporting it as "extra" would be the bug. The assertion is
@@ -221,7 +221,7 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[CLOSED_MATCHING]]),
     })
     expect(res.status).toBe(0)
-    expect(res.stderr).not.toMatch(/cerrad/i)
+    expect(res.stderr).not.toMatch(/the issue is closed/i)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -233,8 +233,8 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[CLOSED_DRIFT]]),
     })
     expect(res.status).toBe(3)
-    expect(res.stderr).toMatch(/t.tulo difiere/i)
-    expect(res.stderr).toMatch(/cerrad.*reconcile/is)
+    expect(res.stderr).toMatch(/title differs/i)
+    expect(res.stderr).toMatch(/the issue is closed — review before applying --reconcile/)
     rmSync(dir, { recursive: true, force: true })
   })
 })
@@ -382,8 +382,8 @@ describe('ct-groom (real run) — divergent AC/Dependencias: they are detected a
     const argvLog = join(dir, 'argv.log')
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], { ...env2(spec), FAKE_GH_ARGV_LOG_FILE: argvLog })
     expect(res.status).toBe(3)
-    expect(res.stderr).toMatch(/falta el criterio de aceptación "AC-1.2"/)
-    expect(res.stderr).toMatch(/falta la dependencia "merge-after `#2`"/)
+    expect(res.stderr).toMatch(/the acceptance criterion "AC-1.2" is missing/)
+    expect(res.stderr).toMatch(/the dependency "merge-after `#2`" is missing/)
     const log = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
     expect(log).not.toMatch(/issue edit/)
     rmSync(dir, { recursive: true, force: true })
@@ -437,7 +437,7 @@ describe('ct-groom (real run) — divergent AC/Dependencias: they are detected a
     expect(res.status).toBe(3) // NOT 0 — a real gap was left unapplied
     expect(res.stderr).toMatch(/cannot fully apply this drift/)
     expect(res.stderr).toMatch(/acceptance criteria/)
-    expect(res.stderr).not.toMatch(/solo en prosa/i) // NEVER this lie (Critical 2)
+    expect(res.stderr).not.toMatch(/prose only/i) // NEVER this lie (Critical 2)
     // deps COULD be applied (a domain independent of AC's) — the --body that is
     // sent (it embeds newlines of its own, which is why it is checked over the
     // whole log instead of isolating the line) has to include the dependency:
@@ -469,7 +469,7 @@ describe('ct-groom (real run) — divergent AC/Dependencias: they are detected a
     })
     expect(res.status).toBe(3)
     expect(res.stderr).toMatch(/there is no telling where "## Contexto heredado" ends/)
-    expect(res.stderr).not.toMatch(/solo en prosa/i)
+    expect(res.stderr).not.toMatch(/prose only/i)
     const log = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
     expect(log).not.toMatch(/issue edit 501/) // nothing is written: there was nothing applicable
     rmSync(dir, { recursive: true, force: true })
@@ -651,7 +651,7 @@ describe('ct-groom (real run) — the link to the spec is the SAME however it is
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[preF10]]),
     })
     expect(res.status).toBe(3)
-    expect(res.stderr).toMatch(/enlace al spec difiere/)
+    expect(res.stderr).toMatch(/the link to the spec differs/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -673,7 +673,7 @@ describe('ct-groom (real run) — the link to the spec is the SAME however it is
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[otherFile]]),
     })
     expect(res.status).toBe(3)
-    expect(res.stderr).toMatch(/enlace al spec difiere/)
+    expect(res.stderr).toMatch(/the link to the spec differs/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -742,7 +742,7 @@ describe('ct-groom (real run) — a duplicated "## Dependencias"/"## Acceptance 
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[issue1WithDuplicateDeps, issue2Matching]]),
     })
     expect(res.status).toBe(3) // before this round, this exited 0 (it was only a note)
-    expect(res.stderr).toMatch(/drift.*Dependencias.*aparece más de una vez/is)
+    expect(res.stderr).toMatch(/drift:[^\n]*"## Dependencias" section appears more than once/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -787,7 +787,7 @@ describe('ct-groom (real run) — a duplicated "## Dependencias"/"## Acceptance 
       FAKE_GH_ARGV_LOG_FILE: argvLog,
     })
     expect(res.status).toBe(3) // before this fix, this exited 0 — it also broke the parity with --dry-run --reconcile over the same body
-    expect(res.stderr).toMatch(/drift.*Dependencias.*aparece más de una vez/is)
+    expect(res.stderr).toMatch(/drift:[^\n]*"## Dependencias" section appears more than once/)
     expect(res.stderr).toMatch(/--reconcile cannot fully apply this drift.*duplicated sections/is)
     const log = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
     expect(log).not.toMatch(/issue edit 501/) // nothing really to apply: ac/deps already matched, all that is left over is one copy

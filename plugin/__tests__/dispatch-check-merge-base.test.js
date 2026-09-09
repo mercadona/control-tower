@@ -264,7 +264,7 @@ describe('dispatch-check --release reads plan citations against the cut, not the
   it('a_plan_citation_written_against_the_cut_is_not_invalidated_by_a_file_the_merged_base_later_changed', () => {
     const r = release(issue, world.work)
 
-    expect((r.stderr || '')).not.toContain('cita de memoria')
+    expect((r.stderr || '')).not.toContain('quoted from memory')
     expect((r.stderr || '')).not.toContain("does not exist in the branch's base")
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(new RegExp(`released #${issue}.*in-review`))

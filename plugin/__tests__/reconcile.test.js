@@ -439,26 +439,26 @@ describe('formatDrift — drift: (counts) vs. note: (does not count); deps/ac/sp
   it('a divergent milestone → a "drift:" line with both values', () => {
     const lines = formatDrift({ ...BASE, milestone: { current: 'Sprint 1', wanted: 'Epic' } })
     expect(lines[0]).toMatch(/^drift:/)
-    expect(lines[0]).toMatch(/milestone difiere/)
+    expect(lines[0]).toMatch(/milestone differs/)
     expect(lines[0]).toMatch(/"Sprint 1"/)
     expect(lines[0]).toMatch(/"Epic"/)
   })
   // F6: the line cites the reference EXACTLY as it appears in the body the
   // spec produces today (with backticks) and says, on top of that, that the
-  // number is a slice order — not an issue number. A human who reads "falta la
-  // dependencia merge-after #3" in the terminal has no way of knowing which of
-  // the two ID spaces they are looking at.
+  // number is a slice order — not an issue number. A human who reads "the
+  // dependency merge-after #3 is missing" in the terminal has no way of knowing
+  // which of the two ID spaces they are looking at.
   it('a missing/left-over dep → one "drift:" line for each, naming merge-after `#N` and that it is a slice order', () => {
     const lines = formatDrift({ ...BASE, deps: { missing: [3], extra: [4] } })
-    expect(lines.find((l) => l.includes('merge-after `#3`'))).toMatch(/^drift:.*falta/i)
-    expect(lines.find((l) => l.includes('merge-after `#4`'))).toMatch(/^drift:.*sobra/i)
-    expect(lines.every((l) => /orden de slice/i.test(l))).toBe(true)
+    expect(lines.find((l) => l.includes('merge-after `#3`'))).toMatch(/^drift:.*is missing/i)
+    expect(lines.find((l) => l.includes('merge-after `#4`'))).toMatch(/^drift:.*is left over/i)
+    expect(lines.every((l) => /slice order/i.test(l))).toBe(true)
     expect(lines.some((l) => /merge-after #\d/.test(l))).toBe(false) // never the bare form, which suggests an issue number
   })
   it('a missing/left-over ac → one "drift:" line for each, with the text of the criterion', () => {
     const lines = formatDrift({ ...BASE, ac: { missing: ['AC-2.2'], extra: ['AC-9.9'] } })
-    expect(lines.find((l) => l.includes('AC-2.2'))).toMatch(/^drift:.*falta/i)
-    expect(lines.find((l) => l.includes('AC-9.9'))).toMatch(/^drift:.*sobra/i)
+    expect(lines.find((l) => l.includes('AC-2.2'))).toMatch(/^drift:.*is missing/i)
+    expect(lines.find((l) => l.includes('AC-9.9'))).toMatch(/^drift:.*is left over/i)
   })
   it('duplicateMachineSections (e.g. Dependencias) → a "drift:" line, not a "note:" one', () => {
     const lines = formatDrift({ ...BASE, duplicateSections: ['Dependencias'], duplicateMachineSections: ['Dependencias'] })
@@ -487,9 +487,9 @@ describe('formatDrift — drift: (counts) vs. note: (does not count); deps/ac/sp
     expect(lines[0]).toMatch(/merge-after #9/)
     expect(lines[0]).toMatch(/dispatcher/i)
   })
-  it('a closed issue WITH something to report (prose-only included) → a final note about it being "cerrado"', () => {
+  it('a closed issue WITH something to report (prose-only included) → a final note about it being "closed"', () => {
     const lines = formatDrift({ ...BASE, closed: true, descripcionDiffers: true })
-    expect(lines[lines.length - 1]).toMatch(/cerrad.*reconcile/is)
+    expect(lines[lines.length - 1]).toMatch(/closed.*reconcile/is)
   })
   it('a closed issue with NOTHING to report → no closure note (closed on its own is still real silence)', () => {
     expect(formatDrift({ ...BASE, closed: true })).toEqual([])
@@ -936,7 +936,7 @@ describe('the signal in the reconciliation (Slice 10)', () => {
     // note, pre-existing and orthogonal — what gets nailed down here is that
     // the signal comes out as note: (verbatim) and that NO line is a
     // drift:.
-    expect(lines).toContain('note: slice #2 (issue #42): la sección "## Señal de observabilidad" difiere del spec (no cuenta para el exit code; --reconcile no la reescribe — la señal que obedece el juez de slice es la que el issue tenía al despachar, igual que los gates)')
+    expect(lines).toContain('note: slice #2 (issue #42): the "## Señal de observabilidad" section differs from the spec (it does not count towards the exit code; --reconcile does not rewrite it — the signal the slice judge obeys is the one the issue carried at dispatch, the same as the gates)')
     expect(lines.every((l) => l.startsWith('note:'))).toBe(true)
     const gaps = reconcileGaps(d, { body: null, unresolvedAc: false, unresolvedDeps: false })
     // `e2e: false` entered reconcileGaps' shape with the E2E column (which IS

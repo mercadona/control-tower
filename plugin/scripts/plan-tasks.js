@@ -554,7 +554,7 @@ function extractGlobal(lines, push) {
   }
 
   if (commands === null || commands.length === 0) {
-    push(0, 'global-verification-block', 'la "## 8. Global verification" del plan declara la validación de punta a punta en prosa, y un programa no ejecuta prosa. Los comandos van en un bloque cercado bajo "## 8. Global verification", o la línea exacta "N/A — <razón>".')
+    push(0, 'global-verification-block', 'the "## 8. Global verification" of the plan declares the end-to-end validation in prose, and a program does not execute prose. The commands go in a fenced block under "## 8. Global verification", or the exact line "N/A — <reason>".')
     return { commands: [] }
   }
 
@@ -564,7 +564,7 @@ function extractGlobal(lines, push) {
     const words = splitRespectingQuotes(span.stage)
     const broken = NOT_A_PREDICATE.find((r) => r.matches(words, span.piped, span.stage))
     if (broken) {
-      push(0, 'global-verification-predicate', `la "## 8. Global verification" verifica con \`${command}\`, y su código de salida no puede afirmar lo que el control dice medir: ${broken.why}`)
+      push(0, 'global-verification-predicate', `the "## 8. Global verification" verifies with \`${command}\`, and its exit code cannot assert what the check says it measures: ${broken.why}`)
     }
   }
 
@@ -657,7 +657,7 @@ export function extractTasks(markdown) {
     })
 
     if (commands === null) {
-      push(h.n, 'verification-block', `la tarea ${h.n} no trae bloque de comandos detrás de "${VERIFICATION}": su verificación es prosa, y un programa no ejecuta prosa.`)
+      push(h.n, 'verification-block', `task ${h.n} brings no command block behind "${VERIFICATION}": its verification is prose, and a program does not execute prose.`)
     } else if (commands.length === 0) {
       push(h.n, 'verification-block', `task ${h.n} brings an empty command block behind "${VERIFICATION}".`)
     } else {
@@ -667,7 +667,7 @@ export function extractTasks(markdown) {
         const words = splitRespectingQuotes(span.stage)
         const broken = NOT_A_PREDICATE.find((r) => r.matches(words, span.piped, span.stage))
         if (broken) {
-          push(h.n, 'verification-predicate', `la tarea ${h.n} verifica con \`${command}\`, y su código de salida no puede afirmar lo que el control dice medir: ${broken.why}`)
+          push(h.n, 'verification-predicate', `task ${h.n} verifies with \`${command}\`, and its exit code cannot assert what the check says it measures: ${broken.why}`)
         }
       }
     }
@@ -690,7 +690,7 @@ export function extractTasks(markdown) {
 
   if (!tasks.length) push(0, 'tasks', 'the plan declares no task at all ("### Task N — ...").')
 
-  // The extraction of §8 runs over the COMPLETE `lines`, not over the `cuerpo`
+  // The extraction of §8 runs over the COMPLETE `lines`, not over the `body`
   // of any task: with no tasks following it, the §8 of a real plan falls inside
   // the stretch of the LAST task (which is harmless for the loop above, that
   // only reacts to markers), but here the whole file is needed to find its own

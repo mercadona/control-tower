@@ -91,7 +91,7 @@ describe('the watcher delivers the merge warning', () => {
   it('sees the merged PR and types the line into the coordinator', () => {
     const r = run(withMerge())
     expect(r.status).toBe(0)
-    expect(r.stdout).toMatch(/línea enviada/)
+    expect(r.stdout).toMatch(/line sent/)
     // The `send-key Enter` consumes the pending one: its being null is the
     // proof that the line was SENT and executed, not that it stayed on the edit
     // line. The two steps go separately because `cmux send` adds no Enter.
@@ -122,7 +122,7 @@ describe('the watcher delivers the merge warning', () => {
     // gets merged hours or days after it opens.
     const r = run(withMerge())
     expect(r.status).toBe(0)
-    expect(r.stdout).toMatch(/línea enviada/)
+    expect(r.stdout).toMatch(/line sent/)
   })
 })
 
@@ -130,7 +130,7 @@ describe('the watcher does not warn about what is not a merge', () => {
   it('an open, unmerged PR runs out the deadline without touching the coordinator', () => {
     const r = run({ FAKE_GH_PR_LIST: '[]' })
     expect(r.status).toBe(3)
-    expect(r.stdout).toMatch(/plazo agotado/)
+    expect(r.stdout).toMatch(/deadline exhausted/)
     expect(pendingOf()).toBeUndefined()
   })
 })
@@ -142,15 +142,15 @@ describe('what cannot bring the watch down', () => {
     // would shut down with the work delivered and unharvested.
     const r = run({ FAKE_GH_PR_LIST_FAIL: '1' })
     expect(r.status).toBe(3)
-    expect(r.stdout).toMatch(/no se pudo consultar el PR/)
-    expect(r.stdout).toMatch(/se reintenta/)
+    expect(r.stdout).toMatch(/could not be queried/)
+    expect(r.stdout).toMatch(/it is retried/)
   })
 
   it('if the merge arrives and there is no coordinator, it says so and dies', () => {
     writeFileSync(stateFile, JSON.stringify([]))
     const r = run(withMerge())
     expect(r.status).toBe(1)
-    expect(r.stdout).toMatch(/cmux dice que no existe/)
+    expect(r.stdout).toMatch(/cmux says there is no workspace/)
   })
 
   // -------------------------------------------------------------------------
@@ -172,10 +172,10 @@ describe('what cannot bring the watch down', () => {
     expect(r.status).toBe(1)
     // The rule: the coordinator lives in the main checkout, and the concrete
     // directory has to appear for it to be actionable.
-    expect(r.stdout).toMatch(/coordinadora tiene que ser una workspace de cmux abierta EN/)
+    expect(r.stdout).toMatch(/coordinator session has to be a cmux workspace opened IN/)
     expect(r.stdout).toContain(dir)
     // And why it is by directory and not by name: it is not created by the loop.
-    expect(r.stdout).toMatch(/no la crea el loop/)
+    expect(r.stdout).toMatch(/the loop does not create it/)
     // The safety net, said out loud: the warning is lost, the work is not.
     expect(r.stdout).toMatch(/pending harvest/)
     expect(r.stdout).toMatch(/No work has been lost/)
@@ -206,11 +206,11 @@ describe('what cannot bring the watch down', () => {
     // not there": the difference is that it keeps trying instead of blaming
     // anybody.
     expect(r.status).toBe(3)
-    expect(r.stdout).toMatch(/no se pudo consultar cmux/)
-    expect(r.stdout).toMatch(/se reintenta la entrega/)
+    expect(r.stdout).toMatch(/cmux could not be asked/)
+    expect(r.stdout).toMatch(/the delivery is retried/)
     // And what CANNOT appear: the accusation.
-    expect(r.stdout).not.toMatch(/La regla que no se cumplió/)
-    expect(r.stdout).not.toMatch(/no existe ninguna workspace/)
+    expect(r.stdout).not.toMatch(/The rule that was not met/)
+    expect(r.stdout).not.toMatch(/there is no workspace/)
   })
 
   it('if the merge arrives and cmux cannot be asked right then, it does NOT give up', () => {
@@ -220,8 +220,8 @@ describe('what cannot bring the watch down', () => {
     // the watch at the only instant that matters.
     const r = run(withMerge({ PATH: withoutCmux() }), { timeoutMs: 500, pollMs: 40 })
     expect(r.status).toBe(3)
-    expect(r.stdout).toMatch(/el merge está visto pero no se pudo consultar cmux/)
-    expect(r.stdout).toMatch(/se reintenta la entrega/)
+    expect(r.stdout).toMatch(/the merge is seen but cmux could not be asked/)
+    expect(r.stdout).toMatch(/the delivery is retried/)
   })
 
   // -------------------------------------------------------------------------
@@ -239,16 +239,16 @@ describe('what cannot bring the watch down', () => {
     writeFileSync(stateFile, JSON.stringify([]))
     const r = run({ FAKE_GH_PR_LIST: '[]' }, { timeoutMs: 400, pollMs: 40 })
     expect(r.status).toBe(3)
-    expect(r.stdout).toMatch(/plazo agotado/)
+    expect(r.stdout).toMatch(/deadline exhausted/)
     // And no exit 4 "the session no longer exists" has been invented like the
     // go watcher's: here that is not a bound, it is the normal case.
-    expect(r.stdout).not.toMatch(/ya no existe/)
+    expect(r.stdout).not.toMatch(/no longer exists/)
   })
 
   it('if the typing fails it says so and dies: the merge was seen and could not be delivered', () => {
     const r = run(withMerge({ FAKE_CMUX_SEND_FAIL: '1' }))
     expect(r.status).toBe(1)
-    expect(r.stdout).toMatch(/no se pudo escribir/)
+    expect(r.stdout).toMatch(/could not be written/)
   })
 })
 

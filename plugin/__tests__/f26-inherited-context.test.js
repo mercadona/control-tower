@@ -959,7 +959,7 @@ describe('§4.4 — the epic context cannot produce an exit 3, whatever happens'
     const issue = { number: 501, title: '#1 login', state: 'open', milestone: { title: 'Epic' }, labels: LABELS_1, body }
     const res = invoke(specWithContext('- regla NUEVA'), [issue], ['--reconcile'])
     expect(res.status).toBe(3)
-    expect(res.stderr).toMatch(/drift:.*criterio de aceptación/)
+    expect(res.stderr).toMatch(/drift:.*acceptance criterion/)
     expect(res.stderr).not.toMatch(new RegExp(`drift:.*${EPIC_CONTEXT_HEADING}`))
     // And nothing has been written in the epic section: why has been said.
     expect(res.stderr).toMatch(/note:.*has NOT rewritten the "## Contexto del epic" section.*LEFT UNCLOSED/s)

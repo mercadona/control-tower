@@ -168,7 +168,7 @@ let specMd
 try {
   specMd = readFileSync(specFile, 'utf8')
 } catch (e) {
-  console.error(`no se pudo leer el spec: ${specFile} (${e.code || e.message})`)
+  console.error(`could not read the spec: ${specFile} (${e.code || e.message})`)
   process.exit(2)
 }
 // F1 (incident report): a real spec, written by somebody who had not read

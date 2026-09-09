@@ -144,7 +144,7 @@ const repo = arg(process.argv, '--repo')
 const coordinatorCwd = arg(process.argv, '--coordinator-cwd')
 const logPath = arg(process.argv, '--log')
 if (!issue || !repo || !coordinatorCwd) {
-  process.stderr.write('usage: ct-watch-merge.mjs --issue N --repo owner/name --coordinator-cwd <ruta del checkout principal> [--log <ruta>]\n')
+  process.stderr.write('usage: ct-watch-merge.mjs --issue N --repo owner/name --coordinator-cwd <path of the main checkout> [--log <path>]\n')
   process.exit(2)
 }
 
@@ -181,7 +181,7 @@ function readMergedPr() {
     // expires and is renewed, GitHub returns a 502. What cannot happen is that a
     // transient failure gets read as "it is not merged" permanently — the watcher
     // would shut down with the work delivered and the harvest uncollected.
-    log(`warning: no se pudo consultar el PR de ${branch} (${String(e.message).trim()}) — se reintenta en el próximo tick`)
+    log(`warning: the PR of ${branch} could not be queried (${String(e.message).trim()}) — it is retried on the next tick`)
     return undefined
   }
 }
@@ -202,7 +202,7 @@ function readMergedPr() {
 // it routes the schema change through the right one of the paths already there.
 const consultarCoordinadora = () => {
   const r = findWorkspaceByCwd(coordinatorCwd, { timeoutMs: CMUX_TIMEOUT_MS })
-  if (!r.consultado) log('warning: no se pudo consultar cmux (o su respuesta no trae el campo del directorio que este plugin sabe leer)')
+  if (!r.consultado) log('warning: cmux could not be asked (or its answer does not carry the directory field this plugin knows how to read)')
   return r
 }
 
@@ -239,7 +239,7 @@ for (;;) {
           stdio: ['ignore', 'ignore', 'pipe'], timeout: CMUX_TIMEOUT_MS, killSignal: 'SIGKILL',
         })
       } catch (e) {
-        log(`ERROR: el merge se vio y el texto no se pudo escribir en la coordinadora (${ref}): ${String(e.message).trim()}. Recoge la cosecha del #${issue} a mano.`)
+        log(`ERROR: the merge was seen and the text could not be written into the coordinator (${ref}): ${String(e.message).trim()}. Collect the harvest of #${issue} by hand.`)
         finish(1)
       }
       try {
@@ -252,13 +252,13 @@ for (;;) {
         // not "it could not be typed": whoever reads it is going to find the
         // line written in the window and has to know that all it is missing is
         // the Enter.
-        log(`ERROR: el texto quedó escrito en la línea de edición de la coordinadora (${ref}) pero el Enter falló: ${String(e.message).trim()}. Ve a esa ventana y pulsa Enter.`)
+        log(`ERROR: the text was left written on the edit line of the coordinator (${ref}) but the Enter failed: ${String(e.message).trim()}. Go to that window and press Enter.`)
         finish(1)
       }
       // What is known is this and no more: the two commands returned 0. There is
       // no sentinel that proves the coordinator received it and acted (see the
       // header), so the message does not claim the harvest has started.
-      log(`línea enviada a la coordinadora (${ref}): \`cmux send\` y \`send-key Enter\` devolvieron 0. No hay forma de comprobar desde aquí que la sesión la haya procesado. Vigilancia terminada.`)
+      log(`line sent to the coordinator (${ref}): \`cmux send\` and \`send-key Enter\` returned 0. There is no way to check from here that the session has processed it. Watch finished.`)
       finish(0)
     }
     if (consultado) {
@@ -267,17 +267,17 @@ for (;;) {
       // cannot deduce from that what they should have done differently. And it
       // says that the harvest is still detected on its own, so that a lost
       // warning does not get read as lost work.
-      log(`ERROR: el merge de ${branch} se vio, pero cmux dice que no existe ninguna workspace cuyo directorio sea ${coordinatorCwd}, así que no hay a quién entregárselo.`)
-      log(`La regla que no se cumplió: la sesión coordinadora tiene que ser una workspace de cmux abierta EN ${coordinatorCwd} — este vigilante la localiza por su directorio porque no hay ningún nombre de sesión que el loop pueda derivar (a ella no la crea el loop, la abres tú).`)
+      log(`ERROR: the merge of ${branch} was seen, but cmux says there is no workspace whose directory is ${coordinatorCwd}, so there is nobody to deliver it to.`)
+      log(`The rule that was not met: the coordinator session has to be a cmux workspace opened IN ${coordinatorCwd} — this watcher locates it by its directory because there is no session name the loop can derive (the loop does not create it, you open it yourself).`)
       log(`No work has been lost: the next \`/ct-next\` in that checkout will emit \`pending harvest:\` for #${issue} with the exact commands. What has been lost is finding out now.`)
       finish(1)
     }
     // The coordinator could not be ASKED about. Nothing follows from that, and
     // less so with the merge already in hand: it retries on the next tick.
-    log(`el merge está visto pero no se pudo consultar cmux para localizar la coordinadora — se reintenta la entrega en el próximo tick`)
+    log(`the merge is seen but cmux could not be asked to locate the coordinator — the delivery is retried on the next tick`)
   }
   if (Date.now() >= deadline) {
-    log(`plazo agotado sin ver ningún merge de ${branch} en ${repo}. Si ya lo mergeaste, la cosecha del #${issue} sigue pendiente: recógela a mano, o vuelve a lanzar este vigilante.`)
+    log(`deadline exhausted without seeing any merge of ${branch} in ${repo}. If you already merged it, the harvest of #${issue} is still pending: collect it by hand, or launch this watcher again.`)
     finish(3)
   }
   await sleep(Math.min(pollMs, Math.max(0, deadline - Date.now())))

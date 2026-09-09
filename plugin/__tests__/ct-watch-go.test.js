@@ -104,7 +104,7 @@ describe('the watcher delivers the go', () => {
   it('sees the token and types the line into the slice session', () => {
     const r = run(withGo())
     expect(r.status).toBe(0)
-    expect(r.stdout).toMatch(/línea enviada/)
+    expect(r.stdout).toMatch(/line sent/)
     // The `send-key Enter` consumes the pending one: its being null is the
     // proof that the line was SENT and executed, not that it was left on the
     // edit line. The two steps go separately because `cmux send` adds no Enter.
@@ -116,7 +116,7 @@ describe('the watcher delivers the go', () => {
     // payload carries no go; the second one does.
     const r = run(withGo())
     expect(r.status).toBe(0)
-    expect(r.stdout).toMatch(/línea enviada/)
+    expect(r.stdout).toMatch(/line sent/)
   })
 })
 
@@ -129,7 +129,7 @@ describe('the watcher does not deliver what is not a go', () => {
       FAKE_GH_VIEW_COMMENTS: JSON.stringify({ comments: [comment(`${GO} pero cambia el nombre`)] }),
     })
     expect(r.status).toBe(3)
-    expect(r.stdout).toMatch(/plazo agotado/)
+    expect(r.stdout).toMatch(/deadline exhausted/)
     expect(pendingOf()).toBeUndefined()
   })
 
@@ -142,7 +142,7 @@ describe('the watcher does not deliver what is not a go', () => {
       FAKE_GH_VIEW_COMMENTS: JSON.stringify({ comments: [comment(GO, 'IC_heredado')] }),
     })
     expect(r.status).toBe(3)
-    expect(r.stdout).toMatch(/1 comentario\(s\) ya presentes/)
+    expect(r.stdout).toMatch(/1 comment\(s\) already there/)
     expect(pendingOf()).toBeUndefined()
   })
 })
@@ -153,8 +153,8 @@ describe('what cannot knock down the watch', () => {
     // transient failure to be read as «there is no go» permanently.
     const r = run({ FAKE_GH_VIEW_FAIL: '1' })
     expect(r.status).toBe(3)
-    expect(r.stdout).toMatch(/no se pudo leer el issue/)
-    expect(r.stdout).toMatch(/se reintenta/)
+    expect(r.stdout).toMatch(/could not read the issue/)
+    expect(r.stdout).toMatch(/it is retried/)
   })
 
   it('if the session does not exist it says so and dies, instead of pretending it is still watching', () => {
@@ -180,8 +180,8 @@ describe('what cannot knock down the watch', () => {
     // there), NOT on the exit 1 of «there is no session»: the difference is that
     // it keeps trying.
     expect(r.status).toBe(3)
-    expect(r.stdout).toMatch(/el go está visto pero no se pudo consultar cmux/)
-    expect(r.stdout).toMatch(/se reintenta la entrega/)
+    expect(r.stdout).toMatch(/the go is seen but cmux could not be asked/)
+    expect(r.stdout).toMatch(/the delivery is retried/)
   })
 
   // -------------------------------------------------------------------------
@@ -198,7 +198,7 @@ describe('what cannot knock down the watch', () => {
     const before = Date.now()
     const r = run({}, { timeoutMs: 60_000, pollMs: 40 })
     expect(r.status).toBe(4)
-    expect(r.stdout).toMatch(/ya no existe/)
+    expect(r.stdout).toMatch(/no longer exists/)
     expect(Date.now() - before).toBeLessThan(20_000)
   })
 
@@ -222,8 +222,8 @@ describe('what cannot knock down the watch', () => {
     // exists»: the watch stays standing instead of killing itself with a false
     // diagnosis.
     expect(r.status).toBe(3)
-    expect(r.stdout).toMatch(/no se pudo consultar cmux/)
-    expect(r.stdout).not.toMatch(/ya no existe/)
+    expect(r.stdout).toMatch(/cmux could not be asked/)
+    expect(r.stdout).not.toMatch(/no longer exists/)
   })
 
   it('but if the session could not be ASKED about, it goes on waiting', () => {
@@ -234,8 +234,8 @@ describe('what cannot knock down the watch', () => {
     // impossible to make, not it answering something else.
     const r = run({ PATH: withoutCmux() }, { timeoutMs: 400, pollMs: 40 })
     expect(r.status).toBe(3)
-    expect(r.stdout).toMatch(/no se pudo consultar cmux/)
-    expect(r.stdout).toMatch(/plazo agotado/)
+    expect(r.stdout).toMatch(/cmux could not be asked/)
+    expect(r.stdout).toMatch(/deadline exhausted/)
   })
 
   it('if the typing fails it says so and dies: the go was seen and could not be delivered', () => {
@@ -253,15 +253,15 @@ describe('the initial snapshot', () => {
   it('it is not taken as empty: if it cannot be read even once, nothing is delivered', () => {
     const r = run({ FAKE_GH_VIEW_FAIL: '1' }, { timeoutMs: 300, pollMs: 40 })
     expect(r.status).toBe(3)
-    expect(r.stdout).toMatch(/sin poder leer ni una vez/)
-    expect(r.stdout).not.toMatch(/foto inicial/)
+    expect(r.stdout).toMatch(/without managing to read the comments/)
+    expect(r.stdout).not.toMatch(/initial snapshot/)
   })
 
   it('it announces how many comments are not going to count', () => {
     const r = run({
       FAKE_GH_VIEW_COMMENTS: JSON.stringify({ comments: [comment('hola'), comment('qué tal')] }),
     }, { timeoutMs: 300, pollMs: 40 })
-    expect(r.stdout).toMatch(/foto inicial: 2 comentario\(s\) ya presentes/)
+    expect(r.stdout).toMatch(/initial snapshot: 2 comment\(s\) already there/)
   })
 })
 
@@ -374,7 +374,7 @@ describe('a go attempt that starts nothing gets the format on the issue', () => 
       // deadline to spare costs no time when it passes.
     }, { timeoutMs: 8000, pollMs: 40 })
     expect(r.status).toBe(0)
-    expect(r.stdout).toMatch(/no se pudo publicar el formato/)
-    expect(r.stdout).toMatch(new RegExp(`${GO_TOKEN} visto`))
+    expect(r.stdout).toMatch(/the format could not be published/)
+    expect(r.stdout).toMatch(new RegExp(`${GO_TOKEN} seen`))
   })
 })

@@ -291,8 +291,8 @@ describe('ct-go: reissuing the go of a dispatch in flight', () => {
     const r = spawnSync(process.execPath, [CT_GO, '--issue', '7', '--repo', 'o/r'], {
       encoding: 'utf8', env: { ...process.env, CLAUDE_CONFIG_DIR: cfg },
     })
-    expect(r.stdout).toMatch(/está buscando el go ANTERIOR/)
-    expect(r.stdout).toMatch(/a mano/)
+    expect(r.stdout).toMatch(/is looking for the PREVIOUS go/)
+    expect(r.stdout).toMatch(/by hand/)
   })
 
   it('the go it reissues really does release: it is the complete recovery path', () => {

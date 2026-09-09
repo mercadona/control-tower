@@ -129,7 +129,7 @@ describe('ct-groom — when a good link cannot be built, it does not go quiet (F
     expect(res.status).toBe(0) // grooming is still possible: the link is not the work
     expect(res.stderr).toMatch(/left WITHOUT a link/)
     const link = planOf(res).issues[0].specLink
-    expect(link).toContain('sin enlace: el spec no está publicado en la rama por defecto del repositorio (o/r, rama main)')
+    expect(link).toContain('sin enlace: the spec is not published on the default branch of the repository (o/r, branch main)')
     expect(link).not.toMatch(/\]\(/) // not even a half-finished markdown link
     expect(link).not.toContain('https://')
     rmSync(dir, { recursive: true, force: true })

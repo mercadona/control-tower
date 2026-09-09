@@ -54,7 +54,7 @@ if (parseError) {
   if (!input.stop_hook_active) {
     process.stdout.write(JSON.stringify({
       decision: 'block',
-      reason: `No se ha podido interpretar el frontmatter YAML de ${stateRel} (${parseError}). Arréglalo antes de cerrar el turno: mientras siga así, la próxima sesión no podrá hidratarse del estado ni saber si el trabajo está BLOQUEADO (campo \`blocked\`), y este mismo aviso volverá a salir.`,
+      reason: `The YAML frontmatter of ${stateRel} could not be parsed (${parseError}). Fix it before closing the turn: while it stays like this, the next session will not be able to hydrate from the state nor to know whether the work is BLOCKED (\`blocked\` field), and this same warning will come out again.`,
     }))
   }
   process.exit(0)

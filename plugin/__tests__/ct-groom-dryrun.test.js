@@ -85,7 +85,7 @@ describe('ct-groom --dry-run', () => {
     } catch (e) {
       threw = true
       expect(e.status).not.toBe(0)
-      expect(e.stderr.toString()).toMatch(/no se pudo leer el spec/)
+      expect(e.stderr.toString()).toMatch(/could not read the spec/)
     }
     expect(threw).toBe(true)
   })
@@ -1305,11 +1305,11 @@ describe('ct-groom --dry-run — it detects the divergence of an issue that alre
       expect(plan.issues[0].title).toBe('#1 login')
       const err = e.stderr.toString()
       expect(err).toMatch(/slice #1.*issue #501/)
-      expect(err).toMatch(/t.tulo difiere/i)
+      expect(err).toMatch(/title differs/i)
       expect(err).toMatch(/"#1 iniciar sesión"/)
       expect(err).toMatch(/"#1 login"/)
-      expect(err).toMatch(/falta la label "area:api"/)
-      expect(err).toMatch(/falta la label "touches:db"/)
+      expect(err).toMatch(/the label "area:api" is missing/)
+      expect(err).toMatch(/the label "touches:db" is missing/)
       // Narrowed to the DIVERGENCE lines, which is what this test defends:
       // `status:in-progress` is a label of the issue that the spec does not own,
       // and reporting it as "extra" would be the bug. The name now shows up,
@@ -1340,7 +1340,7 @@ describe('ct-groom --dry-run — it detects the divergence of an issue that alre
     // epic", no "## Decisiones congeladas" and no "Señal" column, so the stderr
     // carries the THREE absence warnings — all of them orthogonal to the
     // divergence this test watches. What is checked is that ONLY those three
-    // are there (nothing of "difiere"/"falta la label"/etc.), instead of
+    // are there (nothing of "differs"/"the label … is missing"/etc.), instead of
     // demanding bare emptiness.
     const stderrLines = res.stderr.split('\n').filter(Boolean)
     expect(stderrLines).toHaveLength(3)
@@ -1398,8 +1398,8 @@ describe('ct-groom --dry-run — it detects the divergence of an issue that alre
       threw = true
       expect(e.status).toBe(3)
       const err = e.stderr.toString()
-      expect(err).toMatch(/t.tulo difiere/i)
-      expect(err).toMatch(/cerrad.*reconcile/is)
+      expect(err).toMatch(/title differs/i)
+      expect(err).toMatch(/the issue is closed — review before applying --reconcile/)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
@@ -1550,8 +1550,8 @@ describe('ct-groom --dry-run — divergent AC/Dependencias are detected (critica
       threw = true
       expect(e.status).toBe(3)
       const err = e.stderr.toString()
-      expect(err).toMatch(/falta el criterio de aceptación "AC-1.2"/)
-      expect(err).toMatch(/falta la dependencia "merge-after `#2`"/)
+      expect(err).toMatch(/the acceptance criterion "AC-1.2" is missing/)
+      expect(err).toMatch(/the dependency "merge-after `#2`" is missing/)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })

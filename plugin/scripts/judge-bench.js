@@ -3,10 +3,10 @@ import { Agreement } from './judge-bench-case.js'
 import { ClaudeAnswer, MalformedClaudeAnswer } from './judge-dispatch.js'
 
 export const RunOutcome = Object.freeze({
-  HIT: 'acierto',
-  MISS: 'fallo',
-  DISCARDED: 'descartado',
-  NOT_RUN: 'no-ejecutado',
+  HIT: 'hit',
+  MISS: 'miss',
+  DISCARDED: 'discarded',
+  NOT_RUN: 'not-run',
 })
 
 export class SeverityCount {
@@ -101,16 +101,16 @@ export class BenchReport {
     const table = BenchTable.render([BenchTable.HEADER, ...rows])
     const misses = this.results.filter((result) => result.outcome !== RunOutcome.HIT)
     const detail = misses.length
-      ? ['', 'Lo que no acertó:', ...misses.map((result) => `  - ${result.caseName} #${result.attempt}: ${result.outcome} — ${result.detail} (${result.directory})`)]
-      : ['', 'Todos los runs aciertan.']
+      ? ['', 'What it did not get right:', ...misses.map((result) => `  - ${result.caseName} #${result.attempt}: ${result.outcome} — ${result.detail} (${result.directory})`)]
+      : ['', 'Every run is a hit.']
     const withoutCost = this.total.runsWithoutCost
-    const costNote = withoutCost ? [`Coste: ${withoutCost} run(s) sin coste legible; el total suma sólo los que lo declararon.`] : []
-    return [`Banco del juez — agente: ${this.agentPath}`, '', table, ...detail, ...costNote, ''].join('\n')
+    const costNote = withoutCost ? [`Cost: ${withoutCost} run(s) with no readable cost; the total adds up only the ones that declared it.`] : []
+    return [`Judge bench — agent: ${this.agentPath}`, '', table, ...detail, ...costNote, ''].join('\n')
   }
 }
 
 export class BenchTable {
-  static HEADER = Object.freeze(['caso', 'runs', 'aciertos', 'descartes', 'no ejecutados', 'high', 'medium', 'low', 'coste USD'])
+  static HEADER = Object.freeze(['case', 'runs', 'hits', 'discards', 'not run', 'high', 'medium', 'low', 'cost USD'])
 
   static row(summary) {
     const rate = (n) => (summary.runs === 0 ? '0 (0%)' : `${n} (${Math.round((100 * n) / summary.runs)}%)`)
@@ -178,7 +178,7 @@ export class JudgeBench {
       return new RunResult({
         ...base,
         outcome: RunOutcome.NOT_RUN,
-        detail: `claude salió con ${answer.code} y ${error.detail}${JudgeBench.#tail(answer.stderr)}`,
+        detail: `claude exited with ${answer.code} and ${error.detail}${JudgeBench.#tail(answer.stderr)}`,
         costUsd: null,
         severities: new SeverityCount(),
         verdict: null,
@@ -189,24 +189,24 @@ export class JudgeBench {
       return new RunResult({
         ...withCost,
         outcome: RunOutcome.NOT_RUN,
-        detail: `claude salió con ${answer.code}${claude.isError ? ' e is_error' : ''}${JudgeBench.#tail(answer.stderr || claude.result)}`,
+        detail: `claude exited with ${answer.code}${claude.isError ? ' and is_error' : ''}${JudgeBench.#tail(answer.stderr || claude.result)}`,
         severities: new SeverityCount(),
         verdict: null,
       })
     }
     const discarded = (detail) => new RunResult({ ...withCost, outcome: RunOutcome.DISCARDED, detail, severities: new SeverityCount(), verdict: null })
     const text = this.workspace.verdictWrittenAt(judgeRun.verdictPath)
-    if (text === null) return discarded(`el juez no escribió el veredicto en ${judgeRun.verdictPath}`)
+    if (text === null) return discarded(`the judge did not write the verdict at ${judgeRun.verdictPath}`)
     let structured
     try {
       structured = JSON.parse(text)
     } catch (error) {
-      return discarded(`el veredicto no es JSON: ${error.message}`)
+      return discarded(`the verdict is not JSON: ${error.message}`)
     }
     const read = readVerdict(structured)
     if (read.why) return discarded(read.why)
     if (read.verdict.review_token !== null && read.verdict.review_token !== benchCase.token) {
-      return discarded(`el veredicto copia el token ${read.verdict.review_token.slice(0, 12)}… y el paquete declara ${benchCase.token.slice(0, 12)}…`)
+      return discarded(`the verdict copies the token ${read.verdict.review_token.slice(0, 12)}… and the package declares ${benchCase.token.slice(0, 12)}…`)
     }
     const comparison = benchCase.expected.compare(read.verdict)
     return new RunResult({

@@ -307,7 +307,7 @@ describe('F16/H2 — the warnings of the three executables go over the same chan
     const r = spawnSync('node', [ctGroom, '/no/existe/spec.md', '--repo', 'o/r', '--dry-run'], {
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env },
     })
-    expect(r.stderr).toMatch(/no se pudo leer el spec/)
+    expect(r.stderr).toMatch(/could not read the spec/)
     expect(r.stdout).toBe('')
   })
 

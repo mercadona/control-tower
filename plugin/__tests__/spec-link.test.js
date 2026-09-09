@@ -179,8 +179,8 @@ describe('resolveSpecRef — when a good link canNOT be built, it is said: a bro
   it('the spec is not published on the default branch → no url, and the reason names repo and branch', () => {
     const { ref, warnings } = resolve({ failures: { contents: true } })
     expect(ref.url).toBeNull()
-    expect(ref.reason).toBe(`${SPEC_REF_REASONS.notPublished} (o/r, rama main)`)
-    expect(warnings[0]).toMatch(/sin publicar|no está publicado/i)
+    expect(ref.reason).toBe(`${SPEC_REF_REASONS.notPublished} (o/r, branch main)`)
+    expect(warnings[0]).toMatch(/not published/i)
   })
 
   it('the spec falls outside the repo tree → no url', () => {

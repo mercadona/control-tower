@@ -111,8 +111,8 @@ const invokedName = (path) => path.slice(path.lastIndexOf('/') + 1)
 //      With a single session open the output is empty and rc=1 — which this
 //      code read as «no match at all, a normal answer» and therefore
 //      `comprobado: true`. Result: EVERY healthy in-flight slice came out as
-//      «← SIN SEÑAL DE VIDA» with exit 3 and without a single `warning:`, and
-//      the residue block asserted «no hay ningún proceso trabajando dentro»
+//      «← NO SIGN OF LIFE» with exit 3 and without a single `warning:`, and
+//      the residue block asserted «there is no process working inside»
 //      about a worktree with an agent inside it. The safe degradation did not
 //      kick in because, from the inside, the read «had been a success». It is
 //      the worst possible failure of this feature. Do not go back to `pgrep`.

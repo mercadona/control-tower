@@ -62,8 +62,9 @@
 //
 // F18/H4 travels in the SAME call, at ZERO marginal network cost: a slice's
 // branch is deterministic (`feat/<n>`), so one more alias per issue in
-// `status:in-review` turns the either-or the dispatcher says today («o el PR se
-// mergeó y nadie cerró el issue, o…») into a checked fact. Mind the direction:
+// `status:in-review` turns the either-or the dispatcher says today («merge their
+// PRs — or, if a PR was merged already and the issue is still open, close it»)
+// into a checked fact. Mind the direction:
 // this check CONFIRMS, it does not refute — the absence of a merged PR with
 // head `feat/<n>` does not prove the work was not merged (it may have gone out
 // on a branch with another name), so silence is not reported as "it was not
@@ -199,11 +200,11 @@ export function formatSuspectClosureWarnings(closers, dependents) {
   for (const [key, c] of Object.entries(closers || {})) {
     const n = Number(key)
     const deps = (dependents instanceof Map ? dependents.get(n) : (dependents || {})[n]) || []
-    const quien = deps.length ? `${deps.map((d) => `#${d}`).join(', ')}` : 'algún slice'
+    const who = deps.length ? `${deps.map((d) => `#${d}`).join(', ')}` : 'some slice'
     if (c.kind === 'commit' && c.mergedPrs.length === 0) {
-      out.push(`#${n} consta cerrado como *completed* por el COMMIT ${shortOid(c.oid)}${c.headline ? ` («${c.headline}»)` : ''}, que no pertenece a ningún PR mergeado — nadie revisó ni mergeó nada para cerrarlo. GitHub cierra un issue con una closing keyword en CUALQUIER mensaje de commit que llegue a la rama por defecto, incluido un commit que solo la MENCIONA (las comillas no protegen; ocurrió así en un repo real con un commit de documentación). Y ${quien} depende de #${n} con "merge-after": esa dependencia se está dando por satisfecha sobre un trabajo que puede no existir. Comprueba #${n} ANTES de despachar a quien depende de él; si el trabajo no está, reabre #${n} (\`gh issue reopen ${n}\`).`)
+      out.push(`#${n} is recorded as closed as *completed* by the COMMIT ${shortOid(c.oid)}${c.headline ? ` («${c.headline}»)` : ''}, which belongs to no merged PR — nobody reviewed or merged anything to close it. GitHub closes an issue with a closing keyword in ANY commit message that reaches the default branch, including a commit that only MENTIONS it (quotes do not protect; it happened exactly like that in a real repo, with a documentation commit). And ${who} depends on #${n} with "merge-after": that dependency is being taken as satisfied over work that may not exist. Check #${n} BEFORE dispatching whoever depends on it; if the work is not there, reopen #${n} (\`gh issue reopen ${n}\`).`)
     } else if (c.kind === 'pull-request' && c.merged === false) {
-      out.push(`#${n} consta cerrado como *completed* por el PR #${c.pr}, pero ese PR NO está mergeado — la dependencia de ${quien} se da por satisfecha sobre trabajo que no ha entrado en ninguna rama. Comprueba #${n} antes de despachar a quien depende de él.`)
+      out.push(`#${n} is recorded as closed as *completed* by the PR #${c.pr}, but that PR is NOT merged — the dependency of ${who} is taken as satisfied over work that has landed on no branch. Check #${n} before dispatching whoever depends on it.`)
     }
   }
   return out
@@ -212,16 +213,16 @@ export function formatSuspectClosureWarnings(closers, dependents) {
 /**
  * formatMergedButOpenWarnings (H4): the either-or turned into a fact.
  *
- * ct-next.mjs's blocking messages say «mergea su PR — o, si el PR ya se mergeó
- * y el issue sigue abierto, ciérralo». Which of the two was true is something
- * the human had to find out by looking at GitHub. When the deterministic branch
+ * ct-next.mjs's blocking messages say «merge their PRs — or, if a PR was merged
+ * already and the issue is still open, close it». Which of the two was true is
+ * something the human had to find out by looking at GitHub. When the deterministic branch
  * `feat/<n>` DOES have a merged PR, here it is said which one and since when.
  */
 export function formatMergedButOpenWarnings(mergedPr, repo) {
   return Object.entries(mergedPr || {}).map(([key, pr]) => {
     const n = Number(key)
-    const cuando = pr.mergedAt ? ` (mergeado el ${String(pr.mergedAt).slice(0, 10)})` : ''
-    return `#${n} sigue en status:in-review, pero su rama feat/${n} YA está mergeada en el PR #${pr.number}${cuando}: su trabajo está en la base y el issue se quedó abierto —el \`Closes #${n}\` no llegó a aplicarse (o el PR se mergeó en una rama que no es la por defecto)—. Mientras siga abierto retiene sus tokens de área/touches y ningún "merge-after" sobre él cuenta como satisfecho. Ciérralo: \`gh issue close ${n} --repo ${repo} --reason completed\`.`
+    const when = pr.mergedAt ? ` (merged on ${String(pr.mergedAt).slice(0, 10)})` : ''
+    return `#${n} is still at status:in-review, but its branch feat/${n} IS ALREADY merged in the PR #${pr.number}${when}: its work is on the base and the issue was left open —the \`Closes #${n}\` never got applied (or the PR was merged into a branch that is not the default one)—. While it stays open it holds its area/touches tokens and no "merge-after" on it counts as satisfied. Close it: \`gh issue close ${n} --repo ${repo} --reason completed\`.`
   })
 }
 
@@ -232,7 +233,7 @@ export function formatMergedButOpenWarnings(mergedPr, repo) {
  * round is after.
  */
 export function formatClosureCoverageNote(plan, limit = CLOSURE_PROBE_MAX) {
-  const fuera = Math.max(0, (plan?.deps || []).length - limit) + Math.max(0, (plan?.inReview || []).length - limit)
-  if (fuera === 0) return null
-  return `la comprobación de cómo se cerró cada dependencia (y de si la rama de un slice en revisión ya está mergeada) se ha limitado a ${limit} issues por consulta: ${fuera} han quedado SIN mirar en esta corrida. No es "están bien": es "no se han comprobado".`
+  const unseen = Math.max(0, (plan?.deps || []).length - limit) + Math.max(0, (plan?.inReview || []).length - limit)
+  if (unseen === 0) return null
+  return `the check of how each dependency was closed (and of whether the branch of a slice in review is already merged) has been limited to ${limit} issues per query: ${unseen} have been left UNLOOKED-AT in this run. It is not "they are fine": it is "they have not been checked".`
 }

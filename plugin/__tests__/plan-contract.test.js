@@ -171,7 +171,7 @@ describe('validatePlan — structure', () => {
 
   it('detects non-consecutive task numbering', () => {
     const r = validatePlan(VALID_PLAN.replace('### Task 1 — cover sum', '### Task 2 — cover sum'), { readFile })
-    expect(r.violations.some((v) => v.rule === 'tasks' && v.detail.includes('no consecutiva'))).toBe(true)
+    expect(r.violations.some((v) => v.rule === 'tasks' && v.detail.includes('not consecutive'))).toBe(true)
   })
 })
 
@@ -433,7 +433,7 @@ describe('validatePlan — no check pins the suite total of tests', () => {
 
   it("the message offers the alternative: count the task's tests by their module prefix", () => {
     const [violation] = violationsOf(withCheck(`test "$(cargo test | grep -c '52 passed')" -eq 1`), 'commands')
-    expect(violation.detail).toMatch(/prefijo de módulo/)
+    expect(violation.detail).toMatch(/module prefix/)
     expect(violation.detail).toMatch(/conventions\/testing\.md/)
   })
 
@@ -451,7 +451,7 @@ describe('validatePlan — no check pins the suite total of tests', () => {
     const plan = planWithTasks([[CONTRACT, ['Se comprueba así:', ['cargo build', `grep -c '52 passed'`], 'bash']]])
     const [violation] = violationsOf(plan, 'commands')
     const checkLine = plan.split('\n').findIndex((l) => l.includes('52 passed')) + 1
-    expect(violation.detail).toMatch(new RegExp(`^línea ${checkLine}:`))
+    expect(violation.detail).toMatch(new RegExp(`^line ${checkLine}:`))
   })
 })
 
@@ -462,7 +462,7 @@ describe('validatePlan — configurations carry no block', () => {
   ])('a block over %s is a violation and the remedy is prose with the value inline', (path) => {
     const plan = planWithTasks([[[`Contract (${path}):`, ['{ "a": 1 }']]]])
     const [v] = violationsOf(plan, 'config')
-    expect(v.detail).toContain('prosa')
+    expect(v.detail).toContain('prose')
   })
 
   it('a code file with a config name (vite.config.ts) is NOT configuration', () => {
@@ -521,8 +521,8 @@ describe('validatePlan — every TASK fits on an A4 sheet', () => {
     )
     const [v] = violationsOf(plan, 'size')
     expect(v.detail).toMatch(/Task 1/)
-    expect(v.detail).toMatch(/folio/)
-    expect(v.detail).toMatch(/la tarea son dos/)
+    expect(v.detail).toMatch(/sheet/)
+    expect(v.detail).toMatch(/the task is two/)
   })
 
   it('the budget is PER TASK: two big tasks, but each one within the sheet, pass', () => {
@@ -592,7 +592,7 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
     // the one the template asked for until this round.
     const plan = planWith(['**Verification:** `npm test` → exit 0. `npm run lint` → exit 0.'])
     expect(rulesOf(plan)).toHaveLength(1)
-    expect(rulesOf(plan)[0].detail).toMatch(/no ejecuta prosa/)
+    expect(rulesOf(plan)[0].detail).toMatch(/does not execute prose/)
   })
 
   it('the same task with the commands in a block does pass', () => {
@@ -617,7 +617,7 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
       F,
     ])
     expect(rulesOf(plan)).toHaveLength(1)
-    expect(rulesOf(plan)[0].detail).toMatch(/no puede afirmar lo que el control dice medir/)
+    expect(rulesOf(plan)[0].detail).toMatch(/cannot assert what the check says it measures/)
   })
 
   it('the same check written as a predicate does pass', () => {
@@ -666,7 +666,7 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
         '**Verification:** `npm test` otra vez, en prosa.',
         '## 8. Global verification',
       ].join('\n'))
-    expect(rulesOf(plan).map((v) => v.detail.match(/tarea (\d+)/)[1])).toEqual(['1', '2'])
+    expect(rulesOf(plan).map((v) => v.detail.match(/task (\d+)/)[1])).toEqual(['1', '2'])
   })
 
   // §3.7-A of the handoff: the same pair of rules (block / predicate), applied
@@ -679,7 +679,7 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
   it('§8 in prose (not "N/A") is a "verification" violation', () => {
     const plan = withGlobal('## 8. Global verification\nQue todo siga en verde.')
     expect(rulesOf(plan)).toHaveLength(1)
-    expect(rulesOf(plan)[0].detail).toMatch(/no ejecuta prosa/)
+    expect(rulesOf(plan)[0].detail).toMatch(/does not execute prose/)
   })
 
   it('§8 with its command block is valid', () => {
@@ -690,7 +690,7 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
   it('§8 whose last stretch is `grep -c` is a predicate violation', () => {
     const plan = withGlobal(['## 8. Global verification', '', F + 'bash', "grep -c 'algo' AGENTS.md", F].join('\n'))
     expect(rulesOf(plan)).toHaveLength(1)
-    expect(rulesOf(plan)[0].detail).toMatch(/no puede afirmar lo que el control dice medir/)
+    expect(rulesOf(plan)[0].detail).toMatch(/cannot assert what the check says it measures/)
   })
 })
 

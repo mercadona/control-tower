@@ -149,7 +149,7 @@ describe('H2 (CLI) — the slice that fell off the queue stops disappearing in s
     })
     expect(r.code).toBe(0)
     expect(r.out).not.toMatch(/#300 .*status:ready/)
-    expect(r.out).not.toMatch(/CLOSED issue\(s\) keep a live `status:` viva, y para/)
+    expect(r.out).not.toMatch(/CLOSED issue\(s\) keep a live `status:` label, and for/)
     // But the number is not hidden: it is counted and it is said why it is not
     // an anomaly.
     expect(r.err).toMatch(/NORMAL end of a slice/)
@@ -275,7 +275,7 @@ describe('H1/H4 (unit) — planClosureProbe: what is asked and what is not', () 
   it('the cap is SAID when it trims, it never trims in silence', () => {
     const many = Array.from({ length: CLOSURE_PROBE_MAX + 5 }, (_, i) => ({ n: 1000 + i, status: 'ready', deps: [i + 1] }))
     const plan = planClosureProbe({ issues: many, mergedIssues: many.map((_, i) => i + 1) })
-    expect(formatClosureCoverageNote(plan)).toMatch(/SIN mirar/)
+    expect(formatClosureCoverageNote(plan)).toMatch(/UNLOOKED-AT/)
     expect(formatClosureCoverageNote(planClosureProbe({ issues, mergedIssues: [451] }))).toBeNull()
   })
 })
@@ -318,7 +318,7 @@ describe('H1/H4 (unit) — parseClosureProbe: it does not invent what did not ar
   it('H4: the merged PR of feat/12 turns the dilemma into a fact', () => {
     expect(mergedPr[12]).toEqual({ number: 88, mergedAt: '2026-07-12T10:00:00Z' })
     const w = formatMergedButOpenWarnings(mergedPr, 'o/r')
-    expect(w[0]).toMatch(/feat\/12 YA está mergeada en el PR #88/)
+    expect(w[0]).toMatch(/feat\/12 IS ALREADY merged in the PR #88/)
     expect(w[0]).toMatch(/2026-07-12/)
     expect(w[0]).toMatch(/gh issue close 12 --repo o\/r --reason completed/)
   })
@@ -337,8 +337,8 @@ describe('H1/H4 (CLI) — the check enters the real run', () => {
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue], [closedIssue]]),
       FAKE_GH_CLOSURE_JSON: JSON.stringify(closure),
     })
-    expect(r.err).toMatch(/#451 consta cerrado como \*completed\* por el COMMIT/)
-    expect(r.err).toMatch(/#42 depende de #451/)
+    expect(r.err).toMatch(/#451 is recorded as closed as \*completed\* by the COMMIT/)
+    expect(r.err).toMatch(/#42 depends on #451/)
   })
 
   it('if the query fails, it is said and NOTHING is blocked (a detector has no veto)', () => {

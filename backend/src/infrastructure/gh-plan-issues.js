@@ -336,11 +336,11 @@ export class PlanIssueBody {
   static AC_HEADING = '## Acceptance criteria (EARS, 1:1 con tests)'
   static COMMENT_SECTION = 'Comentario de quien pide el plan'
   static COMMENT_HEADING = `## ${PlanIssueBody.COMMENT_SECTION}`
-  static NO_STORY_LINE = '> Plan pedido a mano: no hay ticket detrás.'
+  static NO_STORY_LINE = '> Plan asked for by hand: there is no ticket behind it.'
   static STORY_LINE = '> Historia de usuario: '
   static ISSUE_LINE = '> Issue de GitHub: '
-  static NO_STORY_EPIC_CONTEXT = '_El plan no viene de ningún ticket._'
-  static NO_HEADLINE = '_El comentario no trae una primera línea que resuma lo que se pide._'
+  static NO_STORY_EPIC_CONTEXT = '_This plan does not come from any ticket._'
+  static NO_HEADLINE = '_The comment brings no first line that sums up what is being asked for._'
   static HEADLINE_LIMIT = 72
   static HEADLINE_CUT = '…'
   static #ACTIVE =
@@ -412,10 +412,10 @@ export class PlanIssueBody {
 
   static #EMPTY_EPIC_CONTEXT_BY_KIND = new Projection('plan issue empty epic context', [
     [UserStoryKey, (story) =>
-      `_${story.key.text} no trae descripción en Jira: la historia de usuario está sin escribir._`],
+      `_${story.key.text} brings no description in Jira: the user story is unwritten._`],
     [UserStoryUrl, (story) =>
-      `_El issue ${story.key.repository.text}#${story.key.number} no trae cuerpo ni comentarios: ` +
-      'no hay nada escrito de donde partir._'],
+      `_Issue ${story.key.repository.text}#${story.key.number} brings no body and no comments: ` +
+      'there is nothing written to start from._'],
   ])
 
   static #epicContextOf(story) {
@@ -446,7 +446,7 @@ export class PlanIssueBody {
       '',
       PlanIssueBody.DESCRIPTION_HEADING,
       renderDescription(row) ??
-        (story === null ? PlanIssueBody.NO_HEADLINE : `_${story.key} no trae resumen en Jira._`),
+        (story === null ? PlanIssueBody.NO_HEADLINE : `_${story.key} brings no summary in Jira._`),
       '',
       ...(comment === null ? [] : [PlanIssueBody.COMMENT_HEADING, PlanIssueBody.quieted(comment.text), '']),
       EPIC_CONTEXT_HEADING,

@@ -57,10 +57,10 @@ try {
     home: homedir(),
   })
 } catch (e) {
-  process.stderr.write(`no se ha podido registrar el go de ${repo}#${issue}: ${e.message}. Sin registro, \`dispatch-check --release\` seguirá negándose (exit 9): el compromiso vive fuera del repo a propósito, así que comprueba los permisos de esa carpeta.\n`)
+  process.stderr.write(`the go of ${repo}#${issue} could not be registered: ${e.message}. With no registry, \`dispatch-check --release\` will keep refusing (exit 9): the commitment lives outside the repo on purpose, so check the permissions of that folder.\n`)
   process.exit(1)
 }
 
 console.log(`go for ${repo}#${issue} reissued — the previous one (if there was one) is no longer valid. Registry: ${path}`)
 emitGoNonce(issue, nonce)
-console.log(`  OJO: el vigilante que lanzó /ct-next (si sigue vivo) está buscando el go ANTERIOR, así que tras contestar tendrás que empujar la sesión a mano.`)
+console.log('  MIND: the watcher /ct-next launched (if it is still alive) is looking for the PREVIOUS go, so after answering you will have to push the session by hand.')

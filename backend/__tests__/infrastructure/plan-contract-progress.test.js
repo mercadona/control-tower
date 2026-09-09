@@ -33,7 +33,7 @@ class ProgressDouble {
             failed: true,
             code: this.contractCode,
             stdout: '',
-            stderr: 'no hay ningún plan prescriptivo',
+            stderr: 'there is no prescriptive plan',
           })
       },
       git: (argv) => {
@@ -96,7 +96,7 @@ describe('PlanContractProgress', () => {
     }).refusal()
 
     expect(refusal).toBeInstanceOf(PlanProgressNotRead)
-    expect(refusal.message).toContain('no hay ningún plan prescriptivo')
+    expect(refusal.message).toContain('there is no prescriptive plan')
   })
 
   it('the_contract_is_asked_from_inside_the_worktree_because_it_resolves_its_paths_from_there', async () => {
