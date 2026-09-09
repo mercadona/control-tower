@@ -185,6 +185,15 @@ const Home = () => {
     WorkflowSnapshotStorage.save(ready)
   }, [])
 
+  const planReviewing = useCallback(() => {
+    const current = workflowRef.current
+    if (current === null || current.phase === 'implementing') return
+    const reviewing: WorkflowSnapshot = { ...current, phase: 'planning' }
+    workflowRef.current = reviewing
+    setWorkflow(reviewing)
+    WorkflowSnapshotStorage.save(reviewing)
+  }, [])
+
   const implementationStarted = useCallback(() => {
     const current = workflowRef.current
     if (current === null) return
@@ -205,6 +214,7 @@ const Home = () => {
     setExpandedSummary(null)
     setRequestFormVersion((version) => version + 1)
     WorkflowSnapshotStorage.remove()
+    void reconcile()
   }
 
   const retryReconciliation = () => {
@@ -390,7 +400,8 @@ const Home = () => {
                 key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
                 plan={workflow.plan}
                 onReady={planReady}
-                observe={workflow.phase === 'planning' && restoredIsConfirmed}
+                onReviewing={planReviewing}
+                observe={workflow.phase !== 'implementing' && restoredIsConfirmed}
               />
               {workflow.phase === 'ready' && restoredIsConfirmed && (
                 <div className="home__review-action">

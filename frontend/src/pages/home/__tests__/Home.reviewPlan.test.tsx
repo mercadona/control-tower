@@ -41,4 +41,25 @@ describe('Home · review plan', () => {
 
     expect(screen.queryByRole('button', ASK_BUTTON)).toBeNull()
   })
+
+  it('should stop offering the go while the plan is being reworked', async () => {
+    await planStarted()
+    await streamFrame(PlanEventsMother.ready())
+    expect(screen.getByRole('button', { name: 'Implementar plan' })).toBeInTheDocument()
+
+    await streamFrame(PlanEventsMother.reviewing())
+
+    expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
+    expect(screen.queryByRole('button', ASK_BUTTON)).toBeNull()
+  })
+
+  it('should offer the go again once the reworked plan is committed', async () => {
+    await planStarted()
+    await streamFrame(PlanEventsMother.ready())
+    await streamFrame(PlanEventsMother.reviewing())
+
+    await streamFrame(PlanEventsMother.ready())
+
+    expect(screen.getByRole('button', { name: 'Implementar plan' })).toBeInTheDocument()
+  })
 })

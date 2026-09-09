@@ -188,6 +188,7 @@ describe('Home · start plan', () => {
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
+      .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
     vi.stubGlobal('fetch', (input: string | URL | Request) => input === '/external-tools' ? new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}') : fetching(input))
     const { user } = openHome()
     await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
