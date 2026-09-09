@@ -15,9 +15,9 @@ import { PlanIssues } from '../domain/ports/plan-issues.js'
 import { PlanIssue } from '../domain/value-objects/plan-issue.js'
 import { PlanIssueStatus } from '../domain/value-objects/plan-issue-status.js'
 import { ChangeAsked } from '../domain/value-objects/change-asked.js'
-import { UserStoryKey } from '../domain/value-objects/user-story-key.js'
-import { UserStoryUrl } from '../domain/value-objects/user-story-url.js'
-import { UserStoryReference } from '../domain/value-objects/user-story-reference.js'
+import { UserStoryKey } from '../domain/value-objects/user-story-key.ts'
+import { UserStoryUrl } from '../domain/value-objects/user-story-url.ts'
+import { UserStoryReference } from '../domain/value-objects/user-story-reference.ts'
 import {
   PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed, PlanGoNotAnswered,
   PlanChangesNotRead, PlanChangesNotUnderstood, PlanChangesNotAsked, PlanStoryNotRead, PlanStoryNotUnderstood,

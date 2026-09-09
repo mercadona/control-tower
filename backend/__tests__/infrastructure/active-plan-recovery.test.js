@@ -9,7 +9,7 @@ import { ImplementationProgressNotRead } from '../../src/domain/exceptions.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
+import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 
 const IN_FLIGHT = new PlanWatch({

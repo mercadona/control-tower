@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { GhUserStories } from '../../src/infrastructure/gh-user-stories.js'
-import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.js'
+import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
 import { UserStoryNotRead, UserStoryNotUnderstood, UserStoryFailure } from '../../src/domain/exceptions.js'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.js'
 import { ExternalTool } from '../../src/infrastructure/external-tool.js'

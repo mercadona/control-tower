@@ -8,7 +8,7 @@ import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
+import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import {
   ImplementRequestOutcome, ImplementRefusal, ImplementCollapse,
 } from '../../src/infrastructure/implement-plan-route.js'

@@ -1,6 +1,6 @@
 import { UserStories } from '../domain/ports/user-stories.js'
-import { UserStoryKey } from '../domain/value-objects/user-story-key.js'
-import { UserStoryUrl } from '../domain/value-objects/user-story-url.js'
+import { UserStoryKey } from '../domain/value-objects/user-story-key.ts'
+import { UserStoryUrl } from '../domain/value-objects/user-story-url.ts'
 import { Projection } from './projection.js'
 
 export class ReferredUserStories extends UserStories {

@@ -2,7 +2,9 @@ export class UserStoryKey {
   static #SHAPE = /^[A-Z][A-Z0-9_]*-\d+$/
   static EXAMPLE = 'ABC-123'
 
-  constructor(text) {
+  readonly text: string
+
+  constructor(text: unknown) {
     if (!UserStoryKey.isWellFormed(text)) {
       throw new Error(`a user story key looks like ${UserStoryKey.EXAMPLE}, got ${JSON.stringify(text)}`)
     }
@@ -10,11 +12,11 @@ export class UserStoryKey {
     Object.freeze(this)
   }
 
-  static isWellFormed(text) {
+  static isWellFormed(text: unknown): text is string {
     return typeof text === 'string' && UserStoryKey.#SHAPE.test(text)
   }
 
-  toString() {
+  toString(): string {
     return this.text
   }
 }

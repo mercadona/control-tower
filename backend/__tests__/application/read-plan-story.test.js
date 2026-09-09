@@ -3,7 +3,7 @@ import { ReadPlanStory, ReadPlanStoryParams } from '../../src/application/querie
 import { PlanIssues } from '../../src/domain/ports/plan-issues.js'
 import { PlanStoryNotRead } from '../../src/domain/exceptions.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
+import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 
 class PlanIssuesDouble extends PlanIssues {
   constructor(answer = null) {
