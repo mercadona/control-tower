@@ -3,6 +3,7 @@ import { SLICE_REL_PATH } from '../../../plugin/scripts/state-paths.js'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
 import { PluginYardstick } from '../../../plugin/scripts/plugin-yardstick.js'
+import { PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.js'
 
 describe('PlanAgentBrief', () => {
   const errand = () => new PlanAgentBrief({
@@ -132,6 +133,26 @@ describe('PlanAgentBrief resuming the agent', () => {
   it('it_still_stops_before_the_merge_because_that_is_the_second_human_decision', () => {
     expect(errand()).toMatch(/no la mergees/i)
     expect(errand()).toMatch(/PARA/)
+  })
+})
+
+describe('the published plan says how to ask for changes to it', () => {
+  it('the_first_errand_asks_the_agent_to_close_the_comment_with_the_line_that_says_it', () => {
+    const errand = () => new PlanAgentBrief({
+      dispatchCheck: '/plugin/scripts/dispatch-check.mjs',
+      conventions: '/plugin/conventions',
+      ctStep: '/plugin/scripts/ct-step.mjs',
+    }).errandFor({ issue: { number: 42 }, repository: new RepositoryName('owner/name') })
+    expect(errand()).toContain(PlanIssueBody.CHANGES_LINE)
+  })
+
+  it('the_review_errand_asks_for_it_too_because_the_reworked_plan_can_be_reviewed_again', () => {
+    const errand = () => new PlanAgentBrief({
+      dispatchCheck: '/plugin/scripts/dispatch-check.mjs',
+      conventions: '/plugin/conventions',
+      ctStep: '/plugin/scripts/ct-step.mjs',
+    }).reviewErrandFor({ issueNumber: 42, repository: new RepositoryName('owner/name'), changes: 'test' })
+    expect(errand()).toContain(PlanIssueBody.CHANGES_LINE)
   })
 })
 
