@@ -19,16 +19,16 @@ describe("the task's scope is decided by the plan", () => {
     // Task 1 declares only uno.txt; the report also brings dos.txt.
     ct('report', writeReport(['uno.txt', 'dos.txt']))
     const r = ct('controls')
-    expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/dos\.txt.*sobra/)
+    expect(r.stdout).toMatch(/controls: failed/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/dos\.txt.*surplus/)
   })
 
   it('a declared path that the task did not touch is red', () => {
     // The report brings nothing: uno.txt, which task 1 declares, is left untouched.
     ct('report', writeReport([]))
     const r = ct('controls')
-    expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/uno\.txt.*no está entre lo que tocó/)
+    expect(r.stdout).toMatch(/controls: failed/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/uno\.txt.*is not among what was touched/)
   })
 
   it('(create) over a file that already existed is red', () => {
@@ -41,8 +41,8 @@ describe("the task's scope is decided by the plan", () => {
     writeFileSync(join(repo, 'existente.txt'), 'ya estaba, y ahora cambia\n')
     ct('report', writeReport(['existente.txt']))
     const r = ct('controls')
-    expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/existente\.txt.*ya existía en el commit anterior/)
+    expect(r.stdout).toMatch(/controls: failed/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/existente\.txt.*already existed in the previous commit/)
   })
 })
 
@@ -55,8 +55,8 @@ describe("what the plan's blocks promise has to be there", () => {
     writeFileSync(join(repo, 'plan.md'), withBlock)
     ct('report', writeReport(['uno.txt']))
     const r = ct('controls')
-    expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/bloque Contract \(falta\.txt\).*no está entre lo que tocó/)
+    expect(r.stdout).toMatch(/controls: failed/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/Contract block \(falta\.txt\).*is not among what was touched/)
   })
 
   it('the test the TDD declares has to be in what was staged', () => {
@@ -66,8 +66,8 @@ describe("what the plan's blocks promise has to be there", () => {
     ))
     ct('report', writeReport(['uno.txt']))
     const r = ct('controls')
-    expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/dijo que añadía el test 'uno se sabe de memoria' y no está en lo stageado/)
+    expect(r.stdout).toMatch(/controls: failed/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/said it was adding the test 'uno se sabe de memoria' and it is not in what is staged/)
   })
 
   it('the Final text text has to appear verbatim', () => {
@@ -80,8 +80,8 @@ describe("what the plan's blocks promise has to be there", () => {
     writeFileSync(join(repo, 'doc.md'), 'línea uno\nlínea distinta\n')
     ct('report', writeReport(['uno.txt', 'doc.md']))
     const r = ct('controls')
-    expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/Final text \(doc\.md\).*'línea dos'.*no está verbatim/)
+    expect(r.stdout).toMatch(/controls: failed/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/Final text \(doc\.md\).*'línea dos'.*is not verbatim/)
   })
 
   // ==========================================================================
@@ -116,8 +116,8 @@ describe("what the plan's blocks promise has to be there", () => {
     // The task only declares and touches uno.txt: ya-existe.md is left out.
     ct('report', writeReport(['uno.txt']))
     const r = ct('controls')
-    expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/bloque Final text \(ya-existe\.md\).*no está entre lo que tocó/)
+    expect(r.stdout).toMatch(/controls: failed/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/Final text block \(ya-existe\.md\).*is not among what was touched/)
   })
 })
 
@@ -145,8 +145,8 @@ describe('the checks are measured by the program, not by the implementer', () =>
     ))
     ct('report', writeReport(['uno.txt']))
     const r = ct('controls')
-    expect(r.stdout).toMatch(/controles: failed/)
-    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/dijo que añadía el test 'uno pinta uno'/)
+    expect(r.stdout).toMatch(/controls: failed/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/said it was adding the test 'uno pinta uno'/)
   })
 
   // ==========================================================================
@@ -176,7 +176,7 @@ describe('the checks are measured by the program, not by the implementer', () =>
     // the task could not be closed however much the implementer insisted.
     commitPlan(withTestsLine("retira `'uno pinta uno'`."))
     ct('report', writeReport(['uno.txt']))
-    expect(ct('controls').stdout).toMatch(/controles: done/)
+    expect(ct('controls').stdout).toMatch(/controls: done/)
   })
 
   it('a PROMISED test that is only in the plan, and not in what the task touched, is red', () => {
@@ -185,7 +185,7 @@ describe('the checks are measured by the program, not by the implementer', () =>
     // it —exactly the failure it exists for— because the name is in the plan.
     commitPlan(withTestsLine("añade `'uno pinta uno'`."))
     ct('report', writeReport(['uno.txt']))
-    expect(ct('controls').stdout).toMatch(/controles: failed/)
-    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/dijo que añadía el test 'uno pinta uno'/)
+    expect(ct('controls').stdout).toMatch(/controls: failed/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/said it was adding the test 'uno pinta uno'/)
   })
 })

@@ -56,20 +56,20 @@ describe('a verdict that cannot be read is not a verdict', () => {
   it('a JSON that does not parse is a DISCARD, not a usage error', () => {
     prepare()
     const r = judgeTask(writeRaw('esto no es json'))
-    expect(r.stdout).toMatch(/veredicto descartado/)
+    expect(r.stdout).toMatch(/verdict discarded/)
     expect(runState().discards).toBe(1)
     expect(runState().step).toBe('judge')      // it gets asked again
   })
 
   it('a made-up ruling is discarded', () => {
     prepare()
-    expect(judgeTask(writeVerdict('QUIZÁS')).stdout).toMatch(/ruling desconocido/)
+    expect(judgeTask(writeVerdict('QUIZÁS')).stdout).toMatch(/unknown ruling/)
   })
 
   it('a PASS with a serious finding is discarded: it contradicts itself', () => {
     prepare()
     const r = judgeTask(writeVerdict('PASS', [{ severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }]))
-    expect(r.stdout).toMatch(/contradice la rúbrica/)
+    expect(r.stdout).toMatch(/contradicts the rubric/)
   })
 
   it('discarding without stopping is cut off with 3 instead of going on asking', () => {
@@ -77,7 +77,7 @@ describe('a verdict that cannot be read is not a verdict', () => {
     let r
     for (let i = 0; i < 7; i++) r = judgeTask(writeRaw('nada'))
     expect(r.status).toBe(3)
-    expect(r.stderr).toMatch(/descartes en este run/)
+    expect(r.stderr).toMatch(/discards in this run/)
   })
 })
 
@@ -100,9 +100,9 @@ describe('a verdict issued with no review package is not a verdict', () => {
 
     const r = ct('verdict', writeVerdict('PASS'))
     expect(r.status).toBe(0)                 // a discard, not a closure: it gets asked again
-    expect(r.stdout).toMatch(/veredicto descartado: el paquete de revisión no existe/)
-    expect(r.stdout).toContain('el juez juzgó a ciegas')
-    expect(r.stdout).toContain('vuelve a "ct-step next"')
+    expect(r.stdout).toMatch(/verdict discarded: the review package does not exist/)
+    expect(r.stdout).toContain('the judge judged blind')
+    expect(r.stdout).toContain('go back to "ct-step next"')
     expect(runState().step).toBe('judge')      // it does NOT advance the step
     expect(runState().discards).toBe(1)        // and it counts towards MAX_DISCARDS
     expect(commits()).toBe(1)                // the blind PASS commits nothing
@@ -116,7 +116,7 @@ describe('a verdict issued with no review package is not a verdict', () => {
     const judge = rows.filter((f) => f.step === 'judge')
     expect(judge).toHaveLength(1)
     expect(judge[0].outcome).toBe('discarded')
-    expect(judge[0].why).toMatch(/paquete de revisión no existe/)
+    expect(judge[0].why).toMatch(/review package does not exist/)
     // A discard is NOT a verdict: with no `ruling`, aggregateVerdictMeasures
     // does not count it as one (run-metrics.js), and with no `review_package`
     // the row does not assert a file that does not exist.
@@ -135,8 +135,8 @@ describe('a verdict issued with no review package is not a verdict', () => {
 
     const r = ct('slice-verdict', writeSliceVerdict('PASS'))
     expect(r.status).toBe(0)
-    expect(r.stdout).toMatch(/veredicto de slice descartado: el paquete de revisión del slice no existe/)
-    expect(r.stdout).toContain('vuelve a "ct-step next"')
+    expect(r.stdout).toMatch(/slice verdict discarded: the slice's review package does not exist/)
+    expect(r.stdout).toContain('go back to "ct-step next"')
     expect(runState().step).toBe('slice-judge')
     expect(runState().discards).toBe(1)
     expect(runState().closed ?? null).toBeNull()   // a run does not DELIVER blind
@@ -148,7 +148,7 @@ describe('a verdict issued with no review package is not a verdict', () => {
     const judge = rows.filter((f) => f.step === 'slice-judge')
     expect(judge).toHaveLength(1)
     expect(judge[0].outcome).toBe('discarded')
-    expect(judge[0].why).toMatch(/paquete de revisión del slice no existe/)
+    expect(judge[0].why).toMatch(/slice's review package does not exist/)
     expect(judge[0].ruling).toBeUndefined()
   })
 })

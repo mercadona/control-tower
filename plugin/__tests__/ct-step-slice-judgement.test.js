@@ -27,12 +27,12 @@ describe('the judgement of the whole slice (§3.7-B)', () => {
     const r = ct('next')
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/ct-slice-judge/)
-    expect(r.stdout).toMatch(/SIN Bash/)
+    expect(r.stdout).toMatch(/WITHOUT Bash/)
     const reviewPackage = readFileSync(join(repo, '.agent', 'run-7', 'slice-review.diff'), 'utf8')
     // The commit sequence is the piece the per-task package does not have:
     // `coherencia` is only visible in the order.
     expect(reviewPackage).toMatch(/## Commits/)
-    expect(reviewPackage.indexOf('the first one (#7, tarea 1/2)')).toBeLessThan(reviewPackage.indexOf('the second one (#7, tarea 2/2)'))
+    expect(reviewPackage.indexOf('the first one (#7, task 1/2)')).toBeLessThan(reviewPackage.indexOf('the second one (#7, task 2/2)'))
     expect(reviewPackage).toMatch(/## Files changed/)
     expect(reviewPackage).toMatch(/## Diff/)
   })
@@ -74,7 +74,7 @@ describe('the judgement of the whole slice (§3.7-B)', () => {
     const p = join(repo, 'sv.json')
     writeFileSync(p, JSON.stringify({ ruling: 'PASS', rubric: sliceRubric(), findings: [{ rule: 'alcance', severity: 'low', what: 'x', path: 'y', evidence: 'z' }] }))
     const r = judgeSlice(p)
-    expect(r.stdout).toMatch(/descartado/)
+    expect(r.stdout).toMatch(/discarded/)
     expect(runState().step).toBe('slice-judge')
     expect(runState().discards).toBe(1)
   })

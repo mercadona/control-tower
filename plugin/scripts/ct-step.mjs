@@ -12,7 +12,7 @@
 // path: the kickoff of /ct-next orders it to drive by consulting this file, and
 // `dispatch-check --release` demands the run delivered (exit 7 if not).
 //
-//   ct-step next                    → "toca implementar la tarea 3; el brief está en X"
+//   ct-step next                    → "task 3 is the one to implement; the brief is at X"
 //   ct-step report informe.json     → validates the paths, stages them, transitions
 //   ct-step controls                → runs the plan's commands and MEASURES
 //   ct-step verdict veredicto.json  → validates against the schema, transitions
@@ -138,21 +138,21 @@ const arg = (f, d) => {
   return (typeof v === 'string' && !v.startsWith('--')) ? v : true
 }
 
-const USAGE = `usage: ct-step <verbo> [args] --plan <fichero> --issue <n>
+const USAGE = `usage: ct-step <verb> [args] --plan <file> --issue <n>
 
-  next                      dice qué paso toca y prepara lo que ese paso necesita
-  report <fichero.json>     el informe del implementador: rutas tocadas + resumen
-  controls                  ejecuta los comandos de **Verification:** de la tarea
-  verdict <fichero.json>    el veredicto del juez: ruling + recorrido de la rúbrica + findings
-  advice <fichero.json>     el consejo del consejero, tras el segundo veto: enfoque + rutas a reconsiderar
-  commit                    comitea la tarea con el mensaje que compone el plugin
-  reconcile                 fusiona la base o concluye una fusión a medias, tras la última tarea
-  global                    ejecuta los comandos de ## 8. Global verification, tras la última tarea
-  slice-verdict <fichero.json>  el veredicto del juez de SLICE: ruling + recorrido + findings
-  e2e <fichero.json>        el informe de la travesía de punta a punta de la slice
+  next                      says which step is due and prepares what that step needs
+  report <file.json>        the implementer's report: paths touched + summary
+  controls                  runs the task's **Verification:** commands
+  verdict <file.json>       the judge's verdict: ruling + walk of the rubric + findings
+  advice <file.json>        the advisor's advice, after the second veto: approach + paths to reconsider
+  commit                    commits the task with the message the plugin composes
+  reconcile                 merges the base or concludes a half-finished merge, after the last task
+  global                    runs the commands of ## 8. Global verification, after the last task
+  slice-verdict <file.json>  the SLICE judge's verdict: ruling + walk + findings
+  e2e <file.json>           the report of the slice's end-to-end journey
 
-La secuencia la decide run-machine.js: un verbo que no sea el paso que toca sale
-por 9 y dice cuál es. El estado vive en .agent/run-<issue>.json.`
+The sequence is decided by run-machine.js: a verb that is not the step that is due
+exits with 9 and says which one it is. The state lives in .agent/run-<issue>.json.`
 
 const verbo = process.argv[2]
 if (!verbo || verbo.startsWith('--')) die(USAGE, EXIT.USAGE)
@@ -164,7 +164,7 @@ const planPath = arg('--plan')
 const issueRaw = arg('--issue')
 if (typeof planPath !== 'string' || !planPath) die(USAGE, EXIT.USAGE)
 if (typeof issueRaw !== 'string' || !/^\d+$/.test(issueRaw)) {
-  die(`--issue debe ser un número entero: recibí ${JSON.stringify(issueRaw)}`, EXIT.USAGE)
+  die(`--issue must be a whole number: I got ${JSON.stringify(issueRaw)}`, EXIT.USAGE)
 }
 const issue = Number(issueRaw)
 
@@ -177,7 +177,7 @@ const git = (argv, { allowFail = false } = {}) => {
     })
   } catch (e) {
     if (allowFail) return null
-    throw new Error(`git ${argv.join(' ')} falló: ${String(e.stderr || e.message).trim()}`)
+    throw new Error(`git ${argv.join(' ')} failed: ${String(e.stderr || e.message).trim()}`)
   }
 }
 
@@ -185,16 +185,16 @@ const git = (argv, { allowFail = false } = {}) => {
 // Preconditions
 // ---------------------------------------------------------------------------
 const repoRoot = (git(['rev-parse', '--show-toplevel'], { allowFail: true }) || '').trim()
-if (!repoRoot) die('no estamos dentro de un repositorio git', EXIT.PRECONDITION)
+if (!repoRoot) die('we are not inside a git repository', EXIT.PRECONDITION)
 if (!existsSync(join(repoRoot, '.agent', 'SLICE.md'))) {
-  die('esto no es el worktree de un slice (falta .agent/SLICE.md). ct-step conduce el tramo interno de una slice.', EXIT.PRECONDITION)
+  die('this is not a slice worktree (.agent/SLICE.md is missing). ct-step drives the inner stretch of a slice.', EXIT.PRECONDITION)
 }
 
 let planText
 try {
   planText = readFileSync(planPath, 'utf8')
 } catch (e) {
-  die(`no se puede leer el plan ${planPath}: ${e.message}`, EXIT.PRECONDITION)
+  die(`the plan ${planPath} cannot be read: ${e.message}`, EXIT.PRECONDITION)
 }
 const { tasks, problems, global: globalVerification } = extractTasks(planText)
 if (problems.length) {
@@ -302,10 +302,10 @@ if (existsSync(stateFile)) {
   // well; any verb that transitions is the usual sequence error.
   if (run.closed === RUN_STATES.DELIVERED) {
     if (verbo === 'next') {
-      out(`run delivered: las ${run.tasksTotal} tareas del issue ${issue} están comiteadas con veredicto, la Global verification en verde y el slice juzgado. No queda paso — abre la pull request y libera con dispatch-check --release.`)
+      out(`run delivered: the ${run.tasksTotal} tasks of issue ${issue} are committed with a verdict, the Global verification is green and the slice is judged. No step is left — open the pull request and release with dispatch-check --release.`)
       process.exit(EXIT.OK)
     }
-    die(`el run del issue ${issue} ya está entregado: no queda paso que dar`, EXIT.WRONG_STEP)
+    die(`the run of issue ${issue} is already delivered: there is no step left to take`, EXIT.WRONG_STEP)
   }
   // The file is not believed on its own: it cross-checks the task the state
   // names against the commits there are since the measuring reference. Guessing
@@ -315,7 +315,7 @@ if (existsSync(stateFile)) {
   const shortRange = [`${run.baseSha.slice(0, 7)}..HEAD`, exclusion].filter(Boolean).join(' ')
   const actual = runCommits(run.baseSha, exclusion)
   if (actual === null) {
-    die(`git no pudo contar los commits del run: no resuelve \`${range}\` en este worktree. Borra ${stateFile} si el run es de otra rama.`, EXIT.PRECONDITION)
+    die(`git could not count the run's commits: it does not resolve \`${range}\` in this worktree. Delete ${stateFile} if the run belongs to another branch.`, EXIT.PRECONDITION)
   }
   // At `global`/`slice-judge`/`e2e` the `tasksTotal` tasks are ALREADY
   // committed — `run.task` stays on the last one and not on `tasksTotal + 1`,
@@ -339,11 +339,11 @@ if (existsSync(stateFile)) {
     ? run.tasksTotal + (run.sliceCommits || 0)
     : run.task - 1
   if (actual !== expected) {
-    die(`el estado y git no cuentan lo mismo: el fichero espera ${expected} commit(s) (tarea ${run.task}, paso ${run.step}) y en \`${shortRange}\` (sin fusiones) hay ${actual}. No se sigue a ciegas.`, EXIT.PRECONDITION)
+    die(`the state and git do not count the same: the file expects ${expected} commit(s) (task ${run.task}, step ${run.step}) and in \`${shortRange}\` (merges excluded) there are ${actual}. It does not carry on blind.`, EXIT.PRECONDITION)
   }
 } else {
   if ((git(['diff', '--cached', '--name-only']) || '').trim()) {
-    die('el índice tiene cambios stageados y este run es nuevo. ct-step comitea el índice tarea a tarea: vacíalo (git reset) o comitéalo tú.', EXIT.PRECONDITION)
+    die('the index has staged changes and this run is new. ct-step commits the index task by task: empty it (git reset) or commit it yourself.', EXIT.PRECONDITION)
   }
   // e2eRuns — ct-step does not talk to GitHub (see run-machine.js#newRun), so
   // the journeys the spec's E2E column declared for this slice can only arrive
@@ -446,7 +446,7 @@ function measure(step, measures) {
       mkdirSync(dirname(destination), { recursive: true })
       appendFileSync(destination, line)
     } catch (e) {
-      err(`warning: no se pudo escribir la telemetría en ${destination} (${String(e.message).trim()}). Esto sigue: ninguna transición depende de la medida.`)
+      err(`warning: the telemetry could not be written to ${destination} (${String(e.message).trim()}). This carries on: no transition depends on the measurement.`)
     }
   }
 }
@@ -467,7 +467,7 @@ const VERB_OF = {
 }
 function requireStep(v) {
   if (run.step !== VERB_OF[v]) {
-    die(`"${v}" no es el paso que toca: el run está en "${run.step}" (tarea ${run.task}/${run.tasksTotal}). Pregunta con "ct-step next".`, EXIT.WRONG_STEP)
+    die(`"${v}" is not the step that is due: the run is at "${run.step}" (task ${run.task}/${run.tasksTotal}). Ask with "ct-step next".`, EXIT.WRONG_STEP)
   }
 }
 
@@ -480,11 +480,11 @@ function nextVerb() {
   // "task N/M" to announce, but the whole slice with its tasks already
   // committed.
   if (run.step === STEPS.RECONCILE || run.step === STEPS.GLOBAL || run.step === STEPS.SLICE_JUDGE) {
-    out(`slice del issue ${issue} — las ${run.tasksTotal} tareas comiteadas`)
+    out(`slice of issue ${issue} — the ${run.tasksTotal} tasks committed`)
   } else {
-    out(`tarea ${run.task}/${run.tasksTotal} — ${t.name}`)
+    out(`task ${run.task}/${run.tasksTotal} — ${t.name}`)
   }
-  out(`paso: ${run.step} (intento ${currentAttempt()})`)
+  out(`step: ${run.step} (attempt ${currentAttempt()})`)
   out('')
   switch (run.step) {
     case STEPS.IMPLEMENT: {
@@ -493,42 +493,42 @@ function nextVerb() {
       // The list comes out of the constant and is not typed again: the hand copy
       // of the judge's already diverged once, and `ct-step next` ended up
       // announcing tools that were not those of the agent being dispatched.
-      out(`DESPACHA UN IMPLEMENTADOR (subagente con modelo ${IMPLEMENTER_MODEL} — herramientas: ${IMPLEMENTER_TOOLS}) con:`)
-      out(`  - la rúbrica de ${join(PLUGIN_ROOT, 'prompts', 'task-implementer.md')}`)
-      out(`  - el brief de la tarea: ${brief}`)
-      out(`  - que escriba su informe en: ${reportPath}`)
+      out(`DISPATCH AN IMPLEMENTER (subagent with model ${IMPLEMENTER_MODEL} — tools: ${IMPLEMENTER_TOOLS}) with:`)
+      out(`  - the rubric from ${join(PLUGIN_ROOT, 'prompts', 'task-implementer.md')}`)
+      out(`  - the task's brief: ${brief}`)
+      out(`  - that it write its report to: ${reportPath}`)
       if (run.lastFindings) {
         out('')
-        out('El juez devolvió esta tarea. Lo que hay que arreglar:')
+        out('The judge sent this task back. What has to be fixed:')
         out(run.lastFindings)
       }
       out('')
-      out(`Cuando vuelva:  ct-step report ${reportPath} --plan ${planPath} --issue ${issue}`)
-      out('NO comitees tú, y no le pidas al implementador que comitee: comitea ct-step.')
+      out(`When it comes back:  ct-step report ${reportPath} --plan ${planPath} --issue ${issue}`)
+      out('Do NOT commit yourself, and do not ask the implementer to commit: ct-step commits.')
       break
     }
     case STEPS.CONTROLS:
-      out('MIDE LA TAREA (no lo hace el implementador, y su palabra no cuenta):')
+      out('MEASURE THE TASK (the implementer does not do it, and its word does not count):')
       for (const c of t.commands) out(`  $ ${c}`)
-      if (t.testsAdded.length) out(`  y que existan los tests que la tarea prometió: ${t.testsAdded.map((n) => `'${n}'`).join(', ')}`)
+      if (t.testsAdded.length) out(`  and that the tests the task promised exist: ${t.testsAdded.map((n) => `'${n}'`).join(', ')}`)
       out('')
-      out(`Ejecútalo con:  ct-step controls --plan ${planPath} --issue ${issue}`)
+      out(`Run it with:  ct-step controls --plan ${planPath} --issue ${issue}`)
       break
     case STEPS.JUDGE: {
       const packagePath = writeReviewPackage()
       const verdictPath = join(workDir, `task-${run.task}-verdict.json`)
-      out(`DESPACHA EL JUEZ (subagente ct-judge — declarado SIN Bash: ${JUDGE_TOOLS}) con:`)
-      out(`  - el paquete de revisión: ${packagePath}`)
-      out(`  - el brief de la tarea: ${join(workDir, `task-${run.task}-brief.md`)}`)
-      out(`  - los logs de los controles, YA en verde, por si los quiere: ${run.lastControlsLog ?? '(ninguno)'}`)
-      out(`  - que escriba su veredicto en: ${verdictPath}`)
+      out(`DISPATCH THE JUDGE (subagent ct-judge — declared WITHOUT Bash: ${JUDGE_TOOLS}) with:`)
+      out(`  - the review package: ${packagePath}`)
+      out(`  - the task's brief: ${join(workDir, `task-${run.task}-brief.md`)}`)
+      out(`  - the logs of the controls, ALREADY green, in case it wants them: ${run.lastControlsLog ?? '(none)'}`)
+      out(`  - that it write its verdict to: ${verdictPath}`)
       // The `review_token` is NOT asked of it: this program writes it when it
       // reads the verdict, with the value it computed itself. Asking the judge
       // for it meant asking it to copy 64 hex characters from a line the program
       // had just written, and one copying slip cost a whole opus verdict.
       out('')
-      out(`Cuando vuelva:  ct-step verdict ${verdictPath} --plan ${planPath} --issue ${issue}`)
-      out('No le pases la SALIDA de los controles: un lint sucio no debe ensuciarle el criterio.')
+      out(`When it comes back:  ct-step verdict ${verdictPath} --plan ${planPath} --issue ${issue}`)
+      out('Do not pass it the OUTPUT of the controls: a dirty lint must not dirty its judgement.')
       break
     }
     // H9: the SECOND veto. Between it and the third attempt there does not go
@@ -538,24 +538,24 @@ function nextVerb() {
     case STEPS.ADVISE: {
       const packagePath = writeAdviceReviewPackage()
       const advicePath = join(workDir, `task-${run.task}-advice.json`)
-      out(`DESPACHA EL CONSEJERO (subagente ct-advisor — declarado sólo con ${ADVISOR_TOOLS}) con:`)
-      out(`  - el paquete del consejero: ${packagePath}`)
-      out(`  - que escriba su consejo en: ${advicePath}`)
+      out(`DISPATCH THE ADVISOR (subagent ct-advisor — declared with ${ADVISOR_TOOLS} only) with:`)
+      out(`  - the advisor's package: ${packagePath}`)
+      out(`  - that it write its advice to: ${advicePath}`)
       out('')
-      out('El juez ha vetado dos veces esta tarea. Al aceptar el consejo, el programa devuelve el árbol al último commit para las rutas de la tarea y el brief del tercer intento lleva dentro el enfoque que dicte el consejero: NO despaches un implementador ahora.')
-      out(`Cuando vuelva:  ct-step advice ${advicePath} --plan ${planPath} --issue ${issue}`)
+      out("The judge has vetoed this task twice. On accepting the advice, the program returns the tree to the last commit for the task's paths and the third attempt's brief carries inside it the approach the advisor dictates: do NOT dispatch an implementer now.")
+      out(`When it comes back:  ct-step advice ${advicePath} --plan ${planPath} --issue ${issue}`)
       break
     }
     case STEPS.COMMIT:
       out('COMITEA LA TAREA:')
       out(`  ct-step commit --plan ${planPath} --issue ${issue}`)
-      out('El mensaje lo compone el plugin y lo valida contra las closing keywords.')
+      out('The message is composed by the plugin and validated against the closing keywords.')
       // It is repeated here and not only at `report` because this is the moment
       // the session writes the pull request: a warning given twenty minutes
       // earlier, two subagents ago, has already left its context.
       if (run.lastSummary) {
         out('')
-        out(`Lo que dijo el implementador de esta tarea, por si va en la pull request: ${run.lastSummary}`)
+        out(`What the implementer said about this task, in case it goes in the pull request: ${run.lastSummary}`)
       }
       break
     // Phase B: the branch up to date with its base, after the last commit and
@@ -567,35 +567,35 @@ function nextVerb() {
     // there is a conflict, it is the verb that says who to dispatch, not
     // `next`.
     case STEPS.RECONCILE:
-      out('RECONCILIA LA RAMA CON SU BASE (idempotente: decide solo, según MERGE_HEAD, si toca fusionar o concluir una fusión a medias):')
+      out('RECONCILE THE BRANCH WITH ITS BASE (idempotent: it decides on its own, from MERGE_HEAD, whether to merge or to conclude a half-finished merge):')
       out(`  ct-step reconcile --plan ${planPath} --issue ${issue}`)
-      out('Si hay conflicto, el propio verbo dice a quién despachar.')
+      out('If there is a conflict, the verb itself says who to dispatch.')
       break
     // §3.7-A: the plan's end to end, after the last commit. It is run by the
     // PROGRAM — never by an agent evaluating itself.
     case STEPS.GLOBAL:
-      out('EJECUTA LA GLOBAL VERIFICATION DEL PLAN (no la corre ningún agente, la corre el programa):')
+      out("RUN THE PLAN'S GLOBAL VERIFICATION (no agent runs it, the program runs it):")
       if (globalVerification.commands.length) {
         for (const c of globalVerification.commands) out(`  $ ${c}`)
       } else {
-        out('  el plan declara N/A: ct-step global lo registra y avanza sin ejecutar nada.')
+        out('  the plan declares N/A: ct-step global records it and moves on without running anything.')
       }
       out('')
-      out(`Ejecútalo con:  ct-step global --plan ${planPath} --issue ${issue}`)
+      out(`Run it with:  ct-step global --plan ${planPath} --issue ${issue}`)
       break
     // §3.7-B: the coherence between tasks, and whether together they deliver
     // the end of the slice — what no task judge ever looks at.
     case STEPS.SLICE_JUDGE: {
       const packagePath = writeSliceReviewPackage()
       const verdictPath = join(workDir, 'slice-verdict.json')
-      out(`DESPACHA EL JUEZ DE SLICE (subagente ct-slice-judge — declarado SIN Bash: ${SLICE_JUDGE_TOOLS}) con:`)
-      out(`  - el paquete de revisión del slice: ${packagePath}`)
-      out(`  - el plan: ${planPath}`)
-      out(`  - el log de la Global verification, YA en verde, por si lo quiere: ${run.lastGlobalLog ?? '(N/A declarado)'}`)
-      out(`  - los veredictos de cada tarea, ya comiteados: docs/superpowers/verdicts/issue-${issue}-task-*.json`)
-      out(`  - que escriba su veredicto en: ${verdictPath}`)
+      out(`DISPATCH THE SLICE JUDGE (subagent ct-slice-judge — declared WITHOUT Bash: ${SLICE_JUDGE_TOOLS}) with:`)
+      out(`  - the slice's review package: ${packagePath}`)
+      out(`  - the plan: ${planPath}`)
+      out(`  - the log of the Global verification, ALREADY green, in case it wants it: ${run.lastGlobalLog ?? '(N/A declared)'}`)
+      out(`  - the verdict of every task, already committed: docs/superpowers/verdicts/issue-${issue}-task-*.json`)
+      out(`  - that it write its verdict to: ${verdictPath}`)
         out('')
-      out(`Cuando vuelva:  ct-step slice-verdict ${verdictPath} --plan ${planPath} --issue ${issue}`)
+      out(`When it comes back:  ct-step slice-verdict ${verdictPath} --plan ${planPath} --issue ${issue}`)
       break
     }
     case STEPS.E2E:
@@ -604,30 +604,30 @@ function nextVerb() {
       // brought up by whoever is driving. `AGENTS.md` is the place with the
       // "Levantar" and the "Listo cuando" of each journey — this verb does not
       // repeat them.
-      out('ATRAVIESA LA SLICE DE PUNTA A PUNTA (todas las tareas están comiteadas):')
+      out('CROSS THE SLICE END TO END (every task is committed):')
       for (const r of run.e2eRuns) out(`  - ${r}`)
       out('')
       // The section is NAMED, not alluded to. `GATES.e2e.kickoff` already names
       // it, and §3.3 of the design insists on naming it when it is missing too
-      // ("con el nombre de la sección que falta. No se adivina"): this is
+      // ("with the name of the section that is missing. It is not guessed"): this is
       // precisely the moment the agent needs it, and "it is in AGENTS.md" sends
       // it hunting among the build/test/lint ones.
-      out('El entorno para levantarla está en la sección "## Cómo se atraviesa este repo (e2e)" de AGENTS.md ("Levantar" y "Listo cuando" de cada recorrido). Si esa sección no está rellenada, el veredicto es `no-verificado` con ese motivo: nunca rojo, y nunca inventarse cómo arrancarlo.')
+      out('The environment for bringing it up is in the "## Cómo se atraviesa este repo (e2e)" section of AGENTS.md ("Levantar" and "Listo cuando" for each journey). If that section is not filled in, the verdict is `no-verificado` with that reason: never red, and never making up how to start it.')
       // The contract is stated WHOLE, and comes out of the same module that
       // validates it (E2E_SCHEMA/E2E_REQUIRED_BY_VERDICT, step-contracts.js).
       // Announcing only `run` and `verdict` —the unconditional part— meant
       // instructing the agent with a contract this same program rejects: it cost
       // at least one DISCARDED round per slice, and the discards come out of the
       // budget of the whole slice.
-      out(`Escribe el informe cumpliendo E2E_SCHEMA (scripts/step-contracts.js): cada recorrido lleva ${E2E_SCHEMA.properties.runs.items.required.join(' y ')}, y además, según su veredicto:`)
+      out(`Write the report to E2E_SCHEMA (scripts/step-contracts.js): every journey carries ${E2E_SCHEMA.properties.runs.items.required.join(' and ')}, and on top of that, according to its verdict:`)
       for (const [verdict, fields] of Object.entries(E2E_SCHEMA.properties.runs.items.requiredByVerdict)) {
         out(`  - ${verdict}: ${fields.join(', ')}`)
       }
-      out('Ciérralo con:')
-      out(`  ct-step e2e <fichero.json> --plan ${planPath} --issue ${issue}`)
+      out('Close it with:')
+      out(`  ct-step e2e <file.json> --plan ${planPath} --issue ${issue}`)
       break
     default:
-      die(`el estado tiene un paso que esta versión no conoce: ${run.step}`, EXIT.UNNAMED)
+      die(`the state has a step this version does not know: ${run.step}`, EXIT.UNNAMED)
   }
   // THE SEAL OF THE STEP. `next` has just written the input the subagent of
   // this step is going to read —the brief, or the judge's package—, and that is
@@ -692,7 +692,7 @@ function repoYardstickSection(artifactName) {
     if (!existsSync(path)) return ''
     return yardstickSection(readFileSync(path, 'utf8'))
   } catch (e) {
-    err(`warning: ${CONVENTIONS_FILE} existe y no se ha podido leer (${String(e.message).trim()}): ${artifactName} sale sin la vara del repo.`)
+    err(`warning: ${CONVENTIONS_FILE} exists and could not be read (${String(e.message).trim()}): ${artifactName} goes out without the repo's yardstick.`)
     return ''
   }
 }
@@ -706,10 +706,10 @@ function writeBrief() {
     execFileSync(join(PLUGIN_ROOT, 'skills', 'subagent-driven-development', 'scripts', 'task-brief'),
       ['--with-plan-context', planPath, String(run.task), brief], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
   } catch (e) {
-    die(`no se pudo extraer el brief de la tarea ${run.task}: ${String(e.stderr || e.message).trim()}`, EXIT.PRECONDITION)
+    die(`the brief of task ${run.task} could not be extracted: ${String(e.stderr || e.message).trim()}`, EXIT.PRECONDITION)
   }
   appendFileSync(brief, PluginYardstick.composeSection(ctDocs))
-  appendFileSync(brief, repoYardstickSection('el brief'))
+  appendFileSync(brief, repoYardstickSection('the brief'))
   // H9: the advice for the third attempt, inside the brief and not on a loose
   // line of `next`. The brief is what the subagent receives —the dispatch
   // message says so itself—, so an approach announced outside it is an approach
@@ -845,7 +845,7 @@ function writeSliceReviewPackage() {
   writeFileSync(packagePath, [
     `# Slice review package: issue #${issue} — ${run.tasksTotal} tasks committed since ${run.baseSha.slice(0, 7)}`,
     reviewTokenLine(reviewToken(diff)),
-    '', `## ${YARDSTICK_SECTION}`, `Ábrela con \`Read\`: \`${simplicityPath}\``,
+    '', `## ${YARDSTICK_SECTION}`, `Open it with \`Read\`: \`${simplicityPath}\``,
     '', `## ${SIGNAL_SECTION}`, sliceSignal ?? SIGNAL_ABSENT,
     '', `## ${COMMITS_SECTION}`, git(['log', '--reverse', '--format=%h %s', `${run.baseSha}..HEAD`]) || '',
     '', `## ${FILES_SECTION}`, git(['diff', '--stat', run.baseSha, 'HEAD']) || '',
@@ -869,9 +869,9 @@ function writeAdviceReviewPackage() {
   const [BRIEF_SECTION, ATTEMPTS_SECTION, VERDICTS_SECTION] = ADVICE_PACKAGE_SECTIONS
   writeFileSync(packagePath, [
     `# Advice package: task ${run.task}/${run.tasksTotal} of issue #${issue} — vetoed twice, one attempt left`,
-    '', `## ${BRIEF_SECTION}`, readOrAbsent(briefPath(), 'el brief de la tarea'),
-    '', `## ${ATTEMPTS_SECTION}`, sectionsByAttempt('report', 'el informe del implementador'),
-    '', `## ${VERDICTS_SECTION}`, sectionsByAttempt('verdict', 'el veredicto del juez'),
+    '', `## ${BRIEF_SECTION}`, readOrAbsent(briefPath(), "the task's brief"),
+    '', `## ${ATTEMPTS_SECTION}`, sectionsByAttempt('report', "the implementer's report"),
+    '', `## ${VERDICTS_SECTION}`, sectionsByAttempt('verdict', "the judge's verdict"),
   ].join('\n'))
   return packagePath
 }
@@ -880,7 +880,7 @@ const readOrAbsent = (path, what) => {
   try {
     return readFileSync(path, 'utf8')
   } catch (e) {
-    return `(no se pudo leer ${what} en ${path}: ${String(e.message).trim()})`
+    return `(could not read ${what} at ${path}: ${String(e.message).trim()})`
   }
 }
 
@@ -904,7 +904,7 @@ function taskArchives(kind) {
 
 function sectionsByAttempt(kind, what) {
   const files = taskArchives(kind)
-  if (!files.length) return `(este run no archivó ningún ${what} de esta tarea)`
+  if (!files.length) return `(this run archived no ${what} for this task)`
   return files.map((f) => [
     `### Intento ${ARCHIVED_ATTEMPT_RE.exec(f)[1]}`,
     '',
@@ -922,7 +922,7 @@ function archive(kind, content) {
   try {
     writeFileSync(join(workDir, `task-${run.task}-${kind}-${currentAttempt()}.json`), JSON.stringify(content, null, 2) + '\n')
   } catch (e) {
-    err(`warning: no se pudo archivar ${kind} del intento ${currentAttempt()} (${String(e.message).trim()}): si esta tarea llega al consejero, su paquete lo dirá.`)
+    err(`warning: ${kind} of attempt ${currentAttempt()} could not be archived (${String(e.message).trim()}): if this task reaches the advisor, its package will say so.`)
   }
 }
 
@@ -941,7 +941,7 @@ function currentToken(packagePath, diffNow) {
   try {
     text = readFileSync(packagePath, 'utf8')
   } catch (e) {
-    return { why: `el paquete de revisión existe y no se puede leer (${packagePath}): ${String(e.message).trim()} — vuelve a "ct-step next", que es el único paso que lo genera, y REDESPACHA al juez` }
+    return { why: `the review package exists and cannot be read (${packagePath}): ${String(e.message).trim()} — go back to "ct-step next", the only step that generates it, and REDISPATCH the judge` }
   }
   const declared = reviewTokenOf(text)
   if (declared === null) {
@@ -952,11 +952,11 @@ function currentToken(packagePath, diffNow) {
     // tolerating it would be a «no guardrail» mode that is switched on by
     // DELETING a line, which is exactly what this fix takes out of the
     // repertoire.
-    return { why: `el paquete de revisión (${packagePath}) no declara su "${REVIEW_TOKEN_LABEL}": lo escribió una versión anterior del plugin, o se editó a mano. Vuelve a "ct-step next", que lo regenera con su token, y REDESPACHA al juez` }
+    return { why: `the review package (${packagePath}) does not declare its "${REVIEW_TOKEN_LABEL}": an earlier version of the plugin wrote it, or it was edited by hand. Go back to "ct-step next", which regenerates it with its token, and REDISPATCH the judge` }
   }
   const now = reviewToken(diffNow)
   if (declared !== now) {
-    return { why: `el paquete de revisión ya no describe el código de ahora: declara el token ${declared.slice(0, 12)}… y el del corte recién medido es ${now.slice(0, 12)}… — el código cambió DESPUÉS de generarse el paquete, así que el juez juzgó otro diff. Vuelve a "ct-step next" y REDESPACHA al juez: repreguntarle con este paquete no arregla nada` }
+    return { why: `the review package no longer describes the code as it is now: it declares token ${declared.slice(0, 12)}… and the one of the cut just measured is ${now.slice(0, 12)}… — the code changed AFTER the package was generated, so the judge judged another diff. Go back to "ct-step next" and REDISPATCH the judge: asking it again with this package fixes nothing` }
   }
   return { token: declared }
 }
@@ -965,7 +965,7 @@ function currentToken(packagePath, diffNow) {
 // arrives validated in shape and in lower case by `readVerdict`, so all that
 // happens here is the comparison.
 function whyForeignToken(fromVerdict, fromPackage) {
-  return `el veredicto no es de este paquete: copia el token ${String(fromVerdict).slice(0, 12)}… y el paquete declara ${fromPackage.slice(0, 12)}… — es el veredicto de OTRO juicio, sobre un diff que ya no es el que hay delante. No hace falta volver a "ct-step next" (el paquete de disco es el bueno): REDESPACHA al juez con él`
+  return `the verdict does not belong to this package: it copies token ${String(fromVerdict).slice(0, 12)}… and the package declares ${fromPackage.slice(0, 12)}… — it is the verdict of ANOTHER trial, over a diff that is no longer the one in front of you. There is no need to go back to "ct-step next" (the package on disk is the good one): REDISPATCH the judge with it`
 }
 
 // THE PACKAGE IS SINGLE USE: the verdict that reads it spends it.
@@ -1015,7 +1015,7 @@ function consumePackage(packagePath) {
   try {
     unlinkSync(packagePath)
   } catch (e) {
-    err(`warning: el veredicto se midió pero NO se pudo consumir el paquete de revisión (${packagePath}): ${String(e.message).trim()}. El paso sigue, pero ese fichero ya no corresponde a ningún juicio pendiente: vuelve a "ct-step next" antes de despachar al juez otra vez, porque un paquete que sobrevive a su veredicto es el que deja pasar un juicio rancio.`)
+    err(`warning: the verdict was measured but the review package (${packagePath}) could NOT be consumed: ${String(e.message).trim()}. The step carries on, but that file no longer corresponds to any pending trial: go back to "ct-step next" before dispatching the judge again, because a package that outlives its verdict is the one that lets a stale trial through.`)
   }
 }
 
@@ -1024,14 +1024,14 @@ function consumePackage(packagePath) {
 // ---------------------------------------------------------------------------
 function readJson(path, whose) {
   if (typeof path !== 'string' || !path || path.startsWith('--')) {
-    die(`falta la ruta del JSON ${whose}\n\n${USAGE}`, EXIT.USAGE)
+    die(`the path of the ${whose} JSON is missing\n\n${USAGE}`, EXIT.USAGE)
   }
   try {
     return { value: JSON.parse(readFileSync(path, 'utf8')) }
   } catch (e) {
     // A JSON that cannot be read is a DISCARD, not a usage error: the subagent
     // answered, and what it answered is no good.
-    return { why: `no se pudo leer el ${whose} en ${path}: ${e.message}` }
+    return { why: `the ${whose} at ${path} could not be read: ${e.message}` }
   }
 }
 
@@ -1188,7 +1188,7 @@ function reconcileRoleMeasures() {
 }
 
 function reportVerb() {
-  const { value, why: whyRead } = readJson(process.argv[3], 'del informe')
+  const { value, why: whyRead } = readJson(process.argv[3], 'report')
   const { report, why } = whyRead ? { why: whyRead } : readReport(value)
   // The summary goes into the telemetry only when there is a valid report: a
   // discarded report has no summary to tell, just as `why` only carries a
@@ -1204,7 +1204,7 @@ function reportVerb() {
     ...roleMeasures(STEPS.IMPLEMENT, briefPath()),
   })
   if (!report) {
-    out(`informe descartado: ${why}`)
+    out(`report discarded: ${why}`)
     return OUTCOMES.DISCARDED
   }
   // THE PATHS ARE MEASURED BY THE PROGRAM, and the implementer's declaration
@@ -1240,7 +1240,7 @@ function reportVerb() {
   // that was wanted.
   const onlyMeasured = paths.filter((p) => !report.paths.includes(p) && p !== planRelPath())
   if (onlyDeclared.length || onlyMeasured.length) {
-    err(`warning: lo que el implementador declara y lo que el árbol dice no coinciden. Se stagea lo MEDIDO.${onlyMeasured.length ? ` Tocado y no declarado: ${onlyMeasured.join(', ')}.` : ''}${onlyDeclared.length ? ` Declarado y no tocado: ${onlyDeclared.join(', ')}.` : ''}`)
+    err(`warning: what the implementer declares and what the tree says do not match. What is staged is what was MEASURED.${onlyMeasured.length ? ` Tocado y no declarado: ${onlyMeasured.join(', ')}.` : ''}${onlyDeclared.length ? ` Declarado y no tocado: ${onlyDeclared.join(', ')}.` : ''}`)
   }
   // It is staged BEFORE measuring the checks: one that reads the index does
   // not see a new file that is not staged. After reset+add, the index is
@@ -1260,7 +1260,7 @@ function reportVerb() {
     lastPaths: paths,
     lastSummary: report.summary,
   }
-  out(`stageados ${report.paths.length} fichero(s): ${paths.join(', ')}`)
+  out(`staged ${report.paths.length} file(s): ${paths.join(', ')}`)
   // The summary is PRINTED. It is the channel through which the implementer
   // warns about a skill it did not load, a frozen decision it obeyed
   // reluctantly or a problem it saw and did not touch — and until now nobody
@@ -1270,7 +1270,7 @@ function reportVerb() {
   // reproducible CI" is not enforced in continuous integration reached the
   // pull request only because that session opened the report's file on its own
   // initiative.
-  if (report.summary) out(`el implementador dice: ${report.summary}`)
+  if (report.summary) out(`the implementer says: ${report.summary}`)
   return OUTCOMES.DONE
 }
 
@@ -1291,7 +1291,7 @@ function controlsVerb() {
   // costs nothing, so it runs even before the test names.
   const outOfScope = declaredScope(t)
   if (outOfScope.length) {
-    lines.push('# alcance declarado por la tarea', ...outOfScope.map((f) => `- ${f}`), '')
+    lines.push('# scope declared by the task', ...outOfScope.map((f) => `- ${f}`), '')
     result = OUTCOMES.FAILED
   }
 
@@ -1311,7 +1311,7 @@ function controlsVerb() {
   // one passed.
   const failures = declaredTests(t)
   if (failures.length) {
-    lines.push('# tests declarados por la tarea', ...failures.map((f) => `- ${f}`), '')
+    lines.push('# tests declared by the task', ...failures.map((f) => `- ${f}`), '')
     result = OUTCOMES.FAILED
   }
 
@@ -1319,7 +1319,7 @@ function controlsVerb() {
   // this runs a command.
   const blocks = declaredBlocks(t)
   if (blocks.length) {
-    lines.push('# bloques declarados por la tarea', ...blocks.map((f) => `- ${f}`), '')
+    lines.push('# blocks declared by the task', ...blocks.map((f) => `- ${f}`), '')
     result = OUTCOMES.FAILED
   }
 
@@ -1333,7 +1333,7 @@ function controlsVerb() {
   writeFileSync(log, lines.join('\n'))
   measure('controls', { outcome: result, controls_log: log, commands: t.commands.length, duration_ms: Date.now() - startedAt })
   run = { ...run, lastControlsLog: log }
-  out(`controles: ${result} (log en ${log})`)
+  out(`controls: ${result} (log at ${log})`)
   return result
 }
 
@@ -1410,22 +1410,22 @@ function declaredScope(t) {
 
   for (const path of touched) {
     if (!declared.some((f) => f.path === path)) {
-      failures.push(`la tarea ${t.n} tocó '${path}' y el plan no la declara en sus **Files:** — dos explicaciones son igual de plausibles y este control no puede arbitrar entre ellas: sobra en el CÓDIGO, o hace falta añadirla al PLAN`)
+      failures.push(`task ${t.n} touched '${path}' and the plan does not declare it in its **Files:** — two explanations are equally plausible and this control cannot arbitrate between them: it is surplus in the CODE, or it needs adding to the PLAN`)
     }
   }
 
   for (const f of declared) {
     if (!touched.includes(f.path)) {
-      failures.push(`el plan declara '${f.path}' en las **Files:** de la tarea ${t.n} y no está entre lo que tocó: escribe el CÓDIGO que la tarea prometió. Si de verdad sobra en el PLAN, QUITARLA NO ES TU SALIDA —una enmienda sólo puede añadir rutas, porque quitarlas desactiva este mismo control— así que dilo en tu informe y deja la ruta en el plan`)
+      failures.push(`the plan declares '${f.path}' in the **Files:** of task ${t.n} and it is not among what was touched: write the CODE the task promised. If it really is surplus in the PLAN, REMOVING IT IS NOT YOUR WAY OUT —an amendment can only add paths, because removing them switches this very control off— so say it in your report and leave the path in the plan`)
       continue
     }
     if (f.action === null) continue
     const existedBefore = git(['cat-file', '-e', `HEAD:${f.path}`], { allowFail: true }) !== null
     if (f.action === 'create' && existedBefore) {
-      failures.push(`el plan declara '${f.path}' como (create) y ya existía en el commit anterior — revisa el PLAN, la acción debería ser (modify)`)
+      failures.push(`the plan declares '${f.path}' as (create) and it already existed in the previous commit — check the PLAN, the action should be (modify)`)
     }
     if (f.action === 'modify' && !existedBefore) {
-      failures.push(`el plan declara '${f.path}' como (modify) y no existía en el commit anterior — revisa el PLAN, la acción debería ser (create)`)
+      failures.push(`the plan declares '${f.path}' as (modify) and it did not exist in the previous commit — check the PLAN, the action should be (create)`)
     }
   }
 
@@ -1503,8 +1503,8 @@ function inIndex(nombre) {
 
 function declaredTests(t) {
   const failures = []
-  for (const n of t.testsAdded) if (!inIndex(n)) failures.push(`la tarea dijo que añadía el test '${n}' y no está en lo stageado`)
-  for (const n of t.testsRemoved) if (inIndex(n)) failures.push(`la tarea dijo que retiraba el test '${n}' y sigue estando`)
+  for (const n of t.testsAdded) if (!inIndex(n)) failures.push(`the task said it was adding the test '${n}' and it is not in what is staged`)
+  for (const n of t.testsRemoved) if (inIndex(n)) failures.push(`the task said it was removing the test '${n}' and it is still there`)
   return failures
 }
 
@@ -1533,23 +1533,23 @@ function declaredBlocks(t) {
 
   for (const { role, path } of t.blockPaths) {
     if (!touched.includes(path)) {
-      failures.push(`la tarea ${t.n} declara un bloque ${role} (${path}) y no está entre lo que tocó — falta en el CÓDIGO, o el bloque sobra en el PLAN`)
+      failures.push(`task ${t.n} declares a ${role} block (${path}) and it is not among what was touched — it is missing from the CODE, or the block is surplus in the PLAN`)
     }
   }
 
   if (t.tddName && !inIndex(t.tddName)) {
-    failures.push(`la tarea dijo que añadía el test '${t.tddName}' y no está en lo stageado`)
+    failures.push(`the task said it was adding the test '${t.tddName}' and it is not in what is staged`)
   }
 
   for (const { path, text } of t.finalTexts) {
     const staged = git(['show', `:${path}`], { allowFail: true })
     if (staged === null) {
-      failures.push(`la tarea ${t.n} declara un Final text (${path}) y ese fichero no está entre lo que tocó — falta en el CÓDIGO, o el bloque sobra en el PLAN`)
+      failures.push(`task ${t.n} declares a Final text (${path}) and that file is not among what was touched — it is missing from the CODE, or the block is surplus in the PLAN`)
       continue
     }
     for (const line of text.split('\n')) {
       if (line.trim() !== '' && !staged.includes(line)) {
-        failures.push(`la tarea ${t.n} declara Final text (${path}) y la línea '${line}' no está verbatim en lo stageado — falta en el CÓDIGO, o el PLAN cita mal el texto`)
+        failures.push(`task ${t.n} declares Final text (${path}) and the line '${line}' is not verbatim in what is staged — it is missing from the CODE, or the PLAN quotes the text wrongly`)
       }
     }
   }
@@ -1596,7 +1596,7 @@ const gitForReconcile = (argv) => {
     // clean up a tree that is perfectly fine. What was never measured cannot
     // be interpreted: it stops here.
     if (typeof e.status !== 'number') {
-      die(`git ${argv.join(' ')} no terminó por su cuenta (señal ${e.signal || 'desconocida'}): saltó el tope de tiempo o alguien lo mató. No se distingue de un fallo de git y no se va a interpretar como tal.`, EXIT.PRECONDITION)
+      die(`git ${argv.join(' ')} did not finish on its own (signal ${e.signal || 'unknown'}): it hit the time cap or somebody killed it. That is not distinguishable from a git failure and it is not going to be read as one.`, EXIT.PRECONDITION)
     }
     return { code: e.status, stdout: String(e.stdout || '') }
   }
@@ -1651,7 +1651,7 @@ function seccionDelPlan(markdown, heading) {
     if (inside) output.push(line)
   }
   const content = output.join('\n').trim()
-  return content || `(sección '${heading}' no encontrada en el plan)`
+  return content || `(section '${heading}' not found in the plan)`
 }
 
 // The log of the commits the base brought — the first thing a human resolving
@@ -1663,9 +1663,9 @@ function seccionDelPlan(markdown, heading) {
 // package, declared instead of kept quiet.
 function baseLog(branch) {
   const mergeBase = git(['merge-base', 'HEAD', `origin/${branch}`], { allowFail: true })
-  if (!mergeBase) return '(no se pudo calcular el merge-base con la base: no hay log de commits que enseñar)'
+  if (!mergeBase) return '(the merge-base with the base could not be computed: there is no commit log to show)'
   const log = git(['log', `${mergeBase.trim()}..origin/${branch}`, '--oneline'], { allowFail: true })
-  return log || '(la base no trae ningún commit nuevo)'
+  return log || '(the base brings no new commit)'
 }
 
 // This round's attempt: how many reconciliation packages have already been
@@ -1684,9 +1684,9 @@ function nextReconcileAttempt() {
 // message — ONE list and not two copies that could diverge on what each reason
 // says. `reconcileVerb`, further down, uses it for the message.
 const DISCARD_FIX = {
-  [DiscardReason.MARKERS_LEFT]: 'quedaron marcas de conflicto (<<<<<<< / ======= / >>>>>>>) sin quitar en alguno de los ficheros resueltos.',
-  [DiscardReason.TOUCHED_OUTSIDE_THE_CONFLICT]: 'la resolución tocó ficheros que no estaban en la lista de conflicto: el índice sólo puede llevar los ficheros en disputa.',
-  [DiscardReason.UNRESOLVED_FILES_REMAIN]: 'siguen quedando ficheros sin resolver tras intentar stagearlos: hay que resolverlos todos antes de concluir.',
+  [DiscardReason.MARKERS_LEFT]: 'conflict markers (<<<<<<< / ======= / >>>>>>>) were left in place in one of the resolved files.',
+  [DiscardReason.TOUCHED_OUTSIDE_THE_CONFLICT]: 'the resolution touched files that were not on the conflict list: the index can only carry the files in dispute.',
+  [DiscardReason.UNRESOLVED_FILES_REMAIN]: 'there are still unresolved files after trying to stage them: they all have to be resolved before concluding.',
 }
 
 // The package `ct-reconciler` consumes (Task 9) — same pattern as
@@ -1719,7 +1719,7 @@ function writeReconcileReviewPackage({ branch, round, attempt }) {
   // scope, all of them go: a merge can touch any file at all, a new one
   // included.
   appendFileSync(packagePath, PluginYardstick.composePathSection(ctDocs))
-  appendFileSync(packagePath, repoYardstickSection('el paquete de reconciliación'))
+  appendFileSync(packagePath, repoYardstickSection('the reconciliation package'))
   return packagePath
 }
 
@@ -1730,7 +1730,7 @@ function writeReconcileReviewPackage({ branch, round, attempt }) {
 // handover, and writing it twice is what would leave one of the two halves
 // unwritten.
 function handoverToSliceAgent() {
-  out(`ct-reconciler agotó sus ${DEFAULT_BUDGETS.reconcileRetries} ronda(s) sin resolverlo: le toca al agente del propio slice, que sí tiene Bash. Que resuelva el conflicto a mano, deje los ficheros stageados y llame a:`)
+  out(`ct-reconciler used up its ${DEFAULT_BUDGETS.reconcileRetries} round(s) without resolving it: it is now up to the slice's own agent, which does have Bash. Have it resolve the conflict by hand, leave the files staged and call:`)
   out(`  ct-step reconcile --plan ${planPath} --issue ${issue}`)
 }
 
@@ -1749,7 +1749,7 @@ function reconcileVerb() {
   const startedAt = Date.now()
   const branch = resolveBaseBranch()
   if (!branch) {
-    die('reconcile no puede resolver la rama base del slice (ni "base:" en .agent/SLICE.md, ni main/master remotos en este worktree): no hay con qué fusionar.', EXIT.PRECONDITION)
+    die('reconcile cannot resolve the slice\'s base branch (no "base:" in .agent/SLICE.md, no remote main/master in this worktree): there is nothing to merge with.', EXIT.PRECONDITION)
   }
   const reconciliation = new BranchReconciliation({ git: gitForReconcile, isMachineryPath })
   const round = reconciliation.isMergeInProgress()
@@ -1771,26 +1771,26 @@ function reconcileVerb() {
   const budgetLeft = !reconcileBudgetSpent(run)
   switch (round.outcome) {
     case ReconcileOutcome.UP_TO_DATE:
-      out(`reconcile: up-to-date (la base "${branch}" no se ha movido)`)
+      out(`reconcile: up-to-date (the base "${branch}" has not moved)`)
       break
     case ReconcileOutcome.MERGED:
-      out(`reconcile: merged (la base "${branch}" se fusionó sin conflictos)`)
+      out(`reconcile: merged (the base "${branch}" merged with no conflicts)`)
       break
     case ReconcileOutcome.RESOLVED:
-      out(`reconcile: resolved (la resolución de ${round.files.length} fichero(s) se comiteó)`)
+      out(`reconcile: resolved (the resolution of ${round.files.length} file(s) was committed)`)
       break
     // The CONTENT conflict: there is something to work with (the files in
     // dispute), so while there is budget left it is the reconciler (Task 9,
     // `ct-reconciler`) that resolves it and not the slice agent.
     case ReconcileOutcome.CONFLICTING:
-      out(`reconcile: conflicting — ${round.files.length} fichero(s) en conflicto con "${branch}":`)
+      out(`reconcile: conflicting — ${round.files.length} file(s) in conflict with "${branch}":`)
       for (const f of round.files) out(`  - ${f}`)
       out('')
       if (budgetLeft) {
         const packagePath = writeReconcileReviewPackage({ branch, round, attempt: nextReconcileAttempt() })
-        out(`DESPACHA ct-reconciler (subagente — declarado SIN Bash y SIN Write: ${RECONCILER_TOOLS}) a resolver el conflicto: que deje los ficheros resueltos, sin marcas de conflicto, y sin tocar nada fuera de esa lista — no puede stagear, comitear ni abortar la fusión: eso lo hace este programa al concluir. Dale:`)
-        out(`  - el paquete de reconciliación: ${packagePath}`)
-        out(`Cuando vuelva:  ct-step reconcile --plan ${planPath} --issue ${issue}  (concluye la fusión a medias — lo decide MERGE_HEAD, no hace falta indicar nada más).`)
+        out(`DISPATCH ct-reconciler (subagent — declared WITHOUT Bash and WITHOUT Write: ${RECONCILER_TOOLS}) to resolve the conflict: have it leave the files resolved, with no conflict markers, and without touching anything outside that list — it cannot stage, commit or abort the merge: this program does that on concluding. Give it:`)
+        out(`  - the reconciliation package: ${packagePath}`)
+        out(`When it comes back:  ct-step reconcile --plan ${planPath} --issue ${issue}  (it concludes the half-finished merge — MERGE_HEAD decides, nothing else needs saying).`)
       } else {
         handoverToSliceAgent()
       }
@@ -1803,18 +1803,18 @@ function reconcileVerb() {
     // inside. It is not airtight; it moves the case from the human's retina to
     // the loop.
     case ReconcileOutcome.MARKERS_COMMITTED:
-      out(`reconcile: markers-committed — HEAD ya es un commit de fusión, hecho fuera de este verbo, y ${round.files.length} fichero(s) suyos traen marcas de conflicto DENTRO del commit:`)
+      out(`reconcile: markers-committed — HEAD is already a merge commit, made outside this verb, and ${round.files.length} of its file(s) carry conflict markers INSIDE the commit:`)
       for (const f of round.files) out(`  - ${f}`)
-      out('No hay fusión viva que concluir ni ronda que descartar: la pull request llevaría los marcadores dentro, y si el conflicto cae en un fichero que los controles no compilan, sale verde.')
-      out('DESPACHA AL AGENTE DEL SLICE (tiene Bash) a quitar las marcas y comitear el arreglo, y vuelve a preguntar con ct-step next.')
+      out('There is no live merge to conclude and no round to discard: the pull request would carry the markers inside, and if the conflict falls in a file the controls do not compile, it comes out green.')
+      out("DISPATCH THE SLICE'S AGENT (it has Bash) to remove the markers and commit the fix, and ask again with ct-step next.")
       break
     // The slice's own dirty tree: git could not even BEGIN the merge. There is
     // no conflicting content to show the reconciler —showing it would be
     // sending it off to resolve something that does not exist— so it goes
     // straight to the slice agent, with no mention of ct-reconciler.
     case ReconcileOutcome.UNMERGEABLE_TREE:
-      out(`reconcile: unmergeable-tree — git no pudo empezar la fusión con "${branch}": esto no es un conflicto de contenido, es el árbol del propio slice (cambios sin comitear, o algo a medias).`)
-      out('DESPACHA AL AGENTE DEL SLICE (tiene Bash) a dejar el árbol limpio, y vuelve a preguntar con ct-step next.')
+      out(`reconcile: unmergeable-tree — git could not start the merge with "${branch}": this is not a content conflict, it is the slice's own tree (uncommitted changes, or something half-finished).`)
+      out("DISPATCH THE SLICE'S AGENT (it has Bash) to leave the tree clean, and ask again with ct-step next.")
       break
     // The round that was discarded WITHOUT touching the tree
     // (`checkout --merge` undoes it) — like implement and the judge, it does
@@ -1823,7 +1823,7 @@ function reconcileVerb() {
     // differently.
     case ReconcileOutcome.ROUND_DISCARDED: {
       out(`reconcile: round-discarded (${round.reason}) — ${DISCARD_FIX[round.reason]}`)
-      out('La ronda se descartó sin comitear nada: el merge sigue vivo, con los ficheros en conflicto restaurados a como los dejó git.')
+      out('The round was discarded without committing anything: the merge is still live, with the conflicting files restored to how git left them.')
       // The merge IS STILL UNDER WAY (the discard does not abort it), so
       // while there is budget left it is still ct-reconciler's turn — the new
       // package carries the discard's reason so that the next attempt is not
@@ -1836,13 +1836,13 @@ function reconcileVerb() {
         break
       }
       const packagePath = writeReconcileReviewPackage({ branch, round, attempt: nextReconcileAttempt() })
-      out(`REDESPACHA ct-reconciler (subagente — declarado SIN Bash y SIN Write: ${RECONCILER_TOOLS}) con el paquete nuevo:`)
-      out(`  - el paquete de reconciliación: ${packagePath}`)
-      out(`Cuando vuelva:  ct-step reconcile --plan ${planPath} --issue ${issue}`)
+      out(`REDISPATCH ct-reconciler (subagent — declared WITHOUT Bash and WITHOUT Write: ${RECONCILER_TOOLS}) with the new package:`)
+      out(`  - the reconciliation package: ${packagePath}`)
+      out(`When it comes back:  ct-step reconcile --plan ${planPath} --issue ${issue}`)
       break
     }
     default:
-      throw new Error(`ronda de reconciliación con desenlace sin mensaje: "${round.outcome}"`)
+      throw new Error(`reconciliation round with an outcome that has no message: "${round.outcome}"`)
   }
   return outcomeOfReconcile(round.outcome)
 }
@@ -1860,7 +1860,7 @@ function globalVerb() {
   const startedAt = Date.now()
   if (!globalVerification.commands.length) {
     measure('global', { outcome: OUTCOMES.DONE, global_log: null, commands: 0, duration_ms: Date.now() - startedAt })
-    out('global: done (el plan declara N/A — no hay punta a punta que correr)')
+    out('global: done (the plan declares N/A — there is no end to end to run)')
     return OUTCOMES.DONE
   }
   const log = join(workDir, 'global-verification.log')
@@ -1912,9 +1912,9 @@ function sliceVerdictVerb() {
   // disk the slice judge had no accumulated diff to judge.
   const packagePath = join(workDir, 'slice-review.diff')
   if (!existsSync(packagePath)) {
-    const why = `el paquete de revisión del slice no existe (${packagePath}): el juez de slice juzgó a ciegas — vuelve a "ct-step next", que es el único paso que lo genera, y REDESPACHA al juez de slice. El paquete es de UN SOLO USO: lo consume el veredicto que lo lee, así que tras un veredicto aceptado hay que volver a pasar por next antes de despachar al juez de slice otra vez`
+    const why = `the slice's review package does not exist (${packagePath}): the slice judge judged blind — go back to "ct-step next", the only step that generates it, and REDISPATCH the slice judge. The package is SINGLE USE: the verdict that reads it consumes it, so after an accepted verdict you have to go through next again before dispatching the slice judge once more`
     measure('slice-judge', { outcome: 'discarded', why })
-    out(`veredicto de slice descartado: ${why}`)
+    out(`slice verdict discarded: ${why}`)
     return OUTCOMES.DISCARDED
   }
   // The same pair of checks as in `verdictVerb`, with the RANGE's diff
@@ -1925,20 +1925,20 @@ function sliceVerdictVerb() {
   const { token, why: whyPackage } = currentToken(packagePath, sliceDiff())
   if (whyPackage) {
     measure('slice-judge', { outcome: 'discarded', why: whyPackage })
-    out(`veredicto de slice descartado: ${whyPackage}`)
+    out(`slice verdict discarded: ${whyPackage}`)
     return OUTCOMES.DISCARDED
   }
-  const { value, why: whyRead } = readJson(process.argv[3], 'del veredicto de slice')
+  const { value, why: whyRead } = readJson(process.argv[3], 'slice verdict')
   const { verdict, why } = whyRead ? { why: whyRead } : readSliceVerdict(withProgramToken(value, token))
   if (!verdict) {
     measure('slice-judge', { outcome: 'discarded', why })
-    out(`veredicto de slice descartado: ${why}`)
+    out(`slice verdict discarded: ${why}`)
     return OUTCOMES.DISCARDED
   }
   if (verdict.review_token !== token) {
     const whyForeign = whyForeignToken(verdict.review_token, token)
     measure('slice-judge', { outcome: 'discarded', why: whyForeign })
-    out(`veredicto de slice descartado: ${whyForeign}`)
+    out(`slice verdict discarded: ${whyForeign}`)
     return OUTCOMES.DISCARDED
   }
   const outcome = outcomeOfSliceVerdict(verdict)
@@ -1958,10 +1958,10 @@ function sliceVerdictVerb() {
     // `verdict` and `commit`: evidence that cannot travel is warned about, it
     // never blocks a delivery whose work is already committed in full.
     if (git(['add', '--', path], { allowFail: true }) === null) {
-      err(`warning: el veredicto del slice se escribió en ${path} pero NO se pudo stagear, así que no viajará en la pull request (¿la ruta está gitignoreada en este repo?). La entrega sigue.`)
+      err(`warning: the slice's verdict was written to ${path} but could NOT be staged, so it will not travel in the pull request (is the path gitignored in this repo?). The delivery carries on.`)
     }
     if (existsSync(join(repoRoot, METRICS_REL)) && git(['add', '--', METRICS_REL], { allowFail: true }) === null) {
-      err(`warning: no se pudo stagear la telemetría (${METRICS_REL}) — el veredicto del slice viaja sin ella. ¿La ruta está gitignoreada en este repo?`)
+      err(`warning: the telemetry (${METRICS_REL}) could not be staged — the slice's verdict travels without it. Is the path gitignored in this repo?`)
     }
     // AND THE INDEX IS NOT COMMITTED BLIND. This `git commit` goes without a
     // pathspec, so it carries EVERYTHING that is staged: if the conductor left
@@ -1987,17 +1987,17 @@ function sliceVerdictVerb() {
     // veredicto del slice ... la entrega sigue") and as the three `allowFail`.
     const foreign = foreignInIndex([path, METRICS_REL])
     if (foreign.length) {
-      err(`warning: el índice traía ${foreign.length} ruta(s) ajenas a la maquinaria (${foreign.join(', ')}) y este commit se las llevaría dentro sin que ningún juez las haya visto — NO se comitea el veredicto del slice. La entrega sigue: el trabajo del slice ya está comiteado entero. El veredicto está escrito y STAGEADO en ${path}: saca lo ajeno del índice ("git restore --staged ${foreign[0]}", que no toca tu worktree) y comitéalo a mano antes de abrir la pull request.`)
+      err(`warning: the index carried ${foreign.length} path(s) foreign to the machinery (${foreign.join(', ')}) and this commit would take them inside without any judge having seen them — the slice's verdict is NOT committed. The delivery carries on: the slice's work is already committed in full. The verdict is written and STAGED at ${path}: take what is foreign out of the index ("git restore --staged ${foreign[0]}", which does not touch your worktree) and commit it by hand before opening the pull request.`)
     } else if ((git(['diff', '--cached', '--name-only']) || '').trim()) {
       let message = null
       try {
         message = sliceVerdictCommitMessage({ issue, tasksTotal: run.tasksTotal })
       } catch (e) {
-        err(`warning: ${String(e.message)} — el veredicto del slice se queda sin commitear. La entrega sigue.`)
+        err(`warning: ${String(e.message)} — the slice's verdict is left uncommitted. The delivery carries on.`)
       }
       if (message !== null) {
         if (git(['commit', '-m', message], { allowFail: true }) === null) {
-          err('warning: no se pudo commitear el veredicto del slice — la entrega no depende de la evidencia, pero revisa el índice antes de abrir la pull request.')
+          err("warning: the slice's verdict could not be committed — the delivery does not depend on the evidence, but check the index before opening the pull request.")
         } else {
           // The commit is counted in the STATE, and only when it really
           // happened. The next step (`e2e`) is another process: it re-reads
@@ -2010,14 +2010,14 @@ function sliceVerdictVerb() {
           // in-situ pattern as `lastGlobalLog` in `globalVerb` — `save()`
           // persists it at the end of the dispatch.
           run = { ...run, sliceCommits: (run.sliceCommits || 0) + 1 }
-          out(`veredicto del slice comiteado: ${headSha().slice(0, 7)}`)
+          out(`slice verdict committed: ${headSha().slice(0, 7)}`)
         }
       }
     } else {
-      err('warning: nada que commitear del veredicto del slice (¿las dos rutas gitignoreadas?) — la entrega sigue.')
+      err("warning: nothing to commit of the slice's verdict (are both paths gitignored?) — the delivery carries on.")
     }
   }
-  out(`veredicto de slice ${verdict.ruling} con ${verdict.findings.length} hallazgo(s) → ${outcome}`)
+  out(`slice verdict ${verdict.ruling} with ${verdict.findings.length} finding(s) → ${outcome}`)
   return outcome
 }
 
@@ -2045,7 +2045,7 @@ function verdictVerb() {
   // over the symptom.
   const packagePath = join(workDir, `task-${run.task}-review.diff`)
   if (!existsSync(packagePath)) {
-    const why = `el paquete de revisión no existe (${packagePath}): el juez juzgó a ciegas — vuelve a "ct-step next", que es el único paso que lo genera, y REDESPACHA al juez con el paquete nuevo. El paquete es de UN SOLO USO: lo consume el veredicto que lo lee, así que tras un FAIL (o cualquier veredicto aceptado) hay que volver a pasar por next antes de despachar al juez otra vez — y volver a next SIN redespachar al juez deja un veredicto de otro diff, que este verbo también rechaza`
+    const why = `the review package does not exist (${packagePath}): the judge judged blind — go back to "ct-step next", the only step that generates it, and REDISPATCH the judge with the new package. The package is SINGLE USE: the verdict that reads it consumes it, so after a FAIL (or any accepted verdict) you have to go through next again before dispatching the judge once more — and going back to next WITHOUT redispatching the judge leaves a verdict of another diff, which this verb also rejects`
     // The row carries `outcome` and `why`, and no other measure: exactly the
     // shape of the other discards in this file. Without `ruling` —for
     // `aggregateVerdictMeasures` a row with `ruling` IS a verdict, and this is
@@ -2054,7 +2054,7 @@ function verdictVerb() {
     // that is missing is writing precisely the row that points at a
     // non-existent one, which is what this guard exists to keep out.
     measure('judge', { outcome: 'discarded', why })
-    out(`veredicto descartado: ${why}`)
+    out(`verdict discarded: ${why}`)
     return OUTCOMES.DISCARDED
   }
   // THE INPUT IS STILL THE CUT AS IT STANDS NOW, and it goes BEFORE `readJson`
@@ -2071,14 +2071,14 @@ function verdictVerb() {
     // the row the input of a judgement that is not accepted is writing the very
     // claim this guard exists to keep out.
     measure('judge', { outcome: 'discarded', why: whyPackage })
-    out(`veredicto descartado: ${whyPackage}`)
+    out(`verdict discarded: ${whyPackage}`)
     return OUTCOMES.DISCARDED
   }
-  const { value, why: whyRead } = readJson(process.argv[3], 'del veredicto')
+  const { value, why: whyRead } = readJson(process.argv[3], 'verdict')
   const { verdict, why } = whyRead ? { why: whyRead } : readVerdict(withProgramToken(value, token))
   if (!verdict) {
     measure('judge', { outcome: 'discarded', why })
-    out(`veredicto descartado: ${why}`)
+    out(`verdict discarded: ${why}`)
     return OUTCOMES.DISCARDED
   }
   // THE PRODUCT BELONGS TO THIS INPUT. Here is where the recycled verdict
@@ -2087,7 +2087,7 @@ function verdictVerb() {
   if (verdict.review_token !== token) {
     const whyForeign = whyForeignToken(verdict.review_token, token)
     measure('judge', { outcome: 'discarded', why: whyForeign })
-    out(`veredicto descartado: ${whyForeign}`)
+    out(`verdict discarded: ${whyForeign}`)
     return OUTCOMES.DISCARDED
   }
   const outcome = outcomeOfVerdict(verdict)
@@ -2140,9 +2140,9 @@ function verdictVerb() {
     // not there. The work is committed; the evidence that it did not travel is
     // counted.
     if (git(['add', '--', path], { allowFail: true }) === null) {
-      err(`warning: el veredicto se escribió en ${path} pero NO se pudo stagear, así que no viajará en la pull request (¿la ruta está gitignoreada en este repo?). La tarea se comitea igual.`)
+      err(`warning: the verdict was written to ${path} but could NOT be staged, so it will not travel in the pull request (is the path gitignored in this repo?). The task is committed all the same.`)
     } else {
-      out(`veredicto guardado y stageado: ${path}`)
+      out(`verdict saved and staged: ${path}`)
     }
     // THE INDEX'S SEAL — the THIRD equality (slice 12).
     //
@@ -2173,7 +2173,7 @@ function verdictVerb() {
     // to implementing or closes the run; a discard asks again.
     run = { ...run, sealedTree: indexTree() }
   }
-  out(`veredicto ${verdict.ruling} con ${verdict.findings.length} hallazgo(s) → ${outcome}`)
+  out(`verdict ${verdict.ruling} with ${verdict.findings.length} finding(s) → ${outcome}`)
   return outcome
 }
 
@@ -2189,13 +2189,13 @@ function verdictVerb() {
 function adviceVerb() {
   const packagePath = join(workDir, `task-${run.task}-advice.md`)
   if (!existsSync(packagePath)) {
-    const why = `el paquete del consejero no existe (${packagePath}): el consejero aconsejó a ciegas — vuelve a "ct-step next", que es el único paso que lo genera, y REDESPACHA al consejero con el paquete nuevo`
+    const why = `the advisor's package does not exist (${packagePath}): the advisor advised blind — go back to "ct-step next", the only step that generates it, and REDISPATCH the advisor with the new package`
     measure(STEPS.ADVISE, { outcome: 'discarded', why })
-    out(`consejo descartado: ${why}`)
+    out(`advice discarded: ${why}`)
     return OUTCOMES.DISCARDED
   }
   const path = process.argv[3]
-  const { value, why: whyRead } = readJson(path, 'del consejo')
+  const { value, why: whyRead } = readJson(path, 'advice')
   const { advice, why } = whyRead ? { why: whyRead } : readAdvice(value)
   measure(STEPS.ADVISE, {
     outcome: advice ? 'done' : 'discarded',
@@ -2209,7 +2209,7 @@ function adviceVerb() {
     ...roleMeasures(STEPS.ADVISE, packagePath),
   })
   if (!advice) {
-    out(`consejo descartado: ${why}`)
+    out(`advice discarded: ${why}`)
     return OUTCOMES.DISCARDED
   }
   run = { ...run, lastAdvice: advice }
@@ -2218,7 +2218,7 @@ function adviceVerb() {
   // so that a git failure while cleaning does not sweep away the advice that
   // could be read.
   const cleaned = resetTaskTree()
-  out(`consejo aceptado: ${advice.files_to_reconsider.length} ruta(s) a reconsiderar; el árbol vuelve al último commit en ${cleaned} ruta(s)`)
+  out(`advice accepted: ${advice.files_to_reconsider.length} path(s) to reconsider; the tree goes back to the last commit in ${cleaned} path(s)`)
   return OUTCOMES.DONE
 }
 
@@ -2273,15 +2273,15 @@ function commitVerb() {
   // is 8, and the run stays stopped at `commit` with the seal written in the
   // state file, which is what has to be read in order to fix it.
   if (typeof run.sealedTree !== 'string') {
-    err(`el estado no trae el sello del índice (sealedTree) que el veredicto de esta tarea tenía que dejar: o este run venía de una versión del plugin anterior a esta comprobación —se quedó parado en "commit" mientras se actualizaba—, o alguien editó ${stateFile}. Sin sello no se puede afirmar que lo stageado sea lo que el juez aprobó, y este programa no comitea lo que no puede afirmar. Compruébalo tú y comitea a mano (el veredicto está en docs/superpowers/verdicts/issue-${issue}-task-${run.task}.json), o arranca el run de nuevo: lo que no hay es un modo sin barandilla que se active BORRANDO un campo.`)
+    err(`the state does not carry the index seal (sealedTree) that this task's verdict was supposed to leave: either this run came from a plugin version older than this check —it stayed parked at "commit" while it was being updated—, or somebody edited ${stateFile}. With no seal it cannot be asserted that what is staged is what the judge approved, and this program does not commit what it cannot assert. Check it yourself and commit by hand (the verdict is at docs/superpowers/verdicts/issue-${issue}-task-${run.task}.json), or start the run again: what there is not is a guardrail-less mode that turns on by DELETING a field.`)
     return OUTCOMES.FAILED
   }
   const currentTree = indexTree()
   if (currentTree !== run.sealedTree) {
-    err(`el índice ya no es el que el juez aprobó: al aceptar el veredicto quedó sellado el árbol ${run.sealedTree} y el del índice de ahora es ${currentTree}. Algo lo cambió DESPUÉS del veredicto, así que este commit se llevaría dentro código que ningún juez ha visto, con el veredicto de otro código viajando al lado. NO se comitea nada.
-  - para devolver el índice aprobado, tal cual y sin tocar tu worktree:  git read-tree ${run.sealedTree}
-    y repite "ct-step commit". Lo que hayas stageado después sigue en los ficheros: no se pierde, deja de estar stageado.
-  - si ese código TIENE que entrar, no entra por aquí: desde "commit" no hay vuelta al juez en este run. Sácalo del índice, comitea la tarea aprobada, y que ese trabajo entre por la tarea siguiente o por otro slice.`)
+    err(`the index is no longer the one the judge approved: on accepting the verdict the tree ${run.sealedTree} was sealed and the one of the index now is ${currentTree}. Something changed it AFTER the verdict, so this commit would take inside it code no judge has seen, with the verdict of other code travelling alongside. NOTHING is committed.
+  - to bring the approved index back, as it was and without touching your worktree:  git read-tree ${run.sealedTree}
+    and repeat "ct-step commit". Whatever you staged afterwards is still in the files: it is not lost, it stops being staged.
+  - if that code HAS to go in, it does not go in through here: from "commit" there is no way back to the judge in this run. Take it out of the index, commit the approved task, and let that work come in through the next task or through another slice.`)
     return OUTCOMES.FAILED
   }
   const t = currentTask()
@@ -2293,7 +2293,7 @@ function commitVerb() {
     return OUTCOMES.FAILED
   }
   if (!(git(['diff', '--cached', '--name-only']) || '').trim()) {
-    err(`la tarea ${run.task} no dejó nada stageado: no hay nada que commitear`)
+    err(`task ${run.task} left nothing staged: there is nothing to commit`)
     return OUTCOMES.FAILED
   }
   // The telemetry goes in HERE, with all this task's rows already written —
@@ -2316,7 +2316,7 @@ function commitVerb() {
   // run stuck. The measure is lost and the work is committed, never the other
   // way round.
   if (existsSync(join(repoRoot, METRICS_REL)) && git(['add', '--', METRICS_REL], { allowFail: true }) === null) {
-    err(`warning: no se pudo stagear la telemetría (${METRICS_REL}) — la tarea se comitea sin ella. ¿La ruta está gitignoreada en este repo?`)
+    err(`warning: the telemetry (${METRICS_REL}) could not be staged — the task is committed without it. Is the path gitignored in this repo?`)
   }
   if (git(['commit', '-m', message], { allowFail: true }) === null) return OUTCOMES.FAILED
   const sha = headSha()
@@ -2325,7 +2325,7 @@ function commitVerb() {
   // vetoes, and inheriting it would put into the next one's brief an approach
   // to a problem that no longer exists.
   run = { ...run, lastFindings: null, lastPaths: null, lastSummary: null, lastAdvice: null }
-  out(`commiteada la tarea ${run.task}/${run.tasksTotal}: ${sha.slice(0, 7)}`)
+  out(`task ${run.task}/${run.tasksTotal} committed: ${sha.slice(0, 7)}`)
   return OUTCOMES.DONE
 }
 
@@ -2338,7 +2338,7 @@ function commitVerb() {
 function writeE2eReport(runs) {
   const sectionOf = (r) => {
     const lines = [`## ${r.run}`, '', `**Veredicto:** ${r.verdict}`]
-    if (r.brought_up) lines.push('', `**Cómo se levantó:** ${r.brought_up}`)
+    if (r.brought_up) lines.push('', `**How it was brought up:** ${r.brought_up}`)
     if (r.verdict === 'verde') {
       lines.push('', '**Evidencia:**', '')
       for (const e of r.evidence || []) lines.push(`- \`${e.command}\` → \`${e.output}\``)
@@ -2347,8 +2347,8 @@ function writeE2eReport(runs) {
         '',
         `**Esperado:** ${r.expected}`,
         `**Real:** ${r.actual}`,
-        `**Cómo reproducirlo:** ${r.repro}`,
-        `**Por qué no cuenta:** ${r.refuted_by}`,
+        `**How to reproduce it:** ${r.repro}`,
+        `**Why it does not count:** ${r.refuted_by}`,
       )
     } else {
       lines.push('', `**Motivo:** ${r.reason}`, `**Para desbloquear:** ${r.unblock}`)
@@ -2364,13 +2364,13 @@ function writeE2eReport(runs) {
   // `git add` that throws. The report stays written in the tree even if it does
   // not travel in the commit; what is lost is warned about, not kept quiet.
   if (git(['add', '--', path], { allowFail: true }) === null) {
-    err(`warning: el informe de e2e se escribió en ${path} pero NO se pudo stagear, así que no viajará en la pull request (¿la ruta está gitignoreada en este repo?).`)
+    err(`warning: the e2e report was written to ${path} but could NOT be staged, so it will not travel in the pull request (is the path gitignored in this repo?).`)
   }
   return path
 }
 
 function e2eVerb() {
-  const { value, why: whyRead } = readJson(process.argv[3], 'del informe de e2e')
+  const { value, why: whyRead } = readJson(process.argv[3], 'e2e report')
   const { outcome, runs, why } = whyRead
     ? { outcome: OUTCOMES.DISCARDED, why: whyRead }
     : readE2eReport(value, run.e2eRuns)
@@ -2382,7 +2382,7 @@ function e2eVerb() {
     why: why || null,
   })
   if (outcome === OUTCOMES.DISCARDED) {
-    out(`informe de e2e descartado: ${why}`)
+    out(`e2e report discarded: ${why}`)
     return outcome
   }
   writeE2eReport(runs)
@@ -2444,9 +2444,9 @@ function commitE2eReport() {
   // (step-contracts.js), which commits every task, does not use it either.
   // Same style as that one: descriptive title + body with the why +
   // co-authorship.
-  const message = `informe de e2e del issue #${issue}
+  const message = `e2e report of issue #${issue}
 
-Generado por ct-step tras el paso e2e de la slice. No cierra el issue.
+Generated by ct-step after the slice's e2e step. It does not close the issue.
 
 ${CtStepCommit.TRAILER_LINE}
 Co-Authored-By: Claude <noreply@anthropic.com>`
@@ -2458,12 +2458,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>`
   // labelled.
   const foreign = foreignInIndex([path])
   if (foreign.length) {
-    err(`warning: el índice traía ${foreign.length} ruta(s) ajenas a la maquinaria (${foreign.join(', ')}) y este commit se las llevaría dentro sin que ningún juez las haya visto — el informe de e2e (${path}) queda STAGEADO y sin comitear. Saca lo ajeno del índice ("git restore --staged ${foreign[0]}", que no toca tu worktree) y comitéalo a mano antes de abrir la pull request.`)
+    err(`warning: the index carried ${foreign.length} path(s) foreign to the machinery (${foreign.join(', ')}) and this commit would take them inside without any judge having seen them — the e2e report (${path}) is left STAGED and uncommitted. Take what is foreign out of the index ("git restore --staged ${foreign[0]}", which does not touch your worktree) and commit it by hand before opening the pull request.`)
     return
   }
   const keywords = findClosingKeywords(message)
   if (keywords.length) {
-    err(`warning: el mensaje del commit del informe de e2e contiene una closing keyword (${keywords.map((k) => `${k.keyword} ${k.ref}`).join(', ')}) y cerraría el issue sin que nadie lo haya decidido — NO se comitea. El informe (${path}) queda stageado.`)
+    err(`warning: the commit message of the e2e report contains a closing keyword (${keywords.map((k) => `${k.keyword} ${k.ref}`).join(', ')}) and would close the issue without anybody having decided it — it is NOT committed. The report (${path}) is left staged.`)
     return
   }
   // `allowFail`, same criterion as the rest of this program's artefact
@@ -2471,10 +2471,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>`
   // has already been DELIVERED, so it warns and the file stays staged instead
   // of being lost.
   if (git(['commit', '-m', message], { allowFail: true }) === null) {
-    err(`warning: el informe de e2e (${path}) quedó stageado pero NO se pudo comitear — revísalo a mano antes de abrir la pull request.`)
+    err(`warning: the e2e report (${path}) was left staged but could NOT be committed — check it by hand before opening the pull request.`)
     return
   }
-  out(`informe de e2e comiteado: ${path}`)
+  out(`e2e report committed: ${path}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -2491,7 +2491,7 @@ try {
 
   if (run.discards >= MAX_DISCARDS && outcome === OUTCOMES.DISCARDED) {
     save()
-    die(`${run.discards} descartes en este run: se para en vez de seguir pidiendo respuestas que no se pueden leer`, EXIT.NO_VERDICT)
+    die(`${run.discards} discards in this run: it stops instead of going on asking for answers that cannot be read`, EXIT.NO_VERDICT)
   }
 
   const before = run.step
@@ -2514,23 +2514,23 @@ try {
 
   if (transition.state === RUN_STATES.OPEN) {
     out('')
-    out(`siguiente: tarea ${run.task}/${run.tasksTotal}, paso ${run.step} — pregunta con "ct-step next"`)
+    out(`next: task ${run.task}/${run.tasksTotal}, step ${run.step} — ask with "ct-step next"`)
     process.exit(EXIT.OK)
   }
 
   out('')
-  out(`run ${transition.state}: tarea ${run.task}/${run.tasksTotal}, ${run.discards} descarte(s)`)
+  out(`run ${transition.state}: task ${run.task}/${run.tasksTotal}, ${run.discards} discard(s)`)
   process.exit(exitCodeOf(transition.state, before, outcome))
 } catch (e) {
   save()
-  err(`excepción no prevista: ${e.stack || e.message}`)
+  err(`unforeseen exception: ${e.stack || e.message}`)
   process.exit(EXIT.UNNAMED)
 }
 
 function exitCodeOf(state, step, outcome) {
   switch (state) {
     case RUN_STATES.DELIVERED:
-      out('las tareas comiteadas, la Global verification en verde y el slice con veredicto PASS: la rama está lista para la pull request.')
+      out('the tasks committed, the Global verification green and the slice with a PASS verdict: the branch is ready for the pull request.')
       return EXIT.OK
     case RUN_STATES.BLOCKED_COMMIT: return EXIT.PRECONDITION
     // Phase B: the reconciler and, once its budget was spent, the slice agent

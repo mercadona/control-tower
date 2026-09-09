@@ -27,7 +27,7 @@ describe('the Global verification is run by the program (§3.7-A)', () => {
     twoTasks()
     const r = ct('next')
     expect(r.status).toBe(0)
-    expect(r.stdout).toMatch(/las 2 tareas comiteadas/)
+    expect(r.stdout).toMatch(/the 2 tasks committed/)
     expect(r.stdout).toMatch(/GLOBAL VERIFICATION/)
     expect(r.stdout).toMatch(/test -f uno\.txt && test -f dos\.txt/)
   })

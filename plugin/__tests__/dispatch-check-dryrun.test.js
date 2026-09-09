@@ -206,7 +206,7 @@ describe('dispatch-check --dry-run', () => {
     } catch (e) {
       threw = true
       expect(e.status).toBe(7)
-      expect((e.stdout || '') + (e.stderr || '')).toMatch(/no está entregado.*tarea 1\/3.*judge/)
+      expect((e.stdout || '') + (e.stderr || '')).toMatch(/is not delivered.*task 1\/3.*judge/)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

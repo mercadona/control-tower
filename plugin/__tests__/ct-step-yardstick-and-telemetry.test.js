@@ -38,7 +38,7 @@ describe('what the implementer warns about, and the telemetry, do not stay where
     ct('controls')
     judgeTask(writeVerdict('PASS'))
     const r = ct('next')
-    expect(r.stdout).toMatch(/paso: commit/)
+    expect(r.stdout).toMatch(/step: commit/)
     expect(r.stdout).toMatch(/lockfile sin hacer valer/)
   })
 
@@ -151,11 +151,11 @@ describe('a failure of the telemetry cannot bring the task down', () => {
     const r = judgeSlice(writeSliceVerdict('PASS'))
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/run delivered/)
-    expect(r.stderr).toMatch(/nada que commitear del veredicto del slice/)
+    expect(r.stderr).toMatch(/nothing to commit of the slice's verdict/)
     expect(runState().closed).toBe('delivered')
     // 1 base + 1 gitignore + 2 tasks, and NO verdict commit at all.
     expect(commits()).toBe(4)
-    expect(log()).not.toMatch(/Veredicto del slice entero/)
+    expect(log()).not.toMatch(/Verdict of the whole slice/)
   })
 })
 
