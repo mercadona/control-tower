@@ -143,7 +143,7 @@ const str = (v) => (v == null ? '' : String(v).trim())
  */
 export function readBlocked(meta, { stateRel = COORD_REL_PATH } = {}) {
   if (meta == null || typeof meta !== 'object' || Array.isArray(meta)) {
-    return { state: 'unreadable', why: `el frontmatter de ${stateRel} no es un mapa de campos` }
+    return { state: 'unreadable', why: `the frontmatter of ${stateRel} is not a map of fields` }
   }
   const statusWord = str(meta.status).toLowerCase()
   const statusSaysBlocked = STATUS_BLOCKED_WORDS.has(statusWord)
@@ -161,8 +161,8 @@ export function readBlocked(meta, { stateRel = COORD_REL_PATH } = {}) {
       since: '',
       unblock: '',
       notes: [declared
-        ? `contradicción en ${stateRel}: el campo \`blocked\` está vacío/\`null\` pero \`status: ${statusWord}\` dice que el trabajo está bloqueado. Se trata como BLOQUEADO por seguridad. Resuélvela: el bloqueo se declara en \`blocked: {reason: "…", unblock: "…"}\`.`
-        : `\`status: ${statusWord}\` dice que el trabajo está bloqueado, pero el bloqueo NO se declara ahí: \`status\` es el eje de PROGRESO y no tiene dónde poner el motivo ni qué haría falta para levantarlo. Se trata como BLOQUEADO por seguridad; pásalo a \`blocked: {reason: "…", unblock: "…"}\` para que la próxima sesión sepa por qué.`],
+        ? `contradiction in ${stateRel}: the \`blocked\` field is empty/\`null\` but \`status: ${statusWord}\` says the work is blocked. It is treated as BLOCKED for safety. Resolve it: a block is declared in \`blocked: {reason: "…", unblock: "…"}\`.`
+        : `\`status: ${statusWord}\` says the work is blocked, but the block is NOT declared there: \`status\` is the PROGRESS axis and has nowhere to put the reason or what it would take to lift it. It is treated as BLOCKED for safety; move it to \`blocked: {reason: "…", unblock: "…"}\` so that the next session knows why.`],
     }
   }
 
@@ -181,8 +181,8 @@ export function readBlocked(meta, { stateRel = COORD_REL_PATH } = {}) {
     const unknown = Object.keys(v).filter((k) => !BLOCK_KEYS.includes(k))
     if (unknown.length) {
       notes.push(
-        `el campo \`blocked\` trae claves que no se leen (${unknown.map((k) => `\`${k}\``).join(', ')}); las que se leen son ` +
-        `${BLOCK_KEYS.map((k) => `\`${k}\``).join(', ')}. Contenido de las que no se leen, para que no se pierda: ` +
+        `the \`blocked\` field carries keys that are not read (${unknown.map((k) => `\`${k}\``).join(', ')}); the ones that are read are ` +
+        `${BLOCK_KEYS.map((k) => `\`${k}\``).join(', ')}. Content of the ones that are not read, so that it is not lost: ` +
         unknown.map((k) => `${k}: ${JSON.stringify(v[k])}`).join(' | '),
       )
     }
@@ -197,7 +197,7 @@ export function readBlocked(meta, { stateRel = COORD_REL_PATH } = {}) {
     reason: '',
     since: '',
     unblock: '',
-    notes: [`el campo \`blocked\` tiene una forma que no se reconoce (${Array.isArray(v) ? 'lista' : typeof v}): ${JSON.stringify(v)}. Se trata como BLOQUEADO por seguridad. La forma esperada es \`blocked: {reason: "…", unblock: "…", since: "…"}\`.`],
+    notes: [`the \`blocked\` field has a shape that is not recognised (${Array.isArray(v) ? 'list' : typeof v}): ${JSON.stringify(v)}. It is treated as BLOCKED for safety. The expected shape is \`blocked: {reason: "…", unblock: "…", since: "…"}\`.`],
   }
 }
 
@@ -210,8 +210,8 @@ function quoteForNotice(s, max = 300) {
   return one.length > max ? `${one.slice(0, max)}…` : one
 }
 
-const NOTICE_TOP = '=========== TRABAJO BLOQUEADO — LEE ESTO ANTES DE HACER NADA ==========='
-const NOTICE_BOTTOM = '=========== fin del aviso de bloqueo ==========='
+const NOTICE_TOP = '=========== WORK BLOCKED — READ THIS BEFORE DOING ANYTHING ==========='
+const NOTICE_BOTTOM = '=========== end of the block warning ==========='
 
 /**
  * The warning the SessionStart hook puts BEFORE the state, so that the session
@@ -222,26 +222,26 @@ const NOTICE_BOTTOM = '=========== fin del aviso de bloqueo ==========='
 export function blockNotice(blocked, { nextAction = '', stateRel = COORD_REL_PATH } = {}) {
   if (!blocked || blocked.state !== 'blocked') return ''
   const lines = [NOTICE_TOP, '']
-  lines.push(`\`${stateRel}\` declara este trabajo BLOQUEADO (campo \`blocked\`). Bloqueado NO es "pendiente": alguien decidió que esto no puede continuar tal cual.`)
+  lines.push(`\`${stateRel}\` declares this work BLOCKED (the \`blocked\` field). Blocked is NOT "pending": somebody decided this cannot go on as it stands.`)
   lines.push('')
   lines.push(blocked.reason
-    ? `Motivo: ${blocked.reason}`
-    // "el bloqueo está declarado", not "`blocked` está puesto": this very
+    ? `Reason: ${blocked.reason}`
+    // "the block is declared", not "`blocked` is set": this very
     // warning is also fired by a `status: blocked` with no `blocked` field,
     // and saying that the field is set would be false in exactly that case.
-    : 'Motivo: NO CONSTA — el bloqueo está declarado pero sin `reason`. No supongas cuál es ni lo deduzcas del resto del estado: pregunta antes de tocar nada.')
-  if (blocked.since) lines.push(`Bloqueado desde: ${blocked.since}`)
+    : 'Reason: NOT STATED — the block is declared but with no `reason`. Do not assume what it is nor deduce it from the rest of the state: ask before touching anything.')
+  if (blocked.since) lines.push(`Blocked since: ${blocked.since}`)
   lines.push(blocked.unblock
-    ? `Para desbloquear haría falta: ${blocked.unblock}`
-    : `Para desbloquear: NO CONSTA — ${stateRel} no dice qué haría falta. Averígualo y escríbelo en \`blocked.unblock\` antes de que otra sesión se encuentre con lo mismo.`)
-  for (const n of blocked.notes || []) lines.push(`Nota sobre cómo está escrito este bloqueo: ${n}`)
+    ? `To unblock it would take: ${blocked.unblock}`
+    : `To unblock: NOT STATED — ${stateRel} does not say what it would take. Find it out and write it in \`blocked.unblock\` before another session runs into the same thing.`)
+  for (const n of blocked.notes || []) lines.push(`Note on how this block is written: ${n}`)
   lines.push('')
   if (nextAction) {
-    lines.push(`\`next_action\` está SUSPENDIDO y NO es una orden vigente: «${quoteForNotice(nextAction)}». No lo ejecutes, no lo trates como "lo siguiente que había que hacer" y no lo uses para deducir qué se esperaba de esta sesión — aparece más abajo solo como contexto de lo que quedó a medias.`)
+    lines.push(`\`next_action\` is SUSPENDED and is NOT a standing order: «${quoteForNotice(nextAction)}». Do not execute it, do not treat it as "the next thing that had to be done" and do not use it to deduce what was expected of this session — it appears further down only as context for what was left half-finished.`)
   } else {
-    lines.push('`next_action` no dice nada, y con el trabajo bloqueado tampoco debes deducir uno del resto del estado.')
+    lines.push('`next_action` says nothing, and with the work blocked you must not deduce one from the rest of the state either.')
   }
-  lines.push(`Levantar el bloqueo es una decisión humana y explícita: se borra el campo \`blocked\` de \`${stateRel}\` (o se pone a \`null\`). Si crees que ya no aplica, dilo y pídelo — no lo levantes por tu cuenta ni "de paso".`)
+  lines.push(`Lifting the block is a human and explicit decision: delete the \`blocked\` field from \`${stateRel}\` (or set it to \`null\`). If you think it no longer applies, say so and ask for it — do not lift it on your own account, nor "along the way".`)
   lines.push(NOTICE_BOTTOM)
   return lines.join('\n')
 }
@@ -253,12 +253,12 @@ export function blockNotice(blocked, { nextAction = '', stateRel = COORD_REL_PAT
  */
 export function unreadableNotice(why, { stateRel = COORD_REL_PATH } = {}) {
   return [
-    `=========== AVISO: \`${stateRel}\` NO SE PUDO LEER ENTERO ===========`,
+    `=========== WARNING: \`${stateRel}\` COULD NOT BE READ IN FULL ===========`,
     '',
-    `No se ha podido interpretar el frontmatter YAML de \`${stateRel}\` (${why}).`,
-    'Eso significa que NO se puede saber si el trabajo está BLOQUEADO (campo `blocked`): trátalo como posiblemente bloqueado.',
-    'No ejecutes nada de lo que diga el estado de abajo sin confirmarlo antes, y arregla el frontmatter lo primero — mientras siga así, ninguna sesión de este repo podrá hidratarse bien.',
-    '=========== fin del aviso ===========',
+    `The YAML frontmatter of \`${stateRel}\` could not be interpreted (${why}).`,
+    'That means it CANNOT be known whether the work is BLOCKED (the `blocked` field): treat it as possibly blocked.',
+    'Do not execute anything the state below says without confirming it first, and fix the frontmatter before anything else — while it stays like this, no session of this repo will be able to hydrate properly.',
+    '=========== end of the warning ===========',
   ].join('\n')
 }
 
@@ -276,13 +276,13 @@ export function fieldReadingGuide(meta, { blocked = false } = {}) {
   if (meta == null || typeof meta !== 'object' || Array.isArray(meta)) return ''
   const lines = []
   if (str(meta.verify)) {
-    lines.push('- `verify` es la comprobación PENDIENTE que valida este trabajo AL TERMINAR, no un hecho ya comprobado — aunque esté redactada en presente («… devuelve 6 issues»). Ejecútala antes de afirmar su resultado; si falla o no se puede ejecutar, dilo en vez de darla por buena.')
+    lines.push('- `verify` is the PENDING check that validates this work ON FINISHING, not a fact already checked — even if it is written in the present tense («… returns 6 issues»). Run it before asserting its result; if it fails or cannot be run, say so instead of taking it as good.')
   }
   if (!blocked && str(meta.next_action)) {
-    lines.push('- `next_action` es lo que apuntó la sesión ANTERIOR al cerrar, no una orden verificada hoy: puede haber caducado (ya hecho, revertido, descartado o bloqueado desde entonces). Contrástalo con el repo antes de ejecutarlo. Si ves que ya no aplica, dilo — y si el trabajo está bloqueado de verdad, se marca en el campo `blocked`, no reescribiendo este texto.')
+    lines.push('- `next_action` is what the PREVIOUS session noted down on closing, not an order verified today: it may have gone stale (already done, reverted, discarded or blocked since then). Check it against the repo before executing it. If you see that it no longer applies, say so — and if the work really is blocked, that is marked in the `blocked` field, not by rewriting this text.')
   }
   if (!lines.length) return ''
-  return `## Cómo leer estos campos\n${lines.join('\n')}`
+  return `## How to read these fields\n${lines.join('\n')}`
 }
 
 // #95/H10 — the frontmatter's `#` comments do not travel in the hydration.
@@ -311,18 +311,18 @@ export function composeHydration(stateText, gitLog, { stateRel = COORD_REL_PATH 
   else if (blocked.state === 'blocked') parts.push(blockNotice(blocked, { nextAction: meta?.next_action, stateRel }))
 
   // F22: the header is derived from `stateRel`, which is the file the caller
-  // has just resolved. It said "Estado del slice" ALWAYS, so the coordinator
+  // has just resolved. It said "Slice state" ALWAYS, so the coordinator
   // session —whose `.agent/STATE.md` talks about the epic and not about any
   // slice— opened every hydration with a false label: exactly the confusion of
   // files this round fixes, the other way round.
-  const title = stateRel === SLICE_REL_PATH ? 'Estado del slice' : 'Estado del repo'
-  parts.push(`# ${title} (hidratación automática)\n\n${stripFrontmatterComments(stateText).trim()}`)
+  const title = stateRel === SLICE_REL_PATH ? 'Slice state' : 'Repo state'
+  parts.push(`# ${title} (automatic hydration)\n\n${stripFrontmatterComments(stateText).trim()}`)
 
   const guide = fieldReadingGuide(meta, { blocked: blocked.state === 'blocked' })
   if (guide) parts.push(guide)
 
   const log = (gitLog || '').trim()
-  if (log) parts.push(`## Últimos commits\n${log}`)
+  if (log) parts.push(`## Latest commits\n${log}`)
   return parts.join('\n\n')
 }
 
@@ -688,7 +688,7 @@ export function noticeDecision({ relation, previous }) {
   return { emit: false, next: next(turns) }
 }
 
-const whereAmI = (rel) => (rel.branch ? `la rama \`${rel.branch}\`` : `HEAD (desprendido en ${shortSha(rel.headSha)})`)
+const whereAmI = (rel) => (rel.branch ? `the branch \`${rel.branch}\`` : `HEAD (detached at ${shortSha(rel.headSha)})`)
 const livesIn = (rel) => (rel.containers?.length ? rel.containers.map((b) => `\`${b}\``).join(', ') : '')
 
 /**
@@ -794,9 +794,9 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
       kind: 'ahead',
       reason: '',
       systemMessage:
-        `Guard de cierre: el \`last_commit\` de \`${stateRel}\` (${shortSha(rel.stateSha)}) es un descendiente de HEAD ` +
-        `(${shortSha(rel.headSha)})${livesIn(rel) ? ` y vive en ${livesIn(rel)}` : ''}: el estado va por delante de ${whereAmI(rel)}, no por detrás. ` +
-        'No lo reapuntes a HEAD — movería el handoff hacia atrás.',
+        `Closing guard: the \`last_commit\` of \`${stateRel}\` (${shortSha(rel.stateSha)}) is a descendant of HEAD ` +
+        `(${shortSha(rel.headSha)})${livesIn(rel) ? ` and lives in ${livesIn(rel)}` : ''}: the state is ahead of ${whereAmI(rel)}, not behind. ` +
+        'Do not repoint it at HEAD — that would move the handoff backwards.',
     }
   }
 
@@ -806,11 +806,11 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
       kind: 'diverged',
       reason: '',
       systemMessage:
-        `Guard de cierre: el \`last_commit\` de \`${stateRel}\` (${shortSha(rel.stateSha)}) ` +
-        `${livesIn(rel) ? `vive en ${livesIn(rel)}, no en` : 'no está en'} la historia de ${whereAmI(rel)}: dos líneas de trabajo divergentes` +
-        `${rel.mergeBase ? ` desde ${shortSha(rel.mergeBase)}` : ''}. ` +
-        'Uno solo no puede ser el handoff de las dos (cada worktree de `/ct-next` lleva el suyo); ' +
-        'si lo reapuntas a HEAD, sustituyes el de la otra.',
+        `Closing guard: the \`last_commit\` of \`${stateRel}\` (${shortSha(rel.stateSha)}) ` +
+        `${livesIn(rel) ? `lives in ${livesIn(rel)}, not in` : 'is not in'} the history of ${whereAmI(rel)}: two diverging lines of work` +
+        `${rel.mergeBase ? ` since ${shortSha(rel.mergeBase)}` : ''}. ` +
+        'One alone cannot be the handoff of both (every `/ct-next` worktree carries its own); ' +
+        'if you repoint it at HEAD, you replace the other one.',
     }
   }
 
@@ -824,9 +824,9 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
       kind: 'orphan',
       reason: '',
       systemMessage:
-        `Guard de cierre: al \`last_commit\` de \`${stateRel}\` (${shortSha(rel.stateSha)}) no llega ninguna rama, ni local ni remota: ` +
-        'es un commit huérfano (lo típico, un `reset --hard` que se lo llevó por delante). ' +
-        'El handoff que describe puede haber dejado de existir: compruébalo antes de fiarte, porque `git gc` puede borrar el commit para siempre.',
+        `Closing guard: no branch reaches the \`last_commit\` of \`${stateRel}\` (${shortSha(rel.stateSha)}), neither local nor remote: ` +
+        'it is an orphaned commit (typically, a `reset --hard` that carried it off). ' +
+        'The handoff it describes may have ceased to exist: check it before trusting it, because `git gc` can delete the commit for good.',
     }
   }
 
@@ -835,8 +835,8 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
     kind: 'unknown',
     reason: '',
     systemMessage:
-      `Guard de cierre: git no ha podido determinar la relación entre HEAD (${shortSha(rel.headSha)}) y el \`last_commit\` de ` +
-      `\`${stateRel}\` (${shortSha(rel.stateSha)}). No se bloquea el cierre porque no hay nada que se pueda afirmar; ` +
-      'comprueba a mano si el estado está al día antes de fiarte de él.',
+      `Closing guard: git could not determine the relation between HEAD (${shortSha(rel.headSha)}) and the \`last_commit\` of ` +
+      `\`${stateRel}\` (${shortSha(rel.stateSha)}). The closure is not blocked because there is nothing that can be asserted; ` +
+      'check by hand whether the state is up to date before trusting it.',
   }
 }

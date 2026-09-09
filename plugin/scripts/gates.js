@@ -360,16 +360,16 @@ export function renderGatesIssueContent(resolution, type) {
   const lines = []
   const gates = inGateOrder(resolution.gates || [])
   if (gates.length) {
-    lines.push('Antes de mergear, estos gates los cierra un HUMANO — el agente que implementa el slice no puede darlos por cumplidos:')
+    lines.push('Before merging, these gates are closed by a HUMAN — the agent that implements the slice cannot consider them met:')
     for (const g of gates) lines.push(`- ${GATES[g].issue}`)
   } else {
-    lines.push('- (ninguno) — este slice no exige ningún gate humano antes de mergear.')
+    lines.push('- (none) — this slice demands no human gate before merging.')
   }
   for (const g of resolution.added || []) {
-    lines.push(`- ⚠️ el gate \`${g}\` lo pide el spec para ESTE slice: no viene de su \`Tipo\`${type ? ` (\`${type}\`)` : ''}.`)
+    lines.push(`- ⚠️ the \`${g}\` gate is asked for by the spec for THIS slice: it does not come from its \`Tipo\`${type ? ` (\`${type}\`)` : ''}.`)
   }
   for (const g of resolution.waived || []) {
-    lines.push(`- ⚠️ RENUNCIA explícita: el gate \`${g}\`, que implica el \`Tipo\` de este slice (\`${type}\`), se ha retirado a propósito en la tabla §9 del spec (\`Gate: !${g}\`). Nadie lo comprobará antes de mergear.`)
+    lines.push(`- ⚠️ explicit WAIVER: the \`${g}\` gate, which this slice's \`Tipo\` (\`${type}\`) implies, has been deliberately withdrawn in the spec's §9 table (\`Gate: !${g}\`). Nobody will check it before merging.`)
   }
   return lines.join('\n')
 }

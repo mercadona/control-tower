@@ -20,7 +20,7 @@ class ExitCode {
 }
 
 class BenchArguments {
-  static USAGE = 'uso: judge-bench.mjs --agent <ruta al .md del agente> [--runs N] [--case <nombre>] [--dry-run] [--budget-usd <n>] [--cases <dir>]'
+  static USAGE = 'usage: judge-bench.mjs --agent <path to the agent .md> [--runs N] [--case <name>] [--dry-run] [--budget-usd <n>] [--cases <dir>]'
   static DEFAULT_RUNS = 5
   static DEFAULT_BUDGET_USD = 3
   static PLUGIN_ROOT = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -41,15 +41,15 @@ class BenchArguments {
       const at = argv.indexOf(flag)
       if (at === -1) return undefined
       const next = argv[at + 1]
-      if (typeof next !== 'string' || next.startsWith('--')) throw new Error(`${flag} necesita un valor`)
+      if (typeof next !== 'string' || next.startsWith('--')) throw new Error(`${flag} needs a value`)
       return next
     }
     const agentPath = value('--agent')
     if (agentPath === undefined) throw new Error('falta --agent')
     const runs = value('--runs') === undefined ? BenchArguments.DEFAULT_RUNS : Number(value('--runs'))
-    if (!(Number.isInteger(runs) && runs >= 1)) throw new Error(`--runs debe ser un entero positivo, no ${JSON.stringify(value('--runs'))}`)
+    if (!(Number.isInteger(runs) && runs >= 1)) throw new Error(`--runs must be a positive integer, not ${JSON.stringify(value('--runs'))}`)
     const budgetUsd = value('--budget-usd') === undefined ? BenchArguments.DEFAULT_BUDGET_USD : Number(value('--budget-usd'))
-    if (!(Number.isFinite(budgetUsd) && budgetUsd > 0)) throw new Error(`--budget-usd debe ser un número positivo, no ${JSON.stringify(value('--budget-usd'))}`)
+    if (!(Number.isFinite(budgetUsd) && budgetUsd > 0)) throw new Error(`--budget-usd must be a positive number, not ${JSON.stringify(value('--budget-usd'))}`)
     return new BenchArguments({
       agentPath: resolve(agentPath),
       runs,
@@ -158,14 +158,14 @@ class Program {
       console.error(`no se puede montar el banco: \`${ClaudeRunner.BINARY}\` no está en el PATH o no responde a --version.`)
       return ExitCode.PRECONDITION
     }
-    console.error(`banco del juez: ${cases.length} caso(s) × ${args.runs} run(s); directorio de trabajo ${workspaceRoot}`)
+    console.error(`judge bench: ${cases.length} case(s) × ${args.runs} run(s); working directory ${workspaceRoot}`)
     const report = bench.run({
       cases,
       runs: args.runs,
       onResult: (result) => console.error(`  ${result.caseName} #${result.attempt}: ${result.outcome} — ${result.detail}${result.costUsd === null ? '' : ` (${result.costUsd.toFixed(4)} USD)`}`),
     })
     console.log(report.render())
-    console.log(`Directorio de trabajo con briefs, paquetes y veredictos: ${workspaceRoot}`)
+    console.log(`Working directory with briefs, packages and verdicts: ${workspaceRoot}`)
     return report.allHit ? ExitCode.ALL_HIT : ExitCode.SOME_MISSED
   }
 }

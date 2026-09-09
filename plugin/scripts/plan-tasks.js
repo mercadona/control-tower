@@ -473,23 +473,23 @@ function countsOverManyFiles(stage) {
 const NOT_A_PREDICATE = [
   {
     matches: (words) => isGrepCountInvocation(words),
-    why: '`grep -c` sale con 0 si encuentra AL MENOS UNA coincidencia y con 1 si no encuentra ninguna: su código de salida nunca dice cuántas. Un control que afirma una cuenta se escribe como predicado — `test "$(… | grep -c …)" -eq N` — y entonces el exit code ES la afirmación. (`grep -q`, o el `grep` pelado, sí valen: ahí el exit code ya es la aserción.)',
+    why: '`grep -c` exits with 0 if it finds AT LEAST ONE match and with 1 if it finds none: its exit code never says how many. A check that asserts a count is written as a predicate — `test "$(… | grep -c …)" -eq N` — and then the exit code IS the assertion. (`grep -q`, or a bare `grep`, do hold: there the exit code already is the assertion.)',
   },
   {
     matches: (words, piped, stage) => countsOverManyFiles(stage),
-    why: '`grep -c` con dos o más ficheros imprime `fichero:cuenta` por cada uno, así que la sustitución devuelve varias líneas y `test` sale con 2 ("integer expression expected") diga lo que diga el código: el control es rojo siempre y ningún implementador puede arreglarlo desde el código. Con un solo fichero (o con una tubería) `grep -c` sí imprime un número. Para "no queda ninguna aparición en estos ficheros" el predicado es `test -z "$(grep -l ... fichero1 fichero2)"`, que enumera nombres y cuya lista vacía ES la afirmación.',
+    why: '`grep -c` with two or more files prints `file:count` for each one, so the substitution returns several lines and `test` exits with 2 ("integer expression expected") whatever the code says: the check is red always and no implementer can fix it from the code. With a single file (or with a pipeline) `grep -c` does print a number. For "no occurrence is left in these files" the predicate is `test -z "$(grep -l ... file1 file2)"`, which lists names and whose empty list IS the assertion.',
   },
   {
     matches: (words) => words[0] === 'wc',
-    why: '`wc` sale con 0 con doce líneas y con doce mil: lo que el plan afirma es el número, y el número va por la salida estándar, no por el código de salida. Envuélvelo en un predicado: `test "$(wc -l < fichero)" -le 150`.',
+    why: '`wc` exits with 0 with twelve lines and with twelve thousand: what the plan asserts is the number, and the number travels on standard output, not through the exit code. Wrap it in a predicate: `test "$(wc -l < file)" -le 150`.',
   },
   {
     matches: (words, piped) => piped && /^(tail|head)$/.test(words[0]),
-    why: 'cerrar una tubería con `tail` o `head` tira el código de salida del comando que importa y deja el de `tail`, que es 0 casi siempre — `make check 2>&1 | tail -80` sale por 0 aunque `make check` haya fallado. Deja el comando solo, o captura su código sin tubería (`cmd > fichero 2>&1; echo $?`).',
+    why: 'closing a pipeline with `tail` or `head` throws away the exit code of the command that matters and leaves `tail`\'s, which is 0 almost always — `make check 2>&1 | tail -80` exits 0 even though `make check` failed. Leave the command on its own, or capture its code without a pipeline (`cmd > file 2>&1; echo $?`).',
   },
   {
     matches: (words) => words[0] === 'git' && words[1] === 'status',
-    why: '`git status` sale con 0 con el árbol sucio y con el árbol limpio, así que como control no mide nada. Para "no queda nada sin commitear" el predicado es `test -z "$(git status --porcelain)"`.',
+    why: '`git status` exits with 0 with a dirty tree and with a clean tree, so as a check it measures nothing. For "nothing is left uncommitted" the predicate is `test -z "$(git status --porcelain)"`.',
   },
 ]
 
@@ -526,7 +526,7 @@ const GLOBAL_NA = /^N\/A\b/i
 function extractGlobal(lines, push) {
   const from = lines.findIndex((l) => l.structural && GLOBAL_HEADING.test(l.line))
   if (from === -1) {
-    push(0, 'global-verification-block', 'el plan no declara "## 8. Global verification": la validación de punta a punta no puede ejecutarla un programa que no sabe dónde buscarla.')
+    push(0, 'global-verification-block', 'the plan does not declare "## 8. Global verification": an end-to-end validation cannot be run by a program that does not know where to look for it.')
     return { commands: [] }
   }
   let to = lines.findIndex((l, i) => i > from && l.structural && /^## /.test(l.line))
@@ -638,7 +638,7 @@ export function extractTasks(markdown) {
         // out of scope, with a message that does not mention the format — it
         // fails on the safe side, but blindly.
         if (text.trim() !== '' && files.length === 0) {
-          push(h.n, 'files-line', `la tarea ${h.n} declara "${FILES}" pero no se extrajo ninguna ruta: las rutas van entre backticks, por ejemplo \`path/to/fichero.ext\` (create).`)
+          push(h.n, 'files-line', `task ${h.n} declares "${FILES}" but not one path was extracted: paths go between backticks, for example \`path/to/file.ext\` (create).`)
         }
       }
       if (t.startsWith(TDD) && !tddDeclared) {
@@ -659,7 +659,7 @@ export function extractTasks(markdown) {
     if (commands === null) {
       push(h.n, 'verification-block', `la tarea ${h.n} no trae bloque de comandos detrás de "${VERIFICATION}": su verificación es prosa, y un programa no ejecuta prosa.`)
     } else if (commands.length === 0) {
-      push(h.n, 'verification-block', `la tarea ${h.n} trae un bloque de comandos vacío detrás de "${VERIFICATION}".`)
+      push(h.n, 'verification-block', `task ${h.n} brings an empty command block behind "${VERIFICATION}".`)
     } else {
       for (const command of commands) {
         const span = lastPipelineStage(command)
@@ -672,7 +672,7 @@ export function extractTasks(markdown) {
       }
     }
     if (!testsDeclared) {
-      push(h.n, 'tests-line', `la tarea ${h.n} no declara "${TESTS}".`)
+      push(h.n, 'tests-line', `task ${h.n} does not declare "${TESTS}".`)
     }
 
     return {
@@ -688,7 +688,7 @@ export function extractTasks(markdown) {
     }
   })
 
-  if (!tasks.length) push(0, 'tasks', 'el plan no declara ninguna tarea ("### Task N — ...").')
+  if (!tasks.length) push(0, 'tasks', 'the plan declares no task at all ("### Task N — ...").')
 
   // The extraction of §8 runs over the COMPLETE `lines`, not over the `cuerpo`
   // of any task: with no tasks following it, the §8 of a real plan falls inside

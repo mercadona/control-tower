@@ -31,7 +31,7 @@
 //      only cosmetic (a note, it does not count).
 //   6. Asymmetry with mapGhIssue: the application stays bounded to the section
 //      (on purpose, see point 3 of the previous round), but now the WHOLE body
-//      is scanned TOO in order to warn (nota:, never divergencia:) about any
+//      is scanned TOO in order to warn (note:, never drift:) about any
 //      `merge-after` the dispatcher would see but that lives outside the
 //      recognised section — silence no longer asserts more than the tool
 //      knows.
@@ -330,11 +330,11 @@ export function diffIssue(existing, wantedIssue, wantedMilestone, ownedLabelPref
   // silence, never drift). The authority at runtime is THE ISSUE, like the gates
   // ("it is read from the issue, not from the spec"): the signal the slice judge
   // obeys is the one the issue had at dispatch time. That is why this comparison
-  // only feeds a `nota:` (see formatDrift) and NEVER enters hasDrift,
+  // only feeds a `note:` (see formatDrift) and NEVER enters hasDrift,
   // reconcileGaps or buildReconcileBody — the splice machinery is the
   // EXPERIMENTAL half that five rounds of review decided not to fatten. An old
   // epic without the section only drifts if today's spec declares a signal, and
-  // even then a nota:, never a block.
+  // even then a note:, never a block.
   const currentSignal = extractSectionContent(body, SIGNAL_HEADING)
   const wantedSignal = wantedIssue.senal ?? null
   let senalDiffers
@@ -569,29 +569,29 @@ export function hasReconcileGap(gaps) {
 
 // formatDrift: one human line per field. Title/milestone/link-to-the-spec/
 // labels/deps/ac and the "machine" duplicates (AC/Dependencias) are
-// "divergencia:" — they count towards the exit code (hasDrift) and show the
+// "drift:" — they count towards the exit code (hasDrift) and show the
 // current value and the one the spec asks for where that applies.
 // Descripción/Protegido (and their duplicates), the epic's context and
-// `strayDeps` are "nota:" — they are ALWAYS reported where they apply (total
+// `strayDeps` are "note:" — they are ALWAYS reported where they apply (total
 // silence about this would be as bad as reporting nothing), but they NEVER count
 // towards the exit code. The issue's closure is noted at the end, and only if
 // there is already some other line to report.
 export function formatDrift(diff) {
   const lines = []
   const head = `slice #${diff.order} (issue #${diff.issueNumber})`
-  if (diff.title) lines.push(`divergencia: ${head}: título difiere — issue: "${diff.title.current}", spec: "${diff.title.wanted}"`)
-  if (diff.milestone) lines.push(`divergencia: ${head}: milestone difiere — issue: "${diff.milestone.current ?? '(ninguno)'}", spec: "${diff.milestone.wanted}"`)
-  if (diff.specLink) lines.push(`divergencia: ${head}: el enlace al spec difiere — issue: "${diff.specLink.current ?? '(ausente)'}", spec: "${diff.specLink.wanted}"`)
-  for (const l of diff.labels.missing) lines.push(`divergencia: ${head}: falta la label "${l}" (la pide el spec, el issue no la tiene)`)
-  for (const l of diff.labels.extra) lines.push(`divergencia: ${head}: sobra la label "${l}" (la tiene el issue, el spec ya no la produce)`)
+  if (diff.title) lines.push(`drift: ${head}: título difiere — issue: "${diff.title.current}", spec: "${diff.title.wanted}"`)
+  if (diff.milestone) lines.push(`drift: ${head}: milestone difiere — issue: "${diff.milestone.current ?? '(ninguno)'}", spec: "${diff.milestone.wanted}"`)
+  if (diff.specLink) lines.push(`drift: ${head}: el enlace al spec difiere — issue: "${diff.specLink.current ?? '(ausente)'}", spec: "${diff.specLink.wanted}"`)
+  for (const l of diff.labels.missing) lines.push(`drift: ${head}: falta la label "${l}" (la pide el spec, el issue no la tiene)`)
+  for (const l of diff.labels.extra) lines.push(`drift: ${head}: sobra la label "${l}" (la tiene el issue, el spec ya no la produce)`)
   // F6: the number named here is the slice's ORDER in the §9 table, never an
   // issue number — saying so in the message itself keeps whoever reads the
   // report from going off to look for "issue #3", which has nothing to do with
   // it.
-  for (const d of diff.deps.missing) lines.push(`divergencia: ${head}: falta la dependencia "merge-after \`#${d}\`" (orden de slice de la tabla §9, no un número de issue; la pide el spec, el issue no la tiene)`)
-  for (const d of diff.deps.extra) lines.push(`divergencia: ${head}: sobra la dependencia "merge-after \`#${d}\`" (orden de slice de la tabla §9, no un número de issue; la tiene el issue, el spec ya no la produce)`)
-  for (const a of diff.ac.missing) lines.push(`divergencia: ${head}: falta el criterio de aceptación "${a}" (lo pide el spec, el issue no lo tiene)`)
-  for (const a of diff.ac.extra) lines.push(`divergencia: ${head}: sobra el criterio de aceptación "${a}" (lo tiene el issue, el spec ya no lo produce)`)
+  for (const d of diff.deps.missing) lines.push(`drift: ${head}: falta la dependencia "merge-after \`#${d}\`" (orden de slice de la tabla §9, no un número de issue; la pide el spec, el issue no la tiene)`)
+  for (const d of diff.deps.extra) lines.push(`drift: ${head}: sobra la dependencia "merge-after \`#${d}\`" (orden de slice de la tabla §9, no un número de issue; la tiene el issue, el spec ya no la produce)`)
+  for (const a of diff.ac.missing) lines.push(`drift: ${head}: falta el criterio de aceptación "${a}" (lo pide el spec, el issue no lo tiene)`)
+  for (const a of diff.ac.extra) lines.push(`drift: ${head}: sobra el criterio de aceptación "${a}" (lo tiene el issue, el spec ya no lo produce)`)
   for (const section of diff.duplicateMachineSections || []) {
     // Minor (review round 5): "the dispatcher does not tell the first one
     // apart" was accurate for Dependencias (it unites both copies, a scan of
@@ -601,20 +601,20 @@ export function formatDrift(diff) {
     // message no longer asserts a single mechanism for both: it names the real
     // risk, which is enough for reviewing by hand to make sense without having
     // to know which mechanism applies.
-    lines.push(`divergencia: ${head}: la sección "## ${section}" aparece más de una vez en el body — el dispatcher no reconstruye la intención de un humano a partir de "la primera" ni de "la unión": revisa y une o elimina la copia sobrante a mano`)
+    lines.push(`drift: ${head}: la sección "## ${section}" aparece más de una vez en el body — el dispatcher no reconstruye la intención de un humano a partir de "la primera" ni de "la unión": revisa y une o elimina la copia sobrante a mano`)
   }
-  if (diff.descripcionDiffers) lines.push(`nota: ${head}: la sección "## Descripción" difiere del spec (prosa — no cuenta para el exit code; --reconcile no la reescribe)`)
+  if (diff.descripcionDiffers) lines.push(`note: ${head}: la sección "## Descripción" difiere del spec (prosa — no cuenta para el exit code; --reconcile no la reescribe)`)
   // Slice 10: the signal, like Descripción, is only noted. The half sentence
   // about "the one the judge obeys" exists so that whoever reads the note knows
   // WHY it is not rewritten: at runtime the authority is the dispatch's issue,
   // not today's spec — the same contract as the gates.
-  if (diff.senalDiffers) lines.push(`nota: ${head}: la sección "${SIGNAL_HEADING}" difiere del spec (no cuenta para el exit code; --reconcile no la reescribe — la señal que obedece el juez de slice es la que el issue tenía al despachar, igual que los gates)`)
+  if (diff.senalDiffers) lines.push(`note: ${head}: la sección "${SIGNAL_HEADING}" difiere del spec (no cuenta para el exit code; --reconcile no la reescribe — la señal que obedece el juez de slice es la que el issue tenía al despachar, igual que los gates)`)
   // Task 4 deliberately left this note without saying who rewrites the section:
   // in that commit "with --reconcile it is rewritten from the spec" was still
   // false (buildReconcileBody did not touch it). Task 5 made it true.
   //
   // The final branch review moved it again: --reconcile no longer rewrites this
-  // section ALWAYS. It gives up —out loud, with a `nota:` of its own that states
+  // section ALWAYS. It gives up —out loud, with a `note:` of its own that states
   // the reason— if the heading appears twice, if there is an unclosed fence or
   // comment, if it does not exist and there is no anchor where to put it, or if
   // the only copy falls inside the "## Contexto heredado" zone. This line is
@@ -622,34 +622,34 @@ export function formatDrift(diff) {
   // cases applies, so it cannot promise the rewrite — it says what the normal
   // case is and where the exception comes from, which is exactly what it
   // knows.
-  if (diff.epicContextDiffers) lines.push(`nota: ${head}: la sección "${EPIC_CONTEXT_HEADING}" difiere del spec (no cuenta para el exit code; con --reconcile se reescribe desde el spec salvo que el body no deje hacerlo con seguridad, en cuyo caso se dice aquí mismo con otra nota y el motivo). La sección "${INHERITED_CONTEXT_HEADING}" de al lado no se toca nunca`)
-  if (diff.frozenDecisionsDiffers) lines.push(`nota: ${head}: la sección "${FROZEN_DECISIONS_HEADING}" difiere del spec (no cuenta para el exit code; con --reconcile se reescribe desde el spec salvo que el body no deje hacerlo con seguridad, en cuyo caso se dice aquí mismo con otra nota y el motivo)`)
-  if (diff.protectedDiffers) lines.push(`nota: ${head}: la sección "## Out of scope / Protected" difiere del spec (prosa — no cuenta para el exit code; --reconcile no la reescribe)`)
+  if (diff.epicContextDiffers) lines.push(`note: ${head}: la sección "${EPIC_CONTEXT_HEADING}" difiere del spec (no cuenta para el exit code; con --reconcile se reescribe desde el spec salvo que el body no deje hacerlo con seguridad, en cuyo caso se dice aquí mismo con otra nota y el motivo). La sección "${INHERITED_CONTEXT_HEADING}" de al lado no se toca nunca`)
+  if (diff.frozenDecisionsDiffers) lines.push(`note: ${head}: la sección "${FROZEN_DECISIONS_HEADING}" difiere del spec (no cuenta para el exit code; con --reconcile se reescribe desde el spec salvo que el body no deje hacerlo con seguridad, en cuyo caso se dice aquí mismo con otra nota y el motivo)`)
+  if (diff.protectedDiffers) lines.push(`note: ${head}: la sección "## Out of scope / Protected" difiere del spec (prosa — no cuenta para el exit code; --reconcile no la reescribe)`)
   // F21: the label is named as the channel that DOES count, so that whoever
   // reads this note knows where to look if a gate really worries them — without
   // that sentence, "it does not count towards the exit code" reads as "gates do
   // not matter".
-  if (diff.gatesDiffers) lines.push(`nota: ${head}: la sección "${GATES_HEADING}" difiere del spec (no cuenta para el exit code; --reconcile no la reescribe). El gate que obedece el dispatcher son las labels "gate:" de este issue, que sí se comparan arriba — si un issue es anterior a los gates, esta sección le falta entera y basta con re-groomear su body a mano`)
+  if (diff.gatesDiffers) lines.push(`note: ${head}: la sección "${GATES_HEADING}" difiere del spec (no cuenta para el exit code; --reconcile no la reescribe). El gate que obedece el dispatcher son las labels "gate:" de este issue, que sí se comparan arriba — si un issue es anterior a los gates, esta sección le falta entera y basta con re-groomear su body a mano`)
   // Unlike the Gates note next door, this one is a DRIFT: the section is the
   // only place that says WHAT to traverse, and both /ct-next (the worktree's
   // seed) and `--release` (the exit-8 door) feed off it. An issue with the label
   // and without the section is a slice that traverses nothing — see the
   // `e2eDiffers` block in diffIssue.
-  if (diff.e2eDiffers) lines.push(`divergencia: ${head}: la sección "${E2E_HEADING}" difiere del spec — de ella salen los recorridos que /ct-next siembra en el worktree y los que "dispatch-check --release" exige haber atravesado, así que un issue sin ella (o con otra cosa) no atraviesa lo que el spec pide; con --reconcile se reescribe desde el spec`)
+  if (diff.e2eDiffers) lines.push(`drift: ${head}: la sección "${E2E_HEADING}" difiere del spec — de ella salen los recorridos que /ct-next siembra en el worktree y los que "dispatch-check --release" exige haber atravesado, así que un issue sin ella (o con otra cosa) no atraviesa lo que el spec pide; con --reconcile se reescribe desde el spec`)
   for (const section of diff.duplicateSections || []) {
-    if ((diff.duplicateMachineSections || []).includes(section)) continue // already reported above as divergencia:
+    if ((diff.duplicateMachineSections || []).includes(section)) continue // already reported above as drift:
     // Only the first one is COMPARED (locateSection always returns that one),
     // and none of them is REWRITTEN: since the final branch review, --reconcile
     // gives up in the face of a duplicated section instead of writing into "the
     // first one", because one of the copies may be text pasted inside
     // "## Contexto heredado". The sections in this list are never rewritten
     // anyway, except the epic's context one.
-    lines.push(`nota: ${head}: la sección "## ${section}" aparece más de una vez en el body — solo la primera se compara, y ninguna se reescribe mientras haya dos; revisa la(s) copia(s) sobrante(s) a mano`)
+    lines.push(`note: ${head}: la sección "## ${section}" aparece más de una vez en el body — solo la primera se compara, y ninguna se reescribe mientras haya dos; revisa la(s) copia(s) sobrante(s) a mano`)
   }
   for (const d of diff.strayDeps || []) {
-    lines.push(`nota: ${head}: "merge-after #${d}" aparece fuera de la sección "## Dependencias" — desde el hardening del dispatch (D1), ya NO lo obedece nadie (ni el dispatcher real ni --reconcile); si se pretendía como dependencia real, muévelo dentro de la sección`)
+    lines.push(`note: ${head}: "merge-after #${d}" aparece fuera de la sección "## Dependencias" — desde el hardening del dispatch (D1), ya NO lo obedece nadie (ni el dispatcher real ni --reconcile); si se pretendía como dependencia real, muévelo dentro de la sección`)
   }
-  if (diff.closed && lines.length) lines.push(`nota: ${head}: el issue está cerrado — revisa antes de aplicar --reconcile`)
+  if (diff.closed && lines.length) lines.push(`note: ${head}: el issue está cerrado — revisa antes de aplicar --reconcile`)
   return lines
 }
 

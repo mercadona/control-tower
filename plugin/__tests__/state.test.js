@@ -60,18 +60,18 @@ describe('composeHydration', () => {
   })
 })
 
-// F22 — the header said "Estado del slice" ALWAYS, in the coordinator session
+// F22 — the header said "Slice state" ALWAYS, in the coordinator session
 // too, whose `.agent/STATE.md` talks about no slice at all. Now it comes out
 // of `stateRel`, which is the file the hook has just resolved.
 describe('composeHydration: the header names what the file IS', () => {
-  it('with the coordinator STATE.md (the default) it does NOT say "del slice"', () => {
+  it('with the coordinator STATE.md (the default) it does NOT say "slice"', () => {
     const out = composeHydration('ESTADO', '')
-    expect(out).toContain('# Estado del repo (hidratación automática)')
-    expect(out).not.toContain('Estado del slice')
+    expect(out).toContain('# Repo state (automatic hydration)')
+    expect(out).not.toContain('Slice state')
   })
-  it('with the SLICE.md of a dispatched worktree it does say "del slice"', () => {
+  it('with the SLICE.md of a dispatched worktree it does say "slice"', () => {
     const out = composeHydration('ESTADO', '', { stateRel: SLICE_REL_PATH })
-    expect(out).toContain('# Estado del slice (hidratación automática)')
+    expect(out).toContain('# Slice state (automatic hydration)')
   })
 })
 
@@ -86,10 +86,10 @@ describe('composeHydration with no commits', () => {
   it('omits the commits section if gitLog is empty', () => {
     const out = composeHydration('ESTADO', '')
     expect(out).toContain('ESTADO')
-    expect(out).not.toContain('Últimos commits')
+    expect(out).not.toContain('Latest commits')
   })
   it('includes the section if there are commits', () => {
-    expect(composeHydration('ESTADO', 'abc log')).toContain('Últimos commits')
+    expect(composeHydration('ESTADO', 'abc log')).toContain('Latest commits')
   })
 })
 
@@ -176,7 +176,7 @@ describe('readBlocked', () => {
   it('an unrecognised shape (a list) → blocked for safety, saying that it is not recognised', () => {
     const b = readBlocked({ blocked: ['a', 'b'] })
     expect(b.state).toBe('blocked')
-    expect(b.notes.join(' ')).toMatch(/no se reconoce/i)
+    expect(b.notes.join(' ')).toMatch(/not recognised/i)
     expect(b.notes.join(' ')).toMatch(/\["a","b"\]/)
   })
 
@@ -189,7 +189,7 @@ describe('readBlocked', () => {
     const b = readBlocked({ status: 'blocked', next_action: 'seguir' })
     expect(b.state).toBe('blocked')
     expect(b.notes.join(' ')).toMatch(/`blocked: \{reason:/) // it says the right field AND its shape
-    expect(b.notes.join(' ')).toMatch(/PROGRESO/)
+    expect(b.notes.join(' ')).toMatch(/PROGRESS/)
   })
 
   it('variants of "stopped" in `status` (bloqueado, on_hold…) too', () => {
@@ -207,7 +207,7 @@ describe('readBlocked', () => {
   it('`status: blocked` + `blocked: null` (a contradiction) → BLOCKED for safety, and it is said to be a contradiction', () => {
     const b = readBlocked({ status: 'blocked', blocked: null })
     expect(b.state).toBe('blocked')
-    expect(b.notes.join(' ')).toMatch(/contradicción/i)
+    expect(b.notes.join(' ')).toMatch(/contradiction/i)
   })
 
   it('`blocked` with a reason rules over `status` (neither the reason is lost nor the warning duplicated)', () => {
@@ -242,16 +242,16 @@ describe('composeHydration with BLOCKED work', () => {
   const out = composeHydration(STATE_BLOCKED, 'abc log')
 
   it('the blocking warning goes FIRST, before the state (it is read from the top down)', () => {
-    expect(out.split('\n')[0]).toMatch(/TRABAJO BLOQUEADO/) // la PRIMERA línea
+    expect(out.split('\n')[0]).toMatch(/WORK BLOCKED/) // the FIRST line
     // The header is the main checkout's (`composeHydration` with no
-    // `stateRel` = `.agent/STATE.md`): "del repo", not "del slice" — F22.
-    expect(out.indexOf('TRABAJO BLOQUEADO')).toBeLessThan(out.indexOf('# Estado del repo'))
+    // `stateRel` = `.agent/STATE.md`): "Repo", not "Slice" — F22.
+    expect(out.indexOf('WORK BLOCKED')).toBeLessThan(out.indexOf('# Repo state'))
   })
 
   it('declares the next_action SUSPENDED and quotes it, so that it is not read as a standing order', () => {
-    expect(out).toMatch(/SUSPENDIDO/)
+    expect(out).toMatch(/SUSPENDED/)
     expect(out).toMatch(/Lanzar la corrida REAL/)
-    expect(out).toMatch(/No lo ejecutes/i)
+    expect(out).toMatch(/Do not execute it/i)
   })
 
   it('says the reason and what it would take to unblock', () => {
@@ -261,25 +261,25 @@ describe('composeHydration with BLOCKED work', () => {
   })
 
   it('says how the block is lifted, and that the session itself must not lift it', () => {
-    expect(out).toMatch(/borra el campo `blocked`/)
-    expect(out).toMatch(/no lo levantes por tu cuenta/i)
+    expect(out).toMatch(/delete the `blocked` field/)
+    expect(out).toMatch(/do not lift it on your own account/i)
   })
 
   it('goes on injecting the whole state and the commits (no context is lost)', () => {
     expect(out).toContain('Groom preparado, sin ejecutar.')
-    expect(out).toContain('Últimos commits')
+    expect(out).toContain('Latest commits')
   })
 
-  it('blocked with neither reason nor unblock → it says so as NO CONSTA, without inventing them', () => {
+  it('blocked with neither reason nor unblock → it says so as NOT STATED, without inventing them', () => {
     const o = composeHydration('---\nnext_action: "x"\nblocked: true\n---\ncuerpo', '')
-    expect(o).toMatch(/Motivo: NO CONSTA/)
-    expect(o).toMatch(/Para desbloquear: NO CONSTA/)
+    expect(o).toMatch(/Reason: NOT STATED/)
+    expect(o).toMatch(/To unblock: NOT STATED/)
   })
 
   it('a mile-long next_action is trimmed in the warning (but stays whole in the state)', () => {
     const longText = 'x'.repeat(900)
     const o = composeHydration(`---\nnext_action: "${longText}"\nblocked: "porque sí"\n---\ncuerpo`, '')
-    const warning = o.slice(0, o.indexOf('# Estado del repo'))
+    const warning = o.slice(0, o.indexOf('# Repo state'))
     expect(warning).toContain('…')
     expect(warning.length).toBeLessThan(2000)
     expect(o).toContain(longText) // the text in full is still there, further down
@@ -289,12 +289,12 @@ describe('composeHydration with BLOCKED work', () => {
 describe('composeHydration with no block (backwards compatibility)', () => {
   it('a STATE.md with no `blocked` field fires no blocking warning at all', () => {
     const out = composeHydration(SAMPLE, 'abc log')
-    expect(out).not.toMatch(/TRABAJO BLOQUEADO/)
-    expect(out).not.toMatch(/SUSPENDIDO/)
-    expect(out.startsWith('# Estado del repo')).toBe(true)
+    expect(out).not.toMatch(/WORK BLOCKED/)
+    expect(out).not.toMatch(/SUSPENDED/)
+    expect(out.startsWith('# Repo state')).toBe(true)
   })
   it('`blocked: null` (what ct-next seeds) does not either', () => {
-    expect(composeHydration('---\ntask: "x"\nblocked: null\n---\ncuerpo', '')).not.toMatch(/TRABAJO BLOQUEADO/)
+    expect(composeHydration('---\ntask: "x"\nblocked: null\n---\ncuerpo', '')).not.toMatch(/WORK BLOCKED/)
   })
 })
 
@@ -302,9 +302,9 @@ describe('composeHydration with an unreadable STATE.md', () => {
   const out = composeHydration('---\ntask: "sin cerrar\n  ]: [\n---\ncuerpo', '')
 
   it('does not blow up and warns that IT CANNOT BE KNOWN whether it is blocked', () => {
-    expect(out).toMatch(/NO SE PUDO LEER/)
-    expect(out).toMatch(/no se puede saber si el trabajo está BLOQUEADO/i)
-    expect(out).toMatch(/posiblemente bloqueado/i)
+    expect(out).toMatch(/COULD NOT BE READ/)
+    expect(out).toMatch(/cannot be known whether the work is BLOCKED/i)
+    expect(out).toMatch(/possibly blocked/i)
   })
   it('goes on injecting the raw text of the state (it is the only thing left)', () => {
     expect(out).toContain('cuerpo')
@@ -318,11 +318,11 @@ describe('composeHydration with an unreadable STATE.md', () => {
 describe('fieldReadingGuide — a checked fact vs. a pending check', () => {
   it('with a non-empty `verify`, it says that it is PENDING and not a fact', () => {
     const g = fieldReadingGuide({ verify: '`gh issue list …` devuelve 6 issues' })
-    expect(g).toMatch(/PENDIENTE/)
-    expect(g).toMatch(/no un hecho ya comprobado/i)
+    expect(g).toMatch(/PENDING/)
+    expect(g).toMatch(/not a fact already checked/i)
   })
   it('with a non-empty `next_action`, it warns that it may have gone stale', () => {
-    expect(fieldReadingGuide({ next_action: 'seguir por el AC-2' })).toMatch(/caducad/i)
+    expect(fieldReadingGuide({ next_action: 'seguir por el AC-2' })).toMatch(/gone stale/i)
   })
   it('empty fields → no guide at all (a guide that always comes out is noise)', () => {
     expect(fieldReadingGuide({ verify: '', next_action: '' })).toBe('')
@@ -335,8 +335,8 @@ describe('fieldReadingGuide — a checked fact vs. a pending check', () => {
   })
   it('the guide reaches the hydration of a normal STATE.md', () => {
     const out = composeHydration('---\nverify: "el test T7 pasa"\nnext_action: "seguir"\n---\ncuerpo', '')
-    expect(out).toMatch(/Cómo leer estos campos/)
-    expect(out).toMatch(/PENDIENTE/)
+    expect(out).toMatch(/How to read these fields/)
+    expect(out).toMatch(/PENDING/)
   })
 })
 
@@ -347,8 +347,8 @@ describe('blockNotice', () => {
   })
   it('with no next_action to suspend, it does not invent one', () => {
     const n = blockNotice({ state: 'blocked', reason: 'r' }, { nextAction: '' })
-    expect(n).toMatch(/no dice nada/)
-    expect(n).not.toMatch(/SUSPENDIDO/)
+    expect(n).toMatch(/says nothing/)
+    expect(n).not.toMatch(/SUSPENDED/)
   })
 })
 
@@ -510,16 +510,16 @@ describe('classifyStopState', () => {
   it('ahead does not block but warns, and advises against repointing last_commit', () => {
     const v = verdict('ahead', { containers: ['adelantada'] })
     expect(v.block).toBe(false)
-    expect(v.systemMessage).toMatch(/descendiente de HEAD/)
-    expect(v.systemMessage).toMatch(/hacia atrás/)
+    expect(v.systemMessage).toMatch(/descendant of HEAD/)
+    expect(v.systemMessage).toMatch(/backwards/)
   })
   it('diverged does not block, explains why, and names the way out (one STATE.md per worktree)', () => {
     const v = verdict('diverged', { containers: ['polish-v2-geometria'], mergeBase: 'c'.repeat(40) })
     expect(v.block).toBe(false)
-    expect(v.systemMessage).toMatch(/divergentes/)
+    expect(v.systemMessage).toMatch(/diverging/)
     expect(v.systemMessage).toMatch(/polish-v2-geometria/)
     expect(v.systemMessage).toMatch(/ct-next/)
-    expect(v.systemMessage).not.toMatch(/más nuevos/)
+    expect(v.systemMessage).not.toMatch(/newer/)
   })
   // The warnings come out on EVERY turn for as long as the anomaly lasts.
   // That insistence is deliberate, and the price is paid in brevity: if they
@@ -531,24 +531,24 @@ describe('classifyStopState', () => {
   })
   it('with no known branch at all (git kept quiet) the sentence is not left lame', () => {
     const v = verdict('diverged', { containers: [], containersKnown: false, mergeBase: 'c'.repeat(40) })
-    expect(v.systemMessage).toMatch(/no está en la historia de la rama `main`/)
-    expect(v.systemMessage).not.toMatch(/vive en ,|vive en :/)
-    expect(verdict('ahead', { containers: [] }).systemMessage).not.toMatch(/vive en /)
+    expect(v.systemMessage).toMatch(/is not in the history of the branch `main`/)
+    expect(v.systemMessage).not.toMatch(/lives in ,|lives in :/)
+    expect(verdict('ahead', { containers: [] }).systemMessage).not.toMatch(/lives in /)
   })
   // A `last_commit` that reaches no ref is not "the state is ahead": it is
   // the state pointing at work that stopped existing.
   it('orphan does not block (a block does not resurrect a commit) and is not confused with ahead', () => {
     const v = verdict('orphan', { fromKind: 'ahead' })
     expect(v.block).toBe(false)
-    expect(v.systemMessage).toMatch(/huérfano/)
-    expect(v.systemMessage).toMatch(/ni local ni remota/)
+    expect(v.systemMessage).toMatch(/orphaned/)
+    expect(v.systemMessage).toMatch(/neither local nor remote/)
     expect(v.systemMessage).toMatch(/git gc/)
-    expect(v.systemMessage).not.toMatch(/va por delante|hacia atrás|divergentes/)
+    expect(v.systemMessage).not.toMatch(/is ahead of|backwards|diverging/)
   })
   it('unknown does not block and admits that it does not know', () => {
     const v = verdict('unknown')
     expect(v.block).toBe(false)
-    expect(v.systemMessage).toMatch(/no ha podido determinar/)
+    expect(v.systemMessage).toMatch(/could not determine/)
   })
   it('anti-loop: with stop_hook_active it neither blocks NOR warns, whatever the case', () => {
     for (const kind of ['behind', 'unresolvable', 'diverged', 'ahead', 'orphan', 'unknown']) {
@@ -558,8 +558,8 @@ describe('classifyStopState', () => {
   })
   it('a detached HEAD: it does not invent a branch', () => {
     const v = verdict('behind', { count: 1, branch: '' })
-    expect(v.reason).toMatch(/desprendido/)
-    expect(v.reason).not.toMatch(/rama `/)
+    expect(v.reason).toMatch(/detached/)
+    expect(v.reason).not.toMatch(/branch `/)
   })
 })
 

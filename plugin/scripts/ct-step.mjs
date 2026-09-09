@@ -138,7 +138,7 @@ const arg = (f, d) => {
   return (typeof v === 'string' && !v.startsWith('--')) ? v : true
 }
 
-const USAGE = `uso: ct-step <verbo> [args] --plan <fichero> --issue <n>
+const USAGE = `usage: ct-step <verbo> [args] --plan <fichero> --issue <n>
 
   next                      dice qué paso toca y prepara lo que ese paso necesita
   report <fichero.json>     el informe del implementador: rutas tocadas + resumen
@@ -446,7 +446,7 @@ function measure(step, measures) {
       mkdirSync(dirname(destination), { recursive: true })
       appendFileSync(destination, line)
     } catch (e) {
-      err(`aviso: no se pudo escribir la telemetría en ${destination} (${String(e.message).trim()}). Esto sigue: ninguna transición depende de la medida.`)
+      err(`warning: no se pudo escribir la telemetría en ${destination} (${String(e.message).trim()}). Esto sigue: ninguna transición depende de la medida.`)
     }
   }
 }
@@ -692,7 +692,7 @@ function repoYardstickSection(artifactName) {
     if (!existsSync(path)) return ''
     return yardstickSection(readFileSync(path, 'utf8'))
   } catch (e) {
-    err(`aviso: ${CONVENTIONS_FILE} existe y no se ha podido leer (${String(e.message).trim()}): ${artifactName} sale sin la vara del repo.`)
+    err(`warning: ${CONVENTIONS_FILE} existe y no se ha podido leer (${String(e.message).trim()}): ${artifactName} sale sin la vara del repo.`)
     return ''
   }
 }
@@ -922,7 +922,7 @@ function archive(kind, content) {
   try {
     writeFileSync(join(workDir, `task-${run.task}-${kind}-${currentAttempt()}.json`), JSON.stringify(content, null, 2) + '\n')
   } catch (e) {
-    err(`aviso: no se pudo archivar ${kind} del intento ${currentAttempt()} (${String(e.message).trim()}): si esta tarea llega al consejero, su paquete lo dirá.`)
+    err(`warning: no se pudo archivar ${kind} del intento ${currentAttempt()} (${String(e.message).trim()}): si esta tarea llega al consejero, su paquete lo dirá.`)
   }
 }
 
@@ -1015,7 +1015,7 @@ function consumePackage(packagePath) {
   try {
     unlinkSync(packagePath)
   } catch (e) {
-    err(`aviso: el veredicto se midió pero NO se pudo consumir el paquete de revisión (${packagePath}): ${String(e.message).trim()}. El paso sigue, pero ese fichero ya no corresponde a ningún juicio pendiente: vuelve a "ct-step next" antes de despachar al juez otra vez, porque un paquete que sobrevive a su veredicto es el que deja pasar un juicio rancio.`)
+    err(`warning: el veredicto se midió pero NO se pudo consumir el paquete de revisión (${packagePath}): ${String(e.message).trim()}. El paso sigue, pero ese fichero ya no corresponde a ningún juicio pendiente: vuelve a "ct-step next" antes de despachar al juez otra vez, porque un paquete que sobrevive a su veredicto es el que deja pasar un juicio rancio.`)
   }
 }
 
@@ -1240,7 +1240,7 @@ function reportVerb() {
   // that was wanted.
   const onlyMeasured = paths.filter((p) => !report.paths.includes(p) && p !== planRelPath())
   if (onlyDeclared.length || onlyMeasured.length) {
-    err(`aviso: lo que el implementador declara y lo que el árbol dice no coinciden. Se stagea lo MEDIDO.${onlyMeasured.length ? ` Tocado y no declarado: ${onlyMeasured.join(', ')}.` : ''}${onlyDeclared.length ? ` Declarado y no tocado: ${onlyDeclared.join(', ')}.` : ''}`)
+    err(`warning: lo que el implementador declara y lo que el árbol dice no coinciden. Se stagea lo MEDIDO.${onlyMeasured.length ? ` Tocado y no declarado: ${onlyMeasured.join(', ')}.` : ''}${onlyDeclared.length ? ` Declarado y no tocado: ${onlyDeclared.join(', ')}.` : ''}`)
   }
   // It is staged BEFORE measuring the checks: one that reads the index does
   // not see a new file that is not staged. After reset+add, the index is
@@ -1958,10 +1958,10 @@ function sliceVerdictVerb() {
     // `verdict` and `commit`: evidence that cannot travel is warned about, it
     // never blocks a delivery whose work is already committed in full.
     if (git(['add', '--', path], { allowFail: true }) === null) {
-      err(`aviso: el veredicto del slice se escribió en ${path} pero NO se pudo stagear, así que no viajará en la pull request (¿la ruta está gitignoreada en este repo?). La entrega sigue.`)
+      err(`warning: el veredicto del slice se escribió en ${path} pero NO se pudo stagear, así que no viajará en la pull request (¿la ruta está gitignoreada en este repo?). La entrega sigue.`)
     }
     if (existsSync(join(repoRoot, METRICS_REL)) && git(['add', '--', METRICS_REL], { allowFail: true }) === null) {
-      err(`aviso: no se pudo stagear la telemetría (${METRICS_REL}) — el veredicto del slice viaja sin ella. ¿La ruta está gitignoreada en este repo?`)
+      err(`warning: no se pudo stagear la telemetría (${METRICS_REL}) — el veredicto del slice viaja sin ella. ¿La ruta está gitignoreada en este repo?`)
     }
     // AND THE INDEX IS NOT COMMITTED BLIND. This `git commit` goes without a
     // pathspec, so it carries EVERYTHING that is staged: if the conductor left
@@ -1987,17 +1987,17 @@ function sliceVerdictVerb() {
     // veredicto del slice ... la entrega sigue") and as the three `allowFail`.
     const foreign = foreignInIndex([path, METRICS_REL])
     if (foreign.length) {
-      err(`aviso: el índice traía ${foreign.length} ruta(s) ajenas a la maquinaria (${foreign.join(', ')}) y este commit se las llevaría dentro sin que ningún juez las haya visto — NO se comitea el veredicto del slice. La entrega sigue: el trabajo del slice ya está comiteado entero. El veredicto está escrito y STAGEADO en ${path}: saca lo ajeno del índice ("git restore --staged ${foreign[0]}", que no toca tu worktree) y comitéalo a mano antes de abrir la pull request.`)
+      err(`warning: el índice traía ${foreign.length} ruta(s) ajenas a la maquinaria (${foreign.join(', ')}) y este commit se las llevaría dentro sin que ningún juez las haya visto — NO se comitea el veredicto del slice. La entrega sigue: el trabajo del slice ya está comiteado entero. El veredicto está escrito y STAGEADO en ${path}: saca lo ajeno del índice ("git restore --staged ${foreign[0]}", que no toca tu worktree) y comitéalo a mano antes de abrir la pull request.`)
     } else if ((git(['diff', '--cached', '--name-only']) || '').trim()) {
       let message = null
       try {
         message = sliceVerdictCommitMessage({ issue, tasksTotal: run.tasksTotal })
       } catch (e) {
-        err(`aviso: ${String(e.message)} — el veredicto del slice se queda sin commitear. La entrega sigue.`)
+        err(`warning: ${String(e.message)} — el veredicto del slice se queda sin commitear. La entrega sigue.`)
       }
       if (message !== null) {
         if (git(['commit', '-m', message], { allowFail: true }) === null) {
-          err('aviso: no se pudo commitear el veredicto del slice — la entrega no depende de la evidencia, pero revisa el índice antes de abrir la pull request.')
+          err('warning: no se pudo commitear el veredicto del slice — la entrega no depende de la evidencia, pero revisa el índice antes de abrir la pull request.')
         } else {
           // The commit is counted in the STATE, and only when it really
           // happened. The next step (`e2e`) is another process: it re-reads
@@ -2014,7 +2014,7 @@ function sliceVerdictVerb() {
         }
       }
     } else {
-      err('aviso: nada que commitear del veredicto del slice (¿las dos rutas gitignoreadas?) — la entrega sigue.')
+      err('warning: nada que commitear del veredicto del slice (¿las dos rutas gitignoreadas?) — la entrega sigue.')
     }
   }
   out(`veredicto de slice ${verdict.ruling} con ${verdict.findings.length} hallazgo(s) → ${outcome}`)
@@ -2140,7 +2140,7 @@ function verdictVerb() {
     // not there. The work is committed; the evidence that it did not travel is
     // counted.
     if (git(['add', '--', path], { allowFail: true }) === null) {
-      err(`aviso: el veredicto se escribió en ${path} pero NO se pudo stagear, así que no viajará en la pull request (¿la ruta está gitignoreada en este repo?). La tarea se comitea igual.`)
+      err(`warning: el veredicto se escribió en ${path} pero NO se pudo stagear, así que no viajará en la pull request (¿la ruta está gitignoreada en este repo?). La tarea se comitea igual.`)
     } else {
       out(`veredicto guardado y stageado: ${path}`)
     }
@@ -2316,7 +2316,7 @@ function commitVerb() {
   // run stuck. The measure is lost and the work is committed, never the other
   // way round.
   if (existsSync(join(repoRoot, METRICS_REL)) && git(['add', '--', METRICS_REL], { allowFail: true }) === null) {
-    err(`aviso: no se pudo stagear la telemetría (${METRICS_REL}) — la tarea se comitea sin ella. ¿La ruta está gitignoreada en este repo?`)
+    err(`warning: no se pudo stagear la telemetría (${METRICS_REL}) — la tarea se comitea sin ella. ¿La ruta está gitignoreada en este repo?`)
   }
   if (git(['commit', '-m', message], { allowFail: true }) === null) return OUTCOMES.FAILED
   const sha = headSha()
@@ -2364,7 +2364,7 @@ function writeE2eReport(runs) {
   // `git add` that throws. The report stays written in the tree even if it does
   // not travel in the commit; what is lost is warned about, not kept quiet.
   if (git(['add', '--', path], { allowFail: true }) === null) {
-    err(`aviso: el informe de e2e se escribió en ${path} pero NO se pudo stagear, así que no viajará en la pull request (¿la ruta está gitignoreada en este repo?).`)
+    err(`warning: el informe de e2e se escribió en ${path} pero NO se pudo stagear, así que no viajará en la pull request (¿la ruta está gitignoreada en este repo?).`)
   }
   return path
 }
@@ -2458,12 +2458,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>`
   // labelled.
   const foreign = foreignInIndex([path])
   if (foreign.length) {
-    err(`aviso: el índice traía ${foreign.length} ruta(s) ajenas a la maquinaria (${foreign.join(', ')}) y este commit se las llevaría dentro sin que ningún juez las haya visto — el informe de e2e (${path}) queda STAGEADO y sin comitear. Saca lo ajeno del índice ("git restore --staged ${foreign[0]}", que no toca tu worktree) y comitéalo a mano antes de abrir la pull request.`)
+    err(`warning: el índice traía ${foreign.length} ruta(s) ajenas a la maquinaria (${foreign.join(', ')}) y este commit se las llevaría dentro sin que ningún juez las haya visto — el informe de e2e (${path}) queda STAGEADO y sin comitear. Saca lo ajeno del índice ("git restore --staged ${foreign[0]}", que no toca tu worktree) y comitéalo a mano antes de abrir la pull request.`)
     return
   }
   const keywords = findClosingKeywords(message)
   if (keywords.length) {
-    err(`aviso: el mensaje del commit del informe de e2e contiene una closing keyword (${keywords.map((k) => `${k.keyword} ${k.ref}`).join(', ')}) y cerraría el issue sin que nadie lo haya decidido — NO se comitea. El informe (${path}) queda stageado.`)
+    err(`warning: el mensaje del commit del informe de e2e contiene una closing keyword (${keywords.map((k) => `${k.keyword} ${k.ref}`).join(', ')}) y cerraría el issue sin que nadie lo haya decidido — NO se comitea. El informe (${path}) queda stageado.`)
     return
   }
   // `allowFail`, same criterion as the rest of this program's artefact
@@ -2471,7 +2471,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>`
   // has already been DELIVERED, so it warns and the file stays staged instead
   // of being lost.
   if (git(['commit', '-m', message], { allowFail: true }) === null) {
-    err(`aviso: el informe de e2e (${path}) quedó stageado pero NO se pudo comitear — revísalo a mano antes de abrir la pull request.`)
+    err(`warning: el informe de e2e (${path}) quedó stageado pero NO se pudo comitear — revísalo a mano antes de abrir la pull request.`)
     return
   }
   out(`informe de e2e comiteado: ${path}`)

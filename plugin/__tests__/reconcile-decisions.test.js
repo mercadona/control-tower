@@ -38,9 +38,9 @@ describe('diffIssue — frozenDecisionsDiffers', () => {
     const existing = existingIssue(buildIssueBody(SLICE, SPEC_REF, null, null))
     const diff = diffIssue(existing, wanted('- **D-1** — iOS 17.'), 'Epic', [])
     const rep = formatDrift(diff).join('\n')
-    expect(rep).toContain('nota:')
+    expect(rep).toContain('note:')
     expect(rep).toContain('## Decisiones congeladas')
-    expect(rep).not.toContain('divergencia:')
+    expect(rep).not.toContain('drift:')
   })
 })
 

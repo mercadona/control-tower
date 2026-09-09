@@ -10,7 +10,7 @@ Review the JSON. If it looks right, run it for real (add `--project <n>` for the
 node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-groom.mjs "$1" --repo "<owner/repo>" --milestone "<Epic>" --project <n>
 ```
 
-Groom with the spec already pushed to the default branch (otherwise the issues are born with no link to the spec). One invocation = one `--milestone` = one epic. It is idempotent by existence: re-running does not duplicate, but neither does it converge — the divergences are reported through stderr and are only applied with `--reconcile` (EXPERIMENTAL: review the issue's diff afterwards). Issues are born in `status:backlog`; promoting them to `status:ready` is a human's job. **stdout is the plan** and **stderr carries the `aviso:`, `nota:` and `divergencia:` lines**: pass them on as they are.
+Groom with the spec already pushed to the default branch (otherwise the issues are born with no link to the spec). One invocation = one `--milestone` = one epic. It is idempotent by existence: re-running does not duplicate, but neither does it converge — the divergences are reported through stderr and are only applied with `--reconcile` (EXPERIMENTAL: review the issue's diff afterwards). Issues are born in `status:backlog`; promoting them to `status:ready` is a human's job. **stdout is the plan** and **stderr carries the `aviso:`, `note:` and `drift:` lines**: pass them on as they are.
 
 | Exit | Significa | Qué hacer |
 |---|---|---|

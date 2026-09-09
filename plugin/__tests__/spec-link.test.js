@@ -204,7 +204,7 @@ describe('resolveSpecRef — when a good link canNOT be built, it is said: a bro
   it('the warning says a later run does not fix it without --reconcile', () => {
     const { warnings } = resolve({ failures: { toplevel: true } })
     expect(warnings[0]).toMatch(/--reconcile/)
-    expect(warnings[0]).toMatch(/ANTES de la corrida real/)
+    expect(warnings[0]).toMatch(/BEFORE the real run/)
   })
 })
 
@@ -214,18 +214,18 @@ describe('resolveSpecRef — when there is a link but no anchor: the file is lin
     expect(ref.url).toBe('https://github.com/o/r/blob/main/docs/spec.md')
     expect(ref.reason).toBeNull()
     expect(warnings[0]).toContain('9-slices')
-    expect(warnings[0]).toMatch(/empuja la versión actual del spec/)
+    expect(warnings[0]).toMatch(/push the current version of the spec/)
   })
   it('the §9 table does not live under any heading → url to the file, with a warning that says how to fix it', () => {
     const { ref, warnings } = resolve({ heading: null })
     expect(ref.url).toBe('https://github.com/o/r/blob/main/docs/spec.md')
     expect(ref.heading).toBeNull()
-    expect(warnings[0]).toMatch(/no vive bajo ningún encabezado/)
+    expect(warnings[0]).toMatch(/does not live under any heading/)
   })
   it('the heading produces no usable anchor ("## ...") → url to the file, with a warning', () => {
     const { ref, warnings } = resolve({ heading: { text: '...', anchor: '' } })
     expect(ref.url).toBe('https://github.com/o/r/blob/main/docs/spec.md')
-    expect(warnings[0]).toMatch(/no produce ningún ancla/)
+    expect(warnings[0]).toMatch(/produces no anchor/)
   })
 })
 
@@ -249,8 +249,8 @@ describe('renderSpecLink — how each case is written', () => {
     expect(line).toBe('> Slice `#3` del epic. Spec: [spec.md](https://github.com/o/r/blob/main/spec.md)')
   })
   it('with no url: a text reference with the reason, and NO markdown link', () => {
-    const line = renderSpecLink(SLICE, { path: 'docs/spec.md', heading: '9. Slices', url: null, reason: 'el spec no está dentro de un repositorio git' })
-    expect(line).toBe('> Slice `#3` del epic. Spec: `docs/spec.md` § `9. Slices` — sin enlace: el spec no está dentro de un repositorio git')
+    const line = renderSpecLink(SLICE, { path: 'docs/spec.md', heading: '9. Slices', url: null, reason: 'the spec is not inside a git repository' })
+    expect(line).toBe('> Slice `#3` del epic. Spec: `docs/spec.md` § `9. Slices` — sin enlace: the spec is not inside a git repository')
     expect(line).not.toMatch(/\]\(/)
   })
   // A heading can cite an issue ("## 9. Slices (ver #3)"). Inside a link's

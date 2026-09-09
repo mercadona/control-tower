@@ -74,16 +74,16 @@ describe('ct-next — a collision against an in-progress WITHOUT local evidence 
     expect(r.out).toMatch(/comparte el token 'api' con #41/)
     // ...but it NO LONGER claims "espera a que termine" without qualification.
     expect(r.out).not.toMatch(/espera a que termine, o resuelve el token/)
-    expect(r.out).not.toMatch(/aunque subieras --cap no bastaría todavía: #42.*espera a que termine\./)
+    expect(r.out).not.toMatch(/even if you raised --cap it would not be enough yet: #42.*espera a que termine\./)
     // And it does include the staleness note, making clear what is known and
     // what is not.
-    expect(r.out).toMatch(/no se encontró worktree, rama local, ni sesión cmux para #41 EN ESTA MÁQUINA/)
-    expect(r.out).toMatch(/no puede confirmar que nadie lo esté trabajando en otro sitio/)
+    expect(r.out).toMatch(/no worktree, local branch or cmux session was found for #41 ON THIS MACHINE/)
+    expect(r.out).toMatch(/it cannot confirm that nobody is working on it somewhere else/)
     // It never states the abandonment as a plain fact — it only mentions it in
     // order to RULE IT OUT explicitly ("tampoco afirmamos que esté
     // abandonado").
     expect(r.out).not.toMatch(/#41 está abandonado/i)
-    expect(r.out).toMatch(/tampoco afirmamos que esté abandonado/)
+    expect(r.out).toMatch(/neither do we assert that it is abandoned/)
   })
 
   it('with a worktree present for #41 → it STILL says "espera a que termine" (there is real local evidence)', () => {
@@ -97,7 +97,7 @@ describe('ct-next — a collision against an in-progress WITHOUT local evidence 
     })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/espera a que termine, o resuelve el token\./)
-    expect(r.out).not.toMatch(/no se encontró worktree/)
+    expect(r.out).not.toMatch(/no worktree, local branch or cmux session was found/)
   })
 
   it('with the local branch feat/41 present (worktree already deleted, orphan branch) → it STILL says "espera a que termine"', () => {
@@ -137,7 +137,7 @@ describe('ct-next — a collision against an in-progress WITHOUT local evidence 
       FAKE_CMUX_WORKSPACE_TITLES_JSON: JSON.stringify(['o/r · #410 otra cosa totalmente distinta']),
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/no se encontró worktree, rama local, ni sesión cmux para #41 EN ESTA MÁQUINA/)
+    expect(r.out).toMatch(/no worktree, local branch or cmux session was found for #41 ON THIS MACHINE/)
   })
 
   it('the query to cmux fails (daemon unavailable) → "inconclusive", NEVER "there is no session"', () => {
@@ -149,9 +149,9 @@ describe('ct-next — a collision against an in-progress WITHOUT local evidence 
     })
     expect(r.code).toBe(0)
     expect(r.out).not.toMatch(/espera a que termine, o resuelve el token\./)
-    expect(r.out).not.toMatch(/EN ESTA MÁQUINA/) // that is the phrase of the "no evidence" verdict — it does not apply here
-    expect(r.out).toMatch(/no se pudo consultar cmux/)
-    expect(r.out).toMatch(/no se puede descartar que el trabajo siga en curso en otro sitio/)
+    expect(r.out).not.toMatch(/ON THIS MACHINE/) // that is the phrase of the "no evidence" verdict — it does not apply here
+    expect(r.out).toMatch(/cmux could not be queried/)
+    expect(r.out).toMatch(/it cannot be ruled out that the work is still under way somewhere else/)
   })
 
   it('the cmux binary "is not available" (a stub that always fails) → treated the same as "inconclusive", it never blows up ct-next.mjs', () => {
@@ -181,7 +181,7 @@ describe('ct-next — a collision against an in-progress WITHOUT local evidence 
     })
     const out = (r.stdout || '') + (r.stderr || '')
     expect(r.status).toBe(0)
-    expect(out).toMatch(/no se pudo consultar cmux/)
+    expect(out).toMatch(/cmux could not be queried/)
     expect(out).not.toMatch(/espera a que termine, o resuelve el token\./)
   })
 })
@@ -195,9 +195,9 @@ describe('ct-next — staleness also applies to the cap-full + collision-with-a-
       FAKE_CMUX_WINDOWS_JSON: JSON.stringify([{ id: 'win1' }]),
       FAKE_CMUX_WORKSPACE_TITLES_JSON: JSON.stringify([]),
     })
-    expect(r.out).toMatch(/El cap \(1\) ya está copado por trabajo en vuelo: 1 slice\(s\) en status:in-progress/)
-    expect(r.out).toMatch(/aunque subieras --cap no bastaría todavía/)
-    expect(r.out).toMatch(/no se encontró worktree, rama local, ni sesión cmux para #41 EN ESTA MÁQUINA/)
+    expect(r.out).toMatch(/The cap \(1\) is already taken up by in-flight work: 1 slice\(s\) at status:in-progress/)
+    expect(r.out).toMatch(/even if you raised --cap it would not be enough yet/)
+    expect(r.out).toMatch(/no worktree, local branch or cmux session was found for #41 ON THIS MACHINE/)
   })
 })
 
@@ -219,8 +219,8 @@ describe('ct-next — staleness is not queried at all when it is not needed (the
     })
     expect(r.status).toBe(0)
     const out = (r.stdout || '') + (r.stderr || '')
-    expect(out).toMatch(/No hay ningún issue en status:ready/)
-    expect(out).not.toMatch(/no se pudo consultar cmux/) // it was never attempted: there was no collision to explain
+    expect(out).toMatch(/There is no issue at status:ready/)
+    expect(out).not.toMatch(/cmux could not be queried/) // it was never attempted: there was no collision to explain
   })
 })
 

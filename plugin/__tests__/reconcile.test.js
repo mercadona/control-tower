@@ -416,7 +416,7 @@ describe('hasDrift — title/milestone/link-to-the-spec/labels/deps/ac/machine-d
   })
 })
 
-describe('formatDrift — divergencia: (counts) vs. nota: (does not count); deps/ac/specLink/machine-duplicates show the value, prose/strayDeps/cosmetic-duplicates only the flag', () => {
+describe('formatDrift — drift: (counts) vs. note: (does not count); deps/ac/specLink/machine-duplicates show the value, prose/strayDeps/cosmetic-duplicates only the flag', () => {
   const BASE = {
     order: 2, issueNumber: 42, closed: false, title: null, milestone: null, specLink: null,
     labels: { missing: [], extra: [] }, deps: { missing: [], extra: [] }, ac: { missing: [], extra: [] },
@@ -425,9 +425,9 @@ describe('formatDrift — divergencia: (counts) vs. nota: (does not count); deps
   it('nothing to report → []', () => {
     expect(formatDrift(BASE)).toEqual([])
   })
-  it('a divergent specLink → a "divergencia:" line with both values', () => {
+  it('a divergent specLink → a "drift:" line with both values', () => {
     const lines = formatDrift({ ...BASE, specLink: { current: 'vieja', wanted: 'nueva' } })
-    expect(lines[0]).toMatch(/^divergencia:/)
+    expect(lines[0]).toMatch(/^drift:/)
     expect(lines[0]).toMatch(/"vieja"/)
     expect(lines[0]).toMatch(/"nueva"/)
   })
@@ -436,9 +436,9 @@ describe('formatDrift — divergencia: (counts) vs. nota: (does not count); deps
   // pairing makes it unreachable from that call-site), so formatDrift's line
   // for this branch is tested here, against the pure formatter, instead of
   // against a run of /ct-groom.
-  it('a divergent milestone → a "divergencia:" line with both values', () => {
+  it('a divergent milestone → a "drift:" line with both values', () => {
     const lines = formatDrift({ ...BASE, milestone: { current: 'Sprint 1', wanted: 'Epic' } })
-    expect(lines[0]).toMatch(/^divergencia:/)
+    expect(lines[0]).toMatch(/^drift:/)
     expect(lines[0]).toMatch(/milestone difiere/)
     expect(lines[0]).toMatch(/"Sprint 1"/)
     expect(lines[0]).toMatch(/"Epic"/)
@@ -448,42 +448,42 @@ describe('formatDrift — divergencia: (counts) vs. nota: (does not count); deps
   // number is a slice order — not an issue number. A human who reads "falta la
   // dependencia merge-after #3" in the terminal has no way of knowing which of
   // the two ID spaces they are looking at.
-  it('a missing/left-over dep → one "divergencia:" line for each, naming merge-after `#N` and that it is a slice order', () => {
+  it('a missing/left-over dep → one "drift:" line for each, naming merge-after `#N` and that it is a slice order', () => {
     const lines = formatDrift({ ...BASE, deps: { missing: [3], extra: [4] } })
-    expect(lines.find((l) => l.includes('merge-after `#3`'))).toMatch(/^divergencia:.*falta/i)
-    expect(lines.find((l) => l.includes('merge-after `#4`'))).toMatch(/^divergencia:.*sobra/i)
+    expect(lines.find((l) => l.includes('merge-after `#3`'))).toMatch(/^drift:.*falta/i)
+    expect(lines.find((l) => l.includes('merge-after `#4`'))).toMatch(/^drift:.*sobra/i)
     expect(lines.every((l) => /orden de slice/i.test(l))).toBe(true)
     expect(lines.some((l) => /merge-after #\d/.test(l))).toBe(false) // never the bare form, which suggests an issue number
   })
-  it('a missing/left-over ac → one "divergencia:" line for each, with the text of the criterion', () => {
+  it('a missing/left-over ac → one "drift:" line for each, with the text of the criterion', () => {
     const lines = formatDrift({ ...BASE, ac: { missing: ['AC-2.2'], extra: ['AC-9.9'] } })
-    expect(lines.find((l) => l.includes('AC-2.2'))).toMatch(/^divergencia:.*falta/i)
-    expect(lines.find((l) => l.includes('AC-9.9'))).toMatch(/^divergencia:.*sobra/i)
+    expect(lines.find((l) => l.includes('AC-2.2'))).toMatch(/^drift:.*falta/i)
+    expect(lines.find((l) => l.includes('AC-9.9'))).toMatch(/^drift:.*sobra/i)
   })
-  it('duplicateMachineSections (e.g. Dependencias) → a "divergencia:" line, not a "nota:" one', () => {
+  it('duplicateMachineSections (e.g. Dependencias) → a "drift:" line, not a "note:" one', () => {
     const lines = formatDrift({ ...BASE, duplicateSections: ['Dependencias'], duplicateMachineSections: ['Dependencias'] })
     expect(lines).toHaveLength(1)
-    expect(lines[0]).toMatch(/^divergencia:/)
+    expect(lines[0]).toMatch(/^drift:/)
     expect(lines[0]).toMatch(/Dependencias/)
   })
-  it('a cosmetic duplicateSections (Descripción, not machine) → a "nota:" line', () => {
+  it('a cosmetic duplicateSections (Descripción, not machine) → a "note:" line', () => {
     const lines = formatDrift({ ...BASE, duplicateSections: ['Descripción'], duplicateMachineSections: [] })
     expect(lines).toHaveLength(1)
-    expect(lines[0]).toMatch(/^nota:/)
+    expect(lines[0]).toMatch(/^note:/)
     expect(lines[0]).toMatch(/Descripción/)
   })
-  it('divergent Descripción/Protegido (on their own, with no other divergence) → "nota:" lines, mentioning the section, never the complete text', () => {
+  it('divergent Descripción/Protegido (on their own, with no other divergence) → "note:" lines, mentioning the section, never the complete text', () => {
     const lines = formatDrift({ ...BASE, descripcionDiffers: true, protectedDiffers: true })
     expect(lines).toHaveLength(2)
-    expect(lines.every((l) => l.startsWith('nota:'))).toBe(true)
+    expect(lines.every((l) => l.startsWith('note:'))).toBe(true)
     expect(lines.some((l) => l.includes('Descripción'))).toBe(true)
     expect(lines.some((l) => l.includes('Out of scope / Protected'))).toBe(true)
     for (const l of lines) expect(l.length).toBeLessThan(220) // it never dumps complete prose
   })
-  it('strayDeps → one "nota:" line per reference, naming the number and that the dispatcher DOES obey it', () => {
+  it('strayDeps → one "note:" line per reference, naming the number and that the dispatcher DOES obey it', () => {
     const lines = formatDrift({ ...BASE, strayDeps: [9] })
     expect(lines).toHaveLength(1)
-    expect(lines[0]).toMatch(/^nota:/)
+    expect(lines[0]).toMatch(/^note:/)
     expect(lines[0]).toMatch(/merge-after #9/)
     expect(lines[0]).toMatch(/dispatcher/i)
   })
@@ -896,7 +896,7 @@ describe('buildReconcileBody — the "## E2E" section', () => {
 })
 
 // Slice 10 — the signal in the reconciliation: a yes/no comparison as a
-// `nota:`, the EXACT precedent of Descripción/Protegido. The authority at
+// `note:`, the EXACT precedent of Descripción/Protegido. The authority at
 // runtime is THE ISSUE (like the gates: the signal the slice judge obeys is
 // the one the issue had at dispatch time), and the splice machinery is the
 // EXPERIMENTAL half that five review rounds decided not to fatten — so
@@ -926,7 +926,7 @@ describe('the signal in the reconciliation (Slice 10)', () => {
     expect(diffIssue(withSection, { ...WANTED_ISSUE, senal: '  métrica x  ' }, 'Epic', ALL_PREFIXES).senalDiffers).toBe(false)
   })
 
-  it('the signal divergence comes out as nota: and counts neither towards hasDrift nor towards reconcileGaps', () => {
+  it('the signal divergence comes out as note: and counts neither towards hasDrift nor towards reconcileGaps', () => {
     // The only divergence of the diff is the signal: everything else matches.
     const d = diffIssue(existingWith({ body: bodyWithSignal('métrica x') }), WANTED_ISSUE, 'Epic', ALL_PREFIXES)
     expect(d.senalDiffers).toBe(true)
@@ -934,10 +934,10 @@ describe('the signal in the reconciliation (Slice 10)', () => {
     const lines = formatDrift(d)
     // This fixture (with no "## Gates" section) also drags along the gates
     // note, pre-existing and orthogonal — what gets nailed down here is that
-    // the signal comes out as nota: (verbatim) and that NO line is a
-    // divergencia:.
-    expect(lines).toContain('nota: slice #2 (issue #42): la sección "## Señal de observabilidad" difiere del spec (no cuenta para el exit code; --reconcile no la reescribe — la señal que obedece el juez de slice es la que el issue tenía al despachar, igual que los gates)')
-    expect(lines.every((l) => l.startsWith('nota:'))).toBe(true)
+    // the signal comes out as note: (verbatim) and that NO line is a
+    // drift:.
+    expect(lines).toContain('note: slice #2 (issue #42): la sección "## Señal de observabilidad" difiere del spec (no cuenta para el exit code; --reconcile no la reescribe — la señal que obedece el juez de slice es la que el issue tenía al despachar, igual que los gates)')
+    expect(lines.every((l) => l.startsWith('note:'))).toBe(true)
     const gaps = reconcileGaps(d, { body: null, unresolvedAc: false, unresolvedDeps: false })
     // `e2e: false` entered reconcileGaps' shape with the E2E column (which IS
     // rewritten and DOES count towards the exit code): here only the signal

@@ -321,7 +321,7 @@ function runResidue(repoRoot, closedIssues) {
   })
 }
 function residueLine(r) {
-  return r.err.split('\n').find((l) => /^aviso: \d+ issue\(s\) CERRADOS/.test(l)) || ''
+  return r.err.split('\n').find((l) => /^warning: \d+ issue\(s\) CERRADOS/.test(l)) || ''
 }
 function writeAck(repoRoot, text) {
   mkdirSync(join(repoRoot, '.agent'), { recursive: true })
@@ -336,7 +336,7 @@ describe('F19/H2 — the severity gradient that was flattened', () => {
     // Verified against the unfixed code: it said «2 issue(s) CERRADOS»,
     // throwing into the same sack the one that fell out of the dispatch queue
     // and the one nobody cares about.
-    expect(l).toMatch(/^aviso: 1 issue\(s\) CERRADOS/)
+    expect(l).toMatch(/^warning: 1 issue\(s\) CERRADOS/)
     expect(l).toMatch(/#101/)
     expect(l).toMatch(/#102/) // it shows up, but as an inert count, not as an anomaly
     expect(l).toMatch(/inerte|no bloquea|no le pasa nada/i)
@@ -346,7 +346,7 @@ describe('F19/H2 — the severity gradient that was flattened', () => {
     const repoRoot = makeRepoRoot()
     const r = runResidue(repoRoot, [closedWith(101, 'in-progress'), closedWith(102, 'ready')])
     const l = residueLine(r)
-    expect(l).toMatch(/^aviso: 2 issue\(s\) CERRADOS/)
+    expect(l).toMatch(/^warning: 2 issue\(s\) CERRADOS/)
     expect(l.indexOf('#102')).toBeLessThan(l.indexOf('#101'))
   })
 
@@ -364,7 +364,7 @@ describe('F19/H2 — acknowledgement PER CASE: keep quiet about these numbers, g
     writeAck(repoRoot, 'residuo-status: 2026-07-28 — #101, #102 revisados: slices descartados, las labels se quedan.\n')
     const r = runResidue(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'ready'), closedWith(103, 'ready')])
     const l = residueLine(r)
-    expect(l).toMatch(/^aviso: 1 issue\(s\) CERRADOS/)
+    expect(l).toMatch(/^warning: 1 issue\(s\) CERRADOS/)
     expect(l).toMatch(/#103/)
     expect(l).not.toMatch(/#101/)
     expect(l).not.toMatch(/#102/)
@@ -394,7 +394,7 @@ describe('F19/H2 — acknowledgement PER CASE: keep quiet about these numbers, g
     const repoRoot = makeRepoRoot()
     writeAck(repoRoot, 'residuo-status: 2026-07-28 — ya lo he mirado todo, da igual.\n')
     const r = runResidue(repoRoot, [closedWith(101, 'ready')])
-    expect(residueLine(r)).toMatch(/^aviso: 1 issue\(s\) CERRADOS/)
+    expect(residueLine(r)).toMatch(/^warning: 1 issue\(s\) CERRADOS/)
     expect(r.err).toMatch(/no silencia nada/)
   })
 

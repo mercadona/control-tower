@@ -55,7 +55,7 @@ export function emitGoNonce(issue, nonce, { log = console.log, env = process.env
     // without a go; falling back without warning would be worse still: the
     // person would believe the nonce had not passed through any agent's context
     // when it has.
-    log(`  aviso: la notificación del go de #${issue} falló (${e.message}) — va por aquí, o sea que el nonce SÍ entra en el contexto de esta sesión.`)
+    log(`  warning: la notificación del go de #${issue} falló (${e.message}) — va por aquí, o sea que el nonce SÍ entra en el contexto de esta sesión.`)
     log(goDictationLine(issue, nonce))
   }
 }

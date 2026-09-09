@@ -31,7 +31,7 @@ const AGENTS = 'AGENTS.md'
 // circular. `String(...)` already avoids `JSON.stringify`'s problem with
 // cycles, but a hostile `toString` can still throw, so it is caught.
 function describeValue(v) {
-  try { return String(v) } catch { return '<no se pudo describir>' }
+  try { return String(v) } catch { return '<could not be described>' }
 }
 
 // `.git` can be a DIRECTORY (a normal checkout) or a FILE with a `gitdir:`
@@ -60,14 +60,14 @@ export function probeGovernedRepo(cwd) {
   // would answer about a directory the caller never named. That is worse than
   // inventing a `false`: it is answering a different question.
   if (typeof cwd !== 'string' || cwd.length === 0) {
-    return { error: `cwd invalido: se esperaba una cadena no vacia y llego ${typeof cwd} (${describeValue(cwd)})` }
+    return { error: `invalid cwd: a non-empty string was expected and ${typeof cwd} arrived (${describeValue(cwd)})` }
   }
   let dir
-  try { dir = resolve(cwd) } catch (e) { return { error: `cwd invalido: ${e.message}` } }
+  try { dir = resolve(cwd) } catch (e) { return { error: `invalid cwd: ${e.message}` } }
   try {
     statSync(dir)
   } catch (e) {
-    return { error: `no se ha podido leer el directorio de trabajo (${e.code || e.message})` }
+    return { error: `the working directory could not be read (${e.code || e.message})` }
   }
   try {
     for (;;) {
@@ -79,7 +79,7 @@ export function probeGovernedRepo(cwd) {
           // AGENTS.md NOT BEING THERE is an answer: this repo does not carry
           // the contract. Not being able to READ it is not.
           if (e && (e.code === 'ENOENT' || e.code === 'ENOTDIR')) return { governed: false }
-          return { error: `no se ha podido leer ${AGENTS} (${e.code || e.message})` }
+          return { error: `${AGENTS} could not be read (${e.code || e.message})` }
         }
         return { governed: GOVERNED_MARKERS.some((m) => text.includes(m)) }
       }
@@ -88,6 +88,6 @@ export function probeGovernedRepo(cwd) {
       dir = parent
     }
   } catch (e) {
-    return { error: `no se ha podido determinar la raiz del repo (${e.code || e.message})` }
+    return { error: `the repo root could not be determined (${e.code || e.message})` }
   }
 }

@@ -108,28 +108,28 @@ describe('DispatchGate, on the three steps whose inputs next writes', () => {
     const denial = Gate.verdictOn(RunMother.onStep(STEPS.IMPLEMENT))
 
     expect(denial.dispatch).toBe(Dispatch.DENIED)
-    expect(denial.reason).toContain('el brief de la tarea')
+    expect(denial.reason).toContain("the task's brief")
   })
 
   it('judge_without_its_seal_is_denied_naming_the_review_package_the_judge_would_not_find', () => {
     const denial = Gate.verdictOn(RunMother.onStep(STEPS.JUDGE))
 
     expect(denial.dispatch).toBe(Dispatch.DENIED)
-    expect(denial.reason).toContain('el paquete de revisión de la tarea')
+    expect(denial.reason).toContain("the task's review package")
   })
 
   it('slice_judge_without_its_seal_is_denied_naming_the_package_of_the_whole_slice', () => {
     const denial = Gate.verdictOn(RunMother.onStep(STEPS.SLICE_JUDGE))
 
     expect(denial.dispatch).toBe(Dispatch.DENIED)
-    expect(denial.reason).toContain('el paquete de revisión del slice')
+    expect(denial.reason).toContain("the slice's review package")
   })
 
   it('advise_without_its_seal_is_denied_naming_the_package_the_adviser_would_not_find', () => {
     const denial = Gate.verdictOn(RunMother.onStep(STEPS.ADVISE))
 
     expect(denial.dispatch).toBe(Dispatch.DENIED)
-    expect(denial.reason).toContain('el paquete del consejero')
+    expect(denial.reason).toContain("the adviser's package")
   })
 
   it('the_denial_carries_a_command_that_can_be_pasted_because_ct_step_on_its_own_is_not_one', () => {

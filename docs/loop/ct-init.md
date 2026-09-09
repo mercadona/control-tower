@@ -105,7 +105,7 @@ carry the field is read as **not blocked** (every one older than this is); what
 does get announced as "not known" is a frontmatter that cannot be parsed.
 
 **If the scaffolder warns about conventions of the repository's own** (an
-`ATENCIÓN: este repo ya tenía convenciones propias...` block on stderr, with
+`ATTENTION: este repo ya tenía convenciones propias...` block on stderr, with
 `[claim]`, `[worktrees]` and/or `[estado]` items), **pass it on to the user
 whole, with the evidence and the decision**. Do not resolve it yourself: it means
 the repository already came with its own claim protocol, its own worktrees path

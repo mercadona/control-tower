@@ -37,7 +37,7 @@ import {
 
 const target = process.argv[2]
 if (!target) {
-  console.error('uso: detect-yardstick.mjs <dir-repo>')
+  console.error('usage: detect-yardstick.mjs <dir-repo>')
   process.exit(1)
 }
 
@@ -53,7 +53,7 @@ try {
   entries = r.entradas
   truncated = r.truncated
 } catch (e) {
-  console.error(`no se ha podido barrer ${target}: ${e.message}`)
+  console.error(`could not sweep ${target}: ${e.message}`)
   process.exit(1)
 }
 
@@ -68,7 +68,7 @@ try {
 } catch (e) {
   if (e.code !== 'ENOENT') {
     readNote =
-      `  nota: ${CONVENTIONS_FILE} existe y no se ha podido leer (${String(e.message).trim()}): ` +
+      `  note: ${CONVENTIONS_FILE} existe y no se ha podido leer (${String(e.message).trim()}): ` +
       'puede que alguno de los candidatos de abajo ya esté declarado.'
   }
 }

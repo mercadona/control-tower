@@ -91,7 +91,7 @@ describe('the happy path', () => {
 
   it('it rejects paths from outside the worktree: the list is written by a model', () => {
     const r = ct('report', writeRaw(JSON.stringify({ paths: ['/etc/passwd'], summary: 'ups' })))
-    expect(r.stdout).toMatch(/informe descartado.*fuera del worktree/)
+    expect(r.stdout).toMatch(/informe descartado.*outside the worktree/)
     expect(runState().discards).toBe(1)
   })
 })

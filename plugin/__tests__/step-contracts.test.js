@@ -625,7 +625,7 @@ describe('the slice judge (§3.7-B)', () => {
       findings: [{ rule: 'alcance', severity: 'high', what: 'x', path: 'y', evidence: 'z' }],
     })
     expect(r.verdict).toBeUndefined()
-    expect(r.why).toMatch(/regla desconocida/)
+    expect(r.why).toMatch(/unknown rule/)
   })
 
   it('readSliceVerdict discards a PASS with a high finding, just like the task verdict', () => {
@@ -642,7 +642,7 @@ describe('the slice judge (§3.7-B)', () => {
     const r = readSliceVerdict({ ruling: 'PASS', rubric: [sliceWalk()[0]], findings: [] })
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/coherencia/)
-    expect(r.why).toContain('3 ítems')
+    expect(r.why).toContain('3 items')
   })
 
   // The incomplete-walk message derives from `rules` and names what is
@@ -777,16 +777,16 @@ describe('the verdict', () => {
   })
 
   it.each([
-    ['with no structured_output', null, /no devolvió structured_output/],
+    ['with no structured_output', null, /did not return structured_output/],
     ['with an invented ruling', { ruling: 'MAYBE', findings: [] }, /ruling desconocido/],
-    ['with findings that are not a list', { ruling: 'PASS', findings: 'ninguno' }, /no es una lista/],
-    ['with an invented severity', { ruling: 'FAIL', findings: [{ rule: 'contrato', severity: 'catastrophic', what: 'x', path: 'y', evidence: 'z' }] }, /severidad desconocida/],
-    ['with a mute finding', { ruling: 'FAIL', findings: [{ rule: 'contrato', severity: 'high', what: '', path: 'y', evidence: 'z' }] }, /no dice qué o dónde/],
+    ['with findings that are not a list', { ruling: 'PASS', findings: 'ninguno' }, /is not a list/],
+    ['with an invented severity', { ruling: 'FAIL', findings: [{ rule: 'contrato', severity: 'catastrophic', what: 'x', path: 'y', evidence: 'z' }] }, /unknown severity/],
+    ['with a mute finding', { ruling: 'FAIL', findings: [{ rule: 'contrato', severity: 'high', what: '', path: 'y', evidence: 'z' }] }, /does not say what or where/],
     // Without pinning this case, a regression changing the condition to
     // `f.rule && !VERDICT_RULES.includes(f.rule)` would silently let through a
     // finding with no `rule` — it would only catch the INVENTED rule, not the
     // ABSENT one.
-    ['with a finding with no rule', { ruling: 'FAIL', findings: [{ severity: 'high', what: 'x', path: 'y', evidence: 'z' }] }, /regla desconocida/],
+    ['with a finding with no rule', { ruling: 'FAIL', findings: [{ severity: 'high', what: 'x', path: 'y', evidence: 'z' }] }, /unknown rule/],
   ])('%s is discarded', (_case, structured, reason) => {
     const r = readVerdict(structured)
     expect(r.verdict).toBeUndefined()
@@ -813,7 +813,7 @@ describe('the verdict', () => {
     // error.
     const r = v('FAIL', [{ rule: 'me-lo-invento', severity: 'high', what: 'x', path: 'y', evidence: 'z' }])
     expect(r.verdict).toBeUndefined()
-    expect(r.why).toMatch(/regla desconocida/)
+    expect(r.why).toMatch(/unknown rule/)
     expect(VERDICT_RULES).not.toContain('me-lo-invento')
   })
 
@@ -845,7 +845,7 @@ describe('the verdict', () => {
     // gets discarded is the whole fix.
     const r = readVerdict({ ruling: 'PASS', findings: [] })
     expect(r.verdict).toBeUndefined()
-    expect(r.why).toMatch(/recorrido de la rúbrica/)
+    expect(r.why).toMatch(/walk of the rubric/)
   })
 
   it('a walk that names an item that is not of the rubric is discarded', () => {
@@ -855,7 +855,7 @@ describe('the verdict', () => {
     const walk = [...fullWalk().slice(1), { rule: 'me-lo-invento', result: 'bien', outcome: 'conforme' }]
     const r = v('PASS', [], walk)
     expect(r.verdict).toBeUndefined()
-    expect(r.why).toMatch(/ítem desconocido/)
+    expect(r.why).toMatch(/unknown item/)
   })
 
   it('a walk that repeats an item is discarded: one step too many is not one item more', () => {
@@ -865,7 +865,7 @@ describe('the verdict', () => {
     // declared twice.
     const r = v('PASS', [], [...fullWalk(), { rule: 'alcance', result: 'otra vez', outcome: 'conforme' }])
     expect(r.verdict).toBeUndefined()
-    expect(r.why).toMatch(/repite/)
+    expect(r.why).toMatch(/repeats/)
   })
 
   it('an incomplete walk is discarded, and the reason says which item is missing', () => {
@@ -911,7 +911,7 @@ describe('the verdict', () => {
     const walk = fullWalk().map(({ rule, result }) => ({ rule, result }))
     const r = v('PASS', [], walk)
     expect(r.verdict).toBeUndefined()
-    expect(r.why).toMatch(/de qué clase/)
+    expect(r.why).toMatch(/what class/)
   })
 
   it('an invented class is discarded, with the same criterion as an invented rule', () => {
@@ -943,7 +943,7 @@ describe('the verdict', () => {
   it('the finding that does not cite the evidence holding it up is discarded', () => {
     const r = v('FAIL', [{ rule: 'contrato', severity: 'high', what: 'la firma no casa', path: 'a.js', line: 3 }])
     expect(r.verdict).toBeUndefined()
-    expect(r.why).toMatch(/evidencia/)
+    expect(r.why).toMatch(/evidence/)
   })
 
   it('the citation is demanded on a medium too: that is the one that sends the implementer on a paid-for round trip', () => {
@@ -952,7 +952,7 @@ describe('the verdict', () => {
     // what to look at.
     const r = v('PASS', [{ rule: 'alcance', severity: 'medium', what: 'un helper que nadie pidió', path: 'a.js', line: 9 }])
     expect(r.verdict).toBeUndefined()
-    expect(r.why).toMatch(/evidencia/)
+    expect(r.why).toMatch(/evidence/)
   })
 
   // -------------------------------------------------------------------------
@@ -969,7 +969,7 @@ describe('the verdict', () => {
   it('the finding that does not say which file it is in gets discarded', () => {
     const r = v('FAIL', [{ rule: 'contrato', severity: 'high', what: 'la firma no casa', line: 10, evidence: 'z' }])
     expect(r.verdict).toBeUndefined()
-    expect(r.why).toMatch(/no dice qué o dónde/)
+    expect(r.why).toMatch(/does not say what or where/)
   })
 
   it.each([
@@ -990,7 +990,7 @@ describe('the verdict', () => {
   ])('the finding whose line is %s gets discarded: what is not a number does not aggregate', (_case, line) => {
     const r = v('FAIL', [{ rule: 'contrato', severity: 'high', what: 'x', path: 'a.js', line, evidence: 'z' }])
     expect(r.verdict).toBeUndefined()
-    expect(r.why).toMatch(/línea que no es un número/)
+    expect(r.why).toMatch(/line that is not a number/)
   })
 
   // -------------------------------------------------------------------------
@@ -1109,11 +1109,11 @@ describe("the implementer's report", () => {
   ])('it rejects %s: the list is written by a model, it is not trusted data', (_case, paths) => {
     const r = readReport({ paths, summary: 'hecho' })
     expect(r.report).toBeUndefined()
-    expect(r.why).toMatch(/fuera del worktree/)
+    expect(r.why).toMatch(/outside the worktree/)
   })
 
   it('a report with no paths is discarded instead of committing the index blindly', () => {
-    expect(readReport({ summary: 'ya está' }).why).toMatch(/rutas tocadas/)
+    expect(readReport({ summary: 'ya está' }).why).toMatch(/paths touched/)
   })
 
   // The same path twice used to DISCARD the whole report. Not any more: what
@@ -1323,10 +1323,10 @@ describe("the second veto's advisor", () => {
   })
 
   it.each([
-    ['with no approach', { approach: undefined }, /enfoque/],
-    ['with an empty approach', { approach: '   ' }, /enfoque/],
-    ['with the paths in prose', { files_to_reconsider: 'src/uno.js' }, /rutas/],
-    ['with a path that is not text', { files_to_reconsider: [7] }, /rutas/],
+    ['with no approach', { approach: undefined }, /approach/],
+    ['with an empty approach', { approach: '   ' }, /approach/],
+    ['with the paths in prose', { files_to_reconsider: 'src/uno.js' }, /paths/],
+    ['with a path that is not text', { files_to_reconsider: [7] }, /paths/],
   ])('an advice %s gets discarded, and the why names it', (_, over, reason) => {
     const { advice, why } = readAdvice(adviceFixture(over))
     expect(advice).toBeUndefined()
@@ -1334,7 +1334,7 @@ describe("the second veto's advisor", () => {
   })
 
   it('an advice that names paths outside the worktree gets discarded', () => {
-    expect(readAdvice(adviceFixture({ files_to_reconsider: ['/etc/passwd'] })).why).toMatch(/fuera del worktree/)
+    expect(readAdvice(adviceFixture({ files_to_reconsider: ['/etc/passwd'] })).why).toMatch(/outside the worktree/)
   })
 
   it('with no structured_output there is no advice', () => {

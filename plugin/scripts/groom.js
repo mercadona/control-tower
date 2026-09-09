@@ -90,7 +90,7 @@ export const EPIC_CONTEXT_REASONS = { ABSENT: 'ausente', EMPTY: 'vacia', MALFORM
 // because the two warnings of that class share it and it has to say exactly
 // the same in both: what a reader needs to know is that their formatting error
 // has deleted nothing of theirs.
-const MALFORMED_KEEPS_WHAT_IS_THERE = 'Mientras esté así, no se toca ni se borra el contexto que ya tengan los issues de este epic: sin texto válido, el spec no tiene ninguna opinión que aplicar.'
+const MALFORMED_KEEPS_WHAT_IS_THERE = 'While it stays like this, the context the issues of this epic already carry is neither touched nor deleted: with no valid text, the spec has no opinion to apply.'
 
 // truncationLine: the line that truncated the section, if it turns out that
 // locateSection cut before an H1/H2 heading or before the end of the file.
@@ -195,10 +195,10 @@ export function analyzeSpecFreeze(specMd) {
 // trim betrays a cleaning failure (it is warned about, B2).
 export function readSpecSection(specMd, heading, opts = {}) {
   const warnings = []
-  // `noun` keeps each client's warnings byte-identical: the epic says "lleva
-  // contexto común", the decisions "lleva decisiones congeladas". Without it,
+  // `noun` keeps each client's warnings byte-identical: the epic says "carries
+  // common context", the decisions "carries frozen decisions". Without it,
   // extracting the reader would change the text readEpicContext prints today.
-  const noun = opts.noun || 'esta sección'
+  const noun = opts.noun || 'this section'
   // CRLF (final branch review, I2). It is normalised HERE, before locating
   // anything, and for two different reasons:
   //
@@ -207,7 +207,7 @@ export function readSpecSection(specMd, heading, opts = {}) {
   //      cells of the §9 table all go through `trim`, which eats the `\r`). An
   //      `\r` inside the body cannot be seen, but diffIssue and
   //      buildReconcileBody always compare text normalised to LF: against a
-  //      value with a `\r` they can NEVER match — a `nota:` on every run and,
+  //      value with a `\r` they can NEVER match — a `note:` on every run and,
   //      since the C1 fix, a write on every run, for ever.
   //   2. `locateSection` (and with it the whole guardrail) looks at the lines
   //      with ATX_HEADING_RE, which does not recognise "##\r" as a heading: in
@@ -219,7 +219,7 @@ export function readSpecSection(specMd, heading, opts = {}) {
   const src = normalizeToLF(specMd || '')
   const loc = locateSection(src, heading)
   if (!loc) {
-    warnings.push(`aviso: el spec no trae la sección "${heading}" — ningún issue de este epic lleva ${noun} (ni el que se cree ahora, ni el que ya exista: con --reconcile la sección se retira del cuerpo). Si lo quieres, añade esa sección al spec, fuera de la tabla de slices, y vuelve a correr.`)
+    warnings.push(`warning: the spec does not carry the "${heading}" section — no issue of this epic carries ${noun} (neither the one created now, nor one that already exists: with --reconcile the section is withdrawn from the body). If you want it, add that section to the spec, outside the slices table, and run again.`)
     return { content: null, reason: EPIC_CONTEXT_REASONS.ABSENT, warnings }
   }
   // An unclosed delimiter (final branch review, C3). It goes BEFORE the
@@ -232,19 +232,19 @@ export function readSpecSection(specMd, heading, opts = {}) {
   // (gh-issue-map.js#unterminatedDelimiter), not with a new one.
   const unterminated = unterminatedDelimiter(loc.content)
   if (unterminated) {
-    const what = unterminated === 'valla' ? 'una valla de código (```) sin cerrar' : 'un comentario HTML (<!--) sin cerrar'
-    warnings.push(`aviso: la sección "${heading}" del spec contiene ${what} y por eso NO se emite en ningún issue. Sin el cierre, la sección no termina donde parece: se traga todo lo que venga detrás en el spec (la tabla de slices incluida) y ese texto acabaría en el cuerpo de todos los issues. Cierra el delimitador y vuelve a correr. ${MALFORMED_KEEPS_WHAT_IS_THERE}`)
+    const what = unterminated === 'valla' ? 'an unclosed code fence (```)' : 'an unclosed HTML comment (<!--)'
+    warnings.push(`warning: the "${heading}" section of the spec contains ${what} and that is why it is NOT emitted in any issue. Without the closing, the section does not end where it looks like it does: it swallows everything that comes after it in the spec (the slices table included) and that text would end up in the body of every issue. Close the delimiter and run again. ${MALFORMED_KEEPS_WHAT_IS_THERE}`)
     return { content: null, reason: EPIC_CONTEXT_REASONS.MALFORMED, warnings }
   }
 
   const truncating = truncationLine(src, loc)
   if (truncating) {
-    warnings.push(`aviso: la sección "${heading}" del spec contiene ("${truncating}") y por eso NO se emite en ningún issue. La sección se reescribe entera desde el spec: el reemplazo termina en la primera cosa que corta la sección (cabecera de cualquier nivel, comentario HTML, etc.), así que nada que corte puede vivir dentro. ${MALFORMED_KEEPS_WHAT_IS_THERE}`)
+    warnings.push(`warning: the "${heading}" section of the spec contains ("${truncating}") and that is why it is NOT emitted in any issue. The section is rewritten whole from the spec: the replacement ends at the first thing that cuts the section off (a heading of any level, an HTML comment, etc.), so nothing that cuts can live inside it. ${MALFORMED_KEEPS_WHAT_IS_THERE}`)
     return { content: null, reason: EPIC_CONTEXT_REASONS.MALFORMED, warnings }
   }
   const content = loc.content.trim()
   if (!content) {
-    warnings.push(`aviso: la sección "${heading}" del spec está presente pero sin contenido — se trata igual que si no estuviera, o sea que ningún issue lleva ${noun} (y con --reconcile la sección se retira del cuerpo de los que ya la tengan). Escribe algo debajo de la cabecera, o quítala.`)
+    warnings.push(`warning: the "${heading}" section of the spec is present but has no content — it is treated just as if it were not there, that is, no issue carries ${noun} (and with --reconcile the section is withdrawn from the body of those that already have it). Write something under the heading, or remove it.`)
     return { content: null, reason: EPIC_CONTEXT_REASONS.EMPTY, warnings }
   }
   let out = content
@@ -264,7 +264,7 @@ export function readSpecSection(specMd, heading, opts = {}) {
     if (opts.survives) {
       for (const l of out.split('\n')) {
         if (opts.survives.test(l)) {
-          warnings.push(`aviso: en la sección "${heading}" del spec, esta línea conserva un marcador "${opts.stripLabel}" tras limpiar el sufijo y por eso viaja tal cual al cuerpo de los issues: "${l}". Revisa que cada decisión lleve como mucho un sufijo "*(Procedencia: …)*", en una sola línea, o quítalo a mano.`)
+          warnings.push(`warning: in the "${heading}" section of the spec, this line still carries a "${opts.stripLabel}" marker after the suffix was trimmed, and that is why it travels as it is into the body of the issues: "${l}". Check that each decision carries at most one "*(Procedencia: …)*" suffix, on a single line, or remove it by hand.`)
         }
       }
     }
@@ -277,7 +277,7 @@ export function readSpecSection(specMd, heading, opts = {}) {
 // that now lives in readSpecSection; the signature and the tests that already
 // cover it are preserved).
 export function readEpicContext(specMd) {
-  return readSpecSection(specMd, EPIC_CONTEXT_HEADING, { noun: 'contexto común' })
+  return readSpecSection(specMd, EPIC_CONTEXT_HEADING, { noun: 'common context' })
 }
 
 // PROVENANCE_SUFFIX_RE: the "*(Procedencia: …)*" suffix that the decisions
@@ -306,7 +306,7 @@ const PROVENANCE_MARKER_RE = /\(Procedencia:/i
 // readSpecSection. The ONLY difference is the provenance strip (and its
 // observable warning if a marker survives the trim, B2).
 export function readFrozenDecisions(specMd) {
-  return readSpecSection(specMd, FROZEN_DECISIONS_HEADING, { noun: 'decisiones congeladas', strip: PROVENANCE_SUFFIX_RE, survives: PROVENANCE_MARKER_RE, stripLabel: 'Procedencia' })
+  return readSpecSection(specMd, FROZEN_DECISIONS_HEADING, { noun: 'frozen decisions', strip: PROVENANCE_SUFFIX_RE, survives: PROVENANCE_MARKER_RE, stripLabel: 'Procedencia' })
 }
 
 // gatesOf: a slice's gate resolution, in a single place. buildLabels and
@@ -726,7 +726,7 @@ export function groomPlan(slices, { milestone, specRef, epicContext = null, epic
   const frozenDecisionsUnknown = frozenDecisionsReason === EPIC_CONTEXT_REASONS.MALFORMED
   const dupes = findDuplicateOrders(slices)
   if (dupes.length) {
-    throw new Error(`groomPlan: orden(es) de slice duplicado(s) en la tabla §9: ${dupes.join(', ')}`)
+    throw new Error(`groomPlan: duplicate slice order(s) in the §9 table: ${dupes.join(', ')}`)
   }
   return {
     milestone,

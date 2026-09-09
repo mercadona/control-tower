@@ -38,12 +38,12 @@ const arg = (name) => {
   return i === -1 ? null : process.argv[i + 1] ?? null
 }
 
-const usage = 'uso: ct-go.mjs --issue N --repo owner/name'
+const usage = 'usage: ct-go.mjs --issue N --repo owner/name'
 const issueRaw = arg('--issue')
 const repo = arg('--repo')
 const issue = parseStrictInt(String(issueRaw ?? ''))
 if (!issueRaw || issue == null || issue <= 0 || !repo || !/^[^/\s]+\/[^/\s]+$/.test(repo)) {
-  process.stderr.write(`${!repo || !/^[^/\s]+\/[^/\s]+$/.test(repo) ? '--repo debe ser owner/name' : `--issue inválido: "${issueRaw}" — un número de issue en dígitos decimales`}\n${usage}\n`)
+  process.stderr.write(`${!repo || !/^[^/\s]+\/[^/\s]+$/.test(repo) ? '--repo must be owner/name' : `--issue invalid: "${issueRaw}" — an issue number in plain decimal digits`}\n${usage}\n`)
   process.exit(2)
 }
 
@@ -61,6 +61,6 @@ try {
   process.exit(1)
 }
 
-console.log(`go de ${repo}#${issue} reemitido — el anterior (si había) ya no vale. Registro: ${path}`)
+console.log(`go for ${repo}#${issue} reissued — the previous one (if there was one) is no longer valid. Registry: ${path}`)
 emitGoNonce(issue, nonce)
 console.log(`  OJO: el vigilante que lanzó /ct-next (si sigue vivo) está buscando el go ANTERIOR, así que tras contestar tendrás que empujar la sesión a mano.`)

@@ -72,10 +72,10 @@ describe('ct-groom — labels: it tells the ones that already existed apart from
     expect(log).toMatch(/label create touches:db/)
     expect(log).toMatch(/label create status:backlog/)
     // And the output says so, in two separate groups.
-    expect(res.stderr).toMatch(/ya exist[íi]an.*type:backend/)
-    expect(res.stderr).toMatch(/ya exist[íi]an.*area:api/)
-    expect(res.stderr).toMatch(/creadas.*touches:db/)
-    expect(res.stderr).toMatch(/creadas.*status:backlog/)
+    expect(res.stderr).toMatch(/already existed.*type:backend/)
+    expect(res.stderr).toMatch(/already existed.*area:api/)
+    expect(res.stderr).toMatch(/created.*touches:db/)
+    expect(res.stderr).toMatch(/created.*status:backlog/)
     // A label of the repo that is foreign to the plan is neither mentioned nor touched.
     expect(res.stderr).not.toMatch(/\bbug\b/)
     rmSync(dir, { recursive: true, force: true })
@@ -92,8 +92,8 @@ describe('ct-groom — labels: it tells the ones that already existed apart from
     })
     expect(res.status).toBe(0)
     expect(() => JSON.parse(res.stdout)).not.toThrow() // the plan still comes out clean on stdout
-    expect(res.stderr).toMatch(/ya exist[íi]an.*type:backend/)
-    expect(res.stderr).toMatch(/se crear[íi]an.*area:api/)
+    expect(res.stderr).toMatch(/already existed.*type:backend/)
+    expect(res.stderr).toMatch(/would be created.*area:api/)
     const log = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
     expect(log).not.toMatch(/label create/) // a dry-run never creates a label
     rmSync(dir, { recursive: true, force: true })
@@ -135,7 +135,7 @@ describe('ct-groom — labels: it tells the ones that already existed apart from
       FAKE_GH_LABELS_FAIL: '1',
     })
     expect(res.status).toBe(1)
-    expect(res.stderr).toMatch(/no se pudieron listar las labels/i)
+    expect(res.stderr).toMatch(/could not list the labels/i)
     rmSync(dir, { recursive: true, force: true })
   })
 })
@@ -189,7 +189,7 @@ describe('ct-groom — it says that what it has just created is NOT dispatchable
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[existing]]),
       FAKE_GH_LABELS_LIST: JSON.stringify([[]]),
     })
-    expect(res.stderr).not.toMatch(/recordatorio/)
+    expect(res.stderr).not.toMatch(/reminder/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -208,7 +208,7 @@ describe('ct-groom — it says that what it has just created is NOT dispatchable
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[existing]]),
       FAKE_GH_LABELS_LIST: JSON.stringify([[]]),
     })
-    expect(res.stderr).toMatch(/recordatorio/)
+    expect(res.stderr).toMatch(/reminder/)
     expect(res.stderr).toMatch(/status:ready/)
     rmSync(dir, { recursive: true, force: true })
   })

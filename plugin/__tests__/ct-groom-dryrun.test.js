@@ -108,7 +108,7 @@ describe('ct-groom --dry-run', () => {
       // the rest of this wrapper's validation errors (non-existent spec,
       // invalid --milestone/--project/--repo).
       expect(e.status).toBe(2)
-      expect(e.stderr.toString()).toMatch(/duplicad/)
+      expect(e.stderr.toString()).toMatch(/duplicate/)
       expect(e.stderr.toString()).toMatch(/1/)
       // the wrapper's convention: console.error + process.exit, NEVER a Node
       // stack trace dumped by an uncaught exception.
@@ -127,7 +127,7 @@ describe('ct-groom --dry-run', () => {
     } catch (e) {
       threw = true
       expect(e.status).not.toBe(0)
-      expect(e.stderr.toString()).toMatch(/--repo requerido/)
+      expect(e.stderr.toString()).toMatch(/--repo is required/)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
@@ -231,7 +231,7 @@ describe('ct-groom — dangling flags do not sneak false values through (final r
       } catch (e) {
         threw = true
         expect(e.status).toBe(2)
-        expect((e.stdout || '') + (e.stderr || '')).toMatch(/--project inválido/)
+        expect((e.stdout || '') + (e.stderr || '')).toMatch(/--project invalid/)
       }
       expect(threw).toBe(true)
       rmSync(dir, { recursive: true, force: true })
@@ -258,7 +258,7 @@ describe('ct-groom — dangling flags do not sneak false values through (final r
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--section', '12', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv() })
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/--section está obsoleto y se IGNORA/)
+    expect(res.stderr).toMatch(/--section is OBSOLETE and is IGNORED/)
     const plan = JSON.parse(res.stdout)
     // Not a trace of the "12" that was asked for: the anchor is the real heading's.
     expect(plan.issues[0].body).not.toContain('#12')
@@ -276,7 +276,7 @@ describe('ct-groom — dangling flags do not sneak false values through (final r
       const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', ...argv],
         { encoding: 'utf8', env: fakeEnv() })
       expect(res.status).toBe(0)
-      expect(res.stderr).toMatch(/--section está obsoleto/)
+      expect(res.stderr).toMatch(/--section is OBSOLETE/)
       // The hole F6 closed must NOT reappear through the back door: the boolean
       // `true` of a dangling flag reaches no anchor.
       expect(res.stdout).not.toContain('#true')
@@ -344,7 +344,7 @@ describe('ct-groom — it fails hard on an unusable §9 table (F1)', () => {
       threw = true
       expect(e.status).not.toBe(0)
       expect(e.stdout).toBe('') // it never gets as far as printing the plan JSON
-      expect(e.stderr.toString()).toMatch(/no se encontr.*tabla/i)
+      expect(e.stderr.toString()).toMatch(/no markdown table.*was found/i)
       expect(e.stderr.toString()).toMatch(/§9/)
     }
     expect(threw).toBe(true)
@@ -366,8 +366,8 @@ describe('ct-groom — it fails hard on an unusable §9 table (F1)', () => {
       threw = true
       expect(e.status).toBe(2)
       expect(e.stdout).toBe('')
-      expect(e.stderr.toString()).toMatch(/columna\s+"#"/)
-      expect(e.stderr.toString()).toMatch(/orden/i)
+      expect(e.stderr.toString()).toMatch(/"#"\s+column/)
+      expect(e.stderr.toString()).toMatch(/slice order/i)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
@@ -392,7 +392,7 @@ describe('ct-groom — it fails hard on an unusable §9 table (F1)', () => {
     const plan = JSON.parse(res.stdout)
     expect(plan.issues).toHaveLength(1)
     expect(plan.issues[0].title).toBe('#1 x') // title from "Slice"
-    expect(res.stderr).toMatch(/columna\s+"Entrega"/)
+    expect(res.stderr).toMatch(/"Entrega"\s+column/)
     expect(res.stderr).toMatch(/Descripci/i)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -417,9 +417,9 @@ describe('ct-groom — it fails hard on an unusable §9 table (F1)', () => {
       // Anchored to the count (a toothless test from the review: the message
       // carries the literal "1" in its own example, so a bare /1/ would pass
       // with any count). Anchored to the start of the message.
-      expect(err).toMatch(/^1 fila/)
+      expect(err).toMatch(/^1 row/)
       expect(err).toMatch(/\*\*S1\*\*/) // the offending value, as it stands
-      expect(err).toMatch(/entero/i)
+      expect(err).toMatch(/integer/i)
       expect(err).toMatch(/"1"/) // what to write instead
     }
     expect(threw).toBe(true)
@@ -440,7 +440,7 @@ describe('ct-groom — it fails hard on an unusable §9 table (F1)', () => {
       threw = true
       expect(e.status).toBe(2)
       expect(e.stdout).toBe('')
-      expect(e.stderr.toString()).toMatch(/ninguna fila/i)
+      expect(e.stderr.toString()).toMatch(/no data rows/i)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
@@ -463,7 +463,7 @@ describe('ct-groom — it fails hard on an unusable §9 table (F1)', () => {
       expect(e.status).toBe(2)
       expect(e.stdout).toBe('') // the original bug: this printed {"issues":[],...} and exited 0
       const err = e.stderr.toString()
-      expect(err).toMatch(/^2 fila/) // anchored to the count: the two rows, S1 and S2
+      expect(err).toMatch(/^2 row/) // anchored to the count: the two rows, S1 and S2
       expect(err).toMatch(/\*\*S1\*\*/)
       expect(err).not.toMatch(/at \S+ \(file:/) // convention: never a raw stack trace
     }
@@ -591,8 +591,8 @@ describe('ct-groom — "Tipo" with a value that is no key of ADDENDA warns, it d
     // test's spec does not carry "## Contexto del epic" either, so since T3 the
     // stderr ALSO carries that warning — orthogonal to what is checked here.
     // It is anchored to the Tipo column (the only source of the warning this
-    // test watches), not to a bare "aviso:".
-    expect(res.stderr).not.toMatch(/columna Tipo/)
+    // test watches), not to a bare "warning:".
+    expect(res.stderr).not.toMatch(/column Tipo/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -612,8 +612,8 @@ describe('ct-groom — "Tipo" with a value that is no key of ADDENDA warns, it d
     // test's spec does not carry "## Contexto del epic" either, so since T3 the
     // stderr ALSO carries that warning — orthogonal to what is checked here.
     // It is anchored to the Tipo column (the only source of the warning this
-    // test watches), not to a bare "aviso:".
-    expect(res.stderr).not.toMatch(/columna Tipo/)
+    // test watches), not to a bare "warning:".
+    expect(res.stderr).not.toMatch(/column Tipo/)
     const plan = JSON.parse(res.stdout)
     expect(plan.issues[0].labels.some((l) => l.startsWith('type:'))).toBe(false)
     rmSync(dir, { recursive: true, force: true })
@@ -645,8 +645,8 @@ describe('ct-groom — "Tipo" with a value that is no key of ADDENDA warns, it d
     // test's spec does not carry "## Contexto del epic" either, so since T3 the
     // stderr ALSO carries that warning — orthogonal to what is checked here.
     // It is anchored to the Tipo column (the only source of the warning this
-    // test watches), not to a bare "aviso:".
-    expect(res.stderr).not.toMatch(/columna Tipo/)
+    // test watches), not to a bare "warning:".
+    expect(res.stderr).not.toMatch(/column Tipo/)
     const plan = JSON.parse(res.stdout)
     expect(plan.issues[0].labels.some((l) => l.startsWith('type:'))).toBe(false)
     rmSync(dir, { recursive: true, force: true })
@@ -679,11 +679,11 @@ describe('ct-groom — Dep with content but no recognisable #N reference at all 
       // passes with any count because the example message itself contains
       // digits). 2 malformed rows (slices #2 and #3; #1 with "–" is
       // legitimate).
-      expect(err).toMatch(/^2 fila/)
+      expect(err).toMatch(/^2 row/)
       expect(err).toMatch(/"S1"/) // the offending value, as it stands
       expect(err).toMatch(/#N/) // which format to use
       expect(err).toMatch(/#1/) // an example of the correct format
-      expect(err).toMatch(/escribe\s+"–"/) // CRITICAL 1: the half of the message that was missing
+      expect(err).toMatch(/write\s+"–"/) // CRITICAL 1: the half of the message that was missing
       expect(err).not.toMatch(/at \S+ \(file:/)
     }
     expect(threw).toBe(true)
@@ -745,7 +745,7 @@ describe('ct-groom — an em dash (—) in Dep does not abort; the malformed-Dep
       const err = e.stderr.toString()
       // The message must be about "S1" (row 2), NEVER about "—" (row 1, which
       // always meant "no dependencies" correctly).
-      expect(err).toMatch(/^1 fila/)
+      expect(err).toMatch(/^1 row/)
       expect(err).toMatch(/"S1"/)
       expect(err).not.toMatch(/"—"/)
     }
@@ -766,7 +766,7 @@ describe('ct-groom — an em dash (—) in Dep does not abort; the malformed-Dep
     } catch (e) {
       threw = true
       expect(e.status).toBe(2)
-      expect(e.stderr.toString()).toMatch(/si no hay dependencias, escribe\s+"–"/)
+      expect(e.stderr.toString()).toMatch(/if there are no dependencies, write\s+"–"/)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
@@ -809,7 +809,7 @@ describe('ct-groom — a gap (a blank line) inside the §9 table aborts hard, it
       expect(e.status).toBe(2)
       expect(e.stdout).toBe('') // the bug: this printed a single issue and exited 0
       const err = e.stderr.toString()
-      expect(err).toMatch(/^1 fila/)
+      expect(err).toMatch(/^1 data row/)
       expect(err).toMatch(/segundo/)
     }
     expect(threw).toBe(true)
@@ -835,7 +835,7 @@ describe('ct-groom — an empty "Slice" cell, or a row shorter than the header, 
       expect(e.status).toBe(2)
       expect(e.stdout).toBe('')
       const err = e.stderr.toString()
-      expect(err).toMatch(/^1 fila/)
+      expect(err).toMatch(/^1 row/)
       expect(err).toMatch(/Slice/)
     }
     expect(threw).toBe(true)
@@ -875,8 +875,8 @@ describe('ct-groom — Dep pointing at a slice that does not exist, or at itself
       expect(e.status).toBe(2)
       expect(e.stdout).toBe('')
       const err = e.stderr.toString()
-      expect(err).toMatch(/^1 referencia/)
-      expect(err).toMatch(/#3.*sí mismo|sí mismo.*#3/)
+      expect(err).toMatch(/^1 "Dep" reference/)
+      expect(err).toMatch(/#3.*itself|itself.*#3/)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
@@ -918,7 +918,7 @@ describe('ct-groom — an Área/Toca token that normalises to empty warns but do
     expect(plan.issues[0].labels).not.toContain('area:')
     expect(plan.issues[0].labels.some((l) => l.startsWith('area:'))).toBe(false)
     expect(res.stderr).toMatch(/Área/)
-    expect(res.stderr).toMatch(/inerte/)
+    expect(res.stderr).toMatch(/inert/)
     rmSync(dir, { recursive: true, force: true })
   })
 })
@@ -934,15 +934,15 @@ describe('ct-groom — "the §9 table was not found" tells "there is no table" a
       threw = true
       expect(e.status).toBe(2)
       const err = e.stderr.toString()
-      expect(err).toMatch(/cabecera/i)
+      expect(err).toMatch(/header/i)
       expect(err).toMatch(/Slice/)
-      expect(err).not.toMatch(/ninguna tabla markdown/i)
+      expect(err).not.toMatch(/no markdown table/i)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('with no markdown table at all → the message "no se encontró ninguna tabla markdown"', () => {
+  it('with no markdown table at all → the message "no markdown table was found at all"', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, '# Spec sin ninguna tabla\n\nSolo prosa.\n')
     let threw = false
@@ -951,7 +951,7 @@ describe('ct-groom — "the §9 table was not found" tells "there is no table" a
     } catch (e) {
       threw = true
       expect(e.status).toBe(2)
-      expect(e.stderr.toString()).toMatch(/no se encontr.*tabla/i)
+      expect(e.stderr.toString()).toMatch(/no markdown table.*was found/i)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
@@ -1019,7 +1019,7 @@ describe('ct-groom — a row with more cells than the header aborts hard (review
       threw = true
       expect(e.status).toBe(2)
       expect(e.stdout).toBe('')
-      expect(e.stderr.toString()).toMatch(/^1 fila/)
+      expect(e.stderr.toString()).toMatch(/^1 row/)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
@@ -1044,7 +1044,7 @@ describe('ct-groom — "Slice" with a "no value" marker aborts hard (review roun
       threw = true
       expect(e.status).toBe(2)
       expect(e.stdout).toBe('')
-      expect(e.stderr.toString()).toMatch(/^1 fila/)
+      expect(e.stderr.toString()).toMatch(/^1 row/)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
@@ -1147,8 +1147,8 @@ describe('ct-groom — markup normalisation in a single pass closes the whole cl
     // (F6: stderr is no longer empty — it carries the new labels and the
     // status:backlog reminder. F26: nor is it empty because "## Contexto del
     // epic" is absent — orthogonal to what this test watches, so it is anchored
-    // to the Área/Toca columns instead of a bare "aviso:").
-    expect(res.stderr).not.toMatch(/en columna (Área|Toca)/)
+    // to the Área/Toca columns instead of a bare "warning:").
+    expect(res.stderr).not.toMatch(/in column (Área|Toca)/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1316,7 +1316,7 @@ describe('ct-groom --dry-run — it detects the divergence of an issue that alre
       // legitimately, in the line about the `status:` vocabulary /ct-groom
       // creates so that the claim can write it later
       // (groom.js#LOOP_STATUS_LABELS).
-      expect(err).not.toMatch(/divergencia.*status:in-progress/)
+      expect(err).not.toMatch(/drift.*status:in-progress/)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
@@ -1346,7 +1346,7 @@ describe('ct-groom --dry-run — it detects the divergence of an issue that alre
     expect(stderrLines).toHaveLength(3)
     expect(stderrLines.some((l) => l.includes(EPIC_CONTEXT_HEADING))).toBe(true)
     expect(stderrLines.some((l) => l.includes(FROZEN_DECISIONS_HEADING))).toBe(true)
-    expect(stderrLines.some((l) => l.includes('no tiene columna "Señal"'))).toBe(true)
+    expect(stderrLines.some((l) => l.includes('has no "Señal" column'))).toBe(true)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1375,7 +1375,7 @@ describe('ct-groom --dry-run — it detects the divergence of an issue that alre
     expect(stderrLines).toHaveLength(3)
     expect(stderrLines.some((l) => l.includes(EPIC_CONTEXT_HEADING))).toBe(true)
     expect(stderrLines.some((l) => l.includes(FROZEN_DECISIONS_HEADING))).toBe(true)
-    expect(stderrLines.some((l) => l.includes('no tiene columna "Señal"'))).toBe(true)
+    expect(stderrLines.some((l) => l.includes('has no "Señal" column'))).toBe(true)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1424,7 +1424,7 @@ describe('ct-groom --dry-run — it detects the divergence of an issue that alre
     } catch (e) {
       threw = true
       expect(e.status).toBe(3) // a dry-run never "resolves" anything, even with --reconcile
-      expect(e.stderr.toString()).toMatch(/--reconcile aplicaría.*issue edit 501/)
+      expect(e.stderr.toString()).toMatch(/--reconcile would apply.*issue edit 501/)
     }
     expect(threw).toBe(true)
     const log = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
@@ -1432,7 +1432,7 @@ describe('ct-groom --dry-run — it detects the divergence of an issue that alre
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // A product decision (review round 5): the "--reconcile es EXPERIMENTAL"
+  // A product decision (review round 5): the "--reconcile is EXPERIMENTAL"
   // warning is printed as soon as the flag is present, WITH or WITHOUT
   // --dry-run — the warning is about the flag's risk, not about whether this
   // particular run actually gets to mutate anything.
@@ -1442,7 +1442,7 @@ describe('ct-groom --dry-run — it detects the divergence of an issue that alre
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run', '--reconcile'],
       { encoding: 'utf8', env: fakeEnv() })
     expect(res.status).toBe(0) // with no existing issues, nothing diverges — the warning lives on stderr, it does not affect the exit
-    expect(res.stderr).toMatch(/--reconcile es EXPERIMENTAL/)
+    expect(res.stderr).toMatch(/--reconcile is EXPERIMENTAL/)
     rmSync(dir, { recursive: true, force: true })
   })
   it('--dry-run WITHOUT --reconcile → the warning NEVER shows up', () => {
@@ -1470,7 +1470,7 @@ describe('ct-groom --dry-run — it detects the divergence of an issue that alre
       threw = true
       expect(e.status).toBe(1)
       expect(e.stdout).toBe('') // the bug this avoids: a dry-run that reports LESS than the real run
-      expect(e.stderr.toString()).toMatch(/no se pudo listar issues/)
+      expect(e.stderr.toString()).toMatch(/could not list the issues/)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
@@ -1571,7 +1571,7 @@ describe('ct-groom --dry-run — divergent AC/Dependencias are detected (critica
       threw = true
       expect(e.status).toBe(3)
       const err = e.stderr.toString()
-      expect(err).toMatch(/--reconcile aplicaría.*issue edit 501.*--body <actualizado/)
+      expect(err).toMatch(/--reconcile would apply.*issue edit 501.*--body <updated/)
       // the real text of the AC or dependency is not dumped into the preview message:
       expect(err).not.toContain('merge-after `#2`\n')
     }
@@ -1675,16 +1675,16 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
     expect(res.status).toBe(0)
     // What it did before: it matched #451/#452/#453 and reported the different
     // milestone as a divergence, creating nothing.
-    expect(res.stderr).not.toMatch(/divergencia/)
+    expect(res.stderr).not.toMatch(/drift/)
     // And it also declared #454/#455/#456 orphans in the SAME run.
-    expect(res.stderr).not.toMatch(/hu.rfano/)
+    expect(res.stderr).not.toMatch(/orphaned/)
     // #451/#452/#453 ARE named now, but only as gate B's non-blocking
     // fail-open warning (their link points at another spec): the earlier
     // assertion was `not.toMatch(/#45[123]/)` and it has been sharpened, not
     // relaxed — what matters is that none of those mentions is a match, a
     // divergence or an orphan.
     for (const line of res.stderr.split('\n').filter((l) => /#45[1-6]/.test(l))) {
-      expect(line.startsWith('aviso: ')).toBe(true)
+      expect(line.startsWith('warning: ')).toBe(true)
     }
     const plan = JSON.parse(res.stdout)
     expect(plan.issues.map((i) => i.order)).toEqual([1, 2, 3])
@@ -1709,18 +1709,18 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
         }),
       })
     expect(res.status).toBe(0)
-    expect(res.stdout).toMatch(/issue creado orden #1/)
-    expect(res.stdout).toMatch(/issue creado orden #2/)
-    expect(res.stdout).toMatch(/issue creado orden #3/)
+    expect(res.stdout).toMatch(/issue created, order #1/)
+    expect(res.stdout).toMatch(/issue created, order #2/)
+    expect(res.stdout).toMatch(/issue created, order #3/)
     // In a real run the warning's verb is indicative: here it really is created.
-    expect(res.stderr).toMatch(/crearé un issue nuevo para el slice #1 en "Epic nuevo"/)
-    // The failure this fix closes: "issue orden #1 ya existe (#451), no se
+    expect(res.stderr).toMatch(/will create a new issue for slice #1 in "Epic nuevo"/)
+    // The failure this fix closes: "issue of order #1 already exists (#451), not
     // duplica". Neither the idempotence message nor any of the earlier epic's
     // six numbers may come out over stdout.
-    expect(res.stdout).not.toMatch(/issue orden #\d+ ya existe/)
+    expect(res.stdout).not.toMatch(/issue of order #\d+ already exists/)
     expect(res.stdout).not.toMatch(/#45[1-6]/)
-    expect(res.stderr).not.toMatch(/divergencia/)
-    expect(res.stderr).not.toMatch(/hu.rfano/)
+    expect(res.stderr).not.toMatch(/drift/)
+    expect(res.stderr).not.toMatch(/orphaned/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1730,7 +1730,7 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[PREVIOUS_EPIC]]) }) })
     expect(res.status).toBe(0)
-    expect(res.stderr).not.toMatch(/hu.rfano/)
+    expect(res.stderr).not.toMatch(/orphaned/)
     expect(res.stderr).not.toMatch(/#45[1-6]/)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -1750,15 +1750,15 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[...PREVIOUS_EPIC, REAL_ORPHAN]]]) }) })
     expect(res.status).toBe(3)
     expect(res.stderr).toMatch(/issue #601.*ct-order:9/)
-    expect(res.stderr).toMatch(/hu.rfano/)
+    expect(res.stderr).toMatch(/orphaned/)
     // The narrowing has not silenced the signal, it has only limited it to its
     // own epic: none of the earlier epic's six is declared an orphan.
     // (#451–#453 do come out as gate B's non-blocking warning — the fail-open
     // of a link that does not match — so the assertion is sharpened to the
     // orphan line rather than to "the number does not appear".)
     for (const line of res.stderr.split('\n').filter((l) => /#45[1-6]/.test(l))) {
-      expect(line.startsWith('aviso: ')).toBe(true)
-      expect(line).not.toMatch(/hu.rfano/)
+      expect(line.startsWith('warning: ')).toBe(true)
+      expect(line).not.toMatch(/orphaned/)
     }
     rmSync(dir, { recursive: true, force: true })
   })
@@ -1783,8 +1783,8 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
     // And since slice #1 ALREADY has an issue in this epic, gate B's warning
     // does not talk about it: no creation is possible, hence no duplication is
     // possible. Slices 2 and 3, which would be created, are warned about.
-    expect(res.stderr).not.toMatch(/aviso: el slice #1 de este spec/)
-    expect(res.stderr).toMatch(/aviso: el slice #2 de este spec/)
+    expect(res.stderr).not.toMatch(/warning: slice #1 of this spec/)
+    expect(res.stderr).toMatch(/warning: slice #2 of this spec/)
     rmSync(dir, { recursive: true, force: true })
   })
 })
@@ -1807,12 +1807,12 @@ describe('ct-groom — gate A: issues with no milestone (F23)', () => {
     expect(res.status).toBe(1)
     expect(res.stderr).toMatch(/#487\s+ct-order:2/)
     expect(res.stderr).toMatch(/#488\s+ct-order:3/)
-    expect(res.stderr).toMatch(/no se ha creado ni modificado nada/)
+    expect(res.stderr).toMatch(/nothing has been created or modified/)
     expect(res.stderr).toMatch(/gh issue edit .*--milestone/)
     // The effect, not the exit code: the gate falls BEFORE the first mutation,
     // which is the creation of the milestone.
-    expect(res.stdout).not.toMatch(/milestone creado/)
-    expect(res.stdout).not.toMatch(/issue creado/)
+    expect(res.stdout).not.toMatch(/milestone created/)
+    expect(res.stdout).not.toMatch(/issue created/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1822,8 +1822,8 @@ describe('ct-groom — gate A: issues with no milestone (F23)', () => {
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[SIN_MILESTONE(487, 9)]]]) }) })
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/issue #487.*ct-order:9.*no tiene milestone/)
-    expect(res.stderr).not.toMatch(/no se ha creado ni modificado nada/)
+    expect(res.stderr).toMatch(/issue #487.*ct-order:9.*has no milestone/)
+    expect(res.stderr).not.toMatch(/nothing has been created or modified/)
     const plan = JSON.parse(res.stdout)
     expect(plan.issues.map((i) => i.order)).toEqual([1, 2, 3])
     rmSync(dir, { recursive: true, force: true })
@@ -1876,9 +1876,9 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     expect(res.stderr).toMatch(/#452\s+ct-order:2/)
     expect(res.stderr).toMatch(/Epic anterior/)
     expect(res.stderr).toMatch(/Epic nuevo/)
-    expect(res.stderr).toMatch(/no se ha creado ni modificado nada/)
-    expect(res.stdout).not.toMatch(/milestone creado/)
-    expect(res.stdout).not.toMatch(/issue creado/)
+    expect(res.stderr).toMatch(/nothing has been created or modified/)
+    expect(res.stdout).not.toMatch(/milestone created/)
+    expect(res.stdout).not.toMatch(/issue created/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1888,11 +1888,11 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[PREVIOUS_EPIC]]) }) })
     expect(res.status).toBe(0)
-    expect(res.stderr).not.toMatch(/no se ha creado ni modificado nada/)
+    expect(res.stderr).not.toMatch(/nothing has been created or modified/)
     // "It does not fire" means it does not BLOCK, not that it keeps quiet: the
     // three orders that are in today's table come out as a warning (see the
     // warning's tests further down).
-    expect(res.stderr).toMatch(/aviso: el slice #1 de este spec/)
+    expect(res.stderr).toMatch(/warning: slice #1 of this spec/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1902,7 +1902,7 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[sameSpecOtherEpic(452, 8)]]]) }) })
     expect(res.status).toBe(0)
-    expect(res.stderr).not.toMatch(/no se ha creado ni modificado nada/)
+    expect(res.stderr).not.toMatch(/nothing has been created or modified/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1918,15 +1918,15 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[PREVIOUS_EPIC[1]]]]) }) })
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/^aviso: el slice #2 de este spec tiene un issue en otro milestone con el mismo ct-order \(#452, "Epic anterior"\)/m)
-    expect(res.stderr).toMatch(/su enlace al spec no coincide con el de este spec/)
+    expect(res.stderr).toMatch(/^warning: slice #2 of this spec has an issue in another milestone with the same ct-order \(#452, "Epic anterior"\)/m)
+    expect(res.stderr).toMatch(/its link to the spec does not match this spec's/)
     // Under --dry-run the verb is conditional: nothing is created here (the
     // same criterion as the status:backlog reminder,
-    // "quedarían"/"quedan").
-    expect(res.stderr).toMatch(/crearía un issue nuevo para el slice #2 en "Epic nuevo"/)
-    expect(res.stderr).toMatch(/esto va a duplicarlo: compruébalo antes de seguir/)
+    // "would be left"/"are left").
+    expect(res.stderr).toMatch(/would create a new issue for slice #2 in "Epic nuevo"/)
+    expect(res.stderr).toMatch(/this is going to duplicate it: check before carrying on/)
     // It does not block: the run carries on and the whole plan is printed.
-    expect(res.stderr).not.toMatch(/no se ha creado ni modificado nada/)
+    expect(res.stderr).not.toMatch(/nothing has been created or modified/)
     expect(JSON.parse(res.stdout).issues.map((i) => i.order)).toEqual([1, 2, 3])
     rmSync(dir, { recursive: true, force: true })
   })
@@ -1949,9 +1949,9 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[NO_LINK]]]) }) })
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/aviso:.*#470, "Epic anterior"/)
-    expect(res.stderr).toMatch(/no lleva ninguna línea de enlace al spec/)
-    expect(res.stderr).not.toMatch(/no se ha creado ni modificado nada/)
+    expect(res.stderr).toMatch(/warning:.*#470, "Epic anterior"/)
+    expect(res.stderr).toMatch(/carries no link-to-the-spec line/)
+    expect(res.stderr).not.toMatch(/nothing has been created or modified/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1979,11 +1979,11 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     expect(res.status).toBe(0)
     // #451 carries ct-order:1, just like the issue this epic already has:
     // nothing to duplicate, no warning that names it.
-    expect(res.stderr).not.toMatch(/aviso: el slice #1 de este spec/)
+    expect(res.stderr).not.toMatch(/warning: slice #1 of this spec/)
     expect(res.stderr).not.toMatch(/#451/)
     // #452/#453 do: slices 2 and 3 would still be created.
-    expect(res.stderr).toMatch(/aviso: el slice #2 de este spec.*#452/)
-    expect(res.stderr).toMatch(/aviso: el slice #3 de este spec.*#453/)
+    expect(res.stderr).toMatch(/warning: slice #2 of this spec.*#452/)
+    expect(res.stderr).toMatch(/warning: slice #3 of this spec.*#453/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1993,7 +1993,7 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[PREVIOUS_EPIC]]) }) })
     expect(res.status).toBe(0)
-    expect(res.stderr).not.toMatch(/aviso: el slice/)
+    expect(res.stderr).not.toMatch(/warning: slice #/)
     expect(res.stderr).not.toMatch(/#45[1-6]/)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -2010,9 +2010,9 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[sameSpecOtherEpic(452, 2), PREVIOUS_EPIC[0]]]]) }) })
     expect(res.status).toBe(1)
     expect(res.stderr).toMatch(/#452\s+ct-order:2/) // the block does come out
-    expect(res.stderr).toMatch(/no se ha creado ni modificado nada/)
+    expect(res.stderr).toMatch(/nothing has been created or modified/)
     // #451 (ct-order:1, another spec) would have warned in a run that carried on.
-    expect(res.stderr).not.toMatch(/aviso: el slice/)
+    expect(res.stderr).not.toMatch(/warning: slice #/)
     expect(res.stderr).not.toMatch(/#451/)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -2027,7 +2027,7 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
     expect(res.stderr).toMatch(/#487\s+ct-order:3/)   // gate A
     expect(res.stderr).toMatch(/#452\s+ct-order:2/)   // gate B
     // A single closure: the footer shows up exactly once.
-    expect(res.stderr.match(/no se ha creado ni modificado nada/g)).toHaveLength(1)
+    expect(res.stderr.match(/nothing has been created or modified/g)).toHaveLength(1)
     rmSync(dir, { recursive: true, force: true })
   })
 })
@@ -2053,8 +2053,8 @@ describe('the Señal column in the groom (Slice 10)', () => {
     expect(res.status).toBe(2)
     expect(res.stderr).toMatch(/slice #1: "N\/A"/)
     expect(res.stderr).toMatch(/N\/A — <razón>/)
-    expect(res.stderr).toMatch(/deja la celda vacía o con "–"/)
-    expect(res.stderr).toMatch(/corrige esas filas y vuelve a intentarlo/)
+    expect(res.stderr).toMatch(/leave the cell empty or with "–"/)
+    expect(res.stderr).toMatch(/fix those rows and try again/)
     // It aborts BEFORE printing any plan: under --dry-run no JSON comes out either.
     expect(res.stdout).toBe('')
     rmSync(dir, { recursive: true, force: true })
@@ -2074,8 +2074,8 @@ describe('the Señal column in the groom (Slice 10)', () => {
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TWO_DEFECTS)
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
     expect(res.status).toBe(2)
-    expect(res.stderr).toMatch(/exención sin razón/)
-    expect(res.stderr).toMatch(/sin ninguna dependencia reconocible/)
+    expect(res.stderr).toMatch(/exemption with no reason/)
+    expect(res.stderr).toMatch(/with no recognizable dependency/)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -2084,10 +2084,10 @@ describe('the Señal column in the groom (Slice 10)', () => {
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/no tiene columna "Señal"/)
+    expect(res.stderr).toMatch(/has no "Señal" column/)
     // The warning describes the measurable CONSEQUENCE, not just the absence.
-    expect(res.stderr).toMatch(/sin sección "## Señal de observabilidad"/)
-    expect(res.stderr).toMatch(/observabilidad como sin-vara/)
+    expect(res.stderr).toMatch(/with no "## Señal de observabilidad" section/)
+    expect(res.stderr).toMatch(/observability item as sin-vara/)
     rmSync(dir, { recursive: true, force: true })
   })
 

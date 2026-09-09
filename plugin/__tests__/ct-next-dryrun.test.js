@@ -111,7 +111,7 @@ describe('ct-next — nothing dispatchable', () => {
     })
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: fixtureNadaReady })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/dependencias sin mergear/i)
+    expect(r.out).toMatch(/dependencies unmerged/i)
     expect(r.out).toMatch(/#2/)
     expect(r.out).toMatch(/#1/)
   })
@@ -133,7 +133,7 @@ describe('ct-next — nothing dispatchable', () => {
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/#5/)
     expect(r.out).not.toMatch(/#null/)
-    expect(r.out).toMatch(/no (corresponde|existe)/i)
+    expect(r.out).toMatch(/corresponds to no existing/i)
   })
 
   // D1 finding 2: a ready issue with `depsMalformed: true` (the section "##
@@ -150,7 +150,7 @@ describe('ct-next — nothing dispatchable', () => {
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/#9/)
     expect(r.out).toMatch(/Dependencias/)
-    expect(r.out).not.toMatch(/falta mergear\s*$/im)
+    expect(r.out).not.toMatch(/still to merge\s*$/im)
   })
 })
 
@@ -172,13 +172,13 @@ describe('ct-next — warning about an ambiguous status: (D1 finding 3)', () => 
     expect(r.out).toMatch(/#1/)
     expect(r.out).toMatch(/status:in-progress/)
     expect(r.out).toMatch(/status:ready/)
-    expect(r.out).toMatch(/avis/i)
+    expect(r.out).toMatch(/warning/i)
   })
 
   it('with no statusAmbiguous at all → no warning', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE })
     expect(r.code).toBe(0)
-    expect(r.out).not.toMatch(/avis/i)
+    expect(r.out).not.toMatch(/warning/i)
   })
 })
 
@@ -200,13 +200,13 @@ describe('ct-next — warning about deps outside the "## Dependencias" section (
     expect(r.out).toMatch(/#8/)
     expect(r.out).toMatch(/#1/)
     expect(r.out).toMatch(/Dependencias/)
-    expect(r.out).toMatch(/avis/i)
+    expect(r.out).toMatch(/warning/i)
   })
 
   it('with no strayDeps at all → no warning', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE })
     expect(r.code).toBe(0)
-    expect(r.out).not.toMatch(/avis/i)
+    expect(r.out).not.toMatch(/warning/i)
   })
 })
 
@@ -223,7 +223,7 @@ describe('ct-next — distinguishable reason for blocking (W-B, §8)', () => {
     })
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: fx })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/no hay ningún issue en status:ready/i)
+    expect(r.out).toMatch(/there is no issue at status:ready/i)
   })
 
   it('ready + merged deps but it collides with in-flight touches → it names the in-flight issue and the shared token', () => {
@@ -239,7 +239,7 @@ describe('ct-next — distinguishable reason for blocking (W-B, §8)', () => {
     expect(r.out).toMatch(/#2/)
     expect(r.out).toMatch(/#1/)
     expect(r.out).toMatch(/api/)
-    expect(r.out).toMatch(/en vuelo/i)
+    expect(r.out).toMatch(/In flight/i)
   })
 
   it('ready + merged deps but it collides with serialisation (migration in flight vs. ci ready) → it names both tokens', () => {
@@ -274,8 +274,8 @@ describe('ct-next — distinguishable reason for blocking (W-B, §8)', () => {
     // Here raising --cap WOULD solve something (#2 collides with nothing in
     // flight), so the message still suggests it as it was (fix Minor 1: the
     // message is not touched for the case where raising --cap DOES help).
-    expect(r.out).toMatch(/sube --cap/i)
-    expect(r.out).not.toMatch(/no bastaría/i)
+    expect(r.out).toMatch(/raise --cap/i)
+    expect(r.out).not.toMatch(/would not be enough/i)
   })
 
   // Fix Minor 1 from W-B's review: before, "cap full" always suggested
@@ -294,9 +294,9 @@ describe('ct-next — distinguishable reason for blocking (W-B, §8)', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: fx })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/cap.*1/i)
-    expect(r.out).toMatch(/no bastaría/i)
-    expect(r.out).toMatch(/dependencias sin mergear/i)
-    expect(r.out).not.toMatch(/sube --cap, o espera/i) // it does not promise that raising the cap solves anything
+    expect(r.out).toMatch(/would not be enough/i)
+    expect(r.out).toMatch(/dependencies unmerged/i)
+    expect(r.out).not.toMatch(/raise --cap, or wait/i) // it does not promise that raising the cap solves anything
   })
 })
 
@@ -309,7 +309,7 @@ describe('ct-next --dry-run — visibility of in-flight work (W-B, §8)', () => 
   it('with nothing in flight → it says so explicitly ("ninguno")', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/en vuelo.*ninguno/is)
+    expect(r.out).toMatch(/In flight.*none/is)
   })
 
   it('with something in flight (and another one dispatched anyway) → it lists the in-flight issue and the tokens it holds', () => {
@@ -322,7 +322,7 @@ describe('ct-next --dry-run — visibility of in-flight work (W-B, §8)', () => 
     })
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '2', '--dry-run'], { CT_NEXT_FIXTURE: fx })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/en vuelo/i)
+    expect(r.out).toMatch(/In flight/i)
     expect(r.out).toMatch(/#1/)
     expect(r.out).toMatch(/migration/)
     // and the second slice is dispatched all the same, with no collision
@@ -335,13 +335,13 @@ describe('ct-next — usage errors', () => {
   it('with no --repo → exit 2', () => {
     const r = run(['--dry-run'])
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/uso:/)
+    expect(r.out).toMatch(/usage:/)
   })
 
   it('dangling --repo (last token, with no value) → exit 2', () => {
     const r = run(['--cap', '1', '--dry-run', '--repo'])
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/uso:/)
+    expect(r.out).toMatch(/usage:/)
   })
 
   it('--repo followed by another flag (with no real value) → exit 2', () => {
@@ -467,10 +467,10 @@ describe('ct-next — orphaned worktree on a partial failure (review round 1, Im
       FAKE_GIT_WORKTREE_ADD_AS_FILE: '1',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no se pudo sembrar \.agent\/SLICE\.md/)
+    expect(r.out).toMatch(/could not seed \.agent\/SLICE\.md/)
     expect(r.out).toMatch(/limpiados automáticamente/)
     expect(r.out).toMatch(/puedes reintentar/)
-    expect(r.out).not.toMatch(/ATENCIÓN/)
+    expect(r.out).not.toMatch(/ATTENTION/)
   })
 
   // Finding 10 of the final review: the two cleanup steps are attempted
@@ -478,7 +478,7 @@ describe('ct-next — orphaned worktree on a partial failure (review round 1, Im
   // did, and only one of the two steps had really failed, the hint would be
   // unrunnable as written (the step that did succeed would fail again on
   // retrying it, and because of the `&&` the other would never get to run).
-  it('the worktree remove fails but the branch -D (attempted separately) does succeed → ATENCIÓN with the worktree command only, with no && and no mention of the branch', () => {
+  it('the worktree remove fails but the branch -D (attempted separately) does succeed → ATTENTION with the worktree command only, with no && and no mention of the branch', () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const wtPath = join(repoRoot, '.worktrees', '42')
@@ -490,13 +490,13 @@ describe('ct-next — orphaned worktree on a partial failure (review round 1, Im
       FAKE_GIT_WORKTREE_REMOVE_FAIL: '1',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATENCIÓN.*no se pudo limpiar automáticamente el worktree/s)
+    expect(r.out).toMatch(/ATTENTION.*the worktree of #\d+ could not be cleaned up automatically/s)
     expect(r.out).toMatch(new RegExp(`git worktree remove --force ${wtPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
     expect(r.out).not.toMatch(/&&/) // never chained
     expect(r.out).not.toMatch(/git branch -D feat\/42/) // the branch really was deleted, the hint is not needed
   })
 
-  it('the branch -D fails but the worktree remove (attempted separately) does succeed → ATENCIÓN with the branch command only, with no && and no mention of the worktree', () => {
+  it('the branch -D fails but the worktree remove (attempted separately) does succeed → ATTENTION with the branch command only, with no && and no mention of the worktree', () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
@@ -507,13 +507,13 @@ describe('ct-next — orphaned worktree on a partial failure (review round 1, Im
       FAKE_GIT_BRANCH_DELETE_FAIL: '1',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATENCIÓN.*no se pudo limpiar automáticamente la rama/s)
+    expect(r.out).toMatch(/ATTENTION.*the branch of #\d+ could not be cleaned up automatically/s)
     expect(r.out).toMatch(/git branch -D feat\/42/)
     expect(r.out).not.toMatch(/&&/)
     expect(r.out).not.toMatch(/git worktree remove --force/) // the worktree really was deleted, the hint is not needed
   })
 
-  it('worktree remove AND branch -D both fail → ATENCIÓN with both commands, separately (never with &&)', () => {
+  it('worktree remove AND branch -D both fail → ATTENTION with both commands, separately (never with &&)', () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const wtPath = join(repoRoot, '.worktrees', '42')
@@ -526,7 +526,7 @@ describe('ct-next — orphaned worktree on a partial failure (review round 1, Im
       FAKE_GIT_BRANCH_DELETE_FAIL: '1',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATENCIÓN.*no se pudo limpiar automáticamente el worktree y la rama/s)
+    expect(r.out).toMatch(/ATTENTION.*the worktree and the branch of #\d+ could not be cleaned up automatically/s)
     expect(r.out).toMatch(new RegExp(`git worktree remove --force ${wtPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
     expect(r.out).toMatch(/git branch -D feat\/42/)
     expect(r.out).not.toMatch(/&&/)
@@ -545,7 +545,7 @@ describe('ct-next — orphaned worktree on a partial failure (review round 1, Im
       FAKE_CMUX_FAIL: '1',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no se pudo lanzar cmux/)
+    expect(r.out).toMatch(/could not launch cmux/)
     expect(r.out).toMatch(/limpiados automáticamente/)
     expect(r.out).toMatch(/puedes reintentar/)
   })
@@ -578,7 +578,7 @@ describe('ct-next — orphaned worktree on a partial failure (review round 1, Im
     // stderr pointing at THE SAME file descriptor, which is the only thing
     // that gives the real order of emission.
     const idxLanzado42 = r.out.indexOf('lanzado #42')
-    const idxFallo43 = r.out.indexOf('no se pudo lanzar cmux')
+    const idxFallo43 = r.out.indexOf('could not launch cmux')
     expect(idxLanzado42).toBeGreaterThan(-1)
     expect(idxFallo43).toBeGreaterThan(-1)
     const interleaved = combinedOutputOf(['--repo', 'o/r', '--cap', '2'], {
@@ -588,9 +588,9 @@ describe('ct-next — orphaned worktree on a partial failure (review round 1, Im
       FAKE_CMUX_FAIL_NAME_SUBSTR: '#43',
     })
     expect(interleaved.indexOf('lanzado #42')).toBeGreaterThan(-1)
-    expect(interleaved.indexOf('no se pudo lanzar cmux')).toBeGreaterThan(-1)
-    expect(interleaved.indexOf('lanzado #42')).toBeLessThan(interleaved.indexOf('no se pudo lanzar cmux'))
-    expect(r.out).toMatch(/ya lanzados con éxito antes de este fallo.*siguen corriendo.*no se han tocado/is)
+    expect(interleaved.indexOf('could not launch cmux')).toBeGreaterThan(-1)
+    expect(interleaved.indexOf('lanzado #42')).toBeLessThan(interleaved.indexOf('could not launch cmux'))
+    expect(r.out).toMatch(/already launched successfully before this failure.*carry on running.*have not been touched/is)
     // git's log confirms that ONLY #43's worktree/branch (the second one) was
     // attempted for cleanup, never #42's (the first, which did succeed).
     const gitLog = readFileSync(logFile, 'utf8')
@@ -649,7 +649,7 @@ describe('ct-next — repo identity guard (final review, finding 1)', () => {
       FAKE_GIT_REMOTE_ORIGIN: 'https://github.com/control-tower/control-tower.git',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no coincide/i)
+    expect(r.out).toMatch(/does not match/i)
     expect(r.out).toMatch(/menoplus-app\/menoplus/)
     expect(r.out).toMatch(/control-tower\/control-tower/)
     expect(existsSync(join(repoRoot, '.worktrees'))).toBe(false)
@@ -662,7 +662,7 @@ describe('ct-next — repo identity guard (final review, finding 1)', () => {
       FAKE_GIT_REMOTE_FAIL: '1',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no tiene remote "origin"/i)
+    expect(r.out).toMatch(/it has no "origin" remote/i)
     expect(existsSync(join(repoRoot, '.worktrees'))).toBe(false)
   })
 
@@ -678,7 +678,7 @@ describe('ct-next — repo identity guard (final review, finding 1)', () => {
     expect(r.code).toBe(0)
     // W-B: with no open issues, the reason becomes "none-ready" (the generic
     // message this test used to check is no longer emitted).
-    expect(r.out).toMatch(/no hay ningún issue en status:ready/i)
+    expect(r.out).toMatch(/there is no issue at status:ready/i)
   })
 
   it('the guard also applies in --dry-run with no fixture: a --repo that does not match aborts just the same, not only in the real run', () => {
@@ -688,7 +688,7 @@ describe('ct-next — repo identity guard (final review, finding 1)', () => {
       FAKE_GIT_REMOTE_ORIGIN: 'https://github.com/control-tower/control-tower.git',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no coincide/i)
+    expect(r.out).toMatch(/does not match/i)
   })
 })
 
@@ -877,7 +877,7 @@ describe('ct-next — D1 finding 1: per-epic (milestone) scope of the order, rea
     expect(r.out).toMatch(/colisi[oó]n/i)
     expect(r.out).toMatch(/#7/)
     expect(r.out).toMatch(/#8/)
-    expect(r.out).toMatch(/avis/i)
+    expect(r.out).toMatch(/warning/i)
     // #7/#8 (the collided epic) are never dispatched…
     expect(r.out).not.toContain('slice #7')
     expect(r.out).not.toContain('slice #8')
@@ -938,7 +938,7 @@ describe('ct-next — D1 finding 1: per-epic (milestone) scope of the order, rea
     expect(r.code).toBe(0)
     expect(r.out).toContain('slice #7')
     expect(r.out).toContain('slice #8') // the narrowing is correct: it is NOT blocked
-    expect(r.out).toMatch(/avis/i)
+    expect(r.out).toMatch(/warning/i)
     expect(r.out).toMatch(/#8/)
     expect(r.out).toMatch(/Dependencias/)
   })

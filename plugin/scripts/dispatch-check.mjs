@@ -56,7 +56,7 @@ const ctWatchMergePath = join(dirname(fileURLToPath(import.meta.url)), 'ct-watch
 // ct-next.mjs), and `process.exit()` does not wait for an in-flight `write()`
 // to finish draining. The `COLLISION: ...` message (a line further down) is
 // precisely the one that grows most — a clash against many issues in flight
-// at once — and the ATENCIÓN ones saying "release it by hand" are EXACTLY
+// at once — and the ATTENTION ones saying "release it by hand" are EXACTLY
 // what a human needs in full when something went wrong. `dieErr`/`dieOut`/
 // `errLine`/`outLine`, further down, replace `console.error`/`console.log`
 // in THIS WHOLE file (not only right before exiting): two separate writes to
@@ -94,7 +94,7 @@ const ctWatchMergePath = join(dirname(fileURLToPath(import.meta.url)), 'ct-watch
 //       after a readback failure). This demands that a human look at it
 //       before ct-next.mjs retries anything else — the caller aborts the
 //       WHOLE batch with this code, just as it already did before on seeing
-//       this same ATENCIÓN text. With `--collect` this same 4 means the same
+//       this same ATTENTION text. With `--collect` this same 4 means the same
 //       kind of thing through another door: the HARVEST WAS LEFT HALF DONE
 //       (some step mutated and another failed), and the commands that remain
 //       are printed separately —never chained with `&&`— so that a human can
@@ -167,7 +167,7 @@ const ctWatchMergePath = join(dirname(fileURLToPath(import.meta.url)), 'ct-watch
 //            protocol: `claimed #N → in-progress`, `released`, `reopened`,
 //            `requeued`, and the notes that accompany an outcome that was
 //            achieved.
-//   STDERR (`errLine`/`dieErr`) = the DIAGNOSTIC. `COLLISION:`, `ATENCIÓN:`,
+//   STDERR (`errLine`/`dieErr`) = the DIAGNOSTIC. `COLLISION:`, `ATTENTION:`,
 //            usage errors and every abort.
 //
 // This file ALREADY met the criterion; it is stated so that the split does
@@ -242,7 +242,7 @@ const dryRun = has('--dry-run')
 // releasing, for the same reason the failure to launch it is also said: a
 // silence here is indistinguishable from a watcher that really is there.
 const noWatchMerge = has('--no-watch-merge')
-const usage = 'uso: dispatch-check.mjs <issue#> --repo <o/r> [--release | --reopen | --requeue | --check-plan | --collect] [--dry-run] [--no-watch-merge] [--bq <proyecto:dataset.tabla>]'
+const usage = 'usage: dispatch-check.mjs <issue#> --repo <o/r> [--release | --reopen | --requeue | --check-plan | --collect] [--dry-run] [--no-watch-merge] [--bq <proyecto:dataset.tabla>]'
 // --bq <project:dataset.table>: only inside --collect, where to load the slice's harvested
 // row after closing cmux, deleting the worktree and the branch. It is validated HERE, next
 // to the other flags and before touching `gh`, so that a malformed value exits with 2
@@ -856,7 +856,7 @@ if (checkPlan) {
 // a real process to poll GitHub for 48 hours.
 // ============================================================================
 function launchMergeWatcher(n) {
-  const warn = (reason) => errLine(`aviso: no se ha lanzado el vigilante del merge de #${n} (${reason}) — el slice está entregado y el issue está en status:in-review, pero cuando mergees su PR tendrás que recoger la cosecha a mano (o avisar a la coordinadora).`)
+  const warn = (reason) => errLine(`warning: no se ha lanzado el vigilante del merge de #${n} (${reason}) — el slice está entregado y el issue está en status:in-review, pero cuando mergees su PR tendrás que recoger la cosecha a mano (o avisar a la coordinadora).`)
   try {
     const disk = localSliceArtifacts(n)
     if (!disk.known) return warn('no se ha podido averiguar cuál es el checkout principal, así que no se sabe dónde buscar la sesión coordinadora')
@@ -982,7 +982,7 @@ if (release) {
     let labels = []
     try { labels = labelsOf(issue) } catch { labels = [] }
     if (labels.includes('gate:e2e')) {
-      errLine(`aviso: #${issue} lleva la label gate:e2e pero su cuerpo no declara ninguna sección "${E2E_HEADING}" — no hay recorridos que verificar, así que se libera igual, pero conviene revisar si la sección se perdió al editar el issue a mano.`)
+      errLine(`warning: #${issue} lleva la label gate:e2e pero su cuerpo no declara ninguna sección "${E2E_HEADING}" — no hay recorridos que verificar, así que se libera igual, pero conviene revisar si la sección se perdió al editar el issue a mano.`)
     }
   }
   // ==========================================================================
@@ -1100,7 +1100,7 @@ if (release) {
   const unverified = (Array.isArray(run?.e2eResults) ? run.e2eResults : []).filter((r) => r && r.verdict === 'no-verificado')
   if (unverified.length) {
     const detail = unverified.map((r) => `"${r.run}" (${r.reason || 'sin motivo declarado en el informe'})`).join('; ')
-    errLine(`aviso: #${issue} se libera con ${unverified.length} recorrido(s) que NO se pudieron comprobar: ${detail}. Un "no-verificado" entrega a propósito (retener el slice por un entorno caído lo dejaría ocupando area:/touches: y una plaza de --cap sin nadie trabajando), pero libera SIN haber verificado eso: léelo antes de mergear. Si el motivo es del entorno, el arreglo va en la sección "## Cómo se atraviesa este repo (e2e)" de AGENTS.md, no en relajar la puerta. El informe completo está en docs/superpowers/e2e/${issue}.md.`)
+    errLine(`warning: #${issue} se libera con ${unverified.length} recorrido(s) que NO se pudieron comprobar: ${detail}. Un "no-verificado" entrega a propósito (retener el slice por un entorno caído lo dejaría ocupando area:/touches: y una plaza de --cap sin nadie trabajando), pero libera SIN haber verificado eso: léelo antes de mergear. Si el motivo es del entorno, el arreglo va en la sección "## Cómo se atraviesa este repo (e2e)" de AGENTS.md, no en relajar la puerta. El informe completo está en docs/superpowers/e2e/${issue}.md.`)
   }
   if (!dryRun && !fx) {
     const result = setStatus(issue, 'status:in-progress', 'status:in-review')
@@ -1123,7 +1123,7 @@ if (release) {
     // the flag's header), so the warning is waived on purpose instead of
     // being delivered to someone who cannot read it.
     if (noWatchMerge) {
-      errLine(`aviso: no se ha lanzado el vigilante del merge de #${issue} porque se pidió --no-watch-merge — el slice está entregado y el issue está en status:in-review, pero nadie te avisará cuando mergees su PR: la cosecha la seguirá detectando \`/ct-next\` en su próxima corrida.`)
+      errLine(`warning: no se ha lanzado el vigilante del merge de #${issue} porque se pidió --no-watch-merge — el slice está entregado y el issue está en status:in-review, pero nadie te avisará cuando mergees su PR: la cosecha la seguirá detectando \`/ct-next\` en su próxima corrida.`)
     } else {
       launchMergeWatcher(issue)
     }
@@ -1559,7 +1559,7 @@ if (collect) {
     [CollectionOutcome.KEPT_DIRTY_TREE]: { decir: dieOut, code: 10, linea: () => `kept #${issue}: el worktree ${a.worktree} tiene cambios sin commitear — no se ha borrado nada` },
     [CollectionOutcome.KEPT_TIP_NOT_MERGED]: { decir: dieOut, code: 10, linea: (r) => `kept #${issue}: la punta local de ${a.branch} no es el commit que mergeó la PR #${r.delivery.number} (${r.delivery.headRefOid}) — no se ha borrado nada` },
     [CollectionOutcome.NOT_READ]: { decir: dieErr, code: 3, linea: (r) => `no se pudo leer el estado de #${issue}: ${r.read} falló (${r.detail}) — no se ha tocado nada, el siguiente barrido reintenta.` },
-    [CollectionOutcome.PARTIAL]: { decir: dieErr, code: 4, linea: (r) => `ATENCIÓN: cosecha a medias de #${issue}: ${r.done.length ? r.done.map(doneText).join(', ') : 'no se completó ningún paso'}. Falló: ${r.detail}. Pendiente a mano — ejecuta cada comando por separado: ${r.pending.map((command) => command.line).join(' ; ')}` },
+    [CollectionOutcome.PARTIAL]: { decir: dieErr, code: 4, linea: (r) => `ATTENTION: cosecha a medias de #${issue}: ${r.done.length ? r.done.map(doneText).join(', ') : 'no se completó ningún paso'}. Falló: ${r.detail}. Pendiente a mano — ejecuta cada comando por separado: ${r.pending.map((command) => command.line).join(' ; ')}` },
   }
   const proyeccion = PROYECCION[report.outcome]
   if (!proyeccion) throw new Error(`--collect no tiene proyección para el desenlace ${report.outcome}`)
@@ -1694,7 +1694,7 @@ if (fx) {
         errLine(`#${issue} revertido a status:ready (carrera no confirmada)`)
       } else {
         revertOk = false
-        errLine(`ATENCIÓN: #${issue} puede haber quedado bloqueado en status:in-progress (no se pudo revertir: ${result.error.message}). Libéralo a mano con: ${manualReleaseHint()}`)
+        errLine(`ATTENTION: #${issue} puede haber quedado bloqueado en status:in-progress (no se pudo revertir: ${result.error.message}). Libéralo a mano con: ${manualReleaseHint()}`)
       }
     }
     process.exit(revertOk ? 3 : 4)
@@ -1711,7 +1711,7 @@ if (claimLost(readback, issue)) {
     const result = setStatus(issue, 'status:in-progress', 'status:ready')
     if (!result.ok) {
       revertOk = false
-      errLine(`ATENCIÓN: no se pudo revertir el claim de #${issue} tras perder la carrera (${result.error.message}). Queda bloqueado en status:in-progress — libéralo a mano con: ${manualReleaseHint()}`)
+      errLine(`ATTENTION: no se pudo revertir el claim de #${issue} tras perder la carrera (${result.error.message}). Queda bloqueado en status:in-progress — libéralo a mano con: ${manualReleaseHint()}`)
     }
   }
   process.exit(revertOk ? 1 : 4)

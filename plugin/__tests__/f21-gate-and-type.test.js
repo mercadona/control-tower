@@ -294,7 +294,7 @@ describe('F21 — the gate reaches GitHub, not just the kickoff', () => {
 
   it('a WAIVER is written into the issue body, with the Tipo that implied it', () => {
     const body = buildIssueBody({ ...uiSlice, gate: '!visual' }, {})
-    expect(body.toLowerCase()).toMatch(/renuncia/)
+    expect(body.toLowerCase()).toMatch(/waiver/)
     expect(body).toContain('visual')
     expect(body).toContain('`ui`')
   })
@@ -393,7 +393,7 @@ describe('F21 — /ct-groom talks about the gates', () => {
     expect(res.stderr).toMatch(/gate/i)
     expect(res.stderr).toContain('visual')
     expect(res.stderr).toContain('backend')
-    expect(res.stderr).toMatch(/no implica|no viene de/i)
+    expect(res.stderr).toMatch(/does not imply|does not come from/i)
     const plan = JSON.parse(res.stdout)
     expect(plan.issues[0].labels).toContain('gate:visual')
   })
@@ -401,7 +401,7 @@ describe('F21 — /ct-groom talks about the gates', () => {
   it('a WAIVER is announced on stderr, never in silence', () => {
     const res = dryRun(specWith(['| 1 | pantalla | ui | alta | – | AC-1.1 | – | med | app | !visual |']))
     expect(res.status).toBe(0)
-    expect(res.stderr.toLowerCase()).toMatch(/renuncia/)
+    expect(res.stderr.toLowerCase()).toMatch(/waives/)
     expect(res.stderr).toContain('visual')
     const plan = JSON.parse(res.stdout)
     expect(plan.issues[0].labels).toContain('gate:plan') // the universal default still stands
@@ -429,7 +429,7 @@ describe('F21 — /ct-groom talks about the gates', () => {
   it('a waiver that waives nothing is warned about (it is neither kept quiet nor aborted)', () => {
     const res = dryRun(specWith(['| 1 | barra | backend | tabla | – | AC-1.1 | – | med | db | !visual |']))
     expect(res.status).toBe(0)
-    expect(res.stderr.toLowerCase()).toMatch(/no implica|no tiene ese gate|no hace nada/)
+    expect(res.stderr.toLowerCase()).toMatch(/does not imply|does not have that gate|does nothing/)
   })
 
   it('a Tipo with a typo loses its GATES too, and the unknown-Tipo warning says so (not just the addendum)', () => {
@@ -439,9 +439,9 @@ describe('F21 — /ct-groom talks about the gates', () => {
     // not name it because gates did not exist as a concept.
     const res = dryRun(specWith(['| 1 | pantalla | UI | alta | – | AC-1.1 | – | med | app | – |']))
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/gates humanos/)
+    expect(res.stderr).toMatch(/human gates/)
     expect(res.stderr).toContain('ui→visual')
-    expect(res.stderr).toContain('columna "Gate"') // the remedy, in the warning itself
+    expect(res.stderr).toContain('"Gate" column') // the remedy, in the warning itself
     const plan = JSON.parse(res.stdout)
     // it loses the TECHNICAL gate of its Tipo (visual), but the universal
     // default `plan` does not depend on the Tipo and survives the typo.
@@ -460,7 +460,7 @@ describe('F21 — /ct-groom talks about the gates', () => {
     expect(res.status).toBe(0)
     const plan = JSON.parse(res.stdout)
     expect(plan.issues[0].labels).toContain('gate:visual')
-    expect(res.stderr).not.toMatch(/columna "Gate"/)
+    expect(res.stderr).not.toMatch(/"Gate" column/)
   })
 })
 

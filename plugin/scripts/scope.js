@@ -162,7 +162,7 @@ export function parseScope(issueBody) {
     return {
       declared: false,
       patterns: [],
-      reason: 'el epic no declara `Alcance:` en su sección `## Contexto del epic` — sin alcance declarado el gate no puede comprobar nada, y no poder comprobar NO es estar limpio',
+      reason: 'the epic does not declare `Alcance:` in its `## Contexto del epic` section — with no declared scope the gate cannot check anything, and not being able to check is NOT being clean',
     }
   }
   return { declared: true, patterns, reason: null }

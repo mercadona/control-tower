@@ -258,9 +258,9 @@ describe('the registry of the commitment', () => {
     // Verified by construction: a test of this suite running with HOME='' left
     // a `.claude/control-tower/go/o__r-90.json` inside the checkout.
     expect(() => writeGoCommitment({ repo: 'o/r', issue: 7, commitment: GO_HASH, configDir: 'relativo/mal' }))
-      .toThrow(/ruta absoluta/)
+      .toThrow(/absolute path/)
     // And the read does not say «there is no go», it says «it could not be checked».
-    expect(readGoCommitment({ repo: 'o/r', issue: 7, configDir: 'relativo/mal' }).error).toMatch(/ruta absoluta/)
+    expect(readGoCommitment({ repo: 'o/r', issue: 7, configDir: 'relativo/mal' }).error).toMatch(/absolute path/)
     expect(readGoCommitment({ repo: 'o/r', issue: 7, configDir: 'relativo/mal' }).missing).toBe(undefined)
   })
 
@@ -324,8 +324,8 @@ describe('the watcher demands the commitment', () => {
   it('with no --go-hash it does not watch: exit 2, and it does NOT fall back to the `-OK` with no nonce', () => {
     const r = spawnSync(process.execPath, [WATCH_GO, '--issue', '5', '--repo', 'o/r', '--session', 'x'], { encoding: 'utf8' })
     expect(r.status).toBe(2)
-    expect(r.stderr).toMatch(/--go-hash inválido o ausente/)
-    expect(r.stderr).toMatch(/esa puerta la abriría el propio agente/)
+    expect(r.stderr).toMatch(/--go-hash invalid or absent/)
+    expect(r.stderr).toMatch(/that door would be opened by the agent itself/)
   })
 
   it('with a --go-hash that is not a sha256, it does not either', () => {

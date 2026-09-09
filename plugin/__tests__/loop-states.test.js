@@ -145,11 +145,11 @@ describe('F13/H2 — the lock window reaches the merge, not the PR', () => {
     })
     const r = runNext(['--repo', 'o/r', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: fx })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/#6 está ready con deps mergeadas, pero colisiona con trabajo entregado sin mergear/)
+    expect(r.out).toMatch(/#6 is ready with merged deps, but it collides with delivered unmerged work/)
     expect(r.out).toMatch(/status:in-review/)
-    expect(r.out).toMatch(/esperar no sirve de nada/i)
-    expect(r.out).not.toMatch(/espera a que termine/)
-    expect(r.out).not.toMatch(/no se encontró worktree/)
+    expect(r.out).toMatch(/waiting achieves nothing/i)
+    expect(r.out).not.toMatch(/wait for it to finish/)
+    expect(r.out).not.toMatch(/no worktree, local branch or cmux session was found/)
     // And it gives the three real ways out, including the one nobody sees
     // coming: an already merged PR whose issue nobody closed because the PR was
     // missing its "Closes #N".
@@ -166,12 +166,12 @@ describe('F13/H2 — the lock window reaches the merge, not the PR', () => {
       mergedIssues: [],
     })
     const r = runNext(['--repo', 'o/r', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: fx })
-    expect(r.out).toMatch(/En vuelo: ninguno/)
+    expect(r.out).toMatch(/In flight: none/)
     // F16/H1: the line's label now carries the COUNT, because the enumeration
     // became bounded (thirty slices under review turned this line into a wall
     // that pushed the reason for the block off the screen). The count is never
     // trimmed; the names are.
-    expect(r.out).toMatch(/Sin mergear, reteniendo tokens \(1, status:in-review, NO ocupan cap\): #5 \[touches:db\]/)
+    expect(r.out).toMatch(/Unmerged, holding tokens \(1, status:in-review, they do NOT take cap\): #5 \[touches:db\]/)
   })
 
   it('dispatch-check aborts the claim against an in-review, and says so naming its status', () => {
@@ -311,7 +311,7 @@ describe('F13/H3 — the stale claim is cross-checked too when the only thing bl
   const issue41Stuck = rawIssue({ number: 41, order: 1, status: 'status:in-progress', touches: ['api'] })
   const issue42Ready = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['ui'] })
 
-  it('an in-progress with no worktree/branch/session that only fills the cap → ATENCIÓN, not a bare "espera a que termine alguno"', () => {
+  it('an in-progress with no worktree/branch/session that only fills the cap → ATTENTION, not a bare "espera a que termine alguno"', () => {
     // Observed against the unfixed code, with this very scenario:
     //   "El cap (1) ya está copado por trabajo en vuelo: 1 slice(s) en
     //    status:in-progress — sube --cap, o espera a que termine alguno."
@@ -325,11 +325,11 @@ describe('F13/H3 — the stale claim is cross-checked too when the only thing bl
       FAKE_CMUX_WORKSPACE_TITLES_JSON: JSON.stringify([]),
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/El cap \(1\) ya está copado/)
-    expect(r.out).toMatch(/ATENCIÓN, el cap puede estar copado por un claim muerto/)
-    expect(r.out).toMatch(/no se encontró worktree, rama local, ni sesión cmux para #41 EN ESTA MÁQUINA/)
+    expect(r.out).toMatch(/The cap \(1\) is already taken up/)
+    expect(r.out).toMatch(/ATTENTION, the cap may be taken up by a dead claim/)
+    expect(r.out).toMatch(/no worktree, local branch or cmux session was found for #41 ON THIS MACHINE/)
     // And it still does not assert the abandonment as a fact: the evidence is local.
-    expect(r.out).toMatch(/tampoco afirmamos que esté abandonado/)
+    expect(r.out).toMatch(/neither do we assert that it is abandoned/)
   })
 
   it('with local evidence of life (a worktree present) nothing is said about a dead claim — and cmux is NOT EVEN consulted', () => {
@@ -351,8 +351,8 @@ describe('F13/H3 — the stale claim is cross-checked too when the only thing bl
       FAKE_CMUX_INVOKED_LOG_FILE: cmuxLog,
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/sube --cap, o espera a que termine alguno\./)
-    expect(r.out).not.toMatch(/claim muerto/)
+    expect(r.out).toMatch(/raise --cap, or wait for one of them to finish\./)
+    expect(r.out).not.toMatch(/dead claim/)
     expect(existsSync(cmuxLog)).toBe(false) // not a single invocation of cmux
   })
 
@@ -369,9 +369,9 @@ describe('F13/H3 — the stale claim is cross-checked too when the only thing bl
       FAKE_CMUX_WORKSPACE_TITLES_JSON: JSON.stringify([]),
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/colisiona con trabajo entregado sin mergear/)
-    expect(r.out).not.toMatch(/no se encontró worktree/)
-    expect(r.out).not.toMatch(/claim muerto/)
+    expect(r.out).toMatch(/collides with delivered unmerged work/)
+    expect(r.out).not.toMatch(/no worktree, local branch or cmux session was found/)
+    expect(r.out).not.toMatch(/dead claim/)
   })
 })
 
@@ -415,17 +415,17 @@ describe('F13/H4 — "closed" is not "merged", and now it shows', () => {
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([open, closed]),
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/#7, que está cerrado como "not planned"/)
-    expect(r.out).toMatch(/NO SE VA A SATISFACER NUNCA/)
+    expect(r.out).toMatch(/#7, which is closed as "not planned"/)
+    expect(r.out).toMatch(/IS NEVER GOING TO SATISFY ITSELF/)
     // The two real remedies, because "wait" is not one of them.
-    expect(r.out).toMatch(/quita el "merge-after/)
-    expect(r.out).toMatch(/reabre #7 y ciérralo como completed/)
+    expect(r.out).toMatch(/remove the "merge-after/)
+    expect(r.out).toMatch(/reopen #7 and close it as completed/)
     // And the closing tag line cannot contradict the detail. Observed in a real
     // run against josemerca/ct-loop-sandbox with the first version of this
     // message: "...ESTA NO SE VA A SATISFACER NUNCA... — espera a que se
     // mergeen esas dependencias". The last sentence is the one that sticks.
-    expect(r.out).toMatch(/esperar NO va a desbloquear nada aquí/)
-    expect(r.out).not.toMatch(/espera a que se mergeen esas dependencias/)
+    expect(r.out).toMatch(/waiting is NOT going to unblock anything here/)
+    expect(r.out).not.toMatch(/wait for those dependencies to be merged/)
   })
 
   it('a dep that is simply unmerged (an open issue) still says "falta mergear", with no new noise', () => {
@@ -442,12 +442,12 @@ describe('F13/H4 — "closed" is not "merged", and now it shows', () => {
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([open, []]),
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/#8 \(falta mergear #7\)/)
-    expect(r.out).not.toMatch(/NO SE VA A SATISFACER NUNCA/)
+    expect(r.out).toMatch(/#8 \(still to merge: #7\)/)
+    expect(r.out).not.toMatch(/IS NEVER GOING TO SATISFY ITSELF/)
     // A control on the tag line in the other direction: here waiting IS the
     // right advice, and it has to keep being given.
-    expect(r.out).toMatch(/espera a que se mergeen esas dependencias/)
-    expect(r.out).not.toMatch(/esperar NO va a desbloquear nada/)
+    expect(r.out).toMatch(/wait for those dependencies to be merged/)
+    expect(r.out).not.toMatch(/waiting is NOT going to unblock anything/)
   })
 
   it('"nothing is ready" no longer keeps quiet about the slices stopped under review', () => {
@@ -466,8 +466,8 @@ describe('F13/H4 — "closed" is not "merged", and now it shows', () => {
     // voices of the same message (backlog and in-progress) — the "sí" was a
     // contrast with the short sentence that no longer exists. The content this
     // test defends (the count and the concrete numbers) does not change.
-    expect(r.out).toMatch(/Hay 2 en status:in-review \(#5, #6\)/)
-    expect(r.out).toMatch(/entregado pero SIN MERGEAR/)
+    expect(r.out).toMatch(/There are 2 at status:in-review \(#5, #6\)/)
+    expect(r.out).toMatch(/delivered but NOT MERGED/)
     expect(r.out).toMatch(/--reopen/)
     expect(r.out).not.toMatch(/no hay nada que despachar todavía/)
   })
@@ -482,9 +482,9 @@ describe('F13/H4 — "closed" is not "merged", and now it shows', () => {
     const fx = JSON.stringify({ issues: [{ n: 5, order: 1, status: 'backlog', deps: [], touches: [], name: 'a' }], mergedIssues: [] })
     const r = runNext(['--repo', 'o/r', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: fx })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/No hay ningún issue en status:ready\./)
+    expect(r.out).toMatch(/There is no issue at status:ready\./)
     expect(r.out).not.toMatch(/in-review/)
-    expect(r.out).toMatch(/1 en status:backlog \(#5\)/)
+    expect(r.out).toMatch(/1 at status:backlog \(#5\)/)
     expect(r.out).not.toMatch(/no hay nada que despachar todavía/)
   })
 })

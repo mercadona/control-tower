@@ -1,5 +1,5 @@
 export class PlanComment {
-  static EXAMPLE = 'un texto que diga qué hay que planificar'
+  static EXAMPLE = 'a text saying what needs planning'
 
   constructor(text) {
     if (!PlanComment.isWellFormed(text)) {

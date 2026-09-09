@@ -114,9 +114,9 @@ describe('aborts of the E2E column', () => {
     const r = groom('!e2e', 'curl -i :9115/metrics responde 200')
     expect(r.status).toBe(2)
     expect(r.stderr).toMatch(/#1/)
-    expect(r.stderr).toMatch(/celda "E2E" declara recorridos/)
+    expect(r.stderr).toMatch(/"E2E" cell declares journeys/)
     // The remedy is the cell, not the "Gate" column: the gate is DERIVED from there.
-    expect(r.stderr).toMatch(/escribe "no" en su celda "E2E"/)
+    expect(r.stderr).toMatch(/write "no" in its "E2E" cell/)
     // And it aborts BEFORE printing the plan, like the other four.
     expect(r.stdout.trim()).toBe('')
   })
@@ -152,8 +152,8 @@ describe('the "e2e" gate is announced on stderr, and names the right column', ()
     expect(r.status).toBe(0)
     expect(r.stderr).toMatch(/gate/i)
     expect(r.stderr).toContain('"e2e"')
-    expect(r.stderr).toMatch(/columna "E2E"/)
-    expect(r.stderr).not.toMatch(/columna "Gate"/)
+    expect(r.stderr).toMatch(/"E2E" column/)
+    expect(r.stderr).not.toMatch(/"Gate" column/)
     const plan = JSON.parse(r.stdout)
     expect(plan.issues[0].labels).toContain('gate:e2e')
   })
@@ -186,15 +186,15 @@ describe('review of addition 2 — redundant/inertWaivers also name "E2E", not "
     expect(r.status).toBe(0)
     // The "the gate already comes from the row" warning (the same one that
     // fires with journeys alone) is still there...
-    expect(r.stderr).toMatch(/columna "E2E"/)
+    expect(r.stderr).toMatch(/"E2E" column/)
     // ...and "redundante" no longer says the Tipo implies it: the two lines
     // that mention "e2e" agree that the source is the row/E2E column, and
     // neither names "Tipo" as the cause.
-    expect(r.stderr).toMatch(/redundante/)
-    expect(r.stderr).not.toMatch(/Tipo\s*"?backend"?\s*ya implica/)
+    expect(r.stderr).toMatch(/redundant/)
+    expect(r.stderr).not.toMatch(/Tipo\s*"?backend"?\s*already implies/)
     const e2eLines = r.stderr.split('\n').filter((l) => l.includes('"e2e"'))
     expect(e2eLines.length).toBeGreaterThanOrEqual(2)
-    for (const line of e2eLines) expect(line).toMatch(/columna "E2E"/)
+    for (const line of e2eLines) expect(line).toMatch(/"E2E" column/)
     const plan = JSON.parse(r.stdout)
     expect(plan.issues[0].labels).toContain('gate:e2e')
   })
@@ -202,8 +202,8 @@ describe('review of addition 2 — redundant/inertWaivers also name "E2E", not "
   it('Gate: !e2e + no journeys: the inert waiver names "E2E", not "Tipo"', () => {
     const r = groom('!e2e', 'no')
     expect(r.status).toBe(0)
-    expect(r.stderr).toMatch(/no había nada que quitar/)
-    expect(r.stderr).toMatch(/columna "E2E"/)
-    expect(r.stderr).not.toMatch(/su Tipo .* no implica ese gate/)
+    expect(r.stderr).toMatch(/there was nothing to remove/)
+    expect(r.stderr).toMatch(/"E2E" column/)
+    expect(r.stderr).not.toMatch(/its Tipo .* does not imply that gate/)
   })
 })

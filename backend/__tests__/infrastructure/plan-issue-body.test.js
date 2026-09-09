@@ -110,7 +110,7 @@ describe('PlanIssueBody', () => {
     const scope = parseScope(PlanIssueBody.of({ story: Opened.story(), comment: null }))
 
     expect(scope.declared).toBe(false)
-    expect(scope.reason).toContain('no declara `Alcance:`')
+    expect(scope.reason).toContain('does not declare `Alcance:`')
   })
 
   it('an_issue_number_written_in_jira_does_not_become_a_link_to_someone_elses_issue_here', () => {

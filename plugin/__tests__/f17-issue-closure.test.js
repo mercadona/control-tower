@@ -181,11 +181,11 @@ describe('F17 — a non-default `--base`: the warning that the `Closes #N` will 
   // (stderr only carried the ACCOUNT_MAP warning if the repo did not match).
   it('with --base, it warns on STDERR about the default branch rule', () => {
     const r = runNext(['--repo', 'o/r', '--cap', '1', '--dry-run', '--base', 'develop'], { CT_NEXT_FIXTURE: fx })
-    expect(r.stderr).toMatch(/aviso:.*--base develop/)
+    expect(r.stderr).toMatch(/warning:.*--base develop/)
     expect(r.stderr).toMatch(/rama por defecto/)
     expect(r.stderr).toMatch(/Closes #/)
     // It is diagnostics, not product: it does not sneak into the plan.
-    expect(r.stdout).not.toMatch(/^aviso:/m)
+    expect(r.stdout).not.toMatch(/^warning:/m)
   })
 
   // A negative check: with no --base, the resolved base IS the default branch
@@ -210,7 +210,7 @@ describe('F17 — a non-default `--base`: the warning that the `Closes #N` will 
 //   - the question /ct-next answers is «what gets dispatched now?». «Nothing,
 //     and this is exactly what prevents it, with its remedy» is a COMPLETE and
 //     terminal answer to that question, not an observation about the run. An
-//     `aviso:` is the second thing: the run did its job and ALSO notes
+//     `warning:` is the second thing: the run did its job and ALSO notes
 //     something. That is the dividing line, and the block reason falls on the
 //     product's side in BOTH modes;
 //   - `--dry-run` does not change WHAT the product is, only whether the plan is

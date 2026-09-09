@@ -408,7 +408,7 @@ describe('JudgeBench', () => {
     const { bench } = Benches.over({ root, answers: { 'tarea-correcta#1': JudgeAnswer.writing(Verdicts.withoutRubric(benchCase)) } })
     const [result] = bench.run({ cases: [benchCase], runs: 1 }).results
     expect(result.outcome).toBe(RunOutcome.DISCARDED)
-    expect(result.detail).toBe('el veredicto no trae el recorrido de la rúbrica')
+    expect(result.detail).toBe('the verdict does not carry the walk of the rubric')
   })
 
   it('a verdict that is not JSON is a discard, not a crash of the bench', () => {
@@ -486,7 +486,7 @@ describe('BenchReport', () => {
       agentPath: '/p/agents/ct-judge.md',
       results: [
         result({ caseName: 'test-inexistente-en-verde', attempt: 1, severities: new SeverityCount({ high: 1, low: 2 }), costUsd: 1, verdict: { ruling: 'FAIL' } }),
-        result({ caseName: 'test-inexistente-en-verde', attempt: 2, outcome: RunOutcome.DISCARDED, detail: 'el veredicto no trae el recorrido de la rúbrica', verdict: null, costUsd: 0.5 }),
+        result({ caseName: 'test-inexistente-en-verde', attempt: 2, outcome: RunOutcome.DISCARDED, detail: 'the verdict does not carry the walk of the rubric', verdict: null, costUsd: 0.5 }),
         result({ caseName: 'tarea-correcta', attempt: 1, severities: new SeverityCount({ medium: 1 }), costUsd: 0.25 }),
         result({ caseName: 'tarea-correcta', attempt: 2, costUsd: 0.25 }),
       ],
@@ -497,7 +497,7 @@ describe('BenchReport', () => {
     expect(text).toMatch(/test-inexistente-en-verde\s+2\s+1 \(50%\)\s+1 \(50%\)\s+0 \(0%\)\s+1\s+0\s+2\s+1\.5000/)
     expect(text).toMatch(/tarea-correcta\s+2\s+2 \(100%\)\s+0 \(0%\)\s+0 \(0%\)\s+0\s+1\s+0\s+0\.5000/)
     expect(text).toMatch(/total\s+4\s+3 \(75%\)\s+1 \(25%\)\s+0 \(0%\)\s+1\s+1\s+2\s+2\.0000/)
-    expect(text).toContain('  - test-inexistente-en-verde #2: descartado — el veredicto no trae el recorrido de la rúbrica (/w/tarea-correcta/1)')
+    expect(text).toContain('  - test-inexistente-en-verde #2: descartado — the verdict does not carry the walk of the rubric (/w/tarea-correcta/1)')
   })
 
   it('a report where every run hit says so instead of listing nothing', () => {

@@ -55,7 +55,7 @@ describe('yardstickCandidates', () => {
     expect(paths(r)).toContain('CONTRIBUTING.md')
     expect(paths(r)).not.toContain('docs/AGENTS.md')
     const agents = r.candidatos.find((c) => c.ruta === 'AGENTS.md')
-    expect(agents.motivo).toBe('guía del repo en la raíz')
+    expect(agents.motivo).toBe('repo guide at the root')
   })
 
   it('from a directory matching "convention|rules" it proposes ITS FILES and not the directory', () => {
@@ -230,31 +230,31 @@ describe('formatCandidatos', () => {
     expect(formatCandidatos([])).toBe('')
   })
 
-  it('with candidates, it carries the header, every path between backticks and the sentence saying it proposes and does not declare — and never "aviso"/"ATENCIÓN"/"unblock"', () => {
-    const text = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz' }])
+  it('with candidates, it carries the header, every path between backticks and the sentence saying it proposes and does not declare — and never "warning"/"ATTENTION"/"unblock"', () => {
+    const text = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'repo guide at the root' }])
     expect(text).toContain(CANDIDATOS_HEADER)
     expect(text).toContain('`AGENTS.md`')
-    expect(text).toMatch(/PROPONE.*humano DECLARA|el humano DECLARA/s)
-    expect(text.toLowerCase()).not.toContain('aviso')
-    expect(text).not.toContain('ATENCIÓN')
+    expect(text).toMatch(/PROPOSES.*human DECLARES|the human DECLARES/s)
+    expect(text.toLowerCase()).not.toContain('warning')
+    expect(text).not.toContain('ATTENTION')
     expect(text).not.toContain('unblock')
   })
 
   it("with a candidate marked as a skeleton, it explains that declaring it is worse than not declaring it — it hands the judge an empty document that does count as the repository's yardstick", () => {
-    const text = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz', esqueleto: true }])
-    expect(text).toContain('[esqueleto: sólo encabezados]')
-    expect(text).toMatch(/documento vacío/)
-    expect(text).toMatch(/peor que no declararlos/)
+    const text = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'repo guide at the root', esqueleto: true }])
+    expect(text).toContain('[skeleton: headings only]')
+    expect(text).toMatch(/empty document/)
+    expect(text).toMatch(/worse than not declaring them/)
   })
 
   it('with omitted ones, it says how many more candidates are left unlisted', () => {
-    const text = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz' }], { omitidos: 5 })
-    expect(text).toMatch(/\+5 candidatos más/)
+    const text = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'repo guide at the root' }], { omitidos: 5 })
+    expect(text).toMatch(/\+5 more candidates/)
   })
 
   it('with truncated, it warns that absence is not proof of absence', () => {
-    const text = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'guía del repo en la raíz' }], { truncated: true })
-    expect(text).toContain('Ausencia aquí no es prueba de ausencia')
+    const text = formatCandidatos([{ ruta: 'AGENTS.md', motivo: 'repo guide at the root' }], { truncated: true })
+    expect(text).toContain('Absence here is not proof of absence')
   })
 })
 
@@ -305,7 +305,7 @@ describe('detect-yardstick.mjs end to end', () => {
   // could be deleted without the suite noticing. This test runs the real script
   // against real files, one a skeleton and one with rules, so that mutating
   // that line (or deleting it) DOES knock something down.
-  it('reads each candidate off disk and marks [esqueleto: sólo encabezados] ONLY on the one that really is', () => {
+  it('reads each candidate off disk and marks [skeleton: headings only] ONLY on the one that really is', () => {
     const dir = tmp()
     mkdirSync(join(dir, 'docs', 'conventions'), { recursive: true })
     writeFileSync(join(dir, 'docs', 'conventions', 'esqueleto.md'), '# Reglas\n## Sección\n')
@@ -315,8 +315,8 @@ describe('detect-yardstick.mjs end to end', () => {
     )
     const r = spawnSync('node', [detectYardstickScript, dir], { encoding: 'utf8' })
     expect(r.status).toBe(0)
-    expect(r.stdout).toMatch(/`docs\/conventions\/esqueleto\.md` — [^\n]*\[esqueleto: sólo encabezados\]/)
-    expect(r.stdout).not.toMatch(/`docs\/conventions\/real\.md`[^\n]*\[esqueleto/)
+    expect(r.stdout).toMatch(/`docs\/conventions\/esqueleto\.md` — [^\n]*\[skeleton: headings only\]/)
+    expect(r.stdout).not.toMatch(/`docs\/conventions\/real\.md`[^\n]*\[skeleton/)
   })
 })
 
@@ -364,11 +364,11 @@ describe('ct-init.sh invokes the candidate sweep', () => {
   // `/ct-init` for the first time, where the AGENTS.md the scaffolder itself has
   // just created is proposed as a candidate. It has to come out marked, or the
   // human would declare it believing it carries real rules.
-  it('in a new repository, the AGENTS.md ct-init.sh itself has just created comes out marked [esqueleto: sólo encabezados]', () => {
+  it('in a new repository, the AGENTS.md ct-init.sh itself has just created comes out marked [skeleton: headings only]', () => {
     const dir = tmp()
     const r = spawnSync('bash', [initScript, dir], { encoding: 'utf8' })
     expect(r.status).toBe(0)
-    expect(r.stdout).toMatch(/`AGENTS\.md` — guía del repo en la raíz \[esqueleto: sólo encabezados\]/)
+    expect(r.stdout).toMatch(/`AGENTS\.md` — repo guide at the root \[skeleton: headings only\]/)
   })
 })
 

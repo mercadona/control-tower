@@ -234,7 +234,7 @@ describe('F20/H1 — the idempotency guard (unit)', () => {
     // Second sourcing: the sentinel is already there, so nothing is relaunched.
     const r2 = run()
     expect(readFileSync(marker, 'utf8')).toBe('X')
-    expect(r2.stdout).toMatch(/ya arrancó \(centinela presente\)/)
+    expect(r2.stdout).toMatch(/already started \(sentinel present\)/)
   })
 
   it('the sentinel is still written BEFORE the agent: the guard does not invert the order', () => {
@@ -264,7 +264,7 @@ describe('F20/H2 — the residue of a FINISHED slice gets named', () => {
     // Verified against the UNFIXED code: not a single mention of #451, of
     // `.worktrees/451` or of `feat/451` in the whole output.
     expect(r.all).toMatch(/cosecha pendiente: 1 slice\(s\)/)
-    expect(r.all).toMatch(/#451: worktree .*\.worktrees\/451, rama feat\/451/)
+    expect(r.all).toMatch(/#451: worktree .*\.worktrees\/451, branch feat\/451/)
     expect(r.all).toMatch(/git worktree remove --force .*\.worktrees\/451 && git branch -D feat\/451/)
     // The added edge: that residue blocks the redispatch of the SAME number.
     expect(r.all).toMatch(/se NEGARÁ a redespachar/)
@@ -289,8 +289,8 @@ describe('F20/H2 — the residue of a FINISHED slice gets named', () => {
     expect(residue).toHaveLength(1)
     expect(residue[0].cmuxTitle).toBe('menoplus · #451 Segmented control')
     const w = formatFinishedResidueWarning(residue, { repo: 'o/r' })
-    expect(w).toMatch(/sesión de cmux .* todavía abierta/)
-    expect(w).toMatch(/sigue vivo con el trabajo YA entregado/)
+    expect(w).toMatch(/cmux session .* still open/)
+    expect(w).toMatch(/still alive with the work ALREADY delivered/)
   })
 
   it('#45 does not match inside #451: the number is looked up as a whole token', () => {

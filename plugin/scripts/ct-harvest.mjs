@@ -71,25 +71,25 @@ const arg = (f, d) => {
   return (typeof v === 'string' && !v.startsWith('--')) ? v : true
 }
 
-const usage = 'uso: ct-harvest.mjs --repo <owner/repo> --milestone <título> [--json] [--bq <proyecto:dataset.tabla>]'
+const usage = 'usage: ct-harvest.mjs --repo <owner/repo> --milestone <title> [--json] [--bq <project:dataset.table>]'
 
 const repo = arg('--repo')
-if (repo === true) { console.error(`--repo inválido: "(sin valor)" — ${usage}`); process.exit(2) }
+if (repo === true) { console.error(`invalid --repo: "(no value)" — ${usage}`); process.exit(2) }
 if (typeof repo !== 'string' || repo.length === 0) { console.error(usage); process.exit(2) }
 if (!parseRepoSlug(repo)) {
-  console.error(`--repo inválido: "${repo}" — debe tener la forma owner/repo (p.ej. josemerca/control-tower), con exactamente una barra y ambas mitades no vacías.`)
+  console.error(`invalid --repo: "${repo}" — it has to have the form owner/repo (e.g. josemerca/control-tower), with exactly one slash and neither half empty.`)
   process.exit(2)
 }
 
 const milestone = arg('--milestone')
-if (milestone === true) { console.error(`--milestone inválido: "(sin valor)" — ${usage}`); process.exit(2) }
+if (milestone === true) { console.error(`invalid --milestone: "(no value)" — ${usage}`); process.exit(2) }
 if (typeof milestone !== 'string' || milestone.length === 0) { console.error(usage); process.exit(2) }
 
 const bqArg = arg('--bq', null)
-if (bqArg === true) { console.error(`--bq inválido: "(sin valor)" — ${usage}`); process.exit(2) }
+if (bqArg === true) { console.error(`invalid --bq: "(no value)" — ${usage}`); process.exit(2) }
 const bqTable = bqArg === null ? null : BigQueryTable.parse(bqArg)
 if (bqArg !== null && !bqTable) {
-  console.error(`--bq inválido: "${bqArg}" — debe tener la forma proyecto:dataset.tabla (p.ej. mi-proyecto:control_tower.harvest).`)
+  console.error(`invalid --bq: "${bqArg}" — it has to have the form project:dataset.table (e.g. my-project:control_tower.harvest).`)
   process.exit(2)
 }
 
@@ -171,10 +171,10 @@ const telemetryDir = index.outcome === IndexOutcome.NOT_READ
 // `read` this command does not expect throws instead of getting lost in a
 // generic text.
 function reasonFor(n, f) {
-  if (f.read === SliceRead.TIMELINE) return `no se pudo leer el timeline del issue #${n}: ${f.detail}`
-  if (f.read === SliceRead.PULL_REQUEST) return `no se pudieron leer los datos del ${f.subject} (issue #${n}): ${f.detail}`
-  if (f.read === SliceRead.TELEMETRY_FILE) return `no se pudo leer la telemetría ${f.subject} (issue #${n}): ${f.detail}`
-  throw new Error(`ct-harvest.mjs no sabe redactar un motivo para la lectura "${f.read}"`)
+  if (f.read === SliceRead.TIMELINE) return `could not read the timeline of issue #${n}: ${f.detail}`
+  if (f.read === SliceRead.PULL_REQUEST) return `could not read the data of the ${f.subject} (issue #${n}): ${f.detail}`
+  if (f.read === SliceRead.TELEMETRY_FILE) return `could not read the telemetry ${f.subject} (issue #${n}): ${f.detail}`
+  throw new Error(`ct-harvest.mjs does not know how to word a reason for the read "${f.read}"`)
 }
 
 const rows = []
@@ -183,15 +183,15 @@ for (const issue of issues) {
   const report = harvester.harvest({ repo, issue, index })
   // Two PRs closing the same issue is rare: it is said out loud and the first
   // one is harvested, instead of picking in silence and losing the finding.
-  if (report.closers.length > 1) reasons.push(`el issue #${issue.number} lo cierran ${report.closers.length} PRs (${report.closers.map((n) => `#${n}`).join(', ')}); la fila cosecha solo el #${report.closers[0]}`)
+  if (report.closers.length > 1) reasons.push(`issue #${issue.number} is closed by ${report.closers.length} PRs (${report.closers.map((n) => `#${n}`).join(', ')}); the row harvests only #${report.closers[0]}`)
   for (const f of report.failures) reasons.push(reasonFor(issue.number, f))
   if (report.row) rows.push(report.row)
 }
 
 rows.sort((a, b) => (a.issue ?? 0) - (b.issue ?? 0))
 
-if (bqTable && reasons.length) console.error(`BigQuery: no se carga — la cosecha está incompleta (${reasons.length} lectura(s) sin completar)`)
-else if (bqTable && !rows.length) console.error('BigQuery: nada que cargar — el milestone no tiene slices')
+if (bqTable && reasons.length) console.error(`BigQuery: nothing is loaded — the harvest is incomplete (${reasons.length} read(s) left unfinished)`)
+else if (bqTable && !rows.length) console.error('BigQuery: nothing to load — the milestone has no slices')
 else if (bqTable) {
   const ledger = new HarvestLedger({ table: bqTable, bq: bqRunner, workspace: { create: () => mkdtempSync(join(tmpdir(), 'ct-harvest-bq-')), remove: (d) => rmSync(d, { recursive: true, force: true }) }, identity: LedgerIdentity.fromEnvironment() })
   const report = ledger.record({ repo, milestone, rows })
@@ -199,8 +199,8 @@ else if (bqTable) {
   // throws (calling `undefined` as a function), it never falls into a silent
   // catch-all.
   const BQ_PROJECTION = {
-    [LoadOutcome.LOADED]: () => console.error(`BigQuery: ${report.rowCount} filas cargadas en ${report.table.id} (harvest_id ${report.harvestId})`),
-    [LoadOutcome.REJECTED]: () => reasons.push(`no se pudo cargar en BigQuery (${report.table.id}): bq salió con ${report.code}: ${report.detail}. Los ficheros quedan en ${report.directory}; reintenta a mano: ${report.retryCommand}`),
+    [LoadOutcome.LOADED]: () => console.error(`BigQuery: ${report.rowCount} rows loaded into ${report.table.id} (harvest_id ${report.harvestId})`),
+    [LoadOutcome.REJECTED]: () => reasons.push(`could not load into BigQuery (${report.table.id}): bq exited with ${report.code}: ${report.detail}. The files are kept in ${report.directory}; retry by hand: ${report.retryCommand}`),
   }
   BQ_PROJECTION[report.outcome]()
 }
@@ -208,7 +208,7 @@ else if (bqTable) {
 if (asJson) {
   console.log(JSON.stringify({ repo, milestone, filas: rows, motivos: reasons, telemetry: { dir: METRICS_REPO_DIR, status: telemetryDir.status, why: telemetryDir.why } }, null, 2))
 } else {
-  console.log(`# Cosecha — ${milestone}`)
+  console.log(`# Harvest — ${milestone}`)
   console.log(`# repo: ${repo} · slices: ${rows.length}`)
   console.log('')
   console.log('| Issue | Slice | Tipo | Gate | ready→claim | claim→release | release→merge | reopens | requeues | blocked | PR |')
@@ -229,26 +229,26 @@ if (asJson) {
   // this has to see it without asking.
   const families = new Map()
   for (const f of rows) {
-    const k = f.type ?? '(sin type:)'
+    const k = f.type ?? '(no type:)'
     if (!families.has(k)) families.set(k, [])
     families.get(k).push(f)
   }
-  console.log('## Por familia (Tipo) — nunca agregado')
+  console.log('## By family (Tipo) — never aggregated')
   for (const [type, fs] of families) {
     const measurable = fs.filter((f) => f.claimToRelease !== null)
     const mean = measurable.length ? Math.round(measurable.reduce((a, f) => a + f.claimToRelease, 0) / measurable.length) : null
-    const warning = fs.length < 3 ? '  ← N insuficiente: describe, no promedia' : ''
+    const warning = fs.length < 3 ? '  ← N too small: it describes, it does not average' : ''
     console.log(`- **${type}** · N=${fs.length} · claim→release ${formatDuration(mean)}${warning}`)
   }
   if (rows.some((f) => f.mergeSource === 'issue-closed')) {
     console.log('')
-    console.log('`*` release→merge medido contra el cierre del issue, no contra el merge de un PR.')
+    console.log('`*` release→merge measured against the closing of the issue, not against the merge of a PR.')
   }
   console.log('')
-  console.log('## Telemetría del juez — sólo lo que el repo trae escrito')
+  console.log('## Judge telemetry — only what the repo brings written')
   console.log('')
   if (telemetryDir.status === 'no-leido') {
-    console.log(`no se pudo listar \`${METRICS_REPO_DIR}\` en ${repo} (${telemetryDir.why}). Puede que este repo no tenga telemetría del juez o que la lectura fallara: **no se cuenta nada**, y el hueco NO es un cero.`)
+    console.log(`could not list \`${METRICS_REPO_DIR}\` in ${repo} (${telemetryDir.why}). This repo may have no judge telemetry, or the read may have failed: **nothing is counted**, and the gap is NOT a zero.`)
   } else {
     console.log('| Issue | Slice | Veredictos | sin-vara | Hallazgos por regla | alta/media/baja | vara ct | brief | bytes por papel |')
     console.log('|---|---|---|---|---|---|---|---|---|')
@@ -291,14 +291,14 @@ if (asJson) {
       // without adding a question.
       let severities = '—'
       if (t.status === 'sin-fichero') byRule = '(sin telemetría)'
-      else if (t.status === 'no-leido') byRule = '(no se pudo leer)'
+      else if (t.status === 'no-leido') byRule = '(could not be read)'
       else {
         // The cell's two notes fit together, separated by a comma: how many of
         // those verdicts were a VETO, and how many come from old telemetry.
         // They are only noted if there is something to note — a clean slice is
         // read at a glance, which is what the column is for.
         const notes = []
-        if (t.fails > 0) notes.push(`${t.fails} ${t.fails === 1 ? 'veto' : 'vetos'}`)
+        if (t.fails > 0) notes.push(`${t.fails} ${t.fails === 1 ? 'veto' : 'vetoes'}`)
         if (t.legacy > 0) notes.push(`${t.legacy} sin columna`)
         verdicts = notes.length ? `${t.verdicts} (${notes.join(', ')})` : String(t.verdicts)
         // Same rule as everything else in this table: measuredSeverities === 0
@@ -313,7 +313,7 @@ if (asJson) {
         // taken.
         withoutYardstick = t.measured > 0 ? String(t.rubricSinVara) : '—'
         const entries = Object.entries(t.findingsByRule).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        byRule = t.verdicts === 0 ? '(sin veredictos)' : (entries.length ? entries.map(([r, n]) => `${r} ${n}`).join(' · ') : '(ninguno)')
+        byRule = t.verdicts === 0 ? '(no verdicts)' : (entries.length ? entries.map(([r, n]) => `${r} ${n}`).join(' · ') : '(none)')
         // Same rule as `sin-vara`: measured* === 0 prints «—», never «0» — no
         // verdict of this slice carried the column. BOTH measures are required
         // to print the cell: half a cell with the other half blank would invite
@@ -333,7 +333,7 @@ if (asJson) {
         // And the same one again: roleMeasured === 0 prints «—» and never
         // three zeros, which would assert dispatched roles with no material.
         if (t.roleMeasured > 0) {
-          bytesPerRole = `agente ${t.agentBytes}B · skills ${t.skillBytes}B · paquete ${t.packageBytes}B`
+          bytesPerRole = `agent ${t.agentBytes}B · skills ${t.skillBytes}B · package ${t.packageBytes}B`
           if (t.roleLegacy > 0) bytesPerRole += ` (${t.roleLegacy} sin columna)`
         }
       }
@@ -341,32 +341,32 @@ if (asJson) {
     }
     console.log('')
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.verdicts > 0 && f.telemetry.measured === 0)) {
-      console.log('`—` en `sin-vara`: ningún veredicto de ese slice traía la columna (telemetría anterior a `rubric_sin_vara`). No es un cero.')
+      console.log('`—` in `sin-vara`: no verdict of that slice carried the column (telemetry older than `rubric_sin_vara`). It is not a zero.')
     }
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.verdicts > 0 && f.telemetry.measuredSeverities === 0)) {
-      console.log('`—` en `alta/media/baja`: ningún veredicto de ese slice traía las severidades `findings_high`/`findings_medium`/`findings_low` (telemetría anterior a esta medida). No es un cero.')
+      console.log('`—` in `alta/media/baja`: no verdict of that slice carried the `findings_high`/`findings_medium`/`findings_low` severities (telemetry older than this measure). It is not a zero.')
     }
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.verdicts > 0 && (f.telemetry.measuredVaraCtDocs === 0 || f.telemetry.measuredFindingsVaraCt === 0))) {
-      console.log('`—` en `vara ct`: ningún veredicto de ese slice traía las columnas `rubric_vara_ct_docs`/`findings_vara_ct` (telemetría anterior a esta medida, o de la columna `findings_patrones_vara_ct` que sustituyeron). No es un cero.')
+      console.log('`—` in `vara ct`: no verdict of that slice carried the `rubric_vara_ct_docs`/`findings_vara_ct` columns (telemetry older than this measure, or from the `findings_patrones_vara_ct` column they replaced). It is not a zero.')
     }
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.briefAttempts > 0 && f.telemetry.briefMeasured === 0)) {
-      console.log('`—` en `brief`: ningún intento de `implement` de ese slice traía `brief_vara_ct_docs`/`brief_bytes` (telemetría anterior a esta medida, o el brief no se pudo leer en su momento). No es un cero.')
+      console.log('`—` in `brief`: no `implement` attempt of that slice carried `brief_vara_ct_docs`/`brief_bytes` (telemetry older than this measure, or the brief could not be read at the time). It is not a zero.')
     }
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.roleAttempts > 0 && f.telemetry.roleMeasured === 0)) {
-      console.log('`—` en `bytes por papel`: ningún papel despachado de ese slice traía `agent_bytes`/`skill_bytes`/`package_bytes` (telemetría anterior a esta medida). No es un cero.')
+      console.log('`—` in `bytes por papel`: no dispatched role of that slice carried `agent_bytes`/`skill_bytes`/`package_bytes` (telemetry older than this measure). It is not a zero.')
     }
     if (rows.some((f) => f.telemetry.status === 'sin-fichero')) {
-      console.log(`\`(sin telemetría)\`: el repo no trae \`${METRICS_REPO_DIR}/issue-<n>.jsonl\` para ese slice. Nadie midió — no es un cero.`)
+      console.log(`\`(sin telemetría)\`: the repo does not bring \`${METRICS_REPO_DIR}/issue-<n>.jsonl\` for that slice. Nobody measured — it is not a zero.`)
     }
     for (const f of rows.filter((x) => x.telemetry.status === 'ok' && x.telemetry.malformed > 0)) {
-      console.log(`\`${f.telemetry.path}\`: ${f.telemetry.malformed} línea(s) ilegibles, no se cuentan (el resto sí).`)
+      console.log(`\`${f.telemetry.path}\`: ${f.telemetry.malformed} unreadable line(s), not counted (the rest are).`)
     }
   }
 }
 
 if (reasons.length) {
   console.error('')
-  console.error(`${reasons.length} lectura(s) sin completar — la cosecha está INCOMPLETA:`)
+  console.error(`${reasons.length} read(s) left unfinished — the harvest is INCOMPLETE:`)
   for (const m of reasons) console.error(`  - ${m}`)
   process.exit(1)
 }

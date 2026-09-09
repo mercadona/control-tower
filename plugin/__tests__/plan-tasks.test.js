@@ -417,7 +417,7 @@ describe('the yardstick has to be able to measure what it says it measures (veri
   it('the case of slice 35 of repo-pulse, verbatim: `grep -c` with TWO files inside the predicate', () => {
     const r = rules(['test "$(grep -c \'Cargando…\' web/src/App.tsx web/src/App.test.tsx)" -eq 0'])
     expect(r).toHaveLength(1)
-    expect(r[0].detail).toMatch(/dos o más ficheros/)
+    expect(r[0].detail).toMatch(/two or more files/)
     expect(r[0].detail).toMatch(/grep -l/)
   })
 

@@ -15,7 +15,7 @@ class Frontier {
   static BUILD_ONLY = [join('scripts', 'build.mjs')]
   static RUNTIME_DIRECTORIES = ['scripts', 'hooks', 'dist', 'skills', 'agents', 'commands', 'templates', 'conventions', 'prompts']
 
-  static #SPECIFIER = /(?:\bfrom|\bimport|\brequire)\s*\(?\s*(['"])([^'"]+)\1/g
+  static #SPECIFIER = /^\s*(?:import|export)\b[^;\n]*?\bfrom\s*(['"])([^'"]+)\1|(?:\brequire|\bimport)\s*\(\s*(['"])([^'"]+)\3/gm
   static #LINK = /\[[^\]]*\]\(([^)\s]+)\)/g
   static #EXTERNAL = /^(?:[a-z][a-z0-9+.-]*:|#|\/\/)/i
 
@@ -55,7 +55,8 @@ class Frontier {
   }
 
   static #specifiersIn(source) {
-    return [...Frontier.#withoutComments(source).matchAll(Frontier.#SPECIFIER)].map((found) => found[2])
+    return [...Frontier.#withoutComments(source).matchAll(Frontier.#SPECIFIER)]
+      .map((found) => found[2] ?? found[4])
   }
 
   static escapingSpecifiersInSource(source, from) {
@@ -192,6 +193,18 @@ describe('what the marketplace ships has to stand on its own', () => {
   it('a `//` inside a string does not blind the detector to the rest of the line', () => {
     expect(Frontier.packageSpecifiersInSource("import { get } from 'https://example.com/x'"))
       .toEqual(['https://example.com/x'])
+  })
+
+  it('a message that says "from" and then quotes something is prose, not an import', () => {
+    expect(Frontier.packageSpecifiersInSource('const m = `tell it apart from "Gate"`')).toEqual([])
+    expect(Frontier.packageSpecifiersInSource("console.error(`taken from 'yaml' by hand`)")).toEqual([])
+  })
+
+  it('a real import is still caught wherever it legitimately appears', () => {
+    expect(Frontier.packageSpecifiersInSource("import { parse } from 'yaml'")).toEqual(['yaml'])
+    expect(Frontier.packageSpecifiersInSource("export { parse } from 'yaml'")).toEqual(['yaml'])
+    expect(Frontier.packageSpecifiersInSource("const y = await import('yaml')")).toEqual(['yaml'])
+    expect(Frontier.packageSpecifiersInSource("const y = require('yaml')")).toEqual(['yaml'])
   })
 
   it('a regex literal holding a quote does not blind the detector on the lines below it', () => {

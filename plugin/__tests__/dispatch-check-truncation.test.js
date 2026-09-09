@@ -5,7 +5,7 @@
 // flushing (documented in Node's own docs; the same reasoning that already
 // motivated the `writeSync` in `attemptClaim` in ct-next.mjs, and that a
 // sibling task used to diagnose the same pattern in another file). The
-// "ATENCIÓN … libéralo a mano" diagnostics of dispatch-check.mjs are EXACTLY
+// "ATTENTION … libéralo a mano" diagnostics of dispatch-check.mjs are EXACTLY
 // the ones a human needs whole when something went wrong — and the
 // `COLLISION: ...` message can grow arbitrarily with the number of in-flight
 // issues that share a token.

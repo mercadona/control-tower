@@ -111,7 +111,7 @@ const invokedName = (path) => path.slice(path.lastIndexOf('/') + 1)
 //      With a single session open the output is empty and rc=1 — which this
 //      code read as «no match at all, a normal answer» and therefore
 //      `comprobado: true`. Result: EVERY healthy in-flight slice came out as
-//      «← SIN SEÑAL DE VIDA» with exit 3 and without a single `aviso:`, and
+//      «← SIN SEÑAL DE VIDA» with exit 3 and without a single `warning:`, and
 //      the residue block asserted «no hay ningún proceso trabajando dentro»
 //      about a worktree with an agent inside it. The safe degradation did not
 //      kick in because, from the inside, the read «had been a success». It is
@@ -172,7 +172,7 @@ export function liveSliceProcesses(repoRoot, { run = runCommand } = {}) {
   // partial read of `lsof` further down safe, so it degrades here instead of
   // taking the risk.
   if (typeof process.getuid !== 'function') {
-    return { porSlice: new Map(), comprobado: false, motivo: 'no se pudo determinar el usuario actual: process.getuid no está disponible en esta plataforma' }
+    return { porSlice: new Map(), comprobado: false, motivo: 'could not determine the current user: process.getuid is not available on this platform' }
   }
   const uid = process.getuid()
 
@@ -222,7 +222,7 @@ export function liveSliceProcesses(repoRoot, { run = runCommand } = {}) {
     if (e && e.status === 1 && typeof e.stdout === 'string') {
       output = e.stdout
     } else {
-      return { porSlice: new Map(), comprobado: false, motivo: `no se pudo leer el directorio de trabajo de los procesos con lsof: ${e && e.message}` }
+      return { porSlice: new Map(), comprobado: false, motivo: `could not read the working directory of the processes with lsof: ${e && e.message}` }
     }
   }
 

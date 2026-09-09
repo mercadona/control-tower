@@ -100,7 +100,7 @@ describe('ct-groom — the spec link is absolute and carries the real anchor (F1
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const res = run(dir, spec, [], { FAKE_GH_CONTENTS_ANCHORS: 'otra-cosa' })
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/el ancla "9-slices".*no existe en la copia de spec\.md publicada/s)
+    expect(res.stderr).toMatch(/the anchor "9-slices".*does not exist in the copy of spec\.md published/s)
     const link = planOf(res).issues[0].specLink
     expect(link).toContain(specUrl('spec.md', null))
     expect(link).not.toContain('#9-slices')
@@ -127,7 +127,7 @@ describe('ct-groom — when a good link cannot be built, it does not go quiet (F
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const res = run(dir, spec, [], { FAKE_GH_CONTENTS_FAIL: '1' })
     expect(res.status).toBe(0) // grooming is still possible: the link is not the work
-    expect(res.stderr).toMatch(/se queda SIN enlace/)
+    expect(res.stderr).toMatch(/left WITHOUT a link/)
     const link = planOf(res).issues[0].specLink
     expect(link).toContain('sin enlace: el spec no está publicado en la rama por defecto del repositorio (o/r, rama main)')
     expect(link).not.toMatch(/\]\(/) // not even a half-finished markdown link
@@ -140,8 +140,8 @@ describe('ct-groom — when a good link cannot be built, it does not go quiet (F
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const res = run(dir, spec)
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/se queda SIN enlace.*no está dentro de un repositorio git/s)
-    expect(planOf(res).issues[0].specLink).toContain('sin enlace: el spec no está dentro de un repositorio git')
+    expect(res.stderr).toMatch(/left WITHOUT a link.*not inside a git repository/s)
+    expect(planOf(res).issues[0].specLink).toContain('sin enlace: the spec is not inside a git repository')
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -151,7 +151,7 @@ describe('ct-groom — when a good link cannot be built, it does not go quiet (F
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const res = run(dir, spec)
     expect(res.status).toBe(0)
-    expect(planOf(res).issues[0].specLink).toContain('sin enlace: el repositorio del spec no tiene remoto "origin"')
+    expect(planOf(res).issues[0].specLink).toContain('sin enlace: the repository of the spec has no "origin" remote')
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -164,7 +164,7 @@ describe('ct-groom — when a good link cannot be built, it does not go quiet (F
     writeFileSync(spec, '| # | Slice | Dep |\n|---|---|---|\n| 1 | login | – |\n\n## Hipótesis\n\nApuesta del fixture.\n')
     const res = run(dir, spec)
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/no vive bajo ningún encabezado/)
+    expect(res.stderr).toMatch(/does not live under any heading/)
     const link = planOf(res).issues[0].specLink
     // The link's target carries no fragment: neither the invented anchor of
     // before nor a dangling "#". (The "#1" at the start of the line is the
@@ -180,7 +180,7 @@ describe('ct-groom — when a good link cannot be built, it does not go quiet (F
     writeFileSync(spec, SPEC.replace('## 9. Slices', '## ...'))
     const res = run(dir, spec)
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/no produce ningún ancla/)
+    expect(res.stderr).toMatch(/produces no anchor/)
     const link = planOf(res).issues[0].specLink
     expect(link).toContain(specUrl('spec.md', null))
     expect(link).not.toMatch(/spec\.md#\)/)

@@ -86,10 +86,10 @@ describe('F16/H1 — when N of them block, the message cannot name a single one'
     expect(r.code).toBe(0)
     for (const n of [10, 11, 12, 13, 14]) expect(r.stdout).toMatch(new RegExp(`#${n}\\b`))
     expect(r.stdout).toMatch(/5 issues?/)
-    expect(r.stdout).toMatch(/TODOS/)
+    expect(r.stdout).toMatch(/ALL/)
     // The essential part: the message has to say explicitly that resolving one
     // is no use — it is the wrong deduction the old message invited.
-    expect(r.stdout).toMatch(/resolver uno solo/i)
+    expect(r.stdout).toMatch(/resolving just one/i)
   })
 
   // A case nobody asked for, the same defect: the candidate touches TWO tokens
@@ -151,7 +151,7 @@ describe('F16/H1 — when N of them block, the message cannot name a single one'
     expect(plan.blockReason.blockers[1].laneTokens).toEqual(['migration'])
     const r = runNext(['--repo', 'o/r', '--cap', '9', '--dry-run'], { CT_NEXT_FIXTURE: JSON.stringify({ issues, mergedIssues: [] }) })
     expect(r.stdout).toMatch(/#2\b/)
-    expect(r.stdout).toMatch(/serializante/)
+    expect(r.stdout).toMatch(/serialising/)
   })
 
   // The opposite excess is a defect too: forty issues listed are not
@@ -164,7 +164,7 @@ describe('F16/H1 — when N of them block, the message cannot name a single one'
     const r = runNext(['--repo', 'o/r', '--cap', '9', '--dry-run'], { CT_NEXT_FIXTURE: JSON.stringify({ issues, mergedIssues: [] }) })
     expect(r.code).toBe(0)
     expect(r.stdout).toMatch(/30 issues/)
-    expect(r.stdout).toMatch(/y \d+ más/)
+    expect(r.stdout).toMatch(/and \d+ more/)
     // The thirty of them are not spewed out.
     const citados = new Set((r.stdout.match(/#(\d+)/g) || []).map((s) => s.slice(1)))
     expect(citados.size).toBeLessThan(20)
@@ -180,7 +180,7 @@ describe('F16/H1 — when N of them block, the message cannot name a single one'
     ]
     const r = runNext(['--repo', 'o/r', '--cap', '9', '--dry-run'], { CT_NEXT_FIXTURE: JSON.stringify({ issues, mergedIssues: [] }) })
     expect(r.stdout).toMatch(/#2 está ready con deps mergeadas, pero colisiona con trabajo en vuelo: comparte el token 'api' con #1 \(status:in-progress\)/)
-    expect(r.stdout).not.toMatch(/resolver uno solo/i)
+    expect(r.stdout).not.toMatch(/resolving just one/i)
   })
 })
 
@@ -280,7 +280,7 @@ describe('F16/H1 — "there is nothing to dispatch YET" told you to wait for som
   it('with ZERO open issues it does not say the same as with issues in backlog', () => {
     const r = runNext(['--repo', 'o/r', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: JSON.stringify({ issues: [], mergedIssues: [] }) })
     expect(r.code).toBe(0)
-    expect(r.stdout).toMatch(/ning[uú]n issue abierto/i)
+    expect(r.stdout).toMatch(/not a single open issue/i)
     expect(r.stdout).toMatch(/ct-groom|--repo/)
   })
 })
@@ -290,7 +290,7 @@ describe('F16/H1 — "there is nothing to dispatch YET" told you to wait for som
 // ============================================================================
 describe('F16/H2 — the warnings of the three executables go over the same channel', () => {
   // OBSERVED UNFIXED: a run of /ct-next with warnings left 0 bytes on stderr
-  // (ct-next.mjs:888 emitted `console.log(\`aviso: ...\`)`), while ct-groom.mjs
+  // (ct-next.mjs:888 emitted `console.log(\`warning: ...\`)`), while ct-groom.mjs
   // emits its own over console.error.
   it('ct-next sends the warnings to STDERR, not to stdout', () => {
     // F35: the vehicle used to be the "default account" warning of ACCOUNT_MAP,
@@ -299,8 +299,8 @@ describe('F16/H2 — the warnings of the three executables go over the same chan
     // keywords) and depends on nothing in the environment.
     const fx = JSON.stringify({ issues: [], mergedIssues: [] })
     const r = runNext(['--repo', 'o/r', '--cap', '1', '--base', 'otra-rama', '--dry-run'], { CT_NEXT_FIXTURE: fx })
-    expect(r.stderr).toMatch(/aviso: --base otra-rama/)
-    expect(r.stdout).not.toMatch(/^aviso:/m)
+    expect(r.stderr).toMatch(/warning: --base otra-rama/)
+    expect(r.stdout).not.toMatch(/^warning:/m)
   })
 
   it('ct-groom still sends its own to STDERR (the reference channel)', () => {
@@ -320,8 +320,8 @@ describe('F16/H2 — the warnings of the three executables go over the same chan
     })
     const r = runNext(['--repo', 'o/r', '--cap', '1', '--base', 'otra-rama', '--dry-run'], { CT_NEXT_FIXTURE: fx })
     expect(r.stdout).toMatch(/git worktree add/)
-    expect(r.stdout).not.toMatch(/aviso:/)
-    expect(r.stderr).toMatch(/aviso:/)
+    expect(r.stdout).not.toMatch(/warning:/)
+    expect(r.stderr).toMatch(/warning:/)
   })
 
   // The warnings recap of the 'exit' handler already went over stderr
@@ -330,6 +330,6 @@ describe('F16/H2 — the warnings of the three executables go over the same chan
   it('the final warnings recap is still on stderr and counts the same warnings', () => {
     const fx = JSON.stringify({ issues: [], mergedIssues: [] })
     const r = runNext(['--repo', 'o/r', '--cap', '1', '--base', 'otra-rama', '--dry-run'], { CT_NEXT_FIXTURE: fx })
-    expect(r.stderr).toMatch(/A PESAR de \d+ aviso\(s\)/)
+    expect(r.stderr).toMatch(/DESPITE \d+ warning\(s\)/)
   })
 })

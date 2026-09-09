@@ -957,7 +957,7 @@ describe('ct-init.sh', () => {
     const again = spawnSync('bash', [script, dir], { encoding: 'utf8' })
     expect(again.status).toBe(0)
     expect(again.stdout).toMatch(/al día/)
-    expect(again.stderr).not.toMatch(/aviso/)
+    expect(again.stderr).not.toMatch(/aviso|warning/i)
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1245,7 +1245,7 @@ describe('ct-init.sh', () => {
     // session).
     const plain = spawnSync('bash', [script, dir], { encoding: 'utf8' })
     expect(plain.stdout).toMatch(/al día/)
-    expect(plain.stderr).not.toMatch(/aviso/)
+    expect(plain.stderr).not.toMatch(/aviso|warning/i)
     // But if a sync is ASKED FOR, saying "al día" would cover up that the text
     // is not this plugin's — which is exactly what happened nine times under the
     // name "v1".

@@ -60,11 +60,11 @@ describe('ct-next — dispatch-check killed by a signal during the claim (IMPORT
     const out = (r.stdout || '') + (r.stderr || '')
     expect(r.status).toBe(1)
     expect(r.signal).toBeNull() // ct-next.mjs itself finishes cleanly (process.exit), not killed outright
-    expect(out).toMatch(/dispatch-check para #77 terminó por la señal SIGTERM/)
-    expect(out).toMatch(/no se puede saber si el claim llegó a escribirse antes de morir/)
+    expect(out).toMatch(/dispatch-check for #77 was ended by the signal SIGTERM/)
+    expect(out).toMatch(/there is no way to know whether the claim got as far as being written before it died/)
     expect(out).toMatch(/gh issue edit 77 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
-    expect(out).not.toMatch(/probablemente es un bug o una mala configuración/)
-    expect(out).toMatch(/Abortando toda la tanda/)
+    expect(out).not.toMatch(/it is probably a bug or a misconfiguration/)
+    expect(out).toMatch(/Aborting the whole batch/)
   })
 
   it('SIGINT: same treatment — it names the right signal', () => {
@@ -79,7 +79,7 @@ describe('ct-next — dispatch-check killed by a signal during the claim (IMPORT
     })
     const out = (r.stdout || '') + (r.stderr || '')
     expect(r.status).toBe(1)
-    expect(out).toMatch(/dispatch-check para #77 terminó por la señal SIGINT/)
-    expect(out).not.toMatch(/probablemente es un bug o una mala configuración/)
+    expect(out).toMatch(/dispatch-check for #77 was ended by the signal SIGINT/)
+    expect(out).not.toMatch(/it is probably a bug or a misconfiguration/)
   })
 })

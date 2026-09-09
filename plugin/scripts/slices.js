@@ -443,9 +443,9 @@ export function analyzeSlicesTable(specMd) {
       invalidRows.push({
         n,
         reason: rowLengthMismatch
-          ? `la fila tiene ${cells.length} celda(s), la cabecera tiene ${header.length}` +
-            (cells.length > header.length ? ' (revisa si hay un "|" sin escapar dentro de una celda)' : '')
-          : 'la columna "Slice" está vacía (o trae un marcador de "sin valor" como "–", o solo una referencia "#N" sin ningún nombre)',
+          ? `the row has ${cells.length} cell(s), the header has ${header.length}` +
+            (cells.length > header.length ? ' (check whether there is an unescaped "|" inside a cell)' : '')
+          : 'the "Slice" column is empty (or carries a "no value" marker like "–", or only a "#N" reference with no name around it)',
       })
       continue
     }

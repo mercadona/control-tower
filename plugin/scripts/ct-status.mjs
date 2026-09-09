@@ -72,10 +72,10 @@ const arg = (f, d) => {
   return (typeof v === 'string' && !v.startsWith('--')) ? v : true
 }
 
-const usage = 'uso: ct-status.mjs --repo <owner/repo>'
+const usage = 'usage: ct-status.mjs --repo <owner/repo>'
 const repo = arg('--repo')
 if (repo === true) {
-  console.error(`--repo inválido: "(sin valor)" — ${usage}`)
+  console.error(`invalid --repo: "(no value)" — ${usage}`)
   process.exit(2)
 }
 if (typeof repo !== 'string' || repo.length === 0) { console.error(usage); process.exit(2) }
@@ -83,12 +83,12 @@ if (typeof repo !== 'string' || repo.length === 0) { console.error(usage); proce
 // /ct-next, so that a `--repo menoplus` does not die with a 404 without
 // explaining that the problem was the shape of the argument.
 if (!parseRepoSlug(repo)) {
-  console.error(`--repo inválido: "${repo}" — debe tener la forma owner/repo (p.ej. josemerca/control-tower), con exactamente una barra y ambas mitades no vacías.`)
+  console.error(`invalid --repo: "${repo}" — it has to have the form owner/repo (e.g. josemerca/control-tower), with exactly one slash and neither half empty.`)
   process.exit(2)
 }
 
 // VENTANA_ARRANQUE_MS: below this claim age, a slice with no process is
-// reported as «arrancando», not as «sin señal de vida». Right after a dispatch,
+// reported as «starting up», not as «NO SIGN OF LIFE». Right after a dispatch,
 // cmux is typing the command and `claude` has not started up yet; without this
 // window, looking at the state in that gap would accuse a perfectly healthy
 // slice of abandonment. The value is the budget of /ct-next's start-up sentinel
@@ -107,7 +107,7 @@ const windowRaw = process.env.CT_NEXT_LAUNCH_TIMEOUT_MS
 if (windowRaw !== undefined && windowRaw !== '') {
   const n = Number(windowRaw)
   if (!Number.isFinite(n) || n < 0 || n > START_UP_WINDOW_CAP_MS) {
-    console.error(`aviso: CT_NEXT_LAUNCH_TIMEOUT_MS inválido ("${windowRaw}", debe ser un número entre 0 y ${START_UP_WINDOW_CAP_MS}) — se usa el valor por defecto de ${DEFAULT_START_UP_WINDOW_MS} ms para decidir qué claim es demasiado reciente como para esperar un proceso.`)
+    console.error(`warning: CT_NEXT_LAUNCH_TIMEOUT_MS is invalid ("${windowRaw}", it has to be a number between 0 and ${START_UP_WINDOW_CAP_MS}) — the default value of ${DEFAULT_START_UP_WINDOW_MS} ms is used instead to decide which claim is too recent to be waiting for a process.`)
   } else {
     startUpWindowMs = n
   }
@@ -149,8 +149,8 @@ const reasons = []
 // on its caller's behalf, and this caller wants to report what it does know
 // instead of aborting. It used to throw, and throwing when the second read
 // failed threw away the first —which was already whole in memory—: the report
-// came out EMPTY under a «lo de arriba es sólo lo que sí se ha podido
-// comprobar» that had nothing above it. Each reason names which of the two
+// came out EMPTY under a «what is above is only what it did manage to
+// check» that had nothing above it. Each reason names which of the two
 // reads failed.
 //
 // `issuesLeidos` demands BOTH. This is not over-zealousness: with only the open
@@ -201,7 +201,7 @@ const openStatusByNumber = new Map(mapped.map((i) => [String(i.n), i.status]))
 // about to create branches and worktrees), nothing is aborted here: a check
 // that cannot be made is exactly a `sinComprobar` with exit 1. Which half is
 // not trustworthy is said, and the other one keeps being reported.
-const detailOf = (e) => (e && e.stderr ? String(e.stderr).trim() : '') || (e && e.message) || 'error desconocido'
+const detailOf = (e) => (e && e.stderr ? String(e.stderr).trim() : '') || (e && e.message) || 'unknown error'
 
 function identityReason(root, expected) {
   let originUrl
@@ -213,13 +213,13 @@ function identityReason(root, expected) {
     // ct-next.mjs: a local repo with no origin is a legitimate environment, and
     // that is why this degrades to exit 1 with its reason instead of taking the
     // command down.
-    return `no se pudo verificar que ${root} sea el checkout de ${expected}: no tiene remote "origin" (${detailOf(e)})`
+    return `could not verify that ${root} is the checkout of ${expected}: it has no "origin" remote (${detailOf(e)})`
   }
   const m = originUrl.match(/github\.com[:/]+([^/]+)\/(.+?)(?:\.git)?\/?$/)
-  if (!m) return `no se pudo interpretar el remote "origin" de ${root} ("${originUrl}") como un repo de GitHub owner/repo, así que no se pudo verificar que sea el checkout de ${expected}`
+  if (!m) return `could not read the "origin" remote of ${root} ("${originUrl}") as a GitHub owner/repo, so it could not be verified that it is the checkout of ${expected}`
   const real = `${m[1]}/${m[2]}`
   if (real.toLowerCase() !== expected.toLowerCase()) {
-    return `${root} es el checkout de ${real}, no de ${expected}, y cruzar los issues de un repo con los worktrees de otro produce hallazgos que no existen`
+    return `${root} is the checkout of ${real}, not of ${expected}, and crossing one repo's issues with another's worktrees produces findings that do not exist`
   }
   return null
 }
@@ -231,14 +231,14 @@ let repoRoot = null
 let checkoutReason = null
 try {
   const line = git(['worktree', 'list', '--porcelain']).split('\n').find((l) => l.startsWith('worktree '))
-  if (!line) throw new Error('`git worktree list --porcelain` no devolvió ninguna entrada')
+  if (!line) throw new Error('`git worktree list --porcelain` returned no entry at all')
   repoRoot = line.slice('worktree '.length).trim()
 } catch (e) {
-  checkoutReason = `no se pudo resolver la raíz del checkout principal (${detailOf(e)})`
+  checkoutReason = `could not resolve the root of the main checkout (${detailOf(e)})`
 }
 if (repoRoot) checkoutReason = identityReason(repoRoot, repo)
 const checkoutChecked = repoRoot !== null && checkoutReason === null
-if (checkoutReason) checkoutReason += ': este informe no dice nada sobre worktrees, ramas ni procesos'
+if (checkoutReason) checkoutReason += ': this report says nothing about worktrees, branches or processes'
 
 // worktreesEnDisco / ramasEnDisco: a read failure NEVER translates into «no
 // hay». That `.worktrees/` does not exist is a legitimate answer (no dispatch
@@ -248,7 +248,7 @@ if (checkoutReason) checkoutReason += ': este informe no dice nada sobre worktre
 // `worktreesLeidos`/`ramasLeidas` tell the two apart for the render: without
 // them, an empty array caused by a FAILURE was indistinguishable from an empty
 // array caused by «no hay nada», and the in-flight block printed
-// `worktree ✗ rama ✗` at the same time as the `aviso:` said it had not been
+// `worktree ✗ branch ✗` at the same time as the `warning:` said it had not been
 // possible to look. Reproduced with `.worktrees/` under `chmod 000`. An
 // `ENOENT` is a completed read: the directory does not exist, and that answers
 // the question.
@@ -264,7 +264,7 @@ if (checkoutChecked) {
     worktreesRead = true
   } catch (e) {
     if (e && e.code === 'ENOENT') { worktreesOnDisk = []; worktreesRead = true }
-    else reasons.push(`no se pudo listar ${join(repoRoot, '.worktrees')} (${e.code || e.message}): este informe no dice nada sobre worktrees en disco`)
+    else reasons.push(`could not list ${join(repoRoot, '.worktrees')} (${e.code || e.message}): this report says nothing about worktrees on disk`)
   }
   try {
     // --format instead of parsing `git branch`'s decorated output: without it,
@@ -274,7 +274,7 @@ if (checkoutChecked) {
       .split('\n').map((s) => s.trim()).filter(Boolean)
     branchesRead = true
   } catch (e) {
-    reasons.push(`no se pudieron listar las ramas feat/* (${(e.stderr ? String(e.stderr).trim() : '') || e.message}): este informe no dice nada sobre ramas en disco`)
+    reasons.push(`could not list the feat/* branches (${(e.stderr ? String(e.stderr).trim() : '') || e.message}): this report says nothing about branches on disk`)
   }
 }
 
@@ -294,7 +294,7 @@ const processes = checkoutChecked
 // `status:in-progress`. The issue's `updated_at` will not do (and it would come
 // for free in the payload already read): it changes with any edit —a comment,
 // another label— so a recent comment would make a three-hour-old claim pass for
-// «arrancando». And labels carry no date in the REST payload.
+// «starting up». And labels carry no date in the REST payload.
 //
 // One call per IN-FLIGHT issue, and «in flight» is bounded by the dispatcher's
 // cap. `--paginate` without `--slurp`: over an endpoint that returns an array,
@@ -311,7 +311,7 @@ for (const { n } of inProgress) {
     events = JSON.parse(gh(['api', `repos/${repo}/issues/${n}/timeline`, '--paginate']))
   } catch (e) {
     claimAgeMs.set(n, null)
-    ageReasons.set(n, `#${n}: no se pudo leer el timeline del issue, así que no se sabe cuánto lleva puesto su claim (${e.message})`)
+    ageReasons.set(n, `#${n}: the issue's timeline could not be read, so how long its claim has been on is not known (${e.message})`)
     continue
   }
   const marks = (Array.isArray(events) ? events : [])
@@ -379,7 +379,7 @@ if (!issuesRead) {
   const explained = new Set(state.worktreesExplicados)
   const notCrossed = worktreesOnDisk.filter((w) => !explained.has(w))
   if (notCrossed.length) {
-    reasons.push(`hay ${notCrossed.length} directorio(s) en .worktrees/ (${notCrossed.join(', ')}) que no explica ninguno de los issues que sí se pudieron leer, y con la lista de issues incompleta no se puede decidir si son residuo: este informe no acusa a ninguno`)
+    reasons.push(`there are ${notCrossed.length} directory(ies) in .worktrees/ (${notCrossed.join(', ')}) that none of the issues that could be read explains, and with the list of issues incomplete it cannot be decided whether they are residue: this report accuses none of them`)
   }
 }
 
@@ -429,8 +429,8 @@ function processSuffix(w) {
   if (!processes.comprobado) return ''
   const pid = processes.porSlice.get(String(w))
   return pid
-    ? ` — OJO: hay un proceso trabajando dentro ahora mismo (pid ${pid}), no lo borres`
-    : ' — y ahora mismo no hay ningún proceso trabajando dentro'
+    ? ` — CAREFUL: there is a process working inside right now (pid ${pid}), do not delete it`
+    : ' — and right now there is no process working inside'
 }
 
 const lines = []
@@ -438,7 +438,7 @@ const lines = []
 // three headings with «(ninguno)». The fallback that printed «(ninguno —
 // limpio)» over truncated data is the bug that gives all of this its name.
 if (state.enVuelo.length) {
-  lines.push(`EN VUELO (${state.enVuelo.length})`)
+  lines.push(`IN FLIGHT (${state.enVuelo.length})`)
   for (const s of state.enVuelo) {
     lines.push(`  #${s.n}  ${s.nombre}`)
     if (!checkoutChecked) {
@@ -446,7 +446,7 @@ if (state.enVuelo.length) {
       // at, not because they are not there: printing `worktree ✗` would be
       // asserting what has not been checked, which is the same defect this
       // command is after.
-      lines.push('        worktree ?  rama ?  proceso ?  ← no se ha mirado ningún checkout (ver los avisos)')
+      lines.push('        worktree ?  branch ?  process ?  ← no checkout has been looked at (see the warnings)')
     } else {
       // `?`, not `✗`, when the corresponding read could not be completed:
       // asserting that there is none of what could not be looked at is the same
@@ -454,16 +454,16 @@ if (state.enVuelo.length) {
       // `else` above already prints `worktree ?` for this very reason. A `✓` can
       // only come from a read that really happened, so the mark of doubt never
       // degrades a positive signal.
-      const signals = [`worktree ${mark(worktreesRead, s.hasWorktree)}`, `rama ${mark(branchesRead, s.hasBranch)}`, `proceso ${ALIVE[String(s.vivo)]}`]
+      const signals = [`worktree ${mark(worktreesRead, s.hasWorktree)}`, `branch ${mark(branchesRead, s.hasBranch)}`, `process ${ALIVE[String(s.vivo)]}`]
       if (s.pid) signals.push(`pid ${s.pid}`)
       let note = ''
-      if (s.vivo === null) note = '  ← no se pudo comprobar si hay alguien trabajando (ver los avisos)'
-      else if (s.arrancando) note = '  ← arrancando: el claim es más reciente que la ventana de arranque, todavía no hay proceso que esperar'
-      else if (s.vivo === false && s.edadMs !== null) note = '  ← SIN SEÑAL DE VIDA'
-      else if (s.vivo === false) note = '  ← sin proceso, y sin saber de cuándo es el claim: no se acusa (ver los avisos)'
+      if (s.vivo === null) note = '  ← it could not be checked whether anybody is working (see the warnings)'
+      else if (s.arrancando) note = '  ← starting up: the claim is more recent than the start-up window, there is no process to wait for yet'
+      else if (s.vivo === false && s.edadMs !== null) note = '  ← NO SIGN OF LIFE'
+      else if (s.vivo === false) note = '  ← no process, and with no idea how old the claim is: nobody is accused (see the warnings)'
       lines.push(`        ${signals.join('  ')}${note}`)
     }
-    if (s.edadMs !== null) lines.push(`        claim puesto hace ${formatAge(s.edadMs)}`)
+    if (s.edadMs !== null) lines.push(`        claim put on ${formatAge(s.edadMs)} ago`)
   }
 }
 
@@ -473,7 +473,7 @@ if (state.enVuelo.length) {
 // MERGED and left remains on disk — the two can appear at once.
 if (state.enRevision.length) {
   if (lines.length) lines.push('')
-  lines.push(`ENTREGADO, ESPERANDO MERGE (${state.enRevision.length})`)
+  lines.push(`DELIVERED, WAITING FOR MERGE (${state.enRevision.length})`)
   for (const r of state.enRevision) {
     lines.push(`  #${r.n}  ${r.nombre} — status:in-review`)
   }
@@ -481,24 +481,24 @@ if (state.enRevision.length) {
 
 if (state.cosecha.length) {
   if (lines.length) lines.push('')
-  lines.push(`ENTREGADO, SIN COSECHAR (${state.cosecha.length})`)
+  lines.push(`DELIVERED, NOT HARVESTED (${state.cosecha.length})`)
   for (const c of state.cosecha) {
-    const remaining = [c.hasWorktree ? `worktree .worktrees/${c.n}` : null, c.hasBranch ? `rama feat/${c.n}` : null].filter(Boolean)
-    // «cerrado como completado», not «mergeado»: the only thing observable
+    const remaining = [c.hasWorktree ? `worktree .worktrees/${c.n}` : null, c.hasBranch ? `branch feat/${c.n}` : null].filter(Boolean)
+    // «closed as completed», not «merged»: the only thing observable
     // without crossing with the PR graph is the issue's `stateReason` (see
     // filterMergedIssues in gh-issue-map.js). Closing by hand as completed
     // counts just the same, and saying «mergeado» would be asserting something
     // that has not been checked.
-    lines.push(`  #${c.n}  cerrado como completado, y todavía queda en disco: ${remaining.join(' y ')}`)
+    lines.push(`  #${c.n}  closed as completed, and still left on disk: ${remaining.join(' and ')}`)
   }
 }
 
 const residueTotal = state.residuo.labels.length + state.residuo.worktreesHuerfanos.length
 if (residueTotal) {
   if (lines.length) lines.push('')
-  lines.push(`RESIDUO (${residueTotal})`)
+  lines.push(`RESIDUE (${residueTotal})`)
   for (const r of state.residuo.labels) {
-    lines.push(`  #${r.n}  cerrado, pero conserva ${r.statusLabels.map((l) => `status:${l}`).join(' y ')}`)
+    lines.push(`  #${r.n}  closed, but it still keeps ${r.statusLabels.map((l) => `status:${l}`).join(' and ')}`)
   }
   for (const w of state.residuo.worktreesHuerfanos) {
     // THE SENTENCE. §6 of the spec proposed «sin issue vivo que lo reclame»,
@@ -509,16 +509,16 @@ if (residueTotal) {
     // costs no call at all: it comes out of the open issues that were already
     // read.
     const status = openStatusByNumber.get(w)
-    if (status) lines.push(`  .worktrees/${w}  su issue #${w} sigue abierto (status:${status}) y no está en vuelo${processSuffix(w)}`)
-    else if (/^\d+$/.test(w)) lines.push(`  .worktrees/${w}  ningún issue lo reclama: no hay ninguno abierto con ese número, ni ninguno entregado que lo dejara atrás${processSuffix(w)}`)
-    else lines.push(`  .worktrees/${w}  no corresponde al número de ningún issue${processSuffix(w)}`)
+    if (status) lines.push(`  .worktrees/${w}  its issue #${w} is still open (status:${status}) and is not in flight${processSuffix(w)}`)
+    else if (/^\d+$/.test(w)) lines.push(`  .worktrees/${w}  no issue claims it: there is none open with that number, and none delivered that left it behind${processSuffix(w)}`)
+    else lines.push(`  .worktrees/${w}  it does not correspond to the number of any issue${processSuffix(w)}`)
   }
   // The note is about worktrees, so it only appears when there is one: with
   // label residue alone it would talk about something that is not in the
   // report. Spotted by running the command for real against a repo with real
   // residue.
   if (state.residuo.worktreesHuerfanos.length) {
-    lines.push('  (mientras un .worktrees/<n> exista, /ct-next se niega a despachar #<n> — este comando lo nombra, nunca lo borra)')
+    lines.push('  (while a .worktrees/<n> exists, /ct-next refuses to dispatch #<n> — this command names it, it never deletes it)')
   }
 }
 
@@ -526,14 +526,14 @@ if (residueTotal) {
 // there is nothing, having left a read half-done, is literally the bug of §3.2
 // of the field feedback.
 if (!lines.length && !unchecked.length) {
-  lines.push('loop en reposo: nada en vuelo, nada por cosechar, nada de residuo.')
+  lines.push('loop at rest: nothing in flight, nothing to harvest, no residue.')
 }
 
 // Channel: the report is the PRODUCT and goes on stdout; the reasons for what
 // could not be checked are diagnostics and go on stderr like the rest of the
-// plugin's `aviso:`. The warnings are written BEFORE the report on purpose:
+// plugin's `warning:`/`warning:`. The warnings are written BEFORE the report on purpose:
 // they qualify everything that comes below.
-for (const m of unchecked) console.error(`aviso: ${m}`)
+for (const m of unchecked) console.error(`warning: ${m}`)
 
 // The exit code is decided by the composer's `hayHallazgos`, not by this
 // count: the number is only for the human, and computing it here cannot change
@@ -541,17 +541,17 @@ for (const m of unchecked) console.error(`aviso: ${m}`)
 const howMany = state.enVuelo.filter((s) => s.vivo === false && !s.arrancando && s.edadMs !== null).length
   + state.cosecha.length + residueTotal
 if (unchecked.length) {
-  // «aviso(s)», not «lectura(s) sin completar»: the count is the count of
-  // `aviso:` lines that have just come out on stderr, and not all of them are
+  // «warning(s)», not «lectura(s) sin completar»: the count is the count of
+  // `warning:` lines that have just come out on stderr, and not all of them are
   // reads. The warning about the worktrees that no issue read explains is not a
   // failed read —the disk read went fine— so counting it as one made it say
   // «2 lectura(s)» where ONE had failed. Counting warnings is exact and, on top
   // of that, whoever reads it can verify it by counting the lines above.
-  lines.push(`exit 1 — ${unchecked.length} aviso(s): lo de arriba es sólo lo que sí se ha podido comprobar`)
+  lines.push(`exit 1 — ${unchecked.length} warning(s): what is above is only what it did manage to check`)
 } else if (state.hayHallazgos) {
-  lines.push(`exit 3 — hay ${howMany} cosa(s) que revisar`)
+  lines.push(`exit 3 — ${howMany} thing(s) to review`)
 } else {
-  lines.push('exit 0 — nada que revisar')
+  lines.push('exit 0 — nothing to review')
 }
 console.log(lines.join('\n'))
 

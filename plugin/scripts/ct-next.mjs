@@ -92,7 +92,7 @@ process.stderr.on('error', () => {})
 // claims to cover this case). It is checked ONCE at start-up, before touching
 // `gh` or creating anything.
 if (!existsSync(dispatchCheckPath)) {
-  console.error(`no se encontró dispatch-check.mjs en ${dispatchCheckPath} — el plugin parece estar incompleto o mal instalado (¿se movió/borró el fichero?). Abortando antes de intentar ningún claim: sin él, cada slice se leería en falso como "colisión" y la tanda entera terminaría en un no-op silencioso.`)
+  console.error(`dispatch-check.mjs was not found at ${dispatchCheckPath} — the plugin looks incomplete or badly installed (was the file moved/deleted?). Aborting before attempting any claim: without it, every slice would be misread as a "collision" and the whole batch would end in a silent no-op.`)
   process.exit(1)
 }
 
@@ -321,7 +321,7 @@ const testDelayRaw = process.env.CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS
 if (testDelayRaw !== undefined) {
   const n = Number(testDelayRaw)
   if (!Number.isFinite(n) || n < 0 || n > TEST_DELAY_CAP_MS) {
-    console.error(`CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS inválido: "${testDelayRaw}" — debe ser un número entre 0 y ${TEST_DELAY_CAP_MS}`)
+    console.error(`CT_NEXT_TEST_DELAY_AFTER_CLAIM_MS invalid: "${testDelayRaw}" — it must be a number between 0 and ${TEST_DELAY_CAP_MS}`)
     process.exit(2)
   }
   testDelayAfterClaimMs = n
@@ -447,7 +447,7 @@ for (const varName of ['CT_NEXT_TEST_SELF_SIGINT_AFTER_CLAIM', 'CT_NEXT_TEST_SEL
   const raw = process.env[varName]
   if (raw === undefined || raw === '') continue
   if (!HANDLED_SIGNALS.includes(raw)) {
-    console.error(`${varName} inválido: "${raw}" — debe ser una de las señales que este script maneja (${HANDLED_SIGNALS.join(', ')}). Es un hook exclusivo de tests que se autoenvía la señal en mitad del despacho; con un valor que Node no reconoce, "process.kill" lanza ERR_UNKNOWN_SIGNAL justo entre el claim y el worktree y deja el issue huérfano. Abortando antes de tocar nada.`)
+    console.error(`${varName} invalid: "${raw}" — it must be one of the signals this script handles (${HANDLED_SIGNALS.join(', ')}). It is a test-only hook that sends itself the signal in the middle of the dispatch; with a value Node does not recognise, "process.kill" throws ERR_UNKNOWN_SIGNAL right between the claim and the worktree and leaves the issue orphaned. Aborting before touching anything.`)
     process.exit(2)
   }
 }
@@ -560,9 +560,9 @@ function queryCmuxWorkspaceTitles() {
 function stalenessNote(n, liveness) {
   if (liveness.hasWorktree || liveness.hasBranch || liveness.hasCmuxWorkspace) return null
   if (!liveness.cmuxChecked) {
-    return `no se encontró worktree ni rama local para #${n}, y no se pudo consultar cmux para confirmar si sigue habiendo una sesión activa (¿cmux no instalado, o el daemon no responde?) — no se puede descartar que el trabajo siga en curso en otro sitio; verifica a mano antes de asumir nada.`
+    return `no worktree or local branch was found for #${n}, and cmux could not be queried to confirm whether an active session is still there (cmux not installed, or the daemon not answering?) — it cannot be ruled out that the work is still under way somewhere else; check by hand before assuming anything.`
   }
-  return `no se encontró worktree, rama local, ni sesión cmux para #${n} EN ESTA MÁQUINA — el claim puede estar huérfano (interrumpido a medias, o reclamado desde otra máquina/sesión que ya no sigue aquí). Esta comprobación es solo local: no puede confirmar que nadie lo esté trabajando en otro sitio, así que tampoco afirmamos que esté abandonado — pero "espera a que termine" ya no es una afirmación segura con lo que se ve desde aquí. Verifica a mano antes de tocar el label.`
+  return `no worktree, local branch or cmux session was found for #${n} ON THIS MACHINE — the claim may be orphaned (interrupted half-way, or claimed from another machine/session that is no longer here). This check is local only: it cannot confirm that nobody is working on it somewhere else, so neither do we assert that it is abandoned — but "wait for it to finish" is no longer a safe claim with what can be seen from here. Check by hand before touching the label.`
 }
 
 // stalenessCtxFor: a lazy, memoised helper for formatReason/formatBlockReason
@@ -726,7 +726,7 @@ function launchGoWatcher(slice, sessionName) {
   // the normalisation `sliceForKickoff` does is of `ac`/`issue`/`epic`. This
   // way it does not force the `plans` object to be widened.
   if (!resolveGatesForAgent(slice).includes('plan')) return
-  const warnNotLaunched = (why) => console.error(`  aviso: no se ha lanzado el vigilante del ${GO_TOKEN} de #${slice.n} (${why}) — el slice está lanzado y el gate sigue en pie, pero tendrás que empujar su sesión a mano tras dar el go.`)
+  const warnNotLaunched = (why) => console.error(`  warning: no se ha lanzado el vigilante del ${GO_TOKEN} de #${slice.n} (${why}) — el slice está lanzado y el gate sigue en pie, pero tendrás que empujar su sesión a mano tras dar el go.`)
   try {
     const bin = process.env.CT_WATCH_GO_BIN || ctWatchGoPath
     // `spawn(process.execPath, [bin, …])` with a `bin` that does not exist
@@ -887,10 +887,10 @@ function retypeNote(retypes, retypeProblem) {
 // `state_reason`, or without it) is NOT translated to "not planned": it is
 // said that there is no record of it.
 function stateReasonLabel(sr) {
-  if (sr === 'NOT_PLANNED') return 'cerrado como "not planned"'
-  if (sr === 'REOPENED') return 'cerrado con motivo "reopened"'
-  if (sr == null) return 'cerrado sin motivo de cierre registrado'
-  return `cerrado con motivo "${sr}"`
+  if (sr === 'NOT_PLANNED') return 'closed as "not planned"'
+  if (sr === 'REOPENED') return 'closed with reason "reopened"'
+  if (sr == null) return 'closed with no closure reason on record'
+  return `closed with reason "${sr}"`
 }
 
 // ============================================================================
@@ -915,7 +915,7 @@ const MAX_BLOCKERS_LISTED = 8
 function boundedRefs(ns) {
   const shown = ns.slice(0, MAX_BLOCKERS_LISTED).map((n) => `#${n}`)
   const rest = ns.length - shown.length
-  return rest > 0 ? `${shown.join(', ')} y ${rest} más` : shown.join(', ')
+  return rest > 0 ? `${shown.join(', ')} and ${rest} more` : shown.join(', ')
 }
 
 // detalleDeHolders: the same capping, for --dry-run's inventories ("En
@@ -927,9 +927,9 @@ function boundedRefs(ns) {
 function holdersDetail(holders) {
   const shown = holders
     .slice(0, MAX_BLOCKERS_LISTED)
-    .map((i) => `#${i.n} [${((i.touches || []).length ? i.touches.map((t) => `touches:${t}`).join(', ') : 'sin touches')}]`)
+    .map((i) => `#${i.n} [${((i.touches || []).length ? i.touches.map((t) => `touches:${t}`).join(', ') : 'no touches')}]`)
   const rest = holders.length - shown.length
-  return rest > 0 ? `${shown.join(', ')} … y ${rest} más` : shown.join(', ')
+  return rest > 0 ? `${shown.join(', ')} … and ${rest} more` : shown.join(', ')
 }
 
 // motivoDeBloqueante: why THIS issue prevents the candidate from being
@@ -944,13 +944,13 @@ function holdersDetail(holders) {
 function blockerReason(b, candN) {
   const parts = []
   if (b.sharedTokens.length) {
-    parts.push(`retiene ${b.sharedTokens.map((t) => `'${t}'`).join(', ')}, que #${candN} también toca`)
+    parts.push(`holds ${b.sharedTokens.map((t) => `'${t}'`).join(', ')}, which #${candN} also touches`)
   }
   if (b.laneTokens.length) {
-    parts.push(`ocupa el carril serializante con ${b.laneTokens.map((t) => `touches:${t}`).join(', ')}`)
+    parts.push(`occupies the serialising lane with ${b.laneTokens.map((t) => `touches:${t}`).join(', ')}`)
   }
-  const statusText = b.status ? `status:${b.status}` : 'estado desconocido'
-  return `  - #${b.n} (${statusText}) — ${parts.join('; y además ')}`
+  const statusText = b.status ? `status:${b.status}` : 'unknown status'
+  return `  - #${b.n} (${statusText}) — ${parts.join('; and on top of that ')}`
 }
 
 // formatColisionMultiple: the message when TWO OR MORE block. It is not the
@@ -971,7 +971,7 @@ function formatMultipleCollision(reason, ctx) {
   const lines = blockers.slice(0, MAX_BLOCKERS_LISTED).map((b) => blockerReason(b, candN))
   const hidden = blockers.length - lines.length
   if (hidden > 0) {
-    lines.push(`  … y ${hidden} más (no se listan todos: para decidir aquí lo que cuenta es que son ${blockers.length}, no cuáles)`)
+    lines.push(`  … and ${hidden} more (not all are listed: what counts for deciding here is that there are ${blockers.length} of them, not which ones)`)
   }
 
   const inReview = blockers.filter((b) => b.status === 'in-review').map((b) => b.n)
@@ -980,13 +980,13 @@ function formatMultipleCollision(reason, ctx) {
 
   const remedies = []
   if (inReview.length) {
-    remedies.push(`${inReview.length} en status:in-review (${boundedRefs(inReview)}): trabajo entregado pero SIN MERGEAR, sin ningún agente detrás — esperar no sirve de nada. Lo único que suelta esos tokens es el MERGE de su PR (o cerrar el issue como completed si el PR ya se mergeó y nadie lo cerró porque le faltaba el "Closes #<n>"). \`--reopen\` NO suelta nada: deja el slice en status:in-progress reteniendo estos mismos tokens hasta que su trabajo se mergee.`)
+    remedies.push(`${inReview.length} in status:in-review (${boundedRefs(inReview)}): work delivered but NOT MERGED, with no agent behind it — waiting achieves nothing. The only thing that releases those tokens is the MERGE of its PR (or closing the issue as completed if the PR was merged already and nobody closed it because it was missing the "Closes #<n>"). \`--reopen\` releases NOTHING: it leaves the slice at status:in-progress holding these same tokens until its work is merged.`)
   }
   if (inProgress.length) {
-    remedies.push(`${inProgress.length} en status:in-progress (${boundedRefs(inProgress)}): ahí sí hay (o debería haber) un agente vivo, y esperar es el remedio correcto.`)
+    remedies.push(`${inProgress.length} in status:in-progress (${boundedRefs(inProgress)}): there there IS (or should be) a live agent, and waiting is the right remedy.`)
   }
   if (withoutStatus.length) {
-    remedies.push(`${withoutStatus.length} sin estado conocido (${boundedRefs(withoutStatus)}): compruébalos a mano.`)
+    remedies.push(`${withoutStatus.length} with no known status (${boundedRefs(withoutStatus)}): check them by hand.`)
   }
 
   // The stale-claim note ONLY for those that say they have a live agent (or
@@ -998,16 +998,16 @@ function formatMultipleCollision(reason, ctx) {
   const notes = ctx
     ? [...inProgress, ...withoutStatus].slice(0, MAX_BLOCKERS_LISTED).map((n) => ctx.stalenessNoteFor(n)).filter(Boolean)
     : []
-  const tail = notes.length ? `\nATENCIÓN, alguno de esos claims puede estar muerto: ${notes.join(' ')}` : ''
+  const tail = notes.length ? `\nATTENTION, one of those claims may be dead: ${notes.join(' ')}` : ''
 
   // The lane note only appears if somebody blocks BY lane: if every blocker
   // shares a literal token, explaining the lane is noise.
   const hasLane = blockers.some((b) => b.laneTokens.length)
   const laneNote = hasLane
-    ? ` El carril serializante (migration/ci/pbxproj) es GLOBAL: basta con que #${candN} toque uno cualquiera de esos tres para chocar con TODO el que tenga otro, sin compartir token con nadie.`
+    ? ` The serialising lane (migration/ci/pbxproj) is GLOBAL: it is enough for #${candN} to touch any one of those three to collide with EVERYTHING that has another one, without sharing a token with anybody.`
     : ''
 
-  return `#${candN} está ready con deps mergeadas, pero NO basta con desbloquear uno: ${blockers.length} issues retienen a la vez lo que necesita, y hasta que salgan TODOS seguirá sin poder despacharse — resolver uno solo te devolvería justo aquí en la vuelta siguiente, con otro nombre distinto.${laneNote}\n${lines.join('\n')}\nQué hace falta, por grupos: ${remedies.join(' ')}${tail}`
+  return `#${candN} is ready with merged deps, but unblocking ONE is not enough: ${blockers.length} issues hold at the same time what it needs, and until they ALL clear it still cannot be dispatched — resolving just one would bring you right back here on the next turn, under a different name.${laneNote}\n${lines.join('\n')}\nWhat is needed, by group: ${remedies.join(' ')}${tail}`
 }
 
 function formatReason(reason, ctx) {
@@ -1034,25 +1034,25 @@ function formatReason(reason, ctx) {
       // The prefix is kept literal in every branch: it is what keeps the
       // cause recognisable at a glance (and what W-B's pre-existing tests
       // pin down).
-      const head = 'No hay ningún issue en status:ready'
+      const head = 'There is no issue at status:ready'
       if (total === 0) {
-        return `${head} — de hecho no hay NINGÚN issue abierto en este repo. Eso no es "el loop está al día", es "no hay nada que mirar": o el epic todavía no se ha groomeado (\`/ct-groom <spec> --repo <owner/repo>\`), o --repo apunta a un repo distinto del que crees. Comprueba las dos cosas antes de darlo por terminado.`
+        return `${head} — in fact there is NOT A SINGLE open issue in this repo. That is not "the loop is up to date", it is "there is nothing to look at": either the epic has not been groomed yet (\`/ct-groom <spec> --repo <owner/repo>\`), or --repo points at a repo other than the one you think. Check both things before calling it finished.`
       }
       const parts = []
       if (backlog.length) {
-        parts.push(`Hay ${backlog.length} en status:backlog (${boundedRefs(backlog)}): eso NO se desbloquea esperando. Promover backlog → ready es el gate humano del loop —decides tú qué entra en vuelo— y hasta que lo abras no habrá nada que despachar: \`gh issue edit <n> --repo <owner/repo> --add-label status:ready --remove-label status:backlog\`.`)
+        parts.push(`There are ${backlog.length} at status:backlog (${boundedRefs(backlog)}): that does NOT clear by waiting. Promoting backlog → ready is the loop's human gate —you decide what goes in flight— and until you open it there will be nothing to dispatch: \`gh issue edit <n> --repo <owner/repo> --add-label status:ready --remove-label status:backlog\`.`)
       }
       if (inReview.length) {
-        parts.push(`Hay ${inReview.length} en status:in-review (${boundedRefs(inReview)}): su trabajo está entregado pero SIN MERGEAR, así que ni desbloquea a sus dependientes (merge-after exige el merge) ni suelta sus tokens de área/touches. Mergea sus PRs (o, si un PR ya se mergeó y el issue sigue abierto, ciérralo como completed) — y si alguno se rechazó en revisión y vas a corregir encima, devuélvelo al banco de trabajo con \`node <plugin>/scripts/dispatch-check.mjs <n> --repo <owner/repo> --reopen\` (queda en status:in-progress: SIGUE reteniendo sus tokens, porque su trabajo sigue sin mergear — reabrir no desbloquea a sus vecinos, solo dice quién lo está rehaciendo).`)
+        parts.push(`There are ${inReview.length} at status:in-review (${boundedRefs(inReview)}): their work is delivered but NOT MERGED, so it neither unblocks their dependants (merge-after requires the merge) nor releases their area/touches tokens. Merge their PRs (or, if a PR was merged already and the issue is still open, close it as completed) — and if one was rejected in review and you are going to fix it on top, send it back to the workbench with \`node <plugin>/scripts/dispatch-check.mjs <n> --repo <owner/repo> --reopen\` (it stays at status:in-progress: it STILL holds its tokens, because its work is still unmerged — reopening does not unblock its neighbours, it only says who is redoing it).`)
       }
       if (inProgress.length) {
-        parts.push(`Hay ${inProgress.length} en status:in-progress (${boundedRefs(inProgress)}): con agente vivo, ahí sí toca esperar.`)
+        parts.push(`There are ${inProgress.length} at status:in-progress (${boundedRefs(inProgress)}): with a live agent, there waiting is indeed the thing to do.`)
       }
       if (!parts.length) {
         // Neither backlog, nor in-review, nor in-progress, and yet there are
         // open issues: they are outside the loop. Say so, instead of letting
         // the short sentence read as "there is no work left".
-        return `${head}, y ninguno de los ${total} issue(s) abiertos está en ningún otro estado del loop (backlog/in-progress/in-review): están FUERA del loop, probablemente sin ninguna label \`status:\` — /ct-next no los ve. Si alguno debería despacharse, etiquétalo; si no, no hay nada que hacer aquí.`
+        return `${head}, and none of the ${total} open issue(s) is in any other loop state (backlog/in-progress/in-review): they are OUTSIDE the loop, probably with no \`status:\` label at all — /ct-next does not see them. If one of them should be dispatched, label it; if not, there is nothing to do here.`
       }
       return `${head}. ${parts.join(' ')}`
     }
@@ -1073,7 +1073,7 @@ function formatReason(reason, ctx) {
       //     waiting, the data has to be fixed.
       const list = reason.blocked.map((b) => {
         if (b.malformed) {
-          return `#${b.n} (la sección "## Dependencias" existe pero no se reconoció ningún "merge-after #N" en su contenido — probablemente reescrita a mano; tratado como NO despachable hasta que se corrija el texto, nunca como "sin dependencias")`
+          return `#${b.n} (the "## Dependencias" section exists but no "merge-after #N" was recognised in its content — probably rewritten by hand; treated as NOT dispatchable until the text is corrected, never as "no dependencies")`
         }
         //   - F13/H4: a dependency whose issue is CLOSED but NOT as
         //     "completed" (typically "not planned", which is the correct thing
@@ -1087,14 +1087,14 @@ function formatReason(reason, ctx) {
         const depStates = reason.depStates || {}
         const deps = b.unmetDeps.map((d) => {
           if (d == null) {
-            return 'una dependencia declarada contra un orden que no corresponde a ningún issue existente (¿"merge-after" a un slice que no existe, o que aún no se groomeó?) — nunca se resolverá sola con esperar; corrige el "merge-after" o el "ct-order" del issue referenciado'
+            return 'a dependency declared against an order that corresponds to no existing issue (a "merge-after" to a slice that does not exist, or that has not been groomed yet?) — it will never resolve itself by waiting; fix the "merge-after", or the "ct-order" of the issue it points at'
           }
           if (Object.prototype.hasOwnProperty.call(depStates, d)) {
-            return `#${d}, que está ${stateReasonLabel(depStates[d])} — una dep solo cuenta como satisfecha si su issue está cerrado como "completed", así que ESTA NO SE VA A SATISFACER NUNCA por sí sola: quita el "merge-after #<orden>" de la sección "## Dependencias" de #${b.n} si el slice se descartó, o reabre #${d} y ciérralo como completed si su trabajo sí se hizo`
+            return `#${d}, which is ${stateReasonLabel(depStates[d])} — a dep only counts as satisfied if its issue is closed as "completed", so THIS ONE IS NEVER GOING TO SATISFY ITSELF: remove the "merge-after #<order>" from the "## Dependencias" section of #${b.n} if the slice was dropped, or reopen #${d} and close it as completed if its work really was done`
           }
           return `#${d}`
         })
-        return `#${b.n} (falta mergear ${deps.join(', ')})`
+        return `#${b.n} (still to merge: ${deps.join(', ')})`
       }).join('; ')
       // The closing line CANNOT say "wait for them to be merged" when NONE of
       // the pending deps can be merged any more. Observed in a real run
@@ -1110,9 +1110,9 @@ function formatReason(reason, ctx) {
         (d) => d != null && !Object.prototype.hasOwnProperty.call(depStatesTail, d)
       ))
       const tail = waitable
-        ? 'espera a que se mergeen esas dependencias, o corrige el issue si el bloqueo es por datos, no por trabajo pendiente.'
-        : 'esperar NO va a desbloquear nada aquí: ninguna de esas dependencias puede satisfacerse sola. Corrige los issues como se indica arriba.'
-      return `Hay slice(s) en status:ready pero con dependencias sin mergear o sin resolver: ${list} — ${tail}`
+        ? 'wait for those dependencies to be merged, or fix the issue if the block is about data and not about work still pending.'
+        : 'waiting is NOT going to unblock anything here: none of those dependencies can satisfy itself. Fix the issues as indicated above.'
+      return `There are slice(s) at status:ready but with dependencies unmerged or unresolved: ${list} — ${tail}`
     }
     case 'collision': {
       // F13/H2 — TWO DIFFERENT BLOCKS UNDER THE SAME NAME. Ever since
@@ -1157,20 +1157,20 @@ function formatReason(reason, ctx) {
       const note = (ctx && !inReviewHolder) ? ctx.stalenessNoteFor(reason.withIssue) : null
       // The remedy for the in-review case, in a single place: the same text
       // serves both the token collision and the serialising one.
-      const reviewHint = `#${reason.withIssue} está en status:in-review: su trabajo está entregado pero SIN MERGEAR, así que retiene sus tokens hasta el merge — ramificar ahora de la base te daría un árbol que todavía no lo contiene. NO hay ningún agente trabajándolo: esperar no sirve de nada. Mergea su PR; si su PR YA se mergeó y el issue sigue abierto (el PR no llevaba "Closes #${reason.withIssue}"), ciérralo como completed; si la revisión lo rechazó, \`node <plugin>/scripts/dispatch-check.mjs ${reason.withIssue} --repo <owner/repo> --reopen\` lo devuelve al banco de trabajo — OJO: eso NO te desbloquea, porque #${reason.withIssue} se queda en status:in-progress reteniendo estos mismos tokens hasta que su trabajo se mergee. Lo único que desbloquea es el merge (o abandonar #${reason.withIssue} del todo: borrar su rama y \`--requeue\`).`
+      const reviewHint = `#${reason.withIssue} is at status:in-review: its work is delivered but NOT MERGED, so it holds its tokens until the merge — branching off the base now would give you a tree that does not contain it yet. There is NO agent working on it: waiting achieves nothing. Merge its PR; if its PR was ALREADY merged and the issue is still open (the PR did not carry "Closes #${reason.withIssue}"), close it as completed; if the review rejected it, \`node <plugin>/scripts/dispatch-check.mjs ${reason.withIssue} --repo <owner/repo> --reopen\` sends it back to the workbench — CAREFUL: that does NOT unblock you, because #${reason.withIssue} stays at status:in-progress holding these same tokens until its work is merged. The only thing that unblocks is the merge (or abandoning #${reason.withIssue} altogether: delete its branch and \`--requeue\`).`
       // "in flight" is only said of the `in-progress` case, where it is
       // literally true. For `in-review` the phrase would be false (nothing is
       // flying: it is parked waiting for a merge) — what is said instead is
       // "work delivered without merging".
       if (reason.kind === 'serializing') {
         if (inReviewHolder) {
-          return `#${reason.issue} está ready con deps mergeadas, pero no se puede serializar: su touches:${reason.token} entra en el mismo grupo serializante (migration/ci/pbxproj) que touches:${reason.runningToken}, retenido por #${reason.withIssue} (status:in-review) — ${reviewHint}`
+          return `#${reason.issue} is ready with merged deps, but it cannot be serialised: its touches:${reason.token} falls in the same serialising group (migration/ci/pbxproj) as touches:${reason.runningToken}, held by #${reason.withIssue} (status:in-review) — ${reviewHint}`
         }
-        const base = `#${reason.issue} está ready con deps mergeadas, pero no se puede serializar: su touches:${reason.token} entra en el mismo grupo serializante (migration/ci/pbxproj) que touches:${reason.runningToken}, ya en vuelo en #${reason.withIssue}`
-        return note ? `${base} — ${note}` : `${base} — espera a que termine.`
+        const base = `#${reason.issue} is ready with merged deps, but it cannot be serialised: its touches:${reason.token} falls in the same serialising group (migration/ci/pbxproj) as touches:${reason.runningToken}, already in flight in #${reason.withIssue}`
+        return note ? `${base} — ${note}` : `${base} — wait for it to finish.`
       }
       if (inReviewHolder) {
-        return `#${reason.issue} está ready con deps mergeadas, pero colisiona con trabajo entregado sin mergear: comparte el token '${reason.token}' con #${reason.withIssue} (status:in-review) — ${reviewHint}`
+        return `#${reason.issue} is ready with merged deps, but it collides with delivered unmerged work: it shares the token '${reason.token}' with #${reason.withIssue} (status:in-review) — ${reviewHint}`
       }
       const base = `#${reason.issue} está ready con deps mergeadas, pero colisiona con trabajo en vuelo: comparte el token '${reason.token}' con #${reason.withIssue} (status:in-progress)`
       return note ? `${base} — ${note}` : `${base} — espera a que termine, o resuelve el token.`
@@ -1188,7 +1188,7 @@ function formatBlockReason(reason, cap, ctx) {
     // under --dry-run, in the "En vuelo" line printed just before (further
     // down); here all that is needed is the count and the cap, so that the
     // message is self-sufficient in the real run too (without --dry-run).
-    const base = `El cap (${cap}) ya está copado por trabajo en vuelo: ${reason.inFlightCount} slice(s) en status:in-progress`
+    const base = `The cap (${cap}) is already taken up by in-flight work: ${reason.inFlightCount} slice(s) at status:in-progress`
     // Minor 1 fix from the review: without `wouldDispatchIfCapAllowed`, this
     // message ALWAYS suggested "raise --cap", even when the candidate that
     // would be freed up would still be blocked by another cause (unmerged
@@ -1222,17 +1222,17 @@ function formatBlockReason(reason, cap, ctx) {
       ? (reason.inFlight || []).map((i) => ({ n: i.n, note: ctx.stalenessNoteFor(i.n) })).filter((x) => x.note)
       : []
     const stale = notes.length
-      ? ` ATENCIÓN, el cap puede estar copado por un claim muerto: ${notes.map((x) => x.note).join(' ')}`
+      ? ` ATTENTION, the cap may be taken up by a dead claim: ${notes.map((x) => x.note).join(' ')}`
       : ''
     if (reason.wouldDispatchIfCapAllowed) {
-      return `${base} — sube --cap, o espera a que termine alguno.${stale}`
+      return `${base} — raise --cap, or wait for one of them to finish.${stale}`
     }
-    return `${base} — aunque subieras --cap no bastaría todavía: ${formatReason(reason.blockedEvenWithCap, ctx)}${stale}`
+    return `${base} — even if you raised --cap it would not be enough yet: ${formatReason(reason.blockedEvenWithCap, ctx)}${stale}`
   }
   return formatReason(reason, ctx)
 }
 
-const usage = 'uso: ct-next.mjs --repo <o/r> [--cap N] [--base <rama>] [--dry-run]'
+const usage = 'usage: ct-next.mjs --repo <o/r> [--cap N] [--base <branch>] [--dry-run]'
 const repo = arg('--repo')
 const capArg = arg('--cap', '1')
 const baseArg = arg('--base')
@@ -1247,7 +1247,7 @@ if (typeof repo !== 'string' || repo.length === 0) { console.error(usage); proce
 // problem was the shape of the argument, and `repo.split('/').pop()` produced
 // a "repo name" that was the whole slug.
 if (!parseRepoSlug(repo)) {
-  console.error(`--repo inválido: "${repo}" — debe tener la forma owner/repo (p.ej. josemerca/control-tower), con exactamente una barra y ambas mitades no vacías.`)
+  console.error(`--repo invalid: "${repo}" — it must have the form owner/repo (e.g. josemerca/control-tower), with exactly one slash and neither half empty.`)
   process.exit(2)
 }
 // D4, defect 2: `parseInt(capArg, 10)` silently accepted a value DIFFERENT
@@ -1259,11 +1259,11 @@ if (!parseRepoSlug(repo)) {
 // different errors with two different corrections.
 const cap = typeof capArg === 'string' ? parseStrictInt(capArg) : null
 if (capArg === true || cap === null) {
-  console.error(`--cap inválido: "${capArg === true ? '(sin valor)' : capArg}" — debe ser un entero en dígitos decimales a secas (nada de "1e3", "2.9", "3perros", espacios, ni signo "+"/"-": antes se aceptaban en silencio con un valor distinto del pedido, y el signo se aceptaba pese a que este mismo mensaje decía lo contrario).`)
+  console.error(`--cap invalid: "${capArg === true ? '(no value)' : capArg}" — it must be an integer in plain decimal digits (no "1e3", no "2.9", no "3dogs", no spaces, and no "+"/"-" sign: these used to be accepted silently with a value different from the one asked for, and the sign was accepted even though this very message said otherwise).`)
   process.exit(2)
 }
 if (cap < 1) {
-  console.error(`--cap inválido: "${capArg}" — debe ser >= 1 (un cap de ${cap} no despacharía nada).`)
+  console.error(`--cap invalid: "${capArg}" — it must be >= 1 (a cap of ${cap} would dispatch nothing).`)
   process.exit(2)
 }
 // --base <branch>: same validation pattern as --repo/--cap (`arg()` already
@@ -1276,7 +1276,7 @@ if (cap < 1) {
 // fails late with an internal git error instead of with the exit 2 and clear
 // message that every other misplaced-flag case does have.
 if (baseArg !== undefined && (typeof baseArg !== 'string' || baseArg.length === 0)) {
-  console.error(`--base inválido: "${baseArg === true ? '(sin valor)' : baseArg}" — falta el nombre de la rama (¿--base al final de la línea, seguido de otro flag, o con un valor vacío?)`)
+  console.error(`--base invalid: "${baseArg === true ? '(no value)' : baseArg}" — the branch name is missing (--base at the end of the line, followed by another flag, or with an empty value?)`)
   process.exit(2)
 }
 
@@ -1288,7 +1288,7 @@ if (baseArg !== undefined && (typeof baseArg !== 'string' || baseArg.length === 
 // state. It is treated as a usage error and we abort BEFORE touching gh or the
 // filesystem.
 if (process.env.CT_NEXT_FIXTURE && !dryRun) {
-  console.error('CT_NEXT_FIXTURE está definido pero falta --dry-run: por seguridad no se decide ni se lanza nada real con datos de fixture. Añade --dry-run o limpia la variable de entorno.')
+  console.error('CT_NEXT_FIXTURE is defined but --dry-run is missing: for safety nothing real is decided or launched with fixture data. Add --dry-run or clear the environment variable.')
   process.exit(2)
 }
 // Tied down in the read itself too (defence in depth): `fx` can only be
@@ -1307,11 +1307,11 @@ const fx = (dryRun && process.env.CT_NEXT_FIXTURE) ? JSON.parse(process.env.CT_N
 //            dispatch-check, the result of the claim protocol
 //            (`claimed #N → in-progress`).
 //   STDERR = the DIAGNOSIS. Everything aimed at the human ABOUT the run, not
-//            the result of the run: `aviso:`, `recordatorio:`, `ATENCIÓN:`,
+//            the result of the run: `warning:`, `reminder:`, `ATTENTION:`,
 //            and any abort message.
 //
 // WHAT WAS BROKEN, verified in the field: `warn()` emitted
-// `console.log(\`aviso: …\`)` — to stdout — while ct-groom.mjs's equivalent
+// `console.log(\`warning: …\`)` — to stdout — while ct-groom.mjs's equivalent
 // warnings go through `console.error`. A run of /ct-next with warnings on the
 // screen left 0 BYTES on stderr. Two real consequences, not theoretical ones:
 // the diagnosis got mixed into the output somebody might capture (`/ct-next
@@ -1342,7 +1342,7 @@ const fx = (dryRun && process.env.CT_NEXT_FIXTURE) ? JSON.parse(process.env.CT_N
 const warnings = []
 function warn(msg) {
   warnings.push(msg)
-  console.error(`aviso: ${msg}`)
+  console.error(`warning: ${msg}`)
 }
 // The recap lives in an 'exit' handler and not at the end of the file on
 // purpose: this script ends in MANY different `process.exit()`s (a block with
@@ -1355,12 +1355,12 @@ function warn(msg) {
 process.on('exit', (code) => {
   if (!warnings.length) return
   const lines = warnings.map((w, i) => `  ${i + 1}. ${w}`).join('\n')
-  const what = dryRun ? 'este --dry-run' : 'esta corrida'
+  const what = dryRun ? 'this --dry-run' : 'this run'
   const nuance = code === 0
-    ? 'un exit 0 aquí significa "no se ha roto nada", NO "todo es como esperas" — lee los avisos antes de darlo por bueno'
-    : 'los avisos siguen siendo relevantes, además del fallo que provocó ese exit code'
+    ? 'an exit 0 here means "nothing broke", NOT "everything is as you expect" — read the avisos before calling it good'
+    : 'the avisos are still relevant, on top of the failure that caused that exit code'
   try {
-    writeSync(2, `\n${what} terminó con exit ${code} A PESAR de ${warnings.length} aviso(s); ${nuance}:\n${lines}\n`)
+    writeSync(2, `\n${what} finished with exit ${code} DESPITE ${warnings.length} warning(s); ${nuance}:\n${lines}\n`)
   } catch {
     // stderr closed (e.g. the caller's pipe no longer exists): a recap that
     // cannot be written must not turn a clean exit into a crash.
@@ -1496,7 +1496,7 @@ function fetchAndVerifyBaseOnRemote(base) {
     // point of the dispatch that does so with git.
     execFileSync('git', ['fetch', 'origin', base], { cwd: repoRoot, stdio: 'ignore', timeout: childTimeoutFor(), killSignal: 'SIGKILL' })
   } catch (e) {
-    console.error(`no se pudo hacer \`git fetch origin ${base}\` en ${repoRoot} (${e.message}). El worktree del slice se corta de origin/${base}, así que sin fetch no se puede saber si la base está al día — y un slice que nace por detrás de su remoto acaba en una pull request en conflicto, que GitHub deja sin ningún check. Arréglalo (¿red? ¿remote origin? ¿credenciales?) y reintenta: NO se ha reclamado nada.`)
+    console.error(`could not run \`git fetch origin ${base}\` in ${repoRoot} (${e.message}). The slice's worktree is cut from origin/${base}, so without a fetch there is no knowing whether the base is up to date — and a slice born behind its remote ends up in a pull request in conflict, which GitHub leaves with no checks at all. Fix it (network? remote origin? credentials?) and retry: NOTHING has been claimed.`)
     process.exit(1)
   }
   try {
@@ -1535,17 +1535,17 @@ function ensureRepoIdentity(root, expectedRepo) {
   try {
     originUrl = execFileSync('git', ['remote', 'get-url', 'origin'], { cwd: root, encoding: 'utf8', timeout: childTimeoutFor(), killSignal: 'SIGKILL' }).trim()
   } catch (e) {
-    console.error(`no se pudo verificar que ${root} es el checkout de ${expectedRepo}: no tiene remote "origin" (${e.message}). Por seguridad, ct-next.mjs NO continúa — podría estar corriendo dentro del repo equivocado (p.ej. una sesión de control-tower en vez de ${expectedRepo}). Añade un remote origin que apunte a ${expectedRepo}, o ejecuta ct-next.mjs desde el checkout correcto.`)
+    console.error(`could not verify that ${root} is the checkout of ${expectedRepo}: it has no "origin" remote (${e.message}). For safety, ct-next.mjs does NOT continue — it could be running inside the wrong repo (e.g. a control-tower session instead of ${expectedRepo}). Add an origin remote pointing at ${expectedRepo}, or run ct-next.mjs from the right checkout.`)
     process.exit(1)
   }
   const m = originUrl.match(/github\.com[:/]+([^/]+)\/(.+?)(?:\.git)?\/?$/)
   if (!m) {
-    console.error(`no se pudo interpretar el remote "origin" de ${root} ("${originUrl}") como un repo de GitHub owner/repo. Por seguridad, ct-next.mjs NO continúa.`)
+    console.error(`could not interpret the "origin" remote of ${root} ("${originUrl}") as a GitHub owner/repo. For safety, ct-next.mjs does NOT continue.`)
     process.exit(1)
   }
   const actualRepo = `${m[1]}/${m[2]}`
   if (actualRepo.toLowerCase() !== expectedRepo.toLowerCase()) {
-    console.error(`--repo ${expectedRepo} no coincide con el checkout local en ${root} (remote origin → ${actualRepo}). Aborta: ejecuta ct-next.mjs desde un checkout de ${expectedRepo}, o corrige --repo.`)
+    console.error(`--repo ${expectedRepo} does not match the local checkout at ${root} (remote origin → ${actualRepo}). Aborting: run ct-next.mjs from a checkout of ${expectedRepo}, or fix --repo.`)
     process.exit(1)
   }
 }
@@ -1583,7 +1583,7 @@ if (fx) {
   try {
     repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8', timeout: childTimeoutFor(), killSignal: 'SIGKILL' }).trim()
   } catch (e) {
-    console.error(`no se pudo resolver la raíz del repo git local: ${e.message}`)
+    console.error(`could not resolve the local git repo root: ${e.message}`)
     process.exit(1)
   }
   ensureRepoIdentity(repoRoot, repo)
@@ -1601,7 +1601,7 @@ if (fx) {
       cwd: repoRoot, encoding: 'utf8', timeout: childTimeoutFor(), killSignal: 'SIGKILL',
     }).trim()
   } catch {
-    console.error(`aviso: no se pudo resolver "origin/${resolvedBase}" a un sha concreto, así que la semilla del slice irá sin \`last_commit\`. El hook de cierre de turno no podrá avisar al agente de que su estado se ha quedado atrás.`)
+    console.error(`warning: no se pudo resolver "origin/${resolvedBase}" a un sha concreto, así que la semilla del slice irá sin \`last_commit\`. El hook de cierre de turno no podrá avisar al agente de que su estado se ha quedado atrás.`)
   }
 }
 
@@ -1675,7 +1675,7 @@ function readDispatchInput() {
 function formatOrderCollisions(collisions) {
   return collisions.map((c) => {
     const epicLabel = c.epicKey === NO_MILESTONE_KEY ? 'issues sin milestone asignado' : `el milestone #${c.epicKey}`
-    return `aviso: colisión de orden — el marcador <!-- ct-order:${c.order} --> aparece en más de un issue de ${epicLabel} (${c.issues.map((n) => `#${n}`).join(', ')}). Ese epic queda EXCLUIDO de esta tanda (ni se despacha ni cuenta en vuelo) hasta que se corrija — el resto del repo se despacha con normalidad. ¿Re-groom accidental sobre el mismo milestone, o dos epics compartiendo milestone por no haber pasado --milestone?`
+    return `warning: colisión de orden — el marcador <!-- ct-order:${c.order} --> aparece en más de un issue de ${epicLabel} (${c.issues.map((n) => `#${n}`).join(', ')}). Ese epic queda EXCLUIDO de esta tanda (ni se despacha ni cuenta en vuelo) hasta que se corrija — el resto del repo se despacha con normalidad. ¿Re-groom accidental sobre el mismo milestone, o dos epics compartiendo milestone por no haber pasado --milestone?`
   })
 }
 
@@ -1689,7 +1689,7 @@ function formatOrderCollisions(collisions) {
 function formatStatusAmbiguityWarnings(issues) {
   return issues
     .filter((i) => i.statusAmbiguous)
-    .map((i) => `aviso: #${i.n} tiene más de una label "status:" a la vez (${(i.statusLabels || []).map((s) => `status:${s}`).join(', ')}) — probablemente una edición a medias. Resuelto de forma conservadora a "status:${i.status}" (in-progress > in-review > ready > backlog), sin depender del orden en que gh/GitHub devuelve las labels. Corrige las labels a mano para dejar solo una.`)
+    .map((i) => `warning: #${i.n} carries more than one "status:" label at once (${(i.statusLabels || []).map((s) => `status:${s}`).join(', ')}) — probably a half-finished edit. Resolved conservatively to "status:${i.status}" (in-progress > in-review > ready > backlog), without depending on the order gh/GitHub returns the labels in. Fix the labels by hand so that only one is left.`)
 }
 
 // formatStrayDepsWarnings (D1 finding 1, review follow-up): narrowing the
@@ -1705,7 +1705,7 @@ function formatStatusAmbiguityWarnings(issues) {
 function formatStrayDepsWarnings(issues) {
   return issues
     .filter((i) => (i.strayDeps || []).length > 0)
-    .map((i) => `aviso: #${i.n} tiene "merge-after ${i.strayDeps.map((d) => `#${d}`).join(', ')}" fuera de la sección "## Dependencias" — desde el hardening del dispatch, esto YA NO cuenta como dependencia real (se despacha igual). Si se pretendía como tal, muévelo dentro de la sección "## Dependencias", o bórralo si ya no aplica.`)
+    .map((i) => `warning: #${i.n} tiene "merge-after ${i.strayDeps.map((d) => `#${d}`).join(', ')}" fuera de la sección "## Dependencias" — desde el hardening del dispatch, esto YA NO cuenta como dependencia real (se despacha igual). Si se pretendía como tal, muévelo dentro de la sección "## Dependencias", o bórralo si ya no aplica.`)
 }
 
 // ============================================================================
@@ -1938,10 +1938,10 @@ function formatBlockedClaimWarnings(issues) {
       continue
     }
     if (b.state !== 'blocked') continue
-    const reasonText = b.reason ? `: «${b.reason}»` : ' (sin motivo declarado)'
-    const unblockNote = b.unblock ? ` Para levantarlo, lo que el propio agente dejó escrito: «${b.unblock}».` : ''
+    const reasonText = b.reason ? `: «${b.reason}»` : ' (no reason declared)'
+    const unblockNote = b.unblock ? ` To lift it, what the agent itself wrote down: «${b.unblock}».` : ''
     const extras = (b.notes || []).length ? ` ${b.notes.join(' ')}` : ''
-    out.push(`#${i.n} está en status:in-progress —el dispatcher lo cuenta como trabajo en curso, ocupando una plaza de --cap y reteniendo sus tokens de área/touches— pero su propio .worktrees/${i.n}/${SLICE_REL_PATH} se declara BLOQUEADO${reasonText}. No hay ningún agente avanzándolo, y NINGUNA transición del loop lo saca de ahí sola: la detección de claims rancios no lo ve (el worktree y la rama SÍ existen), \`--requeue\` se niega mientras existan, y \`--release\` mentiría (no hay PR). Esto lo decides tú: desbloquéalo, o abandónalo (borra .worktrees/${i.n} y la rama feat/${i.n} —comprueba antes que no pierdes trabajo sin pushear— y solo entonces \`node <plugin>/scripts/dispatch-check.mjs ${i.n} --repo ${repo} --requeue\`).${unblockNote}${extras}`)
+    out.push(`#${i.n} is at status:in-progress —the dispatcher counts it as work under way, occupying a --cap slot and holding its area/touches tokens— but its own .worktrees/${i.n}/${SLICE_REL_PATH} declares itself BLOCKED${reasonText}. There is no agent moving it forward, and NO transition of the loop gets it out of there on its own: stale-claim detection does not see it (the worktree and the branch DO exist), \`--requeue\` refuses while they exist, and \`--release\` would lie (there is no PR). This one is yours to decide: unblock it, or abandon it (delete .worktrees/${i.n} and the branch feat/${i.n} —check first that you are not losing unpushed work— and only then \`node <plugin>/scripts/dispatch-check.mjs ${i.n} --repo ${repo} --requeue\`).${unblockNote}${extras}`)
   }
   return out
 }
@@ -1961,7 +1961,7 @@ const depStates = dispatchInput.depStates || {}
 //
 // F16/H2 — these four blocks used to go through `console.log` under the
 // criterion "console.error is reserved for what aborts". That criterion is
-// what split the plugin in two: they are `aviso:`, exactly the same category
+// what split the plugin in two: they are `warning:`, exactly the same category
 // that ct-groom.mjs and ct-init.sh emit on stderr. The criterion in force (see
 // the `warn()` block, above) is product/diagnosis, not aborts/does-not-abort —
 // and a warning is diagnosis even if it aborts nothing.
@@ -2027,7 +2027,7 @@ if (!fx && (mergedIssues || []).length) {
     branchesRead = false
   }
   if (!dirsRead || !branchesRead) {
-    warn(`no se ha podido comprobar si algún slice ya mergeado deja worktree o rama sin recoger en este checkout (${!dirsRead ? `no se pudo listar ${join(repoRoot, '.worktrees')}` : `falló \`git branch --list 'feat/*'\``}). NO lo leas como "está limpio": el residuo de un slice terminado bloquea cualquier redespacho futuro de ese mismo número.`)
+    warn(`it could not be checked whether an already-merged slice leaves an uncollected worktree or branch in this checkout (${!dirsRead ? `could not list ${join(repoRoot, '.worktrees')}` : `\`git branch --list 'feat/*'\` failed`}). Do NOT read it as "it is clean": the residue of a finished slice blocks any future redispatch of that same number.`)
   } else {
     const preliminary = collectFinishedResidue(mergedIssues, {
       worktreeDirs, branchNames, cmuxTitles: null, worktreePathOf: (n) => `${repoRoot}/.worktrees/${n}`,
@@ -2038,7 +2038,7 @@ if (!fx && (mergedIssues || []).length) {
         worktreeDirs, branchNames, cmuxTitles: titles, worktreePathOf: (n) => `${repoRoot}/.worktrees/${n}`,
       })
       const w = formatFinishedResidueWarning(residue, { repo })
-      if (w) warn(titles === null ? `${w}\n(no se pudo consultar cmux, así que de las sesiones abiertas no se afirma nada: puede haber agentes vivos que no salen en esta lista.)` : w)
+      if (w) warn(titles === null ? `${w}\n(cmux could not be queried, so nothing is asserted about the open sessions: there may be live agents that do not show up in this list.)` : w)
     }
   }
 }
@@ -2064,11 +2064,11 @@ if (!fx) {
       // It never aborts: a detector that can fail cannot hold a veto over the
       // work. But neither does it keep quiet — the silence would read as
       // "checked and clean", which is the exact lie this round is chasing.
-      warn(`no se ha podido comprobar cómo se cerraron las dependencias ya satisfechas (ni si la rama de un slice en revisión está mergeada): ${e.message}. El despacho sigue con el criterio de siempre (una dep cuenta si su issue está cerrado como *completed*); NO lo leas como "comprobado y correcto".`)
+      warn(`it could not be checked how the already-satisfied dependencies were closed (nor whether the branch of a slice in review is merged): ${e.message}. The dispatch carries on with the usual criterion (a dep counts if its issue is closed as *completed*); do NOT read it as "checked and correct".`)
     }
     if (raw) {
       if (Array.isArray(raw.errors) && raw.errors.length) {
-        warn(`la comprobación de cierres devolvió errores de GraphQL (${raw.errors.map((x) => x?.message || 'sin mensaje').join('; ')}); lo que no vino en la respuesta queda SIN comprobar.`)
+        warn(`the closure check returned GraphQL errors (${raw.errors.map((x) => x?.message || 'no message').join('; ')}); whatever did not come back in the response is left UNCHECKED.`)
       }
       const { closers, mergedPr } = parseClosureProbe(raw, plan)
       for (const w of formatSuspectClosureWarnings(closers, plan.dependents)) warn(w)
@@ -2116,10 +2116,10 @@ function formatConventionWarnings() {
   } catch (e) {
     // The read blowing up CANNOT bring a dispatch down nor pass for "there is
     // no conflict": it is said and we carry on.
-    out.push(`aviso: no se ha podido leer la documentación del repo para comprobar si contradice al kickoff (${e.message}). NO lo leas como "no hay conflicto": no se ha mirado.`)
+    out.push(`warning: no se ha podido leer la documentación del repo para comprobar si contradice al kickoff (${e.message}). NO lo leas como "no hay conflicto": no se ha mirado.`)
   }
   for (const f of failures) {
-    out.push(`aviso: no se ha podido leer la documentación del repo para comprobar si contradice al kickoff (${f}). NO lo leas como "no hay conflicto": no se ha mirado.`)
+    out.push(`warning: no se ha podido leer la documentación del repo para comprobar si contradice al kickoff (${f}). NO lo leas como "no hay conflicto": no se ha mirado.`)
   }
   // `files: []` on purpose — with no walk of the disk, the rule about other
   // people's worktree directories and the one about state files do not fire
@@ -2167,9 +2167,9 @@ if (dryRun) {
   // resolved (neither against GitHub nor against the local checkout).
   console.log(`rama base resuelta: ${resolvedBase}${baseIsFixtureDefault ? ' (fixture)' : ''}`)
   if (inFlight.length) {
-    console.log(`En vuelo (${inFlight.length}/${cap} del cap ocupados): ${holdersDetail(inFlight)}`)
+    console.log(`In flight (${inFlight.length}/${cap} of the cap taken): ${holdersDetail(inFlight)}`)
   } else {
-    console.log(`En vuelo: ninguno (0/${cap} del cap ocupados).`)
+    console.log(`In flight: none (0/${cap} of the cap taken).`)
   }
   // F13/H2: slices in `status:in-review` do NOT occupy cap (there is no live
   // agent) but they DO retain their tokens until the merge. Without this line,
@@ -2179,7 +2179,7 @@ if (dryRun) {
   // into "En vuelo", precisely because they are two different accountings.
   const reviewHolders = (tokenHolders || []).filter((i) => i.status === 'in-review')
   if (reviewHolders.length) {
-    console.log(`Sin mergear, reteniendo tokens (${reviewHolders.length}, status:in-review, NO ocupan cap): ${holdersDetail(reviewHolders)}`)
+    console.log(`Unmerged, holding tokens (${reviewHolders.length}, status:in-review, they do NOT take cap): ${holdersDetail(reviewHolders)}`)
   }
 }
 
@@ -2212,8 +2212,8 @@ if (!selected.length) {
 // anywhere (see sliceNumberError, further down, which now stops it dead); this
 // function only takes care that, in the meantime, the text does not lie
 // either.
-const sliceRef = (s) => (typeof s.n === 'number' && Number.isSafeInteger(s.n) && s.n >= 1 ? `#${s.n}` : `(slice SIN número de issue utilizable: ${JSON.stringify(s.n) ?? 'undefined'})`)
-console.log(`seleccionados para esta tanda (cap ${cap}, ${inFlight.length} en vuelo): ${selected.map((s) => `${sliceRef(s)} (${s.name})`).join(', ')}`)
+const sliceRef = (s) => (typeof s.n === 'number' && Number.isSafeInteger(s.n) && s.n >= 1 ? `#${s.n}` : `(slice with NO usable issue number: ${JSON.stringify(s.n) ?? 'undefined'})`)
+console.log(`selected for this batch (cap ${cap}, ${inFlight.length} in flight): ${selected.map((s) => `${sliceRef(s)} (${s.name})`).join(', ')}`)
 
 // repoName keeps the argument's original casing (parseRepoSlug normalises to
 // lower case in order to COMPARE, not to display): this only feeds the cmux
@@ -2276,7 +2276,7 @@ function sliceNumberError(s) {
   // Verified by construction against the unfixed code: a fixture with no `n`
   // printed exactly those five things and the dry-run exited 0, as if the plan
   // were good.
-  return `${sliceRef(s)}: ${JSON.stringify(s.n) ?? 'undefined'} no es un número de issue utilizable (se esperaba un entero >= 1). Todo lo que el dispatcher construye para un slice sale de ese número — la rama feat/<n>, el worktree .worktrees/<n>, el claim contra GitHub y el título de la sesión de cmux — así que no hay forma de despacharlo sin inventarse un identificador. Revisa de dónde salió este slice (${JSON.stringify(s.name ?? null)}): en la ruta real, "n" es siempre el número de issue de GitHub.`
+  return `${sliceRef(s)}: ${JSON.stringify(s.n) ?? 'undefined'} is not a usable issue number (an integer >= 1 was expected). Everything the dispatcher builds for a slice comes out of that number — the branch feat/<n>, the worktree .worktrees/<n>, the claim against GitHub and the cmux session title — so there is no way of dispatching it without inventing an identifier. Check where this slice came from (${JSON.stringify(s.name ?? null)}): on the real path, "n" is always the GitHub issue number.`
 }
 
 // branchExistsLocally: 'yes' | 'no' | 'unknown'.
@@ -2336,9 +2336,9 @@ function registeredWorktreePaths() {
 // what a --dry-run promises not to do.
 const cmuxPath = findInPath('cmux')
 if (cmuxPath) {
-  console.log(`cmux: ${cmuxPath} (encontrado en PATH; no se ejecuta para comprobarlo).`)
+  console.log(`cmux: ${cmuxPath} (found in PATH; it is not run in order to check it).`)
 } else {
-  preflightFailures.push('`cmux` no está en el PATH de este proceso — ct-next.mjs lo invoca directamente (`cmux new-workspace ...`), así que sin él NINGÚN slice puede lanzarse. Instálalo o añádelo al PATH y reintenta.')
+  preflightFailures.push('`cmux` is not in the PATH of this process — ct-next.mjs invokes it directly (`cmux new-workspace ...`), so without it NO slice can be launched. Install it or add it to the PATH and retry.')
 }
 // F29: the binary looked for is THE RESOLVED ACCOUNT's (`claude-personal` /
 // `claude-work`), not plain `claude` — that is the one that is going to be
@@ -2346,9 +2346,9 @@ if (cmuxPath) {
 // nothing.
 const claudePath = findInPath(agentBin)
 if (claudePath) {
-  console.log(`${agentBin}: ${claudePath} (encontrado en el PATH de este proceso).`)
+  console.log(`${agentBin}: ${claudePath} (found in the PATH of this process).`)
 } else {
-  warn(`\`${agentBin}\` no aparece en el PATH de ESTE proceso. No es concluyente — quien lo ejecuta de verdad es el shell de login que abre cmux, con su propio PATH (y puede ser incluso una función de shell, invisible desde aquí) — pero si tampoco está allí, cada sesión lanzada morirá nada más arrancar, con el claim ya puesto y sin agente. Compruébalo a mano antes de fiarte de un "lanzado".`)
+  warn(`\`${agentBin}\` does not appear in the PATH of THIS process. It is not conclusive — the one that really runs it is the login shell cmux opens, with its own PATH (and it may even be a shell function, invisible from here) — but if it is not there either, every launched session will die as soon as it starts, with the claim already written and no agent. Check it by hand before trusting a "lanzado".`)
 }
 
 // A plan per slice + the check that its destination is free. EVERYTHING is
@@ -2383,7 +2383,7 @@ const baselineMeter = new Baseline({ run: new ShellBaselineRunner({ timeoutMs: c
 async function measureBaseline(s, wt) {
   const measured = await baselineMeter.measure(wt)
   if (measured.outcome !== BaselineOutcome.GREEN) {
-    console.error(`aviso: baseline de #${s.n}: ${measured.outcome}${measured.command ? ` (\`${measured.command}\` en ${wt})` : ''} — ${measured.summary}. Queda sembrado así en ${SLICE_REL_PATH}; despachar sobre un baseline que no está en verde es decisión tuya, y este script sigue.`)
+    console.error(`warning: baseline de #${s.n}: ${measured.outcome}${measured.command ? ` (\`${measured.command}\` en ${wt})` : ''} — ${measured.summary}. Queda sembrado así en ${SLICE_REL_PATH}; despachar sobre un baseline que no está en verde es decisión tuya, y este script sigue.`)
   }
   return measured
 }
@@ -2421,7 +2421,7 @@ for (let idx = 0; idx < selected.length; idx++) {
     // and the real run reseeds with the measurement as soon as it has it.
     stateSeed = buildStateSeed(sliceForKickoff, { branch, base: resolvedBase, baseSha: resolvedBaseSha, baseline: BASELINE_WITHOUT_WORKTREE })
   } catch (e) {
-    failSlice(idx, `no se pudo renderizar el kickoff/SLICE.md de #${s.n}: ${e.message}. El agente se lanzaría sin prompt utilizable — antes, esto solo se descubría en el run real.`)
+    failSlice(idx, `could not render the kickoff/SLICE.md of #${s.n}: ${e.message}. The agent would be launched with no usable prompt — before, this was only discovered on the real run.`)
     continue
   }
   // Override 1 (shell quoting): --command is ONE argv element (buildCmuxArgv
@@ -2483,7 +2483,7 @@ for (let idx = 0; idx < selected.length; idx++) {
   try {
     launcherScript = buildLauncherScript({ sentinelPath, agentCommand, agentBin, issue: s.n, worktree: wt }, shQuote)
   } catch (e) {
-    failSlice(idx, `no se pudo construir el script de arranque de #${s.n}: ${e.message}. Sin él no hay forma de comprobar que el comando llegó a ejecutarse, y despachar sin esa comprobación es exactamente lo que esta ronda elimina.`)
+    failSlice(idx, `could not build the start-up script of #${s.n}: ${e.message}. Without it there is no way of checking that the command really ran, and dispatching without that check is exactly what this round removes.`)
     continue
   }
   const command = buildTypedCommand(launcherPath, shQuote)
@@ -2509,19 +2509,19 @@ for (let idx = 0; idx < selected.length; idx++) {
   const branchExists = branchExistsLocally(branch)
   if (destinationChecked) {
     if (existsSync(wt)) {
-      failSlice(idx, `el worktree de #${s.n} ya existe: ${wt}. \`git worktree add\` fallaría — y en el run real eso pasa DESPUÉS de haber reclamado el issue. Limpia con \`git worktree remove --force ${wt}\` (y \`git branch -D ${branch}\` si la rama también sobra) si es basura de una corrida anterior, o revisa si hay trabajo real ahí antes de borrar nada.`)
+      failSlice(idx, `the worktree of #${s.n} already exists: ${wt}. \`git worktree add\` would fail — and on the real run that happens AFTER the issue has been claimed. Clean it up with \`git worktree remove --force ${wt}\` (and \`git branch -D ${branch}\` if the branch is left over too) if it is rubbish from an earlier run, or check whether there is real work there before deleting anything.`)
     } else if (registeredWorktrees && registeredWorktrees.has(wt)) {
       // The directory is NOT there, but git still has it registered (somebody
       // deleted it by hand without `git worktree remove`): `git worktree add`
       // fails with "missing but already registered worktree".
-      failSlice(idx, `el worktree de #${s.n} (${wt}) no existe en disco pero git SIGUE teniéndolo registrado — \`git worktree add\` fallaría con "missing but already registered worktree" (alguien borró el directorio a mano, sin \`git worktree remove\`). Límpialo con \`git worktree prune\` y reintenta.`)
+      failSlice(idx, `the worktree of #${s.n} (${wt}) does not exist on disk but git STILL has it registered — \`git worktree add\` would fail with "missing but already registered worktree" (somebody deleted the directory by hand, without \`git worktree remove\`). Clean it up with \`git worktree prune\` and retry.`)
     }
   }
   if (branchExists === 'yes') {
-    failSlice(idx, `la rama ${branch} ya existe en el checkout local. \`git worktree add -b ${branch}\` fallaría — y en el run real eso pasa DESPUÉS de haber reclamado el issue. Bórrala (\`git branch -D ${branch}\`) si es basura de una corrida anterior, o revisa qué hay en ella antes de tocarla.`)
+    failSlice(idx, `the branch ${branch} already exists in the local checkout. \`git worktree add -b ${branch}\` would fail — and on the real run that happens AFTER the issue has been claimed. Delete it (\`git branch -D ${branch}\`) if it is rubbish from an earlier run, or check what is in it before touching it.`)
   } else if (branchExists === 'unknown' && !fx) {
     // We do not know whether it is free: a warning, never a "free" by default.
-    warn(`no se pudo comprobar si la rama ${branch} ya existe (la consulta a git falló, no es que la rama no esté). Si existe, el run real fallará al crear el worktree DESPUÉS de haber reclamado #${s.n} — compruébalo a mano con \`git branch --list ${branch}\` antes de seguir.`)
+    warn(`it could not be checked whether the branch ${branch} already exists (the query to git failed; it is not that the branch is absent). If it does exist, the real run will fail creating the worktree AFTER having claimed #${s.n} — check it by hand with \`git branch --list ${branch}\` before carrying on.`)
   }
   // `selIdx` (not plain `idx`) because the dispatch loop further down iterates
   // over `plans`, which can be SHORTER than `selected` (a slice with no usable
@@ -2574,16 +2574,16 @@ for (let idx = 0; idx < selected.length; idx++) {
 function preflightSummary() {
   const failedIdxs = [...failuresBySliceIdx.keys()].sort((a, b) => a - b)
   const label = (i) => sliceRef(selected[i])
-  const parts = [`\nprecondiciones NO cumplidas (${preflightFailures.length}) — no se reclama ni se lanza NADA${dryRun ? '' : ' (ni un solo claim escrito: se comprueba antes de tocar GitHub)'}:\n  - ${preflightFailures.join('\n  - ')}`]
+  const parts = [`\npreconditions NOT met (${preflightFailures.length}) — NOTHING is claimed and NOTHING is launched${dryRun ? '' : ' (not a single claim written: it is checked before touching GitHub)'}:\n  - ${preflightFailures.join('\n  - ')}`]
   if (batchLevelFailureCount > 0) {
-    parts.push(`De esos, ${batchLevelFailureCount} afecta(n) a TODA la tanda (no a un slice concreto): con eso sin arreglar no se lanzaría ninguno de los ${selected.length} seleccionados.`)
+    parts.push(`Of those, ${batchLevelFailureCount} affect(s) the WHOLE batch (not one particular slice): with that unfixed, none of the ${selected.length} selected would be launched.`)
   }
   if (failedIdxs.length) {
     const okIdxs = selected.map((_, i) => i).filter((i) => !failuresBySliceIdx.has(i))
     const okPart = okIdxs.length
-      ? `; ${okIdxs.length} sin problemas propios (${okIdxs.map(label).join(', ')})`
-      : '; ninguno queda sin problemas propios'
-    parts.push(`De los ${selected.length} slice(s) seleccionados, ${failedIdxs.length} tienen precondiciones sin cumplir (${failedIdxs.map(label).join(', ')})${okPart}. En una corrida real, el primero que rompería es ${label(failedIdxs[0])} — pero se listan TODOS a propósito, para que puedas arreglarlos de una vez en vez de descubrirlos de uno en uno.`)
+      ? `; ${okIdxs.length} with no problems of its own (${okIdxs.map(label).join(', ')})`
+      : '; none is left with no problems of its own'
+    parts.push(`Of the ${selected.length} selected slice(s), ${failedIdxs.length} have preconditions not met (${failedIdxs.map(label).join(', ')})${okPart}. On a real run, the first one that would break is ${label(failedIdxs[0])} — but they are ALL listed on purpose, so that you can fix them in one go instead of discovering them one at a time.`)
   }
   return parts.join('\n')
 }
@@ -2593,7 +2593,7 @@ if (preflightFailures.length && !dryRun) {
   process.exit(1)
 }
 if (preflightFailures.length) {
-  console.error(`\nATENCIÓN: ${preflightFailures.length} precondición(es) sin cumplir en esta tanda. Este --dry-run NO es luz verde y terminará con exit 1 — pero el plan de abajo se imprime IGUAL, entero, para que veas de una sola pasada todos los problemas y todos los slices. El detalle va al final.`)
+  console.error(`\nATTENTION: ${preflightFailures.length} precondition(s) not met in this batch. This --dry-run is NOT a green light and will finish with exit 1 — but the plan below is printed ALL THE SAME, in full, so that you see every problem and every slice in one pass. The detail goes at the end.`)
 }
 // ============================================================================
 
@@ -2652,7 +2652,7 @@ if (preflightFailures.length) {
 // result, verified by construction (a child that writes one line to stderr and
 // exits with 1; with `stdio` unspecified, the line appears TWICE in the
 // parent's output): EVERY COLLISION line, and the whole 4-line block of the
-// ATENCIÓN of an orphaned issue (including the manual `gh issue edit ...`
+// ATTENTION of an orphaned issue (including the manual `gh issue edit ...`
 // command), came out duplicated — one orphan read as TWO different failed
 // reverts. Setting `stdio: ['ignore', 'pipe', 'pipe']` disables that automatic
 // forwarding of Node's; the ONLY forwarding left is the explicit one further
@@ -2807,7 +2807,7 @@ function attemptClaim(s) {
 //   - 'stuck' (exit 4) → a lost race OR a readback failure, and the
 //               subsequent revert failed TOO: the issue is left ORPHANED in
 //               status:in-progress, with nobody working on it. dispatch-check
-//               already prints its own "ATENCIÓN" (with the manual command) —
+//               already prints its own "ATTENTION" (with the manual command) —
 //               this code is the MACHINE signal that that is precisely the
 //               case, without depending on recognising that text.
 //
@@ -2820,14 +2820,14 @@ function attemptClaim(s) {
 // that it is NOT a normal collision — the log must not lie about what
 // happened, even if the control flow is the same.
 function classifyClaimOutcome(status) {
-  if (status === 1) return { kind: 'skip', label: 'colisión o carrera perdida, protocolo normal (detalle arriba, en el texto de dispatch-check)' }
-  if (status === 3) return { kind: 'infra', label: 'fallo de infraestructura sin mutación persistente (detalle arriba, en el texto de dispatch-check)' }
-  if (status === 4) return { kind: 'stuck', label: 'huérfano — el revert automático de dispatch-check también falló (detalle arriba)' }
+  if (status === 1) return { kind: 'skip', label: 'collision or lost race, normal protocol (detail above, in the text from dispatch-check)' }
+  if (status === 3) return { kind: 'infra', label: 'infrastructure failure with no persistent mutation (detail above, in the text from dispatch-check)' }
+  if (status === 4) return { kind: 'stuck', label: 'orphaned — the automatic revert of dispatch-check failed too (detail above)' }
   // Should not be reachable: the caller only calls this function for
   // status ∈ {1,3,4}. For any other value, 'infra' (carry on with caution,
   // never a silent 'skip') is the safest option — the same criterion that
   // already governs the rest of this file in the face of an unexpected input.
-  return { kind: 'infra', label: `código de salida ${status} no reconocido para este contrato` }
+  return { kind: 'infra', label: `exit code ${status} not recognised for this contract` }
 }
 
 // W-C, point 3: it reverts an already-obtained claim when the dispatch fails
@@ -2855,7 +2855,7 @@ const manualRevertClaimHint = (s) => `gh issue edit ${s.n} --repo ${repo} --add-
 // were left pending.
 function formatSpanishList(items) {
   if (items.length <= 1) return items[0] || ''
-  return `${items.slice(0, -1).join(', ')} y ${items[items.length - 1]}`
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
 
 // ============================================================================
@@ -2889,9 +2889,9 @@ function ensureSliceIgnored() {
       cwd: repoRoot, encoding: 'utf8', timeout: childTimeoutFor(), killSignal: 'SIGKILL',
     }).trim()
   } catch (e) {
-    return { ok: false, why: `no se pudo localizar el directorio común de git (\`git rev-parse --git-common-dir\`): ${e.message}` }
+    return { ok: false, why: `could not locate git's common directory (\`git rev-parse --git-common-dir\`): ${e.message}` }
   }
-  if (!commonDir) return { ok: false, why: '`git rev-parse --git-common-dir` no devolvió ninguna ruta' }
+  if (!commonDir) return { ok: false, why: '`git rev-parse --git-common-dir` returned no path' }
   const base = isAbsolute(commonDir) ? commonDir : join(repoRoot, commonDir)
   const excludePath = join(base, 'info', 'exclude')
   try {
@@ -2903,17 +2903,17 @@ function ensureSliceIgnored() {
     writeFileSync(excludePath, next.content)
     return { ok: true, added: true, path: excludePath }
   } catch (e) {
-    return { ok: false, why: `no se pudo escribir ${excludePath}: ${e.message}` }
+    return { ok: false, why: `could not write ${excludePath}: ${e.message}` }
   }
 }
 
 function cleanupOrphanedWorktree(s, wt, branch, reason) {
-  console.error(`no se pudo completar el dispatch de #${s.n} tras crear el worktree (${reason}).`)
+  console.error(`could not complete the dispatch of #${s.n} after creating the worktree (${reason}).`)
 
   const attempts = [
-    { label: 'el worktree', cmd: `git worktree remove --force ${wt}`, err: null },
-    { label: 'la rama', cmd: `git branch -D ${branch}`, err: null },
-    { label: 'el claim (status:in-progress → status:ready)', cmd: manualRevertClaimHint(s), err: null },
+    { label: 'the worktree', cmd: `git worktree remove --force ${wt}`, err: null },
+    { label: 'the branch', cmd: `git branch -D ${branch}`, err: null },
+    { label: 'the claim (status:in-progress → status:ready)', cmd: manualRevertClaimHint(s), err: null },
   ]
 
   // timeout+killSignal (finding 1, defence 2) here too: THIS SAME function is
@@ -2942,7 +2942,7 @@ function cleanupOrphanedWorktree(s, wt, branch, reason) {
   // always lists the pending commands separated by `;`, never chained.
   attempts[2].err = attemptRevertClaim(s)
   // finding 1: THIS claim's fate has already been decided (a revert was
-  // attempted, successfully or not — if it failed, the ATENCIÓN below already
+  // attempted, successfully or not — if it failed, the ATTENTION below already
   // says so) — clearing it here prevents a signal handler that got to run
   // right afterwards from trying to revert it a second time.
   activeClaim = null
@@ -2954,12 +2954,12 @@ function cleanupOrphanedWorktree(s, wt, branch, reason) {
     const what = formatSpanishList(failed.map((a) => a.label))
     const errMsg = failed.map((a) => a.err.message).join('; ')
     const pendingCmds = failed.map((a) => a.cmd)
-    console.error(`ATENCIÓN: no se pudo limpiar automáticamente ${what} de #${s.n} (${errMsg}). Pendiente a mano — ejecuta cada comando por separado: ${pendingCmds.join(' ; ')}`)
+    console.error(`ATTENTION: ${what} of #${s.n} could not be cleaned up automatically (${errMsg}). Pending by hand — run each command separately: ${pendingCmds.join(' ; ')}`)
   }
   // The slices of this same batch already launched successfully BEFORE this
   // failure (if cap > 1) carry on running in their own cmux, independent of
   // this process — they are neither touched nor stopped here.
-  console.error('Los slices de esta tanda ya lanzados con éxito antes de este fallo (si los hubo) siguen corriendo en su propio cmux — no se han tocado.')
+  console.error('The slices of this batch already launched successfully before this failure (if there were any) carry on running in their own cmux — they have not been touched.')
   process.exit(1)
 }
 
@@ -3072,13 +3072,13 @@ function handleInterrupt(sig) {
     if (!err) {
       console.error(`claim de #${claimant.n} revertido automáticamente a status:ready.`)
     } else {
-      console.error(`ATENCIÓN: no se pudo revertir automáticamente el claim de #${claimant.n} (${err.message}). Puede haber quedado bloqueado en status:in-progress sin nadie trabajándolo — libéralo a mano con: ${manualRevertClaimHint(claimant)}`)
+      console.error(`ATTENTION: no se pudo revertir automáticamente el claim de #${claimant.n} (${err.message}). Puede haber quedado bloqueado en status:in-progress sin nadie trabajándolo — libéralo a mano con: ${manualRevertClaimHint(claimant)}`)
     }
     activeClaim = null
   } else {
     console.error('no había ningún claim propio pendiente de revertir en este instante.')
   }
-  console.error('Los slices de esta tanda ya lanzados con éxito antes de esta interrupción (si los hubo) siguen corriendo en su propio cmux — no se han tocado.')
+  console.error('The slices of this batch already launched successfully before this interruption (if there were any) carry on running in their own cmux — they have not been touched.')
   process.exit(SIGNAL_EXIT_CODE[sig] || 130)
 }
 process.on('SIGINT', () => handleInterrupt('SIGINT'))
@@ -3124,25 +3124,25 @@ function bailOutOnCrash(err, kind) {
   if (crashing) process.exit(1)
   crashing = true
   const detail = (err && err.stack) || String(err)
-  console.error(`\n${kind} en ct-next.mjs — esto es un bug, no un resultado esperado del protocolo:\n${detail}`)
+  console.error(`\n${kind} in ct-next.mjs — this is a bug, not an expected outcome of the protocol:\n${detail}`)
   if (activeClaim) {
     const claimant = { n: activeClaim.n }
     activeClaim = null
-    console.error(`#${claimant.n} tenía un claim (status:in-progress) sin worktree completado cuando ocurrió el fallo — revirtiendo a status:ready antes de salir, para no dejarlo huérfano.`)
+    console.error(`#${claimant.n} had a claim (status:in-progress) with no completed worktree when the failure happened — reverting to status:ready before exiting, so as not to leave it orphaned.`)
     const revertErr = attemptRevertClaim(claimant)
     if (!revertErr) {
       console.error(`claim de #${claimant.n} revertido automáticamente a status:ready.`)
     } else {
-      console.error(`ATENCIÓN: no se pudo revertir automáticamente el claim de #${claimant.n} (${revertErr.message}). Puede haber quedado bloqueado en status:in-progress sin nadie trabajándolo — libéralo a mano con: ${manualRevertClaimHint(claimant)}`)
+      console.error(`ATTENTION: no se pudo revertir automáticamente el claim de #${claimant.n} (${revertErr.message}). Puede haber quedado bloqueado en status:in-progress sin nadie trabajándolo — libéralo a mano con: ${manualRevertClaimHint(claimant)}`)
     }
   } else {
     console.error('no había ningún claim propio pendiente de revertir en ese instante.')
   }
-  console.error('Los slices de esta tanda ya lanzados con éxito antes de este fallo (si los hubo) siguen corriendo en su propio cmux — no se han tocado.')
+  console.error('The slices of this batch already launched successfully before this failure (if there were any) carry on running in their own cmux — they have not been touched.')
   process.exit(1)
 }
-process.on('uncaughtException', (err) => bailOutOnCrash(err, 'excepción no capturada'))
-process.on('unhandledRejection', (err) => bailOutOnCrash(err, 'promesa rechazada sin manejar'))
+process.on('uncaughtException', (err) => bailOutOnCrash(err, 'uncaught exception'))
+process.on('unhandledRejection', (err) => bailOutOnCrash(err, 'unhandled promise rejection'))
 
 // D2, finding 1: a count of how many of `selected`'s slices were really
 // launched — it is used both for the final count line and to decide the exit
@@ -3165,7 +3165,7 @@ for (let idx = 0; idx < plans.length; idx++) {
     // anyone to cross-reference the summary at the end with the plan above.
     const own = failuresBySliceIdx.get(selIdx)
     if (own) {
-      console.log(`PRECONDICIÓN NO CUMPLIDA (${own.length}) para este slice — con esto sin arreglar, este slice NO se despacharía:\n  - ${own.join('\n  - ')}`)
+      console.log(`PRECONDITION NOT MET (${own.length}) for this slice — with this unfixed, this slice would NOT be dispatched:\n  - ${own.join('\n  - ')}`)
     }
     // W-C, point 5: the plan has to make it clear that a claim WOULD BE
     // ATTEMPTED (dispatch-check.mjs, status:ready → status:in-progress) for
@@ -3178,7 +3178,7 @@ for (let idx = 0; idx < plans.length; idx++) {
     // Round 1 fix, minor: `node ${dispatchCheckPath} ...` (not a loose name
     // "dispatch-check ...") so that the line is copyable and runnable as it
     // stands, just like its neighbours (`git worktree add ...`, `cmux ...`).
-    console.log(`node ${dispatchCheckPath} ${s.n} --repo ${repo}   # se reclamaría #${s.n} (status:ready → status:in-progress) antes de crear el worktree; en --dry-run no se ejecuta, ningún gh real se toca`)
+    console.log(`node ${dispatchCheckPath} ${s.n} --repo ${repo}   # #${s.n} would be claimed (status:ready → status:in-progress) before creating the worktree; under --dry-run it is not run, no real gh is touched`)
     // D4, defect 3: what could REALLY be checked about the destination. In
     // fixture mode (`CT_NEXT_FIXTURE`) the repoRoot is synthetic and the
     // branch check would require a real `git`, which that mode promises not to
@@ -3189,11 +3189,11 @@ for (let idx = 0; idx < plans.length; idx++) {
     // libre" would be a contradiction inside the same block — the exact defect
     // this batch of work is chasing.
     if (own) {
-      console.log(`destino: ${wt} / rama ${branch} — NO LIBRE (ver la precondición de arriba).`)
+      console.log(`destination: ${wt} / branch ${branch} — NOT FREE (see the precondition above).`)
     } else if (destinationCheck === 'checked') {
-      console.log(`destino libre: ${wt} no existe y la rama ${branch} tampoco (comprobado en este checkout).`)
+      console.log(`destination free: ${wt} does not exist and neither does the branch ${branch} (checked in this checkout).`)
     } else if (destinationCheck === 'fixture') {
-      console.log(`destino: ${wt} / rama ${branch} — NO COMPROBADOS (modo fixture: repoRoot sintético, no se toca git). En una corrida real sí se comprueban antes de reclamar.`)
+      console.log(`destination: ${wt} / branch ${branch} — NOT CHECKED (fixture mode: synthetic repoRoot, git is not touched). On a real run they ARE checked before claiming.`)
     } else {
       // 'unknown': it was really attempted and the query failed. Neither
       // "free" nor "not looked at" — it was looked at and could not be known.
@@ -3202,7 +3202,7 @@ for (let idx = 0; idx < plans.length; idx++) {
       // F16/H2: that warning comes out on STDERR (the channel criterion), so
       // the reference says WHERE it is and not just "further up" — whoever
       // redirected stdout to a file does not have it "above" anywhere.
-      console.log(`destino: ${wt} / rama ${branch} — SIN CONFIRMAR: la consulta a git se intentó y FALLÓ (el detalle y el comando manual están en el aviso correspondiente, por stderr), así que no se puede afirmar que estén libres. Esto NO es modo fixture: la corrida real hará exactamente esta misma comprobación, y si vuelve a fallar tampoco lo sabrá.`)
+      console.log(`destination: ${wt} / branch ${branch} — UNCONFIRMED: the query to git was attempted and it FAILED (the detail and the manual command are in the corresponding aviso, on stderr), so it cannot be asserted that they are free. This is NOT fixture mode: the real run will do exactly this same check, and if it fails again it will not know either.`)
     }
     console.log(`git worktree add -b ${branch} ${wt} origin/${resolvedBase}`)
     // slice 9b: under --dry-run there is no worktree, so this seed carries the sha resolved before the loop; the real run re-measures it in the worktree
@@ -3215,7 +3215,7 @@ for (let idx = 0; idx < plans.length; idx++) {
     // exactly as the agent will see it, BEFORE the literal command (which is
     // kept whole, untrimmed: it is still the source of truth of what exactly
     // would be executed).
-    console.log(`--- kickoff que recibiría el agente de #${s.n} (prosa, tal cual) ---\n${kickoff}\n--- fin del kickoff ---`)
+    console.log(`--- kickoff the agent of #${s.n} would receive (prose, verbatim) ---\n${kickoff}\n--- end of the kickoff ---`)
     // F19/H1: the `cmux` line NO LONGER carries the agent's command inside —
     // it carries a `.` over this script, which is the only thing typed into
     // the pty. If the dry-run only printed the cmux line, it would hide
@@ -3303,7 +3303,7 @@ for (let idx = 0; idx < plans.length; idx++) {
     // (1='skip', 3='infra', 4='stuck' — see dispatch-check.mjs's header)
     // precisely so that THIS caller no longer has to parse the free text it
     // prints in order to decide what to do — dispatch-check.mjs's text
-    // (COLLISION, a lost race, ATENCIÓN, etc.) is forwarded as it is further
+    // (COLLISION, a lost race, ATTENTION, etc.) is forwarded as it is further
     // up (attemptClaim) and remains the source of DETAIL for a human; the exit
     // code is now the only source of the DECISION.
     if (claim.status === 1 || claim.status === 3 || claim.status === 4) {
@@ -3323,9 +3323,9 @@ for (let idx = 0; idx < plans.length; idx++) {
       // reproduced (the "if any candidate is left" hedge was not enough on its
       // own: the wording must reflect THIS moment's reality, not cover itself
       // with a conditional).
-      const continuation = isLast ? 'no quedan más candidatos en esta tanda.' : 'sigo con el resto de esta tanda.'
+      const continuation = isLast ? 'no candidates are left in this batch.' : 'carrying on with the rest of this batch.'
       if (outcome.kind === 'skip') {
-        console.error(`saltando #${s.n}: no se pudo reclamar (${outcome.label}, motivo arriba de dispatch-check) — ${continuation}`)
+        console.error(`skipping #${s.n}: could not claim (${outcome.label}, reason above from dispatch-check) — ${continuation}`)
         continue
       }
       if (outcome.kind === 'infra') {
@@ -3336,17 +3336,17 @@ for (let idx = 0; idx < plans.length; idx++) {
         // the message makes it explicit that it is NOT a normal collision —
         // the log must not lie about what happened, even if the control flow
         // is the same.
-        console.error(`saltando #${s.n}: no se pudo reclamar — fallo de infraestructura (${outcome.label}), no una colisión normal (motivo arriba de dispatch-check) — ${continuation}`)
+        console.error(`skipping #${s.n}: could not claim — infrastructure failure (${outcome.label}), not a normal collision (reason above from dispatch-check) — ${continuation}`)
         continue
       }
       // 'stuck': the issue was left ORPHANED in status:in-progress, with
-      // nobody working on it (dispatch-check already printed its own ATENCIÓN
+      // nobody working on it (dispatch-check already printed its own ATTENTION
       // with the manual command). This one DOES stop the whole batch with exit
       // 1: a human has to look at it before ct-next retries anything else
       // against this repo — carrying on blindly here is the gravest scenario
       // the audit reproduced.
-      console.error(`dispatch-check devolvió exit ${claim.status} para #${s.n}, y el issue puede haber quedado bloqueado en status:in-progress sin nadie trabajándolo (${outcome.label}) — revisa el ATENCIÓN de dispatch-check (arriba) antes de reintentar cualquier cosa. Abortando toda la tanda: no sigo con el resto de candidatos a ciegas.`)
-      console.error('Los slices de esta tanda ya lanzados con éxito antes de este fallo (si los hubo) siguen corriendo en su propio cmux — no se han tocado.')
+      console.error(`dispatch-check returned exit ${claim.status} for #${s.n}, and the issue may have been left stuck at status:in-progress with nobody working on it (${outcome.label}) — read the ATTENTION from dispatch-check (above) before retrying anything. Aborting the whole batch: I am not carrying on with the rest of the candidates blind.`)
+      console.error('The slices of this batch already launched successfully before this failure (if there were any) carry on running in their own cmux — they have not been touched.')
       process.exit(1)
     }
     // IMPORTANT (external review): an ordinary terminal Ctrl-C (which DOES
@@ -3370,22 +3370,22 @@ for (let idx = 0; idx < plans.length; idx++) {
       // round had already added for `git worktree add` (see `timedOut` further
       // down, the same detection) and that was missing here.
       if (claim.timedOut) {
-        console.error(`dispatch-check para #${s.n} no terminó dentro del límite de ${childTimeoutFor('dispatch-check')}ms (CT_NEXT_CHILD_TIMEOUT_MS) y lo matamos NOSOTROS con SIGKILL — no fue una interrupción tuya. Al matarlo a mitad de su propio claim-then-verify, no se puede saber si el claim llegó a escribirse: si #${s.n} queda en status:in-progress sin nadie trabajándolo, revierte a mano con ${manualRevertClaimHint(s)}. Si esto pasa contra un repo legítimamente grande/lento (o un \`gh\` que responde despacio), sube CT_NEXT_CHILD_TIMEOUT_MS. Abortando toda la tanda: no sigo con el resto de candidatos a ciegas.`)
-        console.error('Los slices de esta tanda ya lanzados con éxito antes de este fallo (si los hubo) siguen corriendo en su propio cmux — no se han tocado.')
+        console.error(`dispatch-check for #${s.n} did not finish within the bound of ${childTimeoutFor('dispatch-check')}ms (CT_NEXT_CHILD_TIMEOUT_MS) and WE killed it with SIGKILL — it was not an interruption of yours. Having killed it half-way through its own claim-then-verify, there is no way to know whether the claim got as far as being written: if #${s.n} is left at status:in-progress with nobody working on it, revert by hand with ${manualRevertClaimHint(s)}. If this happens against a legitimately big/slow repo (or a \`gh\` that answers slowly), raise CT_NEXT_CHILD_TIMEOUT_MS. Aborting the whole batch: I am not carrying on with the rest of the candidates blind.`)
+        console.error('The slices of this batch already launched successfully before this failure (if there were any) carry on running in their own cmux — they have not been touched.')
         process.exit(1)
       }
-      console.error(`dispatch-check para #${s.n} terminó por la señal ${claim.signal} mientras intentaba reclamar — no se puede saber si el claim llegó a escribirse antes de morir. Si #${s.n} queda en status:in-progress sin nadie trabajándolo, revisa y revierte a mano: ${manualRevertClaimHint(s)}. Abortando toda la tanda: no sigo con el resto de candidatos a ciegas.`)
-      console.error('Los slices de esta tanda ya lanzados con éxito antes de esta interrupción (si los hubo) siguen corriendo en su propio cmux — no se han tocado.')
+      console.error(`dispatch-check for #${s.n} was ended by the signal ${claim.signal} while it was trying to claim — there is no way to know whether the claim got as far as being written before it died. If #${s.n} is left at status:in-progress with nobody working on it, check and revert by hand: ${manualRevertClaimHint(s)}. Aborting the whole batch: I am not carrying on with the rest of the candidates blind.`)
+      console.error('The slices of this batch already launched successfully before this interruption (if there were any) carry on running in their own cmux — they have not been touched.')
       process.exit(1)
     }
-    const statusDesc = typeof claim.status === 'number' ? `exit ${claim.status}` : 'sin exit code numérico (fallo inesperado al lanzar el subproceso)'
-    console.error(`dispatch-check devolvió un fallo inesperado (${statusDesc}) al intentar reclamar #${s.n} — no es un resultado reconocido del protocolo (1/3/4), así que probablemente es un bug o una mala configuración (p.ej. --repo mal formado, o dispatch-check.mjs no encontrado en ${dispatchCheckPath}). Abortando toda la tanda: no sigo con el resto de candidatos a ciegas.`)
+    const statusDesc = typeof claim.status === 'number' ? `exit ${claim.status}` : 'with no numeric exit code (unexpected failure launching the subprocess)'
+    console.error(`dispatch-check returned an unexpected failure (${statusDesc}) while trying to claim #${s.n} — it is not a recognised outcome of the protocol (1/3/4), so it is probably a bug or a misconfiguration (e.g. a malformed --repo, or dispatch-check.mjs not found at ${dispatchCheckPath}). Aborting the whole batch: I am not carrying on with the rest of the candidates blind.`)
     // Round 1 fix, minor: this abort can fire AFTER having successfully
     // launched some earlier slice of the same batch (cap > 1) — just as
     // cleanupOrphanedWorktree already does further down, it has to be made
     // explicit that those slices carry on running in their own cmux,
     // untouched.
-    console.error('Los slices de esta tanda ya lanzados con éxito antes de este fallo (si los hubo) siguen corriendo en su propio cmux — no se han tocado.')
+    console.error('The slices of this batch already launched successfully before this failure (if there were any) carry on running in their own cmux — they have not been touched.')
     process.exit(1)
   }
 
@@ -3473,7 +3473,7 @@ for (let idx = 0; idx < plans.length; idx++) {
     if (!claimErr) {
       console.error(`claim de #${s.n} revertido automáticamente a status:ready — puedes reintentar el dispatch de este slice.`)
     } else {
-      console.error(`ATENCIÓN: no se pudo revertir automáticamente el claim de #${s.n} (${claimErr.message}). Queda bloqueado en status:in-progress — revierte a mano con: ${manualRevertClaimHint(s)}`)
+      console.error(`ATTENTION: no se pudo revertir automáticamente el claim de #${s.n} (${claimErr.message}). Queda bloqueado en status:in-progress — revierte a mano con: ${manualRevertClaimHint(s)}`)
     }
     process.exit(1)
   }
@@ -3481,7 +3481,7 @@ for (let idx = 0; idx < plans.length; idx++) {
   // rule in place, a `git add -A` from the agent could already carry it off.
   const ignored = ensureSliceIgnored()
   if (!ignored.ok) {
-    cleanupOrphanedWorktree(s, wt, branch, `no se pudo garantizar que ${SLICE_REL_PATH} quede fuera de git (${ignored.why}). NO se siembra: un estado de slice que git puede ver acaba dentro del PR y de ahí a main.`)
+    cleanupOrphanedWorktree(s, wt, branch, `it could not be guaranteed that ${SLICE_REL_PATH} stays out of git (${ignored.why}). NOTHING is seeded: a slice state git can see ends up inside the PR and from there in main.`)
   }
   // ==========================================================================
   // Slice 9(b) — THE CUT IS MEASURED WHERE IT WAS CUT, NOT BEFORE.
@@ -3528,13 +3528,13 @@ for (let idx = 0; idx < plans.length; idx++) {
     }).trim()
     if (cutSha) seedToWrite = buildStateSeed(sliceForKickoff, { branch, base: resolvedBase, baseSha: cutSha, baseline })
   } catch (e) {
-    console.error(`aviso: no se pudo medir el corte real en el worktree de #${s.n} (\`git rev-parse HEAD\` en ${wt} falló: ${e.message}). La semilla se siembra con el sha que se resolvió de "origin/${resolvedBase}" antes de la tanda${resolvedBaseSha ? ` (${resolvedBaseSha.slice(0, 12)}…)` : ', que tampoco se pudo resolver: irá sin `base_sha` y con `last_commit` vacío'} — el comportamiento anterior a esta mejora: puede ser el corte, o puede haberse quedado atrás si algo movió origin/${resolvedBase} entre medias.`)
+    console.error(`warning: no se pudo medir el corte real en el worktree de #${s.n} (\`git rev-parse HEAD\` en ${wt} falló: ${e.message}). La semilla se siembra con el sha que se resolvió de "origin/${resolvedBase}" antes de la tanda${resolvedBaseSha ? ` (${resolvedBaseSha.slice(0, 12)}…)` : ', que tampoco se pudo resolver: irá sin `base_sha` y con `last_commit` vacío'} — el comportamiento anterior a esta mejora: puede ser el corte, o puede haberse quedado atrás si algo movió origin/${resolvedBase} entre medias.`)
   }
   try {
     mkdirSync(`${wt}/.agent`, { recursive: true })
     writeFileSync(`${wt}/${SLICE_REL_PATH}`, seedToWrite)
   } catch (e) {
-    cleanupOrphanedWorktree(s, wt, branch, `no se pudo sembrar ${SLICE_REL_PATH}: ${e.message}`)
+    cleanupOrphanedWorktree(s, wt, branch, `could not seed ${SLICE_REL_PATH}: ${e.message}`)
   }
   // ==========================================================================
   // F22 — THE EFFECT IS VERIFIED, NOT THE EXIT CODE.
@@ -3568,7 +3568,7 @@ for (let idx = 0; idx < plans.length; idx++) {
       cwd: wt, encoding: 'utf8', timeout: childTimeoutFor(), killSignal: 'SIGKILL',
     })
   } catch (e) {
-    cleanupOrphanedWorktree(s, wt, branch, `no se pudo COMPROBAR que ${SLICE_REL_PATH} queda fuera de git (\`git status --porcelain\` falló: ${e.message}). No se afirma que esté bien: sin esa comprobación, un estado de slice visible para git acaba en el PR y de ahí a main.`)
+    cleanupOrphanedWorktree(s, wt, branch, `it could not be CHECKED that ${SLICE_REL_PATH} stays out of git (\`git status --porcelain\` failed: ${e.message}). It is not asserted that it is fine: without that check, a slice state visible to git ends up in the PR and from there in main.`)
   }
   if (porcelain.split('\n').some((l) => l.includes(SLICE_REL_PATH))) {
     cleanupOrphanedWorktree(s, wt, branch, `${SLICE_REL_PATH} SIGUE siendo visible para git en ${wt} después de escribir la regla de ignore en ${ignored.path}. Causas típicas: una negación en el .gitignore del repo que gana a la regla (p. ej. \`!.agent/*\`), un core.excludesFile con precedencia, o que alguien trackeara ese path a mano en el pasado (y ninguna regla de ignore afecta a un fichero ya trackeado: haría falta \`git rm --cached ${SLICE_REL_PATH}\`). No se despacha este slice: su estado acabaría dentro del PR.`)
@@ -3594,12 +3594,12 @@ for (let idx = 0; idx < plans.length; idx++) {
     // hole-free.
     writeFileSync(launcherPath, launcherScript, { mode: 0o600 })
   } catch (e) {
-    cleanupOrphanedWorktree(s, wt, branch, `no se pudo escribir el script de arranque en ${launchDir} (${e.message}). Sin él, el comando que cmux teclea no existiría y el agente no arrancaría — así que NO se lanza nada y se deshace lo hecho, en vez de despachar a ciegas.`)
+    cleanupOrphanedWorktree(s, wt, branch, `could not write the start-up script in ${launchDir} (${e.message}). Without it, the command cmux types would not exist and the agent would not start — so NOTHING is launched and what was done is undone, instead of dispatching blind.`)
   }
   try {
     execFileSync('cmux', cmuxArgv, { stdio: 'inherit', timeout: childTimeoutFor(), killSignal: 'SIGKILL' })
   } catch (e) {
-    cleanupOrphanedWorktree(s, wt, branch, `no se pudo lanzar cmux: ${e.message}`)
+    cleanupOrphanedWorktree(s, wt, branch, `could not launch cmux: ${e.message}`)
   }
   // finding 1 + F19: the dangerous window CLOSES HERE, not at the end of the
   // iteration, and the change is compulsory because of what comes right below.
@@ -3636,7 +3636,7 @@ for (let idx = 0; idx < plans.length; idx++) {
   // before deciding what to say.
   const launchCheck = verifyCmuxLaunch(name, wt)
   // IMPORTANT (external review): before, 'wrong-cwd' and 'not-found' printed
-  // their own ATENCIÓN but incremented `launchedCount` anyway — with which the
+  // their own ATTENTION but incremented `launchedCount` anyway — with which the
   // batch ended in "lanzados 1/1" and exit 0, which a `/loop` reads as normal
   // progress. And since the issue stays in status:in-progress with a worktree
   // present, staleness detection itself (finding 2) would never flag it either
@@ -3690,7 +3690,7 @@ for (let idx = 0; idx < plans.length; idx++) {
     cleanupOrphanedWorktree(s, wt, branch, `el comando SÍ llegó a ejecutarse en la sesión de cmux (el centinela de arranque está escrito en ${sentinelPath}), pero \`${agentBin}\` NO resuelve en ese shell de login — \`command -v ${agentBin}\` falló DENTRO de la propia sesión. El agente no va a arrancar: la línea siguiente muere con "command not found", igual que si no se hubiera lanzado nada. Esto no lo puede ver el preflight de ct-next.mjs, que solo mira el PATH de ESTE proceso; el que cuenta es el del shell que abre cmux (donde \`${agentBin}\` puede ser además un alias o una función). Arregla el PATH de tu shell de login —o apunta CT_AGENT_BIN a un ejecutable que sí resuelva ahí— y reintenta`)
   }
   if (sentinel.status === 'wrong-cwd') {
-    console.error(`ATENCIÓN: el comando de #${s.n} SÍ se ejecutó (el centinela de arranque está escrito), pero el shell que lo ejecutó estaba en "${sentinel.cwd}", NO en ${wt}. El dato sale del \`$PWD\` del propio shell, no de lo que cmux diga de su ventana: hay un agente arrancando sobre un directorio que no es el worktree de este slice, así que puede estar tocando otro repo. NO se cuenta como lanzado con éxito, y NO se borra nada: revisa esa sesión antes.`)
+    console.error(`ATTENTION: el comando de #${s.n} SÍ se ejecutó (el centinela de arranque está escrito), pero el shell que lo ejecutó estaba en "${sentinel.cwd}", NO en ${wt}. El dato sale del \`$PWD\` del propio shell, no de lo que cmux diga de su ventana: hay un agente arrancando sobre un directorio que no es el worktree de este slice, así que puede estar tocando otro repo. NO se cuenta como lanzado con éxito, y NO se borra nada: revisa esa sesión antes.`)
     unverifiedLaunches.push({ n: s.n, wt, branch, name, why: `el comando se ejecutó, pero en "${sentinel.cwd}" y no en ${wt} (según el $PWD del propio shell)` })
     continue
   }
@@ -3711,7 +3711,7 @@ for (let idx = 0; idx < plans.length; idx++) {
       : sentinel.retypes > 0
         ? ` Y esto YA no se arregla esperando más: la línea se reenvió ${sentinel.retypes} ${sentinel.retypes === 1 ? 'vez' : 'veces'} a esa sesión dentro del presupuesto y siguió sin ejecutarse — mira qué hay en esa pantalla.`
         : ` No hubo ningún reenvío automático: el presupuesto (${launchSentinelTimeoutMs} ms) no dio para un intento más allá del primero.`
-    console.error(`ATENCIÓN: cmux aceptó el lanzamiento de #${s.n} (exit 0) y la ventana está abierta, pero ${detail} — NO se puede confirmar que el comando llegara a ejecutarse. Los dos casos que esto cubre son indistinguibles desde aquí: (a) el comando nunca corrió —el shell de login se comió parte de la línea al arrancar, que es lo que pasó en el primer despacho real de este loop: un prompt de oh-my-zsh convirtió \`claude\` en \`laude\`— o (b) ese shell sigue arrancando y va a ejecutarlo dentro de un momento. Por eso NO se cuenta como lanzado y por eso TAMPOCO se revierte el claim solo: mira la sesión de cmux "${name}". Si el shell está ahí parado en un prompt, el agente no va a arrancar nunca. Si tu shell de login tarda de verdad tanto, sube CT_NEXT_LAUNCH_TIMEOUT_MS (ahora ${launchSentinelTimeoutMs}).${windowNote}${failedRetry}`)
+    console.error(`ATTENTION: cmux aceptó el lanzamiento de #${s.n} (exit 0) y la ventana está abierta, pero ${detail} — NO se puede confirmar que el comando llegara a ejecutarse. Los dos casos que esto cubre son indistinguibles desde aquí: (a) el comando nunca corrió —el shell de login se comió parte de la línea al arrancar, que es lo que pasó en el primer despacho real de este loop: un prompt de oh-my-zsh convirtió \`claude\` en \`laude\`— o (b) ese shell sigue arrancando y va a ejecutarlo dentro de un momento. Por eso NO se cuenta como lanzado y por eso TAMPOCO se revierte el claim solo: mira la sesión de cmux "${name}". Si el shell está ahí parado en un prompt, el agente no va a arrancar nunca. Si tu shell de login tarda de verdad tanto, sube CT_NEXT_LAUNCH_TIMEOUT_MS (ahora ${launchSentinelTimeoutMs}).${windowNote}${failedRetry}`)
     unverifiedLaunches.push({ n: s.n, wt, branch, name, why: sentinel.status === 'garbled' ? `el centinela de arranque existe pero es ilegible: no se puede afirmar que el comando corriera` : `el comando no dejó constancia de haberse ejecutado en ${launchSentinelTimeoutMs} ms (centinela ausente en ${sentinelPath})` })
     continue
   }
@@ -3729,15 +3729,15 @@ for (let idx = 0; idx < plans.length; idx++) {
     console.log(`lanzado #${s.n} en ${wt} — verificado: la sesión cmux está corriendo en ese directorio, y el comando llegó a ejecutarse de verdad (centinela de arranque escrito por el propio shell, con $PWD=${sentinel.cwd} y \`claude\` resoluble).${resendNote}`)
     launchedCount++
   } else if (launchCheck.status === 'wrong-cwd') {
-    // D5, finding A: besides the ATENCIÓN, the slice is RECORDED in
+    // D5, finding A: besides the ATTENTION, the slice is RECORDED in
     // `unverifiedLaunches` — because this case leaves real state behind (claim
     // written, branch and worktree created, and a `cmux new-workspace` that
     // returned 0, i.e. possibly an agent running) and the final summary has to
     // be able to say so instead of asserting "nothing was left half-done".
-    console.error(`ATENCIÓN: cmux aceptó el lanzamiento de #${s.n} (exit 0), pero la sesión NO está en ${wt} — está en "${launchCheck.actualCwd}" en su lugar (cmux tolera un cwd inexistente y arranca en el shell de login por defecto en vez de fallar; ¿el worktree no llegó a existir a tiempo, o se borró justo antes?). El agente puede estar corriendo en el directorio equivocado — revisa la sesión a mano antes de asumir que está trabajando #${s.n}. NO se cuenta como lanzado con éxito.${resendNote}`)
+    console.error(`ATTENTION: cmux aceptó el lanzamiento de #${s.n} (exit 0), pero la sesión NO está en ${wt} — está en "${launchCheck.actualCwd}" en su lugar (cmux tolera un cwd inexistente y arranca en el shell de login por defecto en vez de fallar; ¿el worktree no llegó a existir a tiempo, o se borró justo antes?). El agente puede estar corriendo en el directorio equivocado — revisa la sesión a mano antes de asumir que está trabajando #${s.n}. NO se cuenta como lanzado con éxito.${resendNote}`)
     unverifiedLaunches.push({ n: s.n, wt, branch, name, why: `la sesión de cmux existe pero está en "${launchCheck.actualCwd}", no en ${wt} — aunque el comando SÍ se ejecutó (su propio $PWD era ${sentinel.cwd}), así que lo más probable es que haya un agente vivo: no borres nada sin mirarlo` })
   } else if (launchCheck.status === 'not-found') {
-    console.error(`ATENCIÓN: cmux devolvió éxito (exit 0) al lanzar #${s.n}, pero no se encontró ninguna sesión con el nombre "${name}" al consultarlo — no se puede confirmar que el agente esté corriendo en absoluto, y mucho menos en ${wt}. El comando SÍ llegó a ejecutarse (centinela de arranque escrito, $PWD=${sentinel.cwd}), o sea que muy probablemente hay un agente vivo en alguna parte y lo que falla es localizar su ventana. Revisa cmux a mano. NO se cuenta como lanzado con éxito.`)
+    console.error(`ATTENTION: cmux devolvió éxito (exit 0) al lanzar #${s.n}, pero no se encontró ninguna sesión con el nombre "${name}" al consultarlo — no se puede confirmar que el agente esté corriendo en absoluto, y mucho menos en ${wt}. El comando SÍ llegó a ejecutarse (centinela de arranque escrito, $PWD=${sentinel.cwd}), o sea que muy probablemente hay un agente vivo en alguna parte y lo que falla es localizar su ventana. Revisa cmux a mano. NO se cuenta como lanzado con éxito.`)
     unverifiedLaunches.push({ n: s.n, wt, branch, name, why: `cmux respondió y no hay ninguna sesión con el título "${name}" (pero el comando sí se ejecutó: probablemente hay un agente vivo cuya ventana no se localiza)` })
   } else if (launchCheck.status === 'cwd-unknown') {
     // D5, finding B: the session DOES exist with the exact title we asked for
@@ -3794,7 +3794,7 @@ let finalExitCode = 0
 // earlier, on detecting the same preconditions.
 if (dryRun && preflightFailures.length) {
   console.error(preflightSummary())
-  console.error('Este --dry-run NO es luz verde: la corrida real se pararía en las precondiciones de arriba, sin escribir ningún claim. Arréglalas TODAS y vuelve a pasar el dry-run.')
+  console.error('This --dry-run is NOT a green light: the real run would stop at the preconditions above, without writing a single claim. Fix them ALL and run the dry-run again.')
   finalExitCode = 1
 }
 if (!dryRun) {
@@ -3885,13 +3885,13 @@ if (!dryRun) {
     const detail = unverifiedLaunches
       .map((u) => `  - #${u.n}: ${u.why}. Quedan en disco/GitHub: el claim (status:in-progress), la rama ${u.branch} y el worktree ${u.wt}. Si NO hay agente trabajándolo, límpialo con: git worktree remove --force ${u.wt} ; git branch -D ${u.branch} ; ${manualRevertClaimHint({ n: u.n })}`)
       .join('\n')
-    console.error(`\nATENCIÓN: ${unverifiedLaunches.length} de los ${selected.length} slice(s) seleccionados quedaron LANZADOS SIN VERIFICAR — no es "reintenta más tarde": hay estado a medias que solo un humano puede resolver, porque no se puede saber desde aquí si hay un agente corriendo o no (mirar la sesión de cmux a mano es la única forma).\n${detail}\nNO borres nada sin comprobar antes que no hay un agente trabajando ahí: un revert del claim con el agente vivo es peor que dejarlo como está.`)
+    console.error(`\nATTENTION: ${unverifiedLaunches.length} de los ${selected.length} slice(s) seleccionados quedaron LANZADOS SIN VERIFICAR — no es "reintenta más tarde": hay estado a medias que solo un humano puede resolver, porque no se puede saber desde aquí si hay un agente corriendo o no (mirar la sesión de cmux a mano es la única forma).\n${detail}\nNO borres nada sin comprobar antes que no hay un agente trabajando ahí: un revert del claim con el agente vivo es peor que dejarlo como está.`)
     finalExitCode = 1
   } else if (selected.length > 0 && launchedCount === 0) {
     // From D5 onwards this branch is only reached when there is NO residue
     // (the case above takes it first), so "nothing was left half-done" is at
     // last a true assertion and not an inherited assumption.
-    console.error(`ninguno de los ${selected.length} slice(s) seleccionados se lanzó esta vez — todos se saltaron AL RECLAMAR, por colisión, carrera perdida, o un fallo de infraestructura puntual (detalle arriba). No es necesariamente un fallo de configuración: puede ser otro dispatcher (u otra invocación concurrente) adelantándose entre la foto de esta tanda y el claim en vivo, o un gh inestable. Ningún claim quedó escrito, ninguna rama ni worktree se creó, y no hay nada que limpiar a mano — reintenta más tarde, o en la próxima vuelta del /loop.`)
+    console.error(`none of the ${selected.length} selected slice(s) was launched this time — they were all skipped AT THE CLAIM, through a collision, a lost race, or a one-off infrastructure failure (detail above). It is not necessarily a configuration failure: it may be another dispatcher (or another concurrent invocation) getting ahead between this batch's snapshot and the live claim, or an unstable gh. No claim was written, no branch and no worktree was created, and there is nothing to clean up by hand — retry later, or on the next turn of the /loop.`)
     finalExitCode = 3
   }
 }

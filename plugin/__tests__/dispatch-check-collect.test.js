@@ -168,7 +168,7 @@ describe('dispatch-check --collect — the harvest', () => {
     const b = bench()
     const res = run(b, { FAKE_GH_PR_LIST: prList('MERGED', b.tip), FAKE_CMUX_CLOSE_FAIL: '1' })
     expect(res.status).toBe(4)
-    expect(res.stderr).toContain('ATENCIÓN: cosecha a medias de #7')
+    expect(res.stderr).toContain('ATTENTION: cosecha a medias de #7')
     expect(res.stderr).toContain('cmux close-workspace --workspace workspace:0')
     expect(res.stderr).not.toContain('&&')
     expect(existsSync(b.worktree)).toBe(false)

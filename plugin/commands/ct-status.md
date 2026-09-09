@@ -1,18 +1,18 @@
 ---
-description: Informe de estado del loop — qué está en vuelo, qué ha entregado y qué es residuo. Sólo lee.
+description: The loop's status report — what is in flight, what it has delivered and what is residue. Read-only.
 ---
 ```
 node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-status.mjs --repo "<owner/repo>"
 ```
 
-Se ejecuta desde el checkout del repo que se mira (también desde dentro de un `.worktrees/<n>`). **No muta nada**: nombra lo que encuentra y el remedio; borrar es decisión tuya. El informe va por stdout; los `aviso:` por stderr. Transmítelo tal cual, bloque a bloque (`EN VUELO`, `ENTREGADO, ESPERANDO MERGE`, `ENTREGADO, SIN COSECHAR`, `RESIDUO`), con la coletilla de cada línea: «sin señal de vida» es local a esta máquina y nunca acusa cuando no ha podido comprobar.
+Run it from the checkout of the repository being looked at (from inside a `.worktrees/<n>` works too). **It mutates nothing**: it names what it finds and the remedy; deleting is your decision. The report goes to stdout; the `warning:` lines to stderr. Pass it on as it is, block by block (`IN FLIGHT`, `DELIVERED, WAITING FOR MERGE`, `DELIVERED, NOT HARVESTED`, `RESIDUE`), keeping each line's tail: «no sign of life» is local to this machine and never accuses when it could not check.
 
-| Exit | Significa | Qué hacer |
+| Exit | Means | What to do |
 |---|---|---|
-| `0` | Nada que revisar: nada en vuelo sin señales de vida, ningún residuo, ninguna lectura a medias | nada |
-| `3` | Hay algo que revisar: residuo, un claim sin proceso vivo, labels huérfanas, entregas sin cosechar | leer los bloques del informe |
-| `1` | **No se pudo comprobar**: falló una lectura de `gh`, de los procesos o del disco, o el checkout no habla del mismo repo que `--repo` | mirar los `aviso:`, arreglar la causa y repetir — lo impreso es sólo lo que sí se sabe |
+| `0` | Nothing to review: nothing in flight without signs of life, no residue, no half-finished read | nothing |
+| `3` | There is something to review: residue, a claim with no live process, orphaned labels, deliveries not harvested | read the report's blocks |
+| `1` | **It could not be checked**: a read of `gh`, of the processes or of the disk failed, or the checkout does not talk about the same repository as `--repo` | look at the `warning:` lines, fix the cause and run it again — what is printed is only what IS known |
 
-El `1` nunca se degrada a `0`: precedencia `1` > `3` > `0`.
+The `1` never degrades to a `0`: precedence is `1` > `3` > `0`.
 
-Referencia completa —qué significa cada bloque y cada coletilla, y por qué—: `docs/loop/ct-status.md` en el repo del plugin.
+Full reference —what each block and each tail means, and why—: `docs/loop/ct-status.md` in the plugin's repository.

@@ -119,8 +119,8 @@ describe('ct-next --cap: strict parsing (D4, defect 2)', () => {
     it(`--cap ${JSON.stringify(bad)} → exit 2, never a cap other than the one asked for`, () => {
       const r = run(['--repo', 'menoplus-app/menoplus', '--cap', bad, '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
       expect(r.code).toBe(2)
-      expect(r.out).toMatch(/--cap inválido/)
-      expect(r.out).not.toMatch(/seleccionados para esta tanda/)
+      expect(r.out).toMatch(/--cap invalid/)
+      expect(r.out).not.toMatch(/selected for this batch/)
     })
   }
 
@@ -133,7 +133,7 @@ describe('ct-next --cap: strict parsing (D4, defect 2)', () => {
   it('--cap 0 → exit 2 with a RANGE message, different from the "this is not an integer" one', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '0', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/debe ser >= 1/)
+    expect(r.out).toMatch(/must be >= 1/)
   })
 
   // D5, finding I — the error message said "debe ser un entero en dígitos
@@ -145,10 +145,10 @@ describe('ct-next --cap: strict parsing (D4, defect 2)', () => {
     it(`--cap ${signed} → exit 2 with the FORM message, which now does name the sign`, () => {
       const r = run(['--repo', 'menoplus-app/menoplus', '--cap', signed, '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
       expect(r.code).toBe(2)
-      expect(r.out).toMatch(/--cap inválido/)
-      expect(r.out).toMatch(/ni signo "\+"\/"-"/)
-      expect(r.out).not.toMatch(/debe ser >= 1/)
-      expect(r.out).not.toMatch(/seleccionados para esta tanda/)
+      expect(r.out).toMatch(/--cap invalid/)
+      expect(r.out).toMatch(/no "\+"\/"-" sign/)
+      expect(r.out).not.toMatch(/must be >= 1/)
+      expect(r.out).not.toMatch(/selected for this batch/)
     })
   }
 
@@ -161,7 +161,7 @@ describe('ct-next --cap: strict parsing (D4, defect 2)', () => {
   it('--repo without the owner/repo form → exit 2 (it used to get as far as gh and die with a 404 without explaining why)', () => {
     const r = run(['--repo', 'menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/--repo inválido/)
+    expect(r.out).toMatch(/--repo invalid/)
   })
 })
 
@@ -183,8 +183,8 @@ describe('ct-next --dry-run — preconditions of the binaries (D4, defect 3)', (
       PATH: emptyDir,
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/`cmux` no está en el PATH/)
-    expect(r.out).toMatch(/NO es luz verde/)
+    expect(r.out).toMatch(/`cmux` is not in the PATH/)
+    expect(r.out).toMatch(/is NOT a green light/)
   })
 
   it('cmux present but claude absent → WARNING (not conclusive: the login shell resolves it), exit 0', () => {
@@ -193,9 +193,9 @@ describe('ct-next --dry-run — preconditions of the binaries (D4, defect 3)', (
       PATH: join(fixturesDir, 'fake-cmux-bin'),
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/aviso: `claude` no aparece en el PATH/)
+    expect(r.out).toMatch(/warning: `claude` does not appear in the PATH/)
     // and the final recap has to make clear that the 0 was given IN SPITE of the warning
-    expect(r.out).toMatch(/terminó con exit 0 A PESAR de \d+ aviso/)
+    expect(r.out).toMatch(/finished with exit 0 DESPITE \d+ warning/)
   })
 
 
@@ -204,16 +204,16 @@ describe('ct-next --dry-run — preconditions of the binaries (D4, defect 3)', (
   it('with everything in place, the dry-run says explicitly what it checked', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/cmux: \S+ \(encontrado en PATH; no se ejecuta/)
+    expect(r.out).toMatch(/cmux: \S+ \(found in PATH; it is not run/)
     // F35: the CLAUDE_CONFIG_DIR of the resolved account used to be checked
     // here too. With no accounts, the only preflight left of that pair is the
     // one of the agent's binary.
-    expect(r.out).toMatch(/claude: \S+ \(encontrado en el PATH de este proceso\)/)
+    expect(r.out).toMatch(/claude: \S+ \(found in the PATH of this process\)/)
   })
 
   it('in fixture mode, the destination is marked as NOT CHECKED instead of being taken for free', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
-    expect(r.out).toMatch(/NO COMPROBADOS \(modo fixture/)
+    expect(r.out).toMatch(/NOT CHECKED \(fixture mode/)
   })
 })
 
@@ -230,8 +230,8 @@ describe('ct-next — an occupied destination: it is detected BEFORE claiming (D
       FAKE_GIT_STALE_BRANCH_EXISTS: '42',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/la rama feat\/42 ya existe/)
-    expect(r.out).toMatch(/NO es luz verde/)
+    expect(r.out).toMatch(/the branch feat\/42 already exists/)
+    expect(r.out).toMatch(/is NOT a green light/)
   })
 
   it('--dry-run with the worktree already existing → exit 1 and it says so', () => {
@@ -242,7 +242,7 @@ describe('ct-next — an occupied destination: it is detected BEFORE claiming (D
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue42], []]),
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/el worktree de #42 ya existe/)
+    expect(r.out).toMatch(/the worktree of #42 already exists/)
   })
 
   // THE test that justifies the whole block: in the REAL run, with the branch
@@ -262,8 +262,8 @@ describe('ct-next — an occupied destination: it is detected BEFORE claiming (D
       FAKE_GIT_STALE_BRANCH_EXISTS: '42',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/la rama feat\/42 ya existe/)
-    expect(r.out).toMatch(/ni un solo claim escrito/)
+    expect(r.out).toMatch(/the branch feat\/42 already exists/)
+    expect(r.out).toMatch(/not a single claim written/)
     const argv = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
     expect(argv).not.toMatch(/issue edit 42/)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
@@ -282,7 +282,7 @@ describe('ct-next — an occupied destination: it is detected BEFORE claiming (D
       FAKE_GIT_WORKTREE_REGISTERED: join(repoRoot, '.worktrees', '42'),
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/SIGUE teniéndolo registrado/)
+    expect(r.out).toMatch(/STILL has it registered/)
     expect(r.out).toMatch(/git worktree prune/)
   })
 
@@ -296,9 +296,9 @@ describe('ct-next — an occupied destination: it is detected BEFORE claiming (D
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue42], []]),
       FAKE_GIT_REV_PARSE_BROKEN: '1',
     })
-    expect(r.out).toMatch(/no se pudo comprobar si la rama feat\/42 ya existe/)
-    expect(r.out).not.toMatch(/destino libre/)
-    expect(r.out).toMatch(/A PESAR de \d+ aviso/)
+    expect(r.out).toMatch(/it could not be checked whether the branch feat\/42 already exists/)
+    expect(r.out).not.toMatch(/destination free/)
+    expect(r.out).toMatch(/DESPITE \d+ warning/)
   })
 
   it('a free destination in a real run → the dry-run states it with evidence, not by omission', () => {
@@ -308,7 +308,7 @@ describe('ct-next — an occupied destination: it is detected BEFORE claiming (D
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue42], []]),
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/destino libre: .*no existe y la rama feat\/42 tampoco \(comprobado/)
+    expect(r.out).toMatch(/destination free: .*does not exist and neither does the branch feat\/42 \(checked/)
   })
 })
 
@@ -316,8 +316,8 @@ describe('ct-next --dry-run — the kickoff reads as PROSE (D4, defect 3)', () =
   it('prints the kickoff in real lines, not as a blob with escaped \\n', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
     expect(r.code).toBe(0)
-    const start = r.out.indexOf('--- kickoff que recibiría el agente')
-    const end = r.out.indexOf('--- fin del kickoff ---')
+    const start = r.out.indexOf('--- kickoff the agent of')
+    const end = r.out.indexOf('--- end of the kickoff ---')
     expect(start).toBeGreaterThan(-1)
     expect(end).toBeGreaterThan(start)
     const block = r.out.slice(start, end)
@@ -356,7 +356,7 @@ describe('ct-next — a slice with no usable issue number (D4, defect 5)', () =>
   it('is not dispatched, and the unreadable identifier does not propagate to branch/worktree/claim/title', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_NO_N })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no es un número de issue utilizable/)
+    expect(r.out).toMatch(/is not a usable issue number/)
     // Before: "feat/undefined", ".worktrees/undefined", "dispatch-check.mjs
     // undefined", and the title "repo · #undefined nombre" — with exit 0.
     expect(r.out).not.toMatch(/feat\/undefined|worktrees\/undefined|· #undefined/)
@@ -376,7 +376,7 @@ describe('ct-next — a slice with no usable issue number (D4, defect 5)', () =>
     })
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: fx })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no es un número de issue utilizable/)
+    expect(r.out).toMatch(/is not a usable issue number/)
     expect(r.out).not.toMatch(/· #—/)
   })
 
@@ -401,15 +401,15 @@ describe('ct-next — a slice with no usable issue number (D4, defect 5)', () =>
     expect(r.out).toMatch(/=== slice #7/)
     // ...and the final summary says how many failed, which one would break
     // first, and which one is left with no problems of its own.
-    expect(r.out).toMatch(/precondiciones NO cumplidas \(1\)/)
-    expect(r.out).toMatch(/el primero que rompería es \(slice SIN número de issue utilizable/)
-    expect(r.out).toMatch(/1 sin problemas propios \(#7\)/)
-    expect(r.out).toMatch(/NO es luz verde/)
+    expect(r.out).toMatch(/preconditions NOT met \(1\)/)
+    expect(r.out).toMatch(/the first one that would break is \(slice with NO usable issue number/)
+    expect(r.out).toMatch(/1 with no problems of its own \(#7\)/)
+    expect(r.out).toMatch(/is NOT a green light/)
   })
 
   it('the selection line does not print it as if it were a number either', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_NO_N })
-    expect(r.out).toMatch(/seleccionados para esta tanda.*SIN número de issue utilizable/)
+    expect(r.out).toMatch(/selected for this batch.*with NO usable issue number/)
     expect(r.out).not.toMatch(/#undefined/)
   })
 })

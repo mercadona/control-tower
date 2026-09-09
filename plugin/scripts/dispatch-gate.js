@@ -23,10 +23,10 @@ export class DispatchVerdict {
 
 export class StepSeal {
   static #INPUT_OF = Object.freeze({
-    [STEPS.IMPLEMENT]: 'el brief de la tarea',
-    [STEPS.JUDGE]: 'el paquete de revisión de la tarea',
-    [STEPS.ADVISE]: 'el paquete del consejero',
-    [STEPS.SLICE_JUDGE]: 'el paquete de revisión del slice',
+    [STEPS.IMPLEMENT]: "the task's brief",
+    [STEPS.JUDGE]: "the task's review package",
+    [STEPS.ADVISE]: "the adviser's package",
+    [STEPS.SLICE_JUDGE]: "the slice's review package",
   })
 
   static SEALED_STEPS = Object.freeze(Object.keys(StepSeal.#INPUT_OF))
@@ -55,14 +55,14 @@ export class DispatchGate {
 
   static #reason(run, ctStepPath, input) {
     return [
-      `El run del issue ${run.issue} está en el paso "${run.step}" y todavía no has pedido el paso.`,
+      `The run of issue ${run.issue} is on step "${run.step}" and you have not asked for the step yet.`,
       '',
-      `"ct-step next" no sólo dice cuál es el paso: ESCRIBE ${input}, que es el fichero que este subagente tiene que leer. Despachado ahora se queda sin él, y eso no se ve hasta que vuelve con el trabajo hecho encima de otra cosa.`,
+      `"ct-step next" does not only say which step it is: it WRITES ${input}, which is the file this subagent has to read. Dispatched now it is left without it, and that does not show until it comes back with the work done on top of something else.`,
       '',
-      'Pide el paso y despacha con lo que imprima:',
+      'Ask for the step and dispatch with what it prints:',
       `  node ${ctStepPath} next --plan ${run.plan} --issue ${run.issue}`,
       '',
-      '"next" no transiciona el run: informa y prepara, así que pedirlo no cuesta ningún intento ni ningún descarte.',
+      '"next" does not transition the run: it informs and prepares, so asking for it costs no attempt and no discard.',
     ].join('\n')
   }
 }

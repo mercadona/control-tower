@@ -64,8 +64,8 @@ describe('ct-next — classifies the claim by the dispatch-check CODE, not by it
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:zzz']),
       FAKE_GIT_LOG_FILE: gitLog,
     })
-    expect(r.out).toMatch(/no se pudo reclamar — fallo de infraestructura/)
-    expect(r.out).toMatch(/sigo con el resto de esta tanda/)
+    expect(r.out).toMatch(/could not claim — infrastructure failure/)
+    expect(r.out).toMatch(/carrying on with the rest of this batch/)
     expect(r.out).toMatch(/lanzado #43/)
     expect(r.out).toMatch(/lanzad[oa]s? 1.*2/i)
     expect(r.code).toBe(0)
@@ -99,9 +99,9 @@ describe('ct-next — classifies the claim by the dispatch-check CODE, not by it
       FAKE_GIT_LOG_FILE: gitLog,
       FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready --remove-label status:in-progress', // the revert of #42 fails
     })
-    expect(r.out).toMatch(/dispatch-check devolvió exit 4 para #42/)
-    expect(r.out).toMatch(/bloqueado en status:in-progress sin nadie trabajándolo/)
-    expect(r.out).toMatch(/Abortando toda la tanda/)
+    expect(r.out).toMatch(/dispatch-check returned exit 4 for #42/)
+    expect(r.out).toMatch(/stuck at status:in-progress with nobody working on it/)
+    expect(r.out).toMatch(/Aborting the whole batch/)
     expect(r.out).not.toMatch(/lanzado #43/) // it NEVER gets as far as trying the next candidate
     expect(r.code).toBe(1)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
@@ -145,7 +145,7 @@ describe('ct-next — exit 3 and exit 1 are told apart by whether ANYTHING WAS L
       ]),
     })
     expect(r.code).toBe(3)
-    expect(r.out).toMatch(/no hay nada que limpiar a mano/)
+    expect(r.out).toMatch(/there is nothing to clean up by hand/)
     expect(r.out).not.toMatch(/LANZADOS SIN VERIFICAR/)
   })
 

@@ -114,10 +114,10 @@ var DispatchVerdict = class _DispatchVerdict {
 };
 var StepSeal = class _StepSeal {
   static #INPUT_OF = Object.freeze({
-    [STEPS.IMPLEMENT]: "el brief de la tarea",
-    [STEPS.JUDGE]: "el paquete de revisi\xF3n de la tarea",
-    [STEPS.ADVISE]: "el paquete del consejero",
-    [STEPS.SLICE_JUDGE]: "el paquete de revisi\xF3n del slice"
+    [STEPS.IMPLEMENT]: "the task's brief",
+    [STEPS.JUDGE]: "the task's review package",
+    [STEPS.ADVISE]: "the adviser's package",
+    [STEPS.SLICE_JUDGE]: "the slice's review package"
   });
   static SEALED_STEPS = Object.freeze(Object.keys(_StepSeal.#INPUT_OF));
   static of(run) {
@@ -140,14 +140,14 @@ var DispatchGate = class _DispatchGate {
   }
   static #reason(run, ctStepPath, input) {
     return [
-      `El run del issue ${run.issue} est\xE1 en el paso "${run.step}" y todav\xEDa no has pedido el paso.`,
+      `The run of issue ${run.issue} is on step "${run.step}" and you have not asked for the step yet.`,
       "",
-      `"ct-step next" no s\xF3lo dice cu\xE1l es el paso: ESCRIBE ${input}, que es el fichero que este subagente tiene que leer. Despachado ahora se queda sin \xE9l, y eso no se ve hasta que vuelve con el trabajo hecho encima de otra cosa.`,
+      `"ct-step next" does not only say which step it is: it WRITES ${input}, which is the file this subagent has to read. Dispatched now it is left without it, and that does not show until it comes back with the work done on top of something else.`,
       "",
-      "Pide el paso y despacha con lo que imprima:",
+      "Ask for the step and dispatch with what it prints:",
       `  node ${ctStepPath} next --plan ${run.plan} --issue ${run.issue}`,
       "",
-      '"next" no transiciona el run: informa y prepara, as\xED que pedirlo no cuesta ning\xFAn intento ni ning\xFAn descarte.'
+      '"next" does not transition the run: it informs and prepares, so asking for it costs no attempt and no discard.'
     ].join("\n");
   }
 };

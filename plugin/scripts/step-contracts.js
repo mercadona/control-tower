@@ -556,15 +556,15 @@ export const ADVICE_SCHEMA = Object.freeze({
 // implementer outside its scope.
 export function readAdvice(structured) {
   if (!structured || typeof structured !== 'object' || Array.isArray(structured)) {
-    return { why: 'el consejero no devolvió structured_output' }
+    return { why: 'the adviser did not return structured_output' }
   }
   const { approach, files_to_reconsider: files } = structured
-  if (!isText(approach)) return { why: 'el consejo no dice qué enfoque tomar: falta `approach`' }
+  if (!isText(approach)) return { why: 'the advice does not say what approach to take: `approach` is missing' }
   if (!Array.isArray(files) || !files.every(isText)) {
-    return { why: 'el consejo no trae la lista de rutas a reconsiderar: `files_to_reconsider` es una lista de rutas, vacía si no hay ninguna' }
+    return { why: 'the advice does not carry the list of paths to reconsider: `files_to_reconsider` is a list of paths, empty if there is none' }
   }
   const outside = files.filter((p) => p.startsWith('/') || p.split('/').includes('..'))
-  if (outside.length) return { why: `el consejo nombra rutas fuera del worktree: ${outside.join(', ')}` }
+  if (outside.length) return { why: `the advice names paths outside the worktree: ${outside.join(', ')}` }
   return { advice: { approach: approach.trim(), files_to_reconsider: [...new Set(files)] } }
 }
 
@@ -649,31 +649,31 @@ const isText = (v) => typeof v === 'string' && v.trim() !== ''
 // would copy these twenty lines and diverge at the first fix applied to only one
 // of the two.
 export function readVerdict(structured, rules = VERDICT_RULES) {
-  if (!structured || typeof structured !== 'object') return { why: 'el juez no devolvió structured_output' }
+  if (!structured || typeof structured !== 'object') return { why: 'the judge did not return structured_output' }
   const { ruling, rubric, findings, review_token: token } = structured
   if (ruling !== 'PASS' && ruling !== 'FAIL') return { why: `ruling desconocido: ${JSON.stringify(ruling)}` }
-  if (!Array.isArray(findings)) return { why: 'findings no es una lista' }
+  if (!Array.isArray(findings)) return { why: 'findings is not a list' }
   for (const [i, f] of findings.entries()) {
-    if (!f || typeof f !== 'object') return { why: `el hallazgo ${i} no es un objeto` }
-    if (!SEVERITIES.includes(f.severity)) return { why: `el hallazgo ${i} tiene una severidad desconocida: ${JSON.stringify(f.severity)}` }
-    if (!isText(f.what) || !isText(f.path)) return { why: `el hallazgo ${i} no dice qué o dónde: hacen falta 'what' y 'path'` }
+    if (!f || typeof f !== 'object') return { why: `finding ${i} is not an object` }
+    if (!SEVERITIES.includes(f.severity)) return { why: `finding ${i} has an unknown severity: ${JSON.stringify(f.severity)}` }
+    if (!isText(f.what) || !isText(f.path)) return { why: `finding ${i} does not say what or where: 'what' and 'path' are needed` }
     // `line` is optional and `null` is valid: a finding about the whole file
     // has no line, and demanding one would be asking for an invented number or
     // spending one of the six discards that kill the run. What is not valid is
     // a line that is not a number: the string `"12"` passes the `typeof` and
     // breaks any aggregation.
     if (f.line !== undefined && f.line !== null && !(Number.isInteger(f.line) && f.line > 0)) {
-      return { why: `el hallazgo ${i} trae una línea que no es un número: ${JSON.stringify(f.line)} — un entero, o null (u omitida) si el hallazgo es del fichero entero` }
+      return { why: `finding ${i} carries a line that is not a number: ${JSON.stringify(f.line)} — an integer, or null (or omitted) if the finding is about the whole file` }
     }
     // The quote, given the same treatment as the what and the where: without
     // it the finding cannot be checked against anything, and a veto that cannot
     // be checked is the defensive veto the rubric's calibration exists to
     // prevent.
-    if (!isText(f.evidence)) return { why: `el hallazgo ${i} no cita la evidencia que lo sostiene` }
+    if (!isText(f.evidence)) return { why: `finding ${i} does not cite the evidence that sustains it` }
     // The rule is the CLOSED enum: none is assumed by default, because a rule
     // invented by the judge would dirty the telemetry's per-rule count just as
     // much as a missing `rule`.
-    if (!rules.includes(f.rule)) return { why: `el hallazgo ${i} incumple una regla desconocida: ${JSON.stringify(f.rule)}` }
+    if (!rules.includes(f.rule)) return { why: `finding ${i} breaks an unknown rule: ${JSON.stringify(f.rule)}` }
   }
   // The walk of the rubric, with the same criterion as a finding's `rule`: a
   // CLOSED enum and a discard, not interpretation. Here the discard also covers
@@ -681,26 +681,26 @@ export function readVerdict(structured, rules = VERDICT_RULES) {
   // and answered whole, so a short walk, one with a repeated item and one with
   // an identifier nobody recognises are the same failure: a verdict of which it
   // cannot be asserted that the rubric was walked.
-  if (!Array.isArray(rubric)) return { why: 'el veredicto no trae el recorrido de la rúbrica' }
+  if (!Array.isArray(rubric)) return { why: 'the verdict does not carry the walk of the rubric' }
   const walked = []
   for (const [i, step] of rubric.entries()) {
-    if (!step || typeof step !== 'object') return { why: `el paso ${i} del recorrido no es un objeto` }
-    if (!rules.includes(step.rule)) return { why: `el recorrido nombra un ítem desconocido de la rúbrica: ${JSON.stringify(step.rule)}` }
+    if (!step || typeof step !== 'object') return { why: `step ${i} of the walk is not an object` }
+    if (!rules.includes(step.rule)) return { why: `the walk names an unknown item of the rubric: ${JSON.stringify(step.rule)}` }
     // An item named with no result is identifiers with nothing behind them:
     // the same empty PASS of rust-monitoring#10, only longer.
-    if (!isText(step.result)) return { why: `el ítem ${step.rule} del recorrido no dice lo que dio` }
+    if (!isText(step.result)) return { why: `item ${step.rule} of the walk does not say what it gave` }
     // The result in prose says what it gave; `outcome` says what CLASS it was,
     // which is the only aggregable part. Without it, "there was nothing to
     // measure with" and "I measured and it is fine" are the same datum.
-    if (!RUBRIC_OUTCOMES.includes(step.outcome)) return { why: `el ítem ${step.rule} del recorrido no dice de qué clase fue su resultado: ${JSON.stringify(step.outcome)}` }
-    if (walked.includes(step.rule)) return { why: `el recorrido repite el ítem ${step.rule} de la rúbrica` }
+    if (!RUBRIC_OUTCOMES.includes(step.outcome)) return { why: `item ${step.rule} of the walk does not say what class its result was: ${JSON.stringify(step.outcome)}` }
+    if (walked.includes(step.rule)) return { why: `the walk repeats item ${step.rule} of the rubric` }
     walked.push(step.rule)
   }
   const notWalked = rules.filter((rule) => !walked.includes(rule))
   // The number comes from the array and not from the prose: the ninth item made
   // a hand-written "eight" obsolete in one go, and this `why` is the text the
   // judge reads in order to answer again after a discard.
-  if (notWalked.length) return { why: `el recorrido no pasa por ${notWalked.join(', ')}: la rúbrica son ${rules.length} ítems y se contestan los ${rules.length}` }
+  if (notWalked.length) return { why: `the walk does not pass through ${notWalked.join(', ')}: the rubric is ${rules.length} items and all ${rules.length} get answered` }
   // The coherence the original checks on the aggregate itself: a PASS with a
   // serious finding contradicts itself. It is not "interpreted" towards the
   // prudent side — it is discarded and asked again, because a judge that does
@@ -735,7 +735,7 @@ export function readVerdict(structured, rules = VERDICT_RULES) {
     return { verdict: { ruling, rubric, findings, review_token: null } }
   }
   if (typeof token !== 'string' || !RE_REVIEW_TOKEN_FORM.test(token)) {
-    return { why: `el veredicto trae un "${REVIEW_TOKEN_LABEL}" que no tiene su forma (64 hex): ${JSON.stringify(token)}. El programa escribe ese campo por su cuenta, así que no hay nada que copiar — un valor que no es un token sólo puede venir de otro sitio` }
+    return { why: `the verdict carries a "${REVIEW_TOKEN_LABEL}" that does not have its shape (64 hex): ${JSON.stringify(token)}. The program writes that field on its own, so there is nothing to copy — a value that is not a token can only come from somewhere else` }
   }
   return { verdict: { ruling, rubric, findings, review_token: token.toLowerCase() } }
 }
@@ -782,15 +782,15 @@ export function findingLocation(finding) {
 }
 
 export function readReport(structured) {
-  if (!structured || typeof structured !== 'object') return { why: 'el implementador no devolvió structured_output' }
+  if (!structured || typeof structured !== 'object') return { why: 'the implementer did not return structured_output' }
   const { paths, summary } = structured
-  if (!Array.isArray(paths) || !paths.every(isText)) return { why: 'el informe no trae la lista de rutas tocadas' }
-  if (!isText(summary)) return { why: 'el informe no trae resumen' }
+  if (!Array.isArray(paths) || !paths.every(isText)) return { why: 'the report does not carry the list of paths touched' }
+  if (!isText(summary)) return { why: 'the report does not carry a summary' }
   // An absolute path, or one that climbs out of the directory, does not get
   // staged: the program runs `git add` on whatever this list says, so the list
   // is an attack surface, not trusted data.
   const outside = paths.filter((p) => p.startsWith('/') || p.split('/').includes('..'))
-  if (outside.length) return { why: `el informe declara rutas fuera del worktree: ${outside.join(', ')}` }
+  if (outside.length) return { why: `the report declares paths outside the worktree: ${outside.join(', ')}` }
   // The same path twice NO LONGER DISCARDS. It used to discard when this list
   // was the source of what gets staged: two declarations of the same path
   // could not be arbitrated. Ever since the program MEASURES the paths against
@@ -822,7 +822,7 @@ const collapse = (s) => String(s || '').replace(/\s+/g, ' ').trim()
 // output— is as insufficient as leaving it out, and saying only "`evidence` is
 // missing" would send an agent that ALREADY put it there to look where the
 // problem is not.
-const fieldName = (field) => (field === 'evidence' ? '`evidence` (al menos un par comando/salida, los dos con texto)' : `\`${field}\``)
+const fieldName = (field) => (field === 'evidence' ? '`evidence` (at least one command/output pair, both with text)' : `\`${field}\``)
 const hasEvidence = (e) => (Array.isArray(e.evidence) ? e.evidence.filter((x) => x && isText(x.command) && isText(x.output)) : []).length > 0
 
 export function readE2eReport(structured, declaredRuns) {
@@ -835,10 +835,10 @@ export function readE2eReport(structured, declaredRuns) {
   // —it is a redundancy—, so it collapses instead of aborting the step.
   const declared = [...new Set((declaredRuns || []).map(collapse).filter(Boolean))]
   if (!structured || typeof structured !== 'object' || Array.isArray(structured)) {
-    return { outcome: OUTCOMES.DISCARDED, why: 'el agente no devolvió structured_output' }
+    return { outcome: OUTCOMES.DISCARDED, why: 'the agent did not return structured_output' }
   }
   if (!Array.isArray(structured.runs)) {
-    return { outcome: OUTCOMES.DISCARDED, why: '`runs` no es una lista' }
+    return { outcome: OUTCOMES.DISCARDED, why: '`runs` is not a list' }
   }
   const problems = []
   // `buenos` keeps its name: e2e-schema.test.js documents this list by it.
@@ -846,10 +846,10 @@ export function readE2eReport(structured, declaredRuns) {
   const seen = new Set()
   for (const run of declared) {
     const e = structured.runs.find((x) => x && collapse(x.run) === run)
-    if (!e) { problems.push(`falta la entrada del recorrido "${run}"`); continue }
+    if (!e) { problems.push(`the entry for the journey "${run}" is missing`); continue }
     seen.add(e)
     if (!E2E_VERDICTS.includes(e.verdict)) {
-      problems.push(`el recorrido "${run}" trae un veredicto desconocido: ${JSON.stringify(e.verdict)}`)
+      problems.push(`the journey "${run}" carries an unknown verdict: ${JSON.stringify(e.verdict)}`)
       continue
     }
     // The three verdicts are validated against ONE table
@@ -869,13 +869,13 @@ export function readE2eReport(structured, declaredRuns) {
     // it here is already validated and checks nothing again.
     const missing = E2E_REQUIRED_BY_VERDICT[e.verdict].filter((field) => (field === 'evidence' ? !hasEvidence(e) : !isText(e[field])))
     if (missing.length) {
-      problems.push(`el recorrido "${run}" se declara ${e.verdict} sin ${missing.map(fieldName).join(', ')}: ese veredicto no se sostiene sin eso. Añádelo al informe y vuelve a cerrar el paso con "ct-step e2e"`)
+      problems.push(`the journey "${run}" declares itself ${e.verdict} with no ${missing.map(fieldName).join(', ')}: that verdict does not stand up without that. Add it to the report and close the step again with "ct-step e2e"`)
       continue
     }
     buenos.push(e)
   }
   for (const e of structured.runs) {
-    if (!seen.has(e)) problems.push(`el informe trae una entrada que esta slice no declara: "${collapse(e && e.run)}"`)
+    if (!seen.has(e)) problems.push(`the report carries an entry this slice does not declare: "${collapse(e && e.run)}"`)
   }
   // RED BEATS MALFORMED: see the test of the same name.
   //
@@ -925,7 +925,7 @@ export function commitMessage({ issue, task, tasksTotal, name }) {
   const message = title + '\n' + body
   const keywords = findClosingKeywords(message)
   if (keywords.length) {
-    throw new Error(`el mensaje de commit contiene una closing keyword (${keywords.map((k) => `${k.keyword} ${k.ref}`).join(', ')}) y cerraría un issue sin que nadie lo haya decidido`)
+    throw new Error(`the commit message contains a closing keyword (${keywords.map((k) => `${k.keyword} ${k.ref}`).join(', ')}) and would close an issue without anybody having decided it`)
   }
   return message
 }
@@ -956,7 +956,7 @@ export function sliceVerdictCommitMessage({ issue, tasksTotal }) {
   const message = title + '\n' + body
   const keywords = findClosingKeywords(message)
   if (keywords.length) {
-    throw new Error(`el mensaje de commit del veredicto de slice contiene una closing keyword (${keywords.map((k) => `${k.keyword} ${k.ref}`).join(', ')}) y cerraría un issue sin que nadie lo haya decidido`)
+    throw new Error(`the commit message of the slice verdict contains a closing keyword (${keywords.map((k) => `${k.keyword} ${k.ref}`).join(', ')}) and would close an issue without anybody having decided it`)
   }
   return message
 }
