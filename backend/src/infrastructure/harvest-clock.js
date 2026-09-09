@@ -1,4 +1,4 @@
-import { HarvestOutcome } from '../domain/value-objects/harvest-outcome.js'
+import { HarvestOutcome } from '../domain/value-objects/harvest-outcome.ts'
 import { Projection } from './projection.js'
 import { HarvestNotRead, HarvestNotUnderstood, PlanFailure } from '../domain/exceptions.js'
 

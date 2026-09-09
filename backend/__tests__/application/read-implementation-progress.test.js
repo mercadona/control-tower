@@ -3,7 +3,7 @@ import { ReadImplementationProgress, ReadImplementationProgressParams } from '..
 import { ImplementationProgress } from '../../src/domain/ports/implementation-progress.js'
 import { PullRequests } from '../../src/domain/ports/pull-requests.js'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.js'
-import { ImplementationState, ImplementationStep } from '../../src/domain/value-objects/implementation-state.js'
+import { ImplementationState, ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'

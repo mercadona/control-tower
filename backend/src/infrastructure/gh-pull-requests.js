@@ -1,6 +1,6 @@
 import { LOOP_BRANCH_PREFIX } from '../../../plugin/scripts/conventions.js'
 import { PullRequests } from '../domain/ports/pull-requests.js'
-import { ChangeAsked } from '../domain/value-objects/change-asked.js'
+import { ChangeAsked } from '../domain/value-objects/change-asked.ts'
 import { PullRequestNotRead, PullRequestNotUnderstood } from '../domain/exceptions.js'
 import { Gh } from './gh.js'
 

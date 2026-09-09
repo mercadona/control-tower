@@ -1,5 +1,5 @@
-import { PlanBriefing } from '../../domain/value-objects/plan-briefing.js'
-import { PlanWatch } from '../../domain/value-objects/plan-watch.js'
+import { PlanBriefing } from '../../domain/value-objects/plan-briefing.ts'
+import { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
 import { PlanTarget } from '../../domain/value-objects/plan-target.ts'
 import { PlanFailure } from '../../domain/exceptions.js'
 

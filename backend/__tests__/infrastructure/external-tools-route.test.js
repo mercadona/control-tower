@@ -5,7 +5,7 @@ import { ApiServer } from '../../src/infrastructure/api-server.js'
 import { ReviewsSpy } from '../reviews-spy.js'
 import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.js'
 import { SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.js'
-import { SessionState, ToolSession } from '../../src/domain/value-objects/tool-session.js'
+import { SessionState, ToolSession } from '../../src/domain/value-objects/tool-session.ts'
 
 class SurveySpy {
   static GH_READY = new ToolSession({ tool: 'gh', installed: true, state: SessionState.READY, fix: null })

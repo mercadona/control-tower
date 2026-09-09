@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.js'
-import { ChangeAsked } from '../../src/domain/value-objects/change-asked.js'
+import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { Gh } from '../../src/infrastructure/gh.js'
 import { PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.js'

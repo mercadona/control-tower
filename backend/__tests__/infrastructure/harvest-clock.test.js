@@ -3,11 +3,11 @@ import { HarvestClock, SweepLine } from '../../src/infrastructure/harvest-clock.
 import { HarvestDeliveryResult } from '../../src/application/actions/harvest-delivery.js'
 import { SurveyWorkspacesResult } from '../../src/application/queries/survey-workspaces.js'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
-import { HarvestOutcome } from '../../src/domain/value-objects/harvest-outcome.js'
-import { PreparedWorkspace } from '../../src/domain/value-objects/prepared-workspace.js'
+import { HarvestOutcome } from '../../src/domain/value-objects/harvest-outcome.ts'
+import { PreparedWorkspace } from '../../src/domain/value-objects/prepared-workspace.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
-import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.js'
+import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.ts'
 import {
   HarvestFailure, HarvestNotRead, HarvestNotUnderstood, WorkspaceNotRead,
 } from '../../src/domain/exceptions.js'

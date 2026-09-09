@@ -598,4 +598,4 @@ the page's HTML.
 | Mounting, the origin filter, the body limit, the last net | `backend/src/infrastructure/api-server.js`, `http.js` |
 | The `{code, detail}` doctrine | `backend/conventions/this-repository.md` |
 | That two endpoints never share a `code` by accident | `backend/__tests__/infrastructure/refusal-codes.test.js` |
-| The step and phase vocabularies | `domain/value-objects/implementation-state.js`, `infrastructure/active-plans-route.js` |
+| The step and phase vocabularies | `domain/value-objects/implementation-state.ts`, `infrastructure/active-plans-route.js` |

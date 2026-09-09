@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../../src/application/queries/read-plan-progress.js'
 import { PlanProgress } from '../../src/domain/ports/plan-progress.js'
-import { PlanState } from '../../src/domain/value-objects/plan-state.js'
+import { PlanState } from '../../src/domain/value-objects/plan-state.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 
