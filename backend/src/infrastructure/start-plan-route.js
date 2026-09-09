@@ -1,6 +1,6 @@
 import { Answer, JsonBody, Refusal } from './http.js'
 import { Projection } from './projection.js'
-import { StartPlanParams } from '../application/actions/start-plan.js'
+import { StartPlanParams } from '../application/actions/start-plan.ts'
 import { UserStoryKey } from '../domain/value-objects/user-story-key.ts'
 import { UserStoryUrl } from '../domain/value-objects/user-story-url.ts'
 import { UserStoryReference } from '../domain/value-objects/user-story-reference.ts'
