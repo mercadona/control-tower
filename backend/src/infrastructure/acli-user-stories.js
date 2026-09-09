@@ -1,7 +1,7 @@
 import { isNoValueCell } from '../../../plugin/scripts/cells.js'
 import { UserStories } from '../domain/ports/user-stories.js'
 import { UserStory } from '../domain/value-objects/user-story.ts'
-import { UserStoryNotRead, UserStoryNotUnderstood } from '../domain/exceptions.js'
+import { UserStoryNotRead, UserStoryNotUnderstood } from '../domain/exceptions.ts'
 
 export class AcliUserStories extends UserStories {
   static BIN = 'acli'

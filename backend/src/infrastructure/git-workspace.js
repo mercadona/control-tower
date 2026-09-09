@@ -13,7 +13,7 @@ import { WorkspaceLocation } from '../domain/value-objects/workspace-location.ts
 import { WorkspaceSurvey } from '../domain/value-objects/workspace-survey.ts'
 import {
   WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood, CheckoutNotConfirmed,
-} from '../domain/exceptions.js'
+} from '../domain/exceptions.ts'
 
 export class SliceSeed {
   static RELATIVE_PATH = SLICE_REL_PATH

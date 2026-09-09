@@ -1,19 +1,24 @@
-export class LaunchStep {
-  static KEEP_PROBING = 'keep-probing'
-  static RESEND_THE_LINE = 'resend-the-line'
-  static GIVE_UP = 'give-up'
+export type LaunchStepValue = 'keep-probing' | 'resend-the-line' | 'give-up'
 
-  static declared() {
+export class LaunchStep {
+  static readonly KEEP_PROBING = 'keep-probing'
+  static readonly RESEND_THE_LINE = 'resend-the-line'
+  static readonly GIVE_UP = 'give-up'
+
+  static declared(): LaunchStepValue[] {
     return Object.values(LaunchStep)
   }
 }
 
 export class LaunchBudget {
-  constructor({ attempts, resends }) {
-    if (!Number.isInteger(attempts) || attempts < 1) {
+  readonly attempts: number
+  readonly resends: number
+
+  constructor({ attempts, resends }: { attempts: unknown, resends: unknown }) {
+    if (typeof attempts !== 'number' || !Number.isInteger(attempts) || attempts < 1) {
       throw new Error(`the probes of one send are a count of at least one, got ${JSON.stringify(attempts)}`)
     }
-    if (!Number.isInteger(resends) || resends < 0) {
+    if (typeof resends !== 'number' || !Number.isInteger(resends) || resends < 0) {
       throw new Error(`the resends of a launch are a count, got ${JSON.stringify(resends)}`)
     }
     this.attempts = attempts
@@ -21,19 +26,21 @@ export class LaunchBudget {
     Object.freeze(this)
   }
 
-  get probes() {
+  get probes(): number {
     return this.attempts * (this.resends + 1)
   }
 }
 
 export class LaunchPolicy {
-  constructor({ budget }) {
+  readonly budget: LaunchBudget
+
+  constructor({ budget }: { budget: LaunchBudget }) {
     this.budget = budget
     Object.freeze(this)
   }
 
-  afterProbing(probes) {
-    if (!Number.isInteger(probes) || probes < 1 || probes > this.budget.probes) {
+  afterProbing(probes: unknown): LaunchStepValue {
+    if (typeof probes !== 'number' || !Number.isInteger(probes) || probes < 1 || probes > this.budget.probes) {
       throw new Error(
         `a launch is probed from one up to ${this.budget.probes} times, got ${JSON.stringify(probes)}`
       )

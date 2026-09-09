@@ -1,6 +1,6 @@
 import { PlanProgress } from '../domain/ports/plan-progress.js'
 import { PlanState } from '../domain/value-objects/plan-state.ts'
-import { PlanProgressNotRead } from '../domain/exceptions.js'
+import { PlanProgressNotRead } from '../domain/exceptions.ts'
 
 export class PlanContractProgress extends PlanProgress {
   static PLANS = 'docs/superpowers/plans'

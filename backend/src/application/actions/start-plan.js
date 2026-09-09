@@ -1,7 +1,7 @@
 import { PlanBriefing } from '../../domain/value-objects/plan-briefing.ts'
 import { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
 import { PlanTarget } from '../../domain/value-objects/plan-target.ts'
-import { PlanFailure } from '../../domain/exceptions.js'
+import { PlanFailure } from '../../domain/exceptions.ts'
 
 export class StartPlanParams {
   constructor({ story, comment, targets }) {

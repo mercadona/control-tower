@@ -2,7 +2,7 @@ import { CmuxPlanAgents } from './cmux-plan-agents.js'
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import { PlanIssue } from '../domain/value-objects/plan-issue.ts'
 import { PlanWatch } from '../domain/value-objects/plan-watch.ts'
-import { PlanStoryFailure, WorkspaceFailure } from '../domain/exceptions.js'
+import { PlanStoryFailure, WorkspaceFailure } from '../domain/exceptions.ts'
 import { PlansInFlight } from '../domain/value-objects/plans-in-flight.ts'
 
 export class WorktreePlans {

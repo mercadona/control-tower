@@ -5,7 +5,7 @@ import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { ActivePlanPhase } from './active-plans-route.js'
 import {
   PlanFailure, PlanAgentNotResumed, PlanGoNotAnswered, GoNotRecorded,
-} from '../domain/exceptions.js'
+} from '../domain/exceptions.ts'
 
 export const ImplementRequestOutcome = Object.freeze({
   ACCEPTED: 'accepted',

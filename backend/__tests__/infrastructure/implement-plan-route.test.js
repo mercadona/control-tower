@@ -14,7 +14,7 @@ import {
 } from '../../src/infrastructure/implement-plan-route.js'
 import {
   PlanAgentNotResumed, PlanFailure, PlanGoNotAnswered, GoFailure, GoNotRecorded,
-} from '../../src/domain/exceptions.js'
+} from '../../src/domain/exceptions.ts'
 import { ActivePlans, ActivePlanPhase } from '../../src/infrastructure/active-plans-route.js'
 
 class ImplementPlanSpy {

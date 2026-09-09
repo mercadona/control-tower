@@ -14,7 +14,7 @@ import {
   PlanIssueNotClaimed,
   PlanAgentNotLaunched, PlanAgentNotNamed, WorkspaceNotPrepared, WorkspaceNotRead,
   WorkspaceNotUnderstood, CheckoutNotConfirmed,
-} from '../domain/exceptions.js'
+} from '../domain/exceptions.ts'
 
 export const PlanRequestOutcome = Object.freeze({
   ACCEPTED: 'accepted',

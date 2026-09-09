@@ -3,7 +3,7 @@ import { PlanContractProgress } from '../../src/infrastructure/plan-contract-pro
 import { PlanState } from '../../src/domain/value-objects/plan-state.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { PlanProgressNotRead } from '../../src/domain/exceptions.js'
+import { PlanProgressNotRead } from '../../src/domain/exceptions.ts'
 
 class ProgressDouble {
   static WORKTREE = '/repo/.worktrees/42'

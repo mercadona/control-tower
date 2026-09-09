@@ -21,7 +21,7 @@ import { UserStoryReference } from '../domain/value-objects/user-story-reference
 import {
   PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed, PlanGoNotAnswered,
   PlanChangesNotRead, PlanChangesNotUnderstood, PlanChangesNotAsked, PlanStoryNotRead, PlanStoryNotUnderstood,
-} from '../domain/exceptions.js'
+} from '../domain/exceptions.ts'
 import { Gh } from './gh.js'
 import { Projection } from './projection.js'
 

@@ -6,7 +6,7 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.ts'
-import { PlanStoryNotRead, WorkspaceNotRead } from '../../src/domain/exceptions.js'
+import { PlanStoryNotRead, WorkspaceNotRead } from '../../src/domain/exceptions.ts'
 import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.js'
 import { CmuxAnswer } from '../../../plugin/scripts/cmux.js'
 

@@ -1,5 +1,5 @@
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
-import { ImplementationProgressFailure } from '../domain/exceptions.js'
+import { ImplementationProgressFailure } from '../domain/exceptions.ts'
 import { ImplementationStep } from '../domain/value-objects/implementation-state.ts'
 
 export class ActivePlanRecovery {

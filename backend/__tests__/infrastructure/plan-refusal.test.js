@@ -4,7 +4,7 @@ import {
 } from '../../src/infrastructure/start-plan-route.js'
 import { ImplementCollapse } from '../../src/infrastructure/implement-plan-route.js'
 import { Refusal } from '../../src/infrastructure/http.js'
-import * as exceptions from '../../src/domain/exceptions.js'
+import * as exceptions from '../../src/domain/exceptions.ts'
 
 describe('PlanRefusal', () => {
   it('every_refusable_outcome_has_an_answer_so_adding_one_cannot_reach_the_client_as_a_crash', () => {

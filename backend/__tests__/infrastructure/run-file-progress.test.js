@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { RunFileProgress } from '../../src/infrastructure/run-file-progress.js'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ImplementationState, ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
-import { ImplementationProgressNotRead } from '../../src/domain/exceptions.js'
+import { ImplementationProgressNotRead } from '../../src/domain/exceptions.ts'
 
 const FENCE = '`'.repeat(3)
 const PLAN = [

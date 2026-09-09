@@ -3,12 +3,12 @@ import { readFileSync } from 'node:fs'
 import { GhPullRequests, OpenPullRequest } from '../../src/infrastructure/gh-pull-requests.js'
 import { Gh } from '../../src/infrastructure/gh.js'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.js'
-import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.js'
+import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.ts'
 import { SleepDouble } from '../sleep-double.js'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { PullRequestNotRead, PullRequestNotUnderstood } from '../../src/domain/exceptions.js'
+import { PullRequestNotRead, PullRequestNotUnderstood } from '../../src/domain/exceptions.ts'
 
 const DECLARED = JSON.parse(
   readFileSync(new URL('../fixtures/declared-gh-pull-request-reviews.json', import.meta.url), 'utf8')

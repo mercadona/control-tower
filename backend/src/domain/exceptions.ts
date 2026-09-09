@@ -1,5 +1,5 @@
 export class PlanFailure extends Error {
-  constructor(reason) {
+  constructor(reason: string) {
     super(reason)
     this.name = new.target.name
   }

@@ -5,7 +5,7 @@ import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { PlanChangesNotRead, PlanAgentNotResumed, SliceNotReopened } from '../../src/domain/exceptions.js'
+import { PlanChangesNotRead, PlanAgentNotResumed, SliceNotReopened } from '../../src/domain/exceptions.ts'
 
 class WatchDouble {
   static LABEL = 'plan review watch'

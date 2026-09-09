@@ -1,6 +1,6 @@
 import { Harvest } from '../domain/ports/harvest.js'
 import { HarvestOutcome } from '../domain/value-objects/harvest-outcome.ts'
-import { HarvestNotRead, HarvestNotUnderstood } from '../domain/exceptions.js'
+import { HarvestNotRead, HarvestNotUnderstood } from '../domain/exceptions.ts'
 
 export class DispatchCheckHarvest extends Harvest {
   static COMMAND = 'dispatch-check --collect'

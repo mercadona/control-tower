@@ -8,8 +8,8 @@ import {
   ProgressRequestOutcome, ProgressRefusal, ProgressCollapse,
 } from '../../src/infrastructure/implement-progress-route.js'
 import { ImplementationState, ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
-import { ImplementationProgressNotRead } from '../../src/domain/exceptions.js'
-import * as exceptions from '../../src/domain/exceptions.js'
+import { ImplementationProgressNotRead } from '../../src/domain/exceptions.ts'
+import * as exceptions from '../../src/domain/exceptions.ts'
 
 class ReadImplementationProgressSpy {
   constructor() {
