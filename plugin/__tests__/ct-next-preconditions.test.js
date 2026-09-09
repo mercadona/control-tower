@@ -339,7 +339,7 @@ describe('ct-next --dry-run — the kickoff reads as PROSE (D4, defect 3)', () =
     // this test defends does NOT change —the dry-run has to show literally what
     // would be executed, with no trimming— only where it lives changes.
     expect(r.out).toMatch(/cmux new-workspace --name .*--command "\. '.*launch\.sh'"/)
-    expect(r.out).toMatch(/script de arranque que cmux sourcearía/)
+    expect(r.out).toMatch(/start-up script cmux would source/)
     expect(r.out).toMatch(/^claude --dangerously-skip-permissions '/m)
   })
 })

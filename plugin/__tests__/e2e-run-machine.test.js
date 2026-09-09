@@ -99,7 +99,7 @@ describe('the transitions of the e2e step', () => {
   })
 
   it('CORRECTIONS_ORDERED THROWS: the pair the table does not describe is not interpreted', () => {
-    expect(() => after(enE2e(), OUTCOMES.CORRECTIONS_ORDERED)).toThrow(/transición imposible/)
+    expect(() => after(enE2e(), OUTCOMES.CORRECTIONS_ORDERED)).toThrow(/impossible transition/)
   })
 
   it('the run that comes in is never touched', () => {
@@ -116,6 +116,6 @@ describe('the transitions of the e2e step', () => {
     const parado = enE2e()
     const r = deliveredRun(JSON.stringify({ ...parado, issue: 4 }), 4)
     expect(r.ok).toBe(false)
-    expect(r.why).toMatch(/no está entregado/)
+    expect(r.why).toMatch(/is not delivered/)
   })
 })

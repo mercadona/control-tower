@@ -66,8 +66,8 @@ describe('ct-next — classifies the claim by the dispatch-check CODE, not by it
     })
     expect(r.out).toMatch(/could not claim — infrastructure failure/)
     expect(r.out).toMatch(/carrying on with the rest of this batch/)
-    expect(r.out).toMatch(/lanzado #43/)
-    expect(r.out).toMatch(/lanzad[oa]s? 1.*2/i)
+    expect(r.out).toMatch(/launched #43/)
+    expect(r.out).toMatch(/launched 1.*2/i)
     expect(r.code).toBe(0)
     const gitLogTxt = readFileSync(gitLog, 'utf8')
     expect(gitLogTxt).not.toMatch(/worktree add -b feat\/42/)
@@ -102,7 +102,7 @@ describe('ct-next — classifies the claim by the dispatch-check CODE, not by it
     expect(r.out).toMatch(/dispatch-check returned exit 4 for #42/)
     expect(r.out).toMatch(/stuck at status:in-progress with nobody working on it/)
     expect(r.out).toMatch(/Aborting the whole batch/)
-    expect(r.out).not.toMatch(/lanzado #43/) // it NEVER gets as far as trying the next candidate
+    expect(r.out).not.toMatch(/launched #43/) // it NEVER gets as far as trying the next candidate
     expect(r.code).toBe(1)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
@@ -116,7 +116,7 @@ describe('ct-next — classifies the claim by the dispatch-check CODE, not by it
 // them: ever since an unverified launch stopped counting as launched, exit 3
 // could be reached with the claim written, the branch and the worktree
 // created and `cmux new-workspace` at exit 0 — while the text asserted
-// "Nada quedó a medias ni bloqueado — reintenta más tarde".
+// "Nothing was left half-finished or stuck — try again later".
 //
 // The contract now reads like this, and these tests pin it down:
 //   3 = there was a batch, zero launches, and NOTHING was left half done (all
@@ -160,7 +160,7 @@ describe('ct-next — exit 3 and exit 1 are told apart by whether ANYTHING WAS L
       FAKE_CMUX_SKIP_STATE_SUBSTR: '#42',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/1 de los 1 slice\(s\) seleccionados quedaron LANZADOS SIN VERIFICAR/)
+    expect(r.out).toMatch(/1 of the 1 selected slice\(s\) were left LAUNCHED WITHOUT VERIFICATION/)
     // The claim and the worktree DO exist: that is why it cannot be a 3.
     expect(readFileSync(join(repoRoot, 'gh-argv'), 'utf8')).toMatch(/issue edit 42 .*--add-label status:in-progress/)
     expect(readFileSync(join(repoRoot, 'git-log'), 'utf8')).toMatch(/worktree add -b feat\/42/)

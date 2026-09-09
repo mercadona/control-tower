@@ -23,20 +23,20 @@ describe('the happy path', () => {
     // §3.7: the last commit no longer delivers — it opens Phase B (Task 8):
     // before the global verification, the branch has to be reconciled with its
     // base.
-    expect(r.stdout).toMatch(/paso reconcile/)
+    expect(r.stdout).toMatch(/step reconcile/)
     expect(commits()).toBe(3)
-    expect(log()).toMatch(/the first one \(#7, tarea 1\/2\)/)
-    expect(log()).toMatch(/the second one \(#7, tarea 2\/2\)/)
+    expect(log()).toMatch(/the first one \(#7, task 1\/2\)/)
+    expect(log()).toMatch(/the second one \(#7, task 2\/2\)/)
   })
 
   it('the whole slice: tasks + global + slice judging, and it delivers', () => {
     const r = sliceOk()
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/run delivered/)
-    expect(r.stdout).toMatch(/lista para la pull request/)
+    expect(r.stdout).toMatch(/ready for the pull request/)
     // 1 base + 2 tasks + 1 for the slice verdict, which gets a commit of its own.
     expect(commits()).toBe(4)
-    expect(log()).toMatch(/Veredicto del slice entero \(#7\)/)
+    expect(log()).toMatch(/Verdict of the whole slice \(#7\)/)
   })
 
   // What goes into the commit is what the task TOUCHED, measured by the
@@ -91,7 +91,7 @@ describe('the happy path', () => {
 
   it('it rejects paths from outside the worktree: the list is written by a model', () => {
     const r = ct('report', writeRaw(JSON.stringify({ paths: ['/etc/passwd'], summary: 'ups' })))
-    expect(r.stdout).toMatch(/informe descartado.*outside the worktree/)
+    expect(r.stdout).toMatch(/report discarded.*outside the worktree/)
     expect(runState().discards).toBe(1)
   })
 })
@@ -141,7 +141,7 @@ describe('the complete queue: commit → global → slice-verdict → e2e → DE
     expect(deliveredRun(readFileSync(join(repo, '.agent', 'run-7.json'), 'utf8'), 7)).toEqual({ ok: true })
     // 1 base + 2 tasks + slice verdict + e2e report.
     expect(commits()).toBe(5)
-    expect(log()).toMatch(/informe de e2e del issue #7/)
+    expect(log()).toMatch(/e2e report of issue #7/)
     // And the slice verdict's commit was COUNTED: that is what lets the next
     // process cross the commits without the sums going wrong.
     expect(runState().sliceCommits).toBe(1)
@@ -154,9 +154,9 @@ describe('the complete queue: commit → global → slice-verdict → e2e → DE
     const r = ct('e2e', e2eReport())
     expect(r.status).toBe(0)                      // the report is valid: it delivers
     expect(runState().closed).toBe('delivered')
-    expect(r.stderr).toMatch(/ajenas a la maquinaria \(colado\.txt\)/)
+    expect(r.stderr).toMatch(/foreign to the machinery \(colado\.txt\)/)
     expect(execFileSync('git', ['log', '--oneline', '--', 'colado.txt'], { cwd: repo, encoding: 'utf8' }).trim()).toBe('')
-    expect(log()).not.toMatch(/informe de e2e del issue #7/)
+    expect(log()).not.toMatch(/e2e report of issue #7/)
     // The report is left STAGED, as on the red path: it waits for whoever commits it.
     expect(execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: repo, encoding: 'utf8' }))
       .toMatch(/docs\/superpowers\/e2e\/7\.md/)

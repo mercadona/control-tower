@@ -11,7 +11,7 @@ import { makeSpecDir, specUrl } from './fixtures/spec-repo.js'
 //
 //   serious 2: ALL issues are born with `status:backlog` (groom.js#buildLabels)
 //   and the dispatcher only looks at `status:ready` — so running groom and
-//   then `/ct-next` straight after produces "no hay slices despachables" over
+//   then `/ct-next` straight after produces "there is no dispatchable slice" over
 //   six freshly created issues. The groom did not mention it anywhere in its
 //   output.
 //

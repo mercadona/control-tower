@@ -144,7 +144,7 @@ describe('dispatch-check --dry-run', () => {
   it('a collision → exit 1', () => {
     const r = run(7, { candLabels: ['touches:db'], openIssues: [{ n: 5, labels: ['status:in-progress', 'touches:db'] }], readback: [] })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/COLLISION|colisión/i)
+    expect(r.out).toMatch(/COLLISION|collision/i)
   })
   it('no collision and we win the race → exit 0 (claimed)', () => {
     const r = run(3, { candLabels: ['touches:db'], openIssues: [], readback: [{ n: 3, labels: ['status:in-progress', 'touches:db'] }] })
@@ -206,7 +206,7 @@ describe('dispatch-check --dry-run', () => {
     } catch (e) {
       threw = true
       expect(e.status).toBe(7)
-      expect((e.stdout || '') + (e.stderr || '')).toMatch(/no está entregado.*tarea 1\/3.*judge/)
+      expect((e.stdout || '') + (e.stderr || '')).toMatch(/is not delivered.*task 1\/3.*judge/)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -255,7 +255,7 @@ describe('dispatch-check <issue#> — strict parsing (D4, defect 2)', () => {
       } catch (e) {
         threw = true
         expect(e.status).toBe(2)
-        expect((e.stdout || '') + (e.stderr || '')).toMatch(/<issue#> inválido/)
+        expect((e.stdout || '') + (e.stderr || '')).toMatch(/<issue#> invalid/)
       }
       expect(threw).toBe(true)
     })
@@ -290,7 +290,7 @@ describe('dispatch-check — T11 fix round 3 (--settle-ms/CT_CLAIM_SETTLE_MS rej
     } catch (e) {
       threw = true
       expect(e.status).toBe(2)
-      expect((e.stdout || '') + (e.stderr || '')).toMatch(/--settle-ms.*ya no existen?/i)
+      expect((e.stdout || '') + (e.stderr || '')).toMatch(/--settle-ms.*no longer exist/i)
     }
     expect(threw).toBe(true)
   })
@@ -303,7 +303,7 @@ describe('dispatch-check — T11 fix round 3 (--settle-ms/CT_CLAIM_SETTLE_MS rej
     } catch (e) {
       threw = true
       expect(e.status).toBe(2)
-      expect((e.stdout || '') + (e.stderr || '')).toMatch(/--settle-ms.*ya no existen?/i)
+      expect((e.stdout || '') + (e.stderr || '')).toMatch(/--settle-ms.*no longer exist/i)
     }
     expect(threw).toBe(true)
   })
@@ -390,8 +390,8 @@ describe('dispatch-check — fix review round 1 (Critical 2: gh() failures leave
     })
     rmSync(dir, { recursive: true, force: true })
     expect(r.code).toBe(3)
-    expect(r.out).toMatch(/no se puede confirmar la carrera/i)
-    expect(r.out).toMatch(/revertido a status:ready/i)
+    expect(r.out).toMatch(/the race cannot be confirmed/i)
+    expect(r.out).toMatch(/reverted to status:ready/i)
   })
 
   it('a lost race and the revert fails too → it warns of the lost race AND of the orphan lock with the manual command, exit 4 (orphan)', () => {
@@ -413,8 +413,8 @@ describe('dispatch-check — fix review round 1 (Critical 2: gh() failures leave
     })
     rmSync(dir, { recursive: true, force: true })
     expect(r.code).toBe(4)
-    expect(r.out).toMatch(/carrera perdida/i)
-    expect(r.out).toMatch(/ATTENTION.*#17.*bloqueado/is)
+    expect(r.out).toMatch(/race lost/i)
+    expect(r.out).toMatch(/ATTENTION.*#17.*stuck/is)
     expect(r.out).toMatch(/gh issue edit 17 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
   })
 
@@ -434,7 +434,7 @@ describe('dispatch-check — fix review round 1 (Critical 2: gh() failures leave
     }, dir)
     rmSync(dir, { recursive: true, force: true })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no se pudo liberar #19/i)
+    expect(r.out).toMatch(/#19 could not be released/i)
   })
 })
 
@@ -460,7 +460,7 @@ describe('dispatch-check — the T11 CT_CLAIM_PRECLAIM_DELAY_MS hook', () => {
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[]]),
     })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/CT_CLAIM_PRECLAIM_DELAY_MS inválido/)
+    expect(r.out).toMatch(/CT_CLAIM_PRECLAIM_DELAY_MS invalid/)
   })
 
   it('a negative CT_CLAIM_PRECLAIM_DELAY_MS → exit 2', () => {
@@ -470,7 +470,7 @@ describe('dispatch-check — the T11 CT_CLAIM_PRECLAIM_DELAY_MS hook', () => {
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[]]),
     })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/CT_CLAIM_PRECLAIM_DELAY_MS inválido/)
+    expect(r.out).toMatch(/CT_CLAIM_PRECLAIM_DELAY_MS invalid/)
   })
 
   it('an explicit "0" from the environment → valid (it is not an error), the same result as absent', () => {
@@ -611,7 +611,7 @@ describe('dispatch-check — the T11 CT_CLAIM_PRECLAIM_DELAY_MS hook', () => {
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[]]),
     })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/CT_CLAIM_PRECLAIM_DELAY_MS inválido/)
+    expect(r.out).toMatch(/CT_CLAIM_PRECLAIM_DELAY_MS invalid/)
   })
 
   // The exact limit (60000ms) must keep being valid — it is checked through
@@ -715,7 +715,7 @@ describe('dispatch-check --release — the base of the diff is the real cut (sli
     // run.
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/released #9.*in-review/)
-    expect(r.stderr).not.toContain('no existe en la base')
+    expect(r.stderr).not.toContain("does not exist in the branch's base")
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -728,7 +728,7 @@ describe('dispatch-check --release — the base of the diff is the real cut (sli
     // do.
     expect(r.status).toBe(6)
     expect(r.stderr).toContain('citado.txt')
-    expect(r.stderr).toContain('no existe en la base')
+    expect(r.stderr).toContain("does not exist in the branch's base")
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -758,7 +758,7 @@ describe('dispatch-check --release — the base of the diff is the real cut (sli
     expect(r.stderr).toContain('base_sha:')
     // --release consults the base TWICE (F22 cleanup + F-jjponz-1 plan); the
     // warning comes out ONCE.
-    expect(r.stderr.match(/AVISO:/g)).toHaveLength(1)
+    expect(r.stderr.match(/WARNING:/g)).toHaveLength(1)
     rmSync(dir, { recursive: true, force: true })
   })
 })
@@ -773,7 +773,7 @@ describe('dispatch-check --release — the `base:` guardrail does not count char
     expect(r.status).toBe(0)               // it warns, it does not abort (just as the 40-hex one)
     expect(r.stderr).toContain('gh pr create')
     expect(r.stderr).toContain('base_sha:')
-    expect(r.stderr.match(/AVISO:/g)).toHaveLength(1)   // two consultations, one warning
+    expect(r.stderr.match(/WARNING:/g)).toHaveLength(1)   // two consultations, one warning
     rmSync(dir, { recursive: true, force: true })
   })
 

@@ -177,8 +177,8 @@ describe('what cannot bring the watch down', () => {
     // And why it is by directory and not by name: it is not created by the loop.
     expect(r.stdout).toMatch(/no la crea el loop/)
     // The safety net, said out loud: the warning is lost, the work is not.
-    expect(r.stdout).toMatch(/cosecha pendiente/)
-    expect(r.stdout).toMatch(/No se ha perdido trabajo/)
+    expect(r.stdout).toMatch(/pending harvest/)
+    expect(r.stdout).toMatch(/No work has been lost/)
   })
 
   // -------------------------------------------------------------------------

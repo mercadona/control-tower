@@ -110,7 +110,7 @@ class CtYardstick {
       }
     })
     const missing = PluginYardstick.missingDocuments(documents)
-    if (missing.length) throw new Error(`la vara de ct no se puede leer: falta o está vacío ${missing.join(', ')} en ${join(pluginRoot, PluginYardstick.DIRECTORY)}`)
+    if (missing.length) throw new Error(`ct's yardstick cannot be read: ${missing.join(', ')} is missing or empty in ${join(pluginRoot, PluginYardstick.DIRECTORY)}`)
     return PluginYardstick.composeSection(documents)
   }
 }
@@ -135,7 +135,7 @@ class Program {
       yardstick = CtYardstick.read(BenchArguments.PLUGIN_ROOT)
     } catch (error) {
       if (!(error instanceof MalformedAgentDefinition || error instanceof CorruptCase || error instanceof UnknownCase || error.code === 'ENOENT' || /vara de ct|cases directory/.test(error.message))) throw error
-      console.error(`no se puede montar el banco: ${error.message}`)
+      console.error(`the bench cannot be set up: ${error.message}`)
       return ExitCode.PRECONDITION
     }
     const workspaceRoot = mkdtempSync(join(tmpdir(), 'judge-bench-'))
@@ -155,7 +155,7 @@ class Program {
       return ExitCode.ALL_HIT
     }
     if (!ClaudeRunner.isInstalled()) {
-      console.error(`no se puede montar el banco: \`${ClaudeRunner.BINARY}\` no está en el PATH o no responde a --version.`)
+      console.error(`the bench cannot be set up: \`${ClaudeRunner.BINARY}\` is not on the PATH or does not answer --version.`)
       return ExitCode.PRECONDITION
     }
     console.error(`judge bench: ${cases.length} case(s) × ${args.runs} run(s); working directory ${workspaceRoot}`)

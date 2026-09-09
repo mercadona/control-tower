@@ -75,13 +75,13 @@ describe('D5/B — cmux renames ONLY `current_directory`', () => {
       FAKE_CMUX_CWD_FIELD_RENAMED: '1',
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/lanzados 1\/1 slice\(s\) seleccionados de esta tanda/)
-    expect(r.out).toMatch(/la sesión de cmux con el título esperado EXISTE, pero cmux no expuso un directorio legible/)
+    expect(r.out).toMatch(/launched 1\/1 of the slice\(s\) selected in this batch/)
+    expect(r.out).toMatch(/the cmux session with the expected title EXISTS, but cmux exposed no readable directory/)
     // Never the false alarm, nor the "verificado" that cannot be asserted
     // either.
-    expect(r.out).not.toMatch(/la sesión NO está en/)
-    expect(r.out).not.toMatch(/NO se cuenta como lanzado con éxito/)
-    expect(r.out).not.toMatch(/verificado: la sesión cmux está corriendo/)
+    expect(r.out).not.toMatch(/the session is NOT at/)
+    expect(r.out).not.toMatch(/It does NOT count as successfully launched/)
+    expect(r.out).not.toMatch(/verified: the cmux session is running/)
     expect(r.out).not.toMatch(/LANZADOS SIN VERIFICAR/)
   })
 
@@ -94,7 +94,7 @@ describe('D5/B — cmux renames ONLY `current_directory`', () => {
       FAKE_CMUX_WRONG_CWD_SUBSTR: '#90',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/la sesión NO está en/)
+    expect(r.out).toMatch(/the session is NOT at/)
   })
 })
 
@@ -120,7 +120,7 @@ describe('D5/A — exit 3 only when nothing really was left half-done', () => {
       ]),
     })
     expect(r.code).toBe(3)
-    expect(r.out).toMatch(/lanzados 0\/1 slice\(s\) seleccionados de esta tanda/)
+    expect(r.out).toMatch(/launched 0\/1 of the slice\(s\) selected in this batch/)
     expect(r.out).toMatch(/No claim was written, no branch and no worktree was created, and there is nothing to clean up by hand/)
     expect(r.out).not.toMatch(/LANZADOS SIN VERIFICAR/)
     // And nothing really was left behind: no claim written, no worktree
@@ -215,7 +215,7 @@ describe('D5/G — the window between the claim and the worktree no longer leave
     expect(r.out).toMatch(/boom-de-prueba/)
     expect(r.out).toMatch(/at file:/) // the stack trace is not hidden
     expect(r.out).toMatch(/#90 had a claim \(status:in-progress\) with no completed worktree/)
-    expect(r.out).toMatch(/claim de #90 revertido automáticamente a status:ready/)
+    expect(r.out).toMatch(/claim of #90 reverted automatically to status:ready/)
     const argv = readOrEmpty(join(repoRoot, 'gh-argv'))
     // EXACTLY one claim and EXACTLY one revert — neither zero (the bug), nor
     // two.
@@ -233,7 +233,7 @@ describe('D5/G — the window between the claim and the worktree no longer leave
       FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready --remove-label status:in-progress',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATTENTION: no se pudo revertir automáticamente el claim de #90/)
+    expect(r.out).toMatch(/ATTENTION: the claim of #90 could not be reverted automatically/)
     expect(r.out).toMatch(/gh issue edit 90 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
   })
 })
@@ -470,15 +470,15 @@ describe('D5/C — a SIGINT that arrives with the work already done', () => {
     expect(code).toBe(130)
     // The work already done is kept and reported: the summary comes out
     // BEFORE the acknowledgement of the signal.
-    expect(out).toMatch(/lanzados 1\/1 slice\(s\) seleccionados de esta tanda/)
+    expect(out).toMatch(/launched 1\/1 of the slice\(s\) selected in this batch/)
     expect(readOrEmpty(gitLog)).toMatch(/worktree add -b feat\/90/)
     // And the signal is acknowledged, with the right nuance: it interrupted
     // nothing.
-    expect(out).toMatch(/SIGINT recibido, pero la tanda YA había terminado de procesarse cuando llegó/)
-    expect(out).toMatch(/no se interrumpe ni se deshace nada de lo ya hecho/)
+    expect(out).toMatch(/SIGINT received, but the batch had ALREADY finished processing when it arrived/)
+    expect(out).toMatch(/nothing already done is interrupted or undone/)
     // The claim of a slice that launched fine is NOT reverted.
     expect(readOrEmpty(join(repoRoot, 'gh-argv'))).not.toMatch(/issue edit 90 --repo o\/r --add-label status:ready/)
-    expect(out).toMatch(/no había ningún claim propio pendiente de revertir/)
+    expect(out).toMatch(/there was no claim of our own pending a revert/)
   })
 
   // A NOTE about what is NOT tested here, and why: the same final yield point

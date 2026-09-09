@@ -77,7 +77,7 @@ print_section() {
   local contenido
   contenido=$(extract_section "$heading")
   if [ -z "$contenido" ]; then
-    echo "(sección '${heading}' no encontrada en el plan)"
+    echo "(section '${heading}' not found in the plan)"
   else
     printf '%s\n' "$contenido"
   fi

@@ -141,7 +141,7 @@ describe('F22 — the hooks read by precedence', () => {
     writeFileSync(join(dir, STATE_REL_PATH), `---\ntask: coordinadora\nlast_commit: ${newHead}\n---\n# c\n`)
     const out = runHook(stopHook, dir)
     expect(out.decision).toBe('block')
-    expect(out.reason).toContain('se ha quedado atrás')
+    expect(out.reason).toContain('has fallen behind')
     rmSync(dir, { recursive: true, force: true })
   })
 })
@@ -359,7 +359,7 @@ function runGateTest(repoRoot) {
   // 1. Nothing is dispatched.
   expect(r.status).not.toBe(0)
   // 2. The reason is the one the effect door prints — not a generic failure.
-  expect(out).toContain('SIGUE siendo visible para git')
+  expect(out).toContain('is STILL visible to git')
   // 3. The worktree was cleaned up, not left orphaned.
   expect(existsSync(join(repoRoot, '.worktrees', '1'))).toBe(false)
   // 4. And the claim reverted: the fake-gh recorded the real call back to
@@ -548,7 +548,7 @@ describe('F22 — the dispatcher does not mistake the coordinator blocked for th
 
     // It says it has NOT checked, and names the file that is missing…
     expect(r.stderr).toContain('.agent/SLICE.md')
-    expect(r.stderr).toContain('NO se ha comprobado')
+    expect(r.stderr).toContain('has NOT been checked')
     // …and it NEVER asserts that the slice is blocked by citing the reason of
     // the epic, on NEITHER of the two channels.
     expect(r.stderr).not.toContain('esperando una decisión de producto')
@@ -976,8 +976,8 @@ describe('F22 — --release refuses if the branch carries a state file', () => {
       cwd: wt, encoding: 'utf8',
     })
     expect(r.status).toBe(5)
-    expect(r.stderr).toContain('EL MISMO commit que HEAD')
-    expect(r.stderr).toContain('NO se ha podido comprobar')
+    expect(r.stderr).toContain('THE SAME commit as HEAD')
+    expect(r.stderr).toContain('could NOT be checked')
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -1003,8 +1003,8 @@ describe('F22 — --release refuses if the branch carries a state file', () => {
       cwd: dir, encoding: 'utf8',
     })
     expect(r.status).toBe(5)
-    expect(r.stderr).toContain('no se pudo determinar la base')
-    expect(r.stderr).toContain('NO se ha podido comprobar')
+    expect(r.stderr).toContain('the base of this branch could not be determined')
+    expect(r.stderr).toContain('could NOT be checked')
     rmSync(dir, { recursive: true, force: true })
   })
 })

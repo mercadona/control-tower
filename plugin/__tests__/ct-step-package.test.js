@@ -67,7 +67,7 @@ describe('the review package is single-use: the verdict that reads it consumes i
     ct('report', writeReport(['uno.txt']))
     ct('controls')
     const r1 = judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'mal', path: 'uno.txt', line: 1 }]))
-    expect(r1.stdout).toMatch(/veredicto FAIL/)
+    expect(r1.stdout).toMatch(/verdict FAIL/)
     expect(runState().step).toBe('implement')      // the veto hands the task back
     expect(runState().judgeRetries).toBe(1)
     // The verdict took its input away with it. This is the line that was RED
@@ -82,8 +82,8 @@ describe('the review package is single-use: the verdict that reads it consumes i
     ct('controls')
     const r2 = ct('verdict', writeVerdict('PASS'))
     expect(r2.status).toBe(0)                    // a discard, not a closure
-    expect(r2.stdout).toMatch(/veredicto descartado: el paquete de revisión no existe/)
-    expect(r2.stdout).toContain('El paquete es de UN SOLO USO')
+    expect(r2.stdout).toMatch(/verdict discarded: the review package does not exist/)
+    expect(r2.stdout).toContain('The package is SINGLE USE')
     expect(runState().step).toBe('judge')          // does NOT advance: it asks again
     expect(runState().discards).toBe(1)
     expect(commits()).toBe(1)                    // the stale PASS commits nothing
@@ -103,7 +103,7 @@ describe('the review package is single-use: the verdict that reads it consumes i
     // And the honest path stays open: `next` regenerates the package from the
     // NEW index, the judge sees it, and the PASS gets through.
     const r3 = judgeTask(writeVerdict('PASS'))
-    expect(r3.stdout).toMatch(/veredicto PASS/)
+    expect(r3.stdout).toMatch(/verdict PASS/)
     expect(runState().step).toBe('commit')
     expect(ct('commit').status).toBe(0)
     expect(commits()).toBe(2)
@@ -116,7 +116,7 @@ describe('the review package is single-use: the verdict that reads it consumes i
     const before = readFileSync(taskPackage(), 'utf8')
 
     const r1 = ct('verdict', writeRaw('esto no es json'))
-    expect(r1.stdout).toMatch(/veredicto descartado: no se pudo leer/)
+    expect(r1.stdout).toMatch(/verdict discarded: the verdict at/)
     expect(runState().step).toBe('judge')
     expect(runState().discards).toBe(1)
     expect(existsSync(taskPackage())).toBe(true)
@@ -128,7 +128,7 @@ describe('the review package is single-use: the verdict that reads it consumes i
     // honest judge copies the SAME token (Slice 11): that is why it is sealed
     // here and not before writing it.
     const r2 = ct('verdict', seal(writeVerdict('PASS'), taskPackage()))
-    expect(r2.stdout).toMatch(/veredicto PASS/)
+    expect(r2.stdout).toMatch(/verdict PASS/)
     expect(runState().step).toBe('commit')
     expect(existsSync(taskPackage())).toBe(false)             // accepted: now it really is spent
   })
@@ -147,7 +147,7 @@ describe('the review package is single-use: the verdict that reads it consumes i
     ct('next')
     const before = readFileSync(slicePackage(), 'utf8')
 
-    expect(ct('slice-verdict', writeRaw('ni json ni nada')).stdout).toMatch(/veredicto de slice descartado/)
+    expect(ct('slice-verdict', writeRaw('ni json ni nada')).stdout).toMatch(/slice verdict discarded/)
     expect(runState().step).toBe('slice-judge')
     expect(existsSync(slicePackage())).toBe(true)
     expect(readFileSync(slicePackage(), 'utf8')).toBe(before)
@@ -189,7 +189,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     expect(token).toBe(createHash('sha256').update(diff, 'utf8').digest('hex'))
     expect(readFileSync(taskPackage(), 'utf8').split('\n')[1]).toBe(`Review token: ${token}`)
 
-    expect(ct('verdict', seal(writeVerdict('PASS'), taskPackage())).stdout).toMatch(/veredicto PASS/)
+    expect(ct('verdict', seal(writeVerdict('PASS'), taskPackage())).stdout).toMatch(/verdict PASS/)
     expect(runState().step).toBe('commit')
     expect(ct('commit').status).toBe(0)
     // The token travels in the pull request's verdict and in its row.
@@ -206,7 +206,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     ct('report', writeReport(['uno.txt']))
     ct('controls')
     const v = writeVerdict('PASS', [{ severity: 'medium', what: 'falta un caso', path: 'uno.txt', line: 1 }])
-    expect(judgeTask(v).stdout).toMatch(/veredicto PASS/)
+    expect(judgeTask(v).stdout).toMatch(/verdict PASS/)
     expect(runState().step).toBe('implement')
 
     // The implementer changes the code and the conductor obeys ONLY half the
@@ -219,8 +219,8 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     ct('next')
     const r = ct('verdict', v)
     expect(r.status).toBe(0)                     // a discard, not a closure
-    expect(r.stdout).toMatch(/veredicto descartado: el veredicto no es de este paquete/)
-    expect(r.stdout).toContain('REDESPACHA al juez')
+    expect(r.stdout).toMatch(/verdict discarded: the verdict does not belong to this package/)
+    expect(r.stdout).toContain('REDISPATCH the judge')
     expect(runState().step).toBe('judge')          // does NOT advance
     expect(runState().discards).toBe(1)            // and it counts towards MAX_DISCARDS
     expect(commits()).toBe(1)                    // the recycled verdict commits nothing
@@ -236,7 +236,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
 
     // And the honest path stays open: the judge is redispatched, and copies
     // the token of the NEW package.
-    expect(judgeTask(writeVerdict('PASS')).stdout).toMatch(/veredicto PASS/)
+    expect(judgeTask(writeVerdict('PASS')).stdout).toMatch(/verdict PASS/)
     expect(runState().step).toBe('commit')
   })
 
@@ -244,7 +244,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     ct('report', writeReport(['uno.txt']))
     ct('controls')
     ct('next')
-    expect(ct('verdict', writeRaw('esto no es json')).stdout).toMatch(/veredicto descartado: no se pudo leer/)
+    expect(ct('verdict', writeRaw('esto no es json')).stdout).toMatch(/verdict discarded: the verdict at/)
     expect(existsSync(taskPackage())).toBe(true)   // the discard still does not consume
 
     // THE GAP: the implementer touches the file and RE-STAGES it. The `git
@@ -259,7 +259,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     // through.
     const r = ct('verdict', seal(writeVerdict('PASS'), taskPackage()))
     expect(r.status).toBe(0)
-    expect(r.stdout).toMatch(/veredicto descartado: el paquete de revisión ya no describe el código de ahora/)
+    expect(r.stdout).toMatch(/verdict discarded: the review package no longer describes the code as it is now/)
     expect(runState().step).toBe('judge')
     expect(runState().discards).toBe(2)
     expect(commits()).toBe(1)
@@ -271,7 +271,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     // The honest path: `next` regenerates the package from the index of NOW
     // and the PASS gets through over the code that is really going to be
     // committed.
-    expect(judgeTask(writeVerdict('PASS')).stdout).toMatch(/veredicto PASS/)
+    expect(judgeTask(writeVerdict('PASS')).stdout).toMatch(/verdict PASS/)
     expect(runState().step).toBe('commit')
   })
 
@@ -282,9 +282,9 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     writeFileSync(join(repo, 'uno.txt'), 'otra cosa\n')
     execFileSync('git', ['add', 'uno.txt'], { cwd: repo })
     const r = ct('verdict', writeRaw('esto tampoco es json'))
-    expect(r.stdout).toMatch(/ya no describe el código de ahora/)
-    expect(r.stdout).not.toMatch(/no se pudo leer/)
-    expect(judgeRows()[0].why).toMatch(/ya no describe el código de ahora/)
+    expect(r.stdout).toMatch(/no longer describes the code as it is now/)
+    expect(r.stdout).not.toMatch(/could not be read/)
+    expect(judgeRows()[0].why).toMatch(/no longer describes the code as it is now/)
   })
 
   it('the legitimate retry over unreadable JSON still gets through without going via next', () => {
@@ -295,10 +295,10 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     ct('controls')
     ct('next')
     const before = readFileSync(taskPackage(), 'utf8')
-    expect(ct('verdict', writeRaw('nada de json')).stdout).toMatch(/descartado/)
+    expect(ct('verdict', writeRaw('nada de json')).stdout).toMatch(/discarded/)
     expect(readFileSync(taskPackage(), 'utf8')).toBe(before)
     const r = ct('verdict', seal(writeVerdict('PASS'), taskPackage()))
-    expect(r.stdout).toMatch(/veredicto PASS/)
+    expect(r.stdout).toMatch(/verdict PASS/)
     expect(runState().discards).toBe(1)             // the retry did not spend a second discard
     expect(existsSync(taskPackage())).toBe(false)
   })
@@ -313,7 +313,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     ct('next')
     const r = ct('verdict', writeVerdict('PASS'))    // nobody seals it: the judge does not write the token
     expect(r.status).toBe(0)
-    expect(r.stdout).toMatch(/veredicto PASS/)
+    expect(r.stdout).toMatch(/verdict PASS/)
     expect(runState().step).toBe('commit')
     expect(runState().discards ?? 0).toBe(0)
     // And what gets committed and what gets measured carry the token of the
@@ -331,7 +331,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     const p = join(repo, 'ajeno.json')
     writeFileSync(p, JSON.stringify({ ruling: 'PASS', rubric: fullRubric(), findings: [], review_token: 'f'.repeat(64) }))
     const r = ct('verdict', p)
-    expect(r.stdout).toMatch(/veredicto descartado: el veredicto no es de este paquete/)
+    expect(r.stdout).toMatch(/verdict discarded: the verdict does not belong to this package/)
     expect(runState().step).toBe('judge')
     expect(runState().discards).toBe(1)
   })
@@ -343,11 +343,11 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     const withoutHeader = readFileSync(taskPackage(), 'utf8').split('\n').filter((l) => !l.startsWith('Review token: ')).join('\n')
     writeFileSync(taskPackage(), withoutHeader)
     const r = ct('verdict', writeVerdict('PASS'))
-    expect(r.stdout).toMatch(/no declara su "Review token"/)
+    expect(r.stdout).toMatch(/does not declare its "Review token"/)
     expect(runState().step).toBe('judge')
     expect(runState().discards).toBe(1)
     // And it heals in one round: `next` regenerates it WITH a token.
-    expect(judgeTask(writeVerdict('PASS')).stdout).toMatch(/veredicto PASS/)
+    expect(judgeTask(writeVerdict('PASS')).stdout).toMatch(/verdict PASS/)
   })
 
   it('THE SLICE TWIN: the token comes out of the RANGE diff and travels in the committed verdict', () => {
@@ -381,7 +381,7 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     const p = join(repo, 'sv.json')
     writeFileSync(p, JSON.stringify({ ruling: 'PASS', rubric: sliceRubric(), findings: [], review_token: 'f'.repeat(64) }))
     const r = ct('slice-verdict', p)
-    expect(r.stdout).toMatch(/veredicto de slice descartado: el veredicto no es de este paquete/)
+    expect(r.stdout).toMatch(/slice verdict discarded: the verdict does not belong to this package/)
     expect(runState().step).toBe('slice-judge')
     expect(runState().discards).toBe(1)
     expect(runState().closed ?? null).toBeNull()
@@ -394,12 +394,12 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     // content different. Without the token, this gets through.
     taskOk('uno.txt'); taskOk('dos.txt'); ct('reconcile'); ct('global')
     ct('next')
-    expect(ct('slice-verdict', writeRaw('ni json ni nada')).stdout).toMatch(/descartado/)
+    expect(ct('slice-verdict', writeRaw('ni json ni nada')).stdout).toMatch(/discarded/)
     writeFileSync(join(repo, 'dos.txt'), 'dos, reescrito después del juicio\n')
     execFileSync('git', ['add', 'dos.txt'], { cwd: repo })
     execFileSync('git', ['commit', '-q', '--amend', '--no-edit'], { cwd: repo })
     const r = ct('slice-verdict', seal(writeSliceVerdict('PASS'), slicePackage()))
-    expect(r.stdout).toMatch(/ya no describe el código de ahora/)
+    expect(r.stdout).toMatch(/no longer describes the code as it is now/)
     expect(runState().closed ?? null).toBeNull()
     expect(runState().step).toBe('slice-judge')
   })

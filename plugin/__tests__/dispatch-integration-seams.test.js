@@ -101,13 +101,13 @@ describe('Seam A — an epic excluded by an order collision (D1) + the only rema
     })
 
     // D1: the collision warning is ALWAYS printed, never in silence.
-    expect(r.out).toMatch(/warning: colisión de orden.*#10.*#11|warning: colisión de orden.*#11.*#10/)
-    expect(r.out).toMatch(/EXCLUIDO de esta tanda/)
+    expect(r.out).toMatch(/warning: order collision.*#10.*#11|warning: order collision.*#11.*#10/)
+    expect(r.out).toMatch(/EXCLUDED from this batch/)
     // Only #20 was selected (epic 100's never competed).
     expect(r.out).toMatch(/selected for this batch.*#20/)
     // #20 collides live with #99 → it is skipped, zero launched.
     expect(r.out).toMatch(/skipping #20/)
-    expect(r.out).toMatch(/lanzad[oa]s? 0.*1/i)
+    expect(r.out).toMatch(/launched 0.*1/i)
     // Exit 3 — the same "retry later" as D2, NOT 0 (that would claim real
     // progress that never happened) nor 1 (nothing broke: the exclusion is not
     // a failure).
@@ -135,7 +135,7 @@ describe('Seam B — the order collision is the ONLY source of work in the repo 
       FAKE_GIT_LOG_FILE: gitLog,
     })
 
-    expect(r.out).toMatch(/warning: colisión de orden/)
+    expect(r.out).toMatch(/warning: order collision/)
     // planDispatch selected nothing — no dispatch-check is ever opened.
     expect(r.out).toMatch(/There is no issue at status:ready/)
     // exit 0: "nothing to do, and it has already been explained why" — the
@@ -182,10 +182,10 @@ describe('Seam C — a stray dep outside the section (D1, it warns and dispatche
 
     // D1: the stray dep warning is printed — the narrowing of the deps domain
     // is correct, but never in silence.
-    expect(r.out).toMatch(/warning: #50 tiene "merge-after #7" fuera de la sección/)
+    expect(r.out).toMatch(/warning: #50 has "merge-after #7" outside the/)
     // D2: 'stuck' aborts the WHOLE batch — the issue is left orphaned.
-    expect(r.out).toMatch(/ATTENTION.*bloqueado en status:in-progress/is)
-    expect(r.out).not.toMatch(/lanzado #50/)
+    expect(r.out).toMatch(/ATTENTION.*stuck at status:in-progress/is)
+    expect(r.out).not.toMatch(/launched #50/)
     // Neither of the two messages steps on the other: the stray dep warning
     // does not say the dispatch completed, and the ATTENTION does not say the
     // dependency blocked anything.
@@ -237,8 +237,8 @@ describe('Seam D — an order collision + malformed deps in another epic + a str
     })
 
     // D1: the three warnings about broken/narrowed data live together.
-    expect(r.out).toMatch(/warning: colisión de orden.*#10.*#11|warning: colisión de orden.*#11.*#10/)
-    expect(r.out).toMatch(/warning: #30 tiene "merge-after #9" fuera de la sección/)
+    expect(r.out).toMatch(/warning: order collision.*#10.*#11|warning: order collision.*#11.*#10/)
+    expect(r.out).toMatch(/warning: #30 has "merge-after #9" outside the/)
     // #20 (malformed) NEVER appears as selected nor launched — but it neither
     // aborts nor contaminates #30's result either: since #30 IS selected,
     // planDispatch never invokes explainNoSelection (it is only used when
@@ -247,11 +247,11 @@ describe('Seam D — an order collision + malformed deps in another epic + a str
     // or preventing #30's progress (behaviour verified here on purpose, not
     // assumed).
     expect(r.out).not.toMatch(/selected for this batch.*#20/)
-    expect(r.out).not.toMatch(/lanzado #20/)
+    expect(r.out).not.toMatch(/launched #20/)
     // #30 was indeed selected, claimed and launched successfully.
     expect(r.out).toMatch(/selected for this batch.*#30/)
-    expect(r.out).toMatch(/lanzado #30/)
-    expect(r.out).toMatch(/lanzad[oa]s? 1.*1/i)
+    expect(r.out).toMatch(/launched #30/)
+    expect(r.out).toMatch(/launched 1.*1/i)
     expect(r.code).toBe(0)
     const argv = readFileSync(argvLog, 'utf8')
     expect(argv).toMatch(/issue edit 30 --repo o\/r --add-label status:in-progress --remove-label status:ready/)

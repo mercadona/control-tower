@@ -184,8 +184,8 @@ describe('F13/H2 — the lock window reaches the merge, not the PR', () => {
     // the in-review did not count as a collision.
     const r = runCheck(['7', '--repo', 'o/r', '--dry-run'], { CT_CLAIM_FIXTURE: fixture })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/COLLISION: #7 choca con #5\[touches:db status:in-review\]/)
-    expect(r.out).toMatch(/retienen sus tokens hasta el merge/)
+    expect(r.out).toMatch(/COLLISION: #7 clashes with #5\[touches:db status:in-review\]/)
+    expect(r.out).toMatch(/they hold their tokens until the merge/)
   })
 })
 
@@ -204,7 +204,7 @@ describe('F13/H1 — a rejected PR can come back into the loop', () => {
     const r = runCheck(['9', '--repo', 'o/r', '--reopen', '--dry-run'], { CT_CLAIM_FIXTURE: fixture })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/reopened #9 → in-progress/)
-    expect(r.out).toMatch(/SIN MERGEAR/)
+    expect(r.out).toMatch(/UNMERGED/)
   })
 
   // F15/H1: `in-progress` goes from "a state you cannot reopen from" to "the
@@ -214,8 +214,8 @@ describe('F13/H1 — a rejected PR can come back into the loop', () => {
     const fixture = JSON.stringify({ candLabels: ['status:in-progress', 'touches:db'], openIssues: [], readback: [] })
     const r = runCheck(['9', '--repo', 'o/r', '--reopen', '--dry-run'], { CT_CLAIM_FIXTURE: fixture })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/ya está en status:in-progress/)
-    expect(r.out).toMatch(/No se ha tocado ninguna label/)
+    expect(r.out).toMatch(/is already at status:in-progress/)
+    expect(r.out).toMatch(/No label has been touched/)
     // And it names the real way out for the other path, which is no longer --reopen.
     expect(r.out).toMatch(/--requeue/)
   })
@@ -224,16 +224,16 @@ describe('F13/H1 — a rejected PR can come back into the loop', () => {
     const fixture = JSON.stringify({ candLabels: ['touches:db'], openIssues: [], readback: [] })
     const r = runCheck(['9', '--repo', 'o/r', '--reopen', '--dry-run'], { CT_CLAIM_FIXTURE: fixture })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/solo devuelve al banco de trabajo un slice en status:in-review/)
-    expect(r.out).toMatch(/No se ha tocado ninguna label/)
-    expect(r.out).toMatch(/DOS estados a la vez/)
+    expect(r.out).toMatch(/only returns to the workbench a slice at status:in-review/)
+    expect(r.out).toMatch(/No label has been touched/)
+    expect(r.out).toMatch(/TWO states at once/)
   })
 
   it('--reopen on something ALREADY ready says so as a no-op, not as a user error', () => {
     const fixture = JSON.stringify({ candLabels: ['status:ready'], openIssues: [], readback: [] })
     const r = runCheck(['9', '--repo', 'o/r', '--reopen', '--dry-run'], { CT_CLAIM_FIXTURE: fixture })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/ya está en status:ready — no hay nada que reabrir/)
+    expect(r.out).toMatch(/is already at status:ready — there is nothing to reopen/)
   })
 
   it('--reopen does NOT reopen an issue with TWO status labels, even if one of them is in-review', () => {
@@ -246,7 +246,7 @@ describe('F13/H1 — a rejected PR can come back into the loop', () => {
     const fixture = JSON.stringify({ candLabels: ['status:in-review', 'status:in-progress', 'touches:db'], openIssues: [], readback: [] })
     const r = runCheck(['9', '--repo', 'o/r', '--reopen', '--dry-run'], { CT_CLAIM_FIXTURE: fixture })
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/DOS o más labels de estado a la vez/)
+    expect(r.out).toMatch(/TWO or more status labels at once/)
     expect(r.out).toMatch(/status:in-progress/)
     expect(r.out).toMatch(/status:in-review/)
     expect(r.out).not.toMatch(/reopened/)
@@ -255,7 +255,7 @@ describe('F13/H1 — a rejected PR can come back into the loop', () => {
   it('--release and --reopen together → a usage error, without guessing which one the writer meant', () => {
     const r = runCheck(['9', '--repo', 'o/r', '--release', '--reopen', '--dry-run'])
     expect(r.code).toBe(2)
-    expect(r.out).toMatch(/mutuamente excluyentes/)
+    expect(r.out).toMatch(/mutually exclusive/)
   })
 
   it('with a worktree and a branch from the previous round: it says what is left and gives BOTH paths with their commands', () => {
@@ -274,10 +274,10 @@ describe('F13/H1 — a rejected PR can come back into the loop', () => {
     expect(r.code).toBe(0)
     expect(r.out).toContain(join(repoRoot, '.worktrees', '9'))
     expect(r.out).toMatch(/feat\/9/)
-    expect(r.out).toMatch(/NO se ha tocado nada de eso: reabrir mueve el label, no el disco/)
-    expect(r.out).toMatch(/\(a\) CORREGIR ENCIMA/)
-    expect(r.out).toMatch(/NO invoques \/ct-next/)
-    expect(r.out).toMatch(/\(b\) EMPEZAR DE CERO/)
+    expect(r.out).toMatch(/NOTHING of that has been touched: reopening moves the label, not the disk/)
+    expect(r.out).toMatch(/\(a\) FIX ON TOP/)
+    expect(r.out).toMatch(/Do NOT invoke \/ct-next/)
+    expect(r.out).toMatch(/\(b\) START FROM SCRATCH/)
     expect(r.out).toContain(`git -C ${repoRoot} worktree remove`)
     expect(r.out).toContain(`git -C ${repoRoot} branch -D feat/9`)
     // F15/H1: path (b) no longer ends in "and /ct-next dispatches it": after
@@ -293,8 +293,8 @@ describe('F13/H1 — a rejected PR can come back into the loop', () => {
       FAKE_GIT_WORKTREE_LIST_FAIL: '1',
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/No se ha podido comprobar qué queda/)
-    expect(r.out).toMatch(/NO lo leas como "no hay nada"/)
+    expect(r.out).toMatch(/What is left of the previous round/)
+    expect(r.out).toMatch(/do NOT read that as "there is nothing"/)
   })
 
   it('the usage line announces --reopen (otherwise nobody reading the error finds out it exists)', () => {

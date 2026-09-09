@@ -147,7 +147,7 @@ const closed = (run, state) => ({ run: freeze(run), state })
 // step reached by a path nobody thought of— a noisy error and not a silent
 // decision taken by omission.
 function impossible(run, outcome) {
-  throw new Error(`transición imposible: el paso "${run.step}" no sabe qué hacer con el resultado "${outcome}"`)
+  throw new Error(`impossible transition: the step "${run.step}" does not know what to do with the outcome "${outcome}"`)
 }
 
 // ============================================================================
@@ -477,7 +477,7 @@ export function deliveredRun(raw, issue) {
     return { ok: false, why: `.agent/run-${issue}.json says issue ${run.issue}, not ${issue}: that run belongs to another slice.` }
   }
   if (run.closed !== RUN_STATES.DELIVERED) {
-    return { ok: false, why: `el run del issue ${issue} no está entregado (closed: ${run.closed ?? '(ausente)'}, tarea ${run.task}/${run.tasksTotal}, paso ${run.step}): termina el run con ct-step hasta "run delivered" y reintenta.` }
+    return { ok: false, why: `the run of issue ${issue} is not delivered (closed: ${run.closed ?? '(absent)'}, task ${run.task}/${run.tasksTotal}, step ${run.step}): finish the run with ct-step up to "run delivered" and try again.` }
   }
   return { ok: true }
 }

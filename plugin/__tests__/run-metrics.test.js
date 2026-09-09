@@ -866,8 +866,8 @@ describe('the telemetry of a real step', () => {
     writeFileSync(blockedDir, 'no soy un directorio\n')
     const r = ct(blockedDir, 'report', 'report.json')
     expect(r.status).toBe(0)                            // the same code as with telemetry
-    expect(r.stdout).toMatch(/stageados 1 fichero/)     // and the step was applied all the same
-    expect(r.stderr).toMatch(/no se pudo escribir la telemetría/)
+    expect(r.stdout).toMatch(/staged 1 file/)     // and the step was applied all the same
+    expect(r.stderr).toMatch(/the telemetry could not be written/)
     // The transition was saved: the measure decides nothing.
     expect(JSON.parse(readFileSync(join(repo, '.agent', 'run-7.json'), 'utf8')).step).toBe('controls')
   })

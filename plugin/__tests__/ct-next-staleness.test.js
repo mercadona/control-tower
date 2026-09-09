@@ -4,7 +4,7 @@
 //
 //   El cap (1) ya está copado por trabajo en vuelo: 1 slice(s) en
 //   status:in-progress — aunque subieras --cap no bastaría todavía: #42 está
-//   ready con deps mergeadas, pero colisiona con trabajo en vuelo: comparte
+//   ready con deps mergeadas, pero collides with work in flight: comparte
 //   el token 'api' con #41 (status:in-progress) — espera a que termine, o
 //   resuelve el token.
 //
@@ -70,10 +70,10 @@ describe('ct-next — a collision against an in-progress WITHOUT local evidence 
     })
     expect(r.code).toBe(0)
     // The diagnosis is still correct (it collides with #41, token api)...
-    expect(r.out).toMatch(/#42 está ready con deps mergeadas, pero colisiona con trabajo en vuelo/)
-    expect(r.out).toMatch(/comparte el token 'api' con #41/)
+    expect(r.out).toMatch(/#42 is ready with merged deps, but it collides with work in flight/)
+    expect(r.out).toMatch(/it shares the token 'api' with #41/)
     // ...but it NO LONGER claims "espera a que termine" without qualification.
-    expect(r.out).not.toMatch(/espera a que termine, o resuelve el token/)
+    expect(r.out).not.toMatch(/wait for it to finish, or resolve the token/)
     expect(r.out).not.toMatch(/even if you raised --cap it would not be enough yet: #42.*espera a que termine\./)
     // And it does include the staleness note, making clear what is known and
     // what is not.
@@ -96,7 +96,7 @@ describe('ct-next — a collision against an in-progress WITHOUT local evidence 
       FAKE_CMUX_WORKSPACE_TITLES_JSON: JSON.stringify([]),
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/espera a que termine, o resuelve el token\./)
+    expect(r.out).toMatch(/wait for it to finish, or resolve the token\./)
     expect(r.out).not.toMatch(/no worktree, local branch or cmux session was found/)
   })
 
@@ -110,7 +110,7 @@ describe('ct-next — a collision against an in-progress WITHOUT local evidence 
       FAKE_CMUX_WORKSPACE_TITLES_JSON: JSON.stringify([]),
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/espera a que termine, o resuelve el token\./)
+    expect(r.out).toMatch(/wait for it to finish, or resolve the token\./)
   })
 
   it('with no worktree and no branch, but with a live cmux session whose title contains "#41" → it STILL says "espera a que termine"', () => {
@@ -122,7 +122,7 @@ describe('ct-next — a collision against an in-progress WITHOUT local evidence 
       FAKE_CMUX_WORKSPACE_TITLES_JSON: JSON.stringify(['o/r · #41 arreglar login']),
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/espera a que termine, o resuelve el token\./)
+    expect(r.out).toMatch(/wait for it to finish, or resolve the token\./)
   })
 
   it('adversarial attack: a cmux session "#410" must NOT count as evidence of #41 (word boundary)', () => {
@@ -148,7 +148,7 @@ describe('ct-next — a collision against an in-progress WITHOUT local evidence 
       FAKE_CMUX_LIST_WINDOWS_FAIL: '1',
     })
     expect(r.code).toBe(0)
-    expect(r.out).not.toMatch(/espera a que termine, o resuelve el token\./)
+    expect(r.out).not.toMatch(/wait for it to finish, or resolve the token\./)
     expect(r.out).not.toMatch(/ON THIS MACHINE/) // that is the phrase of the "no evidence" verdict — it does not apply here
     expect(r.out).toMatch(/cmux could not be queried/)
     expect(r.out).toMatch(/it cannot be ruled out that the work is still under way somewhere else/)
@@ -182,7 +182,7 @@ describe('ct-next — a collision against an in-progress WITHOUT local evidence 
     const out = (r.stdout || '') + (r.stderr || '')
     expect(r.status).toBe(0)
     expect(out).toMatch(/cmux could not be queried/)
-    expect(out).not.toMatch(/espera a que termine, o resuelve el token\./)
+    expect(out).not.toMatch(/wait for it to finish, or resolve the token\./)
   })
 })
 

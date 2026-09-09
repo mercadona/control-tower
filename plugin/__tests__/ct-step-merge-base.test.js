@@ -170,7 +170,7 @@ describe('ct-step for a run whose slice merged an advanced base', () => {
     const { remote, seed, work } = RepoMother.aSliceWhoseBaseShaIsTheCutAndMergedAnAdvancedBase(issue)
     try {
       const r = next(work, issue)
-      expect(r.stderr).not.toMatch(/no cuentan lo mismo/)
+      expect(r.stderr).not.toMatch(/do not count the same/)
       expect(r.status).toBe(0)
       expect(r.stdout).toMatch(/GLOBAL VERIFICATION/)
     } finally {
@@ -186,7 +186,7 @@ describe('ct-step for a run born after the plan commit', () => {
     const { remote, seed, work } = RepoMother.aRunBornAfterThePlanCommit(issue)
     try {
       const r = next(work, issue)
-      expect(r.stderr).not.toMatch(/no cuentan lo mismo/)
+      expect(r.stderr).not.toMatch(/do not count the same/)
       expect(r.status).toBe(0)
       expect(r.stdout).toMatch(/GLOBAL VERIFICATION/)
     } finally {

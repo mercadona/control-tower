@@ -390,9 +390,9 @@ export function composeHydration(stateText, gitLog, { stateRel = COORD_REL_PATH 
 // moment at which a block gets recorded, and `blocked` is the field it goes
 // in.
 const STOP_TAIL =
-  'Y si el trabajo NO puede continuar (bloqueado por una decisión, un dato falso, una dependencia externa…), ' +
-  'no lo escribas en prosa dentro de next_action: ponlo en el campo `blocked` (`blocked: {reason: "…", unblock: "…"}`), ' +
-  'que es lo que el hook de SessionStart anuncia y lo que suspende el next_action en la siguiente sesión.'
+  'And if the work CANNOT continue (blocked by a decision, a false fact, an external dependency…), ' +
+  'do not write it as prose inside next_action: put it in the `blocked` field (`blocked: {reason: "…", unblock: "…"}`), ' +
+  'which is what the SessionStart hook announces and what suspends the next_action in the following session.'
 
 const shortSha = (s) => (typeof s === 'string' && /^[0-9a-f]{7,40}$/i.test(s) ? s.slice(0, 12) : String(s ?? ''))
 
@@ -739,7 +739,7 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
     // `.agent/STATE.md` (see that block's constant). Replacing it with the
     // resolved path would describe an exemption that does not exist.
     const note = b > 0
-      ? ` (más ${b === 1 ? '1 commit que solo toca' : `${b} commits que solo tocan`} \`.agent/STATE.md\`, que no cuenta${b === 1 ? '' : 'n'}: un apunte no es trabajo sin registrar)`
+      ? ` (plus ${b === 1 ? '1 commit that only touches' : `${b} commits that only touch`} \`.agent/STATE.md\`, and ${b === 1 ? 'it does' : 'they do'} not count: an entry is not unrecorded work)`
       : ''
     // Same reason, and that is why the sentence is CONDITIONAL instead of
     // interpolated: the regression that reassures (you commit the entry and
@@ -750,15 +750,15 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
     // into the sentence above would have told two lies in one: that that
     // commit exists and that it does not count.
     const entry = stateRel === COORD_REL_PATH
-      ? 'Commitear ese cambio NO te vuelve a dejar atrás: un commit que solo toca `.agent/STATE.md` no cuenta. '
-      : `No lo commitees: \`${stateRel}\` está fuera de git a propósito y no entra en el PR de este slice; basta con dejarlo al día en disco. `
+      ? 'Committing that change does NOT leave you behind again: a commit that only touches `.agent/STATE.md` does not count. '
+      : `Do not commit it: \`${stateRel}\` is outside git on purpose and does not go into this slice's PR; leaving it up to date on disk is enough. `
     return {
       block: true,
       kind: 'behind',
       reason:
-        `\`${stateRel}\` se ha quedado atrás: hay ${howMany} de trabajo${note} en ${whereAmI(rel)} por encima de su \`last_commit\` ` +
-        `(${shortSha(rel.stateSha)}), que sí es un ancestro de HEAD (${shortSha(rel.headSha)}). ` +
-        `Actualiza \`${stateRel}\` (you_are_here, next_action, tasks[], last_commit) antes de cerrar el turno, para que la próxima sesión se hidrate correcta. ` +
+        `\`${stateRel}\` has fallen behind: there ${n === 1 ? 'is' : 'are'} ${howMany} of work${note} in ${whereAmI(rel)} above its \`last_commit\` ` +
+        `(${shortSha(rel.stateSha)}), which IS an ancestor of HEAD (${shortSha(rel.headSha)}). ` +
+        `Update \`${stateRel}\` (you_are_here, next_action, tasks[], last_commit) before closing the turn, so that the next session hydrates correctly. ` +
         entry +
         STOP_TAIL,
       systemMessage: '',
@@ -770,11 +770,11 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
       block: true,
       kind: 'unresolvable',
       reason:
-        `El \`last_commit\` de \`${stateRel}\` («${quoteForNotice(rel.raw || '(vacío)', 120)}») no es ningún commit de este repositorio: ` +
-        '`git rev-parse` no lo resuelve. Puede ser un valor de relleno, un SHA de otro repo, o un commit que aquí ya no existe. ' +
-        'Mientras siga así NADIE puede contrastar el estado con el repo — ni este guard ni la próxima sesión. ' +
-        `Ponle el SHA real del último commit de este trabajo (\`git rev-parse HEAD\`) y actualiza el resto de \`${stateRel}\` ` +
-        '(you_are_here, next_action, tasks[]) antes de cerrar el turno. ' +
+        `The \`last_commit\` of \`${stateRel}\` («${quoteForNotice(rel.raw || '(empty)', 120)}») is not any commit of this repository: ` +
+        '`git rev-parse` does not resolve it. It may be a filler value, a SHA from another repo, or a commit that no longer exists here. ' +
+        'While it stays that way NOBODY can contrast the state against the repo — neither this guard nor the next session. ' +
+        `Put the real SHA of the last commit of this work (\`git rev-parse HEAD\`) and update the rest of \`${stateRel}\` ` +
+        '(you_are_here, next_action, tasks[]) before closing the turn. ' +
         STOP_TAIL,
       systemMessage: '',
     }

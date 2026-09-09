@@ -18,13 +18,13 @@ describe('next: the session asks and the oracle answers', () => {
   it('states the task, the step and what to dispatch, without transitioning', () => {
     const r = ct('next')
     expect(r.status).toBe(0)
-    expect(r.stdout).toMatch(/tarea 1\/2 — the first one/)
-    expect(r.stdout).toMatch(/paso: implement/)
-    expect(r.stdout).toMatch(/DESPACHA UN IMPLEMENTADOR/)
+    expect(r.stdout).toMatch(/task 1\/2 — the first one/)
+    expect(r.stdout).toMatch(/step: implement/)
+    expect(r.stdout).toMatch(/DISPATCH AN IMPLEMENTER/)
     // And with which model: omitting it inherits the session's, the priciest one.
-    expect(r.stdout).toMatch(/modelo sonnet/)
+    expect(r.stdout).toMatch(/model sonnet/)
     // Asking advances nothing: the step is still the same one.
-    expect(ct('next').stdout).toMatch(/paso: implement/)
+    expect(ct('next').stdout).toMatch(/step: implement/)
     expect(runState().step).toBe('implement')
   })
 
@@ -39,10 +39,10 @@ describe('next: the session asks and the oracle answers', () => {
     ct('report', writeReport(['uno.txt']))
     ct('controls')
     const r = ct('next')
-    expect(r.stdout).toMatch(/DESPACHA EL JUEZ .*ct-judge.*SIN Bash/)
+    expect(r.stdout).toMatch(/DISPATCH THE JUDGE .*ct-judge.*WITHOUT Bash/)
     // The property "implementer and judge read the same text" hangs off this
     // line: the judge's dispatch names the brief, or the judge never opens it.
-    expect(r.stdout).toMatch(/el brief de la tarea: .*task-1-brief\.md/)
+    expect(r.stdout).toMatch(/the task's brief: .*task-1-brief\.md/)
     const reviewPackage = join(repo, '.agent', 'run-7', 'task-1-review.diff')
     expect(readFileSync(reviewPackage, 'utf8')).toMatch(/\+uno/)
   })
@@ -51,7 +51,7 @@ describe('next: the session asks and the oracle answers', () => {
     ct('report', writeReport(['uno.txt']))
     ct('controls')
     judgeTask(writeVerdict('FAIL', [{ severity: 'high', what: 'está mal', path: 'uno.txt', line: 1 }]))
-    expect(ct('next').stdout).toMatch(/El juez devolvió esta tarea[\s\S]*uno\.txt:1: está mal/)
+    expect(ct('next').stdout).toMatch(/The judge sent this task back[\s\S]*uno\.txt:1: está mal/)
   })
 })
 
@@ -69,7 +69,7 @@ describe('the step guard', () => {
     const withJson = { verdict: () => ct('verdict', writeVerdict('PASS')), 'slice-verdict': () => ct('slice-verdict', writeSliceVerdict('PASS')) }
     const r = withJson[verb] ? withJson[verb]() : ct(verb)
     expect(r.status).toBe(9)
-    expect(r.stderr).toMatch(new RegExp(`el run está en "${step}"`))
+    expect(r.stderr).toMatch(new RegExp(`the run is at "${step}"`))
     expect(r.stderr).toMatch(/ct-step next/)
   })
 

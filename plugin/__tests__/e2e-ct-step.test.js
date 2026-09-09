@@ -439,7 +439,7 @@ describe('ct-step e2e', () => {
       // not for a journey.
       const n = step(dir, ['next'])
       expect(n.status).toBe(0)
-      expect(n.stdout).toMatch(/RECONCILIA LA RAMA/)
+      expect(n.stdout).toMatch(/RECONCILE THE BRANCH/)
       expect(n.stdout).not.toMatch(/e2e/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
@@ -510,9 +510,9 @@ describe('ct-step reconcile', () => {
       const dir = worktreeInConflict({ reconcileRetries: 0 })
       try {
         const r = step(dir, ['reconcile'])
-        expect(r.stdout).toMatch(/conflicting — 1 fichero\(s\) en conflicto/)
+        expect(r.stdout).toMatch(/conflicting — 1 file\(s\) in conflict/)
         expect(r.stdout).toContain('- shared.txt')
-        expect(r.stdout).toMatch(/DESPACHA ct-reconciler/)
+        expect(r.stdout).toMatch(/DISPATCH ct-reconciler/)
         // Budget available (reconcileRetries: 0 < 2): FAILED stays OPEN — it
         // retries the same step, it does not close the run.
         expect(r.status).toBe(0)
@@ -545,10 +545,10 @@ describe('ct-step reconcile', () => {
       const dir = worktreeInConflict({ reconcileRetries: DEFAULT_BUDGETS.reconcileRetries })
       try {
         const r = step(dir, ['reconcile'])
-        expect(r.stdout).toMatch(/conflicting — 1 fichero\(s\) en conflicto/)
-        expect(r.stdout).not.toMatch(/DESPACHA ct-reconciler/)
-        expect(r.stdout).toMatch(/ct-reconciler agotó sus \d+ ronda\(s\)/)
-        expect(r.stdout).toMatch(/le toca al agente del propio slice, que sí tiene Bash/)
+        expect(r.stdout).toMatch(/conflicting — 1 file\(s\) in conflict/)
+        expect(r.stdout).not.toMatch(/DISPATCH ct-reconciler/)
+        expect(r.stdout).toMatch(/ct-reconciler used up its \d+ round\(s\)/)
+        expect(r.stdout).toMatch(/it is now up to the slice's own agent, which does have Bash/)
         // Budget spent: FAILED closes the run via EXIT.RECONCILE_BLOCKED.
         expect(r.status).toBe(13)
       } finally { rmSync(dir, { recursive: true, force: true }) }
@@ -559,7 +559,7 @@ describe('ct-step reconcile', () => {
       try {
         const r = step(dir, ['reconcile'])
         expect(r.stdout).toMatch(/unmergeable-tree/)
-        expect(r.stdout).toMatch(/DESPACHA AL AGENTE DEL SLICE/)
+        expect(r.stdout).toMatch(/DISPATCH THE SLICE'S AGENT/)
         // The assertion that matters: the ABSENCE, not just what is said.
         expect(r.stdout + r.stderr).not.toMatch(/ct-reconciler/)
       } finally { rmSync(dir, { recursive: true, force: true }) }
@@ -590,7 +590,7 @@ describe('ct-step reconcile', () => {
         // MARKERS_LEFT.
         const r = step(dir, ['reconcile'])
         expect(r.stdout).toMatch(/round-discarded \(markers-left\)/)
-        expect(r.stdout).toMatch(/quedaron marcas de conflicto/)
+        expect(r.stdout).toMatch(/conflict markers/)
       } finally { rmSync(dir, { recursive: true, force: true }) }
     })
 
@@ -610,7 +610,7 @@ describe('ct-step reconcile', () => {
         const content = readFileSync(second, 'utf8')
         expect(content).toContain('shared.txt')
         expect(content).toMatch(/markers-left/)
-        expect(content).toMatch(/quedaron marcas de conflicto/)
+        expect(content).toMatch(/conflict markers/)
         expect(r.stdout).toContain(second)
       } finally { rmSync(dir, { recursive: true, force: true }) }
     })
@@ -648,7 +648,7 @@ describe('the reconcile ladder reaches all the way down', () => {
     try {
       const firstRound = step(dir, ['reconcile'])
       expect(firstRound.status).toBe(0)
-      expect(firstRound.stdout).toMatch(/DESPACHA ct-reconciler/)
+      expect(firstRound.stdout).toMatch(/DISPATCH ct-reconciler/)
 
       const secondRound = step(dir, ['reconcile'])
       expect(secondRound.status).toBe(0)
@@ -658,8 +658,8 @@ describe('the reconcile ladder reaches all the way down', () => {
 
       const thirdRound = step(dir, ['reconcile'])
       expect(thirdRound.stdout).toMatch(/round-discarded \(markers-left\)/)
-      expect(thirdRound.stdout).toMatch(/ct-reconciler agotó sus \d+ ronda\(s\)/)
-      expect(thirdRound.stdout).toMatch(/le toca al agente del propio slice, que sí tiene Bash/)
+      expect(thirdRound.stdout).toMatch(/ct-reconciler used up its \d+ round\(s\)/)
+      expect(thirdRound.stdout).toMatch(/it is now up to the slice's own agent, which does have Bash/)
       expect(thirdRound.stdout).not.toMatch(/REDESPACHA ct-reconciler/)
       expect(thirdRound.status).toBe(13)
       expect(thirdRound.stdout).toMatch(/run blocked-reconcile/)
@@ -683,8 +683,8 @@ describe('the reconcile ladder reaches all the way down', () => {
       const r = step(dir, ['reconcile'])
 
       expect(r.status).toBe(0)
-      expect(r.stdout).toMatch(/DESPACHA ct-reconciler/)
-      expect(r.stdout).not.toMatch(/agotó sus/)
+      expect(r.stdout).toMatch(/DISPATCH ct-reconciler/)
+      expect(r.stdout).not.toMatch(/used up its/)
       const after = JSON.parse(readFileSync(join(dir, '.agent', 'run-4.json'), 'utf8'))
       expect(after.reconcileRetries).toBe(1)
     } finally { rmSync(dir, { recursive: true, force: true }) }
@@ -716,7 +716,7 @@ describe('ct-step reconcile validates post hoc the merge someone else committed'
       expect(r.stdout).toMatch(/markers-committed/)
       expect(r.stdout).not.toMatch(/up-to-date/)
       expect(r.stdout).toContain('- shared.txt')
-      expect(r.stdout).toMatch(/DESPACHA AL AGENTE DEL SLICE/)
+      expect(r.stdout).toMatch(/DISPATCH THE SLICE'S AGENT/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 

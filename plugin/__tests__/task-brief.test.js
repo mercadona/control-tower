@@ -143,8 +143,8 @@ describe('task-brief', () => {
     expect(r.status).toBe(0)
 
     const text = readFileSync(out, 'utf8')
-    expect(text).toMatch(/### Out of scope.*no encontrada en el plan/)
-    expect(text).toMatch(/## 3\. Reference patterns.*no encontrada en el plan/)
+    expect(text).toMatch(/### Out of scope.*not found in the plan/)
+    expect(text).toMatch(/## 3\. Reference patterns.*not found in the plan/)
     // The line that says they are the yardstick is still printed all the same.
     expect(text).toMatch(/vara/i)
   })

@@ -86,7 +86,7 @@ describe('ct-next — resolving the default base branch (W-D)', () => {
       FAKE_GH_REPO_VIEW_FAIL: '1',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no se pudo determinar la rama por defecto/i)
+    expect(r.out).toMatch(/the default branch of/i)
     expect(r.out).toMatch(/--base/)
     const gitLogTxt = existsSyncSafe(gitLog)
     expect(gitLogTxt).not.toMatch(/worktree add/)
@@ -189,7 +189,7 @@ describe('ct-next — base branch: fix round 1 of the review (Important + Minor 
       FAKE_GIT_LOG_FILE: gitLog,
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no existe en el remoto/i)
+    expect(r.out).toMatch(/does not exist on the remote/i)
     expect(r.out).toMatch(/typo/i)
     expect(existsSyncSafe(gitLog)).not.toMatch(/worktree add/)
   })
@@ -208,7 +208,7 @@ describe('ct-next — base branch: fix round 1 of the review (Important + Minor 
       FAKE_GH_COUNTER_FILE: counterFile,
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/lanzado #42/)
+    expect(r.out).toMatch(/launched #42/)
   })
 
   it('Minor 1: an empty --base ("") → exit 2, just like --base with no value', () => {
@@ -220,24 +220,24 @@ describe('ct-next — base branch: fix round 1 of the review (Important + Minor 
   it('Minor 2: --dry-run with a fixture and NO --base → the banner marks "(fixture)" (the value was not really resolved)', () => {
     const r = runReal(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/rama base resuelta: main \(fixture\)/)
+    expect(r.out).toMatch(/base branch resolved: main \(fixture\)/)
   })
 
   it('Minor 2: --dry-run with a fixture AND an explicit --base → the banner does NOT mark "(fixture)" (a real value was given)', () => {
     const r = runReal(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run', '--base', 'develop'], { CT_NEXT_FIXTURE: FIXTURE })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/rama base resuelta: develop\n/)
+    expect(r.out).toMatch(/base branch resolved: develop\n/)
     expect(r.out).not.toMatch(/\(fixture\)/)
   })
 
-  it('Minor 3: `gh repo view` returns the empty string → exit 1, "no devolvió ningún nombre de rama utilizable" (reachable thanks to `??` in the stub)', () => {
+  it('Minor 3: `gh repo view` returns the empty string → exit 1, "returned no usable branch name" (reachable thanks to `??` in the stub)', () => {
     const repoRoot = makeRepoRoot()
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
       FAKE_GH_DEFAULT_BRANCH: '',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no devolvió ningún nombre de rama utilizable/i)
+    expect(r.out).toMatch(/returned no usable branch name/i)
   })
 
   it('Minor 3: `gh repo view` returns the literal "null" → it is refused just like the empty string', () => {
@@ -247,7 +247,7 @@ describe('ct-next — base branch: fix round 1 of the review (Important + Minor 
       FAKE_GH_DEFAULT_BRANCH: 'null',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no devolvió ningún nombre de rama utilizable/i)
+    expect(r.out).toMatch(/returned no usable branch name/i)
   })
 })
 
@@ -345,8 +345,8 @@ describe('ct-next — the base comes from the remote, not from the local copy (S
       FAKE_GH_DEFAULT_BRANCH: 'develop',
     })
     expect(r.code).toBe(0)                       // it degrades, it does not abort: the slice is launched
-    expect(r.out).toMatch(/lanzado #42/)
-    expect(r.out).toMatch(/no se pudo medir el corte real/)
+    expect(r.out).toMatch(/launched #42/)
+    expect(r.out).toMatch(/the real cut in the worktree of/)
     const sliceMd = readFileSync(join(repoRoot, '.worktrees', '42', '.agent', 'SLICE.md'), 'utf8')
     expect(sliceMd).toMatch(/^base_sha: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef$/m)
     expect(sliceMd).toMatch(/^last_commit: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef$/m)

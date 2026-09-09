@@ -93,7 +93,7 @@ describe('ct-next — fixture tied to --dry-run', () => {
 
 describe('ct-next — nothing dispatchable', () => {
   // W-B (§8): this test existed before W-B and expected the generic message
-  // "no hay slices despachables". W-B's brief explicitly asks that message to
+  // "there is no dispatchable slice". W-B's brief explicitly asks that message to
   // stop being generic and to distinguish the cause (nothing ready / unmerged
   // deps / collision with in-flight work / cap full) — this particular
   // scenario (a ready #2 whose only dep, #1, is not merged) is EXACTLY the
@@ -210,7 +210,7 @@ describe('ct-next — warning about deps outside the "## Dependencias" section (
   })
 })
 
-// W-B (§8): a single message ("nada ready con deps mergeadas y sin colisión")
+// W-B (§8): a single message ("nada ready con deps mergeadas y sin collision")
 // forced you to guess between four causes with different remedies. Each test
 // below pins, against the real wrapper (via CT_NEXT_FIXTURE), the exact
 // message for one cause — using planDispatch/explainNoSelection (already
@@ -262,7 +262,7 @@ describe('ct-next — distinguishable reason for blocking (W-B, §8)', () => {
     const fx = JSON.stringify({
       issues: [
         { n: 1, order: 1, status: 'in-progress', deps: [], touches: ['db'], name: 'en curso', type: 'backend' },
-        { n: 2, order: 2, status: 'ready', deps: [], touches: ['ui'], name: 'sin colisión', type: 'backend' },
+        { n: 2, order: 2, status: 'ready', deps: [], touches: ['ui'], name: 'sin collision', type: 'backend' },
       ],
       mergedIssues: [],
     })
@@ -468,8 +468,8 @@ describe('ct-next — orphaned worktree on a partial failure (review round 1, Im
     })
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/could not seed \.agent\/SLICE\.md/)
-    expect(r.out).toMatch(/limpiados automáticamente/)
-    expect(r.out).toMatch(/puedes reintentar/)
+    expect(r.out).toMatch(/cleaned up automatically/)
+    expect(r.out).toMatch(/you can retry/)
     expect(r.out).not.toMatch(/ATTENTION/)
   })
 
@@ -546,8 +546,8 @@ describe('ct-next — orphaned worktree on a partial failure (review round 1, Im
     })
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/could not launch cmux/)
-    expect(r.out).toMatch(/limpiados automáticamente/)
-    expect(r.out).toMatch(/puedes reintentar/)
+    expect(r.out).toMatch(/cleaned up automatically/)
+    expect(r.out).toMatch(/you can retry/)
   })
 
   it('cap 2, the first slice launches successfully and the second fails in cmux → the message makes clear where it stopped and what is still alive', () => {
@@ -569,7 +569,7 @@ describe('ct-next — orphaned worktree on a partial failure (review round 1, Im
     //
     // F8 — THIS ORDER CHECK USED TO CHECK NOTHING. `runReal` returns
     // `e.stdout + e.stderr`: two CONCATENATED buffers, not an interleaved
-    // transcript. "lanzado #42" comes out on console.log (stdout) and
+    // transcript. "launched #42" comes out on console.log (stdout) and
     // "no se pudo lanzar cmux" on console.error (stderr), so the first
     // appeared before the second in that concatenation ALWAYS — even if the
     // process had emitted them in the opposite order. An order assertion over
@@ -577,7 +577,7 @@ describe('ct-next — orphaned worktree on a partial failure (review round 1, Im
     // construction. `combinedOutputOf` runs the same command with stdout and
     // stderr pointing at THE SAME file descriptor, which is the only thing
     // that gives the real order of emission.
-    const idxLanzado42 = r.out.indexOf('lanzado #42')
+    const idxLanzado42 = r.out.indexOf('launched #42')
     const idxFallo43 = r.out.indexOf('could not launch cmux')
     expect(idxLanzado42).toBeGreaterThan(-1)
     expect(idxFallo43).toBeGreaterThan(-1)
@@ -587,9 +587,9 @@ describe('ct-next — orphaned worktree on a partial failure (review round 1, Im
       FAKE_GH_COUNTER_FILE: join(repoRoot, 'gh-list-count-2'),
       FAKE_CMUX_FAIL_NAME_SUBSTR: '#43',
     })
-    expect(interleaved.indexOf('lanzado #42')).toBeGreaterThan(-1)
+    expect(interleaved.indexOf('launched #42')).toBeGreaterThan(-1)
     expect(interleaved.indexOf('could not launch cmux')).toBeGreaterThan(-1)
-    expect(interleaved.indexOf('lanzado #42')).toBeLessThan(interleaved.indexOf('could not launch cmux'))
+    expect(interleaved.indexOf('launched #42')).toBeLessThan(interleaved.indexOf('could not launch cmux'))
     expect(r.out).toMatch(/already launched successfully before this failure.*carry on running.*have not been touched/is)
     // git's log confirms that ONLY #43's worktree/branch (the second one) was
     // attempted for cleanup, never #42's (the first, which did succeed).
@@ -769,7 +769,7 @@ describe('ct-next — enumerating issues with no fixed --limit (final review, fi
     })
     expect(r.code).toBe(0)
     expect(r.out).toContain('#2')
-    expect(r.out).not.toMatch(/no hay slices despachables/i)
+    expect(r.out).not.toMatch(/there is no dispatchable slice/i)
   })
 })
 
@@ -874,7 +874,7 @@ describe('ct-next — D1 finding 1: per-epic (milestone) scope of the order, rea
       FAKE_GH_COUNTER_FILE: counterFile,
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/colisi[oó]n/i)
+    expect(r.out).toMatch(/collision/i)
     expect(r.out).toMatch(/#7/)
     expect(r.out).toMatch(/#8/)
     expect(r.out).toMatch(/warning/i)

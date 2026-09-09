@@ -156,7 +156,7 @@ describe('--release: correspondence between the run and the issue', () => {
     try {
       const r = release(dir, { viewFail: true })
       expect(r.status).toBe(8)
-      expect(r.stderr).toMatch(/no se (ha podido|pudo)/i)
+      expect(r.stderr).toMatch(/could not be/i)
       expect(r.stderr).not.toMatch(/no declara journeys/)
       expect(r.argv).not.toMatch(/issue edit/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
@@ -216,7 +216,7 @@ describe('--release: correspondence between the run and the issue', () => {
       expect(r.stderr).toMatch(/warning:/)
       expect(r.stderr).toContain(A)
       expect(r.stderr).toContain('el docker de staging no arranca en esta máquina')
-      expect(r.stderr).toMatch(/NO se pudieron comprobar/)
+      expect(r.stderr).toMatch(/could NOT be checked/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
@@ -225,7 +225,7 @@ describe('--release: correspondence between the run and the issue', () => {
     try {
       const r = release(dir, { body: issueBody([A]) })
       expect(r.status).toBe(0)
-      expect(r.stderr).not.toMatch(/NO se pudieron comprobar/)
+      expect(r.stderr).not.toMatch(/could NOT be checked/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
@@ -234,7 +234,7 @@ describe('--release: correspondence between the run and the issue', () => {
     try {
       const r = release(dir, { body: issueBody([A]) })
       expect(r.status).toBe(0)
-      expect(r.stderr).not.toMatch(/NO se pudieron comprobar/)
+      expect(r.stderr).not.toMatch(/could NOT be checked/)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 

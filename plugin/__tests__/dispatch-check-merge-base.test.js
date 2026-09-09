@@ -265,7 +265,7 @@ describe('dispatch-check --release reads plan citations against the cut, not the
     const r = release(issue, world.work)
 
     expect((r.stderr || '')).not.toContain('cita de memoria')
-    expect((r.stderr || '')).not.toContain('no existe en la base')
+    expect((r.stderr || '')).not.toContain("does not exist in the branch's base")
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(new RegExp(`released #${issue}.*in-review`))
   })

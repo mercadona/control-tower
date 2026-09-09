@@ -69,11 +69,11 @@ describe('dispatch-check.mjs — the COLLISION diagnostic is not truncated howev
     }
     expect(r.code).toBe(1)
     expect(r.out.length).toBeGreaterThan(100 * 1024) // confirms the scenario IS big enough to go past a typical pipe buffer (~64 KiB)
-    expect(r.out).toMatch(/^COLLISION: #5 choca con/)
+    expect(r.out).toMatch(/^COLLISION: #5 clashes with/)
     // The last issue of the list is the likeliest candidate to be lost if
     // something truncates — it must still be present, whole.
     // F13/H2: each collider now carries its status inside the bracket
-    // (`#N[touches:db status:in-progress]`) — "choca con #N" no longer implies
+    // (`#N[touches:db status:in-progress]`) — "clashes with #N" no longer implies
     // there is a live agent there, and the remedy depends on which of the two
     // it is.
     expect(r.out).toMatch(new RegExp(`#${1000 + N}\\[touches:db status:in-progress\\]`))

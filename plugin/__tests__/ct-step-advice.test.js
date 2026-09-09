@@ -58,17 +58,17 @@ describe('the second veto does not go back to implementing blindly', () => {
 
     expect(runState().step).toBe('advise')
     const r = ct('next')
-    expect(r.stdout).toMatch(/DESPACHA EL CONSEJERO/)
+    expect(r.stdout).toMatch(/DISPATCH THE ADVISOR/)
     expect(r.stdout).toContain('ct-advisor')
     expect(r.stdout).toContain(ADVISOR_TOOLS)
-    expect(r.stdout).not.toMatch(/DESPACHA UN IMPLEMENTADOR/)
+    expect(r.stdout).not.toMatch(/DISPATCH AN IMPLEMENTER/)
   })
 
   it('the attempt is still the third: advise does not start a counter of its own', () => {
     twoVetoes()
 
     expect(runState().judgeRetries).toBe(2)
-    expect(ct('next').stdout).toMatch(/paso: advise \(intento 3\)/)
+    expect(ct('next').stdout).toMatch(/step: advise \(attempt 3\)/)
   })
 
   it("the advisor's package carries the brief, the two attempts and the two verdicts", () => {
@@ -88,7 +88,7 @@ describe('the second veto does not go back to implementing blindly', () => {
     const r = ct('advice', advice())
 
     expect(r.status).toBe(9)
-    expect(r.stderr).toMatch(/no es el paso que toca/)
+    expect(r.stderr).toMatch(/is not the step that is due/)
   })
 })
 
@@ -98,7 +98,7 @@ describe('advice that does not meet the schema does not spend the attempt that i
 
     const r = askForAdvice(advice({ approach: undefined }))
 
-    expect(r.stdout).toMatch(/consejo descartado/)
+    expect(r.stdout).toMatch(/advice discarded/)
     expect(runState().step).toBe('advise')
     expect(runState().discards).toBe(1)
     expect(runState().judgeRetries).toBe(2)
@@ -120,7 +120,7 @@ describe('advice that does not meet the schema does not spend the attempt that i
 
     const r = ct('advice', advice())
 
-    expect(r.stdout).toMatch(/consejo descartado/)
+    expect(r.stdout).toMatch(/advice discarded/)
     expect(runState().discards).toBe(1)
   })
 
@@ -233,7 +233,7 @@ describe('what the advice leaves measured', () => {
 
     const [row] = judgeRows('advise')
     expect(row.outcome).toBe('discarded')
-    expect(row.why).toMatch(/no se pudo leer/)
+    expect(row.why).toMatch(/could not be read/)
   })
 })
 

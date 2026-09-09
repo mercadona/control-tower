@@ -31,7 +31,7 @@ let truncated = false
 try {
   const st = statSync(target)
   if (!st.isDirectory()) {
-    console.error(`no es un directorio: ${target}`)
+    console.error(`not a directory: ${target}`)
     process.exit(1)
   }
   const r = walkRepo(target)
@@ -48,13 +48,13 @@ try {
 // document both guides called the "full reference", that is, one click from
 // the agent.
 const { docs, failures, truncated: linksTruncated } = readRepoDocs(target)
-const { acks, problems: ackProblems, unreadable: ackUnreadable, prosaSinAcuses: ackProsaSinAcuses } = readAck(target)
+const { acks, problems: ackProblems, unreadable: ackUnreadable, proseWithoutAcks: ackProseWithoutAcks } = readAck(target)
 
 const findings = detectConventions({ docs, files, acks })
-const text = formatFindings(findings, { where: 'este repo', ackProblems, ackUnreadable, ackProsaSinAcuses })
+const text = formatFindings(findings, { where: 'this repo', ackProblems, ackUnreadable, ackProseWithoutAcks })
 if (text) console.log(text)
 for (const f of failures) {
-  console.log(`  warning: no se ha podido leer la documentación del repo (${f}). NO lo leas como "ahí no hay nada": no se ha mirado.`)
+  console.log(`  warning: the repo documentation could not be read (${f}). Do NOT read that as "there is nothing there": it has not been looked at.`)
 }
 // Acknowledgement hygiene, and only here: /ct-init does the COMPLETE scan (all
 // three signals), so it is the only moment at which "this line no longer
@@ -65,14 +65,14 @@ for (const f of failures) {
 for (const [id, ack] of acks) {
   if (findings.some((f) => f.id === id)) continue
   console.log(
-    `  note: ${ACK_PATH}:${ack.line} acusa \`${id}\` pero ya no hay ninguna señal de ese tipo en este repo. ` +
-      'Bórrala: mientras esté, silencia por adelantado cualquier convención de ese tipo que aparezca mañana.'
+    `  note: ${ACK_PATH}:${ack.line} acknowledges \`${id}\` but there is no longer any signal of that kind in this repo. ` +
+      'Delete it: while it is there, it silences in advance any convention of that kind that turns up tomorrow.'
   )
 }
 if (linksTruncated) {
   console.log(
-    `  note: AGENTS.md/CLAUDE.md citan más de ${MAX_LINKED_DOCS} documentos \`.md\` del repo y solo se han ` +
-      'mirado los primeros. Puede quedar una instrucción vieja en los que no se han leído.'
+    `  note: AGENTS.md/CLAUDE.md cite more than ${MAX_LINKED_DOCS} \`.md\` documents of the repo and only the ` +
+      'first ones have been looked at. An old instruction may be left in the ones that were not read.'
   )
 }
 if (truncated) {

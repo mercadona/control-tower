@@ -103,7 +103,7 @@ describe('F20/H1 — if the pty eats the line, it is resent', () => {
   it('the field case (oh-my-zsh eats the first character) NO LONGER condemns the dispatch: it is resent and the agent starts', () => {
     const repoRoot = makeRepoRoot()
     // Verified against the code WITHOUT the fix: exit 1, «lanzados 0/1» and
-    // «NO se puede confirmar que el comando llegara a ejecutarse» — the
+    // «it cannot be confirmed that the command got to run» — the
     // dispatcher behaved honestly, but the dispatch failed all the same and left
     // a claim + branch + worktree for a human to clean up.
     const r = dispatchOne(repoRoot, {
@@ -111,11 +111,11 @@ describe('F20/H1 — if the pty eats the line, it is resent', () => {
       FAKE_CMUX_CLAUDE_RUNS_FILE: join(repoRoot, 'claude-runs'),
     })
     expect(r.code).toBe(0)
-    expect(r.all).toMatch(/lanzado #90 en .*\.worktrees\/90/)
-    expect(r.all).toMatch(/lanzados 1\/1 slice\(s\)/)
+    expect(r.all).toMatch(/launched #90 at .*\.worktrees\/90/)
+    expect(r.all).toMatch(/launched 1\/1 of the slice\(s\)/)
     // …and it does NOT keep quiet about having needed it: a shell that eats what
     // is typed into it is still a datum the human has to find out about.
-    expect(r.all).toMatch(/hizo falta REENVIAR la línea 1 vez/)
+    expect(r.all).toMatch(/the line had to be RESENT 1 time/)
     // The property that makes resending safe.
     expect(claudeRuns(repoRoot)).toBe(1)
   })
@@ -132,7 +132,7 @@ describe('F20/H1 — if the pty eats the line, it is resent', () => {
       FAKE_CMUX_CLAUDE_RUNS_FILE: join(repoRoot, 'claude-runs'),
     })
     expect(r.code).toBe(0)
-    expect(r.all).toMatch(/lanzado #90/)
+    expect(r.all).toMatch(/launched #90/)
     // Margin so that the delayed keystroke arrives after the resend.
     const t0 = Date.now()
     while (Date.now() - t0 < 2000) { /* short busy wait: the delayed stub runs in the background */ }
@@ -148,10 +148,10 @@ describe('F20/H1 — if the pty eats the line, it is resent', () => {
       FAKE_CMUX_CLAUDE_RUNS_FILE: join(repoRoot, 'claude-runs'),
     })
     expect(r.code).toBe(1)
-    expect(r.all).toMatch(/lanzados 0\/1 slice\(s\)/)
-    expect(r.all).toMatch(/NO se puede confirmar que el comando llegara a ejecutarse/)
-    expect(r.all).toMatch(/la línea se reenvió \d+ ve(z|ces) a esa sesión dentro del presupuesto y siguió sin ejecutarse/)
-    expect(r.all).toMatch(/quedaron LANZADOS SIN VERIFICAR/)
+    expect(r.all).toMatch(/launched 0\/1 of the slice\(s\)/)
+    expect(r.all).toMatch(/it cannot be confirmed that the command got to run/)
+    expect(r.all).toMatch(/the line was resent \d+ times? to that session within the budget and still did not run/)
+    expect(r.all).toMatch(/were left LAUNCHED WITHOUT VERIFICATION/)
     expect(claudeRuns(repoRoot)).toBe(0)
   })
 
@@ -162,7 +162,7 @@ describe('F20/H1 — if the pty eats the line, it is resent', () => {
       CT_NEXT_LAUNCH_TIMEOUT_MS: '600',
     })
     expect(r.code).toBe(1)
-    expect(r.all).toMatch(/No hubo ningún reenvío automático: el presupuesto \(600 ms\)/)
+    expect(r.all).toMatch(/There was no automatic resend: the budget \(600 ms\)/)
   })
 
   it('cmux exposes no handle for the session: the resend cannot be addressed, and that does NOT happen in silence', () => {
@@ -173,15 +173,15 @@ describe('F20/H1 — if the pty eats the line, it is resent', () => {
       CT_NEXT_LAUNCH_TIMEOUT_MS: '5200',
     })
     expect(r.code).toBe(1)
-    expect(r.all).toMatch(/el reenvío automático de la línea tampoco se pudo hacer/)
-    expect(r.all).toMatch(/no expuso un handle/)
+    expect(r.all).toMatch(/the automatic resend of the line could not be done either/)
+    expect(r.all).toMatch(/exposed no handle/)
   })
 
   it('the happy path with no resends mentions none: the note only shows up when there was something to report', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot, { FAKE_CMUX_CLAUDE_RUNS_FILE: join(repoRoot, 'claude-runs') })
     expect(r.code).toBe(0)
-    expect(r.all).toMatch(/lanzado #90/)
+    expect(r.all).toMatch(/launched #90/)
     expect(r.all).not.toMatch(/REENVIAR/)
     expect(claudeRuns(repoRoot)).toBe(1)
   })
@@ -207,8 +207,8 @@ describe('F20/H1 — if the pty eats the line, it is resent', () => {
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue90], []]),
       FAKE_GH_COUNTER_FILE: join(repoRoot, 'gh-list-count'),
     })
-    expect(r.out).toMatch(/se REENVÍA la misma línea/)
-    expect(r.out).toMatch(/0 de 6 lanzamientos/)
+    expect(r.out).toMatch(/the same line is RESENT/)
+    expect(r.out).toMatch(/0 of 6 launches/)
   })
 })
 
@@ -263,11 +263,11 @@ describe('F20/H2 — the residue of a FINISHED slice gets named', () => {
     })
     // Verified against the UNFIXED code: not a single mention of #451, of
     // `.worktrees/451` or of `feat/451` in the whole output.
-    expect(r.all).toMatch(/cosecha pendiente: 1 slice\(s\)/)
+    expect(r.all).toMatch(/pending harvest: 1 slice\(s\)/)
     expect(r.all).toMatch(/#451: worktree .*\.worktrees\/451, branch feat\/451/)
     expect(r.all).toMatch(/git worktree remove --force .*\.worktrees\/451 && git branch -D feat\/451/)
     // The added edge: that residue blocks the redispatch of the SAME number.
-    expect(r.all).toMatch(/se NEGARÁ a redespachar/)
+    expect(r.all).toMatch(/will REFUSE to redispatch/)
   })
 
   it('a repo with no residue says nothing (and does not invent a harvest)', () => {
@@ -277,7 +277,7 @@ describe('F20/H2 — the residue of a FINISHED slice gets named', () => {
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[], [{ number: 451, state_reason: 'completed', body: '' }]]),
       FAKE_GH_COUNTER_FILE: join(repoRoot, 'gh-list-count'),
     })
-    expect(r.all).not.toMatch(/cosecha pendiente/)
+    expect(r.all).not.toMatch(/pending harvest/)
   })
 
   it('the cmux session still open on an already merged slice is named separately: that `claude` has been alive for hours', () => {

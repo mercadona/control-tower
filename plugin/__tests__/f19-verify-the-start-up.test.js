@@ -88,21 +88,21 @@ describe('F19/H1 — the shell eats the first character of the command', () => {
     const repoRoot = makeRepoRoot()
     // Verified against the code with the fix NOT applied (with this very
     // stub, which does run the command): exit 0, «lanzados 1/1» and
-    // «verificado: la sesión cmux está corriendo en ese directorio» — the
+    // «verified: the cmux session is running in that directory» — the
     // exact lie from the field.
     const r = dispatchOne(repoRoot, {
       FAKE_CMUX_EAT_FIRST_CHAR_SUBSTR: '#90',
       CT_NEXT_LAUNCH_TIMEOUT_MS: '600',
     })
     expect(r.code).toBe(1)
-    expect(r.all).not.toMatch(/verificado: la sesión cmux está corriendo/)
-    expect(r.all).toMatch(/lanzados 0\/1 slice\(s\)/)
-    expect(r.all).toMatch(/NO se puede confirmar que el comando llegara a ejecutarse/)
+    expect(r.all).not.toMatch(/verified: the cmux session is running/)
+    expect(r.all).toMatch(/launched 0\/1 of the slice\(s\)/)
+    expect(r.all).toMatch(/it cannot be confirmed that the command got to run/)
     // The TWO indistinguishable cases are named: it never claims which one.
-    expect(r.all).toMatch(/el comando nunca corrió/)
-    expect(r.all).toMatch(/ese shell sigue arrancando/)
+    expect(r.all).toMatch(/the command never ran/)
+    expect(r.all).toMatch(/that shell is still starting up/)
     // And the residue is declared, with the exact commands.
-    expect(r.all).toMatch(/quedaron LANZADOS SIN VERIFICAR/)
+    expect(r.all).toMatch(/were left LAUNCHED WITHOUT VERIFICATION/)
     expect(r.all).toMatch(/git worktree remove --force .*\.worktrees\/90/)
     expect(r.all).toMatch(/gh issue edit 90 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
     expect(r.all).not.toMatch(/Nada quedó a medias/)
@@ -112,9 +112,9 @@ describe('F19/H1 — the shell eats the first character of the command', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot)
     expect(r.code).toBe(0)
-    expect(r.all).toMatch(/lanzado #90 en .*\.worktrees\/90/)
-    expect(r.all).toMatch(/el comando llegó a ejecutarse de verdad \(centinela de arranque escrito por el propio shell/)
-    expect(r.all).toMatch(/lanzados 1\/1 slice\(s\)/)
+    expect(r.all).toMatch(/launched #90 at .*\.worktrees\/90/)
+    expect(r.all).toMatch(/the command really did get to run \(start-up sentinel written by the shell itself/)
+    expect(r.all).toMatch(/launched 1\/1 of the slice\(s\)/)
   })
 
   it('the command that is TYPED no longer carries the kickoff inside: the surface exposed to the pty goes from KB to one line', () => {
@@ -132,9 +132,9 @@ describe('F19/H1 — the shell eats the first character of the command', () => {
     expect(cmuxLine).not.toMatch(/dangerously-skip-permissions/)
     // …but the dry-run CANNOT hide what is going to be run: the whole script
     // is printed, with the `claude` inside.
-    expect(r.out).toMatch(/script de arranque que cmux sourcearía/)
+    expect(r.out).toMatch(/start-up script cmux would source/)
     expect(r.out).toMatch(/claude --dangerously-skip-permissions/)
-    expect(r.out).toMatch(/se espera hasta \d+ ms a que aparezca .*started/)
+    expect(r.out).toMatch(/it waits up to \d+ ms for .*started/)
   })
 })
 
@@ -149,7 +149,7 @@ describe('F19/H1 — a slow sentinel is not an absent sentinel', () => {
       CT_NEXT_LAUNCH_TIMEOUT_MS: '8000',
     })
     expect(r.code).toBe(0)
-    expect(r.all).toMatch(/lanzado #90 en .*centinela de arranque escrito/)
+    expect(r.all).toMatch(/launched #90 at .*start-up sentinel written/)
   })
 
   it('the same slow shell with a short cap: it does NOT count, and the message names the variable it is tuned with', () => {
@@ -159,16 +159,16 @@ describe('F19/H1 — a slow sentinel is not an absent sentinel', () => {
       CT_NEXT_LAUNCH_TIMEOUT_MS: '400',
     })
     expect(r.code).toBe(1)
-    expect(r.all).toMatch(/NO apareció en 400 ms/)
-    expect(r.all).toMatch(/sube CT_NEXT_LAUNCH_TIMEOUT_MS \(ahora 400\)/)
-    expect(r.all).not.toMatch(/verificado: la sesión cmux está corriendo/)
+    expect(r.all).toMatch(/did NOT appear within 400 ms/)
+    expect(r.all).toMatch(/raise CT_NEXT_LAUNCH_TIMEOUT_MS \(now 400\)/)
+    expect(r.all).not.toMatch(/verified: the cmux session is running/)
   })
 
   it('an invalid CT_NEXT_LAUNCH_TIMEOUT_MS aborts with exit 2 before touching anything, instead of picking a cap on its own', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot, { CT_NEXT_LAUNCH_TIMEOUT_MS: 'un rato' })
     expect(r.code).toBe(2)
-    expect(r.all).toMatch(/CT_NEXT_LAUNCH_TIMEOUT_MS inválido/)
+    expect(r.all).toMatch(/CT_NEXT_LAUNCH_TIMEOUT_MS invalid/)
     expect(r.all).not.toMatch(/claimed #90/)
   })
 })
@@ -181,11 +181,11 @@ describe('F19/H1 — the sentinel sees what no query to cmux can see', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot, { FAKE_CMUX_NO_CLAUDE_IN_SHELL: '1', CT_NEXT_LAUNCH_TIMEOUT_MS: '4000' })
     expect(r.code).toBe(1)
-    expect(r.all).toMatch(/`claude` NO resuelve en ese shell de login/)
+    expect(r.all).toMatch(/`claude` does NOT resolve in that login shell/)
     // This is the ONLY case with certainty that there will be no agent, so it
     // is the only one where reverting the claim cannot destroy live work.
-    expect(r.all).toMatch(/claim revertido automáticamente a status:ready|worktree y rama de #90 limpiados automáticamente/)
-    expect(r.all).not.toMatch(/lanzado #90/)
+    expect(r.all).toMatch(/claim reverted automatically to status:ready|worktree y rama de #90 cleaned up automatically/)
+    expect(r.all).not.toMatch(/launched #90/)
   })
 
   it('the shell started up in ANOTHER directory: its own $PWD gives it away, not what cmux says about its window — and nothing is deleted', () => {
@@ -194,19 +194,19 @@ describe('F19/H1 — the sentinel sees what no query to cmux can see', () => {
     dirs.push(otherDir)
     const r = dispatchOne(repoRoot, { FAKE_CMUX_COMMAND_CWD: otherDir, CT_NEXT_LAUNCH_TIMEOUT_MS: '4000' })
     expect(r.code).toBe(1)
-    expect(r.all).toMatch(/el shell que lo ejecutó estaba en/)
-    expect(r.all).toMatch(/NO se cuenta como lanzado con éxito, y NO se borra nada/)
-    expect(r.all).toMatch(/quedaron LANZADOS SIN VERIFICAR/)
+    expect(r.all).toMatch(/the shell that ran it was in/)
+    expect(r.all).toMatch(/It does NOT count as successfully launched, and NOTHING is deleted/)
+    expect(r.all).toMatch(/were left LAUNCHED WITHOUT VERIFICATION/)
     // A live agent in the wrong place is NOT cleaned up on its own.
-    expect(r.all).not.toMatch(/claim revertido automáticamente/)
+    expect(r.all).not.toMatch(/claim reverted automatically/)
   })
 
   it('cmux cannot be queried, but the sentinel is there: that is no longer "the benefit of the doubt", it is evidence', () => {
     const repoRoot = makeRepoRoot()
     const r = dispatchOne(repoRoot, { FAKE_CMUX_LIST_WINDOWS_FAIL: '1' })
     expect(r.code).toBe(0)
-    expect(r.all).toMatch(/no se pudo verificar la sesión de cmux/)
-    expect(r.all).toMatch(/pero el comando SÍ llegó a ejecutarse/)
+    expect(r.all).toMatch(/the cmux session could not be verified/)
+    expect(r.all).toMatch(/but the command DID get to run/)
   })
 })
 
@@ -321,7 +321,7 @@ function runResidue(repoRoot, closedIssues) {
   })
 }
 function residueLine(r) {
-  return r.err.split('\n').find((l) => /^warning: \d+ issue\(s\) CERRADOS/.test(l)) || ''
+  return r.err.split('\n').find((l) => /^warning: \d+ CLOSED issue\(s\)/.test(l)) || ''
 }
 function writeAck(repoRoot, text) {
   mkdirSync(join(repoRoot, '.agent'), { recursive: true })
@@ -336,17 +336,17 @@ describe('F19/H2 — the severity gradient that was flattened', () => {
     // Verified against the unfixed code: it said «2 issue(s) CERRADOS»,
     // throwing into the same sack the one that fell out of the dispatch queue
     // and the one nobody cares about.
-    expect(l).toMatch(/^warning: 1 issue\(s\) CERRADOS/)
+    expect(l).toMatch(/^warning: 1 CLOSED issue\(s\)/)
     expect(l).toMatch(/#101/)
     expect(l).toMatch(/#102/) // it shows up, but as an inert count, not as an anomaly
-    expect(l).toMatch(/inerte|no bloquea|no le pasa nada/i)
+    expect(l).toMatch(/inert|blocks no queue|nothing happens/i)
   })
 
   it('ready comes first and is said to be the serious one; in-progress after it', () => {
     const repoRoot = makeRepoRoot()
     const r = runResidue(repoRoot, [closedWith(101, 'in-progress'), closedWith(102, 'ready')])
     const l = residueLine(r)
-    expect(l).toMatch(/^warning: 2 issue\(s\) CERRADOS/)
+    expect(l).toMatch(/^warning: 2 CLOSED issue\(s\)/)
     expect(l.indexOf('#102')).toBeLessThan(l.indexOf('#101'))
   })
 
@@ -354,7 +354,7 @@ describe('F19/H2 — the severity gradient that was flattened', () => {
     const repoRoot = makeRepoRoot()
     const r = runResidue(repoRoot, [closedWith(101, 'blocked'), closedWith(102, 'in-review')])
     expect(residueLine(r)).toBe('')
-    expect(r.err).not.toMatch(/CERRADOS conservan una label `status:` viva/)
+    expect(r.err).not.toMatch(/CLOSED issue\(s\) keep a live `status:` viva/)
   })
 })
 
@@ -364,14 +364,14 @@ describe('F19/H2 — acknowledgement PER CASE: keep quiet about these numbers, g
     writeAck(repoRoot, 'residuo-status: 2026-07-28 — #101, #102 revisados: slices descartados, las labels se quedan.\n')
     const r = runResidue(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'ready'), closedWith(103, 'ready')])
     const l = residueLine(r)
-    expect(l).toMatch(/^warning: 1 issue\(s\) CERRADOS/)
+    expect(l).toMatch(/^warning: 1 CLOSED issue\(s\)/)
     expect(l).toMatch(/#103/)
     expect(l).not.toMatch(/#101/)
     expect(l).not.toMatch(/#102/)
     // The acknowledgement is recognised, and how many it silences is said —
     // but only when there is something live to say; otherwise it would be the
     // same static noise all over again.
-    expect(l).toMatch(/2 más ya acusados/)
+    expect(l).toMatch(/2 more already acknowledged/)
   })
 
   it('with ALL of them acknowledged the warning disappears entirely: that is the point', () => {
@@ -379,7 +379,7 @@ describe('F19/H2 — acknowledgement PER CASE: keep quiet about these numbers, g
     writeAck(repoRoot, '# decisiones\n\nresiduo-status: 2026-07-28 — #101, #102 son slices descartados.\n')
     const r = runResidue(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'in-progress')])
     expect(residueLine(r)).toBe('')
-    expect(r.err).not.toMatch(/2 más ya acusados/)
+    expect(r.err).not.toMatch(/2 more already acknowledged/)
   })
 
   it('the acknowledgement accumulates across lines (one decision per date), instead of treating them as duplicates', () => {
@@ -387,15 +387,15 @@ describe('F19/H2 — acknowledgement PER CASE: keep quiet about these numbers, g
     writeAck(repoRoot, 'residuo-status: 2026-07-01 — #101 descartado.\nresiduo-status: 2026-07-28 — #102 también.\n')
     const r = runResidue(repoRoot, [closedWith(101, 'ready'), closedWith(102, 'ready')])
     expect(residueLine(r)).toBe('')
-    expect(r.err).not.toMatch(/ya estaba acusada más arriba/)
+    expect(r.err).not.toMatch(/was already acknowledged further up/)
   })
 
   it('an acknowledgement with NO numbers silences nothing and says so: believing you have silenced something and not having done it is the failure we cannot afford', () => {
     const repoRoot = makeRepoRoot()
     writeAck(repoRoot, 'residuo-status: 2026-07-28 — ya lo he mirado todo, da igual.\n')
     const r = runResidue(repoRoot, [closedWith(101, 'ready')])
-    expect(residueLine(r)).toMatch(/^warning: 1 issue\(s\) CERRADOS/)
-    expect(r.err).toMatch(/no silencia nada/)
+    expect(residueLine(r)).toMatch(/^warning: 1 CLOSED issue\(s\)/)
+    expect(r.err).toMatch(/silences nothing/)
   })
 
   it('the warning teaches how to acknowledge: without that, the way out exists but nobody finds it', () => {

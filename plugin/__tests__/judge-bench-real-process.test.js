@@ -57,6 +57,6 @@ describe('judge-bench.mjs --dry-run', () => {
   it('an agent file that cannot be read is a precondition failure', () => {
     const r = BenchProcess.run('--agent', join(here, 'nope.md'), '--dry-run')
     expect(r.status).toBe(3)
-    expect(r.stderr).toContain('no se puede montar el banco')
+    expect(r.stderr).toContain('the bench cannot be set up')
   })
 })

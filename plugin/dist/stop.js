@@ -7287,7 +7287,7 @@ function quoteForNotice(s, max = 300) {
   const one = String(s).replace(/\s+/g, " ").trim();
   return one.length > max ? `${one.slice(0, max)}\u2026` : one;
 }
-var STOP_TAIL = 'Y si el trabajo NO puede continuar (bloqueado por una decisi\xF3n, un dato falso, una dependencia externa\u2026), no lo escribas en prosa dentro de next_action: ponlo en el campo `blocked` (`blocked: {reason: "\u2026", unblock: "\u2026"}`), que es lo que el hook de SessionStart anuncia y lo que suspende el next_action en la siguiente sesi\xF3n.';
+var STOP_TAIL = 'And if the work CANNOT continue (blocked by a decision, a false fact, an external dependency\u2026), do not write it as prose inside next_action: put it in the `blocked` field (`blocked: {reason: "\u2026", unblock: "\u2026"}`), which is what the SessionStart hook announces and what suspends the next_action in the following session.';
 var shortSha = (s) => typeof s === "string" && /^[0-9a-f]{7,40}$/i.test(s) ? s.slice(0, 12) : String(s ?? "");
 var REV_SHAPE = /^[^\s-][^\s]*$/;
 function branchesContaining(git2, stateSha, currentBranch) {
@@ -7407,12 +7407,12 @@ function classifyStopState({ relation: relation2, stopHookActive, stateRel: stat
     const n = rel.count;
     const howMany = n === 1 ? "1 commit" : n > 1 ? `${n} commits` : "commits";
     const b = rel.bookkeeping || 0;
-    const note = b > 0 ? ` (m\xE1s ${b === 1 ? "1 commit que solo toca" : `${b} commits que solo tocan`} \`.agent/STATE.md\`, que no cuenta${b === 1 ? "" : "n"}: un apunte no es trabajo sin registrar)` : "";
-    const entry = stateRel2 === STATE_REL_PATH ? "Commitear ese cambio NO te vuelve a dejar atr\xE1s: un commit que solo toca `.agent/STATE.md` no cuenta. " : `No lo commitees: \`${stateRel2}\` est\xE1 fuera de git a prop\xF3sito y no entra en el PR de este slice; basta con dejarlo al d\xEDa en disco. `;
+    const note = b > 0 ? ` (plus ${b === 1 ? "1 commit that only touches" : `${b} commits that only touch`} \`.agent/STATE.md\`, and ${b === 1 ? "it does" : "they do"} not count: an entry is not unrecorded work)` : "";
+    const entry = stateRel2 === STATE_REL_PATH ? "Committing that change does NOT leave you behind again: a commit that only touches `.agent/STATE.md` does not count. " : `Do not commit it: \`${stateRel2}\` is outside git on purpose and does not go into this slice's PR; leaving it up to date on disk is enough. `;
     return {
       block: true,
       kind: "behind",
-      reason: `\`${stateRel2}\` se ha quedado atr\xE1s: hay ${howMany} de trabajo${note} en ${whereAmI(rel)} por encima de su \`last_commit\` (${shortSha(rel.stateSha)}), que s\xED es un ancestro de HEAD (${shortSha(rel.headSha)}). Actualiza \`${stateRel2}\` (you_are_here, next_action, tasks[], last_commit) antes de cerrar el turno, para que la pr\xF3xima sesi\xF3n se hidrate correcta. ` + entry + STOP_TAIL,
+      reason: `\`${stateRel2}\` has fallen behind: there ${n === 1 ? "is" : "are"} ${howMany} of work${note} in ${whereAmI(rel)} above its \`last_commit\` (${shortSha(rel.stateSha)}), which IS an ancestor of HEAD (${shortSha(rel.headSha)}). Update \`${stateRel2}\` (you_are_here, next_action, tasks[], last_commit) before closing the turn, so that the next session hydrates correctly. ` + entry + STOP_TAIL,
       systemMessage: ""
     };
   }
@@ -7420,7 +7420,7 @@ function classifyStopState({ relation: relation2, stopHookActive, stateRel: stat
     return {
       block: true,
       kind: "unresolvable",
-      reason: `El \`last_commit\` de \`${stateRel2}\` (\xAB${quoteForNotice(rel.raw || "(vac\xEDo)", 120)}\xBB) no es ning\xFAn commit de este repositorio: \`git rev-parse\` no lo resuelve. Puede ser un valor de relleno, un SHA de otro repo, o un commit que aqu\xED ya no existe. Mientras siga as\xED NADIE puede contrastar el estado con el repo \u2014 ni este guard ni la pr\xF3xima sesi\xF3n. Ponle el SHA real del \xFAltimo commit de este trabajo (\`git rev-parse HEAD\`) y actualiza el resto de \`${stateRel2}\` (you_are_here, next_action, tasks[]) antes de cerrar el turno. ` + STOP_TAIL,
+      reason: `The \`last_commit\` of \`${stateRel2}\` (\xAB${quoteForNotice(rel.raw || "(empty)", 120)}\xBB) is not any commit of this repository: \`git rev-parse\` does not resolve it. It may be a filler value, a SHA from another repo, or a commit that no longer exists here. While it stays that way NOBODY can contrast the state against the repo \u2014 neither this guard nor the next session. Put the real SHA of the last commit of this work (\`git rev-parse HEAD\`) and update the rest of \`${stateRel2}\` (you_are_here, next_action, tasks[]) before closing the turn. ` + STOP_TAIL,
       systemMessage: ""
     };
   }

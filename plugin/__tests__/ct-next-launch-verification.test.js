@@ -3,7 +3,7 @@
 // '\''<cwd>'\'' ]; } && ...'` — it TOLERATES a non-existent cwd (the `[ ! -d
 // ... ]` check makes the whole `{...}` succeed anyway) and starts the agent in
 // the default login shell instead, exiting with exit 0. ct-next.mjs used to
-// print "lanzado #N en <wt>" based only on `new-workspace` returning exit 0 —
+// print "launched #N en <wt>" based only on `new-workspace` returning exit 0 —
 // inferring "it is in the right place" from "the command did not fail",
 // exactly what this finding forbids.
 //
@@ -59,7 +59,7 @@ describe('ct-next — cmux launch verification (finding 3)', () => {
       FAKE_GH_COUNTER_FILE: counterFile,
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/lanzado #90 en .*\.worktrees\/90.*verificado: la sesión cmux está corriendo en ese directorio/)
+    expect(r.out).toMatch(/launched #90 at .*\.worktrees\/90.*verified: the cmux session is running in that directory/)
   })
 
   it('cmux accepts the launch but the session ends up in ANOTHER directory (non-existent cwd tolerated) → ATTENTION, never a bare "lanzado"', () => {
@@ -86,22 +86,22 @@ describe('ct-next — cmux launch verification (finding 3)', () => {
     // correct semantics, and the message now enumerates what has to be cleaned
     // up.
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATTENTION: cmux aceptó el lanzamiento de #90 \(exit 0\), pero la sesión NO está en/)
-    expect(r.out).toMatch(/está en "\/Users\/fake\/\.config\/ghostty-default-shell-dir" en su lugar/)
-    expect(r.out).toMatch(/NO se cuenta como lanzado con éxito/)
+    expect(r.out).toMatch(/ATTENTION: cmux accepted the launch of #90 \(exit 0\), but the session is NOT at/)
+    expect(r.out).toMatch(/it is at "\/Users\/fake\/\.config\/ghostty-default-shell-dir" instead/)
+    expect(r.out).toMatch(/It does NOT count as successfully launched/)
     // The final summary must NOT say "nada quedó a medias" nor "reintenta más
     // tarde": that is exactly the false assertion D5 removes.
-    expect(r.out).toMatch(/quedaron LANZADOS SIN VERIFICAR/)
-    expect(r.out).toMatch(/la rama feat\/90 y el worktree .*\.worktrees\/90/)
+    expect(r.out).toMatch(/were left LAUNCHED WITHOUT VERIFICATION/)
+    expect(r.out).toMatch(/the branch feat\/90 and the worktree .*\.worktrees\/90/)
     expect(r.out).toMatch(/gh issue edit 90 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
     expect(r.out).not.toMatch(/Nada quedó a medias/)
     expect(r.out).not.toMatch(/there is nothing to clean up by hand/)
     // The text may indeed NAME "reintenta más tarde" in order to deny it, but
     // it can never recommend it as a way out.
-    expect(r.out).toMatch(/no es "reintenta más tarde"/)
+    expect(r.out).toMatch(/this is not "try again later"/)
     expect(r.out).not.toMatch(/retry later, or on the next turn of the \/loop/)
     // It must never read as a confirmed launch with no qualification.
-    expect(r.out).not.toMatch(/lanzado #90 en .*verificado/)
+    expect(r.out).not.toMatch(/launched #90 at .*verificado/)
   })
 
   it('cmux accepts the launch but the session does not show up in the query at all → "no se encontró" ATTENTION, and it does NOT count as progress (exit 1)', () => {
@@ -119,11 +119,11 @@ describe('ct-next — cmux launch verification (finding 3)', () => {
     // D5, finding A: and for the same reason as 'wrong-cwd', the code goes from
     // 3 to 1 — here too a claim, a branch and a worktree are left behind.
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATTENTION: cmux devolvió éxito \(exit 0\) al lanzar #90, pero no se encontró ninguna sesión/)
-    expect(r.out).toMatch(/NO se cuenta como lanzado con éxito/)
-    expect(r.out).toMatch(/quedaron LANZADOS SIN VERIFICAR/)
+    expect(r.out).toMatch(/ATTENTION: cmux returned success \(exit 0\) on launching #90, but no session named/)
+    expect(r.out).toMatch(/It does NOT count as successfully launched/)
+    expect(r.out).toMatch(/were left LAUNCHED WITHOUT VERIFICATION/)
     expect(r.out).not.toMatch(/Nada quedó a medias/)
-    expect(r.out).not.toMatch(/lanzado #90 en .*verificado/)
+    expect(r.out).not.toMatch(/launched #90 at .*verificado/)
   })
 
   it('cmux cannot be queried after the launch (daemon down) → "no se pudo verificar" message, it never asserts confidence it does not have', () => {
@@ -136,9 +136,9 @@ describe('ct-next — cmux launch verification (finding 3)', () => {
       FAKE_CMUX_LIST_WINDOWS_FAIL: '1',
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/lanzado #90 en .*\.worktrees\/90/)
-    expect(r.out).toMatch(/no se pudo verificar la sesión/)
-    expect(r.out).not.toMatch(/verificado: la sesión cmux está corriendo/)
+    expect(r.out).toMatch(/launched #90 at .*\.worktrees\/90/)
+    expect(r.out).toMatch(/the cmux session could not be verified/)
+    expect(r.out).not.toMatch(/verified: the cmux session is running/)
   })
 
   it('adversarial attack: two slices in the same batch with different names are not confused with each other', () => {
@@ -152,8 +152,8 @@ describe('ct-next — cmux launch verification (finding 3)', () => {
       // #90 ends up in the wrong cwd; #91 launches clean.
       FAKE_CMUX_WRONG_CWD_SUBSTR: '#90',
     })
-    expect(r.out).toMatch(/ATTENTION: cmux aceptó el lanzamiento de #90 \(exit 0\), pero la sesión NO está en/)
-    expect(r.out).toMatch(/lanzado #91 en .*\.worktrees\/91.*verificado: la sesión cmux está corriendo en ese directorio/)
+    expect(r.out).toMatch(/ATTENTION: cmux accepted the launch of #90 \(exit 0\), but the session is NOT at/)
+    expect(r.out).toMatch(/launched #91 at .*\.worktrees\/91.*verified: the cmux session is running in that directory/)
     // D5, finding A (the MIXED case, which the commission did not name and
     // which was the hardest to see): with one confirmed and one unconfirmed,
     // `launchedCount` is 1 — so exit 3 was never reached and the batch exited
@@ -161,11 +161,11 @@ describe('ct-next — cmux launch verification (finding 3)', () => {
     // status:in-progress with a branch and a worktree and no confirmed agent.
     // Verified against the unfixed code: exit 0.
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/lanzados 1\/2 slice\(s\) seleccionados de esta tanda/)
-    expect(r.out).toMatch(/1 de los 2 slice\(s\) seleccionados quedaron LANZADOS SIN VERIFICAR/)
+    expect(r.out).toMatch(/launched 1\/2 of the slice\(s\) selected in this batch/)
+    expect(r.out).toMatch(/1 of the 2 selected slice\(s\) were left LAUNCHED WITHOUT VERIFICATION/)
     // Only #90 must show up in the "somebody has to look at this by hand"
     // list: the confirmed #91 is neither touched nor mentioned as residue.
-    expect(r.out).toMatch(/- #90: la sesión de cmux existe pero está en/)
+    expect(r.out).toMatch(/- #90: the cmux session exists but is at/)
     expect(r.out).not.toMatch(/- #91: /)
   })
 
@@ -185,9 +185,9 @@ describe('ct-next — cmux launch verification (finding 3)', () => {
       FAKE_CMUX_SCHEMA_MISMATCH: '1',
     })
     expect(r.code).toBe(0) // it counts as launched: "inconclusive" gets the same benefit of the doubt as "could not be queried"
-    expect(r.out).toMatch(/lanzado #90 en .*\.worktrees\/90/)
-    expect(r.out).toMatch(/no se pudo verificar la sesión/)
-    expect(r.out).not.toMatch(/no se encontró ninguna sesión con el nombre/) // never the confident "not-found"
-    expect(r.out).not.toMatch(/verificado: la sesión cmux está corriendo/)
+    expect(r.out).toMatch(/launched #90 at .*\.worktrees\/90/)
+    expect(r.out).toMatch(/the cmux session could not be verified/)
+    expect(r.out).not.toMatch(/no session named/) // never the confident "not-found"
+    expect(r.out).not.toMatch(/verified: the cmux session is running/)
   })
 })

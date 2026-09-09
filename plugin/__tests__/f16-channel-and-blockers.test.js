@@ -179,7 +179,7 @@ describe('F16/H1 — when N of them block, the message cannot name a single one'
       { n: 2, order: 2, status: 'ready', deps: [], touches: ['api'], name: 'b' },
     ]
     const r = runNext(['--repo', 'o/r', '--cap', '9', '--dry-run'], { CT_NEXT_FIXTURE: JSON.stringify({ issues, mergedIssues: [] }) })
-    expect(r.stdout).toMatch(/#2 está ready con deps mergeadas, pero colisiona con trabajo en vuelo: comparte el token 'api' con #1 \(status:in-progress\)/)
+    expect(r.stdout).toMatch(/#2 is ready with merged deps, but it collides with work in flight: it shares the token 'api' with #1 \(status:in-progress\)/)
     expect(r.stdout).not.toMatch(/resolving just one/i)
   })
 })

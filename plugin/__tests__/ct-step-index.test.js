@@ -26,14 +26,14 @@ describe('what gets committed is what was approved: the index seal', () => {
   it('THE ATTACK: code re-staged AFTER the accepted verdict does not get into the commit', () => {
     ct('report', writeReport(['uno.txt']))
     ct('controls')
-    expect(judgeTask(writeVerdict('PASS')).stdout).toMatch(/veredicto PASS/)
+    expect(judgeTask(writeVerdict('PASS')).stdout).toMatch(/verdict PASS/)
     expect(runState().step).toBe('commit')
     // THE THIRD WINDOW: the verdict is already accepted and its package consumed.
     writeFileSync(join(repo, 'uno.txt'), 'uno, cambiado DESPUÉS del veredicto aceptado\n')
     execFileSync('git', ['add', 'uno.txt'], { cwd: repo })
     const r = ct('commit')
     expect(r.status).toBe(8)
-    expect(r.stderr).toMatch(/el índice ya no es el que el juez aprobó/)
+    expect(r.stderr).toMatch(/the index is no longer the one the judge approved/)
     expect(commits()).toBe(1)                    // NOTHING gets committed
     expect(runState().step).toBe('commit')         // the run neither advances nor goes back
     expect(runState().task).toBe(1)
@@ -86,7 +86,7 @@ describe('what gets committed is what was approved: the index seal', () => {
     execFileSync('git', ['add', '--', 'docs/superpowers/verdicts/issue-7-task-1.json'], { cwd: repo })
     const r = ct('commit')
     expect(r.status).toBe(8)
-    expect(r.stderr).toMatch(/el índice ya no es el que el juez aprobó/)
+    expect(r.stderr).toMatch(/the index is no longer the one the judge approved/)
     expect(commits()).toBe(1)
   })
 
@@ -111,9 +111,9 @@ describe('what gets committed is what was approved: the index seal', () => {
     const r = judgeSlice(writeSliceVerdict('PASS'))
     expect(r.status).toBe(0)                      // the verdict is valid: it delivers
     expect(runState().closed).toBe('delivered')
-    expect(r.stderr).toMatch(/ajenas a la maquinaria \(colado\.txt\)/)
+    expect(r.stderr).toMatch(/foreign to the machinery \(colado\.txt\)/)
     expect(commits()).toBe(3)                     // base + 2 tasks: NO verdict commit at all
-    expect(log()).not.toMatch(/Veredicto del slice entero/)
+    expect(log()).not.toMatch(/Verdict of the whole slice/)
     expect(execFileSync('git', ['log', '--oneline', '--', 'colado.txt'], { cwd: repo, encoding: 'utf8' }).trim()).toBe('')
     expect(runState().sliceCommits ?? 0).toBe(0)    // the commit that did not happen is not counted
     // The evidence stays STAGED: taking the foreign file out and committing it is one line.
@@ -132,7 +132,7 @@ describe('what gets committed is what was approved: the index seal', () => {
     writeFileSync(join(repo, '.agent', 'run-7.json'), JSON.stringify(s, null, 2) + '\n')
     const r = ct('commit')
     expect(r.status).toBe(8)
-    expect(r.stderr).toMatch(/no trae el sello del índice/)
+    expect(r.stderr).toMatch(/does not carry the index seal/)
     expect(commits()).toBe(1)
   })
 })
@@ -150,7 +150,7 @@ describe('where it has got to lives on disk, not in the conversation', () => {
     execFileSync('git', ['commit', '-q', '--allow-empty', '-m', 'a mano'], { cwd: repo })
     const r = ct('next')
     expect(r.status).toBe(8)
-    expect(r.stderr).toMatch(/no cuentan lo mismo/)
+    expect(r.stderr).toMatch(/do not count the same/)
   })
 
   it('writes telemetry with the epic seeded in every one of its rows', () => {
@@ -191,7 +191,7 @@ describe('the index does not accumulate between attempts', () => {
     // Attempt 1: the implementer touches too much; it gets staged and the check
     // catches it.
     ct('report', writeReport(['uno.txt', 'dos.txt']))
-    expect(ct('controls').stdout).toMatch(/controles: failed/)
+    expect(ct('controls').stdout).toMatch(/controls: failed/)
     // Attempt 2: the implementer WITHDRAWS what it touched too much and reports
     // only the legitimate part. Withdrawing it from the worktree and not only
     // from the declaration is what the veto demands ever since the paths are
@@ -200,7 +200,7 @@ describe('the index does not accumulate between attempts', () => {
     // attempt 1's dos.txt is not left quietly staged either.
     rmSync(join(repo, 'dos.txt'))
     ct('report', writeReport(['uno.txt']))
-    expect(ct('controls').stdout).toMatch(/controles: done/)
+    expect(ct('controls').stdout).toMatch(/controls: done/)
     judgeTask(writeVerdict('PASS'))
     expect(ct('commit').status).toBe(0)
     const files = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
@@ -213,9 +213,9 @@ describe('the index does not accumulate between attempts', () => {
     // Something writes and stages dos.txt outside the report — it makes no difference who.
     writeFileSync(join(repo, 'dos.txt'), 'dos\n')
     execFileSync('git', ['add', 'dos.txt'], { cwd: repo })
-    expect(ct('controls').stdout).toMatch(/controles: failed/)
+    expect(ct('controls').stdout).toMatch(/controls: failed/)
     const logText = readFileSync(join(repo, '.agent', 'run-7', 'task-1-controls-1.log'), 'utf8')
-    expect(logText).toMatch(/dos\.txt.*no la declara/)
+    expect(logText).toMatch(/dos\.txt.*does not declare it/)
   })
 })
 
@@ -244,7 +244,7 @@ describe('the good closure is persisted, and the release gate reads it', () => {
     taskOk('uno.txt') // 1 of 2: the run is going fine but it is NOT delivered
     const partial = deliveredRun(readFileSync(join(repo, '.agent', 'run-7.json'), 'utf8'), 7)
     expect(partial.ok).toBe(false)
-    expect(partial.why).toMatch(/no está entregado/)
+    expect(partial.why).toMatch(/is not delivered/)
   })
 
   it('the two tasks committed WITHOUT global nor slice judgement is not delivered either', () => {

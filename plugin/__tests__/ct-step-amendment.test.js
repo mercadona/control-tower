@@ -59,7 +59,7 @@ describe('the amended plan travels inside the commit of its task', () => {
     ct('report', writeReport(['uno.txt', 'extra.txt']))
     const r = ct('controls')
 
-    expect(r.stdout).toMatch(/controles: done/)
+    expect(r.stdout).toMatch(/controls: done/)
     const log = readFileSync(runState().lastControlsLog, 'utf8')
     expect(log).not.toMatch(/plan\.md/)
   })
@@ -136,9 +136,9 @@ describe('an amendment can only ADD paths', () => {
     ct('report', writeReport(['uno.txt']))
     const r = ct('controls')
 
-    expect(r.stdout).toMatch(/controles: failed/)
+    expect(r.stdout).toMatch(/controls: failed/)
     const log = readFileSync(runState().lastControlsLog, 'utf8')
-    expect(log).toMatch(/tarea 1 enmendó el plan quitando 'uno\.txt'.*sólo puede AÑADIR rutas/)
+    expect(log).toMatch(/task 1 amended the plan by removing 'uno\.txt'.*can only ADD paths/)
   })
 
   it('an amendment that only adds paths passes the control', () => {
@@ -146,7 +146,7 @@ describe('an amendment can only ADD paths', () => {
     ct('report', writeReport(['uno.txt', 'extra.txt']))
     const r = ct('controls')
 
-    expect(r.stdout).toMatch(/controles: done/)
+    expect(r.stdout).toMatch(/controls: done/)
   })
 
   it('after the refusal, HEAD\'s plan still declares the path the amendment removed', () => {
@@ -170,9 +170,9 @@ describe('the plan that governs the controls is the one that is going to be comm
     enmendar()
     const r = ct('controls')
 
-    expect(r.stdout).toMatch(/controles: failed/)
-    expect(log()).toMatch(/el plan del árbol no es el que se va a comitear/)
-    expect(log()).toMatch(/no está entre lo stageado/)
+    expect(r.stdout).toMatch(/controls: failed/)
+    expect(log()).toMatch(/the tree's plan is not the one that is going to be committed/)
+    expect(log()).toMatch(/it is not among what is staged/)
   })
 
   it('a second edit after report, with the plan already staged, is refused too', () => {
@@ -185,8 +185,8 @@ describe('the plan that governs the controls is the one that is going to be comm
     writeFileSync(ruta, otra)
     const r = ct('controls')
 
-    expect(r.stdout).toMatch(/controles: failed/)
-    expect(log()).toMatch(/el del ÍNDICE dice otra cosa/)
+    expect(r.stdout).toMatch(/controls: failed/)
+    expect(log()).toMatch(/the INDEX's says something else/)
   })
 })
 
@@ -199,9 +199,9 @@ describe('the scope control does not exempt the machinery that reaches the index
     execFileSync('git', ['add', '--', 'docs/superpowers/specs/colado.md'], { cwd: repo })
     const r = ct('controls')
 
-    expect(r.stdout).toMatch(/controles: failed/)
+    expect(r.stdout).toMatch(/controls: failed/)
     expect(readFileSync(runState().lastControlsLog, 'utf8'))
-      .toMatch(/tocó 'docs\/superpowers\/specs\/colado\.md'/)
+      .toMatch(/touched 'docs\/superpowers\/specs\/colado\.md'/)
   })
 })
 
@@ -210,10 +210,10 @@ describe('the two messages of the scope control do not contradict each other', (
     ct('report', writeReport(['otro.txt']))
     const r = ct('controls')
 
-    expect(r.stdout).toMatch(/controles: failed/)
+    expect(r.stdout).toMatch(/controls: failed/)
     const texto = readFileSync(runState().lastControlsLog, 'utf8')
-    expect(texto).toMatch(/QUITARLA NO ES TU SALIDA/)
-    expect(texto).not.toMatch(/o sobra en el PLAN/)
+    expect(texto).toMatch(/REMOVING IT IS NOT YOUR WAY OUT/)
+    expect(texto).not.toMatch(/or it is surplus in the PLAN/)
   })
 })
 

@@ -42,14 +42,14 @@ describe('the table, entire', () => {
         const { state } = call()
         expect(Object.values(RUN_STATES)).toContain(state)
       } else {
-        expect(call).toThrow(/transición imposible/)
+        expect(call).toThrow(/impossible transition/)
       }
     },
   )
 
   it('the impossible message names the step and the outcome, so that it can be fixed', () => {
     expect(() => after(run({ step: STEPS.IMPLEMENT }), OUTCOMES.FAILED))
-      .toThrow(/paso "implement".*resultado "failed"/)
+      .toThrow(/step "implement".*outcome "failed"/)
   })
 })
 

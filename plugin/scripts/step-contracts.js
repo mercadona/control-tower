@@ -651,7 +651,7 @@ const isText = (v) => typeof v === 'string' && v.trim() !== ''
 export function readVerdict(structured, rules = VERDICT_RULES) {
   if (!structured || typeof structured !== 'object') return { why: 'the judge did not return structured_output' }
   const { ruling, rubric, findings, review_token: token } = structured
-  if (ruling !== 'PASS' && ruling !== 'FAIL') return { why: `ruling desconocido: ${JSON.stringify(ruling)}` }
+  if (ruling !== 'PASS' && ruling !== 'FAIL') return { why: `unknown ruling: ${JSON.stringify(ruling)}` }
   if (!Array.isArray(findings)) return { why: 'findings is not a list' }
   for (const [i, f] of findings.entries()) {
     if (!f || typeof f !== 'object') return { why: `finding ${i} is not an object` }
@@ -706,7 +706,7 @@ export function readVerdict(structured, rules = VERDICT_RULES) {
   // prudent side — it is discarded and asked again, because a judge that does
   // not understand itself has not judged.
   if (ruling === 'PASS' && findings.some((f) => f.severity === 'high')) {
-    return { why: 'un PASS con un hallazgo de severidad high contradice la rúbrica: un hallazgo grave es FAIL' }
+    return { why: 'a PASS with a high-severity finding contradicts the rubric: a serious finding is a FAIL' }
   }
   // THE PACKAGE'S TOKEN, copied — and deliberately THE LAST of the checks. The
   // ones above decide whether this is a verdict; this one decides what it is a
@@ -908,10 +908,10 @@ export function readE2eReport(structured, declaredRuns) {
 // in F27 does not cover this path.
 // ============================================================================
 export function commitMessage({ issue, task, tasksTotal, name }) {
-  const title = `${sanitize(name)} (#${issue}, tarea ${task}/${tasksTotal})`
+  const title = `${sanitize(name)} (#${issue}, task ${task}/${tasksTotal})`
   const body = [
     '',
-    `Tarea ${task} de ${tasksTotal} del plan del slice, implementada y juzgada paso a paso con ct-step.`,
+    `Task ${task} of ${tasksTotal} of the slice's plan, implemented and judged step by step with ct-step.`,
     '',
     // #95/H5: the marker by which the `Stop` hook recognises that this commit
     // was made by the PROGRAM and not by the agent — and then updates
@@ -935,7 +935,7 @@ export function commitMessage({ issue, task, tasksTotal, name }) {
 // by breaking the reference, not by deleting the word: the title still reads
 // the same.
 function sanitize(name) {
-  return String(name || 'tarea sin nombre').replace(/#(\d+)/g, 'issue $1').trim()
+  return String(name || 'unnamed task').replace(/#(\d+)/g, 'issue $1').trim()
 }
 
 // The SLICE verdict has no task to hang off: a task's verdict travels INSIDE
@@ -945,10 +945,10 @@ function sanitize(name) {
 // the program looks at its own message because `commit-keyword-guard` never
 // sees a `git commit` that no session launched.
 export function sliceVerdictCommitMessage({ issue, tasksTotal }) {
-  const title = `Veredicto del slice entero (#${issue})`
+  const title = `Verdict of the whole slice (#${issue})`
   const body = [
     '',
-    `Las ${tasksTotal} tareas comiteadas, la Global verification en verde y el slice juzgado de una vez por ct-slice-judge.`,
+    `The ${tasksTotal} tasks committed, the Global verification green and the slice judged in one go by ct-slice-judge.`,
     '',
     CtStepCommit.TRAILER_LINE,
     'Co-Authored-By: Claude <noreply@anthropic.com>',

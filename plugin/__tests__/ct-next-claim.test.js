@@ -178,7 +178,7 @@ describe('ct-next — a successful claim before the dispatch (W-C, point 1)', ()
     })
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/claimed #42/i)
-    expect(r.out).toMatch(/lanzado #42/)
+    expect(r.out).toMatch(/launched #42/)
     const argv = readFileSync(argvLog, 'utf8')
     expect(argv).toMatch(/issue edit 42 --repo o\/r --add-label status:in-progress --remove-label status:ready/)
     // the claim (gh) happens BEFORE the worktree is created (git)
@@ -207,9 +207,9 @@ describe('ct-next — a failed claim (exit 1) skips the slice and carries on wit
       FAKE_GIT_LOG_FILE: gitLog,
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/COLLISION|colisión/i) // dispatch-check's own message, surfaced as it is
+    expect(r.out).toMatch(/COLLISION|collision/i) // dispatch-check's own message, surfaced as it is
     expect(r.out).toMatch(/skipping #42/)
-    expect(r.out).toMatch(/lanzado #43/)
+    expect(r.out).toMatch(/launched #43/)
     const gitLogTxt = readFileSync(gitLog, 'utf8')
     expect(gitLogTxt).toMatch(/worktree add -b feat\/43/)
     expect(gitLogTxt).not.toMatch(/worktree add -b feat\/42/)
@@ -302,7 +302,7 @@ describe('ct-next — dispatch-check.mjs absent (W-C, fix round 1, finding 2)', 
 // WITHOUT an explicit `maxBuffer` — with `stdio: 'inherit'` (before this
 // change) that never mattered, but on moving to capturing (finding 3, so as to
 // be able to classify the text) it inherits Node's default (1 MiB per stream).
-// A candidate with MANY issues in flight colliding (`COLLISION: #N choca con
+// A candidate with MANY issues in flight colliding (`COLLISION: #N clashes with
 // #A[...] #B[...] ...`, one per issue) can exceed 1 MiB easily against a real
 // repo — and Node does not truncate in silence: it kills the child (SIGTERM)
 // and `execFileSync` throws with no numeric `status`, which ct-next already
@@ -342,7 +342,7 @@ describe("ct-next — an explicit maxBuffer when capturing dispatch-check's outp
       "// to truncate its own write, for the same reason already documented in",
       "// fake-gh-bin/gh — it is NOT a copy of dispatch-check.mjs, the real file is",
       "// not touched.",
-      `process.stderr.write('COLLISION: #42 choca con ' + 'X'.repeat(${BIG_PAYLOAD_BYTES}))`,
+      `process.stderr.write('COLLISION: #42 clashes with ' + 'X'.repeat(${BIG_PAYLOAD_BYTES}))`,
       'process.exitCode = 1',
       '',
     ].join('\n'))
@@ -379,7 +379,7 @@ describe("ct-next — an explicit maxBuffer when capturing dispatch-check's outp
       // Node's default maxBuffer looks) — a candidate that collides, however
       // large the message, is still a NORMAL skip of the protocol.
       expect(out).not.toMatch(/unexpected failure/i)
-      expect(out).toContain('COLLISION: #42 choca con')
+      expect(out).toContain('COLLISION: #42 clashes with')
       expect(out).toMatch(/skipping #42/)
       // A single candidate, it collides, zero launched → the same exit 3 as finding 1.
       expect(r.status).toBe(3)
@@ -469,9 +469,9 @@ describe('ct-next — EVERY selected slice is skipped at claim time → not sile
     // No worktree should have been created: both candidates were skipped.
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
-    expect(r.out).not.toMatch(/lanzado #/)
+    expect(r.out).not.toMatch(/launched #/)
     // An explicit terminal count of how many out of how many were launched.
-    expect(r.out).toMatch(/lanzad[oa]s? 0.*2/i)
+    expect(r.out).toMatch(/launched 0.*2/i)
     // #41 (not the last one) still says it carries on with the rest.
     expect(r.out).toMatch(/skipping #41:.*carrying on with the rest/i)
     // #42 (the LAST candidate) NO LONGER promises "sigo con el resto" — there
@@ -488,13 +488,13 @@ describe('ct-next — EVERY selected slice is skipped at claim time → not sile
     // appear ONCE only — before, `attemptClaim` forwarded the child's stderr
     // twice (once through Node's default forwarding in execFileSync, once
     // through the wrapper's own `process.stderr.write`).
-    expect(countOccurrences(r.out, 'COLLISION: #41 choca con #99')).toBe(1)
-    expect(countOccurrences(r.out, 'COLLISION: #42 choca con #99')).toBe(1)
+    expect(countOccurrences(r.out, 'COLLISION: #41 clashes with #99')).toBe(1)
+    expect(countOccurrences(r.out, 'COLLISION: #42 clashes with #99')).toBe(1)
   })
 })
 
 // D2, finding 3: dispatch-check.mjs's own comment calls its exit 1
-// "colisión o carrera perdida", but that SAME exit 1 also covers a failure to
+// "collision o race lost", but that SAME exit 1 also covers a failure to
 // read the candidate's labels, a failure to write the claim, and a readback
 // failure — ct-next treated all five exactly alike ("saltando ... sigo con el
 // resto"), even when the issue was left ORPHANED in status:in-progress
@@ -535,10 +535,10 @@ describe("ct-next — dispatch-check's exit 1 is NOT always a normal outcome of 
     // Exit code PINNED to 1 (not `not.toBe(0)`): 'stuck' is the only cause that
     // must still land here after the fix of minor 3.
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATTENTION.*bloqueado en status:in-progress/is)
+    expect(r.out).toMatch(/ATTENTION.*stuck at status:in-progress/is)
     // It is NEVER reported as if it were the normal collision/race skip.
     expect(r.out).not.toMatch(/carrying on with the rest of this batch/i)
-    expect(r.out).not.toMatch(/lanzado #42/)
+    expect(r.out).not.toMatch(/launched #42/)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
     // D2 review, major 1: dispatch-check's ATTENTION line (the manual command
@@ -547,8 +547,8 @@ describe("ct-next — dispatch-check's exit 1 is NOT always a normal outcome of 
     // message for 'stuck', a little further down in the code, MENTIONS the word
     // "ATTENTION" when pointing at that line — that is deliberate and a distinct
     // occurrence, not a duplication).
-    expect(countOccurrences(r.out, 'ATTENTION: #42 puede haber quedado bloqueado en status:in-progress')).toBe(1)
-    expect(countOccurrences(r.out, 'Libéralo a mano con: gh issue edit 42')).toBe(1)
+    expect(countOccurrences(r.out, 'ATTENTION: #42 may have been left stuck at status:in-progress')).toBe(1)
+    expect(countOccurrences(r.out, 'Release it by hand with: gh issue edit 42')).toBe(1)
   })
 
   it("'infra' with nothing stuck (a failure to read the candidate's labels) → it NO LONGER aborts with exit 1: it is treated as 'retry later' (exit 3, with no further candidates in this batch)", () => {
@@ -565,7 +565,7 @@ describe("ct-next — dispatch-check's exit 1 is NOT always a normal outcome of 
     // It is NO LONGER an abort with exit 1: nothing mutated, nothing was left
     // stuck — the same code as finding 1's "zero launched, nothing broken".
     expect(r.code).toBe(3)
-    expect(r.out).toMatch(/no se pudo leer el estado de #42/i)
+    expect(r.out).toMatch(/the state of #42 in o\/r could not be read/i)
     // The message must say explicitly that this is NOT a normal collision —
     // but it must NO LONGER say that it aborts the whole batch (with cap=1
     // there are no further candidates anyway; what matters is that the control
@@ -573,8 +573,8 @@ describe("ct-next — dispatch-check's exit 1 is NOT always a normal outcome of 
     // cap=2, where there IS one more candidate and it does get reached).
     expect(r.out).toMatch(/infrastructure failure/i)
     expect(r.out).not.toMatch(/aborting the whole batch/i)
-    expect(r.out).not.toMatch(/lanzado #42/)
-    expect(countOccurrences(r.out, 'no se pudo leer el estado de #42')).toBe(1)
+    expect(r.out).not.toMatch(/launched #42/)
+    expect(countOccurrences(r.out, 'the state of #42')).toBe(1)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
   })
@@ -601,11 +601,11 @@ describe("ct-next — dispatch-check's exit 1 is NOT always a normal outcome of 
       FAKE_GIT_LOG_FILE: gitLog,
     })
     expect(r.code).toBe(0)
-    expect(r.out).toMatch(/no se pudo leer el estado de #41/i)
+    expect(r.out).toMatch(/the state of #41 in o\/r could not be read/i)
     expect(r.out).toMatch(/infrastructure failure/i)
     // The batch WENT ON: #42 was claimed and launched, despite #41's hiccup.
     expect(r.out).toMatch(/claimed #42/)
-    expect(r.out).toMatch(/lanzado #42/)
+    expect(r.out).toMatch(/launched #42/)
     expect(r.out).not.toMatch(/aborting the whole batch/i)
     const gitLogTxt = readFileSync(gitLog, 'utf8')
     expect(gitLogTxt).toMatch(/worktree add -b feat\/42/)
@@ -632,8 +632,8 @@ describe("ct-next — dispatch-check's exit 1 is NOT always a normal outcome of 
       FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready --remove-label status:in-progress',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATTENTION.*bloqueado en status:in-progress/is)
-    expect(r.out).not.toMatch(/lanzado #/)
+    expect(r.out).toMatch(/ATTENTION.*stuck at status:in-progress/is)
+    expect(r.out).not.toMatch(/launched #/)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
     // #42 was never even attempted: no claim (issue edit) for 42 at all,
@@ -662,7 +662,7 @@ describe('ct-next — dispatch fails after a successful claim → it reverts the
     })
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/could not seed \.agent\/SLICE\.md/)
-    expect(r.out).toMatch(/limpiados automáticamente/)
+    expect(r.out).toMatch(/cleaned up automatically/)
     expect(r.out).not.toMatch(/ATTENTION/)
     const argv = readFileSync(argvLog, 'utf8')
     expect(argv).toMatch(/issue edit 42 --repo o\/r --add-label status:in-progress --remove-label status:ready/)
@@ -697,7 +697,7 @@ describe('ct-next — dispatch fails after a successful claim → it reverts the
     })
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/could not launch cmux/)
-    expect(r.out).toMatch(/limpiados automáticamente/)
+    expect(r.out).toMatch(/cleaned up automatically/)
     const argv = readFileSync(argvLog, 'utf8')
     expect(argv).toMatch(/issue edit 42 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
   })
@@ -714,8 +714,8 @@ describe('ct-next — dispatch fails after a successful claim → it reverts the
       FAKE_GIT_WORKTREE_ADD_FAIL: '1',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/no se pudo crear el worktree/)
-    expect(r.out).toMatch(/revertido/i)
+    expect(r.out).toMatch(/the worktree for/)
+    expect(r.out).toMatch(/reverted/i)
     expect(r.out).not.toMatch(/ATTENTION/)
     const argv = readFileSync(argvLog, 'utf8')
     expect(argv).toMatch(/issue edit 42 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
@@ -732,7 +732,7 @@ describe('ct-next — dispatch fails after a successful claim → it reverts the
       FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready',
     })
     expect(r.code).toBe(1)
-    expect(r.out).toMatch(/ATTENTION.*no se pudo revertir.*claim/is)
+    expect(r.out).toMatch(/ATTENTION.*claim.*could not be reverted/is)
     expect(r.out).toMatch(/gh issue edit 42 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
   })
 })

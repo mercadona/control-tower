@@ -635,7 +635,7 @@ describe('the slice judge (§3.7-B)', () => {
       findings: [{ rule: 'coherencia', severity: 'high', what: 'x', path: 'y', evidence: 'z' }],
     })
     expect(r.verdict).toBeUndefined()
-    expect(r.why).toMatch(/contradice la rúbrica/)
+    expect(r.why).toMatch(/contradicts the rubric/)
   })
 
   it('readSliceVerdict discards an incomplete walk: the rubric is 3 items', () => {
@@ -778,7 +778,7 @@ describe('the verdict', () => {
 
   it.each([
     ['with no structured_output', null, /did not return structured_output/],
-    ['with an invented ruling', { ruling: 'MAYBE', findings: [] }, /ruling desconocido/],
+    ['with an invented ruling', { ruling: 'MAYBE', findings: [] }, /unknown ruling/],
     ['with findings that are not a list', { ruling: 'PASS', findings: 'ninguno' }, /is not a list/],
     ['with an invented severity', { ruling: 'FAIL', findings: [{ rule: 'contrato', severity: 'catastrophic', what: 'x', path: 'y', evidence: 'z' }] }, /unknown severity/],
     ['with a mute finding', { ruling: 'FAIL', findings: [{ rule: 'contrato', severity: 'high', what: '', path: 'y', evidence: 'z' }] }, /does not say what or where/],
@@ -798,7 +798,7 @@ describe('the verdict', () => {
     // itself has not judged, and asking again costs less than deciding for it.
     const r = v('PASS', [{ rule: 'contrato', severity: 'high', what: 'sql injection', path: 'db.js', line: 10, evidence: 'query(`… ${id}`)' }])
     expect(r.verdict).toBeUndefined()
-    expect(r.why).toMatch(/contradice la rúbrica/)
+    expect(r.why).toMatch(/contradicts the rubric/)
   })
 
   it('the finding names the rule it breaks', () => {
@@ -1235,7 +1235,7 @@ describe('the message the program composes', () => {
 
   it('it names the task, the issue and how far along the slice is', () => {
     expect(msg('el cliente tipado de la API').split('\n')[0])
-      .toBe('el cliente tipado de la API (#42, tarea 2/8)')
+      .toBe('el cliente tipado de la API (#42, task 2/8)')
   })
 
   it("it NEVER carries a closing keyword, even if the task's name brings one", () => {
@@ -1248,11 +1248,11 @@ describe('the message the program composes', () => {
 
   it.each(['closes #1', 'resolved #99', 'Fixed #7'])('it defuses "%s" too', (keyword) => {
     expect(() => msg(keyword)).not.toThrow()
-    expect(msg(keyword)).not.toMatch(/#\d+\b(?!, tarea)/)
+    expect(msg(keyword)).not.toMatch(/#\d+\b(?!, task)/)
   })
 
   it("the slice's own issue travels as a reference, not as a closing order", () => {
-    expect(msg('una tarea')).toContain('(#42, tarea 2/8)')
+    expect(msg('una tarea')).toContain('(#42, task 2/8)')
   })
 })
 

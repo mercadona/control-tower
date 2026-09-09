@@ -132,11 +132,11 @@ describe('H2 (CLI) — the slice that fell off the queue stops disappearing in s
     })
     expect(r.code).toBe(0)
     expect(r.err).toMatch(/#451/)
-    expect(r.err).toMatch(/CERRADOS conservan una label/)
-    expect(r.err).toMatch(/NO EXISTEN/)
+    expect(r.err).toMatch(/CLOSED issue\(s\) keep a live/)
+    expect(r.err).toMatch(/DO NOT EXIST/)
     expect(r.err).toMatch(/status:ready/)
     // It is diagnostics, not product: never over stdout (F16 channel criterion).
-    expect(r.stdout).not.toMatch(/CERRADOS conservan una label/)
+    expect(r.stdout).not.toMatch(/CLOSED issue\(s\) keep a live/)
   })
 
   it('a closed one with status:in-review is NOT reported as an anomaly: it is the normal end of a slice', () => {
@@ -149,10 +149,10 @@ describe('H2 (CLI) — the slice that fell off the queue stops disappearing in s
     })
     expect(r.code).toBe(0)
     expect(r.out).not.toMatch(/#300 .*status:ready/)
-    expect(r.out).not.toMatch(/CERRADOS conservan una label `status:` viva, y para/)
+    expect(r.out).not.toMatch(/CLOSED issue\(s\) keep a live `status:` viva, y para/)
     // But the number is not hidden: it is counted and it is said why it is not
     // an anomaly.
-    expect(r.err).toMatch(/final NORMAL de un slice/)
+    expect(r.err).toMatch(/NORMAL end of a slice/)
   })
 
   it('a single aggregated warning, not one per issue: ten residues are NOT ten lines', () => {
@@ -168,7 +168,7 @@ describe('H2 (CLI) — the slice that fell off the queue stops disappearing in s
     expect(r.code).toBe(0)
     // Only the emissions AT THE MOMENT (`warning: …`) are counted, not the recap
     // at the end, which by design repeats every accumulated warning.
-    const lines = r.err.split('\n').filter((l) => /^warning: \d+ issue\(s\) CERRADOS/.test(l))
+    const lines = r.err.split('\n').filter((l) => /^warning: \d+ CLOSED issue\(s\)/.test(l))
     expect(lines.length).toBe(1)
     // F19/H2 CHANGES THIS NUMBER ON PURPOSE: it was 6 when `blocked` counted as
     // an anomaly alongside `ready` and `in-progress`. A closed one with
@@ -178,9 +178,9 @@ describe('H2 (CLI) — the slice that fell off the queue stops disappearing in s
     // teaches a reader to discount the whole headline. Now the headline counts
     // 5 (3 ready + 2 in-progress) and the `blocked` one comes out in its own
     // count, just like the `in-review` ones.
-    expect(lines[0]).toMatch(/^warning: 5 issue\(s\) CERRADOS/)
-    expect(lines[0]).toMatch(/Otros 4 cerrados conservan status:in-review/)
-    expect(lines[0]).toMatch(/Otros 1 cerrados conservan status:blocked/)
+    expect(lines[0]).toMatch(/^warning: 5 CLOSED issue\(s\)/)
+    expect(lines[0]).toMatch(/Another 4 closed ones keep status:in-review/)
+    expect(lines[0]).toMatch(/Another 1 closed ones keep status:blocked/)
   })
 })
 
