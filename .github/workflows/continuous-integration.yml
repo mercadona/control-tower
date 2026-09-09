@@ -146,6 +146,12 @@ jobs:
       - name: Install
         run: npm ci
 
+      # Node.js executes the backend's TypeScript by stripping its types; it
+      # never checks them. `npm test` would therefore pass on a module that
+      # does not type-check, so the check is its own step and it runs first.
+      - name: Type-check
+        run: npm run typecheck
+
       - name: Run tests
         run: npm test
 
