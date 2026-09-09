@@ -380,6 +380,11 @@ workspaces, and without cmux it answers 503 on **every** call and never settles.
 The page must show *I cannot tell what is running* rather than *nothing is
 running*, and it must not treat this as an empty list.
 
+When cmux answers with a schema this backend does not read, the reason names
+the fields that **did** arrive. That one line is what tells a stale cmux apart
+from a broken one: the machine this was measured on answered with `title` and no
+`custom_title`, which is the shape of an older build still serving the socket.
+
 Why it could not be asked never reaches this answer — a person reading the page
 can do nothing with `Unknown command: workspace`. It goes to the backend's
 error channel, prefixed `plans in flight:`, in cmux's own words, and

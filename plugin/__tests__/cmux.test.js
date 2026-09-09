@@ -79,10 +79,24 @@ class ACmuxThatRefuses {
     return () => ACmuxThatRefuses.NOT_JSON
   }
 
+  static SCHEMA_OF_AN_OLDER_CMUX = {
+    current_directory: '/Users/someone/Projects/repo/.worktrees/5036',
+    custom_color: null,
+    description: null,
+    id: 'E9835433-3961-4DC2-B93A-B75561C0BD58',
+    index: 0,
+    listening_ports: [],
+    pinned: false,
+    ref: 'workspace:4',
+    remote: null,
+    selected: true,
+    title: 'ct-plan-owner__repo-ABC-123',
+  }
+
   static withAnUnrecognisedSchema() {
     return (argv) => (argv[0] === 'list-windows'
       ? JSON.stringify([{ id: 'one' }])
-      : JSON.stringify({ workspaces: [{ title: 'ct-plan-owner__repo-ABC-123', current_directory: '/repo/.worktrees/7' }] }))
+      : JSON.stringify({ workspaces: [ACmuxThatRefuses.SCHEMA_OF_AN_OLDER_CMUX] }))
   }
 
   static thatWarnsAndThenHangs() {
@@ -130,6 +144,14 @@ describe('CmuxWorkspaceQuery', () => {
 
     expect(asked.entries).toBe(null)
     expect(asked.reason).toContain('custom_title')
+  })
+
+  it('the_reason_names_the_fields_that_did_arrive_so_the_schema_can_be_told_apart_from_silence', () => {
+    const asked = CmuxWorkspaceQuery.ask({ run: ACmuxThatRefuses.withAnUnrecognisedSchema(), requireComplete: true })
+
+    expect(asked.reason).toContain('title')
+    expect(asked.reason).toContain('current_directory')
+    expect(asked.reason).toContain('listening_ports')
   })
 
   it('a_cmux_that_warned_before_hanging_says_it_hung_and_not_only_what_it_warned', () => {

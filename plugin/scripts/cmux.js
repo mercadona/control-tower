@@ -134,6 +134,7 @@ export class CmuxWorkspaceQuery {
     const out = []
     let sawAnyWorkspaceEntry = false
     let sawAnyKnownTitleField = false
+    let fieldsSeen = []
     for (const w of (Array.isArray(windows) ? windows : [])) {
       if (!w || !w.id) continue
       try {
@@ -141,6 +142,7 @@ export class CmuxWorkspaceQuery {
         const workspaces = Array.isArray(parsed.workspaces) ? parsed.workspaces : []
         for (const ws of workspaces) {
           sawAnyWorkspaceEntry = true
+          if (ws !== null && typeof ws === 'object') fieldsSeen = Object.keys(ws)
           // El campo se da por CONOCIDO tanto si trae una cadena como si trae
           // `null`: `null` es cmux diciendo "esta workspace no tiene título
           // puesto" (lo corrobora su `has_custom_title: false`), y eso es una
@@ -174,7 +176,8 @@ export class CmuxWorkspaceQuery {
     }
     if (sawAnyWorkspaceEntry && !sawAnyKnownTitleField) {
       return CmuxWorkspaceQuery.#refused(
-        'cmux listed workspaces and none of them exposes custom_title: this is not the schema this reads'
+        'cmux listed workspaces and none of them exposes custom_title: this is not the schema this reads, ' +
+        `it answered with ${fieldsSeen.join(', ')}`
       )
     }
 
