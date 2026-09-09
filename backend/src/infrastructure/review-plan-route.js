@@ -13,6 +13,8 @@ export const ReviewRequestOutcome = Object.freeze({
   MALFORMED_REPO: 'malformed-repo',
   MALFORMED_CHANGES: 'malformed-changes',
   NO_LIVE_SESSION: 'no-live-planning-session',
+  ALREADY_IMPLEMENTING: 'plan-already-being-implemented',
+  UNCERTAIN_PHASE: 'implementation-phase-uncertain',
 })
 
 class ReviewRequest {
@@ -128,6 +130,16 @@ export class ReviewRefusal {
       code: ReviewRequestOutcome.NO_LIVE_SESSION,
       detail: 'no matching live planning session exists, so nobody would read the changes',
     })],
+    [ReviewRequestOutcome.ALREADY_IMPLEMENTING, () => new Refusal({
+      status: 409,
+      code: ReviewRequestOutcome.ALREADY_IMPLEMENTING,
+      detail: 'the plan is already being implemented, so its review watch is gone',
+    })],
+    [ReviewRequestOutcome.UNCERTAIN_PHASE, () => new Refusal({
+      status: 409,
+      code: ReviewRequestOutcome.UNCERTAIN_PHASE,
+      detail: 'implementation may have started; inspect the plan before retrying',
+    })],
   ])
 
   static of(asked) {
@@ -136,6 +148,22 @@ export class ReviewRefusal {
 
   static declaredOutcomes() {
     return ReviewRefusal.#BY_OUTCOME.members()
+  }
+}
+
+export class ReviewPhases {
+  static #BY_PHASE = new Projection('review outcome', [
+    [ActivePlanPhase.PLANNING, ReviewRequestOutcome.ACCEPTED],
+    [ActivePlanPhase.IMPLEMENTING, ReviewRequestOutcome.ALREADY_IMPLEMENTING],
+    [ActivePlanPhase.UNCERTAIN, ReviewRequestOutcome.UNCERTAIN_PHASE],
+  ])
+
+  static outcomeFor(phase) {
+    return ReviewPhases.#BY_PHASE.of(phase)
+  }
+
+  static declaredPhases() {
+    return ReviewPhases.#BY_PHASE.members()
   }
 }
 
@@ -159,10 +187,15 @@ export class ReviewPlanRoute {
         return
       }
       const active = activePlans.find({ issue: asked.issue, repository: asked.repository })
-      if (active === null || active.phase !== ActivePlanPhase.PLANNING) {
+      if (active === null) {
         Answer.refuseAs(response, ReviewRefusal.of(
           ReviewRequest.refused(ReviewRequestOutcome.NO_LIVE_SESSION)
         ))
+        return
+      }
+      const phased = ReviewPhases.outcomeFor(active.phase)
+      if (phased !== ReviewRequestOutcome.ACCEPTED) {
+        Answer.refuseAs(response, ReviewRefusal.of(ReviewRequest.refused(phased)))
         return
       }
       try {

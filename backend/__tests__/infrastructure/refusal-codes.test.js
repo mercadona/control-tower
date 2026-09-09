@@ -27,6 +27,7 @@ class SharedOnPurposeAcrossRequestVocabularies {
     PlanRequestOutcome.MALFORMED_REPO,
     ImplementRequestOutcome.MALFORMED_ISSUE,
     ImplementRequestOutcome.NO_LIVE_SESSION,
+    ImplementRequestOutcome.UNCERTAIN_PHASE,
   ])
 }
 

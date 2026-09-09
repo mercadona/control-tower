@@ -17,6 +17,10 @@ describe('PlanAgentBrief', () => {
     expect(errand()).toContain(`campo \`baseline:\` de ${SLICE_REL_PATH}`)
   })
 
+  it('the_published_plan_ends_with_the_line_that_says_how_to_ask_it_for_changes', () => {
+    expect(errand()).toContain(PlanIssueBody.CHANGES_LINE)
+  })
+
   it('it_no_longer_orders_the_ground_checked_because_the_program_cut_and_measured_the_worktree_itself', () => {
     expect(errand()).not.toMatch(/pwd/)
     expect(errand()).not.toMatch(/baseline en verde ANTES/)
@@ -136,26 +140,6 @@ describe('PlanAgentBrief resuming the agent', () => {
   })
 })
 
-describe('the published plan says how to ask for changes to it', () => {
-  it('the_first_errand_asks_the_agent_to_close_the_comment_with_the_line_that_says_it', () => {
-    const errand = () => new PlanAgentBrief({
-      dispatchCheck: '/plugin/scripts/dispatch-check.mjs',
-      conventions: '/plugin/conventions',
-      ctStep: '/plugin/scripts/ct-step.mjs',
-    }).errandFor({ issue: { number: 42 }, repository: new RepositoryName('owner/name') })
-    expect(errand()).toContain(PlanIssueBody.CHANGES_LINE)
-  })
-
-  it('the_review_errand_asks_for_it_too_because_the_reworked_plan_can_be_reviewed_again', () => {
-    const errand = () => new PlanAgentBrief({
-      dispatchCheck: '/plugin/scripts/dispatch-check.mjs',
-      conventions: '/plugin/conventions',
-      ctStep: '/plugin/scripts/ct-step.mjs',
-    }).reviewErrandFor({ issueNumber: 42, repository: new RepositoryName('owner/name'), changes: 'test' })
-    expect(errand()).toContain(PlanIssueBody.CHANGES_LINE)
-  })
-})
-
 describe('PlanAgentBrief asking the agent for changes', () => {
   const CHANGES = 'añade el caso\nde la issue sin\tdescripción'
   const errand = (changes = CHANGES) => new PlanAgentBrief({
@@ -163,6 +147,10 @@ describe('PlanAgentBrief asking the agent for changes', () => {
     conventions: '/plugin/conventions',
     ctStep: '/plugin/scripts/ct-step.mjs',
   }).reviewErrandFor({ issueNumber: 42, repository: new RepositoryName('owner/name'), changes })
+
+  it('the_reworked_plan_ends_with_that_line_too_because_it_can_be_reviewed_again', () => {
+    expect(errand()).toContain(PlanIssueBody.CHANGES_LINE)
+  })
 
   it('the_errand_is_one_line_even_when_the_person_wrote_the_change_across_several', () => {
     expect(errand()).not.toContain('\n')

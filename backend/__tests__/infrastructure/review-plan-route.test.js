@@ -9,9 +9,9 @@ import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
-import { ReviewRequestOutcome, ReviewRefusal } from '../../src/infrastructure/review-plan-route.js'
+import { ReviewRequestOutcome, ReviewRefusal, ReviewPhases } from '../../src/infrastructure/review-plan-route.js'
 import { PlanChangesNotAsked } from '../../src/domain/exceptions.js'
-import { ActivePlans } from '../../src/infrastructure/active-plans-route.js'
+import { ActivePlans, ActivePlanPhase } from '../../src/infrastructure/active-plans-route.js'
 
 class AskPlanChangesSpy {
   constructor() {
@@ -35,14 +35,25 @@ class RunningApi {
   static PATH = '/review-plan'
   static ACCEPTED_BODY = '{"issue":33,"repo":"jjponz/repo-pulse","changes":"parte la tarea 2"}'
   static PADDED_BODY = '{"issue":33,"repo":"jjponz/repo-pulse","changes":"   parte la tarea 2   "}'
+  static TWO_LINE_CHANGES = 'parte la tarea 2\ny renumera las siguientes'
+  static TWO_LINE_BODY = '{"issue":33,"repo":"jjponz/repo-pulse","changes":"parte la tarea 2\\ny renumera las siguientes"}'
+  static MALFORMED_IN_TWO_FIELDS_BODY = '{"issue":0,"repo":"repo-pulse","changes":"x"}'
   static activePlans = null
-  static WATCHED = new PlanWatch({
-    story: new UserStoryKey('ABC-123'),
-    issue: new PlanIssue({ number: 33, url: 'https://github.com/jjponz/repo-pulse/issues/33' }),
-    located: new WorkspaceLocation({ root: '/repo', path: '/repo/.worktrees/33', branch: 'feat/33' }),
-    repository: new RepositoryName('jjponz/repo-pulse'),
-    agent: 'workspace:20',
-  })
+
+  static watchOf(number) {
+    return new PlanWatch({
+      story: new UserStoryKey('ABC-123'),
+      issue: new PlanIssue({ number, url: `https://github.com/jjponz/repo-pulse/issues/${number}` }),
+      located: new WorkspaceLocation({
+        root: '/repo', path: `/repo/.worktrees/${number}`, branch: `feat/${number}`,
+      }),
+      repository: new RepositoryName('jjponz/repo-pulse'),
+      agent: 'workspace:20',
+    })
+  }
+
+  static WATCHED = RunningApi.watchOf(33)
+  static FIRST_ISSUE_BODY = '{"issue":1,"repo":"jjponz/repo-pulse","changes":"parte la tarea 2"}'
 
   static NO_FRONTEND = join(tmpdir(), 'ct-frontend-never-built')
   static NO_EVENTS = new PlanEvents({
@@ -55,7 +66,7 @@ class RunningApi {
     const reviews = new ReviewsSpy()
     const pullRequestReviews = new ReviewsSpy()
     const sessions = new PlanSessions()
-    if (options.watched ?? true) sessions.remember(RunningApi.WATCHED)
+    if (options.watched ?? true) sessions.remember(options.watch ?? RunningApi.WATCHED)
     const activePlans = new ActivePlans({ sessions })
     RunningApi.activePlans = activePlans
     const server = new ApiServer({
@@ -117,28 +128,66 @@ describe('ReviewPlanRoute', () => {
     expect(spy.asked).toEqual([])
   })
 
-  it('a_plan_already_being_implemented_is_refused_because_its_review_watch_is_gone', async () => {
+  it('a_plan_already_being_implemented_is_told_apart_from_one_this_process_never_watched', async () => {
     const spy = new AskPlanChangesSpy()
     const port = await RunningApi.listening(spy)
     RunningApi.activePlans.rememberImplementing(RunningApi.WATCHED)
 
     const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
+    const refusal = JSON.parse(await response.text())
 
     expect(response.status).toBe(409)
-    expect(JSON.parse(await response.text()).code).toBe('no-live-planning-session')
+    expect(refusal.code).toBe('plan-already-being-implemented')
+    expect(refusal.detail).toBe('the plan is already being implemented, so its review watch is gone')
     expect(spy.asked).toEqual([])
   })
 
-  it('a_plan_whose_phase_is_uncertain_is_refused_because_its_review_watch_is_gone', async () => {
+  it('a_plan_whose_phase_is_uncertain_is_refused_with_the_code_implement_plan_already_uses_for_it', async () => {
     const spy = new AskPlanChangesSpy()
     const port = await RunningApi.listening(spy)
     RunningApi.activePlans.rememberUncertain(RunningApi.WATCHED)
 
     const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
+    const refusal = JSON.parse(await response.text())
 
     expect(response.status).toBe(409)
-    expect(JSON.parse(await response.text()).code).toBe('no-live-planning-session')
+    expect(refusal.code).toBe('implementation-phase-uncertain')
+    expect(refusal.detail).toBe('implementation may have started; inspect the plan before retrying')
     expect(spy.asked).toEqual([])
+  })
+
+  it('changes_written_across_two_lines_reach_the_action_with_both_lines_verbatim', async () => {
+    const spy = new AskPlanChangesSpy()
+    const response = await RunningApi.post(await RunningApi.listening(spy), RunningApi.TWO_LINE_BODY)
+
+    expect(response.status).toBe(202)
+    expect(spy.asked).toEqual([{
+      issue: 33, repository: 'jjponz/repo-pulse', changes: RunningApi.TWO_LINE_CHANGES,
+    }])
+  })
+
+  it('the_first_issue_of_a_repository_is_a_whole_number_from_one_and_is_accepted', async () => {
+    const spy = new AskPlanChangesSpy()
+    const port = await RunningApi.listening(spy, { watch: RunningApi.watchOf(1) })
+
+    const response = await RunningApi.post(port, RunningApi.FIRST_ISSUE_BODY)
+
+    expect(response.status).toBe(202)
+    expect(spy.asked).toEqual([{ issue: 1, repository: 'jjponz/repo-pulse', changes: 'parte la tarea 2' }])
+  })
+
+  it('a_body_malformed_in_the_issue_and_in_the_repo_names_the_issue_because_that_is_checked_first', async () => {
+    const response = await RunningApi.asking(RunningApi.MALFORMED_IN_TWO_FIELDS_BODY)
+
+    expect(JSON.parse(await response.text()).code).toBe('malformed-issue')
+  })
+
+  it('a_failure_that_is_not_a_refusal_to_publish_is_not_dressed_up_as_gh_refusing', async () => {
+    const spy = AskPlanChangesSpy.failingWith(new TypeError('a bug of ours'))
+    const response = await RunningApi.post(await RunningApi.listening(spy), RunningApi.ACCEPTED_BODY)
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ code: 'request-failed', detail: 'request failed' })
   })
 
   it('blank_changes_are_refused_because_an_empty_review_asks_the_agent_for_nothing', async () => {
@@ -226,5 +275,11 @@ describe('ReviewRefusal', () => {
     )
 
     expect(declared.sort()).toEqual(outcomes.sort())
+  })
+})
+
+describe('ReviewPhases', () => {
+  it('every_phase_a_plan_can_be_in_is_dispatched_over_so_a_fourth_one_cannot_fall_into_a_default', () => {
+    expect(ReviewPhases.declaredPhases().sort()).toEqual(Object.values(ActivePlanPhase).sort())
   })
 })

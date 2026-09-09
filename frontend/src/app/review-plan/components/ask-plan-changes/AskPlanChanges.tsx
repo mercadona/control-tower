@@ -14,6 +14,10 @@ const WHERE_MESSAGE = 'El plan está publicado como el último comentario del is
 const ASKED_MESSAGE = 'Cambios pedidos. El agente los recibe en unos 30 segundos y publicará el plan rehecho en el issue.'
 const STALE_TITLE = 'El backend ya no tiene este plan activo'
 const STALE_DESCRIPTION = 'Nadie leería los cambios. Recupera el plan activo antes de volver a pedirlos.'
+const IMPLEMENTING_TITLE = 'Este plan ya se está implementando'
+const IMPLEMENTING_DESCRIPTION = 'Ya nadie escucha los cambios al plan. Sigue la implementación en curso.'
+const UNCERTAIN_TITLE = 'No se puede saber si la implementación ya empezó'
+const UNCERTAIN_DESCRIPTION = 'Una persona tiene que comprobarlo antes de reintentar.'
 const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
 
 type AskPlanChangesProps = {
@@ -55,10 +59,16 @@ const AskPlanChanges = ({ plan }: AskPlanChangesProps) => {
         Pedir cambios
       </Button>
       {outcome?.kind === 'changes-asked' && (
-        <p className="ask-plan-changes__asked" role="status" aria-live="polite">{ASKED_MESSAGE}</p>
+        <p className="ask-plan-changes__asked" role="status">{ASKED_MESSAGE}</p>
       )}
       {outcome?.kind === 'stale-plan' && (
         <Banner type="warning" role="alert" title={STALE_TITLE} description={STALE_DESCRIPTION} />
+      )}
+      {outcome?.kind === 'plan-implementing' && (
+        <Banner type="warning" role="alert" title={IMPLEMENTING_TITLE} description={IMPLEMENTING_DESCRIPTION} />
+      )}
+      {outcome?.kind === 'phase-uncertain' && (
+        <Banner type="error" role="alert" title={UNCERTAIN_TITLE} description={UNCERTAIN_DESCRIPTION} />
       )}
       {outcome?.kind === 'refused' && <Banner type="error" role="alert" title={outcome.detail} />}
       {outcome?.kind === 'backend-unreachable' && <Banner type="error" role="alert" title={UNREACHABLE_MESSAGE} />}

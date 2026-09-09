@@ -4,18 +4,15 @@ export type ReviewPlanRequest = {
   changes: string
 }
 
-export type ReviewPlanResult = {
-  status: 'changes-asked'
-  issue: number
-}
-
 export type ReviewPlanRefusal = {
   code: string
   detail: string
 }
 
 export type ReviewPlanOutcome =
-  | { kind: 'changes-asked'; issue: number }
+  | { kind: 'changes-asked' }
   | { kind: 'stale-plan'; detail: string }
+  | { kind: 'plan-implementing'; detail: string }
+  | { kind: 'phase-uncertain'; detail: string }
   | { kind: 'refused'; detail: string }
   | { kind: 'backend-unreachable' }
