@@ -34,7 +34,7 @@ describe('AskPlanChanges', () => {
   it('should say where the plan is read, so you know what you are reviewing', () => {
     render(<AskPlanChanges plan={ImplementPlanMother.plan()} />)
 
-    expect(screen.getByText(/último comentario del issue/)).toBeInTheDocument()
+    expect(screen.getByText(/se publica como comentario del issue/)).toBeInTheDocument()
   })
 
   it('should ask for nothing until you write what to change', () => {

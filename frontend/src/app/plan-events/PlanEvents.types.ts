@@ -1,4 +1,4 @@
-export type PlanState = 'writing' | 'ready'
+export type PlanState = 'writing' | 'ready' | 'reviewing'
 
 export type PlanEvent = {
   state: PlanState
