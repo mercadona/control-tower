@@ -19,6 +19,7 @@
 - Un `POST` con un campo desconocido se rechaza, no se ignora (regla 5).
 - El texto que el usuario escribe se publica pasado por `PlanIssueBody.quieted()`: publicar en su nombre no puede avisar a nadie.
 - Toda ruta nueva tiene que entrar en `API_PATHS` de `frontend/vite.config.ts`, o el servidor de desarrollo contesta el HTML de la página en vez del API.
+- Este repositorio NO tiene linter en ningún paquete. Las únicas comprobaciones son `npm test` por paquete (vitest) y, en el frontend, `npm run build`, que corre `tsc --noEmit`. No ejecutes `npx eslint`: npx te lo instala, te modifica `package.json` y `package-lock.json` y te escribe un `eslint.config.js`.
 - Tests: un `it` por criterio. En el backend el nombre va en snake_case describiendo la conducta (`backend/__tests__/infrastructure/`); en el frontend en prosa inglesa empezando por `should` (`frontend/src/app/implement-plan/client.test.ts`). El frontend corre vitest con `globals: true`: no se importan `describe`, `it`, `expect` ni `vi`.
 
 ## File Structure
@@ -1372,15 +1373,14 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 Run: `cd backend && npx vitest run`
 Expected: PASS. Si algo rojo no lo ha tocado esta entrega, no lo arregles aquí: dilo.
 
-- [ ] **Step 2: La suite y el linter del frontend**
+- [ ] **Step 2: La suite y el build del frontend**
 
-Run: `cd frontend && npx vitest run && npx tsc --noEmit && npx eslint src`
-Expected: PASS los tres.
+Run: `npm test --prefix frontend && npm run build --prefix frontend`
+Expected: PASS los dos. El `build` corre `tsc --noEmit` antes de `vite build`, así que es la comprobación de tipos y es exactamente lo que corre la integración continua (`.github/workflows/continuous-integration.yml`).
 
-- [ ] **Step 3: El linter del backend**
+- [ ] **Step 3: No hay linter, y no se instala uno**
 
-Run: `cd backend && npx eslint src __tests__`
-Expected: PASS.
+Este repositorio no tiene linter en ningún paquete: la integración continua corre `npm ci` y `npm test` por paquete, más el `build` del frontend. NO ejecutes `npx eslint`: npx se lo instala, te añade `eslint` a `devDependencies` y te escribe un `eslint.config.js`, y eso es un cambio de dependencias que nadie pidió. Si el árbol trae esos tres artefactos, reviértelos.
 
 - [ ] **Step 4: Comprueba a mano que la puerta funciona de verdad**
 
