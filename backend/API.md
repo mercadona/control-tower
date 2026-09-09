@@ -291,7 +291,7 @@ seen it yet.
 |---|---|---|
 | `issue` | number | whole, from 1 |
 | `repo` | string | `owner/name` |
-| `changes` | string | what to change, not blank, no control characters |
+| `changes` | string | what to change, not blank, no control characters other than newline, carriage return or tab |
 
 The text is published quieted — mentions, `#123` and `owner/name#123`
 references and GitHub URLs are wrapped in backticks so that commenting on
