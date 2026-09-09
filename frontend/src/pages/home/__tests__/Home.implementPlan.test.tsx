@@ -203,8 +203,8 @@ describe('Home · implement plan', () => {
 
     await user.click(screen.getByRole('button', { name: 'Arrancar otro plan' }))
 
-    expect(screen.getByLabelText('Clave del ticket')).toBeEnabled()
-    expect(screen.getByLabelText('Clave del ticket')).toHaveValue('')
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
+    expect(screen.getByLabelText('Ticket')).toHaveValue('')
     expect(screen.queryByText('Agente asignado')).toBeNull()
     expect(fetching.mock.calls.filter(([calledInput]) => calledInput === '/active-plans')).toHaveLength(0)
   })
