@@ -26,7 +26,7 @@ yardstick — and this repository does not take it.
 
 | Term | Meaning |
 |---|---|
-| **User story** | What Jira calls a ticket: the work to plan, identified by its key (`ABC-123`) |
+| **User story** | The work to plan, named either the way Jira calls a ticket, by its key (`ABC-123`), or by the url of the GitHub issue that describes it |
 | **Plan issue** | The GitHub issue that hosts a plan: the plan is posted there, the GO is answered there, the dispatcher reads its labels |
 | **Plan agent** | Whoever writes the plan for a story; today a Claude in a cmux tab |
 | **GO** | The human's `-OK <nonce>` on the issue that releases the agent |

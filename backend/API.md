@@ -64,7 +64,7 @@ that can take minutes. There is no progress signal while it waits.
 
 | Field | Type | Required | Shape |
 |---|---|---|---|
-| `id` | string | one of `id` / `user_comment` | a user story key, `ABC-123` |
+| `id` | string | one of `id` / `user_comment` | a user story key, `ABC-123`, or a GitHub issue url, `https://github.com/owner/name/issues/123` |
 | `user_comment` | string | one of `id` / `user_comment` | free text, not blank |
 | `repo` | string | single mode | `owner/name` |
 | `path` | string | single mode | absolute path of the local clone |
@@ -123,7 +123,7 @@ Two failures behave differently, and the difference is deliberate:
 
 | Cause | What happens |
 |---|---|
-| A path is not a checkout of the repo beside it, git cannot be asked, or Jira refuses | the **whole request** is refused flat, before any side effect; no plan starts, no `failed` array |
+| A path is not a checkout of the repo beside it, git cannot be asked, or the tracker holding the story refuses | the **whole request** is refused flat, before any side effect; no plan starts, no `failed` array |
 | Opening the issue, claiming it, cutting the worktree or launching the agent fails | that repository lands in `failed`, and the others still start |
 
 So one bad pairing in one entry stops every other repository, and the answer
@@ -138,7 +138,7 @@ Shared by both modes:
 |---|---|---|
 | `body-not-a-json-object` | 400 | the body did not parse, or is not an object |
 | `unknown-field` | 400 | `detail` names the fields, sorted |
-| `malformed-id` | 400 | `id` is not a story key |
+| `malformed-id` | 400 | `id` is not a story key such as `ABC-123` nor a GitHub issue url such as `https://github.com/owner/name/issues/123` |
 | `malformed-user-comment` | 400 | `user_comment` is blank or not text |
 | `nothing-to-plan` | 400 | neither `id` nor `user_comment` was sent |
 | `malformed-repo` | 400 | a repo is not `owner/name`; `detail` names which field |
@@ -161,8 +161,8 @@ From a tool refusing, in either mode:
 
 | `code` | Meaning |
 |---|---|
-| `user-story-not-read` | Jira refused |
-| `user-story-not-understood` | Jira answered something unreadable |
+| `user-story-not-read` | the tracker holding the story refused — Jira for a story key, GitHub for an issue url |
+| `user-story-not-understood` | the tracker holding the story answered something unreadable |
 | `plan-issue-not-created` | `gh issue create` refused |
 | `plan-issue-not-named` | the created issue could not be identified |
 | `plan-issue-not-claimed` | the claim on the issue failed |
@@ -185,6 +185,10 @@ curl -s -X POST -H 'Content-Type: application/json' \
   http://127.0.0.1:8787/start-plan \
   -d '{"id":"ABC-1","repo_list":[{"repo":"owner/one","path":"/one"},
                                  {"repo":"owner/two","path":"/two"}]}'
+
+curl -s -X POST -H 'Content-Type: application/json' \
+  http://127.0.0.1:8787/start-plan \
+  -d '{"id":"https://github.com/owner/name/issues/123","repo":"owner/name","path":"/repo/checkout"}'
 ```
 
 ---
