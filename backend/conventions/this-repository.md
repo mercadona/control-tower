@@ -22,6 +22,36 @@ every diff, old module or new. `plugin/conventions/style.md` and
 module that was already there — the one exemption in the whole travelling
 yardstick — and this repository does not take it.
 
+## The backend is migrating to TypeScript, and the migration is temporary
+
+A new module, test or test helper under `backend/` is born `.ts`. Nothing new
+arrives as JavaScript, and no exemption survives the fact that its neighbours
+still are.
+
+`__tests__/typescript-migration-boundary.test.ts` holds the boundary open. It
+walks `src/` and `__tests__/` and refuses any `.js` or `.mjs` path that is not
+in `__tests__/fixtures/javascript-migration-baseline.txt`, the census of the
+143 JavaScript files the backend had when the migration started. The baseline
+is a **fixed superset**: a converted file leaves the tree without anyone
+editing the fixture, so the fixture never becomes the place every branch
+conflicts. It is never widened to admit a path born after the census.
+
+The JavaScript that remains is still open to functional change. Converting a
+whole owner to land a feature is the wrong trade when it makes that pull
+request larger than the feature or riskier than it needs to be — the feature
+merges as JavaScript and the migration types it afterwards.
+
+Node.js executes the backend by stripping types and never checks them, so
+`npm run typecheck` is what says the graph is sound and it runs before the
+suite. Only erasable syntax reaches the tree: no enums, parameter properties,
+runtime namespaces, decorators or path aliases, and `erasableSyntaxOnly`
+refuses them before a reviewer has to. A relative import names the extension
+the file really has — `.ts` for what is converted, `.js` for the JavaScript
+that remains and for everything the backend reads out of `plugin/`.
+
+This whole section, the boundary test and the baseline leave together when the
+last JavaScript module does.
+
 ## Ubiquitous language
 
 | Term | Meaning |
