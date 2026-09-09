@@ -6,7 +6,7 @@ import { PreparedWorkspace } from '../../src/domain/value-objects/prepared-works
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.ts'
-import { WorkspaceNotRead } from '../../src/domain/exceptions.js'
+import { WorkspaceNotRead } from '../../src/domain/exceptions.ts'
 
 class WorkspaceDouble extends Workspace {
   static ROOT = '/repo/checkout'

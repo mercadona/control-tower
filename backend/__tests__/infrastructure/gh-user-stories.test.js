@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { GhUserStories } from '../../src/infrastructure/gh-user-stories.js'
 import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
-import { UserStoryNotRead, UserStoryNotUnderstood, UserStoryFailure } from '../../src/domain/exceptions.js'
+import { UserStoryNotRead, UserStoryNotUnderstood, UserStoryFailure } from '../../src/domain/exceptions.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.js'
 import { ExternalTool } from '../../src/infrastructure/external-tool.js'
-import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.js'
+import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.ts'
 import { SleepDouble } from '../sleep-double.js'
 
 const URL = 'https://github.com/mercadona/control-tower/issues/141'

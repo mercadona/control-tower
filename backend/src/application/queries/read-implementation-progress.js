@@ -1,5 +1,5 @@
 import { ImplementationStep } from '../../domain/value-objects/implementation-state.ts'
-import { DeliveryPolicy, DeliveryState } from '../../domain/policies/delivery-policy.js'
+import { DeliveryPolicy, DeliveryState } from '../../domain/policies/delivery-policy.ts'
 
 export class ReadImplementationProgressParams {
   constructor({ root, issue, repository }) {

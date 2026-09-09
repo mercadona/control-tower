@@ -6,7 +6,7 @@ import { DispatchCheckHarvest } from '../../src/infrastructure/dispatch-check-ha
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.js'
 import { HarvestOutcome } from '../../src/domain/value-objects/harvest-outcome.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { HarvestFailure, HarvestNotRead, HarvestNotUnderstood } from '../../src/domain/exceptions.js'
+import { HarvestFailure, HarvestNotRead, HarvestNotUnderstood } from '../../src/domain/exceptions.ts'
 
 class HarvestDouble {
   static ROOT = '/repo/checkout'

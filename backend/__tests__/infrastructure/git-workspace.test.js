@@ -9,7 +9,7 @@ import { BaselineOutcome, BaselineResult } from '../../../plugin/scripts/baselin
 import { GitWorkspace, SliceSeed } from '../../src/infrastructure/git-workspace.js'
 import {
   WorkspaceFailure, WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood, CheckoutNotConfirmed,
-} from '../../src/domain/exceptions.js'
+} from '../../src/domain/exceptions.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'

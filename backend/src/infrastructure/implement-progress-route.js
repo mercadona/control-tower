@@ -3,7 +3,7 @@ import { Projection } from './projection.js'
 import { ReadImplementationProgressParams } from '../application/queries/read-implementation-progress.js'
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
-import { ImplementationProgressFailure, ImplementationProgressNotRead } from '../domain/exceptions.js'
+import { ImplementationProgressFailure, ImplementationProgressNotRead } from '../domain/exceptions.ts'
 
 export const ProgressRequestOutcome = Object.freeze({
   ACCEPTED: 'accepted',

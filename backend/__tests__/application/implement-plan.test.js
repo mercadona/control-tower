@@ -6,7 +6,7 @@ import { GoRegistry } from '../../src/domain/ports/go-registry.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import {
   PlanAgentNotResumed, PlanGoNotAnswered, GoNotRecorded,
-} from '../../src/domain/exceptions.js'
+} from '../../src/domain/exceptions.ts'
 
 class GoRegistryDouble extends GoRegistry {
   static NONCE = '7f3a91c2'

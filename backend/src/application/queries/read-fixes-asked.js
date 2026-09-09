@@ -1,4 +1,4 @@
-import { DeliveryPolicy, DeliveryState } from '../../domain/policies/delivery-policy.js'
+import { DeliveryPolicy, DeliveryState } from '../../domain/policies/delivery-policy.ts'
 
 export class ReadFixesAskedParams {
   constructor({ issue, repository }) {

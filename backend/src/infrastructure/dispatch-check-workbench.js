@@ -1,5 +1,5 @@
 import { Workbench } from '../domain/ports/workbench.js'
-import { SliceNotReopened, ReopenNotUnderstood } from '../domain/exceptions.js'
+import { SliceNotReopened, ReopenNotUnderstood } from '../domain/exceptions.ts'
 
 export class DispatchCheckWorkbench extends Workbench {
   static COMMAND = 'dispatch-check --reopen'

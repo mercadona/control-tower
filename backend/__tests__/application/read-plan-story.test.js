@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { ReadPlanStory, ReadPlanStoryParams } from '../../src/application/queries/read-plan-story.js'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.js'
-import { PlanStoryNotRead } from '../../src/domain/exceptions.js'
+import { PlanStoryNotRead } from '../../src/domain/exceptions.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 

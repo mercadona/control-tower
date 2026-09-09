@@ -10,8 +10,8 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.ts'
 import {
   HarvestFailure, HarvestNotRead, HarvestNotUnderstood, WorkspaceNotRead,
-} from '../../src/domain/exceptions.js'
-import * as exceptions from '../../src/domain/exceptions.js'
+} from '../../src/domain/exceptions.ts'
+import * as exceptions from '../../src/domain/exceptions.ts'
 
 class Sweeping {
   static ROOT = '/repo/checkout'

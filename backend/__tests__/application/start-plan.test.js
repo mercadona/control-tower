@@ -19,7 +19,7 @@ import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import {
   PlanAgentNotLaunched, PlanIssueNotClaimed, PlanIssueNotCreated, UserStoryNotRead,
   WorkspaceNotPrepared,
-} from '../../src/domain/exceptions.js'
+} from '../../src/domain/exceptions.ts'
 
 class UserStoriesDouble extends UserStories {
   constructor(answer) {

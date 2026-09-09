@@ -5,7 +5,7 @@ import {
 import { shQuote } from '../../../plugin/scripts/shquote.js'
 import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.js'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.js'
-import { LaunchPolicy, LaunchBudget, LaunchStep } from '../../src/domain/policies/launch-policy.js'
+import { LaunchPolicy, LaunchBudget, LaunchStep } from '../../src/domain/policies/launch-policy.ts'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
@@ -14,7 +14,7 @@ import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import {
   PlanAgentNotLaunched, PlanAgentNotNamed, PlanAgentNotResumed, PlanAgentFailure,
-} from '../../src/domain/exceptions.js'
+} from '../../src/domain/exceptions.ts'
 
 class BriefDouble {
   constructor() {

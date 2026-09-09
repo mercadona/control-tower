@@ -5,7 +5,7 @@ import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-statu
 import { Gh } from '../../src/infrastructure/gh.js'
 import { PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.js'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.js'
-import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.js'
+import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.ts'
 import { SleepDouble } from '../sleep-double.js'
 import { UserStory } from '../../src/domain/value-objects/user-story.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
@@ -14,7 +14,7 @@ import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import {
   PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed, PlanGoNotAnswered, PlanIssueFailure,
   PlanChangesNotRead, PlanChangesNotUnderstood, PlanChangesNotAsked, PlanStoryNotRead, PlanStoryNotUnderstood,
-} from '../../src/domain/exceptions.js'
+} from '../../src/domain/exceptions.ts'
 
 class GhDouble {
   static REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')

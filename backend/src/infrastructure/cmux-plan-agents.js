@@ -8,8 +8,8 @@ import {
 } from '../../../plugin/scripts/launch-sentinel.js'
 import { shQuote } from '../../../plugin/scripts/shquote.js'
 import { PlanAgents } from '../domain/ports/plan-agents.js'
-import { LaunchStep } from '../domain/policies/launch-policy.js'
-import { PlanAgentNotLaunched, PlanAgentNotNamed, PlanAgentNotResumed } from '../domain/exceptions.js'
+import { LaunchStep } from '../domain/policies/launch-policy.ts'
+import { PlanAgentNotLaunched, PlanAgentNotNamed, PlanAgentNotResumed } from '../domain/exceptions.ts'
 
 export class CmuxPlanAgents extends PlanAgents {
   static BIN = 'cmux'

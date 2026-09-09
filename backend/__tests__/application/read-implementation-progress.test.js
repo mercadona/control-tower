@@ -7,7 +7,7 @@ import { ImplementationState, ImplementationStep } from '../../src/domain/value-
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { PullRequestNotRead, ImplementationProgressNotRead } from '../../src/domain/exceptions.js'
+import { PullRequestNotRead, ImplementationProgressNotRead } from '../../src/domain/exceptions.ts'
 
 class ImplementationProgressDouble extends ImplementationProgress {
   constructor(answer) {

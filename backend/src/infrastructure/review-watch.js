@@ -1,4 +1,4 @@
-import { PlanFailure } from '../domain/exceptions.js'
+import { PlanFailure } from '../domain/exceptions.ts'
 
 export class ReviewWatch {
   constructor({ asked, review, sleep, stderr, label }) {

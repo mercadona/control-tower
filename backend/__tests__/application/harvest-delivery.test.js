@@ -5,7 +5,7 @@ import { HarvestOutcome } from '../../src/domain/value-objects/harvest-outcome.t
 import { PreparedWorkspace } from '../../src/domain/value-objects/prepared-workspace.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
-import { HarvestNotRead } from '../../src/domain/exceptions.js'
+import { HarvestNotRead } from '../../src/domain/exceptions.ts'
 
 class HarvestDouble extends Harvest {
   static ROOT = '/repo/checkout'

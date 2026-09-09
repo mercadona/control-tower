@@ -5,8 +5,8 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { PlanProgressNotRead, PullRequestNotRead } from '../../src/domain/exceptions.js'
-import { DeliveryState } from '../../src/domain/policies/delivery-policy.js'
+import { PlanProgressNotRead, PullRequestNotRead } from '../../src/domain/exceptions.ts'
+import { DeliveryState } from '../../src/domain/policies/delivery-policy.ts'
 
 class EventsDouble {
   static SUBJECT = new PlanWatch({

@@ -3,7 +3,7 @@ import { ActivePlanPhase } from './active-plans-route.js'
 import { Projection } from './projection.js'
 import { AskPlanChangesParams } from '../application/actions/ask-plan-changes.js'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
-import { PlanChangesFailure } from '../domain/exceptions.js'
+import { PlanChangesFailure } from '../domain/exceptions.ts'
 
 export const ReviewRequestOutcome = Object.freeze({
   ACCEPTED: 'accepted',

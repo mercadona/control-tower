@@ -1,6 +1,6 @@
 import { ImplementationProgress } from '../domain/ports/implementation-progress.js'
 import { ImplementationState, ImplementationStep } from '../domain/value-objects/implementation-state.ts'
-import { ImplementationProgressNotRead } from '../domain/exceptions.js'
+import { ImplementationProgressNotRead } from '../domain/exceptions.ts'
 import { GitWorkspace } from './git-workspace.js'
 
 class PlanTaskNames {

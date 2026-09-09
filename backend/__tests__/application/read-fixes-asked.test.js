@@ -6,7 +6,7 @@ import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { PullRequestNotRead } from '../../src/domain/exceptions.js'
+import { PullRequestNotRead } from '../../src/domain/exceptions.ts'
 
 class PullRequestsDouble extends PullRequests {
   constructor({ open = null, asked = [], failing = null } = {}) {

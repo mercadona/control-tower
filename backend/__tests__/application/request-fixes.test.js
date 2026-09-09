@@ -3,7 +3,7 @@ import { RequestFixes, RequestFixesParams } from '../../src/application/actions/
 import { Workbench } from '../../src/domain/ports/workbench.js'
 import { PlanAgents } from '../../src/domain/ports/plan-agents.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { SliceNotReopened, PlanAgentNotResumed } from '../../src/domain/exceptions.js'
+import { SliceNotReopened, PlanAgentNotResumed } from '../../src/domain/exceptions.ts'
 
 class WorkbenchDouble extends Workbench {
   constructor(failing = null) {

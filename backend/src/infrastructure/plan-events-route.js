@@ -1,6 +1,6 @@
 import { Answer, Refusal } from './http.js'
 import { Projection } from './projection.js'
-import { PlanFailure } from '../domain/exceptions.js'
+import { PlanFailure } from '../domain/exceptions.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
 export class PlanSessions {

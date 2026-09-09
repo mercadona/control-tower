@@ -6,7 +6,7 @@ import { DispatchCheckWorkbench } from '../../src/infrastructure/dispatch-check-
 import { Workbench } from '../../src/domain/ports/workbench.js'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { SliceNotReopened, ReopenNotUnderstood } from '../../src/domain/exceptions.js'
+import { SliceNotReopened, ReopenNotUnderstood } from '../../src/domain/exceptions.ts'
 
 class PluginContract {
   static SCRIPT = join(

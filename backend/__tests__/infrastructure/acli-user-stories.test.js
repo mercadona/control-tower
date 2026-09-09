@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { AcliUserStories } from '../../src/infrastructure/acli-user-stories.js'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
-import { UserStoryNotRead, UserStoryNotUnderstood, UserStoryFailure } from '../../src/domain/exceptions.js'
+import { UserStoryNotRead, UserStoryNotUnderstood, UserStoryFailure } from '../../src/domain/exceptions.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.js'
 import { ExternalTool } from '../../src/infrastructure/external-tool.js'
-import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.js'
+import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.ts'
 import { SleepDouble } from '../sleep-double.js'
 
 class AcliDouble {

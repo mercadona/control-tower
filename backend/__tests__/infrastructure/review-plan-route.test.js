@@ -10,7 +10,7 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { ReviewRequestOutcome, ReviewRefusal, ReviewPhases } from '../../src/infrastructure/review-plan-route.js'
-import { PlanChangesNotAsked } from '../../src/domain/exceptions.js'
+import { PlanChangesNotAsked } from '../../src/domain/exceptions.ts'
 import { ActivePlans, ActivePlanPhase } from '../../src/infrastructure/active-plans-route.js'
 
 class AskPlanChangesSpy {
