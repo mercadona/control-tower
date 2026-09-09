@@ -343,6 +343,7 @@ export class StartPlanRoute {
       branch: started.watch.located.branch,
       worktree: started.watch.located.path,
       root: started.watch.located.root,
+      baseline: started.baseline.seedField,
     }
   }
 

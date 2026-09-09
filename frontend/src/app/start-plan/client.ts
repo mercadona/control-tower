@@ -33,6 +33,7 @@ const start = async (submission: StartPlanSubmission): Promise<StartPlanOutcome>
         branch: started.branch,
         worktree: started.worktree,
         root: started.root,
+        baseline: started.baseline,
       },
     }
   }

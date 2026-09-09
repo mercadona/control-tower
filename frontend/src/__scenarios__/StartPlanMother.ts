@@ -28,6 +28,16 @@ const started = () => ({
     '"root":"/Users/pedro/code/name"}',
 })
 
+const startedOnARedRepository = () => ({
+  status: 202,
+  body:
+    '{"status":"started","id":"ABC-123","repo":"owner/name",' +
+    '"issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},"agent":"workspace:4",' +
+    '"branch":"feat/7","worktree":"/Users/pedro/code/name/.worktrees/7",' +
+    '"root":"/Users/pedro/code/name",' +
+    '"baseline":{"outcome":"rojo","command":"make test","summary":"exit 2 \u00b7 2 failed"}}',
+})
+
 const startedWithoutStory = () => ({
   status: 202,
   body:
@@ -91,6 +101,7 @@ const planNotStarted = () => ({
 })
 
 export const StartPlanMother = {
+  startedOnARedRepository,
   TICKET,
   ISSUE_URL,
   COMMENT,

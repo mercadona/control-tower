@@ -13,9 +13,10 @@ export class StartPlanParams {
 }
 
 export class PlanStarted {
-  constructor({ agent, watch }) {
+  constructor({ agent, watch, baseline }) {
     this.agent = agent
     this.watch = watch
+    this.baseline = baseline
     Object.freeze(this)
   }
 }
@@ -70,12 +71,14 @@ export class StartPlan {
   async #start(target, story, comment, detail) {
     const issue = await this.planIssues.open({ story: detail, comment, repository: target.repository })
     await this.planIssues.claim({ issue, repository: target.repository })
-    const located = await this.#prepare(target, issue)
+    const sown = await this.#prepare(target, issue)
+    const located = sown.located
     const agent = await this.#launch(target, story, issue, located)
     this.checkouts.remember(target.root)
 
     return new PlanStarted({
       agent,
+      baseline: sown.baseline,
       watch: new PlanWatch({ story, issue, located, repository: target.repository, agent }),
     })
   }

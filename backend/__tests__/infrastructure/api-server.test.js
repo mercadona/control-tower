@@ -7,6 +7,7 @@ import { gzipSync } from 'node:zlib'
 import { ApiServer } from '../../src/infrastructure/api-server.js'
 import { ReviewsSpy } from '../reviews-spy.js'
 import { StartPlanResult, PlanStarted, PlanNotStarted } from '../../src/application/actions/start-plan.js'
+import { BaselineResult } from '../../../plugin/scripts/baseline.js'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
 import { PlanEvents, EventsRefusal, PlanSessions } from '../../src/infrastructure/plan-events-route.js'
@@ -25,6 +26,7 @@ import { SurveyExternalToolsResult } from '../../src/application/queries/survey-
 
 class StartPlanSpy {
   static AGENT = 'workspace:4'
+  static BASELINE = new BaselineResult({ outcome: 'verde', command: 'npm test', summary: '42 passed' })
   static ISSUE = new PlanIssue({ number: 7, url: 'https://github.com/owner/name/issues/7' })
   static LOCATED = new WorkspaceLocation({ root: '/repo/checkout', path: '/repo/checkout/.worktrees/7', branch: 'feat/7' })
   static WATCH = new PlanWatch({
@@ -69,6 +71,7 @@ class StartPlanSpy {
         started: [new PlanStarted({
           repository: succeeding.repository,
           agent: StartPlanSpy.AGENT,
+          baseline: StartPlanSpy.BASELINE,
           watch: new PlanWatch({
             story: params.story,
             issue: StartPlanSpy.ISSUE,
@@ -114,6 +117,7 @@ class StartPlanSpy {
       started: [new PlanStarted({
         repository: target.repository,
         agent: StartPlanSpy.AGENT,
+        baseline: StartPlanSpy.BASELINE,
         watch: new PlanWatch({
           story: params.story,
           issue: StartPlanSpy.ISSUE,
@@ -193,7 +197,8 @@ class RunningApi {
   static ANSWER =
     '{"status":"started","id":"ABC-123","repo":"owner/name",' +
     '"issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},"agent":"workspace:4",' +
-    '"branch":"feat/7","worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout"}'
+    '"branch":"feat/7","worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout",' +
+    '"baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}'
   static spy = null
   static reviews = null
 
@@ -353,7 +358,8 @@ describe('ApiServer', () => {
       expect(await response.text()).toBe(
         '{"status":"started","started":[{"id":"ABC-123","repo":"owner/name",' +
           '"issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},"agent":"workspace:4",' +
-          '"branch":"feat/7","worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout"}],' +
+          '"branch":"feat/7","worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout",' +
+        '"baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}],' +
           '"failed":[{"repo":"owner/other","code":"workspace-not-prepared","detail":"branch is taken"}]}'
       )
       expect(RunningApi.reviews.started).toEqual([StartPlanSpy.WATCH])

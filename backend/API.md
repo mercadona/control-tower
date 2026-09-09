@@ -80,12 +80,34 @@ keys and **nothing else** — an extra key makes the whole list malformed.
 {"status":"started","id":"ABC-123","repo":"owner/name",
  "issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},
  "agent":"workspace:4","branch":"feat/7",
- "worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout"}
+ "worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout",
+ "baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}
 ```
 
 `agent` is the handle `POST /implement-plan` demands later. `root` is git's
 canonical path for the checkout, which may differ from the `path` that was sent;
 keep the answered one.
+
+`baseline` is what the target repository's suite answered in the worktree that
+was just cut, **the same measurement that is sown into `.agent/SLICE.md`** for
+the agent to read — one measurement, two readers, so the page and the agent
+cannot disagree about it.
+
+| `outcome` | Meaning | What the UI does |
+|---|---|---|
+| `verde` | the suite ran and passed | nothing |
+| `rojo` | the suite ran and failed | say so: the agent will build on a broken repository and cannot tell its own failures from the ones already there |
+| `no-verificado` | there was nothing to run | say so: the repository declares no test command |
+
+`command` is the literal command that ran, `null` when there was none. `summary`
+is capped at 240 characters by the measuring code.
+
+The three values are the plugin's vocabulary, in Spanish, because they are what
+`.agent/SLICE.md` carries and what the agent reads; they move when that
+vocabulary does. **A plan starts whatever the outcome** — whether to work on a
+baseline that is not green is a person's decision, and until now that person was
+never told: the verdict went to the backend's error channel and the page said
+the request had completed.
 
 ### List mode — 202 Accepted, and it may be partial
 
