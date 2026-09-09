@@ -14,6 +14,14 @@ export type PlanIssue = {
   url: string
 }
 
+export type BaselineOutcome = 'verde' | 'rojo' | 'no-verificado'
+
+export type Baseline = {
+  outcome: BaselineOutcome
+  command: string | null
+  summary: string
+}
+
 export type StartedPlan = {
   id: string | null
   repo: string
@@ -22,6 +30,7 @@ export type StartedPlan = {
   branch: string
   worktree: string
   root?: string
+  baseline?: Baseline
 }
 
 export type StartPlanResult = StartedPlan & {

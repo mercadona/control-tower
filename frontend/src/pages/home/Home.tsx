@@ -6,6 +6,7 @@ import { ImplementPlanAction } from 'app/implement-plan/components/implement-pla
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { PlanProgress } from 'app/plan-events/components/plan-progress'
 import { AskPlanChanges } from 'app/review-plan/components/ask-plan-changes'
+import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartedPlan, StartPlanRequest } from 'app/start-plan/StartPlan.types'
 import { WorkflowSnapshot, WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
@@ -386,6 +387,7 @@ const Home = () => {
                 </div>
               </header>
               {recovery}
+              <BaselineNotice baseline={workflow.plan.baseline} />
               <PlanProgress
                 key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
                 plan={workflow.plan}

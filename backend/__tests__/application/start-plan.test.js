@@ -11,6 +11,8 @@ import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
 import { PlanComment } from '../../src/domain/value-objects/plan-comment.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
+import { SownWorkspace } from '../../src/domain/value-objects/sown-workspace.js'
+import { BaselineResult } from '../../../plugin/scripts/baseline.js'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.js'
 import { PlanTarget } from '../../src/domain/value-objects/plan-target.js'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
@@ -84,9 +86,11 @@ class PlanIssuesDouble extends PlanIssues {
 
 class WorkspaceDouble extends Workspace {
   static LOCATED = new WorkspaceLocation({ root: '/repo', path: '/repo/.worktrees/7', branch: 'feat/7' })
+  static GREEN = new BaselineResult({ outcome: 'verde', command: 'npm test', summary: '42 passed' })
+  static SOWN = new SownWorkspace({ located: WorkspaceDouble.LOCATED, baseline: WorkspaceDouble.GREEN })
 
   constructor(
-    answer = WorkspaceDouble.LOCATED,
+    answer = WorkspaceDouble.SOWN,
     { confirmFailure = null, confirmedRoot = null, confirmFailureRoot = null } = {}
   ) {
     super()
@@ -105,18 +109,18 @@ class WorkspaceDouble extends Workspace {
   }
 
   static refusingToConfirm(said) {
-    return new WorkspaceDouble(WorkspaceDouble.LOCATED, { confirmFailure: new WorkspaceNotPrepared(said) })
+    return new WorkspaceDouble(WorkspaceDouble.SOWN, { confirmFailure: new WorkspaceNotPrepared(said) })
   }
 
   static refusingToConfirmRoot(root, said) {
-    return new WorkspaceDouble(WorkspaceDouble.LOCATED, {
+    return new WorkspaceDouble(WorkspaceDouble.SOWN, {
       confirmFailure: new WorkspaceNotPrepared(said),
       confirmFailureRoot: root,
     })
   }
 
   static confirming(confirmedRoot) {
-    return new WorkspaceDouble(WorkspaceDouble.LOCATED, { confirmedRoot })
+    return new WorkspaceDouble(WorkspaceDouble.SOWN, { confirmedRoot })
   }
 
   async confirm({ root, repository }) {

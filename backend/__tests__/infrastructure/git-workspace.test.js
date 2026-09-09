@@ -376,7 +376,7 @@ describe('GitWorkspace', () => {
   })
 
   it('the_location_it_answers_is_where_the_session_will_actually_run_and_the_root_it_was_cut_from', async () => {
-    const located = await new GitDouble().prepared()
+    const { located } = await new GitDouble().prepared()
 
     expect(located.root).toBe('/repo/checkout')
     expect(located.path).toBe('/repo/checkout/.worktrees/42')
@@ -491,6 +491,15 @@ describe('GitWorkspace', () => {
     })
   })
 
+  it('the_baseline_it_answers_is_the_same_one_it_sowed_so_the_page_and_the_agent_cannot_disagree', async () => {
+    const git = new GitDouble({ baseline: BaselineDouble.answering(BaselineDouble.red()) })
+
+    const { baseline } = await git.prepared()
+
+    expect(baseline.seedField).toEqual(parseStateSafe(git.written[1][1]).meta.baseline)
+    expect(baseline.outcome).toBe(BaselineOutcome.RED)
+  })
+
   it('a_baseline_that_is_not_green_is_said_on_the_error_channel_because_starting_on_one_is_a_human_decision', async () => {
     const git = new GitDouble({ baseline: BaselineDouble.answering(BaselineDouble.unverified()) })
 
@@ -572,7 +581,7 @@ describe('GitWorkspace', () => {
 
   it('undoing_a_location_removes_the_worktree_and_deletes_the_branch_it_was_cut_on', async () => {
     const git = new GitDouble()
-    const located = await git.prepared()
+    const { located } = await git.prepared()
     git.calls = []
 
     await git.workspace().undo(located)

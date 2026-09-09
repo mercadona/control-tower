@@ -3,6 +3,7 @@ import { SLICE_REL_PATH, excludeContentWith } from '../../../plugin/scripts/stat
 import { LOOP_BRANCH_PREFIX } from '../../../plugin/scripts/conventions.js'
 import { renderState } from '../../../plugin/scripts/state.js'
 import { BaselineOutcome, BaselineResult } from '../../../plugin/scripts/baseline.js'
+import { SownWorkspace } from '../domain/value-objects/sown-workspace.js'
 import { GhPlanIssues } from './gh-plan-issues.js'
 import { Workspace } from '../domain/ports/workspace.js'
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.js'
@@ -199,13 +200,11 @@ export class GitWorkspace extends Workspace {
     await this.#cut(root.text, issue, base)
     const located = new WorkspaceLocation({ root: root.text, path, branch })
     try {
-      await this.#seed(located, issue, base)
+      return new SownWorkspace({ located, baseline: await this.#seed(located, issue, base) })
     } catch (failure) {
       await this.undo(located)
       throw failure
     }
-
-    return located
   }
 
   async survey(root) {
@@ -283,6 +282,8 @@ export class GitWorkspace extends Workspace {
       SliceSeed.textFor({ issue, branch: located.branch, base, cut, baseline })
     )
     await this.#verifyHidden(located)
+
+    return baseline
   }
 
   async #baselineOf(located) {
