@@ -5,7 +5,7 @@ import { PlanIssues } from '../../src/domain/ports/plan-issues.js'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PullRequestNotRead } from '../../src/domain/exceptions.js'
 
 class PullRequestsDouble extends PullRequests {

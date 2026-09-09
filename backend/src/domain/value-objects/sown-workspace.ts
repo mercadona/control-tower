@@ -1,5 +1,5 @@
 import type { BaselineResult } from '../../../../plugin/scripts/baseline.js'
-import type { WorkspaceLocation } from './workspace-location.js'
+import type { WorkspaceLocation } from './workspace-location.ts'
 
 export class SownWorkspace {
   readonly located: WorkspaceLocation

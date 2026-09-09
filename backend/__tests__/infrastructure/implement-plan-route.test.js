@@ -6,8 +6,8 @@ import { ReviewsSpy } from '../reviews-spy.js'
 import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.js'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
-import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
 import {
   ImplementRequestOutcome, ImplementRefusal, ImplementCollapse,

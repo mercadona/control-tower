@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { SLICE_REL_PATH } from '../../../plugin/scripts/state-paths.js'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PluginYardstick } from '../../../plugin/scripts/plugin-yardstick.js'
 import { PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.js'
 

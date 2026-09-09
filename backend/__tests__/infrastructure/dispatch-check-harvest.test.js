@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { DispatchCheckHarvest } from '../../src/infrastructure/dispatch-check-harvest.js'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.js'
 import { HarvestOutcome } from '../../src/domain/value-objects/harvest-outcome.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { HarvestFailure, HarvestNotRead, HarvestNotUnderstood } from '../../src/domain/exceptions.js'
 
 class HarvestDouble {

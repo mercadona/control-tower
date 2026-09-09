@@ -6,8 +6,8 @@ import { PlanRequest, PlanRequestOutcome, PlanRefusal } from '../../src/infrastr
 import { Refusal } from '../../src/infrastructure/http.js'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
-import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 
 class Watched {
   static REPO = 'owner/name'

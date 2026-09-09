@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.js'
 import { PlanState } from '../../src/domain/value-objects/plan-state.js'
-import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanProgressNotRead, PullRequestNotRead } from '../../src/domain/exceptions.js'
 import { DeliveryState } from '../../src/domain/policies/delivery-policy.js'
 

@@ -7,7 +7,7 @@ import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy
 import { SleepDouble } from '../sleep-double.js'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PullRequestNotRead, PullRequestNotUnderstood } from '../../src/domain/exceptions.js'
 
 const DECLARED = JSON.parse(

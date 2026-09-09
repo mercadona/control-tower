@@ -3,8 +3,8 @@ import { PlanRequest, PlanRequestOutcome } from '../../src/infrastructure/start-
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
 import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.js'
 import { PlanComment } from '../../src/domain/value-objects/plan-comment.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
-import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
+import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 
 describe('PlanRequest', () => {
   it('every_outcome_is_distinct_so_no_two_refusals_answered_differently_collapse_into_one', () => {

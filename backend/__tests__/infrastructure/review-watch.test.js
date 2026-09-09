@@ -3,8 +3,8 @@ import { ReviewWatch } from '../../src/infrastructure/review-watch.js'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.js'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
-import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanChangesNotRead, PlanAgentNotResumed, SliceNotReopened } from '../../src/domain/exceptions.js'
 
 class WatchDouble {

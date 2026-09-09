@@ -7,11 +7,11 @@ import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.js'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.js'
 import { LaunchPolicy, LaunchBudget, LaunchStep } from '../../src/domain/policies/launch-policy.js'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.js'
-import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
 import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import {
   PlanAgentNotLaunched, PlanAgentNotNamed, PlanAgentNotResumed, PlanAgentFailure,
 } from '../../src/domain/exceptions.js'

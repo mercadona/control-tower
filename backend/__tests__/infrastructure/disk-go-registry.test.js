@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createHash } from 'node:crypto'
 import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { GoNotRecorded } from '../../src/domain/exceptions.js'
 
 class DiskDouble {

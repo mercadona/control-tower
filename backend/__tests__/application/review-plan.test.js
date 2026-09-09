@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { ReviewPlan, ReviewPlanParams } from '../../src/application/actions/review-plan.js'
 import { PlanAgents } from '../../src/domain/ports/plan-agents.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanAgentNotResumed } from '../../src/domain/exceptions.js'
 
 class PlanAgentsDouble extends PlanAgents {

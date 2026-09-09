@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { SurveyWorkspaces, SurveyWorkspacesParams } from '../../src/application/queries/survey-workspaces.js'
 import { Workspace } from '../../src/domain/ports/workspace.js'
-import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.js'
+import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { PreparedWorkspace } from '../../src/domain/value-objects/prepared-workspace.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
-import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.js'
 import { WorkspaceNotRead } from '../../src/domain/exceptions.js'
 

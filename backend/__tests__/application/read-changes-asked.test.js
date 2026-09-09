@@ -3,7 +3,7 @@ import {
   ReadChangesAsked, ReadChangesAskedParams,
 } from '../../src/application/queries/read-changes-asked.js'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 
 class PlanIssuesDouble extends PlanIssues {
   constructor(answer = []) {

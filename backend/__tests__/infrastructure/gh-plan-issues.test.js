@@ -9,7 +9,7 @@ import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy
 import { SleepDouble } from '../sleep-double.js'
 import { UserStory } from '../../src/domain/value-objects/user-story.js'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
 import {
   PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed, PlanGoNotAnswered, PlanIssueFailure,

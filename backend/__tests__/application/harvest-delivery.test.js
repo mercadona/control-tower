@@ -3,8 +3,8 @@ import { HarvestDelivery, HarvestDeliveryParams } from '../../src/application/ac
 import { Harvest } from '../../src/domain/ports/harvest.js'
 import { HarvestOutcome } from '../../src/domain/value-objects/harvest-outcome.js'
 import { PreparedWorkspace } from '../../src/domain/value-objects/prepared-workspace.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
-import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { HarvestNotRead } from '../../src/domain/exceptions.js'
 
 class HarvestDouble extends Harvest {

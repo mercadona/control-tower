@@ -9,7 +9,7 @@ import { ReviewsSpy } from '../reviews-spy.js'
 import { StartPlanResult, PlanStarted, PlanNotStarted } from '../../src/application/actions/start-plan.js'
 import { BaselineResult } from '../../../plugin/scripts/baseline.js'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanEvents, EventsRefusal, PlanSessions } from '../../src/infrastructure/plan-events-route.js'
 import {
   PlanAgentNotLaunched, UserStoryNotRead, PlanIssueNotCreated, PlanIssueNotNamed, WorkspaceNotPrepared,
@@ -17,7 +17,7 @@ import {
 } from '../../src/domain/exceptions.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
 import { PlanState } from '../../src/domain/value-objects/plan-state.js'
-import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.js'
 import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.js'

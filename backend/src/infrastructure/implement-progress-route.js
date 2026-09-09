@@ -1,8 +1,8 @@
 import { Answer, Refusal } from './http.js'
 import { Projection } from './projection.js'
 import { ReadImplementationProgressParams } from '../application/queries/read-implementation-progress.js'
-import { CheckoutRoot } from '../domain/value-objects/checkout-root.js'
-import { RepositoryName } from '../domain/value-objects/repository-name.js'
+import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
+import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { ImplementationProgressFailure, ImplementationProgressNotRead } from '../domain/exceptions.js'
 
 export const ProgressRequestOutcome = Object.freeze({

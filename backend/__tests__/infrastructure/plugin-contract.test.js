@@ -21,10 +21,10 @@ import { RunFileProgress } from '../../src/infrastructure/run-file-progress.js'
 import { UserStory } from '../../src/domain/value-objects/user-story.js'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
 import { Invocation, InvocationOutcome } from '../../src/infrastructure/invocation.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { ImplementationStep } from '../../src/domain/value-objects/implementation-state.js'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.js'
-import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.js'
+import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 
 class Both {
   static ISSUE = 33

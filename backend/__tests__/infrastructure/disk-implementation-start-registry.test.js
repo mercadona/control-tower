@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { DiskImplementationStartRegistry } from '../../src/infrastructure/disk-implementation-start-registry.js'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
-import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
-import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
 
 const WATCH = new PlanWatch({
