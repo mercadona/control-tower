@@ -1,0 +1,191 @@
+import { describe, it, expect, afterEach } from 'vitest'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { ApiServer } from '../../src/infrastructure/api-server.js'
+import { ReviewsSpy } from '../reviews-spy.js'
+import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.js'
+import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
+import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
+import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
+import { ReviewRequestOutcome, ReviewRefusal } from '../../src/infrastructure/review-plan-route.js'
+import { PlanChangesNotAsked } from '../../src/domain/exceptions.js'
+import { ActivePlans } from '../../src/infrastructure/active-plans-route.js'
+
+class AskPlanChangesSpy {
+  constructor() {
+    this.asked = []
+  }
+
+  static failingWith(cause) {
+    const spy = new AskPlanChangesSpy()
+    spy.execute = async () => { throw cause }
+
+    return spy
+  }
+
+  async execute(params) {
+    this.asked.push({ issue: params.issue.number, repository: params.repository.text, changes: params.changes })
+  }
+}
+
+class RunningApi {
+  static #started = []
+  static PATH = '/review-plan'
+  static ACCEPTED_BODY = '{"issue":33,"repo":"jjponz/repo-pulse","changes":"parte la tarea 2"}'
+  static WATCHED = new PlanWatch({
+    story: new UserStoryKey('ABC-123'),
+    issue: new PlanIssue({ number: 33, url: 'https://github.com/jjponz/repo-pulse/issues/33' }),
+    located: new WorkspaceLocation({ root: '/repo', path: '/repo/.worktrees/33', branch: 'feat/33' }),
+    repository: new RepositoryName('jjponz/repo-pulse'),
+    agent: 'workspace:20',
+  })
+
+  static NO_FRONTEND = join(tmpdir(), 'ct-frontend-never-built')
+  static NO_EVENTS = new PlanEvents({
+    read: () => Promise.reject(new Error('this suite never streams plan events')),
+    readDelivery: () => Promise.reject(new Error('this suite never streams delivery events')),
+    sleep: () => Promise.resolve(),
+  })
+
+  static async listening(spy = new AskPlanChangesSpy(), options = {}) {
+    const reviews = new ReviewsSpy()
+    const pullRequestReviews = new ReviewsSpy()
+    const sessions = new PlanSessions()
+    if (options.watched ?? true) sessions.remember(RunningApi.WATCHED)
+    const activePlans = new ActivePlans({ sessions })
+    const server = new ApiServer({
+      port: 0,
+      startPlan: null,
+      implementPlan: null,
+      askPlanChanges: spy,
+      reviews,
+      pullRequestReviews,
+      sessions,
+      activePlans,
+      implementationStarts: { remember: async () => {} },
+      stderr: () => {},
+      planEvents: RunningApi.NO_EVENTS,
+      frontendRoot: RunningApi.NO_FRONTEND,
+    })
+    const port = await server.start()
+    RunningApi.#started.push(server)
+
+    return port
+  }
+
+  static async stopAll() {
+    const running = RunningApi.#started.splice(0)
+    await Promise.all(running.map((server) => server.stop()))
+  }
+
+  static async post(port, body, headers = { 'Content-Type': 'application/json' }) {
+    return fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`, { method: 'POST', body, headers })
+  }
+
+  static async asking(body) {
+    return RunningApi.post(await RunningApi.listening(), body)
+  }
+}
+
+afterEach(async () => {
+  await RunningApi.stopAll()
+})
+
+describe('ReviewPlanRoute', () => {
+  it('a_well_formed_body_for_a_watched_plan_publishes_the_changes_and_answers_accepted', async () => {
+    const spy = new AskPlanChangesSpy()
+    const response = await RunningApi.post(await RunningApi.listening(spy), RunningApi.ACCEPTED_BODY)
+
+    expect(response.status).toBe(202)
+    expect(await response.text()).toBe('{"status":"changes-asked","issue":33}')
+    expect(spy.asked).toEqual([{ issue: 33, repository: 'jjponz/repo-pulse', changes: 'parte la tarea 2' }])
+  })
+
+  it('a_plan_this_process_does_not_watch_is_refused_without_publishing_anything', async () => {
+    const spy = new AskPlanChangesSpy()
+    const response = await RunningApi.post(
+      await RunningApi.listening(spy, { watched: false }), RunningApi.ACCEPTED_BODY
+    )
+
+    expect(response.status).toBe(409)
+    expect(JSON.parse(await response.text()).code).toBe('no-live-planning-session')
+    expect(spy.asked).toEqual([])
+  })
+
+  it('blank_changes_are_refused_because_an_empty_review_asks_the_agent_for_nothing', async () => {
+    const response = await RunningApi.asking('{"issue":33,"repo":"jjponz/repo-pulse","changes":"   "}')
+
+    expect(response.status).toBe(400)
+    expect(JSON.parse(await response.text()).code).toBe('malformed-changes')
+  })
+
+  it('changes_that_are_not_text_are_refused', async () => {
+    const response = await RunningApi.asking('{"issue":33,"repo":"jjponz/repo-pulse","changes":7}')
+
+    expect(JSON.parse(await response.text()).code).toBe('malformed-changes')
+  })
+
+  it('a_body_that_is_not_a_json_object_is_refused', async () => {
+    const response = await RunningApi.asking('[]')
+
+    expect(JSON.parse(await response.text()).code).toBe('body-not-a-json-object')
+  })
+
+  it('an_unknown_field_is_refused_and_named_sorted', async () => {
+    const response = await RunningApi.asking('{"issue":33,"repo":"jjponz/repo-pulse","changes":"x","zip":1,"agent":"a"}')
+    const refusal = JSON.parse(await response.text())
+
+    expect(refusal.code).toBe('unknown-field')
+    expect(refusal.detail).toBe('unknown field: agent, zip')
+  })
+
+  it('a_malformed_issue_is_refused', async () => {
+    const response = await RunningApi.asking('{"issue":0,"repo":"jjponz/repo-pulse","changes":"x"}')
+
+    expect(JSON.parse(await response.text()).code).toBe('malformed-issue')
+  })
+
+  it('a_malformed_repo_is_refused', async () => {
+    const response = await RunningApi.asking('{"issue":33,"repo":"repo-pulse","changes":"x"}')
+
+    expect(JSON.parse(await response.text()).code).toBe('malformed-repo')
+  })
+
+  it('a_gh_that_refuses_reaches_the_page_as_plan_changes_not_asked_with_its_own_words', async () => {
+    const spy = AskPlanChangesSpy.failingWith(new PlanChangesNotAsked('gh issue comment failed: gh: not found'))
+    const response = await RunningApi.post(await RunningApi.listening(spy), RunningApi.ACCEPTED_BODY)
+    const refusal = JSON.parse(await response.text())
+
+    expect(response.status).toBe(400)
+    expect(refusal.code).toBe('plan-changes-not-asked')
+    expect(refusal.detail).toBe('gh issue comment failed: gh: not found')
+  })
+
+  it('a_wrong_method_answers_405_naming_the_right_one', async () => {
+    const port = await RunningApi.listening()
+    const response = await fetch(`http://127.0.0.1:${port}/review-plan`)
+
+    expect(response.status).toBe(405)
+    expect(response.headers.get('Allow')).toBe('POST')
+  })
+
+  it('a_post_that_does_not_declare_json_is_refused', async () => {
+    const port = await RunningApi.listening()
+    const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY, {})
+
+    expect(response.status).toBe(415)
+  })
+})
+
+describe('ReviewRefusal', () => {
+  it('every_declared_outcome_but_the_accepted_one_has_a_refusal', () => {
+    const declared = ReviewRefusal.declaredOutcomes()
+    const outcomes = Object.values(ReviewRequestOutcome).filter(
+      (outcome) => outcome !== ReviewRequestOutcome.ACCEPTED
+    )
+
+    expect(declared.sort()).toEqual(outcomes.sort())
+  })
+})
