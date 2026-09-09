@@ -684,7 +684,7 @@ export class ReadPlanProgress {
 }
 ```
 
-Importa `PlanState` en ese fichero. `#momentOf` devuelve `null` tanto para una fecha ausente como para una ilegible, y las dos caen al estado de disco: **una fecha que no se entiende no afirma una revisión**.
+Importa `PlanState` en ese fichero. Ojo con las dos direcciones, porque **no son la misma** y una versión anterior de este plan lo decía mal. La regla se lee en una frase: **hay revisión en vuelo salvo que el plan se haya recommiteado demostrablemente después de pedirla.** De ahí sale que una fecha PEDIDA ilegible no afirme nada —cae al estado de disco, porque no se puede demostrar que empezara una revisión— y que una fecha de COMMIT ilegible sí afirme `reviewing`, porque no se puede demostrar que la revisión se cerrara. Esa segunda dirección es deliberada: esta función existe para impedir un GO sobre un plan viejo, así que cuando no se puede probar que el plan se rehízo, no se concede el GO. Escríbelo con un predicado que lo diga —`#recommittedSince`— en vez de dejarlo colgando de que `#momentOf` devuelva `null` para los dos casos por coincidencia, y fíjalo con un test.
 
 - [ ] **Step 5: Corre y comprueba que pasan**
 
