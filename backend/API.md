@@ -426,7 +426,7 @@ tool blocks. A tool blocks when it is not installed or its session is `missing`
 | `missing` | the tool was asked and has no usable credential | show `fix` as the command to run |
 | `unknown` | the credential cannot be observed from this process | show `fix` as guidance, never as a verdict |
 
-`installed` is a `PATH` lookup and the binary is never executed. `fix` is the
+`installed` is a `PATH` lookup, which never executes anything; probing does execute a binary for every row but `claude`. `fix` is the
 literal repair, and `null` exactly when the session is `ready`. It repairs what
 was asked about — the **credential** for five of the rows, the **query** for
 `cmux` — so it presupposes the binaries are installed, which `installed`

@@ -8,6 +8,7 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.js'
 import { PlanStoryNotRead, WorkspaceNotRead } from '../../src/domain/exceptions.js'
 import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.js'
+import { CmuxAnswer } from '../../../plugin/scripts/cmux.js'
 
 class SurveyedCheckout {
   static REPOSITORY = new RepositoryName('owner/repo')
@@ -42,7 +43,7 @@ class SessionsOfCmux {
   }
 
   static listing(entries) {
-    return { entries, reason: null }
+    return CmuxAnswer.answered(entries)
   }
 
   static none() {
@@ -50,18 +51,26 @@ class SessionsOfCmux {
   }
 
   static couldNotBeListed() {
-    return { entries: null, reason: SessionsOfCmux.REFUSAL }
+    return CmuxAnswer.refused(SessionsOfCmux.REFUSAL)
   }
 }
 
 class PlansOf {
   static ONE_CHECKOUT = '/repos/one'
 
+  static aCheckoutRegistryThatCannotBeRead({ stderr }) {
+    return PlansOf.aWorktreeAttendedBy(
+      () => SessionsOfCmux.attending(`${PlansOf.ONE_CHECKOUT}/.worktrees/33`),
+      { stderr, checkouts: { known: () => null } }
+    )
+  }
+
   static aWorktreeAttendedBy(sessions, {
     story = () => new UserStoryKey('ABC-123'), stderr = vi.fn(), realpathOf = (path) => path,
+    checkouts = { known: () => [new CheckoutRoot(PlansOf.ONE_CHECKOUT)] },
   } = {}) {
     return new WorktreePlans({
-      checkouts: { known: () => [new CheckoutRoot(PlansOf.ONE_CHECKOUT)] },
+      checkouts,
       survey: () => SurveyedCheckout.of(PlansOf.ONE_CHECKOUT, [33]),
       sessions,
       story,
@@ -147,16 +156,8 @@ describe('WorktreePlans', () => {
 
   it('when_the_checkout_registry_cannot_be_read_the_error_channel_says_that_is_why', async () => {
     const stderr = vi.fn()
-    const plans = new WorktreePlans({
-      checkouts: { known: () => null },
-      survey: () => SurveyedCheckout.of('/repos/one', [33]),
-      sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
-      story: () => null,
-      realpathOf: (path) => path,
-      stderr,
-    })
 
-    await plans.inFlight()
+    await PlansOf.aCheckoutRegistryThatCannotBeRead({ stderr }).inFlight()
 
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining('the checkouts it serves could not be read'))
   })

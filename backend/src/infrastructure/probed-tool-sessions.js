@@ -31,11 +31,11 @@ export class ProbedToolSessions extends ToolSessions {
 
   static AUTHENTICATED = 'successfully authenticated'
 
-  constructor({ clients, lookUp, askCmux }) {
+  constructor({ clients, lookUp, cmuxAnswers }) {
     super()
     this.clients = clients
     this.lookUp = lookUp
-    this.askCmux = askCmux
+    this.cmuxAnswers = cmuxAnswers
   }
 
   async all() {
@@ -49,7 +49,7 @@ export class ProbedToolSessions extends ToolSessions {
   #cmuxSession() {
     const row = ProbedToolSessions.CMUX
     const installed = this.lookUp(row.bin) !== null
-    const answered = installed && this.askCmux() === null
+    const answered = installed && this.cmuxAnswers()
 
     return ProbedToolSessions.#sessionOf(row, installed, answered ? SessionState.READY : SessionState.MISSING)
   }

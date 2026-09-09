@@ -9,7 +9,7 @@ class ClientsDouble {
   constructor(answers = {}) {
     this.answers = answers
     this.calls = []
-    this.cmux = () => null
+    this.cmux = () => true
   }
 
   static allHappy() {
@@ -48,14 +48,14 @@ class ClientsDouble {
     }
   }
 
-  whoseCmux(askCmux) {
-    this.cmux = askCmux
+  whoseCmuxAnswers(cmuxAnswers) {
+    this.cmux = cmuxAnswers
 
     return this
   }
 
   sessions(lookUp = LookUpDouble.installedEverywhere()) {
-    return new ProbedToolSessions({ clients: this.clients(), lookUp, askCmux: () => this.cmux() })
+    return new ProbedToolSessions({ clients: this.clients(), lookUp, cmuxAnswers: () => this.cmux() })
   }
 }
 
@@ -221,7 +221,7 @@ describe('ProbedToolSessions', () => {
     expect(git.fix).toBe('add an SSH key to your GitHub account')
   })
 
-  it('cmux_is_ready_when_it_answers_the_very_query_this_backend_recovers_plans_with', async () => {
+  it('cmux_is_ready_when_it_answers_and_carries_no_fix', async () => {
     const sessions = await ClientsDouble.allHappy().sessions().all()
 
     const cmux = sessions.find((session) => session.tool === 'cmux')
@@ -231,9 +231,7 @@ describe('ProbedToolSessions', () => {
   })
 
   it('a_cmux_that_cannot_be_asked_is_missing_and_says_it_has_to_be_updated_and_run_from_inside', async () => {
-    const clients = ClientsDouble.allHappy().whoseCmux(
-      () => 'cmux could not be asked for its windows: Unknown command: workspace'
-    )
+    const clients = ClientsDouble.allHappy().whoseCmuxAnswers(() => false)
 
     const sessions = await clients.sessions().all()
 
@@ -244,10 +242,10 @@ describe('ProbedToolSessions', () => {
 
   it('a_cmux_that_is_not_installed_is_missing_without_being_asked', async () => {
     const asked = []
-    const clients = ClientsDouble.allHappy().whoseCmux(() => {
+    const clients = ClientsDouble.allHappy().whoseCmuxAnswers(() => {
       asked.push('cmux')
 
-      return null
+      return true
     })
 
     const sessions = await clients.sessions(LookUpDouble.missing('cmux')).all()

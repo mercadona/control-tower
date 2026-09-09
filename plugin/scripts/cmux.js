@@ -103,6 +103,26 @@ export const CMUX_QUERY_TIMEOUT_MS = 5000
 // directorio. Quien consuma esto traduce `cwdKnown: false` a un estado propio
 // ('cwd-unknown' en `verifyCmuxLaunch`), jamás a 'wrong-cwd'.
 // ---------------------------------------------------------------------------
+export class CmuxAnswer {
+  static answered(entries) {
+    return new CmuxAnswer(entries, null)
+  }
+
+  static refused(reason) {
+    return new CmuxAnswer(null, reason)
+  }
+
+  constructor(entries, reason) {
+    this.entries = entries
+    this.reason = reason
+    Object.freeze(this)
+  }
+
+  get wasAnswered() {
+    return this.reason === null
+  }
+}
+
 export class CmuxWorkspaceQuery {
   static ask({ timeoutMs = CMUX_QUERY_TIMEOUT_MS, run = ejecutar, requireComplete = false } = {}) {
     let windows
@@ -158,17 +178,18 @@ export class CmuxWorkspaceQuery {
       )
     }
 
-    return { entries: out, reason: null }
+    return CmuxAnswer.answered(out)
   }
 
   static #refused(reason) {
-    return { entries: null, reason }
+    return CmuxAnswer.refused(reason)
   }
 
   static #saidBy(cause) {
     const written = typeof cause.stderr === 'string' ? cause.stderr.trim() : ''
+    if (written === '') return cause.message
 
-    return written === '' ? cause.message : written
+    return cause.code === undefined ? written : `${cause.message}: ${written}`
   }
 }
 

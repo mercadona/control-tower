@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CmuxWorkspaceQuery, listCmuxWorkspaces } from '../scripts/cmux.js'
+import { CmuxAnswer, CmuxWorkspaceQuery, listCmuxWorkspaces } from '../scripts/cmux.js'
 
 const WORKSPACE = {
   custom_title: 'ct-plan-owner__repo-ABC-123',
@@ -78,6 +78,21 @@ class ACmuxThatRefuses {
   static withText() {
     return () => ACmuxThatRefuses.NOT_JSON
   }
+
+  static withAnUnrecognisedSchema() {
+    return (argv) => (argv[0] === 'list-windows'
+      ? JSON.stringify([{ id: 'one' }])
+      : JSON.stringify({ workspaces: [{ title: 'ct-plan-owner__repo-ABC-123', current_directory: '/repo/.worktrees/7' }] }))
+  }
+
+  static thatWarnsAndThenHangs() {
+    return () => {
+      const refusal = new Error('spawnSync cmux ETIMEDOUT')
+      refusal.stderr = 'warning: reconnecting to daemon...\n'
+      refusal.code = 'ETIMEDOUT'
+      throw refusal
+    }
+  }
 }
 
 describe('CmuxWorkspaceQuery', () => {
@@ -92,7 +107,7 @@ describe('CmuxWorkspaceQuery', () => {
     const asked = CmuxWorkspaceQuery.ask({ run: partialRun, requireComplete: true })
 
     expect(asked.entries).toBe(null)
-    expect(asked.reason).toContain('two')
+    expect(asked.reason).toContain('window two')
     expect(asked.reason).toContain('window query failed')
   })
 
@@ -111,13 +126,23 @@ describe('CmuxWorkspaceQuery', () => {
   })
 
   it('the_reason_an_unrecognised_schema_gives_says_the_title_field_was_never_exposed', () => {
-    const run = (argv) => (argv[0] === 'list-windows'
-      ? JSON.stringify([{ id: 'one' }])
-      : JSON.stringify({ workspaces: [{ title: 'ct-plan-owner__repo-ABC-123', current_directory: '/repo/.worktrees/7' }] }))
-
-    const asked = CmuxWorkspaceQuery.ask({ run, requireComplete: true })
+    const asked = CmuxWorkspaceQuery.ask({ run: ACmuxThatRefuses.withAnUnrecognisedSchema(), requireComplete: true })
 
     expect(asked.entries).toBe(null)
     expect(asked.reason).toContain('custom_title')
+  })
+
+  it('a_cmux_that_warned_before_hanging_says_it_hung_and_not_only_what_it_warned', () => {
+    const asked = CmuxWorkspaceQuery.ask({ run: ACmuxThatRefuses.thatWarnsAndThenHangs(), requireComplete: true })
+
+    expect(asked.reason).toContain('ETIMEDOUT')
+    expect(asked.reason).toContain('warning: reconnecting to daemon...')
+  })
+
+  it('an_answer_and_a_refusal_are_told_apart_by_the_same_question_every_consumer_asks', () => {
+    expect(CmuxAnswer.answered([]).wasAnswered).toBe(true)
+    expect(CmuxAnswer.refused('cmux said no').wasAnswered).toBe(false)
+    expect(CmuxWorkspaceQuery.ask({ run: () => '[]' }).wasAnswered).toBe(true)
+    expect(CmuxWorkspaceQuery.ask({ run: ACmuxThatRefuses.withText() }).wasAnswered).toBe(false)
   })
 })

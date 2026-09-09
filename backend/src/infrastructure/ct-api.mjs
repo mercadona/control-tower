@@ -214,7 +214,7 @@ class CtApi {
     return new ProbedToolSessions({
       clients,
       lookUp: (bin) => Invocation.lookUp(bin, environment),
-      askCmux: () => CtApi.#askCmux().reason,
+      cmuxAnswers: () => CtApi.#askCmux().wasAnswered,
     })
   }
 

@@ -63,8 +63,8 @@ export class WorktreePlans {
 
   async inFlight() {
     const listed = this.sessions()
-    if (listed.entries === null) {
-      this.#refuse(`cmux could not be asked: ${listed.reason}`)
+    if (!listed.wasAnswered) {
+      this.#refuse(listed.reason)
 
       return null
     }
