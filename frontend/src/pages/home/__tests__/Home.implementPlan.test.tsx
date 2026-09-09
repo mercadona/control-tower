@@ -160,7 +160,7 @@ describe('Home · implement plan', () => {
     await user.click(screen.getByRole('button', { name: 'Arrancar otro plan' }))
     expect(oldStream.closes).toBe(1)
     expect(localStorage).toHaveLength(0)
-    expect(screen.getByLabelText('Clave del ticket')).toHaveValue('')
+    expect(screen.getByLabelText('Ticket')).toHaveValue('')
     expect(screen.getByLabelText(/Repositorio/)).toHaveValue('')
     expect(screen.getByLabelText(/Ruta local/)).toHaveValue('')
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()

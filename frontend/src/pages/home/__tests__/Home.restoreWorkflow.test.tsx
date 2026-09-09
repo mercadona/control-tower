@@ -136,7 +136,7 @@ describe('Home · restore workflow', () => {
 
     openHome()
 
-    expect(screen.getByLabelText('Clave del ticket')).toBeEnabled()
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
     await waitFor(() => expect(fetching).toHaveBeenCalledWith('/active-plans'))
   })
 
@@ -157,7 +157,7 @@ describe('Home · restore workflow', () => {
     openHome()
 
     await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
-    expect(screen.getByLabelText('Clave del ticket')).toBeEnabled()
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
@@ -281,7 +281,7 @@ describe('Home · restore workflow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Descartar estado' }))
 
-    expect(screen.getByLabelText('Clave del ticket')).toBeEnabled()
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
   })
 
@@ -325,7 +325,7 @@ describe('Home · restore workflow', () => {
     await user.click(screen.getByRole('button', { name: 'Descartar estado' }))
 
     expect(localStorage.getItem(WORKFLOW_SNAPSHOT_KEY)).toBeNull()
-    expect(screen.getByLabelText('Clave del ticket')).toBeEnabled()
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
     expect(screen.queryByText('Implementación')).toBeInTheDocument()
   })
 
@@ -350,8 +350,8 @@ describe('Home · restore workflow', () => {
     await typeTicket(user, StartPlanMother.TICKET)
     await act(async () => answerRecovery(new Response(JSON.stringify({ plans: [activePlan()] }), { status: 200 })))
 
-    expect(screen.getByLabelText('Clave del ticket')).toHaveValue(StartPlanMother.TICKET)
-    expect(screen.getByLabelText('Clave del ticket')).toBeEnabled()
+    expect(screen.getByLabelText('Ticket')).toHaveValue(StartPlanMother.TICKET)
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
     expect(screen.queryByRole('status')).toBeNull()
   })
 
@@ -409,12 +409,12 @@ describe('Home · restore workflow', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('No se pudo comprobar el estado del plan')
-    expect(screen.getByLabelText('Clave del ticket')).toBeDisabled()
+    expect(screen.getByLabelText('Ticket')).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Descartar estado' })).toBeNull()
 
     await user.click(screen.getByRole('button', { name: 'Reintentar' }))
 
-    expect(await screen.findByLabelText('Clave del ticket')).toBeEnabled()
+    expect(await screen.findByLabelText('Ticket')).toBeEnabled()
     expect(fetching).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('alert')).toBeNull()
   })
@@ -437,7 +437,7 @@ describe('Home · restore workflow', () => {
     await screen.findByRole('alert')
     await user.click(screen.getByRole('button', { name: 'Reintentar' }))
 
-    expect(screen.getByLabelText('Clave del ticket')).toBeDisabled()
+    expect(screen.getByLabelText('Ticket')).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
 
     await act(async () => answerRetry(new Response(activePlansAnswer().body, { status: 200 })))
@@ -462,12 +462,12 @@ describe('Home · restore workflow', () => {
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('No se puede saber qué hay en marcha')
     expect(alert).not.toHaveTextContent('No se pudo contactar con el backend')
-    expect(screen.getByLabelText('Clave del ticket')).toBeDisabled()
+    expect(screen.getByLabelText('Ticket')).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Descartar estado' })).toBeNull()
 
     await user.click(screen.getByRole('button', { name: 'Reintentar' }))
 
-    expect(await screen.findByLabelText('Clave del ticket')).toBeEnabled()
+    expect(await screen.findByLabelText('Ticket')).toBeEnabled()
     expect(fetching).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('alert')).toBeNull()
   })

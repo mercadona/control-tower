@@ -84,7 +84,7 @@ const openHome = () => {
 }
 
 const typeTicket = async (user: User, ticket: string) => {
-  await user.type(screen.getByLabelText('Clave del ticket'), ticket)
+  await user.type(screen.getByLabelText('Ticket'), ticket)
 }
 
 const typeUserComment = async (user: User, comment: string) => {

@@ -107,8 +107,12 @@ const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocke
   return (
     <form className="start-plan-form" onSubmit={startPlan}>
       <FormField
-        label="Clave del ticket"
-        message={ticketError ? `Usa la forma ${TicketKey.EXAMPLE}` : `Con la forma ${TicketKey.EXAMPLE}`}
+        label="Ticket"
+        message={
+          ticketError
+            ? `Usa una clave como ${TicketKey.EXAMPLE} o una URL como ${TicketKey.URL_EXAMPLE}`
+            : `Una clave ${TicketKey.EXAMPLE} o la URL de un issue de GitHub`
+        }
         error={ticketError}
       >
         <Input

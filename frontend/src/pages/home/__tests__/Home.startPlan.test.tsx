@@ -75,7 +75,7 @@ describe('Home · start plan', () => {
     await startPlan(user)
 
     await screen.findByRole('alert')
-    expect(screen.getByLabelText('Clave del ticket')).toBeEnabled()
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
     expect(screen.getByLabelText(/Repositorio/)).toBeEnabled()
     expect(screen.getByLabelText(/Ruta local/)).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeEnabled()
@@ -197,8 +197,8 @@ describe('Home · start plan', () => {
     await user.click(screen.getByRole('button', { name: 'Descartar estado' }))
 
     expect(screen.queryByRole('alert')).toBeNull()
-    expect(screen.getByLabelText('Clave del ticket')).toBeEnabled()
-    expect(screen.getByLabelText('Clave del ticket')).toHaveValue('')
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
+    expect(screen.getByLabelText('Ticket')).toHaveValue('')
     expect(screen.getByLabelText(/Repositorio/)).toHaveValue('')
     expect(screen.getByLabelText(/Ruta local/)).toHaveValue('')
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
@@ -213,9 +213,36 @@ describe('Home · start plan', () => {
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
     await typeTicket(user, 'abc-1')
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
-    await user.clear(screen.getByLabelText('Clave del ticket'))
+    await user.clear(screen.getByLabelText('Ticket'))
     await typeTicket(user, 'MO_SHOP-42')
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeEnabled()
+    await user.clear(screen.getByLabelText('Ticket'))
+    await typeTicket(user, 'https://github.com/owner/name/issues/1x')
+    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    await user.clear(screen.getByLabelText('Ticket'))
+    await typeTicket(user, 'https://github.com/owner/name/issues/0')
+    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    await user.clear(screen.getByLabelText('Ticket'))
+    await typeTicket(user, 'https://github.com/owner/../issues/1')
+    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    await user.clear(screen.getByLabelText('Ticket'))
+    await typeTicket(user, StartPlanMother.ISSUE_URL)
+    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeEnabled()
+  })
+
+  it('should send a github issue url verbatim and show it as the ticket once started', async () => {
+    const fetching = backendAnswering(StartPlanMother.startedFromIssueUrl())
+    const { user } = openHome()
+
+    await typeTicket(user, StartPlanMother.ISSUE_URL)
+    await typeRepository(user, StartPlanMother.REPO)
+    await typePath(user, StartPlanMother.PATH)
+    await pressStart(user)
+
+    await screen.findByRole('status')
+    const [, init] = fetching.mock.calls[0] as unknown as [string, RequestInit]
+    expect(init.body).toBe(StartPlanMother.REQUEST_BODY_ISSUE_URL)
+    expect(screen.getByText(StartPlanMother.ISSUE_URL)).toBeInTheDocument()
   })
 
   it('should keep the start button disabled until the repository is well formed', async () => {
