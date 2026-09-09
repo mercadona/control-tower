@@ -15,7 +15,7 @@ import {
   PlanAgentNotLaunched, UserStoryNotRead, PlanIssueNotCreated, PlanIssueNotNamed, WorkspaceNotPrepared,
   PlanProgressNotRead,
 } from '../../src/domain/exceptions.js'
-import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
+import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanState } from '../../src/domain/value-objects/plan-state.js'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'

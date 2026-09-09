@@ -1,4 +1,4 @@
-import { PlanIssueStatus } from '../value-objects/plan-issue-status.js'
+import { PlanIssueStatus } from '../value-objects/plan-issue-status.ts'
 
 export class DeliveryState {
   static IN_REVIEW = 'in-review'
