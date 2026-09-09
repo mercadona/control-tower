@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ReadFixesAsked, ReadFixesAskedParams } from '../../src/application/queries/read-fixes-asked.js'
-import { PullRequests } from '../../src/domain/ports/pull-requests.js'
+import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.js'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'

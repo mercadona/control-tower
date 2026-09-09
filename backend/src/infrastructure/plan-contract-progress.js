@@ -1,4 +1,4 @@
-import { PlanProgress } from '../domain/ports/plan-progress.js'
+import { PlanProgress } from '../domain/ports/plan-progress.ts'
 import { PlanState } from '../domain/value-objects/plan-state.ts'
 import { PlanProgressNotRead } from '../domain/exceptions.ts'
 
