@@ -185,8 +185,8 @@ Run from `backend/`, per `backend/conventions/this-repository.md`: the fast subs
 
 ### Task 1 — A call that outlives the process that started it
 
-**Objective:** `DetachedRun` launches a binary whose output goes to files, which survives its
-caller's death, and which is killed if it outlives the cap its caller gave it.
+**Objective:** `DetachedRun` launches a binary whose output goes to files, which outlives its
+caller, and whose group the cap kills if it runs past it.
 
 **Files:**
 - Create: `backend/src/infrastructure/detached-run.js`
@@ -203,15 +203,14 @@ export class DetachedRun {
   static SIGNAL = 'SIGTERM'
   static APPEND = 'a'
 
-  constructor({ bin, budgetMs, env })   // budgetMs has NO default: the cap is the caller's
+  constructor({ bin, budgetMs, env })   // no default on the cap: it is the caller's
 
   start({ argv, cwd, out, err })   // StartedRun; `out` and `err` are absolute paths
 }
 ```
 
 `start` opens `out` and `err` with `DetachedRun.APPEND` and spawns with `detached: true` and
-`stdio: ['ignore', <out fd>, <err fd>]`. Two of its lines are the decisions §2 closed, both
-measured fatal rather than cosmetic:
+`stdio: ['ignore', <out fd>, <err fd>]`. Two of its lines are §2's decisions, both measured fatal:
 
 - It registers `child.on('error', …)` **before** reading `child.pid` — an unhandled `'error'`
   event kills the API and no `try`/`catch` sees it — and the listener appends the failure to
@@ -221,24 +220,25 @@ measured fatal rather than cosmetic:
   group, which `detached: true` created — `unref()`ed so it never holds the API open and cleared
   on the child's `exit`. `spawn`'s own `timeout` is never passed.
 
-Then `unref()` on the child; `start` answers before it exits.
+Then `unref()` on the child; `start` answers first.
 
 **TDD:** red first — `it('what_the_call_prints_lands_in_the_file_the_caller_named')`, polled until
 the file holds the marker its child writes. Then
 `it('the_call_gets_a_process_group_of_its_own_so_the_cap_can_reach_what_it_launched')` — the pgid
 from `ps -o pgid= -p <pid>` equals its own pid. Then the cap, both sides of its boundary:
 `it('the_cap_kills_the_whole_group_so_a_tool_the_call_launched_is_not_left_orphaned')`, `budgetMs`
-250 against a child that spawns a grandchild sleeping 5.000 ms, **both** dead when polled; and
-`it('a_call_that_finishes_inside_its_cap_is_never_signalled')` — its exit code lands in `out` as
-0. Last `it('a_binary_that_is_not_installed_raises_without_taking_the_api_down_with_it')`: the
-raise, and the suite still running past the tick `'error'` fires on.
+250 against a child that spawns a grandchild sleeping 5.000 ms, **both** dead when polled; and the
+other side in **two** cases, because an exit code in a file says nothing about whether the cap
+fired — `it('a_call_that_finishes_inside_its_cap_leaves_its_own_exit_code_in_out')` and
+`it('a_call_that_finished_is_never_signalled_once_its_cap_comes_round')`, which spies
+`process.kill`. Last `it('a_binary_that_is_not_installed_raises_without_taking_the_api_down_with_it')`:
+the raise, and the suite alive past the tick `'error'` fires on.
 
-**Tests:** added: the five above, plus the `Child` test type hanging the helpers
-(`.running(budgetMs)`, `.printing(marker)`, `.spawningAGrandchild()`, `.pgidOf(pid)`,
-`.alive(pid)`) and an `afterEach` that kills every group a case started. Removed: none.
+**Tests:** added: the six above, plus the `Child` test type hanging their helpers and an
+`afterEach` that reaps every process a case started. Removed: none.
 
-**Verification:** the group kill and the `'error'` listener are each pinned by a case, and no
-`spawn` option does the cap's job.
+**Verification:** each measured-fatal line has its own case, and no `spawn` option does the cap's
+job.
 
 ```bash
 cd backend && npx vitest run __tests__/infrastructure/detached-run-real-process.test.js   # exit 0: the five cases
