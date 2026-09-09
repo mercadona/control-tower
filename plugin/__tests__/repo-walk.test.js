@@ -33,7 +33,7 @@ function tmp(prefix = 'repo-walk-') {
 }
 
 describe('walkRepo', () => {
-  it('it lists files with a relative path and "/" as the separator, and marks directories with a trailing "/"', () => {
+  it('lists files with a relative path and "/" as the separator, and marks directories with a trailing "/"', () => {
     const dir = tmp()
     mkdirSync(join(dir, 'docs'))
     writeFileSync(join(dir, 'docs', 'a.md'), 'x')
@@ -46,7 +46,7 @@ describe('walkRepo', () => {
     expect(entradas.some((e) => e.includes('\\'))).toBe(false)
   })
 
-  it('it skips node_modules, .git and dist — nothing inside them shows up', () => {
+  it('skips node_modules, .git and dist — nothing inside them shows up', () => {
     const dir = tmp()
     for (const skip of ['node_modules', '.git', 'dist']) {
       mkdirSync(join(dir, skip))
@@ -68,7 +68,7 @@ describe('walkRepo', () => {
     }
   })
 
-  it('it records a directory called "worktrees" but does not descend into it', () => {
+  it('records a directory called "worktrees" but does not descend into it', () => {
     const dir = tmp()
     mkdirSync(join(dir, 'worktrees'))
     writeFileSync(join(dir, 'worktrees', 'copia.txt'), 'x')
@@ -77,7 +77,7 @@ describe('walkRepo', () => {
     expect(entradas.some((e) => e.startsWith('worktrees/') && e !== 'worktrees/')).toBe(false)
   })
 
-  it('it respects maxDepth: a file at depth 7 with maxDepth 2 does not show up', () => {
+  it('respects maxDepth: a file at depth 7 with maxDepth 2 does not show up', () => {
     const dir = tmp()
     let cursor = dir
     for (let i = 0; i < 7; i++) {

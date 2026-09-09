@@ -493,65 +493,65 @@ describe('ct-next — EVERY selected slice is skipped at claim time → not sile
   })
 })
 
-// D2, finding 3: el comentario de dispatch-check.mjs llama a su exit 1
-// "colisión o carrera perdida", pero el MISMO exit 1 también cubre un fallo
-// de lectura de labels del candidato, un fallo al escribir el claim, y un
-// fallo de readback — ct-next trataba los cinco exactamente igual ("saltando
-// ... sigo con el resto"), incluso cuando el issue quedaba HUÉRFANO en
-// status:in-progress (readback Y el revert posterior fallan a la vez, la
-// peor combinación reproducida por el auditor). Estos tests fuerzan esa
-// distinción desde el lado del caller, sin tocar dispatch-check.mjs.
+// D2, finding 3: dispatch-check.mjs's own comment calls its exit 1
+// "colisión o carrera perdida", but that SAME exit 1 also covers a failure to
+// read the candidate's labels, a failure to write the claim, and a readback
+// failure — ct-next treated all five exactly alike ("saltando ... sigo con el
+// resto"), even when the issue was left ORPHANED in status:in-progress
+// (readback AND the subsequent revert fail at the same time, the worst
+// combination the auditor reproduced). These tests force that distinction from
+// the caller's side, without touching dispatch-check.mjs.
 //
-// D2 review, menor 3: dentro de exit 1 hay DOS familias muy distintas de
-// "no es un salto normal" — 'stuck' (el issue quedó de verdad huérfano en
-// status:in-progress: el revert que dispatch-check intentó también falló) y
-// 'infra' (labelsOf falló, o el claim ni llegó a escribirse, o el readback
-// falló pero el revert SÍ tuvo éxito — en los tres casos el issue queda
-// intacto en status:ready, nada mutado, nada atascado). Solo 'stuck' exige
-// parar TODO y avisar a un humano (exit 1): un rate limit o un corte
-// momentáneo de `gh` en ESTE candidato ('infra') no dice nada sobre si el
-// SIGUIENTE candidato — una llamada independiente — también fallaría, así
-// que se trata como el mismo "reintenta más tarde" que ya cubre exit 3
-// (finding 1): se sigue con el resto de la tanda, y si nada se lanza al
-// final, el código de salida es 3, no 1.
-describe('ct-next — exit 1 de dispatch-check NO siempre es un resultado normal del protocolo (D2, finding 3; menor 3)', () => {
-  it("'stuck' (readback falla Y el revert también falla, issue huérfano) → ct-next aborta la tanda ENTERA con exit 1, no lo trata como salto normal", () => {
+// D2 review, minor 3: inside exit 1 there are TWO very different families of
+// "this is not a normal skip" — 'stuck' (the issue really was left orphaned in
+// status:in-progress: the revert dispatch-check attempted failed too) and
+// 'infra' (labelsOf failed, or the claim never even got written, or the
+// readback failed but the revert DID succeed — in all three cases the issue is
+// left intact in status:ready, nothing mutated, nothing stuck). Only 'stuck'
+// demands stopping EVERYTHING and warning a human (exit 1): a rate limit or a
+// momentary `gh` outage on THIS candidate ('infra') says nothing about whether
+// the NEXT candidate — an independent call — would fail too, so it is treated
+// as the same "retry later" that exit 3 already covers (finding 1): the rest of
+// the batch is carried on with, and if nothing gets launched in the end, the
+// exit code is 3, not 1.
+describe("ct-next — dispatch-check's exit 1 is NOT always a normal outcome of the protocol (D2, finding 3; minor 3)", () => {
+  it("'stuck' (readback fails AND the revert fails too, orphaned issue) → ct-next aborts the WHOLE batch with exit 1, it does not treat it as a normal skip", () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const gitLog = join(repoRoot, 'git-log')
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
       // idx0: ct-next open ; idx1: ct-next closed ; idx2: dispatch-check(#42)
-      // collision-check (limpio) ; idx3: dispatch-check(#42) readback → FALLA.
+      // collision-check (clean) ; idx3: dispatch-check(#42) readback → FAILS.
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue42], [], []]),
       FAKE_GH_LIST_FAIL_AT: '3',
       FAKE_GH_COUNTER_FILE: counterFile,
       FAKE_GIT_LOG_FILE: gitLog,
-      // El claim inicial (status:ready→in-progress) SÍ escribe con éxito; es
-      // el revert POSTERIOR (in-progress→ready, tras el fallo de readback) el
-      // que también falla — así el issue queda de verdad bloqueado.
+      // The initial claim (status:ready→in-progress) DOES get written
+      // successfully; it is the SUBSEQUENT revert (in-progress→ready, after the
+      // readback failure) that fails too — so the issue really is left blocked.
       FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready --remove-label status:in-progress',
     })
-    // Exit code FIJADO a 1 (no `not.toBe(0)`): 'stuck' es la única causa que
-    // debe seguir aquí tras el fix de menor 3.
+    // Exit code PINNED to 1 (not `not.toBe(0)`): 'stuck' is the only cause that
+    // must still land here after the fix of minor 3.
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/ATENCIÓN.*bloqueado en status:in-progress/is)
-    // NUNCA se reporta como si fuera el salto normal de colisión/carrera.
+    // It is NEVER reported as if it were the normal collision/race skip.
     expect(r.out).not.toMatch(/sigo con el resto de esta tanda/i)
     expect(r.out).not.toMatch(/lanzado #42/)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
-    // D2 review, importante 1: la línea ATENCIÓN de dispatch-check (incluido
-    // el comando manual) debe aparecer UNA sola vez, no dos — se comprueba
-    // con el texto EXACTO que dispatch-check.mjs emite (no la palabra suelta
-    // "ATENCIÓN": el propio mensaje de ct-next para 'stuck', un poco más
-    // abajo en el código, MENCIONA la palabra "ATENCIÓN" al remitir a ella
-    // — eso es intencional y una ocurrencia distinta, no una duplicación).
+    // D2 review, major 1: dispatch-check's ATENCIÓN line (the manual command
+    // included) must appear ONCE, not twice — it is checked with the EXACT text
+    // dispatch-check.mjs emits (not the bare word "ATENCIÓN": ct-next's own
+    // message for 'stuck', a little further down in the code, MENTIONS the word
+    // "ATENCIÓN" when pointing at that line — that is deliberate and a distinct
+    // occurrence, not a duplication).
     expect(countOccurrences(r.out, 'ATENCIÓN: #42 puede haber quedado bloqueado en status:in-progress')).toBe(1)
     expect(countOccurrences(r.out, 'Libéralo a mano con: gh issue edit 42')).toBe(1)
   })
 
-  it("'infra' sin nada atascado (fallo al leer las labels del candidato) → YA NO aborta con exit 1: se trata como 'reintenta más tarde' (exit 3, sin más candidatos en esta tanda)", () => {
+  it("'infra' with nothing stuck (a failure to read the candidate's labels) → it NO LONGER aborts with exit 1: it is treated as 'retry later' (exit 3, with no further candidates in this batch)", () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const gitLog = join(repoRoot, 'git-log')
@@ -562,15 +562,15 @@ describe('ct-next — exit 1 de dispatch-check NO siempre es un resultado normal
       FAKE_GIT_LOG_FILE: gitLog,
       FAKE_GH_VIEW_FAIL: '1',
     })
-    // Ya NO es un aborto con exit 1: nada mutó, nada quedó atascado — mismo
-    // código que el "cero lanzados, nada roto" de finding 1.
+    // It is NO LONGER an abort with exit 1: nothing mutated, nothing was left
+    // stuck — the same code as finding 1's "zero launched, nothing broken".
     expect(r.code).toBe(3)
     expect(r.out).toMatch(/no se pudo leer el estado de #42/i)
-    // El mensaje debe decir explícitamente que NO es una colisión normal —
-    // pero YA NO debe decir que aborta toda la tanda (con cap=1 no hay más
-    // candidatos de todas formas; lo que importa es que el control de flujo
-    // ya no distingue esto de un salto — ver el siguiente test con cap=2,
-    // donde SÍ hay un candidato más al que sí se llega).
+    // The message must say explicitly that this is NOT a normal collision —
+    // but it must NO LONGER say that it aborts the whole batch (with cap=1
+    // there are no further candidates anyway; what matters is that the control
+    // flow no longer tells this apart from a skip — see the next test with
+    // cap=2, where there IS one more candidate and it does get reached).
     expect(r.out).toMatch(/fallo de infraestructura/i)
     expect(r.out).not.toMatch(/abortando toda la tanda/i)
     expect(r.out).not.toMatch(/lanzado #42/)
@@ -579,7 +579,7 @@ describe('ct-next — exit 1 de dispatch-check NO siempre es un resultado normal
     expect(gitLogTxt).not.toMatch(/worktree add/)
   })
 
-  it("'infra' sin nada atascado en el PRIMER candidato de dos → se sigue con el SEGUNDO, que sí se lanza (exit 0)", () => {
+  it("'infra' with nothing stuck on the FIRST of two candidates → it carries on with the SECOND, which does get launched (exit 0)", () => {
     const repoRoot = makeRepoRoot()
     const openIssue41a = { number: 41, title: '#41 a', labels: [{ name: 'status:ready' }, { name: 'touches:a' }], body: '' }
     const openIssue42b = { number: 42, title: '#42 b', labels: [{ name: 'status:ready' }, { name: 'touches:b' }], body: '' }
@@ -589,13 +589,13 @@ describe('ct-next — exit 1 de dispatch-check NO siempre es un resultado normal
     const r = runReal(['--repo', 'o/r', '--cap', '2'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
       // idx0: ct-next open ; idx1: ct-next closed ; idx2: dispatch-check(#41)
-      // NUNCA llega a esta llamada (labelsOf falla antes) ; en realidad
-      // idx2 = dispatch-check(#42) collision-check (limpio) ; idx3 =
-      // dispatch-check(#42) readback (limpio).
+      // NEVER reaches this call (labelsOf fails first) ; in reality
+      // idx2 = dispatch-check(#42) collision-check (clean) ; idx3 =
+      // dispatch-check(#42) readback (clean).
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue41a, openIssue42b], [], [], []]),
       FAKE_GH_COUNTER_FILE: counterFile,
-      // viewIdx0 (labelsOf de #41, el PRIMER candidato procesado) falla;
-      // viewIdx1 (labelsOf de #42) no coincide con FAIL_AT=0 → tiene éxito.
+      // viewIdx0 (labelsOf of #41, the FIRST candidate processed) fails;
+      // viewIdx1 (labelsOf of #42) does not match FAIL_AT=0 → it succeeds.
       FAKE_GH_VIEW_FAIL_AT: '0',
       FAKE_GH_VIEW_COUNTER_FILE: viewCounterFile,
       FAKE_GIT_LOG_FILE: gitLog,
@@ -603,7 +603,7 @@ describe('ct-next — exit 1 de dispatch-check NO siempre es un resultado normal
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/no se pudo leer el estado de #41/i)
     expect(r.out).toMatch(/fallo de infraestructura/i)
-    // La tanda SIGUIÓ: #42 se reclamó y se lanzó, pese al hiccup de #41.
+    // The batch WENT ON: #42 was claimed and launched, despite #41's hiccup.
     expect(r.out).toMatch(/claimed #42/)
     expect(r.out).toMatch(/lanzado #42/)
     expect(r.out).not.toMatch(/abortando toda la tanda/i)
@@ -612,7 +612,7 @@ describe('ct-next — exit 1 de dispatch-check NO siempre es un resultado normal
     expect(gitLogTxt).not.toMatch(/worktree add -b feat\/41/)
   })
 
-  it("'stuck' en el PRIMER candidato de dos → aborta la tanda ENTERA, el SEGUNDO ni se intenta", () => {
+  it("'stuck' on the FIRST of two candidates → it aborts the WHOLE batch, the SECOND is not even attempted", () => {
     const repoRoot = makeRepoRoot()
     const openIssue41a = { number: 41, title: '#41 a', labels: [{ name: 'status:ready' }, { name: 'touches:a' }], body: '' }
     const openIssue42b = { number: 42, title: '#42 b', labels: [{ name: 'status:ready' }, { name: 'touches:b' }], body: '' }
@@ -622,8 +622,8 @@ describe('ct-next — exit 1 de dispatch-check NO siempre es un resultado normal
     const r = runReal(['--repo', 'o/r', '--cap', '2'], {
       FAKE_GIT_TOPLEVEL: repoRoot,
       // idx0: ct-next open ; idx1: ct-next closed ; idx2: dispatch-check(#41)
-      // collision-check (limpio) ; idx3: dispatch-check(#41) readback →
-      // FALLA. Nunca debe llegarse a un idx4/idx5 para #42.
+      // collision-check (clean) ; idx3: dispatch-check(#41) readback →
+      // FAILS. An idx4/idx5 for #42 must never be reached.
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue41a, openIssue42b], [], []]),
       FAKE_GH_LIST_FAIL_AT: '3',
       FAKE_GH_COUNTER_FILE: counterFile,
@@ -636,15 +636,15 @@ describe('ct-next — exit 1 de dispatch-check NO siempre es un resultado normal
     expect(r.out).not.toMatch(/lanzado #/)
     const gitLogTxt = existsSync(gitLog) ? readFileSync(gitLog, 'utf8') : ''
     expect(gitLogTxt).not.toMatch(/worktree add/)
-    // #42 nunca se intentó reclamar: ningún claim (issue edit) para el 42 en
-    // absoluto, ni de escritura ni de revert.
+    // #42 was never even attempted: no claim (issue edit) for 42 at all,
+    // neither a write nor a revert.
     const argv = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
     expect(argv).not.toMatch(/issue edit 42/)
   })
 })
 
-describe('ct-next — dispatch falla tras un claim exitoso → revierte el claim (W-C, punto 3)', () => {
-  it('seed de SLICE.md falla tras claim exitoso → limpia worktree/rama Y revierte el claim a status:ready', () => {
+describe('ct-next — dispatch fails after a successful claim → it reverts the claim (W-C, point 3)', () => {
+  it('the SLICE.md seed fails after a successful claim → it cleans up worktree/branch AND reverts the claim to status:ready', () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const argvLog = join(repoRoot, 'gh-argv-log')
@@ -653,11 +653,11 @@ describe('ct-next — dispatch falla tras un claim exitoso → revierte el claim
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue42], []]),
       FAKE_GH_COUNTER_FILE: counterFile,
       FAKE_GH_ARGV_LOG_FILE: argvLog,
-      // FAKE_GIT_WORKTREE_ADD_AS_FILE (D4): el worktree se crea como fichero
-      // DURANTE `git worktree add`, así que el seed falla con ENOTDIR. Antes
-      // se pre-creaba ese fichero, pero desde D4 ct-next.mjs comprueba que el
-      // destino esté libre ANTES de reclamar y un worktree pre-existente ya
-      // no llega nunca al seed (ver el preflight en ct-next.mjs).
+      // FAKE_GIT_WORKTREE_ADD_AS_FILE (D4): the worktree is created as a file
+      // DURING `git worktree add`, so the seed fails with ENOTDIR. That file
+      // used to be pre-created, but since D4 ct-next.mjs checks that the
+      // destination is free BEFORE claiming, and a pre-existing worktree never
+      // reaches the seed any more (see the preflight in ct-next.mjs).
       FAKE_GIT_WORKTREE_ADD_AS_FILE: '1',
     })
     expect(r.code).toBe(1)
@@ -669,7 +669,7 @@ describe('ct-next — dispatch falla tras un claim exitoso → revierte el claim
     expect(argv).toMatch(/issue edit 42 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
   })
 
-  it('seed de SLICE.md falla Y el revert del claim también falla → ATENCIÓN con el comando manual exacto', () => {
+  it("the SLICE.md seed fails AND the claim's revert fails too → ATENCIÓN with the exact manual command", () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {
@@ -677,14 +677,14 @@ describe('ct-next — dispatch falla tras un claim exitoso → revierte el claim
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue42], []]),
       FAKE_GH_COUNTER_FILE: counterFile,
       FAKE_GIT_WORKTREE_ADD_AS_FILE: '1',
-      FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready', // el revert falla; el claim inicial (status:in-progress) no
+      FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready', // the revert fails; the initial claim (status:in-progress) does not
     })
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/ATENCIÓN.*no se pudo limpiar automáticamente.*claim/is)
     expect(r.out).toMatch(/gh issue edit 42 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
   })
 
-  it('cmux falla tras claim exitoso (seed sí escrito) → limpia y revierte el claim', () => {
+  it('cmux fails after a successful claim (the seed was written) → it cleans up and reverts the claim', () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const argvLog = join(repoRoot, 'gh-argv-log')
@@ -702,7 +702,7 @@ describe('ct-next — dispatch falla tras un claim exitoso → revierte el claim
     expect(argv).toMatch(/issue edit 42 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
   })
 
-  it('git worktree add falla tras claim exitoso → revierte el claim automáticamente (sin worktree/rama que limpiar)', () => {
+  it('git worktree add fails after a successful claim → it reverts the claim automatically (with no worktree/branch to clean up)', () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const argvLog = join(repoRoot, 'gh-argv-log')
@@ -721,7 +721,7 @@ describe('ct-next — dispatch falla tras un claim exitoso → revierte el claim
     expect(argv).toMatch(/issue edit 42 --repo o\/r --add-label status:ready --remove-label status:in-progress/)
   })
 
-  it('git worktree add falla Y el revert del claim también falla → ATENCIÓN con el comando manual exacto', () => {
+  it("git worktree add fails AND the claim's revert fails too → ATENCIÓN with the exact manual command", () => {
     const repoRoot = makeRepoRoot()
     const counterFile = join(repoRoot, 'gh-list-count')
     const r = runReal(['--repo', 'o/r', '--cap', '1'], {

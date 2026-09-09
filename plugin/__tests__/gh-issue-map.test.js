@@ -3,9 +3,9 @@ import { extractAc, extractDeps, extractOrder, extractSpecLink, normalizeSpecLin
 import { selectNext } from '../scripts/dispatch.js'
 import { buildIssueBody } from '../scripts/groom.js'
 
-// SPEC_REF (F10): la referencia al spec ya resuelta que recibe buildIssueBody
-// — ruta relativa a la raíz del repo, encabezado real de la §9 y la URL
-// absoluta verificada. Sustituye al viejo `{ specPath, specSection }`.
+// SPEC_REF (F10): the already-resolved spec reference buildIssueBody receives —
+// a path relative to the repo root, the §9's real heading and the verified
+// absolute URL. It replaces the old `{ specPath, specSection }`.
 const SPEC_REF = {
   path: 'spec.md',
   heading: '9. Slices',
@@ -13,40 +13,41 @@ const SPEC_REF = {
   reason: null,
 }
 
-describe('mapGhIssue — defensivo con labels/marcadores ausentes', () => {
-  it('sin marcador ct-order en el body → order cae a i.number', () => {
+describe('mapGhIssue — defensive about absent labels and markers', () => {
+  it('with no ct-order marker in the body → order falls back to i.number', () => {
     const mapped = mapGhIssue({ number: 42, title: '#42 algo', labels: [{ name: 'status:ready' }], body: 'sin marcador' })
     expect(mapped.order).toBe(42)
     expect(mapped.n).toBe(42)
   })
-  it('sin label status: → status cae a "backlog"', () => {
+  it('with no status: label → status falls back to "backlog"', () => {
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'type:backend' }], body: '' })
     expect(mapped.status).toBe('backlog')
   })
-  it('sin labels touches: → touches es []', () => {
+  it('with no touches: labels → touches is []', () => {
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'status:ready' }], body: '' })
     expect(mapped.touches).toEqual([])
   })
-  // Finding 5 de la review final: gh-issue-map.js#mapGhIssue solo miraba
-  // `touches:`, dropeando `area:` por completo, mientras claim.js#tokensOf ya
-  // trataba ambos prefijos como igual-de-relevantes para colisión (spec §14:
-  // conflicto = token `area:` O `touches:` compartido). Consecuencia real:
-  // ct-next.mjs podía co-despachar dos slices que solo comparten un `area:`
-  // (p.ej. `area:api` en ambos) sin detectarlo en la selección — worktrees y
-  // agentes ya lanzados — y solo dispatch-check.mjs lo rechazaba después.
-  it('con label area: (sin touches:) → también entra en touches, igual que claim.js#tokensOf', () => {
+  // Finding 5 of the final review: gh-issue-map.js#mapGhIssue only looked at
+  // `touches:`, dropping `area:` entirely, while claim.js#tokensOf already
+  // treated both prefixes as equally relevant for collision (spec §14: a
+  // conflict = a shared `area:` OR `touches:` token). The real consequence:
+  // ct-next.mjs could co-dispatch two slices that only share an `area:`
+  // (`area:api` in both, say) without detecting it during selection —
+  // worktrees and agents already launched — and only dispatch-check.mjs
+  // rejected it afterwards.
+  it('with an area: label (and no touches:) → it also goes into touches, just like claim.js#tokensOf', () => {
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'area:api' }], body: '' })
     expect(mapped.touches).toEqual(['api'])
   })
-  it('con area: Y touches: a la vez → ambos entran, cada uno pelado de su propio prefijo', () => {
+  it('with area: AND touches: at once → both go in, each stripped of its own prefix', () => {
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'area:api' }, { name: 'touches:db' }], body: '' })
     expect(mapped.touches).toEqual(['api', 'db'])
   })
-  it('sin label type: → type es cadena vacía, no el literal "type:"', () => {
+  it('with no type: label → type is an empty string, not the literal "type:"', () => {
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'status:ready' }], body: '' })
     expect(mapped.type).toBe('')
   })
-  it('body vacío/ausente → deps [] y ac []', () => {
+  it('an empty or absent body → deps [] and ac []', () => {
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body: '' })
     expect(mapped.deps).toEqual([])
     expect(mapped.ac).toEqual([])
@@ -54,58 +55,58 @@ describe('mapGhIssue — defensivo con labels/marcadores ausentes', () => {
     expect(mapped2.deps).toEqual([])
     expect(mapped2.ac).toEqual([])
   })
-  it('con marcador ct-order y merge-after DENTRO de "## Dependencias" → order/deps correctos', () => {
-    // D1 finding 2: mapGhIssue ya no escanea el body ENTERO en busca de
-    // "merge-after #N" — solo el contenido de la sección "## Dependencias"
-    // reconocida (unificado con el alcance de --reconcile). Un "merge-after"
-    // fuera de esa sección (ver el describe dedicado más abajo) se ignora.
+  it('with a ct-order marker and merge-after INSIDE "## Dependencias" → correct order and deps', () => {
+    // D1 finding 2: mapGhIssue no longer scans the WHOLE body looking for
+    // "merge-after #N" — only the content of the recognised "## Dependencias"
+    // section (unified with --reconcile's scope). A "merge-after" outside that
+    // section (see the dedicated describe further down) is ignored.
     const body = 'algo\n## Dependencias\n- merge-after #3\n- merge-after #4\n\n<!-- ct-order:7 -->'
     const mapped = mapGhIssue({ number: 99, title: '#99 x', labels: [], body })
     expect(mapped.order).toBe(7)
     expect(mapped.deps).toEqual([3, 4])
     expect(mapped.depsMalformed).toBe(false)
   })
-  it('name: quita el prefijo "#N " del título', () => {
+  it('name: it strips the "#N " prefix from the title', () => {
     const mapped = mapGhIssue({ number: 5, title: '#5 refresh token', labels: [], body: '' })
     expect(mapped.name).toBe('refresh token')
   })
-  it('issue: siempre "#<number>", nunca undefined', () => {
+  it('issue: always "#<number>", never undefined', () => {
     const mapped = mapGhIssue({ number: 5, title: '#5 x', labels: [], body: '' })
     expect(mapped.issue).toBe('#5')
   })
 })
 
 describe('extractAc', () => {
-  it('sin sección "## Acceptance criteria" → []', () => {
+  it('with no "## Acceptance criteria" section → []', () => {
     expect(extractAc('cualquier body sin esa sección')).toEqual([])
     expect(extractAc('')).toEqual([])
     expect(extractAc(null)).toEqual([])
   })
-  it('con bloque AC → extrae cada línea "- ..."', () => {
+  it('with an AC block → it extracts every "- …" line', () => {
     const body = '## Acceptance criteria (EARS, 1:1 con tests)\n- AC-7.1 algo\n- AC-7.2 otro\n\n## Dependencias\n- merge-after #1'
     expect(extractAc(body)).toEqual(['AC-7.1 algo', 'AC-7.2 otro'])
   })
-  it('placeholder "(rellenar desde el spec)" no cuenta como AC real', () => {
+  it('the placeholder "(rellenar desde el spec)" does not count as a real AC', () => {
     const body = '## Acceptance criteria (EARS, 1:1 con tests)\n- (rellenar desde el spec)\n\n## Dependencias'
     expect(extractAc(body)).toEqual([])
   })
-  it('bloque AC es la última sección del body (sin encabezado siguiente) → también se extrae', () => {
+  it('the AC block is the last section of the body (with no following heading) → it is extracted too', () => {
     const body = '## Acceptance criteria (EARS, 1:1 con tests)\n- AC-1 único'
     expect(extractAc(body)).toEqual(['AC-1 único'])
   })
 })
 
-// extractE2eRuns tenía cobertura del caso único y del caso vacío (vía los
-// tests de la cadena completa y de dispatch-check --release), pero ninguno
-// con MÁS de un recorrido leído de un body real — el propio split/trim/filter
-// no tenía un test que lo obligara a partir más de una línea.
+// extractE2eRuns had coverage of the single case and the empty case (through
+// the end-to-end chain tests and dispatch-check --release), but none with MORE
+// than one run read from a real body — the split/trim/filter itself had no test
+// forcing it to break more than one line.
 describe('extractE2eRuns', () => {
-  it('sin sección "## E2E" → []', () => {
+  it('with no "## E2E" section → []', () => {
     expect(extractE2eRuns('cualquier body sin esa sección')).toEqual([])
     expect(extractE2eRuns('')).toEqual([])
     expect(extractE2eRuns(null)).toEqual([])
   })
-  it('con varios recorridos → uno por línea, en orden, verbatim', () => {
+  it('with several runs → one per line, in order, verbatim', () => {
     const body = '## Acceptance criteria\n- un criterio\n\n## E2E\n- curl -i :9115/metrics responde 200\n- el server escucha en 9115\n- el example compila con cargo build --examples\n\n## Dependencias\n- merge-after #1'
     expect(extractE2eRuns(body)).toEqual([
       'curl -i :9115/metrics responde 200',
@@ -115,12 +116,12 @@ describe('extractE2eRuns', () => {
   })
 })
 
-describe('mapGhIssue + groom.js#buildIssueBody — ata las dos piezas (detecta deriva de formato)', () => {
-  it('un body generado por el buildIssueBody real de ct-groom se mapea correctamente', () => {
+describe('mapGhIssue + groom.js#buildIssueBody — it ties the two pieces together (it detects format drift)', () => {
+  it('a body generated by ct-groom\u2019s real buildIssueBody is mapped correctly', () => {
     const slice = { n: 7, entrega: 'refresh token', ac: ['AC-7.1 algo', 'AC-7.2 otro'], deps: [1, 2], protected: '–' }
     const body = buildIssueBody(slice, SPEC_REF)
     const mapped = mapGhIssue({ number: 55, title: '#55 refresh token', labels: [{ name: 'status:ready' }, { name: 'type:backend' }], body })
-    expect(mapped.order).toBe(7) // <!-- ct-order:7 --> generado por buildIssueBody
+    expect(mapped.order).toBe(7) // <!-- ct-order:7 --> generated by buildIssueBody
     expect(mapped.deps).toEqual([1, 2])
     expect(mapped.ac).toEqual(['AC-7.1 algo', 'AC-7.2 otro'])
     expect(mapped.status).toBe('ready')
@@ -128,38 +129,38 @@ describe('mapGhIssue + groom.js#buildIssueBody — ata las dos piezas (detecta d
   })
 })
 
-// T10: en el sandbox real, groom.js crea issues en orden §9 pero GitHub les
-// asigna sus propios números de issue — que NO coinciden con el orden. Orden
-// 1 = issue #2, orden 2 = issue #3. Los bodies llevan `merge-after #1`
-// (orden), pero mergedIssues son NÚMEROS DE ISSUE reales. Sin traducir,
-// `deps.every(d => merged.has(d))` compara dos espacios distintos y deja
-// bloqueado para siempre cualquier slice con dependencias — salvo que, por
-// casualidad, orden == número de issue (que es exactamente lo que pasaba en
-// TODOS los fixtures previos de la suite, por eso el bug nunca se detectó
-// aquí). Ver gh-issue-map.js#buildDispatchInput.
-// F6, grave 1: el formato de la referencia de dependencia cambia de "#N"
-// desnudo a código inline ("`#N`") para que GitHub deje de autoenlazarla al
-// issue N (verificado contra la API real, ver groom.test.js). Los issues YA
-// CREADOS con el formato viejo siguen existiendo en repos reales — el lector
-// tiene que entender LOS DOS, para siempre. Decisión explícita: NO se migran
-// (nadie reescribe bodies existentes solo por esto); un body viejo solo
-// adopta el formato nuevo si --reconcile ya iba a reescribir esa sección por
-// una divergencia real.
-describe('extractDeps / extractDepsInSection — formato nuevo (`#N`) y viejo (#N) se leen igual (F6, grave 1)', () => {
-  it('extractDeps lee la referencia entre backticks', () => {
+// T10: in the real sandbox, groom.js creates issues in §9 order but GitHub
+// assigns them its own issue numbers — which do NOT match the order. Order 1 =
+// issue #2, order 2 = issue #3. The bodies carry `merge-after #1` (an order),
+// but mergedIssues are real ISSUE NUMBERS. Without translating,
+// `deps.every(d => merged.has(d))` compares two different spaces and leaves any
+// slice with dependencies blocked for ever — unless, by chance, order == issue
+// number (which is exactly what happened in EVERY previous fixture of the
+// suite, which is why the bug was never detected here). See
+// gh-issue-map.js#buildDispatchInput.
+// F6, grave 1: the format of the dependency reference changes from a bare "#N"
+// to inline code ("`#N`") so that GitHub stops autolinking it to issue N
+// (verified against the real API, see groom.test.js). Issues ALREADY CREATED
+// with the old format still exist in real repos — the reader has to understand
+// BOTH, for ever. An explicit decision: they are NOT migrated (nobody rewrites
+// existing bodies just for this); an old body only adopts the new format if
+// --reconcile was going to rewrite that section anyway because of a real
+// divergence.
+describe('extractDeps / extractDepsInSection — the new format (`#N`) and the old one (#N) read the same (F6, grave 1)', () => {
+  it('extractDeps reads the reference between backticks', () => {
     expect(extractDeps('- merge-after `#3`')).toEqual([3])
   })
-  it('extractDeps sigue leyendo el formato viejo, sin backticks (issues ya creados)', () => {
+  it('extractDeps still reads the old format, with no backticks (issues already created)', () => {
     expect(extractDeps('- merge-after #3')).toEqual([3])
   })
-  it('extractDeps lee un body mixto (una sección editada a mano con las dos formas)', () => {
+  it('extractDeps reads a mixed body (a section edited by hand with both forms)', () => {
     expect(extractDeps('- merge-after `#3`\n- merge-after #4')).toEqual([3, 4])
   })
-  it('la sección generada hoy no es "malformed": la nota de orden no introduce ninguna referencia sin capturar', () => {
+  it('the section generated today is not "malformed": the order note introduces no uncaptured reference', () => {
     const body = buildIssueBody({ n: 5, name: 'x', ac: ['AC-5.1'], deps: [1, 2], protected: '–' }, SPEC_REF)
     expect(extractDepsInSection(body)).toEqual({ deps: [1, 2], malformed: false })
   })
-  it('un body con el formato VIEJO sigue mapeando igual por el camino de producción (mapGhIssue)', () => {
+  it('a body with the OLD format still maps the same through the production path (mapGhIssue)', () => {
     const legacyBody = [
       '> Slice #5 del epic. Spec: [spec.md#9](spec.md#9)', '',
       '## Acceptance criteria (EARS, 1:1 con tests)', '- AC-5.1', '',
@@ -175,53 +176,50 @@ describe('extractDeps / extractDepsInSection — formato nuevo (`#N`) y viejo (#
 })
 
 describe('extractOrder', () => {
-  it('lee el marcador ct-order:N', () => expect(extractOrder('x\n<!-- ct-order:2 -->')).toBe(2))
-  it('sin marcador → null', () => expect(extractOrder('sin marcador')).toBeNull())
-  it('body vacío/ausente → null', () => {
+  it('it reads the ct-order:N marker', () => expect(extractOrder('x\n<!-- ct-order:2 -->')).toBe(2))
+  it('with no marker → null', () => expect(extractOrder('sin marcador')).toBeNull())
+  it('an empty or absent body → null', () => {
     expect(extractOrder('')).toBeNull()
     expect(extractOrder(undefined)).toBeNull()
   })
 })
 
-// buildOrderIndex — hardening del dispatch, D1 finding 1 (el más grave de la
-// revisión): el índice orden→issue era GLOBAL AL REPO (un único Map), pero
-// /ct-groom numera slices 1..N POR EPIC. Dos epics groomeados en el mismo
-// repo reutilizan los mismos números de orden, y `index.set` se quedaba con
-// el ÚLTIMO issue visto para cada orden — con `[...open, ...closed]`, un
-// issue YA MERGEADO (cerrado) de un epic A ganaba silenciosamente el slot
-// que un `merge-after` de un epic B en curso necesitaba resolver contra su
-// propio slice hermano. Reproducción verificada por el auditor: epic A
-// (slices 1,2 → #1,#2, ambos mergeados), epic B en el mismo repo (slices
-// 1,2 → #7,#8) — el `merge-after #1` de #8 (orden 1 DE EPIC B) resolvía
-// contra el #1 de epic A (ya mergeado), así que #7 y #8 se despachaban en la
-// MISMA tanda sin que #8 esperara de verdad a #7. Nada se imprimía.
+// buildOrderIndex — hardening of the dispatch, D1 finding 1 (the gravest of the
+// review): the order→issue index was GLOBAL TO THE REPO (a single Map), but
+// /ct-groom numbers slices 1..N PER EPIC. Two epics groomed in the same repo
+// reuse the same order numbers, and `index.set` kept the LAST issue seen for
+// each order — with `[...open, ...closed]`, an ALREADY MERGED (closed) issue of
+// an epic A silently won the slot a `merge-after` of an in-flight epic B needed
+// to resolve against its own sibling slice. Reproduction verified by the
+// auditor: epic A (slices 1,2 → #1,#2, both merged), epic B in the same repo
+// (slices 1,2 → #7,#8) — #8's `merge-after #1` (order 1 OF EPIC B) resolved
+// against epic A's #1 (already merged), so #7 and #8 were dispatched in the
+// SAME batch without #8 ever really waiting for #7. Nothing was printed.
 //
-// Decisión de ALCANCE: cada issue lleva un milestone real desde que
-// groom.js#groomPlan existe (una invocación de /ct-groom = un `--milestone`
-// = un epic) — el número de milestone de GitHub es único POR REPO y ya
-// viaja en CADA issue (abierto o cerrado) sin que este fix tenga que escribir
-// nada nuevo en ningún body: coste de compatibilidad CERO para cualquier
-// issue ya groomeado con el marcador actual (`<!-- ct-order:N -->` no
-// cambia). La alternativa (codificar un identificador de epic DENTRO del
-// propio marcador) se descarta: obligaría a reescribir issues ya existentes
-// o a mantener dos formatos de marcador en paralelo indefinidamente, para
-// llevar la MISMA información que el campo `milestone` de GitHub ya provee
-// gratis. Un issue sin milestone (creado a mano, o un repo de antes de que
-// ct-groom asignara milestone) cae en el bucket `NO_MILESTONE_KEY`
-// compartido — sigue siendo mejor que reventar, pero el bucket compartido
-// puede volver a colisionar si dos epics sin milestone reutilizan órdenes;
-// ver el test de colisión más abajo, que cubre justo ese caso.
+// The SCOPE decision: every issue carries a real milestone ever since
+// groom.js#groomPlan exists (one invocation of /ct-groom = one `--milestone` =
+// one epic) — GitHub's milestone number is unique PER REPO and already travels
+// in EVERY issue (open or closed) without this fix having to write anything new
+// into any body: ZERO compatibility cost for any issue already groomed with the
+// current marker (`<!-- ct-order:N -->` does not change). The alternative
+// (encoding an epic identifier INSIDE the marker itself) is ruled out: it would
+// force rewriting issues that already exist, or maintaining two marker formats
+// in parallel indefinitely, to carry the SAME information GitHub's `milestone`
+// field already provides for free. An issue with no milestone (created by hand,
+// or a repo from before ct-groom assigned milestones) falls into the shared
+// `NO_MILESTONE_KEY` bucket — still better than blowing up, but the shared
+// bucket can collide again if two epics with no milestone reuse orders; see the
+// collision test further down, which covers exactly that case.
 //
-// Decisión de DETECCIÓN: una colisión dentro del MISMO epic (dos issues
-// DISTINTOS con el mismo orden bajo el mismo milestone — p.ej. dos epics que
-// comparten milestone por error, o un re-groom accidental) NUNCA se resuelve
-// en silencio quedándose con "el último" o "el primero" — se reporta en
-// `collisions` para que buildDispatchInput/ct-next.mjs aborten el batch
-// entero (ver su propio describe más abajo) en vez de arriesgarse a
-// despachar contra la dependencia equivocada, que es precisamente el bug
-// que este finding describe.
-describe('buildOrderIndex — alcance por epic (milestone) y detección de colisión (D1 finding 1)', () => {
-  it('mapea orden → número de issue, con el índice separado POR MILESTONE (epic)', () => {
+// The DETECTION decision: a collision within the SAME epic (two DIFFERENT
+// issues with the same order under the same milestone — two epics sharing a
+// milestone by mistake, say, or an accidental re-groom) is NEVER resolved in
+// silence by keeping "the last" or "the first" — it is reported in `collisions`
+// so that buildDispatchInput/ct-next.mjs abort the whole batch (see its own
+// describe further down) instead of risking a dispatch against the wrong
+// dependency, which is precisely the bug this finding describes.
+describe('buildOrderIndex — scope per epic (milestone) and collision detection (D1 finding 1)', () => {
+  it('it maps order → issue number, with the index separated PER MILESTONE (epic)', () => {
     const raw = [
       { number: 2, milestone: { number: 5 }, body: '<!-- ct-order:1 -->' },
       { number: 3, milestone: { number: 5 }, body: '<!-- ct-order:2 -->' },
@@ -232,7 +230,7 @@ describe('buildOrderIndex — alcance por epic (milestone) y detección de colis
     expect(collisions).toEqual([])
   })
 
-  it('el MISMO número de orden en milestones DISTINTOS no es colisión — son epics distintos, cada uno con su propio espacio de orden', () => {
+  it('the SAME order number in DIFFERENT milestones is not a collision — they are different epics, each with its own order space', () => {
     const raw = [
       { number: 1, milestone: { number: 10 }, body: '<!-- ct-order:1 -->' }, // epic A, slice 1
       { number: 7, milestone: { number: 20 }, body: '<!-- ct-order:1 -->' }, // epic B, slice 1
@@ -243,26 +241,26 @@ describe('buildOrderIndex — alcance por epic (milestone) y detección de colis
     expect(perEpic.get('20').get(1)).toBe(7)
   })
 
-  it('el MISMO orden bajo el MISMO milestone, en issues DISTINTOS → colisión real, reportada (nunca "el último gana" en silencio)', () => {
+  it('the SAME order under the SAME milestone, on DIFFERENT issues → a real collision, reported (never "the last one wins" in silence)', () => {
     const raw = [
       { number: 7, milestone: { number: 100 }, body: '<!-- ct-order:2 -->' },
       { number: 8, milestone: { number: 100 }, body: '<!-- ct-order:2 -->' },
     ]
     const { perEpic, collisions } = buildOrderIndex(raw)
     expect(collisions).toEqual([{ epicKey: '100', order: 2, issues: [7, 8] }])
-    // el slot no se resuelve arbitrariamente a "el último" — sigue apuntando
-    // al primero visto, pero quien consuma el índice tiene que mirar
-    // `collisions` antes de confiar en ese valor (buildDispatchInput lo hace).
+    // the slot is not arbitrarily resolved to "the last one" — it still points
+    // at the first one seen, but whoever consumes the index has to look at
+    // `collisions` before trusting that value (buildDispatchInput does).
     expect(perEpic.get('100').get(2)).toBe(7)
   })
 
-  it('issues SIN milestone caen en un bucket compartido (NO_MILESTONE_KEY), no en el de ningún epic real', () => {
+  it('issues with NO milestone fall into a shared bucket (NO_MILESTONE_KEY), not into any real epic\u2019s', () => {
     const raw = [{ number: 9, milestone: null, body: '<!-- ct-order:1 -->' }]
     const { perEpic } = buildOrderIndex(raw)
     expect(perEpic.get(NO_MILESTONE_KEY).get(1)).toBe(9)
   })
 
-  it('dos issues sin milestone con el mismo orden → también cuenta como colisión (el bucket compartido no es inmune)', () => {
+  it('two issues with no milestone and the same order → it counts as a collision too (the shared bucket is not immune)', () => {
     const raw = [
       { number: 1, body: '<!-- ct-order:1 -->' },
       { number: 2, body: '<!-- ct-order:1 -->' },
@@ -271,39 +269,39 @@ describe('buildOrderIndex — alcance por epic (milestone) y detección de colis
     expect(collisions).toEqual([{ epicKey: NO_MILESTONE_KEY, order: 1, issues: [1, 2] }])
   })
 
-  it('issues sin marcador no entran en ningún índice', () => {
+  it('issues with no marker do not enter any index', () => {
     const { perEpic, collisions } = buildOrderIndex([{ number: 9, milestone: { number: 1 }, body: 'sin marcador' }])
     expect(perEpic.get('1')).toBeUndefined()
-    // Aserción reforzada (no solo "el bucket del milestone 1 no existe" —
-    // eso por sí solo no descarta que se haya creado ALGÚN otro bucket
-    // vacío por error): sin ningún marcador `ct-order`, `perEpic` entero
-    // queda vacío, igual que el `idx.size === 0` que comprobaba la versión
-    // pre-D1 (Map plano) de este mismo test.
+    // A reinforced assertion (not just "the bucket for milestone 1 does not
+    // exist" — that on its own does not rule out SOME other empty bucket having
+    // been created by mistake): with no `ct-order` marker at all, the whole
+    // `perEpic` is left empty, just like the `idx.size === 0` this same test's
+    // pre-D1 version (a flat Map) checked.
     expect(perEpic.size).toBe(0)
     expect(collisions).toEqual([])
   })
 
-  it('tres issues DISTINTOS en el mismo hueco (epic, orden) → UNA sola colisión con los tres números, nunca entradas solapadas por pares', () => {
+  it('three DIFFERENT issues in the same slot (epic, order) → ONE single collision with the three numbers, never entries overlapping in pairs', () => {
     const raw = [
       { number: 7, milestone: { number: 100 }, body: '<!-- ct-order:2 -->' },
       { number: 8, milestone: { number: 100 }, body: '<!-- ct-order:2 -->' },
       { number: 9, milestone: { number: 100 }, body: '<!-- ct-order:2 -->' },
     ]
     const { collisions } = buildOrderIndex(raw)
-    // Una única entrada para el hueco (epic 100, orden 2), con los TRES
-    // números — no dos entradas solapadas ([7,8] y [7,9]) que repitan al
-    // primero y hagan más difícil ver de un vistazo cuántos issues distintos
-    // compiten de verdad por el mismo hueco.
+    // A single entry for the slot (epic 100, order 2), with the THREE numbers —
+    // not two overlapping entries ([7,8] and [7,9]) that repeat the first one
+    // and make it harder to see at a glance how many different issues really
+    // compete for the same slot.
     expect(collisions).toEqual([{ epicKey: '100', order: 2, issues: [7, 8, 9] }])
   })
 
-  it('defensivo: entrada vacía/ausente no revienta', () => {
+  it('defensive: an empty or absent input does not blow up', () => {
     expect(buildOrderIndex([]).perEpic.size).toBe(0)
     expect(buildOrderIndex([]).collisions).toEqual([])
     expect(buildOrderIndex(undefined).perEpic.size).toBe(0)
   })
 
-  it('epicKeyOf: milestone con número → String(number); sin milestone (o milestone.number no finito) → NO_MILESTONE_KEY', () => {
+  it('epicKeyOf: a milestone with a number → String(number); with no milestone (or a non-finite milestone.number) → NO_MILESTONE_KEY', () => {
     expect(epicKeyOf({ milestone: { number: 42 } })).toBe('42')
     expect(epicKeyOf({ milestone: null })).toBe(NO_MILESTONE_KEY)
     expect(epicKeyOf({})).toBe(NO_MILESTONE_KEY)
@@ -311,42 +309,42 @@ describe('buildOrderIndex — alcance por epic (milestone) y detección de colis
   })
 })
 
-describe('buildDispatchInput — reproduce y fija el mismatch orden/issue del sandbox (T10)', () => {
-  it('escenario exacto del sandbox: orden 1=#2 (mergeado), orden 2=#3 (ready, dep orden 1) → #3 queda despachable', () => {
-    // #2 (orden 1) ya está cerrado y mergeado.
+describe('buildDispatchInput — it reproduces and pins the sandbox\u2019s order/issue mismatch (T10)', () => {
+  it('the sandbox\u2019s exact scenario: order 1=#2 (merged), order 2=#3 (ready, dep on order 1) → #3 becomes dispatchable', () => {
+    // #2 (order 1) is already closed and merged.
     const closed = [{ number: 2, stateReason: 'COMPLETED', body: '<!-- ct-order:1 -->' }]
-    // #3 (orden 2) sigue abierto, ready, con dep declarada como "merge-after #1" (ORDEN, no issue).
+    // #3 (order 2) is still open, ready, with its dep declared as "merge-after #1" (an ORDER, not an issue).
     const open = [{
       number: 3, title: '#3 endpoint', labels: [{ name: 'status:ready' }],
       body: 'algo\n## Dependencias\n- merge-after #1\n\n<!-- ct-order:2 -->',
     }]
     const { issues, mergedIssues } = buildDispatchInput(open, closed)
-    expect(mergedIssues).toEqual([2]) // número de issue real, no orden
+    expect(mergedIssues).toEqual([2]) // a real issue number, not an order
     const mapped = issues.find((i) => i.n === 3)
-    expect(mapped.deps).toEqual([2]) // traducido: orden 1 → issue #2, no [1]
-    // Prueba end-to-end: con el mismatch sin corregir esto habría dado [].
+    expect(mapped.deps).toEqual([2]) // translated: order 1 → issue #2, not [1]
+    // An end-to-end proof: with the mismatch uncorrected this would have given [].
     const selected = selectNext(issues, { mergedIssues, runningTouches: [], concurrencyCap: 1 })
     expect(selected.map((i) => i.n)).toEqual([3])
   })
 
-  it('sin la traducción, comparar deps (orden) contra mergedIssues (issue) directamente NO selecciona nada (documenta el bug que se arregló)', () => {
-    // Mismo escenario, pero replicando el código PRE-fix: mapGhIssue crudo
-    // (deps en espacio de orden) comparado sin más contra mergedIssues.
+  it('without the translation, comparing deps (orders) against mergedIssues (issues) directly selects NOTHING (it documents the bug that was fixed)', () => {
+    // The same scenario, but replicating the PRE-fix code: a raw mapGhIssue
+    // (deps in order space) compared straight against mergedIssues.
     const openRaw = {
       number: 3, title: '#3 endpoint', labels: [{ name: 'status:ready' }],
       body: 'algo\n## Dependencias\n- merge-after #1\n\n<!-- ct-order:2 -->',
     }
-    const mapped = mapGhIssue(openRaw) // deps sigue en espacio de orden: [1]
+    const mapped = mapGhIssue(openRaw) // deps is still in order space: [1]
     expect(mapped.deps).toEqual([1])
     const mergedIssues = filterMergedIssues([{ number: 2, stateReason: 'COMPLETED' }]) // [2]
     const selected = selectNext([mapped], { mergedIssues, runningTouches: [], concurrencyCap: 1 })
-    expect(selected).toEqual([]) // bloqueado para siempre sin la traducción — el bug real
+    expect(selected).toEqual([]) // blocked for ever without the translation — the real bug
   })
 
-  it('dependencia cuyo orden no existe en ningún issue (abierto o cerrado) → null, nunca satisfecha, no revienta', () => {
+  it('a dependency whose order exists in no issue at all (open or closed) → null, never satisfied, no blow-up', () => {
     const open = [{
       number: 5, title: '#5 algo', labels: [{ name: 'status:ready' }],
-      body: '## Dependencias\n- merge-after #99\n\n<!-- ct-order:1 -->', // orden 99 no existe en ningún lado
+      body: '## Dependencias\n- merge-after #99\n\n<!-- ct-order:1 -->', // order 99 exists nowhere
     }]
     const { issues, mergedIssues, orderCollisions } = buildDispatchInput(open, [])
     expect(orderCollisions).toEqual([])
@@ -356,10 +354,10 @@ describe('buildDispatchInput — reproduce y fija el mismatch orden/issue del sa
     expect(selectNext(issues, { mergedIssues, runningTouches: [], concurrencyCap: 1 })).toEqual([])
   })
 
-  it('la dependencia SÍ mergeada resuelve correctamente aunque el issue mergeado ya no esté en la lista de abiertos', () => {
-    // buildOrderIndex tiene que ver el body del CERRADO para conocer su orden
-    // — si solo indexara abiertos, esta dep quedaría irresoluble en cuanto
-    // la dependencia se mergeara (justo cuando queremos que se desbloquee).
+  it('a dependency that IS merged resolves correctly even though the merged issue is no longer in the open list', () => {
+    // buildOrderIndex has to see the CLOSED one's body to know its order — if
+    // it indexed only the open ones, this dep would become unresolvable as soon
+    // as the dependency was merged (exactly when we want it to unblock).
     const closed = [{ number: 10, stateReason: 'COMPLETED', body: '<!-- ct-order:1 -->' }]
     const open = [{
       number: 11, title: '#11 x', labels: [{ name: 'status:ready' }],
@@ -370,18 +368,17 @@ describe('buildDispatchInput — reproduce y fija el mismatch orden/issue del sa
     expect(selected.map((i) => i.n)).toEqual([11])
   })
 
-  // D1 finding 1 (el más grave): reproducción END-TO-END exacta del auditor
-  // — epic A groomeado y mergeado por completo (#1, #2, milestone 100), epic
-  // B groomeado DESPUÉS en el mismo repo (#7, #8, milestone 200 — un
-  // milestone DISTINTO, porque son epics distintos de verdad). #8 declara
-  // "merge-after #1" — orden 1 DE SU PROPIO epic (B), que es #7. Antes de
-  // este fix, el índice global de orden resolvía "orden 1" contra el ÚLTIMO
-  // issue visto con ese marcador en TODO el repo — el #1 de epic A, ya
-  // mergeado — así que #8 se despachaba junto a #7 en la misma tanda, sin
-  // haber esperado nunca a #7 de verdad. Con el índice por milestone, #8
-  // resuelve contra #7 (su hermano real) y queda bloqueado hasta que #7 se
-  // mergee.
-  it('D1 finding 1 — reproducción del auditor: epic A mergeado + epic B en curso, mismos números de orden, milestones DISTINTOS → el dep de B resuelve contra B, nunca contra A', () => {
+  // D1 finding 1 (the gravest): the auditor's exact END-TO-END reproduction —
+  // epic A groomed and merged completely (#1, #2, milestone 100), epic B groomed
+  // AFTERWARDS in the same repo (#7, #8, milestone 200 — a DIFFERENT milestone,
+  // because they really are different epics). #8 declares "merge-after #1" —
+  // order 1 OF ITS OWN epic (B), which is #7. Before this fix, the global order
+  // index resolved "order 1" against the LAST issue seen with that marker in
+  // the WHOLE repo — epic A's #1, already merged — so #8 was dispatched
+  // alongside #7 in the same batch, without ever really having waited for #7.
+  // With the per-milestone index, #8 resolves against #7 (its real sibling) and
+  // stays blocked until #7 is merged.
+  it('D1 finding 1 — the auditor\u2019s reproduction: epic A merged + epic B in flight, the same order numbers, DIFFERENT milestones → B\u2019s dep resolves against B, never against A', () => {
     const closed = [
       { number: 1, stateReason: 'COMPLETED', milestone: { number: 100 }, body: '<!-- ct-order:1 -->' }, // epic A, slice 1
       { number: 2, stateReason: 'COMPLETED', milestone: { number: 100 }, body: '<!-- ct-order:2 -->' }, // epic A, slice 2
@@ -389,26 +386,26 @@ describe('buildDispatchInput — reproduce y fija el mismatch orden/issue del sa
     const open = [
       {
         number: 7, title: '#7 cimiento epicB', labels: [{ name: 'status:ready' }],
-        milestone: { number: 200 }, body: '<!-- ct-order:1 -->', // epic B, slice 1 (sin deps)
+        milestone: { number: 200 }, body: '<!-- ct-order:1 -->', // epic B, slice 1 (no deps)
       },
       {
         number: 8, title: '#8 encima de epicB', labels: [{ name: 'status:ready' }],
         milestone: { number: 200 },
-        body: 'algo\n## Dependencias\n- merge-after #1\n\n<!-- ct-order:2 -->', // epic B, slice 2: depende del orden 1 DE SU PROPIO epic
+        body: 'algo\n## Dependencias\n- merge-after #1\n\n<!-- ct-order:2 -->', // epic B, slice 2: it depends on order 1 OF ITS OWN epic
       },
     ]
     const { issues, mergedIssues, orderCollisions } = buildDispatchInput(open, closed)
-    expect(orderCollisions).toEqual([]) // milestones distintos: nunca es una colisión real
+    expect(orderCollisions).toEqual([]) // different milestones: never a real collision
     expect(mergedIssues).toEqual([1, 2])
     const slice8 = issues.find((i) => i.n === 8)
-    expect(slice8.deps).toEqual([7]) // EL FIX: nunca [1] (el orden 1 de epic A)
-    // end-to-end: con cap de sobra, solo #7 se despacha — #8 sigue esperando
-    // a su hermano real, no al #1 de epic A que ya estaba mergeado.
+    expect(slice8.deps).toEqual([7]) // THE FIX: never [1] (epic A's order 1)
+    // end-to-end: with cap to spare, only #7 is dispatched — #8 keeps waiting
+    // for its real sibling, not for epic A's #1 that was already merged.
     const selected = selectNext(issues, { mergedIssues, runningTouches: [], concurrencyCap: 5 })
     expect(selected.map((i) => i.n)).toEqual([7])
   })
 
-  it('D1 finding 1 — si dos epics comparten milestone por error (p.ej. ambos con el título por defecto "Epic"), la colisión de orden se reporta, nunca se resuelve en silencio', () => {
+  it('D1 finding 1 — if two epics share a milestone by mistake (both with the default title "Epic", say), the order collision is reported, never resolved in silence', () => {
     const open = [
       { number: 7, title: '#7 a', labels: [{ name: 'status:ready' }], milestone: { number: 100 }, body: '<!-- ct-order:1 -->' },
       { number: 8, title: '#8 b', labels: [{ name: 'status:ready' }], milestone: { number: 100 }, body: '<!-- ct-order:1 -->' },
@@ -417,51 +414,50 @@ describe('buildDispatchInput — reproduce y fija el mismatch orden/issue del sa
     expect(orderCollisions).toEqual([{ epicKey: '100', order: 1, issues: [7, 8] }])
   })
 
-  // Review de D1, finding 4: el radio del "refuse" era demasiado ancho — el
-  // batch entero abortaba (ver ct-next.mjs, versión anterior), incluso para
-  // epics sanos y sin ninguna relación con la colisión. `issues` ahora
-  // EXCLUYE, en el propio buildDispatchInput (para que ningún consumidor
-  // tenga que acordarse de filtrar por su cuenta), cualquier issue cuyo
-  // PROPIO epicKey esté en `orderCollisions` — ni se selecciona ni cuenta en
-  // vuelo, porque su propia resolución de deps ya no es de fiar. Un epic sin
-  // relación (milestone distinto, sin colisión) sigue viéndose con
-  // normalidad.
-  it('D1 finding 4 — un epic con colisión de orden queda EXCLUIDO de `issues` (ni se selecciona ni cuenta en vuelo), pero un epic sano y sin relación permanece intacto', () => {
+  // Review of D1, finding 4: the "refuse" radius was too wide — the whole batch
+  // aborted (see ct-next.mjs, the earlier version), even for healthy epics with
+  // no relation to the collision at all. `issues` now EXCLUDES, inside
+  // buildDispatchInput itself (so that no consumer has to remember to filter on
+  // its own), any issue whose OWN epicKey is in `orderCollisions` — it is
+  // neither selected nor counted as in flight, because its own dep resolution
+  // can no longer be trusted. An unrelated epic (a different milestone, no
+  // collision) keeps being seen as normal.
+  it('D1 finding 4 — an epic with an order collision is EXCLUDED from `issues` (neither selected nor counted as in flight), but a healthy, unrelated epic is left intact', () => {
     const open = [
       { number: 7, title: '#7 a', labels: [{ name: 'status:ready' }], milestone: { number: 100 }, body: '<!-- ct-order:1 -->' },
       { number: 8, title: '#8 b', labels: [{ name: 'status:ready' }], milestone: { number: 100 }, body: '<!-- ct-order:1 -->' },
       { number: 20, title: '#20 sano', labels: [{ name: 'status:ready' }], milestone: { number: 300 }, body: '<!-- ct-order:1 -->' },
     ]
     const { issues, orderCollisions } = buildDispatchInput(open, [])
-    expect(orderCollisions.length).toBe(1) // la colisión se sigue reportando (informativo)
-    expect(issues.map((i) => i.n)).toEqual([20]) // #7/#8 (epic colisionado) fuera; #20 (sano) presente
+    expect(orderCollisions.length).toBe(1) // the collision keeps being reported (informational)
+    expect(issues.map((i) => i.n)).toEqual([20]) // #7/#8 (the collided epic) out; #20 (healthy) present
   })
 
-  // Reproducción del escenario que más preocupaba a la review: la colisión
-  // vive SOLO entre issues YA CERRADOS de un epic viejo — nadie tiene
-  // trabajo pendiente ahí hoy. Un epic nuevo, abierto, sin relación (milestone
-  // distinto), no debe verse afectado en absoluto — ni excluido ni bloqueado.
-  it('D1 finding 4 — una colisión que vive SOLO entre issues cerrados de un epic viejo no excluye ni afecta a un epic nuevo y abierto', () => {
+  // A reproduction of the scenario the review worried about most: the collision
+  // lives ONLY between ALREADY CLOSED issues of an old epic — nobody has
+  // pending work there today. A new, open, unrelated epic (a different
+  // milestone) must not be affected at all — neither excluded nor blocked.
+  it('D1 finding 4 — a collision that lives ONLY between closed issues of an old epic neither excludes nor affects a new, open epic', () => {
     const closed = [
       { number: 50, stateReason: 'COMPLETED', milestone: { number: 100 }, body: '<!-- ct-order:1 -->' },
-      { number: 51, stateReason: 'COMPLETED', milestone: { number: 100 }, body: '<!-- ct-order:1 -->' }, // mismo (epic,orden) → colisión histórica
+      { number: 51, stateReason: 'COMPLETED', milestone: { number: 100 }, body: '<!-- ct-order:1 -->' }, // the same (epic, order) → a historical collision
     ]
     const open = [
       { number: 60, title: '#60 nuevo', labels: [{ name: 'status:ready' }], milestone: { number: 400 }, body: '<!-- ct-order:1 -->' },
     ]
     const { issues, orderCollisions } = buildDispatchInput(open, closed)
     expect(orderCollisions.length).toBe(1)
-    expect(issues.map((i) => i.n)).toEqual([60]) // el epic nuevo, sin relación, no se toca
+    expect(issues.map((i) => i.n)).toEqual([60]) // the new, unrelated epic is not touched
   })
 })
 
-// Reproduce el escenario exacto del finding 5 end-to-end: dos issues `ready`
-// que solo comparten un label `area:api` (nunca `touches:`) — antes del fix,
-// selectNext (que decide qué co-despachar) no veía ese `area:` en absoluto y
-// los lanzaba a los dos con cap 2; con el fix, ambos producen el mismo token
-// pelado 'api' y la colisión se detecta en la SELECCIÓN, no después.
-describe('mapGhIssue + selectNext — colisión por area: compartido se detecta en la selección (finding 5)', () => {
-  it('dos issues ready que comparten SOLO area:api → con cap 2 solo se selecciona uno', () => {
+// It reproduces finding 5's exact scenario end-to-end: two `ready` issues that
+// only share an `area:api` label (never a `touches:`) — before the fix,
+// selectNext (which decides what to co-dispatch) did not see that `area:` at all
+// and launched both with cap 2; with the fix, both produce the same stripped
+// token 'api' and the collision is detected during SELECTION, not afterwards.
+describe('mapGhIssue + selectNext — a collision through a shared area: is detected during selection (finding 5)', () => {
+  it('two ready issues sharing ONLY area:api → with cap 2 only one is selected', () => {
     const a = mapGhIssue({ number: 1, title: '#1 a', labels: [{ name: 'status:ready' }, { name: 'area:api' }], body: '<!-- ct-order:1 -->' })
     const b = mapGhIssue({ number: 2, title: '#2 b', labels: [{ name: 'status:ready' }, { name: 'area:api' }], body: '<!-- ct-order:2 -->' })
     const selected = selectNext([a, b], { mergedIssues: [], runningTouches: [], concurrencyCap: 2 })
@@ -470,30 +466,30 @@ describe('mapGhIssue + selectNext — colisión por area: compartido se detecta 
 })
 
 describe('filterMergedIssues', () => {
-  it('stateReason COMPLETED (mayúsculas, enum GraphQL real) → cuenta como mergeado', () => {
+  it('stateReason COMPLETED (upper case, the real GraphQL enum) → it counts as merged', () => {
     expect(filterMergedIssues([{ number: 1, stateReason: 'COMPLETED' }])).toEqual([1])
   })
-  it('stateReason NOT_PLANNED → NO cuenta', () => {
+  it('stateReason NOT_PLANNED → it does NOT count', () => {
     expect(filterMergedIssues([{ number: 1, stateReason: 'NOT_PLANNED' }])).toEqual([])
   })
-  it('stateReason en minúsculas ("completed") → NO cuenta (no existe en la práctica; sin rama muerta)', () => {
+  it('a lower-case stateReason ("completed") → it does NOT count (it does not exist in practice; no dead branch)', () => {
     expect(filterMergedIssues([{ number: 1, stateReason: 'completed' }])).toEqual([])
   })
-  it('defensivo: entrada vacía/ausente no revienta', () => {
+  it('defensive: an empty or absent input does not blow up', () => {
     expect(filterMergedIssues([])).toEqual([])
     expect(filterMergedIssues(undefined)).toEqual([])
   })
 })
 
-// F5 review round 3, CRITICAL 1 — locateSection buscaba la cabecera con una
-// regex SIN anclar a inicio de línea y SIN escapar, mientras el terminador
-// SÍ estaba anclado (`\n##\s`) — las dos mitades usaban criterios
-// distintos. Verificado por construcción (informe del reviewer): una
-// mención de "## Dependencias" dentro de una valla de código, a mitad de
-// línea, o citada, se confundía con una cabecera real. Estos tests
-// reproducen las tres formas exactas del informe.
-describe('locateSection — anclado a columna 0 y consciente de vallas de código (review round 3, Critical 1)', () => {
-  it('mención inline ("...## Dependencias..." a mitad de línea, dentro de un AC) NO se confunde con la cabecera real', () => {
+// F5 review round 3, CRITICAL 1 — locateSection looked for the heading with a
+// regex NOT anchored to the start of a line and NOT escaped, while the
+// terminator WAS anchored (`\n##\s`) — the two halves used different criteria.
+// Verified by construction (the reviewer's report): a mention of
+// "## Dependencias" inside a code fence, halfway through a line, or quoted, was
+// mistaken for a real heading. These tests reproduce the three exact shapes from
+// the report.
+describe('locateSection — anchored to column 0 and aware of code fences (review round 3, Critical 1)', () => {
+  it('an inline mention ("…## Dependencias…" halfway through a line, inside an AC) is NOT mistaken for the real heading', () => {
     const body = [
       '## Acceptance criteria (EARS, 1:1 con tests)',
       '- AC-2.1 el body debe traer ## Dependencias cuando hay deps',
@@ -508,12 +504,12 @@ describe('locateSection — anclado a columna 0 y consciente de vallas de códig
     ].join('\n')
     const loc = locateSection(body, '## Dependencias')
     expect(loc).not.toBeNull()
-    expect(extractDeps(loc.content)).toEqual([1]) // la sección REAL, no la mención inline
-    // el AC en sí no se trunca por la mención — sigue completo
+    expect(extractDeps(loc.content)).toEqual([1]) // the REAL section, not the inline mention
+    // the AC itself is not truncated by the mention — it stays complete
     expect(extractAc(body)).toEqual(['AC-2.1 el body debe traer ## Dependencias cuando hay deps'])
   })
 
-  it('cabecera citada ("> ## Dependencias") NO se confunde con la cabecera real', () => {
+  it('a quoted heading ("> ## Dependencias") is NOT mistaken for the real heading', () => {
     const body = [
       '## Descripción',
       '> ## Dependencias (cita de otro issue, no una cabecera real)',
@@ -533,7 +529,7 @@ describe('locateSection — anclado a columna 0 y consciente de vallas de códig
     expect(extractDeps(loc.content)).toEqual([3])
   })
 
-  it('"## Dependencias" dentro de una valla de código cercada (dentro de "## Descripción") NO se confunde con la cabecera real, y la valla sobrevive intacta', () => {
+  it('a "## Dependencias" inside a fenced code block (inside "## Descripción") is NOT mistaken for the real heading, and the fence survives intact', () => {
     const body = [
       '## Descripción',
       'Ejemplo de la sección que genera el groom:',
@@ -555,26 +551,27 @@ describe('locateSection — anclado a columna 0 y consciente de vallas de códig
       '<!-- ct-order:1 -->',
     ].join('\n')
     const depsLoc = locateSection(body, '## Dependencias')
-    expect(extractDeps(depsLoc.content)).toEqual([1]) // la sección REAL, no la de dentro de la valla (#99)
+    expect(extractDeps(depsLoc.content)).toEqual([1]) // the REAL section, not the one inside the fence (#99)
 
     const descripcionLoc = locateSection(body, '## Descripción')
-    // La sección Descripción debe incluir la valla ENTERA (apertura Y cierre) —
-    // si el cierre "```" se pierde, el resto del body se renderiza como código.
+    // The Descripción section must include the WHOLE fence (opening AND
+    // closing) — if the closing "```" is lost, the rest of the body renders as
+    // code.
     expect(descripcionLoc.content).toContain('```\n## Dependencias\n- merge-after #99\n```')
     expect(descripcionLoc.content).toContain('fin del ejemplo.')
-    expect(descripcionLoc.content).not.toContain('## Acceptance criteria') // no se comió la siguiente cabecera real
+    expect(descripcionLoc.content).not.toContain('## Acceptance criteria') // it did not eat the next real heading
   })
 })
 
-// Review round 4 — el reviewer atacó su propio round 3: "arregló las tres
-// formas que el review nombró y probó exactamente esas tres; no atacó su
-// propio escáner". Estos tests construyen entradas adversarias que nadie
-// pidió explícitamente: valla anidada (delimitador más corto del MISMO
-// carácter dentro), delimitadores de distinta longitud, "~~~" dentro de
-// "```" (carácter DISTINTO), valla sin cerrar, y cabecera con sufijo para
-// las secciones que NO deberían tolerarlo.
-describe('locateSection / stepFence — CommonMark real: cierra solo con MISMO carácter y longitud >= apertura (review round 4, Critical 1)', () => {
-  it('un delimitador MÁS CORTO del mismo carácter (``` dentro de una valla abierta con ````) NO cierra — la sección real más allá se localiza bien', () => {
+// Review round 4 — the reviewer attacked their own round 3: "it fixed the three
+// shapes the review named and tested exactly those three; it did not attack its
+// own scanner". These tests build adversarial inputs nobody asked for
+// explicitly: a nested fence (a shorter delimiter of the SAME character
+// inside), delimiters of different lengths, a "~~~" inside a "```" (a DIFFERENT
+// character), an unclosed fence, and a suffixed heading for the sections that
+// should NOT tolerate one.
+describe('locateSection / stepFence — real CommonMark: it closes only with the SAME character and a length >= the opening (review round 4, Critical 1)', () => {
+  it('a SHORTER delimiter of the same character (``` inside a fence opened with ````) does NOT close it — the real section beyond is located properly', () => {
     const body = [
       '## Descripción',
       'Ejemplo (round 4): una valla de 4 backticks que contiene, como parte',
@@ -599,14 +596,14 @@ describe('locateSection / stepFence — CommonMark real: cierra solo con MISMO c
       '<!-- ct-order:1 -->',
     ].join('\n')
     const depsLoc = locateSection(body, '## Dependencias')
-    expect(extractDeps(depsLoc.content)).toEqual([1]) // la sección REAL, no la del ejemplo anidado (#99)
+    expect(extractDeps(depsLoc.content)).toEqual([1]) // the REAL section, not the nested example's (#99)
     const descripcionLoc = locateSection(body, '## Descripción')
     expect(descripcionLoc.content).toContain('````\n```\n## Dependencias\n- merge-after #99\n```\n````')
     expect(descripcionLoc.content).toContain('fin del ejemplo real.')
     expect(descripcionLoc.content).not.toContain('## Acceptance criteria')
   })
 
-  it('un delimitador de OTRO carácter ("~~~~" dentro de una valla abierta con "```") NO cierra la valla', () => {
+  it('a delimiter of ANOTHER character ("~~~~" inside a fence opened with "```") does NOT close the fence', () => {
     const body = [
       '## Descripción',
       '```',
@@ -636,7 +633,7 @@ describe('locateSection / stepFence — CommonMark real: cierra solo con MISMO c
     expect(descripcionLoc.content).not.toContain('## Acceptance criteria')
   })
 
-  it('un delimitador MÁS LARGO del mismo carácter SÍ cierra (CommonMark real: longitud >= apertura)', () => {
+  it('a LONGER delimiter of the same character DOES close it (real CommonMark: length >= the opening)', () => {
     const body = [
       '## Descripción',
       '```',
@@ -651,19 +648,19 @@ describe('locateSection / stepFence — CommonMark real: cierra solo con MISMO c
     ].join('\n')
     const descripcionLoc = locateSection(body, '## Descripción')
     expect(descripcionLoc.content).toContain('esto ya está FUERA de la valla')
-    // La cabecera de AC se localiza con normalidad — no quedó "dentro" de nada.
+    // The AC heading is located as normal — it did not end up "inside" anything.
     const acLoc = locateSection(body, AC_HEADING_FORMS)
     expect(acLoc).not.toBeNull()
   })
 
-  // Menor (review round 5): una línea de CIERRE, por CommonMark real, no
-  // puede llevar nada detrás del delimitador salvo espacio en blanco — un
-  // "info string" (p.ej. el "js" de "```js") solo es válido en la
-  // APERTURA. Antes, "```js" dentro de un bloque YA abierto (pensado como
-  // CONTENIDO de ejemplo — mostrando otro fence con lenguaje —, no como
-  // cierre real) se leía igual como cierre porque solo se comparaba
-  // carácter+longitud, ignorando el resto de la línea.
-  it('"```js" (con info string) DENTRO de una valla ya abierta con "```" NO la cierra — sigue siendo contenido del ejemplo', () => {
+  // Minor (review round 5): a CLOSING line, by real CommonMark, cannot carry
+  // anything after the delimiter other than whitespace — an "info string" (the
+  // "js" of "```js", say) is only valid on the OPENING. Before, a "```js"
+  // inside an ALREADY open block (meant as example CONTENT — showing another
+  // fence with a language — not as a real closing) was read as a closing all
+  // the same, because only character and length were compared, ignoring the
+  // rest of the line.
+  it('a "```js" (with an info string) INSIDE a fence already opened with "```" does NOT close it — it is still the example\u2019s content', () => {
     const body = [
       '## Descripción',
       '```',
@@ -678,15 +675,15 @@ describe('locateSection / stepFence — CommonMark real: cierra solo con MISMO c
       '<!-- ct-order:1 -->',
     ].join('\n')
     const descripcionLoc = locateSection(body, '## Descripción')
-    // Los tres delimitadores del ejemplo (apertura, el "```js" interior que
-    // NO cierra, y el cierre real) sobreviven intactos dentro de la sección.
+    // The example's three delimiters (the opening, the inner "```js" that does
+    // NOT close, and the real closing) survive intact inside the section.
     expect(descripcionLoc.content).toContain('```\nejemplo mostrando cómo abrir un fence con lenguaje:\n```js\nesto sigue siendo CONTENIDO del ejemplo exterior, no un cierre real\n```')
     expect(descripcionLoc.content).not.toContain('## Dependencias')
     const depsLoc = locateSection(body, '## Dependencias')
     expect(extractDeps(depsLoc.content)).toEqual([1])
   })
 
-  it('valla SIN CERRAR: todo lo que sigue se trata como dentro de ella (CommonMark: una valla abierta llega hasta el fin del documento) — una cabecera real después de la apertura no se localiza', () => {
+  it('an UNCLOSED fence: everything that follows is treated as inside it (CommonMark: an open fence reaches the end of the document) — a real heading after the opening is not located', () => {
     const body = [
       '## Descripción',
       '```',
@@ -700,13 +697,13 @@ describe('locateSection / stepFence — CommonMark real: cierra solo con MISMO c
       '',
       '<!-- ct-order:1 -->',
     ].join('\n')
-    // "## Dependencias" vive, literalmente, dentro de la valla sin cerrar —
-    // no es una cabecera real mientras la valla siga abierta.
+    // "## Dependencias" lives, literally, inside the unclosed fence — it is not
+    // a real heading while the fence stays open.
     expect(locateSection(body, '## Dependencias')).toBeNull()
     expect(locateSection(body, '## Out of scope / Protected')).toBeNull()
   })
 
-  it('cabecera con sufijo humano ("## Dependencias externas (notas del equipo)") NO se reclama como la sección de dependencias real (exact, no prefijo)', () => {
+  it('a heading with a human suffix ("## Dependencias externas (notas del equipo)") is NOT claimed as the real dependencies section (exact, not a prefix)', () => {
     const body = [
       '## Dependencias externas (notas del equipo)',
       'El equipo de pagos también depende de este cambio, informalmente.',
@@ -720,31 +717,30 @@ describe('locateSection / stepFence — CommonMark real: cierra solo con MISMO c
       '<!-- ct-order:1 -->',
     ].join('\n')
     const depsLoc = locateSection(body, '## Dependencias')
-    expect(extractDeps(depsLoc.content)).toEqual([1]) // la sección REAL, no la humana con sufijo
+    expect(extractDeps(depsLoc.content)).toEqual([1]) // the REAL section, not the human one with a suffix
     expect(depsLoc.content).not.toContain('pagos')
   })
 
-  it('"## Acceptance criteria" acepta las DOS formas de AC_HEADING_FORMS — nunca un prefijo abierto', () => {
+  it('"## Acceptance criteria" accepts BOTH forms of AC_HEADING_FORMS — never an open prefix', () => {
     const body = '## Acceptance criteria (EARS, 1:1 con tests)\n- AC-1.1\n\n<!-- ct-order:1 -->'
     const loc = locateSection(body, AC_HEADING_FORMS)
     expect(loc).not.toBeNull()
     expect(extractAc(body)).toEqual(['AC-1.1'])
   })
 
-  it('la forma vieja de la cabecera de AC (sin el sufijo EARS, de antes de que se añadiera) también se localiza — es la SEGUNDA forma del conjunto cerrado', () => {
+  it('the old form of the AC heading (with no EARS suffix, from before it was added) is located too — it is the SECOND form of the closed set', () => {
     const body = '## Acceptance criteria\n- AC-1.1\n\n<!-- ct-order:1 -->'
     expect(extractAc(body)).toEqual(['AC-1.1'])
   })
 
-  // Importante 4 (review round 5): antes, `extractAc` localizaba la cabecera
-  // por PREFIJO (`{ exact: false }`) — el mismo secuestro que ya se había
-  // cerrado para las otras tres secciones. Un "## Acceptance criteria
-  // propuestos por QA (borrador)" escrito por un humano POR ENCIMA de la
-  // sección real se reclamaba como si fuera ella: el dispatcher inyectaba
-  // CERO criterios reales en el prompt del agente. buildIssueBody solo
-  // emite dos cadenas fijas para esta cabecera — el hueco legítimo es ESE
-  // conjunto cerrado, no un prefijo.
-  it('un "## Acceptance criteria propuestos por QA (borrador)" por ENCIMA de la real ya no la secuestra — extractAc lee la real, no la de QA', () => {
+  // Important 4 (review round 5): before, `extractAc` located the heading by
+  // PREFIX (`{ exact: false }`) — the same hijack that had already been closed
+  // for the other three sections. A "## Acceptance criteria propuestos por QA
+  // (borrador)" written by a human ABOVE the real section was claimed as if it
+  // were it: the dispatcher injected ZERO real criteria into the agent's prompt.
+  // buildIssueBody only emits two fixed strings for this heading — the
+  // legitimate slack is THAT closed set, not a prefix.
+  it('a "## Acceptance criteria propuestos por QA (borrador)" ABOVE the real one no longer hijacks it — extractAc reads the real one, not QA\u2019s', () => {
     const body = [
       '## Acceptance criteria propuestos por QA (borrador)',
       '- esto NO debe ser lo que el dispatcher inyecte',
@@ -761,15 +757,15 @@ describe('locateSection / stepFence — CommonMark real: cierra solo con MISMO c
   })
 })
 
-// Review round 5, Critical 1 — mismo diagnóstico que la ronda 4 aplicado a
-// la OTRA cosa con forma de delimitador que vive en el mismo body: un
-// comentario HTML MULTILÍNEA no ocultaba su interior, así que una cabecera
-// conocida "comentada" (deps viejas que se pospusieron, p.ej.) se leía como
-// estructura real. Estos tests atacan la CLASE — no solo el ejemplo que dio
-// el reviewer (deps comentadas) — igual que el round 4 atacó su propio
-// escáner de vallas más allá de los tres casos nombrados.
-describe('locateSection / stepLine — comentarios HTML multilínea ocultan su interior (review round 5, Critical 1)', () => {
-  it('reproducción del reviewer: unas deps VIEJAS comentadas "mientras decidimos" no secuestran la sección — se localiza la real', () => {
+// Review round 5, Critical 1 — the same diagnosis as round 4 applied to the
+// OTHER delimiter-shaped thing that lives in the same body: a MULTILINE HTML
+// comment did not hide its interior, so a known heading that had been "commented
+// out" (old deps that were postponed, say) was read as real structure. These
+// tests attack the CLASS — not just the example the reviewer gave (commented-out
+// deps) — just as round 4 attacked its own fence scanner beyond the three named
+// cases.
+describe('locateSection / stepLine — multiline HTML comments hide their interior (review round 5, Critical 1)', () => {
+  it('the reviewer\u2019s reproduction: some OLD deps commented out "mientras decidimos" do not hijack the section — the real one is located', () => {
     const body = [
       '## Descripción',
       'algo',
@@ -791,10 +787,10 @@ describe('locateSection / stepLine — comentarios HTML multilínea ocultan su i
       '<!-- ct-order:1 -->',
     ].join('\n')
     const depsLoc = locateSection(body, '## Dependencias')
-    expect(extractDeps(depsLoc.content)).toEqual([1]) // la sección REAL, no la comentada (#99)
+    expect(extractDeps(depsLoc.content)).toEqual([1]) // the REAL section, not the commented-out one (#99)
   })
 
-  it('el comentario multilínea sobrevive INTACTO (apertura y cierre) dentro de la sección que lo contiene', () => {
+  it('the multiline comment survives INTACT (opening and closing) inside the section that contains it', () => {
     const body = [
       '## Descripción',
       'antes del comentario.',
@@ -812,10 +808,10 @@ describe('locateSection / stepLine — comentarios HTML multilínea ocultan su i
     const descripcionLoc = locateSection(body, '## Descripción')
     expect(descripcionLoc.content).toContain('<!--\n## Dependencias\n- merge-after #99\n-->')
     expect(descripcionLoc.content).toContain('después del comentario, misma sección.')
-    expect(descripcionLoc.content).not.toContain('## Acceptance criteria') // no se comió la siguiente cabecera real
+    expect(descripcionLoc.content).not.toContain('## Acceptance criteria') // it did not eat the next real heading
   })
 
-  it('comentario SIN CERRAR: todo lo que sigue (incluidas cabeceras reales) queda oculto hasta EOF — igual que una valla sin cerrar', () => {
+  it('an UNCLOSED comment: everything that follows (real headings included) is hidden until EOF — just like an unclosed fence', () => {
     const body = [
       '## Descripción',
       '<!--',
@@ -829,14 +825,14 @@ describe('locateSection / stepLine — comentarios HTML multilínea ocultan su i
       '',
       '<!-- ct-order:1 -->',
     ].join('\n')
-    // "## Dependencias" y "## Out of scope / Protected" viven, literalmente,
-    // dentro del comentario sin cerrar — no son cabeceras reales mientras
-    // el comentario siga abierto.
+    // "## Dependencias" and "## Out of scope / Protected" live, literally,
+    // inside the unclosed comment — they are not real headings while the
+    // comment stays open.
     expect(locateSection(body, '## Dependencias')).toBeNull()
     expect(locateSection(body, '## Out of scope / Protected')).toBeNull()
   })
 
-  it('tras cerrar el comentario, el escaneo se reanuda con normalidad: una cabecera real DESPUÉS del cierre se localiza bien', () => {
+  it('once the comment is closed, the scan resumes as normal: a real heading AFTER the closing is located properly', () => {
     const body = [
       '## Descripción',
       '<!--',
@@ -857,7 +853,7 @@ describe('locateSection / stepLine — comentarios HTML multilínea ocultan su i
     expect(extractAc(body)).toEqual(['AC-1.1'])
   })
 
-  it('un comentario AUTOCONTENIDO (abre y cierra en la MISMA línea, como el marcador ct-order) sigue terminando una sección con normalidad — no se confunde con la apertura de uno multilínea', () => {
+  it('a SELF-CONTAINED comment (it opens and closes on the SAME line, like the ct-order marker) still terminates a section as normal — it is not mistaken for the opening of a multiline one', () => {
     const body = [
       '## Out of scope / Protected',
       '- (ninguno declarado)',
@@ -871,7 +867,7 @@ describe('locateSection / stepLine — comentarios HTML multilínea ocultan su i
     expect(protectedLoc.content).not.toContain('merge-after #99')
   })
 
-  it('un comentario dentro de una valla de código ABIERTA se trata como texto literal — no dispara el rastreo de comentario ni oculta nada extra más allá de la valla', () => {
+  it('a comment inside an OPEN code fence is treated as literal text — it fires no comment tracking and hides nothing extra beyond the fence', () => {
     const body = [
       '## Descripción',
       '```',
@@ -892,7 +888,7 @@ describe('locateSection / stepLine — comentarios HTML multilínea ocultan su i
     expect(descripcionLoc.content).toContain('fin del ejemplo — esto ya está fuera de la valla')
   })
 
-  it('countHeadingLines también ignora una cabecera "comentada" dentro de un comentario multilínea — no cuenta como duplicado', () => {
+  it('countHeadingLines also ignores a heading "commented out" inside a multiline comment — it does not count as a duplicate', () => {
     const body = [
       '## Dependencias',
       '- merge-after #1',
@@ -906,15 +902,15 @@ describe('locateSection / stepLine — comentarios HTML multilínea ocultan su i
   })
 })
 
-// Review round 5, Critical 2 — "solo '## ' a columna 0 termina una
-// sección": un "#", "###", "####", un "##" separado por tabulador, o uno
-// indentado 1-3 espacios son, los cinco, cabeceras ATX reales en GitHub —
-// ninguno terminaba nada antes de este fix, así que su contenido (y
-// cualquier cosa debajo, hasta la siguiente "## " EXACTA) se tragaba en el
-// splice de la sección anterior. Estos tests atacan la CLASE completa de
-// niveles/formas ATX, no solo el "###" que dio el reviewer.
-describe('locateSection — cualquier cabecera ATX (no solo "## ") termina una sección (review round 5, Critical 2)', () => {
-  it('reproducción del reviewer: un "### Notas de implementación" con una advertencia real ya NO desaparece al reconciliar — queda fuera de la sección anterior', () => {
+// Review round 5, Critical 2 — "only a '## ' at column 0 terminates a section":
+// a "#", a "###", a "####", a "##" separated by a tab, or one indented 1-3
+// spaces are, all five of them, real ATX headings on GitHub — none of them
+// terminated anything before this fix, so their content (and anything below,
+// up to the next EXACT "## ") was swallowed into the previous section's splice.
+// These tests attack the whole CLASS of ATX levels and shapes, not just the
+// "###" the reviewer gave.
+describe('locateSection — any ATX heading (not just "## ") terminates a section (review round 5, Critical 2)', () => {
+  it('the reviewer\u2019s reproduction: a "### Notas de implementación" with a real warning in it NO longer disappears on reconciling — it stays outside the previous section', () => {
     const body = [
       '## Descripción',
       'algo de contexto.',
@@ -932,48 +928,48 @@ describe('locateSection — cualquier cabecera ATX (no solo "## ") termina una s
     expect(descripcionLoc.content).not.toContain('### Notas de implementación')
   })
 
-  it('un H1 ("# Algo") también termina la sección anterior', () => {
+  it('an H1 ("# Algo") also terminates the previous section', () => {
     const body = '## Descripción\ncontenido\n\n# Algo\nresto\n\n<!-- ct-order:1 -->'
     expect(locateSection(body, '## Descripción').content).not.toContain('# Algo')
   })
 
-  it('un H4 ("#### Algo") también termina la sección anterior', () => {
+  it('an H4 ("#### Algo") also terminates the previous section', () => {
     const body = '## Descripción\ncontenido\n\n#### Algo\nresto\n\n<!-- ct-order:1 -->'
     expect(locateSection(body, '## Descripción').content).not.toContain('#### Algo')
   })
 
-  it('un "##" separado por TABULADOR (en vez de espacio) también termina la sección anterior', () => {
+  it('a "##" separated by a TAB (instead of a space) also terminates the previous section', () => {
     const body = '## Descripción\ncontenido\n\n##\tOtra cabecera\nresto\n\n<!-- ct-order:1 -->'
     expect(locateSection(body, '## Descripción').content).not.toContain('Otra cabecera')
   })
 
-  it('una cabecera indentada 1-3 espacios ("   ## Algo") también termina la sección anterior (CommonMark: hasta 3 espacios siguen siendo cabecera)', () => {
+  it('a heading indented 1-3 spaces ("   ## Algo") also terminates the previous section (CommonMark: up to 3 spaces is still a heading)', () => {
     const body = '## Descripción\ncontenido\n\n   ## Algo\nresto\n\n<!-- ct-order:1 -->'
     expect(locateSection(body, '## Descripción').content).not.toContain('Algo')
   })
 
-  it('una cabecera de nivel único "##" sin nada detrás (fin de línea inmediato) también termina la sección anterior', () => {
+  it('a bare "##" heading with nothing after it (an immediate end of line) also terminates the previous section', () => {
     const body = '## Descripción\ncontenido\n\n##\nresto\n\n<!-- ct-order:1 -->'
     expect(locateSection(body, '## Descripción').content).not.toContain('resto')
   })
 
-  // Negativos — ataque a mi propia regla: verificar que NO se ensanchó de
-  // más el criterio.
-  it('4+ espacios de indentación → bloque de código indentado, NO una cabecera (CommonMark real) — no termina nada', () => {
+  // Negatives — an attack on my own rule: verifying that the criterion was NOT
+  // widened too far.
+  it('4+ spaces of indentation → an indented code block, NOT a heading (real CommonMark) — it terminates nothing', () => {
     const body = '## Descripción\ncontenido\n\n    ## esto es código indentado, no una cabecera\nmás contenido\n\n<!-- ct-order:1 -->'
     const loc = locateSection(body, '## Descripción')
     expect(loc.content).toContain('## esto es código indentado, no una cabecera')
     expect(loc.content).toContain('más contenido')
   })
 
-  it('sin espacio/tabulador tras los "#" ("##Something", pegado) → NO es una cabecera ATX válida, no termina nada', () => {
+  it('with no space or tab after the "#" ("##Something", stuck together) → it is NOT a valid ATX heading, it terminates nothing', () => {
     const body = '## Descripción\ncontenido\n\n##Something pegado, no es cabecera\nresto\n\n<!-- ct-order:1 -->'
     const loc = locateSection(body, '## Descripción')
     expect(loc.content).toContain('##Something pegado, no es cabecera')
     expect(loc.content).toContain('resto')
   })
 
-  it('más de 6 "#" (p.ej. 7) → CommonMark ya no lo considera una cabecera ATX, no termina nada', () => {
+  it('more than 6 "#" (7, say) → CommonMark no longer considers it an ATX heading, it terminates nothing', () => {
     const body = '## Descripción\ncontenido\n\n####### siete almohadillas, no es cabecera ATX\nresto\n\n<!-- ct-order:1 -->'
     const loc = locateSection(body, '## Descripción')
     expect(loc.content).toContain('####### siete almohadillas, no es cabecera ATX')
@@ -982,152 +978,151 @@ describe('locateSection — cualquier cabecera ATX (no solo "## ") termina una s
 })
 
 describe('CRLF — normalizeToLF/detectLineEnding (review round 4, menor)', () => {
-  it('detectLineEnding: cuerpo con \\r\\n → "\\r\\n"; cuerpo con \\n puro → "\\n"', () => {
+  it('detectLineEnding: a body with \\r\\n → "\\r\\n"; a body with pure \\n → "\\n"', () => {
     expect(detectLineEnding('a\r\nb\r\n')).toBe('\r\n')
     expect(detectLineEnding('a\nb\n')).toBe('\n')
     expect(detectLineEnding('')).toBe('\n')
   })
-  it('normalizeToLF: quita \\r\\n y cualquier \\r suelto, deja \\n puro', () => {
+  it('normalizeToLF: it strips \\r\\n and any loose \\r, leaving pure \\n', () => {
     expect(normalizeToLF('a\r\nb\r\nc')).toBe('a\nb\nc')
     expect(normalizeToLF('a\rb')).toBe('ab')
   })
-  it('una cabecera "exact" con CRLF (arrastra un \\r al final de línea) sigue matcheando — trimEnd absorbe el \\r', () => {
+  it('an "exact" heading with CRLF (it drags a \\r at the end of the line) still matches — trimEnd absorbs the \\r', () => {
     const body = normalizeToLF('## Dependencias\r\n- merge-after #1\r\n\r\n<!-- ct-order:1 -->\r\n')
     const loc = locateSection(body, '## Dependencias')
     expect(extractDeps(loc.content)).toEqual([1])
   })
 })
 
-// F10 sustituye a specLinkAnchor, que extraía SOLO el ancla y descartaba la
-// ruta a propósito: mientras la línea se componía con `process.argv[2]` tal
-// cual, comparar la ruta habría hecho que dos notaciones del mismo fichero
-// se reescribieran mutuamente para siempre. El precio era no detectar que el
-// spec se hubiera movido de fichero (un enlace a OTRO fichero con el mismo
-// número de sección pasaba por bueno). Ahora la línea es canónica — deriva
-// del repositorio, no de argv — y se compara entera.
-describe('normalizeSpecLink — compara la línea entera, normalizando solo el espacio de los extremos (F10)', () => {
+// F10 replaces specLinkAnchor, which extracted ONLY the anchor and discarded
+// the path on purpose: while the line was composed with `process.argv[2]` as it
+// stood, comparing the path would have made two notations of the same file
+// rewrite each other for ever. The price was not detecting that the spec had
+// moved file (a link to ANOTHER file with the same section number passed as
+// good). Now the line is canonical — it derives from the repository, not from
+// argv — and it is compared whole.
+describe('normalizeSpecLink — it compares the whole line, normalising only the whitespace at the ends (F10)', () => {
   const LINK = '> Slice `#2` del epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)'
-  it('dos líneas idénticas son iguales', () => {
+  it('two identical lines are equal', () => {
     expect(normalizeSpecLink(LINK)).toBe(normalizeSpecLink(LINK))
   })
-  it('un espacio de cola (un editor que lo añade) no es un cambio de contenido', () => {
+  it('a trailing space (an editor that adds one) is not a change of content', () => {
     expect(normalizeSpecLink(`${LINK}  `)).toBe(normalizeSpecLink(LINK))
   })
-  it('el MISMO ancla en OTRO fichero YA NO se considera igual — el agujero que dejaba la comparación por ancla', () => {
+  it('the SAME anchor in ANOTHER file is NO longer considered equal — the hole the anchor comparison left', () => {
     const otroFichero = '> Slice `#2` del epic. Spec: [docs/viejo.md § 9. Slices](https://github.com/o/r/blob/main/docs/viejo.md#9-slices)'
     expect(normalizeSpecLink(otroFichero)).not.toBe(normalizeSpecLink(LINK))
   })
-  it('el enlace RELATIVO de antes de F10 no se considera igual al absoluto de hoy', () => {
+  it('the RELATIVE link from before F10 is not considered equal to today\u2019s absolute one', () => {
     expect(normalizeSpecLink('> Slice `#2` del epic. Spec: [docs/spec.md#9](docs/spec.md#9)')).not.toBe(normalizeSpecLink(LINK))
   })
-  it('sin línea → null (y null no es igual a ninguna línea real)', () => {
+  it('with no line → null (and null is not equal to any real line)', () => {
     expect(normalizeSpecLink(null)).toBeNull()
     expect(normalizeSpecLink(undefined)).toBeNull()
     expect(normalizeSpecLink(null)).not.toBe(normalizeSpecLink(LINK))
   })
 })
 
-describe('countHeadingLines — cuenta cabeceras duplicadas (review round 3, menor)', () => {
-  it('una sola aparición → 1', () => {
+describe('countHeadingLines — it counts duplicated headings (review round 3, minor)', () => {
+  it('a single occurrence → 1', () => {
     expect(countHeadingLines('## Dependencias\n- merge-after #1', '## Dependencias')).toBe(1)
   })
-  it('ausente → 0', () => {
+  it('absent → 0', () => {
     expect(countHeadingLines('## Acceptance criteria\n- x', '## Dependencias')).toBe(0)
   })
-  it('dos apariciones reales → 2', () => {
+  it('two real occurrences → 2', () => {
     const body = '## Dependencias\n- merge-after #1\n\n## Dependencias\n- merge-after #2'
     expect(countHeadingLines(body, '## Dependencias')).toBe(2)
   })
-  it('una aparición dentro de una valla de código NO cuenta como real', () => {
+  it('an occurrence inside a code fence does NOT count as real', () => {
     const body = '## Descripción\n```\n## Dependencias\n```\n\n## Dependencias\n- merge-after #1'
     expect(countHeadingLines(body, '## Dependencias')).toBe(1)
   })
 })
 
-describe('extractSpecLink — la línea "> Slice #N del epic. Spec: …" (review round 3, importante 5)', () => {
-  it('la extrae tal cual', () => {
+describe('extractSpecLink — the "> Slice #N del epic. Spec: …" line (review round 3, important 5)', () => {
+  it('it extracts it as it stands', () => {
     const body = '> Slice #2 del epic. Spec: [docs/spec.md#9](docs/spec.md#9)\n\n## Acceptance criteria (EARS, 1:1 con tests)\n- AC-1.1'
     expect(extractSpecLink(body)).toBe('> Slice #2 del epic. Spec: [docs/spec.md#9](docs/spec.md#9)')
   })
-  it('sin esa línea → null', () => {
+  it('with no such line → null', () => {
     expect(extractSpecLink('## Acceptance criteria\n- x')).toBeNull()
   })
-  it('una mención citada/indentada no cuenta como la línea real', () => {
+  it('a quoted or indented mention does not count as the real line', () => {
     const body = '> algo más\n  > Slice #9 no es la línea real (indentada)\n> Slice #2 del epic. Spec: [x#9](x#9)'
     expect(extractSpecLink(body)).toBe('> Slice #2 del epic. Spec: [x#9](x#9)')
   })
-  // F6, grave 1: el orden pasa a ir entre backticks también en esta línea (el
-  // `body_html` real del issue #4 del sandbox demuestra que GitHub enlazaba
-  // ese "#3" al issue #3). Los dos formatos tienen que localizarse: los
-  // issues viejos no se reescriben.
-  it('localiza también la línea con el orden entre backticks (formato F6)', () => {
+  // F6, grave 1: the order now goes between backticks in this line too (the
+  // real `body_html` of the sandbox's issue #4 proves that GitHub linked that
+  // "#3" to issue #3). Both formats have to be located: old issues are not
+  // rewritten.
+  it('it also locates the line with the order between backticks (the F6 format)', () => {
     const body = '> Slice `#2` del epic. Spec: [docs/spec.md#9](docs/spec.md#9)\n\n## Acceptance criteria\n- AC-1.1'
     expect(extractSpecLink(body)).toBe('> Slice `#2` del epic. Spec: [docs/spec.md#9](docs/spec.md#9)')
   })
-  it('una línea "> Slice …" que no cita ningún orden no se confunde con el enlace al spec', () => {
+  it('a "> Slice …" line that quotes no order at all is not mistaken for the spec link', () => {
     const body = '> Slice pendiente de negociar con Ana\n> Slice `#2` del epic. Spec: [x#9](x#9)'
     expect(extractSpecLink(body)).toBe('> Slice `#2` del epic. Spec: [x#9](x#9)')
   })
 })
 
-// D1 finding 2: extractDeps matcheaba SOLO el literal "merge-after #N", SIN
-// anclarse a ninguna sección — y sin ninguna señal cuando el intento de
-// declarar una dependencia no producía ningún match. Verificado por el
-// auditor sobre bodies editados como un humano los edita de verdad en el
-// editor web de GitHub:
-//   "- merge-after #1"                  -> deps [1]      (caso normal)
-//   "- Depende de #1 (merge primero)"   -> deps []       gate abierto, SILENCIO
-//   "- merge after #1" (guion perdido)  -> deps []       gate abierto, SILENCIO
-//   "- ~~merge-after #1~~ ya no aplica" -> deps [1]       (falla cerrado, no es el caso que este fix ataca)
-//   "merge-after #9" en la prosa de un AC -> antes contaba (escaneo de TODO
-//     el body); unificado con --reconcile (que YA leía solo la sección
-//     "## Dependencias" — es la única que puede tocar con seguridad vía
-//     splice), el dispatcher deja de verlo.
+// D1 finding 2: extractDeps matched ONLY the literal "merge-after #N", with NO
+// anchoring to any section — and with no signal at all when the attempt to
+// declare a dependency produced no match. Verified by the auditor over bodies
+// edited the way a human really edits them in GitHub's web editor:
+//   "- merge-after #1"                  -> deps [1]      (the normal case)
+//   "- Depende de #1 (merge primero)"   -> deps []       gate open, SILENCE
+//   "- merge after #1" (lost hyphen)    -> deps []       gate open, SILENCE
+//   "- ~~merge-after #1~~ ya no aplica" -> deps [1]       (it fails closed, it is not the case this fix attacks)
+//   "merge-after #9" in an AC's prose -> it used to count (a scan of the WHOLE
+//     body); unified with --reconcile (which ALREADY read only the
+//     "## Dependencias" section — the only one it can safely touch through a
+//     splice), the dispatcher stops seeing it.
 //
-// La sección "## Dependencias" PRESENTE con CERO matches de "merge-after
-// #N" es la señal que se estaba desperdiciando: antes se traducía en
-// silencio a `deps: []` (mismo resultado que "este slice no declara
-// ninguna dependencia"), indistinguible de un slice que de verdad no tiene
-// deps. `mapGhIssue` ahora expone `depsMalformed: true` en ese caso —
-// dispatch.js#computeReadyCandidates lo trata como NO listo para despachar
-// (fail-closed) en vez de "sin deps" (ver dispatch.test.js).
+// A "## Dependencias" section that is PRESENT with ZERO matches of "merge-after
+// #N" is the signal that was being wasted: before, it was translated in silence
+// into `deps: []` (the same result as "this slice declares no dependency at
+// all"), indistinguishable from a slice that really has no deps. `mapGhIssue`
+// now exposes `depsMalformed: true` in that case — dispatch.js#computeReadyCandidates
+// treats it as NOT ready to dispatch (fail-closed) instead of "no deps" (see
+// dispatch.test.js).
 //
-// Coste de unificar el dominio: un `merge-after` escrito a mano FUERA de la
-// sección reconocida (p.ej. en la prosa de un AC) deja de ser honrado por el
-// dispatcher — exactamente lo que ya le pasaba a --reconcile desde F5. Antes
-// de este fix, el dispatcher SÍ lo obedecía pero --reconcile jamás podía
-// reconciliarlo (splice inseguro fuera de sección): un mismo dato con dos
-// comportamientos distintos según quién lo leyera. Ahora ambos coinciden.
-describe('mapGhIssue — deps con alcance de sección "## Dependencias" y detección de reescritura humana (D1 finding 2)', () => {
-  it('"- merge-after #1" dentro de la sección → deps correctos, depsMalformed false', () => {
+// The cost of unifying the domain: a `merge-after` written by hand OUTSIDE the
+// recognised section (in an AC's prose, say) stops being honoured by the
+// dispatcher — exactly what was already happening to --reconcile since F5.
+// Before this fix, the dispatcher DID obey it but --reconcile could never
+// reconcile it (an unsafe splice outside the section): one and the same datum
+// with two different behaviours depending on who read it. Now the two agree.
+describe('mapGhIssue — deps scoped to the "## Dependencias" section, and detection of a human rewrite (D1 finding 2)', () => {
+  it('a "- merge-after #1" inside the section → correct deps, depsMalformed false', () => {
     const body = '## Dependencias\n- merge-after #1\n\n<!-- ct-order:2 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([1])
     expect(mapped.depsMalformed).toBe(false)
   })
 
-  it('reescritura humana ("Depende de #1 (merge primero)") dentro de la sección → deps [], depsMalformed true — nunca "gate abierto" en silencio', () => {
+  it('a human rewrite ("Depende de #1 (merge primero)") inside the section → deps [], depsMalformed true — never an "open gate" in silence', () => {
     const body = '## Dependencias\n- Depende de #1 (merge primero)\n\n<!-- ct-order:2 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([])
     expect(mapped.depsMalformed).toBe(true)
   })
 
-  it('guion perdido ("merge after #1", sin el guion) dentro de la sección → deps [], depsMalformed true', () => {
+  it('a lost hyphen ("merge after #1", with no hyphen) inside the section → deps [], depsMalformed true', () => {
     const body = '## Dependencias\n- merge after #1\n\n<!-- ct-order:2 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([])
     expect(mapped.depsMalformed).toBe(true)
   })
 
-  it('tachado ("~~merge-after #1~~ ya no aplica") → el regex SIGUE matcheando (falla cerrado; no es el caso que este fix ataca) → deps [1], NO malformed', () => {
+  it('a strikethrough ("~~merge-after #1~~ ya no aplica") → the regex STILL matches (it fails closed; it is not the case this fix attacks) → deps [1], NOT malformed', () => {
     const body = '## Dependencias\n- ~~merge-after #1~~ ya no aplica\n\n<!-- ct-order:2 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([1])
     expect(mapped.depsMalformed).toBe(false)
   })
 
-  it('un "merge-after #9" suelto en la prosa de un AC, FUERA de "## Dependencias" → se IGNORA (unificado con --reconcile); solo cuenta lo que hay DENTRO de la sección real', () => {
+  it('a loose "merge-after #9" in an AC\u2019s prose, OUTSIDE "## Dependencias" → it is IGNORED (unified with --reconcile); only what is INSIDE the real section counts', () => {
     const body = [
       '## Acceptance criteria (EARS, 1:1 con tests)',
       '- algo que menciona merge-after #9 de pasada, sin ser una dependencia real',
@@ -1138,82 +1133,81 @@ describe('mapGhIssue — deps con alcance de sección "## Dependencias" y detecc
       '<!-- ct-order:2 -->',
     ].join('\n')
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
-    expect(mapped.deps).toEqual([1]) // nunca [9, 1] ni [1, 9]
+    expect(mapped.deps).toEqual([1]) // never [9, 1] nor [1, 9]
     expect(mapped.depsMalformed).toBe(false)
-    // Review de D1, finding 1 (parte "falta el aviso"): estrechar el
-    // dominio del dispatcher a la sección abrió una puerta que `main`
-    // mantenía cerrada (el "#9" de la prosa antes SÍ bloqueaba, ahora ya
-    // no) — correcto y deseado, pero invisible sin esto. `strayDeps` expone
-    // exactamente esa referencia ignorada para que ct-next.mjs pueda
-    // avisar; ver el describe dedicado más abajo.
+    // Review of D1, finding 1 (the "the warning is missing" part): narrowing
+    // the dispatcher's domain to the section opened a gate `main` kept closed
+    // (the "#9" in the prose DID block before, and no longer does) — correct
+    // and wanted, but invisible without this. `strayDeps` exposes exactly that
+    // ignored reference so that ct-next.mjs can warn; see the dedicated
+    // describe further down.
     expect(mapped.strayDeps).toEqual([9])
   })
 
-  it('sin sección "## Dependencias" en absoluto → deps [], depsMalformed false (caso normal: el slice no declara deps)', () => {
+  it('with no "## Dependencias" section at all → deps [], depsMalformed false (the normal case: the slice declares no deps)', () => {
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body: 'sin nada de deps aquí' })
     expect(mapped.deps).toEqual([])
     expect(mapped.depsMalformed).toBe(false)
   })
 
-  it('sección "## Dependencias" presente pero completamente vacía (sin ninguna línea de contenido) → depsMalformed true (buildIssueBody NUNCA emite la cabecera sin al menos un "merge-after"; si aparece así, alguien la vació a mano)', () => {
+  it('a "## Dependencias" section that is present but completely empty (with no content line at all) → depsMalformed true (buildIssueBody NEVER emits the heading without at least one "merge-after"; if it shows up like that, someone emptied it by hand)', () => {
     const body = '## Dependencias\n\n<!-- ct-order:1 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([])
     expect(mapped.depsMalformed).toBe(true)
   })
 
-  it('extractDepsInSection — misma función que reconcile.js reutiliza; alcance idéntico', () => {
+  it('extractDepsInSection — the same function reconcile.js reuses; identical scope', () => {
     expect(extractDepsInSection('## Dependencias\n- merge-after #1\n\n<!-- ct-order:1 -->')).toEqual({ deps: [1], malformed: false })
     expect(extractDepsInSection('sin sección')).toEqual({ deps: [], malformed: false })
     expect(extractDepsInSection('## Dependencias\n- nada reconocible\n\n<!-- ct-order:1 -->')).toEqual({ deps: [], malformed: true })
   })
 
-  // Ataque adversarial (no un ejemplo del auditor): una sección con DOS
-  // líneas — una real ("merge-after #1") y una reescrita a mano ("Depende
-  // de #2") — no produce CERO matches (así que la comprobación simple
-  // "deps.length === 0" no la atraparía), pero SÍ pierde una dependencia
-  // real en silencio. `malformed` compara el número de líneas de bullet
-  // ("- ...") contra el número de deps extraídas: si hay menos deps que
-  // bullets, alguna línea no se pudo leer — sigue siendo `malformed: true`,
-  // aunque `deps` no esté vacío (fail-closed: el `#1` que SÍ se reconoció
-  // sigue aplicando como dependencia real).
-  it('sección con una línea real y otra reescrita a mano (mezcla) → deps parcial, PERO depsMalformed:true (no solo "cero matches")', () => {
+  // An adversarial attack (not an example from the auditor): a section with TWO
+  // lines — a real one ("merge-after #1") and one rewritten by hand ("Depende
+  // de #2") — produces no ZERO matches (so the simple "deps.length === 0" check
+  // would not catch it), but it DOES lose a real dependency in silence.
+  // `malformed` compares the number of bullet lines ("- …") against the number
+  // of deps extracted: if there are fewer deps than bullets, some line could
+  // not be read — it is still `malformed: true`, even though `deps` is not empty
+  // (fail-closed: the `#1` that WAS recognised still applies as a real
+  // dependency).
+  it('a section with one real line and another rewritten by hand (a mixture) → partial deps, BUT depsMalformed:true (not just "zero matches")', () => {
     const body = '## Dependencias\n- merge-after #1\n- Depende de #2 (mal escrito)\n\n<!-- ct-order:3 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
-    expect(mapped.deps).toEqual([1]) // el #2 se pierde, pero #1 se conserva (fail-closed)
-    expect(mapped.depsMalformed).toBe(true) // nunca se trata como "solo depende de #1"
+    expect(mapped.deps).toEqual([1]) // the #2 is lost, but #1 is kept (fail-closed)
+    expect(mapped.depsMalformed).toBe(true) // it is never treated as "it only depends on #1"
   })
 
-  it('dos "merge-after" reales en la MISMA línea de bullet → no es una mezcla, no malformed', () => {
+  it('two real "merge-after" on the SAME bullet line → it is not a mixture, not malformed', () => {
     const body = '## Dependencias\n- merge-after #1, merge-after #2\n\n<!-- ct-order:3 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([1, 2])
     expect(mapped.depsMalformed).toBe(false)
   })
 
-  // Ataque adversarial contra mi PROPIA heurística de "bulletLines" (mismo
-  // espíritu que las rondas de review de F5 sobre locateSection): una
-  // sub-lista humana de elaboración, indentada BAJO una dependencia real
-  // ("- merge-after #1\n  - nota: esto es importante") es una edición
-  // legítima y frecuente — buildIssueBody nunca anida bullets, así que
-  // contar CUALQUIER línea que empiece por "-" (incluso indentada) como
-  // "bullet de dependencia" marcaría esto como `malformed` en falso, aunque
-  // la única dependencia real (#1) se leyó perfectamente. `bulletLines`
-  // cuenta solo bullets de NIVEL SUPERIOR ("- " sin indentar, igual que
-  // buildIssueBody los emite) — una sub-lista indentada no cuenta.
-  it('una sub-lista humana indentada bajo una dependencia real NO cuenta como bullet de dependencia — no dispara malformed en falso', () => {
+  // An adversarial attack on my OWN "bulletLines" heuristic (the same spirit as
+  // F5's review rounds on locateSection): a human sub-list of elaboration,
+  // indented UNDER a real dependency ("- merge-after #1\n  - nota: esto es
+  // importante") is a legitimate and frequent edit — buildIssueBody never nests
+  // bullets, so counting ANY line beginning with "-" (indented ones included)
+  // as a "dependency bullet" would falsely mark this as `malformed`, even
+  // though the one real dependency (#1) was read perfectly. `bulletLines`
+  // counts only TOP-LEVEL bullets ("- " unindented, exactly as buildIssueBody
+  // emits them) — an indented sub-list does not count.
+  it('a human sub-list indented under a real dependency does NOT count as a dependency bullet — it does not falsely fire malformed', () => {
     const body = '## Dependencias\n- merge-after #1\n  - nota: esto lo negociamos con pagos, no tocar\n\n<!-- ct-order:2 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([1])
     expect(mapped.depsMalformed).toBe(false)
   })
 
-  // Otro ataque contra la propia heurística: un separador markdown "---"
-  // (regla horizontal) empieza por "-" pero NO es un bullet — sin el
-  // requisito de "- " (guion Y espacio, el formato exacto que buildIssueBody
-  // emite), este separador inflaría bulletLines sin ninguna dependencia
-  // correspondiente, marcando malformed en falso.
-  it('una línea "---" (separador markdown) dentro de la sección no cuenta como bullet de dependencia', () => {
+  // Another attack on the heuristic itself: a markdown separator "---" (a
+  // horizontal rule) begins with "-" but is NOT a bullet — without the "- "
+  // requirement (hyphen AND space, the exact format buildIssueBody emits), this
+  // separator would inflate bulletLines with no corresponding dependency,
+  // falsely marking it malformed.
+  it('a "---" line (a markdown separator) inside the section does not count as a dependency bullet', () => {
     const body = '## Dependencias\n- merge-after #1\n---\n\n<!-- ct-order:2 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([1])
@@ -1221,25 +1215,24 @@ describe('mapGhIssue — deps con alcance de sección "## Dependencias" y detecc
   })
 })
 
-// Review de D1, finding 1 (parte "falta el aviso"): estrechar el dominio de
-// deps del dispatcher a "## Dependencias" (D1 finding 2) abrió una puerta
-// que `main` mantenía cerrada — verificado por la review con el MISMO
-// fixture en ambos sentidos: un `#8` cuyo body lleva `merge-after #1` bajo
-// "## Descripción" (nunca dentro de "## Dependencias"). `main` (escaneo de
-// TODO el body) lo veía y bloqueaba `#8` hasta que `#1`/su hermano real
-// mergeara; esta rama, tras D1 finding 2, lo ignora del todo — correcto y
-// deseado (es justo el estrechamiento pedido), pero antes de este fix no se
-// imprimía NADA al respecto: `#8` se despachaba en silencio sin que nadie
-// supiera que su intento de dependencia dejó de contar.
+// Review of D1, finding 1 (the "the warning is missing" part): narrowing the
+// dispatcher's deps domain to "## Dependencias" (D1 finding 2) opened a gate
+// `main` kept closed — verified by the review with the SAME fixture both ways:
+// an `#8` whose body carries `merge-after #1` under "## Descripción" (never
+// inside "## Dependencias"). `main` (a scan of the WHOLE body) saw it and
+// blocked `#8` until `#1`, its real sibling, merged; this branch, after D1
+// finding 2, ignores it entirely — correct and wanted (it is exactly the
+// narrowing that was asked for), but before this fix NOTHING was printed about
+// it: `#8` was dispatched in silence without anyone knowing that its attempt at
+// a dependency had stopped counting.
 //
-// `extractStrayDeps`/`mapGhIssue#strayDeps` exponen exactamente esas
-// referencias "merge-after #N" que existen en el body pero FUERA de la
-// sección reconocida — la misma señal que reconcile.js ya calculaba para su
-// propio reporte (`diffIssue#strayDeps`), ahora compartida (una sola
-// implementación, no dos que puedan divergir) para que ct-next.mjs también
-// pueda avisar (ver ct-next-dryrun.test.js).
-describe('extractStrayDeps / mapGhIssue#strayDeps — deps fuera de la sección reconocida, expuestas para poder avisar (D1 finding 1, seguimiento de review)', () => {
-  it('reproducción EXACTA de la review: "merge-after #1" bajo "## Descripción" (nunca "## Dependencias") → deps:[], strayDeps:[1]', () => {
+// `extractStrayDeps`/`mapGhIssue#strayDeps` expose exactly those "merge-after
+// #N" references that exist in the body but OUTSIDE the recognised section —
+// the same signal reconcile.js already computed for its own report
+// (`diffIssue#strayDeps`), now shared (a single implementation, not two that
+// can diverge) so that ct-next.mjs can warn too (see ct-next-dryrun.test.js).
+describe('extractStrayDeps / mapGhIssue#strayDeps — deps outside the recognised section, exposed so a warning is possible (D1 finding 1, review follow-up)', () => {
+  it('the review\u2019s EXACT reproduction: "merge-after #1" under "## Descripción" (never "## Dependencias") → deps:[], strayDeps:[1]', () => {
     const body = [
       '## Descripción',
       'hace referencia a merge-after #1 pero no en la sección correcta',
@@ -1250,94 +1243,93 @@ describe('extractStrayDeps / mapGhIssue#strayDeps — deps fuera de la sección 
       '<!-- ct-order:2 -->',
     ].join('\n')
     const mapped = mapGhIssue({ number: 8, title: '#8 x', labels: [], body })
-    expect(mapped.deps).toEqual([]) // el estrechamiento (D1 finding 2) es correcto: no cuenta como dependencia real
-    expect(mapped.strayDeps).toEqual([1]) // pero la referencia ignorada queda expuesta para poder avisar
+    expect(mapped.deps).toEqual([]) // the narrowing (D1 finding 2) is correct: it does not count as a real dependency
+    expect(mapped.strayDeps).toEqual([1]) // but the ignored reference is left exposed so a warning is possible
   })
 
-  it('un "merge-after #N" DENTRO de la sección reconocida no es "stray" — solo lo que vive fuera cuenta', () => {
+  it('a "merge-after #N" INSIDE the recognised section is not "stray" — only what lives outside counts', () => {
     const body = '## Dependencias\n- merge-after #1\n\n<!-- ct-order:2 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.strayDeps).toEqual([])
   })
 
-  it('sin ninguna referencia fuera de sección → strayDeps: [] (caso normal, sin ruido)', () => {
+  it('with no out-of-section reference at all → strayDeps: [] (the normal case, no noise)', () => {
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body: 'body normal sin nada de esto' })
     expect(mapped.strayDeps).toEqual([])
   })
 
-  it('extractStrayDeps — función compartida: dedup y orden ascendente, y una dep repetida DENTRO y fuera de la sección no cuenta como stray', () => {
+  it('extractStrayDeps — the shared function: dedup and ascending order, and a dep repeated INSIDE and outside the section does not count as stray', () => {
     expect(extractStrayDeps('merge-after #9\nmerge-after #9', [])).toEqual([9]) // dedup
-    expect(extractStrayDeps('merge-after #3\nmerge-after #1', [3])).toEqual([1]) // #3 ya está en sectionDeps, no es stray; #1 sí
+    expect(extractStrayDeps('merge-after #3\nmerge-after #1', [3])).toEqual([1]) // #3 is already in sectionDeps, it is not stray; #1 is
     expect(extractStrayDeps('sin nada', [])).toEqual([])
   })
 })
 
-// Review de D1 (round 2): contar viñetas "- " no es el eje correcto — lo
-// derrota cualquier línea buena con DOS "merge-after" (infla el conteo de
-// deps sin inflar el de viñetas) y cualquier línea rota que no use "- "
-// (viñeta "*", numerada, o sin viñeta en absoluto). La señal correcta es
-// otra: CUALQUIER referencia "#N" (por VALOR, no por posición — así una
-// misma referencia repetida en prosa, p.ej. "ver también #1", no cuenta
-// como problema si #1 YA es una dependencia reconocida) que "merge-after"
-// nunca capturó es lo que de verdad distingue "esta línea pretendía
-// declarar una dependencia y está mal escrita" de "esta línea es una nota
-// sin ningún número". Estos tests reproducen EXACTAMENTE los tres falsos
-// negativos y el falso positivo que encontró la review contra mi primer
-// heurístico (bulletLines), y atacan la heurística NUEVA con formas que
-// nadie me dio: viñeta "*", numerada, sin viñeta, indentada, varias deps en
-// una línea, deps tachadas.
-describe('mapGhIssue — extractDepsInSection: la señal correcta es la referencia "#N" sin capturar, no el conteo de viñetas (review de D1, round 2)', () => {
-  it('falso negativo 1 (review): dos merge-after reales en una línea + una tercera dependencia rota en OTRA línea → malformed:true (antes: false, la "mezcla" se perdía)', () => {
+// Review of D1 (round 2): counting "- " bullets is not the right axis — it is
+// defeated by any good line with TWO "merge-after" (it inflates the dep count
+// without inflating the bullet count) and by any broken line that does not use
+// "- " (a "*" bullet, a numbered one, or no bullet at all). The right signal is
+// another one: ANY "#N" reference (by VALUE, not by position — so the same
+// reference repeated in prose, "ver también #1" for instance, does not count as
+// a problem if #1 is ALREADY a recognised dependency) that "merge-after" never
+// captured is what really tells "this line meant to declare a dependency and is
+// badly written" apart from "this line is a note with no number in it". These
+// tests reproduce EXACTLY the three false negatives and the false positive the
+// review found against my first heuristic (bulletLines), and they attack the
+// NEW heuristic with shapes nobody gave me: a "*" bullet, a numbered one, no
+// bullet, an indented one, several deps on one line, struck-through deps.
+describe('mapGhIssue — extractDepsInSection: the right signal is the uncaptured "#N" reference, not the bullet count (review of D1, round 2)', () => {
+  it('false negative 1 (review): two real merge-after on one line + a third broken dependency on ANOTHER line → malformed:true (before: false, the "mixture" was lost)', () => {
     const body = '## Dependencias\n- merge-after #1, merge-after #2\n- Depende de #3\n\n<!-- ct-order:4 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
-    expect(mapped.deps).toEqual([1, 2]) // lo que sí se leyó bien se conserva (fail-closed)
-    expect(mapped.depsMalformed).toBe(true) // pero #3 no puede perderse en silencio
+    expect(mapped.deps).toEqual([1, 2]) // what was read properly is kept (fail-closed)
+    expect(mapped.depsMalformed).toBe(true) // but #3 cannot be lost in silence
   })
 
-  it('falso negativo 2 (review): dependencia rota con viñeta "*" en vez de "-" → malformed:true (antes: false, "*" no contaba como viñeta)', () => {
+  it('false negative 2 (review): a broken dependency with a "*" bullet instead of "-" → malformed:true (before: false, "*" did not count as a bullet)', () => {
     const body = '## Dependencias\n- merge-after #1\n* Depende de #2\n\n<!-- ct-order:3 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([1])
     expect(mapped.depsMalformed).toBe(true)
   })
 
-  it('falso negativo 3 (review): dependencia rota SIN viñeta en absoluto → malformed:true (antes: false, la línea no empezaba por "-")', () => {
+  it('false negative 3 (review): a broken dependency with NO bullet at all → malformed:true (before: false, the line did not begin with "-")', () => {
     const body = '## Dependencias\n- merge-after #1\nDepende de #2 tambien\n\n<!-- ct-order:3 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([1])
     expect(mapped.depsMalformed).toBe(true)
   })
 
-  it('falso positivo (review): una dependencia real + una NOTA sin ningún número → malformed:false (antes: true, 2 viñetas contra 1 dep bloqueaban un slice sano)', () => {
+  it('false positive (review): a real dependency + a NOTE with no number at all → malformed:false (before: true, 2 bullets against 1 dep blocked a healthy slice)', () => {
     const body = '## Dependencias\n- merge-after #1\n- ojo: revisar con Ana\n\n<!-- ct-order:2 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([1])
     expect(mapped.depsMalformed).toBe(false)
   })
 
-  // Ataques adicionales contra la heurística NUEVA (no dados por la review):
-  it('dependencia rota en formato de lista NUMERADA ("1. Depende de #2") → malformed:true', () => {
+  // Further attacks on the NEW heuristic (not given by the review):
+  it('a broken dependency in NUMBERED list format ("1. Depende de #2") → malformed:true', () => {
     const body = '## Dependencias\n- merge-after #1\n1. Depende de #2\n\n<!-- ct-order:3 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([1])
     expect(mapped.depsMalformed).toBe(true)
   })
 
-  it('dependencia rota INDENTADA bajo la real ("  Depende de #2", sub-nivel) → malformed:true — indentarla no la vuelve inofensiva', () => {
+  it('a broken dependency INDENTED under the real one ("  Depende de #2", a sub-level) → malformed:true — indenting it does not make it harmless', () => {
     const body = '## Dependencias\n- merge-after #1\n  - Depende de #2\n\n<!-- ct-order:3 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([1])
     expect(mapped.depsMalformed).toBe(true)
   })
 
-  it('una MISMA referencia repetida en prosa ("ver también #1 en el spec", #1 YA es una dependencia reconocida) → NO cuenta como problema (comparación por valor, no por posición)', () => {
+  it('the SAME reference repeated in prose ("ver también #1 en el spec", where #1 is ALREADY a recognised dependency) → it does NOT count as a problem (comparison by value, not by position)', () => {
     const body = '## Dependencias\n- merge-after #1\n- ver también #1 en el spec para más contexto\n\n<!-- ct-order:2 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([1])
     expect(mapped.depsMalformed).toBe(false)
   })
 
-  it('deps tachadas ("~~merge-after #1~~ ya no aplica") + una nota sin número → sigue sin malformed (regresión: no reintroducir el falso positivo)', () => {
+  it('struck-through deps ("~~merge-after #1~~ ya no aplica") + a note with no number → still not malformed (regression: do not reintroduce the false positive)', () => {
     const body = '## Dependencias\n- ~~merge-after #1~~ ya no aplica\n- nota: pendiente de decidir con pagos\n\n<!-- ct-order:2 -->'
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [], body })
     expect(mapped.deps).toEqual([1])
@@ -1345,52 +1337,52 @@ describe('mapGhIssue — extractDepsInSection: la señal correcta es la referenc
   })
 })
 
-// D1 finding 3: dos labels "status:" a la vez (una edición a medias — se
-// añadió la nueva sin quitar la vieja) hacía que `Array.prototype.find`
-// eligiera la PRIMERA del array que devuelve `gh`, sin ningún aviso ni
-// comprobación de que hubiera exactamente una. El auditor verificó que
-// `['status:in-progress','status:ready']` resuelve a "in-progress" y el
-// mismo array invertido resuelve a "ready" — pero no pudo determinar offline
-// el orden real que GitHub usa, y pidió explícitamente NO adivinarlo: el
-// código tiene que ser independiente de ese orden. La resolución aquí NO
-// intenta adivinar cuál de las dos labels es "la real": aplica, siempre,
-// la interpretación MÁS CONSERVADORA posible (in-progress > in-review >
-// ready > backlog) — la que menos probabilidad tiene de re-despachar dos
-// veces el mismo trabajo o de dejarlo fuera del cómputo del cap. El mismo
-// resultado para las DOS órdenes del array es la prueba de independencia.
-describe('mapGhIssue — status: ambiguo con más de una label a la vez, resuelto sin depender del orden del array (D1 finding 3)', () => {
-  it('["status:in-progress","status:ready"] → resuelve a "in-progress", marcado ambiguo', () => {
+// D1 finding 3: two "status:" labels at once (a half-finished edit — the new
+// one was added without removing the old one) made `Array.prototype.find` pick
+// the FIRST of the array `gh` returns, with no warning and no check that there
+// was exactly one. The auditor verified that
+// `['status:in-progress','status:ready']` resolves to "in-progress" and the
+// same array reversed resolves to "ready" — but could not determine offline the
+// real order GitHub uses, and asked explicitly NOT to guess it: the code has to
+// be independent of that order. The resolution here does NOT try to guess which
+// of the two labels is "the real one": it always applies the MOST CONSERVATIVE
+// interpretation possible (in-progress > in-review > ready > backlog) — the one
+// least likely to re-dispatch the same work twice or to leave it out of the
+// cap's reckoning. The same result for BOTH orders of the array is the proof of
+// independence.
+describe('mapGhIssue — an ambiguous status: with more than one label at once, resolved without depending on the array order (D1 finding 3)', () => {
+  it('["status:in-progress","status:ready"] → it resolves to "in-progress", flagged as ambiguous', () => {
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'status:in-progress' }, { name: 'status:ready' }], body: '' })
     expect(mapped.status).toBe('in-progress')
     expect(mapped.statusAmbiguous).toBe(true)
   })
 
-  it('el MISMO array pero INVERTIDO → resuelve al MISMO status ("in-progress") — independiente del orden', () => {
+  it('the SAME array but REVERSED → it resolves to the SAME status ("in-progress") — independent of the order', () => {
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'status:ready' }, { name: 'status:in-progress' }], body: '' })
     expect(mapped.status).toBe('in-progress')
     expect(mapped.statusAmbiguous).toBe(true)
   })
 
-  it('status:ready + status:in-review (ambos órdenes) → siempre "in-review", nunca "ready"', () => {
+  it('status:ready + status:in-review (both orders) → always "in-review", never "ready"', () => {
     const a = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'status:ready' }, { name: 'status:in-review' }], body: '' })
     const b = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'status:in-review' }, { name: 'status:ready' }], body: '' })
     expect(a.status).toBe('in-review')
     expect(b.status).toBe('in-review')
   })
 
-  it('una sola label status: → sin ambigüedad, comportamiento normal sin cambios', () => {
+  it('a single status: label → no ambiguity, normal behaviour unchanged', () => {
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'status:ready' }], body: '' })
     expect(mapped.status).toBe('ready')
     expect(mapped.statusAmbiguous).toBe(false)
   })
 
-  it('sin ninguna label status: → "backlog", sin ambigüedad', () => {
+  it('with no status: label at all → "backlog", no ambiguity', () => {
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'type:x' }], body: '' })
     expect(mapped.status).toBe('backlog')
     expect(mapped.statusAmbiguous).toBe(false)
   })
 
-  it('tres labels status: a la vez (edición doblemente a medias) → sigue resolviendo por precedencia, sin reventar', () => {
+  it('three status: labels at once (a doubly half-finished edit) → it keeps resolving by precedence, without blowing up', () => {
     const mapped = mapGhIssue({
       number: 1, title: '#1 x',
       labels: [{ name: 'status:backlog' }, { name: 'status:ready' }, { name: 'status:in-progress' }],
@@ -1400,59 +1392,59 @@ describe('mapGhIssue — status: ambiguo con más de una label a la vez, resuelt
     expect(mapped.statusAmbiguous).toBe(true)
   })
 
-  // Menor (review de D1): dos labels custom que NO son ninguna de las cuatro
-  // conocidas (no gatean nada en dispatch.js — no cuenta como "ready" ni
-  // "in-progress" en ningún sitio, así que la DECISIÓN de despacho es
-  // idéntica pase lo que pase aquí) seguían resolviendo por el orden del
-  // array vía `?? statusLabels[0]` — el mismo defecto que esta función existe
-  // para no tener. El TEXTO del aviso sí depende de este valor: tiene que
-  // ser independiente del orden igual que el resto de la función.
-  it('dos labels status: custom (ninguna de las cuatro conocidas) → el fallback es independiente del orden del array (alfabético, no "el primero del array")', () => {
+  // Minor (review of D1): two custom labels that are NONE of the four known
+  // ones (they gate nothing in dispatch.js — they count as neither "ready" nor
+  // "in-progress" anywhere, so the dispatch DECISION is identical whatever
+  // happens here) still resolved by the array order through `?? statusLabels[0]`
+  // — the very defect this function exists in order not to have. The TEXT of
+  // the warning does depend on this value: it has to be independent of the
+  // order, like the rest of the function.
+  it('two custom status: labels (none of the four known ones) → the fallback is independent of the array order (alphabetical, not "the first of the array")', () => {
     const a = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'status:paused' }, { name: 'status:blocked' }], body: '' })
     const b = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'status:blocked' }, { name: 'status:paused' }], body: '' })
-    expect(a.status).toBe(b.status) // el mismo resultado sin importar el orden de entrada
-    expect(a.status).toBe('blocked') // determinista: "blocked" < "paused" alfabéticamente
+    expect(a.status).toBe(b.status) // the same result whatever the input order
+    expect(a.status).toBe('blocked') // deterministic: "blocked" < "paused" alphabetically
   })
 })
 
-// D1 finding 4: una label "area:" o "touches:" SIN VALOR (el colon presente,
-// nada detrás — p.ej. creada por accidente en el editor de GitHub) pela a
-// una cadena VACÍA tras quitarle el prefijo. Dos issues así "colisionan"
-// sobre el token '' aunque no compartan ningún área/touch real — y el
-// mensaje de colisión en ct-next.mjs lo mostraría como `comparte el token
-// ''`. Un token vacío no representa nada: se descarta antes de entrar en la
-// maquinaria de colisión (dispatch.js#touchesConflict), igual que un dep de
-// orden no mapeable se descarta a `null` en vez de colar un valor basura.
-describe('mapGhIssue — una label "area:"/"touches:" sin valor no produce un token vacío colisionable (D1 finding 4)', () => {
-  it('label "area:" sin nada detrás del colon → touches no incluye la cadena vacía', () => {
+// D1 finding 4: an "area:" or "touches:" label with NO VALUE (the colon there,
+// nothing behind it — created by accident in GitHub's editor, say) strips down
+// to an EMPTY string once the prefix is removed. Two such issues "collide" over
+// the token '' even though they share no real area or touch — and the collision
+// message in ct-next.mjs would show it as `comparte el token ''`. An empty token
+// represents nothing: it is discarded before entering the collision machinery
+// (dispatch.js#touchesConflict), just as an unmappable order dep is discarded to
+// `null` rather than sneaking a junk value through.
+describe('mapGhIssue — an "area:"/"touches:" label with no value produces no collidable empty token (D1 finding 4)', () => {
+  it('an "area:" label with nothing behind the colon → touches does not include the empty string', () => {
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'area:' }, { name: 'status:ready' }], body: '' })
     expect(mapped.touches).toEqual([])
   })
 
-  it('label "touches:" sin valor + un area: real → solo el token real sobrevive, nunca la cadena vacía', () => {
+  it('a "touches:" label with no value + a real area: → only the real token survives, never the empty string', () => {
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'touches:' }, { name: 'area:api' }], body: '' })
     expect(mapped.touches).toEqual(['api'])
   })
 
-  it('dos issues que SOLO comparten la label rota "area:" (sin valor) → selectNext NO los trata como colisión (el token vacío no cuenta)', () => {
+  it('two issues sharing ONLY the broken "area:" label (with no value) → selectNext does NOT treat them as a collision (the empty token does not count)', () => {
     const a = mapGhIssue({ number: 1, title: '#1 a', labels: [{ name: 'status:ready' }, { name: 'area:' }], body: '<!-- ct-order:1 -->' })
     const b = mapGhIssue({ number: 2, title: '#2 b', labels: [{ name: 'status:ready' }, { name: 'area:' }], body: '<!-- ct-order:2 -->' })
     const selected = selectNext([a, b], { mergedIssues: [], runningTouches: [], concurrencyCap: 2 })
-    expect(selected.map((i) => i.n)).toEqual([1, 2]) // ambos, sin colisión espuria
+    expect(selected.map((i) => i.n)).toEqual([1, 2]) // both, with no spurious collision
   })
 
-  // Ataque adversarial (no un ejemplo del auditor): "area: " — colon seguido
-  // de un espacio en blanco, sin contenido real detrás — pela a ' ' (un
-  // espacio, NO la cadena vacía). Un filtro que solo comprueba
-  // `t.length > 0` deja pasar este token igual de vacío-de-contenido, y dos
-  // issues con esta variante volverían a "colisionar" sobre ' ' — el MISMO
-  // bug del finding, con un carácter distinto.
-  it('label "area: " (colon + espacio en blanco, sin contenido real) → tampoco produce un token colisionable', () => {
+  // An adversarial attack (not an example from the auditor): "area: " — a colon
+  // followed by whitespace, with no real content behind it — strips down to ' '
+  // (a space, NOT the empty string). A filter that only checks `t.length > 0`
+  // lets this token, just as empty of content, through, and two issues with
+  // this variant would "collide" over ' ' again — the SAME bug as the finding,
+  // with a different character.
+  it('an "area: " label (colon + whitespace, with no real content) → it does not produce a collidable token either', () => {
     const mapped = mapGhIssue({ number: 1, title: '#1 x', labels: [{ name: 'area: ' }], body: '' })
     expect(mapped.touches).toEqual([])
   })
 
-  it('dos issues que comparten SOLO "area: " (espacio en blanco) → tampoco colisionan', () => {
+  it('two issues sharing ONLY "area: " (whitespace) → they do not collide either', () => {
     const a = mapGhIssue({ number: 1, title: '#1 a', labels: [{ name: 'status:ready' }, { name: 'area: ' }], body: '<!-- ct-order:1 -->' })
     const b = mapGhIssue({ number: 2, title: '#2 b', labels: [{ name: 'status:ready' }, { name: 'area: ' }], body: '<!-- ct-order:2 -->' })
     const selected = selectNext([a, b], { mergedIssues: [], runningTouches: [], concurrencyCap: 2 })
@@ -1460,34 +1452,34 @@ describe('mapGhIssue — una label "area:"/"touches:" sin valor no produce un to
   })
 })
 
-// F23 — specTarget: "¿estos dos issues apuntan al mismo spec?", que NO es la
-// misma pregunta que "¿la línea del enlace ha cambiado?" (eso lo responde
-// diffIssue comparando la línea entera, y debe seguir haciéndolo).
+// F23 — specTarget: "do these two issues point at the same spec?", which is NOT
+// the same question as "has the link line changed?" (diffIssue answers that one
+// by comparing the whole line, and it must go on doing so).
 describe('specTarget', () => {
-  it('devuelve lo que va tras "Spec: " en la forma actual del enlace', () => {
+  it('it returns what comes after "Spec: " in the link\u2019s current form', () => {
     const linea = '> Slice `#2` del epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)'
     expect(specTarget(linea)).toBe('[docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)')
   })
-  it('la forma ANTERIOR a F6 (sin backticks) da el MISMO destino — es el motivo de comparar el destino y no la línea', () => {
+  it('the form from BEFORE F6 (with no backticks) gives the SAME target — that is the reason for comparing the target and not the line', () => {
     const destino = '[docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)'
     expect(specTarget(`> Slice #2 del epic. Spec: ${destino}`)).toBe(destino)
     expect(specTarget(`> Slice \`#2\` del epic. Spec: ${destino}`)).toBe(destino)
   })
-  it('el ORDEN del slice no forma parte del destino: dos slices distintos del mismo spec coinciden', () => {
+  it('the slice\u2019s ORDER is not part of the target: two different slices of the same spec match', () => {
     const destino = '`docs/spec.md` § `9. Slices` — sin enlace: el fichero no está publicado'
     expect(specTarget(`> Slice \`#1\` del epic. Spec: ${destino}`))
       .toBe(specTarget(`> Slice \`#7\` del epic. Spec: ${destino}`))
   })
-  it('specs distintos dan destinos distintos', () => {
+  it('different specs give different targets', () => {
     const a = specTarget('> Slice `#1` del epic. Spec: [docs/a.md](https://github.com/o/r/blob/main/docs/a.md)')
     const b = specTarget('> Slice `#1` del epic. Spec: [docs/b.md](https://github.com/o/r/blob/main/docs/b.md)')
     expect(a).not.toBe(b)
   })
-  it('sin separador "Spec: " → null (no se inventa un destino)', () => {
+  it('with no "Spec: " separator → null (it does not invent a target)', () => {
     expect(specTarget('> Slice `#1` del epic.')).toBeNull()
     expect(specTarget('una línea cualquiera')).toBeNull()
   })
-  it('defensivo: null/undefined/vacío → null', () => {
+  it('defensive: null/undefined/empty → null', () => {
     expect(specTarget(null)).toBeNull()
     expect(specTarget(undefined)).toBeNull()
     expect(specTarget('')).toBeNull()
@@ -1495,30 +1487,30 @@ describe('specTarget', () => {
   })
 })
 
-// Slice 10 — extractSenal: la sección "## Señal de observabilidad" del body,
-// section-scoped con extractSectionContent y primera aparición gana — misma
-// postura que extractAc. Es el primer eslabón del canal programa-de-punta-a-
-// punta (issue → SLICE.md → paquete del juez de slice): ningún agente decide
-// copiar la señal en ningún punto.
-describe('extractSenal — la señal del body (Slice 10)', () => {
-  it('lee el contenido de "## Señal de observabilidad" y lo devuelve verbatim', () => {
+// Slice 10 — extractSenal: the body's "## Señal de observabilidad" section,
+// section-scoped with extractSectionContent and first occurrence wins — the same
+// stance as extractAc. It is the first link of the end-to-end program channel
+// (issue → SLICE.md → the slice judge's package): no agent decides to copy the
+// signal at any point.
+describe('extractSenal — the body\u2019s signal (Slice 10)', () => {
+  it('it reads the content of "## Señal de observabilidad" and returns it verbatim', () => {
     const body = '## Señal de observabilidad\nmétrica `backfill_progress` con label `estado`\n\n## Dependencias\n- merge-after #1'
     expect(extractSenal(body)).toBe('métrica `backfill_progress` con label `estado`')
-    // La exención razonada también viaja verbatim — el consumidor la
-    // distingue solo por su prefijo N/A.
+    // The reasoned exemption travels verbatim too — the consumer tells it apart
+    // only by its N/A prefix.
     const exenta = `${SENAL_HEADING}\nN/A — pantalla sin telemetría nueva\n\n## Gates\nx`
     expect(extractSenal(exenta)).toBe('N/A — pantalla sin telemetría nueva')
   })
-  it('sin sección devuelve null; sección vacía cuenta como ausente en mapGhIssue', () => {
+  it('with no section it returns null; an empty section counts as absent in mapGhIssue', () => {
     expect(extractSenal('body sin esa sección')).toBe(null)
     expect(extractSenal('')).toBe(null)
-    // Sección presente pero vacía: extractSenal devuelve '' (contenido
-    // trimmed) y mapGhIssue lo colapsa a null — contenido vacío = ausente.
+    // A section that is present but empty: extractSenal returns '' (trimmed
+    // content) and mapGhIssue collapses it to null — empty content = absent.
     const vacia = `${SENAL_HEADING}\n\n## Dependencias\n- merge-after #1\n\n<!-- ct-order:7 -->`
     const mapped = mapGhIssue({ number: 9, title: '#9 x', labels: [], body: vacia })
     expect(mapped.senal).toBe(null)
   })
-  it('mapGhIssue expone senal junto a ac y gates', () => {
+  it('mapGhIssue exposes senal alongside ac and gates', () => {
     const body = [
       '## Acceptance criteria (EARS, 1:1 con tests)', '- AC-1', '',
       '## Señal de observabilidad', 'métrica x', '',
@@ -1529,7 +1521,7 @@ describe('extractSenal — la señal del body (Slice 10)', () => {
     expect(mapped.senal).toBe('métrica x')
     expect(mapped.ac).toEqual(['AC-1'])
     expect(mapped.gates).toEqual(['visual'])
-    // Sin sección → null, no undefined: la ausencia es un valor declarado.
+    // With no section → null, not undefined: the absence is a declared value.
     const sinSenal = mapGhIssue({ number: 9, title: '#9 x', labels: [], body: '' })
     expect(sinSenal.senal).toBe(null)
   })

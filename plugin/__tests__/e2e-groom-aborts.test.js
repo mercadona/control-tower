@@ -83,7 +83,7 @@ describe('aborts of the E2E column', () => {
     expect(r.stderr).toMatch(/"no"/)
   })
 
-  it('the token next to a traversal aborts', () => {
+  it('the token next to a journey aborts', () => {
     const r = groom('–', 'no, curl -i :9115/metrics')
     expect(r.status).not.toBe(0)
     expect(r.stderr).toMatch(/#1/)
@@ -110,7 +110,7 @@ describe('aborts of the E2E column', () => {
   // thing the waiver removes is the label, that is, the signal for the human —
   // and a waiver that waives nothing is the very same contradiction between two
   // cells that the other four aborts refuse to resolve in silence.
-  it('Gate: !e2e on a row with traversals aborts, and sends you to the "E2E" cell', () => {
+  it('Gate: !e2e on a row with journeys aborts, and sends you to the "E2E" cell', () => {
     const r = groom('!e2e', 'curl -i :9115/metrics responde 200')
     expect(r.status).toBe(2)
     expect(r.stderr).toMatch(/#1/)
@@ -126,7 +126,7 @@ describe('aborts of the E2E column', () => {
     expect(r.status).toBe(0)
   })
 
-  it('a cell with a traversal does NOT abort', () => {
+  it('a cell with a journey does NOT abort', () => {
     const r = groom('–', 'curl -i :9115/metrics responde 200')
     expect(r.status).toBe(0)
   })
@@ -136,7 +136,7 @@ describe('aborts of the E2E column', () => {
 // The "e2e" gate, said out loud (task "e2e at the close of the slice",
 // addition 2). `resolveGates` never classifies this case as `g.added` — `e2e`
 // comes from no `Tipo` (it does not live in TYPE_GATES), so with a row that
-// only carries traversals (with nothing written by hand in "Gate") it goes into
+// only carries journeys (with nothing written by hand in "Gate") it goes into
 // `implied`. The warning has to come out all the same: if it does not, the
 // "gate:e2e" label reaches the issue and groom's report stays quiet, which is
 // the SAME leak F21 closed for the "Gate" column.
@@ -147,7 +147,7 @@ describe('aborts of the E2E column', () => {
 // that sends the author to the wrong column is worse than none.
 // ============================================================================
 describe('the "e2e" gate is announced on stderr, and names the right column', () => {
-  it('a row with traversals produces the warning and names "E2E", never "Gate"', () => {
+  it('a row with journeys produces the warning and names "E2E", never "Gate"', () => {
     const r = groom('–', 'curl -i :9115/metrics responde 200')
     expect(r.status).toBe(0)
     expect(r.stderr).toMatch(/gate/i)
@@ -158,7 +158,7 @@ describe('the "e2e" gate is announced on stderr, and names the right column', ()
     expect(plan.issues[0].labels).toContain('gate:e2e')
   })
 
-  it('a row with no traversals (`no`) carries no "e2e" warning at all', () => {
+  it('a row with no journeys (`no`) carries no "e2e" warning at all', () => {
     const r = groom('–', 'no')
     expect(r.status).toBe(0)
     expect(r.stderr).not.toContain('"e2e"')
@@ -171,21 +171,21 @@ describe('the "e2e" gate is announced on stderr, and names the right column', ()
 // that gate"), which is FALSE for exactly the same reason as "added" — `e2e`
 // does not live in TYPE_GATES, no Tipo ever implies it: the row implies it, via
 // the "E2E" column. The worst case (finding 1): with `Gate: e2e` PLUS real
-// traversals (a legitimate row, it does not abort — the aborts of the E2E
-// column require ZERO traversals), a real `--dry-run` printed both the correct
+// journeys (a legitimate row, it does not abort — the aborts of the E2E
+// column require ZERO journeys), a real `--dry-run` printed both the correct
 // "added"/"implied" warning and the generic "redundant" one, which said "its
 // Tipo already implies" the gate: two claims about the SAME gate contradicting
 // each other three lines apart.
 // ============================================================================
-// (`waived` no longer has a case: with declared traversals, `!e2e` aborts —
+// (`waived` no longer has a case: with declared journeys, `!e2e` aborts —
 // see the fifth abort above —, and without them the waiver falls into
 // `inertWaivers`.)
 describe('review of addition 2 — redundant/inertWaivers also name "E2E", not "Tipo"', () => {
-  it('Gate: e2e + real traversals: it does not abort, and "redundante" no longer contradicts the warning above', () => {
+  it('Gate: e2e + real journeys: it does not abort, and "redundante" no longer contradicts the warning above', () => {
     const r = groom('e2e', 'curl -i :9115/metrics responde 200')
     expect(r.status).toBe(0)
     // The "the gate already comes from the row" warning (the same one that
-    // fires with traversals alone) is still there...
+    // fires with journeys alone) is still there...
     expect(r.stderr).toMatch(/columna "E2E"/)
     // ...and "redundante" no longer says the Tipo implies it: the two lines
     // that mention "e2e" agree that the source is the row/E2E column, and
@@ -199,7 +199,7 @@ describe('review of addition 2 — redundant/inertWaivers also name "E2E", not "
     expect(plan.issues[0].labels).toContain('gate:e2e')
   })
 
-  it('Gate: !e2e + no traversals: the inert waiver names "E2E", not "Tipo"', () => {
+  it('Gate: !e2e + no journeys: the inert waiver names "E2E", not "Tipo"', () => {
     const r = groom('!e2e', 'no')
     expect(r.status).toBe(0)
     expect(r.stderr).toMatch(/no había nada que quitar/)

@@ -14,35 +14,35 @@ const SPEC = `# Spec X
 
 describe('parseSlices', () => {
   const s = parseSlices(SPEC)
-  it('extrae todas las filas de datos (no el separador)', () => {
+  it('it extracts every data row (not the separator)', () => {
     expect(s).toHaveLength(4)
   })
-  it('tipa n, type, deps, ac', () => {
+  it('it types n, type, deps, ac', () => {
     expect(s[0]).toMatchObject({ n: 1, type: 'backend', deps: [], ac: ['AC-1.1', 'AC-1.2'], protected: 'schema §6' })
     expect(s[2].deps).toEqual([1, 2])
     expect(s[1].deps).toEqual([1])
   })
-  it('deps vacío/– → []', () => {
+  it('empty deps/– → []', () => {
     expect(s[0].deps).toEqual([])
   })
-  it('issue: extrae #NN si existe, null en otro caso', () => {
-    expect(s[0].issue).toEqual(null) // #— login model → no coincide /#(\d+)/
-    expect(s[1].issue).toEqual(null) // refresh token → sin issue
-    expect(s[3].issue).toEqual('#42') // #42 notifications → extrae #42
+  it('issue: it extracts #NN when there is one, null otherwise', () => {
+    expect(s[0].issue).toEqual(null) // #— login model → does not match /#(\d+)/
+    expect(s[1].issue).toEqual(null) // refresh token → no issue
+    expect(s[3].issue).toEqual('#42') // #42 notifications → it extracts #42
   })
-  it('entrega: preserva el texto de la celda', () => {
+  it('entrega: it preserves the text of the cell', () => {
     expect(s[0].entrega).toEqual('modelo User')
     expect(s[1].entrega).toEqual('refresh flow')
     expect(s[2].entrega).toEqual('pantalla')
     expect(s[3].entrega).toEqual('notif engine')
   })
-  it('ac: – y vacío → []', () => {
-    expect(s[3].ac).toEqual([]) // #42 notifications → AC es –
+  it('ac: – and empty → []', () => {
+    expect(s[3].ac).toEqual([]) // #42 notifications → AC is –
   })
-  it('sin tabla §9 → []', () => {
+  it('with no §9 table → []', () => {
     expect(parseSlices('# spec sin tabla')).toEqual([])
   })
-  it('sin columnas Área/Toca (tabla vieja) → area/touches por defecto []', () => {
+  it('with no Área/Toca columns (old table) → area/touches default to []', () => {
     expect(s[0].area).toEqual([])
     expect(s[0].touches).toEqual([])
   })
@@ -57,24 +57,24 @@ const SPEC_AREA_TOCA = `# Spec Y
 | 3 | pantalla | ui | login UI | #1, #2 | AC-3.1 | – |  |  |
 `
 
-describe('parseSlices — columnas Área/Toca', () => {
+describe('parseSlices — the Área/Toca columns', () => {
   const s = parseSlices(SPEC_AREA_TOCA)
-  it('parsea area/touches comma-separated', () => {
+  it('it parses area/touches comma-separated', () => {
     expect(s[0].area).toEqual(['api'])
     expect(s[0].touches).toEqual(['db', 'migration'])
   })
-  it('single area, sin touches (–) → []', () => {
+  it('single area, no touches (–) → []', () => {
     expect(s[1].area).toEqual(['api'])
     expect(s[1].touches).toEqual([])
   })
-  it('celdas vacías → []', () => {
+  it('empty cells → []', () => {
     expect(s[2].area).toEqual([])
     expect(s[2].touches).toEqual([])
   })
 })
 
-describe('parseSlices — normalización de tokens Área/Toca', () => {
-  it('trim, lowercase, colapsa espacios internos', () => {
+describe('parseSlices — normalisation of Área/Toca tokens', () => {
+  it('trim, lowercase, it collapses internal spaces', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -84,7 +84,7 @@ describe('parseSlices — normalización de tokens Área/Toca', () => {
     expect(s[0].area).toEqual(['api', 'payments core'])
     expect(s[0].touches).toEqual(['ci pipeline'])
   })
-  it('cabecera "Area" sin tilde también resuelve la columna', () => {
+  it('an "Area" header without the accent resolves the column too', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Area | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -93,7 +93,7 @@ describe('parseSlices — normalización de tokens Área/Toca', () => {
     const s = parseSlices(spec)
     expect(s[0].area).toEqual(['api'])
   })
-  it('caracteres inválidos para un label de GitHub se descartan del token', () => {
+  it('characters that are invalid in a GitHub label are dropped from the token', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -102,15 +102,16 @@ describe('parseSlices — normalización de tokens Área/Toca', () => {
     const s = parseSlices(spec)
     expect(s[0].area).toEqual(['api core'])
   })
-  it('cabecera "Área" en forma NFD (A + acento combinante) resuelve la columna igual que NFC', () => {
-    // 'Á' aquí es DELIBERADAMENTE 'A' (U+0041) + acento agudo combinante
-    // (U+0301), no el carácter precompuesto 'Á' (U+00C1/00E1, NFC). Algunos
-    // editores/entornos (p.ej. macOS en ciertos flujos) normalizan a NFD al
-    // guardar. Como string JS, 'Área' NO es === 'Área' (NFC) ni
-    // contiene la subcadena 'area' ni 'área' bajo comparación literal —
-    // hay que normalizar antes de comparar, o esta cabecera se pierde en
-    // silencio y el epic entero se queda sin labels area:/touches:.
-    const NFD_AREA_HEADER = 'A' + '\u0301' + 'rea' // 'Area' con A + acento agudo combinante (U+0301) = 'Área' visualmente, forma NFD
+  it('an "Área" header in NFD form (A + combining accent) resolves the column just like NFC', () => {
+    // 'Á' here is DELIBERATELY 'A' (U+0041) + a combining acute accent
+    // (U+0301), not the precomposed character 'Á' (U+00C1/00E1, NFC). Some
+    // editors and environments (macOS in certain flows, for instance)
+    // normalise to NFD on save. As a JS string, 'Área' is NOT === 'Área'
+    // (NFC) and it does not contain the substring 'area' or 'área' under a
+    // literal comparison — it has to be normalised before comparing, or this
+    // header is lost in silence and the whole epic ends up with no
+    // area:/touches: labels.
+    const NFD_AREA_HEADER = 'A' + '\u0301' + 'rea' // 'Area' with A + a combining acute accent (U+0301) = 'Área' visually, NFD form
     expect(NFD_AREA_HEADER.normalize('NFC')).toBe('Área')
     expect(NFD_AREA_HEADER === 'Área').toBe(false)
     const spec = `## 9. Slices
@@ -124,28 +125,28 @@ describe('parseSlices — normalización de tokens Área/Toca', () => {
   })
 })
 
-describe('analyzeSlicesTable — contrato enriquecido (F1)', () => {
-  it('parseSlices(md) sigue devolviendo Slice[] a secas (contrato sin romper)', () => {
+describe('analyzeSlicesTable — the enriched contract (F1)', () => {
+  it('parseSlices(md) still returns a plain Slice[] (the contract is not broken)', () => {
     expect(Array.isArray(parseSlices(REAL_FAILING_TABLE))).toBe(true)
   })
 
-  it('regresión: la tabla real del incidente — cabecera encontrada, pero ambas filas se reportan como no parseables por "#"', () => {
+  it('regression: the real table from the incident — header found, but both rows are reported as unparseable because of "#"', () => {
     const r = analyzeSlicesTable(REAL_FAILING_TABLE)
     expect(r.tableFound).toBe(true)
-    expect(r.missingRequiredColumns).toEqual([]) // "Qué entrega (visible)" matchea "entrega"
-    expect(r.slices).toEqual([]) // ninguna fila parseable: 0 slices, ya no en silencio
+    expect(r.missingRequiredColumns).toEqual([]) // "Qué entrega (visible)" matches "entrega"
+    expect(r.slices).toEqual([]) // no parseable row: 0 slices, and no longer in silence
     expect(r.skippedRows).toHaveLength(2)
     expect(r.skippedRows[0].value).toBe('**S1**')
     expect(r.skippedRows[1].value).toBe('**S2**')
   })
 
-  it('sin tabla §9 → tableFound: false (no confundir con "tabla vacía")', () => {
+  it('with no §9 table → tableFound: false (not to be confused with "an empty table")', () => {
     const r = analyzeSlicesTable('# spec sin tabla')
     expect(r.tableFound).toBe(false)
     expect(r.slices).toEqual([])
   })
 
-  it('columna "#" ausente → missingRequiredColumns incluye "#"', () => {
+  it('an absent "#" column → missingRequiredColumns includes "#"', () => {
     const spec = `## 9. Slices
 | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|
@@ -156,14 +157,13 @@ describe('analyzeSlicesTable — contrato enriquecido (F1)', () => {
     expect(r.missingRequiredColumns).toContain('#')
   })
 
-  // F3: el título del issue ya no sale de "Entrega" (ahora sale de "Slice",
-  // ver más abajo) — "Entrega" pasa a ser una columna OPCIONAL (se convierte
-  // en la sección "Descripción" del cuerpo, ver groom.js#buildIssueBody).
-  // Este test antes esperaba que la columna ausente abortara (
-  // missingRequiredColumns); ahora debe degradar como Tipo/Acepta/Protegido/
-  // Área/Toca: se avisa (missingOptionalColumns), la tabla se sigue
-  // parseando.
-  it('columna "Entrega" ausente → missingOptionalColumns la incluye (F3: ya no es obligatoria), y la fila se sigue parseando', () => {
+  // F3: the issue title no longer comes from "Entrega" (it now comes from
+  // "Slice", see below) — "Entrega" becomes an OPTIONAL column (it turns into
+  // the body's "Descripción" section, see groom.js#buildIssueBody). This test
+  // used to expect the absent column to abort (missingRequiredColumns); now it
+  // must degrade like Tipo/Acepta/Protegido/Área/Toca: a warning is emitted
+  // (missingOptionalColumns) and the table keeps being parsed.
+  it('an absent "Entrega" column → missingOptionalColumns includes it (F3: it is no longer mandatory), and the row keeps being parsed', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|
@@ -176,7 +176,7 @@ describe('analyzeSlicesTable — contrato enriquecido (F1)', () => {
     expect(r.slices[0].entrega).toBe('')
   })
 
-  it('columnas Tipo/Acepta/Protegido/Área/Toca ausentes → missingOptionalColumns las nombra, pero slices se siguen parseando', () => {
+  it('absent Tipo/Acepta/Protegido/Área/Toca columns → missingOptionalColumns names them, but the slices keep being parsed', () => {
     const spec = `## 9. Slices
 | # | Slice | Entrega | Dep |
 |---|---|---|---|
@@ -184,13 +184,13 @@ describe('analyzeSlicesTable — contrato enriquecido (F1)', () => {
 `
     const r = analyzeSlicesTable(spec)
     expect(r.missingRequiredColumns).toEqual([])
-    // Slice 10: "Señal" también es opcional-con-consecuencia y esta tabla no
-    // la trae — entra en la lista igual que las demás.
+    // Slice 10: "Señal" is optional-with-a-consequence too and this table does
+    // not carry it — it goes into the list just like the others.
     expect(r.missingOptionalColumns.sort()).toEqual(['Acepta', 'Protegido', 'Señal', 'Tipo', 'Toca', 'Área'].sort())
     expect(r.slices).toHaveLength(1)
   })
 
-  it('fila con "#" que no es un entero a secas ("**1**", "S1") se reporta en skippedRows con el valor ofensor', () => {
+  it('a row whose "#" is not a plain integer ("**1**", "S1") is reported in skippedRows with the offending value', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -200,11 +200,11 @@ describe('analyzeSlicesTable — contrato enriquecido (F1)', () => {
     const r = analyzeSlicesTable(spec)
     expect(r.skippedRows).toHaveLength(1)
     expect(r.skippedRows[0].value).toBe('**1**')
-    expect(r.slices).toHaveLength(1) // la fila 2, válida, sí se parsea
+    expect(r.slices).toHaveLength(1) // row 2, which is valid, does get parsed
     expect(r.slices[0].n).toBe(2)
   })
 
-  it('tabla sin ninguna fila de datos → slices: [], skippedRows: [], totalDataRows: 0', () => {
+  it('a table with no data row at all → slices: [], skippedRows: [], totalDataRows: 0', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -216,8 +216,8 @@ describe('analyzeSlicesTable — contrato enriquecido (F1)', () => {
   })
 })
 
-describe('parseSlices/analyzeSlicesTable — tolerancia al prefijo de label en Área/Toca (F1)', () => {
-  it('Área acepta el token pelado ("medicacion") y el prefijado ("area:medicacion"), mismo resultado', () => {
+describe('parseSlices/analyzeSlicesTable — tolerance of the label prefix in Área/Toca (F1)', () => {
+  it('Área accepts the bare token ("medicacion") and the prefixed one ("area:medicacion"), same result', () => {
     const spec = (val) => `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -227,7 +227,7 @@ describe('parseSlices/analyzeSlicesTable — tolerancia al prefijo de label en �
     expect(parseSlices(spec('area:medicacion'))[0].area).toEqual(['medicacion'])
   })
 
-  it('Toca acepta el token pelado ("pbxproj") y el prefijado ("touches:pbxproj"), mismo resultado', () => {
+  it('Toca accepts the bare token ("pbxproj") and the prefixed one ("touches:pbxproj"), same result', () => {
     const spec = (val) => `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -237,7 +237,7 @@ describe('parseSlices/analyzeSlicesTable — tolerancia al prefijo de label en �
     expect(parseSlices(spec('touches:pbxproj'))[0].touches).toEqual(['pbxproj'])
   })
 
-  it('backticks alrededor del valor prefijado ("`area:medicacion`") no duplican el prefijo', () => {
+  it('backticks around the prefixed value ("`area:medicacion`") do not duplicate the prefix', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -248,37 +248,37 @@ describe('parseSlices/analyzeSlicesTable — tolerancia al prefijo de label en �
     expect(s[0].touches).toEqual(['pbxproj'])
   })
 
-  it('prefijo de LA OTRA columna ("area:x" dentro de Toca) se admite (no se pierde el valor) pero se reporta como aviso', () => {
+  it('THE OTHER column\u2019s prefix ("area:x" inside Toca) is accepted (the value is not lost) but is reported as a warning', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
 | 1 | x | backend | y | – | – | – | – | area:pbxproj |
 `
     const r = analyzeSlicesTable(spec)
-    expect(r.slices[0].touches).toEqual(['pbxproj']) // se usa el valor, no se descarta
+    expect(r.slices[0].touches).toEqual(['pbxproj']) // the value is used, not discarded
     expect(r.prefixWarnings).toHaveLength(1)
     expect(r.prefixWarnings[0]).toMatchObject({ column: 'Toca', n: 1, raw: 'area:pbxproj' })
   })
 })
 
-// F2 — hueco señalado por el coordinador tras verificar F1: una celda "Dep"
-// con contenido (no "–"/"-"/vacío) que no matchea NINGÚN "#N" produce
-// deps: [] en silencio — el grafo de dependencias desaparece pero groom
-// sale con exit 0 y crea los issues igualmente. Es peor que el caso de 0
-// slices (F1 defecto 1): aquel no hacía nada; este hace daño (rompe el
-// orden merge-after) mientras aparenta funcionar. Mismo criterio que los
-// demás defectos: reportar, no perder en silencio.
-describe('analyzeSlicesTable — Dep con contenido pero sin ninguna referencia #N reconocible (F2)', () => {
-  it('regresión: la tabla del coordinador — 2 filas con Dep malformado ("S1", "S1, S2"), la fila con "–" no cuenta', () => {
+// F2 — a gap the coordinator pointed at after verifying F1: a "Dep" cell with
+// content (not "–"/"-"/empty) that matches NO "#N" at all produces deps: []
+// in silence — the dependency graph disappears but groom exits 0 and creates
+// the issues all the same. It is worse than the 0-slices case (F1, defect 1):
+// that one did nothing; this one does damage (it breaks the merge-after order)
+// while looking as if it worked. Same criterion as the other defects: report,
+// do not lose in silence.
+describe('analyzeSlicesTable — Dep with content but no recognisable #N reference at all (F2)', () => {
+  it('regression: the coordinator\u2019s table — 2 rows with a malformed Dep ("S1", "S1, S2"), the row with "–" does not count', () => {
     const r = analyzeSlicesTable(REAL_DEP_TABLE)
     expect(r.tableFound).toBe(true)
-    expect(r.slices).toHaveLength(3) // el "#" de las 3 filas es válido, solo Dep está mal
+    expect(r.slices).toHaveLength(3) // the "#" of all 3 rows is valid, only Dep is wrong
     expect(r.malformedDepRows).toHaveLength(2)
     expect(r.malformedDepRows[0]).toMatchObject({ n: 2, raw: 'S1' })
     expect(r.malformedDepRows[1]).toMatchObject({ n: 3, raw: 'S1, S2' })
   })
 
-  it('"–"/"-"/vacío en Dep no es malformado (es la forma legítima de "sin dependencias")', () => {
+  it('"–"/"-"/empty in Dep is not malformed (it is the legitimate way of writing "no dependencies")', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -290,7 +290,7 @@ describe('analyzeSlicesTable — Dep con contenido pero sin ninguna referencia #
     expect(r.malformedDepRows).toEqual([])
   })
 
-  it('texto legítimo alrededor de una referencia #N válida SÍ pasa (el disparador es "0 deps extraídas", no "caracteres raros")', () => {
+  it('legitimate text around a valid #N reference DOES pass (the trigger is "0 deps extracted", not "odd characters")', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -302,26 +302,25 @@ describe('analyzeSlicesTable — Dep con contenido pero sin ninguna referencia #
     expect(r.slices[1].deps).toEqual([1])
   })
 
-  it('sin tabla / sin filas → malformedDepRows: []', () => {
+  it('no table / no rows → malformedDepRows: []', () => {
     expect(analyzeSlicesTable('# sin tabla').malformedDepRows).toEqual([])
   })
 })
 
 // ============================================================================
-// Review de F1/F2 — 2 Critical + 4 caminos silenciosos encontrados al
-// reproducir el RED contra el código base y al verificar el fix contra el
-// spec real. Cada bloque de abajo corresponde a un punto numerado de esa
-// review.
+// Review of F1/F2 — 2 Criticals + 4 silent paths found while reproducing the
+// RED against the base code and while verifying the fix against the real spec.
+// Each block below corresponds to one numbered point of that review.
 // ============================================================================
 
-// CRITICAL 1 — el em dash (—, U+2014) es la forma en que la tabla REAL del
-// incidente escribe "sin dependencias" en la fila S1, y el conjunto de
-// marcadores de "vacío" solo reconocía en dash (–) y guion (-). Arreglar la
-// columna "#" (como pide nuestro propio mensaje de F1) sin tocar nada más
-// haría que esa misma celda, que siempre significó "sin dependencias"
-// correctamente, disparase el abort de "Dep malformado".
-describe('analyzeSlicesTable — em dash (—) y variantes de guion largo en Dep/Acepta/Área/Toca significan "sin valor" (CRITICAL 1)', () => {
-  it('em dash (—) en Dep no es malformado — deps: []', () => {
+// CRITICAL 1 — the em dash (—, U+2014) is how the REAL table from the incident
+// writes "no dependencies" in row S1, and the set of "empty" markers only
+// recognised the en dash (–) and the hyphen (-). Fixing the "#" column (as our
+// own F1 message asks for) without touching anything else would make that very
+// cell, which always meant "no dependencies" correctly, fire the "malformed
+// Dep" abort.
+describe('analyzeSlicesTable — the em dash (—) and long-dash variants in Dep/Acepta/Área/Toca mean "no value" (CRITICAL 1)', () => {
+  it('an em dash (—) in Dep is not malformed — deps: []', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -332,7 +331,7 @@ describe('analyzeSlicesTable — em dash (—) y variantes de guion largo en Dep
     expect(r.slices[0].deps).toEqual([])
   })
 
-  it('em dash envuelto en NBSP (U+00A0) también cuenta como "sin dependencias" (NBSP ya lo quita String#trim, verificado)', () => {
+  it('an em dash wrapped in NBSP (U+00A0) also counts as "no dependencies" (String#trim already strips NBSP, verified)', () => {
     const nbsp = ' '
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -343,15 +342,15 @@ describe('analyzeSlicesTable — em dash (—) y variantes de guion largo en Dep
     expect(r.malformedDepRows).toEqual([])
   })
 
-  it('regresión EXACTA de la secuencia descrita por el coordinador: REAL_FAILING_TABLE con "#" ya corregido (1, 2) — la fila 1 (Dep "—") no debe abortar; la fila 2 (Dep "S1") sí debe seguir abortando', () => {
+  it('the EXACT regression of the sequence the coordinator described: REAL_FAILING_TABLE with "#" already fixed (1, 2) — row 1 (Dep "—") must not abort; row 2 (Dep "S1") must keep aborting', () => {
     const r = analyzeSlicesTable(REAL_TABLE_WITH_HASH_FIXED)
-    expect(r.skippedRows).toEqual([]) // el "#" ya está arreglado
-    expect(r.malformedDepRows).toHaveLength(1) // solo la fila 2 (Dep "S1"), no la 1 (Dep "—")
+    expect(r.skippedRows).toEqual([]) // the "#" is already fixed
+    expect(r.malformedDepRows).toHaveLength(1) // only row 2 (Dep "S1"), not row 1 (Dep "—")
     expect(r.malformedDepRows[0]).toMatchObject({ n: 2, raw: 'S1' })
-    expect(r.slices[0].deps).toEqual([]) // fila 1: "—" = sin dependencias, correcto
+    expect(r.slices[0].deps).toEqual([]) // row 1: "—" = no dependencies, correct
   })
 
-  it('em dash en Acepta también cuenta como "sin AC" (mismo conjunto de marcadores, coherente entre columnas)', () => {
+  it('an em dash in Acepta also counts as "no AC" (same set of markers, coherent across columns)', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -361,24 +360,24 @@ describe('analyzeSlicesTable — em dash (—) y variantes de guion largo en Dep
     expect(r.slices[0].ac).toEqual([])
   })
 
-  it('"ninguna"/"n/a" en Dep siguen abortando (política defendible), pero el mensaje debe decir qué escribir — verificado a nivel CLI', () => {
+  it('"ninguna"/"n/a" in Dep keep aborting (a defensible policy), but the message must say what to write — verified at CLI level', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
 | 1 | a | ui | x | ninguna | – | – |
 `
     const r = analyzeSlicesTable(spec)
-    expect(r.malformedDepRows).toHaveLength(1) // sigue siendo malformado — no es un marcador reconocido
+    expect(r.malformedDepRows).toHaveLength(1) // it is still malformed — it is not a recognised marker
   })
 })
 
-// CRITICAL 2 — la negrita markdown (**...**) es el hábito demostrado del
-// autor real (es literalmente lo que produjo el defecto del "#": "**S1**").
-// stripColumnPrefix solo desenvolvía backticks; "**area:medicacion**" no se
-// reconocía como prefijado y el `:` se borraba igual que en el defecto
-// original, produciendo "area:areamedicacion".
-describe('parseSlices/analyzeSlicesTable — negrita/cursiva alrededor del valor prefijado en Área/Toca (CRITICAL 2)', () => {
-  it('negrita (**area:medicacion**) no duplica el prefijo, igual que backticks', () => {
+// CRITICAL 2 — markdown bold (**...**) is the real author's demonstrated habit
+// (it is literally what produced the "#" defect: "**S1**"). stripColumnPrefix
+// only unwrapped backticks; "**area:medicacion**" was not recognised as
+// prefixed and the `:` was deleted just as in the original defect, producing
+// "area:areamedicacion".
+describe('parseSlices/analyzeSlicesTable — bold/italics around the prefixed value in Área/Toca (CRITICAL 2)', () => {
+  it('bold (**area:medicacion**) does not duplicate the prefix, just like backticks', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -389,7 +388,7 @@ describe('parseSlices/analyzeSlicesTable — negrita/cursiva alrededor del valor
     expect(s[0].touches).toEqual(['pbxproj'])
   })
 
-  it('guion bajo simple (_area:medicacion_) tampoco duplica el prefijo', () => {
+  it('a single underscore (_area:medicacion_) does not duplicate the prefix either', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -399,7 +398,7 @@ describe('parseSlices/analyzeSlicesTable — negrita/cursiva alrededor del valor
     expect(s[0].area).toEqual(['medicacion'])
   })
 
-  it('backticks + negrita combinados ("`**area:medicacion**`") tampoco duplican el prefijo', () => {
+  it('backticks + bold combined ("`**area:medicacion**`") do not duplicate the prefix either', () => {
     const spec = '## 9. Slices\n' +
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |\n' +
       '|---|---|---|---|---|---|---|---|---|\n' +
@@ -409,14 +408,14 @@ describe('parseSlices/analyzeSlicesTable — negrita/cursiva alrededor del valor
   })
 })
 
-// 3 — una línea en blanco (o cualquier línea sin "|") a mitad de la tabla
-// hacía `break` en el bucle de filas: las filas después del hueco
-// desaparecían en silencio (medio epic creado, exit 0, reportado como
-// éxito). El fix escanea todo el bloque §9 (hasta la siguiente cabecera
-// markdown "## N", que sí marca el fin real de la sección) y reporta las
-// filas que aparecen después de un hueco en vez de truncar.
-describe('analyzeSlicesTable — un hueco (línea en blanco/sin "|") dentro de la tabla no trunca en silencio (3)', () => {
-  it('línea en blanco entre 2 filas de datos: ambas se parsean, y la fila tras el hueco se reporta en rowsAfterGap', () => {
+// 3 — a blank line (or any line without "|") in the middle of the table made
+// the row loop `break`: the rows after the gap disappeared in silence (half an
+// epic created, exit 0, reported as a success). The fix scans the whole §9
+// block (up to the next markdown heading "## N", which does mark the real end
+// of the section) and reports the rows that appear after a gap instead of
+// truncating.
+describe('analyzeSlicesTable — a gap (a blank line, or one without "|") inside the table does not truncate in silence (3)', () => {
+  it('a blank line between 2 data rows: both are parsed, and the row after the gap is reported in rowsAfterGap', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -425,14 +424,14 @@ describe('analyzeSlicesTable — un hueco (línea en blanco/sin "|") dentro de l
 | 2 | b | ui | segundo | – | – | – |
 `
     const r = analyzeSlicesTable(spec)
-    expect(r.totalDataRows).toBe(2) // ya no se trunca en 1
+    expect(r.totalDataRows).toBe(2) // it no longer truncates at 1
     expect(r.slices).toHaveLength(2)
     expect(r.slices.map((s) => s.n)).toEqual([1, 2])
     expect(r.rowsAfterGap).toHaveLength(1)
     expect(r.rowsAfterGap[0].raw).toContain('segundo')
   })
 
-  it('sin ningún hueco → rowsAfterGap: []', () => {
+  it('with no gap at all → rowsAfterGap: []', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -443,7 +442,7 @@ describe('analyzeSlicesTable — un hueco (línea en blanco/sin "|") dentro de l
     expect(r.rowsAfterGap).toEqual([])
   })
 
-  it('una cabecera markdown nueva ("## 10. Otra sección") tras el hueco corta el escaneo — no arrastra la tabla de otra sección', () => {
+  it('a new markdown heading ("## 10. Otra sección") after the gap cuts the scan short — it does not drag in another section\u2019s table', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -460,7 +459,7 @@ describe('analyzeSlicesTable — un hueco (línea en blanco/sin "|") dentro de l
     expect(r.slices).toHaveLength(1)
   })
 
-  it('prosa (no tabla) después de la tabla, sin más filas → rowsAfterGap: [] (no es falso positivo)', () => {
+  it('prose (not a table) after the table, with no further rows → rowsAfterGap: [] (it is not a false positive)', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -474,19 +473,19 @@ Texto normal después de la tabla, sin más filas.
   })
 })
 
-// 4 — solo se validaba la cabecera, nunca las celdas: una fila con la
-// celda obligatoria vacía, o con menos celdas que la cabecera (típicamente
-// porque a esa misma fila le faltan celdas finales), parseaba igual y
-// producía un issue titulado "#N" a secas, sin AC ni deps, exit 0. Mismo
-// resultado observable que "falta la columna entera" — solo que por fila.
-// Se reporta en `invalidRows` y la fila NO se agrega a `slices`.
+// 4 — only the header was validated, never the cells: a row with the
+// mandatory cell empty, or with fewer cells than the header (typically
+// because that same row is missing its trailing cells), parsed all the same
+// and produced an issue titled just "#N", with no AC and no deps, exit 0. The
+// same observable result as "the whole column is missing" — only row by row.
+// It is reported in `invalidRows` and the row is NOT added to `slices`.
 //
-// F3: la celda con contenido obligatorio pasó de "Entrega" a "Slice" (el
-// título del issue ahora sale de ahí) — "Entrega" vacía ya no invalida
-// nada (ver el describe de más arriba sobre F3), así que este test se
-// reescribe sobre "Slice" en vez de "Entrega".
-describe('analyzeSlicesTable — celda "Slice" vacía o fila más corta que la cabecera (4, actualizado por F3)', () => {
-  it('celda Slice vacía se reporta en invalidRows y no se cuela en slices', () => {
+// F3: the cell with mandatory content moved from "Entrega" to "Slice" (the
+// issue title now comes from there) — an empty "Entrega" no longer invalidates
+// anything (see the describe further up about F3), so this test is rewritten
+// over "Slice" instead of "Entrega".
+describe('analyzeSlicesTable — an empty "Slice" cell, or a row shorter than the header (4, updated by F3)', () => {
+  it('an empty Slice cell is reported in invalidRows and does not slip into slices', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -498,7 +497,7 @@ describe('analyzeSlicesTable — celda "Slice" vacía o fila más corta que la c
     expect(r.slices).toEqual([])
   })
 
-  it('fila con menos celdas que la cabecera se reporta en invalidRows y no se cuela en slices', () => {
+  it('a row with fewer cells than the header is reported in invalidRows and does not slip into slices', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -508,11 +507,11 @@ describe('analyzeSlicesTable — celda "Slice" vacía o fila más corta que la c
     const r = analyzeSlicesTable(spec)
     expect(r.invalidRows).toHaveLength(1)
     expect(r.invalidRows[0].n).toBe(1)
-    expect(r.slices).toHaveLength(1) // la fila 2, completa, sí se parsea
+    expect(r.slices).toHaveLength(1) // row 2, which is complete, does get parsed
     expect(r.slices[0].n).toBe(2)
   })
 
-  it('fila completa y válida no aparece en invalidRows', () => {
+  it('a complete and valid row does not show up in invalidRows', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -523,14 +522,14 @@ describe('analyzeSlicesTable — celda "Slice" vacía o fila más corta que la c
   })
 })
 
-// 5 — las deps no se contrastaban contra los slices que existen de verdad
-// en la tabla: "#99" en una tabla de 3 slices, o "#3" en el propio slice 3
-// (auto-referencia, nunca legítima), parseaban y llegarían a GitHub como
-// `merge-after` — un grafo equivocado escrito en los issues, aunque el
-// dispatcher lo acabe reportando como deps-unmet en vez de fallar en
-// silencio del todo.
-describe('analyzeSlicesTable — Dep apunta a un slice inexistente o a sí mismo (5)', () => {
-  it('auto-referencia (slice #3 depende de #3) se reporta en invalidDepRefs', () => {
+// 5 — the deps were not checked against the slices that really exist in the
+// table: "#99" in a table of 3 slices, or "#3" in slice 3 itself (a
+// self-reference, never legitimate), parsed and would reach GitHub as
+// `merge-after` — a wrong graph written into the issues, even though the
+// dispatcher ends up reporting it as deps-unmet instead of failing entirely in
+// silence.
+describe('analyzeSlicesTable — Dep points at a slice that does not exist, or at itself (5)', () => {
+  it('a self-reference (slice #3 depends on #3) is reported in invalidDepRefs', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -543,7 +542,7 @@ describe('analyzeSlicesTable — Dep apunta a un slice inexistente o a sí mismo
     expect(r.invalidDepRefs[0]).toMatchObject({ n: 3, dep: 3, reason: 'self' })
   })
 
-  it('referencia a un "#" que no existe en la tabla (3 slices, #99) se reporta en invalidDepRefs', () => {
+  it('a reference to a "#" that does not exist in the table (3 slices, #99) is reported in invalidDepRefs', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -555,7 +554,7 @@ describe('analyzeSlicesTable — Dep apunta a un slice inexistente o a sí mismo
     expect(r.invalidDepRefs[0]).toMatchObject({ n: 2, dep: 99, reason: 'unknown' })
   })
 
-  it('deps válidas (apuntan a slices existentes, distintos de sí mismas) → invalidDepRefs: []', () => {
+  it('valid deps (they point at existing slices, other than themselves) → invalidDepRefs: []', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -568,14 +567,14 @@ describe('analyzeSlicesTable — Dep apunta a un slice inexistente o a sí mismo
   })
 })
 
-// 6 — una celda Área/Toca que normaliza a cadena vacía (p.ej. "area:" sin
-// nada detrás del prefijo, o "???" sin ningún carácter label-safe) se
-// descartaba con `.filter(Boolean)` sin avisar. El caso de columna AUSENTE
-// sí avisa ("la maquinaria de colisión queda inerte"); el de celda vaciada
-// producía la misma inercia y callaba — incoherente con el propio estándar
-// de este cambio.
-describe('analyzeSlicesTable — token Área/Toca que normaliza a vacío se avisa (6)', () => {
-  it('"area:" solo (nada tras el prefijo) → token vacío, no se cuela en area[], se avisa en emptyTokenWarnings', () => {
+// 6 — an Área/Toca cell that normalises to an empty string (say "area:" with
+// nothing behind the prefix, or "???" with no label-safe character at all) was
+// discarded with `.filter(Boolean)` without a warning. The ABSENT-column case
+// does warn ("la maquinaria de colisión queda inerte"); the emptied-cell case
+// produced the same inertia and kept quiet — incoherent with this change's own
+// standard.
+describe('analyzeSlicesTable — an Área/Toca token that normalises to empty is warned about (6)', () => {
+  it('"area:" on its own (nothing after the prefix) → empty token, it does not slip into area[], it is warned about in emptyTokenWarnings', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -587,7 +586,7 @@ describe('analyzeSlicesTable — token Área/Toca que normaliza a vacío se avis
     expect(r.emptyTokenWarnings[0]).toMatchObject({ column: 'Área', n: 1 })
   })
 
-  it('"???" en Toca (sin ningún carácter label-safe) → token vacío, se avisa', () => {
+  it('"???" in Toca (with no label-safe character at all) → empty token, it is warned about', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -599,7 +598,7 @@ describe('analyzeSlicesTable — token Área/Toca que normaliza a vacío se avis
     expect(r.emptyTokenWarnings[0]).toMatchObject({ column: 'Toca', n: 1 })
   })
 
-  it('celda vacía o "–" (forma legítima de "sin valor") NO cuenta como token vacío', () => {
+  it('an empty cell or "–" (the legitimate way of writing "no value") does NOT count as an empty token', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -610,17 +609,17 @@ describe('analyzeSlicesTable — token Área/Toca que normaliza a vacío se avis
   })
 })
 
-// "no se encontró la tabla §9" debía distinguir "no hay ninguna tabla
-// markdown en absoluto" de "hay filas de tabla, pero ninguna cabecera con
-// Slice/Dep" — el propio detector ya sabe cuál de las dos pasó.
-describe('analyzeSlicesTable — distingue "no hay tabla" de "hay tabla sin cabecera Slice/Dep"', () => {
-  it('sin ninguna línea "|" en el spec → pipeRowsFound: false', () => {
+// "the §9 table was not found" had to tell "there is no markdown table at all"
+// apart from "there are table rows, but no header with Slice/Dep" — the
+// detector itself already knows which of the two happened.
+describe('analyzeSlicesTable — it tells "there is no table" apart from "there is a table with no Slice/Dep header"', () => {
+  it('with no "|" line at all in the spec → pipeRowsFound: false', () => {
     const r = analyzeSlicesTable('# spec sin tabla, solo prosa')
     expect(r.tableFound).toBe(false)
     expect(r.pipeRowsFound).toBe(false)
   })
 
-  it('hay filas de tabla markdown, pero ninguna cabecera con "Slice"/"Dep" → pipeRowsFound: true', () => {
+  it('there are markdown table rows, but no header with "Slice"/"Dep" → pipeRowsFound: true', () => {
     const spec = `## 9. Algo\n| Foo | Bar |\n|---|---|\n| 1 | 2 |\n`
     const r = analyzeSlicesTable(spec)
     expect(r.tableFound).toBe(false)
@@ -629,19 +628,18 @@ describe('analyzeSlicesTable — distingue "no hay tabla" de "hay tabla sin cabe
 })
 
 // ============================================================================
-// Review round 2/5 — el defecto de los prefijos seguía vivo una capa por
-// debajo (split por comas antes de limpiar marcado), el heurístico de fin de
-// tabla abortaba specs válidos, y 3 caminos silenciosos más.
+// Review round 2/5 — the prefix defect was still alive one layer below (the
+// comma split happened before the markup was cleaned), the end-of-table
+// heuristic aborted valid specs, and 3 more silent paths.
 // ============================================================================
 
-// CRITICAL — slices.js hacía el split por comas ANTES de stripInlineMarkup,
-// así que marcado que envuelve la CELDA COMPLETA (en vez de cada token)
-// sobrevivía. Las listas por comas son el uso documentado normal
-// (commands/ct-groom.md: "db, migration"), no un caso raro — y un autor que
-// ya demostró envolver valores en negrita/backticks (F1: "**S1**") envuelve
-// igual de fácil la celda entera de una lista.
-describe('parseSlices — marcado que envuelve la CELDA COMPLETA de una lista por comas (review round 2, CRITICAL)', () => {
-  it('negrita envolviendo "area:medicacion, area:otro" completo → ambos tokens sin duplicar el prefijo', () => {
+// CRITICAL — slices.js did the comma split BEFORE stripInlineMarkup, so markup
+// wrapping the WHOLE CELL (rather than each token) survived. Comma-separated
+// lists are the normal documented use (commands/ct-groom.md: "db, migration"),
+// not an odd case — and an author who already demonstrated wrapping values in
+// bold or backticks (F1: "**S1**") wraps a list's whole cell just as easily.
+describe('parseSlices — markup wrapping the WHOLE CELL of a comma-separated list (review round 2, CRITICAL)', () => {
+  it('bold wrapping the whole of "area:medicacion, area:otro" → both tokens with no duplicated prefix', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -651,7 +649,7 @@ describe('parseSlices — marcado que envuelve la CELDA COMPLETA de una lista po
     expect(s[0].area).toEqual(['medicacion', 'otro'])
   })
 
-  it('backticks envolviendo "touches:pbxproj, touches:otro" completo → ambos tokens sin duplicar el prefijo', () => {
+  it('backticks wrapping the whole of "touches:pbxproj, touches:otro" → both tokens with no duplicated prefix', () => {
     const spec = '## 9. Slices\n' +
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |\n' +
       '|---|---|---|---|---|---|---|---|---|\n' +
@@ -660,7 +658,7 @@ describe('parseSlices — marcado que envuelve la CELDA COMPLETA de una lista po
     expect(s[0].touches).toEqual(['pbxproj', 'otro'])
   })
 
-  it('regresión exacta del ejemplo de la review: ambas columnas envueltas a la vez, ninguna label duplica el prefijo', () => {
+  it('the exact regression of the review\u2019s example: both columns wrapped at once, no label duplicates the prefix', () => {
     const spec = '## 9. Slices\n' +
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |\n' +
       '|---|---|---|---|---|---|---|---|---|\n' +
@@ -672,7 +670,7 @@ describe('parseSlices — marcado que envuelve la CELDA COMPLETA de una lista po
     expect(s[0].touches).not.toContain('touchespbxproj')
   })
 
-  it('sin marcado envolviendo la celda, listas por comas normales siguen funcionando (no regresión del uso documentado)', () => {
+  it('with no markup wrapping the cell, ordinary comma-separated lists keep working (no regression of the documented use)', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -684,17 +682,17 @@ describe('parseSlices — marcado que envuelve la CELDA COMPLETA de una lista po
   })
 })
 
-// IMPORTANTE — HEADING_RE (solo headings ATX "## ...") es demasiado
-// estrecho: una regla horizontal, un heading setext, un pseudo-heading en
-// negrita, o un "##10." sin espacio, todos markdown corriente, hacían que
-// el escaneo post-hueco arrastrara la tabla de OTRA sección y abortara con
-// un ejemplo de la tabla equivocada. Fix barato: tras un hueco, si la
-// siguiente fila con "|" es inmediatamente seguida de una fila separadora
-// (cabecera + separador de una tabla nueva), se corta el escaneo sin
-// contarla como continuación — los 4 falsos positivos tienen esa forma; el
-// salto de línea a mitad de LA MISMA tabla (caso real) no.
-describe('analyzeSlicesTable — el escaneo post-hueco no arrastra una tabla ajena (review round 2, IMPORTANTE)', () => {
-  it('regla horizontal ("---") antes de una tabla no relacionada, SIN heading markdown entre medias → no aborta', () => {
+// IMPORTANT — HEADING_RE (ATX headings "## ..." only) is too narrow: a
+// horizontal rule, a setext heading, a bold pseudo-heading, or a "##10."
+// without a space, all of them ordinary markdown, made the post-gap scan drag
+// in ANOTHER section's table and abort quoting an example from the wrong table.
+// Cheap fix: after a gap, if the next row with "|" is immediately followed by a
+// separator row (a new table's header + separator), the scan is cut short
+// without counting it as a continuation — the 4 false positives all have that
+// shape; the line break in the middle of THE SAME table (the real case) does
+// not.
+describe('analyzeSlicesTable — the post-gap scan does not drag in a foreign table (review round 2, IMPORTANT)', () => {
+  it('a horizontal rule ("---") before an unrelated table, with NO markdown heading in between → it does not abort', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -712,7 +710,7 @@ describe('analyzeSlicesTable — el escaneo post-hueco no arrastra una tabla aje
     expect(r.slices).toHaveLength(1)
   })
 
-  it('heading setext ("Riesgos" + subrayado "-------") antes de una tabla ajena → no aborta', () => {
+  it('a setext heading ("Riesgos" + the underline "-------") before a foreign table → it does not abort', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -730,7 +728,7 @@ Riesgos
     expect(r.slices).toHaveLength(1)
   })
 
-  it('pseudo-heading en negrita ("**10. Riesgos**") antes de una tabla ajena → no aborta', () => {
+  it('a bold pseudo-heading ("**10. Riesgos**") before a foreign table → it does not abort', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -747,7 +745,7 @@ Riesgos
     expect(r.slices).toHaveLength(1)
   })
 
-  it('"##10." sin espacio tras las almohadillas antes de una tabla ajena → no aborta', () => {
+  it('"##10." with no space after the hashes before a foreign table → it does not abort', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -764,7 +762,7 @@ Riesgos
     expect(r.slices).toHaveLength(1)
   })
 
-  it('el caso REAL (línea en blanco a mitad de LA MISMA tabla) sigue disparando rowsAfterGap — no se ha perdido el true positive', () => {
+  it('the REAL case (a blank line in the middle of THE SAME table) still fires rowsAfterGap — the true positive has not been lost', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -779,11 +777,11 @@ Riesgos
   })
 })
 
-// a) Fila MÁS LARGA que la cabecera (un "|" sin escapar dentro de una celda
-// desplaza las columnas siguientes en silencio) — antes solo se comprobaba
-// "menos celdas", nunca "más".
-describe('analyzeSlicesTable — fila con MÁS celdas que la cabecera (desplazamiento de columnas) (review round 2, a)', () => {
-  it('una fila con más celdas que la cabecera se reporta en invalidRows, no se cuela en slices con columnas desplazadas', () => {
+// a) A row LONGER than the header (an unescaped "|" inside a cell shifts the
+// following columns in silence) — before, only "fewer cells" was checked, never
+// "more".
+describe('analyzeSlicesTable — a row with MORE cells than the header (column shift) (review round 2, a)', () => {
+  it('a row with more cells than the header is reported in invalidRows, it does not slip into slices with shifted columns', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -792,22 +790,21 @@ describe('analyzeSlicesTable — fila con MÁS celdas que la cabecera (desplazam
     const r = analyzeSlicesTable(spec)
     expect(r.invalidRows).toHaveLength(1)
     expect(r.invalidRows[0].n).toBe(1)
-    expect(r.slices).toEqual([]) // no se cuela con area:['med']/touches:['icacion'] y "pbx" perdido
+    expect(r.slices).toEqual([]) // it does not slip in with area:['med']/touches:['icacion'] and "pbx" lost
   })
 })
 
-// b) "Entrega" con un marcador de "nada" (–, -, —, etc.) → título de issue
-// "#1 –", exit 0 — la única columna donde el contenido es obligatorio
-// trataba "aquí no hay nada" como si fuera un título válido.
+// b) "Entrega" with a "nothing" marker (–, -, —, and so on) → an issue titled
+// "#1 –", exit 0 — the one column where content is mandatory treated "there is
+// nothing here" as if it were a valid title.
 //
-// F3: el título ya no sale de "Entrega" — sale de "Slice" (ver más abajo).
-// "Entrega" pasa a ser opcional (Descripción del cuerpo), así que un
-// marcador de "sin valor" ahí ya NO invalida la fila: significa "sin
-// descripción", exactamente como en Acepta/Protegido/Área/Toca. La misma
-// exigencia de contenido real se traslada a "Slice", que es de donde sale
-// el título ahora.
-describe('analyzeSlicesTable — "Entrega" con un marcador de "sin valor" ya NO invalida la fila (F3: contenido obligatorio se movió a "Slice")', () => {
-  it('"Entrega" = "–" (Slice con contenido real) ya no aborta la fila — "sin descripción", no "sin título"', () => {
+// F3: the title no longer comes from "Entrega" — it comes from "Slice" (see
+// below). "Entrega" becomes optional (the body's Descripción), so a "no value"
+// marker there NO longer invalidates the row: it means "no description",
+// exactly as in Acepta/Protegido/Área/Toca. The same demand for real content
+// moves to "Slice", which is where the title comes from now.
+describe('analyzeSlicesTable — "Entrega" with a "no value" marker NO longer invalidates the row (F3: the mandatory content moved to "Slice")', () => {
+  it('"Entrega" = "–" (with real content in Slice) no longer aborts the row — "no description", not "no title"', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -819,7 +816,7 @@ describe('analyzeSlicesTable — "Entrega" con un marcador de "sin valor" ya NO 
     expect(r.slices[0].entrega).toBe('–')
   })
 
-  it('"Slice" = "–" (marcador de "sin valor") SÍ invalida la fila — es de ahí de donde sale el título ahora', () => {
+  it('"Slice" = "–" (a "no value" marker) DOES invalidate the row — that is where the title comes from now', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -831,13 +828,12 @@ describe('analyzeSlicesTable — "Entrega" con un marcador de "sin valor" ya NO 
   })
 })
 
-// c) Marcador de "nada" ENVUELTO en marcado ("`–`", "**–**") en Dep — misma
-// forma que el CRITICAL del em dash: isNoValueCell corría sobre la celda
-// cruda, así que el autor que ya demostró envolver valores en marcado
-// recibía el mensaje "si no hay dependencias, escribe –" por escribir
-// EXACTAMENTE eso, solo que envuelto.
-describe('analyzeSlicesTable — marcador de "nada" envuelto en marcado (review round 2, c)', () => {
-  it('"`–`" (backtick) en Dep no es malformado — deps: []', () => {
+// c) A "nothing" marker WRAPPED in markup ("`–`", "**–**") in Dep — the same
+// shape as the em dash CRITICAL: isNoValueCell ran over the raw cell, so the
+// author who already demonstrated wrapping values in markup got the message "si
+// no hay dependencias, escribe –" for writing EXACTLY that, only wrapped.
+describe('analyzeSlicesTable — a "nothing" marker wrapped in markup (review round 2, c)', () => {
+  it('"`–`" (backtick) in Dep is not malformed — deps: []', () => {
     const spec = '## 9. Slices\n' +
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |\n' +
       '|---|---|---|---|---|---|---|\n' +
@@ -847,7 +843,7 @@ describe('analyzeSlicesTable — marcador de "nada" envuelto en marcado (review 
     expect(r.slices[0].deps).toEqual([])
   })
 
-  it('"**–**" (negrita) en Dep no es malformado — deps: []', () => {
+  it('"**–**" (bold) in Dep is not malformed — deps: []', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -858,7 +854,7 @@ describe('analyzeSlicesTable — marcador de "nada" envuelto en marcado (review 
     expect(r.slices[0].deps).toEqual([])
   })
 
-  it('"**–**" (negrita) en Acepta también cuenta como "sin AC" (mismo isNoValueCell compartido)', () => {
+  it('"**–**" (bold) in Acepta also counts as "no AC" (the same shared isNoValueCell)', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -869,11 +865,11 @@ describe('analyzeSlicesTable — marcador de "nada" envuelto en marcado (review 
   })
 })
 
-// Menor — el signo menos matemático (−, U+2212) y el doble-guion ("--") son
-// salidas plausibles de autocorrección de teclado/editor, igual que el
-// em dash.
-describe('analyzeSlicesTable — signo menos (−, U+2212) y doble-guion ("--") también significan "sin valor" (menor)', () => {
-  it('signo menos U+2212 en Dep no es malformado', () => {
+// Minor — the mathematical minus sign (−, U+2212) and the double hyphen ("--")
+// are plausible outputs of keyboard or editor autocorrection, just like the em
+// dash.
+describe('analyzeSlicesTable — the minus sign (−, U+2212) and the double hyphen ("--") also mean "no value" (minor)', () => {
+  it('a U+2212 minus sign in Dep is not malformed', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -883,7 +879,7 @@ describe('analyzeSlicesTable — signo menos (−, U+2212) y doble-guion ("--") 
     expect(r.malformedDepRows).toEqual([])
   })
 
-  it('doble-guion "--" en Dep no es malformado', () => {
+  it('a double hyphen "--" in Dep is not malformed', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -895,24 +891,24 @@ describe('analyzeSlicesTable — signo menos (−, U+2212) y doble-guion ("--") 
 })
 
 // ============================================================================
-// Review round 3/5 — el Critical del prefijo, tercera vez. Las dos rondas
-// anteriores parcheaban por CAPA (bordes de la celda completa, luego bordes
-// de cada pieza), y cada parche tapaba una forma de marcado y dejaba otra
-// sin cubrir según en qué posición cayera. Reproducido por el coordinador a
-// la primera con cada token envuelto en SU PROPIO backtick — el split
-// partía "`area:hoy" y "area:web`" y ninguno de los dos empezaba/terminaba
-// con el mismo backtick por separado, así que el segundo token seguía
-// fallando.
+// Review round 3/5 — the prefix Critical, for the third time. The two previous
+// rounds patched by LAYER (the borders of the whole cell, then the borders of
+// each piece), and each patch covered one shape of markup and left another
+// uncovered depending on which position it fell in. Reproduced by the
+// coordinator on the first try with each token wrapped in ITS OWN backtick —
+// the split broke it into "`area:hoy" and "area:web`" and neither of the two
+// started and ended with the same backtick on its own, so the second token kept
+// failing.
 //
-// Enfoque nuevo: normalizar de un tirón, no por capas. Backtick (`) y
-// asterisco (*) NUNCA son legítimos dentro de un token de label, así que se
-// quitan GLOBALMENTE de la celda completa —en cualquier posición, sin
-// intentar detectar "pares que envuelven"— antes de partir por comas.
-// Guion bajo (_) SÍ es legítimo dentro de un token (normalizeToken ya lo
-// permite, p.ej. "mi_token"), así que ESE se quita solo en los bordes de
-// cada token, después del split, no globalmente.
-describe('parseSlices — normalización de marcado en un solo paso, no por capas (review round 3)', () => {
-  it('REPRODUCCIÓN EXACTA del coordinador: cada token envuelto en su PROPIO backtick — "`area:hoy`, `area:web`"', () => {
+// A new approach: normalise in one go, not by layers. A backtick (`) and an
+// asterisk (*) are NEVER legitimate inside a label token, so they are stripped
+// GLOBALLY from the whole cell — in any position, with no attempt to detect
+// "wrapping pairs" — before splitting on commas. An underscore (_) IS
+// legitimate inside a token (normalizeToken already allows it, "mi_token" for
+// instance), so THAT one is stripped only at the borders of each token, after
+// the split, not globally.
+describe('parseSlices — markup normalisation in a single pass, not by layers (review round 3)', () => {
+  it('the coordinator\u2019s EXACT REPRODUCTION: each token wrapped in ITS OWN backtick — "`area:hoy`, `area:web`"', () => {
     const spec = '## 9. Slices\n' +
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |\n' +
       '|---|---|---|---|---|---|---|---|---|\n' +
@@ -922,7 +918,7 @@ describe('parseSlices — normalización de marcado en un solo paso, no por capa
     expect(s[0].area).not.toContain('areaweb')
   })
 
-  it('las cuatro formas de marcado, en la MISMA tabla, todas producen labels limpias (cierra la clase, no un caso)', () => {
+  it('the four shapes of markup, in the SAME table, all produce clean labels (it closes the class, not one case)', () => {
     const spec = '## 9. Slices\n' +
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |\n' +
       '|---|---|---|---|---|---|---|---|---|\n' +
@@ -931,18 +927,18 @@ describe('parseSlices — normalización de marcado en un solo paso, no por capa
       '| 3 | mezcla | backend | y | – | – | – | **area:x**, `area:y` | – |\n' +
       '| 4 | envoltura anidada | backend | y | – | – | – | `**area:z**` | – |\n'
     const s = parseSlices(spec)
-    expect(s[0].area).toEqual(['medicacion', 'otro']) // celda entera envuelta
-    expect(s[1].area).toEqual(['hoy', 'web']) // cada token envuelto
-    expect(s[2].area).toEqual(['x', 'y']) // mezcla
-    expect(s[3].area).toEqual(['z']) // envoltura anidada
+    expect(s[0].area).toEqual(['medicacion', 'otro']) // whole cell wrapped
+    expect(s[1].area).toEqual(['hoy', 'web']) // each token wrapped
+    expect(s[2].area).toEqual(['x', 'y']) // a mixture
+    expect(s[3].area).toEqual(['z']) // nested wrapping
     for (const slice of s) {
       for (const token of slice.area) {
-        expect(token).not.toMatch(/^area/) // ninguno debe conservar el prefijo duplicado ("areax", "areahoy", etc.)
+        expect(token).not.toMatch(/^area/) // none may keep the duplicated prefix ("areax", "areahoy", and so on)
       }
     }
   })
 
-  it('control negativo: "areas-comunes" (guion) y un token con guion bajo INTERNO ("mi_token") sobreviven intactos', () => {
+  it('negative control: "areas-comunes" (hyphen) and a token with an INTERNAL underscore ("mi_token") survive intact', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -953,7 +949,7 @@ describe('parseSlices — normalización de marcado en un solo paso, no por capa
     expect(s[0].touches).toEqual(['mi_token'])
   })
 
-  it('guion bajo de énfasis SÍ se quita en los bordes del token ("_area:medicacion_"), sin tocar el interno de otro token en la misma celda', () => {
+  it('an emphasis underscore IS stripped at the token\u2019s borders ("_area:medicacion_"), without touching the internal one of another token in the same cell', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -963,7 +959,7 @@ describe('parseSlices — normalización de marcado en un solo paso, no por capa
     expect(s[0].area).toEqual(['medicacion', 'mi_token'])
   })
 
-  it('marcador de "sin valor" (Dep) envuelto en backtick por token único sigue reconociéndose (isNoValueCell con el mismo enfoque de un paso)', () => {
+  it('a "no value" marker (Dep) wrapped in a backtick as a single token is still recognised (isNoValueCell with the same single-pass approach)', () => {
     const spec = '## 9. Slices\n' +
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |\n' +
       '|---|---|---|---|---|---|---|\n' +
@@ -975,29 +971,29 @@ describe('parseSlices — normalización de marcado en un solo paso, no por capa
 })
 
 // ============================================================================
-// Review round 4/5 (última de F1) — dos cosas que corrompen datos:
+// Review round 4/5 (the last one of F1) — two things that corrupt data:
 //
-// 1. REGRESIÓN NUEVA de la round 3: la eliminación de guion bajo por bordes
-//    (^_+ / _+$) no distingue un PAR de énfasis (_x_, __x__) de un guion
-//    bajo inicial/final SIN pareja — que es exactamente cómo empiezan
-//    "_layout.tsx"/"_app.tsx" (Expo Router, Next.js) y "__init__.py"
-//    (Python), y cómo puede terminar "trailing_". El token ES la clave de
-//    colisión de claim.js#tokensOf (comparación exacta), así que corromper
-//    "_layout.tsx" en "layout.tsx" produce colisiones falsas.
+// 1. A NEW REGRESSION from round 3: stripping the underscore by borders
+//    (^_+ / _+$) does not tell an emphasis PAIR (_x_, __x__) apart from a
+//    leading or trailing underscore with NO partner — which is exactly how
+//    "_layout.tsx"/"_app.tsx" (Expo Router, Next.js) and "__init__.py"
+//    (Python) begin, and how "trailing_" can end. The token IS the collision
+//    key of claim.js#tokensOf (an exact comparison), so corrupting
+//    "_layout.tsx" into "layout.tsx" produces false collisions.
 //
-// 2. La clase de envoltorios estaba más ancha que backtick/asterisco/guion
-//    bajo: cualquier carácter no alfanumérico ANTES de "area:" (~~, comillas
-//    rectas, paréntesis, enlaces markdown...) reproducía el defecto
-//    original, porque stripColumnPrefix exigía el prefijo en el índice 0.
-//    Fix: invertir el enfoque — stripColumnPrefix salta los caracteres NO
-//    alfanuméricos iniciales SOLO para detectar el prefijo (sin mutar), y
-//    devuelve la cadena ORIGINAL sin tocar si no encuentra ningún prefijo
-//    ahí. Así deja de depender de qué envoltorio use el autor, sin destruir
-//    contenido cuando no hay prefijo.
+// 2. The class of wrappers was wider than backtick/asterisk/underscore: any
+//    non-alphanumeric character BEFORE "area:" (~~, straight quotes,
+//    parentheses, markdown links…) reproduced the original defect, because
+//    stripColumnPrefix demanded the prefix at index 0. Fix: invert the
+//    approach — stripColumnPrefix skips the leading NON-alphanumeric
+//    characters ONLY to detect the prefix (without mutating), and returns the
+//    ORIGINAL string untouched if it finds no prefix there. That way it stops
+//    depending on which wrapper the author uses, without destroying content
+//    when there is no prefix.
 // ============================================================================
 
-describe('parseSlices — guion bajo se quita SOLO si está emparejado simétricamente (review round 4, issue 1: regresión)', () => {
-  it('control negativo de nombres de fichero: sobreviven INTACTOS (falla si se vuelve a ^_+/_+$ asimétrico)', () => {
+describe('parseSlices — the underscore is stripped ONLY if it is symmetrically paired (review round 4, issue 1: a regression)', () => {
+  it('a negative control of file names: they survive INTACT (it fails if the asymmetric ^_+/_+$ comes back)', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -1011,13 +1007,13 @@ describe('parseSlices — guion bajo se quita SOLO si está emparejado simétric
     const s = parseSlices(spec)
     expect(s[0].touches).toEqual(['_layout.tsx'])
     expect(s[1].touches).toEqual(['_app.tsx'])
-    expect(s[2].touches).toEqual(['__init__.py']) // la señal delatora: NUNCA "init__.py"
+    expect(s[2].touches).toEqual(['__init__.py']) // the telltale signal: NEVER "init__.py"
     expect(s[3].touches).toEqual(['trailing_'])
     expect(s[4].touches).toEqual(['mi_token_largo'])
     expect(s[5].area).toEqual(['areas-comunes'])
   })
 
-  it('guion bajo emparejado simétricamente (_x_, __x__) SÍ se quita — énfasis markdown real', () => {
+  it('a symmetrically paired underscore (_x_, __x__) IS stripped — real markdown emphasis', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -1028,7 +1024,7 @@ describe('parseSlices — guion bajo se quita SOLO si está emparejado simétric
     expect(s[0].touches).toEqual(['pbxproj'])
   })
 
-  it('"___" (solo guiones bajos, número impar) ya no desaparece en silencio: sobrevive como contenido, no se avisa (nada que avisar)', () => {
+  it('"___" (underscores only, an odd number) no longer disappears in silence: it survives as content, with no warning (nothing to warn about)', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -1040,8 +1036,8 @@ describe('parseSlices — guion bajo se quita SOLO si está emparejado simétric
   })
 })
 
-describe('parseSlices — stripColumnPrefix invertido: detecta el prefijo saltando basura inicial, sin destruir cuando no hay prefijo (review round 4, issue 2)', () => {
-  it('la matriz de envoltorios (backtick, asterisco, guion bajo emparejado, ~~, comillas rectas, paréntesis, anidados) — todos producen labels limpias, sin duplicar el prefijo, en la MISMA tabla', () => {
+describe('parseSlices — stripColumnPrefix inverted: it detects the prefix by skipping leading junk, without destroying anything when there is no prefix (review round 4, issue 2)', () => {
+  it('the matrix of wrappers (backtick, asterisk, paired underscore, ~~, straight quotes, parentheses, nested ones) — they all produce clean labels, with no duplicated prefix, in the SAME table', () => {
     const spec = '## 9. Slices\n' +
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |\n' +
       '|---|---|---|---|---|---|---|---|---|\n' +
@@ -1058,7 +1054,7 @@ describe('parseSlices — stripColumnPrefix invertido: detecta el prefijo saltan
     }
   })
 
-  it('control negativo del propio invertido: "areas-comunes" (empieza como "area" pero no es el marcador "area:") no se mutila', () => {
+  it('a negative control of the inverted version itself: "areas-comunes" (it starts like "area" but is not the "area:" marker) is not mutilated', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -1068,7 +1064,7 @@ describe('parseSlices — stripColumnPrefix invertido: detecta el prefijo saltan
     expect(s[0].area).toEqual(['areas-comunes'])
   })
 
-  it('reproducción del coordinador (round 3, ya cerrada): cada token en su propio backtick sigue funcionando con el nuevo enfoque invertido', () => {
+  it('the coordinator\u2019s reproduction (round 3, already closed): each token in its own backtick still works with the new inverted approach', () => {
     const spec = '## 9. Slices\n' +
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |\n' +
       '|---|---|---|---|---|---|---|---|---|\n' +
@@ -1078,8 +1074,8 @@ describe('parseSlices — stripColumnPrefix invertido: detecta el prefijo saltan
   })
 })
 
-describe('analyzeSlicesTable — un token que legítimamente acaba vacío siempre avisa, incluso pasando por el paso de guion bajo (review round 4, issue 3)', () => {
-  it('"_~~_" (par de guion bajo envolviendo solo un tachado, sin ningún carácter label-safe) acaba vacío y SÍ avisa — la garantía de F1 se mantiene tras el paso de guion bajo', () => {
+describe('analyzeSlicesTable — a token that legitimately ends up empty always warns, even going through the underscore pass (review round 4, issue 3)', () => {
+  it('"_~~_" (an underscore pair wrapping only a strikethrough, with no label-safe character at all) ends up empty and DOES warn — F1\u2019s guarantee holds after the underscore pass', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -1093,22 +1089,22 @@ describe('analyzeSlicesTable — un token que legítimamente acaba vacío siempr
 })
 
 // ============================================================================
-// F3 — el título del issue viene de la celda equivocada. buildIssueTitle
-// (groom.js) componía "#N <Entrega>" mientras el texto de "Slice" se
-// descartaba (solo se le extraía un "#NN" hacia `slice.issue`) — un autor
-// que escribe lo natural (nombre corto en Slice, descripción en Entrega)
-// recibía un párrafo entero como título del issue. Decisión: el título sale
-// de "Slice" (`#N <Slice>`); "Slice" pasa a ser CONTENIDO OBLIGATORIO (igual
-// de obligatorio que "Entrega" lo era antes); "Entrega" pasa a ser opcional
-// y se convierte en una descripción dentro del cuerpo (ver groom.test.js).
-// `slice.name` es el texto de "Slice" ya limpio de cualquier referencia
-// "#NN" (que sigue extrayéndose, aparte, hacia `slice.issue` como siempre)
-// — así el título nunca arrastra un hash colgante cuando la celda Slice
-// trae AMBAS cosas (un nombre y una referencia de issue) a la vez.
+// F3 — the issue title comes from the wrong cell. buildIssueTitle (groom.js)
+// composed "#N <Entrega>" while the text of "Slice" was discarded (only a
+// "#NN" was extracted from it into `slice.issue`) — an author who writes the
+// natural thing (a short name in Slice, a description in Entrega) got a whole
+// paragraph as the issue title. Decision: the title comes from "Slice"
+// (`#N <Slice>`); "Slice" becomes MANDATORY CONTENT (as mandatory as "Entrega"
+// was before); "Entrega" becomes optional and turns into a description inside
+// the body (see groom.test.js). `slice.name` is the text of "Slice" already
+// cleaned of any "#NN" reference (which is still extracted, separately, into
+// `slice.issue` as always) — that way the title never drags a dangling hash
+// along when the Slice cell carries BOTH things (a name and an issue
+// reference) at once.
 // ============================================================================
 
-describe('analyzeSlicesTable/parseSlices — "Slice" alimenta slice.name (título del issue) (F3)', () => {
-  it('Slice sin ningún "#NN" → name es el texto tal cual, issue null', () => {
+describe('analyzeSlicesTable/parseSlices — "Slice" feeds slice.name (the issue title) (F3)', () => {
+  it('a Slice with no "#NN" at all → name is the text as it stands, issue null', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -1119,7 +1115,7 @@ describe('analyzeSlicesTable/parseSlices — "Slice" alimenta slice.name (títul
     expect(s[0].issue).toBeNull()
   })
 
-  it('Slice con nombre y una referencia "#NN" a la vez → issue extrae "#NN", name queda SIN esa referencia (sin hash colgante en el título)', () => {
+  it('a Slice with a name and a "#NN" reference at once → issue extracts "#NN", name is left WITHOUT that reference (no dangling hash in the title)', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -1131,7 +1127,7 @@ describe('analyzeSlicesTable/parseSlices — "Slice" alimenta slice.name (títul
     expect(s[0].name).not.toMatch(/#/)
   })
 
-  it('Slice con la referencia "#NN" en medio del texto → se quita solo el hash, el resto del nombre sobrevive sin dobles espacios', () => {
+  it('a Slice with the "#NN" reference in the middle of the text → only the hash is removed, the rest of the name survives with no double spaces', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -1142,7 +1138,7 @@ describe('analyzeSlicesTable/parseSlices — "Slice" alimenta slice.name (títul
     expect(s[0].name).toBe('login model')
   })
 
-  it('la celda "Slice" sigue reconociendo el marcador de "sin valor" (–) como vacía (invalida la fila)', () => {
+  it('the "Slice" cell still recognises the "no value" marker (–) as empty (it invalidates the row)', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -1153,7 +1149,7 @@ describe('analyzeSlicesTable/parseSlices — "Slice" alimenta slice.name (títul
     expect(r.slices).toEqual([])
   })
 
-  it('Slice que SOLO trae "#7" (sin ningún nombre alrededor) → name queda vacío tras quitar el hash → fila inválida (no hay título fiable)', () => {
+  it('a Slice carrying ONLY "#7" (with no name around it) → name is left empty after removing the hash → an invalid row (there is no reliable title)', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -1165,7 +1161,7 @@ describe('analyzeSlicesTable/parseSlices — "Slice" alimenta slice.name (títul
     expect(r.slices).toEqual([])
   })
 
-  it('fila válida (Slice con contenido) no aparece en invalidRows, y "entrega" se sigue poblando desde la columna Entrega, sin cambios', () => {
+  it('a valid row (a Slice with content) does not show up in invalidRows, and "entrega" keeps being populated from the Entrega column, unchanged', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -1178,15 +1174,15 @@ describe('analyzeSlicesTable/parseSlices — "Slice" alimenta slice.name (títul
   })
 })
 
-// F6, importante 3: el contrato dice "Acepta: criterios coma-separados" y no
-// avisa de que una coma DENTRO de un criterio lo trocea en silencio. Y la
-// cabecera de la sección que genera es literalmente "Acceptance criteria
-// (EARS, 1:1 con tests)": la sintaxis EARS ("Cuando <trigger>, el sistema
-// debe <respuesta>") lleva coma casi siempre, así que no es un caso raro —
-// es la forma natural de escribir esta columna. Se soporta un escape (`\,`)
-// y se declara en el contrato (ct-init.sh).
-describe('analyzeSlicesTable — "Acepta": coma escapada (\\,) NO trocea el criterio (F6, importante 3)', () => {
-  it('una coma escapada se conserva como parte del criterio, y no cuenta como separador', () => {
+// F6, important 3: the contract says "Acepta: criterios coma-separados" and
+// does not warn that a comma INSIDE a criterion chops it up in silence. And the
+// heading of the section it generates is literally "Acceptance criteria
+// (EARS, 1:1 con tests)": EARS syntax ("Cuando <trigger>, el sistema debe
+// <respuesta>") carries a comma almost always, so it is not an odd case — it is
+// the natural way of writing this column. An escape (`\,`) is supported and
+// declared in the contract (ct-init.sh).
+describe('analyzeSlicesTable — "Acepta": an escaped comma (\\,) does NOT chop the criterion up (F6, important 3)', () => {
+  it('an escaped comma is kept as part of the criterion, and does not count as a separator', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -1195,7 +1191,7 @@ describe('analyzeSlicesTable — "Acepta": coma escapada (\\,) NO trocea el crit
     const r = analyzeSlicesTable(spec)
     expect(r.slices[0].ac).toEqual(['Cuando el token caduca, el sistema pide login'])
   })
-  it('coma SIN escapar sigue separando criterios (comportamiento de siempre)', () => {
+  it('an UNescaped comma keeps separating criteria (the behaviour it always had)', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -1203,7 +1199,7 @@ describe('analyzeSlicesTable — "Acepta": coma escapada (\\,) NO trocea el crit
 `
     expect(analyzeSlicesTable(spec).slices[0].ac).toEqual(['AC-1.1', 'AC-1.2'])
   })
-  it('mezcla: separadores reales + una coma escapada dentro de un criterio', () => {
+  it('a mixture: real separators + an escaped comma inside a criterion', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -1211,7 +1207,7 @@ describe('analyzeSlicesTable — "Acepta": coma escapada (\\,) NO trocea el crit
 `
     expect(analyzeSlicesTable(spec).slices[0].ac).toEqual(['AC-1.1', 'Cuando A, entonces B', 'AC-1.3'])
   })
-  it('una barra invertida que no precede a una coma se conserva tal cual (no se come el escape de nadie)', () => {
+  it('a backslash that does not precede a comma is kept as it stands (it does not eat anyone else\u2019s escape)', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -1219,14 +1215,14 @@ describe('analyzeSlicesTable — "Acepta": coma escapada (\\,) NO trocea el crit
 `
     expect(analyzeSlicesTable(spec).slices[0].ac).toEqual(['ruta C:\\Users existe'])
   })
-  // Las OTRAS celdas que el contrato llama "coma-separadas" (comprobado
-  // columna por columna, F6): "Protegido" NO se trocea por comas en absoluto
-  // (es texto libre de una sola pieza), "Dep" no se trocea tampoco (se
-  // extraen las referencias "#N" con una regex, así que una coma dentro no
-  // cambia nada), y "Área"/"Toca" SÍ se trocean pero sus valores son tokens
-  // de label donde la coma se descarta igualmente al normalizar — así que un
-  // escape ahí no significaría nada. Solo "Acepta" tenía el problema.
-  it('"Protegido" no se trocea por comas (texto libre de una pieza)', () => {
+  // The OTHER cells the contract calls "coma-separadas" (checked column by
+  // column, F6): "Protegido" is NOT chopped up by commas at all (it is free
+  // text of a single piece), "Dep" is not chopped up either (the "#N"
+  // references are extracted with a regex, so a comma inside changes nothing),
+  // and "Área"/"Toca" ARE chopped up but their values are label tokens where
+  // the comma is discarded on normalising anyway — so an escape there would
+  // mean nothing. Only "Acepta" had the problem.
+  it('"Protegido" is not chopped up by commas (free text of a single piece)', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -1234,7 +1230,7 @@ describe('analyzeSlicesTable — "Acepta": coma escapada (\\,) NO trocea el crit
 `
     expect(analyzeSlicesTable(spec).slices[0].protected).toBe('schema, migraciones y CI')
   })
-  it('"Dep" con comas entre referencias no depende del split: las #N se extraen igual', () => {
+  it('"Dep" with commas between references does not depend on the split: the #N are extracted all the same', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -1246,15 +1242,16 @@ describe('analyzeSlicesTable — "Acepta": coma escapada (\\,) NO trocea el crit
   })
 })
 
-// Slice 10 — la columna `Señal`: la señal de observabilidad que el slice
-// promete. Como `Gate`, el parser entrega la celda CRUDA (trimmed) sin
-// resolver nada: distinguir "señal declarada" de "exención razonada
-// N/A — <razón>" de "no declarada" es cosa de groom.js#parseSenalCell — este
-// parser no sabe de señales, igual que no sabe de gates ni de labels. A
-// diferencia de `Gate`, la ausencia de la columna SÍ entra en
-// missingOptionalColumns: su consecuencia es medible (el juez de slice mide
-// su ítem `observabilidad` como sin-vara en todo el epic).
-describe('analyzeSlicesTable — columna Señal (Slice 10)', () => {
+// Slice 10 — the `Señal` column: the observability signal the slice promises.
+// Like `Gate`, the parser hands over the RAW cell (trimmed) without resolving
+// anything: telling "a declared signal" apart from "a reasoned exemption
+// N/A — <reason>" and from "not declared" is groom.js#parseSenalCell's business
+// — this parser knows nothing about signals, just as it knows nothing about
+// gates or labels. Unlike `Gate`, the column's absence DOES go into
+// missingOptionalColumns: its consequence is measurable (the slice judge
+// measures its `observabilidad` item as without-a-yardstick across the whole
+// epic).
+describe('analyzeSlicesTable — the Señal column (Slice 10)', () => {
   const SPEC_SENAL = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca | Gate | Señal |
 |---|-------|------|---------|-----|--------|-----------|------|------|------|-------|
@@ -1262,16 +1259,17 @@ describe('analyzeSlicesTable — columna Señal (Slice 10)', () => {
 | 2 | barra | backend | backfill | #1 | AC-2.1 | – | api | db | – | métrica \`backfill_progress\` con label \`estado\` |
 | 3 | pantalla | ui | alta | #2 | AC-3.1 | – | api | app | – | N/A — pantalla sin telemetría nueva que prometer |
 `
-  it('la celda cruda llega en slice.senal, sin resolver', () => {
+  it('the raw cell arrives in slice.senal, unresolved', () => {
     const r = analyzeSlicesTable(SPEC_SENAL)
     expect(r.missingOptionalColumns).not.toContain('Señal')
-    // La celda llega VERBATIM (solo trim): el marcador de "sin valor" y la
-    // exención N/A llegan tal cual — la clasificación vive en groom.js.
+    // The cell arrives VERBATIM (only trimmed): the "no value" marker and the
+    // N/A exemption arrive as they stand — the classification lives in
+    // groom.js.
     expect(r.slices[0].senal).toBe('–')
     expect(r.slices[1].senal).toBe('métrica `backfill_progress` con label `estado`')
     expect(r.slices[2].senal).toBe('N/A — pantalla sin telemetría nueva que prometer')
   })
-  it('la grafía "Senal" sin tilde resuelve a la misma columna', () => {
+  it('the spelling "Senal" without the accent resolves to the same column', () => {
     const spec = `## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Senal |
 |---|---|---|---|---|---|---|---|
@@ -1281,7 +1279,7 @@ describe('analyzeSlicesTable — columna Señal (Slice 10)', () => {
     expect(r.missingOptionalColumns).not.toContain('Señal')
     expect(r.slices[0].senal).toBe('métrica viva')
   })
-  it('sin columna Señal, entra en missingOptionalColumns y los slices llevan senal vacío', () => {
+  it('with no Señal column, it goes into missingOptionalColumns and the slices carry an empty senal', () => {
     const r = analyzeSlicesTable(SPEC_AREA_TOCA)
     expect(r.missingOptionalColumns).toContain('Señal')
     for (const s of r.slices) expect(s.senal).toBe('')

@@ -47,7 +47,7 @@ describe('readE2eReport', () => {
     }
   })
 
-  it('a traversal entry is missing → DISCARDED, even if the other one is green', () => {
+  it('a journey entry is missing → DISCARDED, even if the other one is green', () => {
     const r = readE2eReport({ runs: [verde(A)] }, [A, B])
     expect(r.outcome).toBe(OUTCOMES.DISCARDED)
     expect(r.why).toContain(B)
@@ -121,12 +121,12 @@ describe('readE2eReport', () => {
     expect(readE2eReport({ runs: [sinVerificar(A)] }, [A]).outcome).toBe(OUTCOMES.DONE)
   })
 
-  // Two identical cells are the SAME traversal. Without deduplicating, `find`
+  // Two identical cells are the SAME journey. Without deduplicating, `find`
   // returned the same entry for both and `buenos` duplicated it —and with it
   // the markdown section that travels in the pull request—, while sending two
   // equal entries made the second fall into "an entry this slice does not
   // declare": the report had no correct way of being written at all.
-  it('the same traversal declared twice collapses: one entry is enough, and it is not duplicated in `runs`', () => {
+  it('the same journey declared twice collapses: one entry is enough, and it is not duplicated in `runs`', () => {
     const r = readE2eReport({ runs: [verde(A)] }, [A, A])
     expect(r.outcome).toBe(OUTCOMES.DONE)
     expect(r.runs).toHaveLength(1)
@@ -140,7 +140,7 @@ describe('readE2eReport', () => {
     expect(r.outcome).toBe(OUTCOMES.FAILED)
   })
 
-  it('with no traversals declared this is not called, but if it is called it does not blow up', () => {
+  it('with no journeys declared this is not called, but if it is called it does not blow up', () => {
     expect(readE2eReport({ runs: [] }, []).outcome).toBe(OUTCOMES.DONE)
   })
 })

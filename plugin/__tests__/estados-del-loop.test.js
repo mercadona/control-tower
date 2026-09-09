@@ -353,7 +353,7 @@ describe('F13/H3 — the stale claim is cross-checked too when the only thing bl
     expect(r.code).toBe(0)
     expect(r.out).toMatch(/sube --cap, o espera a que termine alguno\./)
     expect(r.out).not.toMatch(/claim muerto/)
-    expect(existsSync(cmuxLog)).toBe(false) // ni una sola invocación de cmux
+    expect(existsSync(cmuxLog)).toBe(false) // not a single invocation of cmux
   })
 
   it('an in-review holding tokens is NOT accused of a dead claim for having no session', () => {
@@ -395,7 +395,7 @@ describe('F13/H4 — "closed" is not "merged", and now it shows', () => {
     const di = buildDispatchInput(open, closed)
     expect(di.mergedIssues).toEqual([])
     expect(di.depStates).toEqual({ 7: 'NOT_PLANNED' })
-    expect(di.issues[0].deps).toEqual([7]) // el orden #1 sí resuelve al issue #7
+    expect(di.issues[0].deps).toEqual([7]) // order #1 does resolve to issue #7
   })
 
   it('ct-next names the "not planned" closure and says that dep is NEVER going to be satisfied', () => {

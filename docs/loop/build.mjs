@@ -40,14 +40,14 @@ const CHROMES = [
 // is published as a web page and is never printed: mixing them would force
 // whoever only edits the content to read pagination rules.
 const PRINT_CSS = `
-  /* ---------- impresión ---------- */
+  /* ---------- printing ---------- */
   @page { size: A4 portrait; margin: 11mm 10mm 13mm; }
 
   @media print {
-    /* El PDF se imprime SIEMPRE en claro, aunque la máquina que lo genera esté
-       en modo oscuro: un fondo casi negro a página completa es ilegible en
-       papel y pesa en pantalla. Se re-declaran los tokens, no los componentes:
-       todo el documento se pinta a través de ellos. */
+    /* The PDF is ALWAYS printed light, even if the machine generating it is
+       in dark mode: an almost-black background at full page size is illegible
+       on paper and heavy on screen. The tokens are re-declared, not the
+       components: the whole document is painted through them. */
     :root {
       --ground: #FFFFFF;
       --surface: #FFFFFF;
@@ -71,11 +71,11 @@ const PRINT_CSS = `
     body { font-size: 10.2px; line-height: 1.5; }
     .wrap { max-width: none; padding: 0; }
 
-    /* Nada de lo que agrupa una unidad de lectura se parte entre páginas —
-       pero NO las tiras ni las fichas de artefacto enteras: son altas, y
-       prohibirles partirse dejaba páginas medio vacías empujándolas enteras a
-       la siguiente. Se protege lo que de verdad se rompe mal (una figura, una
-       tabla, un bloque de código, un aviso). */
+    /* Nothing that groups a unit of reading is split across pages — but NOT
+       the strips nor whole artefact cards: they are tall, and forbidding them
+       to split left half-empty pages while pushing them whole onto the next
+       one. What really breaks badly is what gets protected (a figure, a table,
+       a code block, a warning). */
     figure, .note, .phase-bar, .tbl-scroll, .legend, pre, .cmd,
     .io, .art-meta, .facts, .art-head { break-inside: avoid; page-break-inside: avoid; }
     .phase-bar { break-after: avoid; page-break-after: avoid; }
@@ -85,8 +85,8 @@ const PRINT_CSS = `
     section { margin-bottom: 30px; }
     .masthead { padding-top: 0; }
 
-    /* En pantalla el desbordamiento se resuelve con scroll; en papel no hay
-       scroll, así que lo que sobresale se pierde. Se envuelve. */
+    /* On screen the overflow is resolved with scroll; on paper there is no
+       scroll, so whatever sticks out is lost. It gets wrapped. */
     pre { font-size: 8.9px; white-space: pre-wrap; word-break: break-word; }
     .cmd { font-size: 8.9px; white-space: pre-wrap; word-break: break-word; }
     .tbl-scroll { overflow: visible; }
@@ -96,11 +96,11 @@ const PRINT_CSS = `
     figure svg { min-width: 0; width: 100%; }
     th, td { padding: 5px 7px; }
 
-    /* Los fondos de chips, raíles y cabeceras de tabla son información
-       (quién ejecuta el paso, qué es una puerta humana), no decoración. */
+    /* The backgrounds of chips, rails and table headers are information
+       (who runs the step, what is a human gate), not decoration. */
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
-    /* Un <details> cerrado en papel es contenido perdido. */
+    /* A closed <details> on paper is lost content. */
     details > *:not(summary) { display: revert; }
     summary { list-style: none; }
   }
@@ -117,15 +117,15 @@ function buildHtml() {
   const fragment = body.replace(m[0], '').replace(/^\s*\n/, '')
 
   const html = `<!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
-<meta name="description" content="El ciclo de desarrollo con agentes del plugin control-tower-loop, paso a paso, con el formato exacto de cada artefacto.">
-<meta name="generator" content="docs/loop/build.mjs — fuente: docs/loop/loop.body.html">
+<meta name="description" content="The agent development loop of the control-tower-loop plugin, step by step, with the exact format of every artefact.">
+<meta name="generator" content="docs/loop/build.mjs — source: docs/loop/loop.body.html">
 <style>
-  /* reset mínimo — el Artifact aporta el suyo; el fichero autocontenido no. */
+  /* minimal reset — the Artifact brings its own; the self-contained file does not. */
   html { -webkit-text-size-adjust: 100%; }
   body { margin: 0; }
   img, svg { max-width: 100%; }

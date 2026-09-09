@@ -1,23 +1,23 @@
-// F18 — LO QUE DESAPARECE EN SILENCIO.
+// F18 — WHAT DISAPPEARS IN SILENCE.
 //
-// Cuatro agujeros distintos con la misma forma: el dispatcher (o el groom)
-// deja de ver algo y no lo dice, así que el operador lee una explicación
-// cuidadosa de otra cosa y se queda sin ninguna pista de lo que de verdad
-// pasó.
+// Four different holes with the same shape: the dispatcher (or the groom)
+// stops seeing something and does not say so, so the operator reads a careful
+// explanation of something else and is left with no clue at all about what
+// really happened.
 //
-//   H1  una dep cerrada por un COMMIT suelto (no por un PR mergeado) se da
-//       por satisfecha. Ocurrió en campo con un commit de DOCUMENTACIÓN que
-//       solo MENCIONABA la cadena `Closes #451` — las comillas no protegen.
-//   H2  un issue CERRADO que conserva su label `status:` desaparece del
-//       dispatcher (solo barre abiertos) sin una palabra.
-//   H3  un agente que se declara BLOQUEADO en su STATE.md deja el claim
-//       puesto para siempre: ninguna transición del loop lo saca de ahí y
-//       `stalenessNote` no lo ve (el worktree y la rama SÍ existen).
-//   H4  "PR mergeado, issue abierto" era una disyuntiva que el humano tenía
-//       que resolver mirando GitHub; la rama es determinista (`feat/<n>`).
-//   H6  `gh project item-list --limit 200` sin comprobar el truncado: con más
-//       de 200 items, `hasProjectItem` dice `false` de items que SÍ existen y
-//       el groom los duplica.
+//   H1  a dep closed by a LOOSE COMMIT (not by a merged PR) is taken as
+//       satisfied. It happened in the field with a DOCUMENTATION commit that
+//       only MENTIONED the string `Closes #451` — quotes do not protect.
+//   H2  a CLOSED issue that keeps its `status:` label disappears from the
+//       dispatcher (it only sweeps open ones) without a word.
+//   H3  an agent that declares itself BLOCKED in its STATE.md leaves the claim
+//       in place for ever: no transition of the loop takes it out of there and
+//       `stalenessNote` does not see it (the worktree and the branch DO exist).
+//   H4  "PR merged, issue open" was a dilemma the human had to resolve by
+//       looking at GitHub; the branch is deterministic (`feat/<n>`).
+//   H6  `gh project item-list --limit 200` without checking the truncation:
+//       with more than 200 items, `hasProjectItem` says `false` about items
+//       that DO exist and the groom duplicates them.
 import { describe, it, expect, afterEach } from 'vitest'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
@@ -46,12 +46,12 @@ const fakePath = [
   process.env.PATH,
 ].join(':')
 
-// FAKE_GH_COUNTER_FILE es OBLIGATORIO aquí: sin él, `nextCallIndex` del stub
-// devuelve 0 siempre y las DOS enumeraciones (abiertos y cerrados) reciben el
-// MISMO elemento de FAKE_GH_LIST_SEQUENCE — es decir, la lista de "cerrados"
-// sería en realidad la de abiertos. Verificado por construcción al escribir
-// estos tests: el primer intento reportó el issue ABIERTO #42 como "cerrado
-// con status:ready viva".
+// FAKE_GH_COUNTER_FILE is MANDATORY here: without it, the stub's
+// `nextCallIndex` always returns 0 and BOTH enumerations (open and closed) get
+// the SAME element of FAKE_GH_LIST_SEQUENCE — that is, the list of "closed"
+// ones would actually be the list of open ones. Verified by construction while
+// writing these tests: the first attempt reported the OPEN issue #42 as
+// "closed with a live status:ready".
 function runReal(args, envOverrides = {}) {
   const counter = join(mkdtempSync(join(tmpdir(), 'ct-f18-c-')), 'n')
   dirs.push(dirname(counter))
@@ -79,11 +79,11 @@ function rawIssue({ number, order, status = 'status:ready', touches = [], deps =
 }
 
 // ===========================================================================
-// H2 — el issue cerrado que conserva su `status:`
+// H2 — the closed issue that keeps its `status:`
 // ===========================================================================
 
-describe('H2 (unidad) — closedWithLiveStatus: el residuo de labels sobre issues cerrados', () => {
-  it('reconoce las labels `status:` vivas de un issue cerrado, con su número y su motivo de cierre', () => {
+describe('H2 (unit) — closedWithLiveStatus: the residue of labels on closed issues', () => {
+  it('recognises the live `status:` labels of a closed issue, with its number and its closure reason', () => {
     const res = closedWithLiveStatus([
       { number: 451, stateReason: 'COMPLETED', labels: [{ name: 'status:ready' }, { name: 'touches:pbxproj' }, { name: 'type:ui' }] },
       { number: 400, stateReason: 'COMPLETED', labels: [{ name: 'type:ui' }] },
@@ -91,10 +91,10 @@ describe('H2 (unidad) — closedWithLiveStatus: el residuo de labels sobre issue
     expect(res).toEqual([{ n: 451, statusLabels: ['ready'], stateReason: 'COMPLETED' }])
   })
 
-  it('el conjunto medido en el repo de campo: 10 de 99 cerrados conservan label, repartidos en cuatro estados', () => {
-    // Números y estados reales, medidos con una consulta paginada COMPLETA
-    // (no una lista escrita a mano: la primera medición de campo contó 6 de
-    // 10 porque se dejó fuera los cuatro `in-review`).
+  it('the set measured in the field repo: 10 of 99 closed ones keep a label, spread over four states', () => {
+    // Real numbers and states, measured with a COMPLETE paginated query (not a
+    // hand-written list: the first field measurement counted 6 out of 10
+    // because it left out the four `in-review` ones).
     const campo = [
       [53, 'in-review'], [54, 'in-review'], [58, 'in-review'], [63, 'in-review'],
       [155, 'in-progress'], [245, 'in-progress'],
@@ -102,18 +102,18 @@ describe('H2 (unidad) — closedWithLiveStatus: el residuo de labels sobre issue
       [158, 'blocked'],
     ]
     const closed = campo.map(([n, s]) => ({ number: n, stateReason: 'COMPLETED', labels: [{ name: `status:${s}` }] }))
-    // …más 89 cerrados sin ninguna label `status:` (el resto del repo).
+    // …plus 89 closed ones with no `status:` label at all (the rest of the repo).
     for (let i = 0; i < 89; i++) closed.push({ number: 1000 + i, stateReason: 'COMPLETED', labels: [] })
     const res = closedWithLiveStatus(closed)
     expect(res.length).toBe(10)
     expect(res.map((r) => r.n)).toEqual([53, 54, 58, 63, 155, 245, 156, 157, 161, 158])
   })
 
-  it('una label `status:` SIN valor no cuenta (mismo criterio que area:/touches: vacíos)', () => {
+  it('a `status:` label with NO value does not count (same criterion as empty area:/touches:)', () => {
     expect(closedWithLiveStatus([{ number: 7, labels: [{ name: 'status:' }, { name: 'status: ' }] }])).toEqual([])
   })
 
-  it('buildDispatchInput lo expone junto a mergedIssues, sin ninguna llamada extra', () => {
+  it('buildDispatchInput exposes it alongside mergedIssues, with no extra call', () => {
     const open = [rawIssue({ number: 1, order: 1 })]
     const closed = [{ number: 451, state_reason: 'COMPLETED', stateReason: 'COMPLETED', body: '<!-- ct-order:9 -->', labels: [{ name: 'status:ready' }] }]
     const di = buildDispatchInput(open, closed)
@@ -121,8 +121,8 @@ describe('H2 (unidad) — closedWithLiveStatus: el residuo de labels sobre issue
   })
 })
 
-describe('H2 (CLI) — el slice que se cayó de la cola deja de desaparecer en silencio', () => {
-  it('un cerrado con status:ready se nombra, y se dice que para /ct-next NO EXISTE', () => {
+describe('H2 (CLI) — the slice that fell off the queue stops disappearing in silence', () => {
+  it('a closed one with status:ready is named, and it is said that for /ct-next it DOES NOT EXIST', () => {
     const repoRoot = makeRepoRoot()
     const abierto = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['ui'] })
     const cerrado = { number: 451, state_reason: 'completed', body: '<!-- ct-order:1 -->', labels: [{ name: 'status:ready' }] }
@@ -135,11 +135,11 @@ describe('H2 (CLI) — el slice que se cayó de la cola deja de desaparecer en s
     expect(r.err).toMatch(/CERRADOS conservan una label/)
     expect(r.err).toMatch(/NO EXISTEN/)
     expect(r.err).toMatch(/status:ready/)
-    // Es diagnóstico, no producto: nunca por stdout (criterio de canal F16).
+    // It is diagnostics, not product: never over stdout (F16 channel criterion).
     expect(r.stdout).not.toMatch(/CERRADOS conservan una label/)
   })
 
-  it('un cerrado con status:in-review NO se reporta como anomalía: es el final normal de un slice', () => {
+  it('a closed one with status:in-review is NOT reported as an anomaly: it is the normal end of a slice', () => {
     const repoRoot = makeRepoRoot()
     const abierto = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['ui'] })
     const cerrado = { number: 300, state_reason: 'completed', body: '<!-- ct-order:1 -->', labels: [{ name: 'status:in-review' }] }
@@ -150,11 +150,12 @@ describe('H2 (CLI) — el slice que se cayó de la cola deja de desaparecer en s
     expect(r.code).toBe(0)
     expect(r.out).not.toMatch(/#300 .*status:ready/)
     expect(r.out).not.toMatch(/CERRADOS conservan una label `status:` viva, y para/)
-    // Pero el número no se esconde: se cuenta y se dice por qué no es anomalía.
+    // But the number is not hidden: it is counted and it is said why it is not
+    // an anomaly.
     expect(r.err).toMatch(/final NORMAL de un slice/)
   })
 
-  it('un solo aviso agregado, no uno por issue: diez residuos NO son diez líneas', () => {
+  it('a single aggregated warning, not one per issue: ten residues are NOT ten lines', () => {
     const repoRoot = makeRepoRoot()
     const abierto = rawIssue({ number: 42, order: 20, status: 'status:ready', touches: ['ui'] })
     const cerrados = []
@@ -165,17 +166,18 @@ describe('H2 (CLI) — el slice que se cayó de la cola deja de desaparecer en s
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[abierto], cerrados]),
     })
     expect(r.code).toBe(0)
-    // Se cuentan solo las emisiones EN EL MOMENTO (`aviso: …`), no el recap
-    // del final, que por diseño repite todos los avisos acumulados.
+    // Only the emissions AT THE MOMENT (`aviso: …`) are counted, not the recap
+    // at the end, which by design repeats every accumulated warning.
     const lineas = r.err.split('\n').filter((l) => /^aviso: \d+ issue\(s\) CERRADOS/.test(l))
     expect(lineas.length).toBe(1)
-    // F19/H2 CAMBIA ESTE NÚMERO A PROPÓSITO: eran 6 cuando `blocked` contaba
-    // como anomalía junto a `ready` e `in-progress`. Un cerrado con
-    // `status:blocked` es INERTE — no retiene tokens, no bloquea ninguna cola,
-    // no le pasa nada a nadie por dejarlo — y meterlo en el mismo titular que
-    // el que se cayó de la cola de despacho es lo que enseña a descontar el
-    // titular entero. Ahora el titular cuenta 5 (3 ready + 2 in-progress) y el
-    // `blocked` sale en su propio recuento, igual que los `in-review`.
+    // F19/H2 CHANGES THIS NUMBER ON PURPOSE: it was 6 when `blocked` counted as
+    // an anomaly alongside `ready` and `in-progress`. A closed one with
+    // `status:blocked` is INERT — it holds no tokens, it blocks no queue,
+    // nothing happens to anyone for leaving it there — and putting it in the
+    // same headline as the one that fell off the dispatch queue is exactly what
+    // teaches a reader to discount the whole headline. Now the headline counts
+    // 5 (3 ready + 2 in-progress) and the `blocked` one comes out in its own
+    // count, just like the `in-review` ones.
     expect(lineas[0]).toMatch(/^aviso: 5 issue\(s\) CERRADOS/)
     expect(lineas[0]).toMatch(/Otros 4 cerrados conservan status:in-review/)
     expect(lineas[0]).toMatch(/Otros 1 cerrados conservan status:blocked/)
@@ -183,14 +185,14 @@ describe('H2 (CLI) — el slice que se cayó de la cola deja de desaparecer en s
 })
 
 // ===========================================================================
-// H3 — el agente BLOQUEADO que deja el claim puesto
+// H3 — the BLOCKED agent that leaves the claim in place
 // ===========================================================================
 
-// F22, Task 6: el `blocked` se lee de `.agent/SLICE.md`, no de `.agent/
-// STATE.md` (ese pasó a ser el fichero de la coordinadora, congelado en la
-// base — ver __tests__/f22-estado-del-slice.test.js). Este bloque siembra
-// SLICE.md, que es el fichero que un worktree de ESTA versión trae.
-describe('H3 (CLI) — un claim cuyo SLICE.md se declara BLOQUEADO', () => {
+// F22, Task 6: the `blocked` is read from `.agent/SLICE.md`, not from `.agent/
+// STATE.md` (that one became the coordinator's file, frozen at the base — see
+// __tests__/f22-estado-del-slice.test.js). This block seeds SLICE.md, which is
+// the file a worktree of THIS version brings.
+describe('H3 (CLI) — a claim whose SLICE.md declares itself BLOCKED', () => {
   function repoConWorktree(n, sliceMd) {
     const repoRoot = makeRepoRoot()
     const wt = join(repoRoot, '.worktrees', String(n), '.agent')
@@ -201,7 +203,7 @@ describe('H3 (CLI) — un claim cuyo SLICE.md se declara BLOQUEADO', () => {
 
   const bloqueado = '---\nstatus: wip\nblocked:\n  reason: la API de pagos del sandbox está caída\n  unblock: que Stripe restaure el entorno de test\n---\n\nnotas\n'
 
-  it('lo dice, con el motivo, y nombra las tres transiciones que NO sirven', () => {
+  it('it says so, with the reason, and names the three transitions that do NOT help', () => {
     const repoRoot = repoConWorktree(41, bloqueado)
     const enCurso = rawIssue({ number: 41, order: 1, status: 'status:in-progress', touches: ['api'] })
     const listo = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['api'] })
@@ -214,11 +216,11 @@ describe('H3 (CLI) — un claim cuyo SLICE.md se declara BLOQUEADO', () => {
     expect(r.err).toMatch(/la API de pagos del sandbox está caída/)
     expect(r.err).toMatch(/--requeue/)
     expect(r.err).toMatch(/--release/)
-    // Y no se afirma que haya alguien avanzándolo.
+    // And it does not claim that anyone is moving it forward.
     expect(r.err).toMatch(/ningún agente avanzándolo/)
   })
 
-  it('sin `blocked` en el SLICE.md no dice nada (control negativo: el caso normal)', () => {
+  it('with no `blocked` in the SLICE.md it says nothing (negative control: the normal case)', () => {
     const repoRoot = repoConWorktree(41, '---\nstatus: wip\nnext_action: seguir\n---\n\nnotas\n')
     const enCurso = rawIssue({ number: 41, order: 1, status: 'status:in-progress', touches: ['api'] })
     const listo = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['api'] })
@@ -229,7 +231,7 @@ describe('H3 (CLI) — un claim cuyo SLICE.md se declara BLOQUEADO', () => {
     expect(r.out).not.toMatch(/se declara BLOQUEADO/)
   })
 
-  it('`status: blocked` (el error de escritura más probable) también cuenta', () => {
+  it('`status: blocked` (the most likely way of writing it wrong) also counts', () => {
     const repoRoot = repoConWorktree(41, '---\nstatus: blocked\nnext_action: seguir\n---\n\nnotas\n')
     const enCurso = rawIssue({ number: 41, order: 1, status: 'status:in-progress', touches: ['api'] })
     const listo = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['api'] })
@@ -242,27 +244,27 @@ describe('H3 (CLI) — un claim cuyo SLICE.md se declara BLOQUEADO', () => {
 })
 
 // ===========================================================================
-// H1 + H4 — quién cerró el issue, y qué rama se mergeó de verdad
+// H1 + H4 — who closed the issue, and which branch was really merged
 // ===========================================================================
 
-describe('H1/H4 (unidad) — planClosureProbe: qué se pregunta y qué no', () => {
+describe('H1/H4 (unit) — planClosureProbe: what is asked and what is not', () => {
   const issues = [
     { n: 10, status: 'ready', deps: [451] },
     { n: 11, status: 'ready', deps: [451, 99] },
     { n: 12, status: 'in-review', deps: [] },
     { n: 13, status: 'backlog', deps: [777] },
   ]
-  it('solo pregunta por las deps que YA cuentan como satisfechas, y por los in-review', () => {
+  it('it only asks about the deps that ALREADY count as satisfied, and about the in-review ones', () => {
     const plan = planClosureProbe({ issues, mergedIssues: [451, 777] })
     expect(plan.deps).toEqual([451, 777])
     expect(plan.inReview).toEqual([12])
     expect(plan.dependents.get(451)).toEqual([10, 11])
   })
-  it('sin deps satisfechas ni in-review, NO hay query (cero llamadas de red)', () => {
+  it('with no satisfied deps and no in-review, there is NO query (zero network calls)', () => {
     const plan = planClosureProbe({ issues: [{ n: 1, status: 'ready', deps: [] }], mergedIssues: [] })
     expect(buildClosureQuery('o/r', plan)).toBeNull()
   })
-  it('la query pide el closer del issue y el PR mergeado de la rama determinista feat/<n>', () => {
+  it('the query asks for the issue closer and the merged PR of the deterministic branch feat/<n>', () => {
     const plan = planClosureProbe({ issues, mergedIssues: [451] })
     const q = buildClosureQuery('o/r', plan)
     expect(q).toMatch(/repository\(owner:"o", name:"r"\)/)
@@ -270,7 +272,7 @@ describe('H1/H4 (unidad) — planClosureProbe: qué se pregunta y qué no', () =
     expect(q).toMatch(/CLOSED_EVENT/)
     expect(q).toMatch(/rev12: pullRequests\(headRefName:"feat\/12", states:\[MERGED\]/)
   })
-  it('el tope se DICE cuando recorta, nunca se recorta en silencio', () => {
+  it('the cap is SAID when it trims, it never trims in silence', () => {
     const muchos = Array.from({ length: CLOSURE_PROBE_MAX + 5 }, (_, i) => ({ n: 1000 + i, status: 'ready', deps: [i + 1] }))
     const plan = planClosureProbe({ issues: muchos, mergedIssues: muchos.map((_, i) => i + 1) })
     expect(formatClosureCoverageNote(plan)).toMatch(/SIN mirar/)
@@ -278,7 +280,7 @@ describe('H1/H4 (unidad) — planClosureProbe: qué se pregunta y qué no', () =
   })
 })
 
-describe('H1/H4 (unidad) — parseClosureProbe: no se inventa lo que no vino', () => {
+describe('H1/H4 (unit) — parseClosureProbe: it does not invent what did not arrive', () => {
   const plan = { deps: [451, 452, 453, 454], inReview: [12], dependents: new Map([[451, [10]]]) }
   const raw = {
     data: {
@@ -291,14 +293,14 @@ describe('H1/H4 (unidad) — parseClosureProbe: no se inventa lo que no vino', (
     },
   }
   const { closers, mergedPr } = parseClosureProbe(raw, plan)
-  it('distingue commit suelto, PR mergeado, cierre a mano y "no se sabe"', () => {
+  it('it tells apart a loose commit, a merged PR, a manual closure and "we do not know"', () => {
     expect(closers[451].kind).toBe('commit')
     expect(closers[451].mergedPrs).toEqual([])
     expect(closers[452]).toMatchObject({ kind: 'pull-request', merged: true })
     expect(closers[453].kind).toBe('manual')
-    expect(closers[454].kind).toBe('unknown') // el alias no vino: NO es 'manual'
+    expect(closers[454].kind).toBe('unknown') // the alias did not arrive: it is NOT 'manual'
   })
-  it('solo el commit suelto genera sospecha; el cierre a mano NO (86 de 97 en campo)', () => {
+  it('only the loose commit raises suspicion; the manual closure does NOT (86 of 97 in the field)', () => {
     const w = formatSuspectClosureWarnings(closers, plan.dependents)
     expect(w.length).toBe(1)
     expect(w[0]).toMatch(/#451/)
@@ -308,12 +310,12 @@ describe('H1/H4 (unidad) — parseClosureProbe: no se inventa lo que no vino', (
     expect(w.join(' ')).not.toMatch(/#452/)
     expect(w.join(' ')).not.toMatch(/#454/)
   })
-  it('un commit que SÍ pertenece a un PR mergeado no es sospechoso', () => {
+  it('a commit that DOES belong to a merged PR is not suspicious', () => {
     const okRaw = { data: { repository: { dep451: { timelineItems: { nodes: [{ closer: { __typename: 'Commit', oid: 'abc', messageHeadline: 'x', associatedPullRequests: { nodes: [{ number: 9, merged: true }] } } }] } } } } }
     const p = { deps: [451], inReview: [], dependents: new Map() }
     expect(formatSuspectClosureWarnings(parseClosureProbe(okRaw, p).closers, p.dependents)).toEqual([])
   })
-  it('H4: el PR mergeado de feat/12 convierte la disyuntiva en un hecho', () => {
+  it('H4: the merged PR of feat/12 turns the dilemma into a fact', () => {
     expect(mergedPr[12]).toEqual({ number: 88, mergedAt: '2026-07-12T10:00:00Z' })
     const w = formatMergedButOpenWarnings(mergedPr, 'o/r')
     expect(w[0]).toMatch(/feat\/12 YA está mergeada en el PR #88/)
@@ -322,8 +324,8 @@ describe('H1/H4 (unidad) — parseClosureProbe: no se inventa lo que no vino', (
   })
 })
 
-describe('H1/H4 (CLI) — la comprobación entra en la corrida real', () => {
-  it('una dep cerrada por un commit suelto se avisa, nombrando a quien depende de ella', () => {
+describe('H1/H4 (CLI) — the check enters the real run', () => {
+  it('a dep closed by a loose commit is warned about, naming whoever depends on it', () => {
     const repoRoot = makeRepoRoot()
     const abierto = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['ui'], deps: [1] })
     const cerrado = { number: 451, state_reason: 'completed', body: '<!-- ct-order:1 -->', labels: [] }
@@ -339,7 +341,7 @@ describe('H1/H4 (CLI) — la comprobación entra en la corrida real', () => {
     expect(r.err).toMatch(/#42 depende de #451/)
   })
 
-  it('si la consulta falla, se dice y NO se bloquea nada (un detector no tiene veto)', () => {
+  it('if the query fails, it is said and NOTHING is blocked (a detector has no veto)', () => {
     const repoRoot = makeRepoRoot()
     const abierto = rawIssue({ number: 42, order: 2, status: 'status:ready', touches: ['ui'], deps: [1] })
     const cerrado = { number: 451, state_reason: 'completed', body: '<!-- ct-order:1 -->', labels: [] }
@@ -350,13 +352,13 @@ describe('H1/H4 (CLI) — la comprobación entra en la corrida real', () => {
     })
     expect(r.code).toBe(0)
     expect(r.err).toMatch(/no se ha podido comprobar/i)
-    // El despacho sigue su curso: #42 se selecciona igual.
+    // The dispatch runs its course: #42 is selected all the same.
     expect(r.stdout).toMatch(/#42/)
   })
 })
 
 // ===========================================================================
-// Contrato §9 (ct-init.sh): v7 → v8
+// §9 contract (ct-init.sh): v7 → v8
 // ===========================================================================
 
 const ctInit = join(here, '..', 'scripts', 'ct-init.sh')
@@ -368,25 +370,25 @@ function seedContract() {
   return contrato
 }
 const flat = (s) => s.replace(/\*/g, '').replace(/\s+/g, ' ')
-// El fixture v7 no es una transcripción: su sha256 es 8730d7be…, exactamente
-// el hash que SLICES_PRISTINE_HASHES ya tenía registrado para el bloque v7, y
-// se generó ejecutando el ct-init.sh de b6b9754. Es el bloque de verdad.
+// The v7 fixture is not a transcription: its sha256 is 8730d7be…, exactly the
+// hash SLICES_PRISTINE_HASHES already had registered for the v7 block, and it
+// was generated by running b6b9754's ct-init.sh. It is the real block.
 const V7 = () => readFileSync(join(here, 'fixtures', 'slices-contract-v7.md'), 'utf8')
 
-describe('contrato §9 (F18): la premisa falsificada y los dos estados que no se decían', () => {
-  it('control: el v7 SÍ decía que hacía falta una acción errónea deliberada, y callaba los otros dos', () => {
+describe('§9 contract (F18): the falsified premise and the two states nobody stated', () => {
+  it('control: v7 DID say a deliberate wrong action was needed, and kept quiet about the other two', () => {
     const v7 = flat(V7())
     expect(v7).toMatch(/no se detecta/)
     expect(v7).toMatch(/haría falta cruzar el grafo de PRs/)
     expect(v7).not.toMatch(/closing keywords/)
     expect(v7).not.toMatch(/las comillas no protegen/)
-    // Nada sobre el residuo de labels en cerrados…
+    // Nothing about the residue of labels on closed ones…
     expect(v7).not.toMatch(/conserva su label `status:`/)
-    // …ni sobre el claim bloqueado.
+    // …nor about the blocked claim.
     expect(v7).not.toMatch(/BLOQUEADO retiene su claim/)
   })
 
-  it('el v8 dice que basta con escribir la keyword en cualquier commit, y que las comillas no protegen', () => {
+  it('v8 says writing the keyword in any commit is enough, and that quotes do not protect', () => {
     const v8 = flat(seedContract())
     expect(v8).toMatch(/no requiere que nadie se equivoque a propósito/)
     expect(v8).toMatch(/cualquier mensaje de commit/)
@@ -394,35 +396,36 @@ describe('contrato §9 (F18): la premisa falsificada y los dos estados que no se
     expect(v8).not.toMatch(/haría falta cruzar el grafo de PRs/)
   })
 
-  it('el v8 no convierte el detector en un gate, y dice por qué (86 de 97 cierres son a mano)', () => {
+  it('v8 does not turn the detector into a gate, and says why (86 of 97 closures are manual)', () => {
     const v8 = flat(seedContract())
     expect(v8).toMatch(/86 de 97 cierres/)
     expect(v8).toMatch(/avisa/)
   })
 
-  it('el v8 nombra el residuo `cerrado + status: viva` con su tasa medida', () => {
+  it('v8 names the `closed + live status:` residue with its measured rate', () => {
     const v8 = flat(seedContract())
     expect(v8).toMatch(/CERRADO que conserva su label `status:` no existe/)
     expect(v8).toMatch(/10 cerrados con label viva de cada 99/)
-    // Y deja claro que in-review sobre un cerrado NO es anomalía.
+    // And it makes clear that in-review on a closed one is NOT an anomaly.
     expect(v8).toMatch(/sobre un issue cerrado NO es anomalía/)
   })
 
-  it('el v8 nombra el deadlock del claim bloqueado y las tres transiciones que no lo sueltan', () => {
+  it('v8 names the deadlock of the blocked claim and the three transitions that do not release it', () => {
     const v8 = flat(seedContract())
     expect(v8).toMatch(/BLOQUEADO retiene su claim/)
     expect(v8).toMatch(/--requeue` se niega/)
     expect(v8).toMatch(/--release` mentiría/)
-    // No promete un arreglo automático que no existe.
+    // It does not promise an automatic fix that does not exist.
     expect(v8).toMatch(/no lo arregla/)
   })
 
-  // F20: este test fija que el marcador y la nota de pie declaran la MISMA
-  // versión que `SLICES_CONTRACT_VERSION` — que las tres no puedan divergir es
-  // la propiedad, no el número concreto. El número se actualiza en cada ronda
-  // que toque el texto del contrato (F18 → v8; F20 → v9, por el reparto de
-  // roles); lo que no puede pasar nunca es que uno de los tres se quede atrás.
-  it('la versión declarada del bloque coincide, en el marcador y en la nota de pie, con SLICES_CONTRACT_VERSION', () => {
+  // F20: this test pins that the marker and the footnote declare the SAME
+  // version as `SLICES_CONTRACT_VERSION` — that the three cannot diverge is the
+  // property, not the concrete number. The number is updated on every round
+  // that touches the contract's text (F18 → v8; F20 → v9, because of the
+  // sharing out of roles); what can never happen is that one of the three
+  // falls behind.
+  it("the block's declared version matches, in the marker and in the footnote, SLICES_CONTRACT_VERSION", () => {
     const src = readFileSync(join(here, '..', 'scripts', 'ct-init.sh'), 'utf8')
     const declared = src.match(/^SLICES_CONTRACT_VERSION=(\d+)$/m)?.[1]
     expect(declared).toBeDefined()
@@ -432,27 +435,27 @@ describe('contrato §9 (F18): la premisa falsificada y los dos estados que no se
   })
 })
 
-// La misma lente de H1 aplicada al RESTO del contrato: ¿hay más decisiones
-// justificadas con un "esto solo pasa si alguien hace algo mal"? Sí, una — y
-// venía de la ronda anterior.
-describe('contrato §9 (F18): la causa que el kickoff no puede garantizar', () => {
-  it('control: el v7 decía que ese caso "solo aparece" con PRs a mano o cuerpo editado', () => {
+// The same lens as H1 applied to the REST of the contract: are there more
+// decisions justified with a "this only happens if someone does something
+// wrong"? Yes, one — and it came from the previous round.
+describe("§9 contract (F18): the cause the kickoff cannot guarantee", () => {
+  it('control: v7 said that case "only shows up" with manual PRs or an edited body', () => {
     const v7 = flat(V7())
     expect(v7).toMatch(/solo aparece con PRs abiertos a mano/)
-    // Y el kickoff era la razón por la que se descartaba la causa obvia.
+    // And the kickoff was the reason the obvious cause was ruled out.
     expect(v7).toMatch(/le da a cada agente lo pide explícitamente/)
   })
 
-  it('el v8 nombra la causa más probable: que el agente simplemente no lo pusiera', () => {
+  it('v8 names the most likely cause: that the agent simply did not put it there', () => {
     const v8 = flat(seedContract())
     expect(v8).not.toMatch(/solo aparece con PRs abiertos a mano/)
     expect(v8).toMatch(/el kickoff es un PROMPT, no un gate/)
     expect(v8).toMatch(/la causa más probable de este caso es simplemente que el agente no lo puso/)
   })
 
-  it('el propio v7 ya se contradecía: admitía que no puede garantizar la obediencia', () => {
-    // No es una inferencia: la frase está en el mismo bloque, dos párrafos más
-    // abajo. Lo que faltaba era conectarla con la enumeración de causas.
+  it('v7 already contradicted itself: it admitted it cannot guarantee obedience', () => {
+    // It is not an inference: the sentence is in the same block, two paragraphs
+    // further down. What was missing was connecting it to the list of causes.
     expect(flat(V7())).toMatch(/Lo que el kickoff no puede garantizar es que el agente obedezca/)
   })
 })

@@ -69,7 +69,7 @@ the line right above it. The validator enforces the labels and their budgets:
 
 | Label above the block | What goes inside | Budget |
 |---|---|---|
-| `Current state (path[, lines A-B]):` | the tramo that changes, copied **verbatim** from the file | 12 lines |
+| `Current state (path[, lines A-B]):` | the span that changes, copied **verbatim** from the file | 12 lines |
 | `Contract (path):` | types, interfaces, exact signatures, typed errors, and constants the implementer cannot derive (a format string, a set of flags, a magic value) — **declarations only** | 25 lines |
 | `Call site (path):` | how the call reads in the consumer once this task is done: route, handler, component usage, before → after | 10 lines |
 | `Final text (path.md):` | the exact replacement wording, only where the literal text IS the deliverable — `.md`, `.txt`, `.rst`, `.adoc` | 12 lines |
@@ -106,8 +106,8 @@ rest of the plan stays behind, `## 5. Interfaces` included: name signatures in p
 put the block in the task that creates the file.
 
 Every citation comes from the file in front of you: the validator greps the repo and
-accepts what matches it. A `Current state` citation is one **contiguous** tramo, copied end to
-end, byte for byte. If the tramo you need contains code fences, quote around them as several
+accepts what matches it. A `Current state` citation is one **contiguous** span, copied end to
+end, byte for byte. If the span you need contains code fences, quote around them as several
 smaller citations — a nested fence desynchronises the parser.
 
 ## Configuration travels as prose
@@ -131,8 +131,8 @@ Pin the **boundary**: boundary value analysis, one case at the limit and one on 
 of it. A real plan wrote four cases for an "80% of authors" threshold and none of them
 discriminated it, so mutating 80 to 70 left the whole suite green and the acceptance criterion
 unpinned. Say what has to be impossible to break:
-*`it('la concentración es el mínimo de autores que suma el 80%')` — a case exactly at 80 and one
-just below.*
+*`it('concentration is the smallest number of authors that adds up to 80%')` — a case exactly at
+80 and one just below.*
 
 Citing an assertion that already exists, in order to change it, is a `Current state` citation
 over the test file: that one is allowed, and it goes through the literality check.
@@ -215,7 +215,7 @@ invented — and which, in the real slice, survived byte for byte:
   `parsearHistorial(salida: string): Commit[]`.
 
 The body of `parsearHistorial` stays with the implementer: the format above plus the test
-`it('lee el formato de git log con separadores NUL y US')` determines it. Keep the diagnostic
+`it('reads the git log format with NUL and US separators')` determines it. Keep the diagnostic
 sentence — *if the `.mailmap` test fails returning the raw email, the format is using `%ae`
 instead of `%aE`* — because that is contract knowledge, not a body. It replaces 113 lines of
 final content, of which the implementer rewrote 84%, with two of the branch's defects in the

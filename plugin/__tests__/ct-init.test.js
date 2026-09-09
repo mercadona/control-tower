@@ -683,8 +683,16 @@ describe('ct-init.sh', () => {
     // Since #93 that reference lives outside the plugin, in the repository's
     // docs/loop/ct-groom.md (commands/ct-groom.md kept the invocation and the
     // exit codes), so it is read from there.
+    // The sentence lives in three documents and the migration to English has
+    // reached only one of them: docs/loop/ct-groom.md is English, while the
+    // seeded contract and the slice judge are still Spanish (they move in their
+    // own steps, the contract with a version bump and the judge with a bench
+    // run). So each document is checked in the language it is actually written
+    // in. What the test is for does not change — neither of the three may fall
+    // behind — and the day the other two are translated the two constants below
+    // collapse back into one.
     const groom = readFileSync(join(root, '..', 'docs', 'loop', 'ct-groom.md'), 'utf8')
-    expect(groom).toMatch(/no es un criterio de aceptación más/i)
+    expect(groom).toMatch(/is not one more acceptance criterion/i)
     expect(groom).toContain('`estado-final`')
     // Slice 7: and the JUDGE measures by the SAME rule, in the same words. Slice
     // 4's gap was exactly this: the sentence went into both documents and `git
@@ -692,11 +700,12 @@ describe('ct-init.sh', () => {
     // from the ACs still satisfied the item's three checks. Normalised because
     // the contract's bullet is wrapped at ~72 columns.
     const norm = (s) => s.replace(/\s+/g, ' ')
-    const REGLA = 'se puede comprobar corriendo los tests, es un criterio de aceptación, no una señal'
-    expect(norm(agents)).toContain(REGLA)
-    expect(norm(groom)).toContain(REGLA)
+    const RULE_ES = 'se puede comprobar corriendo los tests, es un criterio de aceptación, no una señal'
+    const RULE_EN = 'can be checked by running the tests, it is an acceptance criterion, not a signal'
+    expect(norm(agents)).toContain(RULE_ES)
+    expect(norm(groom)).toContain(RULE_EN)
     const juez = readFileSync(join(root, 'agents', 'ct-slice-judge.md'), 'utf8')
-    expect(norm(juez)).toContain(REGLA)
+    expect(norm(juez)).toContain(RULE_ES)
     // The token with which telemetry/`grep` tells this low apart from the item's
     // other lows, in the two texts that promise it.
     expect(norm(juez)).toContain('`señal redundante`')
@@ -1601,26 +1610,28 @@ describe('ct-init.sh', () => {
   })
 
   // -------------------------------------------------------------------------
-  // La plantilla del execution spec. El flujo tras /ct-init es brainstorming →
-  // design doc → execution spec, y `skills/brainstorming/SKILL.md` (pasos 8 y
-  // §"After the self-review") manda escribir ese spec «from the repo's
-  // `_TEMPLATE-execution-spec.md`». Hasta aquí esa plantilla NO viajaba con el
-  // plugin: vivía suelta en un repo privado, así que el paso 8 se quedaba sin
-  // su fuente en cualquier repo recién bootstrapeado y el spec había que
-  // escribirlo adivinando sus secciones.
+  // The execution spec's template. The flow after /ct-init is brainstorming →
+  // design doc → execution spec, and `skills/brainstorming/SKILL.md` (steps 8
+  // and §"After the self-review") orders that spec to be written «from the
+  // repo's `_TEMPLATE-execution-spec.md`». Up to here that template did NOT
+  // travel with the plugin: it lived loose in a private repo, so step 8 was
+  // left with no source in any freshly bootstrapped repo and the spec had to be
+  // written guessing at its sections.
   //
-  // El destino es `docs/superpowers/specs/` y no la raíz porque es la carpeta
-  // que el plugin YA declara como casa del spec en código que corre:
-  // LOOP_ARTIFACT_PATTERNS (scripts/scope.js) exime `docs/superpowers/specs/**`
-  // precisamente porque «el skill de brainstorming escribe aquí el design doc y
-  // el execution spec». La misma ruta que documenta docs/loop/README.md.
+  // The destination is `docs/superpowers/specs/` and not the root because it is
+  // the folder the plugin ALREADY declares as the spec's home in code that
+  // runs: LOOP_ARTIFACT_PATTERNS (scripts/scope.js) exempts
+  // `docs/superpowers/specs/**` precisely because «the brainstorming skill
+  // writes the design doc and the execution spec here». The same path
+  // docs/loop/README.md documents.
   // ==========================================================================
-  // #93 — el contrato sale de AGENTS.md. Lo que estos tests atan es el REPARTO:
-  // qué queda en el fichero que se relee en cada sesión y qué se va al que se
-  // lee una vez por epic. Sin ellos, el contrato podría volver a AGENTS.md sin
-  // que nada se pusiera rojo, y el ahorro entero se deshace en un commit.
+  // #93 — the contract comes out of AGENTS.md. What these tests tie down is the
+  // SPLIT: what stays in the file that is re-read on every session and what
+  // goes to the one that is read once per epic. Without them, the contract
+  // could go back into AGENTS.md with nothing turning red, and the whole saving
+  // comes undone in a single commit.
   // ==========================================================================
-  it('el AGENTS.md sembrado cabe en 3 KB y enlaza al contrato en vez de llevarlo dentro', () => {
+  it('the seeded AGENTS.md fits in 3 KB and links to the contract instead of carrying it inside', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
@@ -1633,11 +1644,11 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el contrato sembrado es, byte a byte, el bloque que emite el script', () => {
-    // Que sea idéntico no es comodidad: es lo que hace que el ledger de hashes
-    // reconozca un bloque sembrado por cualquier versión anterior, y que la
-    // poda de conventions.js y el descuento de vara.js lo sigan viendo por sus
-    // marcadores sin una regla nueva. El fichero ES el bloque y nada más.
+  it('the seeded contract is, byte for byte, the block the script emits', () => {
+    // Its being identical is not convenience: it is what makes the hash ledger
+    // recognise a block seeded by any earlier version, and what keeps
+    // conventions.js's pruning and vara.js's discount seeing it by its markers
+    // with no new rule. The file IS the block and nothing else.
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const contrato = leerContrato(dir)
@@ -1646,7 +1657,7 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('un repo bootstrapeado ANTES: el contrato sigue en su AGENTS.md, se avisa y no se toca nada', () => {
+  it('a repo bootstrapped BEFORE: the contract is still in its AGENTS.md, it is warned about and nothing is touched', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const before = `# AGENTS.md\n\n## Gotchas\n- mías\n\n${V1_BLOCK}`
     writeFileSync(join(dir, 'AGENTS.md'), before)
@@ -1654,35 +1665,37 @@ describe('ct-init.sh', () => {
     expect(res.status).toBe(0) // warning is not failing
     expect(res.stderr).toMatch(/todavía lleva DENTRO el contrato/)
     expect(res.stderr).toContain('--update-slices-contract')
-    // Su bloque no se toca, y tampoco recibe la sección corta: mientras el
-    // contrato siga ahí, añadirla contaría el mismo tema dos veces.
+    // Its block is not touched, and it does not get the short section either:
+    // as long as the contract is still there, adding it would tell the same
+    // story twice.
     const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
     expect(agents).toBe(withE2eAppended(before, { loop: false }))
-    // Pero el contrato de HOY ya está sembrado en su sitio: quien escriba un
-    // spec a partir de ahora lee el bueno, aunque nadie haya migrado nada.
+    // But TODAY's contract is already seeded in its place: whoever writes a
+    // spec from now on reads the good one, even though nobody has migrated
+    // anything.
     expect(leerContrato(dir)).toMatch(versionLineRe())
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('--update-slices-contract migra ese repo: saca el bloque de AGENTS.md y deja la sección corta', () => {
+  it('--update-slices-contract migrates that repo: it takes the block out of AGENTS.md and leaves the short section', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const before = `# AGENTS.md\n\n## Gotchas\n- mías\n\n${V1_BLOCK}\n## Después\n- intocable\n`
     writeFileSync(join(dir, 'AGENTS.md'), before)
     const res = spawnSync('bash', [script, dir, '--update-slices-contract'], { encoding: 'utf8' })
     expect(res.status, res.stderr).toBe(0)
     expect(res.stdout).toMatch(/el contrato de slices sale de/)
-    expect(res.stderr).not.toMatch(/editad|acusa/i) // estaba sin editar: no se acusa a nadie
+    expect(res.stderr).not.toMatch(/editad|acusa/i) // it was unedited: nobody is accused
     const agents = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
     expect(agents).not.toContain(MARKER_OPEN)
     expect(agents).toContain(LOOP_MARKER_OPEN)
-    // Y lo que el usuario tenía alrededor sigue exactamente donde estaba.
+    // And what the user had around it is still exactly where it was.
     expect(agents).toContain('- mías')
     expect(agents).toContain('- intocable')
     expect(leerContrato(dir)).toMatch(versionLineRe())
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('siembra la plantilla del execution spec en docs/superpowers/specs/', () => {
+  it("it seeds the execution spec's template in docs/superpowers/specs/", () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const out = execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const dest = join(dir, 'docs', 'superpowers', 'specs', '_TEMPLATE-execution-spec.md')
@@ -1692,7 +1705,7 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('idempotente: no pisa una plantilla de execution spec ya existente', () => {
+  it('idempotent: it does not overwrite an already existing execution spec template', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     const dest = join(dir, 'docs', 'superpowers', 'specs', '_TEMPLATE-execution-spec.md')
     mkdirSync(dirname(dest), { recursive: true })
@@ -1702,21 +1715,21 @@ describe('ct-init.sh', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // El test que de verdad importa: la plantilla que se siembra tiene que PASAR
-  // las puertas del propio /ct-groom. Las dos trampas que traía la versión que
-  // circulaba a mano las detecta esto y nada más:
+  // The test that really matters: the template that gets seeded has to PASS
+  // /ct-groom's own gates. The two traps the version that circulated by hand
+  // carried are detected by this and by nothing else:
   //
-  //  1. `[NEEDS CLARIFICATION` escrito literal en su comentario didáctico.
-  //     analyzeSpecFreeze hace un includes() línea a línea sobre TODO el
-  //     fichero, sin descartar comentarios HTML (el descarte solo cubre el
-  //     cuerpo de la hipótesis), así que la plantilla se autoinvalidaba: exit 2
-  //     en cualquier spec que la copiara sin borrar ese bloque, estando
-  //     perfectamente congelado.
-  //  2. Un comentario multilínea DENTRO de `## Contexto del epic`.
-  //     readEpicContext no lo descarta, y esa sección se copia byte a byte al
-  //     cuerpo de todos los issues del epic: las instrucciones de la plantilla
-  //     acababan pegadas en los N issues.
-  it('la plantilla sembrada pasa las puertas de congelación de /ct-groom y su tabla parsea con el contrato vigente', async () => {
+  //  1. `[NEEDS CLARIFICATION` written literally in its didactic comment.
+  //     analyzeSpecFreeze does an includes() line by line over the WHOLE file,
+  //     without discarding HTML comments (the discarding only covers the body
+  //     of the hypothesis), so the template invalidated itself: exit 2 on any
+  //     spec that copied it without deleting that block, while being perfectly
+  //     frozen.
+  //  2. A multi-line comment INSIDE `## Contexto del epic`. readEpicContext
+  //     does not discard it, and that section is copied byte for byte into the
+  //     body of every issue of the epic: the template's instructions ended up
+  //     pasted into the N issues.
+  it("the seeded template passes /ct-groom's freeze gates and its table parses with the contract in force", async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
     execFileSync('bash', [script, dir], { encoding: 'utf8' })
     const md = readFileSync(join(dir, 'docs', 'superpowers', 'specs', '_TEMPLATE-execution-spec.md'), 'utf8')

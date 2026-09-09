@@ -313,7 +313,7 @@ describe('ct-next — an occupied destination: it is detected BEFORE claiming (D
 })
 
 describe('ct-next --dry-run — the kickoff reads as PROSE (D4, defect 3)', () => {
-  it('it prints the kickoff in real lines, not as a blob with escaped \\n', () => {
+  it('prints the kickoff in real lines, not as a blob with escaped \\n', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
     expect(r.code).toBe(0)
     const start = r.out.indexOf('--- kickoff que recibiría el agente')
@@ -353,7 +353,7 @@ describe('ct-next — a slice with no usable issue number (D4, defect 5)', () =>
     mergedIssues: [],
   })
 
-  it('it is not dispatched, and the unreadable identifier does not propagate to branch/worktree/claim/title', () => {
+  it('is not dispatched, and the unreadable identifier does not propagate to branch/worktree/claim/title', () => {
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_NO_N })
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/no es un número de issue utilizable/)

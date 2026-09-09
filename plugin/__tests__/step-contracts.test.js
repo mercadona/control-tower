@@ -1,11 +1,11 @@
-// Lo que cruza la frontera entre la sesión y sus subagentes
-// (scripts/step-contracts.js): qué se acepta como respuesta y qué escribe el
-// plugin.
+// What crosses the boundary between the session and its subagents
+// (scripts/step-contracts.js): what is accepted as an answer and what the
+// plugin writes.
 //
-// El argv de `claude -p` ya no está: se fue con el conductor-programa (D-4
-// aplazada). Lo que queda es el esquema, que con un subagente al otro lado
-// importa MÁS y no menos — antes lo imponía el binario, ahora lo impone esta
-// validación.
+// The argv of `claude -p` is gone: it went with the program-conductor (D-4
+// postponed). What is left is the schema, which with a subagent on the other
+// side matters MORE and not less — the binary used to impose it, now this
+// validation does.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -28,25 +28,25 @@ const AGENTE_JUEZ_DE_SLICE = join(dirname(fileURLToPath(import.meta.url)), '..',
 const AGENTE_RECONCILIADOR = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-reconciler.md')
 const AGENTE_CONSEJERO = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-advisor.md')
 
-// La línea `tools:` del frontmatter del reconciliador (Reconciliación de
-// ramas, Tarea 9) — mismo patrón que `toolsDelAgente()`/`toolsDelJuezDeSlice()`,
-// sobre `agents/ct-reconciler.md`.
+// The `tools:` line of the reconciler's frontmatter (Branch reconciliation,
+// Task 9) — the same pattern as `toolsDelAgente()`/`toolsDelJuezDeSlice()`,
+// over `agents/ct-reconciler.md`.
 const toolsDelReconciliador = () => {
   const m = /^tools:\s*(.+)$/m.exec(readFileSync(AGENTE_RECONCILIADOR, 'utf8'))
   return m ? m[1].trim() : null
 }
 
-// La línea `tools:` del frontmatter del juez de SLICE — mismo patrón que
-// `toolsDelAgente()` para ct-judge.md, sobre el fichero propio de §3.7-B.
+// The `tools:` line of the SLICE judge's frontmatter — the same pattern as
+// `toolsDelAgente()` for ct-judge.md, over §3.7-B's own file.
 const toolsDelJuezDeSlice = () => {
   const m = /^tools:\s*(.+)$/m.exec(readFileSync(AGENTE_JUEZ_DE_SLICE, 'utf8'))
   return m ? m[1].trim() : null
 }
 
-// Los encabezados de la rúbrica del juez de slice — "### 1. `estado-final` —
-// ..." — en el orden en que el agente los recorre. Mismo patrón que
-// `reglasDelAgente()`, parametrizado por fichero porque ahora hay DOS agentes
-// con esta misma forma de rúbrica.
+// The headings of the slice judge's rubric — "### 1. `estado-final` — ..." —
+// in the order the agent walks them. The same pattern as `reglasDelAgente()`,
+// parameterised by file because there are now TWO agents with this same rubric
+// shape.
 const reglasDeAgente = (fichero) => {
   const texto = readFileSync(fichero, 'utf8')
   const regex = /^### \d+\.\s+`([a-z-]+)`/gm
@@ -56,17 +56,17 @@ const reglasDeAgente = (fichero) => {
   return reglas
 }
 
-// El bloque ```json de "What you write" del juez de slice — mismo patrón que
-// `esquemaDelAgente()`, parametrizado por fichero.
+// The ```json block of the slice judge's "What you write" — the same pattern
+// as `esquemaDelAgente()`, parameterised by file.
 const esquemaDeAgente = (fichero) => {
   const texto = readFileSync(fichero, 'utf8')
   const m = /## What you write[\s\S]*?```json\n([\s\S]*?)```/.exec(texto)
   return m ? m[1] : ''
 }
 
-// Los encabezados del paquete de revisión que cita "What you are given" del
-// juez de slice. Mismo patrón que `seccionesDelPaquete()`, sobre el párrafo
-// "The slice review package." en vez de "The review package.".
+// The headings of the review package that the slice judge's "What you are
+// given" cites. The same pattern as `seccionesDelPaquete()`, over the "The
+// slice review package." paragraph instead of "The review package.".
 const seccionesDelPaqueteDeSlice = () => {
   const texto = readFileSync(AGENTE_JUEZ_DE_SLICE, 'utf8')
   const parrafo = /- \*\*The slice review package\.\*\*([\s\S]*?)\n- \*\*The plan/.exec(texto)
@@ -81,8 +81,8 @@ const seccionesDelPaqueteDeSlice = () => {
   }
   return secciones
 }
-// La línea `tools:` del frontmatter, que es la que decide de verdad qué puede
-// hacer el juez. La constante del módulo es una copia suya.
+// The `tools:` line of the frontmatter, which is what really decides what the
+// judge can do. The module's constant is a copy of it.
 const toolsDelAgente = () => {
   const m = /^tools:\s*(.+)$/m.exec(readFileSync(AGENTE_JUEZ, 'utf8'))
   return m ? m[1].trim() : null
@@ -90,13 +90,13 @@ const toolsDelAgente = () => {
 
 const PROMPT_IMPLEMENTADOR = join(dirname(fileURLToPath(import.meta.url)), '..', 'prompts', 'task-implementer.md')
 
-// El punto 3 del prompt del implementador, aislado hasta el punto 4: es donde
-// vive la frase espejo de e473c97 ("Rules to obey... Open both before you
-// write"). Se acota porque el prompt YA contenía la palabra "boundary" antes
-// de este slice, en el punto "You do not touch files outside the task"
-// (frontera del ALCANCE de la tarea, un sujeto ajeno a las boundaries de
-// arquitectura) — un match contra el fichero entero pasaría igual con la
-// frase espejo borrada.
+// Point 3 of the implementer's prompt, isolated up to point 4: it is where
+// e473c97's mirror sentence lives ("Rules to obey... Open both before you
+// write"). It is bounded because the prompt ALREADY contained the word
+// "boundary" before this slice, in the point "You do not touch files outside
+// the task" (the boundary of the task's SCOPE, a subject unrelated to
+// architecture boundaries) — a match against the whole file would pass just
+// the same with the mirror sentence deleted.
 const punto3DelImplementador = () => {
   const m = /^3\.\s[\s\S]*?(?=^4\.\s)/m.exec(readFileSync(PROMPT_IMPLEMENTADOR, 'utf8'))
   return m ? m[0] : ''
@@ -106,69 +106,70 @@ const PLANTILLA_PLAN = join(
   dirname(fileURLToPath(import.meta.url)), '..',
   'skills', 'writing-plans-prescriptive', 'plan-template.md',
 )
-// El `## 3. Reference patterns` de la plantilla del plan: la sección que declara
-// qué se admite como vara. Se aísla hasta el siguiente `## ` porque el resto de
-// la plantilla también nombra skills y no todas son vara del juez.
+// The plan template's `## 3. Reference patterns`: the section that declares
+// what is admitted as a yardstick. It is isolated up to the next `## ` because
+// the rest of the template also names skills and not all of them are the
+// judge's yardstick.
 const seccion3DeLaPlantilla = () => {
   const m = /^## 3\. Reference patterns$([\s\S]*?)^## /m.exec(readFileSync(PLANTILLA_PLAN, 'utf8'))
   return m ? m[1] : ''
 }
 
-// El ítem `patrones` de la rúbrica, aislado hasta el siguiente encabezado: es el
-// único sitio donde al juez se le manda abrir la vara del repo.
+// The rubric's `patrones` item, isolated up to the next heading: it is the only
+// place where the judge is ordered to open the repo's yardstick.
 const item5DeLaRubrica = () => {
   const m = /^### 5\. `patrones`[\s\S]*?(?=^### |^## )/m.exec(readFileSync(AGENTE_JUEZ, 'utf8'))
   return m ? m[0] : ''
 }
 
-// El ítem 5 con los espacios normalizados. El ajuste de línea de Markdown puede
-// partir en dos líneas del fichero una frase que en el texto es una sola, así
-// que una expresión que busque la frase distintiva contra el crudo se pondría
-// roja al reflowear un párrafo sin haber borrado nada. Mismo recurso que
-// `seccionesDelPaquete` usa por el mismo motivo.
+// Item 5 with its whitespace normalised. Markdown's line wrapping can split
+// across two lines of the file a sentence that in the text is a single one, so
+// an expression looking for the distinctive sentence against the raw text would
+// go red on reflowing a paragraph without anything having been deleted. The
+// same device `seccionesDelPaquete` uses, for the same reason.
 const item5Normalizado = () => item5DeLaRubrica().replace(/\s+/g, ' ')
 
-// El ítem `alcance`, aislado hasta el siguiente encabezado, con el mismo
-// recorte que `item5DeLaRubrica`: es el único sitio donde se le dice al juez
-// que un diff del fichero del plan dentro de una tarea es una enmienda que
-// tiene que dictaminar, no una ruta fuera de alcance.
+// The `alcance` item, isolated up to the next heading, with the same trim as
+// `item5DeLaRubrica`: it is the only place where the judge is told that a diff
+// of the plan file inside a task is an amendment it has to rule on, not a path
+// out of scope.
 const item8DeLaRubrica = () => {
   const m = /^### 8\. `alcance`[\s\S]*?(?=^### |^## )/m.exec(readFileSync(AGENTE_JUEZ, 'utf8'))
   return m ? m[0] : ''
 }
 
-// El ítem `test-desiderata`, aislado hasta el siguiente encabezado, con el
-// mismo recorte que `item5DeLaRubrica`: es el único sitio donde se le dice al
-// juez qué mira en los tests que la tarea ACABA de escribir.
+// The `test-desiderata` item, isolated up to the next heading, with the same
+// trim as `item5DeLaRubrica`: it is the only place where the judge is told what
+// it looks at in the tests the task has JUST written.
 const item9DeLaRubrica = () => {
   const m = /^### 9\. `test-desiderata`[\s\S]*?(?=^### |^## )/m.exec(readFileSync(AGENTE_JUEZ, 'utf8'))
   return m ? m[0] : ''
 }
 
-// La lista de identificadores que el bullet `rule` de "What you write" le
-// enseña al juez. Es una TERCERA copia de VERDICT_RULES —después del array y de
-// los encabezados— y la que no rompe nada al quedarse corta: un identificador
-// que no aparece ahí es un ítem que el juez recorre pero del que nunca se
-// atreve a emitir un hallazgo.
+// The list of identifiers the `rule` bullet of "What you write" shows the
+// judge. It is a THIRD copy of VERDICT_RULES —after the array and the
+// headings— and the one that breaks nothing by falling short: an identifier
+// that does not appear there is an item the judge walks but from which it never
+// dares emit a finding.
 const identificadoresQueElJuezPuedeEscribir = () => {
   const m = /- `rule` is one of the[\s\S]*?(?=\n- `path`)/.exec(readFileSync(AGENTE_JUEZ, 'utf8'))
   return m ? m[0].replace(/\s+/g, ' ') : ''
 }
 
-// El punto 1 del prompt del implementador (la carga de la skill de TDD),
-// aislado hasta el punto 2: es donde vive la frase espejo de este ítem.
+// Point 1 of the implementer's prompt (the loading of the TDD skill), isolated
+// up to point 2: it is where this item's mirror sentence lives.
 const punto1DelImplementador = () => {
   const m = /^1\.\s[\s\S]*?(?=^2\.\s)/m.exec(readFileSync(PROMPT_IMPLEMENTADOR, 'utf8'))
   return m ? m[0] : ''
 }
 
-// Los encabezados de la rúbrica — "### 1. `objetivo` — ..." — en el
-// orden en que el agente los recorre. VERDICT_RULES es una copia suya: este
-// repo ya sufrió el mismo desacople con JUDGE_TOOLS (divergió del frontmatter
-// del agente y la constante se quedó atrás), y aquí el riesgo es peor porque
-// no hay ningún error de esquema que lo delate — un `rule` renombrado en el
-// código no rompe ct-judge.md, sólo hace que TODO veredicto que use ese `rule`
-// se descarte en tiempo de ejecución hasta que el run se agota.
+// The headings of the rubric — "### 1. `objetivo` — ..." — in the order the
+// agent walks them. VERDICT_RULES is a copy of them: this repo already suffered
+// the same decoupling with JUDGE_TOOLS (it diverged from the agent's
+// frontmatter and the constant was left behind), and here the risk is worse
+// because there is no schema error to give it away — a `rule` renamed in the
+// code does not break ct-judge.md, it only makes EVERY verdict using that
+// `rule` be discarded at run time until the run is exhausted.
 const reglasDelAgente = () => {
   const texto = readFileSync(AGENTE_JUEZ, 'utf8')
   const regex = /^### \d+\.\s+`([a-z-]+)`/gm
@@ -178,41 +179,41 @@ const reglasDelAgente = () => {
   return reglas
 }
 
-// El esquema que la rúbrica le ENSEÑA al juez: el bloque ```json de "What you
-// write", que es lo único que el agente lee para saber qué forma tiene el
-// fichero que escribe. Si el validador exige un campo que ese bloque no
-// muestra, el juez no puede acertar ni por casualidad y cada veredicto se
-// descarta hasta que el run se agota — el mismo desacople de JUDGE_TOOLS y
-// VERDICT_RULES, con la factura pagada en round trips.
+// The schema the rubric SHOWS the judge: the ```json block of "What you
+// write", which is the only thing the agent reads in order to know the shape of
+// the file it writes. If the validator demands a field that block does not
+// show, the judge cannot get it right even by accident and every verdict is
+// discarded until the run is exhausted — the same decoupling as JUDGE_TOOLS and
+// VERDICT_RULES, with the bill paid in round trips.
 const esquemaDelAgente = () => {
   const texto = readFileSync(AGENTE_JUEZ, 'utf8')
   const m = /## What you write[\s\S]*?```json\n([\s\S]*?)```/.exec(texto)
   return m ? m[1] : ''
 }
 
-// El paseo por la rúbrica tal y como el esquema lo exige: todos los ítems, cada
-// uno exactamente una vez, cada uno con lo que dio. Se construye desde
-// VERDICT_RULES y no desde una lista a mano por la misma razón por la que el
-// esquema tampoco duplica la lista: dos copias de los identificadores
-// divergen, y el test que las ataba dejaría de mirarlos todos.
+// The walk through the rubric exactly as the schema demands it: every item,
+// each one exactly once, each one with what it gave. It is built from
+// VERDICT_RULES and not from a hand-written list for the same reason the schema
+// does not duplicate the list either: two copies of the identifiers diverge,
+// and the test that tied them together would stop looking at all of them.
 const recorridoCompleto = () => VERDICT_RULES.map((rule) => ({ rule, result: 'sin hallazgos', outcome: 'conforme' }))
 
-// Slice 11 — a estos tests no les importa CUÁL token trae el veredicto, sólo
-// que readVerdict lo exige y lo conserva: un hex de 64 cualquiera basta, y no
-// se teclea dos veces por el mismo motivo que recorridoCompleto no se teclea.
+// Slice 11 — these tests do not care WHICH token the verdict carries, only
+// that readVerdict demands it and preserves it: any 64-char hex will do, and it
+// is not typed twice for the same reason recorridoCompleto is not typed out.
 const TOKEN = 'a'.repeat(64)
 
-// Los encabezados del paquete de revisión que cita el párrafo "The review
-// package." de "What you are given" — el único sitio de la rúbrica que habla
-// del paquete que escribe `escribirPaquete`. Se aísla ese párrafo antes de
-// buscar, porque el resto del fichero también cita encabezados entre
-// comillas invertidas (los del BRIEF: `## 2. Closed decisions`, `### Out of
-// scope`...) y esos no son de este paquete. Los espacios se normalizan porque
-// el ajuste de línea de Markdown puede partir una comilla invertida en dos
-// líneas del fichero sin partir el texto que representa. El párrafo nombra
-// cada encabezado al presentarlo y puede volver a nombrarlo después (para
-// explicar de dónde sale la lista); una repetición no añade una segunda
-// entrada, sólo cuenta la primera mención de cada uno.
+// The headings of the review package cited by the "The review package."
+// paragraph of "What you are given" — the only place in the rubric that talks
+// about the package `escribirPaquete` writes. That paragraph is isolated before
+// searching, because the rest of the file also cites headings between backticks
+// (the BRIEF's: `## 2. Closed decisions`, `### Out of scope`...) and those do
+// not belong to this package. The whitespace is normalised because Markdown's
+// line wrapping can split a backticked span across two lines of the file
+// without splitting the text it represents. The paragraph names each heading as
+// it introduces it and may name it again afterwards (to explain where the list
+// comes from); a repetition does not add a second entry, only the first mention
+// of each one counts.
 const seccionesDelPaquete = () => {
   const texto = readFileSync(AGENTE_JUEZ, 'utf8')
   const parrafo = /- \*\*The review package\.\*\*([\s\S]*?)\n- \*\*The task brief/.exec(texto)
@@ -228,158 +229,162 @@ const seccionesDelPaquete = () => {
   return secciones
 }
 
-describe('quién puede qué', () => {
-  it('el juez no tiene shell, y quien se lo quita es la declaración del agente', () => {
-    // Antes se lo quitaba el binario con --tools; ahora lo declara
-    // agents/ct-judge.md. La propiedad es la misma: estructural, no una promesa
-    // dentro del prompt. Por eso se mira el FICHERO y no sólo la constante.
+describe('who can do what', () => {
+  it('the judge has no shell, and what takes it away is the agent declaration', () => {
+    // The binary used to take it away with --tools; now agents/ct-judge.md
+    // declares it. The property is the same: structural, not a promise inside
+    // the prompt. That is why the FILE is looked at and not only the constant.
     expect(toolsDelAgente()).not.toMatch(/Bash|Edit/)
     expect(JUDGE_TOOLS).not.toMatch(/Bash|Edit/)
     expect(IMPLEMENTER_TOOLS).toMatch(/Bash/)
   })
 
-  it('la constante no puede divergir del agente que se despacha', () => {
-    // Divergieron: al darle `Write` al juez —sin él no puede entregar su
-    // veredicto y el paso no cierra nunca— la constante se quedó atrás, y
-    // `ct-step next` pasó a anunciar unas herramientas que no eran las del juez
-    // real. Un módulo puro no puede leer el fichero, así que lo que impide que
-    // vuelva a pasar es este test y no el código.
+  it('the constant cannot diverge from the agent that gets dispatched', () => {
+    // They diverged: on giving the judge `Write` —without it it cannot deliver
+    // its verdict and the step never closes— the constant was left behind, and
+    // `ct-step next` went on to announce tools that were not the real judge's.
+    // A pure module cannot read the file, so what stops it happening again is
+    // this test and not the code.
     expect(JUDGE_TOOLS).toBe(toolsDelAgente())
   })
 
-  it('el juez puede escribir su veredicto: es el canal por el que contesta', () => {
+  it('the judge can write its verdict: it is the channel it answers through', () => {
     expect(toolsDelAgente()).toMatch(/Write/)
   })
 
-  it('el implementador puede cargar skills: sin ella no puede seguir su propia rúbrica', () => {
+  it('the implementer can load skills: without that it cannot follow its own rubric', () => {
     expect(IMPLEMENTER_TOOLS).toMatch(/\bSkill\b/)
   })
 
-  it('el juez puede cargar skills: la vara secundaria que §3 admite no es una ruta', () => {
-    // El defecto §3.1 del handoff. `Rules to obey:` admitía declarar una skill y
-    // la rúbrica mandaba abrirla, pero el frontmatter era `Read, Grep, Glob,
-    // Write`: un nombre de skill no es una ruta que `Read` pueda abrir, y
-    // `plan-contract` no lo comprueba en disco a propósito. La vara secundaria
-    // era inalcanzable en silencio — el juez habría dicho `conforme` sobre un
-    // documento que nunca abrió.
+  it('the judge can load skills: the secondary yardstick §3 admits is not a path', () => {
+    // Defect §3.1 of the handoff. `Rules to obey:` allowed a skill to be
+    // declared and the rubric ordered it opened, but the frontmatter was `Read,
+    // Grep, Glob, Write`: a skill name is not a path `Read` can open, and
+    // `plan-contract` deliberately does not check it on disk. The secondary
+    // yardstick was unreachable in silence — the judge would have said
+    // `conforme` about a document it never opened.
     expect(toolsDelAgente()).toMatch(/\bSkill\b/)
     expect(JUDGE_TOOLS).toMatch(/\bSkill\b/)
   })
 
-  it('nadie puede admitir una skill como vara sin darle al juez con qué abrirla', () => {
-    // Las tres puntas del defecto, atadas: la plantilla del plan la admite, la
-    // rúbrica manda abrirla, el frontmatter la concede. La primera vez se
-    // hicieron dos de tres y nada se enteró. Si alguien toma más adelante la
-    // opción B del §3.1 (quitar las skills de §3), este test se pone rojo y le
-    // obliga a quitarla de los tres sitios, no de uno.
+  it('nobody can admit a skill as a yardstick without giving the judge something to open it with', () => {
+    // The three ends of the defect, tied together: the plan template admits it,
+    // the rubric orders it opened, the frontmatter grants it. The first time,
+    // two of the three were done and nothing noticed. If somebody later takes
+    // option B of §3.1 (removing skills from §3), this test goes red and forces
+    // them to remove it from all three places, not from one.
     expect(seccion3DeLaPlantilla()).toMatch(/skill/i)
     expect(item5DeLaRubrica()).toMatch(/skill/i)
     expect(toolsDelAgente()).toMatch(/\bSkill\b/)
   })
 
-  it('boundaries se mide dentro de patrones: el ítem 5 dirige la mirada a imports e inyección', () => {
-    // §3.6 del handoff, cerrado como ABSORBIDO. La pregunta dirigida: cuando un
-    // documento de reglas habla de fronteras, los renglones del diff que
-    // contestan son sus imports, sus constructores y sus firmas. Sin esta
-    // dirección, el juez audita texto literal y no mira la arquitectura
-    // (medido en rust-monitoring run-4 tarea 2).
+  it('boundaries is measured inside patrones: item 5 aims the gaze at imports and injection', () => {
+    // §3.6 of the handoff, closed as ABSORBED. The directed question: when a
+    // rules document talks about boundaries, the lines of the diff that answer
+    // are its imports, its constructors and its signatures. Without that
+    // direction, the judge audits literal text and does not look at the
+    // architecture (measured in rust-monitoring run-4 task 2).
     expect(item5DeLaRubrica()).toMatch(/boundar/i)
     expect(item5DeLaRubrica()).toMatch(/import/i)
     expect(item5DeLaRubrica()).toMatch(/inject/i)
   })
 
-  it('boundaries no es un noveno ítem: la decisión del §3.6 queda fijada', () => {
-    // Ítem propio solo cuando el par sujeto+vara es nuevo. La vara de boundaries
-    // son los Rules to obey que patrones ya abre: un encabezado propio solo
-    // duplicaría el sin-vara en repos sin convención de arquitectura.
+  it("boundaries is not a ninth item: §3.6's decision is pinned", () => {
+    // An item of its own only when the subject+yardstick pair is new. The
+    // yardstick of boundaries is the Rules to obey that patrones already opens:
+    // a heading of its own would only duplicate the sin-vara in repos with no
+    // architecture convention.
     expect(VERDICT_RULES).not.toContain('boundaries')
     expect(reglasDelAgente()).not.toContain('boundaries')
   })
 
-  it('la vara de boundaries es la misma a los dos lados: el implementador la lee antes de escribir', () => {
-    // La propiedad de e473c97: el juez no es una sorpresa porque implementador y
-    // juez miden con el mismo texto. Se exige la frase distintiva (no sólo
-    // /boundar/i) dentro del punto 3 aislado: el fichero ya traía "boundary" en
-    // otro punto y otro sujeto antes de este slice, así que un match flojo
-    // contra el fichero entero no detectaría que esta frase se borre.
+  it('the yardstick of boundaries is the same on both sides: the implementer reads it before writing', () => {
+    // e473c97's property: the judge is no surprise because implementer and
+    // judge measure with the same text. The distinctive sentence is demanded
+    // (not just /boundar/i) inside the isolated point 3: the file already
+    // carried "boundary" in another point and another subject before this
+    // slice, so a loose match against the whole file would not detect this
+    // sentence being deleted.
     expect(punto3DelImplementador()).toMatch(/rules speak about boundaries/i)
   })
 
-  it('el patrón de entrega se mide dentro de patrones: el ítem 5 pregunta si es EL patrón que la convención prescribe', () => {
-    // §3.10 del handoff, y lo que su propia rúbrica llama «el check que un
-    // verificador que solo mira la implementación deja pasar»: el patrón puede
-    // estar bien ejecutado y ser coherente consigo mismo y aun así no ser el
-    // que el repo prescribe para ESTE tipo de cambio. Sin la pregunta dirigida
-    // el juez compara idiomas y la de la entrega no la abre nadie. Se exigen
-    // también las palabras del disparador —firma, constructor, contrato
-    // público— porque son las que le dicen dónde mirar en el diff.
+  it('the delivery pattern is measured inside patrones: item 5 asks whether it is THE pattern the convention prescribes', () => {
+    // §3.10 of the handoff, and what its own rubric calls «el check que un
+    // verificador que solo mira la implementación deja pasar» (quoted as it is
+    // written there): the pattern can
+    // be well executed and coherent with itself and still not be the one the
+    // repo prescribes for THIS kind of change. Without the directed question
+    // the judge compares idioms and nobody opens the delivery one. The
+    // trigger's words —signature, constructor, public contract— are demanded
+    // too, because they are what tell it where to look in the diff.
     const item = item5Normalizado()
     expect(item).toMatch(/well executed and coherent with itself/i)
     expect(item).toMatch(/expand-contract/)
     expect(item).toMatch(/signature, a constructor or a public contract/i)
   })
 
-  it('rollout no es un décimo ítem: la decisión del §3.6 queda fijada también para el patrón de entrega', () => {
-    // Misma regla que cerró `boundaries`: ítem propio sólo cuando el par
-    // sujeto+vara es nuevo. La vara del patrón de entrega son los mismos
-    // `Rules to obey:` que `patrones` ya abre, así que un encabezado propio no
-    // compraría vigilancia: duplicaría el `sin-vara` en todo repo que no
-    // escriba cómo entrega.
+  it("rollout is not a tenth item: §3.6's decision is pinned for the delivery pattern too", () => {
+    // The same rule that closed `boundaries`: an item of its own only when the
+    // subject+yardstick pair is new. The delivery pattern's yardstick is the
+    // same `Rules to obey:` that `patrones` already opens, so a heading of its
+    // own would buy no vigilance: it would duplicate the `sin-vara` in every
+    // repo that does not write down how it delivers.
     expect(VERDICT_RULES).not.toContain('rollout')
     expect(reglasDelAgente()).not.toContain('rollout')
   })
 
-  it('la vara del patrón de entrega es la misma a los dos lados: el implementador la lee antes de escribir', () => {
-    // La propiedad de e473c97 otra vez: el juez no es una sorpresa porque los
-    // dos miden con el mismo texto. Se busca la frase distintiva dentro del
-    // punto 3 aislado y con los espacios normalizados, no un match flojo
-    // contra el fichero entero.
+  it("the delivery pattern's yardstick is the same on both sides: the implementer reads it before writing", () => {
+    // e473c97's property again: the judge is no surprise because the two of
+    // them measure with the same text. The distinctive sentence is looked for
+    // inside the isolated point 3 and with whitespace normalised, not a loose
+    // match against the whole file.
     const punto3 = punto3DelImplementador().replace(/\s+/g, ' ')
     expect(punto3).toMatch(/how a change of this kind must reach production/i)
     expect(punto3).toMatch(/expand-contract/)
   })
 
-  it('el ítem alcance le dice al juez que un diff del plan es una enmienda que tiene que dictaminar', () => {
-    // Tarea 5: el ítem `alcance` ya no veta por reflejo, ni ignora, un diff del
-    // fichero del plan dentro de una tarea — es una ENMIENDA escrita por el
-    // implementador y a este ítem le toca dictaminar si estaba justificada.
+  it('the alcance item tells the judge that a diff of the plan is an amendment it has to rule on', () => {
+    // Task 5: the `alcance` item no longer vetoes by reflex, nor ignores, a diff
+    // of the plan file inside a task — it is an AMENDMENT written by the
+    // implementer and it falls to this item to rule on whether it was justified.
     const item = item8DeLaRubrica()
     expect(item).toMatch(/\bamendment\b/i)
     expect(item).toMatch(/plan file/i)
   })
 
-  it('el ítem alcance NO le promete al juez que sólo le llegan añadidos', () => {
-    // Revisión de la PR: el texto afirmaba «what reaches you only ADDS», y es
-    // falso — la guarda del programa sólo mira el **Files:** de LA tarea, así
-    // que una enmienda que reescriba su Verification o borre sus Tests llega
-    // sin comprobar. Prometerle lo contrario le baja la guardia justo donde
-    // no hay red.
+  it('the alcance item does NOT promise the judge that only additions reach it', () => {
+    // The pull request's review: the text asserted «what reaches you only ADDS»,
+    // and that is false — the program's guard only looks at the **Files:** of
+    // THE task, so an amendment that rewrites its Verification or deletes its
+    // Tests arrives unchecked. Promising it otherwise lowers its guard exactly
+    // where there is no net.
     const item = item8DeLaRubrica()
     expect(item).not.toMatch(/only ADDS/)
     expect(item).toMatch(/\*\*Verification:\*\*/)
     expect(item).toMatch(/unchecked/i)
   })
 
-  it('el juez ya no lee que el programa filtre la vara por el alcance de cada documento', () => {
-    // Tarea 1 borró el filtro: los ocho documentos alcanzan a toda tarea. Dos
-    // sitios del fichero seguían afirmando lo contrario, y uno de ellos está
-    // tres líneas por encima de la cabecera que dice que nada se filtra.
+  it('the judge no longer reads that the program filters the yardstick by each document\'s scope', () => {
+    // Task 1 deleted the filter: the eight documents reach every task. Two
+    // places in the file went on asserting the opposite, and one of them sits
+    // three lines above the heading that says nothing is filtered.
     const texto = readFileSync(AGENTE_JUEZ, 'utf8')
     expect(texto).not.toMatch(/picked them by the scope each one/)
     expect(texto).toMatch(/all eight/i)
   })
 
-  it('test-desiderata es el noveno ítem, y va detrás de alcance', () => {
-    // El §3.6 lo cerró como ítem PROPIO (a diferencia de boundaries y rollout,
-    // absorbidos en patrones): sujeto nuevo (los tests que la tarea acaba de
-    // escribir) y vara nueva (propiedades del test, no convenciones del repo).
-    // La POSICIÓN también es decisión: el orden del array es el orden del paseo,
-    // e intercalarlo renumeraría seis encabezados sin cambiar nada medible.
+  it('test-desiderata is the ninth item, and it goes behind alcance', () => {
+    // §3.6 settled it as an item of its OWN (unlike boundaries and rollout,
+    // absorbed into patrones): a new subject (the tests the task has just
+    // written) and a new yardstick (properties of the test, not conventions of
+    // the repo). The POSITION is a decision too: the array's order is the order
+    // of the walk, and slotting it in would renumber six headings without
+    // changing anything measurable.
     expect(VERDICT_RULES.at(-1)).toBe('test-desiderata')
     expect(reglasDelAgente().at(-1)).toBe('test-desiderata')
   })
 
-  it('el ítem 9 nombra las tres violaciones que bloquean, y descarta el medium', () => {
+  it('item 9 names the three violations that block, and discards the medium', () => {
     const item = item9DeLaRubrica()
     expect(item).toMatch(/determinis/i)
     expect(item).toMatch(/isolat/i)
@@ -387,150 +392,152 @@ describe('quién puede qué', () => {
     expect(item).toMatch(/never reports `medium`/i)
   })
 
-  it('el ítem 9 juzga los tests nuevos y devuelve los preexistentes a manipulacion-tests', () => {
-    // El §3.5 del handoff: un assert relajado en un test que YA existía es un
-    // defecto y no dos. Sin la frase, los dos ítems se solapan y el conteo por
-    // regla que lee la telemetría cuenta doble el mismo hallazgo.
+  it('item 9 judges the new tests and hands the pre-existing ones back to manipulacion-tests', () => {
+    // §3.5 of the handoff: a relaxed assert in a test that ALREADY existed is
+    // one defect and not two. Without the sentence, the two items overlap and
+    // the per-rule count the telemetry reads counts the same finding twice.
     expect(item9DeLaRubrica()).toMatch(/manipulacion-tests/)
   })
 
-  it('el ítem 9 mide con la misma skill que el implementador tenía orden de seguir', () => {
-    // El juez corre en el worktree del REPO DESTINO: skills/ del plugin no es
-    // una ruta que `Read` alcance ahí, y por eso este ítem era imposible antes
-    // del Slice 1. Y es la MISMA copia que el prompt del implementador nombra:
-    // un juez que bloquea con un texto que el implementador no recibió es una
-    // sorpresa, que es justo lo que el espejo de e473c97 existe para impedir.
+  it('item 9 measures with the same skill the implementer was under orders to follow', () => {
+    // The judge runs in the TARGET REPO's worktree: the plugin's skills/ is not
+    // a path `Read` can reach there, and that is why this item was impossible
+    // before Slice 1. And it is the SAME copy the implementer's prompt names: a
+    // judge that blocks with a text the implementer never received is a
+    // surprise, which is exactly what e473c97's mirror exists to prevent.
     expect(item9DeLaRubrica()).toMatch(/control-tower-loop:test-driven-development/)
     expect(readFileSync(PROMPT_IMPLEMENTADOR, 'utf8')).toMatch(/control-tower-loop:test-driven-development/)
     expect(toolsDelAgente()).toMatch(/\bSkill\b/)
   })
 
-  it('la lista de identificadores que el juez puede escribir no se queda corta', () => {
-    // Los encabezados ya están atados; esta lista no lo estaba. Un identificador
-    // ausente aquí no rompe ningún esquema: sólo hace que el juez recorra el
-    // ítem y no se atreva a emitir un hallazgo suyo, porque el fichero le dice
-    // que ese `rule` no es de los válidos.
+  it('the list of identifiers the judge may write does not fall short', () => {
+    // The headings are already tied together; this list was not. An identifier
+    // missing here breaks no schema: it merely makes the judge walk the item
+    // and not dare emit a finding of its own, because the file tells it that
+    // `rule` is not one of the valid ones.
     const lista = identificadoresQueElJuezPuedeEscribir()
     for (const regla of VERDICT_RULES) expect(lista).toContain(`\`${regla}\``)
   })
 
-  it('la vara de los tests nuevos es la misma a los dos lados: el implementador la lee antes de escribir', () => {
+  it('the yardstick of the new tests is the same on both sides: the implementer reads it before writing', () => {
     const punto1 = punto1DelImplementador()
     expect(punto1).toMatch(/determinis/i)
     expect(punto1).toMatch(/isolat/i)
     expect(punto1).toMatch(/real behaviour/i)
   })
 
-  it('VERDICT_RULES no puede divergir de los encabezados de la rúbrica', () => {
-    // Renombrar una regla en el código sin tocar el agente (o al revés) no
-    // rompe ningún esquema: sólo hace que un veredicto con ese `rule` se
-    // descarte en cada ejecución. Este test es lo que lo convierte en un
-    // fallo de test en vez de en un fallo silencioso en producción.
+  it("VERDICT_RULES cannot diverge from the rubric's headings", () => {
+    // Renaming a rule in the code without touching the agent (or the other way
+    // round) breaks no schema: it merely makes a verdict with that `rule` be
+    // discarded on every execution. This test is what turns it into a test
+    // failure instead of a silent failure in production.
     expect(VERDICT_RULES).toEqual(reglasDelAgente())
   })
 
-  it('la rúbrica le enseña al juez el campo del recorrido en vez de pedírselo en prosa', () => {
-    // El paseo por los ítems se pedía en prosa, al final del fichero, y
-    // se pedía para la RESPUESTA del subagente — que no se persiste. Ahora es
-    // un campo del veredicto, así que el bloque que el juez copia tiene que
-    // mostrarlo: un validador que exige lo que el agente no ve descarta todos
-    // los veredictos de la corrida sin que ninguno sea culpa del juez.
+  it('the rubric shows the judge the walk field instead of asking for it in prose', () => {
+    // The walk through the items used to be asked for in prose, at the end of
+    // the file, and it was asked for the subagent's ANSWER — which is not
+    // persisted. It is now a field of the verdict, so the block the judge
+    // copies has to show it: a validator that demands what the agent cannot see
+    // discards every verdict of the run without any of them being the judge's
+    // fault.
     expect(esquemaDelAgente()).toMatch(/"rubric"/)
     expect(esquemaDelAgente()).toMatch(/"result"/)
   })
 
-  it('la rúbrica le enseña al juez los dos campos nuevos, o no puede acertar ni por casualidad', () => {
-    // Mismo argumento que el test de arriba, aplicado a `outcome` y a
-    // `evidence`: el validador los exige, así que el bloque que el juez copia
-    // tiene que mostrarlos. Un campo que sólo vive en el validador descarta
-    // todos los veredictos de la corrida sin que ninguno sea culpa del juez.
+  it('the rubric shows the judge the two new fields, or it cannot get them right even by accident', () => {
+    // The same argument as the test above, applied to `outcome` and to
+    // `evidence`: the validator demands them, so the block the judge copies has
+    // to show them. A field that lives only in the validator discards every
+    // verdict of the run without any of them being the judge's fault.
     expect(esquemaDelAgente()).toMatch(/"outcome"/)
     expect(esquemaDelAgente()).toMatch(/"evidence"/)
   })
 
-  it('la rúbrica le enseña al juez los dos campos de la ubicación, y ya no el campo viejo', () => {
-    // Mismo argumento que `outcome` y `evidence`: un campo obligatorio que sólo
-    // vive en el validador descarta todos los veredictos de la corrida sin que
-    // ninguno sea culpa del juez. Y el `not`: un ejemplo que enseñe también el
-    // `where` viejo es un juez que rellena el viejo, no trae `path`, y quema
-    // MAX_DISCARDS con un veredicto correcto dentro.
+  it('the rubric shows the judge the two location fields, and no longer the old one', () => {
+    // The same argument as `outcome` and `evidence`: a mandatory field that
+    // lives only in the validator discards every verdict of the run without any
+    // of them being the judge's fault. And the `not`: an example that also
+    // shows the old `where` is a judge that fills in the old one, brings no
+    // `path`, and burns MAX_DISCARDS with a correct verdict inside.
     expect(esquemaDelAgente()).toMatch(/"path"/)
     expect(esquemaDelAgente()).toMatch(/"line"/)
     expect(esquemaDelAgente()).not.toMatch(/"where"/)
   })
 
-  it('los tres valores de outcome están en la rúbrica, escritos igual que en el enum', () => {
-    // El enum es cerrado y el juez sólo puede escribir lo que la rúbrica le
-    // enseña. Si el código renombra `sin-vara` y el fichero sigue diciendo lo
-    // de antes, el juez escribe el valor viejo y el veredicto se descarta.
+  it('the three outcome values are in the rubric, spelled exactly as in the enum', () => {
+    // The enum is closed and the judge can only write what the rubric shows it.
+    // If the code renames `sin-vara` and the file goes on saying what it said
+    // before, the judge writes the old value and the verdict is discarded.
     const texto = readFileSync(AGENTE_JUEZ, 'utf8')
     for (const valor of RUBRIC_OUTCOMES) expect(texto).toContain(valor)
   })
 
-  // Slice 11 — el campo obligatorio tiene que estar en lo que el juez lee: un
-  // campo que sólo vive en el validador descarta la corrida entera sin que
-  // ninguno de los veredictos sea culpa del juez.
-  // El campo lo escribe `ct-step verdict`, así que el bloque que el juez copia
-  // NO lo lleva: enseñárselo era pedirle 64 hex tecleados a mano, y un error
-  // de copia descartaba un veredicto entero de opus.
-  it('el bloque json de ct-judge.md ya no le pide el review_token: lo escribe el programa', () => {
+  // Slice 11 — the mandatory field has to be in what the judge reads: a field
+  // that lives only in the validator discards the whole run without any of the
+  // verdicts being the judge's fault.
+  // The field is written by `ct-step verdict`, so the block the judge copies
+  // does NOT carry it: showing it to the judge meant asking for 64 hex
+  // characters typed by hand, and a copying error discarded a whole verdict
+  // from opus.
+  it('the json block of ct-judge.md no longer asks it for the review_token: the program writes it', () => {
     expect(esquemaDelAgente()).not.toMatch(/"review_token"/)
   })
 
-  it('la rúbrica del juez le dice que ese campo no es suyo, nombrando la línea del paquete que ya no copia', () => {
+  it("the judge's rubric tells it that field is not its own, naming the package line it no longer copies", () => {
     const texto = readFileSync(AGENTE_JUEZ, 'utf8')
     expect(texto).toContain(`${REVIEW_TOKEN_LABEL}:`)
     expect(texto).toMatch(/There is no `review_token` for you to write/)
     expect(texto).not.toMatch(/copied verbatim/)
   })
 
-  it('PACKAGE_SECTIONS no puede divergir de los encabezados que la rúbrica cita por su nombre', () => {
-    // El mismo fallo que ya tuvieron JUDGE_TOOLS y VERDICT_RULES, con un
-    // agravante: aquí ni siquiera hay un esquema que descarte nada. Si
-    // `escribirPaquete` renombra un encabezado sin tocar la rúbrica, el juez
-    // sigue recibiendo instrucciones para leer una sección que no existe, y
-    // nada se entera salvo este test.
+  it('PACKAGE_SECTIONS cannot diverge from the headings the rubric cites by name', () => {
+    // The same failure JUDGE_TOOLS and VERDICT_RULES already had, with an
+    // aggravating factor: here there is not even a schema to discard anything.
+    // If `escribirPaquete` renames a heading without touching the rubric, the
+    // judge goes on receiving instructions to read a section that does not
+    // exist, and nothing notices except this test.
     expect(PACKAGE_SECTIONS).toEqual(seccionesDelPaquete())
   })
 
-  // La primera sección del paquete no la escribe `escribirPaquete`: la escribe
-  // `PluginYardstick.composePathSection`, con su propia constante. Dos cadenas
-  // a mano para el mismo encabezado son el desacople que ya sufrieron
-  // JUDGE_TOOLS y PACKAGE_SECTIONS, y aquí sería mudo: el juez leería una
-  // sección que el paquete titula de otra forma.
-  it('la sección de la vara la titula el módulo que la escribe, y PACKAGE_SECTIONS no puede divergir de él', () => {
+  // The package's first section is not written by `escribirPaquete`: it is
+  // written by `PluginYardstick.composePathSection`, with its own constant. Two
+  // hand-written strings for the same heading are the decoupling JUDGE_TOOLS
+  // and PACKAGE_SECTIONS already suffered, and here it would be mute: the judge
+  // would read a section the package titles differently.
+  it('the yardstick section is titled by the module that writes it, and PACKAGE_SECTIONS cannot diverge from it', () => {
     expect(PACKAGE_SECTIONS[0]).toBe(PluginYardstick.PATH_SECTION)
   })
 })
 
 // ---------------------------------------------------------------------------
-// EL JUEZ DE SLICE (§3.7-B del handoff): material propio,
-// `agents/ct-slice-judge.md`, con su propia rúbrica de DOS ítems. Mismos
-// patrones de test que ya atan al juez de tarea, aplicados al fichero nuevo.
+// THE SLICE JUDGE (§3.7-B of the handoff): material of its own,
+// `agents/ct-slice-judge.md`, with its own TWO-item rubric. The same test
+// patterns that already tie down the task judge, applied to the new file.
 // ---------------------------------------------------------------------------
-describe('el juez de slice (§3.7-B)', () => {
-  it('SLICE_VERDICT_RULES son los tres encabezados de la rúbrica de ct-slice-judge.md', () => {
+describe('the slice judge (§3.7-B)', () => {
+  it("SLICE_VERDICT_RULES are the three headings of ct-slice-judge.md's rubric", () => {
     expect(SLICE_VERDICT_RULES).toEqual(reglasDeAgente(AGENTE_JUEZ_DE_SLICE))
-    // Slice 10: `observabilidad` es el tercer ítem — las tres comprobaciones
-    // del §3.9 contra el diff acumulado, la señal DE LA SLICE como sujeto.
+    // Slice 10: `observabilidad` is the third item — §3.9's three checks
+    // against the accumulated diff, THE SLICE's signal as the subject.
     expect(SLICE_VERDICT_RULES).toEqual(['estado-final', 'coherencia', 'observabilidad'])
   })
 
-  // El orden del array ES el orden del recorrido y los encabezados están
-  // atados por test — intercalarlo renumeraría los encabezados de
-  // ct-slice-judge.md sin medir nada distinto (el mismo argumento con el que
-  // `test-desiderata` entró noveno en el juez de tarea).
-  it('observabilidad es el tercero y último: entra detrás, nunca intercalado', () => {
+  // The order of the array IS the order of the walk and the headings are tied
+  // down by test — slotting it in the middle would renumber ct-slice-judge.md's
+  // headings without measuring anything different (the same argument by which
+  // `test-desiderata` came in ninth in the task judge).
+  it('observabilidad is the third and last: it comes in behind, never slotted in the middle', () => {
     expect(SLICE_VERDICT_RULES.at(-1)).toBe('observabilidad')
     expect(SLICE_VERDICT_RULES.slice(0, 2)).toEqual(['estado-final', 'coherencia'])
   })
 
-  // La TERCERA copia de los identificadores (después del array y de los
-  // encabezados): la lista que el bullet `rule` de "What you write" le enseña
-  // al juez — un identificador que no aparece ahí es un ítem que el juez
-  // recorre pero del que nunca se atreve a emitir un hallazgo. Mismo motivo
-  // que `identificadoresQueElJuezPuedeEscribir` en el juez de tarea.
-  it('el bullet de rule de ct-slice-judge.md nombra los tres identificadores', () => {
+  // The THIRD copy of the identifiers (after the array and the headings): the
+  // list the `rule` bullet of "What you write" shows the judge — an identifier
+  // that does not appear there is an item the judge walks but from which it
+  // never dares emit a finding. The same reason as
+  // `identificadoresQueElJuezPuedeEscribir` in the task judge.
+  it("the rule bullet of ct-slice-judge.md names the three identifiers", () => {
     const texto = readFileSync(AGENTE_JUEZ_DE_SLICE, 'utf8')
     const m = /- `rule` is one of the[\s\S]*?(?=\n- `path`)/.exec(texto)
     const bullet = m ? m[0].replace(/\s+/g, ' ') : ''
@@ -539,29 +546,30 @@ describe('el juez de slice (§3.7-B)', () => {
     }
   })
 
-  // La telemetría (`findings_by_rule`) cuenta hallazgos por NOMBRE de regla y
-  // `aggregateVerdictMeasures` funde tal cual todo lo que trae `ruling`: un
-  // nombre compartido entre los dos jueces haría indistinguibles sus cuentas.
-  it('observabilidad no choca con ninguna regla del juez de tarea', () => {
+  // The telemetry (`findings_by_rule`) counts findings by rule NAME and
+  // `aggregateVerdictMeasures` merges as it is everything that carries a
+  // `ruling`: a name shared between the two judges would make their counts
+  // indistinguishable.
+  it('observabilidad does not clash with any rule of the task judge', () => {
     expect(VERDICT_RULES).not.toContain('observabilidad')
-    // Disjunción completa: ningún identificador vive en las dos rúbricas.
+    // Complete disjunction: no identifier lives in both rubrics.
     expect(SLICE_VERDICT_RULES.filter((r) => VERDICT_RULES.includes(r))).toEqual([])
   })
 
-  it('el juez de slice no tiene shell ni Edit', () => {
+  it('the slice judge has neither a shell nor Edit', () => {
     expect(toolsDelJuezDeSlice()).not.toMatch(/Bash|Edit/)
     expect(SLICE_JUDGE_TOOLS).not.toMatch(/Bash|Edit/)
   })
 
-  it('SLICE_JUDGE_TOOLS no puede divergir del agente que se despacha', () => {
+  it('SLICE_JUDGE_TOOLS cannot diverge from the agent that gets dispatched', () => {
     expect(SLICE_JUDGE_TOOLS).toBe(toolsDelJuezDeSlice())
   })
 
-  it('el juez de slice puede escribir su veredicto: es el canal por el que contesta', () => {
+  it('the slice judge can write its verdict: it is the channel it answers through', () => {
     expect(toolsDelJuezDeSlice()).toMatch(/Write/)
   })
 
-  it('el bloque ```json de ct-slice-judge.md enseña rubric, outcome, evidence y path', () => {
+  it('the ```json block of ct-slice-judge.md shows rubric, outcome, evidence and path', () => {
     const esquema = esquemaDeAgente(AGENTE_JUEZ_DE_SLICE)
     expect(esquema).toMatch(/"rubric"/)
     expect(esquema).toMatch(/"outcome"/)
@@ -569,48 +577,48 @@ describe('el juez de slice (§3.7-B)', () => {
     expect(esquema).toMatch(/"path"/)
   })
 
-  it('el bloque json de ct-slice-judge.md tampoco le pide el review_token, y le dice quién lo escribe', () => {
+  it('the json block of ct-slice-judge.md does not ask it for the review_token either, and tells it who writes it', () => {
     expect(esquemaDeAgente(AGENTE_JUEZ_DE_SLICE)).not.toMatch(/"review_token"/)
     const texto = readFileSync(AGENTE_JUEZ_DE_SLICE, 'utf8')
     expect(texto).toContain(`${REVIEW_TOKEN_LABEL}:`)
     expect(texto).toMatch(/There is no `review_token` for you to write/)
   })
 
-  it('SLICE_PACKAGE_SECTIONS abre con Vara y no puede divergir de la rúbrica', () => {
+  it('SLICE_PACKAGE_SECTIONS opens with Vara and cannot diverge from the rubric', () => {
     expect(SLICE_PACKAGE_SECTIONS).toEqual(seccionesDelPaqueteDeSlice())
-    // Tarea 8: `Vara` PRIMERA, delante incluso de `Señal`, por el mismo
-    // motivo que `Señal` iba delante del diff -U10: enterrada detrás no la
-    // lee nadie. La atadura de arriba obliga a que paquete y agente cambien
-    // en la MISMA tarea.
+    // Task 8: `Vara` FIRST, ahead even of `Señal`, for the same reason `Señal`
+    // went ahead of the -U10 diff: buried further down nobody reads it. The
+    // tie-down above forces package and agent to change in the SAME task.
     expect(SLICE_PACKAGE_SECTIONS).toEqual(['Vara', 'Señal', 'Commits', 'Files changed', 'Diff'])
   })
 
-  it('el esquema del recorrido de slice no duplica los identificadores: los toma de SLICE_VERDICT_RULES', () => {
+  it("the slice walk's schema does not duplicate the identifiers: it takes them from SLICE_VERDICT_RULES", () => {
     expect(SLICE_VERDICT_SCHEMA.properties.rubric.items.properties.rule.enum).toBe(SLICE_VERDICT_RULES)
   })
 
-  it('el esquema de slice pide el recorrido entero: tres ítems, ni uno más ni uno menos', () => {
-    // Slice 10: el esquema deriva de SLICE_VERDICT_RULES.length — sube a 3
-    // solo, sin tocar schemaFor ni readSliceVerdict.
+  it('the slice schema asks for the whole walk: three items, not one more and not one less', () => {
+    // Slice 10: the schema derives from SLICE_VERDICT_RULES.length — it goes up
+    // to 3 on its own, without touching schemaFor or readSliceVerdict.
     expect(SLICE_VERDICT_SCHEMA.properties.rubric.minItems).toBe(3)
     expect(SLICE_VERDICT_SCHEMA.properties.rubric.maxItems).toBe(3)
   })
 
   const recorridoDeSlice = () => SLICE_VERDICT_RULES.map((rule) => ({ rule, result: `mirado: ${rule}`, outcome: 'conforme' }))
 
-  it('readSliceVerdict acepta un recorrido de dos ítems válido', () => {
+  it('readSliceVerdict accepts a valid two-item walk', () => {
     const r = readSliceVerdict({ ruling: 'PASS', rubric: recorridoDeSlice(), findings: [], review_token: TOKEN })
     expect(r.verdict).toEqual({ ruling: 'PASS', rubric: recorridoDeSlice(), findings: [], review_token: TOKEN })
   })
 
-  // Slice 11: mismo campo, mismo validador — `readSliceVerdict` es
-  // `readVerdict` con otra rúbrica dentro, así que el token se exige igual.
-  it('el juez de slice valida el mismo campo, con el mismo readVerdict: ausente vale, con otra forma no', () => {
+  // Slice 11: the same field, the same validator — `readSliceVerdict` is
+  // `readVerdict` with another rubric inside, so the token is demanded just the
+  // same.
+  it('the slice judge validates the same field, with the same readVerdict: absent is fine, another shape is not', () => {
     expect(readSliceVerdict({ ruling: 'PASS', rubric: recorridoDeSlice(), findings: [] }).verdict.review_token).toBeNull()
     expect(readSliceVerdict({ ruling: 'PASS', rubric: recorridoDeSlice(), findings: [], review_token: 'x' }).verdict).toBeUndefined()
   })
 
-  it('readSliceVerdict descarta un veredicto con una regla de TAREA (p. ej. "alcance")', () => {
+  it('readSliceVerdict discards a verdict with a TASK rule (e.g. "alcance")', () => {
     const r = readSliceVerdict({
       ruling: 'FAIL',
       rubric: recorridoDeSlice(),
@@ -620,7 +628,7 @@ describe('el juez de slice (§3.7-B)', () => {
     expect(r.why).toMatch(/regla desconocida/)
   })
 
-  it('readSliceVerdict descarta un PASS con un hallazgo high, igual que el veredicto de tarea', () => {
+  it('readSliceVerdict discards a PASS with a high finding, just like the task verdict', () => {
     const r = readSliceVerdict({
       ruling: 'PASS',
       rubric: recorridoDeSlice(),
@@ -630,77 +638,80 @@ describe('el juez de slice (§3.7-B)', () => {
     expect(r.why).toMatch(/contradice la rúbrica/)
   })
 
-  it('readSliceVerdict descarta un recorrido incompleto: la rúbrica son 3 ítems', () => {
+  it('readSliceVerdict discards an incomplete walk: the rubric is 3 items', () => {
     const r = readSliceVerdict({ ruling: 'PASS', rubric: [recorridoDeSlice()[0]], findings: [] })
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/coherencia/)
     expect(r.why).toContain('3 ítems')
   })
 
-  // El mensaje de recorrido incompleto deriva de `rules` y nombra lo que
-  // falta: un juez de slice que conteste el recorrido viejo de dos ítems se
-  // descarta con el nombre del tercero en el texto que lee para reintentar.
-  it('un recorrido de slice sin observabilidad se descarta nombrándolo', () => {
+  // The incomplete-walk message derives from `rules` and names what is
+  // missing: a slice judge that answers the old two-item walk gets discarded
+  // with the third one's name in the text it reads in order to retry.
+  it('a slice walk with no observabilidad is discarded naming it', () => {
     const soloDos = recorridoDeSlice().filter((p) => p.rule !== 'observabilidad')
     const r = readSliceVerdict({ ruling: 'PASS', rubric: soloDos, findings: [] })
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/observabilidad/)
   })
 
-  it('readVerdict (el de TAREA) sigue exigiendo el recorrido de nueve: no hay regresión', () => {
+  it('readVerdict (the TASK one) still demands the walk of nine: there is no regression', () => {
     const completo = VERDICT_RULES.map((rule) => ({ rule, result: 'ok', outcome: 'conforme' }))
     expect(readVerdict({ ruling: 'PASS', rubric: completo, findings: [], review_token: TOKEN }).verdict).toBeDefined()
-    // El mismo recorrido de DOS ítems no basta para un veredicto de TAREA.
+    // That same TWO-item walk is not enough for a TASK verdict.
     expect(readVerdict({ ruling: 'PASS', rubric: recorridoDeSlice(), findings: [] }).verdict).toBeUndefined()
   })
 
-  it('outcomeOfSliceVerdict: FAIL es siempre failed', () => {
+  it('outcomeOfSliceVerdict: FAIL is always failed', () => {
     expect(outcomeOfSliceVerdict({ ruling: 'FAIL', findings: [] })).toBe('failed')
   })
 
-  it('outcomeOfSliceVerdict: PASS con un medium sigue siendo done — no hay vuelta pagada', () => {
+  it('outcomeOfSliceVerdict: PASS with a medium is still done — no round trip is paid for', () => {
     expect(outcomeOfSliceVerdict({ ruling: 'PASS', findings: [{ severity: 'medium' }] })).toBe('done')
   })
 
-  it('outcomeOfSliceVerdict: PASS limpio es done', () => {
+  it('outcomeOfSliceVerdict: a clean PASS is done', () => {
     expect(outcomeOfSliceVerdict({ ruling: 'PASS', findings: [] })).toBe('done')
   })
 
-  it('sliceVerdictCommitMessage lleva el issue, Co-Authored-By, y ninguna closing keyword', () => {
+  it('sliceVerdictCommitMessage carries the issue, Co-Authored-By, and no closing keyword', () => {
     const msg = sliceVerdictCommitMessage({ issue: 42, tasksTotal: 3 })
     expect(msg).toContain('(#42)')
     expect(msg).toContain('Co-Authored-By: Claude <noreply@anthropic.com>')
     expect(findClosingKeywords(msg)).toEqual([])
   })
 
-  // El ítem `observabilidad` aislado — misma regex con la que vara.test.js
-  // aísla el ítem 5 del juez de tarea: el encabezado exacto hasta el siguiente
-  // `###` o `##` (aquí, `## What you do not judge`).
+  // The `observabilidad` item, isolated — the same regex vara.test.js isolates
+  // the task judge's item 5 with: the exact heading up to the next `###` or
+  // `##` (here, `## What you do not judge`).
   const itemObservabilidad = () => {
     const texto = readFileSync(AGENTE_JUEZ_DE_SLICE, 'utf8')
     const m = /^### 3\. `observabilidad`[\s\S]*?(?=^### |^## )/m.exec(texto)
     return m ? m[0] : ''
   }
 
-  // El hallazgo MEDIO del review de la PR #36: la frase del contrato la leía un
-  // humano en el groom y nadie más. Esto ata la mitad que faltaba — el criterio
-  // se mide en tiempo de juicio, y con las palabras del contrato.
-  it('el ítem observabilidad mide la señal redundante con la regla del contrato', () => {
+  // The MEDIUM finding of PR #36's review: the contract's sentence was read by
+  // a human at groom time and by nobody else. This ties down the half that was
+  // missing — the criterion is measured at judgement time, and with the
+  // contract's words.
+  it("the observabilidad item measures the redundant signal with the contract's rule", () => {
     const item = itemObservabilidad()
     expect(item).not.toBe('')
     const norm = item.replace(/\s+/g, ' ')
     expect(norm).toContain('se puede comprobar corriendo los tests, es un criterio de aceptación, no una señal')
     expect(norm).toContain('`señal redundante`')
-    // Las dos condiciones del disparo, las dos dentro del ítem: el test del
-    // diff acumulado, y que la celda no nombre nada que se lea en producción.
+    // The two conditions of the trigger, both inside the item: the test of the
+    // accumulated diff, and the cell naming nothing that can be read in
+    // production.
     expect(norm).toMatch(/test of the accumulated diff/)
     expect(norm).toMatch(/no metric, no log line, no event/)
   })
 
-  // El número que el ítem promete tiene que cuadrar con lo que lista. Si alguien
-  // añade un cuarto check bloqueante, este test cae y le obliga a actualizar la
-  // promesa — que es lo que no pasó con «three checks» cuando entró la frase.
-  it('el ítem promete tres checks y lista tres: el smell no es un cuarto bullet', () => {
+  // The number the item promises has to add up with what it lists. If somebody
+  // adds a fourth blocking check, this test falls and forces them to update the
+  // promise — which is what did not happen with «three checks» when the
+  // sentence came in.
+  it('the item promises three checks and lists three: the smell is not a fourth bullet', () => {
     const item = itemObservabilidad()
     expect(item.match(/^- \*\*/gm)).toHaveLength(3)
     const norm = item.replace(/\s+/g, ' ')
@@ -708,18 +719,19 @@ describe('el juez de slice (§3.7-B)', () => {
     expect(norm).toContain('one smell')
   })
 
-  // El vocabulario NO crece: es un finding, no un outcome nuevo. Un `low` que
-  // se convirtiera en «redundante» rompería el enum cerrado del esquema y con
-  // él `rubric_sin_vara`, que es lo único que hoy dice si hubo vara.
-  it('la señal redundante es un finding, no un outcome nuevo: el ítem sigue conforme', () => {
+  // The vocabulary does NOT grow: it is a finding, not a new outcome. A `low`
+  // turned into «redundante» would break the schema's closed enum and with it
+  // `rubric_sin_vara`, which is the only thing that says today whether there
+  // was a yardstick at all.
+  it('the redundant signal is a finding, not a new outcome: the item stays conforme', () => {
     expect(itemObservabilidad().replace(/\s+/g, ' ')).toContain('still `conforme`')
     expect(SLICE_VERDICT_SCHEMA.properties.rubric.items.properties.outcome.enum).toBe(RUBRIC_OUTCOMES)
     for (const valor of RUBRIC_OUTCOMES) expect(itemObservabilidad()).toContain(valor)
   })
 
-  // La calibración de severidades del ítem nombra el caso: un juez que sólo lea
-  // ese párrafo no puede convertirlo en un veto ni en un round trip pagado.
-  it('la severidad del smell vive también en «Severity, decided here»', () => {
+  // The item's severity calibration names the case: a judge that reads only
+  // that paragraph cannot turn it into a veto or into a round trip paid for.
+  it('the smell\'s severity also lives in «Severity, decided here»', () => {
     const sev = /\*\*Severity, decided here:\*\*[\s\S]*?(?=\n\n)/.exec(itemObservabilidad())
     expect(sev).not.toBeNull()
     expect(sev[0].replace(/\s+/g, ' ')).toContain('restated an acceptance criterion is `low`')
@@ -727,76 +739,78 @@ describe('el juez de slice (§3.7-B)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// EL RECONCILIADOR (Reconciliación de ramas, Tarea 9): `agents/ct-reconciler.md`.
-// A diferencia de los dos jueces de arriba, invierte la asimetría en vez de
-// repetirla — `Edit` en vez de `Write`, y ni `Bash` ni `Write` — porque git no
-// da un fichero en conflicto por resuelto hasta que alguien lo stagea, y el
-// único que puede es el programa (`BranchReconciliation.conclude()`), nunca
-// el agente. Este invariante sostiene TODA la higiene del diseño (un
-// reconciliador que pudiera stagear o crear ficheros podría esconder una
-// resolución mala detrás de un `git status` verde), así que va pinado con las
-// AUSENCIAS comprobadas explícitamente y no sólo las presencias.
+// THE RECONCILER (Branch reconciliation, Task 9): `agents/ct-reconciler.md`.
+// Unlike the two judges above, it inverts the asymmetry instead of repeating it
+// — `Edit` instead of `Write`, and neither `Bash` nor `Write` — because git
+// does not count a conflicted file as resolved until somebody stages it, and
+// the only one that can is the program (`BranchReconciliation.conclude()`),
+// never the agent. This invariant holds up ALL of the design's hygiene (a
+// reconciler that could stage or create files could hide a bad resolution
+// behind a green `git status`), so it is pinned with the ABSENCES checked
+// explicitly and not only the presences.
 // ---------------------------------------------------------------------------
-describe('el reconciliador (Reconciliación de ramas, Tarea 9)', () => {
-  it('declara exactamente Read, Grep, Glob, Edit — ni Bash ni Write', () => {
+describe('the reconciler (Branch reconciliation, Task 9)', () => {
+  it('declares exactly Read, Grep, Glob, Edit — neither Bash nor Write', () => {
     expect(toolsDelReconciliador()).toBe('Read, Grep, Glob, Edit')
     expect(toolsDelReconciliador()).not.toMatch(/\bBash\b/)
     expect(toolsDelReconciliador()).not.toMatch(/\bWrite\b/)
   })
 
-  it('la constante RECONCILER_TOOLS no puede divergir del agente que se despacha', () => {
-    // Mismo fallo que ya sufrieron JUDGE_TOOLS y SLICE_JUDGE_TOOLS: una
-    // constante copiada a mano que se queda atrás del frontmatter real.
+  it('the RECONCILER_TOOLS constant cannot diverge from the agent that gets dispatched', () => {
+    // The same failure JUDGE_TOOLS and SLICE_JUDGE_TOOLS already suffered: a
+    // hand-copied constant that falls behind the real frontmatter.
     expect(RECONCILER_TOOLS).toBe(toolsDelReconciliador())
     expect(RECONCILER_TOOLS).not.toMatch(/\bBash\b/)
     expect(RECONCILER_TOOLS).not.toMatch(/\bWrite\b/)
   })
 
-  it('el reconciliador puede editar ficheros que ya existen: es el único canal por el que resuelve', () => {
+  it('the reconciler can edit files that already exist: it is the only channel it resolves through', () => {
     expect(toolsDelReconciliador()).toMatch(/\bEdit\b/)
   })
 })
 
-describe('el veredicto', () => {
+describe('the verdict', () => {
   const v = (ruling, findings = [], rubric = recorridoCompleto()) => readVerdict({ ruling, rubric, findings, review_token: TOKEN })
 
-  it('un PASA limpio se lee y vale', () => {
+  it('a clean PASS reads and holds', () => {
     expect(v('PASS').verdict).toEqual({ ruling: 'PASS', rubric: recorridoCompleto(), findings: [], review_token: TOKEN })
   })
 
   it.each([
-    ['sin structured_output', null, /no devolvió structured_output/],
-    ['con un ruling inventado', { ruling: 'MAYBE', findings: [] }, /ruling desconocido/],
-    ['con findings que no es lista', { ruling: 'PASS', findings: 'ninguno' }, /no es una lista/],
-    ['con una severidad inventada', { ruling: 'FAIL', findings: [{ rule: 'contrato', severity: 'catastrophic', what: 'x', path: 'y', evidence: 'z' }] }, /severidad desconocida/],
-    ['con un hallazgo mudo', { ruling: 'FAIL', findings: [{ rule: 'contrato', severity: 'high', what: '', path: 'y', evidence: 'z' }] }, /no dice qué o dónde/],
-    // Sin fijar este caso, una regresión que cambiara la condición a
-    // `f.rule && !VERDICT_RULES.includes(f.rule)` dejaría pasar en silencio
-    // un hallazgo sin `rule` — sólo cazaría la regla INVENTADA, no la AUSENTE.
-    ['con un hallazgo sin rule', { ruling: 'FAIL', findings: [{ severity: 'high', what: 'x', path: 'y', evidence: 'z' }] }, /regla desconocida/],
-  ])('se descarta %s', (_caso, structured, motivo) => {
+    ['with no structured_output', null, /no devolvió structured_output/],
+    ['with an invented ruling', { ruling: 'MAYBE', findings: [] }, /ruling desconocido/],
+    ['with findings that are not a list', { ruling: 'PASS', findings: 'ninguno' }, /no es una lista/],
+    ['with an invented severity', { ruling: 'FAIL', findings: [{ rule: 'contrato', severity: 'catastrophic', what: 'x', path: 'y', evidence: 'z' }] }, /severidad desconocida/],
+    ['with a mute finding', { ruling: 'FAIL', findings: [{ rule: 'contrato', severity: 'high', what: '', path: 'y', evidence: 'z' }] }, /no dice qué o dónde/],
+    // Without pinning this case, a regression changing the condition to
+    // `f.rule && !VERDICT_RULES.includes(f.rule)` would silently let through a
+    // finding with no `rule` — it would only catch the INVENTED rule, not the
+    // ABSENT one.
+    ['with a finding with no rule', { ruling: 'FAIL', findings: [{ severity: 'high', what: 'x', path: 'y', evidence: 'z' }] }, /regla desconocida/],
+  ])('%s is discarded', (_caso, structured, motivo) => {
     const r = readVerdict(structured)
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(motivo)
   })
 
-  it('un PASS con un hallazgo grave se descarta: se contradice a sí mismo', () => {
-    // No se interpreta hacia el lado prudente. Un juez que no se entiende a sí
-    // mismo no ha juzgado, y volver a preguntar cuesta menos que decidir por él.
+  it('a PASS with a serious finding is discarded: it contradicts itself', () => {
+    // It is not read towards the prudent side. A judge that does not understand
+    // itself has not judged, and asking again costs less than deciding for it.
     const r = v('PASS', [{ rule: 'contrato', severity: 'high', what: 'sql injection', path: 'db.js', line: 10, evidence: 'query(`… ${id}`)' }])
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/contradice la rúbrica/)
   })
 
-  it('el hallazgo nombra la regla que incumple', () => {
+  it('the finding names the rule it breaks', () => {
     const r = v('FAIL', [{ rule: 'manipulacion-tests', severity: 'high', what: 'debilitó una aserción', path: 'a.test.js', line: 12, evidence: '-  expect(x).toBe(3)' }])
     expect(r.verdict.findings[0].rule).toBe('manipulacion-tests')
   })
 
-  it('una regla fuera del enum descarta el veredicto', () => {
-    // El mismo criterio que ya aplica a un ruling inventado: una regla que no
-    // está en VERDICT_RULES no es un hallazgo sin justificar, es un dato que no
-    // se entiende — se descarta y se vuelve a preguntar, no es un error.
+  it('a rule outside the enum discards the verdict', () => {
+    // The same criterion that already applies to an invented ruling: a rule
+    // that is not in VERDICT_RULES is not an unjustified finding, it is a datum
+    // that is not understood — it is discarded and asked again, it is not an
+    // error.
     const r = v('FAIL', [{ rule: 'me-lo-invento', severity: 'high', what: 'x', path: 'y', evidence: 'z' }])
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/regla desconocida/)
@@ -804,74 +818,76 @@ describe('el veredicto', () => {
   })
 
   // -------------------------------------------------------------------------
-  // EL PASEO POR LA RÚBRICA, medido en jjponz/rust-monitoring#10: los tres
-  // veredictos que viajaron commiteados en aquella pull request eran
-  // `{"ruling": "PASS", "findings": []}` — exactamente el artefacto que la
-  // propia rúbrica declara indistinguible de ocho ítems que nadie abrió. La
-  // rúbrica pedía el paseo, pero lo pedía en PROSA y para la respuesta
-  // conversacional del subagente, que no se persiste: nada la capturaba, y el
-  // esquema que se validaba y viajaba era sólo `{ruling, findings}`.
+  // THE WALK THROUGH THE RUBRIC, measured in jjponz/rust-monitoring#10: the
+  // three verdicts that travelled committed in that pull request were
+  // `{"ruling": "PASS", "findings": []}` — exactly the artefact the rubric
+  // itself declares indistinguishable from eight items nobody opened. The
+  // rubric asked for the walk, but it asked for it in PROSE and for the
+  // subagent's conversational answer, which is not persisted: nothing captured
+  // it, and the schema that was validated and travelled was only
+  // `{ruling, findings}`.
   //
-  // Y en aquel slice el PASS vacío era el resultado CORRECTO: cuatro de los
-  // ocho ítems no tenían sujeto (un esqueleto sobre un repo vacío, sin
-  // patrones que citar, sin tests previos, sin contratos). Eso es lo que
-  // duele: era correcto y nadie podía saberlo leyendo el fichero. Por eso el
-  // recorrido no es un campo informativo — es la diferencia entre "no
-  // aplicaba" y "no se miró", y la carga la lleva el esquema, no la prosa.
+  // And in that slice the empty PASS was the CORRECT result: four of the eight
+  // items had no subject (a skeleton over an empty repo, with no patterns to
+  // cite, no prior tests, no contracts). That is what hurts: it was correct and
+  // nobody could know it by reading the file. That is why the walk is not an
+  // informative field — it is the difference between "it did not apply" and "it
+  // was not looked at", and the load is carried by the schema, not by the
+  // prose.
   // -------------------------------------------------------------------------
-  it('el veredicto trae el paseo por todos los ítems, y viaja dentro de él', () => {
+  it('the verdict carries the walk through every item, and it travels inside it', () => {
     const r = v('PASS')
     expect(r.verdict.rubric.map((paso) => paso.rule)).toEqual(VERDICT_RULES)
   })
 
-  it('se descarta el veredicto que no trae el recorrido: es el fichero de la corrida de campo', () => {
-    // El payload literal de rust-monitoring#10. Hoy se aceptaba; que se
-    // descarte es todo el arreglo.
+  it('the verdict that does not carry the walk is discarded: it is the file of the field run', () => {
+    // rust-monitoring#10's literal payload. It used to be accepted; that it now
+    // gets discarded is the whole fix.
     const r = readVerdict({ ruling: 'PASS', findings: [] })
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/recorrido de la rúbrica/)
   })
 
-  it('se descarta un recorrido que nombra un ítem que no es de la rúbrica', () => {
-    // Mismo criterio que un `rule` inventado en un hallazgo: un ítem que no
-    // está en VERDICT_RULES no es un paseo laxo, es un dato que no se
-    // entiende. Se vuelve a preguntar.
+  it('a walk that names an item that is not of the rubric is discarded', () => {
+    // The same criterion as an invented `rule` in a finding: an item that is
+    // not in VERDICT_RULES is not a lax walk, it is a datum that is not
+    // understood. It gets asked again.
     const recorrido = [...recorridoCompleto().slice(1), { rule: 'me-lo-invento', result: 'bien', outcome: 'conforme' }]
     const r = v('PASS', [], recorrido)
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/ítem desconocido/)
   })
 
-  it('se descarta un recorrido que repite un ítem: un paso de más no es un ítem más', () => {
-    // Una entrada de más con todos los identificadores presentes: sin la
-    // comprobación de repetidos, un recuento por conjunto los daría todos por
-    // recorridos y el duplicado pasaría. Es el mismo criterio que readReport
-    // aplica a una ruta declarada dos veces.
+  it('a walk that repeats an item is discarded: one step too many is not one item more', () => {
+    // One entry too many with every identifier present: without the check for
+    // repeats, a count by set would take them all as walked and the duplicate
+    // would pass. It is the same criterion readReport applies to a path
+    // declared twice.
     const r = v('PASS', [], [...recorridoCompleto(), { rule: 'alcance', result: 'otra vez', outcome: 'conforme' }])
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/repite/)
   })
 
-  it('se descarta un recorrido incompleto, y el motivo dice qué ítem falta', () => {
-    // Sin nombrar el ítem que falta, el descarte cuesta un round trip y el
-    // juez no sabe por dónde volver.
+  it('an incomplete walk is discarded, and the reason says which item is missing', () => {
+    // Without naming the missing item, the discard costs a round trip and the
+    // judge does not know where to come back to.
     const r = v('PASS', [], recorridoCompleto().filter((paso) => paso.rule !== 'fixture-theater'))
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/fixture-theater/)
   })
 
-  it('el motivo del descarte cuenta los ítems que la rúbrica tiene hoy, no los que tenía', () => {
-    // El mensaje decía "ocho" en literal, y el noveno ítem lo convirtió en una
-    // mentira dirigida justo al agente que tiene que volver a contestar.
+  it("the discard's reason counts the items the rubric has today, not the ones it used to have", () => {
+    // The message said "ocho" literally, and the ninth item turned it into a
+    // lie aimed at precisely the agent that has to answer again.
     const r = v('PASS', [], recorridoCompleto().filter((paso) => paso.rule !== 'test-desiderata'))
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/test-desiderata/)
     expect(r.why).toContain(String(VERDICT_RULES.length))
   })
 
-  it('se descarta el ítem que se nombra pero no dice lo que dio: un texto vacío es el ítem sin abrir otra vez', () => {
-    // Ocho identificadores sin resultado son el mismo artefacto que el PASS
-    // con hallazgos vacíos, sólo que más largo.
+  it('the item that is named but does not say what it gave is discarded: an empty text is the unopened item all over again', () => {
+    // Eight identifiers with no result are the same artefact as the PASS with
+    // empty findings, only longer.
     const recorrido = recorridoCompleto().map((paso) => (paso.rule === 'patrones' ? { rule: 'patrones', result: '   ', outcome: 'conforme' } : paso))
     const r = v('PASS', [], recorrido)
     expect(r.verdict).toBeUndefined()
@@ -879,25 +895,26 @@ describe('el veredicto', () => {
   })
 
   // -------------------------------------------------------------------------
-  // LA VARA VACÍA. El recorrido ya distinguía "no se miró" de "se miró"; dentro
-  // de "se miró" seguían colapsando dos cosas distintas, y una es un agujero:
-  // un ítem sin SUJETO (no hay tests previos que debilitar) y un ítem sin
-  // INSUMO (el plan no nombró ningún patrón). El segundo es un juez que dijo
-  // PASS a ciegas, y en prosa se lee igual que el primero. Es la mitad de H5.
+  // THE EMPTY YARDSTICK. The walk already told "it was not looked at" apart
+  // from "it was looked at"; inside "it was looked at", two different things
+  // went on collapsing together, and one of them is a hole: an item with no
+  // SUBJECT (there are no prior tests to weaken) and an item with no INPUT (the
+  // plan named no pattern at all). The second is a judge that said PASS
+  // blindly, and in prose it reads just like the first. It is half of H5.
   // -------------------------------------------------------------------------
-  it('cada paso del recorrido dice de qué clase fue su resultado', () => {
+  it('every step of the walk says what class its result was', () => {
     const r = v('PASS')
     expect(r.verdict.rubric.every((paso) => RUBRIC_OUTCOMES.includes(paso.outcome))).toBe(true)
   })
 
-  it('se descarta el paso que no dice de qué clase fue: es "N/A" indistinguible de "conforme" otra vez', () => {
+  it('the step that does not say what class it was gets discarded: it is "N/A" indistinguishable from "conforme" all over again', () => {
     const recorrido = recorridoCompleto().map(({ rule, result }) => ({ rule, result }))
     const r = v('PASS', [], recorrido)
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/de qué clase/)
   })
 
-  it('se descarta una clase inventada, con el mismo criterio que una regla inventada', () => {
+  it('an invented class is discarded, with the same criterion as an invented rule', () => {
     const recorrido = recorridoCompleto().map((paso) => (paso.rule === 'patrones' ? { ...paso, outcome: 'regular' } : paso))
     const r = v('PASS', [], recorrido)
     expect(r.verdict).toBeUndefined()
@@ -905,10 +922,10 @@ describe('el veredicto', () => {
     expect(RUBRIC_OUTCOMES).not.toContain('regular')
   })
 
-  it('un ítem sin vara viaja en el veredicto, y no bloquea: lo que hace es dejar de esconderse', () => {
-    // El caso de rust-monitoring, ahora legible. `patrones` sin patrón que
-    // citar sigue dando un PASS —no es un defecto del implementador—, pero el
-    // fichero ya dice que ese ítem se recorrió sin nada con lo que medir.
+  it('an item with no yardstick travels in the verdict, and does not block: what it does is stop hiding', () => {
+    // The rust-monitoring case, now legible. `patrones` with no pattern to cite
+    // still gives a PASS —it is not a defect of the implementer's— but the file
+    // now says that item was walked with nothing to measure against.
     const recorrido = recorridoCompleto().map((paso) => (
       paso.rule === 'patrones'
         ? { rule: 'patrones', result: 'el plan dice "N/A": no hay patrón que comparar', outcome: 'sin-vara' }
@@ -919,134 +936,136 @@ describe('el veredicto', () => {
   })
 
   // -------------------------------------------------------------------------
-  // LA CITA. La rúbrica ya exigía citar antes de bloquear, pero en PROSA y en
-  // un fichero donde compite con ocho ítems que hay que recorrer de verdad. Un
-  // campo obligatorio no se olvida.
+  // THE CITATION. The rubric already demanded citing before blocking, but in
+  // PROSE and in a file where it competes with eight items that genuinely have
+  // to be walked. A mandatory field does not get forgotten.
   // -------------------------------------------------------------------------
-  it('se descarta el hallazgo que no cita la evidencia que lo sostiene', () => {
+  it('the finding that does not cite the evidence holding it up is discarded', () => {
     const r = v('FAIL', [{ rule: 'contrato', severity: 'high', what: 'la firma no casa', path: 'a.js', line: 3 }])
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/evidencia/)
   })
 
-  it('la cita se exige también en un medium: es el que manda al implementador a una vuelta pagada', () => {
-    // Un campo obligatorio sólo para `high` se olvida igual que la prosa, y un
-    // `medium` sin cita cuesta un viaje de ida y vuelta sin decir qué mirar.
+  it('the citation is demanded on a medium too: that is the one that sends the implementer on a paid-for round trip', () => {
+    // A field mandatory only for `high` gets forgotten just like the prose, and
+    // a `medium` with no citation costs a there-and-back trip without saying
+    // what to look at.
     const r = v('PASS', [{ rule: 'alcance', severity: 'medium', what: 'un helper que nadie pidió', path: 'a.js', line: 9 }])
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/evidencia/)
   })
 
   // -------------------------------------------------------------------------
-  // LA UBICACIÓN, EN DOS CAMPOS. Era la cadena `"path:line"`, y lo que impedía
-  // es agregar: partir por el último `:` una cadena que escribió un modelo es
-  // adivinar. §3.13 del handoff.
+  // THE LOCATION, IN TWO FIELDS. It used to be the `"path:line"` string, and
+  // what that prevented was aggregating: splitting a string a model wrote by
+  // its last `:` is guessing. §3.13 of the handoff.
   // -------------------------------------------------------------------------
-  it('el hallazgo ubica en dos campos, y el veredicto los conserva separados', () => {
+  it('the finding locates in two fields, and the verdict keeps them separate', () => {
     const r = v('FAIL', [{ rule: 'contrato', severity: 'high', what: 'la firma no casa', path: 'src/db.js', line: 10, evidence: 'function q(id, extra)' }])
     expect(r.verdict.findings[0].path).toBe('src/db.js')
     expect(r.verdict.findings[0].line).toBe(10)
   })
 
-  it('se descarta el hallazgo que no dice en qué fichero está', () => {
+  it('the finding that does not say which file it is in gets discarded', () => {
     const r = v('FAIL', [{ rule: 'contrato', severity: 'high', what: 'la firma no casa', line: 10, evidence: 'z' }])
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/no dice qué o dónde/)
   })
 
   it.each([
-    ['sin línea', {}],
-    ['con la línea a null', { line: null }],
-  ])('un hallazgo del fichero entero vale %s: la línea no es obligatoria', (_caso, extra) => {
-    // Exigir línea siempre sólo compra un número inventado o un descarte más de
-    // los seis que matan el run (§3.2 del handoff).
+    ['with no line', {}],
+    ['with the line at null', { line: null }],
+  ])('a whole-file finding holds %s: the line is not mandatory', (_caso, extra) => {
+    // Always demanding a line buys nothing but an invented number or one more
+    // of the six discards that kill the run (§3.2 of the handoff).
     const r = v('FAIL', [{ rule: 'alcance', severity: 'high', what: 'este fichero no lo pide ninguna frase', path: 'src/de-mas.js', evidence: '**Files:** src/a.js', ...extra }])
     expect(r.verdict.findings[0].path).toBe('src/de-mas.js')
   })
 
   it.each([
-    ['una cadena', '12'],
-    ['un rango', '12-18'],
-    ['un cero', 0],
-    ['un decimal', 3.5],
-  ])('se descarta el hallazgo cuya línea es %s: lo que no es número no se agrega', (_caso, line) => {
+    ['a string', '12'],
+    ['a range', '12-18'],
+    ['a zero', 0],
+    ['a decimal', 3.5],
+  ])('the finding whose line is %s gets discarded: what is not a number does not aggregate', (_caso, line) => {
     const r = v('FAIL', [{ rule: 'contrato', severity: 'high', what: 'x', path: 'a.js', line, evidence: 'z' }])
     expect(r.verdict).toBeUndefined()
     expect(r.why).toMatch(/línea que no es un número/)
   })
 
   // -------------------------------------------------------------------------
-  // Slice 11 — EL TOKEN DEL PAQUETE. El insumo se ataba (slice 6: un paquete
-  // consumido no se puede reutilizar); esto ata el otro sentido: nada ligaba
-  // el verdict.json AL paquete. El paquete declara en su cabecera el sha256
-  // del diff que capturó; el juez lo copia en `review_token`; y `readVerdict`
-  // exige que el campo llegue con forma de sha256 — quién decide si es EL DEL
-  // PAQUETE es ct-step.mjs, que es quien tiene git delante.
+  // Slice 11 — THE PACKAGE'S TOKEN. The input was tied down (slice 6: a
+  // consumed package cannot be reused); this ties down the other direction:
+  // nothing bound the verdict.json TO the package. The package declares in its
+  // header the sha256 of the diff it captured; the judge copies it into
+  // `review_token`; and `readVerdict` demands that the field arrive shaped like
+  // a sha256 — who decides whether it is THE PACKAGE'S is ct-step.mjs, which is
+  // the one with git in front of it.
   // -------------------------------------------------------------------------
-  it('el token del paquete es el sha256 del diff que captura, y su línea la escribe el módulo', () => {
+  it("the package's token is the sha256 of the diff it captures, and its line is written by the module", () => {
     const diff = 'diff --git a/uno.txt b/uno.txt\n@@ -0,0 +1 @@\n+uno\n'
     expect(reviewToken(diff)).toBe(createHash('sha256').update(diff, 'utf8').digest('hex'))
     expect(reviewTokenLine(reviewToken(diff))).toBe(`${REVIEW_TOKEN_LABEL}: ${reviewToken(diff)}`)
   })
 
-  it('el lector del token no puede divergir del escritor: los dos salen de REVIEW_TOKEN_LABEL', () => {
+  it("the token's reader cannot diverge from its writer: both come out of REVIEW_TOKEN_LABEL", () => {
     const t = reviewToken('lo que sea')
     expect(reviewTokenOf(`# Review package\n${reviewTokenLine(t)}\n\n## Diff\n`)).toBe(t)
   })
 
-  it('un paquete sin la línea, o con algo que no es un sha256, no declara ningún token', () => {
+  it('a package with no such line, or with something that is not a sha256, declares no token at all', () => {
     expect(reviewTokenOf('# Review package\n\n## Diff\n')).toBeNull()
     expect(reviewTokenOf('Review token: no-soy-un-sha\n')).toBeNull()
     expect(reviewTokenOf(`Review token: ${'a'.repeat(63)}\n`)).toBeNull()
     expect(reviewTokenOf(null)).toBeNull()
   })
 
-  // EL TOKEN LO ESCRIBE EL PROGRAMA (`ct-step verdict` lo inyecta antes de
-  // validar), así que un veredicto que no lo trae NO se descarta: se acepta
-  // con el campo a null, y quien decide si ata a algún corte es ct-step, que
-  // es el único que puede leer el paquete.
-  it('un veredicto sin review_token se acepta: el campo lo escribe el programa, no el juez', () => {
+  // THE TOKEN IS WRITTEN BY THE PROGRAM (`ct-step verdict` injects it before
+  // validating), so a verdict that does not carry it is NOT discarded: it is
+  // accepted with the field at null, and who decides whether it binds to any
+  // cut is ct-step, the only one that can read the package.
+  it('a verdict with no review_token is accepted: the field is written by the program, not by the judge', () => {
     const r = readVerdict({ ruling: 'PASS', rubric: recorridoCompleto(), findings: [] })
     expect(r.why).toBeUndefined()
     expect(r.verdict.review_token).toBeNull()
   })
 
-  it('un review_token que no es un sha256 de 64 hex se descarta: no se puede comparar con nada', () => {
+  it('a review_token that is not a 64-hex sha256 gets discarded: it cannot be compared with anything', () => {
     for (const malo of ['12', 'a'.repeat(63), 'z'.repeat(64), 123]) {
       expect(readVerdict({ ruling: 'PASS', rubric: recorridoCompleto(), findings: [], review_token: malo }).verdict).toBeUndefined()
     }
   })
 
-  it('un review_token en mayúsculas se acepta y se guarda en minúsculas: copiar un hex no es teclear un permiso', () => {
-    // El precedente es matchesGo: el token se compara en minúsculas para que un
-    // reformateo no cueste un descarte con el veredicto correcto dentro.
+  it('an upper-case review_token is accepted and stored in lower case: copying a hex is not typing a permission', () => {
+    // The precedent is matchesGo: the token is compared in lower case so that a
+    // reformat does not cost a discard with the correct verdict inside.
     const r = readVerdict({ ruling: 'PASS', rubric: recorridoCompleto(), findings: [], review_token: 'A'.repeat(64) })
     expect(r.verdict.review_token).toBe('a'.repeat(64))
   })
 
-  it('el review_token viaja DENTRO del veredicto validado: es lo que se comitea y lo que se compara', () => {
+  it('the review_token travels INSIDE the validated verdict: it is what gets committed and what gets compared', () => {
     expect(v('PASS').verdict.review_token).toBe(TOKEN)
   })
 
-  it('review_token NO está en el required del esquema: es campo del programa, no del juez', () => {
+  it("review_token is NOT in the schema's required: it is the program's field, not the judge's", () => {
     expect(VERDICT_SCHEMA.required).not.toContain('review_token')
     expect(SLICE_VERDICT_SCHEMA.required).not.toContain('review_token')
     expect(VERDICT_SCHEMA.properties.review_token).toBeDefined()
   })
 
-  it('la FORMA del token la declara UNA constante: el pattern del esquema y el validador no divergen', () => {
-    // Se comprueba por COMPORTAMIENTO y no comparando la constante consigo misma:
-    // para cada muestra, lo que el `pattern` del esquema acepta es exactamente lo
-    // que `readVerdict` acepta. Si una de las dos copias se cambiara —la más
-    // probable, poner el pattern en minúsculas— la muestra en mayúsculas las
-    // separa y esto cae.
+  it("the token's SHAPE is declared by ONE constant: the schema's pattern and the validator do not diverge", () => {
+    // It is checked by BEHAVIOUR and not by comparing the constant with itself:
+    // for every sample, what the schema's `pattern` accepts is exactly what
+    // `readVerdict` accepts. If one of the two copies were changed —the most
+    // likely one being putting the pattern in lower case— the upper-case sample
+    // separates them and this falls.
     const pattern = VERDICT_SCHEMA.properties.review_token.pattern
     expect(SLICE_VERDICT_SCHEMA.properties.review_token.pattern).toBe(pattern)
     const re = new RegExp(pattern)
-    // `undefined` y `null` quedan fuera de la muestra a propósito: el esquema
-    // los trata como campo ausente (ya no es `required`) y el validador los
-    // acepta como el hueco que el programa rellena, así que no son un caso de
-    // la FORMA del token.
+    // `undefined` and `null` are deliberately left out of the sample: the
+    // schema treats them as an absent field (it is no longer `required`) and the
+    // validator accepts them as the gap the program fills in, so they are not a
+    // case of the token's SHAPE.
     for (const muestra of ['a'.repeat(64), 'A'.repeat(64), 'aB3'.repeat(21) + 'f', 'a'.repeat(63),
                            'a'.repeat(65), 'z'.repeat(64), '', `${'a'.repeat(64)}\n`, ` ${'a'.repeat(64)}`]) {
       const loDiceElEsquema = re.test(muestra)
@@ -1056,82 +1075,84 @@ describe('el veredicto', () => {
   })
 })
 
-describe('de veredicto a resultado de la tabla', () => {
+describe("from verdict to the table's result", () => {
   const o = (ruling, findings = []) => outcomeOfVerdict({ ruling, findings })
 
-  it('FAIL es un veto', () => {
+  it('FAIL is a veto', () => {
     expect(o('FAIL', [{ severity: 'high', what: 'x', path: 'y' }])).toBe('failed')
   })
 
-  it('PASS limpio entrega', () => {
+  it('a clean PASS delivers', () => {
     expect(o('PASS')).toBe('done')
   })
 
-  it('PASS con hallazgos sólo de severidad baja entrega igual', () => {
-    // Si cada nimiedad volviera al implementador, el bucle no terminaría nunca.
+  it('a PASS with findings of low severity only delivers just the same', () => {
+    // If every triviality went back to the implementer, the loop would never
+    // end.
     expect(o('PASS', [{ severity: 'low', what: 'nombre mejorable', path: 'a.js' }])).toBe('done')
   })
 
-  it('PASS con un hallazgo medio es un refunfuño: corrige, pero no bloquea', () => {
+  it('a PASS with a medium finding is a grumble: it corrects, but it does not block', () => {
     expect(o('PASS', [{ severity: 'medium', what: 'falta un caso', path: 'a.test.js' }])).toBe('corrections-ordered')
   })
 })
 
-describe('el informe del implementador', () => {
-  it('trae las rutas que tocó, que es lo que el programa stagea', () => {
+describe("the implementer's report", () => {
+  it('it carries the paths it touched, which is what the program stages', () => {
     const paths = ['src/a.js', 'src/a.test.js']
     expect(readReport({ paths, summary: 'hecho' }).report.paths).toHaveLength(2)
   })
 
   it.each([
-    ['una ruta absoluta', ['/etc/passwd']],
-    ['una ruta que se sale del worktree', ['../otro-repo/secreto.txt']],
-  ])('rechaza %s: la lista la escribe un modelo, no es un dato de confianza', (_caso, paths) => {
+    ['an absolute path', ['/etc/passwd']],
+    ['a path that leaves the worktree', ['../otro-repo/secreto.txt']],
+  ])('it rejects %s: the list is written by a model, it is not trusted data', (_caso, paths) => {
     const r = readReport({ paths, summary: 'hecho' })
     expect(r.report).toBeUndefined()
     expect(r.why).toMatch(/fuera del worktree/)
   })
 
-  it('un informe sin rutas se descarta en vez de commitear el índice a ciegas', () => {
+  it('a report with no paths is discarded instead of committing the index blindly', () => {
     expect(readReport({ summary: 'ya está' }).why).toMatch(/rutas tocadas/)
   })
 
-  // La misma ruta dos veces DESCARTABA el informe entero. Ya no: lo que se
-  // stagea no sale de esta lista sino de lo que el programa mide del árbol,
-  // así que un duplicado no deja nada indecidible — se cuenta una vez y se
-  // sigue. Descartar aquí costaba un informe entero, y uno de los seis
-  // descartes que matan el run, por una repetición que no cambia nada.
-  it('la misma ruta declarada dos veces ya no descarta el informe: se cuenta una vez', () => {
+  // The same path twice used to DISCARD the whole report. Not any more: what
+  // gets staged does not come out of this list but out of what the program
+  // measures from the tree, so a duplicate leaves nothing undecidable — it is
+  // counted once and it carries on. Discarding here cost a whole report, and one
+  // of the six discards that kill the run, over a repetition that changes
+  // nothing.
+  it('the same path declared twice no longer discards the report: it is counted once', () => {
     const r = readReport({ paths: ['src/a.js', 'src/a.js'], summary: 'hecho' })
     expect(r.why).toBeUndefined()
     expect(r.report.paths).toEqual(['src/a.js'])
   })
 
-  it('el esquema del informe pide rutas y resumen, y nada más', () => {
+  it("the report's schema asks for paths and summary, and nothing else", () => {
     expect(REPORT_SCHEMA.required).toEqual(['paths', 'summary'])
     expect(REPORT_SCHEMA.additionalProperties).toBe(false)
   })
 })
 
 // ---------------------------------------------------------------------------
-// REPORT_SCHEMA y VERDICT_SCHEMA se exportan, pero nada los ejecuta: quien
-// valida de verdad es readReport/readVerdict, escritos a mano más arriba en
-// step-contracts.js. Sin este test, los dos esquemas pueden divergir del
-// validador en silencio — ninguna suite se entera hasta que alguien lee el
-// esquema, se cree lo que dice, y descubre que no es lo que se exige.
+// REPORT_SCHEMA and VERDICT_SCHEMA are exported, but nothing executes them: the
+// ones that really validate are readReport/readVerdict, hand-written further up
+// in step-contracts.js. Without this test, the two schemas can diverge from the
+// validator in silence — no suite notices until somebody reads the schema,
+// believes what it says, and discovers that is not what is demanded.
 //
-// Lo que SÍ se ata aquí: el REQUIRED que cada esquema declara (en la raíz y
-// en cada item de array) es exactamente lo que el validador exige — quitar
-// cualquiera de esos campos de un payload por lo demás válido lo descarta.
+// What IS tied down here: the REQUIRED each schema declares (at the root and in
+// each array item) is exactly what the validator demands — removing any of
+// those fields from an otherwise valid payload discards it.
 //
-// Lo que NO se ata, y hay que decirlo: los dos esquemas declaran
-// `additionalProperties: false`, tanto en el objeto raíz como en cada item de
-// paths/findings, y ni readReport ni readVerdict comprueban de verdad que no
-// sobre una propiedad — un campo de más pasa hoy sin que ninguno de los dos
-// se entere. Cerrar ese hueco es cambiar el validador, no añadir un test, y
-// no es parte de este arreglo.
+// What is NOT tied down, and has to be said: both schemas declare
+// `additionalProperties: false`, in the root object as well as in each item of
+// paths/findings, and neither readReport nor readVerdict genuinely checks that
+// no property is left over — an extra field passes today without either of the
+// two noticing. Closing that gap means changing the validator, not adding a
+// test, and it is not part of this fix.
 // ---------------------------------------------------------------------------
-describe('los esquemas declarados, atados a lo que valida de verdad', () => {
+describe('the declared schemas, tied to what really validates', () => {
   const informeValido = () => ({
     paths: ['src/a.js'],
     summary: 'hecho',
@@ -1143,126 +1164,126 @@ describe('los esquemas declarados, atados a lo que valida de verdad', () => {
     review_token: TOKEN,
   })
 
-  it.each(REPORT_SCHEMA.required)('readReport exige "%s", como declara REPORT_SCHEMA.required', (campo) => {
+  it.each(REPORT_SCHEMA.required)('readReport demands "%s", as REPORT_SCHEMA.required declares', (campo) => {
     const payload = informeValido()
     delete payload[campo]
     expect(readReport(payload).report).toBeUndefined()
   })
 
-  it('cada ruta de paths es una cadena, como declara el esquema del item', () => {
+  it("every path in paths is a string, as the item's schema declares", () => {
     expect(REPORT_SCHEMA.properties.paths.items).toEqual({ type: 'string' })
   })
 
-  it.each(VERDICT_SCHEMA.required)('readVerdict exige "%s", como declara VERDICT_SCHEMA.required', (campo) => {
+  it.each(VERDICT_SCHEMA.required)('readVerdict demands "%s", as VERDICT_SCHEMA.required declares', (campo) => {
     const payload = veredictoValido()
     delete payload[campo]
     expect(readVerdict(payload).verdict).toBeUndefined()
   })
 
-  it.each(VERDICT_SCHEMA.properties.findings.items.required)('cada hallazgo exige "%s", como declara el esquema del item', (campo) => {
+  it.each(VERDICT_SCHEMA.properties.findings.items.required)('every finding demands "%s", as the item\'s schema declares', (campo) => {
     const payload = veredictoValido()
     delete payload.findings[0][campo]
     expect(readVerdict(payload).verdict).toBeUndefined()
   })
 
-  it.each(VERDICT_SCHEMA.properties.rubric.items.required)('cada paso del recorrido exige "%s", como declara el esquema del item', (campo) => {
+  it.each(VERDICT_SCHEMA.properties.rubric.items.required)('every step of the walk demands "%s", as the item\'s schema declares', (campo) => {
     const payload = veredictoValido()
     delete payload.rubric[0][campo]
     expect(readVerdict(payload).verdict).toBeUndefined()
   })
 
-  it('el esquema del recorrido no duplica los identificadores: los toma de VERDICT_RULES', () => {
-    // Identidad y no igualdad a propósito. Una segunda lista con los mismos
-    // valores pasaría un toEqual y divergiría en el primer renombrado,
-    // que es el fallo que este fichero ya caza dos veces (JUDGE_TOOLS y
-    // VERDICT_RULES contra ct-judge.md).
+  it("the walk's schema does not duplicate the identifiers: it takes them from VERDICT_RULES", () => {
+    // Identity and not equality, on purpose. A second list with the same values
+    // would pass a toEqual and would diverge on the first rename, which is the
+    // failure this file already catches twice (JUDGE_TOOLS and VERDICT_RULES
+    // against ct-judge.md).
     expect(VERDICT_SCHEMA.properties.rubric.items.properties.rule.enum).toBe(VERDICT_RULES)
   })
 
-  it('el esquema del outcome tampoco duplica sus tres valores: los toma de RUBRIC_OUTCOMES', () => {
+  it("the outcome's schema does not duplicate its three values either: it takes them from RUBRIC_OUTCOMES", () => {
     expect(VERDICT_SCHEMA.properties.rubric.items.properties.outcome.enum).toBe(RUBRIC_OUTCOMES)
   })
 
-  it('el esquema pide el recorrido entero: ni un paso más, ni uno menos', () => {
+  it('the schema asks for the whole walk: not one step more, not one less', () => {
     expect(VERDICT_SCHEMA.properties.rubric.minItems).toBe(VERDICT_RULES.length)
     expect(VERDICT_SCHEMA.properties.rubric.maxItems).toBe(VERDICT_RULES.length)
   })
 })
 
-// La ubicación se recompone en un solo sitio: el aviso de corrección la quiere
-// de una pieza, y la cosecha la querrá mañana.
-describe('la ubicación de un hallazgo, de dos campos a una pieza', () => {
-  it('con línea es `path:line`', () => {
+// The location is recomposed in a single place: the correction warning wants it
+// in one piece, and the harvest will want it tomorrow.
+describe("a finding's location, from two fields into one piece", () => {
+  it('with a line it is `path:line`', () => {
     expect(findingLocation({ path: 'src/a.js', line: 4 })).toBe('src/a.js:4')
   })
 
   it.each([
-    ['sin línea', { path: 'src/a.js' }],
-    ['con la línea a null', { path: 'src/a.js', line: null }],
-  ])('%s es sólo el fichero, que es lo que ese hallazgo dice', (_caso, f) => {
+    ['with no line', { path: 'src/a.js' }],
+    ['with the line at null', { path: 'src/a.js', line: null }],
+  ])('%s is just the file, which is what that finding says', (_caso, f) => {
     expect(findingLocation(f)).toBe('src/a.js')
   })
 })
 
 // ---------------------------------------------------------------------------
-// El mensaje de commit. El hook `commit-keyword-guard` es un PreToolUse sobre
-// la herramienta Bash de una SESIÓN: un `git commit` lanzado por un programa no
-// pasa por esa puerta, así que el programa se mira su propio mensaje.
+// The commit message. The `commit-keyword-guard` hook is a PreToolUse over a
+// SESSION's Bash tool: a `git commit` launched by a program does not go through
+// that door, so the program looks at its own message.
 // ---------------------------------------------------------------------------
-describe('el mensaje que compone el programa', () => {
+describe('the message the program composes', () => {
   const msg = (name) => commitMessage({ issue: 42, task: 2, tasksTotal: 8, name })
 
-  it('nombra la tarea, el issue y por dónde va la slice', () => {
+  it('it names the task, the issue and how far along the slice is', () => {
     expect(msg('el cliente tipado de la API').split('\n')[0])
       .toBe('el cliente tipado de la API (#42, tarea 2/8)')
   })
 
-  it('NUNCA lleva una closing keyword, aunque el nombre de la tarea la traiga', () => {
-    // El nombre viene del plan, o sea de un agente. En F27 un commit de
-    // documentación que MENCIONABA "Closes #451" cerró ese issue.
+  it("it NEVER carries a closing keyword, even if the task's name brings one", () => {
+    // The name comes from the plan, that is, from an agent. In F27 a
+    // documentation commit that MENTIONED "Closes #451" closed that issue.
     const m = msg('fixes #451 el parseo del carrito')
     expect(m).not.toMatch(/\bfixes\s*#\d+/i)
     expect(m).toContain('fixes issue 451')
   })
 
-  it.each(['closes #1', 'resolved #99', 'Fixed #7'])('desactiva también "%s"', (nombre) => {
+  it.each(['closes #1', 'resolved #99', 'Fixed #7'])('it defuses "%s" too', (nombre) => {
     expect(() => msg(nombre)).not.toThrow()
     expect(msg(nombre)).not.toMatch(/#\d+\b(?!, tarea)/)
   })
 
-  it('el issue del propio slice viaja como referencia, no como orden de cierre', () => {
+  it("the slice's own issue travels as a reference, not as a closing order", () => {
     expect(msg('una tarea')).toContain('(#42, tarea 2/8)')
   })
 })
 
 // ---------------------------------------------------------------------------
-// Con qué modelo corre cada subagente. Omitir el modelo no es neutral: hereda
-// el de la sesión, que es el más caro, y el implementador es el paso que más
-// veces se despacha en un run.
+// Which model each subagent runs with. Omitting the model is not neutral: it
+// inherits the session's, which is the most expensive one, and the implementer
+// is the step dispatched most often in a run.
 // ---------------------------------------------------------------------------
-describe('el modelo de cada subagente', () => {
+describe("each subagent's model", () => {
   const modeloDeAgente = (fichero) => {
     const m = /^model:\s*(.+)$/m.exec(readFileSync(fichero, 'utf8'))
     return m ? m[1].trim() : null
   }
 
   it.each([
-    ['el juez de tarea', AGENTE_JUEZ],
-    ['el juez de slice', AGENTE_JUEZ_DE_SLICE],
-    ['el reconciliador', AGENTE_RECONCILIADOR],
-    ['el consejero', AGENTE_CONSEJERO],
-  ])('%s declara su modelo, no lo hereda de la sesión', (_, fichero) => {
+    ['the task judge', AGENTE_JUEZ],
+    ['the slice judge', AGENTE_JUEZ_DE_SLICE],
+    ['the reconciler', AGENTE_RECONCILIADOR],
+    ['the advisor', AGENTE_CONSEJERO],
+  ])('%s declares its model, it does not inherit the session\'s', (_, fichero) => {
     expect(modeloDeAgente(fichero)).toBe('opus')
   })
 })
 
 // ---------------------------------------------------------------------------
-// EL CONSEJERO (H9, `agents/ct-advisor.md`): el paso que el SEGUNDO veto abre.
-// Su respuesta es un JSON con un enfoque y las rutas a reconsiderar, y lo que
-// decide si se acepta es este esquema — igual que con el veredicto, un consejo
-// que no lo cumple es un DESCARTE y se vuelve a preguntar.
+// THE ADVISOR (H9, `agents/ct-advisor.md`): the step the SECOND veto opens. Its
+// answer is a JSON with an approach and the paths to reconsider, and what
+// decides whether it is accepted is this schema — just as with the verdict, an
+// advice that does not meet it is a DISCARD and gets asked again.
 // ---------------------------------------------------------------------------
-describe('el consejero del segundo veto', () => {
+describe("the second veto's advisor", () => {
   const toolsDelConsejero = () => {
     const m = /^tools:\s*(.+)$/m.exec(readFileSync(AGENTE_CONSEJERO, 'utf8'))
     return m ? m[1].trim() : null
@@ -1285,52 +1306,52 @@ describe('el consejero del segundo veto', () => {
 
   const consejo = (over = {}) => ({ approach: 'tíralo y empieza por el puerto', files_to_reconsider: ['src/uno.js'], ...over })
 
-  it('el consejero no puede tocar nada: sólo lee', () => {
+  it('the advisor cannot touch anything: it only reads', () => {
     expect(ADVISOR_TOOLS).toBe('Read')
     expect(toolsDelConsejero()).toBe(ADVISOR_TOOLS)
   })
 
-  it('un consejo con enfoque y rutas se acepta, y las rutas repetidas no lo descartan', () => {
+  it('an advice with an approach and paths is accepted, and repeated paths do not discard it', () => {
     const { advice, why } = readAdvice(consejo({ files_to_reconsider: ['src/uno.js', 'src/uno.js'] }))
     expect(why).toBeUndefined()
     expect(advice.approach).toBe('tíralo y empieza por el puerto')
     expect(advice.files_to_reconsider).toEqual(['src/uno.js'])
   })
 
-  it('un consejo sin lista de rutas se acepta con la lista vacía: no reconsiderar ninguna es una respuesta', () => {
+  it('an advice with no list of paths is accepted with the list empty: reconsidering none of them is an answer', () => {
     expect(readAdvice(consejo({ files_to_reconsider: [] })).advice.files_to_reconsider).toEqual([])
   })
 
   it.each([
-    ['sin approach', { approach: undefined }, /enfoque/],
-    ['con un approach vacío', { approach: '   ' }, /enfoque/],
-    ['con las rutas en prosa', { files_to_reconsider: 'src/uno.js' }, /rutas/],
-    ['con una ruta que no es texto', { files_to_reconsider: [7] }, /rutas/],
-  ])('un consejo %s se descarta, y el porqué lo nombra', (_, over, motivo) => {
+    ['with no approach', { approach: undefined }, /enfoque/],
+    ['with an empty approach', { approach: '   ' }, /enfoque/],
+    ['with the paths in prose', { files_to_reconsider: 'src/uno.js' }, /rutas/],
+    ['with a path that is not text', { files_to_reconsider: [7] }, /rutas/],
+  ])('an advice %s gets discarded, and the why names it', (_, over, motivo) => {
     const { advice, why } = readAdvice(consejo(over))
     expect(advice).toBeUndefined()
     expect(why).toMatch(motivo)
   })
 
-  it('un consejo que nombra rutas fuera del worktree se descarta', () => {
+  it('an advice that names paths outside the worktree gets discarded', () => {
     expect(readAdvice(consejo({ files_to_reconsider: ['/etc/passwd'] })).why).toMatch(/fuera del worktree/)
   })
 
-  it('sin structured_output no hay consejo', () => {
+  it('with no structured_output there is no advice', () => {
     expect(readAdvice(null).why).toMatch(/structured_output/)
   })
 
-  it('ADVICE_SCHEMA exige los dos campos que el programa consume', () => {
+  it('ADVICE_SCHEMA demands the two fields the program consumes', () => {
     expect(ADVICE_SCHEMA.required).toEqual(['approach', 'files_to_reconsider'])
     expect(ADVICE_SCHEMA.additionalProperties).toBe(false)
   })
 
-  it('ADVICE_PACKAGE_SECTIONS no puede divergir de los encabezados que el consejero cita por su nombre', () => {
+  it('ADVICE_PACKAGE_SECTIONS cannot diverge from the headings the advisor cites by name', () => {
     expect(ADVICE_PACKAGE_SECTIONS).toEqual(seccionesDelPaqueteDeConsejo())
     expect(ADVICE_PACKAGE_SECTIONS).toEqual(['Brief', 'Intentos', 'Veredictos'])
   })
 
-  it('el bloque json de ct-advisor.md enseña los dos campos y ninguno más', () => {
+  it('the json block of ct-advisor.md shows the two fields and no others', () => {
     const esquema = esquemaDeAgente(AGENTE_CONSEJERO)
     expect(esquema).toMatch(/"approach"/)
     expect(esquema).toMatch(/"files_to_reconsider"/)

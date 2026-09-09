@@ -11,15 +11,16 @@ const fakeEnv = (o = {}) => ({ ...process.env, PATH: `${fakeGhDir}:${process.env
 
 const gitEn = (repo, ...args) => execFileSync('git', ['-C', repo, '-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { stdio: ['ignore', 'ignore', 'pipe'] })
 
-// bancada: cada test se lleva su propio checkout git, con su `origin` y su
-// contenido de `.worktrees/`. El `origin` no es decorado — el comando compara
-// la identidad del checkout contra `--repo` antes de mirar nada local, porque
-// cruzar los issues de un repo con los worktrees de otro fabrica hallazgos
-// (medido: 3, uno de ellos una acusación de abandono).
+// bancada: each test takes its own git checkout, with its `origin` and its
+// contents of `.worktrees/`. The `origin` is not decoration — the command
+// compares the checkout's identity against `--repo` before looking at
+// anything local, because crossing one repo's issues with another's worktrees
+// manufactures findings (measured: 3, one of them an accusation of
+// abandonment).
 //
-// FAKE_GH_COUNTER_FILE tampoco es opcional: sin él el stub devuelve SIEMPRE el
-// primer elemento de FAKE_GH_LIST_SEQUENCE, así que los issues "abiertos"
-// volverían otra vez como "cerrados".
+// FAKE_GH_COUNTER_FILE is not optional either: without it the stub ALWAYS
+// returns the first element of FAKE_GH_LIST_SEQUENCE, so the "open" issues
+// would come back again as "closed".
 function bancada({ worktrees = [], origin = 'https://github.com/o/r.git', conCommit = false } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'ct-st-'))
   const repo = join(dir, 'repo')
@@ -45,7 +46,7 @@ const enProgreso7 = () => JSON.stringify([[abierto(7, 'in-progress')], []])
 const hace = (ms) => JSON.stringify([{ event: 'labeled', label: { name: 'status:in-progress' }, created_at: new Date(Date.now() - ms).toISOString() }])
 
 describe('/ct-status', () => {
-  it('un loop limpio: exit 0, sin bloques vacíos', () => {
+  it('a clean loop: exit 0, with no empty blocks', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: SIN_ISSUES })
     expect(res.status).toBe(0)
@@ -56,7 +57,7 @@ describe('/ct-status', () => {
     limpiar(b)
   })
 
-  it('un slice en vuelo sin proceso y con claim viejo: exit 3 y lo nombra', () => {
+  it('a slice in flight with no process and an old claim: exit 3 and it names it', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: enProgreso7(), FAKE_GH_TIMELINE_JSON: hace(3 * 3600_000) })
     expect(res.status).toBe(3)
@@ -67,7 +68,7 @@ describe('/ct-status', () => {
     limpiar(b)
   })
 
-  it('un slice en vuelo con el claim recién puesto sale arrancando, no muerto: exit 0', () => {
+  it('a slice in flight whose claim was just set comes out as starting up, not dead: exit 0', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: enProgreso7(), FAKE_GH_TIMELINE_JSON: hace(1000) })
     expect(res.status).toBe(0)
@@ -76,21 +77,21 @@ describe('/ct-status', () => {
     limpiar(b)
   })
 
-  it('el timeline ilegible no acusa a nadie, y sale 1', () => {
+  it('an unreadable timeline accuses nobody, and exits 1', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: enProgreso7(), FAKE_GH_TIMELINE_FAIL: '1' })
     expect(res.status).toBe(1)
     expect(res.stdout).not.toMatch(/SIN SE.AL DE VIDA/)
     expect(res.stderr).toMatch(/timeline/)
-    // El motivo se dice UNA vez: el compositor sabe que la edad falta, pero
-    // sólo el CLI sabe por qué, así que su mensaje genérico se sustituye en
-    // vez de acumularse — dos líneas sobre el mismo issue por una sola causa
-    // se leerían como dos problemas distintos.
+    // The reason is said ONCE: the composer knows the age is missing, but
+    // only the CLI knows why, so its generic message is replaced rather than
+    // accumulated — two lines about the same issue for a single cause would
+    // read as two different problems.
     expect(res.stderr.match(/#7/g)).toHaveLength(1)
     limpiar(b)
   })
 
-  it('una lectura que falla NUNCA sale 0, aunque el resto esté limpio', () => {
+  it('a read that fails NEVER exits 0, even if the rest is clean', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_LIST_FAIL_AT: '0' })
     expect(res.status).toBe(1)
@@ -99,59 +100,62 @@ describe('/ct-status', () => {
     limpiar(b)
   })
 
-  it('si fallan los CERRADOS, lo de arriba no se queda vacío: el bloque EN VUELO sigue ahí', () => {
-    // El informe salía vacío bajo un pie que decía «lo de arriba es sólo lo
-    // que sí se ha podido comprobar»… y arriba no había nada, porque
-    // `cargarIssues` lanzaba y con ello tiraba la lectura de abiertos que ya
-    // estaba entera en memoria. Contradecía el contrato que este comando
-    // publica: «se informa de lo que sí se sabe».
+  it('if the CLOSED ones fail, what is above does not go empty: the IN FLIGHT block is still there', () => {
+    // The report came out empty under a footer that said "what is above is
+    // only what could be checked"… and above there was nothing, because
+    // `cargarIssues` threw and with it dropped the read of open issues that
+    // was already entirely in memory. It contradicted the contract this
+    // command publishes: "what is known is reported".
     const b = bancada()
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: enProgreso7(), FAKE_GH_TIMELINE_JSON: hace(3 * 3600_000), FAKE_GH_LIST_FAIL_AT: '1' })
     expect(res.status).toBe(1)
     expect(res.stdout).toMatch(/EN VUELO \(1\)/)
     expect(res.stdout).toMatch(/#7\s+refresh/)
     expect(res.stderr).toMatch(/no se pudieron listar issues cerrados/)
-    // Y sólo se ha perdido UNA de las dos lecturas, no las dos.
+    // And only ONE of the two reads has been lost, not both.
     expect(res.stdout).toMatch(/exit 1 — 1 aviso\(s\)/)
     limpiar(b)
   })
 
-  it('con los issues a medias, un worktree que SÍ está en disco se afirma: `worktree ✓`, jamás `✗`', () => {
-    // Defecto nacido de la INTERACCIÓN de dos arreglos, y por eso no lo vio
-    // ninguna revisión de tarea: el vaciado de `worktreesEnDisco` que protege
-    // de fabricar huérfanos alimentaba también el `hasWorktree` del bloque en
-    // vuelo. Era inalcanzable mientras `cargarIssues` lanzaba (sin issues no
-    // había bloque en vuelo que imprimir); el informe parcial lo hizo
-    // alcanzable, y el informe se contradecía en dos líneas seguidas: el aviso
-    // nombraba `.worktrees/7` y el bloque decía `worktree ✗` sobre #7.
+  it('with the issues half read, a worktree that IS on disk is asserted: `worktree ✓`, never `✗`', () => {
+    // A defect born of the INTERACTION of two fixes, and that is why no task
+    // review saw it: the emptying of `worktreesEnDisco` that protects against
+    // manufacturing orphans also fed the `hasWorktree` of the in-flight
+    // block. It was unreachable while `cargarIssues` threw (with no issues
+    // there was no in-flight block to print); the partial report made it
+    // reachable, and the report contradicted itself in two consecutive lines:
+    // the warning named `.worktrees/7` and the block said `worktree ✗` about
+    // #7.
     //
-    // La marca correcta aquí es `✓`, no `?`: la lectura de disco SÍ se hizo y
-    // el directorio SÍ está. Lo que no se sabe es a quién pertenece, y eso no
-    // es una señal del bloque en vuelo — es lo que apaga la atribución de
-    // huérfanos. Un `?` sería inventarse una duda que no existe.
+    // The right mark here is `✓`, not `?`: the disk read WAS done and the
+    // directory IS there. What is not known is who it belongs to, and that is
+    // not a signal of the in-flight block — it is what switches off the
+    // attribution of orphans. A `?` would be inventing a doubt that does not
+    // exist.
     const b = bancada({ worktrees: [7] })
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: enProgreso7(), FAKE_GH_TIMELINE_JSON: hace(3 * 3600_000), FAKE_GH_LIST_FAIL_AT: '1' })
     expect(res.status).toBe(1)
     expect(res.stdout).toMatch(/worktree ✓/)
     expect(res.stdout).not.toMatch(/worktree ✗/)
-    // Y el aviso NO nombra el 7: el informe acaba de explicarlo. Ver el test
-    // de aquí abajo, que es el que ata esa mitad.
+    // And the warning does NOT name the 7: the report has just explained it.
+    // See the test below, which is the one that ties down that half.
     expect(res.stderr).not.toMatch(/en \.worktrees\//)
-    // Sin poder atribuir, tampoco se acusa a nadie de huérfano.
+    // Unable to attribute, nobody is accused of being an orphan either.
     expect(res.stdout).not.toMatch(/RESIDUO/)
     limpiar(b)
   })
 
-  it('el aviso no nombra un directorio que el informe SÍ explica', () => {
-    // Segunda cara del mismo defecto: al pasar la lista real a los bloques, el
-    // aviso —que no se tocó— pasó a afirmar lo contrario de lo que el informe
-    // imprimía dos líneas más abajo. Sus dos mitades eran falsas para el 7: sí
-    // se había cruzado, y sí se sabía quién lo reclamaba, porque la lectura
-    // que SÍ funcionó es justo la que lo explica.
+  it('the warning does not name a directory the report DOES explain', () => {
+    // The other face of the same defect: on passing the real list to the
+    // blocks, the warning —which was not touched— went on to assert the
+    // opposite of what the report printed two lines further down. Both of its
+    // halves were false for the 7: it HAD been crossed, and who claimed it
+    // WAS known, because the read that DID work is precisely the one that
+    // explains it.
     const b = bancada({ worktrees: [7, 8] })
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: enProgreso7(), FAKE_GH_TIMELINE_JSON: hace(3 * 3600_000), FAKE_GH_LIST_FAIL_AT: '1' })
     expect(res.status).toBe(1)
-    expect(res.stdout).toMatch(/worktree ✓/) // el 7, explicado por #7 en vuelo
+    expect(res.stdout).toMatch(/worktree ✓/) // the 7, explained by #7 in flight
     const aviso = res.stderr.split('\n').find((l) => /en \.worktrees\//.test(l))
     expect(aviso).toBeDefined()
     const nombrados = /en \.worktrees\/ \(([^)]*)\)/.exec(aviso)[1].split(', ')
@@ -159,10 +163,10 @@ describe('/ct-status', () => {
     limpiar(b)
   })
 
-  it('si la lectura parcial explica TODOS los worktrees, no hay aviso — pero el exit sigue siendo 1', () => {
-    // El motivo de la lectura que falló no se pierde nunca: viaja aparte,
-    // desde `cargarIssues`. Que no quede ningún directorio del que avisar no
-    // convierte una lectura incompleta en un loop en reposo.
+  it('if the partial read explains ALL the worktrees, there is no warning — but the exit is still 1', () => {
+    // The reason for the read that failed is never lost: it travels
+    // separately, from `cargarIssues`. That no directory is left to warn
+    // about does not turn an incomplete read into a loop at rest.
     const b = bancada({ worktrees: [7] })
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: enProgreso7(), FAKE_GH_TIMELINE_JSON: hace(3 * 3600_000), FAKE_GH_LIST_FAIL_AT: '1' })
     expect(res.status).toBe(1)
@@ -173,10 +177,10 @@ describe('/ct-status', () => {
     limpiar(b)
   })
 
-  it('si fallan los ABIERTOS, la cosecha no omite el worktree que sí está en disco', () => {
-    // Colateral del mismo origen: `ENTREGADO, SIN COSECHAR` se construye con
-    // los cerrados, que aquí sí se leyeron, pero el vaciado le borraba el
-    // worktree — y el worktree es justo lo que hay que ir a limpiar.
+  it('if the OPEN ones fail, the harvest does not omit the worktree that is on disk', () => {
+    // Collateral of the same origin: `ENTREGADO, SIN COSECHAR` is built from
+    // the closed ones, which here were read, but the emptying deleted its
+    // worktree — and the worktree is precisely what has to be cleaned up.
     const b = bancada({ worktrees: [5] })
     const seq = JSON.stringify([[], [{ number: 5, body: '', labels: [], state_reason: 'completed' }]])
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: seq, FAKE_GH_LIST_FAIL_AT: '0' })
@@ -186,7 +190,7 @@ describe('/ct-status', () => {
     limpiar(b)
   })
 
-  it('si la lectura de issues falla, ningún worktree se acusa de huérfano', () => {
+  it('if the issue read fails, no worktree is accused of being an orphan', () => {
     const b = bancada({ worktrees: [7] })
     const res = correr(b, { FAKE_GH_LIST_FAIL_AT: '0' })
     expect(res.status).toBe(1)
@@ -195,10 +199,11 @@ describe('/ct-status', () => {
     limpiar(b)
   })
 
-  it('no se puede listar .worktrees/ → nunca «no hay huérfanos», y la señal sale `?` en vez de `✗`', () => {
-    // El test que el §9 del diseño exige y que faltaba. Con `.worktrees/`
-    // ilegible salían a la vez el `aviso:` de EACCES y un `worktree ✗` que
-    // afirmaba que no hay lo que no se ha podido mirar.
+  it('.worktrees/ cannot be listed → never "there are no orphans", and the signal comes out `?` instead of `✗`', () => {
+    // The test §9 of the design demands and that was missing. With
+    // `.worktrees/` unreadable, the EACCES `aviso:` and a `worktree ✗` came
+    // out at the same time, the latter asserting the absence of what could
+    // not be looked at.
     const b = bancada({ worktrees: [7] })
     chmodSync(join(b.repo, '.worktrees'), 0o000)
     try {
@@ -207,11 +212,11 @@ describe('/ct-status', () => {
       expect(res.stderr).toMatch(/no se pudo listar .*\.worktrees/)
       expect(res.stdout).toMatch(/worktree \?/)
       expect(res.stdout).not.toMatch(/worktree ✗/)
-      // Y jamás la afirmación de limpieza sobre la lectura que no se hizo.
+      // And never the assertion of cleanliness about the read that was not done.
       expect(res.stdout).not.toMatch(/RESIDUO/)
       expect(res.stdout).not.toMatch(/reposo/i)
-      // La rama SÍ se pudo leer, así que ésa sí se afirma: la duda no se
-      // contagia a la señal de al lado.
+      // The branch COULD be read, so that one is asserted: the doubt does
+      // not spread to the signal next to it.
       expect(res.stdout).toMatch(/rama ✗/)
     } finally {
       chmodSync(join(b.repo, '.worktrees'), 0o755)
@@ -219,7 +224,7 @@ describe('/ct-status', () => {
     }
   })
 
-  it('un worktree de un issue ABIERTO que no está en vuelo se nombra sin afirmar que nadie lo reclama', () => {
+  it('a worktree of an OPEN issue that is not in flight is named without asserting nobody claims it', () => {
     const b = bancada({ worktrees: [9] })
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: JSON.stringify([[abierto(9, 'ready', 'plan')], []]) })
     expect(res.status).toBe(3)
@@ -227,13 +232,13 @@ describe('/ct-status', () => {
     expect(res.stdout).toMatch(/\.worktrees\/9/)
     expect(res.stdout).toMatch(/#9 sigue abierto/)
     expect(res.stdout).toMatch(/status:ready/)
-    // La frase que el §6 del spec proponía sería FALSA aquí: el issue #9 está
-    // abierto, o sea vivo.
+    // The phrase §6 of the spec proposed would be FALSE here: issue #9 is
+    // open, that is, alive.
     expect(res.stdout).not.toMatch(/sin issue vivo que lo reclame/)
     limpiar(b)
   })
 
-  it('un worktree que ningún issue explica sí sale como no reclamado', () => {
+  it('a worktree no issue explains does come out as unclaimed', () => {
     const b = bancada({ worktrees: [11] })
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: SIN_ISSUES })
     expect(res.status).toBe(3)
@@ -242,7 +247,7 @@ describe('/ct-status', () => {
     limpiar(b)
   })
 
-  it('el worktree de un slice EN VUELO no es residuo', () => {
+  it('the worktree of a slice IN FLIGHT is not residue', () => {
     const b = bancada({ worktrees: [7] })
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: enProgreso7(), FAKE_GH_TIMELINE_JSON: hace(1000) })
     expect(res.status).toBe(0)
@@ -251,25 +256,26 @@ describe('/ct-status', () => {
     limpiar(b)
   })
 
-  it('un issue cerrado que conserva su label status: sale como residuo, con exit 3', () => {
+  it('a closed issue that keeps its status: label comes out as residue, with exit 3', () => {
     const b = bancada()
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: JSON.stringify([[], [{ number: 3, body: '', labels: [{ name: 'status:in-review' }], state_reason: 'completed' }]]) })
     expect(res.status).toBe(3)
     expect(res.stdout).toMatch(/RESIDUO \(1\)/)
     expect(res.stdout).toMatch(/#3\s+cerrado, pero conserva status:in-review/)
-    // Sin worktrees huérfanos, la nota sobre worktrees no pinta nada aquí.
+    // With no orphaned worktrees, the note about worktrees has no business here.
     expect(res.stdout).not.toMatch(/\.worktrees/)
     limpiar(b)
   })
 
-  it('sin `ps` en el PATH nadie sale muerto: exit 1 y «no se pudo comprobar»', () => {
+  it('with no `ps` on the PATH nobody comes out dead: exit 1 and "it could not be checked"', () => {
     const b = bancada()
-    // Un PATH sin `ps` ni `lsof`, pero con `git` (hace falta para resolver
-    // la raíz del checkout) y con `node` (el stub de `gh` es un script de node
-    // y sin él fallaría TAMBIÉN la lectura de issues, que no es lo que se está
-    // probando aquí): así el único fallo es el de la señal de procesos, y se
-    // ve qué hace el comando cuando falta la herramienta — acusar de abandono
-    // a un slice sano por eso sería su peor fallo posible.
+    // A PATH with neither `ps` nor `lsof`, but with `git` (needed to resolve
+    // the checkout's root) and with `node` (the `gh` stub is a node script
+    // and without it the issue read would fail TOO, which is not what is
+    // being tested here): that way the only failure is the process signal's,
+    // and you get to see what the command does when the tool is missing —
+    // accusing a healthy slice of abandonment over that would be its worst
+    // possible failure.
     const bin = join(b.dir, 'bin')
     mkdirSync(bin)
     symlinkSync(execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).trim(), join(bin, 'git'))
@@ -292,12 +298,12 @@ describe('/ct-status', () => {
     limpiar(b)
   })
 
-  it('no muta nada: jamás llama a `gh issue edit` ni a `gh label`', () => {
+  it('it mutates nothing: it never calls `gh issue edit` nor `gh label`', () => {
     const b = bancada({ worktrees: [7] })
     correr(b, { FAKE_GH_LIST_SEQUENCE: enProgreso7(), FAKE_GH_TIMELINE_JSON: hace(3 * 3600_000) })
     const log = argvDe(b)
-    // La prueba mira el argv REAL con el que se invocó a `gh`, no la ausencia
-    // de errores: un comando puede mutar y salir con 0 tan campante.
+    // The test looks at the REAL argv `gh` was invoked with, not at the
+    // absence of errors: a command can mutate and exit 0 quite happily.
     expect(log.length).toBeGreaterThan(0)
     expect(log).not.toMatch(/issue edit/)
     expect(log).not.toMatch(/label/)
@@ -306,11 +312,11 @@ describe('/ct-status', () => {
     limpiar(b)
   })
 
-  it('ninguna lectura lleva --limit, y todas paginan', () => {
+  it('no read carries --limit, and they all paginate', () => {
     const b = bancada()
     correr(b, { FAKE_GH_LIST_SEQUENCE: enProgreso7(), FAKE_GH_TIMELINE_JSON: '[]' })
     const lineas = argvDe(b).split('\n').filter(Boolean)
-    expect(lineas.length).toBe(3) // abiertos, cerrados, timeline de #7
+    expect(lineas.length).toBe(3) // open, closed, timeline of #7
     for (const l of lineas) {
       expect(l).not.toMatch(/--limit/)
       expect(l).toMatch(/--paginate/)
@@ -318,7 +324,7 @@ describe('/ct-status', () => {
     limpiar(b)
   })
 
-  it('--repo colgante (último token de argv) no llega a gh: exit 2', () => {
+  it('a dangling --repo (the last token of argv) does not reach gh: exit 2', () => {
     const b = bancada()
     const res = correr(b, {}, ['--repo'])
     expect(res.status).toBe(2)
@@ -327,7 +333,7 @@ describe('/ct-status', () => {
     limpiar(b)
   })
 
-  it('--repo con forma inválida: exit 2, sin tocar gh', () => {
+  it('--repo with an invalid shape: exit 2, without touching gh', () => {
     const b = bancada()
     const res = correr(b, {}, ['--repo', 'menoplus'])
     expect(res.status).toBe(2)
@@ -336,7 +342,7 @@ describe('/ct-status', () => {
     limpiar(b)
   })
 
-  it('sin --repo: exit 2 con el uso', () => {
+  it('with no --repo: exit 2 with the usage', () => {
     const b = bancada()
     const res = correr(b, {}, [])
     expect(res.status).toBe(2)
@@ -345,13 +351,14 @@ describe('/ct-status', () => {
   })
 })
 
-describe('/ct-status — la identidad del checkout', () => {
-  it('un --repo que no es el de este checkout no fabrica hallazgos: avisa y sale 1', () => {
-    // El checkout es de o/r, con tres worktrees y un claim; se pregunta por
-    // OTRO repo. Sin esta comprobación salían 3 hallazgos con cero avisos y
-    // exit 3 — uno la acusación de abandono sobre #7, y dos worktrees (8 y 9)
-    // marcados como candidatos a `git worktree remove`. Que el comando no
-    // escriba no ayuda: escribe el humano, por indicación suya.
+describe("/ct-status — the checkout's identity", () => {
+  it("a --repo that is not this checkout's does not manufacture findings: it warns and exits 1", () => {
+    // The checkout is o/r's, with three worktrees and a claim; ANOTHER repo
+    // is asked about. Without this check, 3 findings came out with zero
+    // warnings and exit 3 — one the accusation of abandonment on #7, and two
+    // worktrees (8 and 9) marked as candidates for `git worktree remove`.
+    // That the command does not write does not help: the human writes, at its
+    // suggestion.
     const b = bancada({ worktrees: [7, 8, 9] })
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: enProgreso7(), FAKE_GH_TIMELINE_JSON: hace(3 * 3600_000) }, ['--repo', 'otro/repo'])
     expect(res.status).toBe(1)
@@ -363,7 +370,7 @@ describe('/ct-status — la identidad del checkout', () => {
     limpiar(b)
   })
 
-  it('un checkout sin remote origin no se da por bueno: avisa y sale 1, sin acusar a nadie', () => {
+  it('a checkout with no origin remote is not taken as good: it warns and exits 1, accusing nobody', () => {
     const b = bancada({ worktrees: [9], origin: null })
     const res = correr(b, { FAKE_GH_LIST_SEQUENCE: SIN_ISSUES })
     expect(res.status).toBe(1)
@@ -372,11 +379,12 @@ describe('/ct-status — la identidad del checkout', () => {
     limpiar(b)
   })
 
-  it('invocado DESDE DENTRO de un worktree, mira el checkout principal', () => {
-    // `git rev-parse --show-toplevel` devolvería aquí el propio worktree: no
-    // hay ningún `.worktrees/` dentro (todo saldría `worktree ✗`) y el prefijo
-    // con el que se mapea el cwd de cada proceso quedaría mal (todo `proceso
-    // ✗`) — el informe negaría justo el directorio en el que estás parado.
+  it('invoked FROM INSIDE a worktree, it looks at the main checkout', () => {
+    // `git rev-parse --show-toplevel` would return the worktree itself here:
+    // there is no `.worktrees/` inside (everything would come out
+    // `worktree ✗`) and the prefix each process's cwd is mapped with would be
+    // wrong (everything `proceso ✗`) — the report would deny precisely the
+    // directory you are standing in.
     const b = bancada({ conCommit: true })
     gitEn(b.repo, 'worktree', 'add', '-q', '-b', 'feat/7', join(b.repo, '.worktrees', '7'))
     b.cwd = join(b.repo, '.worktrees', '7')
@@ -388,15 +396,15 @@ describe('/ct-status — la identidad del checkout', () => {
   })
 })
 
-describe('/ct-status — entregado, esperando merge', () => {
-  it('tres in-review con sus worktrees: bloque propio, sin residuo y exit 0', () => {
+describe('/ct-status — delivered, waiting for the merge', () => {
+  it('three in-review with their worktrees: a block of their own, no residue and exit 0', () => {
     const b = bancada({ worktrees: [11, 12, 13] })
     const res = correr(b, {
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[abierto(11, 'in-review', 'refresh de tokens'), abierto(12, 'in-review', 'marca de ritmo'), abierto(13, 'in-review', 'pie de plan')], []]),
     })
-    // Un loop sano con tres PRs abiertos devolvía 3 de forma permanente: el
-    // coordinador aprende a ignorar el código de salida, y un vigilante que
-    // gatee sobre él queda inservible.
+    // A healthy loop with three open PRs returned 3 permanently: the
+    // coordinator learns to ignore the exit code, and a watcher that gates on
+    // it becomes useless.
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/ENTREGADO, ESPERANDO MERGE \(3\)/)
     expect(res.stdout).toMatch(/#11\s+refresh de tokens — status:in-review/)
@@ -404,12 +412,12 @@ describe('/ct-status — entregado, esperando merge', () => {
     limpiar(b)
   })
 
-  it('no se confunde con la cosecha: los dos bloques pueden salir a la vez', () => {
+  it('it is not confused with the harvest: the two blocks can come out at once', () => {
     const b = bancada({ worktrees: [11, 5] })
     const res = correr(b, {
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[abierto(11, 'in-review')], [{ number: 5, body: '', labels: [], state_reason: 'completed' }]]),
     })
-    expect(res.status).toBe(3) // lo mergeado sin cosechar SÍ es hallazgo
+    expect(res.status).toBe(3) // what is merged and unharvested IS a finding
     expect(res.stdout).toMatch(/ENTREGADO, ESPERANDO MERGE \(1\)/)
     expect(res.stdout).toMatch(/ENTREGADO, SIN COSECHAR \(1\)/)
     expect(res.stdout).not.toMatch(/RESIDUO/)
@@ -417,22 +425,22 @@ describe('/ct-status — entregado, esperando merge', () => {
   })
 })
 
-describe('/ct-status — la señal de vida en el bloque de residuo', () => {
-  it('con un proceso vivo dentro, NO se dice que no hay ninguno', () => {
+describe('/ct-status — the sign of life in the residue block', () => {
+  it('with a live process inside, it is NOT said that there is none', () => {
     const b = bancada({ worktrees: [9] })
-    // Un proceso de verdad con su cwd dentro del worktree: es la única forma
-    // de ejercitar `liveSliceProcesses` de punta a punta.
+    // A real process with its cwd inside the worktree: it is the only way to
+    // exercise `liveSliceProcesses` end to end.
     //
-    // Montado COMO LO MONTA EL INSTALADOR NATIVO, que es lo que hace decisiva
-    // esta prueba: `bin/claude` es un SYMLINK a un ejecutable guardado bajo
-    // `versions/<versión>`, igual que `~/.local/bin/claude` apunta a
-    // `~/.local/share/claude/versions/2.1.221`. El nombre de proceso que ve el
-    // kernel es el del ejecutable RESUELTO (medido: `ps -o ucomm=` de un
-    // Claude Code real devuelve "2.1.221", no "claude"), así que lo único que
-    // dice `claude` aquí es la RUTA con la que se invocó — que es justo lo que
-    // este comando mira. Un symlink a /bin/sleep, no una copia: copiar un
-    // binario de sistema en macOS le rompe la firma y el SO lo mata con
-    // SIGKILL (comprobado).
+    // Set up THE WAY THE NATIVE INSTALLER SETS IT UP, which is what makes
+    // this test decisive: `bin/claude` is a SYMLINK to an executable stored
+    // under `versions/<version>`, just as `~/.local/bin/claude` points at
+    // `~/.local/share/claude/versions/2.1.221`. The process name the kernel
+    // sees is that of the RESOLVED executable (measured: `ps -o ucomm=` of a
+    // real Claude Code returns "2.1.221", not "claude"), so the only thing
+    // `claude` says here is the PATH it was invoked with — which is precisely
+    // what this command looks at. A symlink to /bin/sleep, not a copy:
+    // copying a system binary on macOS breaks its signature and the OS kills
+    // it with SIGKILL (checked).
     const bin = join(b.dir, 'bin')
     mkdirSync(join(bin, 'versions'), { recursive: true })
     symlinkSync('/bin/sleep', join(bin, 'versions', '2.1.221'))
@@ -440,26 +448,26 @@ describe('/ct-status — la señal de vida en el bloque de residuo', () => {
     const hijo = spawn(join(bin, 'claude'), ['30'], { cwd: join(b.repo, '.worktrees', '9'), stdio: 'ignore' })
     try {
       execFileSync('sh', ['-c', 'sleep 0.5'])
-      // EL CANARIO, Y POR QUÉ DEPENDE DEL SISTEMA OPERATIVO.
+      // THE CANARY, AND WHY IT DEPENDS ON THE OPERATING SYSTEM.
       //
-      // En macOS `ucomm` da el ejecutable RESUELTO ('2.1.221'), así que
-      // "el nombre no es claude" delata a quien vuelva a identificar por
-      // nombre antes que la aserción de abajo. En Linux `ucomm` es alias de
-      // `comm`, que da el basename INVOCADO: 'claude'.
+      // On macOS `ucomm` gives the RESOLVED executable ('2.1.221'), so "the
+      // name is not claude" gives away anyone who goes back to identifying by
+      // name before the assertion below. On Linux `ucomm` is an alias of
+      // `comm`, which gives the INVOKED basename: 'claude'.
       //
-      // Eso NO es una suposición: es lo que midió la primera corrida de la
-      // integración continua sobre ubuntu-latest, y es exactamente la pregunta
-      // que scripts/liveness.js dejó abierta por escrito («si alguien lleva el
-      // loop a Linux, lo primero que hay que verificar es qué devuelve ahí
-      // `ps -o comm=`»). Consecuencia para el filtro de liveness.js, que acepta
-      // un proceso si el basename de `comm` es exactamente `claude`: en Linux
-      // sigue funcionando, porque el basename de 'claude' es 'claude'.
+      // That is NOT a supposition: it is what the first continuous
+      // integration run on ubuntu-latest measured, and it is exactly the
+      // question scripts/liveness.js left open in writing ("if anyone takes
+      // the loop to Linux, the first thing to verify is what `ps -o comm=`
+      // returns there"). Consequence for liveness.js's filter, which accepts
+      // a process if the basename of `comm` is exactly `claude`: on Linux it
+      // keeps working, because the basename of 'claude' is 'claude'.
       //
-      // Se AFIRMA el valor de cada plataforma en vez de saltarse la aserción
-      // donde estorba: así el test documenta la medición y se rompe el día que
-      // cambie. En Linux el canario es inerte —el nombre sí es 'claude'—, y la
-      // garantía de este test es por tanto más débil ahí; queda dicho en vez de
-      // relajarse en silencio.
+      // Each platform's value is ASSERTED instead of skipping the assertion
+      // where it gets in the way: that way the test documents the measurement
+      // and breaks the day it changes. On Linux the canary is inert —the name
+      // IS 'claude'— and this test's guarantee is therefore weaker there; it
+      // is said out loud instead of being relaxed in silence.
       const nombreDeProceso = execFileSync('ps', ['-o', 'ucomm=', '-p', String(hijo.pid)], { encoding: 'utf8' }).trim()
       if (process.platform === 'darwin') {
         expect(nombreDeProceso).not.toBe('claude')
@@ -467,13 +475,14 @@ describe('/ct-status — la señal de vida en el bloque de residuo', () => {
         expect(nombreDeProceso).toBe('claude')
       }
       const res = correr(b, { FAKE_GH_LIST_SEQUENCE: SIN_ISSUES })
-      // LA afirmación que no se puede hacer sin mirar: la primera versión
-      // imprimía «nadie lo está trabajando ahora» sin consultar
-      // `procesos.porSlice`, que ya estaba en memoria.
+      // THE assertion that cannot be made without looking: the first version
+      // printed "nobody is working on it now" without consulting
+      // `procesos.porSlice`, which was already in memory.
       expect(res.stdout).not.toMatch(/no hay ning.n proceso trabajando dentro/)
-      // La rama positiva sólo se exige si la comprobación de procesos se pudo
-      // hacer de verdad en esta máquina: si falta `lsof`, el comando calla, y
-      // eso es justo lo que la aserción de arriba ya protege.
+      // The positive branch is only demanded if the process check could
+      // really be done on this machine: if `lsof` is missing, the command
+      // stays quiet, and that is exactly what the assertion above already
+      // protects.
       if (!/no se pudo (listar procesos|leer el directorio)/.test(res.stderr)) {
         expect(res.stdout).toMatch(new RegExp(`OJO: hay un proceso trabajando dentro ahora mismo \\(pid ${hijo.pid}\\)`))
       }
@@ -483,7 +492,7 @@ describe('/ct-status — la señal de vida en el bloque de residuo', () => {
     }
   })
 
-  it('si la comprobación de procesos falló, no se dice NADA sobre procesos', () => {
+  it('if the process check failed, NOTHING is said about processes', () => {
     const b = bancada({ worktrees: [9] })
     const bin = join(b.dir, 'bin')
     mkdirSync(bin)
@@ -502,13 +511,13 @@ describe('/ct-status — la señal de vida en el bloque de residuo', () => {
   })
 })
 
-describe('/ct-status — el informe entero llega al otro lado de la tubería', () => {
-  it('un informe largo capturado por un padre no se trunca a 65536 bytes', () => {
+describe('/ct-status — the whole report reaches the other side of the pipe', () => {
+  it('a long report captured by a parent is not truncated at 65536 bytes', () => {
     const b = bancada()
-    // `process.stdout` es asíncrono hacia una tubería en POSIX: con
-    // `process.exit()` el proceso muere sin esperar a vaciarlo, y el informe
-    // llegaba cortado a mitad de línea al tamaño del buffer del pipe del SO —
-    // con el exit code intacto, así que nada delataba el corte.
+    // `process.stdout` is asynchronous towards a pipe on POSIX: with
+    // `process.exit()` the process dies without waiting to drain it, and the
+    // report arrived cut off mid-line at the size of the OS's pipe buffer —
+    // with the exit code intact, so nothing gave the cut away.
     const cerrados = Array.from({ length: 2000 }, (_, i) => ({ number: i + 1, body: '', labels: [{ name: 'status:in-review' }], state_reason: 'completed' }))
     const seqFile = join(b.dir, 'seq.json')
     writeFileSync(seqFile, JSON.stringify([[], cerrados]))

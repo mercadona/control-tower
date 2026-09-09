@@ -1,25 +1,24 @@
 #!/usr/bin/env node
-// ADVERTENCIA HONESTA (T11, fix round 2 — decisión de José): el claim por
-// labels de este script NO tiene compare-and-swap. `claimLost()`
-// (scripts/claim.js) solo puede hacer perder al claimant de número MAYOR —
-// el de número menor nunca pierde por construcción — así que si dos
-// dispatchers concurrentes pasan su comprobación de colisión antes de que
-// cualquiera de los dos haya escrito, PUEDEN QUEDAR AMBOS reclamando el
-// mismo token compartido. Esto no es hipotético: está reproducido de forma
-// determinista y repetible con el harness adversarial
-// (scripts/experiments/ac6-race2-deterministic.sh — 3/3 rondas en su corrida
-// más reciente, y sin excepciones en ninguna de las corridas hechas durante
-// su desarrollo con otros parámetros), verificado contra el estado real de
-// los labels en GitHub, no solo por exit code — ver task-11-report.md §3
-// para el detalle completo. La mitigación real HOY, mientras el claim siga viviendo
-// en labels, es operativa, no de código: NO lanzar dos dispatchers a la vez
-// sobre el mismo repo. Este script no puede garantizar exclusión mutua bajo
-// concurrencia real; que quede dicho aquí sin adornos para que quien lo lea
-// sepa exactamente qué garantía tiene (ninguna) y no confíe de más en el
-// resultado de un exit 0. El plan es migrar el lock a una primitiva atómica
-// real (test-and-set vía `git refs`, ya validado en el experimento CAS de T9)
-// — hasta que eso aterrice, esta es la garantía real: ninguna bajo
-// concurrencia, sí bajo uso secuencial disciplinado.
+// HONEST WARNING (T11, fix round 2 — José's decision): the label-based claim
+// of this script has NO compare-and-swap. `claimLost()` (scripts/claim.js)
+// can only make the claimant with the HIGHER number lose — the lower-numbered
+// one never loses by construction — so if two concurrent dispatchers pass
+// their collision check before either of them has written, BOTH CAN END UP
+// claiming the same shared token. This is not hypothetical: it is reproduced
+// deterministically and repeatably with the adversarial harness
+// (scripts/experiments/ac6-race2-deterministic.sh — 3/3 rounds in its most
+// recent run, and with no exceptions in any of the runs made during its
+// development with other parameters), verified against the real state of the
+// labels in GitHub, not just by exit code — see task-11-report.md §3 for the
+// full detail. The real mitigation TODAY, while the claim keeps living in
+// labels, is operational, not code: do NOT launch two dispatchers at once
+// against the same repo. This script cannot guarantee mutual exclusion under
+// real concurrency; let it be said here without ornament so that whoever
+// reads it knows exactly what guarantee they have (none) and does not trust
+// the result of an exit 0 further than it deserves. The plan is to migrate
+// the lock to a real atomic primitive (test-and-set via `git refs`, already
+// validated in the CAS experiment of T9) — until that lands, this is the real
+// guarantee: none under concurrency, yes under disciplined sequential use.
 import { execFileSync, spawn } from 'node:child_process'
 import { writeSync, statSync, readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
@@ -47,136 +46,141 @@ import { HarvestLedger, LedgerIdentity } from './harvest-ledger.js'
 const ctWatchMergePath = join(dirname(fileURLToPath(import.meta.url)), 'ct-watch-merge.mjs')
 
 // ============================================================================
-// Finding 4 (auditoría de interrupción/staleness): dos cambios en este
-// fichero, relacionados pero independientes.
+// Finding 4 (interruption/staleness audit): two changes in this file,
+// related but independent.
 //
-// (a) Truncado a ~64 KiB. `console.error(grande)` seguido INMEDIATAMENTE de
-// `process.exit()` puede perder texto: `process.stdout`/`process.stderr` son
-// ASÍNCRONOS hacia una tubería en POSIX (documentado en los propios docs de
-// Node — el mismo razonamiento que ya motivó el `writeSync` de
-// `attemptClaim` en ct-next.mjs), y `process.exit()` no espera a que un
-// `write()` en vuelo termine de vaciarse. El mensaje `COLLISION: ...` (línea
-// más abajo) es justo el que más crece — un choque contra muchos issues en
-// vuelo a la vez — y los ATENCIÓN de "libéralo a mano" son EXACTAMENTE lo
-// que un humano necesita íntegro cuando algo salió mal. `dieErr`/`dieOut`/
-// `errLine`/`outLine`, más abajo, sustituyen a `console.error`/`console.log`
-// en TODO este fichero (no solo justo antes de salir): dos escrituras
-// separadas al MISMO fd conservan su orden aunque una sea síncrona y la
-// otra no lo fuera, pero si CUALQUIERA de las escrituras previas a un
-// `process.exit()` sigue en vuelo cuando este llega, se pierde igual — así
-// que la única forma de estar seguro es que NINGUNA escritura de este
-// fichero dependa del flush asíncrono por defecto.
+// (a) Truncation at ~64 KiB. `console.error(big)` followed IMMEDIATELY by
+// `process.exit()` can lose text: `process.stdout`/`process.stderr` are
+// ASYNCHRONOUS towards a pipe on POSIX (documented in Node's own docs — the
+// same reasoning that already motivated the `writeSync` of `attemptClaim` in
+// ct-next.mjs), and `process.exit()` does not wait for an in-flight `write()`
+// to finish draining. The `COLLISION: ...` message (a line further down) is
+// precisely the one that grows most — a clash against many issues in flight
+// at once — and the ATENCIÓN ones saying "release it by hand" are EXACTLY
+// what a human needs in full when something went wrong. `dieErr`/`dieOut`/
+// `errLine`/`outLine`, further down, replace `console.error`/`console.log`
+// in THIS WHOLE file (not only right before exiting): two separate writes to
+// the SAME fd keep their order even if one is synchronous and the other was
+// not, but if ANY of the writes preceding a `process.exit()` is still in
+// flight when it arrives, it is lost all the same — so the only way to be
+// sure is that NO write in this file depends on the default asynchronous
+// flush.
 //
-// (b) Contrato de exit code ensanchado. Antes, TODO fallo tras el paso de
-// colisión (fallo de lectura/escritura, fallo de readback, carrera perdida)
-// compartía el mismo exit 1 — el caller (ct-next.mjs#classifyClaimOutcome)
-// tenía que DIFERENCIAR cinco causas muy distintas parseando el TEXTO libre
-// que este fichero imprime, lo cual es frágil ante un cambio futuro de
-// wording. Ahora el exit code por sí solo ya distingue las tres
-// consecuencias que de verdad le importan al caller:
-//   0 = éxito (claim confirmado, o --release con éxito) — sin cambios.
-//   1 = 'skip' — resultado NORMAL del protocolo: colisión detectada ANTES de
-//       escribir nada, o carrera perdida con el revert posterior EXITOSO
-//       (el issue vuelve limpio a status:ready). Ninguna mutación queda
-//       persistida. Saltar este slice y seguir con el resto de la tanda es
-//       correcto — sin cambios de comportamiento respecto a antes.
-//   2 = error de uso/config (argv inválido, flags retirados, fixture sin
-//       --dry-run, hook de prueba malformado) — sin cambios.
-//   3 = NUEVO — fallo de INFRAESTRUCTURA sin mutación persistente: no se
-//       pudo leer el estado del candidato, no se pudo escribir el claim, o
-//       falló el readback pero el revert posterior fue exitoso. El issue
-//       queda intacto (o vuelve a status:ready) — no es una colisión real,
-//       pero tampoco deja nada huérfano. El caller trata esto como
-//       "sigue con el resto de la tanda", igual que antes, solo que ahora
-//       lo sabe por el exit code, no por parsear el mensaje.
-//   4 = NUEVO — HUÉRFANO: el claim quedó en status:in-progress SIN NADIE
-//       trabajándolo (revert fallido tras perder la carrera, o revert
-//       fallido tras un fallo de readback). Esto exige que un humano lo
-//       mire antes de que ct-next.mjs reintente nada más — el caller aborta
-//       la tanda ENTERA con este código, igual que ya hacía antes al ver
-//       este mismo texto de ATENCIÓN. Con `--collect` este mismo 4 significa
-//       la misma clase de cosa por otra puerta: la COSECHA QUEDÓ A MEDIAS
-//       (algún paso mutó y otro falló), y los comandos que quedan se imprimen
-//       por separado —nunca encadenados con `&&`— para que un humano remate.
-//   5 = NUEVO (F22) — la rama del slice INTRODUCE un fichero de estado
-//       (`.agent/STATE.md` o `.agent/SLICE.md`). No se libera nada: el issue
-//       se queda en status:in-progress. Este código NO lo ve nunca
-//       ct-next.mjs — `--release` lo invoca el agente al entregar, no el
-//       bucle de claim, así que no pasa por classifyClaimOutcome.
-//   6 = NUEVO (F-jjponz-1) — el plan prescriptivo del slice falta en la rama,
-//       no se puede leer, o no cumple el contrato (plan-contract.js). Sale de
-//       `--release` (que se niega SIN mutar nada: el issue sigue en
-//       status:in-progress) y de `--check-plan` (modo read-only para que el
-//       agente valide ANTES de commitear). Igual que el 5, nunca lo ve
-//       classifyClaimOutcome.
-//   9 = NUEVO (F38) — el gate `plan` de este slice NO está cerrado por un
-//       humano: no hay ningún comentario con el go de ESTE despacho
-//       (`-OK <nonce>`), o el go de este despacho no está registrado, o no se
-//       ha podido comprobar. Sale sólo de `--release`, que se niega sin mutar
-//       nada. Igual que el 5, el 6, el 7 y el 8, nunca lo ve
-//       classifyClaimOutcome.
-//  10 = NUEVO (F20/cosecha) — CONSERVADO: `--collect` encontró la PR
-//       mergeada, pero el árbol del worktree tiene cambios sin commitear o la
-//       punta local de `feat/<n>` no es el `headRefOid` que mergeó la PR. No
-//       se borra NADA y el motivo se imprime. "Mergeado" no es "nadie está
-//       tocando eso", y borrar un worktree es irreversible: ante la duda se
-//       conserva y se dice. Sale sólo de `--collect`; como el 5, el 6 y el 9,
-//       nunca lo ve classifyClaimOutcome.
-//  11 = NUEVO (F20/cosecha a BigQuery) — `--collect --bq` leyó la cosecha del
-//       slice y BigQuery RECHAZÓ la fila. No se borra NADA (la fila viaja antes
-//       de borrar precisamente para esto) y el motivo que dio `bq` se imprime
-//       por el canal de error. Es un código PROPIO y no el 10 a propósito: el
-//       10 dice que el DISCO discrepa de la PR mergeada y se arregla en el
-//       worktree; esto se arregla en los permisos o el schema del dataset. Un
-//       solo código para las dos causas dejaba al backend proyectando la del
-//       disco sobre las dos, y a su lector mirando un worktree sano.
-//       Sale sólo de `--collect`; como el 5, el 6, el 9 y el 10, nunca lo ve
-//       classifyClaimOutcome.
-// El texto que este fichero imprime NO cambia de contenido (los mismos
-// detalles, incluido el comando manual de `--release`/revert) — solo deja
-// de ser la ÚNICA fuente de verdad para la decisión del caller.
+// (b) Widened exit code contract. Before, EVERY failure after the collision
+// step (read/write failure, readback failure, lost race) shared the same
+// exit 1 — the caller (ct-next.mjs#classifyClaimOutcome) had to TELL APART
+// five very different causes by parsing the free TEXT this file prints,
+// which is fragile against a future change of wording. Now the exit code on
+// its own already distinguishes the three consequences the caller really
+// cares about:
+//   0 = success (claim confirmed, or --release succeeded) — unchanged.
+//   1 = 'skip' — the NORMAL outcome of the protocol: collision detected
+//       BEFORE writing anything, or lost race with a SUCCESSFUL revert
+//       afterwards (the issue goes back cleanly to status:ready). No
+//       mutation stays persisted. Skipping this slice and carrying on with
+//       the rest of the batch is correct — no behaviour change from before.
+//   2 = usage/config error (invalid argv, withdrawn flags, fixture without
+//       --dry-run, malformed test hook) — unchanged.
+//   3 = NEW — INFRASTRUCTURE failure with no persistent mutation: the
+//       candidate's state could not be read, the claim could not be written,
+//       or the readback failed but the revert afterwards succeeded. The
+//       issue is left intact (or goes back to status:ready) — it is not a
+//       real collision, but neither does it leave anything orphaned. The
+//       caller treats this as "carry on with the rest of the batch", just as
+//       before, only that now it knows it by the exit code, not by parsing
+//       the message.
+//   4 = NEW — ORPHAN: the claim was left at status:in-progress with NOBODY
+//       working on it (failed revert after losing the race, or failed revert
+//       after a readback failure). This demands that a human look at it
+//       before ct-next.mjs retries anything else — the caller aborts the
+//       WHOLE batch with this code, just as it already did before on seeing
+//       this same ATENCIÓN text. With `--collect` this same 4 means the same
+//       kind of thing through another door: the HARVEST WAS LEFT HALF DONE
+//       (some step mutated and another failed), and the commands that remain
+//       are printed separately —never chained with `&&`— so that a human can
+//       finish the job.
+//   5 = NEW (F22) — the slice's branch INTRODUCES a state file
+//       (`.agent/STATE.md` or `.agent/SLICE.md`). Nothing is released: the
+//       issue stays at status:in-progress. ct-next.mjs NEVER sees this code —
+//       `--release` is invoked by the agent on delivering, not by the claim
+//       loop, so it does not go through classifyClaimOutcome.
+//   6 = NEW (F-jjponz-1) — the slice's prescriptive plan is missing from the
+//       branch, cannot be read, or does not meet the contract
+//       (plan-contract.js). It comes out of `--release` (which refuses
+//       WITHOUT mutating anything: the issue stays at status:in-progress) and
+//       of `--check-plan` (read-only mode so the agent can validate BEFORE
+//       committing). Like the 5, classifyClaimOutcome never sees it.
+//   9 = NEW (F38) — this slice's `plan` gate is NOT closed by a human: there
+//       is no comment carrying the go of THIS dispatch (`-OK <nonce>`), or
+//       the go of this dispatch is not registered, or it could not be
+//       checked. It comes only out of `--release`, which refuses without
+//       mutating anything. Like the 5, the 6, the 7 and the 8,
+//       classifyClaimOutcome never sees it.
+//  10 = NEW (F20/harvest) — KEPT: `--collect` found the PR merged, but the
+//       worktree's tree has uncommitted changes or the local tip of
+//       `feat/<n>` is not the `headRefOid` that merged the PR. NOTHING is
+//       deleted and the reason is printed. "Merged" is not "nobody is
+//       touching that", and deleting a worktree is irreversible: when in
+//       doubt it is kept and said out loud. It comes only out of
+//       `--collect`; like the 5, the 6 and the 9, classifyClaimOutcome never
+//       sees it.
+//  11 = NEW (F20/harvest into BigQuery) — `--collect --bq` read the slice's
+//       harvest and BigQuery REJECTED the row. NOTHING is deleted (the row
+//       travels before deleting precisely for this) and the reason `bq` gave
+//       is printed on the error channel. It is a code of ITS OWN and not the
+//       10 on purpose: the 10 says that the DISK disagrees with the merged
+//       PR and is fixed in the worktree; this one is fixed in the dataset's
+//       permissions or schema. A single code for the two causes left the
+//       backend projecting the disk one onto both, and its reader staring at
+//       a healthy worktree.
+//       It comes only out of `--collect`; like the 5, the 6, the 9 and the
+//       10, classifyClaimOutcome never sees it.
+// The text this file prints does NOT change in content (the same details,
+// including the manual `--release`/revert command) — it merely stops being
+// the ONLY source of truth for the caller's decision.
 // ============================================================================
 //
-// D5 (hallazgo colateral, hermano del de ct-next.mjs) — UN DESTINO DE SALIDA
-// ROTO NO PUEDE CAMBIAR EL EXIT CODE DE ESTE PROTOCOLO.
+// D5 (collateral finding, sibling of the one in ct-next.mjs) — A BROKEN
+// OUTPUT DESTINATION CANNOT CHANGE THIS PROTOCOL'S EXIT CODE.
 //
-// `writeSync` garantiza que el dato está escrito CUANDO RETORNA, pero puede
-// no retornar nunca (tubería llena y descriptor bloqueante) o lanzar EPIPE
-// (el lector cerró). Sin este try/catch, ese EPIPE subía como excepción no
-// capturada y mataba el proceso con exit 1. Verificado por construcción
-// ejecutando `dispatch-check 90 --repo o/r` con el extremo de LECTURA de
-// stdout cerrado (el caso real de `dispatch-check ... | head`, o de un
-// agente que lo invoca desde el kickoff y no consume la salida): el claim de
-// #90 se escribió CON ÉXITO —`issue edit 90 --add-label status:in-progress`
-// y su readback están en el log de gh— y el proceso murió con EPIPE en el
-// `dieOut('claimed #90 → in-progress', 0)` final, saliendo con 1.
+// `writeSync` guarantees the datum is written WHEN IT RETURNS, but it may
+// never return (full pipe and blocking descriptor) or throw EPIPE (the reader
+// closed). Without this try/catch, that EPIPE came up as an uncaught
+// exception and killed the process with exit 1. Verified by construction by
+// running `dispatch-check 90 --repo o/r` with the READ end of stdout closed
+// (the real case of `dispatch-check ... | head`, or of an agent that invokes
+// it from the kickoff and does not consume the output): the claim of #90 was
+// written SUCCESSFULLY —`issue edit 90 --add-label status:in-progress` and
+// its readback are in gh's log— and the process died with EPIPE at the final
+// `dieOut('claimed #90 → in-progress', 0)`, exiting with 1.
 //
-// Y 1 no es un código cualquiera en este fichero: es 'skip', o sea "colisión
-// detectada a tiempo o carrera perdida con revert limpio — NADA quedó
-// mutado". El caller leería un claim conseguido como un claim que nunca
-// ocurrió, sobre el propio contrato de exit codes del protocolo de claim. Un
-// mensaje que no se puede entregar es un límite aceptable; que decida el
-// resultado del protocolo, no.
-// CANAL DE SALIDA (F16/H2) — mismo criterio que ct-next.mjs y ct-groom.mjs,
-// escrito entero en ct-next.mjs junto a su `warn()`:
+// And 1 is not just any code in this file: it is 'skip', that is, "collision
+// detected in time or race lost with a clean revert — NOTHING was left
+// mutated". The caller would read a claim that succeeded as a claim that
+// never happened, on the claim protocol's very own exit code contract. A
+// message that cannot be delivered is an acceptable limit; a message deciding
+// the protocol's outcome is not.
+// OUTPUT CHANNEL (F16/H2) — same criterion as ct-next.mjs and ct-groom.mjs,
+// written out in full in ct-next.mjs next to its `warn()`:
 //
-//   STDOUT (`outLine`/`dieOut`) = el PRODUCTO. Aquí, el resultado del
-//            protocolo de claim: `claimed #N → in-progress`, `released`,
-//            `reopened`, `requeued`, y las notas que acompañan a un resultado
-//            conseguido.
-//   STDERR (`errLine`/`dieErr`) = el DIAGNÓSTICO. `COLLISION:`, `ATENCIÓN:`,
-//            errores de uso y todo aborto.
+//   STDOUT (`outLine`/`dieOut`) = the PRODUCT. Here, the outcome of the claim
+//            protocol: `claimed #N → in-progress`, `released`, `reopened`,
+//            `requeued`, and the notes that accompany an outcome that was
+//            achieved.
+//   STDERR (`errLine`/`dieErr`) = the DIAGNOSTIC. `COLLISION:`, `ATENCIÓN:`,
+//            usage errors and every abort.
 //
-// Este fichero YA cumplía el criterio; queda dicho para que el reparto no
-// haya que inferirlo. OJO al añadir líneas: `writeSync` (más abajo) NO es un
-// detalle de estilo — es lo que impide que un `process.exit()` inmediato se
-// coma el mensaje, y lo que impide que un destino roto cambie el exit code.
+// This file ALREADY met the criterion; it is stated so that the split does
+// not have to be inferred. WATCH OUT when adding lines: `writeSync` (further
+// down) is NOT a style detail — it is what stops an immediate
+// `process.exit()` from eating the message, and what stops a broken
+// destination from changing the exit code.
 function safeWrite(fd, text) {
   try {
     writeSync(fd, text)
   } catch {
-    // Tubería cerrada o llena: la línea se pierde. Nunca cambia el exit code
-    // ni mata el proceso a mitad del protocolo de claim.
+    // Pipe closed or full: the line is lost. It never changes the exit code
+    // nor kills the process halfway through the claim protocol.
   }
 }
 function errLine(msg) { safeWrite(2, msg + '\n') }
@@ -184,11 +188,12 @@ function outLine(msg) { safeWrite(1, msg + '\n') }
 function dieErr(msg, code) { errLine(msg); process.exit(code) }
 function dieOut(msg, code) { outLine(msg); process.exit(code) }
 
-// `arg()` solo devuelve un string cuando el flag realmente trae un valor: si
-// el flag es el último token de argv, o el token siguiente es a su vez otro
-// flag (empieza por `--`), devolvemos `true` (presente-sin-valor) en vez de
-// colarlo como valor. Los call-sites validan explícitamente `typeof === 'string'`
-// antes de usarlo — así un `--repo` colgante nunca llega a `execFileSync`.
+// `arg()` only returns a string when the flag really carries a value: if the
+// flag is the last token of argv, or the next token is itself another flag
+// (starts with `--`), we return `true` (present-without-value) instead of
+// sneaking it in as a value. The call sites explicitly validate
+// `typeof === 'string'` before using it — that way a dangling `--repo` never
+// reaches `execFileSync`.
 const arg = (f, d) => {
   const i = process.argv.indexOf(f)
   if (i === -1) return d
@@ -196,14 +201,13 @@ const arg = (f, d) => {
   return (typeof v === 'string' && !v.startsWith('--')) ? v : true
 }
 const has = (f) => process.argv.includes(f)
-// D4, defecto 2 (mismo patrón que `--cap` en ct-next.mjs, y aquí más caro):
-// `parseInt(process.argv[2], 10)` es un parser TOLERANTE — `parseInt('42x',
-// 10)` es 42, `parseInt('1e3', 10)` es 1. Este número identifica el issue
-// que se va a MUTAR (status:ready → status:in-progress) contra un repo real:
-// un argumento con basura de cola reclamaba, en silencio, un issue que el
-// usuario no había nombrado. parseStrictInt (scripts/argnum.js) solo acepta
-// dígitos decimales; cualquier otra cosa es error de uso, nunca un número
-// "parecido".
+// D4, defect 2 (same pattern as `--cap` in ct-next.mjs, and costlier here):
+// `parseInt(process.argv[2], 10)` is a TOLERANT parser — `parseInt('42x',
+// 10)` is 42, `parseInt('1e3', 10)` is 1. This number identifies the issue
+// that is going to be MUTATED (status:ready → status:in-progress) against a
+// real repo: an argument with trailing rubbish silently claimed an issue the
+// user had not named. parseStrictInt (scripts/argnum.js) only accepts decimal
+// digits; anything else is a usage error, never a "close enough" number.
 const issue = parseStrictInt(process.argv[2])
 const repo = arg('--repo')
 const release = has('--release')
@@ -212,36 +216,37 @@ const requeue = has('--requeue')
 const checkPlan = has('--check-plan')
 const collect = has('--collect')
 const dryRun = has('--dry-run')
-// --no-watch-merge: no lances el vigilante del merge en este release.
+// --no-watch-merge: do not launch the merge watcher in this release.
 //
-// Lo pide un flujo que NO TIENE sesión coordinadora, y por eso no es un
-// interruptor de comodidad: sin él, el vigilante hace exactamente lo que sabe
-// hacer —localizar por DIRECTORIO la workspace de cmux del checkout principal— y
-// en ese flujo la única que hay ahí es la que corre el servidor que despachó el
-// slice. Le teclearía a un programa un párrafo pensado para un agente, y su log
-// lo anunciaría como entregado: una entrega falsa por escrito, que es peor que
-// no avisar.
+// It is asked for by a flow that HAS NO coordinator session, and that is why
+// it is not a convenience switch: without it, the watcher does exactly what
+// it knows how to do —locate the main checkout's cmux workspace by
+// DIRECTORY— and in that flow the only one there is the one running the
+// server that dispatched the slice. It would type at a program a paragraph
+// meant for an agent, and its log would announce it as delivered: a false
+// delivery in writing, which is worse than not warning at all.
 //
-// No se detecta, se declara. Desde aquí no hay forma de distinguir «esa pestaña
-// es una coordinadora» de «esa pestaña es un servidor»: las dos son una
-// workspace de cmux en el mismo directorio. Quien despacha sí lo sabe, así que
-// lo dice.
+// It is not detected, it is declared. From here there is no way to tell "that
+// tab is a coordinator" from "that tab is a server": both are a cmux
+// workspace in the same directory. Whoever dispatches does know, so they say
+// so.
 //
-// NO cambia ninguna otra decisión del release, y en particular no lo relaja: las
-// cinco puertas se comprueban igual y el issue se mueve igual. Lo único que se
-// pierde es el aviso, que es justo lo que el vigilante aporta —el MOMENTO, no el
-// conocimiento— porque `/ct-next` sigue emitiendo `cosecha pendiente:` en cada
-// corrida. Y en el flujo que pide esta bandera se pierde aún menos: ahí quien
-// recoge es un reloj que llama a `--collect` por su cuenta, así que el aviso no
-// se queda sin destinatario, se queda sin función. Se dice en voz alta al
-// liberar, por la misma razón por la que el fallo al lanzarlo también se dice:
-// un silencio aquí es indistinguible de un vigilante que sí está.
+// It does NOT change any other decision of the release, and in particular it
+// does not relax it: the five gates are checked the same and the issue moves
+// the same. The only thing lost is the warning, which is precisely what the
+// watcher contributes —the MOMENT, not the knowledge— because `/ct-next`
+// keeps emitting `cosecha pendiente:` on every run. And in the flow that asks
+// for this flag even less is lost: there the one who collects is a clock that
+// calls `--collect` on its own, so the warning is not left without a
+// recipient, it is left without a function. It is said out loud when
+// releasing, for the same reason the failure to launch it is also said: a
+// silence here is indistinguishable from a watcher that really is there.
 const noWatchMerge = has('--no-watch-merge')
 const usage = 'uso: dispatch-check.mjs <issue#> --repo <o/r> [--release | --reopen | --requeue | --check-plan | --collect] [--dry-run] [--no-watch-merge] [--bq <proyecto:dataset.tabla>]'
-// --bq <proyecto:dataset.tabla>: solo dentro de --collect, dónde cargar la fila cosechada
-// del slice tras cerrar cmux, borrar el worktree y la rama. Se valida AQUÍ, junto a los
-// demás flags y antes de tocar `gh`, para que un valor mal formado salga con exit 2 sin
-// haber leído nada de GitHub — el mismo criterio que el resto de este bloque.
+// --bq <project:dataset.table>: only inside --collect, where to load the slice's harvested
+// row after closing cmux, deleting the worktree and the branch. It is validated HERE, next
+// to the other flags and before touching `gh`, so that a malformed value exits with 2
+// without having read anything from GitHub — the same criterion as the rest of this block.
 const bqArg = arg('--bq', null)
 if (bqArg === true) dieErr(`--bq inválido: "(sin valor)" — ${usage}`, 2)
 const bqTable = bqArg === null ? null : BigQueryTable.parse(bqArg)
@@ -250,13 +255,14 @@ if (issue === null || issue < 1) {
   dieErr(`<issue#> inválido: ${process.argv[2] === undefined ? '(ausente)' : `"${process.argv[2]}"`} — debe ser un entero >= 1 escrito con dígitos a secas (nada de "42x", "1e3", "4.2", espacios, ni signo "+"/"-": un número aproximado aquí reclamaría un issue que no es el que pediste).\n${usage}`, 2)
 }
 if (typeof repo !== 'string' || repo.length === 0) { dieErr(usage, 2) }
-// Los tres flags mueven el MISMO label por aristas distintas del ciclo
-// (ready → in-progress → in-review → in-progress → … → ready). Pasar dos
-// juntos no tiene una interpretación razonable, y elegir uno en silencio sería
-// adivinar cuál quería quien lo escribió sobre una mutación de estado real.
-// `--collect` no mueve ninguna label —borra residuo en disco— pero entra en la
-// misma exclusión por el mismo motivo: es otro modo entero de este comando, y
-// combinarlo con uno que muta labels no tiene interpretación razonable.
+// The three flags move the SAME label along different edges of the cycle
+// (ready → in-progress → in-review → in-progress → … → ready). Passing two
+// together has no reasonable interpretation, and silently picking one would
+// be guessing which one whoever wrote it meant, on top of a real state
+// mutation. `--collect` moves no label —it deletes residue on disk— but it
+// falls under the same exclusion for the same reason: it is another whole
+// mode of this command, and combining it with one that mutates labels has no
+// reasonable interpretation.
 {
   const pedidos = [release && '--release', reopen && '--reopen', requeue && '--requeue', checkPlan && '--check-plan', collect && '--collect'].filter(Boolean)
   if (pedidos.length > 1) {
@@ -264,97 +270,98 @@ if (typeof repo !== 'string' || repo.length === 0) { dieErr(usage, 2) }
   }
 }
 
-// CT_CLAIM_TEST_SELF_KILL_SIGNAL — exclusivamente para tests (revisión
-// externa, IMPORTANTE: un Ctrl-C real durante attemptClaim en ct-next.mjs
-// mata a ESTE proceso por señal, y el caller necesita distinguirlo de un
-// "bug o mala configuración" — ver classifyClaimOutcome/el caller en
-// ct-next.mjs). Reproducir esto de forma determinista con una señal EXTERNA
-// exigiría coordinar el PID de un subproceso lanzado dentro de OTRO
-// subproceso — fràgil y con las mismas carreras de temporización ya vistas
-// en finding 1. Autoenviarse la señal (misma syscall subyacente que una
-// externa, indistinguible para Node) en un punto determinista es la forma
-// fiable de ejercer ese camino. Se comprueba aquí, justo después de la
-// validación de uso — antes de tocar `gh` o mutar nada — para que el efecto
-// sea idéntico a "el usuario interrumpió justo al principio".
+// CT_CLAIM_TEST_SELF_KILL_SIGNAL — exclusively for tests (external review,
+// IMPORTANT: a real Ctrl-C during attemptClaim in ct-next.mjs kills THIS
+// process by signal, and the caller needs to tell that apart from a "bug or
+// misconfiguration" — see classifyClaimOutcome/the caller in ct-next.mjs).
+// Reproducing this deterministically with an EXTERNAL signal would require
+// coordinating the PID of a subprocess launched inside ANOTHER subprocess —
+// fragile and with the same timing races already seen in finding 1. Sending
+// the signal to oneself (the same underlying syscall as an external one,
+// indistinguishable to Node) at a deterministic point is the reliable way to
+// exercise that path. It is checked here, right after the usage validation —
+// before touching `gh` or mutating anything — so that the effect is identical
+// to "the user interrupted right at the start".
 if (process.env.CT_CLAIM_TEST_SELF_KILL_SIGNAL) {
   process.kill(process.pid, process.env.CT_CLAIM_TEST_SELF_KILL_SIGNAL)
-  // El propio proceso muere aquí por la señal (disposición por defecto: sin
-  // manejador registrado en este fichero) — nada después de esta línea
-  // llega a ejecutarse cuando la variable está fijada.
+  // The process itself dies here from the signal (default disposition: no
+  // handler registered in this file) — nothing after this line gets to run
+  // when the variable is set.
 }
 
-// --settle-ms/CT_CLAIM_SETTLE_MS ya NO EXISTEN (T11, fix round 2 — ver el
-// comentario de cabecera de este fichero para el porqué). Si el flag
-// aparece en argv, se RECHAZA explícitamente con exit 2 en vez de
-// ignorarlo en silencio: alguien que lo invoque por costumbre
-// (`--settle-ms 2000`, de un script o de memoria muscular) con un exit 0
-// limpio se quedaría creyendo que hay una espera de asentamiento activa —
-// exactamente el "invita a confiar en él" que motivó eliminarla. Ignorarlo
-// en silencio habría reintroducido esa falsa confianza por otra vía.
+// --settle-ms/CT_CLAIM_SETTLE_MS NO LONGER EXIST (T11, fix round 2 — see this
+// file's header comment for why). If the flag appears in argv, it is
+// explicitly REJECTED with exit 2 instead of being ignored silently: someone
+// invoking it out of habit (`--settle-ms 2000`, from a script or from muscle
+// memory) with a clean exit 0 would be left believing there is a settle wait
+// active — exactly the "invites you to trust it" that motivated removing it.
+// Ignoring it silently would have reintroduced that false confidence by
+// another route.
 if (has('--settle-ms') || process.env.CT_CLAIM_SETTLE_MS !== undefined) {
   dieErr('--settle-ms/CT_CLAIM_SETTLE_MS ya no existen: la espera de asentamiento se eliminó a propósito (ver el comentario de cabecera de dispatch-check.mjs y task-11-report.md). Quítalo de la invocación/entorno — no hace nada, y dejarlo puesto invita a creer que sigue activo.', 2)
 }
 
-// NO HAY ESPERA DE ASENTAMIENTO ("settle wait") EN ESTE SCRIPT — se eliminó a
-// propósito (T11, fix round 2). Existió una versión anterior con
-// --settle-ms/CT_CLAIM_SETTLE_MS (una espera entre escribir el claim y
-// releerlo, con 2000ms de default), vendida como mitigación de la ventana de
-// doble claim.
+// THERE IS NO SETTLE WAIT IN THIS SCRIPT — it was removed on purpose (T11,
+// fix round 2). An earlier version existed with
+// --settle-ms/CT_CLAIM_SETTLE_MS (a wait between writing the claim and
+// re-reading it, with a 2000ms default), sold as a mitigation of the double
+// claim window.
 //
-// LA RAZÓN DE ELIMINARLA NO ES "SE DEMOSTRÓ QUE NO SERVÍA DE NADA" — eso no
-// está demostrado, y afirmarlo sería tan impreciso como la promesa original.
-// La razón es más simple y no depende de esa medición: una ventana temporal
-// no CIERRA una condición de carrera, solo reduce su probabilidad, y no
-// queremos mitigar una carrera real con un temporizador, mida lo que mida.
-// Esa razón se sostiene sola.
+// THE REASON FOR REMOVING IT IS NOT "IT WAS PROVEN USELESS" — that is not
+// proven, and asserting it would be as imprecise as the original promise. The
+// reason is simpler and does not depend on that measurement: a time window
+// does not CLOSE a race condition, it only reduces its probability, and we do
+// not want to mitigate a real race with a timer, whatever it measures. That
+// reason stands on its own.
 //
-// Lo que sí se midió (task-11-report.md §5, resumen y detalle): tres
-// barridos de skew (500, 3000 y 8000ms) contra settle=0 y settle=2000 dieron
-// el mismo resultado en ambos valores de settle. Un cuarto punto, skew=1000,
-// SÍ divergió (settle=0 → doble claim 3/3; settle=2000 → sin doble claim
-// 3/3) — pero es n=1 (una sola ronda de 3 medida en ese punto, sin repetir
-// en puntos vecinos), no concluyente por sí solo. Los datos, en conjunto,
-// no permiten afirmar ni que el settle aportaba 0 de margen ni que aportaba
-// ~2s: el muestreo no alcanza para resolverlo, y no se ha completado el
-// barrido fino que sí lo resolvería. La garantía real hoy está en el
-// comentario de cabecera de este fichero: ninguna bajo concurrencia.
+// What was measured (task-11-report.md §5, summary and detail): three skew
+// sweeps (500, 3000 and 8000ms) against settle=0 and settle=2000 gave the
+// same result at both settle values. A fourth point, skew=1000, DID diverge
+// (settle=0 → double claim 3/3; settle=2000 → no double claim 3/3) — but that
+// is n=1 (a single round of 3 measured at that point, with no repeat at
+// neighbouring points), not conclusive on its own. Taken together, the data
+// allow us to assert neither that the settle contributed 0 margin nor that it
+// contributed ~2s: the sampling does not reach far enough to settle it, and
+// the fine sweep that would settle it has not been completed. The real
+// guarantee today is in this file's header comment: none under concurrency.
 //
-// Sleep síncrono y bloqueante (sin async/await, para no reestructurar todo el
-// script en promesas): Atomics.wait sobre un buffer compartido es la forma
-// estándar de bloquear el hilo principal de Node un intervalo fijo.
+// Synchronous, blocking sleep (no async/await, so as not to restructure the
+// whole script into promises): Atomics.wait over a shared buffer is the
+// standard way to block Node's main thread for a fixed interval.
 function sleepSync(ms) {
   if (!(ms > 0)) return
   const sab = new Int32Array(new SharedArrayBuffer(4))
   Atomics.wait(sab, 0, 0, ms)
 }
 
-// CT_CLAIM_FIXTURE es exclusivamente para tests. Si queda colgada en el
-// entorno (una variable que un test no limpió, un wrapper que no la borra) SIN
-// --dry-run, el script NO debe decidir con datos fabricados ni, sobre todo,
-// ejecutar mutaciones reales contra gh con ese estado inventado de fondo:
-// se trata como error de uso y abortamos antes de tocar gh.
+// CT_CLAIM_FIXTURE is exclusively for tests. If it is left dangling in the
+// environment (a variable a test did not clean up, a wrapper that does not
+// unset it) WITHOUT --dry-run, the script must NOT decide with fabricated
+// data nor, above all, run real mutations against gh with that invented state
+// in the background: it is treated as a usage error and we abort before
+// touching gh.
 if (process.env.CT_CLAIM_FIXTURE && !dryRun) {
   dieErr('CT_CLAIM_FIXTURE está definido pero falta --dry-run: por seguridad no se decide ni se muta gh real con datos de fixture. Añade --dry-run o limpia la variable de entorno.', 2)
 }
-// Atado también en la propia lectura (defensa en profundidad): `fx` solo
-// puede ser no-nulo cuando `dryRun` es cierto.
+// Tied down in the read itself too (defence in depth): `fx` can only be
+// non-null when `dryRun` is true.
 const fx = (dryRun && process.env.CT_CLAIM_FIXTURE) ? JSON.parse(process.env.CT_CLAIM_FIXTURE) : null
 
-// maxBuffer explícito (finding 7 de la review final): el default de Node para
-// execFileSync es 1 MiB. `allOpen()` ya no lleva `--limit` (ver más abajo), así
-// que en un repo con unos pocos cientos de issues abiertos el JSON puede
-// superar 1 MiB con facilidad. Node aborta ruidosamente si se excede (no
-// trunca en silencio), pero eso haría inusable el comando contra un repo real.
-// 20 MiB es generoso para miles de issues sin ser "sin límite" de verdad.
+// Explicit maxBuffer (finding 7 of the final review): Node's default for
+// execFileSync is 1 MiB. `allOpen()` no longer carries `--limit` (see below),
+// so in a repo with a few hundred open issues the JSON can exceed 1 MiB
+// easily. Node aborts noisily if it is exceeded (it does not truncate
+// silently), but that would make the command unusable against a real repo.
+// 20 MiB is generous for thousands of issues without being truly "no limit".
 const GH_MAX_BUFFER = 20 * 1024 * 1024
-// timeout+killSignal (MENOR, revisión externa: consistencia con el
-// principio de ct-next.mjs de que TODA llamada bloqueante a un subproceso
-// debe estar acotada — este fichero también puede invocarse en solitario,
-// no solo como subproceso de ct-next.mjs, así que le hace falta su propia
-// cota independiente en vez de depender solo del timeout que le impone el
-// caller desde fuera). Mismo default (10 min) y mismo tope (24h) que
-// CT_NEXT_CHILD_TIMEOUT_MS en ct-next.mjs, con su propia variable de
-// entorno — dispatch-check.mjs no importa nada de ct-next.mjs.
+// timeout+killSignal (MINOR, external review: consistency with ct-next.mjs's
+// principle that EVERY blocking call to a subprocess must be bounded — this
+// file can also be invoked on its own, not only as a subprocess of
+// ct-next.mjs, so it needs its own independent bound instead of depending
+// only on the timeout the caller imposes on it from outside). Same default
+// (10 min) and same cap (24h) as CT_NEXT_CHILD_TIMEOUT_MS in ct-next.mjs,
+// with its own environment variable — dispatch-check.mjs imports nothing from
+// ct-next.mjs.
 const CHILD_TIMEOUT_CAP_MS = 24 * 60 * 60 * 1000
 let ghTimeoutMs = 10 * 60 * 1000
 const ghTimeoutRaw = process.env.CT_CLAIM_CHILD_TIMEOUT_MS
@@ -367,53 +374,53 @@ if (ghTimeoutRaw !== undefined) {
 }
 const gh = (a) => execFileSync('gh', a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: GH_MAX_BUFFER, timeout: ghTimeoutMs, killSignal: 'SIGKILL' })
 const labelsOf = (n) => JSON.parse(gh(['issue', 'view', String(n), '--repo', repo, '--json', 'labels', '-q', '[.labels[].name]']))
-// Listado directo de issues abiertos vía el endpoint REST `gh api
-// repos/<repo>/issues` — NUNCA el índice de búsqueda (`--search` / `gh search
-// issues`), que tiene latencia de indexado y podría no reflejar todavía el
-// label recién escrito por otro runner. Tampoco `gh issue list --limit 200`
-// (finding 2 de la review final): ese endpoint devuelve más nuevo primero, así
-// que un `--limit` fijo deja fuera justo los issues VIEJOS — y un
-// `in-progress` colisionante que caiga fuera de esta lista hace que
-// `detectCollisions`/`claimLost` fallen ABIERTOS (el lock deja de bloquear,
-// en vez de fallar cerrado). En su lugar usamos paginación real (`--paginate
-// --slurp`, sin tope), reutilizando el mismo helper de aplanado/filtrado de
-// PRs que ct-groom.mjs/ct-next.mjs (scripts/gh-issues.js) — ese endpoint
-// también devuelve pull requests. Toda la lógica de colisión y desempate
-// sigue siendo enteramente client-side en `claim.js`. per_page=100 (re-review):
-// el default REST es 30/página; con --paginate igual se traen todas, pero
-// `allOpen()` se llama DOS veces por claim (colisión + readback), así que
-// menos páginas por llamada recorta ~3x los round-trips totales. 100 es el
-// máximo que admite este endpoint.
+// Direct listing of open issues via the REST endpoint `gh api
+// repos/<repo>/issues` — NEVER the search index (`--search` / `gh search
+// issues`), which has indexing latency and might not yet reflect the label
+// another runner has just written. Nor `gh issue list --limit 200` (finding 2
+// of the final review): that endpoint returns newest first, so a fixed
+// `--limit` leaves out precisely the OLD issues — and a colliding
+// `in-progress` that falls outside this list makes
+// `detectCollisions`/`claimLost` fail OPEN (the lock stops blocking, instead
+// of failing closed). Instead we use real pagination (`--paginate --slurp`,
+// with no cap), reusing the same PR flattening/filtering helper as
+// ct-groom.mjs/ct-next.mjs (scripts/gh-issues.js) — that endpoint also
+// returns pull requests. All the collision and tie-breaking logic is still
+// entirely client-side in `claim.js`. per_page=100 (re-review): the REST
+// default is 30/page; with --paginate they all get fetched anyway, but
+// `allOpen()` is called TWICE per claim (collision + readback), so fewer
+// pages per call cuts the total round-trips by ~3x. 100 is the maximum this
+// endpoint admits.
 const allOpen = () => realIssuesOnly(flattenIssuePages(JSON.parse(
   gh(['api', `repos/${repo}/issues`, '--method', 'GET', '-f', 'state=open', '-f', 'per_page=100', '--paginate', '--slurp']))))
   .map((i) => ({ n: i.number, labels: (i.labels || []).map((l) => l.name) }))
 
 const manualReleaseHint = () => `gh issue edit ${issue} --repo ${repo} --add-label status:ready --remove-label status:in-progress`
 
-// setStatus: única función que muta el label `status:` de un issue — el
-// claim (status:ready → status:in-progress), el revert por carrera perdida,
-// el revert por fallo de readback, y --release (status:in-progress →
-// status:in-review) pasan los cuatro por aquí. El plan (decisión ya tomada
-// por José) es migrar el lock a una primitiva atómica real — un create de
-// `POST /repos/{owner}/{repo}/git/refs`, ya validado en un experimento
-// anterior como test-and-set real: 201 para el ganador, 422 "Reference
-// already exists" para cada perdedor, en 5 rondas de 8 intentos realmente
-// concurrentes — y esta extracción reduce esa migración futura a un solo
-// punto de edición en vez de cuatro.
+// setStatus: the only function that mutates an issue's `status:` label — the
+// claim (status:ready → status:in-progress), the revert on a lost race, the
+// revert on a readback failure, and --release (status:in-progress →
+// status:in-review) all four go through here. The plan (a decision José has
+// already taken) is to migrate the lock to a real atomic primitive — a create
+// of `POST /repos/{owner}/{repo}/git/refs`, already validated in an earlier
+// experiment as a real test-and-set: 201 for the winner, 422 "Reference
+// already exists" for each loser, over 5 rounds of 8 genuinely concurrent
+// attempts — and this extraction reduces that future migration to a single
+// point of edit instead of four.
 //
-// Devuelve { ok: true } o { ok: false, error }, y NO imprime ni sale del
-// proceso por su cuenta: qué mensaje mostrar en fallo, si hace falta uno de
-// éxito, y si el fallo debe abortar (exit 1) o solo avisar y seguir difieren
-// en cada uno de los cuatro call sites (ver más abajo y en el claim-then-
-// verify) — esa decisión es de cada caller, no de setStatus. Se eligió
-// "devuelve un resultado" en vez de una callback de mensajes porque el
-// control de flujo alrededor de cada mutación ya es distinto sitio a sitio
-// (dos de los cuatro sitios llaman a process.exit(1) inmediatamente en
-// fallo; los otros dos delegan esa decisión a un catch/if exterior que ya
-// existía antes de esta extracción) — forzar ese control de flujo dentro de
-// setStatus habría sido más complejo que dejarlo donde ya estaba. Mismo
-// patrón que `attemptRevertClaim` en ct-next.mjs: una mutación gh que
-// reporta éxito/fallo sin decidir qué hacer con ese resultado.
+// It returns { ok: true } or { ok: false, error }, and it does NOT print nor
+// exit the process on its own: what message to show on failure, whether a
+// success one is needed, and whether the failure must abort (exit 1) or only
+// warn and carry on differ at each of the four call sites (see below and in
+// the claim-then-verify) — that decision belongs to each caller, not to
+// setStatus. "Return a result" was chosen over a message callback because the
+// control flow around each mutation is already different from site to site
+// (two of the four sites call process.exit(1) immediately on failure; the
+// other two delegate that decision to an outer catch/if that already existed
+// before this extraction) — forcing that control flow inside setStatus would
+// have been more complex than leaving it where it already was. Same pattern
+// as `attemptRevertClaim` in ct-next.mjs: a gh mutation that reports
+// success/failure without deciding what to do with that result.
 function setStatus(issue, from, to) {
   try {
     gh(['issue', 'edit', String(issue), '--repo', repo, '--add-label', to, '--remove-label', from])
@@ -424,109 +431,112 @@ function setStatus(issue, from, to) {
 }
 
 // ============================================================================
-// F22 — LA PUERTA: UN SLICE NO ENTREGA CON UN FICHERO DE ESTADO DENTRO.
+// F22 — THE GATE: A SLICE DOES NOT DELIVER WITH A STATE FILE INSIDE.
 //
-// `.agent/STATE.md` es de la sesión COORDINADORA. Si la rama del slice lo
-// introduce, el squash del PR deja main con el estado de un slice: `task:` con
-// el nombre del slice, `role: slice-agent` y un gate pendiente de un PR ya
-// mergeado. Cualquier sesión nueva del repo se hidrata creyendo que ES ese
-// agente. Pasó tres veces en un periodo de 9 slices, y una llegó a main.
+// `.agent/STATE.md` belongs to the COORDINATOR session. If the slice's branch
+// introduces it, the PR's squash leaves main with a slice's state: `task:`
+// with the slice's name, `role: slice-agent` and a gate pending on an already
+// merged PR. Any new session of the repo hydrates believing it IS that agent.
+// It happened three times over a span of 9 slices, and one reached main.
 //
-// SE NIEGA, no avisa. Una comprobación que sólo imprime no es una
-// comprobación: si su resultado no puede detener la acción siguiente, es
-// decoración — y fue exactamente así como se coló la que llegó a main (imprimió
-// `1` y el merge siguió adelante).
+// IT REFUSES, it does not warn. A check that only prints is not a check: if
+// its result cannot stop the next action, it is decoration — and that is
+// exactly how the one that reached main slipped through (it printed `1` and
+// the merge carried on).
 //
-// LÍMITE, dicho: `--release` lo invoca el agente porque el kickoff se lo pide,
-// y el kickoff es un prompt, no un gate. Un agente que no lo llame se salta
-// esta puerta — pero entonces su issue se queda en status:in-progress, que sí
-// se ve. Esto mueve el caso normal de la retina del humano al loop; no lo
-// vuelve hermético.
+// LIMIT, said out loud: `--release` is invoked by the agent because the
+// kickoff asks it to, and the kickoff is a prompt, not a gate. An agent that
+// does not call it skips this gate — but then its issue stays at
+// status:in-progress, which is visible. This moves the normal case from the
+// human's retina to the loop; it does not make it hermetic.
 // ============================================================================
-// Slice 2 (apuntes de Capde) — LA BASE DEL DIFF ES EL CORTE REAL, NO LA COPIA
-// LOCAL. Una versión anterior de este comentario afirmaba que `base:` "es la
-// referencia real desde la que se cortó este worktree". Es falso desde
-// c3af34c, y esa mentira ya costó una corrida: `base:` es el NOMBRE DE RAMA
-// del PR (`main`, `develop` — de ahí sale el `--base` de `gh pr create` al
-// cerrar el slice), y el worktree se corta de `origin/<base>`. Resolver ese
-// nombre aquí dentro apunta a la copia LOCAL de la rama, que puede llevar
-// días sin fetch: en la corrida del slice 10 estaba 7 commits por detrás de
-// origin/main y el gate del plan acusó de "cita inventada" un fichero que
-// llevaba todo ese tiempo en el remoto.
+// Slice 2 (Capde's notes) — THE DIFF'S BASE IS THE REAL CUT, NOT THE LOCAL
+// COPY. An earlier version of this comment claimed that `base:` "is the real
+// reference this worktree was cut from". That is false since c3af34c, and
+// that lie already cost one run: `base:` is the PR's BRANCH NAME (`main`,
+// `develop` — that is where the `--base` of `gh pr create` comes from when
+// closing the slice), and the worktree is cut from `origin/<base>`. Resolving
+// that name in here points at the LOCAL copy of the branch, which may have
+// gone days without a fetch: in the slice 10 run it was 7 commits behind
+// origin/main and the plan gate accused of "invented citation" a file that
+// had been on the remote all that time.
 //
-// El corte real viaja en `base_sha:` (kickoff.js lo siembra desde el slice 1:
-// el sha de `origin/<base>` en el momento del corte, en un campo que ningún
-// verbo ni hook reescribe; ausente —nunca vacío— si no resolvió). Por eso se
-// PREFIERE, verificado con `rev-parse --verify --quiet <sha>^{commit}` — el
-// sufijo `^{commit}` no es decorativo: sin él, `--verify` da por bueno
-// CUALQUIER 40-hex bien formado aunque el objeto no exista en el repo
-// (comprobado contra git real). Si el campo no está (semillas anteriores al
-// slice 1) o el sha no resuelve (repo podado, semilla corrupta), se cae a la
-// cadena de siempre, INTACTA: `base:` → origin/HEAD → origin/main → main →
-// master.
+// The real cut travels in `base_sha:` (kickoff.js seeds it as of slice 1: the
+// sha of `origin/<base>` at the moment of the cut, in a field no verb or hook
+// rewrites; absent —never empty— if it did not resolve). That is why it is
+// PREFERRED, verified with `rev-parse --verify --quiet <sha>^{commit}` — the
+// `^{commit}` suffix is not decorative: without it, `--verify` accepts ANY
+// well-formed 40-hex even if the object does not exist in the repo (checked
+// against real git). If the field is not there (seeds older than slice 1) or
+// the sha does not resolve (pruned repo, corrupt seed), it falls back to the
+// usual chain, INTACT: `base:` → origin/HEAD → origin/main → main → master.
 //
-// La verificación del sha vive AQUÍ y no en los dos consumidores a propósito:
-// ellos también hacen rev-parse de lo que esta función devuelve, pero su
-// fallo es `known:false` → --release SE NIEGA (exit 5/6) — lo correcto para
-// una ref que debía resolver. Un `base_sha:` que no resuelve no debe negar
-// nada: debe caer al fallback, y eso solo puede decidirse ANTES de elegir qué
-// devolver. El rev-parse de los consumidores se queda: sigue cubriendo la
-// cadena de fallback y es el que ancla el caso "base === HEAD".
-// RE_40HEX ya NO es la barandilla de `base:` (slice 9a, más abajo): su único
-// consumidor es el contrato del campo `base_sha:`, que SÍ es un 40-hex
-// sembrado por kickoff.js y nunca un nombre de ref — ver su comentario en el
-// cuerpo de sliceBaseRef.
+// The sha's verification lives HERE and not in the two consumers on purpose:
+// they also rev-parse what this function returns, but their failure is
+// `known:false` → --release REFUSES (exit 5/6) — which is right for a ref
+// that was supposed to resolve. A `base_sha:` that does not resolve must
+// refuse nothing: it must fall back, and that can only be decided BEFORE
+// choosing what to return. The consumers' rev-parse stays: it still covers
+// the fallback chain and it is the one anchoring the "base === HEAD" case.
+// RE_40HEX is NO LONGER the guardrail for `base:` (slice 9a, below): its only
+// consumer is the contract of the `base_sha:` field, which IS a 40-hex seeded
+// by kickoff.js and never a ref name — see its comment in the body of
+// sliceBaseRef.
 const RE_40HEX = /^[0-9a-f]{40}$/i
-// --release consulta la base DOS veces (limpieza F22 + plan F-jjponz-1); el
-// aviso de más abajo sale UNA por proceso, no una por consulta.
+// --release queries the base TWICE (F22 cleanliness + F-jjponz-1 plan); the
+// warning below comes out ONCE per process, not once per query.
 let avisoBaseEsShaEmitido = false
-// El SEGUNDO candado, y es de COSTE, no de ruido: `avisoBaseEsShaEmitido`
-// solo se levanta cuando el aviso SE EMITE, así que en el caso normal
-// (`base:` es una rama de verdad y no hay nada que avisar) se queda en false
-// para siempre y la sonda de `baseNoEsUnaRama` se pagaría OTRA VEZ en la
-// segunda consulta. Con esto, la sonda se paga una vez por valor de `base:`
-// por proceso — y `base:` sale del mismo fichero en las dos consultas.
+// The SECOND latch, and it is about COST, not noise: `avisoBaseEsShaEmitido`
+// is only raised when the warning IS EMITTED, so in the normal case (`base:`
+// is a real branch and there is nothing to warn about) it stays false forever
+// and the `baseNoEsUnaRama` probe would be paid for AGAIN on the second
+// query. With this, the probe is paid once per value of `base:` per process —
+// and `base:` comes out of the same file on both queries.
 let baseFormaProbada = null
 
 // ============================================================================
-// Slice 9(a) — LA BARANDILLA DEJA DE CONTAR CARACTERES.
+// Slice 9(a) — THE GUARDRAIL STOPS COUNTING CHARACTERS.
 //
-// La versión del slice 2 exigía los 40 hex. Un agente que "arregle" el campo
-// con `git rev-parse --short HEAD` mete 7-12 hex: rompe `gh pr create --base`
-// EXACTAMENTE igual (exige un nombre de rama), pero el diff sale bien (git
-// resuelve el sha corto como cualquier otra ref) y la barandilla callaba. Un
-// tag, un `HEAD~1` o un `origin/main` en ese campo rompen lo mismo y también
-// callaban.
+// The slice 2 version demanded the full 40 hex. An agent that "fixes" the
+// field with `git rev-parse --short HEAD` puts in 7-12 hex: it breaks
+// `gh pr create --base` EXACTLY the same (it demands a branch name), but the
+// diff comes out right (git resolves the short sha like any other ref) and
+// the guardrail stayed quiet. A tag, a `HEAD~1` or an `origin/main` in that
+// field break the same thing and were also passed over in silence.
 //
-// La distinción real no es la longitud, es la NATURALEZA del valor: `base:` es
-// el nombre de rama del que sale el `--base` de `gh pr create`. Así que se
-// pregunta lo que importa, en este orden (que además es el orden más BARATO —
-// el caso normal cuesta UN rev-parse):
+// The real distinction is not the length, it is the NATURE of the value:
+// `base:` is the branch name the `--base` of `gh pr create` comes from. So we
+// ask what matters, in this order (which is also the CHEAPEST order — the
+// normal case costs ONE rev-parse):
 //
-//   1. ¿existe `refs/heads/<base>`?           → es una rama local: CALLA.
-//   2. ¿existe `refs/remotes/origin/<base>`?  → es una rama del remoto que
-//      este clon nunca ha checkouteado (base `develop` en un clon que solo
-//      tiene `main`): es un nombre de rama LEGÍTIMO, CALLA. Esta sonda es
-//      defensiva y no es la que salva ese caso: `develop^{commit}` tampoco
-//      resuelve una rama solo-remota (git busca `refs/remotes/develop`, no
-//      `refs/remotes/origin/develop`), así que el paso 4 ya callaría. Lo que
-//      la sonda añade es decir la verdad en el camino, en vez de callar por
-//      no haber encontrado nada. El remoto se llama `origin` a pelo porque
-//      todo el dispatcher ya lo hace: el worktree se corta de
-//      `origin/<base>` (ct-next.mjs:3506) y la cadena de fallback de aquí
-//      abajo nombra `origin/HEAD` y `origin/main`.
-//   3. ¿resuelve `<base>^{commit}`?           → no es una rama y SÍ es un
-//      commit: sha (completo o corto), tag, `HEAD`, `origin/main`… → AVISA.
-//   4. si tampoco resuelve → CALLA. No es una rama ni un commit: esa avería
-//      la nombran ya los dos consumidores con su propia voz y su propio exit
-//      ("no se pudo resolver `<base>` o HEAD a un commit", exit 5/6), que es
-//      más preciso que este aviso. Duplicarla aquí sería ruido.
+//   1. does `refs/heads/<base>` exist?           → it is a local branch: STAY
+//      QUIET.
+//   2. does `refs/remotes/origin/<base>` exist?  → it is a branch of the
+//      remote that this clone has never checked out (base `develop` in a
+//      clone that only has `main`): it is a LEGITIMATE branch name, STAY
+//      QUIET. This probe is defensive and it is not the one that saves that
+//      case: `develop^{commit}` does not resolve a remote-only branch either
+//      (git looks for `refs/remotes/develop`, not
+//      `refs/remotes/origin/develop`), so step 4 would already stay quiet.
+//      What the probe adds is telling the truth along the way, instead of
+//      staying quiet for having found nothing. The remote is called `origin`
+//      bare because the whole dispatcher already does so: the worktree is cut
+//      from `origin/<base>` (ct-next.mjs:3506) and the fallback chain further
+//      down names `origin/HEAD` and `origin/main`.
+//   3. does `<base>^{commit}` resolve?           → it is not a branch and it
+//      IS a commit: a sha (full or short), a tag, `HEAD`, `origin/main`… →
+//      WARN.
+//   4. if it does not resolve either → STAY QUIET. It is neither a branch nor
+//      a commit: that breakage is already named by the two consumers in their
+//      own voice and with their own exit ("no se pudo resolver `<base>` o
+//      HEAD a un commit", exit 5/6), which is more precise than this warning.
+//      Duplicating it here would be noise.
 //
-// Prefijar `refs/heads/`/`refs/remotes/origin/` no es decorativo: hace que el
-// argumento no pueda empezar por `-` y ser leído por git como una opción.
-// Cualquier fallo (git ausente, cwd fuera de un repo, .git ilegible) se lee
-// como "no lo pude comprobar" y CALLA: esto es un diagnóstico, nunca aborta
-// nada — el reparto de F16/H2.
+// Prefixing `refs/heads/`/`refs/remotes/origin/` is not decorative: it makes
+// the argument unable to start with `-` and be read by git as an option. Any
+// failure (git absent, cwd outside a repo, unreadable .git) is read as "I
+// could not check it" and STAYS QUIET: this is a diagnostic, it never aborts
+// anything — the F16/H2 split.
 // ============================================================================
 function refResuelve(ref) {
   try {
@@ -541,12 +551,12 @@ function baseNoEsUnaRama(base) {
   return refResuelve(`${base}^{commit}`)
 }
 
-// Fix round 1 (Importante 1) — el parseo del campo `base:` de la semilla
-// vivía escrito dos veces (aquí y en nombreDeLaRamaBase(), más abajo): mismo
-// readFileSync, mismo regex, mismo recorte de comillas. `conventions/decisions.md`:
-// si cambia cómo se escribe o se entrecomilla ese campo, hay que tocar las DOS
-// a la vez o divergen en silencio. Un solo sitio que sepa parsear el campo
-// crudo — la deuda declarada del fichero exime del estilo, no de esto.
+// Fix round 1 (Important 1) — the parsing of the seed's `base:` field lived
+// written twice (here and in nombreDeLaRamaBase(), below): same readFileSync,
+// same regex, same quote trimming. `conventions/decisions.md`: if how that
+// field is written or quoted changes, BOTH have to be touched at once or they
+// diverge silently. A single place that knows how to parse the raw field —
+// the file's declared debt exempts it from the style, not from this.
 function parseBaseField(seedText) {
   const b = seedText.match(/^base:[ \t]*(.+)$/m)
   return b ? b[1].trim().replace(/^['"]|['"]$/g, '') : ''
@@ -561,12 +571,12 @@ function sliceBaseRef() {
   try {
     const seed = readFileSync(join(process.cwd(), SLICE_REL_PATH), 'utf8')
     const base = parseBaseField(seed)
-    // Barandilla contra el arreglo espontáneo observado en la corrida real:
-    // un agente que "arregla" el diff metiendo un SHA en `base:`. El diff
-    // sale igual (un sha resuelve como cualquier ref), así que NO se aborta —
-    // la avería está en el OTRO consumidor del campo: `gh pr create --base`
-    // exige un nombre de rama y fallará al cerrar el slice. Aviso por stderr
-    // (diagnóstico, no producto — el reparto de F16/H2 de arriba).
+    // Guardrail against the spontaneous fix observed in the real run: an
+    // agent that "fixes" the diff by putting a SHA in `base:`. The diff comes
+    // out the same (a sha resolves like any ref), so it does NOT abort — the
+    // breakage is in the OTHER consumer of the field: `gh pr create --base`
+    // demands a branch name and will fail when closing the slice. Warning via
+    // stderr (diagnostic, not product — the F16/H2 split from above).
     if (base && !avisoBaseEsShaEmitido && baseFormaProbada !== base) {
       baseFormaProbada = base
       if (baseNoEsUnaRama(base)) {
@@ -578,67 +588,68 @@ function sliceBaseRef() {
     const s = seed.match(/^base_sha:[ \t]*(.+)$/m)
     if (s) {
       const sha = s[1].trim().replace(/^['"]|['"]$/g, '')
-      // Solo un 40-hex: `base_sha:` es un SHA sembrado, nunca un nombre de
-      // ref. Aceptar `HEAD~1` o `main` aquí dejaría que una semilla
-      // reescrita (SLICE.md es agent-reachable — la trampa (c) de F22, más
-      // abajo) moviera la base del diff a una ref que controla el propio
-      // agente. No es una frontera de seguridad (un sha válido también se
-      // puede escribir a mano; el caso base===HEAD lo siguen cazando los
-      // consumidores), es el contrato del campo.
+      // Only a 40-hex: `base_sha:` is a seeded SHA, never a ref name.
+      // Accepting `HEAD~1` or `main` here would let a rewritten seed
+      // (SLICE.md is agent-reachable — trap (c) of F22, below) move the
+      // diff's base to a ref the agent itself controls. It is not a security
+      // boundary (a valid sha can also be written by hand; the base===HEAD
+      // case is still caught by the consumers), it is the field's contract.
       if (RE_40HEX.test(sha)) {
         try {
           execFileSync('git', ['rev-parse', '--verify', '--quiet', `${sha}^{commit}`], { stdio: 'ignore' })
           return sha
-        } catch { /* el commit no está en este repo (podado / semilla corrupta): al fallback */ }
+        } catch { /* the commit is not in this repo (pruned / corrupt seed): to the fallback */ }
       }
     }
     if (base) return base
-  } catch { /* sin SLICE.md: worktree del esquema anterior, o cwd que no es el worktree */ }
+  } catch { /* no SLICE.md: worktree of the previous scheme, or a cwd that is not the worktree */ }
   for (const ref of ['origin/HEAD', 'origin/main', 'main', 'master']) {
     try {
       execFileSync('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { stdio: 'ignore' })
       return ref
-    } catch { /* siguiente */ }
+    } catch { /* next */ }
   }
   return ''
 }
 
 // ============================================================================
-// Reconciliación de ramas, tarea 2 — LA MEDIDA no es EL CORTE.
+// Branch reconciliation, task 2 — THE MEASURE is not THE CUT.
 //
-// `sliceBaseRef()` de arriba responde a DOS preguntas que dejaron de ser la
-// misma: contra qué medir lo que la rama introduce, y contra qué commit se
-// escribieron las citas del plan (el corte real — `readFileAtBase()` más
-// abajo sigue recibiendo ESE, no se toca). Mientras la rama del slice no
-// mergea nada, corte y medida coinciden. En cuanto mergea su base avanzada
-// (el caso que esta tarea viene a arreglar), el corte se queda fijo en un
-// punto anterior a ese merge: diferir contra él cuenta como "de la rama"
-// cada fichero que el merge trajo y el slice nunca escribió.
+// `sliceBaseRef()` above answers TWO questions that stopped being the same
+// one: what to measure what the branch introduces against, and what commit
+// the plan's citations were written against (the real cut — `readFileAtBase()`
+// below still receives THAT one, it is not touched). As long as the slice's
+// branch merges nothing, cut and measure coincide. The moment it merges its
+// advanced base (the case this task comes to fix), the cut stays pinned at a
+// point before that merge: diffing against it counts as "from the branch"
+// every file the merge brought in and the slice never wrote.
 //
-// `git merge-base HEAD origin/<rama>` sí aísla eso: es el commit donde la
-// historia del slice se separó de la base, DESPUÉS de cualquier merge que la
-// rama haya hecho de ella. `SliceBase` (scripts/slice-base.js, Tarea 1) hace
-// ese cálculo con el nombre de la rama remota — no con el `base_sha:`/`base:`
-// sembrado, que puede ser un sha del corte —, y cae al corte si no hay rama
-// remota que combinar con `origin/` o si el merge-base no resuelve. Nunca
-// deja "sin medir": el peor caso es medir como se mide hoy.
+// `git merge-base HEAD origin/<branch>` does isolate that: it is the commit
+// where the slice's history diverged from the base, AFTER any merge the
+// branch has made of it. `SliceBase` (scripts/slice-base.js, Task 1) does
+// that computation with the remote branch's name — not with the seeded
+// `base_sha:`/`base:`, which may be a sha of the cut —, and falls back to the
+// cut if there is no remote branch to combine with `origin/` or if the
+// merge-base does not resolve. It never leaves anything "unmeasured": the
+// worst case is measuring the way it is measured today.
 //
-// QUÉ rama remota es, y qué hacer cuando la semilla no la nombra, lo decide
-// `BaseBranch` (scripts/slice-base.js) y no este fichero: la misma pregunta se
-// la hace `ct-step.mjs` para excluir de su cuenta lo que trajo la fusión, y la
-// cadena de reserva vivía escrita dos veces contestando distinto (aquí
-// origin/HEAD → origin/main → origin/master; allí sólo `base:`). El resolutor
-// devuelve un NOMBRE de rama ('main'), no una ref ('origin/main'): quien la
-// consume antepone `origin/` (eso daría `origin/origin/HEAD`).
+// WHICH remote branch it is, and what to do when the seed does not name it,
+// is decided by `BaseBranch` (scripts/slice-base.js) and not by this file:
+// `ct-step.mjs` asks itself the same question in order to exclude from its
+// count what the merge brought in, and the fallback chain lived written twice
+// answering differently (here origin/HEAD → origin/main → origin/master;
+// there only `base:`). The resolver returns a branch NAME ('main'), not a ref
+// ('origin/main'): whoever consumes it prepends `origin/` (that would give
+// `origin/origin/HEAD`).
 //
-// Lo que NO se unifica es el PARSEO del campo `base:` — este fichero usa su
-// propia regex y `ct-step.mjs` usa `parseStateSafe`: deuda anterior y fuera
-// del alcance de este arreglo.
+// What is NOT unified is the PARSING of the `base:` field — this file uses its
+// own regex and `ct-step.mjs` uses `parseStateSafe`: earlier debt and outside
+// the scope of this fix.
 function nombreDeLaRamaBase() {
   let declarada = null
   try {
     declarada = campoBaseDeLaSemilla()
-  } catch { /* sin SLICE.md: sin nombre declarado, a la cadena de reserva */ }
+  } catch { /* no SLICE.md: no declared name, on to the fallback chain */ }
   const resolutor = new BaseBranch({ remoteRefExists: (nombre) => refResuelve(`refs/remotes/origin/${nombre}`) })
   return resolutor.resolve({ declared: declarada })
 }
@@ -659,31 +670,31 @@ function referenciaDeMedida(cut) {
 }
 // ============================================================================
 
-// F22, fix round 1 (Important + Minor elevado) — TRES formas de que esta
-// función informe "limpia" sin haber comprobado nada de verdad:
+// F22, fix round 1 (Important + escalated Minor) — THREE ways for this
+// function to report "clean" without having really checked anything:
 //
-//   (a) `diff.relative=true` en la config de git de quien invoca, combinado
-//       con un cwd en un subdirectorio: `git diff --name-only` sin más omite
-//       los paths FUERA del subárbol del cwd, así que el `includes(p)` de
-//       abajo nunca encontraría `.agent/STATE.md` aunque esté en el diff
-//       real. `--no-relative` lo desactiva explícitamente sin importar la
-//       config de quien invoque.
-//   (b) detección de renombres activada (el default de `git diff` con
-//       heurística de similitud): una rama que RENOMBRA `.agent/STATE.md` a
-//       otra cosa imprime solo el destino — el borrado del origen queda
-//       oculto dentro del par de rename, y `includes('.agent/STATE.md')`
-//       no lo ve. `--no-renames` fuerza que el borrado y la creación salgan
-//       como dos líneas independientes, una de ellas el path exacto que se
-//       busca.
-//   (c) un `base:` en la semilla IGUAL a HEAD. `SLICE.md` no está trackeado
-//       y lo escribe el propio agente del slice — es agent-reachable. Con
-//       `base === HEAD`, `git diff base...HEAD` es SIEMPRE vacío por
-//       construcción: no es que la rama esté limpia, es que no se comparó
-//       nada. Tratarlo como "limpia" dejaría que un agente (a propósito o
-//       por un bug) neutralizara la puerta reescribiendo su propio `base:`
-//       al commit en el que ya cometió la contaminación. Se trata igual que
-//       "no se pudo determinar la base": known:false, nunca known:true con
-//       hits vacíos.
+//   (a) `diff.relative=true` in the caller's git config, combined with a cwd
+//       in a subdirectory: a plain `git diff --name-only` omits the paths
+//       OUTSIDE the cwd's subtree, so the `includes(p)` below would never
+//       find `.agent/STATE.md` even if it is in the real diff.
+//       `--no-relative` disables that explicitly regardless of the caller's
+//       config.
+//   (b) rename detection enabled (`git diff`'s default, with a similarity
+//       heuristic): a branch that RENAMES `.agent/STATE.md` to something else
+//       prints only the destination — the deletion of the origin stays hidden
+//       inside the rename pair, and `includes('.agent/STATE.md')` does not
+//       see it. `--no-renames` forces the deletion and the creation to come
+//       out as two independent lines, one of them the exact path being looked
+//       for.
+//   (c) a `base:` in the seed EQUAL to HEAD. `SLICE.md` is not tracked and it
+//       is written by the slice's own agent — it is agent-reachable. With
+//       `base === HEAD`, `git diff base...HEAD` is ALWAYS empty by
+//       construction: it is not that the branch is clean, it is that nothing
+//       was compared. Treating that as "clean" would let an agent (on purpose
+//       or through a bug) neutralise the gate by rewriting its own `base:` to
+//       the commit where it already committed the contamination. It is
+//       treated the same as "the base could not be determined": known:false,
+//       never known:true with empty hits.
 function stateFilesIntroducedByBranch() {
   const cut = sliceBaseRef()
   if (!cut) {
@@ -710,15 +721,16 @@ function stateFilesIntroducedByBranch() {
   return { known: true, measurementRef, hits: NEVER_IN_A_SLICE_PR.filter((p) => touched.includes(p)) }
 }
 
-// F-jjponz-1 — EL PLAN DEL SLICE ES UN ENTREGABLE, NO UNA COSTUMBRE.
+// F-jjponz-1 — THE SLICE'S PLAN IS A DELIVERABLE, NOT A HABIT.
 //
-// El kickoff pide el plan desde F32, pero un kickoff es un prompt, no un
-// gate (el LÍMITE de arriba lo dice para --release entero). Desde esta ronda
-// el plan tiene contrato (plan-contract.js) y el release lo comprueba con la
-// misma doctrina que el check de ficheros de estado: SE NIEGA, no avisa.
-// Mismo git diff de base (y las mismas tres trampas: --no-relative,
-// --no-renames, base === HEAD) que stateFilesIntroducedByBranch — pero sin
-// el filtro NEVER_IN_A_SLICE_PR, porque aquí buscamos lo que la rama APORTA.
+// The kickoff has asked for the plan since F32, but a kickoff is a prompt,
+// not a gate (the LIMIT above says so for the whole of --release). As of this
+// round the plan has a contract (plan-contract.js) and the release checks it
+// with the same doctrine as the state-file check: IT REFUSES, it does not
+// warn. Same base git diff (and the same three traps: --no-relative,
+// --no-renames, base === HEAD) as stateFilesIntroducedByBranch — but without
+// the NEVER_IN_A_SLICE_PR filter, because here we are looking for what the
+// branch CONTRIBUTES.
 function branchIntroducedFiles() {
   const cut = sliceBaseRef()
   if (!cut) {
@@ -731,12 +743,13 @@ function branchIntroducedFiles() {
   } catch (e) {
     return { known: false, why: `no se pudo resolver \`${cut}\` o HEAD a un commit: ${e.message}` }
   }
-  // `measurementRef` es donde se MIDE lo que la rama aporta (Tarea 2 de la
-  // reconciliación de ramas); `cutSha` es donde se LEEN las citas del plan
-  // (F-jjponz-3, readFileAtBase más abajo) y NO cambia: el plan se escribió
-  // contra el corte, no contra el merge-base. Devolver un solo `base` para
-  // los dos usos es justo el defecto que reintroduce el falso positivo que
-  // `base_sha:` vino a arreglar — de ahí que se devuelvan por separado.
+  // `measurementRef` is where what the branch contributes is MEASURED (Task 2
+  // of the branch reconciliation); `cutSha` is where the plan's citations are
+  // READ (F-jjponz-3, readFileAtBase below) and it does NOT change: the plan
+  // was written against the cut, not against the merge-base. Returning a
+  // single `base` for both uses is precisely the defect that reintroduces the
+  // false positive `base_sha:` came to fix — hence they are returned
+  // separately.
   const measurementRef = referenciaDeMedida(cut)
   let measurementSha
   try {
@@ -758,17 +771,17 @@ function branchIntroducedFiles() {
 
 const readRepoFile = (p) => readFileSync(p, 'utf8')
 
-// F-jjponz-3 — lector de los ficheros CITADOS por el plan en --release: la
-// base de la rama, no el árbol. `git show <sha>:<path>` resuelve el path
-// desde la raíz del repo (a diferencia de readFileSync, que lo resuelve desde
-// el cwd), así que de propina esto no depende del directorio desde el que se
-// invoque. Si el fichero no está en la base, se LANZA: el validador lo
-// convierte en una violación que dice dónde se miró, en vez de afirmar "cita
-// de memoria" — un fichero que el slice crea se cita con "Current state: does
-// not exist.", y confundir los dos casos manda a buscar el error donde no
-// está. maxBuffer explícito porque el default de execFileSync (1 MiB) haría
-// fallar la lectura de un fichero citado grande, y eso se leería como un plan
-// inválido cuando lo que pasa es que no se pudo comprobar.
+// F-jjponz-3 — reader of the files CITED by the plan in --release: the
+// branch's base, not the tree. `git show <sha>:<path>` resolves the path from
+// the repo's root (unlike readFileSync, which resolves it from the cwd), so
+// as a bonus this does not depend on the directory it is invoked from. If the
+// file is not in the base, it THROWS: the validator turns that into a
+// violation that says where it looked, instead of asserting "cited from
+// memory" — a file the slice creates is cited with "Current state: does not
+// exist.", and confusing the two cases sends you looking for the error where
+// it is not. Explicit maxBuffer because execFileSync's default (1 MiB) would
+// make the read of a large cited file fail, and that would be read as an
+// invalid plan when what is happening is that it could not be checked.
 const readFileAtBase = (base) => (p) => {
   try {
     return execFileSync('git', ['show', `${base}:${p}`], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
@@ -778,8 +791,9 @@ const readFileAtBase = (base) => (p) => {
 }
 
 if (checkPlan) {
-  // Modo read-only: candidatos = el árbol de trabajo, commiteado o no — es
-  // el modo de ANTES de commitear. No toca GitHub, no mira labels.
+  // Read-only mode: candidates = the working tree, committed or not — it is
+  // the mode for BEFORE committing. It does not touch GitHub, it does not
+  // look at labels.
   let candidates = []
   try {
     candidates = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'docs/superpowers/plans'], { encoding: 'utf8' })
@@ -793,46 +807,53 @@ if (checkPlan) {
 }
 
 // ============================================================================
-// EL VIGILANTE DEL MERGE — para que la cosecha no espere a un recado.
+// THE MERGE WATCHER — so that the harvest does not wait for a message to be
+// run.
 //
-// La Puerta 3 del loop es humana (cerrar los gates y mergear) y hasta esta ronda
-// mergear no producía NINGUNA señal mecánica. El PR se mergeaba, el issue se
-// cerraba, y `.worktrees/<n>` + `feat/<n>` se quedaban en disco con su `claude`
-// vivo —trece horas en el caso que dio origen a F20— hasta que la misma persona
-// que había mergeado iba a la ventana de la coordinadora a decírselo. El evento
-// existía en GitHub; lo que disparaba la cosecha era un recado.
+// Gate 3 of the loop is human (closing the gates and merging) and until this
+// round merging produced NO mechanical signal at all. The PR was merged, the
+// issue was closed, and `.worktrees/<n>` + `feat/<n>` stayed on disk with
+// their `claude` alive —thirteen hours in the case that gave rise to F20—
+// until the very person who had merged went over to the coordinator's window
+// to tell it. The event existed in GitHub; what triggered the harvest was
+// someone running a message.
 //
-// SE LANZA AQUÍ, Y NO EN `/ct-next`, porque este es el instante EXACTO en que
-// existe un PR abierto esperando un merge humano. Lanzarlo en el despacho —junto
-// al vigilante del `-OK`, que es donde primero se pensó— pondría un proceso a
-// preguntar por un PR que todavía no existe durante toda la implementación.
+// IT IS LAUNCHED HERE, AND NOT IN `/ct-next`, because this is the EXACT
+// instant at which there is an open PR waiting for a human merge. Launching
+// it at dispatch —next to the `-OK` watcher, which is where it was first
+// considered— would put a process asking after a PR that does not yet exist
+// for the whole of the implementation.
 //
-// SE LANZA DESPRENDIDO (`detached` + `unref`) porque tiene que sobrevivir a que
-// esta invocación termine, y a que se cierre la sesión del slice: el caso que
-// motiva todo esto es un PR que se mergea horas o días después de abrirse.
+// IT IS LAUNCHED DETACHED (`detached` + `unref`) because it has to survive
+// this invocation finishing, and the slice's session being closed: the case
+// that motivates all of this is a PR that gets merged hours or days after
+// being opened.
 //
-// NO ROMPE EL RELEASE, y esto es la regla, no una cortesía: va DESPUÉS de que el
-// issue ya esté en `status:in-review`, y cualquier fallo aquí se AVISA y sigue.
-// El trabajo ya está entregado; no poder vigilar el merge significa volver al
-// modo de antes —avisar a mano—, no perder la entrega. Es el mismo criterio que
-// el `git add` de la telemetría en ct-step: el termómetro no es parte del motor.
-// Por eso hay además un manejador de `error`: un fallo ASÍNCRONO de `spawn`
-// (EAGAIN, EMFILE) no lo ve el `try/catch`, y sin manejador sería un `'error'`
-// sin atender que tumbaría este script — convirtiendo un release CONSUMADO en un
-// exit distinto de 0, o sea en la peor mentira posible en este fichero.
+// IT DOES NOT BREAK THE RELEASE, and this is the rule, not a courtesy: it
+// comes AFTER the issue is already at `status:in-review`, and any failure
+// here is WARNED about and carries on. The work is already delivered; not
+// being able to watch the merge means going back to the earlier mode —warning
+// by hand—, not losing the delivery. It is the same criterion as ct-step's
+// `git add` of the telemetry: the thermometer is not part of the engine. That
+// is why there is also an `error` handler: an ASYNCHRONOUS `spawn` failure
+// (EAGAIN, EMFILE) is not seen by the `try/catch`, and with no handler it
+// would be an unattended `'error'` that would take this script down —
+// turning a CONSUMMATED release into an exit other than 0, that is, into the
+// worst possible lie in this file.
 //
-// EL CWD DE LA COORDINADORA SALE DE `localSliceArtifacts`, no de `process.cwd()`.
-// Este script se invoca desde dentro del worktree del slice, así que el cwd es
-// `.worktrees/<n>`; la coordinadora vive en el checkout PRINCIPAL, que es lo que
-// esa función ya sabe sacar de `git worktree list --porcelain`. Si no se ha
-// podido mirar, NO se inventa una ruta: se avisa y no se lanza nada. Un
-// vigilante apuntando a un directorio equivocado no encontraría nunca a quién
-// entregarle el aviso, y encima lo anunciaría como lanzado.
+// THE COORDINATOR'S CWD COMES OUT OF `localSliceArtifacts`, not out of
+// `process.cwd()`. This script is invoked from inside the slice's worktree, so
+// the cwd is `.worktrees/<n>`; the coordinator lives in the MAIN checkout,
+// which is what that function already knows how to get out of `git worktree
+// list --porcelain`. If it could not be looked up, a path is NOT invented: it
+// warns and launches nothing. A watcher pointing at the wrong directory would
+// never find anyone to deliver the warning to, and would announce itself as
+// launched on top of that.
 //
-// CT_WATCH_MERGE_BIN sigue el patrón de CT_WATCH_GO_BIN: no cambia NINGUNA
-// decisión, sólo qué programa se lanza. Existe para que los tests puedan
-// comprobar que el vigilante se lanza con los argumentos correctos sin poner un
-// proceso real a sondear GitHub durante 48 horas.
+// CT_WATCH_MERGE_BIN follows the pattern of CT_WATCH_GO_BIN: it changes NO
+// decision, only which program is launched. It exists so that the tests can
+// check that the watcher is launched with the right arguments without putting
+// a real process to poll GitHub for 48 hours.
 // ============================================================================
 function lanzarVigilanteDelMerge(n) {
   const aviso = (por) => errLine(`aviso: no se ha lanzado el vigilante del merge de #${n} (${por}) — el slice está entregado y el issue está en status:in-review, pero cuando mergees su PR tendrás que recoger la cosecha a mano (o avisar a la coordinadora).`)
@@ -840,11 +861,11 @@ function lanzarVigilanteDelMerge(n) {
     const disco = localSliceArtifacts(n)
     if (!disco.known) return aviso('no se ha podido averiguar cuál es el checkout principal, así que no se sabe dónde buscar la sesión coordinadora')
     const bin = process.env.CT_WATCH_MERGE_BIN || ctWatchMergePath
-    // `spawn(process.execPath, [bin, …])` con un `bin` que no existe NO falla:
-    // el ejecutable es siempre `node`, así que el proceso nace, muere al
-    // instante con un error de módulo, y sin esta comprobación se anunciaría
-    // «vigilante lanzado» con un pid que ya no existe. Misma guarda, y mismo
-    // motivo, que en ct-next.mjs#lanzarVigilanteDelGo.
+    // `spawn(process.execPath, [bin, …])` with a `bin` that does not exist
+    // does NOT fail: the executable is always `node`, so the process is born,
+    // dies instantly with a module error, and without this check it would
+    // announce "watcher launched" with a pid that no longer exists. Same
+    // guard, and same reason, as in ct-next.mjs#lanzarVigilanteDelGo.
     if (!existsSync(bin)) return aviso(`el programa del vigilante no existe: ${bin}`)
     const logPath = join(controlTowerLogDir({ configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() }), `watch-merge-${n}.log`)
     const hijo = spawn(process.execPath, [
@@ -865,17 +886,17 @@ if (release) {
   }
   if (check.hits.length) {
     const lista = check.hits.join(', ')
-    // `pathspec` va SEPARADO de `lista` a propósito: la prosa enumera con
-    // comas, pero un `git checkout <base> -- a.md, b.md` mete la coma DENTRO
-    // del pathspec y falla ("did not match any file"). El comando que se
-    // emite tiene que poder pegarse tal cual, y con los dos ficheros a la vez
-    // es justo cuando más falta hace.
+    // `pathspec` is kept SEPARATE from `lista` on purpose: the prose
+    // enumerates with commas, but a `git checkout <base> -- a.md, b.md` puts
+    // the comma INSIDE the pathspec and fails ("did not match any file"). The
+    // command that is emitted has to be pasteable as-is, and with both files
+    // at once is exactly when that is needed most.
     const pathspec = check.hits.join(' ')
     dieErr(`no se libera #${issue}: esta rama INTRODUCE ${lista} respecto a ${check.measurementRef}. Ese fichero es el estado de la sesión coordinadora, no producto de este slice: al mergear con squash, main se quedaría con el estado de este slice y cualquier sesión nueva del repo se hidrataría creyendo que es este agente. Restáuralo y vuelve a intentarlo: \`git checkout ${check.measurementRef} -- ${pathspec}\` y commitea (o \`git rm --cached\` si lo añadiste nuevo). El issue sigue en status:in-progress: no se ha movido nada.`, 5)
   }
-  // F-jjponz-1 — el plan, DESPUÉS del check de ficheros de estado a propósito:
-  // la contaminación de main (exit 5) es la avería más cara y su mensaje debe
-  // ganar. Un plan ausente (exit 6) solo retrasa a ESTE slice.
+  // F-jjponz-1 — the plan, AFTER the state-file check on purpose: the
+  // contamination of main (exit 5) is the costliest breakage and its message
+  // must win. A missing plan (exit 6) only delays THIS slice.
   const plan = branchIntroducedFiles()
   if (!plan.known) {
     dieErr(`no se puede liberar #${issue}: ${plan.why}, así que NO se ha podido comprobar si la rama trae el plan prescriptivo del slice. No se afirma que falte — comprueba a mano con \`git diff --name-only <base>...HEAD | grep docs/superpowers/plans\` y reintenta desde un cwd donde la base se resuelva.`, 6)
@@ -889,40 +910,43 @@ if (release) {
   if (!planCheck.ok) {
     dieErr(`no se libera #${issue}: ${planCheck.message} El issue sigue en status:in-progress: no se ha movido nada.`, planCheck.code)
   }
-  // El gate del run (exit 7), DESPUÉS del plan (exit 6) a propósito: sin plan
-  // válido ningún run pudo existir, así que su mensaje debe ganar. El kickoff
-  // manda conducir la implementación con ct-step, pero un prompt no es un
-  // gate: esto lo es. `deliveredRun` (run-machine.js) lee lo que ct-step
-  // persistió al cerrar bien; el fichero es local del worktree (gitignoreado
-  // por ct-init), igual que el claim vive en labels — se comprueba donde está.
+  // The run's gate (exit 7), AFTER the plan (exit 6) on purpose: with no
+  // valid plan no run could have existed, so its message must win. The
+  // kickoff orders the implementation to be driven with ct-step, but a prompt
+  // is not a gate: this one is. `deliveredRun` (run-machine.js) reads what
+  // ct-step persisted on closing cleanly; the file is local to the worktree
+  // (gitignored by ct-init), just as the claim lives in labels — it is
+  // checked where it is.
   const runRaw = (() => { try { return readFileSync(join('.agent', `run-${issue}.json`), 'utf8') } catch { return null } })()
   const runGate = deliveredRun(runRaw, issue)
   if (!runGate.ok) {
     dieErr(`no se libera #${issue}: ${runGate.why} El issue sigue en status:in-progress: no se ha movido nada.`, 7)
   }
-  // F-e2e — LA CORRESPONDENCIA. La máquina de ct-step ya impide entregar un run
-  // sin pasar el e2e (run-machine.js), así que esto NO vuelve a verificar la
-  // travesía: verifica que el run entregado hable de los MISMOS recorridos que
-  // el issue declara.
+  // F-e2e — THE CORRESPONDENCE. ct-step's machine already prevents delivering
+  // a run without passing the e2e (run-machine.js), so this does NOT verify
+  // the journey again: it verifies that the delivered run speaks of the
+  // SAME runs the issue declares.
   //
-  // Existe porque el run lee sus recorridos de `.agent/SLICE.md`, que es
-  // agent-reachable — este mismo fichero ya desconfía de su `base:` por eso. Un
-  // agente que vaciara ese campo tendría un run "entregado" sin haber
-  // atravesado nada, y la puerta del 7 lo dejaría pasar. Aquí se cruza contra el
-  // ISSUE, que es la fuente que el agente no controla.
+  // It exists because the run reads its runs from `.agent/SLICE.md`, which is
+  // agent-reachable — this very file already distrusts its `base:` for that
+  // reason. An agent that emptied that field would have a "delivered" run
+  // without having traversed anything, and the gate of the 7 would let it
+  // through. Here it is cross-checked against the ISSUE, which is the source
+  // the agent does not control.
   //
-  // Y se lee la SECCIÓN `## E2E` (E2E_HEADING/extractE2eRuns, TAREA 9,
-  // gh-issue-map.js — la MISMA función que usa /ct-next para sembrar el
-  // worktree: un solo parseo, para que un exit 8 nunca sea por una discrepancia
-  // de lectura entre los dos lados), no la label `gate:e2e`: las dos pueden
-  // discrepar si alguien edita el issue a mano, y manda la sección porque es la
-  // única que dice QUÉ atravesar. Label sin sección no describe trabajo (se
-  // libera, con aviso); sección sin label sí (se exige igual).
-  // Sin `&& !fx` aquí: el fixture de `CT_CLAIM_FIXTURE` modela la forma del
-  // claim (candLabels/openIssues/readback), no el cuerpo del issue — no hay
-  // dato de fixture que cruzar, así que esta lectura siempre va a `gh` de
-  // verdad. Deliberado, no un descuido: no lo "arregles" añadiendo `fx` sin
-  // ensanchar antes la forma del fixture.
+  // And the `## E2E` SECTION is what is read (E2E_HEADING/extractE2eRuns,
+  // TASK 9, gh-issue-map.js — the SAME function /ct-next uses to seed the
+  // worktree: a single parse, so that an exit 8 is never due to a reading
+  // discrepancy between the two sides), not the `gate:e2e` label: the two can
+  // disagree if someone edits the issue by hand, and the section rules
+  // because it is the only one that says WHAT to traverse. A label with no
+  // section does not describe work (it is released, with a warning); a
+  // section with no label does (it is demanded all the same).
+  // No `&& !fx` here: the `CT_CLAIM_FIXTURE` fixture models the shape of the
+  // claim (candLabels/openIssues/readback), not the issue's body — there is
+  // no fixture datum to cross-check, so this read always goes to the real
+  // `gh`. Deliberate, not an oversight: do not "fix" it by adding `fx`
+  // without widening the fixture's shape first.
   const bodyRaw = (() => {
     try {
       return gh(['issue', 'view', String(issue), '--repo', repo, '--json', 'body', '-q', '.body'])
@@ -931,17 +955,17 @@ if (release) {
     }
   })()
   if (bodyRaw === null) {
-    // "no se ha podido comprobar" — NUNCA "no hay recorridos". Este repo no
-    // afirma limpio lo que no pudo mirar (misma doctrina que los exit 5/6 de
-    // arriba): un issue con recorridos reales cuyo body no se pudo leer no es
-    // indistinguible de uno sin ninguno.
+    // "it could not be checked" — NEVER "there are no runs". This repo does
+    // not declare clean what it could not look at (the same doctrine as the
+    // exits 5/6 above): an issue with real runs whose body could not be read
+    // is not indistinguishable from one with none.
     dieErr(`no se libera #${issue}: no se ha podido leer el cuerpo del issue (\`gh issue view --json body\` falló) — no se afirma que no declare recorridos, solo que no se ha podido comprobar. Reintenta cuando \`gh\` responda; el issue sigue en status:in-progress: no se ha movido nada.`, 8)
   }
   const recorridos = extractE2eRuns(bodyRaw)
-  // `deliveredRun` devuelve {ok, why}, no el run parseado — se relee aquí, de
-  // forma que no pueda LANZAR ante un fichero corrupto: un JSON inválido se
-  // trata como "cero recorridos declarados" (fail hacia el exit 8, no hacia un
-  // crash: un gate que revienta no es un gate).
+  // `deliveredRun` returns {ok, why}, not the parsed run — it is re-read
+  // here, in a way that cannot THROW on a corrupt file: an invalid JSON is
+  // treated as "zero declared runs" (failing towards exit 8, not towards a
+  // crash: a gate that blows up is not a gate).
   let run = null
   try { run = JSON.parse(runRaw) } catch { run = null }
   if (recorridos.length) {
@@ -951,10 +975,10 @@ if (release) {
       dieErr(`no se libera #${issue}: el issue declara en "${E2E_HEADING}" ${recorridos.length} recorrido(s), y el run entregado NO cubre ${faltan.length} de ellos: ${faltan.map((r) => `"${r}"`).join(', ')}. El run lee sus recorridos de .agent/SLICE.md, que es agent-reachable — esta puerta cruza contra el ISSUE, que el agente no controla. Completa esos recorridos con ct-step (paso "e2e") y reintenta. El issue sigue en status:in-progress: no se ha movido nada.`, 8)
     }
   } else {
-    // Sección ausente o vacía: la label es la única señal que queda para
-    // decidir si avisar. Si no se puede leer (gh caído), no se avisa —
-    // el aviso es cortesía, no gate, así que no vale la pena bloquear NI
-    // fallar ruidosamente por él.
+    // Section absent or empty: the label is the only signal left to decide
+    // whether to warn. If it cannot be read (gh down), no warning is issued —
+    // the warning is a courtesy, not a gate, so it is not worth blocking NOR
+    // failing noisily over it.
     let labels = []
     try { labels = labelsOf(issue) } catch { labels = [] }
     if (labels.includes('gate:e2e')) {
@@ -962,38 +986,40 @@ if (release) {
     }
   }
   // ==========================================================================
-  // F38 — LA PUERTA DEL GO: EL GATE `plan` NO SE CIERRA SOLO.
+  // F38 — THE GO GATE: THE `plan` GATE DOES NOT CLOSE BY ITSELF.
   //
-  // EL DEFECTO QUE CIERRA. Desde la #32, contestar `-OK` en el issue arranca la
-  // sesión: le dio consecuencia mecánica a un comentario de GitHub. Y el agente
-  // tiene `gh`. Su propio límite lo decía (commands/ct-next.md): «no impide que
-  // el propio agente escriba `-OK` en su propio issue». Con el gate `plan`
-  // implicado por defecto en TODO slice (gates.js#gatesForType), el resultado
-  // era una puerta que el gateado podía abrir, dejando además el REGISTRO de una
-  // revisión humana que no ocurrió. Aquí se cierran las dos mitades: el go
-  // lleva un nonce que el agente no puede adivinar (go-response.js), y ES UN
-  // REQUISITO para liberar — antes no lo era para nada: un agente podía ignorar
-  // el gate entero y entregar igual, porque el kickoff que lo manda parar es un
-  // prompt y no un gate.
+  // THE DEFECT IT CLOSES. Since #32, answering `-OK` on the issue starts the
+  // session: it gave mechanical consequence to a GitHub comment. And the
+  // agent has `gh`. Its own limit said so (commands/ct-next.md): "it does not
+  // stop the agent itself from writing `-OK` on its own issue". With the
+  // `plan` gate implied by default on EVERY slice (gates.js#gatesForType),
+  // the result was a gate the gated party could open, leaving on top of that
+  // the RECORD of a human review that never happened. Both halves are closed
+  // here: the go carries a nonce the agent cannot guess (go-response.js), and
+  // it IS A REQUIREMENT to release — before it was not a requirement for
+  // anything: an agent could ignore the whole gate and deliver anyway,
+  // because the kickoff that orders it to stop is a prompt and not a gate.
   //
-  // POR QUÉ ESTA PUERTA VA LA ÚLTIMA, y no junto a la del plan (exit 6). El
-  // orden de esta escalera es «qué mensaje debe ganar», y un go que falta
-  // significa cosas distintas según lo demás: con el run a medias, preguntar por
-  // el go es ruido sobre un slice que aún no ha terminado; con TODO en verde —el
-  // plan válido, las tareas comiteadas, la Global en verde, el e2e cubierto— un
-  // go que falta ya no es un «todavía no», es trabajo entero hecho sin permiso.
-  // Ahí es cuando este mensaje tiene que ganar, y ahí es donde está.
+  // WHY THIS GATE GOES LAST, and not next to the plan's one (exit 6). The
+  // order of this ladder is "which message must win", and a missing go means
+  // different things depending on the rest: with the run half done, asking
+  // after the go is noise about a slice that has not finished yet; with
+  // EVERYTHING green —the plan valid, the tasks committed, the Global green,
+  // the e2e covered— a missing go is no longer a "not yet", it is a whole
+  // body of work done without permission. That is when this message has to
+  // win, and that is where it is.
   //
-  // Y VA ANTES DEL AVISO DE LOS *NO-VERIFICADOS* por lo mismo que ese aviso va
-  // antes de mutar: si el release no va a ocurrir, es ruido sobre una decisión
-  // que ya se tomó.
+  // AND IT GOES BEFORE THE WARNING ABOUT THE *UNVERIFIED* ONES for the same
+  // reason that warning goes before mutating: if the release is not going to
+  // happen, it is noise about a decision already taken.
   //
-  // LAS TRES FORMAS DE NO PODER AFIRMARLO, y ninguna libera: sin compromiso
-  // registrado, con el registro ilegible, o sin poder leer los comentarios. Es
-  // la doctrina de los exit 5/6/8 de arriba: este fichero no afirma limpio lo
-  // que no ha podido mirar. La renuncia `!plan` de la fila SÍ libera, porque
-  // entonces no hay gate que cerrar — y se lee de las labels, que es donde la
-  // renuncia sobrevive al kickoff.
+  // THE THREE WAYS OF NOT BEING ABLE TO ASSERT IT, and none of them releases:
+  // with no registered commitment, with the register unreadable, or without
+  // being able to read the comments. It is the doctrine of the exits 5/6/8
+  // above: this file does not declare clean what it has not been able to look
+  // at. The `!plan` waiver on the row DOES release, because then there is no
+  // gate to close — and it is read from the labels, which is where the waiver
+  // survives the kickoff.
   // ==========================================================================
   const ctHome = { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() }
   const registro = readGoCommitment({ repo, issue, ...ctHome })
@@ -1001,19 +1027,20 @@ if (release) {
     dieErr(`no se libera #${issue}: el go de este despacho está registrado en ${registro.path} y NO se ha podido leer (${registro.error}). No se afirma que falte el go, sólo que no se ha podido comprobar. Arréglalo (permisos, o el contenido del fichero) o reemite uno con \`node <plugin>/scripts/ct-go.mjs --issue ${issue} --repo ${repo}\`. El issue sigue en status:in-progress: no se ha movido nada.`, 9)
   }
   if (registro.missing) {
-    // Sin registro, la única forma de saber si este slice DEBÍA tener gate
-    // `plan` son sus labels. Un fallo de lectura aquí no libera: sería la misma
-    // afirmación sin haber mirado.
+    // With no register, the only way to know whether this slice WAS SUPPOSED
+    // to have a `plan` gate is its labels. A read failure here does not
+    // release: it would be the same assertion without having looked.
     let labels = null
     try { labels = labelsOf(issue) } catch (e) {
       dieErr(`no se libera #${issue}: el go de este despacho no está registrado (${registro.path} no existe) y tampoco se han podido leer las labels del issue (${e.message}) para saber si este slice lleva el gate \`plan\`. No se afirma que no lo lleve. Reintenta cuando \`gh\` responda. El issue sigue en status:in-progress: no se ha movido nada.`, 9)
     }
-    // `gatesFromLabels` devuelve {gates, declared}: `declared` distingue «este
-    // issue dice que no tiene gate `plan`» de «este issue no dice nada de sus
-    // gates» (es anterior a que los gates existieran, o está hecho a mano). Sólo
-    // la PRIMERA libera. La segunda no es una renuncia, es un silencio, y un
-    // silencio no cierra un gate — además de ser el camino que abriría un agente
-    // borrándose las labels. Se arregla con un comando y no rompe nada en vuelo.
+    // `gatesFromLabels` returns {gates, declared}: `declared` tells "this
+    // issue says it has no `plan` gate" apart from "this issue says nothing
+    // about its gates" (it predates gates existing, or it was made by hand).
+    // Only the FIRST releases. The second is not a waiver, it is a silence,
+    // and a silence does not close a gate — besides being the path an agent
+    // would open by deleting its own labels. It is fixed with one command and
+    // breaks nothing in flight.
     const declaracion = gatesFromLabels(labels)
     if (!declaracion.declared || declaracion.gates.includes('plan')) {
       const porque = declaracion.declared
@@ -1022,10 +1049,11 @@ if (release) {
       dieErr(`no se libera #${issue}: ${porque} y el go de este despacho NO ESTÁ REGISTRADO (${registro.path} no existe), así que no hay nada contra lo que comprobar el \`${GO_TOKEN}\` del issue. Pasa cuando el slice se despachó con una versión anterior a la que trajo el nonce, o cuando ese fichero se borró. Reemite el go con \`node <plugin>/scripts/ct-go.mjs --issue ${issue} --repo ${repo}\`, pide que lo contesten en el issue y vuelve a liberar. El issue sigue en status:in-progress: no se ha movido nada.`, 9)
     }
   } else {
-    // MISMA LECTURA QUE EL VIGILANTE (`--json comments` a secas, y `.comments`
-    // parseado aquí), no un `-q` distinto: dos formas de pedir lo mismo son dos
-    // formas de que un día una de ellas devuelva otra cosa. Es la razón por la
-    // que la puerta del e2e reutiliza `extractE2eRuns` en vez de reparsear.
+    // THE SAME READ AS THE WATCHER (a plain `--json comments`, with
+    // `.comments` parsed here), not a different `-q`: two ways of asking for
+    // the same thing are two ways for one of them to return something else
+    // one day. It is the reason the e2e gate reuses `extractE2eRuns` instead
+    // of re-parsing.
     let comentarios = null
     try {
       const parsed = JSON.parse(gh(['issue', 'view', String(issue), '--repo', repo, '--json', 'comments']))
@@ -1036,38 +1064,39 @@ if (release) {
     if (!Array.isArray(comentarios)) {
       dieErr(`no se libera #${issue}: no se han podido leer los comentarios del issue (\`gh issue view --json comments\`), así que no se ha podido comprobar el go del gate \`plan\` — no se afirma que falte. Reintenta cuando \`gh\` responda. El issue sigue en status:in-progress: no se ha movido nada.`, 9)
     }
-    // SIN VENTANA a propósito, al contrario que el vigilante: aquí vale
-    // cualquier comentario del issue, porque el nonce ya hace el trabajo que
-    // allí hacía la foto de ids — un go de un despacho anterior tiene otro
-    // nonce y no encaja por construcción.
+    // NO WINDOW on purpose, unlike the watcher: here any comment on the issue
+    // counts, because the nonce already does the work the snapshot of ids did
+    // there — a go from an earlier dispatch has a different nonce and does not
+    // match by construction.
     const go = comentarios.find((c) => matchesGo(c?.body, registro.commitment))
     if (!go) {
       dieErr(`no se libera #${issue}: el gate \`plan\` no está cerrado — ningún comentario de este issue trae el go de este despacho. Lo cierra una persona contestando \`${GO_TOKEN} <nonce>\` con el nonce que /ct-next imprimió al despachar (no está en tu contexto, ni en el issue, ni en tu worktree: es de quien revisa el plan, a propósito). Si se ha perdido, quien despachó lo reemite con \`node <plugin>/scripts/ct-go.mjs --issue ${issue} --repo ${repo}\`. El issue sigue en status:in-progress: no se ha movido nada.`, 9)
     }
-    // QUIÉN lo dio, por stderr: el registro de quién autorizó vale más impreso
-    // que guardado, y es la única señal que delataría un go dado por la propia
-    // identidad con la que corre el agente.
+    // WHO gave it, via stderr: the record of who authorised is worth more
+    // printed than stored, and it is the only signal that would give away a
+    // go granted by the very identity the agent runs as.
     errLine(`gate \`plan\` cerrado: go de este despacho dado por ${go?.author?.login ? `@${go.author.login}` : 'un autor que gh no ha devuelto'}${go?.createdAt ? ` el ${go.createdAt}` : ''}.`)
   }
 
-  // LOS *NO-VERIFICADOS*, DICHOS. Es el estado que libera un slice SIN haberlo
-  // comprobado —un docker que no arranca, una credencial caducada, la sección
-  // de AGENTS.md sin rellenar—, y entrega a propósito: retenerlo dejaría el
-  // slice en status:in-progress ocupando `area:`/`touches:` y una plaza de
-  // `--cap` sin nadie trabajando, el modo de fallo que F13 y F18 quitaron. Lo
-  // que no puede ser es que además sea SILENCIOSO: tres textos de esta rama
-  // (run-machine.js#trasElE2e, gates.js#GATES.e2e.issue y el §3.7 del diseño)
-  // prometen que --release "lo dice", y hasta la review final de rama no lo
-  // decía nadie — el run sólo persistía los NOMBRES de los recorridos, así que
-  // esta puerta no distinguía un slice verde de otro con todos sus recorridos
-  // sin verificar. `ct-step` persiste ahora el veredicto de cada uno
-  // (`e2eResults`), y aquí se leen.
+  // THE *UNVERIFIED* ONES, SAID OUT LOUD. It is the state that releases a
+  // slice WITHOUT having checked it —a docker that does not start, an expired
+  // credential, the AGENTS.md section left unfilled—, and it delivers on
+  // purpose: holding it back would leave the slice at status:in-progress
+  // occupying `area:`/`touches:` and a `--cap` slot with nobody working on
+  // it, the failure mode F13 and F18 removed. What cannot be is that it is
+  // also SILENT: three texts of this branch (run-machine.js#trasElE2e,
+  // gates.js#GATES.e2e.issue and §3.7 of the design) promise that --release
+  // "says so", and until the final branch review nobody said it — the run
+  // only persisted the NAMES of the runs, so this gate did not tell a green
+  // slice apart from one with every one of its runs unverified. `ct-step` now
+  // persists the verdict of each one (`e2eResults`), and here they are read.
   //
-  // Va DESPUÉS de la puerta de correspondencia y ANTES de mutar: si el release
-  // no va a ocurrir, este aviso sería ruido sobre una decisión que ya se tomó.
-  // Se lee del run (no del issue) porque el veredicto es del run: el issue no
-  // dice nada sobre cómo fue la travesía. Y no gatea nada — es diagnóstico por
-  // stderr, la doctrina de siempre: stdout es el producto, stderr el porqué.
+  // It goes AFTER the correspondence gate and BEFORE mutating: if the release
+  // is not going to happen, this warning would be noise about a decision
+  // already taken. It is read from the run (not from the issue) because the
+  // verdict belongs to the run: the issue says nothing about how the
+  // journey went. And it gates nothing — it is a diagnostic via stderr, the
+  // usual doctrine: stdout is the product, stderr the why.
   const sinVerificar = (Array.isArray(run?.e2eResults) ? run.e2eResults : []).filter((r) => r && r.verdict === 'no-verificado')
   if (sinVerificar.length) {
     const detalle = sinVerificar.map((r) => `"${r.run}" (${r.reason || 'sin motivo declarado en el informe'})`).join('; ')
@@ -1076,23 +1105,23 @@ if (release) {
   if (!dryRun && !fx) {
     const result = setStatus(issue, 'status:in-progress', 'status:in-review')
     if (!result.ok) {
-      // --release nunca pasa por classifyClaimOutcome en ct-next.mjs (es un
-      // paso posterior, invocado por el propio agente al terminar el
-      // slice, no por el bucle de claim) — su exit 1 queda fuera del
-      // contrato ensanchado de arriba, sin cambios.
+      // --release never goes through classifyClaimOutcome in ct-next.mjs (it
+      // is a later step, invoked by the agent itself on finishing the slice,
+      // not by the claim loop) — its exit 1 falls outside the widened
+      // contract above, unchanged.
       dieErr(`no se pudo liberar #${issue} a in-review: ${result.error.message}. Sigue en status:in-progress; reintenta el --release.`, 1)
     }
-    // DENTRO del `!dryRun && !fx`, y eso es la decisión: con `--dry-run` no se
-    // ha movido nada, así que no hay ningún PR cuyo merge esperar, y lanzar el
-    // vigilante ahí convertiría una corrida en seco en un proceso de 48 horas.
-    // Con `fx` (CT_CLAIM_FIXTURE) tampoco: el fixture modela la forma del claim,
-    // no un repo real donde haya nada que cosechar.
+    // INSIDE the `!dryRun && !fx`, and that is the decision: with `--dry-run`
+    // nothing has been moved, so there is no PR whose merge to wait for, and
+    // launching the watcher there would turn a dry run into a 48-hour
+    // process. With `fx` (CT_CLAIM_FIXTURE) neither: the fixture models the
+    // shape of the claim, not a real repo where there is anything to harvest.
     //
-    // Y con `--no-watch-merge` tampoco, pero por un motivo distinto de los dos
-    // anteriores y que hay que decir en voz alta: ahí SÍ hay un PR esperando un
-    // merge humano. Lo que no hay es a quién avisar (ver la cabecera de la
-    // bandera), así que el aviso se renuncia a propósito en vez de entregarse a
-    // quien no lo sabe leer.
+    // And with `--no-watch-merge` neither, but for a reason different from
+    // the previous two and one that has to be said out loud: there there IS a
+    // PR waiting for a human merge. What there is not is anyone to warn (see
+    // the flag's header), so the warning is waived on purpose instead of
+    // being delivered to someone who cannot read it.
     if (noWatchMerge) {
       errLine(`aviso: no se ha lanzado el vigilante del merge de #${issue} porque se pidió --no-watch-merge — el slice está entregado y el issue está en status:in-review, pero nadie te avisará cuando mergees su PR: la cosecha la seguirá detectando \`/ct-next\` en su próxima corrida.`)
     } else {
@@ -1103,122 +1132,131 @@ if (release) {
 }
 
 // ============================================================================
-// F15/H1 — `--reopen` REABRÍA LA VENTANA QUE F13 CERRÓ.
+// F15/H1 — `--reopen` REOPENED THE WINDOW F13 CLOSED.
 //
-// F13 separó dos contabilidades que vivían en un solo label: el CAP mide
-// agentes vivos (`in-progress`), los TOKENS miden trabajo SIN MERGEAR
-// (`in-progress` + `in-review`). Y en la misma ronda añadió `--reopen` para
-// que un PR rechazado pudiera volver al loop… mandándolo a `status:ready`.
+// F13 separated two accountings that lived in a single label: the CAP
+// measures live agents (`in-progress`), the TOKENS measure UNMERGED work
+// (`in-progress` + `in-review`). And in the same round it added `--reopen` so
+// that a rejected PR could come back into the loop… by sending it to
+// `status:ready`.
 //
-// `ready` NO retiene tokens. Pero el trabajo sin mergear del slice rechazado
-// sigue existiendo en su rama y en su PR: mientras alguien corrige encima, un
-// vecino que comparta `area:`/`touches:` podía despacharse ramificando de una
-// `main` que no lo contiene — exactamente la ventana que F13 vino a cerrar,
-// reabierta por su propia arista de vuelta. Reproducido por construcción con
-// `planDispatch` antes de tocar nada: con #7 en `in-review` y `area:plan`, el
-// candidato #8 que comparte esa área se salta y sale #9; con ese mismo #7 en
-// `ready`, `runningTouches` sale VACÍO y la protección desaparece.
+// `ready` does NOT hold tokens. But the rejected slice's unmerged work still
+// exists in its branch and in its PR: while someone corrects on top of it, a
+// neighbour sharing `area:`/`touches:` could be dispatched branching off a
+// `main` that does not contain it — exactly the window F13 came to close,
+// reopened by its own return edge. Reproduced by construction with
+// `planDispatch` before touching anything: with #7 at `in-review` and
+// `area:plan`, candidate #8 that shares that area is skipped and #9 comes
+// out; with that same #7 at `ready`, `runningTouches` comes out EMPTY and the
+// protection disappears.
 //
-// LA RAÍZ: `ready` significaba dos cosas incompatibles. "Nunca se empezó — no
-// hay nada en ninguna rama" y "se empezó, se rechazó, hay trabajo sin mergear
-// y se está rehaciendo encima". La primera no debe bloquear a nadie; la
-// segunda tiene que bloquear a sus vecinos. Un solo label no puede ser las
-// dos.
+// THE ROOT: `ready` meant two incompatible things. "It was never started —
+// there is nothing on any branch" and "it was started, it was rejected, there
+// is unmerged work and it is being redone on top". The first must block
+// nobody; the second has to block its neighbours. A single label cannot be
+// both.
 //
-// LA SOLUCIÓN: `--reopen` deja de ir a `ready`. Va a `status:in-progress`, que
-// es el INVERSO EXACTO de `--release`. No es un apaño para retener tokens: es
-// que `in-progress` describe la verdad de ese slice tras un rechazo, en las
-// DOS contabilidades a la vez y sin tocar ni una línea de dispatch.js:
-//   - TOKENS: hay trabajo sin mergear en `feat/<n>`. Debe retenerlos. Lo hace.
-//   - CAP: hay alguien trabajándolo (corregir encima es el camino normal tras
-//     un rechazo, y es lo que el propio mensaje de abajo recomienda). Ocupar
-//     una plaza de concurrencia es correcto, no un efecto colateral.
-//   - CLAIM RANCIO: `stalenessNote` marca un `in-progress` sin worktree, ni
-//     rama, ni sesión. Tras un `--reopen` el worktree y la rama SIGUEN AHÍ
-//     (reabrir no toca el disco), así que no salta ninguna falsa alarma.
+// THE SOLUTION: `--reopen` stops going to `ready`. It goes to
+// `status:in-progress`, which is the EXACT INVERSE of `--release`. It is not
+// a hack to hold tokens: it is that `in-progress` describes the truth of that
+// slice after a rejection, in BOTH accountings at once and without touching a
+// single line of dispatch.js:
+//   - TOKENS: there is unmerged work in `feat/<n>`. It must hold them. It
+//     does.
+//   - CAP: there is someone working on it (correcting on top is the normal
+//     path after a rejection, and it is what the message below itself
+//     recommends). Occupying a concurrency slot is correct, not a side
+//     effect.
+//   - STALE CLAIM: `stalenessNote` flags an `in-progress` with no worktree,
+//     no branch and no session. After a `--reopen` the worktree and the
+//     branch are STILL THERE (reopening does not touch the disk), so no false
+//     alarm goes off.
 //
-// POR QUÉ NO LAS OTRAS DOS VÍAS:
-//   - "que `ready` retenga tokens": rompe el caso normal — un slice que nunca
-//     se empezó pasaría a bloquear a todos sus vecinos de área para siempre.
-//   - "un estado nuevo, `status:rejected`": el argumento de F13 sigue en pie
-//     (hay que enseñárselo a todo lo que lee labels), y aquí además sobra: el
-//     estado que hacía falta ya existía y se llama `in-progress`.
-// Y NO reintroduce lo que F13 descartó a conciencia (mantener el claim desde
-// el PR hasta el merge): ahí el slice pasaba días en `in-progress` SIN NADIE
-// trabajándolo, congelando una plaza y disparando una falsa alarma de claim
-// huérfano en cada PR en revisión. Aquí el `in-progress` se pone en el momento
-// exacto en que alguien vuelve a ponerse con él, y no antes.
+// WHY NOT THE OTHER TWO ROUTES:
+//   - "let `ready` hold tokens": it breaks the normal case — a slice that was
+//     never started would go on to block all its area neighbours forever.
+//   - "a new state, `status:rejected`": F13's argument still stands (it has
+//     to be taught to everything that reads labels), and here it is also
+//     superfluous: the state that was needed already existed and is called
+//     `in-progress`.
+// And it does NOT reintroduce what F13 discarded deliberately (holding the
+// claim from the PR until the merge): there the slice spent days at
+// `in-progress` with NOBODY working on it, freezing a slot and setting off a
+// false orphan-claim alarm on every PR under review. Here the `in-progress`
+// is set at the exact moment someone gets back to work on it, and not
+// earlier.
 //
-// LO QUE ESTO ESTRECHA, DICHO EN VOZ ALTA. Antes, `--reopen` dejaba el slice
-// despachable por `/ct-next`. Ya no: sale del comando ya reclamado. Eso es
-// deliberado (era despachable en falso — `/ct-next` se negaba igual, porque el
-// worktree y la rama existían), pero deja huérfano el otro camino, el de
-// "empezar de cero", que sí necesitaba `ready`. Ese camino tiene ahora su
-// propia arista comprobada: `--requeue` (más abajo), que exige que no quede
-// nada del slice en esta máquina antes de declararlo listo para volver a la
-// cola. La alternativa era dejar ese caso en manos de un `gh issue edit` a
-// mano, que es justo lo que `--reopen` existe para no tener que hacer.
+// WHAT THIS NARROWS, SAID OUT LOUD. Before, `--reopen` left the slice
+// dispatchable by `/ct-next`. Not any more: it comes out of the command
+// already claimed. That is deliberate (it was dispatchable in name only —
+// `/ct-next` refused all the same, because the worktree and the branch
+// existed), but it orphans the other path, "start from scratch", which did
+// need `ready`. That path now has its own checked edge: `--requeue` (below),
+// which demands that nothing of the slice be left on this machine before
+// declaring it ready to go back into the queue. The alternative was to leave
+// that case in the hands of a hand-written `gh issue edit`, which is exactly
+// what `--reopen` exists to avoid having to do.
 // ============================================================================
 
 // ============================================================================
-// --reopen (F13/H1) — `status:in-review` ERA UN ESTADO TERMINAL.
+// --reopen (F13/H1) — `status:in-review` WAS A TERMINAL STATE.
 //
-// EL AGUJERO. `--release` movía `in-progress → in-review` y NO EXISTÍA
-// NINGUNA transición de vuelta a `status:ready`. Los únicos caminos que
-// devolvían un issue a `ready` eran los reverts (carrera perdida, fallo de
-// readback, interrupción) — todos por FALLOS DEL PROTOCOLO, ninguno por una
-// revisión rechazada. Y `/ct-next` solo despacha `ready`. Consecuencia: si
-// rechazas un PR en el gate, ese slice sale del loop PARA SIEMPRE, y con él
-// todo lo que dependa de él. El caso no es exótico: en un epic típico, el
-// slice con más papeletas de ser rechazado en el gate visual suele ser
-// justamente uno del que cuelgan varios.
+// THE HOLE. `--release` moved `in-progress → in-review` and there was NO
+// transition back to `status:ready`. The only paths that returned an issue to
+// `ready` were the reverts (lost race, readback failure, interruption) — all
+// of them for PROTOCOL FAILURES, none of them for a rejected review. And
+// `/ct-next` only dispatches `ready`. Consequence: if you reject a PR at the
+// gate, that slice leaves the loop FOREVER, and with it everything that
+// depends on it. The case is not exotic: in a typical epic, the slice most
+// likely to be rejected at the visual gate tends to be precisely one that
+// several others hang off.
 //
-// POR QUÉ UNA TRANSICIÓN EXPLÍCITA Y NO UN ESTADO NUEVO ('status:rejected').
-// Un estado nuevo obliga a enseñárselo a TODO lo que lee labels
-// (resolveStatus y su precedencia, computeReadyCandidates, la detección de
-// colisión, ct-groom, el contrato de la §9…) y multiplica las combinaciones
-// que hay que razonar, a cambio de información que el propio issue ya
-// conserva mejor que un label: el hilo de la review dice por qué se rechazó.
-// Lo que faltaba no era un estado, era una ARISTA.
+// WHY AN EXPLICIT TRANSITION AND NOT A NEW STATE ('status:rejected'). A new
+// state forces it to be taught to EVERYTHING that reads labels (resolveStatus
+// and its precedence, computeReadyCandidates, the collision detection,
+// ct-groom, the §9 contract…) and multiplies the combinations that have to be
+// reasoned about, in exchange for information the issue itself already keeps
+// better than a label: the review thread says why it was rejected. What was
+// missing was not a state, it was an EDGE.
 //
-// POR QUÉ AQUÍ Y NO EN /ct-next. `dispatch-check.mjs` ya es el único fichero
-// que muta labels `status:` (ver el comentario de `setStatus`), y reabrir es
-// una decisión HUMANA del gate — igual que promover de backlog a ready. El
-// dispatcher no debe poder deshacer un veredicto de revisión por su cuenta.
+// WHY HERE AND NOT IN /ct-next. `dispatch-check.mjs` is already the only file
+// that mutates `status:` labels (see `setStatus`'s comment), and reopening is
+// a HUMAN decision of the gate — just like promoting from backlog to ready.
+// The dispatcher must not be able to undo a review verdict on its own.
 //
-// CÓMO SE EVITA REABRIR ALGO POR ACCIDENTE (el requisito explícito):
-//   1. Flag propio y explícito, nunca invocado por ningún camino automático:
-//      ni /ct-next, ni el kickoff del agente, lo ejecutan jamás.
-//   2. PRECONDICIÓN LEÍDA, no supuesta: se lee el estado real del issue y se
-//      exige `status:in-review`. Un `gh issue edit --add-label ready
-//      --remove-label in-review` a pelo (lo que haría cualquiera a mano)
-//      NO comprueba nada: sobre un issue en `in-progress` añadiría `ready`
-//      dejando DOS labels de status a la vez, que es justo el estado
-//      ambiguo que resolveStatus existe para sobrevivir. Aquí se rechaza.
-//   3. Y se rechaza distinguiendo el caso: reabrir algo que ya está `ready`
-//      no es un error del usuario que haya que castigar, es un no-op que hay
-//      que nombrar.
+// HOW REOPENING SOMETHING BY ACCIDENT IS AVOIDED (the explicit requirement):
+//   1. Its own explicit flag, never invoked by any automatic path: neither
+//      /ct-next nor the agent's kickoff ever run it.
+//   2. PRECONDITION READ, not assumed: the issue's real state is read and
+//      `status:in-review` is demanded. A bare `gh issue edit --add-label
+//      ready --remove-label in-review` (what anyone would do by hand) checks
+//      NOTHING: on an issue at `in-progress` it would add `ready` leaving TWO
+//      status labels at once, which is precisely the ambiguous state
+//      resolveStatus exists to survive. Here it is rejected.
+//   3. And it is rejected while telling the cases apart: reopening something
+//      that is already `ready` is not a user error to be punished, it is a
+//      no-op that has to be named.
 // ============================================================================
 
-// localSliceArtifacts: qué queda EN ESTA MÁQUINA de la vuelta anterior del
-// slice — el worktree `.worktrees/<n>` y la rama `feat/<n>`. Se mira desde el
-// checkout PRINCIPAL, no desde el cwd: este script puede invocarse desde
-// dentro del propio worktree del slice (el kickoff lo hace), y ahí
-// `--show-toplevel` devolvería el worktree en vez del checkout donde vive
-// `.worktrees/`. `git worktree list --porcelain` empieza SIEMPRE por el
-// worktree principal, y es portable a git viejos (a diferencia de
+// localSliceArtifacts: what is left ON THIS MACHINE from the slice's previous
+// round — the worktree `.worktrees/<n>` and the branch `feat/<n>`. It is
+// looked at from the MAIN checkout, not from the cwd: this script can be
+// invoked from inside the slice's own worktree (the kickoff does that), and
+// there `--show-toplevel` would return the worktree instead of the checkout
+// where `.worktrees/` lives. `git worktree list --porcelain` ALWAYS starts
+// with the main worktree, and it is portable to old gits (unlike
 // `--path-format=absolute --git-common-dir`).
 //
-// Devuelve `{ known: false }` si no se ha podido mirar (no hay git, no
-// estamos dentro de un repo, el comando falla). Nunca se traduce "no se pudo
-// comprobar" a "no hay nada": el mensaje de abajo dice explícitamente cuál de
-// las dos cosas sabe.
+// It returns `{ known: false }` if it could not be looked up (there is no
+// git, we are not inside a repo, the command fails). "It could not be
+// checked" is never translated into "there is nothing": the message below
+// says explicitly which of the two things it knows.
 function localSliceArtifacts(n) {
-  // `cwd` en vez de `-C <root>` a propósito: el argv queda idéntico al que
-  // usa ct-next.mjs para la misma pregunta (`rev-parse --verify --quiet
-  // refs/heads/feat/<n>`), que es lo que permite razonar sobre los dos sitios
-  // como una sola consulta — y lo que hace que el stub de git de los tests
-  // reconozca esta llamada sin tener que enseñarle una segunda forma.
+  // `cwd` instead of `-C <root>` on purpose: the argv comes out identical to
+  // the one ct-next.mjs uses for the same question (`rev-parse --verify
+  // --quiet refs/heads/feat/<n>`), which is what allows the two places to be
+  // reasoned about as a single query — and what makes the tests' git stub
+  // recognise this call without having to teach it a second shape.
   const git = (a, cwd) => execFileSync('git', a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30_000, killSignal: 'SIGKILL', ...(cwd ? { cwd } : {}) })
   let mainRoot
   try {
@@ -1238,9 +1276,10 @@ function localSliceArtifacts(n) {
   }
   let hasBranch = false
   try {
-    // Si `mainRoot` ya no existe en disco (worktree list respondió desde otro
-    // sitio, o el directorio se borró entre las dos llamadas), spawn falla y
-    // caemos a `false` — que es lo correcto: no hay evidencia de rama.
+    // If `mainRoot` no longer exists on disk (worktree list answered from
+    // somewhere else, or the directory was deleted between the two calls),
+    // spawn fails and we fall back to `false` — which is right: there is no
+    // evidence of a branch.
     git(['rev-parse', '--verify', '--quiet', `refs/heads/feat/${n}`], mainRoot)
     hasBranch = true
   } catch {
@@ -1249,13 +1288,14 @@ function localSliceArtifacts(n) {
   return { known: true, mainRoot, worktree, branch: `feat/${n}`, hasWorktree, hasBranch }
 }
 
-// reopenDiskNote: qué hacer con el worktree y la rama que ya existen de la
-// vuelta anterior. Reabrir un slice NO los borra —y no debe: normalmente el
-// trabajo rechazado se corrige ENCIMA de lo que ya hay, no desde cero— pero
-// tampoco puede callarlo, porque `/ct-next` SE NIEGA a despachar un slice
-// cuyo worktree o rama ya existen (precondición, antes de reclamar nada). Sin
-// esta nota, reabrir "funcionaría" y el siguiente `/ct-next` fallaría con un
-// mensaje que no menciona la reapertura.
+// reopenDiskNote: what to do with the worktree and the branch that already
+// exist from the previous round. Reopening a slice does NOT delete them —and
+// it must not: normally rejected work is corrected ON TOP of what is already
+// there, not from scratch— but neither can it stay quiet about it, because
+// `/ct-next` REFUSES to dispatch a slice whose worktree or branch already
+// exist (a precondition, before claiming anything). Without this note,
+// reopening would "work" and the next `/ct-next` would fail with a message
+// that does not mention the reopening.
 function reopenDiskNote(n) {
   const a = localSliceArtifacts(n)
   const requeueCmd = `node <plugin>/scripts/dispatch-check.mjs ${n} --repo ${repo} --requeue`
@@ -1282,11 +1322,11 @@ function reopenDiskNote(n) {
 }
 
 if (reopen) {
-  // Precondición LEÍDA. En dry-run con fixture se usa el fixture; en dry-run
-  // SIN fixture no hay estado que leer y no se muta nada, así que se admite
-  // como ensayo del mensaje. `labelsOf` es la misma lectura que usa el paso
-  // de colisión, y su fallo se clasifica igual: exit 3 (infraestructura, sin
-  // mutación).
+  // Precondition READ. In dry-run with a fixture the fixture is used; in
+  // dry-run WITHOUT a fixture there is no state to read and nothing is
+  // mutated, so it is admitted as a rehearsal of the message. `labelsOf` is
+  // the same read the collision step uses, and its failure is classified the
+  // same way: exit 3 (infrastructure, no mutation).
   let labels = null
   if (fx) {
     labels = fx.candLabels
@@ -1297,16 +1337,16 @@ if (reopen) {
       dieErr(`no se pudo leer el estado de #${issue} en ${repo}: ${e.message} — no se reabre nada sin haber comprobado que está en status:in-review.`, 3)
     }
   }
-  // La precondición es que el estado sea EXACTAMENTE `status:in-review`, no
-  // que in-review esté ENTRE sus labels. Hallazgo al atacar esta misma
-  // implementación: con `labels.includes(...)`, un issue que arrastrara
-  // `status:in-progress` Y `status:in-review` a la vez (una edición de label
-  // que se quedó a medias — el caso que resolveStatus existe para sobrevivir)
-  // pasaba la comprobación, y el `--add-label ready --remove-label in-review`
-  // lo dejaba en `[status:in-progress, status:ready]`: exactamente el estado
-  // ambiguo del que avisa el mensaje de abajo, creado por la herramienta que
-  // existe para no crearlo. Verificado contra esa primera versión: exit 0 y
-  // "reopened #9 → ready" sobre un issue con las dos labels.
+  // The precondition is that the status be EXACTLY `status:in-review`, not
+  // that in-review be AMONG its labels. Finding while attacking this very
+  // implementation: with `labels.includes(...)`, an issue dragging
+  // `status:in-progress` AND `status:in-review` at once (a label edit left
+  // half done — the case resolveStatus exists to survive) passed the check,
+  // and the `--add-label ready --remove-label in-review` left it at
+  // `[status:in-progress, status:ready]`: exactly the ambiguous state the
+  // message below warns about, created by the very tool that exists so as not
+  // to create it. Verified against that first version: exit 0 and "reopened
+  // #9 → ready" on an issue carrying both labels.
   if (labels !== null) {
     const actuales = labels.filter((l) => l.startsWith('status:'))
     const soloInReview = actuales.length === 1 && actuales[0] === 'status:in-review'
@@ -1339,30 +1379,30 @@ if (reopen) {
 }
 
 // ============================================================================
-// --requeue (F15/H1) — LA OTRA MITAD DE LA ARISTA DE VUELTA.
+// --requeue (F15/H1) — THE OTHER HALF OF THE RETURN EDGE.
 //
-// `--reopen` deja el slice en `in-progress` porque su trabajo sigue existiendo
-// sin mergear. El camino contrario —"abandono este intento, que /ct-next lo
-// despache de cero"— necesita `ready`, y `ready` solo es verdad cuando NO
-// queda trabajo sin mergear de ese slice en ninguna parte. Eso no se puede
-// suponer: se comprueba.
+// `--reopen` leaves the slice at `in-progress` because its work still exists
+// unmerged. The opposite path —"I abandon this attempt, let /ct-next dispatch
+// it from scratch"— needs `ready`, and `ready` is only true when NO unmerged
+// work of that slice is left anywhere. That cannot be assumed: it is checked.
 //
-// QUÉ EXIGE, Y QUÉ NO PUEDE EXIGIR (dicho, no escondido):
-//   - estado EXACTAMENTE `status:in-progress` (misma precondición leída que
-//     --reopen, mismo trato para el caso ambiguo de dos labels);
-//   - que en ESTA MÁQUINA no queden ni el worktree `.worktrees/<n>` ni la rama
-//     `feat/<n>`. Si quedan, se niega: devolverlo a la cola soltaría sus
-//     tokens mientras su trabajo sigue vivo, y encima /ct-next se negaría
-//     igual a re-despacharlo por esos mismos artefactos;
-//   - si NO SE PUDO MIRAR, se niega también. Es la diferencia entre `--reopen`
-//     y este: allí la nota de disco es informativa y "no lo sé" se puede
-//     decir; aquí la mutación ES una declaración de ausencia, y no se declara
-//     ausente lo que no se ha podido mirar.
-// Lo que NO puede comprobar, y por eso lo IMPRIME siempre en vez de dejarlo
-// implícito: la rama en el REMOTO y el PR abierto. Un slice cuya rama sigue
-// pusheada y cuyo PR sigue abierto tiene trabajo sin mergear aunque esta
-// máquina esté limpia; ahí `ready` vuelve a mentir. Cerrar el PR es parte del
-// abandono, y el mensaje lo dice con el comando.
+// WHAT IT DEMANDS, AND WHAT IT CANNOT DEMAND (said, not hidden):
+//   - status EXACTLY `status:in-progress` (the same precondition read as
+//     --reopen, the same treatment for the ambiguous two-label case);
+//   - that ON THIS MACHINE neither the worktree `.worktrees/<n>` nor the
+//     branch `feat/<n>` be left. If they are, it refuses: returning it to the
+//     queue would release its tokens while its work is still alive, and on
+//     top of that /ct-next would refuse to re-dispatch it anyway over those
+//     very artefacts;
+//   - if IT COULD NOT BE LOOKED AT, it refuses too. That is the difference
+//     between `--reopen` and this one: there the disk note is informative and
+//     "I do not know" can be said; here the mutation IS a declaration of
+//     absence, and what could not be looked at is not declared absent.
+// What it CANNOT check, and that is why it always PRINTS it instead of
+// leaving it implicit: the branch on the REMOTE and the open PR. A slice
+// whose branch is still pushed and whose PR is still open has unmerged work
+// even if this machine is clean; there `ready` lies again. Closing the PR is
+// part of the abandonment, and the message says so with the command.
 // ============================================================================
 if (requeue) {
   let labels = null
@@ -1395,8 +1435,9 @@ if (requeue) {
       )
     }
   }
-  // La comprobación de disco va ANTES de mutar. Un --requeue que suelta los
-  // tokens y LUEGO descubre que la rama sigue ahí ya ha abierto la ventana.
+  // The disk check goes BEFORE mutating. A --requeue that releases the tokens
+  // and THEN discovers the branch is still there has already opened the
+  // window.
   const a = localSliceArtifacts(issue)
   if (!a.known) {
     dieErr(`no se ha podido comprobar si queda algo de #${issue} en esta máquina (no se pudo consultar git desde aquí), y --requeue DECLARA que no queda trabajo sin mergear de este slice. No se declara ausente lo que no se ha podido mirar: no se ha tocado ninguna label. Corre esto desde dentro del checkout del repo, o comprueba a mano que ni .worktrees/${issue} ni feat/${issue} existen y haz la edición tú.`, 2)
@@ -1423,23 +1464,24 @@ if (requeue) {
 }
 
 // ============================================================================
-// --collect (F20/cosecha) — EL ÚNICO CAMINO DE ÉXITO DE ESTE FICHERO QUE BORRA
-// COSAS EN DISCO.
+// --collect (F20/harvest) — THE ONLY SUCCESS PATH IN THIS FILE THAT DELETES
+// THINGS ON DISK.
 //
-// Todo lo demás que borra un worktree en este plugin es un rollback de un
-// despacho fallido (`cleanupOrphanedWorktree` en ct-next.mjs). Aquí se borra
-// porque el slice TERMINÓ: su PR está mergeada, el árbol está limpio y la
-// punta local es el commit que aterrizó. Esas tres condiciones NO se deciden
-// aquí — las decide `CollectionPolicy` (scripts/slice-collection.js) y las
-// orquesta `SliceCollector` (scripts/slice-collector.js), que es quien lee,
-// decide y ejecuta los tres pasos. Este bloque hace lo que le toca a un
-// entrypoint y nada más: cablear los runners reales, proyectar el desenlace a
-// texto y a exit code, y salir. Ninguna regla de cosecha vive en este fichero.
+// Everything else that deletes a worktree in this plugin is a rollback of a
+// failed dispatch (`cleanupOrphanedWorktree` in ct-next.mjs). Here it deletes
+// because the slice FINISHED: its PR is merged, the tree is clean and the
+// local tip is the commit that landed. Those three conditions are NOT decided
+// here — they are decided by `CollectionPolicy`
+// (scripts/slice-collection.js) and orchestrated by `SliceCollector`
+// (scripts/slice-collector.js), which is the one that reads, decides and runs
+// the three steps. This block does what an entrypoint is supposed to do and
+// nothing more: wire up the real runners, project the outcome to text and to
+// an exit code, and exit. No harvest rule lives in this file.
 //
-// El objeto que fluye es el REAL de `localSliceArtifacts(issue)`: si un día
-// alguien renombra una de sus claves, esto deja de compilar el argv correcto y
-// el test de integración lo dice. Un `known: false` es exit 3 (no se pudo
-// mirar), nunca "no queda nada".
+// The object that flows is the REAL one from `localSliceArtifacts(issue)`: if
+// one day someone renames one of its keys, this stops compiling the right
+// argv and the integration test says so. A `known: false` is exit 3 (it could
+// not be looked at), never "there is nothing left".
 // ============================================================================
 if (collect) {
   const COLLECT_GIT_TIMEOUT_MS = 30_000
@@ -1449,9 +1491,9 @@ if (collect) {
   if (!a.known) {
     dieErr(`no se ha podido comprobar qué queda de #${issue} en esta máquina (no se pudo consultar git desde aquí): no se ha tocado nada. Corre esto desde dentro del checkout del repo.`, 3)
   }
-  // Un exit code distinto de 0 es DATO, no excepción: los tres runners lo
-  // devuelven en `code` para que el colector decida (y no traduzca un fallo
-  // de lectura a un árbol limpio).
+  // An exit code other than 0 is DATA, not an exception: the three runners
+  // return it in `code` so that the collector decides (and does not translate
+  // a read failure into a clean tree).
   const ghRunner = (argv) => {
     try {
       return { code: 0, stdout: gh(argv), stderr: '' }
@@ -1472,11 +1514,11 @@ if (collect) {
     cmux: localRunner('cmux', COLLECT_CMUX_TIMEOUT_MS),
     findWorkspace: (cwd) => findWorkspaceByCwd(cwd),
   })
-  // F20/cosecha, Task 7 (corregida): con `--bq` y la guarda diciendo COSECHAR,
-  // la fila viaja a BigQuery ANTES de que `execute()` (más abajo) borre nada.
-  // El ensayo se hace UNA sola vez, arriba; tanto la decisión de cargar en
-  // BigQuery como la propia borradura reutilizan ese mismo `ensayo`, así que
-  // `--collect --bq` solo pide la PR a GitHub una vez por invocación.
+  // F20/harvest, Task 7 (corrected): with `--bq` and the guard saying
+  // HARVEST, the row travels to BigQuery BEFORE `execute()` (below) deletes
+  // anything. The rehearsal is done ONCE only, above; both the decision to
+  // load into BigQuery and the deletion itself reuse that same `ensayo`, so
+  // `--collect --bq` only asks GitHub for the PR once per invocation.
   const espacioTemporal = {
     create: () => mkdtempSync(join(tmpdir(), 'ct-collect-bq-')),
     remove: (directory) => rmSync(directory, { recursive: true, force: true }),
@@ -1507,8 +1549,8 @@ if (collect) {
     if (delivery.state === DeliveryState.ABANDONED) return `la PR #${delivery.number} se cerró sin mergear`
     throw new Error(`--collect no sabe esperar por el estado ${delivery.state}`)
   }
-  // Proyección EXHAUSTIVA desenlace → (canal, texto, exit code). Un desenlace
-  // nuevo sin fila aquí lanza en vez de salir con un código inventado.
+  // EXHAUSTIVE projection outcome → (channel, text, exit code). A new outcome
+  // with no row here throws instead of exiting with an invented code.
   const PROYECCION = {
     [CollectionOutcome.COLLECTED]: { decir: dieOut, code: 0, linea: (r) => `collected #${issue}: ${r.done.map(hechoDe).join(', ')}${cargada}` },
     [CollectionOutcome.WOULD_COLLECT]: { decir: dieOut, code: 0, linea: (r) => `would collect #${issue}: ${r.pending.map((command) => command.line).join(' ; ')}${bqTable ? ` ; y cargaría 1 fila en ${bqTable.id}` : ''}` },
@@ -1523,10 +1565,10 @@ if (collect) {
   if (!proyeccion) throw new Error(`--collect no tiene proyección para el desenlace ${report.outcome}`)
   proyeccion.decir(`${dryRun ? 'dry-run: ' : ''}${proyeccion.linea(report)}`, proyeccion.code)
 }
-// 1) colisión previa. Ningún fallo aquí ha mutado nada todavía: abortar es
-// seguro, no deja lock huérfano. Finding 4: exit 3 (fallo de lectura, no
-// mutación, no colisión real) — antes exit 1, indistinguible por código de
-// la COLLISION real de más abajo.
+// 1) prior collision. No failure here has mutated anything yet: aborting is
+// safe, it leaves no orphan lock. Finding 4: exit 3 (read failure, no
+// mutation, no real collision) — formerly exit 1, indistinguishable by code
+// from the real COLLISION further down.
 let candLabels, open
 if (fx) {
   candLabels = fx.candLabels
@@ -1541,12 +1583,12 @@ if (fx) {
 }
 const collisions = detectCollisions(candLabels, open)
 if (collisions.length) {
-  // Finding 4: exit 1 — 'skip', resultado NORMAL del protocolo (ninguna
-  // mutación se llegó a escribir). Sin cambios de comportamiento.
-  // F13/H2: el estado de cada colisionante viaja en el mensaje. Desde que
-  // `in-review` también retiene tokens, "choca con #7" ya no implica que haya
-  // un agente vivo en #7 — y el remedio es distinto (mergear el PR, no
-  // esperar). Sin el estado, los dos casos son indistinguibles en la salida.
+  // Finding 4: exit 1 — 'skip', the NORMAL outcome of the protocol (no
+  // mutation ever got written). No behaviour change.
+  // F13/H2: each collider's status travels in the message. Since `in-review`
+  // also holds tokens, "clashes with #7" no longer implies there is a live
+  // agent on #7 — and the remedy is different (merge the PR, do not wait).
+  // Without the status, the two cases are indistinguishable in the output.
   const detalle = collisions.map((c) => `#${c.n}[${c.tokens.join(',')}${c.status ? ` ${c.status}` : ''}]`).join(' ')
   const hayReview = collisions.some((c) => c.status === 'status:in-review')
   const nota = hayReview
@@ -1555,60 +1597,57 @@ if (collisions.length) {
   dieErr(`COLLISION: #${issue} choca con ${detalle}${nota}`, 1)
 }
 
-// HOOK DE PRUEBA — CT_CLAIM_PRECLAIM_DELAY_MS.
+// TEST HOOK — CT_CLAIM_PRECLAIM_DELAY_MS.
 //
-// Qué hace: si está definida, inserta una espera síncrona justo DESPUÉS de
-// que la comprobación de colisión (paso 1, arriba) haya pasado limpia, y
-// ANTES de escribir el label de claim `status:in-progress` (paso 2, abajo).
-// Ningún otro punto del script se ve afectado.
+// What it does: if it is defined, it inserts a synchronous wait right AFTER
+// the collision check (step 1, above) has passed clean, and BEFORE writing
+// the claim label `status:in-progress` (step 2, below). No other point of the
+// script is affected.
 //
-// Por qué existe: el AC6 original (T10) solo pudo observar la mitad
-// falsificable de la garantía de exclusión mutua — `claimLost()` únicamente
-// puede hacer perder al claimant de número MAYOR, así que el de número menor
-// nunca pierde por construcción. Para ejercer de verdad la ventana de doble
-// claim (T11) hace falta poder pausar un claimant justo entre su
-// comprobación de colisión y su escritura, de forma determinista — sin este
-// hook esa ventana depende del scheduler del SO y catorce rondas de
-// `--settle-ms 0` no la alcanzaron ni una vez, lo cual es ausencia de
-// evidencia, no evidencia de ausencia.
+// Why it exists: the original AC6 (T10) could only observe the falsifiable
+// half of the mutual exclusion guarantee — `claimLost()` can only make the
+// claimant with the HIGHER number lose, so the lower-numbered one never loses
+// by construction. To really exercise the double claim window (T11) you need
+// to be able to pause one claimant right between its collision check and its
+// write, deterministically — without this hook that window depends on the
+// OS's scheduler and fourteen rounds of `--settle-ms 0` did not reach it even
+// once, which is absence of evidence, not evidence of absence.
 //
-// Por qué es seguro que exista fuera de tests, sin atarlo a --dry-run como
-// CT_CLAIM_FIXTURE: a diferencia del fixture (que sustituye datos reales por
-// datos fabricados y por tanto SÍ podría hacer decidir con información
-// falsa), este hook SOLO puede añadir una espera. No cambia qué se decide
-// (colisión/no colisión, gana/pierde la carrera), no cambia qué se escribe
-// en GitHub, no salta ningún paso ni reordena nada. Con la variable ausente
-// (el caso de producción real, y el de todos los tests existentes que no la
-// fijan) el valor es exactamente 0 y `sleepSync(0)` es un no-op — el camino
-// de código es IDÉNTICO al de antes de este cambio. Que quede activa por
-// accidente en producción degradaría latencia, nunca corrección.
+// Why it is safe for it to exist outside tests, without tying it to
+// --dry-run like CT_CLAIM_FIXTURE: unlike the fixture (which replaces real
+// data with fabricated data and therefore COULD make it decide on false
+// information), this hook can ONLY add a wait. It does not change what is
+// decided (collision/no collision, race won/lost), it does not change what
+// gets written to GitHub, it skips no step and reorders nothing. With the
+// variable absent (the real production case, and that of every existing test
+// that does not set it) the value is exactly 0 and `sleepSync(0)` is a no-op
+// — the code path is IDENTICAL to the one before this change. Leaving it
+// active by accident in production would degrade latency, never correctness.
 //
-// No hace falta un segundo hook simétrico entre la escritura y el readback
-// para construir la interleaving del harness: basta con este hook aplicado
-// SOLO al claimant de número menor (skew grande) y ninguno en el de número
-// mayor — mientras el skew supere el ciclo completo (escritura + readback)
-// del mayor, el mayor completa su decisión antes de que el menor escriba en
-// absoluto. (Existió una versión anterior de este comentario que apuntaba a
-// --settle-ms/CT_CLAIM_SETTLE_MS como ese segundo control; esa mitigación se
-// retiró en T11 fix round 2 por no poder demostrarse que aportaba nada — ver
-// el comentario más arriba, junto a `sleepSync`.)
+// A second symmetric hook between the write and the readback is not needed to
+// build the harness's interleaving: this hook applied ONLY to the
+// lower-numbered claimant (large skew) and none on the higher-numbered one is
+// enough — as long as the skew exceeds the higher one's complete cycle (write
+// + readback), the higher one completes its decision before the lower one
+// writes at all. (An earlier version of this comment existed that pointed at
+// --settle-ms/CT_CLAIM_SETTLE_MS as that second control; that mitigation was
+// withdrawn in T11 fix round 2 for not being provable to contribute anything
+// — see the comment further up, next to `sleepSync`.)
 //
-// Colocación (fix round 1, T11 review): esta validación vive AQUÍ, después
-// del `if (release) { ...; process.exit(0) }` de arriba, a propósito — no
-// junto a la definición de `sleepSync`. Un `--release` no pasa nunca por
-// este punto del script, así que un CT_CLAIM_PRECLAIM_DELAY_MS malformado
-// (p.ej. dejado colgado en el entorno por una sesión de pruebas anterior)
-// nunca puede bloquear un `--release` con exit 2 y dejar un issue atascado
-// en `status:in-progress` — el único efecto posible de una variable de
-// entorno cuyo propósito es "solo esperar" sería justo ese, si viviera antes
-// del guard de `release`.
+// Placement (fix round 1, T11 review): this validation lives HERE, after the
+// `if (release) { ...; process.exit(0) }` above, on purpose — not next to the
+// definition of `sleepSync`. A `--release` never passes through this point of
+// the script, so a malformed CT_CLAIM_PRECLAIM_DELAY_MS (e.g. left dangling
+// in the environment by an earlier test session) can never block a
+// `--release` with exit 2 and leave an issue stuck at `status:in-progress` —
+// the only possible effect of an environment variable whose purpose is "just
+// wait" would be exactly that, if it lived before the `release` guard.
 //
-// Tope superior (60000ms = 1 minuto): sin él, un valor como "1e12" (~31
-// años) se acepta como "número >= 0" válido y es indistinguible en la
-// práctica de un cuelgue — el harness que usa este hook nunca necesita más
-// de unos pocos segundos de skew, así que un valor por encima del tope es,
-// con altísima probabilidad, un error de quien lo invoca, no una necesidad
-// real.
+// Upper cap (60000ms = 1 minute): without it, a value like "1e12" (~31 years)
+// is accepted as a valid "number >= 0" and is in practice indistinguishable
+// from a hang — the harness that uses this hook never needs more than a few
+// seconds of skew, so a value above the cap is, with very high probability,
+// an error by whoever invokes it, not a real need.
 const PRECLAIM_DELAY_CAP_MS = 60_000
 let preclaimDelayMs = 0
 const preclaimRaw = process.env.CT_CLAIM_PRECLAIM_DELAY_MS
@@ -1621,9 +1660,9 @@ if (preclaimRaw !== undefined) {
 }
 if (!dryRun && !fx) sleepSync(preclaimDelayMs)
 
-// 2) claim. Finding 4: exit 3 — fallo de infraestructura, ninguna mutación
-// llegó a persistir (el intento de escritura falló, el issue sigue en
-// status:ready). Antes exit 1, indistinguible de una COLLISION real.
+// 2) claim. Finding 4: exit 3 — infrastructure failure, no mutation got to
+// persist (the write attempt failed, the issue is still at status:ready).
+// Formerly exit 1, indistinguishable from a real COLLISION.
 if (!dryRun && !fx) {
   const result = setStatus(issue, 'status:ready', 'status:in-progress')
   if (!result.ok) {
@@ -1631,7 +1670,7 @@ if (!dryRun && !fx) {
   }
 }
 
-// 3) claim-then-verify (re-lee — nunca el índice de búsqueda — y desempata por número menor)
+// 3) claim-then-verify (re-reads — never the search index — and breaks ties by lower number)
 let readback
 if (fx) {
   readback = fx.readback
@@ -1639,14 +1678,14 @@ if (fx) {
   try {
     readback = allOpen()
   } catch (e) {
-    // Ya escribimos el claim en el paso 2: si ahora no podemos releer, no
-    // sabemos si ganamos la carrera. Dejar el label puesto sería un lock
-    // huérfano silencioso, así que intentamos revertir antes de salir con
-    // error — y lo decimos distinto de una carrera perdida normal, porque un
-    // humano necesita saber que esto es un fallo de infraestructura, no un
-    // desempate. Finding 4: el exit code final depende de si ESE revert
-    // tuvo éxito (3 — infra, sin mutación persistente) o falló (4 —
-    // huérfano de verdad, exige intervención humana).
+    // We already wrote the claim in step 2: if we cannot re-read now, we do
+    // not know whether we won the race. Leaving the label in place would be a
+    // silent orphan lock, so we try to revert before exiting with an error —
+    // and we say it differently from a normal lost race, because a human
+    // needs to know this is an infrastructure failure, not a tie-break.
+    // Finding 4: the final exit code depends on whether THAT revert succeeded
+    // (3 — infra, no persistent mutation) or failed (4 — a real orphan,
+    // demanding human intervention).
     errLine(`no se pudo re-leer el estado tras el claim de #${issue}: ${e.message} — no se puede confirmar la carrera`)
     let revertOk = true
     if (!dryRun) {
@@ -1664,9 +1703,9 @@ if (fx) {
 
 if (claimLost(readback, issue)) {
   errLine(`carrera perdida: #${issue} liberado (otro claim menor con token compartido ganó)`) // lost
-  // Finding 4: 'skip' (exit 1) si el revert tuvo éxito — carrera perdida
-  // LIMPIA, resultado normal del protocolo (ninguna mutación persiste).
-  // 'stuck' (exit 4) si el revert TAMBIÉN falló — huérfano de verdad.
+  // Finding 4: 'skip' (exit 1) if the revert succeeded — a CLEAN lost race,
+  // the normal outcome of the protocol (no mutation persists). 'stuck'
+  // (exit 4) if the revert ALSO failed — a real orphan.
   let revertOk = true
   if (!dryRun && !fx) {
     const result = setStatus(issue, 'status:in-progress', 'status:ready')

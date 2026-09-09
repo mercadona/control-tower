@@ -1,45 +1,45 @@
-// F8 — POR QUÉ ESTE FICHERO EXISTE.
+// F8 — WHY THIS FILE EXISTS.
 //
-// Hasta ahora la suite no tenía fichero de configuración, así que corría con
-// el `testTimeout` POR DEFECTO de vitest: 5000 ms. Ese número era, sin que
-// nadie lo hubiera decidido, la condición de aprobado de casi toda la suite.
+// Until now the suite had no configuration file, so it ran with vitest's
+// DEFAULT `testTimeout`: 5000 ms. That number was, without anybody having
+// decided it, the pass condition of almost the whole suite.
 //
-// Casi ningún test de este repo es una función pura. Los de ct-next /
-// ct-groom / dispatch-check arrancan el script REAL como subproceso, y ese
-// script arranca a su vez `git`, `gh` y `cmux` (stubs, sí, pero procesos node
-// de verdad, con su arranque de V8 completo cada uno). Un caso `--cap 2` de
-// extremo a extremo encadena del orden de veinte arranques de node. Con la
-// máquina ociosa eso son 1-3 s: por debajo de los 5 s, pero por poco y sin
-// que nadie lo hubiera comprobado.
+// Hardly any test in this repo is a pure function. The ct-next / ct-groom /
+// dispatch-check ones start the REAL script as a subprocess, and that script
+// in turn starts `git`, `gh` and `cmux` (stubs, yes, but real node processes,
+// each with its full V8 start-up). One end-to-end `--cap 2` case chains
+// something of the order of twenty node start-ups. With the machine idle that
+// is 1-3 s: below the 5 s, but only just, and without anybody having checked
+// it.
 //
-// Medido en este repo (main @ b0799f3 SIN TOCAR, con otra suite de vitest
-// completa corriendo en bucle a la vez, 6 corridas seguidas):
-//   19, 23, 9, 23, 15 y 31 tests fallados de 836. Cero corridas verdes.
-//   De esos 120 fallos, 116 eran literalmente "Test timed out in 5000ms" —
-//   ni una sola AssertionError. Duraciones reales de tests que "fallaron":
+// Measured in this repo (main @ b0799f3 UNTOUCHED, with another complete
+// vitest suite running in a loop at the same time, 6 runs in a row):
+//   19, 23, 9, 23, 15 and 31 tests failed out of 836. Zero green runs.
+//   Of those 120 failures, 116 were literally "Test timed out in 5000ms" —
+//   not a single AssertionError. Real durations of tests that "failed":
 //   17427, 16814, 16261, 15242, 12204, 10107, 9773, 9717, 8721 ms…
 //
-// SUBIR ESTE NÚMERO NO ES TAPAR UN TEST QUE MIENTE, y la distinción importa
-// porque es justo la trampa que esta tarea venía a desmontar. Un
-// `testTimeout` es un DETECTOR DE CUELGUES, no un mecanismo de
-// sincronización. Ninguno de los tests que se caían por él afirma NADA sobre
-// cuánto tarda algo: todas sus aserciones son sobre el exit code, el texto de
-// salida y los ficheros que quedaron en disco. A 5 s el plazo no significaba
-// "esto se ha colgado", significaba "la máquina estaba ocupada" — y el
-// informe de fallo era indistinguible del de una aserción rota de verdad. A
-// 120 s solo puede dispararlo un cuelgue real, y el veredicto ante un cuelgue
-// real sigue siendo el mismo que antes: falla. Solo tarda más en llegar, que
-// es exactamente lo que se le pide a una red de seguridad.
+// RAISING THIS NUMBER IS NOT COVERING UP A TEST THAT LIES, and the
+// distinction matters because it is exactly the trap this task came to
+// dismantle. A `testTimeout` is a HANG DETECTOR, not a synchronisation
+// mechanism. None of the tests that fell over because of it asserts ANYTHING
+// about how long something takes: all their assertions are about the exit
+// code, the output text and the files left on disk. At 5 s the deadline did
+// not mean "this has hung", it meant "the machine was busy" — and the failure
+// report was indistinguishable from that of a genuinely broken assertion. At
+// 120 s only a real hang can fire it, and the verdict in the face of a real
+// hang is still the same as before: it fails. It just takes longer to arrive,
+// which is exactly what is asked of a safety net.
 //
-// Los sitios donde el reloj SÍ era la sincronización o la aserción (no un
-// plazo de seguridad) NO se han arreglado subiendo ningún número — ver
-// CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE en scripts/ct-next.mjs,
-// FAKE_GIT_WORKTREE_ADD_WAIT_FILE en __tests__/fixtures/fake-git-bin/git, y
-// las mediciones pareadas de dispatch-check-dryrun.test.js.
+// The places where the clock really WAS the synchronisation or the assertion
+// (and not a safety deadline) have NOT been fixed by raising any number — see
+// CT_NEXT_TEST_CHILD_TIMEOUT_SCOPE in scripts/ct-next.mjs,
+// FAKE_GIT_WORKTREE_ADD_WAIT_FILE in __tests__/fixtures/fake-git-bin/git, and
+// the paired measurements of dispatch-check-dryrun.test.js.
 //
-// hookTimeout: mismo razonamiento para los `afterEach` (que borran árboles de
-// directorios temporales); su default es 10 s y bajo carga se queda igual de
-// corto.
+// hookTimeout: the same reasoning for the `afterEach` hooks (which delete
+// trees of temporary directories); their default is 10 s and under load it
+// comes out just as short.
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
@@ -48,33 +48,35 @@ export default defineConfig({
     testTimeout: 120_000,
     hookTimeout: 120_000,
     teardownTimeout: 60_000,
-    // CT_WATCH_GO_BIN — NINGÚN test lanza el vigilante del `-OK` de verdad.
+    // CT_WATCH_GO_BIN — NO test launches the real `-OK` watcher.
     //
-    // `ct-next` lo lanza DESPRENDIDO tras despachar un slice con gate `plan`, o
-    // sea en la mayoría de los tests que despachan algo. Medido la primera vez
-    // que la suite corrió con esto puesto: 42 procesos `ct-watch-go.mjs`
-    // huérfanos, cada uno sondeando cada 30 s durante ocho horas. Un `pkill`
-    // después de cada corrida no es una solución: la suite no puede dejar
-    // procesos detrás, punto.
+    // `ct-next` launches it DETACHED after dispatching a slice with a `plan`
+    // gate, that is, in most of the tests that dispatch anything. Measured the
+    // first time the suite ran with this in place: 42 orphaned
+    // `ct-watch-go.mjs` processes, each one polling every 30 s for eight
+    // hours. A `pkill` after every run is not a solution: the suite cannot
+    // leave processes behind, full stop.
     //
-    // Va aquí y no en cada test porque el defecto es exactamente ese: que un
-    // test que NO habla de esto lo lance sin querer. Los tres ficheros que sí
-    // hablan de esto fijan su propio valor y no dependen de éste.
+    // It goes here and not in each test because the defect is exactly that: a
+    // test that does NOT talk about this launching it by accident. The three
+    // files that do talk about it set their own value and do not depend on
+    // this one.
     //
-    // La grabadora, además de no sondear nada, apunta su argv cuando el test le
-    // da un FAKE_WATCH_GO_LOG — así el mismo doble sirve para no hacer daño y
-    // para comprobar que el lanzamiento ocurre con los argumentos correctos.
-    // CT_WATCH_MERGE_BIN — lo mismo para el vigilante del MERGE, que
-    // `dispatch-check --release` lanza desprendido. `--release` se ejercita en
-    // muchos más tests que los que hablan de él (todos los de la
-    // correspondencia del e2e, los de dry-run, los de truncado), así que sin
-    // esto cada uno dejaría un proceso sondeando GitHub cada minuto durante 48
-    // horas. Es exactamente el defecto que CT_WATCH_GO_BIN vino a cerrar; que
-    // esté aquí y no en cada test es el punto.
+    // The recorder, besides polling nothing, notes down its argv when the test
+    // gives it a FAKE_WATCH_GO_LOG — so the same double serves both to do no
+    // harm and to check that the launch happens with the right arguments.
+    // CT_WATCH_MERGE_BIN — the same for the MERGE watcher, which
+    // `dispatch-check --release` launches detached. `--release` is exercised
+    // in many more tests than the ones that talk about it (all the e2e
+    // correspondence ones, the dry-run ones, the truncation ones), so without
+    // this each one would leave a process polling GitHub every minute for 48
+    // hours. It is exactly the defect CT_WATCH_GO_BIN came to close; that it
+    // is here and not in each test is the point.
     env: {
-      // `fileURLToPath` y no `.pathname`: con el checkout bajo una ruta con
-      // espacios o no-ASCII, `.pathname` viene percent-encoded y apuntaría a un
-      // fichero que no existe. Es lo que usan los otros 56 ficheros del repo.
+      // `fileURLToPath` and not `.pathname`: with the checkout under a path
+      // with spaces or non-ASCII, `.pathname` comes percent-encoded and would
+      // point at a file that does not exist. It is what the repo's other 56
+      // files use.
       CT_WATCH_GO_BIN: fileURLToPath(new URL('./__tests__/fixtures/fake-watch-go-bin/recorder.mjs', import.meta.url)),
       CT_WATCH_MERGE_BIN: fileURLToPath(new URL('./__tests__/fixtures/fake-watch-merge-bin/recorder.mjs', import.meta.url)),
     },

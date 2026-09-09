@@ -1,24 +1,24 @@
 node_modules/
 
-# Salidas efímeras de los harness de experimentos en vivo (plugin/scripts/experiments/*.sh):
-# nunca se ejecutan en CI/npm test, y sus resultados no deben versionarse.
+# Ephemeral output of the live-experiment harnesses (plugin/scripts/experiments/*.sh):
+# they never run in CI/npm test, and their results must not be versioned.
 plugin/scripts/experiments/*-results/
 
 
-# Scratch del proceso subagent-driven (ledger, briefs, informes, paquetes de review).
-# Efímero por definición: el registro durable es el historial de git.
+# Scratch of the subagent-driven process (ledger, briefs, reports, review packages).
+# Ephemeral by definition: the durable record is git history.
 .superpowers/
 
-# Worktrees de sesión creados por el harness dentro del propio checkout. Sin esta
-# línea, un `git add -A` en el checkout principal se traga un árbol de trabajo
-# anidado entero — el mismo accidente que `.worktrees/` ya tiene cubierto para los
-# worktrees de slice (ver el bloque de .worktrees/ en scripts/ct-init.sh). Se ignora
-# SOLO el subdirectorio: `.claude/` también guarda configuración que sí se versiona.
+# Session worktrees the harness creates inside the checkout itself. Without this
+# line, a `git add -A` in the main checkout swallows a whole nested working tree —
+# the same accident `.worktrees/` already covers for the slice worktrees (see the
+# .worktrees/ block in scripts/ct-init.sh). ONLY the subdirectory is ignored:
+# `.claude/` also holds configuration that does get versioned.
 .claude/worktrees/
 
-# Basura de Finder. Aparece sola al abrir cualquier carpeta del repo en macOS y
-# ensucia `git status` en cada sesión — dos de ellas convivían sin trackear a la
-# vez que se escribía esto.
+# Finder junk. It shows up on its own when any folder of the repo is opened on
+# macOS and dirties `git status` in every session — two of them were living
+# untracked at the same time this was being written.
 .DS_Store
 .worktrees/
 .agent/SLICE.md

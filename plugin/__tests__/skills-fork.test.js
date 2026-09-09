@@ -312,13 +312,23 @@ describe("seam 4 — the slice's plan is written by writing-plans-prescriptive (
     // bytes, 7.2%, and the debt the previous raise wrote down —look at the
     // accumulated total, not just the previous step— is paid right here: the
     // next raise still has to add up from 16,314, not from 17,492.
+    //
+    // Cap raised from 17,492 to 17,495: three bytes, and they buy no content.
+    // The skill was translated from Spanish to English along with the rest of
+    // the repository, and English says the same thing slightly longer. Trimming
+    // was not attempted on purpose: there is nothing to trim, because nothing
+    // was added — a sentence removed here would pay for a translation with a
+    // measured lesson, which is the exact trade the previous raise refused. The
+    // ratchet is deliberately set to the new size and not to a round number, so
+    // the next real addition still has to argue for itself. Accumulated since
+    // 16,314: +1,181 bytes, 7.2%.
     expect(
       bytes('SKILL.md'),
-      'SKILL.md se ha pasado del tope: recorta dentro del mismo apartado, o sube el tope escribiendo aquí mismo el motivo de la subida — no vale por precedente.'
-    ).toBeLessThanOrEqual(17492)
+      'SKILL.md is over its cap: trim inside the same section, or raise the cap by writing the reason for the raise right here — precedent is not a reason.'
+    ).toBeLessThanOrEqual(17495)
     expect(
       bytes('plan-template.md'),
-      'plan-template.md se ha pasado del tope: recorta dentro del mismo apartado, o sube el tope escribiendo aquí mismo el motivo de la subida — no vale por precedente.'
+      'plan-template.md is over its cap: trim inside the same section, or raise the cap by writing the reason for the raise right here — precedent is not a reason.'
     ).toBeLessThanOrEqual(6377)
   })
 

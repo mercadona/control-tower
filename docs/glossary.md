@@ -86,6 +86,57 @@ and test names, measured on `b77c76e`.
 
 `loop-estado.js` is the loop's own record, so it becomes `loop-state.js`.
 
+## Terms settled during the migration
+
+Eight agents translating in parallel each met words the table above did not
+carry. These are the choices that were made, and the reasoning where the choice
+was not obvious. They are here so the next diff does not reopen them.
+
+| Spanish | English | Why this one |
+|---|---|---|
+| recorrido (e2e) | **journey** | The end-to-end path through the product. Not *run*: `run-machine.js`, `run-metrics.js` and `.agent/run-<n>/` already own that word. The JSON field is `runs` and **does not move** — it is contract |
+| recorrido (the judge's pass over the rubric) | **walk** | A different sense from the e2e one, deliberately kept apart |
+| travesía | **traversal** | Only the "how this repository is traversed" section of AGENTS.md |
+| divergencia | **drift** | `hasDrift` / `formatDrift` already carried it |
+| acuse | **acknowledgement** | Forced by `ACK_PATH`, `ACK_IDS`, `parseAcks` |
+| centinela | **sentinel** | Matches `scripts/launch-sentinel.js` |
+| residuo | **residue** | Matches `collectFinishedResidue` |
+| sello | **seal** | Matches the `sealedTree` field |
+| consejero | **adviser** | Matches `ct-advisor` |
+| carril | **lane** | Matches the `laneTokens` field |
+| cota | **bound** | *cap* stays reserved for `tope` |
+| barrido | **sweep** | |
+| poda / podar | **pruning / prune** | |
+| ancla | **anchor** | |
+| valla | **fence** | CommonMark's own word; `stepFence` already used it |
+| zona | **zone** | |
+| oleada | **wave** | |
+| peldaño | **rung** | Already the metaphor in `STATUS_LADDER` |
+| enmienda | **amendment** | |
+| traspaso / relevo | **handover** | |
+| grano | **grain** | BigQuery row granularity |
+| stagear | **to stage** | |
+| dictaminar | **rule on** | Kept apart from `veredicto` → verdict |
+| tramo | **span** | |
+| envoltorio | **wrapper** | |
+| viñeta | **bullet** | |
+| ajeno | **foreign** | |
+| huérfano | **orphaned** | |
+| en vuelo | **in flight** | |
+| punto de cesión | **yield point** | |
+| fallo en abierto | **fail-open** | The code already says fail-closed |
+| menor / importante (review severity) | **minor / major** | `minor N` was already established in `fake-gh-bin/gh` |
+
+Three words split by call site, and conflating them would be wrong:
+
+- **`hueco`** is *gap* when it is a hole in a plan or a contract, and **slot**
+  when it is the `(epic, order)` cell of an index — where *gap* would invert the
+  meaning.
+- **`red`** is *net* in "the safety net" and **network** when it is literally a
+  `gh` call on the critical path.
+- **`reenvío`** is **resend** when the cmux line is retyped and **forwarding**
+  when a child's stdout is relayed.
+
 ## The ordinary words
 
 Not domain terms, but they appear inside identifiers and test names.

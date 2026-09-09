@@ -43,7 +43,7 @@ const SPEC = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 `
 
 describe('ct-groom --dry-run', () => {
-  it('imprime el plan sin tocar gh', () => {
+  it('it prints the plan without touching gh', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const out = execFileSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', stdio: QUIET_STDIO, env: fakeEnv() })
@@ -51,16 +51,16 @@ describe('ct-groom --dry-run', () => {
     expect(plan.milestone).toBe('Epic')
     expect(plan.issues).toHaveLength(2)
     expect(plan.issues[1].labels).toContain('type:backend')
-    expect(plan.issues[1].body).toContain('merge-after `#1`') // F6: código inline, GitHub no lo autoenlaza al issue #1
-    // F3: el título sale de "Slice" ("login"/"refresh"), no de "Entrega"
-    // ("modelo"/"flow") — "Entrega" aparece en el cuerpo como descripción.
+    expect(plan.issues[1].body).toContain('merge-after `#1`') // F6: inline code, GitHub does not autolink it to issue #1
+    // F3: the title comes from "Slice" ("login"/"refresh"), not from "Entrega"
+    // ("modelo"/"flow") — "Entrega" shows up in the body as a description.
     expect(plan.issues[0].title).toBe('#1 login')
     expect(plan.issues[1].title).toBe('#2 refresh')
     expect(plan.issues[0].body).toContain('modelo')
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('--project 7 aparece como número 7 en el JSON del dry-run', () => {
+  it('--project 7 shows up as the number 7 in the dry-run JSON', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const out = execFileSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--project', '7', '--dry-run'], { encoding: 'utf8', stdio: QUIET_STDIO, env: fakeEnv() })
@@ -69,7 +69,7 @@ describe('ct-groom --dry-run', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('sin --project, el plan lleva project: null', () => {
+  it('with no --project, the plan carries project: null', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const out = execFileSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', stdio: QUIET_STDIO, env: fakeEnv() })
@@ -78,7 +78,7 @@ describe('ct-groom --dry-run', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('spec inexistente sale con código distinto de 0 y mensaje de uso', () => {
+  it('a non-existent spec exits with a code other than 0 and a usage message', () => {
     let threw = false
     try {
       execFileSync('node', [script, '/no/existe/spec.md', '--repo', 'o/r', '--dry-run'], { encoding: 'utf8', stdio: QUIET_STDIO, env: fakeEnv() })
@@ -90,7 +90,7 @@ describe('ct-groom --dry-run', () => {
     expect(threw).toBe(true)
   })
 
-  it('spec con órdenes de slice duplicados sale con código distinto de 0 y mensaje nombrando el duplicado', () => {
+  it('a spec with duplicated slice orders exits with a code other than 0 and a message naming the duplicate', () => {
     const dir = makeSpecDir('ctg-')
     const DUP_SPEC = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice (issue) | Tipo | Entrega | Dep | Acepta (AC) | Protegido |
@@ -104,21 +104,21 @@ describe('ct-groom --dry-run', () => {
       execFileSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', stdio: QUIET_STDIO, env: fakeEnv() })
     } catch (e) {
       threw = true
-      // exit 2, no exit 1 crudo de una excepción sin capturar: mismo código que
-      // el resto de errores de validación de este wrapper (spec inexistente,
-      // --milestone/--project/--repo inválidos).
+      // exit 2, not a raw exit 1 from an uncaught exception: the same code as
+      // the rest of this wrapper's validation errors (non-existent spec,
+      // invalid --milestone/--project/--repo).
       expect(e.status).toBe(2)
       expect(e.stderr.toString()).toMatch(/duplicad/)
       expect(e.stderr.toString()).toMatch(/1/)
-      // convención del wrapper: console.error + process.exit, NUNCA un stack
-      // trace de Node volcado por una excepción sin capturar.
+      // the wrapper's convention: console.error + process.exit, NEVER a Node
+      // stack trace dumped by an uncaught exception.
       expect(e.stderr.toString()).not.toMatch(/at \S+ \(file:/)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('sin --repo fuera de --dry-run sale con código distinto de 0 y mensaje de uso', () => {
+  it('with no --repo outside --dry-run it exits with a code other than 0 and a usage message', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     let threw = false
@@ -134,15 +134,15 @@ describe('ct-groom --dry-run', () => {
   })
 })
 
-// Finding 3 de la review final: el `arg()` de ct-groom.mjs (a diferencia de
-// ct-next.mjs/dispatch-check.mjs) tomaba `process.argv[i+1]` literal sin
-// comprobar que fuera un valor real. Verificado en vivo contra el sandbox:
-// `--milestone` como último token hacía que `milestone` fuera el booleano
-// `true`, y una corrida real CREABA un milestone titulado "true" enganchando
-// todos los issues del epic; `--milestone --dry-run` se comía `--dry-run`
-// como valor; `--project` sin valor se convertía en `1` (`Number(true)===1`).
-describe('ct-groom — flags colgantes no cuelan valores falsos (review final, finding 3)', () => {
-  it('--milestone como último token (sin valor) → exit 2, nunca crea/usa un milestone "true"', () => {
+// Finding 3 of the final review: ct-groom.mjs's `arg()` (unlike
+// ct-next.mjs/dispatch-check.mjs) took `process.argv[i+1]` literally without
+// checking that it was a real value. Verified live against the sandbox:
+// `--milestone` as the last token made `milestone` the boolean `true`, and a
+// real run CREATED a milestone titled "true" hooking every issue of the epic
+// to it; `--milestone --dry-run` ate `--dry-run` as a value; `--project` with
+// no value turned into `1` (`Number(true)===1`).
+describe('ct-groom — dangling flags do not sneak false values through (final review, finding 3)', () => {
+  it('--milestone as the last token (with no value) → exit 2, it never creates or uses a "true" milestone', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     let threw = false
@@ -157,7 +157,7 @@ describe('ct-groom — flags colgantes no cuelan valores falsos (review final, f
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('--milestone seguido de otro flag (--dry-run) sin valor real → exit 2, no se come el flag siguiente', () => {
+  it('--milestone followed by another flag (--dry-run) with no real value → exit 2, it does not eat the next flag', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     let threw = false
@@ -172,7 +172,7 @@ describe('ct-groom — flags colgantes no cuelan valores falsos (review final, f
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('--project como último token (sin valor) → exit 2, nunca se convierte en 1', () => {
+  it('--project as the last token (with no value) → exit 2, it never turns into 1', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     let threw = false
@@ -187,7 +187,7 @@ describe('ct-groom — flags colgantes no cuelan valores falsos (review final, f
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('--project seguido de otro flag (sin valor real) → exit 2', () => {
+  it('--project followed by another flag (with no real value) → exit 2', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     let threw = false
@@ -202,7 +202,7 @@ describe('ct-groom — flags colgantes no cuelan valores falsos (review final, f
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('--project no numérico → exit 2', () => {
+  it('a non-numeric --project → exit 2', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     let threw = false
@@ -217,12 +217,12 @@ describe('ct-groom — flags colgantes no cuelan valores falsos (review final, f
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // D4 (revisión de argumentos numéricos): `Number('2.9')` es 2.9 — finito y
-  // > 0, así que la validación anterior lo dejaba pasar y el valor viajaba
-  // tal cual hasta `gh project view 2.9`, que falla tarde y de forma confusa.
-  // Un número de project es un entero o no es nada.
+  // D4 (review of numeric arguments): `Number('2.9')` is 2.9 — finite and > 0,
+  // so the previous validation let it through and the value travelled as it
+  // stood all the way to `gh project view 2.9`, which fails late and
+  // confusingly. A project number is an integer or it is nothing.
   for (const bad of ['2.9', '1e3', ' 3', '0x10']) {
-    it(`--project ${JSON.stringify(bad)} → exit 2 (no es un entero en dígitos a secas)`, () => {
+    it(`--project ${JSON.stringify(bad)} → exit 2 (it is not an integer in plain digits)`, () => {
       const dir = makeSpecDir('ctg-')
       const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
       let threw = false
@@ -238,21 +238,21 @@ describe('ct-groom — flags colgantes no cuelan valores falsos (review final, f
     })
   }
 
-  // F10 — `--section` queda OBSOLETO. Hasta aquí, F6 le había puesto una
-  // validación de call-site (un `--section` colgante devolvía el booleano
-  // `true` y el enlace al spec de TODOS los issues salía como
-  // "[spec.md#true](spec.md#true)"). Esa validación era correcta para lo que
-  // el flag hacía entonces, pero el flag entero era una promesa vacía: la
-  // tabla §9 se localiza por su cabecera de columnas ("Slice" + "Dep"), no por
-  // ningún número de sección, así que --section jamás decidió QUÉ se
-  // groomeaba; solo componía el ancla del enlace... y "#9" no es un ancla que
-  // exista en GitHub (el encabezado "## 9. Slices" tiene el id "9-slices").
-  // Su único efecto observable era producir un enlace roto.
+  // F10 — `--section` becomes OBSOLETE. Up to here, F6 had given it a call-site
+  // validation (a dangling `--section` returned the boolean `true` and the spec
+  // link of EVERY issue came out as "[spec.md#true](spec.md#true)"). That
+  // validation was correct for what the flag did back then, but the whole flag
+  // was an empty promise: the §9 table is located by its column header
+  // ("Slice" + "Dep"), not by any section number, so --section never decided
+  // WHAT got groomed; it only composed the link's anchor… and "#9" is not an
+  // anchor that exists on GitHub (the heading "## 9. Slices" has the id
+  // "9-slices"). Its only observable effect was producing a broken link.
   //
-  // Contrato nuevo: se acepta en cualquier forma (nadie ve su script romperse
-  // de golpe), se ignora, y se avisa de que se ignora — que es lo que impide
-  // que alguien siga creyendo que decide algo.
-  it('--section con un valor real: se IGNORA (el ancla sale del encabezado real), avisa, y no rompe', () => {
+  // The new contract: it is accepted in any shape (nobody sees their script
+  // break all at once), it is ignored, and the fact that it is ignored is said
+  // out loud — which is what stops anyone from going on believing it decides
+  // anything.
+  it('--section with a real value: it is IGNORED (the anchor comes from the real heading), it warns, and it does not break', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--section', '12', '--dry-run'],
@@ -260,7 +260,7 @@ describe('ct-groom — flags colgantes no cuelan valores falsos (review final, f
     expect(res.status).toBe(0)
     expect(res.stderr).toMatch(/--section está obsoleto y se IGNORA/)
     const plan = JSON.parse(res.stdout)
-    // Ni rastro del "12" que se pidió: el ancla es la del encabezado real.
+    // Not a trace of the "12" that was asked for: the anchor is the real heading's.
     expect(plan.issues[0].body).not.toContain('#12')
     expect(plan.issues[0].body).toContain(specUrl('spec.md'))
     rmSync(dir, { recursive: true, force: true })
@@ -270,21 +270,21 @@ describe('ct-groom — flags colgantes no cuelan valores falsos (review final, f
     ['como último token (sin valor)', ['--dry-run', '--section']],
     ['seguido de otro flag (sin valor real)', ['--section', '--dry-run']],
   ]) {
-    it(`--section ${caso}: ya no es un error — se ignora y se avisa, exit 0`, () => {
+    it(`--section ${caso}: it is no longer an error — it is ignored and warned about, exit 0`, () => {
       const dir = makeSpecDir('ctg-')
       const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
       const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', ...argv],
         { encoding: 'utf8', env: fakeEnv() })
       expect(res.status).toBe(0)
       expect(res.stderr).toMatch(/--section está obsoleto/)
-      // El agujero que F6 cerró NO puede reaparecer por la puerta de atrás:
-      // el booleano `true` de un flag colgante no llega a ningún ancla.
+      // The hole F6 closed must NOT reappear through the back door: the boolean
+      // `true` of a dangling flag reaches no anchor.
       expect(res.stdout).not.toContain('#true')
       rmSync(dir, { recursive: true, force: true })
     })
   }
 
-  it('sin --section no se dice nada de --section (el aviso no es ruido de fondo)', () => {
+  it('with no --section nothing is said about --section (the warning is not background noise)', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'],
@@ -294,10 +294,10 @@ describe('ct-groom — flags colgantes no cuelan valores falsos (review final, f
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Re-review: --repo tenía el mismo hueco (solo `if (!repo)`, que un
-  // `true` colgante pasa sin avisar por ser truthy) — ahora validado igual
-  // que ct-next.mjs/dispatch-check.mjs (`typeof !== 'string'`).
-  it('--repo como último token (sin valor) → exit 2, nunca "true" colándose hacia gh', () => {
+  // Re-review: --repo had the same gap (only `if (!repo)`, which a dangling
+  // `true` passes unnoticed by being truthy) — now validated the same way as
+  // ct-next.mjs/dispatch-check.mjs (`typeof !== 'string'`).
+  it('--repo as the last token (with no value) → exit 2, never a "true" slipping through towards gh', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     let threw = false
@@ -312,7 +312,7 @@ describe('ct-groom — flags colgantes no cuelan valores falsos (review final, f
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('--repo seguido de otro flag (sin valor real) → exit 2', () => {
+  it('--repo followed by another flag (with no real value) → exit 2', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     let threw = false
@@ -328,14 +328,13 @@ describe('ct-groom — flags colgantes no cuelan valores falsos (review final, f
   })
 })
 
-// F1 — /ct-groom falla fuerte ante una tabla §9 inusable, ANTES de tocar
-// GitHub y también bajo --dry-run (un dry-run que valida menos que la
-// corrida real es una trampa). Las tres pruebas de silent-failure del
-// informe del incidente: parseSlices devolviendo [] en silencio (defecto 1),
-// duplicación de prefijo en Área/Toca (defecto 2) y columnas ausentes sin
-// reportar (defecto 3).
-describe('ct-groom — falla fuerte ante tabla §9 inusable (F1)', () => {
-  it('sin tabla §9 en el spec → exit != 0, mensaje nombra la ausencia, ANTES de imprimir el plan', () => {
+// F1 — /ct-groom fails hard on an unusable §9 table, BEFORE touching GitHub and
+// under --dry-run too (a dry-run that validates less than the real run is a
+// trap). The three silent-failure proofs from the incident report: parseSlices
+// returning [] in silence (defect 1), prefix duplication in Área/Toca
+// (defect 2) and absent columns going unreported (defect 3).
+describe('ct-groom — it fails hard on an unusable §9 table (F1)', () => {
+  it('with no §9 table in the spec → exit != 0, the message names the absence, BEFORE printing the plan', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, '# Spec sin sección de slices\n\nSolo prosa, ninguna tabla.\n')
     let threw = false
@@ -344,7 +343,7 @@ describe('ct-groom — falla fuerte ante tabla §9 inusable (F1)', () => {
     } catch (e) {
       threw = true
       expect(e.status).not.toBe(0)
-      expect(e.stdout).toBe('') // nunca llega a imprimir el JSON del plan
+      expect(e.stdout).toBe('') // it never gets as far as printing the plan JSON
       expect(e.stderr.toString()).toMatch(/no se encontr.*tabla/i)
       expect(e.stderr.toString()).toMatch(/§9/)
     }
@@ -352,7 +351,7 @@ describe('ct-groom — falla fuerte ante tabla §9 inusable (F1)', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('falta la columna "#" → exit != 0, mensaje nombra la columna y la consecuencia (orden/dependencias)', () => {
+  it('the "#" column is missing → exit != 0, the message names the column and the consequence (order/dependencies)', () => {
     const dir = makeSpecDir('ctg-')
     const NO_HASH = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -374,13 +373,13 @@ describe('ct-groom — falla fuerte ante tabla §9 inusable (F1)', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // F3: el título ya no sale de "Entrega" (sale de "Slice") — "Entrega" pasó
-  // a ser una columna OPCIONAL (Descripción del cuerpo), así que su ausencia
-  // ya NO aborta; degrada como Tipo/Acepta/Protegido/Área/Toca (se avisa por
-  // stderr, dry-run sigue funcionando). Este test antes verificaba el abort;
-  // ahora verifica el nuevo contrato explícitamente para dejar constancia
-  // del cambio.
-  it('falta la columna "Entrega" → YA NO aborta (F3: pasó a opcional), avisa por stderr y el dry-run sigue funcionando', () => {
+  // F3: the title no longer comes from "Entrega" (it comes from "Slice") —
+  // "Entrega" became an OPTIONAL column (the body's Descripción), so its
+  // absence NO longer aborts; it degrades like Tipo/Acepta/Protegido/Área/Toca
+  // (a warning on stderr, the dry-run keeps working). This test used to verify
+  // the abort; it now verifies the new contract explicitly, to put the change
+  // on record.
+  it('the "Entrega" column is missing → it NO longer aborts (F3: it became optional), it warns on stderr and the dry-run keeps working', () => {
     const dir = makeSpecDir('ctg-')
     const NO_ENTREGA = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Dep | Acepta | Protegido |
@@ -392,13 +391,13 @@ describe('ct-groom — falla fuerte ante tabla §9 inusable (F1)', () => {
     expect(res.status).toBe(0)
     const plan = JSON.parse(res.stdout)
     expect(plan.issues).toHaveLength(1)
-    expect(plan.issues[0].title).toBe('#1 x') // título desde "Slice"
+    expect(plan.issues[0].title).toBe('#1 x') // title from "Slice"
     expect(res.stderr).toMatch(/columna\s+"Entrega"/)
     expect(res.stderr).toMatch(/Descripci/i)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('filas con "#" no entero a secas → exit != 0, mensaje dice cuántas, muestra un valor ofensor y dice qué escribir en su lugar', () => {
+  it('rows whose "#" is not a plain integer → exit != 0, the message says how many, shows an offending value and says what to write instead', () => {
     const dir = makeSpecDir('ctg-')
     const BAD_HASH = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -413,21 +412,21 @@ describe('ct-groom — falla fuerte ante tabla §9 inusable (F1)', () => {
     } catch (e) {
       threw = true
       expect(e.status).toBe(2)
-      expect(e.stdout).toBe('') // ni siquiera parcial: aborta antes de imprimir nada
+      expect(e.stdout).toBe('') // not even partially: it aborts before printing anything
       const err = e.stderr.toString()
-      // Anclado al recuento (test sin dientes de la review: el mensaje trae
-      // el literal "1" en su propio ejemplo, así que un /1/ suelto pasaría
-      // con cualquier recuento). Ancla al principio del mensaje.
+      // Anchored to the count (a toothless test from the review: the message
+      // carries the literal "1" in its own example, so a bare /1/ would pass
+      // with any count). Anchored to the start of the message.
       expect(err).toMatch(/^1 fila/)
-      expect(err).toMatch(/\*\*S1\*\*/) // el valor ofensor, tal cual
+      expect(err).toMatch(/\*\*S1\*\*/) // the offending value, as it stands
       expect(err).toMatch(/entero/i)
-      expect(err).toMatch(/"1"/) // qué escribir en su lugar
+      expect(err).toMatch(/"1"/) // what to write instead
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('tabla presente pero sin ninguna fila de datos → exit != 0, mensaje dice que no hay filas', () => {
+  it('the table is there but with no data row at all → exit != 0, the message says there are no rows', () => {
     const dir = makeSpecDir('ctg-')
     const EMPTY_TABLE = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -447,13 +446,13 @@ describe('ct-groom — falla fuerte ante tabla §9 inusable (F1)', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Regresión mandatoria: la tabla REAL que disparó el incidente (importada
-  // de __tests__/fixtures/slices-real-tables.js — no se parafrasea ni se
-  // duplica: son las filas exactas del informe, numeración "**S1**"/"**S2**",
-  // dep de S2 como "S1" sin "#", valores de Área/Toca con backticks y
-  // prefijo completo de label). Antes de este fix, `/ct-groom --dry-run`
-  // imprimía `{"issues": [], ...}` y salía con 0.
-  it('regresión: la tabla real del incidente → exit != 0 en vez de "0 issues, exit 0"', () => {
+  // A mandatory regression: the REAL table that triggered the incident
+  // (imported from __tests__/fixtures/slices-real-tables.js — it is neither
+  // paraphrased nor duplicated: they are the exact rows of the report, the
+  // "**S1**"/"**S2**" numbering, S2's dep as "S1" with no "#", Área/Toca values
+  // with backticks and the full label prefix). Before this fix,
+  // `/ct-groom --dry-run` printed `{"issues": [], ...}` and exited 0.
+  it('regression: the real table from the incident → exit != 0 instead of "0 issues, exit 0"', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, REAL_FAILING_TABLE)
     let threw = false
@@ -462,19 +461,19 @@ describe('ct-groom — falla fuerte ante tabla §9 inusable (F1)', () => {
     } catch (e) {
       threw = true
       expect(e.status).toBe(2)
-      expect(e.stdout).toBe('') // el bug original: esto imprimía {"issues":[],...} y salía 0
+      expect(e.stdout).toBe('') // the original bug: this printed {"issues":[],...} and exited 0
       const err = e.stderr.toString()
-      expect(err).toMatch(/^2 fila/) // anclado al recuento: las dos filas, S1 y S2
+      expect(err).toMatch(/^2 fila/) // anchored to the count: the two rows, S1 and S2
       expect(err).toMatch(/\*\*S1\*\*/)
-      expect(err).not.toMatch(/at \S+ \(file:/) // convención: nunca un stack trace crudo
+      expect(err).not.toMatch(/at \S+ \(file:/) // convention: never a raw stack trace
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
   })
 })
 
-describe('ct-groom — avisa pero continúa ante columnas ausentes o prefijo en la columna equivocada (F1)', () => {
-  it('sin columnas Tipo/Acepta/Protegido/Área/Toca → dry-run sigue funcionando, stderr avisa de cada ausencia y su consecuencia', () => {
+describe('ct-groom — it warns but carries on with absent columns or a prefix in the wrong column (F1)', () => {
+  it('with no Tipo/Acepta/Protegido/Área/Toca columns → the dry-run keeps working, stderr warns about each absence and its consequence', () => {
     const dir = makeSpecDir('ctg-')
     const MINIMAL = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Entrega | Dep |
@@ -488,7 +487,7 @@ describe('ct-groom — avisa pero continúa ante columnas ausentes o prefijo en 
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el aviso de columnas ausentes se ve en stderr al capturarlo explícitamente (spawnSync)', () => {
+  it('the absent-columns warning is visible on stderr when captured explicitly (spawnSync)', () => {
     const dir = makeSpecDir('ctg-')
     const MINIMAL = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Entrega | Dep |
@@ -497,7 +496,7 @@ describe('ct-groom — avisa pero continúa ante columnas ausentes o prefijo en 
 `
     const spec = join(dir, 'spec.md'); writeFileSync(spec, MINIMAL)
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
-    expect(res.status).toBe(0) // avisa, no aborta
+    expect(res.status).toBe(0) // it warns, it does not abort
     expect(res.stderr).toMatch(/Tipo/)
     expect(res.stderr).toMatch(/type:/)
     expect(res.stderr).toMatch(/Acepta/)
@@ -507,7 +506,7 @@ describe('ct-groom — avisa pero continúa ante columnas ausentes o prefijo en 
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('valor con prefijo de la otra columna ("area:x" en Toca) → dry-run no aborta, label se genera bien (touches:pbxproj, no touches:areapbxproj), y avisa', () => {
+  it('a value with the other column\u2019s prefix ("area:x" in Toca) → the dry-run does not abort, the label is generated properly (touches:pbxproj, not touches:areapbxproj), and it warns', () => {
     const dir = makeSpecDir('ctg-')
     const MISMATCHED = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
@@ -524,7 +523,7 @@ describe('ct-groom — avisa pero continúa ante columnas ausentes o prefijo en 
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('valor prefijado correctamente ("area:medicacion" en Área, con backticks) → label sin duplicar el prefijo', () => {
+  it('a correctly prefixed value ("area:medicacion" in Área, with backticks) → a label with no duplicated prefix', () => {
     const dir = makeSpecDir('ctg-')
     const PREFIXED = [
       '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices',
@@ -544,17 +543,17 @@ describe('ct-groom — avisa pero continúa ante columnas ausentes o prefijo en 
   })
 })
 
-// F3 — `Tipo` decide qué addendum recibe el agente despachado
-// (kickoff.js#ADDENDA, vía renderKickoff): `ADDENDA[slice.type] || ''`
-// devuelve cadena vacía en silencio para cualquier valor que no sea una key
-// exacta de ADDENDA. Un autor que escribe "ios"/"swift" para un slice de UI
-// real obtiene una label `type:ios` de aspecto normal, pero el agente
-// despachado NUNCA recibe el addendum de `ui` (el gate de screenshot
-// obligatorio) — sin ningún aviso. /ct-groom debe avisar (no abortar:
-// `type:ios` sigue siendo una label legítima aunque no tenga addendum),
-// nombrando el valor, el slice, la consecuencia y el conjunto reconocido.
-describe('ct-groom — "Tipo" con un valor que no es ninguna key de ADDENDA avisa, no aborta (F3)', () => {
-  it('"Tipo" = "ios" (no es key de ADDENDA) → dry-run no aborta, la label type:ios se crea igual, y avisa por stderr con el valor, el slice, la consecuencia y el conjunto reconocido', () => {
+// F3 — `Tipo` decides which addendum the dispatched agent gets
+// (kickoff.js#ADDENDA, through renderKickoff): `ADDENDA[slice.type] || ''`
+// returns an empty string in silence for any value that is not an exact key of
+// ADDENDA. An author who writes "ios"/"swift" for a slice that is really UI
+// gets a normal-looking `type:ios` label, but the dispatched agent NEVER gets
+// `ui`'s addendum (the mandatory screenshot gate) — with no warning at all.
+// /ct-groom must warn (not abort: `type:ios` is still a legitimate label even
+// with no addendum), naming the value, the slice, the consequence and the
+// recognised set.
+describe('ct-groom — "Tipo" with a value that is no key of ADDENDA warns, it does not abort (F3)', () => {
+  it('"Tipo" = "ios" (not a key of ADDENDA) → the dry-run does not abort, the type:ios label is created all the same, and it warns on stderr with the value, the slice, the consequence and the recognised set', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -564,19 +563,19 @@ describe('ct-groom — "Tipo" con un valor que no es ninguna key de ADDENDA avis
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
     expect(res.status).toBe(0)
     const plan = JSON.parse(res.stdout)
-    expect(plan.issues[0].labels).toContain('type:ios') // se usa el valor igualmente
-    expect(res.stderr).toMatch(/"ios"/) // el valor ofensor
-    expect(res.stderr).toMatch(/Tipo/) // la columna
-    expect(res.stderr).toMatch(/#1/) // el slice
-    expect(res.stderr).toMatch(/addendum/i) // la consecuencia
-    expect(res.stderr).toMatch(/ui/) // el conjunto reconocido incluye "ui"
+    expect(plan.issues[0].labels).toContain('type:ios') // the value is used all the same
+    expect(res.stderr).toMatch(/"ios"/) // the offending value
+    expect(res.stderr).toMatch(/Tipo/) // the column
+    expect(res.stderr).toMatch(/#1/) // the slice
+    expect(res.stderr).toMatch(/addendum/i) // the consequence
+    expect(res.stderr).toMatch(/ui/) // the recognised set includes "ui"
     expect(res.stderr).toMatch(/backend/)
     expect(res.stderr).toMatch(/infra/)
     expect(res.stderr).toMatch(/bugfix/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('"Tipo" con un valor reconocido ("ui") no dispara ningún aviso de tipo', () => {
+  it('"Tipo" with a recognised value ("ui") fires no type warning at all', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
@@ -585,19 +584,19 @@ describe('ct-groom — "Tipo" con un valor que no es ninguna key de ADDENDA avis
 `)
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
     expect(res.status).toBe(0)
-    // F6: un epic nuevo ya nunca produce stderr vacío — el groom dice qué
-    // labels se inventaría y que lo creado no será despachable hasta que
-    // alguien lo promueva a status:ready. Lo que este test comprueba es la
-    // ausencia del AVISO de tipo, no el silencio global. F26: el spec de
-    // este test tampoco trae "## Contexto del epic", así que desde T3 el
-    // stderr trae ADEMÁS ese aviso — ortogonal a lo que aquí se comprueba.
-    // Se ancla a la columna Tipo (la única fuente del aviso que este test
-    // vigila), no a "aviso:" a secas.
+    // F6: a new epic never produces an empty stderr any more — the groom says
+    // which labels it would invent and that what it creates will not be
+    // dispatchable until someone promotes it to status:ready. What this test
+    // checks is the absence of the type WARNING, not global silence. F26: this
+    // test's spec does not carry "## Contexto del epic" either, so since T3 the
+    // stderr ALSO carries that warning — orthogonal to what is checked here.
+    // It is anchored to the Tipo column (the only source of the warning this
+    // test watches), not to a bare "aviso:".
     expect(res.stderr).not.toMatch(/columna Tipo/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('"Tipo" vacío (columna presente, celda en blanco) no dispara ningún aviso de tipo (sigue sin label type:)', () => {
+  it('an empty "Tipo" (the column is there, the cell is blank) fires no type warning at all (it still gets no type: label)', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
@@ -606,32 +605,31 @@ describe('ct-groom — "Tipo" con un valor que no es ninguna key de ADDENDA avis
 `)
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
     expect(res.status).toBe(0)
-    // F6: un epic nuevo ya nunca produce stderr vacío — el groom dice qué
-    // labels se inventaría y que lo creado no será despachable hasta que
-    // alguien lo promueva a status:ready. Lo que este test comprueba es la
-    // ausencia del AVISO de tipo, no el silencio global. F26: el spec de
-    // este test tampoco trae "## Contexto del epic", así que desde T3 el
-    // stderr trae ADEMÁS ese aviso — ortogonal a lo que aquí se comprueba.
-    // Se ancla a la columna Tipo (la única fuente del aviso que este test
-    // vigila), no a "aviso:" a secas.
+    // F6: a new epic never produces an empty stderr any more — the groom says
+    // which labels it would invent and that what it creates will not be
+    // dispatchable until someone promotes it to status:ready. What this test
+    // checks is the absence of the type WARNING, not global silence. F26: this
+    // test's spec does not carry "## Contexto del epic" either, so since T3 the
+    // stderr ALSO carries that warning — orthogonal to what is checked here.
+    // It is anchored to the Tipo column (the only source of the warning this
+    // test watches), not to a bare "aviso:".
     expect(res.stderr).not.toMatch(/columna Tipo/)
     const plan = JSON.parse(res.stdout)
     expect(plan.issues[0].labels.some((l) => l.startsWith('type:'))).toBe(false)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Review de F3, finding 1: un marcador de "sin valor" en "Tipo" ("–", "-",
-  // "—", etc. — el MISMO criterio que ya usan Dep/Acepta/Protegido/Área/Toca)
-  // significa "ninguno", igual que la celda vacía de arriba — NO un valor
-  // real desconocido. Antes del fix esto disparaba DOS síntomas a la vez:
-  // (a) el aviso de "Tipo no reconocido" acusaba de error tipográfico a
-  // quien escribió exactamente el marcador que el propio contrato enseña a
-  // usar en todas las demás columnas, y (b) `buildLabels` (groom.js) trataba
-  // "–" como truthy y emitía la label literal "type:–" — que `gh label
-  // create --force` crearía de verdad en el repo del usuario, el mismo bug
-  // de "area:areamedicacion" por otra puerta. Las dos formas de decir
-  // "ninguno" (celda vacía, celda con marcador) deben comportarse igual.
-  it.each(['-', '–', '—', '―', '−', '--'])('"Tipo" = marcador de "sin valor" ("%s") → sin aviso, y sin label "type:" (mismo trato que Tipo vacío)', (marker) => {
+  // Review of F3, finding 1: a "no value" marker in "Tipo" ("–", "-", "—", and
+  // so on — the SAME criterion Dep/Acepta/Protegido/Área/Toca already use)
+  // means "none", just like the empty cell above — NOT an unknown real value.
+  // Before the fix this fired TWO symptoms at once: (a) the "unrecognised Tipo"
+  // warning accused of a typo whoever wrote exactly the marker the contract
+  // itself teaches them to use in every other column, and (b) `buildLabels`
+  // (groom.js) treated "–" as truthy and emitted the literal label "type:–" —
+  // which `gh label create --force` would really create in the user's repo, the
+  // same "area:areamedicacion" bug through another door. The two ways of saying
+  // "none" (an empty cell, a cell with a marker) must behave the same.
+  it.each(['-', '–', '—', '―', '−', '--'])('"Tipo" = a "no value" marker ("%s") → no warning, and no "type:" label (the same treatment as an empty Tipo)', (marker) => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
@@ -640,14 +638,14 @@ describe('ct-groom — "Tipo" con un valor que no es ninguna key de ADDENDA avis
 `)
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
     expect(res.status).toBe(0)
-    // F6: un epic nuevo ya nunca produce stderr vacío — el groom dice qué
-    // labels se inventaría y que lo creado no será despachable hasta que
-    // alguien lo promueva a status:ready. Lo que este test comprueba es la
-    // ausencia del AVISO de tipo, no el silencio global. F26: el spec de
-    // este test tampoco trae "## Contexto del epic", así que desde T3 el
-    // stderr trae ADEMÁS ese aviso — ortogonal a lo que aquí se comprueba.
-    // Se ancla a la columna Tipo (la única fuente del aviso que este test
-    // vigila), no a "aviso:" a secas.
+    // F6: a new epic never produces an empty stderr any more — the groom says
+    // which labels it would invent and that what it creates will not be
+    // dispatchable until someone promotes it to status:ready. What this test
+    // checks is the absence of the type WARNING, not global silence. F26: this
+    // test's spec does not carry "## Contexto del epic" either, so since T3 the
+    // stderr ALSO carries that warning — orthogonal to what is checked here.
+    // It is anchored to the Tipo column (the only source of the warning this
+    // test watches), not to a bare "aviso:".
     expect(res.stderr).not.toMatch(/columna Tipo/)
     const plan = JSON.parse(res.stdout)
     expect(plan.issues[0].labels.some((l) => l.startsWith('type:'))).toBe(false)
@@ -655,18 +653,18 @@ describe('ct-groom — "Tipo" con un valor que no es ninguna key de ADDENDA avis
   })
 })
 
-// F2 — señalado por el coordinador tras verificar F1 contra el spec real:
-// una celda "Dep" con contenido pero sin ninguna referencia "#N" reconocible
-// (p.ej. "S1" en vez de "#1") produce deps: [] en silencio. A diferencia del
-// caso de 0 slices (que al menos no crea nada), este SÍ crea el milestone y
-// los issues, con exit 0, pero sin ninguna línea `merge-after` — /ct-next
-// despacha slices dependientes sin esperar al merge del que dependían.
-describe('ct-groom — Dep con contenido pero sin ninguna referencia #N reconocible aborta fuerte (F2)', () => {
-  // Tabla tal cual la verificó el coordinador (importada de
-  // __tests__/fixtures/slices-real-tables.js, columnas completadas donde el
-  // mensaje original usaba "..."): "#" de las 3 filas es válido — el
-  // problema es solo la columna Dep.
-  it('regresión: la tabla del coordinador → exit != 0 en vez de "issues creados, exit 0, deps borrados"', () => {
+// F2 — pointed at by the coordinator after verifying F1 against the real spec:
+// a "Dep" cell with content but no recognisable "#N" reference at all ("S1"
+// instead of "#1", say) produces deps: [] in silence. Unlike the 0-slices case
+// (which at least creates nothing), this one DOES create the milestone and the
+// issues, with exit 0, but with no `merge-after` line — /ct-next dispatches
+// dependent slices without waiting for the merge of the one they depended on.
+describe('ct-groom — Dep with content but no recognisable #N reference at all aborts hard (F2)', () => {
+  // The table exactly as the coordinator verified it (imported from
+  // __tests__/fixtures/slices-real-tables.js, with the columns filled in where
+  // the original message used "…"): the "#" of all 3 rows is valid — the only
+  // problem is the Dep column.
+  it('regression: the coordinator\u2019s table → exit != 0 instead of "issues created, exit 0, deps wiped"', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, REAL_DEP_TABLE)
     let threw = false
@@ -675,31 +673,32 @@ describe('ct-groom — Dep con contenido pero sin ninguna referencia #N reconoci
     } catch (e) {
       threw = true
       expect(e.status).toBe(2)
-      expect(e.stdout).toBe('') // el bug: esto imprimía el plan completo (deps: []) y salía 0
+      expect(e.stdout).toBe('') // the bug: this printed the whole plan (deps: []) and exited 0
       const err = e.stderr.toString()
-      // Anclado al recuento (test sin dientes de la review: /2/ suelto pasa
-      // con cualquier recuento porque el propio mensaje de ejemplo contiene
-      // dígitos). 2 filas malformadas (slice #2 y #3; #1 con "–" es legítimo).
+      // Anchored to the count (a toothless test from the review: a bare /2/
+      // passes with any count because the example message itself contains
+      // digits). 2 malformed rows (slices #2 and #3; #1 with "–" is
+      // legitimate).
       expect(err).toMatch(/^2 fila/)
-      expect(err).toMatch(/"S1"/) // el valor ofensor, tal cual
-      expect(err).toMatch(/#N/) // qué formato usar
-      expect(err).toMatch(/#1/) // ejemplo de formato correcto
-      expect(err).toMatch(/escribe\s+"–"/) // CRITICAL 1: la mitad que faltaba del mensaje
+      expect(err).toMatch(/"S1"/) // the offending value, as it stands
+      expect(err).toMatch(/#N/) // which format to use
+      expect(err).toMatch(/#1/) // an example of the correct format
+      expect(err).toMatch(/escribe\s+"–"/) // CRITICAL 1: the half of the message that was missing
       expect(err).not.toMatch(/at \S+ \(file:/)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('"–" (sin dependencias, forma legítima) no aborta', () => {
+  it('"–" (no dependencies, the legitimate form) does not abort', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC) // SPEC del top del fichero: Dep "–" y "#1"
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC) // the SPEC from the top of the file: Dep "–" and "#1"
     const out = execFileSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', stdio: QUIET_STDIO, env: fakeEnv() })
     expect(JSON.parse(out).issues).toHaveLength(2)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('texto legítimo alrededor de una referencia #N válida ("#1 (tras el merge)") no aborta', () => {
+  it('legitimate text around a valid #N reference ("#1 (tras el merge)") does not abort', () => {
     const dir = makeSpecDir('ctg-')
     const LEGIT = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -716,13 +715,13 @@ describe('ct-groom — Dep con contenido pero sin ninguna referencia #N reconoci
 })
 
 // ============================================================================
-// Review de F1/F2 — 2 Critical + 4 caminos silenciosos, verificados a nivel
-// CLI end-to-end (dry-run). Los tests unitarios equivalentes viven en
-// __tests__/slices.test.js contra analyzeSlicesTable directamente.
+// Review of F1/F2 — 2 Criticals + 4 silent paths, verified end-to-end at CLI
+// level (dry-run). The equivalent unit tests live in __tests__/slices.test.js
+// against analyzeSlicesTable directly.
 // ============================================================================
 
-describe('ct-groom — em dash (—) en Dep no aborta; el mensaje de Dep malformado dice qué escribir (CRITICAL 1)', () => {
-  it('em dash (—) en Dep no aborta — el plan se genera con deps: []', () => {
+describe('ct-groom — an em dash (—) in Dep does not abort; the malformed-Dep message says what to write (CRITICAL 1)', () => {
+  it('an em dash (—) in Dep does not abort — the plan is generated with deps: []', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -734,7 +733,7 @@ describe('ct-groom — em dash (—) en Dep no aborta; el mensaje de Dep malform
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('regresión exacta de la secuencia del coordinador: "#" ya corregido (REAL_TABLE_WITH_HASH_FIXED) — no aborta por la fila 1 (Dep "—"), sí sigue abortando por la fila 2 (Dep "S1")', () => {
+  it('the exact regression of the coordinator\u2019s sequence: "#" already fixed (REAL_TABLE_WITH_HASH_FIXED) — it does not abort because of row 1 (Dep "—"), it does keep aborting because of row 2 (Dep "S1")', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, REAL_TABLE_WITH_HASH_FIXED)
     let threw = false
@@ -744,8 +743,8 @@ describe('ct-groom — em dash (—) en Dep no aborta; el mensaje de Dep malform
       threw = true
       expect(e.status).toBe(2)
       const err = e.stderr.toString()
-      // El mensaje debe ser sobre "S1" (fila 2), NUNCA sobre "—" (fila 1,
-      // que siempre significó "sin dependencias" correctamente).
+      // The message must be about "S1" (row 2), NEVER about "—" (row 1, which
+      // always meant "no dependencies" correctly).
       expect(err).toMatch(/^1 fila/)
       expect(err).toMatch(/"S1"/)
       expect(err).not.toMatch(/"—"/)
@@ -754,7 +753,7 @@ describe('ct-groom — em dash (—) en Dep no aborta; el mensaje de Dep malform
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el mensaje de "Dep malformado" dice explícitamente qué escribir si no hay dependencias', () => {
+  it('the "malformed Dep" message says explicitly what to write when there are no dependencies', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -774,8 +773,8 @@ describe('ct-groom — em dash (—) en Dep no aborta; el mensaje de Dep malform
   })
 })
 
-describe('ct-groom — negrita/cursiva alrededor del prefijo en Área/Toca no duplica la label (CRITICAL 2)', () => {
-  it('"**area:medicacion**"/"**touches:pbxproj**" (negrita) → labels sin duplicar el prefijo', () => {
+describe('ct-groom — bold/italics around the prefix in Área/Toca does not duplicate the label (CRITICAL 2)', () => {
+  it('"**area:medicacion**"/"**touches:pbxproj**" (bold) → labels with no duplicated prefix', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
@@ -792,8 +791,8 @@ describe('ct-groom — negrita/cursiva alrededor del prefijo en Área/Toca no du
   })
 })
 
-describe('ct-groom — un hueco (línea en blanco) dentro de la tabla §9 aborta fuerte, no trunca en silencio (3)', () => {
-  it('línea en blanco entre 2 filas de datos → exit != 0 en vez de "1 issue creado, exit 0" (medio epic silencioso)', () => {
+describe('ct-groom — a gap (a blank line) inside the §9 table aborts hard, it does not truncate in silence (3)', () => {
+  it('a blank line between 2 data rows → exit != 0 instead of "1 issue created, exit 0" (half a silent epic)', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -808,7 +807,7 @@ describe('ct-groom — un hueco (línea en blanco) dentro de la tabla §9 aborta
     } catch (e) {
       threw = true
       expect(e.status).toBe(2)
-      expect(e.stdout).toBe('') // el bug: esto imprimía 1 solo issue y salía 0
+      expect(e.stdout).toBe('') // the bug: this printed a single issue and exited 0
       const err = e.stderr.toString()
       expect(err).toMatch(/^1 fila/)
       expect(err).toMatch(/segundo/)
@@ -818,10 +817,10 @@ describe('ct-groom — un hueco (línea en blanco) dentro de la tabla §9 aborta
   })
 })
 
-// F3: la celda con contenido obligatorio (la que, vacía, deja sin título
-// fiable que construir) pasó de "Entrega" a "Slice".
-describe('ct-groom — celda "Slice" vacía o fila más corta que la cabecera aborta fuerte (4, actualizado por F3)', () => {
-  it('celda Slice vacía → exit != 0 en vez de un issue titulado "#1" a secas', () => {
+// F3: the cell with mandatory content (the one that, when empty, leaves no
+// reliable title to build) moved from "Entrega" to "Slice".
+describe('ct-groom — an empty "Slice" cell, or a row shorter than the header, aborts hard (4, updated by F3)', () => {
+  it('an empty Slice cell → exit != 0 instead of an issue titled just "#1"', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -843,7 +842,7 @@ describe('ct-groom — celda "Slice" vacía o fila más corta que la cabecera ab
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('celda Entrega vacía (Slice con contenido) YA NO aborta (F3: Entrega es opcional)', () => {
+  it('an empty Entrega cell (with content in Slice) NO longer aborts (F3: Entrega is optional)', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -858,8 +857,8 @@ describe('ct-groom — celda "Slice" vacía o fila más corta que la cabecera ab
   })
 })
 
-describe('ct-groom — Dep apunta a un slice inexistente o a sí mismo aborta fuerte (5)', () => {
-  it('auto-referencia (slice #3 depende de #3) → exit != 0, mensaje nombra la auto-referencia', () => {
+describe('ct-groom — Dep pointing at a slice that does not exist, or at itself, aborts hard (5)', () => {
+  it('a self-reference (slice #3 depends on #3) → exit != 0, the message names the self-reference', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -883,7 +882,7 @@ describe('ct-groom — Dep apunta a un slice inexistente o a sí mismo aborta fu
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('referencia a un "#" inexistente (#99 en tabla de 2 slices) → exit != 0', () => {
+  it('a reference to a "#" that does not exist (#99 in a table of 2 slices) → exit != 0', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -905,8 +904,8 @@ describe('ct-groom — Dep apunta a un slice inexistente o a sí mismo aborta fu
   })
 })
 
-describe('ct-groom — token Área/Toca que normaliza a vacío avisa pero no aborta (6)', () => {
-  it('"area:" vacío tras el prefijo → dry-run no aborta, avisa por stderr que la label queda inerte para ese slice', () => {
+describe('ct-groom — an Área/Toca token that normalises to empty warns but does not abort (6)', () => {
+  it('an "area:" empty after the prefix → the dry-run does not abort, it warns on stderr that the label is left inert for that slice', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
@@ -924,8 +923,8 @@ describe('ct-groom — token Área/Toca que normaliza a vacío avisa pero no abo
   })
 })
 
-describe('ct-groom — "no se encontró la tabla §9" distingue "no hay tabla" de "hay tabla sin cabecera Slice/Dep"', () => {
-  it('hay filas de tabla markdown pero ninguna cabecera con "Slice"/"Dep" → mensaje distinto de "no hay tabla en absoluto"', () => {
+describe('ct-groom — "the §9 table was not found" tells "there is no table" apart from "there is a table with no Slice/Dep header"', () => {
+  it('there are markdown table rows but no header with "Slice"/"Dep" → a different message from "there is no table at all"', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, '## 9. Algo\n| Foo | Bar |\n|---|---|\n| 1 | 2 |\n')
     let threw = false
@@ -943,7 +942,7 @@ describe('ct-groom — "no se encontró la tabla §9" distingue "no hay tabla" d
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('sin ninguna tabla markdown en absoluto → mensaje "no se encontró ninguna tabla markdown"', () => {
+  it('with no markdown table at all → the message "no se encontró ninguna tabla markdown"', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, '# Spec sin ninguna tabla\n\nSolo prosa.\n')
     let threw = false
@@ -960,13 +959,13 @@ describe('ct-groom — "no se encontró la tabla §9" distingue "no hay tabla" d
 })
 
 // ============================================================================
-// Review round 2/5 — CRITICAL (marcado envolviendo la celda completa de una
-// lista), IMPORTANTE (falsos positivos del heurístico de fin de tabla) y 3
-// caminos silenciosos más, verificados a nivel CLI end-to-end.
+// Review round 2/5 — CRITICAL (markup wrapping the whole cell of a list),
+// IMPORTANT (false positives of the end-of-table heuristic) and 3 more silent
+// paths, verified end-to-end at CLI level.
 // ============================================================================
 
-describe('ct-groom — marcado envolviendo la CELDA COMPLETA de una lista por comas no duplica el prefijo (review round 2, CRITICAL)', () => {
-  it('"**area:medicacion, area:otro**" / "`touches:pbxproj, touches:otro`" → labels correctas, sin duplicar, sin abortar', () => {
+describe('ct-groom — markup wrapping the WHOLE CELL of a comma-separated list does not duplicate the prefix (review round 2, CRITICAL)', () => {
+  it('"**area:medicacion, area:otro**" / "`touches:pbxproj, touches:otro`" → correct labels, no duplication, no abort', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices\n' +
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |\n' +
@@ -985,8 +984,8 @@ describe('ct-groom — marcado envolviendo la CELDA COMPLETA de una lista por co
   })
 })
 
-describe('ct-groom — el escaneo post-hueco no arrastra una tabla ajena (review round 2, IMPORTANTE)', () => {
-  it('regla horizontal ("---") antes de una tabla no relacionada, sin heading markdown → no aborta', () => {
+describe('ct-groom — the post-gap scan does not drag in a foreign table (review round 2, IMPORTANT)', () => {
+  it('a horizontal rule ("---") before an unrelated table, with no markdown heading → it does not abort', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -1005,8 +1004,8 @@ describe('ct-groom — el escaneo post-hueco no arrastra una tabla ajena (review
   })
 })
 
-describe('ct-groom — fila con más celdas que la cabecera aborta fuerte (review round 2, a)', () => {
-  it('un "|" sin escapar en una celda (más celdas que la cabecera) → exit != 0 en vez de columnas desplazadas en silencio', () => {
+describe('ct-groom — a row with more cells than the header aborts hard (review round 2, a)', () => {
+  it('an unescaped "|" in a cell (more cells than the header) → exit != 0 instead of columns shifted in silence', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
@@ -1027,11 +1026,11 @@ describe('ct-groom — fila con más celdas que la cabecera aborta fuerte (revie
   })
 })
 
-// F3: la exigencia de contenido real se movió de "Entrega" a "Slice" — un
-// marcador de "sin valor" en "Entrega" ya no aborta (es "sin descripción",
-// legítimo); en "Slice" sí, porque de ahí sale el título.
-describe('ct-groom — "Slice" con un marcador de "sin valor" aborta fuerte (review round 2, b — actualizado por F3)', () => {
-  it('"Slice" = "–" → exit != 0 en vez de un issue titulado "#1 –"', () => {
+// F3: the demand for real content moved from "Entrega" to "Slice" — a "no
+// value" marker in "Entrega" no longer aborts (it is "no description", which is
+// legitimate); in "Slice" it does, because that is where the title comes from.
+describe('ct-groom — "Slice" with a "no value" marker aborts hard (review round 2, b — updated by F3)', () => {
+  it('"Slice" = "–" → exit != 0 instead of an issue titled "#1 –"', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -1051,7 +1050,7 @@ describe('ct-groom — "Slice" con un marcador de "sin valor" aborta fuerte (rev
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('"Entrega" = "–" (Slice con contenido) YA NO aborta', () => {
+  it('"Entrega" = "–" (with content in Slice) NO longer aborts', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -1064,8 +1063,8 @@ describe('ct-groom — "Slice" con un marcador de "sin valor" aborta fuerte (rev
   })
 })
 
-describe('ct-groom — marcador de "nada" envuelto en marcado en Dep no aborta (review round 2, c)', () => {
-  it('"`–`" (backtick) en Dep no aborta', () => {
+describe('ct-groom — a "nothing" marker wrapped in markup in Dep does not abort (review round 2, c)', () => {
+  it('"`–`" (backtick) in Dep does not abort', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices\n' +
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |\n' +
@@ -1076,7 +1075,7 @@ describe('ct-groom — marcador de "nada" envuelto en marcado en Dep no aborta (
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('"**–**" (negrita) en Dep no aborta', () => {
+  it('"**–**" (bold) in Dep does not abort', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -1089,12 +1088,12 @@ describe('ct-groom — marcador de "nada" envuelto en marcado en Dep no aborta (
   })
 })
 
-// Mejora de uso recomendada por el coordinador: con varios defectos a la vez
-// antes solo se imprimía el primero (una noria de hasta ocho ejecuciones
-// para verlos todos). Ahora se agregan todas las clases de error que
-// disparan y se imprimen juntas antes de un único exit(2).
-describe('ct-groom — varios defectos a la vez se reportan TODOS en una sola ejecución (mejora de uso)', () => {
-  it('una fila con "#" malformado y otra con "Dep" malformado en la misma tabla → stderr trae AMBOS mensajes, un solo exit 2', () => {
+// A usability improvement recommended by the coordinator: with several defects
+// at once, only the first was printed before (a merry-go-round of up to eight
+// runs to see them all). Now every class of error that fires is aggregated and
+// they are printed together before a single exit(2).
+describe('ct-groom — several defects at once are ALL reported in a single run (usability improvement)', () => {
+  it('one row with a malformed "#" and another with a malformed "Dep" in the same table → stderr carries BOTH messages, a single exit 2', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
@@ -1110,8 +1109,8 @@ describe('ct-groom — varios defectos a la vez se reportan TODOS en una sola ej
       expect(e.status).toBe(2)
       expect(e.stdout).toBe('')
       const err = e.stderr.toString()
-      // Ambas clases de error deben aparecer en la MISMA ejecución — no hace
-      // falta arreglar una, volver a correr, y descubrir la otra.
+      // Both classes of error must show up in the SAME run — there is no need
+      // to fix one, run again, and discover the other.
       expect(err).toMatch(/"#"/)
       expect(err).toMatch(/\*\*1\*\*/)
       expect(err).toMatch(/"Dep"/)
@@ -1122,17 +1121,16 @@ describe('ct-groom — varios defectos a la vez se reportan TODOS en una sola ej
   })
 })
 
-// Review round 3/5 — el Critical del prefijo, tercera vez: cada token
-// envuelto en SU PROPIO backtick ("`area:hoy`, `area:web`") seguía
-// produciendo "area:areaweb" porque el fix de round 2 solo limpiaba los
-// bordes de la celda COMPLETA o los bordes de cada pieza, por capas — y el
-// split partía justo en el punto donde ninguna de las dos capas alcanzaba.
-// Fix: normalizar de un tirón (backtick/asterisco fuera globalmente, guion
-// bajo solo en bordes de token, split, prefijo, normalizar) en vez de
-// capas. Verificado con las cuatro formas en la misma tabla, más un control
-// negativo de que no se corrompe lo legítimo.
-describe('ct-groom — normalización de marcado en un solo paso cierra la clase entera (review round 3)', () => {
-  it('REPRODUCCIÓN EXACTA del coordinador: "`area:hoy`, `area:web`" → labels limpias, sin abortar, sin aviso', () => {
+// Review round 3/5 — the prefix Critical, for the third time: each token
+// wrapped in ITS OWN backtick ("`area:hoy`, `area:web`") kept producing
+// "area:areaweb" because round 2's fix only cleaned the borders of the WHOLE
+// cell or the borders of each piece, by layers — and the split broke exactly at
+// the point neither of the two layers reached. Fix: normalise in one go
+// (backtick/asterisk out globally, underscore only at token borders, split,
+// prefix, normalise) instead of by layers. Verified with the four shapes in the
+// same table, plus a negative control that what is legitimate is not corrupted.
+describe('ct-groom — markup normalisation in a single pass closes the whole class (review round 3)', () => {
+  it('the coordinator\u2019s EXACT REPRODUCTION: "`area:hoy`, `area:web`" → clean labels, no abort, no warning', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices\n' +
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |\n' +
@@ -1145,16 +1143,16 @@ describe('ct-groom — normalización de marcado en un solo paso cierra la clase
     expect(labels).toContain('area:hoy')
     expect(labels).toContain('area:web')
     expect(labels).not.toContain('area:areaweb')
-    // sin ningún aviso de normalización: ambos tokens se reconocen limpios
-    // (F6: el stderr ya no está vacío — trae labels nuevas y el recordatorio
-    // de status:backlog. F26: tampoco está vacío por "## Contexto del epic"
-    // ausente — ortogonal a lo que este test vigila, así que se ancla a las
-    // columnas Área/Toca en vez de "aviso:" a secas).
+    // with no normalisation warning at all: both tokens are recognised clean
+    // (F6: stderr is no longer empty — it carries the new labels and the
+    // status:backlog reminder. F26: nor is it empty because "## Contexto del
+    // epic" is absent — orthogonal to what this test watches, so it is anchored
+    // to the Área/Toca columns instead of a bare "aviso:").
     expect(res.stderr).not.toMatch(/en columna (Área|Toca)/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('las cuatro formas de marcado en la misma tabla, más un control negativo, todas correctas en una sola ejecución', () => {
+  it('the four shapes of markup in the same table, plus a negative control, all correct in a single run', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices\n' +
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |\n' +
@@ -1179,11 +1177,11 @@ describe('ct-groom — normalización de marcado en un solo paso cierra la clase
   })
 })
 
-// Review round 4/5 (última de F1) — verificado a nivel CLI: la regresión
-// del guion bajo asimétrico (issue 1) y la matriz ampliada de envoltorios
-// (issue 2), en una sola ejecución.
-describe('ct-groom — guion bajo simétrico + prefijo invertido (review round 4)', () => {
-  it('control negativo de nombres de fichero (_layout.tsx, __init__.py, trailing_) llega a las labels SIN mutilar — falla si se vuelve a ^_+/_+$ asimétrico', () => {
+// Review round 4/5 (the last one of F1) — verified at CLI level: the
+// asymmetric-underscore regression (issue 1) and the widened matrix of wrappers
+// (issue 2), in a single run.
+describe('ct-groom — symmetric underscore + inverted prefix (review round 4)', () => {
+  it('a negative control of file names (_layout.tsx, __init__.py, trailing_) reaches the labels UNmutilated — it fails if the asymmetric ^_+/_+$ comes back', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
@@ -1205,7 +1203,7 @@ describe('ct-groom — guion bajo simétrico + prefijo invertido (review round 4
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('matriz de envoltorios (backtick, asterisco, guion bajo, ~~, comillas rectas, paréntesis, anidado) — todas producen "area:med", ninguna duplica el prefijo', () => {
+  it('the matrix of wrappers (backtick, asterisk, underscore, ~~, straight quotes, parentheses, nested) — they all produce "area:med", none duplicates the prefix', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices\n' +
       '| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |\n' +
@@ -1228,14 +1226,14 @@ describe('ct-groom — guion bajo simétrico + prefijo invertido (review round 4
 })
 
 // ============================================================================
-// F5 — el groom detecta divergencia, no solo existencia. Hasta ahora, un
-// issue ya existente (encontrado por su marcador ct-order) solo disparaba
-// "ya existe, no se duplica" — sin comparar NUNCA su título/labels/milestone
-// contra lo que la tabla §9 produce hoy. Estos tests cubren el reporte bajo
-// --dry-run (idéntico al de la corrida real, ver ct-groom-reconcile.test.js
-// para esa mitad) — "un dry-run que informa menos que la corrida real es una
-// trampa" aplica aquí exactamente igual que ya aplicaba a la validación de
-// la tabla en F1.
+// F5 — the groom detects divergence, not just existence. Until now, an issue
+// that already existed (found by its ct-order marker) only fired "it already
+// exists, it is not duplicated" — NEVER comparing its title, labels or
+// milestone against what the §9 table produces today. These tests cover the
+// report under --dry-run (identical to the real run's, see
+// ct-groom-reconcile.test.js for that half) — "a dry-run that reports less than
+// the real run is a trap" applies here exactly as it already applied to the
+// table validation in F1.
 // ============================================================================
 
 const ONE_SLICE_SPEC = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
@@ -1243,38 +1241,40 @@ const ONE_SLICE_SPEC = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 |---|---|---|---|---|---|---|---|---|
 | 1 | login | backend | modelo | – | AC-1.1 | schema | api | db |
 `
-// Plan que ONE_SLICE_SPEC produce con --milestone Epic (verificado contra
+// The plan ONE_SLICE_SPEC produces with --milestone Epic (verified against
 // groom.js): title "#1 login", labels ['type:backend','area:api','touches:db','status:backlog'].
-// PLAN_LABELS_EXIST (F6): las cuatro labels del plan, ya presentes en el
-// repo. Los fixtures de "todo coincide" de más abajo necesitan un mundo
-// COHERENTE para poder seguir exigiendo stderr vacío: un issue que ya existe
-// con esas labels implica que esas labels existen en el repo — sin esto, el
-// stub respondería "el repo no tiene ninguna label" y el groom diría, con
-// razón, que se crearían cuatro.
-// F21: `gate:none` se une al plan (una label de gate por issue, siempre —
-// ver gates.js#GATE_LABEL_NONE). Sin ella aquí, el mundo dejaría de ser
-// coherente y el groom diría, con razón, que se crearía una label nueva.
-// El vocabulario `status:` entero se une al conjunto que el repo tiene que
-// TENER (groom.js#LOOP_STATUS_LABELS): un issue nace en `status:backlog`, pero
-// las otras tres se escriben más tarde con `--add-label`, que no puede crearlas.
-// Sin ellas aquí el mundo dejaría de ser coherente y el groom diría, con razón,
-// que se crearían tres labels nuevas. Se derivan de la constante, no se copian:
-// una lista a mano divergiría en cuanto alguien tocara el vocabulario.
+// PLAN_LABELS_EXIST (F6): the plan's four labels, already present in the repo.
+// The "everything matches" fixtures further down need a COHERENT world to be
+// able to keep demanding an empty stderr: an issue that already exists with
+// those labels implies those labels exist in the repo — without this, the stub
+// would answer "the repo has no label at all" and the groom would say, quite
+// rightly, that four would be created.
+// F21: `gate:none` joins the plan (one gate label per issue, always — see
+// gates.js#GATE_LABEL_NONE). Without it here, the world would stop being
+// coherent and the groom would say, quite rightly, that a new label would be
+// created.
+// The whole `status:` vocabulary joins the set the repo has to HAVE
+// (groom.js#LOOP_STATUS_LABELS): an issue is born in `status:backlog`, but the
+// other three are written later with `--add-label`, which cannot create them.
+// Without them here the world would stop being coherent and the groom would
+// say, quite rightly, that three new labels would be created. They are derived
+// from the constant, not copied: a hand-written list would diverge the moment
+// anyone touched the vocabulary.
 const PLAN_LABELS_EXIST = JSON.stringify([[{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:plan' }, ...LOOP_STATUS_LABELS.map((name) => ({ name }))]])
 
-// SPEC_REF_OK: la referencia al spec que ct-groom.mjs resuelve para un spec
-// llamado "spec.md" dentro de un directorio de makeSpecDir (repo git con
-// origin https://github.com/o/r.git) cuando el stub de `gh` confirma que el
-// fichero está publicado en `main` y que el ancla existe. F10: ya NO depende
-// de la ruta del directorio temporal — la ruta que va al body es la relativa
-// a la raíz del repo, así que es la misma en todos los `it`.
+// SPEC_REF_OK: the spec reference ct-groom.mjs resolves for a spec called
+// "spec.md" inside a makeSpecDir directory (a git repo with the origin
+// https://github.com/o/r.git) when the `gh` stub confirms the file is published
+// on `main` and that the anchor exists. F10: it NO longer depends on the
+// temporary directory's path — the path that goes into the body is the one
+// relative to the repo root, so it is the same in every `it`.
 const SPEC_REF_OK = { path: 'spec.md', heading: '9. Slices', url: specUrl('spec.md'), reason: null }
 
-// matchingBody(): el body EXACTO que ONE_SLICE_SPEC produce hoy — generado
-// con el buildIssueBody real (no a mano) para que un "coincide en todo" de
-// verdad coincida en TODO, incluidas las secciones que F5 ahora también
-// compara (AC, Dependencias, Descripción, Protegido, y — review round 3 — el
-// enlace al spec).
+// matchingBody(): the EXACT body ONE_SLICE_SPEC produces today — generated with
+// the real buildIssueBody (not by hand) so that a real "it matches in
+// everything" matches in EVERYTHING, including the sections F5 now also compares
+// (AC, Dependencias, Descripción, Protegido, and — review round 3 — the spec
+// link).
 function matchingBody() {
   return buildIssueBody(
     { n: 1, name: 'login', type: 'backend', entrega: 'modelo', deps: [], ac: ['AC-1.1'], protected: 'schema' },
@@ -1282,8 +1282,8 @@ function matchingBody() {
   )
 }
 
-describe('ct-groom --dry-run — detecta divergencia de un issue ya existente (F5)', () => {
-  it('título/labels divergentes → se reportan por stderr, exit 3, JSON del plan idéntico al de siempre (nada se muta)', () => {
+describe('ct-groom --dry-run — it detects the divergence of an issue that already exists (F5)', () => {
+  it('a divergent title or labels → they are reported on stderr, exit 3, the plan JSON identical to the usual one (nothing is mutated)', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, ONE_SLICE_SPEC)
     const EXISTING = {
@@ -1301,7 +1301,7 @@ describe('ct-groom --dry-run — detecta divergencia de un issue ya existente (F
     } catch (e) {
       threw = true
       expect(e.status).toBe(3)
-      const plan = JSON.parse(e.stdout) // el plan SÍ se imprime bajo drift (solo cambia el exit code)
+      const plan = JSON.parse(e.stdout) // the plan IS printed under drift (only the exit code changes)
       expect(plan.issues[0].title).toBe('#1 login')
       const err = e.stderr.toString()
       expect(err).toMatch(/slice #1.*issue #501/)
@@ -1310,18 +1310,19 @@ describe('ct-groom --dry-run — detecta divergencia de un issue ya existente (F
       expect(err).toMatch(/"#1 login"/)
       expect(err).toMatch(/falta la label "area:api"/)
       expect(err).toMatch(/falta la label "touches:db"/)
-      // Acotado a las líneas de DIVERGENCIA, que es lo que este test defiende:
-      // `status:in-progress` es una label del issue que el spec no posee, y
-      // reportarla como "extra" sería el bug. El nombre aparece ahora,
-      // legítimamente, en la línea del vocabulario `status:` que /ct-groom crea
-      // para que el claim pueda escribirlo después (groom.js#LOOP_STATUS_LABELS).
+      // Narrowed to the DIVERGENCE lines, which is what this test defends:
+      // `status:in-progress` is a label of the issue that the spec does not own,
+      // and reporting it as "extra" would be the bug. The name now shows up,
+      // legitimately, in the line about the `status:` vocabulary /ct-groom
+      // creates so that the claim can write it later
+      // (groom.js#LOOP_STATUS_LABELS).
       expect(err).not.toMatch(/divergencia.*status:in-progress/)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('sin ninguna divergencia (issue existente ya coincide) → exit 0, stderr vacío', () => {
+  it('with no divergence at all (the existing issue already matches) → exit 0, empty stderr', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, ONE_SLICE_SPEC)
     const MATCHING = {
@@ -1335,11 +1336,12 @@ describe('ct-groom --dry-run — detecta divergencia de un issue ya existente (F
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[MATCHING]]), FAKE_GH_LABELS_LIST: PLAN_LABELS_EXIST }) })
     expect(res.status).toBe(0)
-    // F26 + Slice 10 + decisiones: ONE_SLICE_SPEC no trae "## Contexto del
-    // epic", ni "## Decisiones congeladas", ni columna "Señal", así que el
-    // stderr trae los TRES avisos de ausencia — todos ortogonales a la
-    // divergencia que este test vigila. Se comprueba que SOLO están esos tres
-    // (nada de "difiere"/"falta la label"/etc.), en vez de exigir vacío a secas.
+    // F26 + Slice 10 + decisions: ONE_SLICE_SPEC carries no "## Contexto del
+    // epic", no "## Decisiones congeladas" and no "Señal" column, so the stderr
+    // carries the THREE absence warnings — all of them orthogonal to the
+    // divergence this test watches. What is checked is that ONLY those three
+    // are there (nothing of "difiere"/"falta la label"/etc.), instead of
+    // demanding bare emptiness.
     const stderrLines = res.stderr.split('\n').filter(Boolean)
     expect(stderrLines).toHaveLength(3)
     expect(stderrLines.some((l) => l.includes(EPIC_CONTEXT_HEADING))).toBe(true)
@@ -1348,7 +1350,7 @@ describe('ct-groom --dry-run — detecta divergencia de un issue ya existente (F
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('issue cerrado sin ninguna otra divergencia → sin nota de cierre (closed por sí solo no es divergencia), exit 0', () => {
+  it('a closed issue with no other divergence → no closure note (closed on its own is not a divergence), exit 0', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, ONE_SLICE_SPEC)
     const CLOSED_MATCHING = {
@@ -1362,13 +1364,13 @@ describe('ct-groom --dry-run — detecta divergencia de un issue ya existente (F
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[CLOSED_MATCHING]]), FAKE_GH_LABELS_LIST: PLAN_LABELS_EXIST }) })
     expect(res.status).toBe(0)
-    // F6: este fixture (issue CERRADO, sin ninguna label status:) es también
-    // la prueba de que el recordatorio de status:backlog no persigue a un
-    // epic ya terminado: un issue cerrado no está pendiente de promoción.
-    // F26 + Slice 10 + decisiones: mismo caso que el test anterior —
-    // ONE_SLICE_SPEC no trae ni "## Contexto del epic", ni "## Decisiones
-    // congeladas", ni columna "Señal", así que el stderr trae esos tres avisos
-    // y nada más.
+    // F6: this fixture (a CLOSED issue, with no status: label at all) is also
+    // the proof that the status:backlog reminder does not chase an epic that is
+    // already finished: a closed issue is not awaiting promotion.
+    // F26 + Slice 10 + decisions: the same case as the previous test —
+    // ONE_SLICE_SPEC carries neither "## Contexto del epic", nor "## Decisiones
+    // congeladas", nor a "Señal" column, so the stderr carries those three
+    // warnings and nothing else.
     const stderrLines = res.stderr.split('\n').filter(Boolean)
     expect(stderrLines).toHaveLength(3)
     expect(stderrLines.some((l) => l.includes(EPIC_CONTEXT_HEADING))).toBe(true)
@@ -1377,7 +1379,7 @@ describe('ct-groom --dry-run — detecta divergencia de un issue ya existente (F
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('issue cerrado CON divergencia → añade nota de "cerrado" avisando antes de --reconcile, exit 3', () => {
+  it('a closed issue WITH divergence → it adds a "closed" note warning before --reconcile, exit 3', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, ONE_SLICE_SPEC)
     const CLOSED_DRIFT = {
@@ -1403,7 +1405,7 @@ describe('ct-groom --dry-run — detecta divergencia de un issue ya existente (F
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('--reconcile bajo --dry-run: anuncia qué aplicaría, pero NUNCA llama a `gh issue edit` (sigue sin mutar nada), exit 3', () => {
+  it('--reconcile under --dry-run: it announces what it would apply, but NEVER calls `gh issue edit` (it still mutates nothing), exit 3', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, ONE_SLICE_SPEC)
     const argvLog = join(dir, 'argv.log')
@@ -1421,29 +1423,29 @@ describe('ct-groom --dry-run — detecta divergencia de un issue ya existente (F
         { encoding: 'utf8', stdio: QUIET_STDIO, env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[EXISTING]]), FAKE_GH_ARGV_LOG_FILE: argvLog }) })
     } catch (e) {
       threw = true
-      expect(e.status).toBe(3) // dry-run nunca "resuelve" nada, incluso con --reconcile
+      expect(e.status).toBe(3) // a dry-run never "resolves" anything, even with --reconcile
       expect(e.stderr.toString()).toMatch(/--reconcile aplicaría.*issue edit 501/)
     }
     expect(threw).toBe(true)
     const log = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
-    expect(log).not.toMatch(/issue edit/) // el anuncio no es una llamada real
+    expect(log).not.toMatch(/issue edit/) // the announcement is not a real call
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // Decisión de producto (review round 5): el aviso de "--reconcile es
-  // EXPERIMENTAL" se imprime en cuanto el flag está presente, CON o SIN
-  // --dry-run — el aviso es sobre el riesgo del flag, no sobre si esta
-  // corrida en concreto llega a mutar algo de verdad.
-  it('--dry-run --reconcile → el aviso de EXPERIMENTAL también aparece (mismo riesgo, aunque dry-run nunca mute)', () => {
+  // A product decision (review round 5): the "--reconcile es EXPERIMENTAL"
+  // warning is printed as soon as the flag is present, WITH or WITHOUT
+  // --dry-run — the warning is about the flag's risk, not about whether this
+  // particular run actually gets to mutate anything.
+  it('--dry-run --reconcile → the EXPERIMENTAL warning shows up too (the same risk, even though a dry-run never mutates)', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, ONE_SLICE_SPEC)
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run', '--reconcile'],
       { encoding: 'utf8', env: fakeEnv() })
-    expect(res.status).toBe(0) // sin issues existentes, nada diverge — el aviso vive en stderr, no afecta el exit
+    expect(res.status).toBe(0) // with no existing issues, nothing diverges — the warning lives on stderr, it does not affect the exit
     expect(res.stderr).toMatch(/--reconcile es EXPERIMENTAL/)
     rmSync(dir, { recursive: true, force: true })
   })
-  it('--dry-run SIN --reconcile → el aviso NUNCA aparece', () => {
+  it('--dry-run WITHOUT --reconcile → the warning NEVER shows up', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, ONE_SLICE_SPEC)
     let stderrOut = ''
@@ -1457,7 +1459,7 @@ describe('ct-groom --dry-run — detecta divergencia de un issue ya existente (F
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('fallo al listar issues de GitHub bajo --dry-run (con --repo) aborta igual que la corrida real — el plan nunca se imprime', () => {
+  it('a failure listing GitHub issues under --dry-run (with --repo) aborts just like the real run — the plan is never printed', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, ONE_SLICE_SPEC)
     let threw = false
@@ -1467,26 +1469,27 @@ describe('ct-groom --dry-run — detecta divergencia de un issue ya existente (F
     } catch (e) {
       threw = true
       expect(e.status).toBe(1)
-      expect(e.stdout).toBe('') // el bug que esto evita: un dry-run que informa MENOS que la corrida real
+      expect(e.stdout).toBe('') // the bug this avoids: a dry-run that reports LESS than the real run
       expect(e.stderr.toString()).toMatch(/no se pudo listar issues/)
     }
     expect(threw).toBe(true)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // F10 cambia esta propiedad, y el cambio se declara en vez de borrarse: el
-  // test decía "--dry-run SIN --repo nunca invoca `gh`". Ya no es cierto, y no
-  // podía seguir siéndolo — el enlace al spec se VERIFICA contra GitHub
-  // (¿está el fichero publicado en la rama por defecto? ¿existe el ancla?), y
-  // esa verificación no depende de `--repo` sino del repositorio donde vive el
-  // SPEC. Saltársela bajo --dry-run devolvería la trampa que F1 y F5 ya
-  // cerraron dos veces: un preview que informa de menos que la corrida real —
-  // aquí, un preview que enseña un enlace que la corrida real degradaría.
+  // F10 changes this property, and the change is declared instead of deleted:
+  // the test said "--dry-run WITHOUT --repo never invokes `gh`". That is no
+  // longer true, and it could not stay true — the spec link is VERIFIED against
+  // GitHub (is the file published on the default branch? does the anchor
+  // exist?), and that verification does not depend on `--repo` but on the
+  // repository where the SPEC lives. Skipping it under --dry-run would bring
+  // back the trap F1 and F5 have already closed twice: a preview that reports
+  // less than the real run — here, a preview that shows a link the real run
+  // would degrade.
   //
-  // Lo que SÍ sigue siendo cierto, y es lo que de verdad protegía este test,
-  // es que --dry-run no muta nada: las únicas llamadas a `gh` sin --repo son
-  // las dos LECTURAS del enlace al spec.
-  it('--dry-run SIN --repo: las únicas llamadas a `gh` son las lecturas del enlace al spec — ninguna mutación', () => {
+  // What DOES remain true, and is what this test really protected, is that
+  // --dry-run mutates nothing: the only `gh` calls without --repo are the two
+  // READS of the spec link.
+  it('--dry-run WITHOUT --repo: the only `gh` calls are the reads of the spec link — no mutation', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, ONE_SLICE_SPEC)
     const argvLog = join(dir, 'argv.log')
@@ -1504,13 +1507,13 @@ describe('ct-groom --dry-run — detecta divergencia de un issue ya existente (F
 })
 
 // ============================================================================
-// Review del coordinador tras la primera versión de F5 — cobertura bajo
-// --dry-run de los dos puntos de fondo (el body SÍ se compara para AC/deps;
-// las labels están gateadas por columna) y confirmación explícita de que el
-// exit 3 bajo --dry-run es una decisión, no una consecuencia accidental.
+// The coordinator's review after the first version of F5 — coverage under
+// --dry-run of the two substantive points (the body IS compared for AC/deps;
+// the labels are gated by column) and an explicit confirmation that exit 3
+// under --dry-run is a decision, not an accidental consequence.
 // ============================================================================
 
-describe('ct-groom --dry-run — AC/Dependencias divergentes se detectan (review crítica: el body SÍ se compara para lo que lee el dispatcher)', () => {
+describe('ct-groom --dry-run — divergent AC/Dependencias are detected (critical review: the body IS compared for what the dispatcher reads)', () => {
   const SPEC_2 = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
@@ -1534,7 +1537,7 @@ describe('ct-groom --dry-run — AC/Dependencias divergentes se detectan (review
     body: buildIssueBody({ n: 2, name: 'signup', type: 'backend', entrega: 'registro', deps: [], ac: ['AC-2.1'], protected: '–' }, SPEC_REF_OK),
   }
 
-  it('reporta el AC y la dependencia faltantes por stderr, exit 3, sin mutar nada', () => {
+  it('it reports the missing AC and dependency on stderr, exit 3, mutating nothing', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC_2)
     let threw = false
@@ -1554,7 +1557,7 @@ describe('ct-groom --dry-run — AC/Dependencias divergentes se detectan (review
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('--reconcile bajo --dry-run: el preview nombra las categorías (dependencias, criterios de aceptación) SIN volcar el `--body` completo, y no muta nada', () => {
+  it('--reconcile under --dry-run: the preview names the categories (dependencies, acceptance criteria) WITHOUT dumping the whole `--body`, and mutates nothing', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC_2)
     const argvLog = join(dir, 'argv.log')
@@ -1569,23 +1572,23 @@ describe('ct-groom --dry-run — AC/Dependencias divergentes se detectan (review
       expect(e.status).toBe(3)
       const err = e.stderr.toString()
       expect(err).toMatch(/--reconcile aplicaría.*issue edit 501.*--body <actualizado/)
-      // el texto real del AC/dependencia no se vuelca en el mensaje de preview:
+      // the real text of the AC or dependency is not dumped into the preview message:
       expect(err).not.toContain('merge-after `#2`\n')
     }
     expect(threw).toBe(true)
     const log = existsSync(argvLog) ? readFileSync(argvLog, 'utf8') : ''
-    expect(log).not.toMatch(/issue edit/) // --dry-run jamás muta, ni con --reconcile
+    expect(log).not.toMatch(/issue edit/) // --dry-run never mutates, not even with --reconcile
     rmSync(dir, { recursive: true, force: true })
   })
 })
 
-describe('ct-groom --dry-run — labels: gateadas por columna (review, punto 2)', () => {
+describe('ct-groom --dry-run — labels: gated by column (review, point 2)', () => {
   const NO_AREA_SPEC = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|---|
 | 1 | login | backend | modelo | – | AC-1.1 | schema |
 `
-  it('sin columna "Área" en la tabla: un area: puesto a mano en el issue no se reporta como "sobra", exit 0', () => {
+  it('with no "Área" column in the table: an area: put on the issue by hand is not reported as "extra", exit 0', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, NO_AREA_SPEC)
     const ISSUE_WITH_AREA = {
@@ -1593,9 +1596,9 @@ describe('ct-groom --dry-run — labels: gateadas por columna (review, punto 2)'
       title: '#1 login',
       state: 'open',
       milestone: { title: 'Epic' },
-      // F21: `gate:none` sí la pide el spec — la columna `Tipo` está presente,
-      // así que el spec SÍ tiene opinión sobre `gate:` (a diferencia de
-      // `area:`, que es de lo que trata este test).
+      // F21: the spec does ask for `gate:none` — the `Tipo` column is present,
+      // so the spec DOES have an opinion about `gate:` (unlike `area:`, which
+      // is what this test is about).
       labels: [{ name: 'type:backend' }, { name: 'area:ops' }, { name: 'gate:plan' }],
       body: matchingBody(),
     }
@@ -1607,18 +1610,18 @@ describe('ct-groom --dry-run — labels: gateadas por columna (review, punto 2)'
   })
 })
 
-describe('ct-groom --dry-run — el exit 3 ante divergencia es una decisión explícita, no una consecuencia (review, punto 3)', () => {
-  // --dry-run y la corrida real SIN --reconcile comparten el mismo 3 ante
-  // la MISMA divergencia, por PARIDAD (misma condición, misma señal, sin
-  // sorpresas al pasar de "revisar" a "ejecutar de verdad"). Revisión de
-  // round 3 del coordinador: la justificación original de este fichero
-  // ("así `groom --dry-run && groom` recibe la misma señal") estaba
-  // invertida — con `&&`, un exit 3 CORTA la cadena justo cuando hay
-  // divergencia que --reconcile podría aplicar, así que ese encadenamiento
-  // nunca llegaría a ejecutar la corrida real. La paridad se sostiene por
-  // sí sola (ver el comentario junto al `process.exit` en ct-groom.mjs);
-  // este test fija esa igualdad como comportamiento observable.
-  it('--dry-run y la corrida real (sin --reconcile) devuelven el MISMO exit code (3) ante la MISMA divergencia', () => {
+describe('ct-groom --dry-run — exit 3 on divergence is an explicit decision, not a consequence (review, point 3)', () => {
+  // --dry-run and the real run WITHOUT --reconcile share the same 3 on the SAME
+  // divergence, out of PARITY (the same condition, the same signal, no
+  // surprises going from "review" to "actually execute"). The coordinator's
+  // round 3 review: this file's original justification ("that way
+  // `groom --dry-run && groom` gets the same signal") was back to front — with
+  // `&&`, an exit 3 CUTS the chain exactly when there is divergence that
+  // --reconcile could apply, so that chaining would never get as far as running
+  // the real run. Parity stands on its own (see the comment next to the
+  // `process.exit` in ct-groom.mjs); this test pins that equality as observable
+  // behaviour.
+  it('--dry-run and the real run (without --reconcile) return the SAME exit code (3) on the SAME divergence', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, ONE_SLICE_SPEC)
     const EXISTING = {
@@ -1638,11 +1641,11 @@ describe('ct-groom --dry-run — el exit 3 ante divergencia es una decisión exp
   })
 })
 
-// F23 — las dos caras del §2 del feedback de campo, medidas en producción
-// sobre menoplus-app/menoplus con los issues #451–#456 de un epic anterior y
-// cerrado. Antes de este arreglo, el emparejado por marcador barría el REPO
-// ENTERO, así que el contrato §9 ("los # son únicos dentro de su milestone,
-// no del repo") era cierto en /ct-next y falso aquí.
+// F23 — the two faces of §2 of the field feedback, measured in production on
+// menoplus-app/menoplus with issues #451–#456 of an earlier, closed epic.
+// Before this fix, matching by marker swept the WHOLE REPO, so the §9 contract
+// ("the #s are unique within their milestone, not within the repo") was true in
+// /ct-next and false here.
 const TRES_SLICES = (a, b, c) => `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
@@ -1651,9 +1654,9 @@ const TRES_SLICES = (a, b, c) => `## Hipótesis\n\nApuesta del fixture.\n\n## 9.
 | ${c} | tres | backend | c | – | AC-${c}.1 | – | api | db |
 `
 
-// Los seis del epic anterior: cerrados, en OTRO milestone, con ct-order 1..6
-// y un enlace a OTRO spec (para no disparar la puerta de la Tarea 5, que es
-// una comprobación distinta — aquí lo que se prueba es el acotado).
+// The six of the earlier epic: closed, in ANOTHER milestone, with ct-order 1..6
+// and a link to ANOTHER spec (so as not to fire Task 5's gate, which is a
+// different check — what is tested here is the narrowing).
 const EPIC_ANTERIOR = [1, 2, 3, 4, 5, 6].map((n) => ({
   number: 450 + n,
   title: `#${n} slice viejo`,
@@ -1663,23 +1666,23 @@ const EPIC_ANTERIOR = [1, 2, 3, 4, 5, 6].map((n) => ({
   body: `> Slice \`#${n}\` del epic. Spec: [otro-spec.md](https://github.com/o/r/blob/main/otro-spec.md)\n\ncuerpo viejo\n\n<!-- ct-order:${n} -->`,
 }))
 
-describe('ct-groom — el marcador ct-order acotado por milestone (F23, §2 del feedback)', () => {
-  it('cara 1: tabla §9 empezando en 1,2,3 sobre un epic anterior con 1..6 → crea los tres, cero divergencias, cero huérfanos, exit 0', () => {
+describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of the feedback)', () => {
+  it('face 1: a §9 table starting at 1,2,3 over an earlier epic with 1..6 → it creates the three, zero divergences, zero orphans, exit 0', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[EPIC_ANTERIOR]]) }) })
     expect(res.status).toBe(0)
-    // Lo que hacía antes: emparejaba con #451/#452/#453 y reportaba el
-    // milestone distinto como divergencia, sin crear nada.
+    // What it did before: it matched #451/#452/#453 and reported the different
+    // milestone as a divergence, creating nothing.
     expect(res.stderr).not.toMatch(/divergencia/)
-    // Y además declaraba huérfanos a #454/#455/#456 en la MISMA corrida.
+    // And it also declared #454/#455/#456 orphans in the SAME run.
     expect(res.stderr).not.toMatch(/hu.rfano/)
-    // #451/#452/#453 SÍ se nombran ahora, pero sólo como el aviso no
-    // bloqueante del fallo en abierto de la puerta B (su enlace apunta a otro
-    // spec): la aserción de antes era `not.toMatch(/#45[123]/)` y se ha
-    // afinado, no relajado — lo que importa es que ninguna de esas menciones
-    // sea un emparejado, una divergencia o un huérfano.
+    // #451/#452/#453 ARE named now, but only as gate B's non-blocking
+    // fail-open warning (their link points at another spec): the earlier
+    // assertion was `not.toMatch(/#45[123]/)` and it has been sharpened, not
+    // relaxed — what matters is that none of those mentions is a match, a
+    // divergence or an orphan.
     for (const linea of res.stderr.split('\n').filter((l) => /#45[1-6]/.test(l))) {
       expect(linea.startsWith('aviso: ')).toBe(true)
     }
@@ -1688,14 +1691,13 @@ describe('ct-groom — el marcador ct-order acotado por milestone (F23, §2 del 
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // La MISMA cara 1, sin --dry-run. El test de arriba no puede observar el
-  // arreglo: ct-groom.mjs sale antes del bucle de creación bajo --dry-run, así
-  // que su única aserción sobre creación (`plan.issues.map(i => i.order)`)
-  // sale de la tabla §9 y habría pasado igual ANTES del acotado. Y la
-  // modalidad de fallo de este arreglo es justamente la contraria: emparejar
-  // con los issues del epic anterior en vez de crear los propios. Eso sólo se
-  // ve en una corrida real.
-  it('cara 1, corrida REAL: crea los tres issues del epic nuevo y no empareja con ninguno de #451–#456', () => {
+  // The SAME face 1, without --dry-run. The test above cannot observe the fix:
+  // ct-groom.mjs exits before the creation loop under --dry-run, so its only
+  // assertion about creation (`plan.issues.map(i => i.order)`) comes out of the
+  // §9 table and would have passed just the same BEFORE the narrowing. And this
+  // fix's failure mode is precisely the opposite: matching the earlier epic's
+  // issues instead of creating its own. That is only visible in a real run.
+  it('face 1, a REAL run: it creates the three issues of the new epic and matches none of #451–#456', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo'],
@@ -1710,11 +1712,11 @@ describe('ct-groom — el marcador ct-order acotado por milestone (F23, §2 del 
     expect(res.stdout).toMatch(/issue creado orden #1/)
     expect(res.stdout).toMatch(/issue creado orden #2/)
     expect(res.stdout).toMatch(/issue creado orden #3/)
-    // En corrida real el verbo del aviso es indicativo: aquí sí se crea.
+    // In a real run the warning's verb is indicative: here it really is created.
     expect(res.stderr).toMatch(/crearé un issue nuevo para el slice #1 en "Epic nuevo"/)
-    // El fallo que este arreglo cierra: "issue orden #1 ya existe (#451), no
-    // se duplica". Ni el mensaje de idempotencia ni ninguno de los seis
-    // números del epic anterior pueden salir por stdout.
+    // The failure this fix closes: "issue orden #1 ya existe (#451), no se
+    // duplica". Neither the idempotence message nor any of the earlier epic's
+    // six numbers may come out over stdout.
     expect(res.stdout).not.toMatch(/issue orden #\d+ ya existe/)
     expect(res.stdout).not.toMatch(/#45[1-6]/)
     expect(res.stderr).not.toMatch(/divergencia/)
@@ -1722,7 +1724,7 @@ describe('ct-groom — el marcador ct-order acotado por milestone (F23, §2 del 
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('cara 2: tabla §9 empezando en 7,8,9 → NO declara huérfanos a los seis del epic anterior', () => {
+  it('face 2: a §9 table starting at 7,8,9 → it does NOT declare the earlier epic\u2019s six orphans', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(7, 8, 9))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
@@ -1733,7 +1735,7 @@ describe('ct-groom — el marcador ct-order acotado por milestone (F23, §2 del 
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el huérfano legítimo — un issue DEL EPIC ACTUAL cuyo orden ya no está en la tabla — sigue avisando y sigue saliendo 3', () => {
+  it('the legitimate orphan — an issue OF THE CURRENT EPIC whose order is no longer in the table — still warns and still exits 3', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const HUERFANO_REAL = {
@@ -1749,11 +1751,11 @@ describe('ct-groom — el marcador ct-order acotado por milestone (F23, §2 del 
     expect(res.status).toBe(3)
     expect(res.stderr).toMatch(/issue #601.*ct-order:9/)
     expect(res.stderr).toMatch(/hu.rfano/)
-    // El acotado no ha silenciado la señal, sólo la ha limitado a su epic:
-    // ninguno de los seis del epic anterior se declara huérfano. (Sí salen
-    // #451–#453 como aviso no bloqueante de la puerta B — el fallo en abierto
-    // de un enlace que no casa —, así que la aserción se afina a la línea de
-    // huérfano en vez de a "no aparece el número".)
+    // The narrowing has not silenced the signal, it has only limited it to its
+    // own epic: none of the earlier epic's six is declared an orphan.
+    // (#451–#453 do come out as gate B's non-blocking warning — the fail-open
+    // of a link that does not match — so the assertion is sharpened to the
+    // orphan line rather than to "the number does not appear".)
     for (const linea of res.stderr.split('\n').filter((l) => /#45[1-6]/.test(l))) {
       expect(linea.startsWith('aviso: ')).toBe(true)
       expect(linea).not.toMatch(/hu.rfano/)
@@ -1761,7 +1763,7 @@ describe('ct-groom — el marcador ct-order acotado por milestone (F23, §2 del 
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el emparejado SÍ ocurre dentro del propio epic: un issue del milestone pedido con el mismo orden no se duplica', () => {
+  it('matching DOES happen within the epic itself: an issue of the requested milestone with the same order is not duplicated', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const DEL_EPIC = {
@@ -1774,20 +1776,20 @@ describe('ct-groom — el marcador ct-order acotado por milestone (F23, §2 del 
     }
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[...EPIC_ANTERIOR, DEL_EPIC]]]) }) })
-    // Divergencia real (el body no trae AC ni enlace al spec) → exit 3,
-    // nombrando el issue de SU epic. Lo que importa aquí es que lo encuentra.
+    // A real divergence (the body carries neither AC nor a spec link) → exit 3,
+    // naming the issue of ITS epic. What matters here is that it finds it.
     expect(res.status).toBe(3)
     expect(res.stderr).toMatch(/slice #1.*issue #700/)
-    // Y como el slice #1 YA tiene issue en este epic, el aviso de la puerta B
-    // no habla de él: no hay creación posible, luego no hay duplicación
-    // posible. Los slices 2 y 3, que sí se crearían, sí se avisan.
+    // And since slice #1 ALREADY has an issue in this epic, gate B's warning
+    // does not talk about it: no creation is possible, hence no duplication is
+    // possible. Slices 2 and 3, which would be created, are warned about.
     expect(res.stderr).not.toMatch(/aviso: el slice #1 de este spec/)
     expect(res.stderr).toMatch(/aviso: el slice #2 de este spec/)
     rmSync(dir, { recursive: true, force: true })
   })
 })
 
-describe('ct-groom — puerta A: issues sin milestone (F23)', () => {
+describe('ct-groom — gate A: issues with no milestone (F23)', () => {
   const SIN_MILESTONE = (number, order) => ({
     number,
     title: `#${order} suelto`,
@@ -1797,7 +1799,7 @@ describe('ct-groom — puerta A: issues sin milestone (F23)', () => {
     body: `cuerpo\n\n<!-- ct-order:${order} -->`,
   })
 
-  it('colisiona con la tabla §9 → exit 1, los nombra, y NO muta nada', () => {
+  it('it collides with the §9 table → exit 1, it names them, and it mutates NOTHING', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo'],
@@ -1807,14 +1809,14 @@ describe('ct-groom — puerta A: issues sin milestone (F23)', () => {
     expect(res.stderr).toMatch(/#488\s+ct-order:3/)
     expect(res.stderr).toMatch(/no se ha creado ni modificado nada/)
     expect(res.stderr).toMatch(/gh issue edit .*--milestone/)
-    // El efecto, no el exit code: la puerta cae ANTES de la primera mutación,
-    // que es la creación del milestone.
+    // The effect, not the exit code: the gate falls BEFORE the first mutation,
+    // which is the creation of the milestone.
     expect(res.stdout).not.toMatch(/milestone creado/)
     expect(res.stdout).not.toMatch(/issue creado/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('NO colisiona con la tabla §9 → aviso que lo nombra, la corrida sigue', () => {
+  it('it does NOT collide with the §9 table → a warning that names it, the run carries on', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
@@ -1827,17 +1829,17 @@ describe('ct-groom — puerta A: issues sin milestone (F23)', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('bajo --dry-run la puerta también aborta: un preview que calla que la corrida real se pararía informa menos que la corrida real', () => {
+  it('under --dry-run the gate aborts too: a preview that keeps quiet about the real run stopping reports less than the real run', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[SIN_MILESTONE(487, 2)]]]) }) })
     expect(res.status).toBe(1)
-    expect(res.stdout).not.toMatch(/"issues"/) // ni siquiera se imprime el plan
+    expect(res.stdout).not.toMatch(/"issues"/) // the plan is not even printed
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('un issue sin milestone y SIN marcador ct-order no dice nada de nada', () => {
+  it('an issue with no milestone and NO ct-order marker says nothing at all', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const SUELTO = { number: 490, title: 'issue a mano', state: 'open', milestone: null, labels: [], body: 'sin marcador' }
@@ -1849,9 +1851,9 @@ describe('ct-groom — puerta A: issues sin milestone (F23)', () => {
   })
 })
 
-describe('ct-groom — puerta B: el mismo epic bajo otro título (F23)', () => {
-  // MISMO spec que produce el plan de este directorio de test (spec.md), pero
-  // en OTRO milestone: la firma de un epic renombrado, o de una errata en
+describe('ct-groom — gate B: the same epic under another title (F23)', () => {
+  // The SAME spec that produces this test directory's plan (spec.md), but in
+  // ANOTHER milestone: the signature of a renamed epic, or of a typo in
   // --milestone.
   const mismoSpecOtroEpic = (number, order) => ({
     number,
@@ -1865,7 +1867,7 @@ describe('ct-groom — puerta B: el mismo epic bajo otro título (F23)', () => {
     ),
   })
 
-  it('mismo orden + mismo spec en otro milestone → exit 1, nombra el issue y su milestone real, no muta nada', () => {
+  it('the same order + the same spec in another milestone → exit 1, it names the issue and its real milestone, it mutates nothing', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo'],
@@ -1880,20 +1882,21 @@ describe('ct-groom — puerta B: el mismo epic bajo otro título (F23)', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('mismo orden pero OTRO spec → no dispara: es un epic distinto reusando números, que es lo que F23 habilita', () => {
+  it('the same order but ANOTHER spec → it does not fire: it is a different epic reusing numbers, which is what F23 enables', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[EPIC_ANTERIOR]]) }) })
     expect(res.status).toBe(0)
     expect(res.stderr).not.toMatch(/no se ha creado ni modificado nada/)
-    // "No dispara" es no BLOQUEAR, no callarse: los tres órdenes que sí están
-    // en la tabla de hoy salen como aviso (ver los tests del aviso más abajo).
+    // "It does not fire" means it does not BLOCK, not that it keeps quiet: the
+    // three orders that are in today's table come out as a warning (see the
+    // warning's tests further down).
     expect(res.stderr).toMatch(/aviso: el slice #1 de este spec/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('mismo spec pero un orden que NO está en la tabla de hoy → no dispara', () => {
+  it('the same spec but an order that is NOT in today\u2019s table → it does not fire', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
@@ -1903,13 +1906,13 @@ describe('ct-groom — puerta B: el mismo epic bajo otro título (F23)', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // El aviso del fallo en abierto. La puerta B descarta un issue de otro
-  // milestone cuando su enlace al spec no casa con el nuestro — y ése es
-  // exactamente el cubo del que sale un epic duplicado con exit 0 si el
-  // enlace no casaba sólo porque el issue es viejo o porque su enlace quedó
-  // degradado. Descartarlo en silencio era la asimetría con la puerta A, que
-  // sí nombra los issues sin milestone que NO bloquean.
-  it('aviso (enlace DISTINTO): nombra el issue, su milestone y el riesgo de duplicado — y no cambia el exit code', () => {
+  // The fail-open warning. Gate B discards an issue from another milestone when
+  // its spec link does not match ours — and that is exactly the bucket a
+  // duplicated epic with exit 0 comes out of, if the link failed to match only
+  // because the issue is old or because its link ended up degraded. Discarding
+  // it in silence was the asymmetry with gate A, which does name the issues
+  // without a milestone that do NOT block.
+  it('warning (a DIFFERENT link): it names the issue, its milestone and the duplication risk — and it does not change the exit code', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
@@ -1917,21 +1920,22 @@ describe('ct-groom — puerta B: el mismo epic bajo otro título (F23)', () => {
     expect(res.status).toBe(0)
     expect(res.stderr).toMatch(/^aviso: el slice #2 de este spec tiene un issue en otro milestone con el mismo ct-order \(#452, "Epic anterior"\)/m)
     expect(res.stderr).toMatch(/su enlace al spec no coincide con el de este spec/)
-    // Bajo --dry-run el verbo es condicional: aquí no se crea nada (mismo
-    // criterio que el recordatorio de status:backlog, "quedarían"/"quedan").
+    // Under --dry-run the verb is conditional: nothing is created here (the
+    // same criterion as the status:backlog reminder,
+    // "quedarían"/"quedan").
     expect(res.stderr).toMatch(/crearía un issue nuevo para el slice #2 en "Epic nuevo"/)
     expect(res.stderr).toMatch(/esto va a duplicarlo: compruébalo antes de seguir/)
-    // No bloquea: la corrida sigue y el plan se imprime entero.
+    // It does not block: the run carries on and the whole plan is printed.
     expect(res.stderr).not.toMatch(/no se ha creado ni modificado nada/)
     expect(JSON.parse(res.stdout).issues.map((i) => i.order)).toEqual([1, 2, 3])
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // La rama `suyo === null` del fallo en abierto: un issue de otro epic con
-  // marcador ct-order pero SIN línea de enlace al spec en el body. Es la más
-  // probable en un repo real (issues creados a mano, o groomeados por una
-  // versión anterior a la línea de enlace) y no tenía ningún test.
-  it('aviso (SIN enlace al spec en el body): también se nombra, con el motivo correcto', () => {
+  // The `suyo === null` branch of the fail-open: an issue from another epic
+  // with a ct-order marker but with NO spec-link line in the body. It is the
+  // most likely one in a real repo (issues created by hand, or groomed by a
+  // version older than the link line) and it had no test at all.
+  it('warning (with NO spec link in the body): it is named too, with the right reason', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const SIN_ENLACE = {
@@ -1951,12 +1955,12 @@ describe('ct-groom — puerta B: el mismo epic bajo otro título (F23)', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // El acotado del aviso: la duplicación sólo puede ocurrir si el slice se va
-  // a CREAR. Si ya tiene issue en este epic, el emparejado lo encuentra, la
-  // creación se salta, y avisar sería un aviso que nadie puede satisfacer —
-  // saldría en cada corrida, para siempre, sin describir ninguna pérdida
-  // (mismo criterio que el filtro de cerrados de backlogPendingCount).
-  it('el aviso NO sale para un slice que YA tiene issue en este epic: sin creación no hay duplicación', () => {
+  // The narrowing of the warning: duplication can only happen if the slice is
+  // going to be CREATED. If it already has an issue in this epic, the matching
+  // finds it, the creation is skipped, and warning would be a warning nobody
+  // can satisfy — it would come out on every run, for ever, describing no loss
+  // at all (the same criterion as backlogPendingCount's closed-issue filter).
+  it('the warning does NOT come out for a slice that ALREADY has an issue in this epic: with no creation there is no duplication', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const YA_EN_ESTE_EPIC = {
@@ -1973,17 +1977,17 @@ describe('ct-groom — puerta B: el mismo epic bajo otro título (F23)', () => {
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[...EPIC_ANTERIOR, YA_EN_ESTE_EPIC]]]) }) })
     expect(res.status).toBe(0)
-    // #451 lleva ct-order:1, igual que el issue que este epic ya tiene: nada
-    // que duplicar, ningún aviso que lo nombre.
+    // #451 carries ct-order:1, just like the issue this epic already has:
+    // nothing to duplicate, no warning that names it.
     expect(res.stderr).not.toMatch(/aviso: el slice #1 de este spec/)
     expect(res.stderr).not.toMatch(/#451/)
-    // #452/#453 sí: los slices 2 y 3 todavía se crearían.
+    // #452/#453 do: slices 2 and 3 would still be created.
     expect(res.stderr).toMatch(/aviso: el slice #2 de este spec.*#452/)
     expect(res.stderr).toMatch(/aviso: el slice #3 de este spec.*#453/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el aviso NO sale cuando el orden del issue de otro epic no está en la tabla de hoy: ahí no hay nada que duplicar', () => {
+  it('the warning does NOT come out when the order of another epic\u2019s issue is not in today\u2019s table: there is nothing to duplicate there', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(7, 8, 9))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
@@ -1994,46 +1998,47 @@ describe('ct-groom — puerta B: el mismo epic bajo otro título (F23)', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  // El aviso afirma que este groom va a crear ese slice. En una corrida que
-  // se para en seco no se crea nada, así que los avisos se emiten DESPUÉS del
-  // exit de los bloqueos: un aviso que sale junto a "no se ha creado ni
-  // modificado nada" se contradice con el pie de su propia corrida. Nada se
-  // pierde — la corrida siguiente, ya sin bloqueo, los vuelve a calcular.
-  it('cuando la puerta bloquea, el aviso no se emite: nada se va a crear, así que nada se puede duplicar', () => {
+  // The warning asserts that this groom is going to create that slice. In a run
+  // that stops dead nothing is created, so the warnings are emitted AFTER the
+  // exit of the blocks: a warning that comes out alongside "no se ha creado ni
+  // modificado nada" contradicts its own run's footer. Nothing is lost — the
+  // next run, now unblocked, computes them again.
+  it('when the gate blocks, the warning is not emitted: nothing is going to be created, so nothing can be duplicated', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[mismoSpecOtroEpic(452, 2), EPIC_ANTERIOR[0]]]]) }) })
     expect(res.status).toBe(1)
-    expect(res.stderr).toMatch(/#452\s+ct-order:2/) // el bloqueo sí sale
+    expect(res.stderr).toMatch(/#452\s+ct-order:2/) // the block does come out
     expect(res.stderr).toMatch(/no se ha creado ni modificado nada/)
-    // #451 (ct-order:1, otro spec) habría avisado en una corrida que siguiera.
+    // #451 (ct-order:1, another spec) would have warned in a run that carried on.
     expect(res.stderr).not.toMatch(/aviso: el slice/)
     expect(res.stderr).not.toMatch(/#451/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('las DOS puertas en la misma corrida: los dos bloques se reportan y se sale UNA sola vez', () => {
+  it('BOTH gates in the same run: the two blocks are reported and it exits ONLY once', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
     const SIN_MS = { number: 487, title: '#3 suelto', state: 'open', milestone: null, labels: [], body: 'x\n\n<!-- ct-order:3 -->' }
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[SIN_MS, mismoSpecOtroEpic(452, 2)]]]) }) })
     expect(res.status).toBe(1)
-    expect(res.stderr).toMatch(/#487\s+ct-order:3/)   // puerta A
-    expect(res.stderr).toMatch(/#452\s+ct-order:2/)   // puerta B
-    // Un solo cierre: el pie aparece exactamente una vez.
+    expect(res.stderr).toMatch(/#487\s+ct-order:3/)   // gate A
+    expect(res.stderr).toMatch(/#452\s+ct-order:2/)   // gate B
+    // A single closure: the footer shows up exactly once.
     expect(res.stderr.match(/no se ha creado ni modificado nada/g)).toHaveLength(1)
     rmSync(dir, { recursive: true, force: true })
   })
 })
 
-// Slice 10 — la columna `Señal` en el wrapper: la exención sin razón es
-// hardError (exit 2, ANTES de cualquier mutación y también bajo --dry-run —
-// precedente del Gate desconocido: lo que no se puede leer no puede colar en
-// silencio), y la ausencia de la columna avisa POR CONSECUENCIA (el juez de
-// slice medirá su ítem observabilidad como sin-vara en todo el epic).
-describe('la columna Señal en el groom (Slice 10)', () => {
+// Slice 10 — the `Señal` column in the wrapper: an exemption with no reason is
+// a hardError (exit 2, BEFORE any mutation and under --dry-run too — the
+// precedent of the unknown Gate: what cannot be read cannot slip through in
+// silence), and the column's absence warns BY CONSEQUENCE (the slice judge will
+// measure its observabilidad item as without-a-yardstick across the whole
+// epic).
+describe('the Señal column in the groom (Slice 10)', () => {
   const CON_SENAL = (senal1, senal2) => `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Señal |
 |---|---|---|---|---|---|---|---|
@@ -2041,7 +2046,7 @@ describe('la columna Señal en el groom (Slice 10)', () => {
 | 2 | refresh | backend | flow | #1 | AC-2.1 | – | ${senal2} |
 `
 
-  it('una exención sin razón aborta con exit 2 nombrando la fila, la sintaxis N/A — <razón> y el remedio', () => {
+  it('an exemption with no reason aborts with exit 2 naming the row, the N/A — <razón> syntax and the remedy', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, CON_SENAL('N/A', 'métrica x'))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
@@ -2050,16 +2055,16 @@ describe('la columna Señal en el groom (Slice 10)', () => {
     expect(res.stderr).toMatch(/N\/A — <razón>/)
     expect(res.stderr).toMatch(/deja la celda vacía o con "–"/)
     expect(res.stderr).toMatch(/corrige esas filas y vuelve a intentarlo/)
-    // Aborta ANTES de imprimir ningún plan: bajo --dry-run tampoco sale JSON.
+    // It aborts BEFORE printing any plan: under --dry-run no JSON comes out either.
     expect(res.stdout).toBe('')
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('las exenciones sin razón se agregan con el resto de hardErrors en una sola corrida', () => {
+  it('exemptions with no reason are aggregated with the rest of the hardErrors in a single run', () => {
     const dir = makeSpecDir('ctg-')
-    // Dos defectos a la vez: la exención sin razón (Señal) y un Dep
-    // malformado ("S1") — los dos mensajes deben salir en UNA sola ejecución,
-    // como el resto de hardErrors agregados.
+    // Two defects at once: the exemption with no reason (Señal) and a malformed
+    // Dep ("S1") — both messages must come out in ONE single run, like the rest
+    // of the aggregated hardErrors.
     const DOS_DEFECTOS = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Señal |
 |---|---|---|---|---|---|---|---|
@@ -2074,19 +2079,19 @@ describe('la columna Señal en el groom (Slice 10)', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('tabla sin columna Señal: aviso por consecuencia por stderr, exit 0', () => {
+  it('a table with no Señal column: a warning by consequence on stderr, exit 0', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
     expect(res.status).toBe(0)
     expect(res.stderr).toMatch(/no tiene columna "Señal"/)
-    // El aviso describe la CONSECUENCIA medible, no solo la ausencia.
+    // The warning describes the measurable CONSEQUENCE, not just the absence.
     expect(res.stderr).toMatch(/sin sección "## Señal de observabilidad"/)
     expect(res.stderr).toMatch(/observabilidad como sin-vara/)
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('el dry-run enseña la sección "## Señal de observabilidad" en el body del slice que la declara y no en el que no', () => {
+  it('the dry-run shows the "## Señal de observabilidad" section in the body of the slice that declares it and not in the one that does not', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, CON_SENAL('–', 'métrica `backfill_progress` con label `estado`'))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
@@ -2098,7 +2103,7 @@ describe('la columna Señal en el groom (Slice 10)', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('la exención razonada viaja verbatim al body y no aborta nada', () => {
+  it('the reasoned exemption travels verbatim to the body and aborts nothing', () => {
     const dir = makeSpecDir('ctg-')
     const spec = join(dir, 'spec.md'); writeFileSync(spec, CON_SENAL('N/A — pantalla sin telemetría nueva que prometer', 'métrica x'))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
