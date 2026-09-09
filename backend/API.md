@@ -26,8 +26,9 @@ the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
    `{"code": "<kebab-case>", "detail": "<one sentence>"}`. One refusal adds a
    third field: `no-plan-started` carries `failed`.
 2. **An application refusal answers 400.** The status stopped being the signal.
-   Three refusals keep another status because they are about the protocol, not
-   about the request: 405, 409 and 503 below.
+   405 keeps its own status because it is about the protocol, not about the
+   request. The two 409 of `/implement-plan` are not about the protocol either,
+   and are the one place where this rule is still not applied.
 3. **A `POST` must declare `Content-Type: application/json`.** Otherwise 415.
 4. **A body over 8 KiB is refused** with 413 `body-too-large`.
 5. **An unknown field in a `POST` body is refused**, not ignored.
@@ -373,22 +374,27 @@ person would have typed — and `plan` — what starting it produced.
 
 | `code` | Status | Meaning |
 |---|---|---|
-| `active-plans-recovery-inconclusive` | **503** | cmux could not be asked, so the list would be a lie |
+| `active-plans-recovery-inconclusive` | **400** | cmux could not be asked, so the list would be a lie; `detail` carries what cmux answered |
 
-The 503 is the common failure on a fresh machine: recovery reads the live cmux
-workspaces, and without cmux it answers 503 on **every** call and never settles.
-The page must show *I cannot tell what is running* rather than *nothing is
+It is the common failure on a fresh machine: recovery reads the live cmux
+workspaces, and without cmux it refuses **every** call and never settles. The
+page must show *I cannot tell what is running* rather than *nothing is
 running*, and it must not treat this as an empty list.
+
+`detail` carries the reason itself, not a fixed sentence — the same rule the ten
+refusals of `POST /start-plan` follow. It is the one place a person sees why
+without reaching the terminal running the backend, and it was measured to
+matter: during the in-store run the reason lived only in a cmux tab nobody was
+looking at, while the page said *no pudo preguntar a cmux* and nothing else.
 
 When cmux answers with a schema this backend does not read, the reason names
 the fields that **did** arrive. That one line is what tells a stale cmux apart
 from a broken one: the machine this was measured on answered with `title` and no
 `custom_title`, which is the shape of an older build still serving the socket.
 
-Why it could not be asked never reaches this answer — a person reading the page
-can do nothing with `Unknown command: workspace`. It goes to the backend's
-error channel, prefixed `plans in flight:`, in cmux's own words, and
-`GET /external-tools` answers the same question ahead of time in its `cmux` row.
+The same reason also goes to the backend's error channel, prefixed
+`plans in flight:`, and `GET /external-tools` answers the same question ahead of
+time in its `cmux` row.
 
 ```
 curl -s http://127.0.0.1:8787/active-plans
@@ -405,7 +411,7 @@ these failed at the moment it was used, mid-flow, in the tool's own words.
 Five of them are asked about a credential. `cmux` is asked about something else
 — whether it answers the query this backend recovers plans with — because that
 is what fails first on a machine whose cmux is too old or that is running this
-backend from outside cmux, and it fails as `GET /active-plans` answering 503
+backend from outside cmux, and it fails as `GET /active-plans` refusing
 forever.
 
 **200 OK**

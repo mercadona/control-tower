@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.js'
+import { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.js'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.js'
 import { PlanSessions } from '../../src/infrastructure/plan-events-route.js'
 import { DiskImplementationStartRegistry } from '../../src/infrastructure/disk-implementation-start-registry.js'
@@ -48,7 +49,7 @@ describe('ActivePlanRecovery', () => {
       root: '/state',
     })
     const checkouts = { remembered: [], remember(root) { this.remembered.push(root.text) } }
-    const plans = { inFlight: vi.fn(async () => watches) }
+    const plans = { inFlight: vi.fn(async () => (watches === null ? PlansInFlight.refused('cmux said no') : PlansInFlight.listed(watches))) }
     const recovery = new ActivePlanRecovery({
       plans,
       checkouts,
@@ -77,7 +78,7 @@ describe('ActivePlanRecovery', () => {
   it('a_valid_go_without_an_implementation_marker_recovers_as_uncertain', async () => {
     const recovered = fixture({ go: true })
 
-    expect(await recovered.recovery.recover()).toBe(true)
+    expect(await recovered.recovery.recover()).toBeNull()
 
     expect(recovered.sessions.known()).toEqual([])
     expect(recovered.reviews.startRecovered).not.toHaveBeenCalled()
@@ -91,7 +92,7 @@ describe('ActivePlanRecovery', () => {
     const implementationProgress = { of: vi.fn(async () => runState) }
     const recovered = fixture({ go: true, implementationProgress })
 
-    expect(await recovered.recovery.recover()).toBe(true)
+    expect(await recovered.recovery.recover()).toBeNull()
 
     expect(implementationProgress.of).toHaveBeenCalledWith({ root: expect.objectContaining({ text: '/repo' }), issue: 45 })
     expect(recovered.sessions.known()).toEqual([])
@@ -105,7 +106,7 @@ describe('ActivePlanRecovery', () => {
     }) }
     const recovered = fixture({ go: true, implementationProgress })
 
-    expect(await recovered.recovery.recover()).toBe(true)
+    expect(await recovered.recovery.recover()).toBeNull()
 
     expect(recovered.activePlans.known()[0].phase).toBe('uncertain')
   })
@@ -114,7 +115,7 @@ describe('ActivePlanRecovery', () => {
     const implementationProgress = { of: vi.fn(async () => ImplementationState.starting()) }
     const recovered = fixture({ go: true, implementationProgress })
 
-    expect(await recovered.recovery.recover()).toBe(true)
+    expect(await recovered.recovery.recover()).toBeNull()
 
     expect(recovered.activePlans.known()[0].phase).toBe('uncertain')
   })
@@ -126,7 +127,7 @@ describe('ActivePlanRecovery', () => {
     const implementationProgress = { of: vi.fn(async () => runState) }
     const recovered = fixture({ go: true, implementationProgress })
 
-    expect(await recovered.recovery.recover()).toBe(true)
+    expect(await recovered.recovery.recover()).toBeNull()
 
     expect(recovered.activePlans.known()[0].phase).toBe('uncertain')
   })
@@ -234,17 +235,17 @@ describe('ActivePlanRecovery', () => {
   it('does_not_start_a_second_review_when_recovery_is_repeated', async () => {
     const recovered = fixture()
 
-    expect(await recovered.recovery.recover()).toBe(true)
-    expect(await recovered.recovery.recover()).toBe(true)
+    expect(await recovered.recovery.recover()).toBeNull()
+    expect(await recovered.recovery.recover()).toBeNull()
 
     expect(recovered.sessions.known()).toHaveLength(1)
     expect(recovered.reviews.startRecovered).toHaveBeenCalledOnce()
   })
 
-  it('recovers_nothing_when_the_plans_in_flight_could_not_be_listed', async () => {
+  it('recovers_nothing_and_hands_over_the_reason_when_the_plans_in_flight_could_not_be_listed', async () => {
     const recovered = fixture({ watches: null })
 
-    expect(await recovered.recovery.recover()).toBe(false)
+    expect(await recovered.recovery.recover()).toBe('cmux said no')
     expect(recovered.activePlans.known()).toEqual([])
     expect(recovered.reviews.startRecovered).not.toHaveBeenCalled()
   })

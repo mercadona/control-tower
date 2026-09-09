@@ -82,13 +82,9 @@ export class ActivePlansRoute {
 
   static handledBy(activePlans, recovery = null) {
     return async (request, response) => {
-      if (recovery !== null && !(await recovery.recover())) {
-        Answer.refuse(
-          response,
-          503,
-          ActivePlansOutcome.RECOVERY_INCONCLUSIVE,
-          'active plans could not be recovered conclusively'
-        )
+      const refusal = recovery === null ? null : await recovery.recover()
+      if (refusal !== null) {
+        Answer.refuse(response, 400, ActivePlansOutcome.RECOVERY_INCONCLUSIVE, refusal)
         return
       }
       Answer.send(response, 200, { plans: activePlans.known() })

@@ -97,7 +97,7 @@ describe('the backend and the plugin answer the same question about a directory 
       ref: 'workspace:97',
     }])
 
-    const [watch] = await TheSameQuestion.askedOfTheBackend()
+    const [watch] = (await TheSameQuestion.askedOfTheBackend()).watches
 
     expect(TheSameQuestion.askedOfThePlugin()).toEqual({ consultado: true, ref: 'workspace:97' })
     expect(watch.agent).toBe('workspace:97')
@@ -107,7 +107,7 @@ describe('the backend and the plugin answer the same question about a directory 
     cmux.saying([{ custom_title: TheSameQuestion.TITLE, ref: 'workspace:97' }])
 
     expect(TheSameQuestion.askedOfThePlugin()).toEqual({ consultado: false, ref: null })
-    expect(await TheSameQuestion.askedOfTheBackend()).toBeNull()
+    expect((await TheSameQuestion.askedOfTheBackend()).wereListed).toBe(false)
   })
 
   it('a_session_that_shows_a_different_directory_is_answered_as_absent_by_both', async () => {
@@ -118,6 +118,6 @@ describe('the backend and the plugin answer the same question about a directory 
     }])
 
     expect(TheSameQuestion.askedOfThePlugin()).toEqual({ consultado: true, ref: null })
-    expect(await TheSameQuestion.askedOfTheBackend()).toEqual([])
+    expect((await TheSameQuestion.askedOfTheBackend()).watches).toEqual([])
   })
 })
