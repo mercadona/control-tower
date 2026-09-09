@@ -362,7 +362,7 @@ describe('ct-api entrypoint', () => {
     }
   })
 
-  it('plan_events_refuses_an_issue_this_process_never_watched_instead_of_crashing_for_want_of_a_review_log', async () => {
+  it('plan_events_is_composed_in_the_real_process_and_refuses_an_issue_it_never_watched', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })
 
     const response = await fetch(`http://127.0.0.1:${port}/plan-events/54?repo=jjponz%2Frepo-pulse`)
