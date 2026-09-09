@@ -2,7 +2,7 @@ import { CmuxPlanAgents } from './cmux-plan-agents.js'
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.js'
 import { PlanIssue } from '../domain/value-objects/plan-issue.js'
 import { PlanWatch } from '../domain/value-objects/plan-watch.js'
-import { PlanFailure } from '../domain/exceptions.js'
+import { PlanStoryFailure, WorkspaceFailure } from '../domain/exceptions.js'
 
 export class WorktreePlans {
   static #UNDER_A_CHECKOUT = /^(.+)\/\.worktrees\/[1-9]\d*$/
@@ -21,22 +21,21 @@ export class WorktreePlans {
   }
 
   static #opensAPlan(entry) {
-    return CmuxPlanAgents.isHandle(entry.ref) &&
+    return entry !== null && typeof entry === 'object' && CmuxPlanAgents.isHandle(entry.ref) &&
       typeof entry.title === 'string' && entry.title.startsWith(CmuxPlanAgents.NAME_PREFIX)
   }
 
   #agentOf(knowable, worktree) {
+    const canonical = this.#canonical(worktree)
     const attending = knowable.find((entry) =>
-      WorktreePlans.#opensAPlan(entry) && this.#sameDirectory(entry.cwd, worktree))
+      WorktreePlans.#opensAPlan(entry) &&
+      (entry.cwd === worktree || (canonical !== null && this.#canonical(entry.cwd) === canonical)))
 
     return attending === undefined ? null : attending.ref
   }
 
-  #sameDirectory(said, worktree) {
-    if (said === worktree) return true
-    const canonical = this.realpathOf(worktree)
-
-    return canonical !== null && said === canonical
+  #canonical(path) {
+    return path === null ? null : this.realpathOf(path)
   }
 
   #toSurvey(knowable) {
@@ -46,15 +45,17 @@ export class WorktreePlans {
     for (const entry of knowable) {
       if (!WorktreePlans.#opensAPlan(entry)) continue
       const found = entry.cwd.match(WorktreePlans.#UNDER_A_CHECKOUT)
-      if (found === null || roots.has(found[1]) || !CheckoutRoot.isWellFormed(found[1])) continue
-      roots.set(found[1], new CheckoutRoot(found[1]))
+      if (found === null) continue
+      const named = this.#canonical(found[1]) ?? found[1]
+      if (roots.has(named) || !CheckoutRoot.isWellFormed(named)) continue
+      roots.set(named, new CheckoutRoot(named))
     }
 
     return [...roots.values()]
   }
 
   static #knowableIn(listed) {
-    const knowable = listed.filter((entry) => entry.cwdKnown === true)
+    const knowable = listed.filter((entry) => entry !== null && typeof entry === 'object' && entry.cwdKnown === true)
     if (listed.length > 0 && knowable.length === 0) return null
 
     return knowable
@@ -101,7 +102,7 @@ export class WorktreePlans {
     try {
       return await this.survey(root)
     } catch (failure) {
-      if (!(failure instanceof PlanFailure)) throw failure
+      if (!(failure instanceof WorkspaceFailure)) throw failure
       this.stderr(
         `plans in flight: ${root.text} could not be surveyed, so its plans are not recovered: ${failure.message}\n`
       )
@@ -114,7 +115,7 @@ export class WorktreePlans {
     try {
       return await this.story({ issueNumber, repository })
     } catch (failure) {
-      if (!(failure instanceof PlanFailure)) throw failure
+      if (!(failure instanceof PlanStoryFailure)) throw failure
       this.stderr(`plans in flight: #${issueNumber} is recovered without its user story: ${failure.message}\n`)
 
       return null

@@ -223,7 +223,7 @@ export class GhPlanIssues extends PlanIssues {
   }
 
   static storyArgvFor({ issueNumber, repository }) {
-    return ['issue', 'view', String(issueNumber), '--repo', repository.text, '--json', 'title,body']
+    return ['issue', 'view', String(issueNumber), '--repo', repository.text, '--json', 'body']
   }
 
   async storyOf({ issueNumber, repository }) {
@@ -232,7 +232,7 @@ export class GhPlanIssues extends PlanIssues {
     )
     if (outcome.failed) {
       throw new PlanStoryNotRead(
-        `${Gh.BIN} issue view --json title,body failed: ${outcome.stderr.trim()}`
+        `${Gh.BIN} issue view --json body failed: ${outcome.stderr.trim()}`
       )
     }
 
@@ -245,12 +245,12 @@ export class GhPlanIssues extends PlanIssues {
       view = JSON.parse(printed)
     } catch {
       throw new PlanStoryNotUnderstood(
-        `${Gh.BIN} issue view --json title,body printed something that is not json for #${issueNumber}: ${JSON.stringify(printed)}`
+        `${Gh.BIN} issue view --json body printed something that is not json for #${issueNumber}: ${JSON.stringify(printed)}`
       )
     }
-    if (view === null || typeof view.title !== 'string' || typeof view.body !== 'string') {
+    if (view === null || typeof view.body !== 'string') {
       throw new PlanStoryNotUnderstood(
-        `${Gh.BIN} issue view --json title,body printed no title and body for #${issueNumber}: ${JSON.stringify(printed)}`
+        `${Gh.BIN} issue view --json body printed no body for #${issueNumber}: ${JSON.stringify(printed)}`
       )
     }
 
@@ -316,6 +316,7 @@ export class PlanIssueBody {
   static COMMENT_SECTION = 'Comentario de quien pide el plan'
   static COMMENT_HEADING = `## ${PlanIssueBody.COMMENT_SECTION}`
   static NO_STORY_LINE = '> Plan pedido a mano: no hay historia de usuario en Jira.'
+  static STORY_LINE = '> Historia de usuario: '
   static NO_STORY_EPIC_CONTEXT = '_El plan no viene de una historia de usuario de Jira._'
   static NO_HEADLINE = '_El comentario no trae una primera línea que resuma lo que se pide._'
   static HEADLINE_LIMIT = 72
@@ -331,11 +332,12 @@ export class PlanIssueBody {
     return [...gateLabels(gatesOf(PlanIssueBody.rowFor({ story, comment })).gates), GhPlanIssues.READY_LABEL]
   }
 
-  static storyIn({ title, body }) {
-    if (typeof body === 'string' && body.includes(PlanIssueBody.NO_STORY_LINE)) return null
-    const opening = title.trim().split(/\s+/)[0]
+  static storyIn({ body }) {
+    const named = body.split('\n').find((line) => line.startsWith(PlanIssueBody.STORY_LINE))
+    if (named === undefined) return null
+    const key = named.slice(PlanIssueBody.STORY_LINE.length).trim()
 
-    return UserStoryKey.isWellFormed(opening) ? new UserStoryKey(opening) : null
+    return UserStoryKey.isWellFormed(key) ? new UserStoryKey(key) : null
   }
 
   static titleFor({ story, comment }) {
@@ -387,7 +389,7 @@ export class PlanIssueBody {
     const row = PlanIssueBody.rowFor({ story, comment })
 
     return [
-      story === null ? PlanIssueBody.NO_STORY_LINE : `> Historia de usuario: ${story.key}`,
+      story === null ? PlanIssueBody.NO_STORY_LINE : `${PlanIssueBody.STORY_LINE}${story.key}`,
       PlanIssueBody.CHANGES_LINE,
       '',
       PlanIssueBody.DESCRIPTION_HEADING,

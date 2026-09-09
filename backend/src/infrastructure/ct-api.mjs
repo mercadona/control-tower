@@ -401,6 +401,7 @@ class CtApi {
       CtApi.#refuseListen(`could not listen on ${LOOPBACK}: ${error.message}`)
     }
     process.stdout.write(`${JSON.stringify({ port })}\n`)
+    await recovery.recover()
     CtApi.#sweepUntilItBreaks(CtApi.#harvestClock({
       workspace, checkouts, environment, harvestTable: asked.harvestTable,
     }))

@@ -4,6 +4,7 @@ import { CheckoutRoot } from '../domain/value-objects/checkout-root.js'
 
 export class DiskCheckoutRegistry extends CheckoutRegistry {
   static FILE = 'checkouts.json'
+  static #NOTHING_WRITTEN = []
 
   constructor({ read, stat, write, stderr, root }) {
     super()
@@ -53,21 +54,20 @@ export class DiskCheckoutRegistry extends CheckoutRegistry {
 
   #stored() {
     const path = DiskCheckoutRegistry.#pathFor(this.root)
-    if (!this.#present(path)) return []
+    const seen = DiskCheckoutRegistry.#NOTHING_WRITTEN
+    let found
+    try {
+      found = this.stat(path)
+    } catch (failure) {
+      return failure.code === 'ENOENT' ? seen : null
+    }
+    if (!found.isFile()) return null
     try {
       const record = JSON.parse(this.read(path))
 
       return Array.isArray(record?.roots) ? record.roots : null
     } catch {
       return null
-    }
-  }
-
-  #present(path) {
-    try {
-      return this.stat(path).isFile()
-    } catch {
-      return false
     }
   }
 }

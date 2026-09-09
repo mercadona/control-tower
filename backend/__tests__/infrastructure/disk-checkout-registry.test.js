@@ -5,11 +5,14 @@ import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.js'
 
 class StoredCheckouts {
   static A_FILE = { isFile: () => true }
-  static NOT_A_FILE = { isFile: () => false }
 
-  static empty(write = vi.fn()) {
+  static #missing() {
+    throw Object.assign(new Error('no such file or directory'), { code: 'ENOENT' })
+  }
+
+  static empty(write = vi.fn(), stderr = vi.fn()) {
     return new DiskCheckoutRegistry({
-      read: vi.fn(), stat: () => StoredCheckouts.NOT_A_FILE, write, stderr: vi.fn(), root: '/state',
+      read: vi.fn(), stat: StoredCheckouts.#missing, write, stderr, root: '/state',
     })
   }
 
@@ -93,6 +96,30 @@ describe('DiskCheckoutRegistry', () => {
     expect(StoredCheckouts.unreadable('null\n').known()).toBeNull()
   })
 
+  it('a_path_it_cannot_even_look_at_is_not_the_same_as_nothing_written_yet', () => {
+    const registry = new DiskCheckoutRegistry({
+      read: vi.fn(),
+      stat: () => { throw Object.assign(new Error('input/output error'), { code: 'EIO' }) },
+      write: vi.fn(),
+      stderr: vi.fn(),
+      root: '/state',
+    })
+
+    expect(registry.known()).toBeNull()
+  })
+
+  it('a_registry_that_is_a_directory_is_not_the_same_as_nothing_written_yet', () => {
+    const registry = new DiskCheckoutRegistry({
+      read: vi.fn(),
+      stat: () => ({ isFile: () => false }),
+      write: vi.fn(),
+      stderr: vi.fn(),
+      root: '/state',
+    })
+
+    expect(registry.known()).toBeNull()
+  })
+
   it('a_registry_it_cannot_read_is_left_alone_instead_of_being_overwritten_with_the_one_checkout_it_knows', () => {
     const write = vi.fn()
     const stderr = vi.fn()
@@ -105,13 +132,10 @@ describe('DiskCheckoutRegistry', () => {
 
   it('a_registry_it_cannot_write_does_not_bring_down_the_plan_that_was_already_launched', () => {
     const stderr = vi.fn()
-    const registry = new DiskCheckoutRegistry({
-      read: vi.fn(),
-      stat: () => StoredCheckouts.NOT_A_FILE,
-      write: () => { throw Object.assign(new Error('permission denied'), { code: 'EACCES' }) },
-      stderr,
-      root: '/state',
-    })
+    const registry = StoredCheckouts.empty(
+      () => { throw Object.assign(new Error('permission denied'), { code: 'EACCES' }) },
+      stderr
+    )
 
     expect(() => registry.remember(new CheckoutRoot('/repos/one'))).not.toThrow()
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining('permission denied'))
@@ -121,7 +145,11 @@ describe('DiskCheckoutRegistry', () => {
     let stored = null
     const registry = new DiskCheckoutRegistry({
       read: () => stored,
-      stat: () => (stored === null ? StoredCheckouts.NOT_A_FILE : StoredCheckouts.A_FILE),
+      stat: () => {
+        if (stored === null) throw Object.assign(new Error('no such file or directory'), { code: 'ENOENT' })
+
+        return StoredCheckouts.A_FILE
+      },
       write: (path, text) => { stored = text },
       stderr: vi.fn(),
       root: '/state',

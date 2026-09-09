@@ -236,12 +236,67 @@ describe('WorktreePlans', () => {
   it('a_session_sitting_in_the_same_place_through_a_symlink_still_names_its_agent', async () => {
     const plans = PlansOf.aWorktreeAttendedBy(
       () => SessionsOfCmux.attending('/private/repos/one/.worktrees/33'),
-      { realpathOf: (path) => path.replace('/repos/one', '/private/repos/one') }
+      { realpathOf: (path) => path.replace(/^\/(private\/)?repos\/one/, '/private/repos/one') }
     )
 
     const [watch] = await plans.inFlight()
 
     expect(watch.agent).toBe('workspace:20')
+  })
+
+  it('a_session_that_names_the_logical_path_while_git_names_the_physical_one_still_names_its_agent', async () => {
+    const plans = PlansOf.aWorktreeAttendedBy(
+      () => SessionsOfCmux.attending('/logical/one/.worktrees/33'),
+      { realpathOf: (path) => path.replace(/^\/(logical|repos)\/one/, '/physical/one') }
+    )
+
+    const [watch] = await plans.inFlight()
+
+    expect(watch.agent).toBe('workspace:20')
+  })
+
+  it('the_checkout_a_session_names_is_surveyed_by_the_path_git_itself_uses', async () => {
+    const surveyed = []
+    const plans = new WorktreePlans({
+      checkouts: { known: () => [] },
+      survey: (root) => {
+        surveyed.push(root.text)
+
+        return SurveyedCheckout.of(root.text, [])
+      },
+      sessions: () => SessionsOfCmux.attending('/logical/one/.worktrees/33'),
+      story: () => null,
+      realpathOf: (path) => path.replace('/logical/one', '/physical/one'),
+      stderr: vi.fn(),
+    })
+
+    await plans.inFlight()
+
+    expect(surveyed).toEqual(['/physical/one'])
+  })
+
+  it('an_entry_that_is_not_an_object_does_not_take_the_whole_recovery_down_with_it', async () => {
+    const plans = PlansOf.aWorktreeAttendedBy(() => [
+      null,
+      ...SessionsOfCmux.attending('/repos/one/.worktrees/33'),
+    ])
+
+    const [watch] = await plans.inFlight()
+
+    expect(watch.agent).toBe('workspace:20')
+  })
+
+  it('a_failure_of_another_kind_of_domain_is_not_swallowed_as_this_checkout_having_no_plans', async () => {
+    const plans = new WorktreePlans({
+      checkouts: { known: () => [new CheckoutRoot('/repos/one')] },
+      survey: () => { throw new PlanStoryNotRead('a failure that is not the survey\'s') },
+      sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
+      story: () => null,
+      realpathOf: (path) => path,
+      stderr: vi.fn(),
+    })
+
+    await expect(plans.inFlight()).rejects.toBeInstanceOf(PlanStoryNotRead)
   })
 
   it('a_failure_that_is_not_the_ones_this_reader_degrades_travels_out_instead_of_passing_for_nothing', async () => {

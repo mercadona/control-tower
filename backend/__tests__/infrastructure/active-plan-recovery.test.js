@@ -47,8 +47,11 @@ describe('ActivePlanRecovery', () => {
       write: vi.fn(),
       root: '/state',
     })
+    const checkouts = { remembered: [], remember(root) { this.remembered.push(root.text) } }
+    const plans = { inFlight: vi.fn(async () => watches) }
     const recovery = new ActivePlanRecovery({
-      plans: { inFlight: vi.fn(async () => watches) },
+      plans,
+      checkouts,
       implementationStarts,
       goRegistry: { matches: vi.fn(() => go) },
       implementationProgress,
@@ -58,7 +61,7 @@ describe('ActivePlanRecovery', () => {
       activePlans,
     })
 
-    return { recovery, sessions, activePlans, reviews, pullRequestReviews }
+    return { recovery, sessions, activePlans, reviews, pullRequestReviews, checkouts, plans }
   }
 
   it('a_plan_with_no_go_and_no_implementation_marker_recovers_as_planning', async () => {
@@ -209,6 +212,23 @@ describe('ActivePlanRecovery', () => {
 
     await expect(recovered.recovery.recover()).resolves.not.toThrow()
     expect(recovered.activePlans.known()[0].phase).toBe('planning')
+  })
+
+  it('the_checkout_of_a_plan_it_recovered_goes_back_to_the_registry_so_the_sweep_knows_that_clone', async () => {
+    const recovered = fixture()
+
+    await recovered.recovery.recover()
+
+    expect(recovered.checkouts.remembered).toEqual(['/repo'])
+  })
+
+  it('two_recoveries_at_once_run_the_recovery_once_so_nobody_gets_two_watches', async () => {
+    const recovered = fixture()
+
+    await Promise.all([recovered.recovery.recover(), recovered.recovery.recover()])
+
+    expect(recovered.plans.inFlight).toHaveBeenCalledOnce()
+    expect(recovered.reviews.startRecovered).toHaveBeenCalledOnce()
   })
 
   it('does_not_start_a_second_review_when_recovery_is_repeated', async () => {

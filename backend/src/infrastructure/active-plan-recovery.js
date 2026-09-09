@@ -4,10 +4,11 @@ import { ImplementationStep } from '../domain/value-objects/implementation-state
 
 export class ActivePlanRecovery {
   constructor({
-    plans, implementationStarts, goRegistry, implementationProgress,
+    plans, checkouts, implementationStarts, goRegistry, implementationProgress,
     sessions, reviews, pullRequestReviews, activePlans,
   }) {
     this.plans = plans
+    this.checkouts = checkouts
     this.implementationStarts = implementationStarts
     this.goRegistry = goRegistry
     this.implementationProgress = implementationProgress
@@ -16,6 +17,7 @@ export class ActivePlanRecovery {
     this.pullRequestReviews = pullRequestReviews
     this.activePlans = activePlans
     this.conclusive = false
+    this.recovering = null
   }
 
   async #workIsUnderway(watch) {
@@ -39,9 +41,19 @@ export class ActivePlanRecovery {
 
   async recover() {
     if (this.conclusive) return true
+    this.recovering = this.recovering ?? this.#recover()
+    try {
+      return await this.recovering
+    } finally {
+      this.recovering = null
+    }
+  }
+
+  async #recover() {
     const watches = await this.plans.inFlight()
     if (watches === null) return false
     for (const watch of watches) {
+      this.checkouts.remember(new CheckoutRoot(watch.located.root))
       if (this.activePlans.find({ issue: watch.issue.number, repository: watch.repository }) !== null) continue
       if (this.implementationStarts.matches(watch)) {
         this.#rememberImplementing(watch)
