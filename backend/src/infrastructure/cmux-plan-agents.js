@@ -7,7 +7,7 @@ import {
   SENTINEL_FILENAME,
 } from '../../../plugin/scripts/launch-sentinel.js'
 import { shQuote } from '../../../plugin/scripts/shquote.js'
-import { PlanAgents } from '../domain/ports/plan-agents.js'
+import { PlanAgents } from '../domain/ports/plan-agents.ts'
 import { LaunchStep } from '../domain/policies/launch-policy.ts'
 import { PlanAgentNotLaunched, PlanAgentNotNamed, PlanAgentNotResumed } from '../domain/exceptions.ts'
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { ImplementPlan, ImplementPlanParams } from '../../src/application/actions/implement-plan.js'
-import { PlanAgents } from '../../src/domain/ports/plan-agents.js'
-import { PlanIssues } from '../../src/domain/ports/plan-issues.js'
+import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
+import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
 import { GoRegistry } from '../../src/domain/ports/go-registry.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import {
