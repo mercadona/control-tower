@@ -215,6 +215,10 @@ const Home = () => {
     setExpandedSummary(null)
     setRequestFormVersion((version) => version + 1)
     WorkflowSnapshotStorage.remove()
+  }
+
+  const discardStaleWorkflow = () => {
+    discardWorkflow()
     void reconcile()
   }
 
@@ -262,7 +266,7 @@ const Home = () => {
             title="El plan guardado ya no está activo"
             description="El backend o cmux ya no tiene este plan activo. Descarta el estado para crear una solicitud nueva."
           />
-          <Button variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
+          <Button variant="secondary" onClick={discardStaleWorkflow}>Descartar estado</Button>
         </div>
       )}
       {reconciliation === 'unavailable' && (
@@ -403,7 +407,7 @@ const Home = () => {
                 plan={workflow.plan}
                 onReady={planReady}
                 onReviewing={planReviewing}
-                observe={workflow.phase !== 'implementing' && restoredIsConfirmed}
+                observe={restoredIsConfirmed}
               />
               {workflow.phase === 'ready' && restoredIsConfirmed && (
                 <div className="home__review-action">

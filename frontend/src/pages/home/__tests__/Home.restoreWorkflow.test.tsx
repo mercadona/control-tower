@@ -274,19 +274,16 @@ describe('Home · restore workflow', () => {
     await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
   })
 
-  it('should discard an uncertain candidate and unlock a fresh request', async () => {
-    const fetching = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ plans: [activePlan('uncertain')] }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(activePlansAnswer().body, { status: 200 }))
-    withReadyTools(fetching)
+  it('should discard an uncertain candidate and unlock a fresh request even if the backend still reports it', async () => {
+    const fetching = backendRecovering(activePlansAnswer(activePlan('uncertain')))
     const { user } = openHome()
     await screen.findByRole('alert')
 
     await user.click(screen.getByRole('button', { name: 'Descartar estado' }))
 
-    expect(await screen.findByLabelText('Ticket')).toBeEnabled()
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
-    expect(fetching).toHaveBeenCalledTimes(2)
+    expect(fetching).toHaveBeenCalledTimes(1)
   })
 
   it.each(['planning', 'ready'] as const)('should reconcile restored %s with backend planning', async (phase) => {

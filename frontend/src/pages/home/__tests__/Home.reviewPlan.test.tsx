@@ -3,6 +3,7 @@ import { ImplementPlanMother } from '__scenarios__/ImplementPlanMother'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { backendAnswering, openHome, startPlan, streamFrame } from './helpers'
+import { FakeEventSource } from './FakeEventSource'
 
 const ASK_BUTTON = { name: 'Pedir cambios' }
 const READ_LINK = { name: 'Abrir el plan en GitHub' }
@@ -46,6 +47,7 @@ describe('Home · review plan', () => {
     await planStarted()
     await streamFrame(PlanEventsMother.ready())
     expect(screen.getByRole('button', { name: 'Implementar plan' })).toBeInTheDocument()
+    expect(FakeEventSource.last().closes).toBe(0)
 
     await streamFrame(PlanEventsMother.reviewing())
 

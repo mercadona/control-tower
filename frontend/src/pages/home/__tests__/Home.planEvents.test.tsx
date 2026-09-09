@@ -47,7 +47,7 @@ describe('Home · plan events', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Escribiendo el plan…')
   })
 
-  it('keeps a ready plan in review and stops listening', async () => {
+  it('should keep a ready plan in review and keep listening in case a review reworks it', async () => {
     await planStarted()
 
     await streamFrame(PlanEventsMother.writing())
@@ -57,7 +57,7 @@ describe('Home · plan events', () => {
     expect(screen.getByText('El plan está listo. Revísalo antes de decidir si quieres implementarlo.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Implementar plan' })).toBeEnabled()
     expect(screen.getByRole('navigation', { name: 'Flujo del plan' }).querySelector('[aria-current="step"]')).toHaveTextContent('Revisar plan')
-    expect(FakeEventSource.last().closes).toBe(1)
+    expect(FakeEventSource.last().closes).toBe(0)
   })
 
   it('should say the backend is unreachable when the stream fails before any frame', async () => {
@@ -69,14 +69,14 @@ describe('Home · plan events', () => {
     expect(FakeEventSource.last().closes).toBe(1)
   })
 
-  it('should ignore the connection error the browser fires once the plan is ready', async () => {
+  it('should report the backend as unreachable if the connection drops once the plan is ready', async () => {
     await planStarted()
 
     await streamFrame(PlanEventsMother.ready())
     await dropStream()
 
     expect(screen.getByRole('heading', { name: 'Revisar plan' })).toBeInTheDocument()
-    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
     expect(FakeEventSource.last().closes).toBe(1)
   })
 

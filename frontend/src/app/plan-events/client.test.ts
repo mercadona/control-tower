@@ -43,12 +43,12 @@ describe('PlanEventsClient', () => {
     expect(states).toEqual(['writing', 'ready'])
   })
 
-  it('should close the stream once the last state arrives', () => {
+  it('should keep listening once the plan reaches ready, since a review can still rework it', () => {
     listenTo()
 
     FakeEventSource.last().receive(PlanEventsMother.ready())
 
-    expect(FakeEventSource.last().closes).toBe(1)
+    expect(FakeEventSource.last().closes).toBe(0)
   })
 
   it('should report a failure frame with its code, and keep listening', () => {
@@ -87,13 +87,13 @@ describe('PlanEventsClient', () => {
     expect(unreachables()).toBe(0)
   })
 
-  it('should ignore a connection error the browser fires once the plan is ready', () => {
+  it('should report the connection as unreachable when it drops after the plan is ready', () => {
     const { unreachables } = listenTo()
 
     FakeEventSource.last().receive(PlanEventsMother.ready())
     FakeEventSource.last().dropConnection()
 
-    expect(unreachables()).toBe(0)
+    expect(unreachables()).toBe(1)
     expect(FakeEventSource.last().closes).toBe(1)
   })
 
