@@ -351,12 +351,12 @@ class CtApi {
     })
     const pullRequestReviews = CtApi.#pullRequestReviews(pullRequests, planIssues, planAgents, workbench)
     const runFileProgress = new RunFileProgress({ read: Disk.read, exists: Disk.exists })
+    const surveyWorkspaces = new SurveyWorkspaces({ workspace })
     const readPlanStory = new ReadPlanStory({ planIssues })
     const recovery = new ActivePlanRecovery({
       plans: new WorktreePlans({
         checkouts,
-        survey: async (root) => (await new SurveyWorkspaces({ workspace })
-          .execute(new SurveyWorkspacesParams({ root }))).survey,
+        survey: async (root) => (await surveyWorkspaces.execute(new SurveyWorkspacesParams({ root }))).survey,
         sessions: () => listCmuxWorkspaces({ requireComplete: true }),
         realpathOf: Disk.realpathOf,
         story: async (subject) => (await readPlanStory.execute(new ReadPlanStoryParams(subject))).story,
