@@ -3,6 +3,7 @@ import { CheckoutRoot } from '../domain/value-objects/checkout-root.js'
 import { PlanIssue } from '../domain/value-objects/plan-issue.js'
 import { PlanWatch } from '../domain/value-objects/plan-watch.js'
 import { PlanStoryFailure, WorkspaceFailure } from '../domain/exceptions.js'
+import { PlansInFlight } from '../domain/value-objects/plans-in-flight.js'
 
 export class WorktreePlans {
   static #UNDER_A_CHECKOUT = /^(.+)\/\.worktrees\/[1-9]\d*$/
@@ -63,17 +64,23 @@ export class WorktreePlans {
 
   async inFlight() {
     const listed = this.sessions()
-    if (listed === null) return null
-    const knowable = WorktreePlans.#knowableIn(listed)
-    if (knowable === null) return null
+    if (!listed.wasAnswered) return this.#refuse(listed.reason)
+    const knowable = WorktreePlans.#knowableIn(listed.entries)
+    if (knowable === null) return this.#refuse('cmux listed sessions and none of them exposes its directory')
     const roots = this.#toSurvey(knowable)
-    if (roots === null) return null
+    if (roots === null) return this.#refuse('the checkouts it serves could not be read')
     const watches = []
     for (const root of roots) {
       for (const watch of await this.#of(root, knowable)) watches.push(watch)
     }
 
-    return watches
+    return PlansInFlight.listed(watches)
+  }
+
+  #refuse(reason) {
+    this.stderr(`plans in flight: ${reason}, so no plan in flight can be recovered\n`)
+
+    return PlansInFlight.refused(reason)
   }
 
   async #of(root, knowable) {

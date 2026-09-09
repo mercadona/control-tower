@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { findWorkspaceByCwd, listCmuxWorkspaces } from '../../../plugin/scripts/cmux.js'
+import { CmuxWorkspaceQuery, findWorkspaceByCwd } from '../../../plugin/scripts/cmux.js'
 import { WorktreePlans } from '../../src/infrastructure/worktree-plans.js'
 import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.js'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.js'
@@ -71,7 +71,7 @@ class TheSameQuestion {
           }),
         })],
       }),
-      sessions: () => listCmuxWorkspaces({ requireComplete: true }),
+      sessions: () => CmuxWorkspaceQuery.ask({ requireComplete: true }),
       story: () => null,
       realpathOf: (path) => path,
       stderr: vi.fn(),
@@ -97,7 +97,7 @@ describe('the backend and the plugin answer the same question about a directory 
       ref: 'workspace:97',
     }])
 
-    const [watch] = await TheSameQuestion.askedOfTheBackend()
+    const [watch] = (await TheSameQuestion.askedOfTheBackend()).watches
 
     expect(TheSameQuestion.askedOfThePlugin()).toEqual({ consultado: true, ref: 'workspace:97' })
     expect(watch.agent).toBe('workspace:97')
@@ -107,7 +107,7 @@ describe('the backend and the plugin answer the same question about a directory 
     cmux.saying([{ custom_title: TheSameQuestion.TITLE, ref: 'workspace:97' }])
 
     expect(TheSameQuestion.askedOfThePlugin()).toEqual({ consultado: false, ref: null })
-    expect(await TheSameQuestion.askedOfTheBackend()).toBeNull()
+    expect((await TheSameQuestion.askedOfTheBackend()).wereListed).toBe(false)
   })
 
   it('a_session_that_shows_a_different_directory_is_answered_as_absent_by_both', async () => {
@@ -118,6 +118,6 @@ describe('the backend and the plugin answer the same question about a directory 
     }])
 
     expect(TheSameQuestion.askedOfThePlugin()).toEqual({ consultado: true, ref: null })
-    expect(await TheSameQuestion.askedOfTheBackend()).toEqual([])
+    expect((await TheSameQuestion.askedOfTheBackend()).watches).toEqual([])
   })
 })

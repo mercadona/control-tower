@@ -27,7 +27,7 @@ import { RunFileProgress } from './run-file-progress.js'
 import { ActivePlans } from './active-plans-route.js'
 import { ActivePlanRecovery } from './active-plan-recovery.js'
 import { DiskImplementationStartRegistry } from './disk-implementation-start-registry.js'
-import { listCmuxWorkspaces } from '../../../plugin/scripts/cmux.js'
+import { CmuxWorkspaceQuery } from '../../../plugin/scripts/cmux.js'
 import { StartPlan } from '../application/actions/start-plan.js'
 import { ImplementPlan } from '../application/actions/implement-plan.js'
 import { AskPlanChanges } from '../application/actions/ask-plan-changes.js'
@@ -209,6 +209,10 @@ class CtApi {
     })
   }
 
+  static #askCmux() {
+    return CmuxWorkspaceQuery.ask({ requireComplete: true })
+  }
+
   static #toolSessions(environment) {
     const probes = ProbedToolSessions.PROBES.map((row) => row.probe).filter((probe) => probe !== null)
     const clients = Object.fromEntries(probes.map((bin) => [bin, CtApi.#talkingTo(bin, ExternalTool)]))
@@ -216,6 +220,7 @@ class CtApi {
     return new ProbedToolSessions({
       clients,
       lookUp: (bin) => Invocation.lookUp(bin, environment),
+      cmuxAnswers: () => CtApi.#askCmux().wasAnswered,
     })
   }
 
@@ -363,7 +368,7 @@ class CtApi {
       plans: new WorktreePlans({
         checkouts,
         survey: async (root) => (await surveyWorkspaces.execute(new SurveyWorkspacesParams({ root }))).survey,
-        sessions: () => listCmuxWorkspaces({ requireComplete: true }),
+        sessions: () => CtApi.#askCmux(),
         realpathOf: Disk.realpathOf,
         story: async (subject) => (await readPlanStory.execute(new ReadPlanStoryParams(subject))).story,
         stderr: (line) => process.stderr.write(line),

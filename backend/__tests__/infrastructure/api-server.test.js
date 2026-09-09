@@ -20,6 +20,7 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.js'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.js'
 import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.js'
+import { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.js'
 import { SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.js'
 
 class StartPlanSpy {
@@ -1238,32 +1239,33 @@ describe('ApiServer', () => {
   })
 
   it('active_plans_retries_inconclusive_recovery_and_refuses_unknown_state', async () => {
-    const recovery = { recover: vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true) }
+    const recovery = { recover: vi.fn().mockReturnValueOnce('cmux said no').mockReturnValueOnce(null) }
     const port = await RunningApi.listening({ recovery })
 
     const unknown = await fetch(`http://127.0.0.1:${port}/active-plans`)
     const recovered = await fetch(`http://127.0.0.1:${port}/active-plans`)
 
-    expect(unknown.status).toBe(503)
+    expect(unknown.status).toBe(400)
     expect(await unknown.json()).toEqual({
       code: 'active-plans-recovery-inconclusive',
-      detail: 'active plans could not be recovered conclusively',
+      detail: 'cmux said no',
     })
     expect(recovered.status).toBe(200)
     expect(await recovered.json()).toEqual({ plans: [] })
     expect(recovery.recover).toHaveBeenCalledTimes(2)
   })
 
-  it('active_plans_returns_503_when_the_plans_in_flight_could_not_be_listed', async () => {
-    const recovery = new ActivePlanRecovery({ plans: { inFlight: async () => null } })
+  it('the_detail_of_an_inconclusive_recovery_carries_what_cmux_answered_and_not_a_fixed_sentence', async () => {
+    const answered = 'cmux listed workspaces and none of them exposes custom_title: it answered with title'
+    const recovery = new ActivePlanRecovery({ plans: { inFlight: async () => PlansInFlight.refused(answered) } })
     const port = await RunningApi.listening({ recovery })
 
     const response = await fetch(`http://127.0.0.1:${port}/active-plans`)
 
-    expect(response.status).toBe(503)
+    expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
       code: 'active-plans-recovery-inconclusive',
-      detail: 'active plans could not be recovered conclusively',
+      detail: answered,
     })
   })
 })

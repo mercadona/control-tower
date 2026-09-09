@@ -103,14 +103,38 @@ export const CMUX_QUERY_TIMEOUT_MS = 5000
 // directorio. Quien consuma esto traduce `cwdKnown: false` a un estado propio
 // ('cwd-unknown' en `verifyCmuxLaunch`), jamás a 'wrong-cwd'.
 // ---------------------------------------------------------------------------
-export function listCmuxWorkspaces({
-  timeoutMs = CMUX_QUERY_TIMEOUT_MS, run = ejecutar, requireComplete = false,
-} = {}) {
-  try {
-    const windows = JSON.parse(run(['list-windows', '--json'], timeoutMs))
+export class CmuxAnswer {
+  static answered(entries) {
+    return new CmuxAnswer(entries, null)
+  }
+
+  static refused(reason) {
+    return new CmuxAnswer(null, reason)
+  }
+
+  constructor(entries, reason) {
+    this.entries = entries
+    this.reason = reason
+    Object.freeze(this)
+  }
+
+  get wasAnswered() {
+    return this.reason === null
+  }
+}
+
+export class CmuxWorkspaceQuery {
+  static ask({ timeoutMs = CMUX_QUERY_TIMEOUT_MS, run = ejecutar, requireComplete = false } = {}) {
+    let windows
+    try {
+      windows = JSON.parse(run(['list-windows', '--json'], timeoutMs))
+    } catch (cause) {
+      return CmuxWorkspaceQuery.#refused(`cmux could not be asked for its windows: ${CmuxWorkspaceQuery.#saidBy(cause)}`)
+    }
     const out = []
     let sawAnyWorkspaceEntry = false
     let sawAnyKnownTitleField = false
+    let fieldsSeen = []
     for (const w of (Array.isArray(windows) ? windows : [])) {
       if (!w || !w.id) continue
       try {
@@ -118,6 +142,7 @@ export function listCmuxWorkspaces({
         const workspaces = Array.isArray(parsed.workspaces) ? parsed.workspaces : []
         for (const ws of workspaces) {
           sawAnyWorkspaceEntry = true
+          if (ws !== null && typeof ws === 'object') fieldsSeen = Object.keys(ws)
           // El campo se da por CONOCIDO tanto si trae una cadena como si trae
           // `null`: `null` es cmux diciendo "esta workspace no tiene título
           // puesto" (lo corrobora su `has_custom_title: false`), y eso es una
@@ -139,22 +164,45 @@ export function listCmuxWorkspaces({
             out.push({ title: ws.custom_title, cwd: cwdKnown ? ws.current_directory : null, cwdKnown, ref })
           }
         }
-      } catch {
+      } catch (cause) {
         // The default mode keeps results from the other windows. Complete mode
         // cannot reach a conclusion if one window is missing.
-        if (requireComplete) return null
+        if (requireComplete) {
+          return CmuxWorkspaceQuery.#refused(
+            `cmux could not be asked for the workspaces of window ${w.id}: ${CmuxWorkspaceQuery.#saidBy(cause)}`
+          )
+        }
       }
     }
-    if (sawAnyWorkspaceEntry && !sawAnyKnownTitleField) return null
-    return out
-  } catch {
-    return null // cmux no instalado, daemon caído, o timeout: no concluyente.
+    if (sawAnyWorkspaceEntry && !sawAnyKnownTitleField) {
+      return CmuxWorkspaceQuery.#refused(
+        'cmux listed workspaces and none of them exposes custom_title: this is not the schema this reads, ' +
+        `it answered with ${fieldsSeen.join(', ')}`
+      )
+    }
+
+    return CmuxAnswer.answered(out)
   }
+
+  static #refused(reason) {
+    return CmuxAnswer.refused(reason)
+  }
+
+  static #saidBy(cause) {
+    const written = typeof cause.stderr === 'string' ? cause.stderr.trim() : ''
+    if (written === '') return cause.message
+
+    return cause.code === undefined ? written : `${cause.message}: ${written}`
+  }
+}
+
+export function listCmuxWorkspaces(opts = {}) {
+  return CmuxWorkspaceQuery.ask(opts).entries
 }
 
 function ejecutar(argv, timeoutMs) {
   return execFileSync('cmux', argv, {
-    encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: timeoutMs, killSignal: 'SIGKILL',
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs, killSignal: 'SIGKILL',
   })
 }
 

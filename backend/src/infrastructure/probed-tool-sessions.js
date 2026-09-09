@@ -24,25 +24,43 @@ export class ProbedToolSessions extends ToolSessions {
     },
   ]
 
+  static CMUX = {
+    tool: 'cmux', bin: 'cmux',
+    fix: 'update cmux and restart the app, then start this backend from a terminal inside cmux',
+  }
+
   static AUTHENTICATED = 'successfully authenticated'
 
-  constructor({ clients, lookUp }) {
+  constructor({ clients, lookUp, cmuxAnswers }) {
     super()
     this.clients = clients
     this.lookUp = lookUp
+    this.cmuxAnswers = cmuxAnswers
   }
 
   async all() {
     const sessions = []
     for (const row of ProbedToolSessions.PROBES) sessions.push(await this.#sessionFor(row))
+    sessions.push(this.#cmuxSession())
 
     return sessions
   }
 
+  #cmuxSession() {
+    const row = ProbedToolSessions.CMUX
+    const installed = this.lookUp(row.bin) !== null
+    const answered = installed && this.cmuxAnswers()
+
+    return ProbedToolSessions.#sessionOf(row, installed, answered ? SessionState.READY : SessionState.MISSING)
+  }
+
   async #sessionFor(row) {
     const installed = this.lookUp(row.bin) !== null
-    const state = await this.#resolvedState(row, installed)
 
+    return ProbedToolSessions.#sessionOf(row, installed, await this.#resolvedState(row, installed))
+  }
+
+  static #sessionOf(row, installed, state) {
     return new ToolSession({
       tool: row.tool,
       installed,

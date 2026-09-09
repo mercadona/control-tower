@@ -158,6 +158,32 @@ class ACmuxAttendingOnePlan {
   }
 }
 
+class ACmuxThatRefusesTheConnection {
+  static SCRIPT = [
+    '#!/bin/sh',
+    'echo "Error: ERROR: Access denied - only processes started inside cmux can connect" >&2',
+    'exit 1',
+  ].join('\n')
+
+  static async onThePath() {
+    const directory = await mkdtemp(join(tmpdir(), 'ct-api-cmux-refusing-'))
+    const binary = join(directory, 'cmux')
+    await writeFile(binary, `${ACmuxThatRefusesTheConnection.SCRIPT}\n`, { mode: 0o755 })
+
+    return { directory, path: `${directory}:${process.env.PATH}` }
+  }
+}
+
+class ExternalTools {
+  static async cmuxRowOf(port) {
+    const response = await fetch(`http://127.0.0.1:${port}/external-tools`)
+    const body = await response.json()
+    const row = body.tools.find((candidate) => candidate.tool === 'cmux')
+
+    return { installed: row.installed, session: row.session, fix: row.fix }
+  }
+}
+
 class RunFileFixture {
   static ISSUE = 7
 
@@ -240,6 +266,21 @@ describe('ct-api entrypoint', () => {
     expect(port).toBeGreaterThan(0)
   })
 
+  it('the_cmux_row_is_ready_only_when_the_cmux_on_the_path_answers_the_query', async () => {
+    const answering = await ACmuxWithNoWindows.onThePath()
+    const refusing = await ACmuxThatRefusesTheConnection.onThePath()
+
+    const answered = await Entrypoint.listening({ CT_API_PORT: '0', PATH: answering.path })
+    const refused = await Entrypoint.listening({ CT_API_PORT: '0', PATH: refusing.path })
+
+    expect(await ExternalTools.cmuxRowOf(answered)).toEqual({ installed: true, session: 'ready', fix: null })
+    expect(await ExternalTools.cmuxRowOf(refused)).toEqual({
+      installed: true,
+      session: 'missing',
+      fix: 'update cmux and restart the app, then start this backend from a terminal inside cmux',
+    })
+  })
+
   it('a_whole_request_to_external_tools_reaches_every_probe_client_the_entrypoint_wired_up', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })
 
@@ -247,7 +288,7 @@ describe('ct-api entrypoint', () => {
 
     expect(response.status).toBe(200)
     const body = await response.json()
-    expect(body.tools.map((row) => row.tool)).toEqual(['gh', 'acli', 'claude', 'git', 'bq'])
+    expect(body.tools.map((row) => row.tool)).toEqual(['gh', 'acli', 'claude', 'git', 'bq', 'cmux'])
     expect(body.tools.every((row) => ['ready', 'missing', 'unknown'].includes(row.session))).toBe(true)
     const claude = body.tools.find((row) => row.tool === 'claude')
     expect(claude.session).toBe('unknown')

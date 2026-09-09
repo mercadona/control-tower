@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { listCmuxWorkspaces } from '../scripts/cmux.js'
+import { CmuxAnswer, CmuxWorkspaceQuery, listCmuxWorkspaces } from '../scripts/cmux.js'
 
 const WORKSPACE = {
   custom_title: 'ct-plan-owner__repo-ABC-123',
@@ -60,5 +60,111 @@ describe('listCmuxWorkspaces', () => {
       : JSON.stringify({ workspaces: [{ title: 'ct-plan-owner__repo-ABC-123', current_directory: '/repo/.worktrees/7' }] }))
 
     expect(listCmuxWorkspaces({ run, requireComplete: true })).toBe(null)
+  })
+})
+
+class ACmuxThatRefuses {
+  static ACCESS_DENIED = 'Error: ERROR: Access denied - only processes started inside cmux can connect'
+  static NOT_JSON = '* 0: 4C3418DA-8B2E-4D4F-BBA3-69FD3EE61ED2 selected_workspace=E9835433 workspaces=3\n'
+
+  static onItsErrorChannel() {
+    return () => {
+      const refusal = new Error('Command failed: cmux list-windows --json')
+      refusal.stderr = `${ACmuxThatRefuses.ACCESS_DENIED}\n`
+      throw refusal
+    }
+  }
+
+  static withText() {
+    return () => ACmuxThatRefuses.NOT_JSON
+  }
+
+  static SCHEMA_OF_AN_OLDER_CMUX = {
+    current_directory: '/Users/someone/Projects/repo/.worktrees/5036',
+    custom_color: null,
+    description: null,
+    id: 'E9835433-3961-4DC2-B93A-B75561C0BD58',
+    index: 0,
+    listening_ports: [],
+    pinned: false,
+    ref: 'workspace:4',
+    remote: null,
+    selected: true,
+    title: 'ct-plan-owner__repo-ABC-123',
+  }
+
+  static withAnUnrecognisedSchema() {
+    return (argv) => (argv[0] === 'list-windows'
+      ? JSON.stringify([{ id: 'one' }])
+      : JSON.stringify({ workspaces: [ACmuxThatRefuses.SCHEMA_OF_AN_OLDER_CMUX] }))
+  }
+
+  static thatWarnsAndThenHangs() {
+    return () => {
+      const refusal = new Error('spawnSync cmux ETIMEDOUT')
+      refusal.stderr = 'warning: reconnecting to daemon...\n'
+      refusal.code = 'ETIMEDOUT'
+      throw refusal
+    }
+  }
+}
+
+describe('CmuxWorkspaceQuery', () => {
+  it('a_conclusive_answer_carries_no_reason', () => {
+    const asked = CmuxWorkspaceQuery.ask({ run: () => '[]', requireComplete: true })
+
+    expect(asked.entries).toEqual([])
+    expect(asked.reason).toBe(null)
+  })
+
+  it('the_reason_a_required_window_left_the_answer_incomplete_names_that_window', () => {
+    const asked = CmuxWorkspaceQuery.ask({ run: partialRun, requireComplete: true })
+
+    expect(asked.entries).toBe(null)
+    expect(asked.reason).toContain('window two')
+    expect(asked.reason).toContain('window query failed')
+  })
+
+  it('the_reason_carries_what_cmux_wrote_on_its_error_channel_when_it_refused_the_connection', () => {
+    const asked = CmuxWorkspaceQuery.ask({ run: ACmuxThatRefuses.onItsErrorChannel(), requireComplete: true })
+
+    expect(asked.entries).toBe(null)
+    expect(asked.reason).toContain(ACmuxThatRefuses.ACCESS_DENIED)
+  })
+
+  it('a_cmux_that_answers_text_instead_of_json_is_a_reason_and_never_an_empty_list', () => {
+    const asked = CmuxWorkspaceQuery.ask({ run: ACmuxThatRefuses.withText(), requireComplete: true })
+
+    expect(asked.entries).toBe(null)
+    expect(asked.reason).toContain('* 0: 4C341')
+  })
+
+  it('the_reason_an_unrecognised_schema_gives_says_the_title_field_was_never_exposed', () => {
+    const asked = CmuxWorkspaceQuery.ask({ run: ACmuxThatRefuses.withAnUnrecognisedSchema(), requireComplete: true })
+
+    expect(asked.entries).toBe(null)
+    expect(asked.reason).toContain('custom_title')
+  })
+
+  it('the_reason_names_the_fields_that_did_arrive_so_the_schema_can_be_told_apart_from_silence', () => {
+    const asked = CmuxWorkspaceQuery.ask({ run: ACmuxThatRefuses.withAnUnrecognisedSchema(), requireComplete: true })
+
+    expect(asked.reason).toContain('title')
+    expect(asked.reason).toContain('current_directory')
+    expect(asked.reason).toContain('listening_ports')
+  })
+
+  it('a_cmux_that_warned_before_hanging_says_it_hung_and_not_only_what_it_warned', () => {
+    const asked = CmuxWorkspaceQuery.ask({ run: ACmuxThatRefuses.thatWarnsAndThenHangs(), requireComplete: true })
+
+    expect(asked.reason).toContain('ETIMEDOUT')
+    expect(asked.reason).toContain('warning: reconnecting to daemon...')
+  })
+
+  it('an_answer_and_a_refusal_are_told_apart_by_the_same_question_every_consumer_asks', () => {
+    expect(CmuxAnswer.answered([]).wasAnswered).toBe(true)
+    expect(CmuxAnswer.refused('cmux said no').wasAnswered).toBe(false)
+    expect(CmuxWorkspaceQuery.ask({ run: () => '[]' }).wasAnswered).toBe(true)
+    expect(CmuxWorkspaceQuery.ask({ run: ACmuxThatRefuses.withText() }).wasAnswered).toBe(false)
   })
 })

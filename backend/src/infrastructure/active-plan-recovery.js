@@ -40,7 +40,7 @@ export class ActivePlanRecovery {
   }
 
   async recover() {
-    if (this.conclusive) return true
+    if (this.conclusive) return null
     this.recovering = this.recovering ?? this.#recover()
     try {
       return await this.recovering
@@ -50,9 +50,9 @@ export class ActivePlanRecovery {
   }
 
   async #recover() {
-    const watches = await this.plans.inFlight()
-    if (watches === null) return false
-    for (const watch of watches) {
+    const found = await this.plans.inFlight()
+    if (!found.wereListed) return found.reason
+    for (const watch of found.watches) {
       this.checkouts.remember(new CheckoutRoot(watch.located.root))
       if (this.activePlans.find({ issue: watch.issue.number, repository: watch.repository }) !== null) continue
       if (this.implementationStarts.matches(watch)) {
@@ -72,6 +72,6 @@ export class ActivePlanRecovery {
     }
     this.conclusive = true
 
-    return true
+    return null
   }
 }

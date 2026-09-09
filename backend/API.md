@@ -26,8 +26,9 @@ the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
    `{"code": "<kebab-case>", "detail": "<one sentence>"}`. One refusal adds a
    third field: `no-plan-started` carries `failed`.
 2. **An application refusal answers 400.** The status stopped being the signal.
-   Three refusals keep another status because they are about the protocol, not
-   about the request: 405, 409 and 503 below.
+   405 keeps its own status because it is about the protocol, not about the
+   request. The two 409 of `/implement-plan` are not about the protocol either,
+   and are the one place where this rule is still not applied.
 3. **A `POST` must declare `Content-Type: application/json`.** Otherwise 415.
 4. **A body over 8 KiB is refused** with 413 `body-too-large`.
 5. **An unknown field in a `POST` body is refused**, not ignored.
@@ -439,12 +440,27 @@ person would have typed — and `plan` — what starting it produced.
 
 | `code` | Status | Meaning |
 |---|---|---|
-| `active-plans-recovery-inconclusive` | **503** | cmux could not be asked, so the list would be a lie |
+| `active-plans-recovery-inconclusive` | **400** | cmux could not be asked, so the list would be a lie; `detail` carries what cmux answered |
 
-The 503 is the common failure on a fresh machine: recovery reads the live cmux
-workspaces, and without cmux it answers 503 on **every** call and never settles.
-The page must show *I cannot tell what is running* rather than *nothing is
+It is the common failure on a fresh machine: recovery reads the live cmux
+workspaces, and without cmux it refuses **every** call and never settles. The
+page must show *I cannot tell what is running* rather than *nothing is
 running*, and it must not treat this as an empty list.
+
+`detail` carries the reason itself, not a fixed sentence — the same rule the ten
+refusals of `POST /start-plan` follow. It is the one place a person sees why
+without reaching the terminal running the backend, and it was measured to
+matter: during the in-store run the reason lived only in a cmux tab nobody was
+looking at, while the page said *no pudo preguntar a cmux* and nothing else.
+
+When cmux answers with a schema this backend does not read, the reason names
+the fields that **did** arrive. That one line is what tells a stale cmux apart
+from a broken one: the machine this was measured on answered with `title` and no
+`custom_title`, which is the shape of an older build still serving the socket.
+
+The same reason also goes to the backend's error channel, prefixed
+`plans in flight:`, and `GET /external-tools` answers the same question ahead of
+time in its `cmux` row.
 
 ```
 curl -s http://127.0.0.1:8787/active-plans
@@ -454,10 +470,15 @@ curl -s http://127.0.0.1:8787/active-plans
 
 ## `GET /external-tools`
 
-Whether the five external tools this backend drives have a usable credential
-right now. No parameters. It exists to be asked **before** starting work: until
-now each of these failed at the moment it was used, mid-flow, in the tool's own
-words.
+Whether the six external tools this backend drives can be used right now. No
+parameters. It exists to be asked **before** starting work: until now each of
+these failed at the moment it was used, mid-flow, in the tool's own words.
+
+Five of them are asked about a credential. `cmux` is asked about something else
+— whether it answers the query this backend recovers plans with — because that
+is what fails first on a machine whose cmux is too old or that is running this
+backend from outside cmux, and it fails as `GET /active-plans` refusing
+forever.
 
 **200 OK**
 
@@ -468,10 +489,11 @@ words.
   {"tool":"claude","installed":true,"session":"unknown",
     "fix":"claude, then /login \u2014 not observable from this process"},
   {"tool":"git","installed":true,"session":"ready","fix":null},
-  {"tool":"bq","installed":true,"session":"ready","fix":null}]}
+  {"tool":"bq","installed":true,"session":"ready","fix":null},
+  {"tool":"cmux","installed":true,"session":"ready","fix":null}]}
 ```
 
-Five rows, always, in that order. `ready` is the whole verdict: `true` when no
+Six rows, always, in that order. `ready` is the whole verdict: `true` when no
 tool blocks. A tool blocks when it is not installed or its session is `missing`
 — `unknown` never blocks, or `claude` would pin the verdict to `false` forever.
 
@@ -481,10 +503,11 @@ tool blocks. A tool blocks when it is not installed or its session is `missing`
 | `missing` | the tool was asked and has no usable credential | show `fix` as the command to run |
 | `unknown` | the credential cannot be observed from this process | show `fix` as guidance, never as a verdict |
 
-`installed` is a `PATH` lookup and the binary is never executed. `fix` is the
-literal repair command, and `null` exactly when the session is `ready`. It
-repairs the **credential**, so it presupposes the binaries are installed —
-which `installed` answers separately.
+`installed` is a `PATH` lookup, which never executes anything; probing does execute a binary for every row but `claude`. `fix` is the
+literal repair, and `null` exactly when the session is `ready`. It repairs what
+was asked about — the **credential** for five of the rows, the **query** for
+`cmux` — so it presupposes the binaries are installed, which `installed`
+answers separately.
 
 How each one is asked:
 
@@ -495,6 +518,15 @@ How each one is asked:
 | `claude` | nothing | never: its login is not observable from another process |
 | `git` | `ssh -T git@github.com` | its stderr says `successfully authenticated`, **whatever the exit code** — it exits 1 on success |
 | `bq` | `gcloud auth list --filter=status:ACTIVE` | it exited 0 and named an account |
+| `cmux` | the workspace query `GET /active-plans` recovers with | it answered it conclusively |
+
+The `cmux` row is the one that catches a failure no version number reveals: the
+app serves its socket from the process that is **running**, so a cmux updated on
+disk but not restarted keeps answering with the schema of the build it was
+started from, while `cmux --version` already reports the new one. Measured on
+2026-09-09: same binary, byte for byte, on two machines — one answering
+`custom_title`, the other only the older `title`, and the recovery refusing to
+guess.
 
 **Refusals**
 
