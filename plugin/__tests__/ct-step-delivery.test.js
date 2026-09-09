@@ -44,9 +44,9 @@ describe('the happy path', () => {
   // commit however much the plan names it further down.
   it('only what this task touched goes into the commit', () => {
     taskOk('uno.txt')
-    const primero = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
-    expect(primero).toMatch(/uno\.txt/)
-    expect(primero).not.toMatch(/dos\.txt/)
+    const first = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
+    expect(first).toMatch(/uno\.txt/)
+    expect(first).not.toMatch(/dos\.txt/)
   })
 
   // THE DECLARATION IS A CROSS-CHECK: if it differs from what the tree says, a
@@ -108,12 +108,12 @@ describe('the happy path', () => {
 // rejected it with the 7 forever.
 // ---------------------------------------------------------------------------
 describe('the complete queue: commit → global → slice-verdict → e2e → DELIVERED', () => {
-  const RECORRIDO = 'levantado con el example, curl -i :9115/metrics responde 200'
-  const informeE2e = (nombre = 'e2e.json') => {
-    const p = join(repo, nombre)
+  const JOURNEY = 'levantado con el example, curl -i :9115/metrics responde 200'
+  const e2eReport = (name = 'e2e.json') => {
+    const p = join(repo, name)
     writeFileSync(p, JSON.stringify({
       runs: [{
-        run: RECORRIDO, verdict: 'verde', brought_up: 'cargo run --example serve',
+        run: JOURNEY, verdict: 'verde', brought_up: 'cargo run --example serve',
         evidence: [{ command: 'curl -sS -o /dev/null -w \'%{http_code}\' localhost:9115/metrics', output: '200' }],
       }],
     }))
@@ -122,7 +122,7 @@ describe('the complete queue: commit → global → slice-verdict → e2e → DE
 
   beforeEach(() => {
     rmSyncBestEffort(repo)
-    repo = makeRepo({ e2e: [RECORRIDO] })
+    repo = makeRepo({ e2e: [JOURNEY] })
   })
 
   it('a slice with journeys traverses the e2e and DELIVERS', () => {
@@ -133,9 +133,9 @@ describe('the complete queue: commit → global → slice-verdict → e2e → DE
     // Asking no longer dies in PRECONDITION: that is the defect's exact symptom.
     const n = ct('next')
     expect(n.status).toBe(0)
-    expect(n.stdout).toContain(RECORRIDO)
+    expect(n.stdout).toContain(JOURNEY)
 
-    const r = ct('e2e', informeE2e())
+    const r = ct('e2e', e2eReport())
     expect(r.status).toBe(0)
     expect(runState().closed).toBe('delivered')
     expect(deliveredRun(readFileSync(join(repo, '.agent', 'run-7.json'), 'utf8'), 7)).toEqual({ ok: true })
@@ -151,7 +151,7 @@ describe('the complete queue: commit → global → slice-verdict → e2e → DE
     sliceOk()
     writeFileSync(join(repo, 'colado.txt'), 'nadie ha visto esto\n')
     execFileSync('git', ['add', 'colado.txt'], { cwd: repo })
-    const r = ct('e2e', informeE2e())
+    const r = ct('e2e', e2eReport())
     expect(r.status).toBe(0)                      // the report is valid: it delivers
     expect(runState().closed).toBe('delivered')
     expect(r.stderr).toMatch(/ajenas a la maquinaria \(colado\.txt\)/)
@@ -168,13 +168,13 @@ describe('the complete queue: commit → global → slice-verdict → e2e → DE
 describe('the verdict travels in the pull request', () => {
   it("each task's PASS ends up tracked and inside that task's commit", () => {
     taskOk('uno.txt')
-    const ruta = join('docs', 'superpowers', 'verdicts', 'issue-7-task-1.json')
-    expect(existsSync(join(repo, ruta))).toBe(true)
+    const path = join('docs', 'superpowers', 'verdicts', 'issue-7-task-1.json')
+    expect(existsSync(join(repo, path))).toBe(true)
     const files = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: repo, encoding: 'utf8' })
     expect(files).toMatch(/issue-7-task-1\.json/)
-    const guardado = JSON.parse(readFileSync(join(repo, ruta), 'utf8'))
-    expect(guardado.verdict.ruling).toBe('PASS')
-    expect(guardado.task).toBe(1)
+    const saved = JSON.parse(readFileSync(join(repo, path), 'utf8'))
+    expect(saved.verdict.ruling).toBe('PASS')
+    expect(saved.task).toBe(1)
   })
 
   it('a FAIL leaves no tracked verdict: only the one that passes travels', () => {

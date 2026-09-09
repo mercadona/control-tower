@@ -59,12 +59,12 @@ describe('F15/H1 — `ready` meant two incompatible things', () => {
   // and the protection disappears entirely.
   it('a slice in `ready` holds no tokens: THAT is the window (checking the premise)', () => {
     const issues = (st) => [slice(7, st, ['area:plan'], 1), slice(8, 'ready', ['area:plan'], 2), slice(9, 'ready', ['area:ui'], 3)]
-    const enReview = planDispatch(issues('in-review'), { cap: 1 })
-    expect(enReview.runningTouches).toEqual(['area:plan'])
-    expect(enReview.selected.map((i) => i.n)).toEqual([9]) // #8 protected
+    const inReview = planDispatch(issues('in-review'), { cap: 1 })
+    expect(inReview.runningTouches).toEqual(['area:plan'])
+    expect(inReview.selected.map((i) => i.n)).toEqual([9]) // #8 protected
 
-    const enReady = planDispatch(issues('ready'), { cap: 1 })
-    expect(enReady.runningTouches).toEqual([]) // nobody holds anything
+    const inReady = planDispatch(issues('ready'), { cap: 1 })
+    expect(inReady.runningTouches).toEqual([]) // nobody holds anything
   })
 
   // THE FIX. `--reopen` leaves the slice in `in-progress`, which holds tokens
@@ -196,8 +196,8 @@ describe('F15/H1 — --requeue: sending it back to the queue is a DECLARATION th
   })
 
   it('--requeue with --reopen (or with --release) → a usage error, no guessing', () => {
-    for (const otro of ['--reopen', '--release']) {
-      const r = runCheck(['9', '--repo', 'o/r', '--requeue', otro, '--dry-run'])
+    for (const other of ['--reopen', '--release']) {
+      const r = runCheck(['9', '--repo', 'o/r', '--requeue', other, '--dry-run'])
       expect(r.code).toBe(2)
       expect(r.out).toMatch(/mutuamente excluyentes/)
     }
@@ -253,8 +253,8 @@ describe('F15/H2 — if /ct-groom aborts while validating the Project, it has cr
   })
 
   it('with no current iteration: it aborts without creating the milestone or any label', () => {
-    const viejo = JSON.stringify([{ id: 'F', name: 'Sprint', configuration: { iterations: [{ id: 'I', title: 'Sprint 1', startDate: '2020-01-06', duration: 14 }] } }])
-    const r = groomRun({ FAKE_GH_PROJECT_FIELDS: viejo })
+    const old = JSON.stringify([{ id: 'F', name: 'Sprint', configuration: { iterations: [{ id: 'I', title: 'Sprint 1', startDate: '2020-01-06', duration: 14 }] } }])
+    const r = groomRun({ FAKE_GH_PROJECT_FIELDS: old })
     expect(r.code).toBe(1)
     expect(r.out).toMatch(/no tiene una iteración vigente/)
     expect(r.log).not.toMatch(/milestones -f title=/)
@@ -276,14 +276,14 @@ describe('F15/H2 — if /ct-groom aborts while validating the Project, it has cr
     const r = groomRun({})
     expect(r.code).toBe(0)
     const idx = (re) => r.log.split('\n').findIndex((l) => re.test(l))
-    const validacion = idx(/^project view 5/)
-    const milestoneCreado = idx(/^api repos\/o\/r\/milestones -f title=/)
-    const labelCreada = idx(/^label create /)
-    const issueCreado = idx(/^issue create /)
-    expect(validacion).toBeGreaterThanOrEqual(0)
-    expect(milestoneCreado).toBeGreaterThan(validacion)
-    expect(labelCreada).toBeGreaterThan(validacion)
-    expect(issueCreado).toBeGreaterThan(validacion)
+    const validation = idx(/^project view 5/)
+    const createdMilestone = idx(/^api repos\/o\/r\/milestones -f title=/)
+    const createdLabel = idx(/^label create /)
+    const createdIssue = idx(/^issue create /)
+    expect(validation).toBeGreaterThanOrEqual(0)
+    expect(createdMilestone).toBeGreaterThan(validation)
+    expect(createdLabel).toBeGreaterThan(validation)
+    expect(createdIssue).toBeGreaterThan(validation)
   })
 
   // And the sister guarantee, the one that makes a failure HALFWAY through the
@@ -305,7 +305,7 @@ describe('F15/H3 — the acknowledgement admits a human explanation without ceas
   // "silences nothing" warnings, one per line of the preamble. Putting it
   // between <!-- and --> produced 4 (the three inside plus the one for the
   // `-->`), because only the line that STARTED with `<!--` was skipped.
-  const conPreambulo = [
+  const withPreamble = [
     '# Convenciones acusadas',
     '',
     'Este repo traía su propio protocolo de claim desde 2025, en',
@@ -317,7 +317,7 @@ describe('F15/H3 — the acknowledgement admits a human explanation without ceas
   ].join('\n')
 
   it('a prose preamble no longer produces a single warning, and the acknowledgements still hold', () => {
-    const { acks, problems, prosaSinAcuses } = parseAcks(conPreambulo)
+    const { acks, problems, prosaSinAcuses } = parseAcks(withPreamble)
     expect(problems).toEqual([])
     expect([...acks.keys()]).toEqual(['claim', 'worktrees'])
     expect(prosaSinAcuses).toBe(false)
@@ -357,21 +357,21 @@ describe('F15/H3 — the acknowledgement admits a human explanation without ceas
   })
 
   it('looksLikeAck: the boundary between prose and a broken acknowledgement', () => {
-    for (const prosa of [
+    for (const prose of [
       'Contexto: en julio de 2026 se decidió retirar el script del repo.',
       'La decisión fue: seguir con el del plugin.',
       'Ver docs/agentic-workflow.md para el detalle.',
       'Nada que ver con esto.',
-    ]) expect(looksLikeAck(prosa), prosa).toBe(false)
+    ]) expect(looksLikeAck(prose), prose).toBe(false)
 
-    for (const intento of [
+    for (const attempt of [
       'claim: 2026-01-01 — x',
       '- claim: 2026-01-01 — x',
       'clim: 2026-01-01 — x',      // a typo at distance 1
       'worktree: 2026-01-01 — x',  // an almost-valid signal
       'estado',                    // a bare signal, with nothing else
       'cualquiera: 2026-01-01 — x', // the fingerprint of a date
-    ]) expect(looksLikeAck(intento), intento).toBe(true)
+    ]) expect(looksLikeAck(attempt), attempt).toBe(true)
   })
 
   // THE VOICE OF THE NEW SILENCE. Ignoring prose creates a state in which the
@@ -417,8 +417,8 @@ describe('F15/H3 — the acknowledgement admits a human explanation without ceas
     // The condition that matters is not "your file silences nothing", it is
     // "you could believe you have hushed THIS and you have not". Without a
     // THIS, there is nobody to mislead.
-    const limpios = [{ path: 'AGENTS.md', content: '# Repo\nNada que choque con el loop.\n' }]
-    const text = formatFindings(detectConventions({ docs: limpios, files: [] }), { ackProsaSinAcuses: true })
+    const clean = [{ path: 'AGENTS.md', content: '# Repo\nNada que choque con el loop.\n' }]
+    const text = formatFindings(detectConventions({ docs: clean, files: [] }), { ackProsaSinAcuses: true })
     expect(text).not.toMatch(/NO silencia ninguna señal/)
   })
 

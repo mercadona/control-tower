@@ -47,9 +47,9 @@
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { cargarIssues } from './loop-issues.js'
+import { loadIssues } from './loop-issues.js'
 import { liveSliceProcesses } from './liveness.js'
-import { construirEstado } from './loop-state.js'
+import { buildState } from './loop-state.js'
 import { mapGhIssue, filterMergedIssues, closedWithLiveStatus } from './gh-issue-map.js'
 import { parseRepoSlug } from './dispatch.js'
 
@@ -100,16 +100,16 @@ if (!parseRepoSlug(repo)) {
 // aborts with exit 2 (it is about to mutate things), and here, where it only
 // reads, it warns and carries on with the default — closing down the report
 // because of a badly set variable would be worse than reporting it.
-const VENTANA_ARRANQUE_DEFECTO_MS = 15000
-const VENTANA_ARRANQUE_TOPE_MS = 600_000
-let ventanaArranqueMs = VENTANA_ARRANQUE_DEFECTO_MS
-const ventanaRaw = process.env.CT_NEXT_LAUNCH_TIMEOUT_MS
-if (ventanaRaw !== undefined && ventanaRaw !== '') {
-  const n = Number(ventanaRaw)
-  if (!Number.isFinite(n) || n < 0 || n > VENTANA_ARRANQUE_TOPE_MS) {
-    console.error(`aviso: CT_NEXT_LAUNCH_TIMEOUT_MS inválido ("${ventanaRaw}", debe ser un número entre 0 y ${VENTANA_ARRANQUE_TOPE_MS}) — se usa el valor por defecto de ${VENTANA_ARRANQUE_DEFECTO_MS} ms para decidir qué claim es demasiado reciente como para esperar un proceso.`)
+const DEFAULT_START_UP_WINDOW_MS = 15000
+const START_UP_WINDOW_CAP_MS = 600_000
+let startUpWindowMs = DEFAULT_START_UP_WINDOW_MS
+const windowRaw = process.env.CT_NEXT_LAUNCH_TIMEOUT_MS
+if (windowRaw !== undefined && windowRaw !== '') {
+  const n = Number(windowRaw)
+  if (!Number.isFinite(n) || n < 0 || n > START_UP_WINDOW_CAP_MS) {
+    console.error(`aviso: CT_NEXT_LAUNCH_TIMEOUT_MS inválido ("${windowRaw}", debe ser un número entre 0 y ${START_UP_WINDOW_CAP_MS}) — se usa el valor por defecto de ${DEFAULT_START_UP_WINDOW_MS} ms para decidir qué claim es demasiado reciente como para esperar un proceso.`)
   } else {
-    ventanaArranqueMs = n
+    startUpWindowMs = n
   }
 }
 
@@ -131,8 +131,8 @@ const gh = (a) => {
   try {
     return execFileSync('gh', a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: GH_MAX_BUFFER, timeout: CHILD_TIMEOUT_MS, killSignal: 'SIGKILL' })
   } catch (e) {
-    const detalle = (e && e.stderr ? String(e.stderr).trim() : '') || (e && e.message) || 'error desconocido'
-    throw new Error(detalle)
+    const detail = (e && e.stderr ? String(e.stderr).trim() : '') || (e && e.message) || 'error desconocido'
+    throw new Error(detail)
   }
 }
 
@@ -141,10 +141,10 @@ const git = (args) => execFileSync('git', args, { encoding: 'utf8', stdio: ['ign
 // motivos: everything that could NOT be checked. It is the only thing that
 // decides the exit 1, so nothing that lands here can end up in a report that
 // reads as «nada que revisar».
-const motivos = []
+const reasons = []
 
 // ---------------------------------------------------------------- issues ---
-// `cargarIssues` ALWAYS attempts both reads and returns what went well
+// `loadIssues` ALWAYS attempts both reads and returns what went well
 // together with the reasons for what did not: a shared module does not decide
 // on its caller's behalf, and this caller wants to report what it does know
 // instead of aborting. It used to throw, and throwing when the second read
@@ -158,24 +158,24 @@ const motivos = []
 // behind, and with only the closed ones there is no knowing which one is in
 // flight — in either case, the crossing that decides "orphan" would manufacture
 // findings. What could be read still feeds its own block of the report.
-const { abiertos, cerrados, motivos: motivosIssues } = cargarIssues({ repo, gh })
-const issuesLeidos = motivosIssues.length === 0
-motivos.push(...motivosIssues)
+const { abiertos: open, cerrados: closed, motivos: issueReasons } = loadIssues({ repo, gh })
+const issuesRead = issueReasons.length === 0
+reasons.push(...issueReasons)
 
-const mapeados = abiertos.map(mapGhIssue)
-const enProgreso = mapeados.filter((i) => i.status === 'in-progress').map((i) => ({ n: i.n, nombre: i.name }))
+const mapped = open.map(mapGhIssue)
+const inProgress = mapped.filter((i) => i.status === 'in-progress').map((i) => ({ n: i.n, nombre: i.name }))
 // enRevision: DELIVERED work waiting for a merge. It is the second of §3.2's
 // three questions («qué está en vuelo, qué ha entregado, qué es residuo») and
 // until now the command did not answer it: its worktrees fell into RESIDUO and
 // fired an exit 3 over a perfectly healthy loop. See the `enRevision` comment
 // in loop-state.js for why it is neither residue nor harvest.
-const enRevision = mapeados.filter((i) => i.status === 'in-review').map((i) => ({ n: i.n, nombre: i.name }))
-const mergeados = filterMergedIssues(cerrados)
-const cerradosConStatus = closedWithLiveStatus(cerrados)
+const inReview = mapped.filter((i) => i.status === 'in-review').map((i) => ({ n: i.n, nombre: i.name }))
+const merged = filterMergedIssues(closed)
+const closedWithStatus = closedWithLiveStatus(closed)
 // statusAbiertoPorNumero: so that the TRUTH can be told about a worktree that
 // no in-flight or delivered issue explains — see the render's residue block. It
 // costs no extra call: it comes out of the issues already read.
-const statusAbiertoPorNumero = new Map(mapeados.map((i) => [String(i.n), i.status]))
+const openStatusByNumber = new Map(mapped.map((i) => [String(i.n), i.status]))
 
 // ---------------------------------------------------------- the checkout ---
 // The LOCAL half of this report —worktrees, branches, processes— comes out of
@@ -201,9 +201,9 @@ const statusAbiertoPorNumero = new Map(mapeados.map((i) => [String(i.n), i.statu
 // about to create branches and worktrees), nothing is aborted here: a check
 // that cannot be made is exactly a `sinComprobar` with exit 1. Which half is
 // not trustworthy is said, and the other one keeps being reported.
-const detalleDe = (e) => (e && e.stderr ? String(e.stderr).trim() : '') || (e && e.message) || 'error desconocido'
+const detailOf = (e) => (e && e.stderr ? String(e.stderr).trim() : '') || (e && e.message) || 'error desconocido'
 
-function motivoDeIdentidad(root, esperado) {
+function identityReason(root, expected) {
   let originUrl
   try {
     originUrl = git(['-C', root, 'remote', 'get-url', 'origin']).trim()
@@ -213,13 +213,13 @@ function motivoDeIdentidad(root, esperado) {
     // ct-next.mjs: a local repo with no origin is a legitimate environment, and
     // that is why this degrades to exit 1 with its reason instead of taking the
     // command down.
-    return `no se pudo verificar que ${root} sea el checkout de ${esperado}: no tiene remote "origin" (${detalleDe(e)})`
+    return `no se pudo verificar que ${root} sea el checkout de ${expected}: no tiene remote "origin" (${detailOf(e)})`
   }
   const m = originUrl.match(/github\.com[:/]+([^/]+)\/(.+?)(?:\.git)?\/?$/)
-  if (!m) return `no se pudo interpretar el remote "origin" de ${root} ("${originUrl}") como un repo de GitHub owner/repo, así que no se pudo verificar que sea el checkout de ${esperado}`
+  if (!m) return `no se pudo interpretar el remote "origin" de ${root} ("${originUrl}") como un repo de GitHub owner/repo, así que no se pudo verificar que sea el checkout de ${expected}`
   const real = `${m[1]}/${m[2]}`
-  if (real.toLowerCase() !== esperado.toLowerCase()) {
-    return `${root} es el checkout de ${real}, no de ${esperado}, y cruzar los issues de un repo con los worktrees de otro produce hallazgos que no existen`
+  if (real.toLowerCase() !== expected.toLowerCase()) {
+    return `${root} es el checkout de ${real}, no de ${expected}, y cruzar los issues de un repo con los worktrees de otro produce hallazgos que no existen`
   }
   return null
 }
@@ -228,17 +228,17 @@ let repoRoot = null
 // motivoCheckout: why the local half is not usable. It travels as `procesos`'s
 // `motivo` (see further down) instead of being pushed to `motivos` separately,
 // so that the same cause does not produce two different warnings.
-let motivoCheckout = null
+let checkoutReason = null
 try {
-  const linea = git(['worktree', 'list', '--porcelain']).split('\n').find((l) => l.startsWith('worktree '))
-  if (!linea) throw new Error('`git worktree list --porcelain` no devolvió ninguna entrada')
-  repoRoot = linea.slice('worktree '.length).trim()
+  const line = git(['worktree', 'list', '--porcelain']).split('\n').find((l) => l.startsWith('worktree '))
+  if (!line) throw new Error('`git worktree list --porcelain` no devolvió ninguna entrada')
+  repoRoot = line.slice('worktree '.length).trim()
 } catch (e) {
-  motivoCheckout = `no se pudo resolver la raíz del checkout principal (${detalleDe(e)})`
+  checkoutReason = `no se pudo resolver la raíz del checkout principal (${detailOf(e)})`
 }
-if (repoRoot) motivoCheckout = motivoDeIdentidad(repoRoot, repo)
-const checkoutComprobado = repoRoot !== null && motivoCheckout === null
-if (motivoCheckout) motivoCheckout += ': este informe no dice nada sobre worktrees, ramas ni procesos'
+if (repoRoot) checkoutReason = identityReason(repoRoot, repo)
+const checkoutChecked = repoRoot !== null && checkoutReason === null
+if (checkoutReason) checkoutReason += ': este informe no dice nada sobre worktrees, ramas ni procesos'
 
 // worktreesEnDisco / ramasEnDisco: a read failure NEVER translates into «no
 // hay». That `.worktrees/` does not exist is a legitimate answer (no dispatch
@@ -252,29 +252,29 @@ if (motivoCheckout) motivoCheckout += ': este informe no dice nada sobre worktre
 // possible to look. Reproduced with `.worktrees/` under `chmod 000`. An
 // `ENOENT` is a completed read: the directory does not exist, and that answers
 // the question.
-let worktreesEnDisco = []
-let ramasEnDisco = []
-let worktreesLeidos = false
-let ramasLeidas = false
-if (checkoutComprobado) {
+let worktreesOnDisk = []
+let branchesOnDisk = []
+let worktreesRead = false
+let branchesRead = false
+if (checkoutChecked) {
   try {
-    worktreesEnDisco = readdirSync(join(repoRoot, '.worktrees'), { withFileTypes: true })
+    worktreesOnDisk = readdirSync(join(repoRoot, '.worktrees'), { withFileTypes: true })
       .filter((d) => d.isDirectory())
       .map((d) => d.name)
-    worktreesLeidos = true
+    worktreesRead = true
   } catch (e) {
-    if (e && e.code === 'ENOENT') { worktreesEnDisco = []; worktreesLeidos = true }
-    else motivos.push(`no se pudo listar ${join(repoRoot, '.worktrees')} (${e.code || e.message}): este informe no dice nada sobre worktrees en disco`)
+    if (e && e.code === 'ENOENT') { worktreesOnDisk = []; worktreesRead = true }
+    else reasons.push(`no se pudo listar ${join(repoRoot, '.worktrees')} (${e.code || e.message}): este informe no dice nada sobre worktrees en disco`)
   }
   try {
     // --format instead of parsing `git branch`'s decorated output: without it,
     // the current branch arrives with a "* " in front and none would match
     // `feat/N`.
-    ramasEnDisco = git(['-C', repoRoot, 'branch', '--list', 'feat/*', '--format=%(refname:short)'])
+    branchesOnDisk = git(['-C', repoRoot, 'branch', '--list', 'feat/*', '--format=%(refname:short)'])
       .split('\n').map((s) => s.trim()).filter(Boolean)
-    ramasLeidas = true
+    branchesRead = true
   } catch (e) {
-    motivos.push(`no se pudieron listar las ramas feat/* (${(e.stderr ? String(e.stderr).trim() : '') || e.message}): este informe no dice nada sobre ramas en disco`)
+    reasons.push(`no se pudieron listar las ramas feat/* (${(e.stderr ? String(e.stderr).trim() : '') || e.message}): este informe no dice nada sobre ramas en disco`)
   }
 }
 
@@ -285,9 +285,9 @@ if (checkoutComprobado) {
 // turns that into `vivo: null` for everybody, never into «dead». `pgrep` no
 // longer takes part: see the `liveSliceProcesses` comment in
 // scripts/liveness.js for why it was rejected.
-const procesos = checkoutComprobado
+const processes = checkoutChecked
   ? liveSliceProcesses(repoRoot)
-  : { porSlice: new Map(), comprobado: false, motivo: motivoCheckout }
+  : { porSlice: new Map(), comprobado: false, motivo: checkoutReason }
 
 // ------------------------------------------------- the age of each claim ---
 // Out of the issue's TIMELINE: the most recent `labeled` event for
@@ -299,29 +299,29 @@ const procesos = checkoutComprobado
 // One call per IN-FLIGHT issue, and «in flight» is bounded by the dispatcher's
 // cap. `--paginate` without `--slurp`: over an endpoint that returns an array,
 // gh merges the pages into a single array.
-const edadClaimMs = new Map()
+const claimAgeMs = new Map()
 // motivosEdad: why the age of one particular claim could not be read. It is
 // kept aside because the composer knows THAT it is missing, but only here is it
 // known WHY — see the substitution further down.
-const motivosEdad = new Map()
-const ahora = Date.now()
-for (const { n } of enProgreso) {
-  let eventos
+const ageReasons = new Map()
+const now = Date.now()
+for (const { n } of inProgress) {
+  let events
   try {
-    eventos = JSON.parse(gh(['api', `repos/${repo}/issues/${n}/timeline`, '--paginate']))
+    events = JSON.parse(gh(['api', `repos/${repo}/issues/${n}/timeline`, '--paginate']))
   } catch (e) {
-    edadClaimMs.set(n, null)
-    motivosEdad.set(n, `#${n}: no se pudo leer el timeline del issue, así que no se sabe cuánto lleva puesto su claim (${e.message})`)
+    claimAgeMs.set(n, null)
+    ageReasons.set(n, `#${n}: no se pudo leer el timeline del issue, así que no se sabe cuánto lleva puesto su claim (${e.message})`)
     continue
   }
-  const marcas = (Array.isArray(eventos) ? eventos : [])
+  const marks = (Array.isArray(events) ? events : [])
     .filter((ev) => ev && ev.event === 'labeled' && ev.label && ev.label.name === 'status:in-progress')
     .map((ev) => Date.parse(ev.created_at))
     .filter((t) => Number.isFinite(t))
   // The LAST `labeled`, not the first: a slice reopened with `--reopen` goes
   // back to `status:in-progress`, and the age that matters is the current
   // claim's, not that of the first one in its history.
-  edadClaimMs.set(n, marcas.length ? ahora - Math.max(...marcas) : null)
+  claimAgeMs.set(n, marks.length ? now - Math.max(...marks) : null)
 }
 
 // ----------------------------------------------------------- composition ---
@@ -342,7 +342,7 @@ for (const { n } of enProgreso) {
 // contradicted itself in two consecutive lines —the warning named
 // `.worktrees/7` and the block said `worktree ✗` about #7— and it was the same
 // class of false assertion the `?` mark further down came to kill, coming in
-// through another door. It was unreachable while `cargarIssues` threw (with no
+// through another door. It was unreachable while `loadIssues` threw (with no
 // issues there was no in-flight block to print); the partial report made it
 // reachable.
 //
@@ -358,28 +358,28 @@ for (const { n } of enProgreso) {
 // to warn about —and the exit is still 1 all the same, because the reason for
 // the read that failed has been in `motivos` since the issues were read; that
 // is never lost.
-const estado = construirEstado({
-  enProgreso,
-  enRevision,
-  mergeados,
-  cerradosConStatus,
-  worktreesEnDisco,
-  sePuedeAtribuirWorktree: issuesLeidos,
-  ramasEnDisco,
-  procesos,
-  edadClaimMs,
-  ventanaArranqueMs,
+const state = buildState({
+  enProgreso: inProgress,
+  enRevision: inReview,
+  mergeados: merged,
+  cerradosConStatus: closedWithStatus,
+  worktreesEnDisco: worktreesOnDisk,
+  sePuedeAtribuirWorktree: issuesRead,
+  ramasEnDisco: branchesOnDisk,
+  procesos: processes,
+  edadClaimMs: claimAgeMs,
+  ventanaArranqueMs: startUpWindowMs,
 })
 
 // The ones left UNEXPLAINED, using the same criterion as the composer
 // (`worktreesExplicados` comes out of it, it is not recomputed here: two copies
 // of the criterion would drift, and the first victim would be this very
 // warning).
-if (!issuesLeidos) {
-  const explicados = new Set(estado.worktreesExplicados)
-  const sinCruzar = worktreesEnDisco.filter((w) => !explicados.has(w))
-  if (sinCruzar.length) {
-    motivos.push(`hay ${sinCruzar.length} directorio(s) en .worktrees/ (${sinCruzar.join(', ')}) que no explica ninguno de los issues que sí se pudieron leer, y con la lista de issues incompleta no se puede decidir si son residuo: este informe no acusa a ninguno`)
+if (!issuesRead) {
+  const explained = new Set(state.worktreesExplicados)
+  const notCrossed = worktreesOnDisk.filter((w) => !explained.has(w))
+  if (notCrossed.length) {
+    reasons.push(`hay ${notCrossed.length} directorio(s) en .worktrees/ (${notCrossed.join(', ')}) que no explica ninguno de los issues que sí se pudieron leer, y con la lista de issues incompleta no se puede decidir si son residuo: este informe no acusa a ninguno`)
   }
 }
 
@@ -388,24 +388,24 @@ if (!issuesLeidos) {
 // failure was a READ failure, the exact cause is known here, so its reason is
 // REPLACED by the concrete one instead of accumulating: two lines on stderr
 // about the same issue for a single cause read as two different problems.
-const numeroCitado = (m) => {
+const citedNumber = (m) => {
   const x = /^#(\d+):/.exec(m)
   return x ? Number(x[1]) : null
 }
-const sinComprobar = [
-  ...motivos,
-  ...estado.sinComprobar.filter((m) => !motivosEdad.has(numeroCitado(m))),
-  ...motivosEdad.values(),
+const unchecked = [
+  ...reasons,
+  ...state.sinComprobar.filter((m) => !ageReasons.has(citedNumber(m))),
+  ...ageReasons.values(),
 ]
 
 // ---------------------------------------------------------------- report ---
-const VIVO = { true: '✓', false: '✗', null: '?' }
+const ALIVE = { true: '✓', false: '✗', null: '?' }
 // marca: `✓` / `✗` only when the read that answers that question could be
 // completed; `?` when it could not. The same three-state alphabet as `VIVO`,
 // and for the same reason: «there is none» and «it could not be looked at» are
 // not the same thing.
-const marca = (leido, hay) => (leido ? (hay ? '✓' : '✗') : '?')
-function formatearEdad(ms) {
+const mark = (wasRead, present) => (wasRead ? (present ? '✓' : '✗') : '?')
+function formatAge(ms) {
   const s = Math.max(0, Math.round(ms / 1000))
   if (s < 90) return `${s} s`
   const m = Math.round(s / 60)
@@ -425,28 +425,28 @@ function formatearEdad(ms) {
 // —«there are artefacts» versus «somebody is working now»— reintroduced in
 // prose, and it contradicts §4: when it cannot be checked, nobody is accused.
 // When it is not known, this function says NOTHING.
-function sufijoDeProceso(w) {
-  if (!procesos.comprobado) return ''
-  const pid = procesos.porSlice.get(String(w))
+function processSuffix(w) {
+  if (!processes.comprobado) return ''
+  const pid = processes.porSlice.get(String(w))
   return pid
     ? ` — OJO: hay un proceso trabajando dentro ahora mismo (pid ${pid}), no lo borres`
     : ' — y ahora mismo no hay ningún proceso trabajando dentro'
 }
 
-const lineas = []
+const lines = []
 // Empty blocks are NOT printed: a loop at rest produces a short report, not
 // three headings with «(ninguno)». The fallback that printed «(ninguno —
 // limpio)» over truncated data is the bug that gives all of this its name.
-if (estado.enVuelo.length) {
-  lineas.push(`EN VUELO (${estado.enVuelo.length})`)
-  for (const s of estado.enVuelo) {
-    lineas.push(`  #${s.n}  ${s.nombre}`)
-    if (!checkoutComprobado) {
+if (state.enVuelo.length) {
+  lines.push(`EN VUELO (${state.enVuelo.length})`)
+  for (const s of state.enVuelo) {
+    lines.push(`  #${s.n}  ${s.nombre}`)
+    if (!checkoutChecked) {
       // `hasWorktree`/`hasBranch` are `false` here because nothing was looked
       // at, not because they are not there: printing `worktree ✗` would be
       // asserting what has not been checked, which is the same defect this
       // command is after.
-      lineas.push('        worktree ?  rama ?  proceso ?  ← no se ha mirado ningún checkout (ver los avisos)')
+      lines.push('        worktree ?  rama ?  proceso ?  ← no se ha mirado ningún checkout (ver los avisos)')
     } else {
       // `?`, not `✗`, when the corresponding read could not be completed:
       // asserting that there is none of what could not be looked at is the same
@@ -454,16 +454,16 @@ if (estado.enVuelo.length) {
       // `else` above already prints `worktree ?` for this very reason. A `✓` can
       // only come from a read that really happened, so the mark of doubt never
       // degrades a positive signal.
-      const señales = [`worktree ${marca(worktreesLeidos, s.hasWorktree)}`, `rama ${marca(ramasLeidas, s.hasBranch)}`, `proceso ${VIVO[String(s.vivo)]}`]
-      if (s.pid) señales.push(`pid ${s.pid}`)
-      let nota = ''
-      if (s.vivo === null) nota = '  ← no se pudo comprobar si hay alguien trabajando (ver los avisos)'
-      else if (s.arrancando) nota = '  ← arrancando: el claim es más reciente que la ventana de arranque, todavía no hay proceso que esperar'
-      else if (s.vivo === false && s.edadMs !== null) nota = '  ← SIN SEÑAL DE VIDA'
-      else if (s.vivo === false) nota = '  ← sin proceso, y sin saber de cuándo es el claim: no se acusa (ver los avisos)'
-      lineas.push(`        ${señales.join('  ')}${nota}`)
+      const signals = [`worktree ${mark(worktreesRead, s.hasWorktree)}`, `rama ${mark(branchesRead, s.hasBranch)}`, `proceso ${ALIVE[String(s.vivo)]}`]
+      if (s.pid) signals.push(`pid ${s.pid}`)
+      let note = ''
+      if (s.vivo === null) note = '  ← no se pudo comprobar si hay alguien trabajando (ver los avisos)'
+      else if (s.arrancando) note = '  ← arrancando: el claim es más reciente que la ventana de arranque, todavía no hay proceso que esperar'
+      else if (s.vivo === false && s.edadMs !== null) note = '  ← SIN SEÑAL DE VIDA'
+      else if (s.vivo === false) note = '  ← sin proceso, y sin saber de cuándo es el claim: no se acusa (ver los avisos)'
+      lines.push(`        ${signals.join('  ')}${note}`)
     }
-    if (s.edadMs !== null) lineas.push(`        claim puesto hace ${formatearEdad(s.edadMs)}`)
+    if (s.edadMs !== null) lines.push(`        claim puesto hace ${formatAge(s.edadMs)}`)
   }
 }
 
@@ -471,36 +471,36 @@ if (estado.enVuelo.length) {
 // not look at it), so a healthy loop with three open PRs comes out with 0
 // again. Different from the harvest block just below, which is what is ALREADY
 // MERGED and left remains on disk — the two can appear at once.
-if (estado.enRevision.length) {
-  if (lineas.length) lineas.push('')
-  lineas.push(`ENTREGADO, ESPERANDO MERGE (${estado.enRevision.length})`)
-  for (const r of estado.enRevision) {
-    lineas.push(`  #${r.n}  ${r.nombre} — status:in-review`)
+if (state.enRevision.length) {
+  if (lines.length) lines.push('')
+  lines.push(`ENTREGADO, ESPERANDO MERGE (${state.enRevision.length})`)
+  for (const r of state.enRevision) {
+    lines.push(`  #${r.n}  ${r.nombre} — status:in-review`)
   }
 }
 
-if (estado.cosecha.length) {
-  if (lineas.length) lineas.push('')
-  lineas.push(`ENTREGADO, SIN COSECHAR (${estado.cosecha.length})`)
-  for (const c of estado.cosecha) {
-    const queda = [c.hasWorktree ? `worktree .worktrees/${c.n}` : null, c.hasBranch ? `rama feat/${c.n}` : null].filter(Boolean)
+if (state.cosecha.length) {
+  if (lines.length) lines.push('')
+  lines.push(`ENTREGADO, SIN COSECHAR (${state.cosecha.length})`)
+  for (const c of state.cosecha) {
+    const remaining = [c.hasWorktree ? `worktree .worktrees/${c.n}` : null, c.hasBranch ? `rama feat/${c.n}` : null].filter(Boolean)
     // «cerrado como completado», not «mergeado»: the only thing observable
     // without crossing with the PR graph is the issue's `stateReason` (see
     // filterMergedIssues in gh-issue-map.js). Closing by hand as completed
     // counts just the same, and saying «mergeado» would be asserting something
     // that has not been checked.
-    lineas.push(`  #${c.n}  cerrado como completado, y todavía queda en disco: ${queda.join(' y ')}`)
+    lines.push(`  #${c.n}  cerrado como completado, y todavía queda en disco: ${remaining.join(' y ')}`)
   }
 }
 
-const residuoTotal = estado.residuo.labels.length + estado.residuo.worktreesHuerfanos.length
-if (residuoTotal) {
-  if (lineas.length) lineas.push('')
-  lineas.push(`RESIDUO (${residuoTotal})`)
-  for (const r of estado.residuo.labels) {
-    lineas.push(`  #${r.n}  cerrado, pero conserva ${r.statusLabels.map((l) => `status:${l}`).join(' y ')}`)
+const residueTotal = state.residuo.labels.length + state.residuo.worktreesHuerfanos.length
+if (residueTotal) {
+  if (lines.length) lines.push('')
+  lines.push(`RESIDUO (${residueTotal})`)
+  for (const r of state.residuo.labels) {
+    lines.push(`  #${r.n}  cerrado, pero conserva ${r.statusLabels.map((l) => `status:${l}`).join(' y ')}`)
   }
-  for (const w of estado.residuo.worktreesHuerfanos) {
+  for (const w of state.residuo.worktreesHuerfanos) {
     // THE SENTENCE. §6 of the spec proposed «sin issue vivo que lo reclame»,
     // and that sentence is FALSE when the issue is OPEN in a state that is not
     // `status:in-progress` (e.g. `ready`, `blocked`): neither `enProgreso` nor
@@ -508,52 +508,52 @@ if (residuoTotal) {
     // are different situations with different remedies, and telling them apart
     // costs no call at all: it comes out of the open issues that were already
     // read.
-    const status = statusAbiertoPorNumero.get(w)
-    if (status) lineas.push(`  .worktrees/${w}  su issue #${w} sigue abierto (status:${status}) y no está en vuelo${sufijoDeProceso(w)}`)
-    else if (/^\d+$/.test(w)) lineas.push(`  .worktrees/${w}  ningún issue lo reclama: no hay ninguno abierto con ese número, ni ninguno entregado que lo dejara atrás${sufijoDeProceso(w)}`)
-    else lineas.push(`  .worktrees/${w}  no corresponde al número de ningún issue${sufijoDeProceso(w)}`)
+    const status = openStatusByNumber.get(w)
+    if (status) lines.push(`  .worktrees/${w}  su issue #${w} sigue abierto (status:${status}) y no está en vuelo${processSuffix(w)}`)
+    else if (/^\d+$/.test(w)) lines.push(`  .worktrees/${w}  ningún issue lo reclama: no hay ninguno abierto con ese número, ni ninguno entregado que lo dejara atrás${processSuffix(w)}`)
+    else lines.push(`  .worktrees/${w}  no corresponde al número de ningún issue${processSuffix(w)}`)
   }
   // The note is about worktrees, so it only appears when there is one: with
   // label residue alone it would talk about something that is not in the
   // report. Spotted by running the command for real against a repo with real
   // residue.
-  if (estado.residuo.worktreesHuerfanos.length) {
-    lineas.push('  (mientras un .worktrees/<n> exista, /ct-next se niega a despachar #<n> — este comando lo nombra, nunca lo borra)')
+  if (state.residuo.worktreesHuerfanos.length) {
+    lines.push('  (mientras un .worktrees/<n> exista, /ct-next se niega a despachar #<n> — este comando lo nombra, nunca lo borra)')
   }
 }
 
 // The at-rest line ONLY when there is nothing left to check. Asserting that
 // there is nothing, having left a read half-done, is literally the bug of §3.2
 // of the field feedback.
-if (!lineas.length && !sinComprobar.length) {
-  lineas.push('loop en reposo: nada en vuelo, nada por cosechar, nada de residuo.')
+if (!lines.length && !unchecked.length) {
+  lines.push('loop en reposo: nada en vuelo, nada por cosechar, nada de residuo.')
 }
 
 // Channel: the report is the PRODUCT and goes on stdout; the reasons for what
 // could not be checked are diagnostics and go on stderr like the rest of the
 // plugin's `aviso:`. The warnings are written BEFORE the report on purpose:
 // they qualify everything that comes below.
-for (const m of sinComprobar) console.error(`aviso: ${m}`)
+for (const m of unchecked) console.error(`aviso: ${m}`)
 
 // The exit code is decided by the composer's `hayHallazgos`, not by this
 // count: the number is only for the human, and computing it here cannot change
 // the signal an external watcher receives.
-const cuantos = estado.enVuelo.filter((s) => s.vivo === false && !s.arrancando && s.edadMs !== null).length
-  + estado.cosecha.length + residuoTotal
-if (sinComprobar.length) {
+const howMany = state.enVuelo.filter((s) => s.vivo === false && !s.arrancando && s.edadMs !== null).length
+  + state.cosecha.length + residueTotal
+if (unchecked.length) {
   // «aviso(s)», not «lectura(s) sin completar»: the count is the count of
   // `aviso:` lines that have just come out on stderr, and not all of them are
   // reads. The warning about the worktrees that no issue read explains is not a
   // failed read —the disk read went fine— so counting it as one made it say
   // «2 lectura(s)» where ONE had failed. Counting warnings is exact and, on top
   // of that, whoever reads it can verify it by counting the lines above.
-  lineas.push(`exit 1 — ${sinComprobar.length} aviso(s): lo de arriba es sólo lo que sí se ha podido comprobar`)
-} else if (estado.hayHallazgos) {
-  lineas.push(`exit 3 — hay ${cuantos} cosa(s) que revisar`)
+  lines.push(`exit 1 — ${unchecked.length} aviso(s): lo de arriba es sólo lo que sí se ha podido comprobar`)
+} else if (state.hayHallazgos) {
+  lines.push(`exit 3 — hay ${howMany} cosa(s) que revisar`)
 } else {
-  lineas.push('exit 0 — nada que revisar')
+  lines.push('exit 0 — nada que revisar')
 }
-console.log(lineas.join('\n'))
+console.log(lines.join('\n'))
 
 // `process.exitCode` and NOT `process.exit(code)` — the same lesson already
 // written twice in this repo (ct-next.mjs, next to its `finalExitCode`, and the
@@ -570,4 +570,4 @@ console.log(lineas.join('\n'))
 // (exit 2 for a badly set `--repo`) do use `process.exit()`, with the same
 // criterion as ct-next.mjs: they are one line through console.error and there
 // is no report to flush.
-process.exitCode = sinComprobar.length ? 1 : (estado.hayHallazgos ? 3 : 0)
+process.exitCode = unchecked.length ? 1 : (state.hayHallazgos ? 3 : 0)

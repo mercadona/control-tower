@@ -43,8 +43,8 @@ describe('next: the session asks and the oracle answers', () => {
     // The property "implementer and judge read the same text" hangs off this
     // line: the judge's dispatch names the brief, or the judge never opens it.
     expect(r.stdout).toMatch(/el brief de la tarea: .*task-1-brief\.md/)
-    const paquete = join(repo, '.agent', 'run-7', 'task-1-review.diff')
-    expect(readFileSync(paquete, 'utf8')).toMatch(/\+uno/)
+    const reviewPackage = join(repo, '.agent', 'run-7', 'task-1-review.diff')
+    expect(readFileSync(reviewPackage, 'utf8')).toMatch(/\+uno/)
   })
 
   it('when the judge sent the task back, next tells the implementer so', () => {
@@ -65,11 +65,11 @@ describe('the step guard', () => {
     ['verdict', 'implement'],
     ['global', 'implement'],
     ['slice-verdict', 'implement'],
-  ])('asking for "%s" while in "%s" is REFUSED with 9, and it says which one is due', (verbo, paso) => {
-    const conJson = { verdict: () => ct('verdict', writeVerdict('PASS')), 'slice-verdict': () => ct('slice-verdict', writeSliceVerdict('PASS')) }
-    const r = conJson[verbo] ? conJson[verbo]() : ct(verbo)
+  ])('asking for "%s" while in "%s" is REFUSED with 9, and it says which one is due', (verb, step) => {
+    const withJson = { verdict: () => ct('verdict', writeVerdict('PASS')), 'slice-verdict': () => ct('slice-verdict', writeSliceVerdict('PASS')) }
+    const r = withJson[verb] ? withJson[verb]() : ct(verb)
     expect(r.status).toBe(9)
-    expect(r.stderr).toMatch(new RegExp(`el run está en "${paso}"`))
+    expect(r.stderr).toMatch(new RegExp(`el run está en "${step}"`))
     expect(r.stderr).toMatch(/ct-step next/)
   })
 

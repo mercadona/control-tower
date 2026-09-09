@@ -315,8 +315,8 @@ export function composeHydration(stateText, gitLog, { stateRel = COORD_REL_PATH 
   // session —whose `.agent/STATE.md` talks about the epic and not about any
   // slice— opened every hydration with a false label: exactly the confusion of
   // files this round fixes, the other way round.
-  const titulo = stateRel === SLICE_REL_PATH ? 'Estado del slice' : 'Estado del repo'
-  parts.push(`# ${titulo} (hidratación automática)\n\n${stripFrontmatterComments(stateText).trim()}`)
+  const title = stateRel === SLICE_REL_PATH ? 'Estado del slice' : 'Estado del repo'
+  parts.push(`# ${title} (hidratación automática)\n\n${stripFrontmatterComments(stateText).trim()}`)
 
   const guide = fieldReadingGuide(meta, { blocked: blocked.state === 'blocked' })
   if (guide) parts.push(guide)
@@ -550,8 +550,8 @@ export function withLastCommit(stateText, sha) {
   if (!m) return { text: s, updated: false }
   const frontmatter = m[1]
   if (!LAST_COMMIT_LINE.test(frontmatter)) return { text: s, updated: false }
-  const nuevo = frontmatter.replace(LAST_COMMIT_LINE, (_, prefijo, comilla, __, cierre, cola) => `${prefijo}${comilla}${sha}${cierre}${cola}`)
-  return { text: s.replace(frontmatter, nuevo), updated: true }
+  const rewritten = frontmatter.replace(LAST_COMMIT_LINE, (_, prefix, quote, __, closeQuote, tail) => `${prefix}${quote}${sha}${closeQuote}${tail}`)
+  return { text: s.replace(frontmatter, rewritten), updated: true }
 }
 
 function countWorkCommits(git, stateSha, headSha, total) {
@@ -566,18 +566,18 @@ function countWorkCommits(git, stateSha, headSha, total) {
   let work = 0
   let bookkeeping = 0
   let files = null // null = we have not seen any commit yet
-  const cerrar = () => {
+  const close = () => {
     if (files === null) return
     // With no files listed (a merge, an empty commit) → it counts as work.
     if (files.length > 0 && files.every((f) => f === STATE_REL_PATH)) bookkeeping++
     else work++
   }
   for (const line of String(r.stdout || '').split('\n')) {
-    if (line.startsWith('commit:')) { cerrar(); files = []; continue }
+    if (line.startsWith('commit:')) { close(); files = []; continue }
     const f = line.trim()
     if (f && files !== null) files.push(f)
   }
-  cerrar()
+  close()
   // Sanity check: if the parsing did not see the same commits as
   // `rev-list --count`, we do not trust it.
   if (work + bookkeeping !== total) return { work: total, bookkeeping: 0, known: false }
@@ -675,14 +675,14 @@ export const STOP_NOTICE_REL_NAME = 'stop-notice.json'
 
 export function noticeDecision({ relation, previous }) {
   const next = (turns) => ({ kind: relation.kind, stateSha: relation.stateSha || '', turns })
-  const misma = previous
+  const same = previous
     && typeof previous === 'object'
     && !Array.isArray(previous)
     && previous.kind === relation.kind
     && (previous.stateSha || '') === (relation.stateSha || '')
     && Number.isInteger(previous.turns)
     && previous.turns > 0
-  if (!misma) return { emit: true, next: next(1) }
+  if (!same) return { emit: true, next: next(1) }
   const turns = previous.turns + 1
   if (turns > NOTICE_REPEAT_EVERY_TURNS) return { emit: true, next: next(1) }
   return { emit: false, next: next(turns) }
@@ -729,7 +729,7 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
 
   if (rel.kind === 'behind') {
     const n = rel.count
-    const cuantos = n === 1 ? '1 commit' : n > 1 ? `${n} commits` : 'commits'
+    const howMany = n === 1 ? '1 commit' : n > 1 ? `${n} commits` : 'commits'
     // If there are entries in between as well, it is said: otherwise the
     // count does not square with what `git log` shows and it looks like a
     // failure of the guard.
@@ -738,7 +738,7 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
     // about COMMITS, and the path `countWorkCommits` exempts is literally
     // `.agent/STATE.md` (see that block's constant). Replacing it with the
     // resolved path would describe an exemption that does not exist.
-    const nota = b > 0
+    const note = b > 0
       ? ` (más ${b === 1 ? '1 commit que solo toca' : `${b} commits que solo tocan`} \`.agent/STATE.md\`, que no cuenta${b === 1 ? '' : 'n'}: un apunte no es trabajo sin registrar)`
       : ''
     // Same reason, and that is why the sentence is CONDITIONAL instead of
@@ -749,17 +749,17 @@ export function classifyStopState({ relation, stopHookActive, stateRel = COORD_R
     // commit exists and therefore none is exempt. Interpolating `stateRel`
     // into the sentence above would have told two lies in one: that that
     // commit exists and that it does not count.
-    const apunte = stateRel === COORD_REL_PATH
+    const entry = stateRel === COORD_REL_PATH
       ? 'Commitear ese cambio NO te vuelve a dejar atrás: un commit que solo toca `.agent/STATE.md` no cuenta. '
       : `No lo commitees: \`${stateRel}\` está fuera de git a propósito y no entra en el PR de este slice; basta con dejarlo al día en disco. `
     return {
       block: true,
       kind: 'behind',
       reason:
-        `\`${stateRel}\` se ha quedado atrás: hay ${cuantos} de trabajo${nota} en ${whereAmI(rel)} por encima de su \`last_commit\` ` +
+        `\`${stateRel}\` se ha quedado atrás: hay ${howMany} de trabajo${note} en ${whereAmI(rel)} por encima de su \`last_commit\` ` +
         `(${shortSha(rel.stateSha)}), que sí es un ancestro de HEAD (${shortSha(rel.headSha)}). ` +
         `Actualiza \`${stateRel}\` (you_are_here, next_action, tasks[], last_commit) antes de cerrar el turno, para que la próxima sesión se hidrate correcta. ` +
-        apunte +
+        entry +
         STOP_TAIL,
       systemMessage: '',
     }

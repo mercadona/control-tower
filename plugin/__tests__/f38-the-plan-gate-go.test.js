@@ -23,21 +23,21 @@ import { GO_TOKEN, goBody, goCommitment, newGoNonce } from '../scripts/go-respon
 import { goPath, readGoCommitment, writeGoCommitment } from '../scripts/go-registry.js'
 import { GO, GO_HASH, NONCE, goComment, goEnv } from './fixtures/go-gate.js'
 
-const AQUI = dirname(fileURLToPath(import.meta.url))
-const RELEASE = join(AQUI, '..', 'scripts', 'dispatch-check.mjs')
-const CT_GO = join(AQUI, '..', 'scripts', 'ct-go.mjs')
-const WATCH_GO = join(AQUI, '..', 'scripts', 'ct-watch-go.mjs')
-const FAKE_GH = join(AQUI, 'fixtures', 'fake-gh-bin')
+const HERE = dirname(fileURLToPath(import.meta.url))
+const RELEASE = join(HERE, '..', 'scripts', 'dispatch-check.mjs')
+const CT_GO = join(HERE, '..', 'scripts', 'ct-go.mjs')
+const WATCH_GO = join(HERE, '..', 'scripts', 'ct-watch-go.mjs')
+const FAKE_GH = join(HERE, 'fixtures', 'fake-gh-bin')
 
-const basura = []
-afterEach(() => { for (const d of basura.splice(0)) rmSync(d, { recursive: true, force: true }) })
-const tmp = (pref) => { const d = mkdtempSync(join(tmpdir(), pref)); basura.push(d); return d }
+const trash = []
+afterEach(() => { for (const d of trash.splice(0)) rmSync(d, { recursive: true, force: true }) })
+const tmp = (pref) => { const d = mkdtempSync(join(tmpdir(), pref)); trash.push(d); return d }
 
 // ---------------------------------------------------------------------------
 // The worktree of the slice: a branch with the plan and the task committed,
 // and the run DELIVERED. It is the state in which a slice asks to release — in
 // other words, the only state in which the door of the go has anything to say.
-// Copied from the fixture of e2e-release-correspondencia.test.js: the tests of
+// Copied from the fixture of e2e-release-correspondence.test.js: the tests of
 // this repo do not import each other, they only share `fixtures/`.
 // ---------------------------------------------------------------------------
 const FENCE = '```'
@@ -84,7 +84,7 @@ function worktree(issue = 9) {
 // A real `--release` (without --dry-run: what is being tested includes that it
 // does NOT mutate). `labels` carries `gate:plan` by default, which is the
 // normal case of every slice.
-function release(dir, { issue = 9, comentarios, labels, configDir, viewFail = false, commentsFail = false } = {}) {
+function release(dir, { issue = 9, comments, labels, configDir, viewFail = false, commentsFail = false } = {}) {
   const log = join(dir, 'gh-argv.log')
   const r = spawnSync(process.execPath, [RELEASE, String(issue), '--repo', 'o/r', '--release'], {
     cwd: dir, encoding: 'utf8',
@@ -93,17 +93,17 @@ function release(dir, { issue = 9, comentarios, labels, configDir, viewFail = fa
       PATH: `${FAKE_GH}:${process.env.PATH}`,
       FAKE_GH_ARGV_LOG_FILE: log,
       FAKE_GH_VIEW_LABELS: JSON.stringify(labels ?? ['status:in-progress', 'gate:plan']),
-      ...(comentarios !== undefined ? { FAKE_GH_VIEW_COMMENTS: JSON.stringify({ comments: comentarios }) } : {}),
+      ...(comments !== undefined ? { FAKE_GH_VIEW_COMMENTS: JSON.stringify({ comments }) } : {}),
       ...(viewFail ? { FAKE_GH_VIEW_FAIL: '1' } : {}),
       ...(commentsFail ? { FAKE_GH_VIEW_COMMENTS_FAIL: '1' } : {}),
       ...(configDir !== undefined ? { CLAUDE_CONFIG_DIR: configDir } : {}),
     },
   })
-  return { ...r, salida: (r.stdout || '') + (r.stderr || ''), argv: existsSync(log) ? readFileSync(log, 'utf8') : '' }
+  return { ...r, output: (r.stdout || '') + (r.stderr || ''), argv: existsSync(log) ? readFileSync(log, 'utf8') : '' }
 }
 
 // The commitment of a dispatch, registered where it really lives.
-const registrar = (issue = 9, commitment = GO_HASH) => {
+const register = (issue = 9, commitment = GO_HASH) => {
   const cfg = tmp('ct-f38-cfg-')
   writeGoCommitment({ repo: 'o/r', issue, commitment, configDir: cfg })
   return cfg
@@ -111,7 +111,7 @@ const registrar = (issue = 9, commitment = GO_HASH) => {
 
 describe('door 9: the `plan` gate does not close by itself', () => {
   it('with the go of THIS dispatch answered → it releases, and says who gave it', () => {
-    const r = release(worktree(), { configDir: registrar(), comentarios: [goComment('josemerca')] })
+    const r = release(worktree(), { configDir: register(), comments: [goComment('josemerca')] })
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/released #9/)
     // Who authorised it, on stderr: it is the only place where a go given by
@@ -120,10 +120,10 @@ describe('door 9: the `plan` gate does not close by itself', () => {
   })
 
   it('with no go answered at all → exit 9, and it mutates NOTHING', () => {
-    const r = release(worktree(), { configDir: registrar(), comentarios: [] })
+    const r = release(worktree(), { configDir: register(), comments: [] })
     expect(r.status).toBe(9)
-    expect(r.salida).toMatch(/el gate `plan` no está cerrado/)
-    expect(r.salida).toMatch(/sigue en status:in-progress/)
+    expect(r.output).toMatch(/el gate `plan` no está cerrado/)
+    expect(r.output).toMatch(/sigue en status:in-progress/)
     // The proof that it did not mutate is not the message: it is the real argv of `gh`.
     expect(r.argv).not.toMatch(/issue edit/)
   })
@@ -135,29 +135,29 @@ describe('door 9: the `plan` gate does not close by itself', () => {
   // -------------------------------------------------------------------------
   it('a BARE `-OK` does not release: it is the go the agent WOULD know how to fabricate', () => {
     const r = release(worktree(), {
-      configDir: registrar(),
-      comentarios: [{ id: 'IC_1', body: GO_TOKEN, createdAt: '2026-08-25T10:00:00Z', author: { login: 'un-agente' } }],
+      configDir: register(),
+      comments: [{ id: 'IC_1', body: GO_TOKEN, createdAt: '2026-08-25T10:00:00Z', author: { login: 'un-agente' } }],
     })
     expect(r.status).toBe(9)
     expect(r.argv).not.toMatch(/issue edit/)
   })
 
   it('the go of ANOTHER dispatch does not either: the nonce is per dispatch', () => {
-    const otro = goBody(newGoNonce(Buffer.from([1, 2, 3, 4])))
+    const other = goBody(newGoNonce(Buffer.from([1, 2, 3, 4])))
     const r = release(worktree(), {
-      configDir: registrar(),
-      comentarios: [{ id: 'IC_1', body: otro, createdAt: '2026-08-25T10:00:00Z', author: { login: 'josemerca' } }],
+      configDir: register(),
+      comments: [{ id: 'IC_1', body: other, createdAt: '2026-08-25T10:00:00Z', author: { login: 'josemerca' } }],
     })
     expect(r.status).toBe(9)
     // And that is why this door can look at the WHOLE issue with no window of
     // ids: an inherited go does not fit, by construction.
-    expect(r.salida).toMatch(/ningún comentario de este issue trae el go de este despacho/)
+    expect(r.output).toMatch(/ningún comentario de este issue trae el go de este despacho/)
   })
 
   it('the right go in an old comment of the issue DOES count: there is no window here, the nonce makes it', () => {
     const r = release(worktree(), {
-      configDir: registrar(),
-      comentarios: [
+      configDir: register(),
+      comments: [
         { id: 'IC_0', body: 'prosa', createdAt: '2026-08-01T00:00:00Z', author: { login: 'x' } },
         goComment('josemerca'),
       ],
@@ -166,21 +166,21 @@ describe('door 9: the `plan` gate does not close by itself', () => {
   })
 
   it('with no commitment registered and with a `plan` gate → exit 9, and it names the remedy', () => {
-    const r = release(worktree(), { configDir: tmp('ct-f38-vacio-'), comentarios: [goComment()] })
+    const r = release(worktree(), { configDir: tmp('ct-f38-vacio-'), comments: [goComment()] })
     expect(r.status).toBe(9)
-    expect(r.salida).toMatch(/NO ESTÁ REGISTRADO/)
-    expect(r.salida).toMatch(/ct-go\.mjs --issue 9 --repo o\/r/)
+    expect(r.output).toMatch(/NO ESTÁ REGISTRADO/)
+    expect(r.output).toMatch(/ct-go\.mjs --issue 9 --repo o\/r/)
   })
 
   it('with no commitment and with an issue that declares NO gate at all → exit 9: silence is not a waiver', () => {
     // It is also the path an agent would open by deleting its own labels.
-    const r = release(worktree(), { configDir: tmp('ct-f38-vacio-'), labels: ['status:in-progress'], comentarios: [] })
+    const r = release(worktree(), { configDir: tmp('ct-f38-vacio-'), labels: ['status:in-progress'], comments: [] })
     expect(r.status).toBe(9)
-    expect(r.salida).toMatch(/no declaran NINGÚN gate/)
+    expect(r.output).toMatch(/no declaran NINGÚN gate/)
   })
 
   it('the EXPLICIT waiver (`gate:none`) releases without looking at any go', () => {
-    const r = release(worktree(), { configDir: tmp('ct-f38-vacio-'), labels: ['status:in-progress', 'gate:none'], comentarios: [] })
+    const r = release(worktree(), { configDir: tmp('ct-f38-vacio-'), labels: ['status:in-progress', 'gate:none'], comments: [] })
     expect(r.status).toBe(0)
     expect(r.stdout).toMatch(/released #9/)
   })
@@ -188,22 +188,22 @@ describe('door 9: the `plan` gate does not close by itself', () => {
   it('an unreadable registry does NOT release, and does not claim the go is missing', () => {
     // The doctrine of the exits 5/6/8: this file does not call clean what it
     // has not been able to look at.
-    const cfg = registrar()
+    const cfg = register()
     writeFileSync(goPath({ repo: 'o/r', issue: 9, configDir: cfg }), '{ esto no es json\n')
-    const r = release(worktree(), { configDir: cfg, comentarios: [goComment()] })
+    const r = release(worktree(), { configDir: cfg, comments: [goComment()] })
     expect(r.status).toBe(9)
-    expect(r.salida).toMatch(/NO se ha podido leer/)
-    expect(r.salida).not.toMatch(/no está cerrado/)
+    expect(r.output).toMatch(/NO se ha podido leer/)
+    expect(r.output).not.toMatch(/no está cerrado/)
   })
 
   it('if the comments cannot be read it does not release either, and does NOT say the go is missing', () => {
     // An issue with a real go whose comments could not be read is not
     // indistinguishable from one with none — and this file does not confuse
     // the two at any of its doors.
-    const r = release(worktree(), { configDir: registrar(), commentsFail: true })
+    const r = release(worktree(), { configDir: register(), commentsFail: true })
     expect(r.status).toBe(9)
-    expect(r.salida).toMatch(/no se han podido leer los comentarios/)
-    expect(r.salida).toMatch(/no se afirma que falte/)
+    expect(r.output).toMatch(/no se han podido leer los comentarios/)
+    expect(r.output).toMatch(/no se afirma que falte/)
     expect(r.argv).not.toMatch(/issue edit/)
   })
 
@@ -218,7 +218,7 @@ describe('door 9: the `plan` gate does not close by itself', () => {
     const run = JSON.parse(readFileSync(join(dir, '.agent', 'run-9.json'), 'utf8'))
     delete run.closed
     writeFileSync(join(dir, '.agent', 'run-9.json'), JSON.stringify(run))
-    const r = release(dir, { configDir: tmp('ct-f38-vacio-'), comentarios: [] })
+    const r = release(dir, { configDir: tmp('ct-f38-vacio-'), comments: [] })
     expect(r.status).toBe(7)
   })
 })
@@ -241,14 +241,14 @@ describe('the registry of the commitment', () => {
 
   it('the file is not readable by the rest of the machine', () => {
     const cfg = tmp('ct-f38-reg-')
-    const ruta = writeGoCommitment({ repo: 'o/r', issue: 7, commitment: GO_HASH, configDir: cfg })
-    expect(statSync(ruta).mode & 0o077).toBe(0)
+    const path = writeGoCommitment({ repo: 'o/r', issue: 7, commitment: GO_HASH, configDir: cfg })
+    expect(statSync(path).mode & 0o077).toBe(0)
   })
 
   it('a repo name with slashes or `..` does not write outside the folder', () => {
     const cfg = tmp('ct-f38-reg-')
-    const ruta = goPath({ repo: '../../etc/passwd', issue: 7, configDir: cfg })
-    expect(dirname(ruta)).toBe(join(cfg, 'control-tower', 'go'))
+    const path = goPath({ repo: '../../etc/passwd', issue: 7, configDir: cfg })
+    expect(dirname(path)).toBe(join(cfg, 'control-tower', 'go'))
   })
 
   it('with neither HOME nor CLAUDE_CONFIG_DIR it writes NOTHING: a relative path would end up in the cwd', () => {
@@ -281,8 +281,8 @@ describe('ct-go: reissuing the go of a dispatch in flight', () => {
     expect(r.status).toBe(0)
     const nonce = (r.stdout.match(/-OK ([0-9a-f]{8})/) || [])[1]
     expect(nonce).toMatch(/^[0-9a-f]{8}$/)
-    const ruta = goPath({ repo: 'o/r', issue: 7, configDir: cfg })
-    expect(readFileSync(ruta, 'utf8')).not.toContain(nonce)
+    const path = goPath({ repo: 'o/r', issue: 7, configDir: cfg })
+    expect(readFileSync(path, 'utf8')).not.toContain(nonce)
     expect(readGoCommitment({ repo: 'o/r', issue: 7, configDir: cfg }).commitment).toBe(goCommitment(nonce))
   })
 
@@ -297,13 +297,13 @@ describe('ct-go: reissuing the go of a dispatch in flight', () => {
 
   it('the go it reissues really does release: it is the complete recovery path', () => {
     const cfg = tmp('ct-f38-ctgo-')
-    const emitido = spawnSync(process.execPath, [CT_GO, '--issue', '9', '--repo', 'o/r'], {
+    const issued = spawnSync(process.execPath, [CT_GO, '--issue', '9', '--repo', 'o/r'], {
       encoding: 'utf8', env: { ...process.env, CLAUDE_CONFIG_DIR: cfg },
     })
-    const nonce = (emitido.stdout.match(/-OK ([0-9a-f]{8})/) || [])[1]
+    const nonce = (issued.stdout.match(/-OK ([0-9a-f]{8})/) || [])[1]
     const r = release(worktree(), {
       configDir: cfg,
-      comentarios: [{ id: 'IC_1', body: goBody(nonce), createdAt: '2026-08-25T11:00:00Z', author: { login: 'josemerca' } }],
+      comments: [{ id: 'IC_1', body: goBody(nonce), createdAt: '2026-08-25T11:00:00Z', author: { login: 'josemerca' } }],
     })
     expect(r.status).toBe(0)
   })

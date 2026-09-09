@@ -66,7 +66,7 @@ import { extractTasks } from './plan-tasks.js'
 import { BranchReconciliation } from './branch-reconciliation.js'
 import { ReconcileOutcome, DiscardReason } from './reconcile-outcome.js'
 import { LOOP_ARTIFACT_PATTERNS, matchesPattern } from './scope.js'
-import { CONVENTIONS_FILE, seccionDeVara } from './repo-yardstick.js'
+import { CONVENTIONS_FILE, yardstickSection } from './repo-yardstick.js'
 import { PluginYardstick } from './plugin-yardstick.js'
 import { PluginManifest } from './plugin-manifest.js'
 import {
@@ -78,16 +78,16 @@ import {
   REVIEW_TOKEN_LABEL, reviewToken, reviewTokenLine, reviewTokenOf,
   readAdvice, ADVISOR_TOOLS, ADVICE_PACKAGE_SECTIONS,
 } from './step-contracts.js'
-import { metricRow, metricLine, metricsPath, planSha256, verdictMeasures, metricsRepoRelPath, briefVaraCtMeasures } from './run-metrics.js'
+import { metricRow, metricLine, metricsPath, planSha256, verdictMeasures, metricsRepoRelPath, briefCtYardstickMeasures } from './run-metrics.js'
 import { RoleBytes } from './role-bytes.js'
 // Slice 10: parseStateSafe reads the `senal:` field of the SLICE.md (see
-// senalDelSlice, below, for why the `epic:` regex will not do), and
-// SENAL_AUSENTE is the ONE constant with which the two writers of the channel
+// sliceSignal, below, for why the `epic:` regex will not do), and
+// SIGNAL_ABSENT is the ONE constant with which the two writers of the channel
 // (buildStateSeed when seeding, this module when packaging the fallback)
 // declare that there is no signal — imported, not copied, so that they cannot
 // diverge.
 import { parseStateSafe } from './state.js'
-import { SENAL_AUSENTE } from './kickoff.js'
+import { SIGNAL_ABSENT } from './kickoff.js'
 import { SLICE_REL_PATH } from './state-paths.js'
 import { findClosingKeywords } from './closing-keywords.js'
 import { CtStepCommit } from './ct-step-commit.js'
@@ -204,10 +204,10 @@ if (problems.length) {
 
 // The steps that belong to the SLICE and to no task. One single list and not
 // two: it is used by the cross-check of commits (below) and by the telemetry
-// (`medir`), and when the same concept was written twice the second copy fell
+// (`measure`), and when the same concept was written twice the second copy fell
 // behind when `e2e` arrived — with the result that every e2e row was attributed
 // to the last task of the plan.
-const PASOS_DE_SLICE = [STEPS.RECONCILE, STEPS.GLOBAL, STEPS.SLICE_JUDGE, STEPS.E2E]
+const SLICE_STEPS = [STEPS.RECONCILE, STEPS.GLOBAL, STEPS.SLICE_JUDGE, STEPS.E2E]
 
 // ---------------------------------------------------------------------------
 // The state of the run
@@ -247,7 +247,7 @@ const headSha = () => (git(['rev-parse', 'HEAD']) || '').trim()
 // The branch name comes out of `.agent/SLICE.md` with `parseStateSafe` — the
 // same parser this file already uses for `epic:` and `senal:` (see below) — and
 // NOT with a regex of its own: `dispatch-check.mjs` does have its own for this
-// same field (`campoBaseDeLaSemilla`), debt older than this task and outside
+// same field (`seedBaseField`), debt older than this task and outside
 // its scope. Which remote branch it is when the seed does not name it is
 // decided by `BaseBranch` (scripts/slice-base.js), the same resolver
 // `dispatch-check.mjs` consumes: that fallback chain used to be written twice
@@ -257,8 +257,8 @@ const headSha = () => (git(['rev-parse', 'HEAD']) || '').trim()
 // exist in this worktree, the measurement is made without the exclusion: the
 // worst case is counting the way it was counted until today, never "not
 // counting".
-const refRemotaResuelve = (nombre) =>
-  git(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${nombre}`], { allowFail: true }) !== null
+const remoteRefResolves = (name) =>
+  git(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${name}`], { allowFail: true }) !== null
 
 // The resolution itself —which branch is "the base"— lives in one single
 // function, and not one per consumer: `reconcile` (Task 8) needs the NAME to
@@ -267,22 +267,22 @@ const refRemotaResuelve = (nombre) =>
 // asked twice for two different reasons, and the reviewer of the previous phase
 // warned in writing that a second copy here would be "the third divergent copy"
 // of this same decision.
-function resolverRamaBase() {
+function resolveBaseBranch() {
   const { meta } = parseStateSafe(readFileSync(join(repoRoot, SLICE_REL_PATH), 'utf8'))
-  return new BaseBranch({ remoteRefExists: refRemotaResuelve }).resolve({ declared: meta.base })
+  return new BaseBranch({ remoteRefExists: remoteRefResolves }).resolve({ declared: meta.base })
 }
 
-function exclusionDeLaBase() {
-  const rama = resolverRamaBase()
-  if (!rama || !refRemotaResuelve(rama)) return null
-  return `^origin/${rama}`
+function baseExclusion() {
+  const branch = resolveBaseBranch()
+  if (!branch || !remoteRefResolves(branch)) return null
+  return `^origin/${branch}`
 }
 
-const commitsDelRun = (desde, exclusion) => {
-  const argv = ['rev-list', '--count', '--no-merges', `${desde}..HEAD`]
+const runCommits = (since, exclusion) => {
+  const argv = ['rev-list', '--count', '--no-merges', `${since}..HEAD`]
   if (exclusion) argv.push(exclusion)
-  const salida = git(argv, { allowFail: true })
-  return salida === null ? null : Number(salida.trim())
+  const output = git(argv, { allowFail: true })
+  return output === null ? null : Number(output.trim())
 }
 
 let run
@@ -310,12 +310,12 @@ if (existsSync(stateFile)) {
   // The file is not believed on its own: it cross-checks the task the state
   // names against the commits there are since the measuring reference. Guessing
   // here means reimplementing on top of a task that is already committed.
-  const exclusion = exclusionDeLaBase()
-  const rango = [`${run.baseSha}..HEAD`, exclusion].filter(Boolean).join(' ')
-  const rangoCorto = [`${run.baseSha.slice(0, 7)}..HEAD`, exclusion].filter(Boolean).join(' ')
-  const hechos = commitsDelRun(run.baseSha, exclusion)
-  if (hechos === null) {
-    die(`git no pudo contar los commits del run: no resuelve \`${rango}\` en este worktree. Borra ${stateFile} si el run es de otra rama.`, EXIT.PRECONDITION)
+  const exclusion = baseExclusion()
+  const range = [`${run.baseSha}..HEAD`, exclusion].filter(Boolean).join(' ')
+  const shortRange = [`${run.baseSha.slice(0, 7)}..HEAD`, exclusion].filter(Boolean).join(' ')
+  const actual = runCommits(run.baseSha, exclusion)
+  if (actual === null) {
+    die(`git no pudo contar los commits del run: no resuelve \`${range}\` en este worktree. Borra ${stateFile} si el run es de otra rama.`, EXIT.PRECONDITION)
   }
   // At `global`/`slice-judge`/`e2e` the `tasksTotal` tasks are ALREADY
   // committed — `run.task` stays on the last one and not on `tasksTotal + 1`,
@@ -325,21 +325,21 @@ if (existsSync(stateFile)) {
   // here at PRECONDITION before it gets to run anything.
   //
   // And `tasksTotal` on its own is NOT enough: the slice steps commit too. The
-  // slice verdict opens a commit of its own on approval (`verboSliceVerdict`),
+  // slice verdict opens a commit of its own on approval (`sliceVerdictVerb`),
   // so on reaching `e2e` —a new process, the file read again— there are
   // `tasksTotal + 1` commits since `baseSha` and the fixed count brought down
   // EVERY verb with PRECONDITION: no slice with journeys could close, the run
   // never reached DELIVERED and `dispatch-check --release` rejected it with the
   // 7 for ever. This file already had that very reasoning written down for the
-  // NEXT commit (see `comprometerInformeE2e`, which is why it only commits at
+  // NEXT commit (see `commitE2eReport`, which is why it only commits at
   // DELIVERED); nobody applied it to the one placed in front of it. That is why
   // the slice commits are COUNTED in the state (`sliceCommits`) instead of being
   // taken for zero: `|| 0` covers the runs written before the field existed.
-  const esperados = PASOS_DE_SLICE.includes(run.step)
+  const expected = SLICE_STEPS.includes(run.step)
     ? run.tasksTotal + (run.sliceCommits || 0)
     : run.task - 1
-  if (hechos !== esperados) {
-    die(`el estado y git no cuentan lo mismo: el fichero espera ${esperados} commit(s) (tarea ${run.task}, paso ${run.step}) y en \`${rangoCorto}\` (sin fusiones) hay ${hechos}. No se sigue a ciegas.`, EXIT.PRECONDITION)
+  if (actual !== expected) {
+    die(`el estado y git no cuentan lo mismo: el fichero espera ${expected} commit(s) (tarea ${run.task}, paso ${run.step}) y en \`${shortRange}\` (sin fusiones) hay ${actual}. No se sigue a ciegas.`, EXIT.PRECONDITION)
   }
 } else {
   if ((git(['diff', '--cached', '--name-only']) || '').trim()) {
@@ -359,8 +359,8 @@ if (existsSync(stateFile)) {
   writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\n')
 }
 
-const guardar = () => writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\n')
-const tarea = () => tasks.find((t) => t.n === run.task)
+const save = () => writeFileSync(stateFile, JSON.stringify(run, null, 2) + '\n')
+const currentTask = () => tasks.find((t) => t.n === run.task)
 
 // ---------------------------------------------------------------------------
 // The telemetry: append-only, TWO destinations, and a failure of its own brings
@@ -382,7 +382,7 @@ const tarea = () => tasks.find((t) => t.n === run.task)
 // the same one given to the verdict: it is written and staged by the PROGRAM,
 // at a path the program decides, and it is staged at `commit` — after the
 // checks and after the judge. If it were in the index while the checks run,
-// `alcanceDeclarado` would see it as a path the plan does not declare and would
+// `declaredScope` would see it as a path the plan does not declare and would
 // veto the task.
 //
 // The local file is still the machine's accumulated record (every repo, every
@@ -395,7 +395,7 @@ const repoSlug = (() => {
   const m = /[:/]([^/:]+\/[^/]+?)(?:\.git)?$/.exec(url)
   return m ? m[1] : null
 })()
-const epicDelSlice = (() => {
+const sliceEpic = (() => {
   const m = /^epic:\s*(.+)$/m.exec(readFileSync(join(repoRoot, '.agent', 'SLICE.md'), 'utf8'))
   return m ? m[1].trim() : null
 })()
@@ -407,12 +407,12 @@ const epicDelSlice = (() => {
 // slice judge half-finished without anybody seeing it. `parseStateSafe` already
 // exists in state.js and never throws; a SLICE.md without the field (seeded by
 // a plugin older than the column) comes out null and the package declares the
-// absence with SENAL_AUSENTE.
-const senalDelSlice = (() => {
+// absence with SIGNAL_ABSENT.
+const sliceSignal = (() => {
   const { meta } = parseStateSafe(readFileSync(join(repoRoot, '.agent', 'SLICE.md'), 'utf8'))
   return typeof meta.senal === 'string' && meta.senal.trim() ? meta.senal.trim() : null
 })()
-const intento = () => StepSeal.attemptOf(run)
+const currentAttempt = () => StepSeal.attemptOf(run)
 // The two identity fields the row's module CANNOT go and look up (it is pure):
 // whoever writes provides them. The version comes out of the plugin's manifest
 // —a rewritten `ct-step` makes two runs incomparable, just as a rewritten plan
@@ -427,26 +427,26 @@ const ACTOR = (git(['config', 'user.email'], { allowFail: true }) || '').trim() 
 // /ct-harvest: the writer and the reader cannot diverge.
 const METRICS_REL = metricsRepoRelPath(issue)
 
-function medir(step, measures) {
+function measure(step, measures) {
   // `global`, `slice-judge` and `e2e` belong to no task: a `task: 3` on that row
   // would be a gap read as an assertion (the same doctrine that already forbids
   // filling in with `null` disguised as zero throughout the rest of this file).
   // In those steps `run.task` stays nailed to the last task, so attributing the
   // cost to it would be a false assertion, not one datum too many.
-  const esDeSlice = PASOS_DE_SLICE.includes(step)
-  const linea = metricLine(metricRow({
-    repo: repoSlug, epic: epicDelSlice, issue, plan: planPath, plan_sha256: PLAN_SHA,
-    task: esDeSlice ? null : run.task, task_name: esDeSlice ? null : (tarea()?.name ?? null), tasks_total: run.tasksTotal,
-    step, attempt: intento(), plugin_version: PLUGIN_VERSION, actor: ACTOR,
+  const isSliceStep = SLICE_STEPS.includes(step)
+  const line = metricLine(metricRow({
+    repo: repoSlug, epic: sliceEpic, issue, plan: planPath, plan_sha256: PLAN_SHA,
+    task: isSliceStep ? null : run.task, task_name: isSliceStep ? null : (currentTask()?.name ?? null), tasks_total: run.tasksTotal,
+    step, attempt: currentAttempt(), plugin_version: PLUGIN_VERSION, actor: ACTOR,
   }, measures, { now: new Date().toISOString() }))
   // The two destinations are attempted separately: the account's disk being
   // full cannot cost the repo the row that travels, nor the other way round.
-  for (const destino of [metricsPath('ct-step', { configDir: process.env.CLAUDE_CONFIG_DIR }), join(repoRoot, METRICS_REL)]) {
+  for (const destination of [metricsPath('ct-step', { configDir: process.env.CLAUDE_CONFIG_DIR }), join(repoRoot, METRICS_REL)]) {
     try {
-      mkdirSync(dirname(destino), { recursive: true })
-      appendFileSync(destino, linea)
+      mkdirSync(dirname(destination), { recursive: true })
+      appendFileSync(destination, line)
     } catch (e) {
-      err(`aviso: no se pudo escribir la telemetría en ${destino} (${String(e.message).trim()}). Esto sigue: ninguna transición depende de la medida.`)
+      err(`aviso: no se pudo escribir la telemetría en ${destination} (${String(e.message).trim()}). Esto sigue: ninguna transición depende de la medida.`)
     }
   }
 }
@@ -461,12 +461,12 @@ function medir(step, measures) {
 // verdict file, like `verdict`). Both families already existed under those
 // names and renaming either of the two would break state in flight, so the
 // asymmetry is left stated rather than fixed.
-const VERBO_DE = {
+const VERB_OF = {
   report: STEPS.IMPLEMENT, controls: STEPS.CONTROLS, verdict: STEPS.JUDGE, advice: STEPS.ADVISE, commit: STEPS.COMMIT,
   reconcile: STEPS.RECONCILE, global: STEPS.GLOBAL, 'slice-verdict': STEPS.SLICE_JUDGE, e2e: STEPS.E2E,
 }
-function exigirPaso(v) {
-  if (run.step !== VERBO_DE[v]) {
+function requireStep(v) {
+  if (run.step !== VERB_OF[v]) {
     die(`"${v}" no es el paso que toca: el run está en "${run.step}" (tarea ${run.task}/${run.tasksTotal}). Pregunta con "ct-step next".`, EXIT.WRONG_STEP)
   }
 }
@@ -474,8 +474,8 @@ function exigirPaso(v) {
 // ---------------------------------------------------------------------------
 // next — it does not transition: it reports, and prepares what the step needs.
 // ---------------------------------------------------------------------------
-function verboNext() {
-  const t = tarea()
+function nextVerb() {
+  const t = currentTask()
   // §3.7: `global` and `slice-judge` run AFTER the last task — there is no
   // "task N/M" to announce, but the whole slice with its tasks already
   // committed.
@@ -484,26 +484,26 @@ function verboNext() {
   } else {
     out(`tarea ${run.task}/${run.tasksTotal} — ${t.name}`)
   }
-  out(`paso: ${run.step} (intento ${intento()})`)
+  out(`paso: ${run.step} (intento ${currentAttempt()})`)
   out('')
   switch (run.step) {
     case STEPS.IMPLEMENT: {
-      const brief = escribirBrief()
-      const informe = join(workDir, `task-${run.task}-report.json`)
+      const brief = writeBrief()
+      const reportPath = join(workDir, `task-${run.task}-report.json`)
       // The list comes out of the constant and is not typed again: the hand copy
       // of the judge's already diverged once, and `ct-step next` ended up
       // announcing tools that were not those of the agent being dispatched.
       out(`DESPACHA UN IMPLEMENTADOR (subagente con modelo ${IMPLEMENTER_MODEL} — herramientas: ${IMPLEMENTER_TOOLS}) con:`)
       out(`  - la rúbrica de ${join(PLUGIN_ROOT, 'prompts', 'task-implementer.md')}`)
       out(`  - el brief de la tarea: ${brief}`)
-      out(`  - que escriba su informe en: ${informe}`)
+      out(`  - que escriba su informe en: ${reportPath}`)
       if (run.lastFindings) {
         out('')
         out('El juez devolvió esta tarea. Lo que hay que arreglar:')
         out(run.lastFindings)
       }
       out('')
-      out(`Cuando vuelva:  ct-step report ${informe} --plan ${planPath} --issue ${issue}`)
+      out(`Cuando vuelva:  ct-step report ${reportPath} --plan ${planPath} --issue ${issue}`)
       out('NO comitees tú, y no le pidas al implementador que comitee: comitea ct-step.')
       break
     }
@@ -515,19 +515,19 @@ function verboNext() {
       out(`Ejecútalo con:  ct-step controls --plan ${planPath} --issue ${issue}`)
       break
     case STEPS.JUDGE: {
-      const paquete = escribirPaquete()
-      const veredicto = join(workDir, `task-${run.task}-verdict.json`)
+      const packagePath = writeReviewPackage()
+      const verdictPath = join(workDir, `task-${run.task}-verdict.json`)
       out(`DESPACHA EL JUEZ (subagente ct-judge — declarado SIN Bash: ${JUDGE_TOOLS}) con:`)
-      out(`  - el paquete de revisión: ${paquete}`)
+      out(`  - el paquete de revisión: ${packagePath}`)
       out(`  - el brief de la tarea: ${join(workDir, `task-${run.task}-brief.md`)}`)
       out(`  - los logs de los controles, YA en verde, por si los quiere: ${run.lastControlsLog ?? '(ninguno)'}`)
-      out(`  - que escriba su veredicto en: ${veredicto}`)
+      out(`  - que escriba su veredicto en: ${verdictPath}`)
       // The `review_token` is NOT asked of it: this program writes it when it
       // reads the verdict, with the value it computed itself. Asking the judge
       // for it meant asking it to copy 64 hex characters from a line the program
       // had just written, and one copying slip cost a whole opus verdict.
       out('')
-      out(`Cuando vuelva:  ct-step verdict ${veredicto} --plan ${planPath} --issue ${issue}`)
+      out(`Cuando vuelva:  ct-step verdict ${verdictPath} --plan ${planPath} --issue ${issue}`)
       out('No le pases la SALIDA de los controles: un lint sucio no debe ensuciarle el criterio.')
       break
     }
@@ -536,14 +536,14 @@ function verboNext() {
     // higher tier that sees BOTH attempts and BOTH vetoes at once — which is the
     // one thing neither of the two implementers could see.
     case STEPS.ADVISE: {
-      const paquete = escribirPaqueteDeConsejo()
-      const consejo = join(workDir, `task-${run.task}-advice.json`)
+      const packagePath = writeAdviceReviewPackage()
+      const advicePath = join(workDir, `task-${run.task}-advice.json`)
       out(`DESPACHA EL CONSEJERO (subagente ct-advisor — declarado sólo con ${ADVISOR_TOOLS}) con:`)
-      out(`  - el paquete del consejero: ${paquete}`)
-      out(`  - que escriba su consejo en: ${consejo}`)
+      out(`  - el paquete del consejero: ${packagePath}`)
+      out(`  - que escriba su consejo en: ${advicePath}`)
       out('')
       out('El juez ha vetado dos veces esta tarea. Al aceptar el consejo, el programa devuelve el árbol al último commit para las rutas de la tarea y el brief del tercer intento lleva dentro el enfoque que dicte el consejero: NO despaches un implementador ahora.')
-      out(`Cuando vuelva:  ct-step advice ${consejo} --plan ${planPath} --issue ${issue}`)
+      out(`Cuando vuelva:  ct-step advice ${advicePath} --plan ${planPath} --issue ${issue}`)
       break
     }
     case STEPS.COMMIT:
@@ -586,16 +586,16 @@ function verboNext() {
     // §3.7-B: the coherence between tasks, and whether together they deliver
     // the end of the slice — what no task judge ever looks at.
     case STEPS.SLICE_JUDGE: {
-      const paquete = escribirPaqueteDeSlice()
-      const veredicto = join(workDir, 'slice-verdict.json')
+      const packagePath = writeSliceReviewPackage()
+      const verdictPath = join(workDir, 'slice-verdict.json')
       out(`DESPACHA EL JUEZ DE SLICE (subagente ct-slice-judge — declarado SIN Bash: ${SLICE_JUDGE_TOOLS}) con:`)
-      out(`  - el paquete de revisión del slice: ${paquete}`)
+      out(`  - el paquete de revisión del slice: ${packagePath}`)
       out(`  - el plan: ${planPath}`)
       out(`  - el log de la Global verification, YA en verde, por si lo quiere: ${run.lastGlobalLog ?? '(N/A declarado)'}`)
       out(`  - los veredictos de cada tarea, ya comiteados: docs/superpowers/verdicts/issue-${issue}-task-*.json`)
-      out(`  - que escriba su veredicto en: ${veredicto}`)
+      out(`  - que escriba su veredicto en: ${verdictPath}`)
         out('')
-      out(`Cuando vuelva:  ct-step slice-verdict ${veredicto} --plan ${planPath} --issue ${issue}`)
+      out(`Cuando vuelva:  ct-step slice-verdict ${verdictPath} --plan ${planPath} --issue ${issue}`)
       break
     }
     case STEPS.E2E:
@@ -620,8 +620,8 @@ function verboNext() {
       // at least one DISCARDED round per slice, and the discards come out of the
       // budget of the whole slice.
       out(`Escribe el informe cumpliendo E2E_SCHEMA (scripts/step-contracts.js): cada recorrido lleva ${E2E_SCHEMA.properties.runs.items.required.join(' y ')}, y además, según su veredicto:`)
-      for (const [veredicto, campos] of Object.entries(E2E_SCHEMA.properties.runs.items.requiredByVerdict)) {
-        out(`  - ${veredicto}: ${campos.join(', ')}`)
+      for (const [verdict, fields] of Object.entries(E2E_SCHEMA.properties.runs.items.requiredByVerdict)) {
+        out(`  - ${verdict}: ${fields.join(', ')}`)
       }
       out('Ciérralo con:')
       out(`  ct-step e2e <fichero.json> --plan ${planPath} --issue ${issue}`)
@@ -641,13 +641,13 @@ function verboNext() {
   // assert that there is a protected dispatch there.
   //
   // The seal does NOT count the discards, and that is why it survives one: on a
-  // discard, `consumirPaquete` does not run and that attempt's artefact is still
+  // discard, `consumePackage` does not run and that attempt's artefact is still
   // on disk, so forcing another pass through here would be asking for what is
   // already there to be regenerated. The three self-loops of `discarded` are
   // those of run-machine.js.
   if (StepSeal.inputWrittenFor(run.step) !== null) {
     run = { ...run, nextSeal: StepSeal.of(run) }
-    guardar()
+    save()
   }
   process.exit(EXIT.OK)
 }
@@ -659,63 +659,63 @@ function verboNext() {
 // measuring against nothing, and in silence that does not differ from a
 // conforming item.
 //
-// Branch reconciliation, Task 9: it is shared by `escribirBrief` (the brief of
-// the implementer and of the judge) and `escribirPaqueteDeReconciliacion` (the
+// Branch reconciliation, Task 9: it is shared by `writeBrief` (the brief of
+// the implementer and of the judge) and `writeReconcileReviewPackage` (the
 // reconciler's package) — one single read and one single abort message, instead
 // of two copies which it already warned diverge (see JUDGE_TOOLS in
 // step-contracts.js).
-function cargarVaraDeCt() {
-  const deCt = PluginYardstick.FILES.map((nombre) => {
-    const path = join(PLUGIN_ROOT, PluginYardstick.DIRECTORY, nombre)
+function loadCtYardstick() {
+  const ctDocs = PluginYardstick.FILES.map((name) => {
+    const path = join(PLUGIN_ROOT, PluginYardstick.DIRECTORY, name)
     try {
-      return { name: nombre, path, content: readFileSync(path, 'utf8') }
+      return { name, path, content: readFileSync(path, 'utf8') }
     } catch {
-      return { name: nombre, path, content: null }
+      return { name, path, content: null }
     }
   })
-  const faltas = PluginYardstick.missingDocuments(deCt)
-  if (faltas.length) {
-    die(`la vara de ct no se puede leer: falta o está vacío ${faltas.join(', ')} en ${join(PLUGIN_ROOT, PluginYardstick.DIRECTORY)}. Es una instalación del plugin incompleta, no una propiedad de este repo: sin esos documentos quien implementa, juzga o reconcilia mide contra nada, y eso no se distingue en silencio de un diff conforme. Reinstala el plugin.`, EXIT.PRECONDITION)
+  const missing = PluginYardstick.missingDocuments(ctDocs)
+  if (missing.length) {
+    die(`la vara de ct no se puede leer: falta o está vacío ${missing.join(', ')} en ${join(PLUGIN_ROOT, PluginYardstick.DIRECTORY)}. Es una instalación del plugin incompleta, no una propiedad de este repo: sin esos documentos quien implementa, juzga o reconcilia mide contra nada, y eso no se distingue en silencio de un diff conforme. Reinstala el plugin.`, EXIT.PRECONDITION)
   }
-  return deCt
+  return ctDocs
 }
 
 // §3.3: the repo's yardstick crosses the funnel HERE, read straight off disk
 // and with no agent in between. Its absence does not warn: it is the normal
 // state of almost every repo today, and the judge measures it as `sin-vara`,
-// not as an error. `nombreDelArtefacto` only enters the read-failure warning,
+// not as an error. `artifactName` only enters the read-failure warning,
 // so that the same message serves the brief and the reconciliation package
 // without lying about which of the two came up short.
-function seccionVaraDelRepo(nombreDelArtefacto) {
+function repoYardstickSection(artifactName) {
   try {
-    const ruta = join(repoRoot, CONVENTIONS_FILE)
-    if (!existsSync(ruta)) return ''
-    return seccionDeVara(readFileSync(ruta, 'utf8'))
+    const path = join(repoRoot, CONVENTIONS_FILE)
+    if (!existsSync(path)) return ''
+    return yardstickSection(readFileSync(path, 'utf8'))
   } catch (e) {
-    err(`aviso: ${CONVENTIONS_FILE} existe y no se ha podido leer (${String(e.message).trim()}): ${nombreDelArtefacto} sale sin la vara del repo.`)
+    err(`aviso: ${CONVENTIONS_FILE} existe y no se ha podido leer (${String(e.message).trim()}): ${artifactName} sale sin la vara del repo.`)
     return ''
   }
 }
 
-function escribirBrief() {
+function writeBrief() {
   const brief = join(workDir, `task-${run.task}-brief.md`)
   // It is checked before calling `task-brief` so as not to leave a brief on
   // disk that nobody is going to use.
-  const deCt = cargarVaraDeCt()
+  const ctDocs = loadCtYardstick()
   try {
     execFileSync(join(PLUGIN_ROOT, 'skills', 'subagent-driven-development', 'scripts', 'task-brief'),
       ['--with-plan-context', planPath, String(run.task), brief], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
   } catch (e) {
     die(`no se pudo extraer el brief de la tarea ${run.task}: ${String(e.stderr || e.message).trim()}`, EXIT.PRECONDITION)
   }
-  appendFileSync(brief, PluginYardstick.composeSection(deCt))
-  appendFileSync(brief, seccionVaraDelRepo('el brief'))
+  appendFileSync(brief, PluginYardstick.composeSection(ctDocs))
+  appendFileSync(brief, repoYardstickSection('el brief'))
   // H9: the advice for the third attempt, inside the brief and not on a loose
   // line of `next`. The brief is what the subagent receives —the dispatch
   // message says so itself—, so an approach announced outside it is an approach
   // that depends on the session copying it. It goes AT THE END, after the
   // yardstick: it is the last thing decided about this task.
-  if (run.lastAdvice) appendFileSync(brief, seccionDeConsejo(run.lastAdvice))
+  if (run.lastAdvice) appendFileSync(brief, adviceSection(run.lastAdvice))
   return brief
 }
 
@@ -723,8 +723,8 @@ function escribirBrief() {
 // out of a plan in English). The paths are listed even when the approach
 // already names them: it is what makes the paragraph actionable without
 // re-reading it.
-function seccionDeConsejo(advice) {
-  const rutas = advice.files_to_reconsider.length
+function adviceSection(advice) {
+  const paths = advice.files_to_reconsider.length
     ? advice.files_to_reconsider.map((p) => `- \`${p}\``).join('\n')
     : '(none in particular)'
   return [
@@ -737,7 +737,7 @@ function seccionDeConsejo(advice) {
     '',
     '**Files to reconsider before editing:**',
     '',
-    rutas,
+    paths,
     '',
     'This does not widen the task: `**Files:**` above is still its scope.',
     '',
@@ -755,9 +755,9 @@ function seccionDeConsejo(advice) {
 // sees and the one `commit` takes away: an unstaged edit does not reach the
 // commit, so it has no reason to invalidate the judgement. The slice's one
 // comes out of the RANGE, because by then everything is committed (see
-// `escribirPaqueteDeSlice`).
-const diffDeTarea = () => git(['diff', '--cached', '-U10']) || ''
-const diffDeSlice = () => git(['diff', '-U10', run.baseSha, 'HEAD']) || ''
+// `writeSliceReviewPackage`).
+const taskDiff = () => git(['diff', '--cached', '-U10']) || ''
+const sliceDiff = () => git(['diff', '-U10', run.baseSha, 'HEAD']) || ''
 
 // THE TREE OF THE INDEX — the identity of what is about to be committed, and
 // git already has it: `write-tree` writes the index's tree and returns its sha.
@@ -778,12 +778,12 @@ const diffDeSlice = () => git(['diff', '-U10', run.baseSha, 'HEAD']) || ''
 // `read-tree` would fail (the check would not: that one only compares two
 // shas). It is deliberately not referenced: a ref per task would show up in
 // `git for-each-ref` and could end up pushed.
-const arbolDelIndice = () => git(['write-tree']).trim()
+const indexTree = () => git(['write-tree']).trim()
 
 // The package comes out of the INDEX and not out of a range of commits: the
 // implementer does not commit, so what has to be judged is not a commit yet.
-function escribirPaquete() {
-  const paquete = join(workDir, `task-${run.task}-review.diff`)
+function writeReviewPackage() {
+  const packagePath = join(workDir, `task-${run.task}-review.diff`)
   // This section used to carry, alongside each path, whether it was production
   // or test code (the `kind` the implementer's report declared). It was removed:
   // the judge has the diff in front of it and tells a test from a production
@@ -791,31 +791,31 @@ function escribirPaquete() {
   // could not see for itself. On top of that it was produced by the very agent
   // being judged, nobody verified it, and when it came out wrong it did not
   // degrade the judgement: it disabled it. Do not add it back.
-  const rutas = (run.lastPaths || []).map((p) => `- ${p}`).join('\n') || '(ninguna)'
+  const paths = (run.lastPaths || []).map((p) => `- ${p}`).join('\n') || '(ninguna)'
   // The first heading of PACKAGE_SECTIONS is written by `composePathSection`
   // (it is `PluginYardstick.PATH_SECTION`), so it is not typed here: what gets
   // destructured are the three this verb writes.
-  const [, SECCION_FILES, SECCION_RUTAS, SECCION_DIFF] = PACKAGE_SECTIONS
-  const diff = diffDeTarea()
+  const [, FILES_SECTION, PATHS_SECTION, DIFF_SECTION] = PACKAGE_SECTIONS
+  const diff = taskDiff()
   // THE CT YARDSTICK, BY PATH and with the same scope as the brief: the judge
   // has `Read` (JUDGE_TOOLS), and what it needs in order to cite a rule is to
   // know which documents reach this task and where they are. The section goes
   // AHEAD of the diff for the same reason as `Señal` in the slice package:
   // behind a `-U10` it would be buried.
-  const varaDeCt = PluginYardstick.composePathSection(cargarVaraDeCt())
-  writeFileSync(paquete, [
+  const ctYardstick = PluginYardstick.composePathSection(loadCtYardstick())
+  writeFileSync(packagePath, [
     `# Review package: task ${run.task}/${run.tasksTotal} of issue #${issue} (staged, not yet committed)`,
     // The HEADER carries the token: the sha256 of exactly the diff that goes
     // below. A second line and not a `##` section, so as not to touch
     // PACKAGE_SECTIONS (which the rubric cites heading by heading) nor the order
     // slice 10 decided on for the slice package.
     reviewTokenLine(reviewToken(diff)),
-    varaDeCt,
-    '', `## ${SECCION_FILES}`, git(['diff', '--cached', '--stat']) || '',
-    '', `## ${SECCION_RUTAS}`, rutas,
-    '', `## ${SECCION_DIFF}`, diff,
+    ctYardstick,
+    '', `## ${FILES_SECTION}`, git(['diff', '--cached', '--stat']) || '',
+    '', `## ${PATHS_SECTION}`, paths,
+    '', `## ${DIFF_SECTION}`, diff,
   ].join('\n'))
-  return paquete
+  return packagePath
 }
 
 // The package of the WHOLE SLICE comes out of a RANGE OF COMMITS and not out of
@@ -825,33 +825,33 @@ function escribirPaquete() {
 // is ONE commit with no history of its own to show): the sequence matters for
 // judging `coherencia` — a later task undoing the earlier one is only visible in
 // the order of the commits, not in the accumulated diff on its own.
-function escribirPaqueteDeSlice() {
-  const paquete = join(workDir, 'slice-review.diff')
-  const [SECCION_VARA, SECCION_SENAL, SECCION_COMMITS, SECCION_FILES, SECCION_DIFF] = SLICE_PACKAGE_SECTIONS
-  const diff = diffDeSlice()
+function writeSliceReviewPackage() {
+  const packagePath = join(workDir, 'slice-review.diff')
+  const [YARDSTICK_SECTION, SIGNAL_SECTION, COMMITS_SECTION, FILES_SECTION, DIFF_SECTION] = SLICE_PACKAGE_SECTIONS
+  const diff = sliceDiff()
   // Task 8: the slice judge measures end state, coherence and signal — not code
   // rule by rule —, so the whole yardstick is not pasted onto it: it is given
   // ONE single path, that of `simplicity.md`, which is exactly the rule its
   // `observabilidad` item measures (a trace names its reader). The FIRST
   // section, ahead even of `Señal`, for the same reason `Señal` goes ahead of
   // the diff: behind a `-U10` it would be buried.
-  const rutaSimplicity = join(PLUGIN_ROOT, PluginYardstick.DIRECTORY, 'simplicity.md')
+  const simplicityPath = join(PLUGIN_ROOT, PluginYardstick.DIRECTORY, 'simplicity.md')
   // Slice 10: the signal crosses the funnel HERE, read off disk (the `senal:`
   // field the dispatch seeded into the SLICE.md) and with no agent in between —
   // the same doctrine of §3.3 by which the repo's yardstick travels in the
-  // brief. The SENAL_AUSENTE fallback covers a SLICE.md seeded by a plugin older
+  // brief. The SIGNAL_ABSENT fallback covers a SLICE.md seeded by a plugin older
   // than the column: the absence is declared, not omitted, and its text is
   // exactly what the rubric reads as sin-vara.
-  writeFileSync(paquete, [
+  writeFileSync(packagePath, [
     `# Slice review package: issue #${issue} — ${run.tasksTotal} tasks committed since ${run.baseSha.slice(0, 7)}`,
     reviewTokenLine(reviewToken(diff)),
-    '', `## ${SECCION_VARA}`, `Ábrela con \`Read\`: \`${rutaSimplicity}\``,
-    '', `## ${SECCION_SENAL}`, senalDelSlice ?? SENAL_AUSENTE,
-    '', `## ${SECCION_COMMITS}`, git(['log', '--reverse', '--format=%h %s', `${run.baseSha}..HEAD`]) || '',
-    '', `## ${SECCION_FILES}`, git(['diff', '--stat', run.baseSha, 'HEAD']) || '',
-    '', `## ${SECCION_DIFF}`, diff,
+    '', `## ${YARDSTICK_SECTION}`, `Ábrela con \`Read\`: \`${simplicityPath}\``,
+    '', `## ${SIGNAL_SECTION}`, sliceSignal ?? SIGNAL_ABSENT,
+    '', `## ${COMMITS_SECTION}`, git(['log', '--reverse', '--format=%h %s', `${run.baseSha}..HEAD`]) || '',
+    '', `## ${FILES_SECTION}`, git(['diff', '--stat', run.baseSha, 'HEAD']) || '',
+    '', `## ${DIFF_SECTION}`, diff,
   ].join('\n'))
-  return paquete
+  return packagePath
 }
 
 // THE ADVISER'S PACKAGE (H9). What neither of the two vetoed implementers could
@@ -864,51 +864,51 @@ function escribirPaqueteDeSlice() {
 // AN ABSENCE IS DECLARED, NEVER OMITTED: an attempt whose artefact is not on
 // disk comes out named and with the reason, because a section missing in silence
 // reads as "there was no such attempt".
-function escribirPaqueteDeConsejo() {
-  const paquete = join(workDir, `task-${run.task}-advice.md`)
-  const [SECCION_BRIEF, SECCION_INTENTOS, SECCION_VEREDICTOS] = ADVICE_PACKAGE_SECTIONS
-  writeFileSync(paquete, [
+function writeAdviceReviewPackage() {
+  const packagePath = join(workDir, `task-${run.task}-advice.md`)
+  const [BRIEF_SECTION, ATTEMPTS_SECTION, VERDICTS_SECTION] = ADVICE_PACKAGE_SECTIONS
+  writeFileSync(packagePath, [
     `# Advice package: task ${run.task}/${run.tasksTotal} of issue #${issue} — vetoed twice, one attempt left`,
-    '', `## ${SECCION_BRIEF}`, leerOAusente(rutaDelBrief(), 'el brief de la tarea'),
-    '', `## ${SECCION_INTENTOS}`, apartadosPorIntento('report', 'el informe del implementador'),
-    '', `## ${SECCION_VEREDICTOS}`, apartadosPorIntento('verdict', 'el veredicto del juez'),
+    '', `## ${BRIEF_SECTION}`, readOrAbsent(briefPath(), 'el brief de la tarea'),
+    '', `## ${ATTEMPTS_SECTION}`, sectionsByAttempt('report', 'el informe del implementador'),
+    '', `## ${VERDICTS_SECTION}`, sectionsByAttempt('verdict', 'el veredicto del juez'),
   ].join('\n'))
-  return paquete
+  return packagePath
 }
 
-const leerOAusente = (ruta, que) => {
+const readOrAbsent = (path, what) => {
   try {
-    return readFileSync(ruta, 'utf8')
+    return readFileSync(path, 'utf8')
   } catch (e) {
-    return `(no se pudo leer ${que} en ${ruta}: ${String(e.message).trim()})`
+    return `(no se pudo leer ${what} en ${path}: ${String(e.message).trim()})`
   }
 }
 
 // The artefacts this run archived per attempt, from the first to the last. The
-// numbering comes out of the name itself and not out of `intento()`: the vetoed
+// numbering comes out of the name itself and not out of `currentAttempt()`: the vetoed
 // attempts are not necessarily 1 and 2 —a red from the checks or a correction
 // shifts them— so what is there gets read, in the order it was written. The same
-// criterion as `paquetesDeReconciliacion`, and for the same reason: one list and
+// criterion as `reconcilePackages`, and for the same reason: one list and
 // not two walks of the directory with the same expression.
-const RE_INTENTO_ARCHIVADO = /-(\d+)\.json$/
-function archivadosDeLaTarea(clase) {
-  const prefijo = `task-${run.task}-${clase}-`
+const ARCHIVED_ATTEMPT_RE = /-(\d+)\.json$/
+function taskArchives(kind) {
+  const prefix = `task-${run.task}-${kind}-`
   try {
     return readdirSync(workDir)
-      .filter((f) => f.startsWith(prefijo) && RE_INTENTO_ARCHIVADO.test(f))
-      .sort((a, b) => Number(RE_INTENTO_ARCHIVADO.exec(a)[1]) - Number(RE_INTENTO_ARCHIVADO.exec(b)[1]))
+      .filter((f) => f.startsWith(prefix) && ARCHIVED_ATTEMPT_RE.test(f))
+      .sort((a, b) => Number(ARCHIVED_ATTEMPT_RE.exec(a)[1]) - Number(ARCHIVED_ATTEMPT_RE.exec(b)[1]))
   } catch {
     return []
   }
 }
 
-function apartadosPorIntento(clase, que) {
-  const ficheros = archivadosDeLaTarea(clase)
-  if (!ficheros.length) return `(este run no archivó ningún ${que} de esta tarea)`
-  return ficheros.map((f) => [
-    `### Intento ${RE_INTENTO_ARCHIVADO.exec(f)[1]}`,
+function sectionsByAttempt(kind, what) {
+  const files = taskArchives(kind)
+  if (!files.length) return `(este run no archivó ningún ${what} de esta tarea)`
+  return files.map((f) => [
+    `### Intento ${ARCHIVED_ATTEMPT_RE.exec(f)[1]}`,
     '',
-    leerOAusente(join(workDir, f), que),
+    readOrAbsent(join(workDir, f), what),
   ].join('\n')).join('\n\n')
 }
 
@@ -918,11 +918,11 @@ function apartadosPorIntento(clase, que) {
 // and by the time the adviser is needed there is no trace left of the first. What
 // gets archived is what the verb ACCEPTED —not the file that arrived through
 // argv— because it is the only thing this program answers for.
-function archivar(clase, contenido) {
+function archive(kind, content) {
   try {
-    writeFileSync(join(workDir, `task-${run.task}-${clase}-${intento()}.json`), JSON.stringify(contenido, null, 2) + '\n')
+    writeFileSync(join(workDir, `task-${run.task}-${kind}-${currentAttempt()}.json`), JSON.stringify(content, null, 2) + '\n')
   } catch (e) {
-    err(`aviso: no se pudo archivar ${clase} del intento ${intento()} (${String(e.message).trim()}): si esta tarea llega al consejero, su paquete lo dirá.`)
+    err(`aviso: no se pudo archivar ${kind} del intento ${currentAttempt()} (${String(e.message).trim()}): si esta tarea llega al consejero, su paquete lo dirá.`)
   }
 }
 
@@ -934,17 +934,17 @@ function archivar(clase, contenido) {
 // One function and not two copies in the two verbs: the only thing that changes
 // between the task and the slice is WHICH diff gets recomputed, and that comes
 // in as a parameter. The alternative —the same reasoning written twice— is the
-// decoupling this file already paid for with the PASOS_DE_SLICE list.
+// decoupling this file already paid for with the SLICE_STEPS list.
 // ---------------------------------------------------------------------------
-function tokenVigente(paquete, diffAhora) {
-  let texto
+function currentToken(packagePath, diffNow) {
+  let text
   try {
-    texto = readFileSync(paquete, 'utf8')
+    text = readFileSync(packagePath, 'utf8')
   } catch (e) {
-    return { why: `el paquete de revisión existe y no se puede leer (${paquete}): ${String(e.message).trim()} — vuelve a "ct-step next", que es el único paso que lo genera, y REDESPACHA al juez` }
+    return { why: `el paquete de revisión existe y no se puede leer (${packagePath}): ${String(e.message).trim()} — vuelve a "ct-step next", que es el único paso que lo genera, y REDESPACHA al juez` }
   }
-  const declarado = reviewTokenOf(texto)
-  if (declarado === null) {
+  const declared = reviewTokenOf(text)
+  if (declared === null) {
     // A package without the line: it was written by a version of the plugin
     // older than this field (a run in flight when the plugin was updated), or
     // somebody edited it. A discard cures it in one round —`next` regenerates it
@@ -952,20 +952,20 @@ function tokenVigente(paquete, diffAhora) {
     // tolerating it would be a «no guardrail» mode that is switched on by
     // DELETING a line, which is exactly what this fix takes out of the
     // repertoire.
-    return { why: `el paquete de revisión (${paquete}) no declara su "${REVIEW_TOKEN_LABEL}": lo escribió una versión anterior del plugin, o se editó a mano. Vuelve a "ct-step next", que lo regenera con su token, y REDESPACHA al juez` }
+    return { why: `el paquete de revisión (${packagePath}) no declara su "${REVIEW_TOKEN_LABEL}": lo escribió una versión anterior del plugin, o se editó a mano. Vuelve a "ct-step next", que lo regenera con su token, y REDESPACHA al juez` }
   }
-  const ahora = reviewToken(diffAhora)
-  if (declarado !== ahora) {
-    return { why: `el paquete de revisión ya no describe el código de ahora: declara el token ${declarado.slice(0, 12)}… y el del corte recién medido es ${ahora.slice(0, 12)}… — el código cambió DESPUÉS de generarse el paquete, así que el juez juzgó otro diff. Vuelve a "ct-step next" y REDESPACHA al juez: repreguntarle con este paquete no arregla nada` }
+  const now = reviewToken(diffNow)
+  if (declared !== now) {
+    return { why: `el paquete de revisión ya no describe el código de ahora: declara el token ${declared.slice(0, 12)}… y el del corte recién medido es ${now.slice(0, 12)}… — el código cambió DESPUÉS de generarse el paquete, así que el juez juzgó otro diff. Vuelve a "ct-step next" y REDESPACHA al juez: repreguntarle con este paquete no arregla nada` }
   }
-  return { token: declarado }
+  return { token: declared }
 }
 
 // The verdict carries the token OF THIS package. `verdict.review_token` already
 // arrives validated in shape and in lower case by `readVerdict`, so all that
 // happens here is the comparison.
-function whyTokenAjeno(delVeredicto, delPaquete) {
-  return `el veredicto no es de este paquete: copia el token ${String(delVeredicto).slice(0, 12)}… y el paquete declara ${delPaquete.slice(0, 12)}… — es el veredicto de OTRO juicio, sobre un diff que ya no es el que hay delante. No hace falta volver a "ct-step next" (el paquete de disco es el bueno): REDESPACHA al juez con él`
+function whyForeignToken(fromVerdict, fromPackage) {
+  return `el veredicto no es de este paquete: copia el token ${String(fromVerdict).slice(0, 12)}… y el paquete declara ${fromPackage.slice(0, 12)}… — es el veredicto de OTRO juicio, sobre un diff que ya no es el que hay delante. No hace falta volver a "ct-step next" (el paquete de disco es el bueno): REDESPACHA al juez con él`
 }
 
 // THE PACKAGE IS SINGLE USE: the verdict that reads it spends it.
@@ -1006,52 +1006,52 @@ function whyTokenAjeno(delVeredicto, delPaquete) {
 // SLICE 11 — AND THE DISCARD STILL DOES NOT CONSUME, now because of a property
 // and not because of an assumption. The justification above («the retry judges
 // the same diff») was an assertion about the agent's conduct; from the package's
-// token it is checkable at the moment of use: if the cut changed, `tokenVigente`
+// token it is checkable at the moment of use: if the cut changed, `currentToken`
 // discards it before reading the verdict. Keeping the package after a discard
 // stops being a gap —what survives is an input that VERIFIES ITSELF— and it
 // still buys what it bought: asking the judge again over an unreadable JSON
 // without forcing anything to be regenerated.
-function consumirPaquete(paquete) {
+function consumePackage(packagePath) {
   try {
-    unlinkSync(paquete)
+    unlinkSync(packagePath)
   } catch (e) {
-    err(`aviso: el veredicto se midió pero NO se pudo consumir el paquete de revisión (${paquete}): ${String(e.message).trim()}. El paso sigue, pero ese fichero ya no corresponde a ningún juicio pendiente: vuelve a "ct-step next" antes de despachar al juez otra vez, porque un paquete que sobrevive a su veredicto es el que deja pasar un juicio rancio.`)
+    err(`aviso: el veredicto se midió pero NO se pudo consumir el paquete de revisión (${packagePath}): ${String(e.message).trim()}. El paso sigue, pero ese fichero ya no corresponde a ningún juicio pendiente: vuelve a "ct-step next" antes de despachar al juez otra vez, porque un paquete que sobrevive a su veredicto es el que deja pasar un juicio rancio.`)
   }
 }
 
 // ---------------------------------------------------------------------------
 // The verbs that transition
 // ---------------------------------------------------------------------------
-function leerJson(ruta, quien) {
-  if (typeof ruta !== 'string' || !ruta || ruta.startsWith('--')) {
-    die(`falta la ruta del JSON ${quien}\n\n${USAGE}`, EXIT.USAGE)
+function readJson(path, whose) {
+  if (typeof path !== 'string' || !path || path.startsWith('--')) {
+    die(`falta la ruta del JSON ${whose}\n\n${USAGE}`, EXIT.USAGE)
   }
   try {
-    return { valor: JSON.parse(readFileSync(ruta, 'utf8')) }
+    return { value: JSON.parse(readFileSync(path, 'utf8')) }
   } catch (e) {
     // A JSON that cannot be read is a DISCARD, not a usage error: the subagent
     // answered, and what it answered is no good.
-    return { why: `no se pudo leer el ${quien} en ${ruta}: ${e.message}` }
+    return { why: `no se pudo leer el ${whose} en ${path}: ${e.message}` }
   }
 }
 
 // Whether the ct yardstick reached the brief, and how much it weighed —
-// measured on the BRIEF THAT IS ON DISK, not on what `escribirBrief` meant to
+// measured on the BRIEF THAT IS ON DISK, not on what `writeBrief` meant to
 // write: that function ran in an EARLIER invocation of the process (the one of
 // `ct-step next`), so there is nothing in memory here to drag along, and
 // measuring the artefact that really exists is better instrumentation than
-// measuring a code path. The path is derived JUST AS in `escribirBrief`.
+// measuring a code path. The path is derived JUST AS in `writeBrief`.
 //
 // If the brief cannot be read, the two fields go to `null`, never to `0`: a zero
 // would assert a brief with no yardstick, and what has happened is that it could
 // not be looked at.
-function rutaDelBrief() {
+function briefPath() {
   return join(workDir, `task-${run.task}-brief.md`)
 }
 
-function medidaDeBrief() {
+function briefMeasures() {
   try {
-    return briefVaraCtMeasures(readFileSync(rutaDelBrief(), 'utf8'))
+    return briefCtYardstickMeasures(readFileSync(briefPath(), 'utf8'))
   } catch {
     return { brief_vara_ct_docs: null, brief_bytes: null }
   }
@@ -1079,7 +1079,7 @@ function medidaDeBrief() {
 // AND THE SAFETY FILTER IS KEPT for absolute paths or paths with `..`: git
 // does not produce them, but what is handed to `git add` does not stop being
 // checked just because it comes from where it is expected to.
-const rutaSegura = (p) => p !== '' && !p.startsWith('/') && !p.split('/').includes('..')
+const isSafePath = (p) => p !== '' && !p.startsWith('/') && !p.split('/').includes('..')
 
 const esDelRun = (p) => {
   const suyo = `${relative(repoRoot, workDir)}/`
@@ -1097,7 +1097,7 @@ const esDelRun = (p) => {
 // this path are against git output, which always uses `/`, while `relative`
 // would give `\` on Windows. It is the same care `ajenoEnElIndice` documents,
 // applied where the path is built.
-const rutaDelPlan = () => relative(repoRoot, resolve(planPath)).replace(/\\/g, '/')
+const planRelPath = () => relative(repoRoot, resolve(planPath)).replace(/\\/g, '/')
 
 //
 // WHAT THIS FUNCTION MEASURES HAS TWO CONSUMERS: `report`, which stages what
@@ -1107,67 +1107,67 @@ const rutaDelPlan = () => relative(repoRoot, resolve(planPath)).replace(/\\/g, '
 // (`git checkout --`) or has never seen it (`git clean`), and deriving it a
 // second time with another `git status` would be the second reading that
 // answers differently the day one of the two changes its flags.
-const entradasDelArbol = () => {
-  const trozos = (git(['status', '--porcelain', '-z', '--untracked-files=all']) || '').split('\0')
-  const entradas = []
-  for (let i = 0; i < trozos.length; i++) {
-    const entrada = trozos[i]
-    if (!entrada) continue
-    const estado = entrada.slice(0, 2)
-    const ruta = entrada.slice(3)
-    if (estado.startsWith('R') || estado.startsWith('C')) {
-      const origen = trozos[++i]
-      if (origen) entradas.push({ estado, ruta: origen })
+const treeEntries = () => {
+  const chunks = (git(['status', '--porcelain', '-z', '--untracked-files=all']) || '').split('\0')
+  const entries = []
+  for (let i = 0; i < chunks.length; i++) {
+    const entry = chunks[i]
+    if (!entry) continue
+    const status = entry.slice(0, 2)
+    const path = entry.slice(3)
+    if (status.startsWith('R') || status.startsWith('C')) {
+      const origin = chunks[++i]
+      if (origin) entries.push({ status, path: origin })
     }
-    if (ruta) entradas.push({ estado, ruta })
+    if (path) entries.push({ status, path })
   }
-  const vistas = new Set()
-  // THE PLAN GETS THROUGH BOTH GUARDS. `esRutaDeLaMaquinaria` covers it in a
-  // real run (it lives under `docs/superpowers/plans/**`), and that guard still
+  const seen = new Set()
+  // THE PLAN GETS THROUGH BOTH GUARDS. `isMachineryPath` covers it in a real
+  // run (it lives under `docs/superpowers/plans/**`), and that guard still
   // stands for everything else; only the plan's path crosses it, because it is
   // the one piece of the machinery the implementer legitimately changes.
-  return entradas.filter(({ ruta }) => {
-    if (vistas.has(ruta)) return false
-    vistas.add(ruta)
-    return rutaSegura(ruta) && !esDelRun(ruta) &&
-      (ruta === rutaDelPlan() || !esRutaDeLaMaquinaria(ruta))
+  return entries.filter(({ path }) => {
+    if (seen.has(path)) return false
+    seen.add(path)
+    return isSafePath(path) && !esDelRun(path) &&
+      (path === planRelPath() || !isMachineryPath(path))
   })
 }
 
-const rutasTocadas = () => entradasDelArbol().map(({ ruta }) => ruta)
+const touchedPaths = () => treeEntries().map(({ path }) => path)
 
 // WHAT IT COST THE ROLE TO READ WHAT IT WAS SENT (#92). `brief_bytes` measured
 // a single one of the four calls to the model, so the fixed half of the
 // context —the agent's file and the skills its prompt orders it to load— was in
 // no column at all: the saving per slice was being claimed with no measure.
 //
-// Same doctrine as `medidaDeBrief`: what gets measured is the file that EXISTS
+// Same doctrine as `briefMeasures`: what gets measured is the file that EXISTS
 // on disk, never what the program intended to write, and a file that cannot be
 // measured is worth `null` and never `0` — a zero would claim a role dispatched
 // with no material. That is why the port RoleBytes receives returns `null`
 // instead of throwing: what the absence means is decided by the measure, not by
 // `statSync`.
-const tamanoEnDisco = (ruta) => {
+const sizeOnDisk = (path) => {
   try {
-    return statSync(ruta).size
+    return statSync(path).size
   } catch {
     return null
   }
 }
 
-const roleBytes = new RoleBytes({ pluginRoot: PLUGIN_ROOT, sizeOf: tamanoEnDisco })
+const roleBytes = new RoleBytes({ pluginRoot: PLUGIN_ROOT, sizeOf: sizeOnDisk })
 
-function medidaDePapel(step, paquete) {
-  return { ...roleBytes.measuresOf({ step, packagePath: paquete }) }
+function roleMeasures(step, packagePath) {
+  return { ...roleBytes.measuresOf({ step, packagePath }) }
 }
 
 // The reconciliation packages this run has already written, from the first to
-// the last. `proximoIntentoDeReconciliacion` reads them to number the next one,
+// the last. `nextReconcileAttempt` reads them to number the next one,
 // and the step's measure reads them to know WHICH one this round's reconciler
 // read: the last one written. One single list and not two walks of the
 // directory with the same expression, which is the copy that would end up
 // numbering by one criterion and measuring by another.
-function paquetesDeReconciliacion() {
+function reconcilePackages() {
   try {
     return readdirSync(workDir).filter((f) => /^reconcile-package-\d+\.md$/.test(f))
       .sort((a, b) => Number(/(\d+)/.exec(a)[1]) - Number(/(\d+)/.exec(b)[1]))
@@ -1181,27 +1181,27 @@ function paquetesDeReconciliacion() {
 // and it does not carry them as `null` but ABSENT, because a null here would
 // say "an attempt was made to measure the material of a role that ran" and what
 // happened is that the role did not run.
-function medidaDePapelDeReconcile() {
-  const previos = paquetesDeReconciliacion()
-  if (previos.length === 0) return {}
-  return medidaDePapel(STEPS.RECONCILE, join(workDir, previos.at(-1)))
+function reconcileRoleMeasures() {
+  const previous = reconcilePackages()
+  if (previous.length === 0) return {}
+  return roleMeasures(STEPS.RECONCILE, join(workDir, previous.at(-1)))
 }
 
-function verboReport() {
-  const { valor, why: porLeer } = leerJson(process.argv[3], 'del informe')
-  const { report, why } = porLeer ? { why: porLeer } : readReport(valor)
+function reportVerb() {
+  const { value, why: whyRead } = readJson(process.argv[3], 'del informe')
+  const { report, why } = whyRead ? { why: whyRead } : readReport(value)
   // The summary goes into the telemetry only when there is a valid report: a
   // discarded report has no summary to tell, just as `why` only carries a
   // value when the report is discarded.
-  medir('implement', {
+  measure('implement', {
     outcome: report ? 'done' : 'discarded',
     paths: report ? report.paths.length : 0,
     why: report ? null : why,
     summary: report ? report.summary : null,
-    ...medidaDeBrief(),
+    ...briefMeasures(),
     // Also when the report is discarded: the implementer WAS DISPATCHED and
     // read its material all the same, so that cost existed and the row says so.
-    ...medidaDePapel(STEPS.IMPLEMENT, rutaDelBrief()),
+    ...roleMeasures(STEPS.IMPLEMENT, briefPath()),
   })
   if (!report) {
     out(`informe descartado: ${why}`)
@@ -1231,16 +1231,16 @@ function verboReport() {
   // Measured: `git add` of that path fails with `pathspec did not match` and
   // the step dies by exception.
   git(['reset', '-q'])
-  const rutas = rutasTocadas()
-  const soloDeclaradas = report.paths.filter((p) => !rutas.includes(p))
+  const paths = touchedPaths()
+  const onlyDeclared = report.paths.filter((p) => !paths.includes(p))
   // The plan does not go into the discrepancy: amending it is a capability the
   // implementer has and its report does not declare —the report lists the
   // WORK—, so without this exemption every legitimate amendment came out warned
   // about as "touched and not declared", labelling as a defect the very thing
   // that was wanted.
-  const soloMedidas = rutas.filter((p) => !report.paths.includes(p) && p !== rutaDelPlan())
-  if (soloDeclaradas.length || soloMedidas.length) {
-    err(`aviso: lo que el implementador declara y lo que el árbol dice no coinciden. Se stagea lo MEDIDO.${soloMedidas.length ? ` Tocado y no declarado: ${soloMedidas.join(', ')}.` : ''}${soloDeclaradas.length ? ` Declarado y no tocado: ${soloDeclaradas.join(', ')}.` : ''}`)
+  const onlyMeasured = paths.filter((p) => !report.paths.includes(p) && p !== planRelPath())
+  if (onlyDeclared.length || onlyMeasured.length) {
+    err(`aviso: lo que el implementador declara y lo que el árbol dice no coinciden. Se stagea lo MEDIDO.${onlyMeasured.length ? ` Tocado y no declarado: ${onlyMeasured.join(', ')}.` : ''}${onlyDeclared.length ? ` Declarado y no tocado: ${onlyDeclared.join(', ')}.` : ''}`)
   }
   // It is staged BEFORE measuring the checks: one that reads the index does
   // not see a new file that is not staged. After reset+add, the index is
@@ -1250,17 +1250,17 @@ function verboReport() {
   // adds nothing and warns on its own account, and an empty index is already
   // the right answer to a task that touched nothing — the checks measure it
   // all the same.
-  if (rutas.length) git(['add', '--', ...rutas])
-  // `lastPaths` feeds the `--` of a `git grep` in `testsDeclarados`, which
+  if (paths.length) git(['add', '--', ...paths])
+  // `lastPaths` feeds the `--` of a `git grep` in `declaredTests`, which
   // narrows the scope of that check to what the task staged — the most fragile
   // property in all of this (see the commit that fixed it, e4cc3dc).
-  archivar('report', { paths: rutas, summary: report.summary })
+  archive('report', { paths, summary: report.summary })
   run = {
     ...run,
-    lastPaths: rutas,
+    lastPaths: paths,
     lastSummary: report.summary,
   }
-  out(`stageados ${report.paths.length} fichero(s): ${rutas.join(', ')}`)
+  out(`stageados ${report.paths.length} fichero(s): ${paths.join(', ')}`)
   // The summary is PRINTED. It is the channel through which the implementer
   // warns about a skill it did not load, a frozen decision it obeyed
   // reluctantly or a problem it saw and did not touch — and until now nobody
@@ -1274,34 +1274,34 @@ function verboReport() {
   return OUTCOMES.DONE
 }
 
-function verboControls() {
-  const t = tarea()
+function controlsVerb() {
+  const t = currentTask()
   // The only time this program can really measure: the two calls to the model
   // are made by the session, so of those there is neither cost nor turns nor
   // duration. And it is the only one that cannot be reconstructed by
   // subtracting consecutive `written_at`, because between two rows there is
   // session latency mixed with work.
-  const arranque = Date.now()
-  const log = join(workDir, `task-${run.task}-controls-${intento()}.log`)
-  const lineas = []
-  let resultado = OUTCOMES.DONE
+  const startedAt = Date.now()
+  const log = join(workDir, `task-${run.task}-controls-${currentAttempt()}.log`)
+  const lines = []
+  let result = OUTCOMES.DONE
 
   // Scope goes ahead of everything, because it is the cheapest of all:
   // comparing two lists of paths and looking at the previous commit's tree
   // costs nothing, so it runs even before the test names.
-  const fueraDeAlcance = alcanceDeclarado(t)
-  if (fueraDeAlcance.length) {
-    lineas.push('# alcance declarado por la tarea', ...fueraDeAlcance.map((f) => `- ${f}`), '')
-    resultado = OUTCOMES.FAILED
+  const outOfScope = declaredScope(t)
+  if (outOfScope.length) {
+    lines.push('# alcance declarado por la tarea', ...outOfScope.map((f) => `- ${f}`), '')
+    result = OUTCOMES.FAILED
   }
 
   // The other direction of the scope control: an amendment can only ADD paths
   // to **Files:**, never remove them — removing one would switch the control
   // above off from inside the plan itself.
-  const enmienda = enmiendaSoloAnade(t)
-  if (enmienda.length) {
-    lineas.push('# enmienda del plan', ...enmienda.map((f) => `- ${f}`), '')
-    resultado = OUTCOMES.FAILED
+  const amendment = amendmentOnlyAdds(t)
+  if (amendment.length) {
+    lines.push('# enmienda del plan', ...amendment.map((f) => `- ${f}`), '')
+    result = OUTCOMES.FAILED
   }
 
   // Then the names, which are free too. A plan's yardstick measures that
@@ -1309,32 +1309,32 @@ function verboControls() {
   // field: a task asked for a function and its test, the function arrived
   // without the test, and the suite stayed green because the previous commit's
   // one passed.
-  const fallos = testsDeclarados(t)
-  if (fallos.length) {
-    lineas.push('# tests declarados por la tarea', ...fallos.map((f) => `- ${f}`), '')
-    resultado = OUTCOMES.FAILED
+  const failures = declaredTests(t)
+  if (failures.length) {
+    lines.push('# tests declarados por la tarea', ...failures.map((f) => `- ${f}`), '')
+    result = OUTCOMES.FAILED
   }
 
   // And last what the plan's BLOCKS promise, which is still free: none of
   // this runs a command.
-  const bloques = bloquesDeclarados(t)
-  if (bloques.length) {
-    lineas.push('# bloques declarados por la tarea', ...bloques.map((f) => `- ${f}`), '')
-    resultado = OUTCOMES.FAILED
+  const blocks = declaredBlocks(t)
+  if (blocks.length) {
+    lines.push('# bloques declarados por la tarea', ...blocks.map((f) => `- ${f}`), '')
+    result = OUTCOMES.FAILED
   }
 
-  for (const comando of resultado === OUTCOMES.FAILED ? [] : t.commands) {
-    const medido = ejecutarControl(comando)
-    lineas.push(`$ ${comando}`, medido.output ?? '', `-> exit ${medido.code}`, '')
-    if (medido.code === 'unmeasured') { resultado = OUTCOMES.INDETERMINATE; break }
-    if (medido.code !== 0) { resultado = OUTCOMES.FAILED; break }
+  for (const command of result === OUTCOMES.FAILED ? [] : t.commands) {
+    const measured = runCheck(command)
+    lines.push(`$ ${command}`, measured.output ?? '', `-> exit ${measured.code}`, '')
+    if (measured.code === 'unmeasured') { result = OUTCOMES.INDETERMINATE; break }
+    if (measured.code !== 0) { result = OUTCOMES.FAILED; break }
   }
 
-  writeFileSync(log, lineas.join('\n'))
-  medir('controls', { outcome: resultado, controls_log: log, commands: t.commands.length, duration_ms: Date.now() - arranque })
+  writeFileSync(log, lines.join('\n'))
+  measure('controls', { outcome: result, controls_log: log, commands: t.commands.length, duration_ms: Date.now() - startedAt })
   run = { ...run, lastControlsLog: log }
-  out(`controles: ${resultado} (log en ${log})`)
-  return resultado
+  out(`controles: ${result} (log en ${log})`)
+  return result
 }
 
 // What really gets committed is the INDEX, not the list the report declared:
@@ -1351,12 +1351,12 @@ const stagedPaths = () => (git(['diff', '--cached', '--name-only']) || '').split
 // were the task's code would answer wrongly: the plan QUOTES verbatim the names
 // of the tests the task withdraws, so a control on names would see "it is still
 // there" for a test that really was deleted (the false positive that motivates
-// this function). The three controls that read content —`alcanceDeclarado`,
-// `bloquesDeclarados`, `enElIndice`— filter out the plan and the rest of the
+// this function). The three controls that read content —`declaredScope`,
+// `declaredBlocks`, `inIndex`— filter out the plan and the rest of the
 // machinery before looking; `ajenoEnElIndice` goes on reading the raw index,
 // because to that question the plan does belong.
-const rutasDeTrabajoEnElIndice = () =>
-  stagedPaths().filter((p) => p !== rutaDelPlan() && !esRutaDeLaMaquinaria(p))
+const workingPathsInTheIndex = () =>
+  stagedPaths().filter((p) => p !== planRelPath() && !isMachineryPath(p))
 
 // AND THE VERSION FOR THE CONTROLS THAT COMPARE LISTS OF PATHS, which only
 // takes the plan out. The false positive above is one of CONTENT —the plan
@@ -1365,7 +1365,7 @@ const rutasDeTrabajoEnElIndice = () =>
 // `docs/superpowers/**` path that reaches the index, which is exactly the
 // vector `scope.js` documents from dispatch 1, and would make it travel inside
 // the task's commit without any control seeing it.
-const rutasDeObraEnElIndice = () => stagedPaths().filter((p) => p !== rutaDelPlan())
+const workPathsInTheIndex = () => stagedPaths().filter((p) => p !== planRelPath())
 
 // WHAT IS FOREIGN IN THE INDEX: what is staged that this program did NOT put there.
 //
@@ -1380,14 +1380,14 @@ const rutasDeObraEnElIndice = () => stagedPaths().filter((p) => p !== rutaDelPla
 // except for the paths the program has just staged, and the program REWRITES
 // its artefacts right before staging them, so a foreign edit of the file does
 // not survive. That cannot be said of the implementer's work — which is why
-// the task commit carries a seal (`arbolDelIndice`) and not belonging: there
+// the task commit carries a seal (`indexTree`) and not belonging: there
 // the attack overwrites a path that IS within scope.
-const ajenoEnElIndice = (nuestras) => {
+const foreignInIndex = (ours) => {
   // `stagedPaths` returns git paths (always with `/`) and ours are built with
   // `join`, which on Windows would give `\`. Normalising is one line and it
   // stops the guard from firing ALWAYS on the platform nobody looks at.
-  const mias = nuestras.map((p) => p.replace(/\\/g, '/'))
-  return stagedPaths().filter((p) => !mias.includes(p))
+  const mine = ours.map((p) => p.replace(/\\/g, '/'))
+  return stagedPaths().filter((p) => !mine.includes(p))
 }
 
 // The task's scope is decided by the PLAN, not by the implementer: this check
@@ -1403,47 +1403,47 @@ const ajenoEnElIndice = (nuestras) => {
 // because a plan that left a path out of its **Files:** is just as likely as
 // an implementer that touched too much, and confusing them costs a whole
 // cycle.
-function alcanceDeclarado(t) {
-  const fallos = []
-  const tocadas = rutasDeObraEnElIndice()
-  const declaradas = t.files
+function declaredScope(t) {
+  const failures = []
+  const touched = workPathsInTheIndex()
+  const declared = t.files
 
-  for (const ruta of tocadas) {
-    if (!declaradas.some((f) => f.path === ruta)) {
-      fallos.push(`la tarea ${t.n} tocó '${ruta}' y el plan no la declara en sus **Files:** — dos explicaciones son igual de plausibles y este control no puede arbitrar entre ellas: sobra en el CÓDIGO, o hace falta añadirla al PLAN`)
+  for (const path of touched) {
+    if (!declared.some((f) => f.path === path)) {
+      failures.push(`la tarea ${t.n} tocó '${path}' y el plan no la declara en sus **Files:** — dos explicaciones son igual de plausibles y este control no puede arbitrar entre ellas: sobra en el CÓDIGO, o hace falta añadirla al PLAN`)
     }
   }
 
-  for (const f of declaradas) {
-    if (!tocadas.includes(f.path)) {
-      fallos.push(`el plan declara '${f.path}' en las **Files:** de la tarea ${t.n} y no está entre lo que tocó: escribe el CÓDIGO que la tarea prometió. Si de verdad sobra en el PLAN, QUITARLA NO ES TU SALIDA —una enmienda sólo puede añadir rutas, porque quitarlas desactiva este mismo control— así que dilo en tu informe y deja la ruta en el plan`)
+  for (const f of declared) {
+    if (!touched.includes(f.path)) {
+      failures.push(`el plan declara '${f.path}' en las **Files:** de la tarea ${t.n} y no está entre lo que tocó: escribe el CÓDIGO que la tarea prometió. Si de verdad sobra en el PLAN, QUITARLA NO ES TU SALIDA —una enmienda sólo puede añadir rutas, porque quitarlas desactiva este mismo control— así que dilo en tu informe y deja la ruta en el plan`)
       continue
     }
     if (f.action === null) continue
-    const existiaAntes = git(['cat-file', '-e', `HEAD:${f.path}`], { allowFail: true }) !== null
-    if (f.action === 'create' && existiaAntes) {
-      fallos.push(`el plan declara '${f.path}' como (create) y ya existía en el commit anterior — revisa el PLAN, la acción debería ser (modify)`)
+    const existedBefore = git(['cat-file', '-e', `HEAD:${f.path}`], { allowFail: true }) !== null
+    if (f.action === 'create' && existedBefore) {
+      failures.push(`el plan declara '${f.path}' como (create) y ya existía en el commit anterior — revisa el PLAN, la acción debería ser (modify)`)
     }
-    if (f.action === 'modify' && !existiaAntes) {
-      fallos.push(`el plan declara '${f.path}' como (modify) y no existía en el commit anterior — revisa el PLAN, la acción debería ser (create)`)
+    if (f.action === 'modify' && !existedBefore) {
+      failures.push(`el plan declara '${f.path}' como (modify) y no existía en el commit anterior — revisa el PLAN, la acción debería ser (create)`)
     }
   }
 
-  return fallos
+  return failures
 }
 
 // The other direction of the scope control (issue 161): an amendment can ADD
-// paths to the **Files:** of its own task — that is what `alcanceDeclarado`
+// paths to the **Files:** of its own task — that is what `declaredScope`
 // already lets through, comparing against TODAY'S INDEX — but it can never
 // REMOVE one it already declared, because that would switch the control above
 // off from inside the plan itself: deleting the surplus path from **Files:**
-// would be enough for `alcanceDeclarado` to stop seeing it.
+// would be enough for `declaredScope` to stop seeing it.
 //
 // IT IS NOT CONDITIONED ON THE INDEX, and that was the open door. `t` comes
 // from the plan of the TREE, read when the process starts; the index is another
 // thing. With the guard conditioned on the plan being staged, editing it AFTER
 // `report` was enough: the guard did not run, `t.files` —already reduced—
-// governed `alcanceDeclarado`, and the commit took the old plan, so the judge
+// governed `declaredScope`, and the commit took the old plan, so the judge
 // saw no amendment either. Delivering green with the committed plan
 // contradicting the code is exactly what this slice exists to prevent.
 //
@@ -1456,8 +1456,8 @@ function alcanceDeclarado(t) {
 // of HEAD cannot be read, or its text does not declare the task `t.n`, there is
 // nothing to compare against and that is NOT a permission — it is a control
 // that could not measure, and it is said.
-function enmiendaSoloAnade(t) {
-  const ruta = rutaDelPlan()
+function amendmentOnlyAdds(t) {
+  const ruta = planRelPath()
   const anterior = git(['show', `HEAD:${ruta}`], { allowFail: true })
   if (anterior === null) {
     return [`no se pudo leer '${ruta}' en HEAD: sin el plan comiteado no hay contra qué comparar el del árbol, y este control no puede medir si la tarea ${t.n} le quitó rutas a sus **Files:**. Comitea el plan —el gate \`plan\` ya lo pide antes de implementar— y vuelve a pedir el paso.`]
@@ -1490,33 +1490,33 @@ function enmiendaSoloAnade(t) {
 // 1 of repo-pulse's slice #5) and the promised one "is already there" even
 // though nobody wrote it (a false negative, which is precisely the failure this
 // check exists to catch). With no staged files there is nowhere to look, and
-// that is a NO. Shared by `testsDeclarados` and `bloquesDeclarados`: same
+// that is a NO. Shared by `testsDeclarados` and `declaredBlocks`: same
 // question, same scope, same mechanism.
-function enElIndice(nombre) {
-  const ambito = rutasDeTrabajoEnElIndice()
+function inIndex(nombre) {
+  const ambito = workingPathsInTheIndex()
   if (!ambito.length) return false
   try {
-    execFileSync('git', ['grep', '--cached', '--quiet', '-F', '-e', nombre, '--', ...ambito], { cwd: repoRoot, stdio: 'ignore', timeout: 60_000 })
+    execFileSync('git', ['grep', '--cached', '--quiet', '-F', '-e', name, '--', ...scope], { cwd: repoRoot, stdio: 'ignore', timeout: 60_000 })
     return true
   } catch { return false }
 }
 
-function testsDeclarados(t) {
-  const fallos = []
-  for (const n of t.testsAdded) if (!enElIndice(n)) fallos.push(`la tarea dijo que añadía el test '${n}' y no está en lo stageado`)
-  for (const n of t.testsRemoved) if (enElIndice(n)) fallos.push(`la tarea dijo que retiraba el test '${n}' y sigue estando`)
-  return fallos
+function declaredTests(t) {
+  const failures = []
+  for (const n of t.testsAdded) if (!inIndex(n)) failures.push(`la tarea dijo que añadía el test '${n}' y no está en lo stageado`)
+  for (const n of t.testsRemoved) if (inIndex(n)) failures.push(`la tarea dijo que retiraba el test '${n}' y sigue estando`)
+  return failures
 }
 
-// What the plan's BLOCKS promise has to be there, just as `alcanceDeclarado`
+// What the plan's BLOCKS promise has to be there, just as `declaredScope`
 // measures what **Files:** promises. Three checks, all of them narrowed to
-// what is staged for the same reason as `testsDeclarados`: the plan lives
+// what is staged for the same reason as `declaredTests`: the plan lives
 // committed inside the repo, so searching the repo is searching the plan.
 //
 //  - `blockPaths`: every `{role, path}` demands that `path` be among the
 //    touched paths. A Contract or a Call site nobody touched is scaffolding
 //    declared and never written.
-//  - `tddName`: the same `enElIndice` as `testsDeclarados`, and the same
+//  - `tddName`: the same `inIndex` as `declaredTests`, and the same
 //    message — the test the task promised in its **TDD:** is just as
 //    enforceable as those of **Tests:**.
 //  - `finalTexts`: the text has to appear verbatim in the INDEX of its path.
@@ -1526,40 +1526,40 @@ function testsDeclarados(t) {
 //    WHICH line is missing, and that is half the value of this check.
 //
 // Each failure's message says whether the PLAN or the CODE is what gets fixed,
-// just as in `alcanceDeclarado`: confusing the two costs a whole cycle.
-function bloquesDeclarados(t) {
-  const fallos = []
-  const tocadas = rutasDeObraEnElIndice()
+// just as in `declaredScope`: confusing the two costs a whole cycle.
+function declaredBlocks(t) {
+  const failures = []
+  const touched = workPathsInTheIndex()
 
   for (const { role, path } of t.blockPaths) {
-    if (!tocadas.includes(path)) {
-      fallos.push(`la tarea ${t.n} declara un bloque ${role} (${path}) y no está entre lo que tocó — falta en el CÓDIGO, o el bloque sobra en el PLAN`)
+    if (!touched.includes(path)) {
+      failures.push(`la tarea ${t.n} declara un bloque ${role} (${path}) y no está entre lo que tocó — falta en el CÓDIGO, o el bloque sobra en el PLAN`)
     }
   }
 
-  if (t.tddName && !enElIndice(t.tddName)) {
-    fallos.push(`la tarea dijo que añadía el test '${t.tddName}' y no está en lo stageado`)
+  if (t.tddName && !inIndex(t.tddName)) {
+    failures.push(`la tarea dijo que añadía el test '${t.tddName}' y no está en lo stageado`)
   }
 
   for (const { path, text } of t.finalTexts) {
-    const indexado = git(['show', `:${path}`], { allowFail: true })
-    if (indexado === null) {
-      fallos.push(`la tarea ${t.n} declara un Final text (${path}) y ese fichero no está entre lo que tocó — falta en el CÓDIGO, o el bloque sobra en el PLAN`)
+    const staged = git(['show', `:${path}`], { allowFail: true })
+    if (staged === null) {
+      failures.push(`la tarea ${t.n} declara un Final text (${path}) y ese fichero no está entre lo que tocó — falta en el CÓDIGO, o el bloque sobra en el PLAN`)
       continue
     }
-    for (const linea of text.split('\n')) {
-      if (linea.trim() !== '' && !indexado.includes(linea)) {
-        fallos.push(`la tarea ${t.n} declara Final text (${path}) y la línea '${linea}' no está verbatim en lo stageado — falta en el CÓDIGO, o el PLAN cita mal el texto`)
+    for (const line of text.split('\n')) {
+      if (line.trim() !== '' && !staged.includes(line)) {
+        failures.push(`la tarea ${t.n} declara Final text (${path}) y la línea '${line}' no está verbatim en lo stageado — falta en el CÓDIGO, o el PLAN cita mal el texto`)
       }
     }
   }
 
-  return fallos
+  return failures
 }
 
-function ejecutarControl(comando) {
+function runCheck(command) {
   try {
-    return { code: 0, output: execFileSync('sh', ['-c', comando], {
+    return { code: 0, output: execFileSync('sh', ['-c', command], {
       encoding: 'utf8', cwd: repoRoot, stdio: ['ignore', 'pipe', 'pipe'],
       maxBuffer: GIT_MAX_BUFFER, timeout: 20 * 60_000, killSignal: 'SIGKILL',
     }) }
@@ -1567,9 +1567,9 @@ function ejecutarControl(comando) {
     // A command that ran and said no is RED and gets retried; one that could
     // not be executed or that hung could not be MEASURED, and retrying it
     // blindly repeats the cost without changing anything.
-    const seColgo = e.killed || e.signal === 'SIGKILL' || e.code === 'ETIMEDOUT'
-    const noExiste = e.status === 127 || e.code === 'ENOENT'
-    const code = (seColgo || noExiste) ? 'unmeasured' : (typeof e.status === 'number' ? e.status : 'unmeasured')
+    const hung = e.killed || e.signal === 'SIGKILL' || e.code === 'ETIMEDOUT'
+    const notFound = e.status === 127 || e.code === 'ENOENT'
+    const code = (hung || notFound) ? 'unmeasured' : (typeof e.status === 'number' ? e.status : 'unmeasured')
     return { code, output: String(e.stdout || '') + String(e.stderr || '') }
   }
 }
@@ -1581,7 +1581,7 @@ function ejecutarControl(comando) {
 // (CONFLICTING), not a failure of the program. That is why this adapter is its
 // own and not the one above: wrapping the one above in a try/catch would have
 // been reimplementing `execFileSync` with more steps.
-const gitParaReconciliar = (argv) => {
+const gitForReconcile = (argv) => {
   try {
     return { code: 0, stdout: execFileSync('git', argv, {
       encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
@@ -1611,13 +1611,13 @@ const gitParaReconciliar = (argv) => {
 // One single source for the decision of what is "the machinery's":
 // `LOOP_ARTIFACT_PATTERNS`, consumed here and in the target repo's workflow,
 // never a second list typed in by hand.
-const esRutaDeLaMaquinaria = (path) => LOOP_ARTIFACT_PATTERNS.some((pat) => matchesPattern(path, pat))
+const isMachineryPath = (path) => LOOP_ARTIFACT_PATTERNS.some((pat) => matchesPattern(path, pat))
 
 // The extractor of one section of the plan by its literal heading, up to the
 // next heading of equal or lesser level — the same criterion as
 // `extract_section` of `skills/subagent-driven-development/scripts/task-brief`
 // (bash/awk), rewritten here because the reconciliation package is pasted by
-// `verboReconcile` directly, with no such script in between.
+// `reconcileVerb` directly, with no such script in between.
 //
 // THE COPY IS DECLARED AND MEASURED (`conventions/decisions.md`, "when the
 // copy is unavoidable"): the rule lives in two languages because the script is
@@ -1631,27 +1631,27 @@ const esRutaDeLaMaquinaria = (path) => LOOP_ARTIFACT_PATTERNS.some((pat) => matc
 // code fences so as not to mistake a "### ..." comment inside a block for a
 // real heading. Absence is declared, never kept quiet — a blank gap read as
 // "empty section" is not the same as "the plan does not carry it".
-function seccionDelPlan(markdown, encabezado) {
-  const nivel = /^#+/.exec(encabezado)[0].length
-  let enCercado = false
-  let dentro = false
-  let visto = false
-  const salida = []
-  for (const linea of markdown.split('\n')) {
-    if (/^```/.test(linea)) enCercado = !enCercado
-    if (!enCercado && !visto && linea.startsWith(encabezado)) {
-      visto = true
-      dentro = true
-      salida.push(linea)
+function seccionDelPlan(markdown, heading) {
+  const level = /^#+/.exec(heading)[0].length
+  let inFence = false
+  let inside = false
+  let seen = false
+  const output = []
+  for (const line of markdown.split('\n')) {
+    if (/^```/.test(line)) inFence = !inFence
+    if (!inFence && !seen && line.startsWith(heading)) {
+      seen = true
+      inside = true
+      output.push(line)
       continue
     }
-    if (dentro && !enCercado && /^#+[ \t]/.test(linea)) {
-      if (/^#+/.exec(linea)[0].length <= nivel) dentro = false
+    if (inside && !inFence && /^#+[ \t]/.test(line)) {
+      if (/^#+/.exec(line)[0].length <= level) inside = false
     }
-    if (dentro) salida.push(linea)
+    if (inside) output.push(line)
   }
-  const contenido = salida.join('\n').trim()
-  return contenido || `(sección '${encabezado}' no encontrada en el plan)`
+  const content = output.join('\n').trim()
+  return content || `(sección '${heading}' no encontrada en el plan)`
 }
 
 // The log of the commits the base brought — the first thing a human resolving
@@ -1661,10 +1661,10 @@ function seccionDelPlan(markdown, encabezado) {
 // the role is forbidden. `allowFail` because a merge-base that cannot be
 // computed is not a failure of the program: it is one datum less in the
 // package, declared instead of kept quiet.
-function logDeLaBase(rama) {
-  const mergeBase = git(['merge-base', 'HEAD', `origin/${rama}`], { allowFail: true })
+function baseLog(branch) {
+  const mergeBase = git(['merge-base', 'HEAD', `origin/${branch}`], { allowFail: true })
   if (!mergeBase) return '(no se pudo calcular el merge-base con la base: no hay log de commits que enseñar)'
-  const log = git(['log', `${mergeBase.trim()}..origin/${rama}`, '--oneline'], { allowFail: true })
+  const log = git(['log', `${mergeBase.trim()}..origin/${branch}`, '--oneline'], { allowFail: true })
   return log || '(la base no trae ningún commit nuevo)'
 }
 
@@ -1676,51 +1676,51 @@ function logDeLaBase(rama) {
 // having seen a single package) counts what is needed here: every call that is
 // going to dispatch `ct-reconciler` writes one, and the next number is simply
 // how many there already are in the run's directory.
-function proximoIntentoDeReconciliacion() {
-  return paquetesDeReconciliacion().length + 1
+function nextReconcileAttempt() {
+  return reconcilePackages().length + 1
 }
 
 // The fix text of every `DiscardReason`, for the package and for the stdout
 // message — ONE list and not two copies that could diverge on what each reason
-// says. `verboReconcile`, further down, uses it for the message.
-const ARREGLO_DE_DESCARTE = {
+// says. `reconcileVerb`, further down, uses it for the message.
+const DISCARD_FIX = {
   [DiscardReason.MARKERS_LEFT]: 'quedaron marcas de conflicto (<<<<<<< / ======= / >>>>>>>) sin quitar en alguno de los ficheros resueltos.',
   [DiscardReason.TOUCHED_OUTSIDE_THE_CONFLICT]: 'la resolución tocó ficheros que no estaban en la lista de conflicto: el índice sólo puede llevar los ficheros en disputa.',
   [DiscardReason.UNRESOLVED_FILES_REMAIN]: 'siguen quedando ficheros sin resolver tras intentar stagearlos: hay que resolverlos todos antes de concluir.',
 }
 
 // The package `ct-reconciler` consumes (Task 9) — same pattern as
-// `escribirPaquete`/`escribirPaqueteDeSlice`: the program pastes already
+// `writeReviewPackage`/`writeSliceReviewPackage`: the program pastes already
 // resolved text onto disk and the agent reads it in one go. With no review
 // token: unlike a judge, the reconciler does not emit a verdict that has to be
 // tied to a cut of the index — it edits files, and it is the PROGRAM that
 // validates the tree afterwards (`BranchReconciliation.conclude()`), never a
 // JSON this package has to anchor.
-function escribirPaqueteDeReconciliacion({ rama, ronda, intento }) {
-  const paquete = join(workDir, `reconcile-package-${intento}.md`)
-  const deCt = cargarVaraDeCt()
-  const ficheros = ronda.files.map((f) => `- ${f}`).join('\n') || '(ninguno)'
-  const cabecera = ronda.reason
-    ? `# Reconcile package: issue #${issue}, round ${intento} (previous round discarded: ${ronda.reason})`
-    : `# Reconcile package: issue #${issue}, round ${intento}`
-  const lineas = [
-    cabecera, '',
-    '## Conflicted files', ficheros,
-    '', '## Base commits', logDeLaBase(rama),
+function writeReconcileReviewPackage({ branch, round, attempt }) {
+  const packagePath = join(workDir, `reconcile-package-${attempt}.md`)
+  const ctDocs = loadCtYardstick()
+  const files = round.files.map((f) => `- ${f}`).join('\n') || '(ninguno)'
+  const header = round.reason
+    ? `# Reconcile package: issue #${issue}, round ${attempt} (previous round discarded: ${round.reason})`
+    : `# Reconcile package: issue #${issue}, round ${attempt}`
+  const lines = [
+    header, '',
+    '## Conflicted files', files,
+    '', '## Base commits', baseLog(branch),
     '', seccionDelPlan(planText, '### Desired end state'),
   ]
-  if (ronda.reason) {
-    lineas.push('', '## Discard reason', ARREGLO_DE_DESCARTE[ronda.reason] ?? ronda.reason)
+  if (round.reason) {
+    lines.push('', '## Discard reason', DISCARD_FIX[round.reason] ?? round.reason)
   }
-  writeFileSync(paquete, lineas.join('\n'))
+  writeFileSync(packagePath, lines.join('\n'))
   // BY PATH AND NOT PASTED: the reconciler has `Read` (RECONCILER_TOOLS), and
   // the eight whole documents in front of a conflict are some 41 KB of fixed
   // material that does not depend on the conflict. With no task to narrow the
   // scope, all of them go: a merge can touch any file at all, a new one
   // included.
-  appendFileSync(paquete, PluginYardstick.composePathSection(deCt))
-  appendFileSync(paquete, seccionVaraDelRepo('el paquete de reconciliación'))
-  return paquete
+  appendFileSync(packagePath, PluginYardstick.composePathSection(ctDocs))
+  appendFileSync(packagePath, repoYardstickSection('el paquete de reconciliación'))
+  return packagePath
 }
 
 // The ladder's last bullet, and the promise `agents/ct-reconciler.md` makes to
@@ -1729,7 +1729,7 @@ function escribirPaqueteDeReconciliacion({ rama, ronda, intento }) {
 // from a CONFLICTING nobody touched or from a discarded round: it is the same
 // handover, and writing it twice is what would leave one of the two halves
 // unwritten.
-function relevoAlAgenteDelSlice() {
+function handoverToSliceAgent() {
   out(`ct-reconciler agotó sus ${DEFAULT_BUDGETS.reconcileRetries} ronda(s) sin resolverlo: le toca al agente del propio slice, que sí tiene Bash. Que resuelva el conflicto a mano, deje los ficheros stageados y llame a:`)
   out(`  ct-step reconcile --plan ${planPath} --issue ${issue}`)
 }
@@ -1740,25 +1740,25 @@ function relevoAlAgenteDelSlice() {
 // round we are in" is carried by git, not by this file — there is no counter
 // to keep in sync and no way to invoke it out of order.
 //
-// The base branch's name is NOT resolved here: `resolverRamaBase()` is the
-// same function `exclusionDeLaBase()` already uses (see its comment, above).
+// The base branch's name is NOT resolved here: `resolveBaseBranch()` is the
+// same function `baseExclusion()` already uses (see its comment, above).
 // Asking for it twice by two roads —one to exclude commits, another to merge—
 // is the divergent copy the previous phase's reviewer warned in writing must
 // not be written again.
-function verboReconcile() {
-  const arranque = Date.now()
-  const rama = resolverRamaBase()
-  if (!rama) {
+function reconcileVerb() {
+  const startedAt = Date.now()
+  const branch = resolveBaseBranch()
+  if (!branch) {
     die('reconcile no puede resolver la rama base del slice (ni "base:" en .agent/SLICE.md, ni main/master remotos en este worktree): no hay con qué fusionar.', EXIT.PRECONDITION)
   }
-  const reconciliacion = new BranchReconciliation({ git: gitParaReconciliar, isMachineryPath: esRutaDeLaMaquinaria })
-  const ronda = reconciliacion.isMergeInProgress()
-    ? reconciliacion.conclude()
-    : reconciliacion.merge({ baseBranch: rama })
-  medir('reconcile', {
-    outcome: ronda.outcome, files: ronda.files, reason: ronda.reason,
-    duration_ms: Date.now() - arranque,
-    ...medidaDePapelDeReconcile(),
+  const reconciliation = new BranchReconciliation({ git: gitForReconcile, isMachineryPath })
+  const round = reconciliation.isMergeInProgress()
+    ? reconciliation.conclude()
+    : reconciliation.merge({ baseBranch: branch })
+  measure('reconcile', {
+    outcome: round.outcome, files: round.files, reason: round.reason,
+    duration_ms: Date.now() - startedAt,
+    ...reconcileRoleMeasures(),
   })
   // The budget that decides the message is THIS round's, BEFORE `after()`
   // (further down, in the final dispatch) consumes it. The question is
@@ -1768,31 +1768,31 @@ function verboReconcile() {
   // the same decision in two files, and with a discarded round spending a
   // retry the two copies would have stopped agreeing: the verb would announce
   // another round and the table would close the run.
-  const quedaPresupuesto = !reconcileBudgetSpent(run)
-  switch (ronda.outcome) {
+  const budgetLeft = !reconcileBudgetSpent(run)
+  switch (round.outcome) {
     case ReconcileOutcome.UP_TO_DATE:
-      out(`reconcile: up-to-date (la base "${rama}" no se ha movido)`)
+      out(`reconcile: up-to-date (la base "${branch}" no se ha movido)`)
       break
     case ReconcileOutcome.MERGED:
-      out(`reconcile: merged (la base "${rama}" se fusionó sin conflictos)`)
+      out(`reconcile: merged (la base "${branch}" se fusionó sin conflictos)`)
       break
     case ReconcileOutcome.RESOLVED:
-      out(`reconcile: resolved (la resolución de ${ronda.files.length} fichero(s) se comiteó)`)
+      out(`reconcile: resolved (la resolución de ${round.files.length} fichero(s) se comiteó)`)
       break
     // The CONTENT conflict: there is something to work with (the files in
     // dispute), so while there is budget left it is the reconciler (Task 9,
     // `ct-reconciler`) that resolves it and not the slice agent.
     case ReconcileOutcome.CONFLICTING:
-      out(`reconcile: conflicting — ${ronda.files.length} fichero(s) en conflicto con "${rama}":`)
-      for (const f of ronda.files) out(`  - ${f}`)
+      out(`reconcile: conflicting — ${round.files.length} fichero(s) en conflicto con "${branch}":`)
+      for (const f of round.files) out(`  - ${f}`)
       out('')
-      if (quedaPresupuesto) {
-        const paquete = escribirPaqueteDeReconciliacion({ rama, ronda, intento: proximoIntentoDeReconciliacion() })
+      if (budgetLeft) {
+        const packagePath = writeReconcileReviewPackage({ branch, round, attempt: nextReconcileAttempt() })
         out(`DESPACHA ct-reconciler (subagente — declarado SIN Bash y SIN Write: ${RECONCILER_TOOLS}) a resolver el conflicto: que deje los ficheros resueltos, sin marcas de conflicto, y sin tocar nada fuera de esa lista — no puede stagear, comitear ni abortar la fusión: eso lo hace este programa al concluir. Dale:`)
-        out(`  - el paquete de reconciliación: ${paquete}`)
+        out(`  - el paquete de reconciliación: ${packagePath}`)
         out(`Cuando vuelva:  ct-step reconcile --plan ${planPath} --issue ${issue}  (concluye la fusión a medias — lo decide MERGE_HEAD, no hace falta indicar nada más).`)
       } else {
-        relevoAlAgenteDelSlice()
+        handoverToSliceAgent()
       }
       break
     // The mitigation the design promised in writing ("Declared limits"): the
@@ -1803,8 +1803,8 @@ function verboReconcile() {
     // inside. It is not airtight; it moves the case from the human's retina to
     // the loop.
     case ReconcileOutcome.MARKERS_COMMITTED:
-      out(`reconcile: markers-committed — HEAD ya es un commit de fusión, hecho fuera de este verbo, y ${ronda.files.length} fichero(s) suyos traen marcas de conflicto DENTRO del commit:`)
-      for (const f of ronda.files) out(`  - ${f}`)
+      out(`reconcile: markers-committed — HEAD ya es un commit de fusión, hecho fuera de este verbo, y ${round.files.length} fichero(s) suyos traen marcas de conflicto DENTRO del commit:`)
+      for (const f of round.files) out(`  - ${f}`)
       out('No hay fusión viva que concluir ni ronda que descartar: la pull request llevaría los marcadores dentro, y si el conflicto cae en un fichero que los controles no compilan, sale verde.')
       out('DESPACHA AL AGENTE DEL SLICE (tiene Bash) a quitar las marcas y comitear el arreglo, y vuelve a preguntar con ct-step next.')
       break
@@ -1813,7 +1813,7 @@ function verboReconcile() {
     // sending it off to resolve something that does not exist— so it goes
     // straight to the slice agent, with no mention of ct-reconciler.
     case ReconcileOutcome.UNMERGEABLE_TREE:
-      out(`reconcile: unmergeable-tree — git no pudo empezar la fusión con "${rama}": esto no es un conflicto de contenido, es el árbol del propio slice (cambios sin comitear, o algo a medias).`)
+      out(`reconcile: unmergeable-tree — git no pudo empezar la fusión con "${branch}": esto no es un conflicto de contenido, es el árbol del propio slice (cambios sin comitear, o algo a medias).`)
       out('DESPACHA AL AGENTE DEL SLICE (tiene Bash) a dejar el árbol limpio, y vuelve a preguntar con ct-step next.')
       break
     // The round that was discarded WITHOUT touching the tree
@@ -1822,7 +1822,7 @@ function verboReconcile() {
     // WHICH of the three reasons it was, because each one is fixed
     // differently.
     case ReconcileOutcome.ROUND_DISCARDED: {
-      out(`reconcile: round-discarded (${ronda.reason}) — ${ARREGLO_DE_DESCARTE[ronda.reason]}`)
+      out(`reconcile: round-discarded (${round.reason}) — ${DISCARD_FIX[round.reason]}`)
       out('La ronda se descartó sin comitear nada: el merge sigue vivo, con los ficheros en conflicto restaurados a como los dejó git.')
       // The merge IS STILL UNDER WAY (the discard does not abort it), so
       // while there is budget left it is still ct-reconciler's turn — the new
@@ -1831,54 +1831,54 @@ function verboReconcile() {
       // handover is the SAME as in CONFLICTING: it is the same ladder, and a
       // discarded round spends a retry precisely so that it reaches the
       // bottom.
-      if (!quedaPresupuesto) {
-        relevoAlAgenteDelSlice()
+      if (!budgetLeft) {
+        handoverToSliceAgent()
         break
       }
-      const paquete = escribirPaqueteDeReconciliacion({ rama, ronda, intento: proximoIntentoDeReconciliacion() })
+      const packagePath = writeReconcileReviewPackage({ branch, round, attempt: nextReconcileAttempt() })
       out(`REDESPACHA ct-reconciler (subagente — declarado SIN Bash y SIN Write: ${RECONCILER_TOOLS}) con el paquete nuevo:`)
-      out(`  - el paquete de reconciliación: ${paquete}`)
+      out(`  - el paquete de reconciliación: ${packagePath}`)
       out(`Cuando vuelva:  ct-step reconcile --plan ${planPath} --issue ${issue}`)
       break
     }
     default:
-      throw new Error(`ronda de reconciliación con desenlace sin mensaje: "${ronda.outcome}"`)
+      throw new Error(`ronda de reconciliación con desenlace sin mensaje: "${round.outcome}"`)
   }
-  return outcomeOfReconcile(ronda.outcome)
+  return outcomeOfReconcile(round.outcome)
 }
 
 // §3.7-A: the plan's end to end, executed BY THE PROGRAM after the last
 // committed task. Same machinery as the `controls` commands
-// (`ejecutarControl`: the exit code rules, `unmeasured` is a different class
+// (`runCheck`: the exit code rules, `unmeasured` is a different class
 // of red), but without the index checks — here nothing is staged: the subject
 // is the whole committed tree. A §8 declared "N/A" arrives here as an empty
 // list of commands (plan-tasks.js accepts the N/A with the same tolerance as a
 // task's **Tests:** one — the reason is asked for in the template, no program
 // validates it), it is recorded and it moves on: demanding a command of it
 // would be F14's impossible guard applied to §8.
-function verboGlobal() {
-  const arranque = Date.now()
+function globalVerb() {
+  const startedAt = Date.now()
   if (!globalVerification.commands.length) {
-    medir('global', { outcome: OUTCOMES.DONE, global_log: null, commands: 0, duration_ms: Date.now() - arranque })
+    measure('global', { outcome: OUTCOMES.DONE, global_log: null, commands: 0, duration_ms: Date.now() - startedAt })
     out('global: done (el plan declara N/A — no hay punta a punta que correr)')
     return OUTCOMES.DONE
   }
   const log = join(workDir, 'global-verification.log')
-  const lineas = []
-  let resultado = OUTCOMES.DONE
-  for (const comando of globalVerification.commands) {
-    const medido = ejecutarControl(comando)
-    lineas.push(`$ ${comando}`, medido.output ?? '', `-> exit ${medido.code}`, '')
-    if (medido.code === 'unmeasured') { resultado = OUTCOMES.INDETERMINATE; break }
-    if (medido.code !== 0) { resultado = OUTCOMES.FAILED; break }
+  const lines = []
+  let result = OUTCOMES.DONE
+  for (const command of globalVerification.commands) {
+    const measured = runCheck(command)
+    lines.push(`$ ${command}`, measured.output ?? '', `-> exit ${measured.code}`, '')
+    if (measured.code === 'unmeasured') { result = OUTCOMES.INDETERMINATE; break }
+    if (measured.code !== 0) { result = OUTCOMES.FAILED; break }
   }
-  writeFileSync(log, lineas.join('\n'))
-  medir('global', { outcome: resultado, global_log: log, commands: globalVerification.commands.length, duration_ms: Date.now() - arranque })
+  writeFileSync(log, lines.join('\n'))
+  measure('global', { outcome: result, global_log: log, commands: globalVerification.commands.length, duration_ms: Date.now() - startedAt })
   // `lastGlobalLog` is what `next` shows the slice judge: the proof that the
   // end to end has already run, so that it does not re-derive it from the diff.
   run = { ...run, lastGlobalLog: log }
-  out(`global: ${resultado} (log en ${log})`)
-  return resultado
+  out(`global: ${result} (log en ${log})`)
+  return result
 }
 
 // §3.7-B: the verdict on the whole slice. Unlike the task's, a PASS does not
@@ -1900,65 +1900,65 @@ function verboGlobal() {
 // still rejected downstream (`verdict.review_token !== token`): it is defence
 // in depth against the file of an earlier judgement at the same path, and
 // overwriting it here would disarm exactly that check.
-const conTokenDelPrograma = (valor, token) =>
-  (valor && typeof valor === 'object' && !Array.isArray(valor) && valor.review_token === undefined)
-    ? { ...valor, review_token: token }
-    : valor
+const withProgramToken = (value, token) =>
+  (value && typeof value === 'object' && !Array.isArray(value) && value.review_token === undefined)
+    ? { ...value, review_token: token }
+    : value
 
-function verboSliceVerdict() {
+function sliceVerdictVerb() {
   // THE INPUT BEFORE THE VERDICT, and for the same reason as in
-  // `verboVerdict` (see the long comment there, which is where the field case
-  // is): `escribirPaqueteDeSlice` is invoked ONLY by `next`, so with no file on
+  // `verdictVerb` (see the long comment there, which is where the field case
+  // is): `writeSliceReviewPackage` is invoked ONLY by `next`, so with no file on
   // disk the slice judge had no accumulated diff to judge.
-  const paquete = join(workDir, 'slice-review.diff')
-  if (!existsSync(paquete)) {
-    const why = `el paquete de revisión del slice no existe (${paquete}): el juez de slice juzgó a ciegas — vuelve a "ct-step next", que es el único paso que lo genera, y REDESPACHA al juez de slice. El paquete es de UN SOLO USO: lo consume el veredicto que lo lee, así que tras un veredicto aceptado hay que volver a pasar por next antes de despachar al juez de slice otra vez`
-    medir('slice-judge', { outcome: 'discarded', why })
+  const packagePath = join(workDir, 'slice-review.diff')
+  if (!existsSync(packagePath)) {
+    const why = `el paquete de revisión del slice no existe (${packagePath}): el juez de slice juzgó a ciegas — vuelve a "ct-step next", que es el único paso que lo genera, y REDESPACHA al juez de slice. El paquete es de UN SOLO USO: lo consume el veredicto que lo lee, así que tras un veredicto aceptado hay que volver a pasar por next antes de despachar al juez de slice otra vez`
+    measure('slice-judge', { outcome: 'discarded', why })
     out(`veredicto de slice descartado: ${why}`)
     return OUTCOMES.DISCARDED
   }
-  // The same pair of checks as in `verboVerdict`, with the RANGE's diff
-  // instead of the index's (see `diffDeSlice`). Here the token covers what the
+  // The same pair of checks as in `verdictVerb`, with the RANGE's diff
+  // instead of the index's (see `sliceDiff`). Here the token covers what the
   // state's commit invariant does NOT cover: a commit ADDED in the gap already
   // dies at the `hechos !== esperados` crossing of the state load, but an
   // `--amend` leaves the count the same and the content different.
-  const { token, why: porElPaquete } = tokenVigente(paquete, diffDeSlice())
-  if (porElPaquete) {
-    medir('slice-judge', { outcome: 'discarded', why: porElPaquete })
-    out(`veredicto de slice descartado: ${porElPaquete}`)
+  const { token, why: whyPackage } = currentToken(packagePath, sliceDiff())
+  if (whyPackage) {
+    measure('slice-judge', { outcome: 'discarded', why: whyPackage })
+    out(`veredicto de slice descartado: ${whyPackage}`)
     return OUTCOMES.DISCARDED
   }
-  const { valor, why: porLeer } = leerJson(process.argv[3], 'del veredicto de slice')
-  const { verdict, why } = porLeer ? { why: porLeer } : readSliceVerdict(conTokenDelPrograma(valor, token))
+  const { value, why: whyRead } = readJson(process.argv[3], 'del veredicto de slice')
+  const { verdict, why } = whyRead ? { why: whyRead } : readSliceVerdict(withProgramToken(value, token))
   if (!verdict) {
-    medir('slice-judge', { outcome: 'discarded', why })
+    measure('slice-judge', { outcome: 'discarded', why })
     out(`veredicto de slice descartado: ${why}`)
     return OUTCOMES.DISCARDED
   }
   if (verdict.review_token !== token) {
-    const porAjeno = whyTokenAjeno(verdict.review_token, token)
-    medir('slice-judge', { outcome: 'discarded', why: porAjeno })
-    out(`veredicto de slice descartado: ${porAjeno}`)
+    const whyForeign = whyForeignToken(verdict.review_token, token)
+    measure('slice-judge', { outcome: 'discarded', why: whyForeign })
+    out(`veredicto de slice descartado: ${whyForeign}`)
     return OUTCOMES.DISCARDED
   }
   const outcome = outcomeOfSliceVerdict(verdict)
-  medir('slice-judge', { outcome, review_package: paquete, review_token: token, ...verdictMeasures(verdict), ...medidaDePapel(STEPS.SLICE_JUDGE, paquete) })
+  measure('slice-judge', { outcome, review_package: packagePath, review_token: token, ...verdictMeasures(verdict), ...roleMeasures(STEPS.SLICE_JUDGE, packagePath) })
   // Here and not further down: AFTER measuring (the row names the package the
   // slice judge read, and it is written while that is still true) and BEFORE
   // the PASS branch, which writes, stages and COMMITS. Any of those writes can
   // throw —`mkdirSync`/`writeFileSync` over a read-only tree— and climb up to
   // the dispatch's catch: leaving the consumption behind them would open a
   // window in which a verdict already emitted did not spend its input.
-  consumirPaquete(paquete)
+  consumePackage(packagePath)
   if (verdict.ruling === 'PASS') {
-    const ruta = join('docs', 'superpowers', 'verdicts', `issue-${issue}-slice.json`)
+    const path = join('docs', 'superpowers', 'verdicts', `issue-${issue}-slice.json`)
     mkdirSync(join(repoRoot, 'docs', 'superpowers', 'verdicts'), { recursive: true })
-    writeFileSync(join(repoRoot, ruta), JSON.stringify({ issue, tasks_total: run.tasksTotal, verdict }, null, 2) + '\n')
+    writeFileSync(join(repoRoot, path), JSON.stringify({ issue, tasks_total: run.tasksTotal, verdict }, null, 2) + '\n')
     // The two `add` calls with `allowFail` follow the same doctrine as in
     // `verdict` and `commit`: evidence that cannot travel is warned about, it
     // never blocks a delivery whose work is already committed in full.
-    if (git(['add', '--', ruta], { allowFail: true }) === null) {
-      err(`aviso: el veredicto del slice se escribió en ${ruta} pero NO se pudo stagear, así que no viajará en la pull request (¿la ruta está gitignoreada en este repo?). La entrega sigue.`)
+    if (git(['add', '--', path], { allowFail: true }) === null) {
+      err(`aviso: el veredicto del slice se escribió en ${path} pero NO se pudo stagear, así que no viajará en la pull request (¿la ruta está gitignoreada en este repo?). La entrega sigue.`)
     }
     if (existsSync(join(repoRoot, METRICS_REL)) && git(['add', '--', METRICS_REL], { allowFail: true }) === null) {
       err(`aviso: no se pudo stagear la telemetría (${METRICS_REL}) — el veredicto del slice viaja sin ella. ¿La ruta está gitignoreada en este repo?`)
@@ -1972,7 +1972,7 @@ function verboSliceVerdict() {
     // `colado.txt` ended up inside "Veredicto del slice entero (#7)", with the
     // run delivering.
     //
-    // BELONGING is enough (see `ajenoEnElIndice`): here the index has to carry
+    // BELONGING is enough (see `foreignInIndex`): here the index has to carry
     // only the two paths the lines above have just staged.
     //
     // And the treatment is that of evidence that cannot travel, not that of a
@@ -1985,18 +1985,18 @@ function verboSliceVerdict() {
     // so taking the foreign material out and committing them by hand is one
     // line. Same doctrine as the `else` further down ("nada que commitear del
     // veredicto del slice ... la entrega sigue") and as the three `allowFail`.
-    const ajeno = ajenoEnElIndice([ruta, METRICS_REL])
-    if (ajeno.length) {
-      err(`aviso: el índice traía ${ajeno.length} ruta(s) ajenas a la maquinaria (${ajeno.join(', ')}) y este commit se las llevaría dentro sin que ningún juez las haya visto — NO se comitea el veredicto del slice. La entrega sigue: el trabajo del slice ya está comiteado entero. El veredicto está escrito y STAGEADO en ${ruta}: saca lo ajeno del índice ("git restore --staged ${ajeno[0]}", que no toca tu worktree) y comitéalo a mano antes de abrir la pull request.`)
+    const foreign = foreignInIndex([path, METRICS_REL])
+    if (foreign.length) {
+      err(`aviso: el índice traía ${foreign.length} ruta(s) ajenas a la maquinaria (${foreign.join(', ')}) y este commit se las llevaría dentro sin que ningún juez las haya visto — NO se comitea el veredicto del slice. La entrega sigue: el trabajo del slice ya está comiteado entero. El veredicto está escrito y STAGEADO en ${path}: saca lo ajeno del índice ("git restore --staged ${foreign[0]}", que no toca tu worktree) y comitéalo a mano antes de abrir la pull request.`)
     } else if ((git(['diff', '--cached', '--name-only']) || '').trim()) {
-      let mensaje = null
+      let message = null
       try {
-        mensaje = sliceVerdictCommitMessage({ issue, tasksTotal: run.tasksTotal })
+        message = sliceVerdictCommitMessage({ issue, tasksTotal: run.tasksTotal })
       } catch (e) {
         err(`aviso: ${String(e.message)} — el veredicto del slice se queda sin commitear. La entrega sigue.`)
       }
-      if (mensaje !== null) {
-        if (git(['commit', '-m', mensaje], { allowFail: true }) === null) {
+      if (message !== null) {
+        if (git(['commit', '-m', message], { allowFail: true }) === null) {
           err('aviso: no se pudo commitear el veredicto del slice — la entrega no depende de la evidencia, pero revisa el índice antes de abrir la pull request.')
         } else {
           // The commit is counted in the STATE, and only when it really
@@ -2007,7 +2007,7 @@ function verboSliceVerdict() {
           // at PRECONDITION for ever. And it goes INSIDE the `else` because if
           // the two evidence paths are gitignored there is no commit: counting
           // it then would throw the count off in the other direction. Same
-          // in-situ pattern as `lastGlobalLog` in `verboGlobal` — `guardar()`
+          // in-situ pattern as `lastGlobalLog` in `globalVerb` — `save()`
           // persists it at the end of the dispatch.
           run = { ...run, sliceCommits: (run.sliceCommits || 0) + 1 }
           out(`veredicto del slice comiteado: ${headSha().slice(0, 7)}`)
@@ -2021,10 +2021,10 @@ function verboSliceVerdict() {
   return outcome
 }
 
-function verboVerdict() {
+function verdictVerb() {
   // THE INPUT BEFORE THE VERDICT. `next` is the ONLY verb that writes the
-  // review package (`escribirPaquete`, above; it is invoked only in
-  // `verboNext`'s JUDGE case), so if it is not on disk the judge had nothing to
+  // review package (`writeReviewPackage`, above; it is invoked only in
+  // `nextVerb`'s JUDGE case), so if it is not on disk the judge had nothing to
   // judge: it judged blind. Measured in the field — an agent chained
   // report→controls→verdict without going back through `next`, and that PASS
   // only failed to get in because the judge itself confessed it could not find
@@ -2035,7 +2035,7 @@ function verboVerdict() {
   // do not take the implementer's word for it; the commit is not made by the
   // implementer; the index is verified instead of assumed).
   //
-  // And it goes BEFORE `leerJson` on purpose. With both things wrong —package
+  // And it goes BEFORE `readJson` on purpose. With both things wrong —package
   // absent and JSON unreadable— the row that has to be written is the
   // package's: asking the judge again fixes a broken JSON, but it does not make
   // a package nobody generated appear, so measuring "the verdict could not be
@@ -2043,9 +2043,9 @@ function verboVerdict() {
   // problem that was not the one, and the telemetry would count a judge that
   // writes badly instead of a conductor that skipped a step. The cause rules
   // over the symptom.
-  const paquete = join(workDir, `task-${run.task}-review.diff`)
-  if (!existsSync(paquete)) {
-    const why = `el paquete de revisión no existe (${paquete}): el juez juzgó a ciegas — vuelve a "ct-step next", que es el único paso que lo genera, y REDESPACHA al juez con el paquete nuevo. El paquete es de UN SOLO USO: lo consume el veredicto que lo lee, así que tras un FAIL (o cualquier veredicto aceptado) hay que volver a pasar por next antes de despachar al juez otra vez — y volver a next SIN redespachar al juez deja un veredicto de otro diff, que este verbo también rechaza`
+  const packagePath = join(workDir, `task-${run.task}-review.diff`)
+  if (!existsSync(packagePath)) {
+    const why = `el paquete de revisión no existe (${packagePath}): el juez juzgó a ciegas — vuelve a "ct-step next", que es el único paso que lo genera, y REDESPACHA al juez con el paquete nuevo. El paquete es de UN SOLO USO: lo consume el veredicto que lo lee, así que tras un FAIL (o cualquier veredicto aceptado) hay que volver a pasar por next antes de despachar al juez otra vez — y volver a next SIN redespachar al juez deja un veredicto de otro diff, que este verbo también rechaza`
     // The row carries `outcome` and `why`, and no other measure: exactly the
     // shape of the other discards in this file. Without `ruling` —for
     // `aggregateVerdictMeasures` a row with `ruling` IS a verdict, and this is
@@ -2053,31 +2053,31 @@ function verboVerdict() {
     // and without `review_package`, because naming in the telemetry the file
     // that is missing is writing precisely the row that points at a
     // non-existent one, which is what this guard exists to keep out.
-    medir('judge', { outcome: 'discarded', why })
+    measure('judge', { outcome: 'discarded', why })
     out(`veredicto descartado: ${why}`)
     return OUTCOMES.DISCARDED
   }
-  // THE INPUT IS STILL THE CUT AS IT STANDS NOW, and it goes BEFORE `leerJson`
+  // THE INPUT IS STILL THE CUT AS IT STANDS NOW, and it goes BEFORE `readJson`
   // for the same reason as the existence guard: with both things wrong, the row
   // that has to be written is the package's. Asking the judge again fixes a
   // broken JSON and does NOT make the code go back to being the one it judged,
   // so measuring "the verdict could not be read" would send the loop off to
   // spend discards answering the problem that was not the one. The cause rules
   // over the symptom.
-  const { token, why: porElPaquete } = tokenVigente(paquete, diffDeTarea())
-  if (porElPaquete) {
+  const { token, why: whyPackage } = currentToken(packagePath, taskDiff())
+  if (whyPackage) {
     // Same shape as the other discards: `outcome` and `why`, no other
     // measure. Without `review_package` or `review_token`, because naming in
     // the row the input of a judgement that is not accepted is writing the very
     // claim this guard exists to keep out.
-    medir('judge', { outcome: 'discarded', why: porElPaquete })
-    out(`veredicto descartado: ${porElPaquete}`)
+    measure('judge', { outcome: 'discarded', why: whyPackage })
+    out(`veredicto descartado: ${whyPackage}`)
     return OUTCOMES.DISCARDED
   }
-  const { valor, why: porLeer } = leerJson(process.argv[3], 'del veredicto')
-  const { verdict, why } = porLeer ? { why: porLeer } : readVerdict(conTokenDelPrograma(valor, token))
+  const { value, why: whyRead } = readJson(process.argv[3], 'del veredicto')
+  const { verdict, why } = whyRead ? { why: whyRead } : readVerdict(withProgramToken(value, token))
   if (!verdict) {
-    medir('judge', { outcome: 'discarded', why })
+    measure('judge', { outcome: 'discarded', why })
     out(`veredicto descartado: ${why}`)
     return OUTCOMES.DISCARDED
   }
@@ -2085,13 +2085,13 @@ function verboVerdict() {
   // dies: the one from the previous judgement brings the previous package's
   // token.
   if (verdict.review_token !== token) {
-    const porAjeno = whyTokenAjeno(verdict.review_token, token)
-    medir('judge', { outcome: 'discarded', why: porAjeno })
-    out(`veredicto descartado: ${porAjeno}`)
+    const whyForeign = whyForeignToken(verdict.review_token, token)
+    measure('judge', { outcome: 'discarded', why: whyForeign })
+    out(`veredicto descartado: ${whyForeign}`)
     return OUTCOMES.DISCARDED
   }
   const outcome = outcomeOfVerdict(verdict)
-  const graves = verdict.findings.filter((f) => f.severity !== 'low')
+  const major = verdict.findings.filter((f) => f.severity !== 'low')
   // `review_token` next to `review_package`: the input's path and its
   // IDENTITY. The path is no longer good for checking anything (the package is
   // consumed two lines further down), and the token says which code this
@@ -2099,7 +2099,7 @@ function verboVerdict() {
   // JSONL by either road. It is not derived from `verdictMeasures` because it
   // is not a measure of the judgement: it is the input's, and it goes where
   // the input's already lives.
-  medir('judge', { outcome, review_package: paquete, review_token: token, ...verdictMeasures(verdict), ...medidaDePapel(STEPS.JUDGE, paquete) })
+  measure('judge', { outcome, review_package: packagePath, review_token: token, ...verdictMeasures(verdict), ...roleMeasures(STEPS.JUDGE, packagePath) })
   // The consumption goes HERE for the same reason as in the slice twin: the
   // row that names the package is written first, and everything that comes
   // after —`mkdirSync`, `writeFileSync` and the `git add` of the verdict that
@@ -2107,12 +2107,12 @@ function verboVerdict() {
   // into one never emitted. None of those roads touches the package (the `add`
   // calls are by path, never `-A`), so consuming it earlier cannot sneak into
   // any commit.
-  consumirPaquete(paquete)
-  archivar('verdict', verdict)
+  consumePackage(packagePath)
+  archive('verdict', verdict)
   run = {
     ...run,
     lastVerdict: verdict,
-    lastFindings: graves.length ? graves.map((f) => `- [${f.severity}] ${findingLocation(f)}: ${f.what}`).join('\n') : null,
+    lastFindings: major.length ? major.map((f) => `- [${f.severity}] ${findingLocation(f)}: ${f.what}`).join('\n') : null,
   }
   if (verdict.ruling === 'PASS') {
     // The verdict TRAVELS in the pull request (F37's closure criterion: "el
@@ -2127,9 +2127,9 @@ function verboVerdict() {
     // the next PASS rewrites it, so the commit always gets the last one). It
     // is staged AFTER the checks on purpose: it is an artefact of the
     // machinery, like the plan, not the implementer's scope.
-    const ruta = join('docs', 'superpowers', 'verdicts', `issue-${issue}-task-${run.task}.json`)
+    const path = join('docs', 'superpowers', 'verdicts', `issue-${issue}-task-${run.task}.json`)
     mkdirSync(join(repoRoot, 'docs', 'superpowers', 'verdicts'), { recursive: true })
-    writeFileSync(join(repoRoot, ruta), JSON.stringify({ issue, task: run.task, task_name: tarea()?.name ?? null, verdict }, null, 2) + '\n')
+    writeFileSync(join(repoRoot, path), JSON.stringify({ issue, task: run.task, task_name: currentTask()?.name ?? null, verdict }, null, 2) + '\n')
     // `allowFail`, for the same reason as the telemetry's `git add` in
     // `commit`: without it, a repo that ignores this path makes the exception
     // climb up and leaves the task UNCOMMITTED with the run stuck at the
@@ -2139,10 +2139,10 @@ function verboVerdict() {
     // the run's folder, and whoever reviews the pull request sees that it is
     // not there. The work is committed; the evidence that it did not travel is
     // counted.
-    if (git(['add', '--', ruta], { allowFail: true }) === null) {
-      err(`aviso: el veredicto se escribió en ${ruta} pero NO se pudo stagear, así que no viajará en la pull request (¿la ruta está gitignoreada en este repo?). La tarea se comitea igual.`)
+    if (git(['add', '--', path], { allowFail: true }) === null) {
+      err(`aviso: el veredicto se escribió en ${path} pero NO se pudo stagear, así que no viajará en la pull request (¿la ruta está gitignoreada en este repo?). La tarea se comitea igual.`)
     } else {
-      out(`veredicto guardado y stageado: ${ruta}`)
+      out(`veredicto guardado y stageado: ${path}`)
     }
     // THE INDEX'S SEAL — the THIRD equality (slice 12).
     //
@@ -2159,7 +2159,7 @@ function verboVerdict() {
     // the index WITH the artefact the machinery has just laid on top of the
     // reviewed cut, so that is what has to be sealed; sealing before the add
     // would be sealing an index that no longer exists and would make ALL the
-    // commits fail — the same trap of ordering that `diffDeTarea`'s comment
+    // commits fail — the same trap of ordering that `taskDiff`'s comment
     // documents for the token. As a side effect, the artefact ends up inside
     // the seal: a verdict forged and staged in the gap does not get in either
     // (measured: today it does).
@@ -2167,11 +2167,11 @@ function verboVerdict() {
     // Only on the PASS, and there is no need to clear it on the other roads:
     // the COMMIT step is only reached from a PASS —`done` and
     // `corrections-ordered` with the budget spent, the two branches of
-    // `run-machine.js#trasElJuez`, and both come out of `ruling === 'PASS'`—,
+    // `run-machine.js#afterJudge`, and both come out of `ruling === 'PASS'`—,
     // so the seal `commit` reads is ALWAYS that of the immediately preceding
     // verdict and never a stale one from three attempts back. A FAIL goes back
     // to implementing or closes the run; a discard asks again.
-    run = { ...run, sealedTree: arbolDelIndice() }
+    run = { ...run, sealedTree: indexTree() }
   }
   out(`veredicto ${verdict.ruling} con ${verdict.findings.length} hallazgo(s) → ${outcome}`)
   return outcome
@@ -2186,27 +2186,27 @@ function verboVerdict() {
 // A discard here does NOT spend the attempt the task has left: the adviser
 // does not touch the code, so its unreadable answer cannot cost the same as a
 // veto. What backs it is the slice's discard cap.
-function verboAdvice() {
-  const paquete = join(workDir, `task-${run.task}-advice.md`)
-  if (!existsSync(paquete)) {
-    const why = `el paquete del consejero no existe (${paquete}): el consejero aconsejó a ciegas — vuelve a "ct-step next", que es el único paso que lo genera, y REDESPACHA al consejero con el paquete nuevo`
-    medir(STEPS.ADVISE, { outcome: 'discarded', why })
+function adviceVerb() {
+  const packagePath = join(workDir, `task-${run.task}-advice.md`)
+  if (!existsSync(packagePath)) {
+    const why = `el paquete del consejero no existe (${packagePath}): el consejero aconsejó a ciegas — vuelve a "ct-step next", que es el único paso que lo genera, y REDESPACHA al consejero con el paquete nuevo`
+    measure(STEPS.ADVISE, { outcome: 'discarded', why })
     out(`consejo descartado: ${why}`)
     return OUTCOMES.DISCARDED
   }
-  const ruta = process.argv[3]
-  const { valor, why: porLeer } = leerJson(ruta, 'del consejo')
-  const { advice, why } = porLeer ? { why: porLeer } : readAdvice(valor)
-  medir(STEPS.ADVISE, {
+  const path = process.argv[3]
+  const { value, why: whyRead } = readJson(path, 'del consejo')
+  const { advice, why } = whyRead ? { why: whyRead } : readAdvice(value)
+  measure(STEPS.ADVISE, {
     outcome: advice ? 'done' : 'discarded',
     why: advice ? null : why,
     // The weight of what the adviser answered, measured on the file that
     // exists on disk — never `0` when it cannot be measured: a zero would
     // claim an empty piece of advice, and what has happened is that it could
     // not be looked at.
-    advice_bytes: typeof ruta === 'string' ? tamanoEnDisco(ruta) : null,
+    advice_bytes: typeof path === 'string' ? sizeOnDisk(path) : null,
     advice_paths: advice ? advice.files_to_reconsider.length : null,
-    ...medidaDePapel(STEPS.ADVISE, paquete),
+    ...roleMeasures(STEPS.ADVISE, packagePath),
   })
   if (!advice) {
     out(`consejo descartado: ${why}`)
@@ -2217,8 +2217,8 @@ function verboAdvice() {
   // patches. It goes AFTER the telemetry row and after accepting the advice,
   // so that a git failure while cleaning does not sweep away the advice that
   // could be read.
-  const limpiadas = limpiarElArbolDeLaTarea()
-  out(`consejo aceptado: ${advice.files_to_reconsider.length} ruta(s) a reconsiderar; el árbol vuelve al último commit en ${limpiadas} ruta(s)`)
+  const cleaned = resetTaskTree()
+  out(`consejo aceptado: ${advice.files_to_reconsider.length} ruta(s) a reconsiderar; el árbol vuelve al último commit en ${cleaned} ruta(s)`)
   return OUTCOMES.DONE
 }
 
@@ -2240,22 +2240,22 @@ function verboAdvice() {
 // previous attempt's index in place, `git status` reads what was only staged
 // as "added and deleted", and what counts as tracked gets decided over a state
 // that no longer is.
-function limpiarElArbolDeLaTarea() {
+function resetTaskTree() {
   git(['reset', '-q'])
-  const entradas = entradasDelArbol()
-  const esNueva = ({ estado }) => estado === '??'
-  const rastreadas = entradas.filter((e) => !esNueva(e)).map(({ ruta }) => ruta)
-  const nuevas = entradas.filter(esNueva).map(({ ruta }) => ruta)
-  if (rastreadas.length) git(['checkout', '--', ...rastreadas])
-  if (nuevas.length) git(['clean', '-q', '-f', '-d', '--', ...nuevas])
-  return entradas.length
+  const entries = treeEntries()
+  const isNew = ({ status }) => status === '??'
+  const tracked = entries.filter((e) => !isNew(e)).map(({ path }) => path)
+  const untracked = entries.filter(isNew).map(({ path }) => path)
+  if (tracked.length) git(['checkout', '--', ...tracked])
+  if (untracked.length) git(['clean', '-q', '-f', '-d', '--', ...untracked])
+  return entries.length
 }
 
-function verboCommit() {
+function commitVerb() {
   // WHAT GETS COMMITTED IS WHAT WAS APPROVED, and it is checked before
   // anything else.
   //
-  // The third equality (see the seal in `verboVerdict`): the index as it
+  // The third equality (see the seal in `verdictVerb`): the index as it
   // stands now has to be the SAME one the machinery sealed when it accepted
   // the verdict. It goes ahead of the message and of the "nothing is staged"
   // because those two ask whether git CAN commit and this one asks whether it
@@ -2276,18 +2276,18 @@ function verboCommit() {
     err(`el estado no trae el sello del índice (sealedTree) que el veredicto de esta tarea tenía que dejar: o este run venía de una versión del plugin anterior a esta comprobación —se quedó parado en "commit" mientras se actualizaba—, o alguien editó ${stateFile}. Sin sello no se puede afirmar que lo stageado sea lo que el juez aprobó, y este programa no comitea lo que no puede afirmar. Compruébalo tú y comitea a mano (el veredicto está en docs/superpowers/verdicts/issue-${issue}-task-${run.task}.json), o arranca el run de nuevo: lo que no hay es un modo sin barandilla que se active BORRANDO un campo.`)
     return OUTCOMES.FAILED
   }
-  const arbolDeAhora = arbolDelIndice()
-  if (arbolDeAhora !== run.sealedTree) {
-    err(`el índice ya no es el que el juez aprobó: al aceptar el veredicto quedó sellado el árbol ${run.sealedTree} y el del índice de ahora es ${arbolDeAhora}. Algo lo cambió DESPUÉS del veredicto, así que este commit se llevaría dentro código que ningún juez ha visto, con el veredicto de otro código viajando al lado. NO se comitea nada.
+  const currentTree = indexTree()
+  if (currentTree !== run.sealedTree) {
+    err(`el índice ya no es el que el juez aprobó: al aceptar el veredicto quedó sellado el árbol ${run.sealedTree} y el del índice de ahora es ${currentTree}. Algo lo cambió DESPUÉS del veredicto, así que este commit se llevaría dentro código que ningún juez ha visto, con el veredicto de otro código viajando al lado. NO se comitea nada.
   - para devolver el índice aprobado, tal cual y sin tocar tu worktree:  git read-tree ${run.sealedTree}
     y repite "ct-step commit". Lo que hayas stageado después sigue en los ficheros: no se pierde, deja de estar stageado.
   - si ese código TIENE que entrar, no entra por aquí: desde "commit" no hay vuelta al juez en este run. Sácalo del índice, comitea la tarea aprobada, y que ese trabajo entre por la tarea siguiente o por otro slice.`)
     return OUTCOMES.FAILED
   }
-  const t = tarea()
-  let mensaje
+  const t = currentTask()
+  let message
   try {
-    mensaje = commitMessage({ issue, task: run.task, tasksTotal: run.tasksTotal, name: t.name })
+    message = commitMessage({ issue, task: run.task, tasksTotal: run.tasksTotal, name: t.name })
   } catch (e) {
     err(String(e.message))
     return OUTCOMES.FAILED
@@ -2318,7 +2318,7 @@ function verboCommit() {
   if (existsSync(join(repoRoot, METRICS_REL)) && git(['add', '--', METRICS_REL], { allowFail: true }) === null) {
     err(`aviso: no se pudo stagear la telemetría (${METRICS_REL}) — la tarea se comitea sin ella. ¿La ruta está gitignoreada en este repo?`)
   }
-  if (git(['commit', '-m', mensaje], { allowFail: true }) === null) return OUTCOMES.FAILED
+  if (git(['commit', '-m', message], { allowFail: true }) === null) return OUTCOMES.FAILED
   const sha = headSha()
   // `lastAdvice` goes away with the committed task, like everything else that
   // named it: the advice was dictated by an adviser that read THIS task's two
@@ -2335,15 +2335,15 @@ function verboCommit() {
 // missing and no journey can be quoted wrong, and what reaches the pull
 // request is EXACTLY what `readE2eReport` accepted — not a separate narration
 // somebody could let drift out of line with the validated JSON.
-function escribirInformeE2e(runs) {
-  const seccionDe = (r) => {
-    const lineas = [`## ${r.run}`, '', `**Veredicto:** ${r.verdict}`]
-    if (r.brought_up) lineas.push('', `**Cómo se levantó:** ${r.brought_up}`)
+function writeE2eReport(runs) {
+  const sectionOf = (r) => {
+    const lines = [`## ${r.run}`, '', `**Veredicto:** ${r.verdict}`]
+    if (r.brought_up) lines.push('', `**Cómo se levantó:** ${r.brought_up}`)
     if (r.verdict === 'verde') {
-      lineas.push('', '**Evidencia:**', '')
-      for (const e of r.evidence || []) lineas.push(`- \`${e.command}\` → \`${e.output}\``)
+      lines.push('', '**Evidencia:**', '')
+      for (const e of r.evidence || []) lines.push(`- \`${e.command}\` → \`${e.output}\``)
     } else if (r.verdict === 'rojo') {
-      lineas.push(
+      lines.push(
         '',
         `**Esperado:** ${r.expected}`,
         `**Real:** ${r.actual}`,
@@ -2351,30 +2351,30 @@ function escribirInformeE2e(runs) {
         `**Por qué no cuenta:** ${r.refuted_by}`,
       )
     } else {
-      lineas.push('', `**Motivo:** ${r.reason}`, `**Para desbloquear:** ${r.unblock}`)
+      lines.push('', `**Motivo:** ${r.reason}`, `**Para desbloquear:** ${r.unblock}`)
     }
-    return lineas.join('\n')
+    return lines.join('\n')
   }
-  const md = [`# E2E — issue #${issue}`, ...runs.map(seccionDe), ''].join('\n\n')
-  const ruta = join('docs', 'superpowers', 'e2e', `${issue}.md`)
+  const md = [`# E2E — issue #${issue}`, ...runs.map(sectionOf), ''].join('\n\n')
+  const path = join('docs', 'superpowers', 'e2e', `${issue}.md`)
   mkdirSync(join(repoRoot, 'docs', 'superpowers', 'e2e'), { recursive: true })
-  writeFileSync(join(repoRoot, ruta), md)
+  writeFileSync(join(repoRoot, path), md)
   // `allowFail`, same reason as the verdict and the telemetry: a repo that
   // gitignores `docs/` cannot be allowed to leave the run stuck because of a
   // `git add` that throws. The report stays written in the tree even if it does
   // not travel in the commit; what is lost is warned about, not kept quiet.
-  if (git(['add', '--', ruta], { allowFail: true }) === null) {
-    err(`aviso: el informe de e2e se escribió en ${ruta} pero NO se pudo stagear, así que no viajará en la pull request (¿la ruta está gitignoreada en este repo?).`)
+  if (git(['add', '--', path], { allowFail: true }) === null) {
+    err(`aviso: el informe de e2e se escribió en ${path} pero NO se pudo stagear, así que no viajará en la pull request (¿la ruta está gitignoreada en este repo?).`)
   }
-  return ruta
+  return path
 }
 
-function verboE2e() {
-  const { valor, why: porLeer } = leerJson(process.argv[3], 'del informe de e2e')
-  const { outcome, runs, why } = porLeer
-    ? { outcome: OUTCOMES.DISCARDED, why: porLeer }
-    : readE2eReport(valor, run.e2eRuns)
-  medir('e2e', {
+function e2eVerb() {
+  const { value, why: whyRead } = readJson(process.argv[3], 'del informe de e2e')
+  const { outcome, runs, why } = whyRead
+    ? { outcome: OUTCOMES.DISCARDED, why: whyRead }
+    : readE2eReport(value, run.e2eRuns)
+  measure('e2e', {
     outcome,
     runs: runs ? runs.length : 0,
     red: runs ? runs.filter((r) => r.verdict === 'rojo').length : 0,
@@ -2385,7 +2385,7 @@ function verboE2e() {
     out(`informe de e2e descartado: ${why}`)
     return outcome
   }
-  escribirInformeE2e(runs)
+  writeE2eReport(runs)
   // Each journey's verdict is PERSISTED in the run. Until this branch's final
   // review, `run-<issue>.json` kept only the NAMES (`e2eRuns`, the seeded
   // ones), so gate 8 of `dispatch-check --release` could not tell a green
@@ -2412,11 +2412,11 @@ function verboE2e() {
   return outcome
 }
 
-// Commits the e2e report that `escribirInformeE2e` left STAGED. It is not done
+// Commits the e2e report that `writeE2eReport` left STAGED. It is not done
 // from there: committing belongs to the moment in which it is known whether
 // the run CLOSES, not to when the file is written, and that is only known
 // after applying the transition. That is why the one that calls this is the
-// final dispatch and not `verboE2e`.
+// final dispatch and not `e2eVerb`.
 //
 // ONLY on DELIVERED (green, or green with some no-verificado): on BLOCKED_E2E
 // (red) the run does NOT close, so `.agent/run-<issue>.json` gets loaded again
@@ -2429,8 +2429,8 @@ function verboE2e() {
 // so committing there breaks no future count. The red road's report stays
 // staged on purpose: it is the proof that it is waiting for whoever fixes the
 // failure.
-function comprometerInformeE2e() {
-  const ruta = join('docs', 'superpowers', 'e2e', `${issue}.md`)
+function commitE2eReport() {
+  const path = join('docs', 'superpowers', 'e2e', `${issue}.md`)
   // It does not close the issue: it is the report of the crossing, not the
   // work that closes it, so the message carries no closing keyword — and that
   // is checked, with the same mechanism as `commitMessage`
@@ -2444,7 +2444,7 @@ function comprometerInformeE2e() {
   // (step-contracts.js), which commits every task, does not use it either.
   // Same style as that one: descriptive title + body with the why +
   // co-authorship.
-  const mensaje = `informe de e2e del issue #${issue}
+  const message = `informe de e2e del issue #${issue}
 
 Generado por ct-step tras el paso e2e de la slice. No cierra el issue.
 
@@ -2456,79 +2456,79 @@ Co-Authored-By: Claude <noreply@anthropic.com>`
   // the report's commit). It goes before the closing-keywords guard because
   // first it is decided WHAT goes into the repo and afterwards how it is
   // labelled.
-  const ajeno = ajenoEnElIndice([ruta])
-  if (ajeno.length) {
-    err(`aviso: el índice traía ${ajeno.length} ruta(s) ajenas a la maquinaria (${ajeno.join(', ')}) y este commit se las llevaría dentro sin que ningún juez las haya visto — el informe de e2e (${ruta}) queda STAGEADO y sin comitear. Saca lo ajeno del índice ("git restore --staged ${ajeno[0]}", que no toca tu worktree) y comitéalo a mano antes de abrir la pull request.`)
+  const foreign = foreignInIndex([path])
+  if (foreign.length) {
+    err(`aviso: el índice traía ${foreign.length} ruta(s) ajenas a la maquinaria (${foreign.join(', ')}) y este commit se las llevaría dentro sin que ningún juez las haya visto — el informe de e2e (${path}) queda STAGEADO y sin comitear. Saca lo ajeno del índice ("git restore --staged ${foreign[0]}", que no toca tu worktree) y comitéalo a mano antes de abrir la pull request.`)
     return
   }
-  const keywords = findClosingKeywords(mensaje)
+  const keywords = findClosingKeywords(message)
   if (keywords.length) {
-    err(`aviso: el mensaje del commit del informe de e2e contiene una closing keyword (${keywords.map((k) => `${k.keyword} ${k.ref}`).join(', ')}) y cerraría el issue sin que nadie lo haya decidido — NO se comitea. El informe (${ruta}) queda stageado.`)
+    err(`aviso: el mensaje del commit del informe de e2e contiene una closing keyword (${keywords.map((k) => `${k.keyword} ${k.ref}`).join(', ')}) y cerraría el issue sin que nadie lo haya decidido — NO se comitea. El informe (${path}) queda stageado.`)
     return
   }
   // `allowFail`, same criterion as the rest of this program's artefact
   // commits (verdict, telemetry): not committing cannot bring down a run that
   // has already been DELIVERED, so it warns and the file stays staged instead
   // of being lost.
-  if (git(['commit', '-m', mensaje], { allowFail: true }) === null) {
-    err(`aviso: el informe de e2e (${ruta}) quedó stageado pero NO se pudo comitear — revísalo a mano antes de abrir la pull request.`)
+  if (git(['commit', '-m', message], { allowFail: true }) === null) {
+    err(`aviso: el informe de e2e (${path}) quedó stageado pero NO se pudo comitear — revísalo a mano antes de abrir la pull request.`)
     return
   }
-  out(`informe de e2e comiteado: ${ruta}`)
+  out(`informe de e2e comiteado: ${path}`)
 }
 
 // ---------------------------------------------------------------------------
 // Apply the outcome to the table, and say what comes now.
 // ---------------------------------------------------------------------------
 try {
-  if (verbo === 'next') verboNext()
+  if (verbo === 'next') nextVerb()
 
-  exigirPaso(verbo)
+  requireStep(verbo)
   const outcome = {
-    report: verboReport, controls: verboControls, verdict: verboVerdict, advice: verboAdvice, commit: verboCommit,
-    reconcile: verboReconcile, global: verboGlobal, 'slice-verdict': verboSliceVerdict, e2e: verboE2e,
+    report: reportVerb, controls: controlsVerb, verdict: verdictVerb, advice: adviceVerb, commit: commitVerb,
+    reconcile: reconcileVerb, global: globalVerb, 'slice-verdict': sliceVerdictVerb, e2e: e2eVerb,
   }[verbo]()
 
   if (run.discards >= MAX_DISCARDS && outcome === OUTCOMES.DISCARDED) {
-    guardar()
+    save()
     die(`${run.discards} descartes en este run: se para en vez de seguir pidiendo respuestas que no se pueden leer`, EXIT.NO_VERDICT)
   }
 
-  const antes = run.step
-  const transicion = after(run, outcome, DEFAULT_BUDGETS)
-  run = transicion.run
+  const before = run.step
+  const transition = after(run, outcome, DEFAULT_BUDGETS)
+  run = transition.run
   // The good closure is PERSISTED: "delivered" has to be readable from the
   // file without rebuilding the table, because `dispatch-check --release`
   // demands it before releasing. A prompt is not a gate; this is the gate's
   // ct-step half.
-  if (transicion.state === RUN_STATES.DELIVERED) run = { ...run, closed: RUN_STATES.DELIVERED }
-  guardar()
+  if (transition.state === RUN_STATES.DELIVERED) run = { ...run, closed: RUN_STATES.DELIVERED }
+  save()
 
   // The e2e report is committed HERE, after persisting the state and only if
   // the verb just applied was `e2e` and the transition closed the run in
-  // DELIVERED — see `comprometerInformeE2e`'s comment for why that exact
+  // DELIVERED — see `commitE2eReport`'s comment for why that exact
   // condition (and for why the red road commits NOTHING).
-  if (verbo === 'e2e' && transicion.state === RUN_STATES.DELIVERED) {
-    comprometerInformeE2e()
+  if (verbo === 'e2e' && transition.state === RUN_STATES.DELIVERED) {
+    commitE2eReport()
   }
 
-  if (transicion.state === RUN_STATES.OPEN) {
+  if (transition.state === RUN_STATES.OPEN) {
     out('')
     out(`siguiente: tarea ${run.task}/${run.tasksTotal}, paso ${run.step} — pregunta con "ct-step next"`)
     process.exit(EXIT.OK)
   }
 
   out('')
-  out(`run ${transicion.state}: tarea ${run.task}/${run.tasksTotal}, ${run.discards} descarte(s)`)
-  process.exit(codigoDe(transicion.state, antes, outcome))
+  out(`run ${transition.state}: tarea ${run.task}/${run.tasksTotal}, ${run.discards} descarte(s)`)
+  process.exit(exitCodeOf(transition.state, before, outcome))
 } catch (e) {
-  guardar()
+  save()
   err(`excepción no prevista: ${e.stack || e.message}`)
   process.exit(EXIT.UNNAMED)
 }
 
-function codigoDe(estado, paso, outcome) {
-  switch (estado) {
+function exitCodeOf(state, step, outcome) {
+  switch (state) {
     case RUN_STATES.DELIVERED:
       out('las tareas comiteadas, la Global verification en verde y el slice con veredicto PASS: la rama está lista para la pull request.')
       return EXIT.OK

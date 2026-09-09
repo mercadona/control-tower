@@ -11,10 +11,11 @@
 // Three states for "is it alive?", not two: `true`, `false`, and `null` when it
 // could not be checked. Collapsing the third into `false` would turn a missing
 // tool into an accusation of abandonment.
-export function construirEstado(entrada) {
+export function buildState(input) {
   const {
-    enProgreso, enRevision = [], mergeados, cerradosConStatus,
-    worktreesEnDisco, ramasEnDisco,
+    enProgreso: inProgress, enRevision: inReview = [], mergeados: merged,
+    cerradosConStatus: closedWithStatus,
+    worktreesEnDisco: worktreesOnDisk, ramasEnDisco: branchesOnDisk,
     // sePuedeAtribuirWorktree: whether the list of issues (open and closed)
     // could be read WHOLE, which is what it takes to conclude that nobody
     // claims a worktree. It separates three questions that used to travel in
@@ -35,47 +36,47 @@ export function construirEstado(entrada) {
     // `worktree ✗` about a directory its own warning had just named. Now the
     // real list always goes in and the only thing turned off is the residue
     // CONCLUSION — the attribution is still done with whatever arrived.
-    sePuedeAtribuirWorktree = true,
-    procesos, edadClaimMs, ventanaArranqueMs,
-  } = entrada
+    sePuedeAtribuirWorktree: canAttributeWorktree = true,
+    procesos: processes, edadClaimMs: claimAgeMs, ventanaArranqueMs: startUpWindowMs,
+  } = input
 
-  const sinComprobar = []
-  if (!procesos.comprobado) sinComprobar.push(procesos.motivo)
+  const unchecked = []
+  if (!processes.comprobado) unchecked.push(processes.motivo)
 
-  const worktreeSet = new Set(worktreesEnDisco)
-  const ramaSet = new Set(ramasEnDisco)
+  const worktreeSet = new Set(worktreesOnDisk)
+  const branchSet = new Set(branchesOnDisk)
   // A worktree stops being an orphan the moment SOME issue claims it. It is
   // accumulated from the THREE buckets that can claim it: in flight, delivered
   // and waiting for a merge (`enRevision`, which is the legitimate owner of
   // its own), and already merged (harvest). There were two of them until
   // `enRevision` became a bucket of its own: leaving it out made a healthy loop
   // with open PRs report its worktrees as residue.
-  const worktreesExplicados = new Set()
+  const explainedWorktrees = new Set()
 
-  const enVuelo = enProgreso.map(({ n, nombre }) => {
+  const inFlight = inProgress.map(({ n, nombre: name }) => {
     const hasWorktree = worktreeSet.has(String(n))
-    const hasBranch = ramaSet.has(`feat/${n}`)
-    if (hasWorktree) worktreesExplicados.add(String(n))
+    const hasBranch = branchSet.has(`feat/${n}`)
+    if (hasWorktree) explainedWorktrees.add(String(n))
 
     // `null` when the process list could not be checked: it is never collapsed
     // into `false`, or the absence of the tool would read as the agent having
     // died.
-    const vivo = procesos.comprobado ? procesos.porSlice.has(String(n)) : null
-    const pid = procesos.comprobado ? (procesos.porSlice.get(String(n)) ?? null) : null
+    const alive = processes.comprobado ? processes.porSlice.has(String(n)) : null
+    const pid = processes.comprobado ? (processes.porSlice.get(String(n)) ?? null) : null
 
-    const edadMs = edadClaimMs.has(n) ? edadClaimMs.get(n) : null
+    const ageMs = claimAgeMs.has(n) ? claimAgeMs.get(n) : null
     // A claim just placed has not yet had time to start up the process that
     // proves it alive: below the start-up window it is reported as "starting
     // up", not as "no sign of life".
-    const arrancando = vivo === false && edadMs !== null && edadMs < ventanaArranqueMs
+    const startingUp = alive === false && ageMs !== null && ageMs < startUpWindowMs
 
-    if (vivo === false && edadMs === null) {
+    if (alive === false && ageMs === null) {
       // Unknown age: nobody is accused. The issue is named in sinComprobar
       // instead of deciding on its behalf.
-      sinComprobar.push(`#${n}: no se pudo determinar la antigüedad del claim`)
+      unchecked.push(`#${n}: no se pudo determinar la antigüedad del claim`)
     }
 
-    return { n, nombre, hasWorktree, hasBranch, pid, vivo, arrancando, edadMs }
+    return { n, nombre: name, hasWorktree, hasBranch, pid, vivo: alive, arrancando: startingUp, edadMs: ageMs }
   })
 
   // enRevision: the open issues in `status:in-review` — DELIVERED work waiting
@@ -94,19 +95,19 @@ export function construirEstado(entrada) {
   // That is why it does NOT count as a finding (see `hayHallazgos` further
   // down): it is informative. And that is why its worktrees end up EXPLAINED:
   // an `in-review` is exactly the legitimate owner of its own.
-  const enRevisionSalida = enRevision.map(({ n, nombre }) => {
+  const inReviewOutput = inReview.map(({ n, nombre: name }) => {
     const hasWorktree = worktreeSet.has(String(n))
-    if (hasWorktree) worktreesExplicados.add(String(n))
-    return { n, nombre, hasWorktree, hasBranch: ramaSet.has(`feat/${n}`) }
+    if (hasWorktree) explainedWorktrees.add(String(n))
+    return { n, nombre: name, hasWorktree, hasBranch: branchSet.has(`feat/${n}`) }
   })
 
-  const cosecha = []
-  for (const n of mergeados) {
+  const harvest = []
+  for (const n of merged) {
     const hasWorktree = worktreeSet.has(String(n))
-    const hasBranch = ramaSet.has(`feat/${n}`)
+    const hasBranch = branchSet.has(`feat/${n}`)
     if (hasWorktree || hasBranch) {
-      if (hasWorktree) worktreesExplicados.add(String(n))
-      cosecha.push({ n, hasWorktree, hasBranch })
+      if (hasWorktree) explainedWorktrees.add(String(n))
+      harvest.push({ n, hasWorktree, hasBranch })
     }
   }
 
@@ -123,13 +124,13 @@ export function construirEstado(entrada) {
   // computed and travels outwards, and it is what the caller uses so as not to
   // warn about what the report does explain. Different from pretending the
   // directory is not there, which is what the caller's emptying did.
-  const worktreesHuerfanos = sePuedeAtribuirWorktree
-    ? worktreesEnDisco.filter((w) => !worktreesExplicados.has(w))
+  const orphanedWorktrees = canAttributeWorktree
+    ? worktreesOnDisk.filter((w) => !explainedWorktrees.has(w))
     : []
 
-  const residuo = {
-    labels: cerradosConStatus,
-    worktreesHuerfanos,
+  const residue = {
+    labels: closedWithStatus,
+    worktreesHuerfanos: orphanedWorktrees,
   }
 
   // An in-flight slice with no life counts as a finding only if its age is
@@ -137,11 +138,11 @@ export function construirEstado(entrada) {
   // issue's number, and presenting it as a finding AS WELL would leave it
   // indistinguishable from a genuinely abandoned claim — precisely the
   // accusation that an unknown age avoids.
-  const hayHallazgoEnVuelo = enVuelo.some((s) => s.vivo === false && !s.arrancando && s.edadMs !== null)
-  const hayHallazgos = cosecha.length > 0
-    || residuo.labels.length > 0
-    || residuo.worktreesHuerfanos.length > 0
-    || hayHallazgoEnVuelo
+  const hasInFlightFinding = inFlight.some((s) => s.vivo === false && !s.arrancando && s.edadMs !== null)
+  const hasFindings = harvest.length > 0
+    || residue.labels.length > 0
+    || residue.worktreesHuerfanos.length > 0
+    || hasInFlightFinding
 
   // `worktreesExplicados` travels outwards because the caller needs the SAME
   // answer for something else: warning about the directories that were left
@@ -149,5 +150,5 @@ export function construirEstado(entrada) {
   // would duplicate the criterion of "who claims a worktree" in two places that
   // would drift apart — and the first victim of that drift would be exactly a
   // warning naming a directory the report does explain.
-  return { enVuelo, enRevision: enRevisionSalida, cosecha, residuo, sinComprobar, hayHallazgos, worktreesExplicados: [...worktreesExplicados] }
+  return { enVuelo: inFlight, enRevision: inReviewOutput, cosecha: harvest, residuo: residue, sinComprobar: unchecked, hayHallazgos: hasFindings, worktreesExplicados: [...explainedWorktrees] }
 }

@@ -120,20 +120,20 @@ function normalizePath(p) {
  * already an open PR.
  */
 export function parseScope(issueBody) {
-  const texto = typeof issueBody === 'string' ? issueBody : ''
-  const lineas = texto.split(/\r?\n/)
+  const text = typeof issueBody === 'string' ? issueBody : ''
+  const lines = text.split(/\r?\n/)
 
   // Only INSIDE `## Contexto del epic` is looked at, and the section is cut at
   // the next heading of any level: without that cut, an `Alcance:` written
   // further down (in «Out of scope», for example) would read as if it belonged
   // to this section.
-  let dentro = false
+  let inside = false
   const patterns = []
-  for (const linea of lineas) {
-    if (SECTION_HEADING.test(linea)) { dentro = true; continue }
-    if (dentro && ANY_HEADING.test(linea)) break
-    if (!dentro) continue
-    const m = linea.match(SCOPE_LINE)
+  for (const line of lines) {
+    if (SECTION_HEADING.test(line)) { inside = true; continue }
+    if (inside && ANY_HEADING.test(line)) break
+    if (!inside) continue
+    const m = line.match(SCOPE_LINE)
     if (!m) continue
     // The closing of the label's bold: in `- **Alcance:** apps/**` the two
     // asterisks that close the `**Alcance:**` fall AFTER the colon and would
@@ -144,8 +144,8 @@ export function parseScope(issueBody) {
     // closing of the bold always carries a space behind it (`** apps/…`),
     // whereas a pattern that starts with `**` always carries a slash
     // (`**/*.swift`).
-    const valor = m[1].replace(/^\*\*(?=\s)/, '')
-    for (const trozo of valor.split(',')) {
+    const value = m[1].replace(/^\*\*(?=\s)/, '')
+    for (const chunk of value.split(',')) {
       // The BACKTICKS are removed and nothing else. The temptation is to remove
       // Markdown's bold asterisks too, and that is a bug: in the value the
       // asterisks are the glob (`apps/ios/**`), not decoration. The first
@@ -153,8 +153,8 @@ export function parseScope(issueBody) {
       // directory prefix in silence — the gate stayed green and checked
       // something else. The LABEL's bold (`- **Alcance:**`) is already absorbed
       // by SCOPE_LINE, so it never reaches here.
-      const limpio = trozo.replace(/`/g, '').trim()
-      if (limpio) patterns.push(limpio)
+      const cleaned = chunk.replace(/`/g, '').trim()
+      if (cleaned) patterns.push(cleaned)
     }
   }
 
@@ -224,11 +224,11 @@ export function scopeViolations(files, patterns, extraExempt = []) {
   // plus whatever the target repo declares in its workflow (its own
   // bookkeeping). They add up instead of replacing one another: a repo cannot
   // accidentally switch off the plugin's by declaring its own.
-  const exentos = [...LOOP_ARTIFACT_PATTERNS, ...(Array.isArray(extraExempt) ? extraExempt.filter(Boolean) : [])]
+  const exemptPatterns = [...LOOP_ARTIFACT_PATTERNS, ...(Array.isArray(extraExempt) ? extraExempt.filter(Boolean) : [])]
   return (files || [])
     .map(normalizePath)
     .filter((f) => f)
-    .filter((f) => !exentos.some((pat) => matchesPattern(f, pat)))
+    .filter((f) => !exemptPatterns.some((pat) => matchesPattern(f, pat)))
     .filter((f) => !pats.some((pat) => matchesPattern(f, pat)))
 }
 
@@ -263,12 +263,12 @@ export function isSliceBranch(name) {
  * gate does not silently choose which of the two scopes applies.
  */
 export function issueFromPrBody(prBody) {
-  const encontrados = findClosingKeywords(typeof prBody === 'string' ? prBody : '')
-  const numeros = new Set()
-  for (const { ref } of encontrados) {
+  const found = findClosingKeywords(typeof prBody === 'string' ? prBody : '')
+  const numbers = new Set()
+  for (const { ref } of found) {
     const m = String(ref).match(/#(\d+)$/)
-    if (m) numeros.add(Number(m[1]))
+    if (m) numbers.add(Number(m[1]))
   }
-  if (numeros.size !== 1) return null
-  return [...numeros][0]
+  if (numbers.size !== 1) return null
+  return [...numbers][0]
 }

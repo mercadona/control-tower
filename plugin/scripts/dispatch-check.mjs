@@ -264,9 +264,9 @@ if (typeof repo !== 'string' || repo.length === 0) { dieErr(usage, 2) }
 // mode of this command, and combining it with one that mutates labels has no
 // reasonable interpretation.
 {
-  const pedidos = [release && '--release', reopen && '--reopen', requeue && '--requeue', checkPlan && '--check-plan', collect && '--collect'].filter(Boolean)
-  if (pedidos.length > 1) {
-    dieErr(`${pedidos.join(' y ')} son mutuamente excluyentes: --release cierra el slice hacia revisión (in-progress → in-review), --reopen lo devuelve al banco de trabajo tras un rechazo (in-review → in-progress), --requeue lo abandona y lo devuelve a la cola (in-progress → ready) y --collect recoge el residuo en disco de un slice ya mergeado sin tocar ninguna label. Elige uno.\n${usage}`, 2)
+  const requested = [release && '--release', reopen && '--reopen', requeue && '--requeue', checkPlan && '--check-plan', collect && '--collect'].filter(Boolean)
+  if (requested.length > 1) {
+    dieErr(`${requested.join(' y ')} son mutuamente excluyentes: --release cierra el slice hacia revisión (in-progress → in-review), --reopen lo devuelve al banco de trabajo tras un rechazo (in-review → in-progress), --requeue lo abandona y lo devuelve a la cola (in-progress → ready) y --collect recoge el residuo en disco de un slice ya mergeado sin tocar ninguna label. Elige uno.\n${usage}`, 2)
   }
 }
 
@@ -485,14 +485,14 @@ function setStatus(issue, from, to) {
 const RE_40HEX = /^[0-9a-f]{40}$/i
 // --release queries the base TWICE (F22 cleanliness + F-jjponz-1 plan); the
 // warning below comes out ONCE per process, not once per query.
-let avisoBaseEsShaEmitido = false
-// The SECOND latch, and it is about COST, not noise: `avisoBaseEsShaEmitido`
+let baseIsShaWarningEmitted = false
+// The SECOND latch, and it is about COST, not noise: `baseIsShaWarningEmitted`
 // is only raised when the warning IS EMITTED, so in the normal case (`base:`
 // is a real branch and there is nothing to warn about) it stays false forever
-// and the `baseNoEsUnaRama` probe would be paid for AGAIN on the second
+// and the `baseIsNotABranch` probe would be paid for AGAIN on the second
 // query. With this, the probe is paid once per value of `base:` per process —
 // and `base:` comes out of the same file on both queries.
-let baseFormaProbada = null
+let baseFormProbed = null
 
 // ============================================================================
 // Slice 9(a) — THE GUARDRAIL STOPS COUNTING CHARACTERS.
@@ -538,21 +538,21 @@ let baseFormaProbada = null
 // could not check it" and STAYS QUIET: this is a diagnostic, it never aborts
 // anything — the F16/H2 split.
 // ============================================================================
-function refResuelve(ref) {
+function refResolves(ref) {
   try {
     execFileSync('git', ['rev-parse', '--verify', '--quiet', ref], { stdio: 'ignore' })
     return true
   } catch { return false }
 }
 
-function baseNoEsUnaRama(base) {
-  if (refResuelve(`refs/heads/${base}`)) return false
-  if (refResuelve(`refs/remotes/origin/${base}`)) return false
-  return refResuelve(`${base}^{commit}`)
+function baseIsNotABranch(base) {
+  if (refResolves(`refs/heads/${base}`)) return false
+  if (refResolves(`refs/remotes/origin/${base}`)) return false
+  return refResolves(`${base}^{commit}`)
 }
 
 // Fix round 1 (Important 1) — the parsing of the seed's `base:` field lived
-// written twice (here and in nombreDeLaRamaBase(), below): same readFileSync,
+// written twice (here and in baseBranchName(), below): same readFileSync,
 // same regex, same quote trimming. `conventions/decisions.md`: if how that
 // field is written or quoted changes, BOTH have to be touched at once or they
 // diverge silently. A single place that knows how to parse the raw field —
@@ -562,7 +562,7 @@ function parseBaseField(seedText) {
   return b ? b[1].trim().replace(/^['"]|['"]$/g, '') : ''
 }
 
-function campoBaseDeLaSemilla() {
+function seedBaseField() {
   const seed = readFileSync(join(process.cwd(), SLICE_REL_PATH), 'utf8')
   return parseBaseField(seed)
 }
@@ -577,10 +577,10 @@ function sliceBaseRef() {
     // breakage is in the OTHER consumer of the field: `gh pr create --base`
     // demands a branch name and will fail when closing the slice. Warning via
     // stderr (diagnostic, not product — the F16/H2 split from above).
-    if (base && !avisoBaseEsShaEmitido && baseFormaProbada !== base) {
-      baseFormaProbada = base
-      if (baseNoEsUnaRama(base)) {
-        avisoBaseEsShaEmitido = true
+    if (base && !baseIsShaWarningEmitted && baseFormProbed !== base) {
+      baseFormProbed = base
+      if (baseIsNotABranch(base)) {
+        baseIsShaWarningEmitted = true
         const visible = base.length > 40 ? `${base.slice(0, 40)}…` : base
         errLine(`AVISO: el campo \`base:\` de ${SLICE_REL_PATH} (\`${visible}\`) NO es un nombre de rama: no existe ni como \`refs/heads/\` ni como \`refs/remotes/origin/\`, y sin embargo resuelve a un commit — un SHA (completo o abreviado), un tag, o una ref como \`origin/main\`. Eso ROMPE el \`gh pr create --base\` del cierre del slice (exige un nombre de rama), y no arregla el diff: para medir contra el corte real ya existe \`base_sha:\`, que este check prefiere solo. Devuelve \`base:\` al nombre de la rama del PR (p. ej. \`main\`).`)
       }
@@ -645,16 +645,16 @@ function sliceBaseRef() {
 // What is NOT unified is the PARSING of the `base:` field — this file uses its
 // own regex and `ct-step.mjs` uses `parseStateSafe`: earlier debt and outside
 // the scope of this fix.
-function nombreDeLaRamaBase() {
-  let declarada = null
+function baseBranchName() {
+  let declared = null
   try {
-    declarada = campoBaseDeLaSemilla()
+    declared = seedBaseField()
   } catch { /* no SLICE.md: no declared name, on to the fallback chain */ }
-  const resolutor = new BaseBranch({ remoteRefExists: (nombre) => refResuelve(`refs/remotes/origin/${nombre}`) })
-  return resolutor.resolve({ declared: declarada })
+  const resolver = new BaseBranch({ remoteRefExists: (name) => refResolves(`refs/remotes/origin/${name}`) })
+  return resolver.resolve({ declared })
 }
 
-const gitParaSliceBase = (argv) => {
+const gitForSliceBase = (argv) => {
   try {
     return execFileSync('git', argv, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
   } catch {
@@ -662,11 +662,11 @@ const gitParaSliceBase = (argv) => {
   }
 }
 
-function referenciaDeMedida(cut) {
-  const rama = nombreDeLaRamaBase()
-  if (!rama) return cut
-  const sliceBase = new SliceBase({ git: gitParaSliceBase })
-  return sliceBase.measurementRef({ baseBranch: rama, fallbackRef: cut })
+function measurementRefFor(cut) {
+  const branch = baseBranchName()
+  if (!branch) return cut
+  const sliceBase = new SliceBase({ git: gitForSliceBase })
+  return sliceBase.measurementRef({ baseBranch: branch, fallbackRef: cut })
 }
 // ============================================================================
 
@@ -700,7 +700,7 @@ function stateFilesIntroducedByBranch() {
   if (!cut) {
     return { known: false, why: 'no se pudo determinar la base de esta rama (ni `base_sha:`/`base:` en la semilla, ni origin/HEAD, ni main, ni master)' }
   }
-  const measurementRef = referenciaDeMedida(cut)
+  const measurementRef = measurementRefFor(cut)
   let measurementSha, headSha
   try {
     measurementSha = execFileSync('git', ['rev-parse', '--verify', '--quiet', `${measurementRef}^{commit}`], { encoding: 'utf8' }).trim()
@@ -750,7 +750,7 @@ function branchIntroducedFiles() {
   // single `base` for both uses is precisely the defect that reintroduces the
   // false positive `base_sha:` came to fix — hence they are returned
   // separately.
-  const measurementRef = referenciaDeMedida(cut)
+  const measurementRef = measurementRefFor(cut)
   let measurementSha
   try {
     measurementSha = execFileSync('git', ['rev-parse', '--verify', '--quiet', `${measurementRef}^{commit}`], { encoding: 'utf8' }).trim()
@@ -855,27 +855,27 @@ if (checkPlan) {
 // check that the watcher is launched with the right arguments without putting
 // a real process to poll GitHub for 48 hours.
 // ============================================================================
-function lanzarVigilanteDelMerge(n) {
-  const aviso = (por) => errLine(`aviso: no se ha lanzado el vigilante del merge de #${n} (${por}) — el slice está entregado y el issue está en status:in-review, pero cuando mergees su PR tendrás que recoger la cosecha a mano (o avisar a la coordinadora).`)
+function launchMergeWatcher(n) {
+  const warn = (reason) => errLine(`aviso: no se ha lanzado el vigilante del merge de #${n} (${reason}) — el slice está entregado y el issue está en status:in-review, pero cuando mergees su PR tendrás que recoger la cosecha a mano (o avisar a la coordinadora).`)
   try {
-    const disco = localSliceArtifacts(n)
-    if (!disco.known) return aviso('no se ha podido averiguar cuál es el checkout principal, así que no se sabe dónde buscar la sesión coordinadora')
+    const disk = localSliceArtifacts(n)
+    if (!disk.known) return warn('no se ha podido averiguar cuál es el checkout principal, así que no se sabe dónde buscar la sesión coordinadora')
     const bin = process.env.CT_WATCH_MERGE_BIN || ctWatchMergePath
     // `spawn(process.execPath, [bin, …])` with a `bin` that does not exist
     // does NOT fail: the executable is always `node`, so the process is born,
     // dies instantly with a module error, and without this check it would
     // announce "watcher launched" with a pid that no longer exists. Same
     // guard, and same reason, as in ct-next.mjs#lanzarVigilanteDelGo.
-    if (!existsSync(bin)) return aviso(`el programa del vigilante no existe: ${bin}`)
+    if (!existsSync(bin)) return warn(`el programa del vigilante no existe: ${bin}`)
     const logPath = join(controlTowerLogDir({ configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() }), `watch-merge-${n}.log`)
-    const hijo = spawn(process.execPath, [
-      bin, '--issue', String(n), '--repo', repo, '--coordinator-cwd', disco.mainRoot, '--log', logPath,
+    const child = spawn(process.execPath, [
+      bin, '--issue', String(n), '--repo', repo, '--coordinator-cwd', disk.mainRoot, '--log', logPath,
     ], { detached: true, stdio: 'ignore' })
-    hijo.on('error', (e) => aviso(`fallo al arrancarlo: ${e.message}`))
-    hijo.unref()
-    outLine(`vigilante del merge de #${n} lanzado (pid ${hijo.pid}) — cuando mergees el PR, la coordinadora se enterará sola. Log: ${logPath}`)
+    child.on('error', (e) => warn(`fallo al arrancarlo: ${e.message}`))
+    child.unref()
+    outLine(`vigilante del merge de #${n} lanzado (pid ${child.pid}) — cuando mergees el PR, la coordinadora se enterará sola. Log: ${logPath}`)
   } catch (e) {
-    aviso(e.message)
+    warn(e.message)
   }
 }
 
@@ -961,18 +961,18 @@ if (release) {
     // is not indistinguishable from one with none.
     dieErr(`no se libera #${issue}: no se ha podido leer el cuerpo del issue (\`gh issue view --json body\` falló) — no se afirma que no declare recorridos, solo que no se ha podido comprobar. Reintenta cuando \`gh\` responda; el issue sigue en status:in-progress: no se ha movido nada.`, 8)
   }
-  const recorridos = extractE2eRuns(bodyRaw)
+  const journeys = extractE2eRuns(bodyRaw)
   // `deliveredRun` returns {ok, why}, not the parsed run — it is re-read
   // here, in a way that cannot THROW on a corrupt file: an invalid JSON is
   // treated as "zero declared runs" (failing towards exit 8, not towards a
   // crash: a gate that blows up is not a gate).
   let run = null
   try { run = JSON.parse(runRaw) } catch { run = null }
-  if (recorridos.length) {
-    const declarados = new Set(Array.isArray(run?.e2eRuns) ? run.e2eRuns : [])
-    const faltan = recorridos.filter((r) => !declarados.has(r))
-    if (faltan.length) {
-      dieErr(`no se libera #${issue}: el issue declara en "${E2E_HEADING}" ${recorridos.length} recorrido(s), y el run entregado NO cubre ${faltan.length} de ellos: ${faltan.map((r) => `"${r}"`).join(', ')}. El run lee sus recorridos de .agent/SLICE.md, que es agent-reachable — esta puerta cruza contra el ISSUE, que el agente no controla. Completa esos recorridos con ct-step (paso "e2e") y reintenta. El issue sigue en status:in-progress: no se ha movido nada.`, 8)
+  if (journeys.length) {
+    const declared = new Set(Array.isArray(run?.e2eRuns) ? run.e2eRuns : [])
+    const missing = journeys.filter((r) => !declared.has(r))
+    if (missing.length) {
+      dieErr(`no se libera #${issue}: el issue declara en "${E2E_HEADING}" ${journeys.length} recorrido(s), y el run entregado NO cubre ${missing.length} de ellos: ${missing.map((r) => `"${r}"`).join(', ')}. El run lee sus recorridos de .agent/SLICE.md, que es agent-reachable — esta puerta cruza contra el ISSUE, que el agente no controla. Completa esos recorridos con ct-step (paso "e2e") y reintenta. El issue sigue en status:in-progress: no se ha movido nada.`, 8)
     }
   } else {
     // Section absent or empty: the label is the only signal left to decide
@@ -1022,17 +1022,17 @@ if (release) {
   // survives the kickoff.
   // ==========================================================================
   const ctHome = { configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() }
-  const registro = readGoCommitment({ repo, issue, ...ctHome })
-  if (registro.error) {
-    dieErr(`no se libera #${issue}: el go de este despacho está registrado en ${registro.path} y NO se ha podido leer (${registro.error}). No se afirma que falte el go, sólo que no se ha podido comprobar. Arréglalo (permisos, o el contenido del fichero) o reemite uno con \`node <plugin>/scripts/ct-go.mjs --issue ${issue} --repo ${repo}\`. El issue sigue en status:in-progress: no se ha movido nada.`, 9)
+  const register = readGoCommitment({ repo, issue, ...ctHome })
+  if (register.error) {
+    dieErr(`no se libera #${issue}: el go de este despacho está registrado en ${register.path} y NO se ha podido leer (${register.error}). No se afirma que falte el go, sólo que no se ha podido comprobar. Arréglalo (permisos, o el contenido del fichero) o reemite uno con \`node <plugin>/scripts/ct-go.mjs --issue ${issue} --repo ${repo}\`. El issue sigue en status:in-progress: no se ha movido nada.`, 9)
   }
-  if (registro.missing) {
+  if (register.missing) {
     // With no register, the only way to know whether this slice WAS SUPPOSED
     // to have a `plan` gate is its labels. A read failure here does not
     // release: it would be the same assertion without having looked.
     let labels = null
     try { labels = labelsOf(issue) } catch (e) {
-      dieErr(`no se libera #${issue}: el go de este despacho no está registrado (${registro.path} no existe) y tampoco se han podido leer las labels del issue (${e.message}) para saber si este slice lleva el gate \`plan\`. No se afirma que no lo lleve. Reintenta cuando \`gh\` responda. El issue sigue en status:in-progress: no se ha movido nada.`, 9)
+      dieErr(`no se libera #${issue}: el go de este despacho no está registrado (${register.path} no existe) y tampoco se han podido leer las labels del issue (${e.message}) para saber si este slice lleva el gate \`plan\`. No se afirma que no lo lleve. Reintenta cuando \`gh\` responda. El issue sigue en status:in-progress: no se ha movido nada.`, 9)
     }
     // `gatesFromLabels` returns {gates, declared}: `declared` tells "this
     // issue says it has no `plan` gate" apart from "this issue says nothing
@@ -1041,12 +1041,12 @@ if (release) {
     // and a silence does not close a gate — besides being the path an agent
     // would open by deleting its own labels. It is fixed with one command and
     // breaks nothing in flight.
-    const declaracion = gatesFromLabels(labels)
-    if (!declaracion.declared || declaracion.gates.includes('plan')) {
-      const porque = declaracion.declared
+    const declaration = gatesFromLabels(labels)
+    if (!declaration.declared || declaration.gates.includes('plan')) {
+      const why = declaration.declared
         ? 'este slice lleva el gate `plan`'
         : 'las labels de este issue no declaran NINGÚN gate (ni `gate:none`), así que no se puede afirmar que renuncie al `plan` —silencio no es renuncia—'
-      dieErr(`no se libera #${issue}: ${porque} y el go de este despacho NO ESTÁ REGISTRADO (${registro.path} no existe), así que no hay nada contra lo que comprobar el \`${GO_TOKEN}\` del issue. Pasa cuando el slice se despachó con una versión anterior a la que trajo el nonce, o cuando ese fichero se borró. Reemite el go con \`node <plugin>/scripts/ct-go.mjs --issue ${issue} --repo ${repo}\`, pide que lo contesten en el issue y vuelve a liberar. El issue sigue en status:in-progress: no se ha movido nada.`, 9)
+      dieErr(`no se libera #${issue}: ${why} y el go de este despacho NO ESTÁ REGISTRADO (${register.path} no existe), así que no hay nada contra lo que comprobar el \`${GO_TOKEN}\` del issue. Pasa cuando el slice se despachó con una versión anterior a la que trajo el nonce, o cuando ese fichero se borró. Reemite el go con \`node <plugin>/scripts/ct-go.mjs --issue ${issue} --repo ${repo}\`, pide que lo contesten en el issue y vuelve a liberar. El issue sigue en status:in-progress: no se ha movido nada.`, 9)
     }
   } else {
     // THE SAME READ AS THE WATCHER (a plain `--json comments`, with
@@ -1054,21 +1054,21 @@ if (release) {
     // the same thing are two ways for one of them to return something else
     // one day. It is the reason the e2e gate reuses `extractE2eRuns` instead
     // of re-parsing.
-    let comentarios = null
+    let comments = null
     try {
       const parsed = JSON.parse(gh(['issue', 'view', String(issue), '--repo', repo, '--json', 'comments']))
-      comentarios = Array.isArray(parsed?.comments) ? parsed.comments : null
+      comments = Array.isArray(parsed?.comments) ? parsed.comments : null
     } catch {
-      comentarios = null
+      comments = null
     }
-    if (!Array.isArray(comentarios)) {
+    if (!Array.isArray(comments)) {
       dieErr(`no se libera #${issue}: no se han podido leer los comentarios del issue (\`gh issue view --json comments\`), así que no se ha podido comprobar el go del gate \`plan\` — no se afirma que falte. Reintenta cuando \`gh\` responda. El issue sigue en status:in-progress: no se ha movido nada.`, 9)
     }
     // NO WINDOW on purpose, unlike the watcher: here any comment on the issue
     // counts, because the nonce already does the work the snapshot of ids did
     // there — a go from an earlier dispatch has a different nonce and does not
     // match by construction.
-    const go = comentarios.find((c) => matchesGo(c?.body, registro.commitment))
+    const go = comments.find((c) => matchesGo(c?.body, register.commitment))
     if (!go) {
       dieErr(`no se libera #${issue}: el gate \`plan\` no está cerrado — ningún comentario de este issue trae el go de este despacho. Lo cierra una persona contestando \`${GO_TOKEN} <nonce>\` con el nonce que /ct-next imprimió al despachar (no está en tu contexto, ni en el issue, ni en tu worktree: es de quien revisa el plan, a propósito). Si se ha perdido, quien despachó lo reemite con \`node <plugin>/scripts/ct-go.mjs --issue ${issue} --repo ${repo}\`. El issue sigue en status:in-progress: no se ha movido nada.`, 9)
     }
@@ -1084,7 +1084,7 @@ if (release) {
   // purpose: holding it back would leave the slice at status:in-progress
   // occupying `area:`/`touches:` and a `--cap` slot with nobody working on
   // it, the failure mode F13 and F18 removed. What cannot be is that it is
-  // also SILENT: three texts of this branch (run-machine.js#trasElE2e,
+  // also SILENT: three texts of this branch (run-machine.js#afterE2e,
   // gates.js#GATES.e2e.issue and §3.7 of the design) promise that --release
   // "says so", and until the final branch review nobody said it — the run
   // only persisted the NAMES of the runs, so this gate did not tell a green
@@ -1097,10 +1097,10 @@ if (release) {
   // verdict belongs to the run: the issue says nothing about how the
   // journey went. And it gates nothing — it is a diagnostic via stderr, the
   // usual doctrine: stdout is the product, stderr the why.
-  const sinVerificar = (Array.isArray(run?.e2eResults) ? run.e2eResults : []).filter((r) => r && r.verdict === 'no-verificado')
-  if (sinVerificar.length) {
-    const detalle = sinVerificar.map((r) => `"${r.run}" (${r.reason || 'sin motivo declarado en el informe'})`).join('; ')
-    errLine(`aviso: #${issue} se libera con ${sinVerificar.length} recorrido(s) que NO se pudieron comprobar: ${detalle}. Un "no-verificado" entrega a propósito (retener el slice por un entorno caído lo dejaría ocupando area:/touches: y una plaza de --cap sin nadie trabajando), pero libera SIN haber verificado eso: léelo antes de mergear. Si el motivo es del entorno, el arreglo va en la sección "## Cómo se atraviesa este repo (e2e)" de AGENTS.md, no en relajar la puerta. El informe completo está en docs/superpowers/e2e/${issue}.md.`)
+  const unverified = (Array.isArray(run?.e2eResults) ? run.e2eResults : []).filter((r) => r && r.verdict === 'no-verificado')
+  if (unverified.length) {
+    const detail = unverified.map((r) => `"${r.run}" (${r.reason || 'sin motivo declarado en el informe'})`).join('; ')
+    errLine(`aviso: #${issue} se libera con ${unverified.length} recorrido(s) que NO se pudieron comprobar: ${detail}. Un "no-verificado" entrega a propósito (retener el slice por un entorno caído lo dejaría ocupando area:/touches: y una plaza de --cap sin nadie trabajando), pero libera SIN haber verificado eso: léelo antes de mergear. Si el motivo es del entorno, el arreglo va en la sección "## Cómo se atraviesa este repo (e2e)" de AGENTS.md, no en relajar la puerta. El informe completo está en docs/superpowers/e2e/${issue}.md.`)
   }
   if (!dryRun && !fx) {
     const result = setStatus(issue, 'status:in-progress', 'status:in-review')
@@ -1125,7 +1125,7 @@ if (release) {
     if (noWatchMerge) {
       errLine(`aviso: no se ha lanzado el vigilante del merge de #${issue} porque se pidió --no-watch-merge — el slice está entregado y el issue está en status:in-review, pero nadie te avisará cuando mergees su PR: la cosecha la seguirá detectando \`/ct-next\` en su próxima corrida.`)
     } else {
-      lanzarVigilanteDelMerge(issue)
+      launchMergeWatcher(issue)
     }
   }
   dieOut(`released #${issue} → in-review`, 0)
@@ -1310,9 +1310,9 @@ function reopenDiskNote(n) {
       `  OJO: si la rama solo existe en el remoto, el trabajo anterior sigue ahí — recupéralo (o cierra su PR) antes de rehacerlo.`,
     ].join('\n')
   }
-  const quedan = [a.hasWorktree ? `el worktree ${a.worktree}` : null, a.hasBranch ? `la rama ${a.branch}` : null].filter(Boolean).join(' y ')
+  const left = [a.hasWorktree ? `el worktree ${a.worktree}` : null, a.hasBranch ? `la rama ${a.branch}` : null].filter(Boolean).join(' y ')
   return [
-    `De la vuelta anterior queda ${quedan} en ${a.mainRoot}. NO se ha tocado nada de eso: reabrir mueve el label, no el disco. Tienes dos caminos, y son excluyentes:`,
+    `De la vuelta anterior queda ${left} en ${a.mainRoot}. NO se ha tocado nada de eso: reabrir mueve el label, no el disco. Tienes dos caminos, y son excluyentes:`,
     `  (a) CORREGIR ENCIMA (lo normal tras un rechazo de revisión, y para lo que #${n} acaba de quedar en status:in-progress): sigue trabajando en ese mismo worktree y esa misma rama, sobre el PR que ya existe. NO invoques /ct-next para #${n}: se negaría a despachar precisamente porque el worktree/la rama ya existen. Cuando vuelvas a dejarlo listo, repite el --release.`,
     `  (b) EMPEZAR DE CERO: borra primero lo anterior (te llevas por delante el trabajo que hubiera, comprueba que está pusheado) y DESPUÉS devuélvelo a la cola, que es lo que hace que /ct-next vuelva a considerarlo:`,
     a.hasWorktree ? `      git -C ${a.mainRoot} worktree remove ${a.worktree}` : null,
@@ -1348,21 +1348,21 @@ if (reopen) {
   // to create it. Verified against that first version: exit 0 and "reopened
   // #9 → ready" on an issue carrying both labels.
   if (labels !== null) {
-    const actuales = labels.filter((l) => l.startsWith('status:'))
-    const soloInReview = actuales.length === 1 && actuales[0] === 'status:in-review'
-    if (!soloInReview) {
-      const enQue = actuales.length ? actuales.join(', ') : 'ninguna label status: (o sea, backlog)'
-      const yaReady = actuales.length === 1 && actuales[0] === 'status:ready'
-      const ambiguo = actuales.length > 1
-      const yaInProgress = actuales.length === 1 && actuales[0] === 'status:in-progress'
+    const current = labels.filter((l) => l.startsWith('status:'))
+    const onlyInReview = current.length === 1 && current[0] === 'status:in-review'
+    if (!onlyInReview) {
+      const statusText = current.length ? current.join(', ') : 'ninguna label status: (o sea, backlog)'
+      const alreadyReady = current.length === 1 && current[0] === 'status:ready'
+      const ambiguous = current.length > 1
+      const alreadyInProgress = current.length === 1 && current[0] === 'status:in-progress'
       dieErr(
-        yaReady
+        alreadyReady
           ? `#${issue} ya está en status:ready — no hay nada que reabrir, /ct-next puede despacharlo tal cual. (No se ha tocado ninguna label.)`
-          : ambiguo
-            ? `#${issue} tiene DOS o más labels de estado a la vez (${enQue}) — probablemente una edición que se quedó a medias. No se ha tocado ninguna: reabrir desde aquí solo quitaría status:in-review y dejaría el resto puesto junto a status:in-progress, o sea el mismo lío con una label más. Arréglalo primero dejando UNA sola, y vuelve a intentarlo.`
-            : yaInProgress
+          : ambiguous
+            ? `#${issue} tiene DOS o más labels de estado a la vez (${statusText}) — probablemente una edición que se quedó a medias. No se ha tocado ninguna: reabrir desde aquí solo quitaría status:in-review y dejaría el resto puesto junto a status:in-progress, o sea el mismo lío con una label más. Arréglalo primero dejando UNA sola, y vuelve a intentarlo.`
+            : alreadyInProgress
               ? `#${issue} ya está en status:in-progress — que es justo donde --reopen lo dejaría: en el banco de trabajo, reteniendo sus tokens. No hay nada que reabrir. (No se ha tocado ninguna label.) Si lo que querías era devolverlo a la cola para que /ct-next lo despache de cero, eso es --requeue, y exige que no quede nada del slice en esta máquina.`
-              : `--reopen solo devuelve al banco de trabajo un slice en status:in-review, y #${issue} está en: ${enQue}. No se ha tocado ninguna label — añadir status:in-progress sin quitar el status: que ya tiene dejaría el issue con DOS estados a la vez, que es exactamente el estado ambiguo que el dispatcher tiene que adivinar después. Si de verdad quieres moverlo desde ${enQue}, hazlo a mano y a conciencia: gh issue edit ${issue} --repo ${repo} --add-label status:in-progress --remove-label <la que tenga>.`,
+              : `--reopen solo devuelve al banco de trabajo un slice en status:in-review, y #${issue} está en: ${statusText}. No se ha tocado ninguna label — añadir status:in-progress sin quitar el status: que ya tiene dejaría el issue con DOS estados a la vez, que es exactamente el estado ambiguo que el dispatcher tiene que adivinar después. Si de verdad quieres moverlo desde ${statusText}, hazlo a mano y a conciencia: gh issue edit ${issue} --repo ${repo} --add-label status:in-progress --remove-label <la que tenga>.`,
         2
       )
     }
@@ -1416,21 +1416,21 @@ if (requeue) {
     }
   }
   if (labels !== null) {
-    const actuales = labels.filter((l) => l.startsWith('status:'))
-    const soloInProgress = actuales.length === 1 && actuales[0] === 'status:in-progress'
-    if (!soloInProgress) {
-      const enQue = actuales.length ? actuales.join(', ') : 'ninguna label status: (o sea, backlog)'
-      const yaReady = actuales.length === 1 && actuales[0] === 'status:ready'
-      const ambiguo = actuales.length > 1
-      const enReview = actuales.length === 1 && actuales[0] === 'status:in-review'
+    const current = labels.filter((l) => l.startsWith('status:'))
+    const onlyInProgress = current.length === 1 && current[0] === 'status:in-progress'
+    if (!onlyInProgress) {
+      const statusText = current.length ? current.join(', ') : 'ninguna label status: (o sea, backlog)'
+      const alreadyReady = current.length === 1 && current[0] === 'status:ready'
+      const ambiguous = current.length > 1
+      const inReview = current.length === 1 && current[0] === 'status:in-review'
       dieErr(
-        yaReady
+        alreadyReady
           ? `#${issue} ya está en status:ready — no hay nada que devolver a la cola, /ct-next puede despacharlo tal cual. (No se ha tocado ninguna label.)`
-          : ambiguo
-            ? `#${issue} tiene DOS o más labels de estado a la vez (${enQue}) — probablemente una edición que se quedó a medias. No se ha tocado ninguna: arréglalo primero dejando UNA sola, y vuelve a intentarlo.`
-            : enReview
+          : ambiguous
+            ? `#${issue} tiene DOS o más labels de estado a la vez (${statusText}) — probablemente una edición que se quedó a medias. No se ha tocado ninguna: arréglalo primero dejando UNA sola, y vuelve a intentarlo.`
+            : inReview
               ? `#${issue} está en status:in-review: su PR sigue abierto sin mergear, así que devolverlo a la cola soltaría sus tokens mientras ese trabajo sigue vivo. No se ha tocado ninguna label. Si la revisión lo rechazó y vas a corregir encima, usa --reopen; si de verdad lo abandonas, cierra antes su PR y reabre primero con --reopen.`
-              : `--requeue solo devuelve a la cola un slice en status:in-progress, y #${issue} está en: ${enQue}. No se ha tocado ninguna label — añadir status:ready sin quitar el status: que ya tiene dejaría el issue con DOS estados a la vez, que es exactamente el estado ambiguo que el dispatcher tiene que adivinar después.`,
+              : `--requeue solo devuelve a la cola un slice en status:in-progress, y #${issue} está en: ${statusText}. No se ha tocado ninguna label — añadir status:ready sin quitar el status: que ya tiene dejaría el issue con DOS estados a la vez, que es exactamente el estado ambiguo que el dispatcher tiene que adivinar después.`,
         2
       )
     }
@@ -1443,9 +1443,9 @@ if (requeue) {
     dieErr(`no se ha podido comprobar si queda algo de #${issue} en esta máquina (no se pudo consultar git desde aquí), y --requeue DECLARA que no queda trabajo sin mergear de este slice. No se declara ausente lo que no se ha podido mirar: no se ha tocado ninguna label. Corre esto desde dentro del checkout del repo, o comprueba a mano que ni .worktrees/${issue} ni feat/${issue} existen y haz la edición tú.`, 2)
   }
   if (a.hasWorktree || a.hasBranch) {
-    const quedan = [a.hasWorktree ? `el worktree ${a.worktree}` : null, a.hasBranch ? `la rama ${a.branch}` : null].filter(Boolean).join(' y ')
+    const left = [a.hasWorktree ? `el worktree ${a.worktree}` : null, a.hasBranch ? `la rama ${a.branch}` : null].filter(Boolean).join(' y ')
     dieErr([
-      `#${issue} todavía tiene ${quedan} en ${a.mainRoot}: su trabajo sigue vivo sin mergear, así que devolverlo a status:ready soltaría sus tokens de área/touches y dejaría que un vecino se despachara sobre una base que no lo contiene. No se ha tocado ninguna label.`,
+      `#${issue} todavía tiene ${left} en ${a.mainRoot}: su trabajo sigue vivo sin mergear, así que devolverlo a status:ready soltaría sus tokens de área/touches y dejaría que un vecino se despachara sobre una base que no lo contiene. No se ha tocado ninguna label.`,
       `Si de verdad lo abandonas, bórralo primero (comprueba antes que no pierdes nada sin pushear) y repite:`,
       a.hasWorktree ? `      git -C ${a.mainRoot} worktree remove ${a.worktree}` : null,
       a.hasBranch ? `      git -C ${a.mainRoot} branch -D ${a.branch}` : null,
@@ -1517,33 +1517,33 @@ if (collect) {
   // F20/harvest, Task 7 (corrected): with `--bq` and the guard saying
   // HARVEST, the row travels to BigQuery BEFORE `execute()` (below) deletes
   // anything. The rehearsal is done ONCE only, above; both the decision to
-  // load into BigQuery and the deletion itself reuse that same `ensayo`, so
+  // load into BigQuery and the deletion itself reuse that same `rehearsal`, so
   // `--collect --bq` only asks GitHub for the PR once per invocation.
-  const espacioTemporal = {
+  const tempWorkspace = {
     create: () => mkdtempSync(join(tmpdir(), 'ct-collect-bq-')),
     remove: (directory) => rmSync(directory, { recursive: true, force: true }),
   }
-  const lecturaFallida = (c) => `${c.failures[0].read} falló (${c.failures[0].detail})`
-  const ensayo = collector.rehearse({ artifacts: a, repo })
-  let report = ensayo
-  let cargada = ''
-  if (!dryRun && ensayo.outcome === CollectionOutcome.WOULD_COLLECT) {
+  const failedRead = (c) => `${c.failures[0].read} falló (${c.failures[0].detail})`
+  const rehearsal = collector.rehearse({ artifacts: a, repo })
+  let report = rehearsal
+  let loaded = ''
+  if (!dryRun && rehearsal.outcome === CollectionOutcome.WOULD_COLLECT) {
     if (bqTable) {
-      const cosecha = new SliceHarvest({ gh: ghRunner }).harvestIssue({ repo, number: issue, index: TelemetryIndex.read({ gh: ghRunner, repo }) })
-      if (cosecha.outcome !== SliceHarvestOutcome.COMPLETE) dieErr(`no se pudo leer la cosecha de #${issue}: ${lecturaFallida(cosecha)} — no se ha tocado nada, el siguiente barrido reintenta.`, 3)
-      const ledger = new HarvestLedger({ table: bqTable, bq: localRunner('bq', COLLECT_BQ_TIMEOUT_MS), workspace: espacioTemporal, identity: LedgerIdentity.fromEnvironment() }).record({ repo, milestone: cosecha.row.milestone, rows: [cosecha.row] })
-      if (ledger.outcome === LoadOutcome.REJECTED) { espacioTemporal.remove(ledger.directory); dieErr(`no se pudo cargar la fila de #${issue} en BigQuery (${bqTable.id}): bq salió con ${ledger.code}: ${ledger.detail} — no se ha borrado nada, el siguiente barrido reintenta.`, 11) }
-      cargada = ` ; 1 fila cargada en ${bqTable.id} (harvest_id ${ledger.harvestId})`
+      const harvest = new SliceHarvest({ gh: ghRunner }).harvestIssue({ repo, number: issue, index: TelemetryIndex.read({ gh: ghRunner, repo }) })
+      if (harvest.outcome !== SliceHarvestOutcome.COMPLETE) dieErr(`no se pudo leer la cosecha de #${issue}: ${failedRead(harvest)} — no se ha tocado nada, el siguiente barrido reintenta.`, 3)
+      const ledger = new HarvestLedger({ table: bqTable, bq: localRunner('bq', COLLECT_BQ_TIMEOUT_MS), workspace: tempWorkspace, identity: LedgerIdentity.fromEnvironment() }).record({ repo, milestone: harvest.row.milestone, rows: [harvest.row] })
+      if (ledger.outcome === LoadOutcome.REJECTED) { tempWorkspace.remove(ledger.directory); dieErr(`no se pudo cargar la fila de #${issue} en BigQuery (${bqTable.id}): bq salió con ${ledger.code}: ${ledger.detail} — no se ha borrado nada, el siguiente barrido reintenta.`, 11) }
+      loaded = ` ; 1 fila cargada en ${bqTable.id} (harvest_id ${ledger.harvestId})`
     }
-    report = collector.execute(ensayo)
+    report = collector.execute(rehearsal)
   }
-  const hechoDe = (command) => {
+  const doneText = (command) => {
     if (command.action === CollectionAction.CLOSE_WORKSPACE) return 'cerrada la workspace de cmux'
     if (command.action === CollectionAction.REMOVE_WORKTREE) return `borrado el worktree ${a.worktree}`
     if (command.action === CollectionAction.DELETE_BRANCH) return `borrada la rama ${a.branch}`
     throw new Error(`--collect no sabe nombrar la acción ${command.action}`)
   }
-  const esperaPor = (delivery) => {
+  const waitingFor = (delivery) => {
     if (delivery.state === DeliveryState.NOT_OPENED) return `no hay ninguna PR para la rama ${a.branch}`
     if (delivery.state === DeliveryState.OPEN) return `la PR #${delivery.number} sigue abierta`
     if (delivery.state === DeliveryState.ABANDONED) return `la PR #${delivery.number} se cerró sin mergear`
@@ -1552,14 +1552,14 @@ if (collect) {
   // EXHAUSTIVE projection outcome → (channel, text, exit code). A new outcome
   // with no row here throws instead of exiting with an invented code.
   const PROYECCION = {
-    [CollectionOutcome.COLLECTED]: { decir: dieOut, code: 0, linea: (r) => `collected #${issue}: ${r.done.map(hechoDe).join(', ')}${cargada}` },
+    [CollectionOutcome.COLLECTED]: { decir: dieOut, code: 0, linea: (r) => `collected #${issue}: ${r.done.map(doneText).join(', ')}${loaded}` },
     [CollectionOutcome.WOULD_COLLECT]: { decir: dieOut, code: 0, linea: (r) => `would collect #${issue}: ${r.pending.map((command) => command.line).join(' ; ')}${bqTable ? ` ; y cargaría 1 fila en ${bqTable.id}` : ''}` },
     [CollectionOutcome.NOTHING_LEFT]: { decir: dieOut, code: 0, linea: () => `nothing left for #${issue}: en ${a.mainRoot} ya no queda ni el worktree .worktrees/${issue} ni la rama ${a.branch}` },
-    [CollectionOutcome.WAITING]: { decir: dieOut, code: 1, linea: (r) => `waiting on #${issue} (${r.delivery.state}): ${esperaPor(r.delivery)} — no se ha tocado nada` },
+    [CollectionOutcome.WAITING]: { decir: dieOut, code: 1, linea: (r) => `waiting on #${issue} (${r.delivery.state}): ${waitingFor(r.delivery)} — no se ha tocado nada` },
     [CollectionOutcome.KEPT_DIRTY_TREE]: { decir: dieOut, code: 10, linea: () => `kept #${issue}: el worktree ${a.worktree} tiene cambios sin commitear — no se ha borrado nada` },
     [CollectionOutcome.KEPT_TIP_NOT_MERGED]: { decir: dieOut, code: 10, linea: (r) => `kept #${issue}: la punta local de ${a.branch} no es el commit que mergeó la PR #${r.delivery.number} (${r.delivery.headRefOid}) — no se ha borrado nada` },
     [CollectionOutcome.NOT_READ]: { decir: dieErr, code: 3, linea: (r) => `no se pudo leer el estado de #${issue}: ${r.read} falló (${r.detail}) — no se ha tocado nada, el siguiente barrido reintenta.` },
-    [CollectionOutcome.PARTIAL]: { decir: dieErr, code: 4, linea: (r) => `ATENCIÓN: cosecha a medias de #${issue}: ${r.done.length ? r.done.map(hechoDe).join(', ') : 'no se completó ningún paso'}. Falló: ${r.detail}. Pendiente a mano — ejecuta cada comando por separado: ${r.pending.map((command) => command.line).join(' ; ')}` },
+    [CollectionOutcome.PARTIAL]: { decir: dieErr, code: 4, linea: (r) => `ATENCIÓN: cosecha a medias de #${issue}: ${r.done.length ? r.done.map(doneText).join(', ') : 'no se completó ningún paso'}. Falló: ${r.detail}. Pendiente a mano — ejecuta cada comando por separado: ${r.pending.map((command) => command.line).join(' ; ')}` },
   }
   const proyeccion = PROYECCION[report.outcome]
   if (!proyeccion) throw new Error(`--collect no tiene proyección para el desenlace ${report.outcome}`)
@@ -1589,12 +1589,12 @@ if (collisions.length) {
   // also holds tokens, "clashes with #7" no longer implies there is a live
   // agent on #7 — and the remedy is different (merge the PR, do not wait).
   // Without the status, the two cases are indistinguishable in the output.
-  const detalle = collisions.map((c) => `#${c.n}[${c.tokens.join(',')}${c.status ? ` ${c.status}` : ''}]`).join(' ')
-  const hayReview = collisions.some((c) => c.status === 'status:in-review')
-  const nota = hayReview
+  const detail = collisions.map((c) => `#${c.n}[${c.tokens.join(',')}${c.status ? ` ${c.status}` : ''}]`).join(' ')
+  const hasReview = collisions.some((c) => c.status === 'status:in-review')
+  const note = hasReview
     ? ' — los marcados status:in-review tienen su trabajo entregado pero SIN MERGEAR: retienen sus tokens hasta el merge (ramificar ahora daría una base sin ese trabajo) y no hay ningún agente en ellos, así que esperar no sirve: mergea su PR, ciérralo como completed si el PR ya se mergeó, o reábrelo con --reopen si la revisión lo rechazó.'
     : ''
-  dieErr(`COLLISION: #${issue} choca con ${detalle}${nota}`, 1)
+  dieErr(`COLLISION: #${issue} choca con ${detail}${note}`, 1)
 }
 
 // TEST HOOK — CT_CLAIM_PRECLAIM_DELAY_MS.

@@ -247,12 +247,12 @@ describe('F27 — findClosingKeywords', () => {
   // intact (measured above: zero or one space, with or without a colon) is what
   // avoids the collapse without ceasing to detect anything real.
   it('a keyword followed by pathological spacing finishes fast, without blocking the hook', () => {
-    const patologico = `closes${' '.repeat(120000)}`
-    const inicio = Date.now()
-    const resultado = findClosingKeywords(patologico)
-    const duracion = Date.now() - inicio
-    expect(resultado).toEqual([])
-    expect(duracion).toBeLessThan(1000)
+    const pathological = `closes${' '.repeat(120000)}`
+    const start = Date.now()
+    const result = findClosingKeywords(pathological)
+    const duration = Date.now() - start
+    expect(result).toEqual([])
+    expect(duration).toBeLessThan(1000)
   })
 })
 
@@ -262,9 +262,9 @@ import { join } from 'node:path'
 import { probeGovernedRepo, CONTRACT_MARKER, LOOP_MARKER } from '../scripts/governed-repo.js'
 
 describe('F27 — probeGovernedRepo', () => {
-  const hechos = []
-  const tmp = () => { const d = mkdtempSync(join(tmpdir(), 'f27-')); hechos.push(d); return d }
-  afterAll(() => { for (const d of hechos) { try { chmodSync(d, 0o755) } catch {} ; rmSync(d, { recursive: true, force: true }) } })
+  const created = []
+  const tmp = () => { const d = mkdtempSync(join(tmpdir(), 'f27-')); created.push(d); return d }
+  afterAll(() => { for (const d of created) { try { chmodSync(d, 0o755) } catch {} ; rmSync(d, { recursive: true, force: true }) } })
 
   it('a repo with an AGENTS.md carrying the marker is governed', () => {
     const d = tmp()
@@ -387,26 +387,26 @@ describe('F27 — probeGovernedRepo', () => {
   })
 
   it('a getter that throws when read as cwd does not throw, and is an ERROR', () => {
-    const hostil = {}
-    Object.defineProperty(hostil, 'x', { enumerable: true, get() { throw new Error('boom') } })
-    expect(() => probeGovernedRepo(hostil)).not.toThrow()
-    const r = probeGovernedRepo(hostil)
+    const hostile = {}
+    Object.defineProperty(hostile, 'x', { enumerable: true, get() { throw new Error('boom') } })
+    expect(() => probeGovernedRepo(hostile)).not.toThrow()
+    const r = probeGovernedRepo(hostile)
     expect(r.error).toBeTruthy()
     expect(r.governed).toBeUndefined()
   })
 
   it('a toJSON that throws as cwd does not throw, and is an ERROR', () => {
-    const hostil = { toJSON() { throw new Error('boom') } }
-    expect(() => probeGovernedRepo(hostil)).not.toThrow()
-    const r = probeGovernedRepo(hostil)
+    const hostile = { toJSON() { throw new Error('boom') } }
+    expect(() => probeGovernedRepo(hostile)).not.toThrow()
+    const r = probeGovernedRepo(hostile)
     expect(r.error).toBeTruthy()
     expect(r.governed).toBeUndefined()
   })
 
   it('a toString that throws as cwd does not throw, and is an ERROR', () => {
-    const hostil = { toString() { throw new Error('boom') } }
-    expect(() => probeGovernedRepo(hostil)).not.toThrow()
-    const r = probeGovernedRepo(hostil)
+    const hostile = { toString() { throw new Error('boom') } }
+    expect(() => probeGovernedRepo(hostile)).not.toThrow()
+    const r = probeGovernedRepo(hostile)
     expect(r.error).toBeTruthy()
     expect(r.governed).toBeUndefined()
   })
@@ -432,14 +432,14 @@ describe("F27 — the quoted heredoc inside the -m (Claude Code's default multil
   ].join('\n')
 
   it('the complete message, heredoc included, comes out of extractCommitMessages', () => {
-    const mensajes = extractCommitMessages(command)
-    expect(mensajes).toHaveLength(1)
-    expect(mensajes[0]).toContain('Closes #451')
+    const messages = extractCommitMessages(command)
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toContain('Closes #451')
   })
 
   it('findClosingKeywords DOES find the keyword inside that message', () => {
-    const hallazgos = extractCommitMessages(command).flatMap(findClosingKeywords)
-    expect(hallazgos).toEqual([{ keyword: 'Closes', ref: '#451' }])
+    const findings = extractCommitMessages(command).flatMap(findClosingKeywords)
+    expect(findings).toEqual([{ keyword: 'Closes', ref: '#451' }])
   })
 })
 
@@ -459,12 +459,12 @@ import { fileURLToPath } from 'node:url'
 // READER (`probeGovernedRepo`) — without the marker's literal appearing written
 // anywhere in this file.
 describe('F27 — the writer (ct-init.sh) and the reader (probeGovernedRepo), tied by the same test', () => {
-  const hechos = []
-  afterAll(() => { for (const d of hechos) { try { chmodSync(d, 0o755) } catch {} ; rmSync(d, { recursive: true, force: true }) } })
+  const created = []
+  afterAll(() => { for (const d of created) { try { chmodSync(d, 0o755) } catch {} ; rmSync(d, { recursive: true, force: true }) } })
 
   it('a repo seeded by the real ct-init.sh is recognised as governed', () => {
     const d = mkdtempSync(join(tmpdir(), 'f27-e2e-'))
-    hechos.push(d)
+    created.push(d)
     execFileSync('git', ['init', '-q'], { cwd: d })
     const ctInit = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'ct-init.sh')
     execFileSync('bash', [ctInit, d], { encoding: 'utf8' })

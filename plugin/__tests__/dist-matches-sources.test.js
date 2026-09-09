@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-// comprobarDist: answers ONE question — is HEAD's `dist/` exactly what HEAD's
+// checkDist: answers ONE question — is HEAD's `dist/` exactly what HEAD's
 // sources produce?
 //
 // The working tree is never read, not to compare and not to decide whether to
@@ -17,7 +17,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 // as a commit exists carrying a stale bundle — which is the state the defect
 // produces and the one `npm test` masks, because it rebuilds `dist/` before
 // launching vitest.
-async function comprobarDist(root) {
+async function checkDist(root) {
   const tmp = mkdtempSync(join(tmpdir(), 'ct-dist-'))
   try {
     // 1. HEAD's sources: EVERYTHING tracked, with no list of paths. A list is
@@ -93,27 +93,27 @@ async function comprobarDist(root) {
     const res = await build({ ...mod.buildOptions, absWorkingDir: tmp, metafile: true })
 
     // 5. A SET comparison in both directions, not a list comparison.
-    const construido = readdirSync(join(tmp, 'dist')).sort()
-    const enHead = execFileSync('git', ['-C', toplevel, 'ls-tree', '--name-only', headTree, 'dist/'], { encoding: 'utf8' })
+    const built = readdirSync(join(tmp, 'dist')).sort()
+    const inHead = execFileSync('git', ['-C', toplevel, 'ls-tree', '--name-only', headTree, 'dist/'], { encoding: 'utf8' })
       .split('\n').filter(Boolean).map((p) => p.replace(/^dist\//, '')).sort()
 
-    const faltan = construido.filter((f) => !enHead.includes(f))
-    const sobran = enHead.filter((f) => !construido.includes(f))
-    const difieren = []
-    for (const f of construido.filter((f) => enHead.includes(f))) {
-      const nuevo = readFileSync(join(tmp, 'dist', f))
-      const viejo = execFileSync('git', ['-C', root, 'show', `HEAD:${prefix}dist/${f}`], { maxBuffer: 256 * 1024 * 1024 })
-      if (Buffer.compare(nuevo, viejo) !== 0) difieren.push(f)
+    const missing = built.filter((f) => !inHead.includes(f))
+    const leftOver = inHead.filter((f) => !built.includes(f))
+    const differ = []
+    for (const f of built.filter((f) => inHead.includes(f))) {
+      const freshBytes = readFileSync(join(tmp, 'dist', f))
+      const headBytes = execFileSync('git', ['-C', root, 'show', `HEAD:${prefix}dist/${f}`], { maxBuffer: 256 * 1024 * 1024 })
+      if (Buffer.compare(freshBytes, headBytes) !== 0) differ.push(f)
     }
 
     const inputs = Object.keys(res.metafile.inputs).filter((k) => !k.includes('node_modules')).sort()
-    return { faltan, sobran, difieren, inputs }
+    return { missing, leftOver, differ, inputs }
   } finally {
     rmSync(tmp, { recursive: true, force: true })
   }
 }
 
-// explicarIncoherencia: the message a human reads. A failure has two possible
+// explainIncoherence: the message a human reads. A failure has two possible
 // causes and the fix is the same for both, but knowing which one changes what
 // the reader thinks they did wrong — so they are told apart without guessing.
 //
@@ -124,26 +124,26 @@ async function comprobarDist(root) {
 // OTHER file of scripts/ does not enter any hook's bundle. Looking at the
 // whole directory would have given a false positive on any change to those
 // other files, even though no bundle depends on them.
-function explicarIncoherencia(root, { faltan, sobran, difieren, inputs }) {
-  const partes = ['el dist/ commiteado NO corresponde a los fuentes commiteados:']
-  if (faltan.length) partes.push(`  el build produce ficheros que HEAD no tiene commiteados: ${faltan.join(', ')}`)
-  if (sobran.length) partes.push(`  HEAD tiene ficheros en dist/ que el build ya no produce: ${sobran.join(', ')}`)
-  if (difieren.length) partes.push(`  difieren en contenido: ${difieren.join(', ')}`)
+function explainIncoherence(root, { missing, leftOver, differ, inputs }) {
+  const parts = ['el dist/ commiteado NO corresponde a los fuentes commiteados:']
+  if (missing.length) parts.push(`  el build produce ficheros que HEAD no tiene commiteados: ${missing.join(', ')}`)
+  if (leftOver.length) parts.push(`  HEAD tiene ficheros en dist/ que el build ya no produce: ${leftOver.join(', ')}`)
+  if (differ.length) parts.push(`  differ en contenido: ${differ.join(', ')}`)
 
-  const ultimoDist = execFileSync('git', ['-C', root, 'log', '-1', '--format=%H', '--', 'dist/'], { encoding: 'utf8' }).trim()
+  const lastDistCommit = execFileSync('git', ['-C', root, 'log', '-1', '--format=%H', '--', 'dist/'], { encoding: 'utf8' }).trim()
   // An empty `inputs` cannot happen today (the metafile always carries at
   // least the entry points), but a `git diff -- ` with NO paths diffs the
   // WHOLE repo, and that would turn any documentation commit into a false
   // "needs a rebuild". It is cut off here instead of trusting it never
   // happens.
-  if (ultimoDist && inputs.length) {
-    const cambiados = execFileSync('git', ['-C', root, 'diff', '--name-only', `${ultimoDist}..HEAD`, '--', ...inputs], { encoding: 'utf8' })
+  if (lastDistCommit && inputs.length) {
+    const changed = execFileSync('git', ['-C', root, 'diff', '--name-only', `${lastDistCommit}..HEAD`, '--', ...inputs], { encoding: 'utf8' })
       .split('\n').filter(Boolean)
-    if (cambiados.length) {
-      partes.push(`  falta un rebuild: estos inputs del bundle cambiaron desde el último commit que tocó dist/ (${ultimoDist.slice(0, 7)}): ${cambiados.join(', ')}`)
+    if (changed.length) {
+      parts.push(`  falta un rebuild: estos inputs del bundle cambiaron desde el último commit que tocó dist/ (${lastDistCommit.slice(0, 7)}): ${changed.join(', ')}`)
     } else {
       const v = esbuildVersion(root)
-      partes.push(`  ningún input del bundle cambió desde el último commit que tocó dist/ (${ultimoDist.slice(0, 7)}) — lo que se movió es el toolchain (esbuild ${v} instalado), o alguien editó el bundle a mano`)
+      parts.push(`  ningún input del bundle cambió desde el último commit que tocó dist/ (${lastDistCommit.slice(0, 7)}) — lo que se movió es el toolchain (esbuild ${v} instalado), o alguien editó el bundle a mano`)
     }
   } else {
     // Never a silent skip, not here either: when the guard cuts in, the
@@ -153,13 +153,13 @@ function explicarIncoherencia(root, { faltan, sobran, difieren, inputs }) {
     // investigated".
     //
     // "outside node_modules" is not an ornament: `inputs` arrives already
-    // filtered by that criterion from comprobarDist, so the condition that
+    // filtered by that criterion from checkDist, so the condition that
     // holds here is not plainly "the build declared no inputs".
-    const motivo = ultimoDist ? 'el build no declaró ningún input fuera de node_modules' : 'dist/ no tiene historia en este repo'
-    partes.push(`  no se puede determinar la causa: ${motivo}`)
+    const reason = lastDistCommit ? 'el build no declaró ningún input fuera de node_modules' : 'dist/ no tiene historia en este repo'
+    parts.push(`  no se puede determinar la causa: ${reason}`)
   }
-  partes.push('  arreglo, en los dos casos: npm run build && git add dist/ && git commit')
-  return partes.join('\n')
+  parts.push('  arreglo, en los dos casos: npm run build && git add dist/ && git commit')
+  return parts.join('\n')
 }
 
 function esbuildVersion(root) {
@@ -172,13 +172,13 @@ function esbuildVersion(root) {
 
 describe('the committed dist/ corresponds to the committed sources (F24)', () => {
   it('HEAD is coherent: the committed bundle is what the committed sources produce', async () => {
-    const r = await comprobarDist(root)
-    const incoherente = r.faltan.length || r.sobran.length || r.difieren.length
-    expect(incoherente ? explicarIncoherencia(root, r) : 'coherente').toBe('coherente')
+    const r = await checkDist(root)
+    const incoherent = r.missing.length || r.leftOver.length || r.differ.length
+    expect(incoherent ? explainIncoherence(root, r) : 'coherente').toBe('coherente')
   }, 60_000)
 
   it('the bundle inputs come from the real metafile, not from a hand-written list', async () => {
-    const { inputs } = await comprobarDist(root)
+    const { inputs } = await checkDist(root)
     // This literal is a canary, not a source of truth: when the bundle gains
     // or loses an input it has to be updated by hand, but nothing ELSE
     // depends on it — the diagnosis above (missing/left over/differing) takes
@@ -218,13 +218,13 @@ describe('the committed dist/ corresponds to the committed sources (F24)', () =>
   }, 60_000)
 })
 
-// repoDeMentira: a minimal and COHERENT git repo, so that it can be broken on
+// fakeRepo: a minimal and COHERENT git repo, so that it can be broken on
 // purpose. Its scripts/build.mjs does not import esbuild at the top (unlike
 // the real one): that way the checker can import it without the temporary
 // directory needing node_modules, and these four tests do not pay for the
 // 45 MB copy. The path that does import a build.mjs with real dependencies is
 // covered by the HEAD test.
-function repoDeMentira() {
+function fakeRepo() {
   const dir = mkdtempSync(join(tmpdir(), 'ct-falso-'))
   const git = (...args) => execFileSync('git', ['-C', dir, ...args], { stdio: 'ignore' })
   git('init', '-q')
@@ -243,18 +243,18 @@ function repoDeMentira() {
   return dir
 }
 
-// construirEnRepo: generates the fake repo's dist with the SAME configuration
+// buildInRepo: generates the fake repo's dist with the SAME configuration
 // the checker will read afterwards, so that the starting point is really
 // coherent and not coherent by accident.
-async function construirEnRepo(dir) {
+async function buildInRepo(dir) {
   const mod = await import(pathToFileURL(join(dir, 'scripts/build.mjs')).href + `?v=${Date.now()}`)
   await build({ ...mod.buildOptions, absWorkingDir: dir })
 }
 
 describe('the checker fails when it must (F24)', () => {
   it('a source changed without regenerating the bundle → it detects it and names the file', async () => {
-    const dir = repoDeMentira()
-    await construirEnRepo(dir)
+    const dir = fakeRepo()
+    await buildInRepo(dir)
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' })
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'coherente'], { stdio: 'ignore' })
 
@@ -265,33 +265,33 @@ describe('the checker fails when it must (F24)', () => {
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'fuente sin rebuild'], { stdio: 'ignore' })
 
     try {
-      const { faltan, sobran, difieren } = await comprobarDist(dir)
-      expect(difieren).toEqual(['a.js'])
-      expect({ faltan, sobran }).toEqual({ faltan: [], sobran: [] })
+      const { missing, leftOver, differ } = await checkDist(dir)
+      expect(differ).toEqual(['a.js'])
+      expect({ missing, leftOver }).toEqual({ missing: [], leftOver: [] })
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
   }, 60_000)
 
   it('a file HEAD has in dist/ and the build no longer produces → comes out as LEFT OVER', async () => {
-    const dir = repoDeMentira()
-    await construirEnRepo(dir)
+    const dir = fakeRepo()
+    await buildInRepo(dir)
     writeFileSync(join(dir, 'dist/huerfano.js'), '// bundle de un entry point que ya no existe\n')
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' })
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'con un sobrante'], { stdio: 'ignore' })
 
     try {
-      const { faltan, sobran, difieren } = await comprobarDist(dir)
-      expect(sobran).toEqual(['huerfano.js'])
-      expect({ faltan, difieren }).toEqual({ faltan: [], difieren: [] })
+      const { missing, leftOver, differ } = await checkDist(dir)
+      expect(leftOver).toEqual(['huerfano.js'])
+      expect({ missing, differ }).toEqual({ missing: [], differ: [] })
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
   }, 60_000)
 
   it('a file the build produces and HEAD has not committed → comes out as MISSING', async () => {
-    const dir = repoDeMentira()
-    await construirEnRepo(dir)
+    const dir = fakeRepo()
+    await buildInRepo(dir)
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' })
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'coherente'], { stdio: 'ignore' })
 
@@ -308,17 +308,17 @@ describe('the checker fails when it must (F24)', () => {
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'entry point nuevo sin bundle'], { stdio: 'ignore' })
 
     try {
-      const { faltan, sobran, difieren } = await comprobarDist(dir)
-      expect(faltan).toEqual(['b.js'])
-      expect({ sobran, difieren }).toEqual({ sobran: [], difieren: [] })
+      const { missing, leftOver, differ } = await checkDist(dir)
+      expect(missing).toEqual(['b.js'])
+      expect({ leftOver, differ }).toEqual({ leftOver: [], differ: [] })
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
   }, 60_000)
 
   it('a dirty working tree turns NOTHING red: HEAD is still coherent with itself', async () => {
-    const dir = repoDeMentira()
-    await construirEnRepo(dir)
+    const dir = fakeRepo()
+    await buildInRepo(dir)
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' })
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'coherente'], { stdio: 'ignore' })
 
@@ -328,8 +328,8 @@ describe('the checker fails when it must (F24)', () => {
     writeFileSync(join(dir, 'src/a.js'), 'export const x = 12345\nconsole.log(x)\n')
 
     try {
-      const { faltan, sobran, difieren } = await comprobarDist(dir)
-      expect({ faltan, sobran, difieren }).toEqual({ faltan: [], sobran: [], difieren: [] })
+      const { missing, leftOver, differ } = await checkDist(dir)
+      expect({ missing, leftOver, differ }).toEqual({ missing: [], leftOver: [], differ: [] })
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -338,8 +338,8 @@ describe('the checker fails when it must (F24)', () => {
 
 describe('the diagnosis tells the two causes apart (F24)', () => {
   it('if any input changed since the last commit that touched dist/ → it says a rebuild is missing and names the files', async () => {
-    const dir = repoDeMentira()
-    await construirEnRepo(dir)
+    const dir = fakeRepo()
+    await buildInRepo(dir)
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' })
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'coherente'], { stdio: 'ignore' })
     writeFileSync(join(dir, 'src/a.js'), 'export const x = 999\nconsole.log(x)\n')
@@ -347,8 +347,8 @@ describe('the diagnosis tells the two causes apart (F24)', () => {
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'fuente sin rebuild'], { stdio: 'ignore' })
 
     try {
-      const r = await comprobarDist(dir)
-      const msg = explicarIncoherencia(dir, r)
+      const r = await checkDist(dir)
+      const msg = explainIncoherence(dir, r)
       expect(msg).toMatch(/falta un rebuild/i)
       expect(msg).toMatch(/src\/a\.js/)
       expect(msg).toMatch(/npm run build/)
@@ -358,8 +358,8 @@ describe('the diagnosis tells the two causes apart (F24)', () => {
   }, 60_000)
 
   it('if no input changed → it says the toolchain moved and names the esbuild version', async () => {
-    const dir = repoDeMentira()
-    await construirEnRepo(dir)
+    const dir = fakeRepo()
+    await buildInRepo(dir)
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' })
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'coherente'], { stdio: 'ignore' })
     // The committed bundle is corrupted without touching any source: from the
@@ -370,14 +370,14 @@ describe('the diagnosis tells the two causes apart (F24)', () => {
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'bundle tocado a mano'], { stdio: 'ignore' })
 
     try {
-      const r = await comprobarDist(dir)
-      expect(r.difieren).toEqual(['a.js'])
+      const r = await checkDist(dir)
+      expect(r.differ).toEqual(['a.js'])
 
-      // The fake esbuild is planted AFTER comprobarDist and after the last
+      // The fake esbuild is planted AFTER checkDist and after the last
       // commit, deliberately: that way it neither enters git's archive nor
-      // pays for the node_modules copy comprobarDist makes when one exists.
+      // pays for the node_modules copy checkDist makes when one exists.
       // The only thing that has to see it is esbuildVersion, which runs
-      // inside explicarIncoherencia.
+      // inside explainIncoherence.
       //
       // Without it, asserting the version would be worth nothing: the word
       // "esbuild" is in the fixed text of the message template, so
@@ -391,7 +391,7 @@ describe('the diagnosis tells the two causes apart (F24)', () => {
       mkdirSync(join(dir, 'node_modules/esbuild'), { recursive: true })
       writeFileSync(join(dir, 'node_modules/esbuild/package.json'), JSON.stringify({ version: '9.9.9' }))
 
-      const msg = explicarIncoherencia(dir, r)
+      const msg = explainIncoherence(dir, r)
       expect(msg).toMatch(/toolchain/i)
       expect(msg).toMatch(/esbuild 9\.9\.9/)
       expect(msg).not.toMatch(/falta un rebuild/i)
@@ -411,19 +411,19 @@ describe('when it cannot answer, it fails with a reason (F24)', () => {
       // .../scripts/build.mjs" — a reason that points at a missing file, not
       // at `root` not being a git repo. The assertion has to tell the right
       // reason apart from the one that masks it.
-      await expect(comprobarDist(dir)).rejects.toThrow(/not a git repository/i)
+      await expect(checkDist(dir)).rejects.toThrow(/not a git repository/i)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
   }, 60_000)
 
   it('a repo whose scripts/build.mjs does not export buildOptions → it throws saying so', async () => {
-    const dir = repoDeMentira()
+    const dir = fakeRepo()
     writeFileSync(join(dir, 'scripts/build.mjs'), '// sin export\n')
     execFileSync('git', ['-C', dir, 'add', '-A'], { stdio: 'ignore' })
     execFileSync('git', ['-C', dir, 'commit', '-qm', 'build.mjs sin export'], { stdio: 'ignore' })
     try {
-      await expect(comprobarDist(dir)).rejects.toThrow(/buildOptions/)
+      await expect(checkDist(dir)).rejects.toThrow(/buildOptions/)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

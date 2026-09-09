@@ -7318,8 +7318,8 @@ function withLastCommit(stateText, sha) {
   if (!m) return { text: s, updated: false };
   const frontmatter = m[1];
   if (!LAST_COMMIT_LINE.test(frontmatter)) return { text: s, updated: false };
-  const nuevo = frontmatter.replace(LAST_COMMIT_LINE, (_, prefijo, comilla, __, cierre, cola) => `${prefijo}${comilla}${sha}${cierre}${cola}`);
-  return { text: s.replace(frontmatter, nuevo), updated: true };
+  const rewritten = frontmatter.replace(LAST_COMMIT_LINE, (_, prefix, quote, __, closeQuote, tail) => `${prefix}${quote}${sha}${closeQuote}${tail}`);
+  return { text: s.replace(frontmatter, rewritten), updated: true };
 }
 function countWorkCommits(git2, stateSha, headSha2, total) {
   if (!(total > 0) || total > WORK_SCAN_MAX) return { work: total, bookkeeping: 0, known: false };
@@ -7328,21 +7328,21 @@ function countWorkCommits(git2, stateSha, headSha2, total) {
   let work = 0;
   let bookkeeping = 0;
   let files = null;
-  const cerrar = () => {
+  const close = () => {
     if (files === null) return;
     if (files.length > 0 && files.every((f) => f === STATE_REL_PATH2)) bookkeeping++;
     else work++;
   };
   for (const line of String(r.stdout || "").split("\n")) {
     if (line.startsWith("commit:")) {
-      cerrar();
+      close();
       files = [];
       continue;
     }
     const f = line.trim();
     if (f && files !== null) files.push(f);
   }
-  cerrar();
+  close();
   if (work + bookkeeping !== total) return { work: total, bookkeeping: 0, known: false };
   return { work, bookkeeping, known: true };
 }
@@ -7385,8 +7385,8 @@ var NOTICE_REPEAT_EVERY_TURNS = 10;
 var STOP_NOTICE_REL_NAME = "stop-notice.json";
 function noticeDecision({ relation: relation2, previous }) {
   const next = (turns2) => ({ kind: relation2.kind, stateSha: relation2.stateSha || "", turns: turns2 });
-  const misma = previous && typeof previous === "object" && !Array.isArray(previous) && previous.kind === relation2.kind && (previous.stateSha || "") === (relation2.stateSha || "") && Number.isInteger(previous.turns) && previous.turns > 0;
-  if (!misma) return { emit: true, next: next(1) };
+  const same = previous && typeof previous === "object" && !Array.isArray(previous) && previous.kind === relation2.kind && (previous.stateSha || "") === (relation2.stateSha || "") && Number.isInteger(previous.turns) && previous.turns > 0;
+  if (!same) return { emit: true, next: next(1) };
   const turns = previous.turns + 1;
   if (turns > NOTICE_REPEAT_EVERY_TURNS) return { emit: true, next: next(1) };
   return { emit: false, next: next(turns) };
@@ -7405,14 +7405,14 @@ function classifyStopState({ relation: relation2, stopHookActive, stateRel: stat
   }
   if (rel.kind === "behind") {
     const n = rel.count;
-    const cuantos = n === 1 ? "1 commit" : n > 1 ? `${n} commits` : "commits";
+    const howMany = n === 1 ? "1 commit" : n > 1 ? `${n} commits` : "commits";
     const b = rel.bookkeeping || 0;
-    const nota = b > 0 ? ` (m\xE1s ${b === 1 ? "1 commit que solo toca" : `${b} commits que solo tocan`} \`.agent/STATE.md\`, que no cuenta${b === 1 ? "" : "n"}: un apunte no es trabajo sin registrar)` : "";
-    const apunte = stateRel2 === STATE_REL_PATH ? "Commitear ese cambio NO te vuelve a dejar atr\xE1s: un commit que solo toca `.agent/STATE.md` no cuenta. " : `No lo commitees: \`${stateRel2}\` est\xE1 fuera de git a prop\xF3sito y no entra en el PR de este slice; basta con dejarlo al d\xEDa en disco. `;
+    const note = b > 0 ? ` (m\xE1s ${b === 1 ? "1 commit que solo toca" : `${b} commits que solo tocan`} \`.agent/STATE.md\`, que no cuenta${b === 1 ? "" : "n"}: un apunte no es trabajo sin registrar)` : "";
+    const entry = stateRel2 === STATE_REL_PATH ? "Commitear ese cambio NO te vuelve a dejar atr\xE1s: un commit que solo toca `.agent/STATE.md` no cuenta. " : `No lo commitees: \`${stateRel2}\` est\xE1 fuera de git a prop\xF3sito y no entra en el PR de este slice; basta con dejarlo al d\xEDa en disco. `;
     return {
       block: true,
       kind: "behind",
-      reason: `\`${stateRel2}\` se ha quedado atr\xE1s: hay ${cuantos} de trabajo${nota} en ${whereAmI(rel)} por encima de su \`last_commit\` (${shortSha(rel.stateSha)}), que s\xED es un ancestro de HEAD (${shortSha(rel.headSha)}). Actualiza \`${stateRel2}\` (you_are_here, next_action, tasks[], last_commit) antes de cerrar el turno, para que la pr\xF3xima sesi\xF3n se hidrate correcta. ` + apunte + STOP_TAIL,
+      reason: `\`${stateRel2}\` se ha quedado atr\xE1s: hay ${howMany} de trabajo${note} en ${whereAmI(rel)} por encima de su \`last_commit\` (${shortSha(rel.stateSha)}), que s\xED es un ancestro de HEAD (${shortSha(rel.headSha)}). Actualiza \`${stateRel2}\` (you_are_here, next_action, tasks[], last_commit) antes de cerrar el turno, para que la pr\xF3xima sesi\xF3n se hidrate correcta. ` + entry + STOP_TAIL,
       systemMessage: ""
     };
   }

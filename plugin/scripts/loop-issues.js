@@ -1,4 +1,4 @@
-// cargarIssues: the paginated read of open and closed issues, extracted out
+// loadIssues: the paginated read of open and closed issues, extracted out
 // of loadIssues (ct-next.mjs) so that a shared module does not end up
 // paginating differently depending on who calls it — that drift is the class
 // of bug this module exists to kill.
@@ -28,12 +28,12 @@
 // report the partial picture uses the arrays all the same.
 import { flattenIssuePages, realIssuesOnly } from './gh-issues.js'
 
-export function cargarIssues({ repo, gh }) {
+export function loadIssues({ repo, gh }) {
   // A failed read leaves its array EMPTY and its reason in the list. Never the
   // other way round: an empty array with no reason would mean "there are no
   // issues", which is the class of silent degradation this whole module
   // avoids.
-  const motivos = []
+  const reasons = []
   // open issues with labels → {n, order, status, deps, touches, name, type, ac, issue}.
   // Enumerated through the REST endpoint `gh api repos/<repo>/issues`, NEVER
   // the search index (`--search`/`gh search issues`): that one has indexing
@@ -53,18 +53,18 @@ export function cargarIssues({ repo, gh }) {
   // gh-issue-map.js — see __tests__/gh-issue-map.test.js — so that it can be
   // tested without a network and so that a format drift against groom.js is
   // caught.
-  let abiertos = []
+  let open = []
   try {
     // per_page=100 (re-review): the REST default is 30/page — with --paginate
     // they all get fetched anyway, but at 3x more round-trips than needed. 100
     // is the maximum this endpoint admits.
-    abiertos = realIssuesOnly(flattenIssuePages(JSON.parse(
+    open = realIssuesOnly(flattenIssuePages(JSON.parse(
       gh(['api', `repos/${repo}/issues`, '--method', 'GET', '-f', 'state=open', '-f', 'per_page=100', '--paginate', '--slurp']))))
   } catch (e) {
-    motivos.push(`no se pudieron listar issues abiertos de ${repo}: ${e.message}`)
+    reasons.push(`no se pudieron listar issues abiertos de ${repo}: ${e.message}`)
   }
 
-  let cerrados = []
+  let closed = []
   try {
     // `body` is indispensable here (not just number,stateReason): it is the
     // only way to recover the <!-- ct-order:N --> marker of an ALREADY CLOSED
@@ -79,9 +79,9 @@ export function cargarIssues({ repo, gh }) {
     // gh-issue-map.js, verified against gh 2.86). We normalise here, in the
     // wrapper, so as not to have to teach the pure layer two formats of the
     // same thing.
-    const rawCerrados = realIssuesOnly(flattenIssuePages(JSON.parse(
+    const rawClosed = realIssuesOnly(flattenIssuePages(JSON.parse(
       gh(['api', `repos/${repo}/issues`, '--method', 'GET', '-f', 'state=closed', '-f', 'per_page=100', '--paginate', '--slurp']))))
-    cerrados = rawCerrados.map((i) => ({
+    closed = rawClosed.map((i) => ({
       number: i.number,
       body: i.body,
       // milestone (D1 finding 1): buildOrderIndex needs the milestone of ANY
@@ -102,8 +102,8 @@ export function cargarIssues({ repo, gh }) {
       stateReason: i.state_reason ? String(i.state_reason).toUpperCase() : null,
     }))
   } catch (e) {
-    motivos.push(`no se pudieron listar issues cerrados de ${repo}: ${e.message}`)
+    reasons.push(`no se pudieron listar issues cerrados de ${repo}: ${e.message}`)
   }
 
-  return { abiertos, cerrados, motivos }
+  return { abiertos: open, cerrados: closed, motivos: reasons }
 }

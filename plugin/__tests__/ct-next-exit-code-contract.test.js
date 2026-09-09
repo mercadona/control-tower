@@ -83,7 +83,7 @@ describe('ct-next — classifies the claim by the dispatch-check CODE, not by it
     // looks for `mine` in the readback itself; if #42 did not show up there,
     // the result would be "ambiguous, we do not block" instead of the real
     // lost race this test needs to reproduce.
-    const readbackConPerdida = [
+    const readbackWithLoss = [
       { number: 42, labels: [{ name: 'status:in-progress' }, { name: 'touches:zzz' }] },
       { number: 5, labels: [{ name: 'status:in-progress' }, { name: 'touches:zzz' }] }, // lower number → it wins, we lose
     ]
@@ -93,7 +93,7 @@ describe('ct-next — classifies the claim by the dispatch-check CODE, not by it
       FAKE_GIT_TOPLEVEL: repoRoot,
       // idx0: ct-next open ; idx1: ct-next closed ; idx2: dispatch-check(#42)
       // collision check (clean) ; idx3: readback WITH a loss (#5 < #42).
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue42, openIssue43], [], [], readbackConPerdida]),
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[openIssue42, openIssue43], [], [], readbackWithLoss]),
       FAKE_GH_COUNTER_FILE: counterFile,
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:zzz']),
       FAKE_GIT_LOG_FILE: gitLog,

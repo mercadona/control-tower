@@ -95,7 +95,7 @@ import {
 // autolink it as an issue number — a --reconcile with the old copy would have
 // rewritten the new format back into the old one, reintroducing the false link
 // on every run).
-import { renderDepsContent, renderAcContent, GATES_HEADING, E2E_HEADING, EPIC_CONTEXT_HEADING, INHERITED_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, SENAL_HEADING } from './groom.js'
+import { renderDepsContent, renderAcContent, GATES_HEADING, E2E_HEADING, EPIC_CONTEXT_HEADING, INHERITED_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, SIGNAL_HEADING } from './groom.js'
 
 // ownedLabelsOnly: the spec is authority over a prefix (`type:`, `area:`,
 // `touches:`) ONLY IF the §9 table carries the column that feeds it
@@ -188,7 +188,7 @@ function acInSection(body) {
 //
 // What did change with the final branch review (C2): --reconcile no longer
 // writes into "the first one" when there are two — it gives up and says so (see
-// `seccionSpliceable` in buildReconcileBody), because one of those two copies
+// `spliceableSection` in buildReconcileBody), because one of those two copies
 // may be text the coordinator pasted into "## Contexto heredado". The duplicate
 // still counts towards the exit code because of the dispatcher, which does
 // resolve in silence.
@@ -314,15 +314,15 @@ export function diffIssue(existing, wantedIssue, wantedMilestone, ownedLabelPref
   // Descripción: `null` on either of the two sides means "no section should
   // exist" — null on BOTH sides is agreement (real silence), not drift. The text
   // is only compared (trimmed) when both sides do have a section.
-  const currentDescripcion = extractSectionContent(body, '## Descripción') // a string, or null (no section)
-  const wantedDescripcion = wantedIssue.descripcion ?? null // same
+  const currentDescription = extractSectionContent(body, '## Descripción') // a string, or null (no section)
+  const wantedDescription = wantedIssue.descripcion ?? null // same
   let descripcionDiffers
-  if (currentDescripcion === null && wantedDescripcion === null) {
+  if (currentDescription === null && wantedDescription === null) {
     descripcionDiffers = false // agreement: neither of the two sides has a section
-  } else if (currentDescripcion === null || wantedDescripcion === null) {
+  } else if (currentDescription === null || wantedDescription === null) {
     descripcionDiffers = true // one side has a section, the other does not
   } else {
-    descripcionDiffers = currentDescripcion.trim() !== wantedDescripcion.trim()
+    descripcionDiffers = currentDescription.trim() !== wantedDescription.trim()
   }
 
   // Señal (Slice 10): an EXACT mirror of Descripción — three states, the
@@ -335,15 +335,15 @@ export function diffIssue(existing, wantedIssue, wantedMilestone, ownedLabelPref
   // EXPERIMENTAL half that five rounds of review decided not to fatten. An old
   // epic without the section only drifts if today's spec declares a signal, and
   // even then a nota:, never a block.
-  const currentSenal = extractSectionContent(body, SENAL_HEADING)
-  const wantedSenal = wantedIssue.senal ?? null
+  const currentSignal = extractSectionContent(body, SIGNAL_HEADING)
+  const wantedSignal = wantedIssue.senal ?? null
   let senalDiffers
-  if (currentSenal === null && wantedSenal === null) {
+  if (currentSignal === null && wantedSignal === null) {
     senalDiffers = false // agreement: neither of the two sides has a section
-  } else if (currentSenal === null || wantedSenal === null) {
+  } else if (currentSignal === null || wantedSignal === null) {
     senalDiffers = true // one side has a section, the other does not
   } else {
-    senalDiffers = currentSenal.trim() !== wantedSenal.trim()
+    senalDiffers = currentSignal.trim() !== wantedSignal.trim()
   }
 
   // Contexto del epic: the same three-state criterion as Descripción — null on
@@ -608,7 +608,7 @@ export function formatDrift(diff) {
   // about "the one the judge obeys" exists so that whoever reads the note knows
   // WHY it is not rewritten: at runtime the authority is the dispatch's issue,
   // not today's spec — the same contract as the gates.
-  if (diff.senalDiffers) lines.push(`nota: ${head}: la sección "${SENAL_HEADING}" difiere del spec (no cuenta para el exit code; --reconcile no la reescribe — la señal que obedece el juez de slice es la que el issue tenía al despachar, igual que los gates)`)
+  if (diff.senalDiffers) lines.push(`nota: ${head}: la sección "${SIGNAL_HEADING}" difiere del spec (no cuenta para el exit code; --reconcile no la reescribe — la señal que obedece el juez de slice es la que el issue tenía al despachar, igual que los gates)`)
   // Task 4 deliberately left this note without saying who rewrites the section:
   // in that commit "with --reconcile it is rewritten from the spec" was still
   // false (buildReconcileBody did not touch it). Task 5 made it true.
@@ -682,7 +682,7 @@ export function buildReconcileEditArgs(diff) {
 // AC/Dependencias and the journeys of "## E2E", from the §9 table; the epic's
 // context, from the section of the same name the spec itself carries
 // (groom.js#readEpicContext); and Descripción/Protegido from the
-// Entrega/Protegido columns of that same table (renderDescripcion/
+// Entrega/Protegido columns of that same table (renderDescription/
 // renderProtectedLine, groom.js — see also diffIssue's comment further up, "the
 // spec owns them").
 //
@@ -709,12 +709,12 @@ export function buildReconcileEditArgs(diff) {
 // slice's issue context in there —which carries the SAME headings, because this
 // very generator writes them— and that copy of hers became the target of the
 // splice. Two filters prevent it, and they cover different things:
-//   - the forbidden zone (`zonaHeredada`), which runs from the inherited heading
+//   - the forbidden zone (`inheritedZone`), which runs from the inherited heading
 //     to "## Acceptance criteria" and skips EVERYTHING that falls inside it: the
 //     spec-link line and also the pasted headings when they are the body's only
 //     copy (the issue does not have that section of its own);
 //   - the refusal to splice any section whose heading appears more than once
-//     (`seccionSpliceable`), for when the issue DOES have its own and there is no
+//     (`spliceableSection`), for when the issue DOES have its own and there is no
 //     way to point at which of the two copies it is.
 // See each one's comment for the detail.
 //
@@ -777,7 +777,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
   let unresolvedE2e = null
   const unresolvedReasons = { ac: null, deps: null }
 
-  // zonaHeredada: the range of the body that belongs to the coordinator
+  // inheritedZone: the range of the body that belongs to the coordinator
   // session. It is RECOMPUTED on every use, not cached up front: every splice
   // down below changes the body's length, and a range computed earlier would
   // point at different characters afterwards. It is pure and cheap.
@@ -788,7 +788,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
   // coordinator pastes inside her section does not fall inside the range — it is
   // precisely the one that closes it. With the issue having no section of its
   // own by that name (a slice with no dependencies, an issue older than F26 with
-  // no "## Contexto del epic"), the copy count was 1, `seccionSpliceable` did not
+  // no "## Contexto del epic"), the copy count was 1, `spliceableSection` did not
   // see it as ambiguous, and the splice was applied INSIDE her text: it deleted
   // what had been pasted and, since the deletion runs to the next heading, all
   // the prose she had written after it.
@@ -805,7 +805,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
   // IF "## Acceptance criteria" CANNOT BE LOCATED —neither through absence (a
   // human deleted it or renamed it) nor through ambiguity (it appears more than
   // once, which means one of the two may also be pasted text)— the range extends
-  // to the END of the body, and the `acotada` flag stays false so that whoever
+  // to the END of the body, and the `bounded` flag stays false so that whoever
   // gives up can say WHY without asserting more than it knows. It is the
   // conservative extreme on purpose: without that heading there is no evidence
   // left of where what the coordinator wrote ends —it could reach all the way to
@@ -815,7 +815,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
   // over a body like that, --reconcile stops being able to apply Dependencias
   // (see the test "con la sección heredada y sin cabecera de AC…" in
   // reconcile.test.js).
-  const zonaHeredada = () => {
+  const inheritedZone = () => {
     const loc = locateSection(body, INHERITED_CONTEXT_HEADING)
     if (!loc) return null
     // The end anchor is looked for starting from the inherited heading itself,
@@ -826,13 +826,13 @@ export function buildReconcileBody(existingBody, wantedIssue) {
     const ac = countHeadingLines(body, AC_HEADING_FORMS) === 1
       ? locateSection(body, AC_HEADING_FORMS, { start: 0, end: loc.headingEnd })
       : null
-    return { start: loc.headingStart, end: ac ? ac.headingStart : body.length, acotada: !!ac }
+    return { start: loc.headingStart, end: ac ? ac.headingStart : body.length, bounded: !!ac }
   }
 
-  // seccionSpliceable: where to splice a known section, or why it cannot be
+  // spliceableSection: where to splice a known section, or why it cannot be
   // done. Two filters, and both are needed because they cover different things:
   //
-  //   - `copias > 1` → AMBIGUOUS: it is not touched. It covers the case in which
+  //   - `copies > 1` → AMBIGUOUS: it is not touched. It covers the case in which
   //     the issue DOES have its own section and the coordinator pasted another
   //     copy: there is no way to decide which one is the plugin's without
   //     inventing a criterion, so it gives up and reports — exactly what the
@@ -845,7 +845,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
   //     as "## Acceptance criteria", also the pasted headings when they are the
   //     body's only copy.
   //
-  // `motivo` (null when there IS a `loc`) separates the four ways of not having
+  // `reason` (null when there IS a `loc`) separates the four ways of not having
   // one, because the remedy offered to the user is different in each and saying
   // the wrong one would be asserting something false. Besides 'duplicada' (the
   // filter above):
@@ -862,19 +862,19 @@ export function buildReconcileBody(existingBody, wantedIssue) {
   //     but the zone could not be bounded (with no locatable "## Acceptance
   //     criteria"). Here it CANNOT be asserted that it is the coordinator's
   //     text: what is asserted is that there is no way of knowing.
-  const seccionSpliceable = (headings) => {
-    const copias = countHeadingLines(body, headings)
-    if (copias > 1) return { loc: null, ambigua: true, motivo: 'duplicada' }
-    const zona = zonaHeredada()
-    const loc = locateSection(body, headings, zona)
-    // copias === 1 and even so there is no `loc` ⟹ that single copy fell inside
+  const spliceableSection = (headings) => {
+    const copies = countHeadingLines(body, headings)
+    if (copies > 1) return { loc: null, ambiguous: true, reason: 'duplicada' }
+    const zone = inheritedZone()
+    const loc = locateSection(body, headings, zone)
+    // copies === 1 and even so there is no `loc` ⟹ that single copy fell inside
     // the zone (it is the only thing that can hide a heading that IS in the
     // body).
-    const motivo = loc ? null : copias === 0 ? 'sin-seccion' : zona.acotada ? 'en-heredado' : 'zona-sin-fin'
-    return { loc, ambigua: false, motivo }
+    const reason = loc ? null : copies === 0 ? 'sin-seccion' : zone.bounded ? 'en-heredado' : 'zona-sin-fin'
+    return { loc, ambiguous: false, reason }
   }
 
-  const specLinkLoc = locateLine(body, SPEC_LINK_PREFIXES, zonaHeredada())
+  const specLinkLoc = locateLine(body, SPEC_LINK_PREFIXES, inheritedZone())
   const currentSpecLink = specLinkLoc ? specLinkLoc.line : null
   if (normalizeSpecLink(currentSpecLink) !== normalizeSpecLink(wantedIssue.specLink)) {
     if (specLinkLoc) {
@@ -890,7 +890,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
 
   const acDiff = diffAc(acInSection(body), wantedIssue.ac)
   if (acDiff.missing.length || acDiff.extra.length) {
-    const ac = seccionSpliceable(AC_HEADING_FORMS)
+    const ac = spliceableSection(AC_HEADING_FORMS)
     if (ac.loc) {
       body = body.slice(0, ac.loc.headingEnd) + renderAcContent(wantedIssue.ac) + '\n' + body.slice(ac.loc.contentEnd)
       changed = true
@@ -902,30 +902,30 @@ export function buildReconcileBody(existingBody, wantedIssue) {
       // and it says so (unresolvedAc + the reason) so that the caller never
       // reports this as "applied".
       //
-      // Here `ac.motivo` can only be 'duplicada' or 'sin-seccion', and that is no
+      // Here `ac.reason` can only be 'duplicada' or 'sin-seccion', and that is no
       // accident: the forbidden range ENDS at "## Acceptance criteria" itself
       // when it appears exactly once (so it cannot fall inside it), and when it
-      // appears more than once `seccionSpliceable` returns 'duplicada' before
-      // even looking at the range. See `zonaHeredada`.
+      // appears more than once `spliceableSection` returns 'duplicada' before
+      // even looking at the range. See `inheritedZone`.
       unresolvedAc = true
-      unresolvedReasons.ac = ac.motivo
+      unresolvedReasons.ac = ac.reason
     }
   }
 
   const depsDiff = diffDeps(depsInSection(body), wantedIssue.deps)
   const wantDeps = (wantedIssue.deps || []).length > 0
   if (depsDiff.missing.length || depsDiff.extra.length) {
-    const deps = seccionSpliceable('## Dependencias') // over the ALREADY updated body (fresh positions after the splices above, if there were any)
+    const deps = spliceableSection('## Dependencias') // over the ALREADY updated body (fresh positions after the splices above, if there were any)
     const depsLoc = deps.loc
     const wantedDepsContent = renderDepsContent(wantedIssue.deps)
-    if (deps.ambigua) {
+    if (deps.ambiguous) {
       // More than one "## Dependencias" in the body: neither rewriting the
       // first one nor withdrawing it is defensible — the other copy is still
       // there, and one of the two may be text the coordinator pasted into her
       // section.
       unresolvedDeps = true
       unresolvedReasons.deps = 'duplicada'
-    } else if (deps.motivo === 'en-heredado' || deps.motivo === 'zona-sin-fin') {
+    } else if (deps.reason === 'en-heredado' || deps.reason === 'zona-sin-fin') {
       // The ONLY "## Dependencias" in the body falls inside the coordinator's
       // zone: the issue has no section of its own and that block is (or may be)
       // text she pasted (second wave of the final review).
@@ -941,7 +941,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
       // remedies are different (taking the block out of the inherited section
       // vs. restoring the AC heading that bounds the zone).
       unresolvedDeps = true
-      unresolvedReasons.deps = deps.motivo
+      unresolvedReasons.deps = deps.reason
     } else if (wantDeps && depsLoc) {
       body = body.slice(0, depsLoc.headingEnd) + wantedDepsContent + '\n' + body.slice(depsLoc.contentEnd)
       changed = true
@@ -957,10 +957,10 @@ export function buildReconcileBody(existingBody, wantedIssue) {
       // appears twice (the coordinator pasted the previous issue's body, which
       // carries it), anchoring on "the first one" means inserting inside her
       // text.
-      const ancla = seccionSpliceable('## Out of scope / Protected')
-      if (ancla.loc) {
+      const anchor = spliceableSection('## Out of scope / Protected')
+      if (anchor.loc) {
         const insertion = `## Dependencias\n${wantedDepsContent}\n\n`
-        body = body.slice(0, ancla.loc.headingStart) + insertion + body.slice(ancla.loc.headingStart)
+        body = body.slice(0, anchor.loc.headingStart) + insertion + body.slice(anchor.loc.headingStart)
         changed = true
       } else {
         // Each reason has its own sentence because "the Protegido section does
@@ -974,7 +974,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
           'sin-seccion': 'sin-ancla',
           'en-heredado': 'ancla-en-heredado',
           'zona-sin-fin': 'zona-sin-fin',
-        }[ancla.motivo]
+        }[anchor.reason]
       }
     } else if (!wantDeps && depsLoc) {
       // The spec no longer declares deps for this slice, but the issue keeps
@@ -1023,11 +1023,11 @@ export function buildReconcileBody(existingBody, wantedIssue) {
       ? true
       : currentE2eBody.trim() !== wantedE2eContent.trim()
   if (e2eDiffers) {
-    const e2e = seccionSpliceable(E2E_HEADING)
-    if (e2e.ambigua) {
+    const e2e = spliceableSection(E2E_HEADING)
+    if (e2e.ambiguous) {
       unresolvedE2e = 'duplicada'
-    } else if (e2e.motivo === 'en-heredado' || e2e.motivo === 'zona-sin-fin') {
-      unresolvedE2e = e2e.motivo
+    } else if (e2e.reason === 'en-heredado' || e2e.reason === 'zona-sin-fin') {
+      unresolvedE2e = e2e.reason
     } else if (wantedE2eContent && e2e.loc) {
       body = body.slice(0, e2e.loc.headingEnd) + wantedE2eContent + '\n' + body.slice(e2e.loc.contentEnd)
       changed = true
@@ -1038,9 +1038,9 @@ export function buildReconcileBody(existingBody, wantedIssue) {
       // buildIssueBody (groom.js) gives it and the only unambiguous anchor — the
       // same one "## Dependencias" uses, with the same four ways of giving
       // up.
-      const ancla = seccionSpliceable('## Out of scope / Protected')
-      if (ancla.loc) {
-        body = body.slice(0, ancla.loc.headingStart) + `${E2E_HEADING}\n${wantedE2eContent}\n\n` + body.slice(ancla.loc.headingStart)
+      const anchor = spliceableSection('## Out of scope / Protected')
+      if (anchor.loc) {
+        body = body.slice(0, anchor.loc.headingStart) + `${E2E_HEADING}\n${wantedE2eContent}\n\n` + body.slice(anchor.loc.headingStart)
         changed = true
       } else {
         unresolvedE2e = {
@@ -1048,7 +1048,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
           'sin-seccion': 'sin-ancla',
           'en-heredado': 'ancla-en-heredado',
           'zona-sin-fin': 'zona-sin-fin',
-        }[ancla.motivo]
+        }[anchor.reason]
       }
     } else if (!wantedE2eContent && e2e.loc) {
       // The spec no longer declares journeys for this slice (the cell became
@@ -1089,7 +1089,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
         ? true
         : currentEpic.trim() !== wantedEpic.trim()
   if (epicDiffers) {
-    const epic = seccionSpliceable(EPIC_CONTEXT_HEADING)
+    const epic = spliceableSection(EPIC_CONTEXT_HEADING)
     const epicLoc = epic.loc
     // Defence at the consumer (final branch review, C3). The guardrail in
     // groom.js#readEpicContext cuts this off at the producer, but it cannot be
@@ -1102,11 +1102,11 @@ export function buildReconcileBody(existingBody, wantedIssue) {
     // next groom creates a duplicate). The NEW text is looked at too: writing an
     // open delimiter into the body is manufacturing this very damage for the
     // next run.
-    const seccionAbierta = epicLoc ? unterminatedDelimiter(epicLoc.content) : null
-    const textoAbierto = wantedEpic ? unterminatedDelimiter(wantedEpic) : null
-    if (seccionAbierta || textoAbierto) {
-      unresolvedEpicContext = seccionAbierta ? 'seccion-sin-cerrar' : 'texto-sin-cerrar'
-    } else if (epic.ambigua) {
+    const openSection = epicLoc ? unterminatedDelimiter(epicLoc.content) : null
+    const openText = wantedEpic ? unterminatedDelimiter(wantedEpic) : null
+    if (openSection || openText) {
+      unresolvedEpicContext = openSection ? 'seccion-sin-cerrar' : 'texto-sin-cerrar'
+    } else if (epic.ambiguous) {
       // Two copies of the epic's section: one of them may be the one the
       // coordinator pasted inside hers. Neither of them gets written to.
       unresolvedEpicContext = 'duplicada'
@@ -1120,7 +1120,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
       // used as the anchor and why).
       //
       // The "the only copy falls inside the coordinator's zone" case
-      // (`epic.motivo === 'en-heredado'`) comes through here on purpose, and the
+      // (`epic.reason === 'en-heredado'`) comes through here on purpose, and the
       // other way round from Dependencias, which gives up in the equivalent
       // case. The difference is not one of criterion, it is one of POSITION:
       // this section's anchor is the inherited heading, which means the inserted
@@ -1142,22 +1142,22 @@ export function buildReconcileBody(existingBody, wantedIssue) {
       // The anchor has to be unambiguous, for the same reason as Dependencias':
       // with two copies of the heading in the body, "the first one" may be the
       // one the coordinator pasted into her section. For the inherited one
-      // `seccionSpliceable` is NOT used: that function discards any match inside
+      // `spliceableSection` is NOT used: that function discards any match inside
       // the inherited zone, and the heading of the inherited section itself is,
       // by definition, the first character of that zone.
-      const heredadaUnica = countHeadingLines(body, INHERITED_CONTEXT_HEADING) === 1
+      const soleInheritedSection = countHeadingLines(body, INHERITED_CONTEXT_HEADING) === 1
         ? locateSection(body, INHERITED_CONTEXT_HEADING)
         : null
-      const ancla = heredadaUnica ? { loc: heredadaUnica, ambigua: false } : seccionSpliceable(AC_HEADING_FORMS)
-      if (ancla.loc) {
-        body = body.slice(0, ancla.loc.headingStart) + `${EPIC_CONTEXT_HEADING}\n${wantedEpic}\n\n` + body.slice(ancla.loc.headingStart)
+      const anchor = soleInheritedSection ? { loc: soleInheritedSection, ambiguous: false } : spliceableSection(AC_HEADING_FORMS)
+      if (anchor.loc) {
+        body = body.slice(0, anchor.loc.headingStart) + `${EPIC_CONTEXT_HEADING}\n${wantedEpic}\n\n` + body.slice(anchor.loc.headingStart)
         changed = true
       } else {
         // With no anchor: nothing is written and no gap is marked (this section
         // never counts towards the exit code, so it cannot produce one) — but it
         // IS said. Giving up in silence left the caller announcing "reconciled"
         // about a section that still did not exist.
-        unresolvedEpicContext = ancla.ambigua ? 'ancla-duplicada' : 'sin-ancla'
+        unresolvedEpicContext = anchor.ambiguous ? 'ancla-duplicada' : 'sin-ancla'
       }
     } else if (!wantedEpic && epicLoc) {
       // The spec no longer carries the epic's context: the section is withdrawn
@@ -1169,7 +1169,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
       changed = true
     } else {
       // `!wantedEpic && !epicLoc`, and even so `epicDiffers`: the body's only
-      // copy of the heading falls inside the coordinator's zone (`epic.motivo`
+      // copy of the heading falls inside the coordinator's zone (`epic.reason`
       // is 'en-heredado' or 'zona-sin-fin') — `currentEpic` read it, because
       // `extractSectionContent` looks at the whole body, and the spec no longer
       // carries any context. Withdrawing it would be deleting text that is not
@@ -1184,7 +1184,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
       // and saying so would be exactly the class of over-assertion this branch
       // has spent eleven rounds removing. It is the same distinction the
       // Dependencias route already makes, a few blocks further up.
-      unresolvedEpicContext = epic.motivo
+      unresolvedEpicContext = epic.reason
     }
   }
 
@@ -1205,16 +1205,16 @@ export function buildReconcileBody(existingBody, wantedIssue) {
         ? true
         : currentFrozen.trim() !== wantedFrozen.trim()
   if (frozenDiffers) {
-    const frozen = seccionSpliceable(FROZEN_DECISIONS_HEADING)
+    const frozen = spliceableSection(FROZEN_DECISIONS_HEADING)
     const frozenLoc = frozen.loc
     // Defence at the consumer (just as in the epic's context): an unclosed
     // delimiter inside the section would make the splice delete as far as the
     // end of the body. The section is looked at and so is the new text.
-    const seccionAbierta = frozenLoc ? unterminatedDelimiter(frozenLoc.content) : null
-    const textoAbierto = wantedFrozen ? unterminatedDelimiter(wantedFrozen) : null
-    if (seccionAbierta || textoAbierto) {
-      unresolvedFrozenDecisions = seccionAbierta ? 'seccion-sin-cerrar' : 'texto-sin-cerrar'
-    } else if (frozen.ambigua) {
+    const openSection = frozenLoc ? unterminatedDelimiter(frozenLoc.content) : null
+    const openText = wantedFrozen ? unterminatedDelimiter(wantedFrozen) : null
+    if (openSection || openText) {
+      unresolvedFrozenDecisions = openSection ? 'seccion-sin-cerrar' : 'texto-sin-cerrar'
+    } else if (frozen.ambiguous) {
       unresolvedFrozenDecisions = 'duplicada'
     } else if (wantedFrozen && frozenLoc) {
       body = body.slice(0, frozenLoc.headingEnd) + wantedFrozen + '\n' + body.slice(frozenLoc.contentEnd)
@@ -1225,18 +1225,18 @@ export function buildReconcileBody(existingBody, wantedIssue) {
       // epic → decisions → inherited), with "## Acceptance criteria" as the
       // fallback — just like the epic's context. Since this block runs AFTER
       // its one, if the epic has just been inserted the section lands between
-      // the epic and the inherited one. seccionSpliceable is not used for the
+      // the epic and the inherited one. spliceableSection is not used for the
       // inherited one, for the same reason as there: its heading is the first
       // character of the zone that function discards.
-      const heredadaUnica = countHeadingLines(body, INHERITED_CONTEXT_HEADING) === 1
+      const soleInheritedSection = countHeadingLines(body, INHERITED_CONTEXT_HEADING) === 1
         ? locateSection(body, INHERITED_CONTEXT_HEADING)
         : null
-      const ancla = heredadaUnica ? { loc: heredadaUnica, ambigua: false } : seccionSpliceable(AC_HEADING_FORMS)
-      if (ancla.loc) {
-        body = body.slice(0, ancla.loc.headingStart) + `${FROZEN_DECISIONS_HEADING}\n${wantedFrozen}\n\n` + body.slice(ancla.loc.headingStart)
+      const anchor = soleInheritedSection ? { loc: soleInheritedSection, ambiguous: false } : spliceableSection(AC_HEADING_FORMS)
+      if (anchor.loc) {
+        body = body.slice(0, anchor.loc.headingStart) + `${FROZEN_DECISIONS_HEADING}\n${wantedFrozen}\n\n` + body.slice(anchor.loc.headingStart)
         changed = true
       } else {
-        unresolvedFrozenDecisions = ancla.ambigua ? 'ancla-duplicada' : 'sin-ancla'
+        unresolvedFrozenDecisions = anchor.ambiguous ? 'ancla-duplicada' : 'sin-ancla'
       }
     } else if (!wantedFrozen && frozenLoc) {
       // The spec no longer carries any decisions: the section is withdrawn
@@ -1252,7 +1252,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
       // and the spec no longer carries any decisions. It is not touched (it is
       // not the plugin's text) and it is said, or the caller would report as
       // withdrawn a section that is still there.
-      unresolvedFrozenDecisions = frozen.motivo
+      unresolvedFrozenDecisions = frozen.reason
     }
   }
 

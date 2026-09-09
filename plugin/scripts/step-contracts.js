@@ -275,7 +275,7 @@ export const SLICE_VERDICT_SCHEMA = Object.freeze(schemaFor(SLICE_VERDICT_RULES)
 // loop.
 //
 // There used to be a KIND per path here ('production' or 'test'). The idea was
-// that the judge —via `escribirPaquete` in `scripts/ct-step.mjs`— would see at a
+// that the judge —via `writeReviewPackage` in `scripts/ct-step.mjs`— would see at a
 // glance whether a diff with a green suite touched no production file. It was
 // removed: the judge has the diff in front of it and tells a test file from a
 // production one without anyone saying so, so the label added nothing it could
@@ -303,7 +303,7 @@ export const E2E_VERDICTS = ['verde', 'rojo', 'no-verificado']
 // E2E_REQUIRED_BY_VERDICT: what each verdict demands BESIDES `run` and
 // `verdict`. It lives here, exported and in a single place, because TWO
 // consume it: `readE2eReport` (below, which validates against this table) and
-// `ct-step.mjs#verboNext` (which tells the agent about it before it writes the
+// `ct-step.mjs#nextVerb` (which tells the agent about it before it writes the
 // report). Until the final branch review it only existed inside
 // `readE2eReport`'s branches, and `next` announced only `run` and `verdict`:
 // the program instructed the agent with a contract it rejected itself, and
@@ -433,7 +433,7 @@ export const IMPLEMENTER_MODEL = 'sonnet'
 // tools that were not those of the judge about to be dispatched.
 export const JUDGE_TOOLS = 'Read, Grep, Glob, Write, Skill'
 
-// The three headings of the review package `escribirPaquete` writes in
+// The three headings of the review package `writeReviewPackage` writes in
 // `scripts/ct-step.mjs`, in the order in which they appear in the file. The
 // judge's rubric (`agents/ct-judge.md`) cites them by name in backticks under
 // "What you are given" to tell the judge what each section carries — and that
@@ -446,7 +446,7 @@ export const JUDGE_TOOLS = 'Read, Grep, Glob, Write, Skill'
 //
 // `Vara de ct` opens the package and is written by
 // `PluginYardstick.composePathSection` (scripts/plugin-yardstick.js), not by
-// `escribirPaquete`: they are the PATHS of the documents that reach this task,
+// `writeReviewPackage`: they are the PATHS of the documents that reach this task,
 // for a judge that has `Read`. It goes first for the same reason as `Señal` in
 // the slice package — behind a `-U10` diff it would be buried.
 export const PACKAGE_SECTIONS = ['Vara de ct', 'Files changed', 'Rutas tocadas', 'Diff']
@@ -482,7 +482,7 @@ export const SLICE_JUDGE_TOOLS = 'Read, Grep, Glob, Write'
 // the two from diverging is the test, not the code.
 export const RECONCILER_TOOLS = 'Read, Grep, Glob, Edit'
 
-// The five headings of the SLICE package `escribirPaqueteDeSlice` writes in
+// The five headings of the SLICE package `writeSliceReviewPackage` writes in
 // `scripts/ct-step.mjs`. The slice judge measures final state, coherence and
 // signal — not code rule by rule, and it deliberately has fewer tools — so it
 // does not receive the whole yardstick: it receives ONE single path, that of
@@ -514,7 +514,7 @@ export const SLICE_PACKAGE_SECTIONS = ['Vara', 'Señal', 'Commits', 'Files chang
 // test.
 export const ADVISOR_TOOLS = 'Read'
 
-// The three headings of the advisor's package `escribirPaqueteDeConsejo` writes
+// The three headings of the advisor's package `writeAdviceReviewPackage` writes
 // in `scripts/ct-step.mjs`, in the order in which they appear: the task's brief
 // (what was asked for), the reports of the two vetoed attempts (what was done)
 // and the two verdicts (why it did not do). The same crossing and the same test
@@ -559,12 +559,12 @@ export function readAdvice(structured) {
     return { why: 'el consejero no devolvió structured_output' }
   }
   const { approach, files_to_reconsider: files } = structured
-  if (!esTexto(approach)) return { why: 'el consejo no dice qué enfoque tomar: falta `approach`' }
-  if (!Array.isArray(files) || !files.every(esTexto)) {
+  if (!isText(approach)) return { why: 'el consejo no dice qué enfoque tomar: falta `approach`' }
+  if (!Array.isArray(files) || !files.every(isText)) {
     return { why: 'el consejo no trae la lista de rutas a reconsiderar: `files_to_reconsider` es una lista de rutas, vacía si no hay ninguna' }
   }
-  const fuera = files.filter((p) => p.startsWith('/') || p.split('/').includes('..'))
-  if (fuera.length) return { why: `el consejo nombra rutas fuera del worktree: ${fuera.join(', ')}` }
+  const outside = files.filter((p) => p.startsWith('/') || p.split('/').includes('..'))
+  if (outside.length) return { why: `el consejo nombra rutas fuera del worktree: ${outside.join(', ')}` }
   return { advice: { approach: approach.trim(), files_to_reconsider: [...new Set(files)] } }
 }
 
@@ -609,7 +609,7 @@ export function readAdvice(structured) {
 // valid» are the same sentence.
 //
 // The LABEL is exported and the reader is built from it: whoever writes the line
-// (`escribirPaquete`), whoever reads it (`reviewTokenOf`), the two rubrics that
+// (`writeReviewPackage`), whoever reads it (`reviewTokenOf`), the two rubrics that
 // quote it to the judge and the tests are four copies of the same string, and
 // that is exactly what already diverged with JUDGE_TOOLS, VERDICT_RULES and
 // PACKAGE_SECTIONS. Here the failure would be mute twice over: the judge copies
@@ -632,12 +632,12 @@ export const reviewTokenLine = (token) => `${REVIEW_TOKEN_LABEL}: ${token}`
 // package whose line does not comply declares NO token at all (null), which is
 // what the verb treats as «a package from an earlier version, or hand-edited».
 const RE_REVIEW_TOKEN = new RegExp(`^${REVIEW_TOKEN_LABEL}: ([0-9a-f]{64})$`, 'm')
-export function reviewTokenOf(textoDelPaquete) {
-  const m = RE_REVIEW_TOKEN.exec(String(textoDelPaquete ?? ''))
+export function reviewTokenOf(packageText) {
+  const m = RE_REVIEW_TOKEN.exec(String(packageText ?? ''))
   return m ? m[1] : null
 }
 
-const esTexto = (v) => typeof v === 'string' && v.trim() !== ''
+const isText = (v) => typeof v === 'string' && v.trim() !== ''
 
 // Hand-written validation and not a schema library: the spec demands zero new
 // dependencies, and what has to be checked fits in twenty lines.
@@ -656,7 +656,7 @@ export function readVerdict(structured, rules = VERDICT_RULES) {
   for (const [i, f] of findings.entries()) {
     if (!f || typeof f !== 'object') return { why: `el hallazgo ${i} no es un objeto` }
     if (!SEVERITIES.includes(f.severity)) return { why: `el hallazgo ${i} tiene una severidad desconocida: ${JSON.stringify(f.severity)}` }
-    if (!esTexto(f.what) || !esTexto(f.path)) return { why: `el hallazgo ${i} no dice qué o dónde: hacen falta 'what' y 'path'` }
+    if (!isText(f.what) || !isText(f.path)) return { why: `el hallazgo ${i} no dice qué o dónde: hacen falta 'what' y 'path'` }
     // `line` is optional and `null` is valid: a finding about the whole file
     // has no line, and demanding one would be asking for an invented number or
     // spending one of the six discards that kill the run. What is not valid is
@@ -669,7 +669,7 @@ export function readVerdict(structured, rules = VERDICT_RULES) {
     // it the finding cannot be checked against anything, and a veto that cannot
     // be checked is the defensive veto the rubric's calibration exists to
     // prevent.
-    if (!esTexto(f.evidence)) return { why: `el hallazgo ${i} no cita la evidencia que lo sostiene` }
+    if (!isText(f.evidence)) return { why: `el hallazgo ${i} no cita la evidencia que lo sostiene` }
     // The rule is the CLOSED enum: none is assumed by default, because a rule
     // invented by the judge would dirty the telemetry's per-rule count just as
     // much as a missing `rule`.
@@ -682,25 +682,25 @@ export function readVerdict(structured, rules = VERDICT_RULES) {
   // an identifier nobody recognises are the same failure: a verdict of which it
   // cannot be asserted that the rubric was walked.
   if (!Array.isArray(rubric)) return { why: 'el veredicto no trae el recorrido de la rúbrica' }
-  const recorridos = []
-  for (const [i, paso] of rubric.entries()) {
-    if (!paso || typeof paso !== 'object') return { why: `el paso ${i} del recorrido no es un objeto` }
-    if (!rules.includes(paso.rule)) return { why: `el recorrido nombra un ítem desconocido de la rúbrica: ${JSON.stringify(paso.rule)}` }
+  const walked = []
+  for (const [i, step] of rubric.entries()) {
+    if (!step || typeof step !== 'object') return { why: `el paso ${i} del recorrido no es un objeto` }
+    if (!rules.includes(step.rule)) return { why: `el recorrido nombra un ítem desconocido de la rúbrica: ${JSON.stringify(step.rule)}` }
     // An item named with no result is identifiers with nothing behind them:
     // the same empty PASS of rust-monitoring#10, only longer.
-    if (!esTexto(paso.result)) return { why: `el ítem ${paso.rule} del recorrido no dice lo que dio` }
+    if (!isText(step.result)) return { why: `el ítem ${step.rule} del recorrido no dice lo que dio` }
     // The result in prose says what it gave; `outcome` says what CLASS it was,
     // which is the only aggregable part. Without it, "there was nothing to
     // measure with" and "I measured and it is fine" are the same datum.
-    if (!RUBRIC_OUTCOMES.includes(paso.outcome)) return { why: `el ítem ${paso.rule} del recorrido no dice de qué clase fue su resultado: ${JSON.stringify(paso.outcome)}` }
-    if (recorridos.includes(paso.rule)) return { why: `el recorrido repite el ítem ${paso.rule} de la rúbrica` }
-    recorridos.push(paso.rule)
+    if (!RUBRIC_OUTCOMES.includes(step.outcome)) return { why: `el ítem ${step.rule} del recorrido no dice de qué clase fue su resultado: ${JSON.stringify(step.outcome)}` }
+    if (walked.includes(step.rule)) return { why: `el recorrido repite el ítem ${step.rule} de la rúbrica` }
+    walked.push(step.rule)
   }
-  const sinRecorrer = rules.filter((regla) => !recorridos.includes(regla))
+  const notWalked = rules.filter((rule) => !walked.includes(rule))
   // The number comes from the array and not from the prose: the ninth item made
   // a hand-written "eight" obsolete in one go, and this `why` is the text the
   // judge reads in order to answer again after a discard.
-  if (sinRecorrer.length) return { why: `el recorrido no pasa por ${sinRecorrer.join(', ')}: la rúbrica son ${rules.length} ítems y se contestan los ${rules.length}` }
+  if (notWalked.length) return { why: `el recorrido no pasa por ${notWalked.join(', ')}: la rúbrica son ${rules.length} ítems y se contestan los ${rules.length}` }
   // The coherence the original checks on the aggregate itself: a PASS with a
   // serious finding contradicts itself. It is not "interpreted" towards the
   // prudent side — it is discarded and asked again, because a judge that does
@@ -720,7 +720,7 @@ export function readVerdict(structured, rules = VERDICT_RULES) {
   // and «the worst moment of all is typing the right permission and nothing
   // happening». What this module CANNOT decide is whether the token is THE
   // PACKAGE'S: that demands reading the package and measuring the cut again, and
-  // ct-step.mjs does that (`tokenVigente`).
+  // ct-step.mjs does that (`currentToken`).
   // ABSENT IS VALID, because whoever writes it is the program: `ct-step verdict`
   // injects it with the value it has just computed before calling here, so on
   // the real path this field always arrives. A verdict that reaches here without
@@ -759,7 +759,7 @@ export function outcomeOfVerdict(verdict) {
 }
 
 // From a SLICE verdict to a result of the table — only TWO outputs, the ones
-// `trasElJuezDeSlice` knows how to attend to. `PASS` is ALWAYS `done`, with or
+// `afterSliceJudge` knows how to attend to. `PASS` is ALWAYS `done`, with or
 // without findings: unlike a task, here no implementer is left with staged work
 // to send back to — the whole slice is already committed, task by task. A medium
 // does not buy a paid round there is nobody to charge for: it travels INSIDE the
@@ -784,13 +784,13 @@ export function findingLocation(finding) {
 export function readReport(structured) {
   if (!structured || typeof structured !== 'object') return { why: 'el implementador no devolvió structured_output' }
   const { paths, summary } = structured
-  if (!Array.isArray(paths) || !paths.every(esTexto)) return { why: 'el informe no trae la lista de rutas tocadas' }
-  if (!esTexto(summary)) return { why: 'el informe no trae resumen' }
+  if (!Array.isArray(paths) || !paths.every(isText)) return { why: 'el informe no trae la lista de rutas tocadas' }
+  if (!isText(summary)) return { why: 'el informe no trae resumen' }
   // An absolute path, or one that climbs out of the directory, does not get
   // staged: the program runs `git add` on whatever this list says, so the list
   // is an attack surface, not trusted data.
-  const fuera = paths.filter((p) => p.startsWith('/') || p.split('/').includes('..'))
-  if (fuera.length) return { why: `el informe declara rutas fuera del worktree: ${fuera.join(', ')}` }
+  const outside = paths.filter((p) => p.startsWith('/') || p.split('/').includes('..'))
+  if (outside.length) return { why: `el informe declara rutas fuera del worktree: ${outside.join(', ')}` }
   // The same path twice NO LONGER DISCARDS. It used to discard when this list
   // was the source of what gets staged: two declarations of the same path
   // could not be arbitrated. Ever since the program MEASURES the paths against
@@ -814,16 +814,16 @@ export function readReport(structured) {
 // through and not something else.
 //
 // WHAT IT DOES NOT CHECK: that the output is real. See the test's header.
-const colapsa = (s) => String(s || '').replace(/\s+/g, ' ').trim()
+const collapse = (s) => String(s || '').replace(/\s+/g, ' ').trim()
 
-// nombraCampo: the field's name exactly as it travels in the JSON, plus the
+// fieldName: the field's name exactly as it travels in the JSON, plus the
 // clarification needed when the name alone is not enough. `evidence` is the
 // only such case: an empty list —or one with pairs missing the command or the
 // output— is as insufficient as leaving it out, and saying only "`evidence` is
 // missing" would send an agent that ALREADY put it there to look where the
 // problem is not.
-const nombraCampo = (campo) => (campo === 'evidence' ? '`evidence` (al menos un par comando/salida, los dos con texto)' : `\`${campo}\``)
-const tieneEvidencia = (e) => (Array.isArray(e.evidence) ? e.evidence.filter((x) => x && esTexto(x.command) && esTexto(x.output)) : []).length > 0
+const fieldName = (field) => (field === 'evidence' ? '`evidence` (al menos un par comando/salida, los dos con texto)' : `\`${field}\``)
+const hasEvidence = (e) => (Array.isArray(e.evidence) ? e.evidence.filter((x) => x && isText(x.command) && isText(x.output)) : []).length > 0
 
 export function readE2eReport(structured, declaredRuns) {
   // The declared runs are DEDUPLICATED. Two identical cells are the same run,
@@ -833,22 +833,23 @@ export function readE2eReport(structured, declaredRuns) {
   // entries made the second one fall into "an entry this slice does not
   // declare". A repeated run is not a contradiction that has to be rejected
   // —it is a redundancy—, so it collapses instead of aborting the step.
-  const declared = [...new Set((declaredRuns || []).map(colapsa).filter(Boolean))]
+  const declared = [...new Set((declaredRuns || []).map(collapse).filter(Boolean))]
   if (!structured || typeof structured !== 'object' || Array.isArray(structured)) {
     return { outcome: OUTCOMES.DISCARDED, why: 'el agente no devolvió structured_output' }
   }
   if (!Array.isArray(structured.runs)) {
     return { outcome: OUTCOMES.DISCARDED, why: '`runs` no es una lista' }
   }
-  const problemas = []
+  const problems = []
+  // `buenos` keeps its name: e2e-schema.test.js documents this list by it.
   const buenos = []
-  const vistos = new Set()
+  const seen = new Set()
   for (const run of declared) {
-    const e = structured.runs.find((x) => x && colapsa(x.run) === run)
-    if (!e) { problemas.push(`falta la entrada del recorrido "${run}"`); continue }
-    vistos.add(e)
+    const e = structured.runs.find((x) => x && collapse(x.run) === run)
+    if (!e) { problems.push(`falta la entrada del recorrido "${run}"`); continue }
+    seen.add(e)
     if (!E2E_VERDICTS.includes(e.verdict)) {
-      problemas.push(`el recorrido "${run}" trae un veredicto desconocido: ${JSON.stringify(e.verdict)}`)
+      problems.push(`el recorrido "${run}" trae un veredicto desconocido: ${JSON.stringify(e.verdict)}`)
       continue
     }
     // The three verdicts are validated against ONE table
@@ -864,32 +865,32 @@ export function readE2eReport(structured, declaredRuns) {
     // the slice without leaving anyone knowing what to fix; and a half-written
     // red slipped a literal "undefined" into
     // `docs/superpowers/e2e/<issue>.md` —an artefact of the pull request—
-    // because `escribirInformeE2e` (ct-step.mjs) trusts that whatever reaches
+    // because `writeE2eReport` (ct-step.mjs) trusts that whatever reaches
     // it here is already validated and checks nothing again.
-    const faltan = E2E_REQUIRED_BY_VERDICT[e.verdict].filter((campo) => (campo === 'evidence' ? !tieneEvidencia(e) : !esTexto(e[campo])))
-    if (faltan.length) {
-      problemas.push(`el recorrido "${run}" se declara ${e.verdict} sin ${faltan.map(nombraCampo).join(', ')}: ese veredicto no se sostiene sin eso. Añádelo al informe y vuelve a cerrar el paso con "ct-step e2e"`)
+    const missing = E2E_REQUIRED_BY_VERDICT[e.verdict].filter((field) => (field === 'evidence' ? !hasEvidence(e) : !isText(e[field])))
+    if (missing.length) {
+      problems.push(`el recorrido "${run}" se declara ${e.verdict} sin ${missing.map(fieldName).join(', ')}: ese veredicto no se sostiene sin eso. Añádelo al informe y vuelve a cerrar el paso con "ct-step e2e"`)
       continue
     }
     buenos.push(e)
   }
   for (const e of structured.runs) {
-    if (!vistos.has(e)) problemas.push(`el informe trae una entrada que esta slice no declara: "${colapsa(e && e.run)}"`)
+    if (!seen.has(e)) problems.push(`el informe trae una entrada que esta slice no declara: "${collapse(e && e.run)}"`)
   }
   // RED BEATS MALFORMED: see the test of the same name.
   //
   // `why` is OMITTED here when there are no problems — it is not set to `null`
   // — so as not to diverge from `readVerdict`/`readReport`, which do not carry
   // the `why` key on their happy path either. An explicit `null` would have
-  // been a third value for no reason: the caller (`ct-step.mjs#verboE2e`)
+  // been a third value for no reason: the caller (`ct-step.mjs#e2eVerb`)
   // already normalises with `why || null`, so omitting it changes no
   // behaviour.
   if (buenos.some((e) => e.verdict === 'rojo')) {
-    return problemas.length
-      ? { outcome: OUTCOMES.FAILED, runs: buenos, why: problemas.join('; ') }
+    return problems.length
+      ? { outcome: OUTCOMES.FAILED, runs: buenos, why: problems.join('; ') }
       : { outcome: OUTCOMES.FAILED, runs: buenos }
   }
-  if (problemas.length) return { outcome: OUTCOMES.DISCARDED, why: problemas.join('; ') }
+  if (problems.length) return { outcome: OUTCOMES.DISCARDED, why: problems.join('; ') }
   return { outcome: OUTCOMES.DONE, runs: buenos }
 }
 
@@ -907,8 +908,8 @@ export function readE2eReport(structured, declaredRuns) {
 // in F27 does not cover this path.
 // ============================================================================
 export function commitMessage({ issue, task, tasksTotal, name }) {
-  const titulo = `${sanear(name)} (#${issue}, tarea ${task}/${tasksTotal})`
-  const cuerpo = [
+  const title = `${sanitize(name)} (#${issue}, tarea ${task}/${tasksTotal})`
+  const body = [
     '',
     `Tarea ${task} de ${tasksTotal} del plan del slice, implementada y juzgada paso a paso con ct-step.`,
     '',
@@ -921,19 +922,19 @@ export function commitMessage({ issue, task, tasksTotal, name }) {
     CtStepCommit.TRAILER_LINE,
     'Co-Authored-By: Claude <noreply@anthropic.com>',
   ].join('\n')
-  const mensaje = titulo + '\n' + cuerpo
-  const keywords = findClosingKeywords(mensaje)
+  const message = title + '\n' + body
+  const keywords = findClosingKeywords(message)
   if (keywords.length) {
     throw new Error(`el mensaje de commit contiene una closing keyword (${keywords.map((k) => `${k.keyword} ${k.ref}`).join(', ')}) y cerraría un issue sin que nadie lo haya decidido`)
   }
-  return mensaje
+  return message
 }
 
 // The task's name comes from the plan, that is, from an agent. "fixes #12" in
 // the title of a task is exactly the F27 accident, so the keyword is defused
 // by breaking the reference, not by deleting the word: the title still reads
 // the same.
-function sanear(name) {
+function sanitize(name) {
   return String(name || 'tarea sin nombre').replace(/#(\d+)/g, 'issue $1').trim()
 }
 
@@ -944,18 +945,18 @@ function sanear(name) {
 // the program looks at its own message because `commit-keyword-guard` never
 // sees a `git commit` that no session launched.
 export function sliceVerdictCommitMessage({ issue, tasksTotal }) {
-  const titulo = `Veredicto del slice entero (#${issue})`
-  const cuerpo = [
+  const title = `Veredicto del slice entero (#${issue})`
+  const body = [
     '',
     `Las ${tasksTotal} tareas comiteadas, la Global verification en verde y el slice juzgado de una vez por ct-slice-judge.`,
     '',
     CtStepCommit.TRAILER_LINE,
     'Co-Authored-By: Claude <noreply@anthropic.com>',
   ].join('\n')
-  const mensaje = titulo + '\n' + cuerpo
-  const keywords = findClosingKeywords(mensaje)
+  const message = title + '\n' + body
+  const keywords = findClosingKeywords(message)
   if (keywords.length) {
     throw new Error(`el mensaje de commit del veredicto de slice contiene una closing keyword (${keywords.map((k) => `${k.keyword} ${k.ref}`).join(', ')}) y cerraría un issue sin que nadie lo haya decidido`)
   }
-  return mensaje
+  return message
 }

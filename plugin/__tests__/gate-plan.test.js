@@ -13,8 +13,8 @@ describe('the `plan` gate — vocabulary', () => {
     expect(GATES.plan.kickoff).toContain('PARA')
     expect(GATES.plan.kickoff).toContain('--check-plan')
     expect(GATES.plan.issue).toContain('comentario')
-    for (const texto of [GATES.plan.kickoff, GATES.plan.issue]) {
-      expect(texto.toLowerCase()).toContain('humano')
+    for (const text of [GATES.plan.kickoff, GATES.plan.issue]) {
+      expect(text.toLowerCase()).toContain('humano')
     }
   })
 

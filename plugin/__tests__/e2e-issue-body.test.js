@@ -47,7 +47,7 @@ describe('the ## E2E section of the issue body', () => {
 // Measured by hand over mo-monitoring v1 applying the criterion "does the
 // system have to be up?".
 describe('mo-monitoring v1 as a worked example', () => {
-  const filas = [
+  const rows = [
     { n: 1, name: 'esqueleto', type: 'infra', e2e: 'no' },
     { n: 2, name: 'modelo y environment', type: 'backend', e2e: 'no' },
     { n: 3, name: 'repositorio prometheus', type: 'backend', e2e: 'no' },
@@ -59,12 +59,12 @@ describe('mo-monitoring v1 as a worked example', () => {
   ].map((f) => ({ ...f, issue: null, entrega: '', gate: '–', deps: [], ac: ['x'], protected: '', area: ['core'], touches: [] }))
 
   it('exactly 2 out of 8 produce gate:e2e', () => {
-    const conE2e = filas.filter((f) => buildLabels(f).includes('gate:e2e'))
-    expect(conE2e.map((f) => f.n)).toEqual([5, 8])
+    const withE2e = rows.filter((f) => buildLabels(f).includes('gate:e2e'))
+    expect(withE2e.map((f) => f.n)).toEqual([5, 8])
   })
 
   it('the 6 with `no` emit no ## E2E section', () => {
-    for (const f of filas.filter((f) => f.e2e === 'no')) {
+    for (const f of rows.filter((f) => f.e2e === 'no')) {
       expect(buildIssueBody(f, null), `slice #${f.n}`).not.toContain(E2E_HEADING)
     }
   })

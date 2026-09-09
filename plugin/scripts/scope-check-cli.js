@@ -51,9 +51,9 @@ const gh = (a) => execFileSync('gh', a, { encoding: 'utf8', stdio: ['ignore', 'p
 // plugin already holds up («el 1 nunca se degrada a 0»): not being able to
 // check is NOT being clean. A gate that fails open on a network error is worse
 // than having no gate, because on top of that it reassures.
-function morir(mensaje, detalle) {
-  console.error(`🛑 scope-check: ${mensaje}`)
-  if (detalle) console.error(`   ${detalle}`)
+function die(message, detail) {
+  console.error(`🛑 scope-check: ${message}`)
+  if (detail) console.error(`   ${detail}`)
   process.exit(1)
 }
 
@@ -61,7 +61,7 @@ let prData
 try {
   prData = JSON.parse(gh(['pr', 'view', pr, '--repo', repo, '--json', 'body,files,headRefName']))
 } catch (e) {
-  morir(`no se pudo leer el PR #${pr} de ${repo}`, (e.stderr || e.message || '').toString().trim())
+  die(`no se pudo leer el PR #${pr} de ${repo}`, (e.stderr || e.message || '').toString().trim())
 }
 
 const issueN = issueFromPrBody(prData.body)
@@ -82,7 +82,7 @@ if (!issueN) {
   // not be closed on merge, holding its tokens forever— so that one does come
   // out red.
   if (isSliceBranch(prData.headRefName)) {
-    morir(
+    die(
       `el PR #${pr} viene de la rama de slice \`${prData.headRefName}\` pero no declara un único issue con una closing keyword en su CUERPO`,
       'Añade `Closes #<issue>` al cuerpo del PR (no al título, no en un comentario). Sin él, además, el issue no se cierra al mergear y el slice retiene sus tokens de `area:`/`touches:` para siempre.',
     )
@@ -97,28 +97,28 @@ let issueBody
 try {
   issueBody = JSON.parse(gh(['issue', 'view', String(issueN), '--repo', repo, '--json', 'body'])).body
 } catch (e) {
-  morir(`no se pudo leer el issue #${issueN} de ${repo}`, (e.stderr || e.message || '').toString().trim())
+  die(`no se pudo leer el issue #${issueN} de ${repo}`, (e.stderr || e.message || '').toString().trim())
 }
 
-const alcance = parseScope(issueBody)
-if (!alcance.declared) {
-  morir(
+const scope = parseScope(issueBody)
+if (!scope.declared) {
+  die(
     `el epic del issue #${issueN} no declara alcance`,
-    `${alcance.reason}. Añade una línea \`Alcance: <rutas>\` a la sección \`## Contexto del epic\` del execution spec y re-groomea (o edita el issue). Se declara UNA vez por epic, en la congelación.`,
+    `${scope.reason}. Añade una línea \`Alcance: <rutas>\` a la sección \`## Contexto del epic\` del execution spec y re-groomea (o edita el issue). Se declara UNA vez por epic, en la congelación.`,
   )
 }
 
-const ficheros = (prData.files || []).map((f) => f.path)
-const violaciones = scopeViolations(ficheros, alcance.patterns, exempt)
+const files = (prData.files || []).map((f) => f.path)
+const violations = scopeViolations(files, scope.patterns, exempt)
 
-if (violaciones.length) {
-  console.error(`🛑 scope-check: el PR #${pr} toca ${violaciones.length} fichero(s) FUERA del alcance declarado por su epic (issue #${issueN}).`)
+if (violations.length) {
+  console.error(`🛑 scope-check: el PR #${pr} toca ${violations.length} fichero(s) FUERA del alcance declarado por su epic (issue #${issueN}).`)
   console.error('')
   console.error('   Alcance declarado:')
-  for (const p of alcance.patterns) console.error(`     ✓ ${p}`)
+  for (const p of scope.patterns) console.error(`     ✓ ${p}`)
   console.error('')
   console.error('   Fuera de alcance:')
-  for (const f of violaciones) console.error(`     ✗ ${f}`)
+  for (const f of violations) console.error(`     ✗ ${f}`)
   console.error('')
   // The message does not accuse anybody of bad faith, and it must not: the
   // real failure mode that was measured is not an adversarial agent, it is an
@@ -131,5 +131,5 @@ if (violaciones.length) {
   process.exit(1)
 }
 
-console.log(`✅ scope-check: los ${ficheros.length} fichero(s) del PR #${pr} caben en el alcance del epic (issue #${issueN}).`)
+console.log(`✅ scope-check: los ${files.length} fichero(s) del PR #${pr} caben en el alcance del epic (issue #${issueN}).`)
 process.exit(0)

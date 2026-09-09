@@ -30,8 +30,8 @@ import { parseStrictInt } from './argnum.js'
 // `--name value` out of a flat argv. There is no options parser on purpose:
 // there are four flags, and one dependency less in a process that runs
 // detached.
-export function arg(argv, nombre) {
-  const i = argv.indexOf(nombre)
+export function arg(argv, name) {
+  const i = argv.indexOf(name)
   return i === -1 ? null : argv[i + 1] ?? null
 }
 
@@ -42,12 +42,12 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 // same reason: a badly written deadline changes what the process MEANS, and you
 // would not want to find that out eight hours (or two days) later while looking
 // into why nobody warned you.
-export function plazo(nombre, defecto) {
-  const raw = process.env[nombre]
-  if (raw == null || raw === '') return defecto
+export function plazo(name, fallback) {
+  const raw = process.env[name]
+  if (raw == null || raw === '') return fallback
   const v = parseStrictInt(raw)
   if (v == null || v <= 0) {
-    process.stderr.write(`${nombre} inválido: "${raw}" — debe ser un número de milisegundos mayor que 0.\n`)
+    process.stderr.write(`${name} inválido: "${raw}" — debe ser un número de milisegundos mayor que 0.\n`)
     process.exit(2)
   }
   return v
@@ -65,7 +65,7 @@ export function plazo(nombre, defecto) {
 // NOT BEING ABLE TO OPEN IT DOES NOT STOP THE WATCH: losing the trace is worse
 // than not having one, but far less bad than losing the warning that was being
 // waited for.
-export function abrirLog(logPath) {
+export function openLog(logPath) {
   let fd = null
   if (logPath) {
     try {
@@ -76,13 +76,15 @@ export function abrirLog(logPath) {
     }
   }
   const log = (msg) => {
-    const linea = `${new Date().toISOString()} ${msg}\n`
-    if (fd !== null) { try { writeSync(fd, linea) } catch { /* the trace is lost, the watch is not */ } }
-    process.stdout.write(linea)
+    const line = `${new Date().toISOString()} ${msg}\n`
+    if (fd !== null) { try { writeSync(fd, line) } catch { /* the trace is lost, the watch is not */ } }
+    process.stdout.write(line)
   }
-  const terminar = (codigo) => {
+  // `terminar` is the key the two watchers destructure; the local name is
+  // English, the key stays as it crosses the module boundary.
+  const finish = (code) => {
     if (fd !== null) { try { closeSync(fd) } catch { /* already done */ } }
-    process.exit(codigo)
+    process.exit(code)
   }
-  return { log, terminar }
+  return { log, terminar: finish }
 }

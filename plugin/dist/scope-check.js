@@ -75,23 +75,23 @@ function normalizePath(p) {
   return String(p || "").replace(/^\.\//, "").replace(/^\/+/, "");
 }
 function parseScope(issueBody2) {
-  const texto = typeof issueBody2 === "string" ? issueBody2 : "";
-  const lineas = texto.split(/\r?\n/);
-  let dentro = false;
+  const text = typeof issueBody2 === "string" ? issueBody2 : "";
+  const lines = text.split(/\r?\n/);
+  let inside = false;
   const patterns = [];
-  for (const linea of lineas) {
-    if (SECTION_HEADING.test(linea)) {
-      dentro = true;
+  for (const line of lines) {
+    if (SECTION_HEADING.test(line)) {
+      inside = true;
       continue;
     }
-    if (dentro && ANY_HEADING.test(linea)) break;
-    if (!dentro) continue;
-    const m = linea.match(SCOPE_LINE);
+    if (inside && ANY_HEADING.test(line)) break;
+    if (!inside) continue;
+    const m = line.match(SCOPE_LINE);
     if (!m) continue;
-    const valor = m[1].replace(/^\*\*(?=\s)/, "");
-    for (const trozo of valor.split(",")) {
-      const limpio = trozo.replace(/`/g, "").trim();
-      if (limpio) patterns.push(limpio);
+    const value = m[1].replace(/^\*\*(?=\s)/, "");
+    for (const chunk of value.split(",")) {
+      const cleaned = chunk.replace(/`/g, "").trim();
+      if (cleaned) patterns.push(cleaned);
     }
   }
   if (!patterns.length) {
@@ -130,23 +130,23 @@ function matchesPattern(path, pattern) {
   re += "$";
   return new RegExp(re).test(p);
 }
-function scopeViolations(files, patterns, extraExempt = []) {
+function scopeViolations(files2, patterns, extraExempt = []) {
   const pats = Array.isArray(patterns) ? patterns.filter(Boolean) : [];
-  const exentos = [...LOOP_ARTIFACT_PATTERNS, ...Array.isArray(extraExempt) ? extraExempt.filter(Boolean) : []];
-  return (files || []).map(normalizePath).filter((f) => f).filter((f) => !exentos.some((pat) => matchesPattern(f, pat))).filter((f) => !pats.some((pat) => matchesPattern(f, pat)));
+  const exemptPatterns = [...LOOP_ARTIFACT_PATTERNS, ...Array.isArray(extraExempt) ? extraExempt.filter(Boolean) : []];
+  return (files2 || []).map(normalizePath).filter((f) => f).filter((f) => !exemptPatterns.some((pat) => matchesPattern(f, pat))).filter((f) => !pats.some((pat) => matchesPattern(f, pat)));
 }
 function isSliceBranch(name) {
   return /^feat\/\d+$/.test(String(name || "").trim());
 }
 function issueFromPrBody(prBody) {
-  const encontrados = findClosingKeywords(typeof prBody === "string" ? prBody : "");
-  const numeros = /* @__PURE__ */ new Set();
-  for (const { ref } of encontrados) {
+  const found = findClosingKeywords(typeof prBody === "string" ? prBody : "");
+  const numbers = /* @__PURE__ */ new Set();
+  for (const { ref } of found) {
     const m = String(ref).match(/#(\d+)$/);
-    if (m) numeros.add(Number(m[1]));
+    if (m) numbers.add(Number(m[1]));
   }
-  if (numeros.size !== 1) return null;
-  return [...numeros][0];
+  if (numbers.size !== 1) return null;
+  return [...numbers][0];
 }
 
 // scripts/scope-check-cli.js
@@ -166,21 +166,21 @@ if (typeof repo !== "string" || typeof pr !== "string" || !/^\d+$/.test(pr)) {
   process.exit(2);
 }
 var gh = (a) => execFileSync("gh", a, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 20 * 1024 * 1024, timeout: 5 * 60 * 1e3, killSignal: "SIGKILL" });
-function morir(mensaje, detalle) {
-  console.error(`\u{1F6D1} scope-check: ${mensaje}`);
-  if (detalle) console.error(`   ${detalle}`);
+function die(message, detail) {
+  console.error(`\u{1F6D1} scope-check: ${message}`);
+  if (detail) console.error(`   ${detail}`);
   process.exit(1);
 }
 var prData;
 try {
   prData = JSON.parse(gh(["pr", "view", pr, "--repo", repo, "--json", "body,files,headRefName"]));
 } catch (e) {
-  morir(`no se pudo leer el PR #${pr} de ${repo}`, (e.stderr || e.message || "").toString().trim());
+  die(`no se pudo leer el PR #${pr} de ${repo}`, (e.stderr || e.message || "").toString().trim());
 }
 var issueN = issueFromPrBody(prData.body);
 if (!issueN) {
   if (isSliceBranch(prData.headRefName)) {
-    morir(
+    die(
       `el PR #${pr} viene de la rama de slice \`${prData.headRefName}\` pero no declara un \xFAnico issue con una closing keyword en su CUERPO`,
       "A\xF1ade `Closes #<issue>` al cuerpo del PR (no al t\xEDtulo, no en un comentario). Sin \xE9l, adem\xE1s, el issue no se cierra al mergear y el slice retiene sus tokens de `area:`/`touches:` para siempre."
     );
@@ -192,30 +192,30 @@ var issueBody;
 try {
   issueBody = JSON.parse(gh(["issue", "view", String(issueN), "--repo", repo, "--json", "body"])).body;
 } catch (e) {
-  morir(`no se pudo leer el issue #${issueN} de ${repo}`, (e.stderr || e.message || "").toString().trim());
+  die(`no se pudo leer el issue #${issueN} de ${repo}`, (e.stderr || e.message || "").toString().trim());
 }
-var alcance = parseScope(issueBody);
-if (!alcance.declared) {
-  morir(
+var scope = parseScope(issueBody);
+if (!scope.declared) {
+  die(
     `el epic del issue #${issueN} no declara alcance`,
-    `${alcance.reason}. A\xF1ade una l\xEDnea \`Alcance: <rutas>\` a la secci\xF3n \`## Contexto del epic\` del execution spec y re-groomea (o edita el issue). Se declara UNA vez por epic, en la congelaci\xF3n.`
+    `${scope.reason}. A\xF1ade una l\xEDnea \`Alcance: <rutas>\` a la secci\xF3n \`## Contexto del epic\` del execution spec y re-groomea (o edita el issue). Se declara UNA vez por epic, en la congelaci\xF3n.`
   );
 }
-var ficheros = (prData.files || []).map((f) => f.path);
-var violaciones = scopeViolations(ficheros, alcance.patterns, exempt);
-if (violaciones.length) {
-  console.error(`\u{1F6D1} scope-check: el PR #${pr} toca ${violaciones.length} fichero(s) FUERA del alcance declarado por su epic (issue #${issueN}).`);
+var files = (prData.files || []).map((f) => f.path);
+var violations = scopeViolations(files, scope.patterns, exempt);
+if (violations.length) {
+  console.error(`\u{1F6D1} scope-check: el PR #${pr} toca ${violations.length} fichero(s) FUERA del alcance declarado por su epic (issue #${issueN}).`);
   console.error("");
   console.error("   Alcance declarado:");
-  for (const p of alcance.patterns) console.error(`     \u2713 ${p}`);
+  for (const p of scope.patterns) console.error(`     \u2713 ${p}`);
   console.error("");
   console.error("   Fuera de alcance:");
-  for (const f of violaciones) console.error(`     \u2717 ${f}`);
+  for (const f of violations) console.error(`     \u2717 ${f}`);
   console.error("");
   console.error("   Esto NO se arregla editando el registro del PR. O el trabajo sale del PR,");
   console.error("   o el alcance del epic cambia \u2014 y cambiar el alcance de un epic congelado es");
   console.error("   una decisi\xF3n humana, no del agente.");
   process.exit(1);
 }
-console.log(`\u2705 scope-check: los ${ficheros.length} fichero(s) del PR #${pr} caben en el alcance del epic (issue #${issueN}).`);
+console.log(`\u2705 scope-check: los ${files.length} fichero(s) del PR #${pr} caben en el alcance del epic (issue #${issueN}).`);
 process.exit(0);

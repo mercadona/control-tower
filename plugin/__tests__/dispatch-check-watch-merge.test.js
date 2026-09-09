@@ -23,7 +23,7 @@ const FAKE_GH = fileURLToPath(new URL('./fixtures/fake-gh-bin', import.meta.url)
 const RECORDER = fileURLToPath(new URL('./fixtures/fake-watch-merge-bin/recorder.mjs', import.meta.url))
 
 // Minimal plan that satisfies the contract of plan-contract.js. Copied from
-// e2e-release-correspondencia.test.js: the tests of this repository do not
+// e2e-release-correspondence.test.js: the tests of this repository do not
 // import each other.
 const FENCE = '```'
 const PLAN = [
@@ -70,7 +70,7 @@ const PLAN = [
   '',
 ].join('\n')
 
-const CUERPO = ['## Acceptance criteria (EARS, 1:1 con tests)', '- un criterio', '', '## Gates', '- **`plan`** — …', ''].join('\n')
+const BODY = ['## Acceptance criteria (EARS, 1:1 con tests)', '- un criterio', '', '## Gates', '- **`plan`** — …', ''].join('\n')
 
 // Slice worktree with the task committed, the plan and the run DELIVERED, on a
 // REAL git repository: `localSliceArtifacts` asks for the main checkout with
@@ -100,11 +100,11 @@ function repo() {
 // The child goes DETACHED and with `unref`, so dispatch-check can finish before
 // the recorder writes. The file is polled instead of read once: otherwise the
 // test would be flaky by construction. It is the same wait, and for the same
-// reason, as `esperarArgv` in ct-next-watch-go.test.js.
-async function esperarArgv(ruta, ms = 5000) {
-  const fin = Date.now() + ms
-  while (Date.now() < fin) {
-    if (existsSync(ruta)) return readFileSync(ruta, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+// reason, as `waitForArgv` in ct-next-watch-go.test.js.
+async function waitForArgv(path, ms = 5000) {
+  const deadline = Date.now() + ms
+  while (Date.now() < deadline) {
+    if (existsSync(path)) return readFileSync(path, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
     await new Promise((r) => setTimeout(r, 25))
   }
   return null
@@ -117,7 +117,7 @@ function release(dir, { args = [], env = {} } = {}) {
     env: {
       ...process.env,
       PATH: `${FAKE_GH}:${process.env.PATH}`,
-      FAKE_GH_VIEW_BODY: CUERPO,
+      FAKE_GH_VIEW_BODY: BODY,
       FAKE_GH_VIEW_LABELS: JSON.stringify(['status:in-progress', 'gate:plan']),
       // The `plan` gate with its nonce (F38): without a registered commitment
       // and a comment satisfying it, `--release` refuses with exit 9 long before
@@ -139,9 +139,9 @@ describe('--release launches the merge watcher', () => {
       const r = release(dir)
       expect(r.status).toBe(0)
       expect(r.stdout).toMatch(/released #9/)
-      const lanzamientos = await esperarArgv(r.watchLog)
-      expect(lanzamientos).toHaveLength(1)
-      const argv = lanzamientos[0]
+      const launches = await waitForArgv(r.watchLog)
+      expect(launches).toHaveLength(1)
+      const argv = launches[0]
       expect(argv).toContain('--issue')
       expect(argv[argv.indexOf('--issue') + 1]).toBe('9')
       expect(argv[argv.indexOf('--repo') + 1]).toBe('o/r')
@@ -169,7 +169,7 @@ describe('--release launches the merge watcher', () => {
       const r = release(dir, { args: ['--no-watch-merge'] })
       expect(r.status).toBe(0)
       expect(r.stdout).toMatch(/released #9/)
-      expect(await esperarArgv(r.watchLog, 600)).toBe(null)
+      expect(await waitForArgv(r.watchLog, 600)).toBe(null)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
@@ -189,7 +189,7 @@ describe('--release launches the merge watcher', () => {
       const r = release(dir, { args: ['--dry-run'] })
       expect(r.status).toBe(0)
       expect(r.stdout).not.toMatch(/vigilante del merge/)
-      expect(await esperarArgv(r.watchLog, 600)).toBe(null)
+      expect(await waitForArgv(r.watchLog, 600)).toBe(null)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
@@ -205,7 +205,7 @@ describe('--release launches the merge watcher', () => {
       const r = release(dir)
       expect(r.status).toBe(7)
       expect(r.stdout + r.stderr).not.toMatch(/vigilante del merge/)
-      expect(await esperarArgv(r.watchLog, 600)).toBe(null)
+      expect(await waitForArgv(r.watchLog, 600)).toBe(null)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
@@ -221,7 +221,7 @@ describe('--release launches the merge watcher', () => {
       const r = release(dir, { env: goEnv({ repo: 'o/r', issue: 9, given: false }) })
       expect(r.status).toBe(9)
       expect(r.stdout + r.stderr).not.toMatch(/vigilante del merge/)
-      expect(await esperarArgv(r.watchLog, 600)).toBe(null)
+      expect(await waitForArgv(r.watchLog, 600)).toBe(null)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
@@ -238,7 +238,7 @@ describe('--release launches the merge watcher', () => {
       expect(r.stderr).toMatch(/aviso:/)
       expect(r.stderr).toMatch(/a mano/)
       expect(r.stdout).not.toMatch(/vigilante del merge de #9 lanzado \(pid/)
-      expect(await esperarArgv(r.watchLog, 600)).toBe(null)
+      expect(await waitForArgv(r.watchLog, 600)).toBe(null)
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 })

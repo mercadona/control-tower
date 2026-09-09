@@ -491,9 +491,9 @@ describe('F22 — the messages name the file that was read', () => {
     // No line names the coordinator's file: the kickoff is received ONLY by a
     // slice agent, so there is no possible ambiguity there.
     expect(k).not.toContain(STATE_REL_PATH)
-    const linea = (aguja) => k.split('\n').find((l) => l.includes(aguja))
-    expect(linea('blocked:')).toContain(SLICE_REL_PATH)
-    expect(linea('Al acabar:')).toContain(SLICE_REL_PATH)
+    const lineWith = (needle) => k.split('\n').find((l) => l.includes(needle))
+    expect(lineWith('blocked:')).toContain(SLICE_REL_PATH)
+    expect(lineWith('Al acabar:')).toContain(SLICE_REL_PATH)
   })
 })
 
@@ -726,7 +726,7 @@ describe('F22 — --release refuses if the branch carries a state file', () => {
 
   // The same as seedPlan, but its Task 1 CITES a file instead of creating it:
   // `Current state (<path>):` with `<body>` inside the fence.
-  const seedPlanCitando = (wt, issue, path, body) => {
+  const seedPlanCiting = (wt, issue, path, body) => {
     const plan = minimalPlanFor(issue)
       .replace('Final text (f.txt):', `Current state (${path}):`)
       .replace(`${FENCE}\ntrabajo\n${FENCE}`, `${FENCE}\n${body}\n${FENCE}`)
@@ -782,9 +782,9 @@ describe('F22 — --release refuses if the branch carries a state file', () => {
   it('--check-plan with a citation from memory → exit 6 and it names the cited file (F-jjponz-1)', () => {
     const { dir, wt } = mkSliceWorktree()
     seedPlan(wt, 1)
-    const roto = readFileSync(join(wt, 'docs', 'superpowers', 'plans', '2026-08-12-issue-1-fixture.md'), 'utf8')
+    const broken = readFileSync(join(wt, 'docs', 'superpowers', 'plans', '2026-08-12-issue-1-fixture.md'), 'utf8')
       .replace('Final text (f.txt):', 'Current state (f.txt):')
-    writeFileSync(join(wt, 'docs', 'superpowers', 'plans', '2026-08-12-issue-1-fixture.md'), roto)
+    writeFileSync(join(wt, 'docs', 'superpowers', 'plans', '2026-08-12-issue-1-fixture.md'), broken)
     const r = spawnSync('node', [dispatchCheck, '1', '--repo', 'o/r', '--check-plan'], {
       cwd: wt, encoding: 'utf8',
     })
@@ -817,7 +817,7 @@ describe('F22 — --release refuses if the branch carries a state file', () => {
 
   it('exit 0 when the plan cites a file this slice MODIFIES: the citation is checked in the BASE, not in HEAD (F-jjponz-3)', () => {
     const { dir, wt, git } = mkSliceWorktree({ baseFiles: { 'AGENTS.md': 'texto de antes del slice\n' } })
-    seedPlanCitando(wt, 1, 'AGENTS.md', 'texto de antes del slice')
+    seedPlanCiting(wt, 1, 'AGENTS.md', 'texto de antes del slice')
     // The task does what the plan orders: it rewrites the cited file.
     writeFileSync(join(wt, 'AGENTS.md'), 'texto nuevo que trae el slice\n')
     git('add', '-A')
@@ -838,7 +838,7 @@ describe('F22 — --release refuses if the branch carries a state file', () => {
     // An invented citation... and the work of the slice leaves it written in
     // the tree: with the old reader (HEAD) this passed green. It is exactly the
     // way to slip a citation from memory through the release door.
-    seedPlanCitando(wt, 1, 'AGENTS.md', 'esto no estuvo nunca en el fichero')
+    seedPlanCiting(wt, 1, 'AGENTS.md', 'esto no estuvo nunca en el fichero')
     writeFileSync(join(wt, 'AGENTS.md'), 'esto no estuvo nunca en el fichero\n')
     git('add', '-A')
     git('commit', '-qm', 'work')
@@ -852,7 +852,7 @@ describe('F22 — --release refuses if the branch carries a state file', () => {
 
   it('exit 6 with an honest message if the cited file did NOT exist in the base: a file the slice creates is cited with "does not exist" (F-jjponz-3)', () => {
     const { dir, wt, git } = mkSliceWorktree()
-    seedPlanCitando(wt, 1, 'nuevo.txt', 'contenido nuevo')
+    seedPlanCiting(wt, 1, 'nuevo.txt', 'contenido nuevo')
     writeFileSync(join(wt, 'nuevo.txt'), 'contenido nuevo\n')
     git('add', '-A')
     git('commit', '-qm', 'work')
@@ -869,19 +869,19 @@ describe('F22 — --release refuses if the branch carries a state file', () => {
 
   it('--check-plan keeps reading the WORKING TREE: it is the mode from BEFORE implementing (F-jjponz-3)', () => {
     const { dir, wt } = mkSliceWorktree({ baseFiles: { 'AGENTS.md': 'texto de antes del slice\n' } })
-    seedPlanCitando(wt, 1, 'AGENTS.md', 'texto de antes del slice')
-    const verde = spawnSync('node', [dispatchCheck, '1', '--repo', 'o/r', '--check-plan'], {
+    seedPlanCiting(wt, 1, 'AGENTS.md', 'texto de antes del slice')
+    const green = spawnSync('node', [dispatchCheck, '1', '--repo', 'o/r', '--check-plan'], {
       cwd: wt, encoding: 'utf8',
     })
-    expect(verde.status).toBe(0)
+    expect(green.status).toBe(0)
     // And if the tree no longer says that, --check-plan calls it out: in that
     // mode the tree IS the state the plan cites, and it is not replaced by the
     // base.
     writeFileSync(join(wt, 'AGENTS.md'), 'otra cosa\n')
-    const rojo = spawnSync('node', [dispatchCheck, '1', '--repo', 'o/r', '--check-plan'], {
+    const red = spawnSync('node', [dispatchCheck, '1', '--repo', 'o/r', '--check-plan'], {
       cwd: wt, encoding: 'utf8',
     })
-    expect(rojo.status).toBe(6)
+    expect(red.status).toBe(6)
     rmSync(dir, { recursive: true, force: true })
   })
 

@@ -266,11 +266,11 @@ describe('ct-groom — dangling flags do not sneak false values through (final r
     rmSync(dir, { recursive: true, force: true })
   })
 
-  for (const [caso, argv] of [
+  for (const [caseName, argv] of [
     ['como último token (sin valor)', ['--dry-run', '--section']],
     ['seguido de otro flag (sin valor real)', ['--section', '--dry-run']],
   ]) {
-    it(`--section ${caso}: it is no longer an error — it is ignored and warned about, exit 0`, () => {
+    it(`--section ${caseName}: it is no longer an error — it is ignored and warned about, exit 0`, () => {
       const dir = makeSpecDir('ctg-')
       const spec = join(dir, 'spec.md'); writeFileSync(spec, SPEC)
       const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', ...argv],
@@ -381,12 +381,12 @@ describe('ct-groom — it fails hard on an unusable §9 table (F1)', () => {
   // on record.
   it('the "Entrega" column is missing → it NO longer aborts (F3: it became optional), it warns on stderr and the dry-run keeps working', () => {
     const dir = makeSpecDir('ctg-')
-    const NO_ENTREGA = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
+    const NO_DELIVERY = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Dep | Acepta | Protegido |
 |---|---|---|---|---|---|
 | 1 | x | backend | – | – | – |
 `
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, NO_ENTREGA)
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, NO_DELIVERY)
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
     expect(res.status).toBe(0)
     const plan = JSON.parse(res.stdout)
@@ -1646,7 +1646,7 @@ describe('ct-groom --dry-run — exit 3 on divergence is an explicit decision, n
 // Before this fix, matching by marker swept the WHOLE REPO, so the §9 contract
 // ("the #s are unique within their milestone, not within the repo") was true in
 // /ct-next and false here.
-const TRES_SLICES = (a, b, c) => `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
+const THREE_SLICES = (a, b, c) => `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca |
 |---|---|---|---|---|---|---|---|---|
 | ${a} | uno | backend | a | – | AC-${a}.1 | – | api | db |
@@ -1657,7 +1657,7 @@ const TRES_SLICES = (a, b, c) => `## Hipótesis\n\nApuesta del fixture.\n\n## 9.
 // The six of the earlier epic: closed, in ANOTHER milestone, with ct-order 1..6
 // and a link to ANOTHER spec (so as not to fire Task 5's gate, which is a
 // different check — what is tested here is the narrowing).
-const EPIC_ANTERIOR = [1, 2, 3, 4, 5, 6].map((n) => ({
+const PREVIOUS_EPIC = [1, 2, 3, 4, 5, 6].map((n) => ({
   number: 450 + n,
   title: `#${n} slice viejo`,
   state: 'closed',
@@ -1669,9 +1669,9 @@ const EPIC_ANTERIOR = [1, 2, 3, 4, 5, 6].map((n) => ({
 describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of the feedback)', () => {
   it('face 1: a §9 table starting at 1,2,3 over an earlier epic with 1..6 → it creates the three, zero divergences, zero orphans, exit 0', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
-      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[EPIC_ANTERIOR]]) }) })
+      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[PREVIOUS_EPIC]]) }) })
     expect(res.status).toBe(0)
     // What it did before: it matched #451/#452/#453 and reported the different
     // milestone as a divergence, creating nothing.
@@ -1683,8 +1683,8 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
     // assertion was `not.toMatch(/#45[123]/)` and it has been sharpened, not
     // relaxed — what matters is that none of those mentions is a match, a
     // divergence or an orphan.
-    for (const linea of res.stderr.split('\n').filter((l) => /#45[1-6]/.test(l))) {
-      expect(linea.startsWith('aviso: ')).toBe(true)
+    for (const line of res.stderr.split('\n').filter((l) => /#45[1-6]/.test(l))) {
+      expect(line.startsWith('aviso: ')).toBe(true)
     }
     const plan = JSON.parse(res.stdout)
     expect(plan.issues.map((i) => i.order)).toEqual([1, 2, 3])
@@ -1699,12 +1699,12 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
   // issues instead of creating its own. That is only visible in a real run.
   it('face 1, a REAL run: it creates the three issues of the new epic and matches none of #451–#456', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo'],
       {
         encoding: 'utf8',
         env: fakeEnv({
-          FAKE_GH_LIST_SEQUENCE: JSON.stringify([[EPIC_ANTERIOR]]),
+          FAKE_GH_LIST_SEQUENCE: JSON.stringify([[PREVIOUS_EPIC]]),
           FAKE_GH_MILESTONES_LIST: JSON.stringify([{ title: 'Epic nuevo', number: 2 }]),
         }),
       })
@@ -1726,9 +1726,9 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
 
   it('face 2: a §9 table starting at 7,8,9 → it does NOT declare the earlier epic\u2019s six orphans', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(7, 8, 9))
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(7, 8, 9))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
-      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[EPIC_ANTERIOR]]) }) })
+      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[PREVIOUS_EPIC]]) }) })
     expect(res.status).toBe(0)
     expect(res.stderr).not.toMatch(/hu.rfano/)
     expect(res.stderr).not.toMatch(/#45[1-6]/)
@@ -1737,8 +1737,8 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
 
   it('the legitimate orphan — an issue OF THE CURRENT EPIC whose order is no longer in the table — still warns and still exits 3', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
-    const HUERFANO_REAL = {
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
+    const REAL_ORPHAN = {
       number: 601,
       title: '#9 slice retirado',
       state: 'open',
@@ -1747,7 +1747,7 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
       body: 'cuerpo\n\n<!-- ct-order:9 -->',
     }
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
-      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[...EPIC_ANTERIOR, HUERFANO_REAL]]]) }) })
+      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[...PREVIOUS_EPIC, REAL_ORPHAN]]]) }) })
     expect(res.status).toBe(3)
     expect(res.stderr).toMatch(/issue #601.*ct-order:9/)
     expect(res.stderr).toMatch(/hu.rfano/)
@@ -1756,17 +1756,17 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
     // (#451–#453 do come out as gate B's non-blocking warning — the fail-open
     // of a link that does not match — so the assertion is sharpened to the
     // orphan line rather than to "the number does not appear".)
-    for (const linea of res.stderr.split('\n').filter((l) => /#45[1-6]/.test(l))) {
-      expect(linea.startsWith('aviso: ')).toBe(true)
-      expect(linea).not.toMatch(/hu.rfano/)
+    for (const line of res.stderr.split('\n').filter((l) => /#45[1-6]/.test(l))) {
+      expect(line.startsWith('aviso: ')).toBe(true)
+      expect(line).not.toMatch(/hu.rfano/)
     }
     rmSync(dir, { recursive: true, force: true })
   })
 
   it('matching DOES happen within the epic itself: an issue of the requested milestone with the same order is not duplicated', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
-    const DEL_EPIC = {
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
+    const FROM_THE_EPIC = {
       number: 700,
       title: '#1 uno',
       state: 'open',
@@ -1775,7 +1775,7 @@ describe('ct-groom — the ct-order marker narrowed by milestone (F23, §2 of th
       body: 'cuerpo\n\n<!-- ct-order:1 -->',
     }
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
-      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[...EPIC_ANTERIOR, DEL_EPIC]]]) }) })
+      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[...PREVIOUS_EPIC, FROM_THE_EPIC]]]) }) })
     // A real divergence (the body carries neither AC nor a spec link) → exit 3,
     // naming the issue of ITS epic. What matters here is that it finds it.
     expect(res.status).toBe(3)
@@ -1801,7 +1801,7 @@ describe('ct-groom — gate A: issues with no milestone (F23)', () => {
 
   it('it collides with the §9 table → exit 1, it names them, and it mutates NOTHING', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[SIN_MILESTONE(487, 2), SIN_MILESTONE(488, 3)]]]) }) })
     expect(res.status).toBe(1)
@@ -1818,7 +1818,7 @@ describe('ct-groom — gate A: issues with no milestone (F23)', () => {
 
   it('it does NOT collide with the §9 table → a warning that names it, the run carries on', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[SIN_MILESTONE(487, 9)]]]) }) })
     expect(res.status).toBe(0)
@@ -1831,7 +1831,7 @@ describe('ct-groom — gate A: issues with no milestone (F23)', () => {
 
   it('under --dry-run the gate aborts too: a preview that keeps quiet about the real run stopping reports less than the real run', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
       { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[SIN_MILESTONE(487, 2)]]]) }) })
     expect(res.status).toBe(1)
@@ -1841,10 +1841,10 @@ describe('ct-groom — gate A: issues with no milestone (F23)', () => {
 
   it('an issue with no milestone and NO ct-order marker says nothing at all', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
-    const SUELTO = { number: 490, title: 'issue a mano', state: 'open', milestone: null, labels: [], body: 'sin marcador' }
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
+    const LOOSE = { number: 490, title: 'issue a mano', state: 'open', milestone: null, labels: [], body: 'sin marcador' }
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
-      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[SUELTO]]]) }) })
+      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[LOOSE]]]) }) })
     expect(res.status).toBe(0)
     expect(res.stderr).not.toMatch(/#490/)
     rmSync(dir, { recursive: true, force: true })
@@ -1855,7 +1855,7 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
   // The SAME spec that produces this test directory's plan (spec.md), but in
   // ANOTHER milestone: the signature of a renamed epic, or of a typo in
   // --milestone.
-  const mismoSpecOtroEpic = (number, order) => ({
+  const sameSpecOtherEpic = (number, order) => ({
     number,
     title: `#${order} uno`,
     state: 'open',
@@ -1869,9 +1869,9 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
 
   it('the same order + the same spec in another milestone → exit 1, it names the issue and its real milestone, it mutates nothing', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo'],
-      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[mismoSpecOtroEpic(452, 2)]]]) }) })
+      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[sameSpecOtherEpic(452, 2)]]]) }) })
     expect(res.status).toBe(1)
     expect(res.stderr).toMatch(/#452\s+ct-order:2/)
     expect(res.stderr).toMatch(/Epic anterior/)
@@ -1884,9 +1884,9 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
 
   it('the same order but ANOTHER spec → it does not fire: it is a different epic reusing numbers, which is what F23 enables', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
-      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[EPIC_ANTERIOR]]) }) })
+      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[PREVIOUS_EPIC]]) }) })
     expect(res.status).toBe(0)
     expect(res.stderr).not.toMatch(/no se ha creado ni modificado nada/)
     // "It does not fire" means it does not BLOCK, not that it keeps quiet: the
@@ -1898,9 +1898,9 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
 
   it('the same spec but an order that is NOT in today\u2019s table → it does not fire', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
-      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[mismoSpecOtroEpic(452, 8)]]]) }) })
+      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[sameSpecOtherEpic(452, 8)]]]) }) })
     expect(res.status).toBe(0)
     expect(res.stderr).not.toMatch(/no se ha creado ni modificado nada/)
     rmSync(dir, { recursive: true, force: true })
@@ -1914,9 +1914,9 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
   // without a milestone that do NOT block.
   it('warning (a DIFFERENT link): it names the issue, its milestone and the duplication risk — and it does not change the exit code', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
-      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[EPIC_ANTERIOR[1]]]]) }) })
+      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[PREVIOUS_EPIC[1]]]]) }) })
     expect(res.status).toBe(0)
     expect(res.stderr).toMatch(/^aviso: el slice #2 de este spec tiene un issue en otro milestone con el mismo ct-order \(#452, "Epic anterior"\)/m)
     expect(res.stderr).toMatch(/su enlace al spec no coincide con el de este spec/)
@@ -1937,8 +1937,8 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
   // version older than the link line) and it had no test at all.
   it('warning (with NO spec link in the body): it is named too, with the right reason', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
-    const SIN_ENLACE = {
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
+    const NO_LINK = {
       number: 470,
       title: '#2 a mano',
       state: 'open',
@@ -1947,7 +1947,7 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
       body: 'cuerpo escrito a mano, sin enlace al spec\n\n<!-- ct-order:2 -->',
     }
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
-      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[SIN_ENLACE]]]) }) })
+      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[NO_LINK]]]) }) })
     expect(res.status).toBe(0)
     expect(res.stderr).toMatch(/aviso:.*#470, "Epic anterior"/)
     expect(res.stderr).toMatch(/no lleva ninguna línea de enlace al spec/)
@@ -1962,8 +1962,8 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
   // at all (the same criterion as backlogPendingCount's closed-issue filter).
   it('the warning does NOT come out for a slice that ALREADY has an issue in this epic: with no creation there is no duplication', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
-    const YA_EN_ESTE_EPIC = {
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
+    const ALREADY_IN_THIS_EPIC = {
       number: 700,
       title: '#1 uno',
       state: 'open',
@@ -1975,7 +1975,7 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
       ),
     }
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
-      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[...EPIC_ANTERIOR, YA_EN_ESTE_EPIC]]]) }) })
+      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[...PREVIOUS_EPIC, ALREADY_IN_THIS_EPIC]]]) }) })
     expect(res.status).toBe(0)
     // #451 carries ct-order:1, just like the issue this epic already has:
     // nothing to duplicate, no warning that names it.
@@ -1989,9 +1989,9 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
 
   it('the warning does NOT come out when the order of another epic\u2019s issue is not in today\u2019s table: there is nothing to duplicate there', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(7, 8, 9))
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(7, 8, 9))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo', '--dry-run'],
-      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[EPIC_ANTERIOR]]) }) })
+      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[PREVIOUS_EPIC]]) }) })
     expect(res.status).toBe(0)
     expect(res.stderr).not.toMatch(/aviso: el slice/)
     expect(res.stderr).not.toMatch(/#45[1-6]/)
@@ -2005,9 +2005,9 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
   // next run, now unblocked, computes them again.
   it('when the gate blocks, the warning is not emitted: nothing is going to be created, so nothing can be duplicated', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo'],
-      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[mismoSpecOtroEpic(452, 2), EPIC_ANTERIOR[0]]]]) }) })
+      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[sameSpecOtherEpic(452, 2), PREVIOUS_EPIC[0]]]]) }) })
     expect(res.status).toBe(1)
     expect(res.stderr).toMatch(/#452\s+ct-order:2/) // the block does come out
     expect(res.stderr).toMatch(/no se ha creado ni modificado nada/)
@@ -2019,10 +2019,10 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
 
   it('BOTH gates in the same run: the two blocks are reported and it exits ONLY once', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, TRES_SLICES(1, 2, 3))
-    const SIN_MS = { number: 487, title: '#3 suelto', state: 'open', milestone: null, labels: [], body: 'x\n\n<!-- ct-order:3 -->' }
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, THREE_SLICES(1, 2, 3))
+    const NO_MILESTONE = { number: 487, title: '#3 suelto', state: 'open', milestone: null, labels: [], body: 'x\n\n<!-- ct-order:3 -->' }
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic nuevo'],
-      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[SIN_MS, mismoSpecOtroEpic(452, 2)]]]) }) })
+      { encoding: 'utf8', env: fakeEnv({ FAKE_GH_LIST_SEQUENCE: JSON.stringify([[[NO_MILESTONE, sameSpecOtherEpic(452, 2)]]]) }) })
     expect(res.status).toBe(1)
     expect(res.stderr).toMatch(/#487\s+ct-order:3/)   // gate A
     expect(res.stderr).toMatch(/#452\s+ct-order:2/)   // gate B
@@ -2039,16 +2039,16 @@ describe('ct-groom — gate B: the same epic under another title (F23)', () => {
 // measure its observabilidad item as without-a-yardstick across the whole
 // epic).
 describe('the Señal column in the groom (Slice 10)', () => {
-  const CON_SENAL = (senal1, senal2) => `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
+  const WITH_SIGNAL = (signal1, signal2) => `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Señal |
 |---|---|---|---|---|---|---|---|
-| 1 | login | backend | modelo | – | AC-1.1 | schema | ${senal1} |
-| 2 | refresh | backend | flow | #1 | AC-2.1 | – | ${senal2} |
+| 1 | login | backend | modelo | – | AC-1.1 | schema | ${signal1} |
+| 2 | refresh | backend | flow | #1 | AC-2.1 | – | ${signal2} |
 `
 
   it('an exemption with no reason aborts with exit 2 naming the row, the N/A — <razón> syntax and the remedy', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, CON_SENAL('N/A', 'métrica x'))
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, WITH_SIGNAL('N/A', 'métrica x'))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
     expect(res.status).toBe(2)
     expect(res.stderr).toMatch(/slice #1: "N\/A"/)
@@ -2065,13 +2065,13 @@ describe('the Señal column in the groom (Slice 10)', () => {
     // Two defects at once: the exemption with no reason (Señal) and a malformed
     // Dep ("S1") — both messages must come out in ONE single run, like the rest
     // of the aggregated hardErrors.
-    const DOS_DEFECTOS = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
+    const TWO_DEFECTS = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
 | # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Señal |
 |---|---|---|---|---|---|---|---|
 | 1 | login | backend | modelo | – | AC-1.1 | schema | N/A — |
 | 2 | refresh | backend | flow | S1 | AC-2.1 | – | – |
 `
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, DOS_DEFECTOS)
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, TWO_DEFECTS)
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
     expect(res.status).toBe(2)
     expect(res.stderr).toMatch(/exención sin razón/)
@@ -2093,7 +2093,7 @@ describe('the Señal column in the groom (Slice 10)', () => {
 
   it('the dry-run shows the "## Señal de observabilidad" section in the body of the slice that declares it and not in the one that does not', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, CON_SENAL('–', 'métrica `backfill_progress` con label `estado`'))
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, WITH_SIGNAL('–', 'métrica `backfill_progress` con label `estado`'))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
     expect(res.status).toBe(0)
     const plan = JSON.parse(res.stdout)
@@ -2105,7 +2105,7 @@ describe('the Señal column in the groom (Slice 10)', () => {
 
   it('the reasoned exemption travels verbatim to the body and aborts nothing', () => {
     const dir = makeSpecDir('ctg-')
-    const spec = join(dir, 'spec.md'); writeFileSync(spec, CON_SENAL('N/A — pantalla sin telemetría nueva que prometer', 'métrica x'))
+    const spec = join(dir, 'spec.md'); writeFileSync(spec, WITH_SIGNAL('N/A — pantalla sin telemetría nueva que prometer', 'métrica x'))
     const res = spawnSync('node', [script, spec, '--repo', 'o/r', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
     expect(res.status).toBe(0)
     const plan = JSON.parse(res.stdout)

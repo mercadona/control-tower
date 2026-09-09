@@ -179,9 +179,9 @@ export function matchesGo(body, commitment) {
 // count as new — which is the prudent side here, because the effect of counting
 // it too readily is waiting (the token has to be exact anyway), and that of
 // counting it too rarely would be honouring an old go.
-export function commentIds(comentarios) {
+export function commentIds(comments) {
   const ids = new Set()
-  for (const c of comentarios || []) {
+  for (const c of comments || []) {
     if (typeof c?.id === 'string' && c.id !== '') ids.add(c.id)
   }
   return ids
@@ -234,14 +234,14 @@ export function commentIds(comentarios) {
 // What is closed off is the invalid state: a VALID go cannot come out of here
 // as a failed attempt, because `matchesGo` discards it inside. Without that the
 // watcher would deliver and explain at the same time.
-export function failedGoAttempt(comentarios, idsPrevios, commitment) {
-  const previos = idsPrevios instanceof Set ? idsPrevios : new Set(idsPrevios || [])
-  for (const comentario of [...(comentarios || [])].reverse()) {
-    const id = typeof comentario?.id === 'string' ? comentario.id : ''
-    if (id !== '' && previos.has(id)) continue
-    const cuerpo = String(comentario?.body ?? '').trim()
-    if (!cuerpo.toUpperCase().startsWith(GO_TOKEN)) continue
-    if (matchesGo(cuerpo, commitment)) continue
+export function failedGoAttempt(comments, previousIds, commitment) {
+  const previous = previousIds instanceof Set ? previousIds : new Set(previousIds || [])
+  for (const comment of [...(comments || [])].reverse()) {
+    const id = typeof comment?.id === 'string' ? comment.id : ''
+    if (id !== '' && previous.has(id)) continue
+    const body = String(comment?.body ?? '').trim()
+    if (!body.toUpperCase().startsWith(GO_TOKEN)) continue
+    if (matchesGo(body, commitment)) continue
     return id === '' ? null : id
   }
   return null
@@ -267,12 +267,12 @@ export const GO_FORMAT_REPLY = [
 // back»: an `-OK` followed by «wait, no» is still a go, because the only thing
 // this module recognizes is the token. It is walked this way because it is what
 // stays correct the day there is a second answer, and because the cost is zero.
-export function hasGo(comentarios, idsPrevios, commitment) {
-  const previos = idsPrevios instanceof Set ? idsPrevios : new Set(idsPrevios || [])
-  for (const comentario of [...(comentarios || [])].reverse()) {
-    const id = typeof comentario?.id === 'string' ? comentario.id : ''
-    if (id !== '' && previos.has(id)) continue
-    if (matchesGo(comentario?.body, commitment)) return true
+export function hasGo(comments, previousIds, commitment) {
+  const previous = previousIds instanceof Set ? previousIds : new Set(previousIds || [])
+  for (const comment of [...(comments || [])].reverse()) {
+    const id = typeof comment?.id === 'string' ? comment.id : ''
+    if (id !== '' && previous.has(id)) continue
+    if (matchesGo(comment?.body, commitment)) return true
   }
   return false
 }

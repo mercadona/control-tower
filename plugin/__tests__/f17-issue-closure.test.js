@@ -226,7 +226,7 @@ describe('F17 — a non-default `--base`: the warning that the `Closes #N` will 
 // to argue against it instead of applying it in silence.
 // ============================================================================
 describe('F17/H2 — the block reason is PRODUCT: stdout, in dry-run and for real', () => {
-  const bloqueado = JSON.stringify({
+  const blocked = JSON.stringify({
     issues: [
       { n: 1, order: 1, status: 'in-progress', deps: [], touches: ['api'], name: 'a' },
       { n: 2, order: 2, status: 'ready', deps: [], touches: ['api'], name: 'b' },
@@ -235,7 +235,7 @@ describe('F17/H2 — the block reason is PRODUCT: stdout, in dry-run and for rea
   })
 
   it('the block reason comes out on stdout and is NOT duplicated on stderr', () => {
-    const r = runNext(['--repo', 'o/r', '--cap', '9', '--dry-run'], { CT_NEXT_FIXTURE: bloqueado })
+    const r = runNext(['--repo', 'o/r', '--cap', '9', '--dry-run'], { CT_NEXT_FIXTURE: blocked })
     expect(r.code).toBe(0)
     expect(r.stdout).toMatch(/colisiona con trabajo en vuelo/)
     expect(r.stderr).not.toMatch(/colisiona con trabajo en vuelo/)
@@ -258,9 +258,9 @@ describe('F17/H2 — the block reason is PRODUCT: stdout, in dry-run and for rea
 function seed() {
   const dir = mkdtempSync(join(tmpdir(), 'ct-'))
   execFileSync('bash', [ctInit, dir], { encoding: 'utf8' })
-  const contrato = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
+  const contract = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
   rmSync(dir, { recursive: true, force: true })
-  return contrato
+  return contract
 }
 const flat = (s) => s.replace(/\*/g, '').replace(/\s+/g, ' ')
 const V6 = () => readFileSync(join(root, '__tests__', 'fixtures', 'slices-contract-v6.md'), 'utf8')

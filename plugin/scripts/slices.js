@@ -489,7 +489,7 @@ export function analyzeSlicesTable(specMd) {
       // senal (Slice 10): the RAW cell, unresolved — the mirror of `gate`. The
       // resolution (a declared signal, a reasoned exemption `N/A — <razón>`, an
       // exemption with no reason, nothing) lives entirely in
-      // groom.js#parseSenalCell: this parser knows nothing about signals, its
+      // groom.js#parseSignalCell: this parser knows nothing about signals, its
       // job is to deliver reliable cells.
       senal: (cells[iSenal] || '').trim(),
       // e2e: the RAW cell, unresolved — the same contract as `gate`, and for

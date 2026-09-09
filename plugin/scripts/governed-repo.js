@@ -30,7 +30,7 @@ const AGENTS = 'AGENTS.md'
 // `cwd` arrives from outside and may carry a `toString` that throws, or be
 // circular. `String(...)` already avoids `JSON.stringify`'s problem with
 // cycles, but a hostile `toString` can still throw, so it is caught.
-function describirValor(v) {
+function describeValue(v) {
   try { return String(v) } catch { return '<no se pudo describir>' }
 }
 
@@ -60,7 +60,7 @@ export function probeGovernedRepo(cwd) {
   // would answer about a directory the caller never named. That is worse than
   // inventing a `false`: it is answering a different question.
   if (typeof cwd !== 'string' || cwd.length === 0) {
-    return { error: `cwd invalido: se esperaba una cadena no vacia y llego ${typeof cwd} (${describirValor(cwd)})` }
+    return { error: `cwd invalido: se esperaba una cadena no vacia y llego ${typeof cwd} (${describeValue(cwd)})` }
   }
   let dir
   try { dir = resolve(cwd) } catch (e) { return { error: `cwd invalido: ${e.message}` } }
@@ -72,20 +72,20 @@ export function probeGovernedRepo(cwd) {
   try {
     for (;;) {
       if (isRepoRoot(dir)) {
-        let texto
+        let text
         try {
-          texto = readFileSync(join(dir, AGENTS), 'utf8')
+          text = readFileSync(join(dir, AGENTS), 'utf8')
         } catch (e) {
           // AGENTS.md NOT BEING THERE is an answer: this repo does not carry
           // the contract. Not being able to READ it is not.
           if (e && (e.code === 'ENOENT' || e.code === 'ENOTDIR')) return { governed: false }
           return { error: `no se ha podido leer ${AGENTS} (${e.code || e.message})` }
         }
-        return { governed: GOVERNED_MARKERS.some((m) => texto.includes(m)) }
+        return { governed: GOVERNED_MARKERS.some((m) => text.includes(m)) }
       }
-      const padre = dirname(dir)
-      if (padre === dir) return { governed: false }
-      dir = padre
+      const parent = dirname(dir)
+      if (parent === dir) return { governed: false }
+      dir = parent
     }
   } catch (e) {
     return { error: `no se ha podido determinar la raiz del repo (${e.code || e.message})` }

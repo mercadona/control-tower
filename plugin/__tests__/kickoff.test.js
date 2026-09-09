@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { renderKickoff, buildStateSeed, ADDENDA, SENAL_AUSENTE } from '../scripts/kickoff.js'
+import { renderKickoff, buildStateSeed, ADDENDA, SIGNAL_ABSENT } from '../scripts/kickoff.js'
 import { BaselineOutcome, BaselineResult } from '../scripts/baseline.js'
 import { parseState } from '../scripts/state.js'
 
@@ -16,8 +16,8 @@ const SLICE = { n: 7, name: 'refresh token', type: 'backend', ac: ['AC-7.1'], de
 // without anything being broken. The absence is now checked against the REAL
 // addendum (ADDENDA is already exported), which is what they actually mean to
 // say: "the kickoff of this Tipo does not carry another one's addendum".
-const otrosAddenda = (tipo) =>
-  Object.entries(ADDENDA).filter(([t]) => t !== tipo).map(([, texto]) => texto)
+const otherAddenda = (type) =>
+  Object.entries(ADDENDA).filter(([t]) => t !== type).map(([, text]) => text)
 
 describe('renderKickoff', () => {
   it('backend: carries its own addendum and none of the others', () => {
@@ -29,25 +29,25 @@ describe('renderKickoff', () => {
     // contamination motivated this whole round.
     expect(k).toContain('.agent/SLICE.md')
     expect(k).toContain(ADDENDA.backend)
-    for (const otro of otrosAddenda('backend')) expect(k).not.toContain(otro)
+    for (const other of otherAddenda('backend')) expect(k).not.toContain(other)
   })
   it('ui: carries its own addendum and none of the others', () => {
     const k = renderKickoff({ ...SLICE, type: 'ui' }, { repo: 'o/r' , conventionsDir: '/plugin/conventions' })
     expect(k).toContain(ADDENDA.ui)
     expect(k.toLowerCase()).toMatch(/screenshot|design system/)
-    for (const otro of otrosAddenda('ui')) expect(k).not.toContain(otro)
+    for (const other of otherAddenda('ui')) expect(k).not.toContain(other)
   })
   it('infra: carries its own addendum and none of the others', () => {
     const k = renderKickoff({ ...SLICE, type: 'infra' }, { repo: 'o/r' , conventionsDir: '/plugin/conventions' })
     expect(k).toContain(ADDENDA.infra)
     expect(k.toLowerCase()).toMatch(/dry-run.*plan primero/)
-    for (const otro of otrosAddenda('infra')) expect(k).not.toContain(otro)
+    for (const other of otherAddenda('infra')) expect(k).not.toContain(other)
   })
   it('bugfix: carries its own addendum and none of the others', () => {
     const k = renderKickoff({ ...SLICE, type: 'bugfix' }, { repo: 'o/r' , conventionsDir: '/plugin/conventions' })
     expect(k).toContain(ADDENDA.bugfix)
     expect(k.toLowerCase()).toMatch(/reproduce-first.*test que falla/)
-    for (const otro of otrosAddenda('bugfix')) expect(k).not.toContain(otro)
+    for (const other of otherAddenda('bugfix')) expect(k).not.toContain(other)
   })
 })
 
@@ -104,8 +104,8 @@ describe('buildStateSeed', () => {
     // The same rule that stopped ct-next silently assuming `main` when it did
     // not know the base: a gap in a metric reads as a zero, and a zero is a
     // claim.
-    for (const sinEpic of [{ ...SLICE }, { ...SLICE, epic: null }, { ...SLICE, epic: '' }]) {
-      const { meta } = parseState(buildStateSeed(sinEpic, { branch: 'feat/7', base: 'main' }))
+    for (const withoutEpic of [{ ...SLICE }, { ...SLICE, epic: null }, { ...SLICE, epic: '' }]) {
+      const { meta } = parseState(buildStateSeed(withoutEpic, { branch: 'feat/7', base: 'main' }))
       expect(meta.epic).toBe('(sin milestone)')
     }
   })
@@ -154,14 +154,14 @@ describe('buildStateSeed', () => {
 // ended up measuring against the LOCAL copy of the base branch (slice 10's
 // run, main 7 commits behind).
 describe('buildStateSeed — base_sha, the sha of the cut that nobody overwrites (slice 1)', () => {
-  const CORTE = 'c3af34c0dead0000beef0000cafe0000feed1234'
+  const CUT = 'c3af34c0dead0000beef0000cafe0000feed1234'
 
   it('the seed carries base_sha: = the SHA of origin/<base> at the cut', () => {
-    const seed = buildStateSeed(SLICE, { branch: 'feat/7', base: 'main', baseSha: CORTE })
+    const seed = buildStateSeed(SLICE, { branch: 'feat/7', base: 'main', baseSha: CUT })
     // In the TEXT and on its own line, not only after parsing: its consumer
     // (dispatch-check, slice 2) will read it with a regex over the file.
-    expect(seed).toMatch(new RegExp(`^base_sha: ${CORTE}$`, 'm'))
-    expect(parseState(seed).meta.base_sha).toBe(CORTE)
+    expect(seed).toMatch(new RegExp(`^base_sha: ${CUT}$`, 'm'))
+    expect(parseState(seed).meta.base_sha).toBe(CUT)
   })
 
   it('with no resolvable SHA, the field does not appear', () => {
@@ -176,12 +176,12 @@ describe('buildStateSeed — base_sha, the sha of the cut that nobody overwrites
   })
 
   it('`last_commit` does not change: the same sha when there is one, and `""` when there is not — the asymmetry is deliberate', () => {
-    expect(parseState(buildStateSeed(SLICE, { branch: 'feat/7', base: 'main', baseSha: CORTE })).meta.last_commit).toBe(CORTE)
+    expect(parseState(buildStateSeed(SLICE, { branch: 'feat/7', base: 'main', baseSha: CUT })).meta.last_commit).toBe(CUT)
     expect(parseState(buildStateSeed(SLICE, { branch: 'feat/7', base: 'main' })).meta.last_commit).toBe('')
   })
 
   it('`base:` is still the branch name, never the sha: that is where the `--base` of `gh pr create` comes from', () => {
-    const { meta } = parseState(buildStateSeed(SLICE, { branch: 'feat/7', base: 'develop', baseSha: CORTE }))
+    const { meta } = parseState(buildStateSeed(SLICE, { branch: 'feat/7', base: 'develop', baseSha: CUT }))
     expect(meta.base).toBe('develop')
     expect(meta.base).not.toBe(meta.base_sha)
   })
@@ -325,7 +325,7 @@ describe('renderKickoff — F32, the two-level model (its own skills, plan first
 })
 
 // Slice 10 — the signal in the dispatch. The `senal:` field is ALWAYS seeded
-// (with the verbatim text of the issue, or with SENAL_AUSENTE — the absence is
+// (with the verbatim text of the issue, or with SIGNAL_ABSENT — the absence is
 // declared, not omitted, the same criterion as gates:/blocked:), because its
 // reader is ct-step, which pastes it as the first section of the slice judge's
 // package with no agent in between. The kickoff's line, by contrast, is
@@ -342,28 +342,28 @@ describe('the signal in the dispatch (Slice 10)', () => {
     expect(meta.senal).toBe('métrica `backfill_progress` con label `estado`')
   })
 
-  it('buildStateSeed declares the absence with SENAL_AUSENTE when the issue carries no section', () => {
-    for (const sinSenal of [{ ...SLICE }, { ...SLICE, senal: null }, { ...SLICE, senal: '' }, { ...SLICE, senal: '  ' }]) {
-      const { meta } = parseState(buildStateSeed(sinSenal, { branch: 'feat/7', base: 'main' }))
-      expect(meta.senal).toBe(SENAL_AUSENTE)
+  it('buildStateSeed declares the absence with SIGNAL_ABSENT when the issue carries no section', () => {
+    for (const withoutSignal of [{ ...SLICE }, { ...SLICE, senal: null }, { ...SLICE, senal: '' }, { ...SLICE, senal: '  ' }]) {
+      const { meta } = parseState(buildStateSeed(withoutSignal, { branch: 'feat/7', base: 'main' }))
+      expect(meta.senal).toBe(SIGNAL_ABSENT)
     }
     // The constant opens with "(sin señal declarada" — it is the prefix by
     // which the slice judge's rubric recognises the sin-vara state.
-    expect(SENAL_AUSENTE.startsWith('(sin señal declarada')).toBe(true)
+    expect(SIGNAL_ABSENT.startsWith('(sin señal declarada')).toBe(true)
   })
 
-  it("the opening the slice judge's rubric cites is a real prefix of SENAL_AUSENTE", () => {
+  it("the opening the slice judge's rubric cites is a real prefix of SIGNAL_ABSENT", () => {
     // Low finding of the Slice 10 judge: the cross-check was one-directional —
     // the test above watches the constant, but the agent's CITATION («it opens
     // with `(sin señal declarada`») was not tied to it, so editing that
     // sentence in agents/ct-slice-judge.md would break the sin-vara
     // recognition without any test noticing it. It is read from the real file,
     // like every agent↔constant tie of step-contracts.test.js.
-    const agente = readFileSync(
+    const agentText = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), '..', 'agents', 'ct-slice-judge.md'), 'utf8')
-    const cita = /opens with\s+`([^`]+)`/.exec(agente)
-    expect(cita).not.toBeNull()
-    expect(SENAL_AUSENTE.startsWith(cita[1])).toBe(true)
+    const citation = /opens with\s+`([^`]+)`/.exec(agentText)
+    expect(citation).not.toBeNull()
+    expect(SIGNAL_ABSENT.startsWith(citation[1])).toBe(true)
   })
 
   it('the reasoned exemption travels to SLICE.md as it stands (N/A — reason)', () => {
@@ -394,7 +394,7 @@ describe('the signal in the dispatch (Slice 10)', () => {
 // two. (The REPO's one already arrived: the skill orders you to start from
 // `.agent/conventions.md`.)
 describe('the first act names the yardstick of ct', () => {
-  const OPTS_CON_VARA = {
+  const OPTS_WITH_YARDSTICK = {
     repo: 'o/r',
     dispatchCheckPath: '/x/dispatch-check.mjs',
     ctStepPath: '/x/ct-step.mjs',
@@ -402,7 +402,7 @@ describe('the first act names the yardstick of ct', () => {
   }
 
   it('it names it by its absolute path, so that whoever plans can open whichever document they need', () => {
-    const k = renderKickoff(SLICE, OPTS_CON_VARA)
+    const k = renderKickoff(SLICE, OPTS_WITH_YARDSTICK)
     expect(k).toContain('/plugin/conventions')
   })
 
@@ -411,7 +411,7 @@ describe('the first act names the yardstick of ct', () => {
   // the REPO's yardstick in the `Rules to obey:` of §3. ct's one is carried to
   // every task by the program, without the plan being able to take it away.
   it('it does not order the whole yardstick to be read, but it names the two the plan cannot not have opened', () => {
-    const k = renderKickoff(SLICE, OPTS_CON_VARA)
+    const k = renderKickoff(SLICE, OPTS_WITH_YARDSTICK)
     expect(k).not.toMatch(/LEE la vara de ct/)
     expect(k).not.toMatch(/No hace falta que abras/)
     expect(k).toContain('simplicity.md')
@@ -423,7 +423,7 @@ describe('the first act names the yardstick of ct', () => {
     // after the plan has already been written is no use at all, so a laxer
     // anchor would let through exactly the regression this test exists to
     // catch.
-    const k = renderKickoff(SLICE, OPTS_CON_VARA)
+    const k = renderKickoff(SLICE, OPTS_WITH_YARDSTICK)
     expect(k.indexOf('/plugin/conventions')).toBeGreaterThan(-1)
     expect(k.indexOf('/plugin/conventions')).toBeLessThan(k.indexOf('Primer acto'))
   })
@@ -435,7 +435,7 @@ describe('the first act names the yardstick of ct', () => {
   // applies). Whoever stated it here no longer states it, and the test that
   // checks that is `precedence-one-single-source.test.js`.
   it('it cites the header where the rule lives, and does not state it again', () => {
-    const k = renderKickoff(SLICE, OPTS_CON_VARA)
+    const k = renderKickoff(SLICE, OPTS_WITH_YARDSTICK)
     expect(k).toMatch(/CABECERA/)
     expect(k).not.toMatch(/regla a regla/i)
     expect(k).not.toMatch(/no por tema/i)
@@ -447,7 +447,7 @@ describe('the first act names the yardstick of ct', () => {
   // El kickoff ya no puede decirle al planificador que reparta el trabajo
   // entre los dos marcadores para decidir a qué lado de esa regla cae cada cosa.
   it('no reparte la arquitectura entre las dos marcas: architecture.md alcanza a toda tarea', () => {
-    const k = renderKickoff(SLICE, OPTS_CON_VARA)
+    const k = renderKickoff(SLICE, OPTS_WITH_YARDSTICK)
     expect(k).not.toContain('MÓDULOS NUEVOS')
     expect(k).not.toMatch(/reparti[a-zé]* .*entre .*\(create\).* y .*\(modify\)/i)
   })

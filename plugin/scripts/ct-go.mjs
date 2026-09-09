@@ -33,8 +33,8 @@ import { writeGoCommitment } from './go-registry.js'
 import { emitGoNonce } from './go-channel.js'
 import { parseStrictInt } from './argnum.js'
 
-const arg = (nombre) => {
-  const i = process.argv.indexOf(nombre)
+const arg = (name) => {
+  const i = process.argv.indexOf(name)
   return i === -1 ? null : process.argv[i + 1] ?? null
 }
 
@@ -49,9 +49,9 @@ if (!issueRaw || issue == null || issue <= 0 || !repo || !/^[^/\s]+\/[^/\s]+$/.t
 
 const nonce = newGoNonce(randomBytes(4))
 const commitment = goCommitment(nonce)
-let ruta
+let path
 try {
-  ruta = writeGoCommitment({
+  path = writeGoCommitment({
     repo, issue, commitment,
     configDir: process.env.CLAUDE_CONFIG_DIR || null,
     home: homedir(),
@@ -61,6 +61,6 @@ try {
   process.exit(1)
 }
 
-console.log(`go de ${repo}#${issue} reemitido — el anterior (si había) ya no vale. Registro: ${ruta}`)
+console.log(`go de ${repo}#${issue} reemitido — el anterior (si había) ya no vale. Registro: ${path}`)
 emitGoNonce(issue, nonce)
 console.log(`  OJO: el vigilante que lanzó /ct-next (si sigue vivo) está buscando el go ANTERIOR, así que tras contestar tendrás que empujar la sesión a mano.`)

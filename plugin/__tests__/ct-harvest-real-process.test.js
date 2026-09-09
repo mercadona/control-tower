@@ -42,17 +42,17 @@ const DIR_JSON = JSON.stringify([
   { name: 'issue-99.jsonl', type: 'file' },
 ])
 
-const veredicto = (m) => JSON.stringify({ step: 'judge', ...m }) + '\n'
-const intentoImplement = (m) => JSON.stringify({ step: 'implement', ...m }) + '\n'
+const verdict = (m) => JSON.stringify({ step: 'judge', ...m }) + '\n'
+const implementAttempt = (m) => JSON.stringify({ step: 'implement', ...m }) + '\n'
 
-function bancada() {
+function bench() {
   const dir = mkdtempSync(join(tmpdir(), 'ct-hv-'))
   return { dir, counter: join(dir, 'gh-count'), argvLog: join(dir, 'gh-argv') }
 }
-const limpiar = (b) => rmSync(b.dir, { recursive: true, force: true })
-const argvDe = (b) => (existsSync(b.argvLog) ? readFileSync(b.argvLog, 'utf8') : '')
+const cleanup = (b) => rmSync(b.dir, { recursive: true, force: true })
+const argvOf = (b) => (existsSync(b.argvLog) ? readFileSync(b.argvLog, 'utf8') : '')
 
-const correr = (b, env = {}, args = ['--repo', 'o/r', '--milestone', 'E']) => spawnSync('node', [script, ...args], {
+const run = (b, env = {}, args = ['--repo', 'o/r', '--milestone', 'E']) => spawnSync('node', [script, ...args], {
   encoding: 'utf8',
   env: fakeEnv({
     FAKE_GH_COUNTER_FILE: b.counter,
@@ -65,15 +65,15 @@ const correr = (b, env = {}, args = ['--repo', 'o/r', '--milestone', 'E']) => sp
 
 describe('/ct-harvest — the judge telemetry, per slice', () => {
   it('the block comes out with each slice sin-vara and findings per rule, and exit 0', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 1, findings_by_rule: { patrones: 1 } })
-        + veredicto({ ruling: 'FAIL', rubric_sin_vara: 1, findings_by_rule: { patrones: 1, alcance: 1 } }),
+      'issue-12.jsonl': verdict({ ruling: 'PASS', rubric_sin_vara: 1, findings_by_rule: { patrones: 1 } })
+        + verdict({ ruling: 'FAIL', rubric_sin_vara: 1, findings_by_rule: { patrones: 1, alcance: 1 } }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 2 \(1 veto\) \| 2 \| patrones 2 · alcance 1 \|/)
-    limpiar(b)
+    cleanup(b)
   })
 
   // THE SEVERITY, in a single cell and in the order in which it is read: a high
@@ -81,49 +81,49 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
   // buys a round trip to the implementer, a low is only noted down. Three
   // `alcance` findings without this are indistinguishable from three vetoes.
   it('the three severities come out added up in a single cell, in the alta/media/baja order', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': veredicto({ ruling: 'FAIL', rubric_sin_vara: 0, findings_by_rule: { patrones: 2 }, findings_high: 1, findings_medium: 0, findings_low: 1 })
-        + veredicto({ ruling: 'PASS', rubric_sin_vara: 0, findings_by_rule: { alcance: 1 }, findings_high: 0, findings_medium: 1, findings_low: 0 }),
+      'issue-12.jsonl': verdict({ ruling: 'FAIL', rubric_sin_vara: 0, findings_by_rule: { patrones: 2 }, findings_high: 1, findings_medium: 0, findings_low: 1 })
+        + verdict({ ruling: 'PASS', rubric_sin_vara: 0, findings_by_rule: { alcance: 1 }, findings_high: 0, findings_medium: 1, findings_low: 0 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 2 \(1 veto\) \| 0 \| patrones 2 · alcance 1 \| 1\/1\/1 \|/)
-    limpiar(b)
+    cleanup(b)
   })
 
   it('a slice whose telemetry is all older than the severities prints «—», never 0/0/0', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0, findings_by_rule: {} }),
+      'issue-12.jsonl': verdict({ ruling: 'PASS', rubric_sin_vara: 0, findings_by_rule: {} }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(ninguno\) \| — \|/)
     expect(res.stdout).toMatch(/`—` en `alta\/media\/baja`: ningún veredicto de ese slice traía las severidades/)
-    limpiar(b)
+    cleanup(b)
   })
 
   it('a slice the judge measured clean prints three real zeros and notes no veto at all', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0, findings_by_rule: {}, findings_high: 0, findings_medium: 0, findings_low: 0 }),
+      'issue-12.jsonl': verdict({ ruling: 'PASS', rubric_sin_vara: 0, findings_by_rule: {}, findings_high: 0, findings_medium: 0, findings_low: 0 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(ninguno\) \| 0\/0\/0 \|/)
-    limpiar(b)
+    cleanup(b)
   })
 
   it('the vetoes and the rows with no column fit in the same verdicts cell, separated by a comma', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': veredicto({ ruling: 'FAIL' }) + veredicto({ ruling: 'FAIL', rubric_sin_vara: 1 }),
+      'issue-12.jsonl': verdict({ ruling: 'FAIL' }) + verdict({ ruling: 'FAIL', rubric_sin_vara: 1 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 2 \(2 vetos, 1 sin columna\) \|/)
-    limpiar(b)
+    cleanup(b)
   })
 
   // MEASURE 1: whether the ct yardstick was used and whether it caught
@@ -131,230 +131,230 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
   // which only looked at findings of the `patrones` item and for that reason did
   // not see the ones the judge files under another item.
   it('vara ct prints both halves added up over all the verdicts of the slice', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': veredicto({ ruling: 'FAIL', rubric_sin_vara: 0, findings_by_rule: { patrones: 2 }, rubric_vara_ct_docs: 5, findings_vara_ct: 1 })
-        + veredicto({ ruling: 'FAIL', rubric_sin_vara: 0, findings_by_rule: { patrones: 1 }, rubric_vara_ct_docs: 4, findings_vara_ct: 1 }),
+      'issue-12.jsonl': verdict({ ruling: 'FAIL', rubric_sin_vara: 0, findings_by_rule: { patrones: 2 }, rubric_vara_ct_docs: 5, findings_vara_ct: 1 })
+        + verdict({ ruling: 'FAIL', rubric_sin_vara: 0, findings_by_rule: { patrones: 1 }, rubric_vara_ct_docs: 4, findings_vara_ct: 1 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 2 \(2 vetos\) \| 0 \| patrones 3 \| — \| 9 docs · 2 hallazgos \|/)
-    limpiar(b)
+    cleanup(b)
   })
 
   it('a slice whose telemetry is all older than these columns prints «—» in vara ct, never 0', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': veredicto({ ruling: 'FAIL', rubric_sin_vara: 0, findings_by_rule: { patrones: 2 } }),
+      'issue-12.jsonl': verdict({ ruling: 'FAIL', rubric_sin_vara: 0, findings_by_rule: { patrones: 2 } }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \(1 veto\) \| 0 \| patrones 2 \| — \| — \|/)
     expect(res.stdout).toMatch(/`—` en `vara ct`: ningún veredicto de ese slice traía las columnas/)
-    limpiar(b)
+    cleanup(b)
   })
 
   it('half a measure does not print half a cell: with one column alone it comes out «—», because the gap would be read as a zero', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': veredicto({ ruling: 'FAIL', rubric_sin_vara: 0, findings_by_rule: { patrones: 2 }, rubric_vara_ct_docs: 5 }),
+      'issue-12.jsonl': verdict({ ruling: 'FAIL', rubric_sin_vara: 0, findings_by_rule: { patrones: 2 }, rubric_vara_ct_docs: 5 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \(1 veto\) \| 0 \| patrones 2 \| — \| — \|/)
-    limpiar(b)
+    cleanup(b)
   })
 
   // MEASURE 2: whether the yardstick reached the brief of the `implement` step,
   // and how much it weighed. Added up over ALL the `implement` attempts the
   // slice left written — the same per-issue file the judge's telemetry reads.
   it('brief adds up the ct yardstick documents and the weight of every implement attempt of the slice', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
       'issue-12.jsonl':
-        intentoImplement({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 500 })
-        + intentoImplement({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 520 })
-        + veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
+        implementAttempt({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 500 })
+        + implementAttempt({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 520 })
+        + verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(ninguno\) \| — \| — \| 8 docs · 1020B \|/)
-    limpiar(b)
+    cleanup(b)
   })
 
   it('a slice with no implement attempt at all in its telemetry says «—» in brief, never 0', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
+      'issue-12.jsonl': verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(ninguno\) \| — \| — \| — \|/)
-    limpiar(b)
+    cleanup(b)
   })
 
   it('a slice whose implement attempts are all older than the measure says «—» in brief, never 0, and says so out loud', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
       // Old schema: an `implement` row with no brief_vara_ct_docs/brief_bytes.
-      'issue-12.jsonl': intentoImplement({ outcome: 'done' }) + veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
+      'issue-12.jsonl': implementAttempt({ outcome: 'done' }) + verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(ninguno\) \| — \| — \| — \|/)
     expect(res.stdout).toMatch(/`—` en `brief`: ningún intento de `implement` de ese slice traía `brief_vara_ct_docs`\/`brief_bytes`/)
-    limpiar(b)
+    cleanup(b)
   })
 
   it('an implement attempt whose brief was not read (null) does not count as zero: it is noted as "sin columna"', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
       'issue-12.jsonl':
-        intentoImplement({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 500 })
-        + intentoImplement({ outcome: 'discarded', brief_vara_ct_docs: null, brief_bytes: null })
-        + veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
+        implementAttempt({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 500 })
+        + implementAttempt({ outcome: 'discarded', brief_vara_ct_docs: null, brief_bytes: null })
+        + verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/4 docs · 500B \(1 sin columna\) \|/)
-    limpiar(b)
+    cleanup(b)
   })
 
   // MEASURE 3 (#92): how much fixed material each dispatched role read. Added
   // up over the four steps that call a subagent, not only over `implement`.
   it('bytes por papel adds up the agent, the skills and the package of every dispatched role of the slice', () => {
-    const b = bancada()
+    const b = bench()
     const bytes = { agent_bytes: 5000, skill_bytes: 18000, package_bytes: 1000 }
     const filesJson = JSON.stringify({
       'issue-12.jsonl':
-        intentoImplement({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 1000, ...bytes })
-        + veredicto({ ruling: 'PASS', rubric_sin_vara: 0, ...bytes }),
+        implementAttempt({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 1000, ...bytes })
+        + verdict({ ruling: 'PASS', rubric_sin_vara: 0, ...bytes }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| agente 10000B · skills 36000B · paquete 2000B \|/)
-    limpiar(b)
+    cleanup(b)
   })
 
   it('a slice whose roles are all older than the measure says «—» in bytes por papel, never 0, and says so out loud', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': intentoImplement({ outcome: 'done' }) + veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
+      'issue-12.jsonl': implementAttempt({ outcome: 'done' }) + verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/`—` en `bytes por papel`: ningún papel despachado de ese slice traía `agent_bytes`\/`skill_bytes`\/`package_bytes`/)
-    limpiar(b)
+    cleanup(b)
   })
 
   it('a slice with no telemetry file says «(sin telemetría)» and never a zero', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
+      'issue-12.jsonl': verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #13 \| Slice 2 \| — \| — \| \(sin telemetría\) \|/)
     expect(res.stdout).toMatch(/Nadie midió — no es un cero/)
-    limpiar(b)
+    cleanup(b)
   })
 
   it('a slice whose telemetry is all older than the column prints «—» in sin-vara, never 0, and shows how many verdicts have no column', () => {
-    const b = bancada()
+    const b = bench()
     // A single verdict row WITHOUT `rubric_sin_vara`: the schema older than the
     // column (the 15 rows of PR #11 of jjponz/rust-monitoring are of this kind).
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': veredicto({ ruling: 'PASS' }),
+      'issue-12.jsonl': verdict({ ruling: 'PASS' }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\(1 sin columna\)/)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \(1 sin columna\) \| — \|/)
     expect(res.stdout).toMatch(/telemetría anterior a `rubric_sin_vara`/)
-    limpiar(b)
+    cleanup(b)
   })
 
   it('a telemetry listing that fails does not drop the exit to 1, and the report prints not a single number', () => {
-    const b = bancada()
+    const b = bench()
     // Without FAKE_GH_METRICS_DIR_JSON: the stub makes the directory listing
     // fail (a simulated 404), which is real life for every epic older than
     // 1422c67.
-    const res = correr(b, {})
+    const res = run(b, {})
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/no se pudo listar/)
     expect(res.stdout).not.toMatch(/\| Veredictos \|/)
-    limpiar(b)
+    cleanup(b)
   })
 
   it('a file the listing did name and could not be read is an INCOMPLETE harvest: reason and exit 1', () => {
-    const b = bancada()
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILE_FAIL: 'issue-12' })
+    const b = bench()
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILE_FAIL: 'issue-12' })
     expect(res.status).toBe(1)
     expect(res.stderr).toMatch(/telemetr/i)
     expect(res.stderr).toMatch(/#12/)
-    limpiar(b)
+    cleanup(b)
   })
 
   it('the unreadable lines are said out loud and do not change the exit', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': '{no json\n' + veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
+      'issue-12.jsonl': '{no json\n' + verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/l.nea\(s\) ilegibles/)
-    limpiar(b)
+    cleanup(b)
   })
 
   it('the telemetry files of other epics do not show up', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
+      'issue-12.jsonl': verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
     expect(res.stdout).not.toMatch(/#99/)
-    expect(argvDe(b)).not.toMatch(/issue-99/)
-    limpiar(b)
+    expect(argvOf(b)).not.toMatch(/issue-99/)
+    cleanup(b)
   })
 
   it('--json carries the telemetry inside each row, with the status explicit', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
+      'issue-12.jsonl': verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson }, ['--repo', 'o/r', '--milestone', 'E', '--json'])
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson }, ['--repo', 'o/r', '--milestone', 'E', '--json'])
     expect(res.status).toBe(0)
-    const salida = JSON.parse(res.stdout)
-    expect(salida.filas[0].telemetry.status).toBe('ok')
-    expect(salida.filas[1].telemetry.status).toBe('sin-fichero')
-    expect(salida.telemetry.dir).toBe('docs/superpowers/metrics')
-    limpiar(b)
+    const output = JSON.parse(res.stdout)
+    expect(output.filas[0].telemetry.status).toBe('ok')
+    expect(output.filas[1].telemetry.status).toBe('sin-fichero')
+    expect(output.telemetry.dir).toBe('docs/superpowers/metrics')
+    cleanup(b)
   })
 
   it('reads exactly where ct-step writes', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
+      'issue-12.jsonl': verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    expect(argvDe(b)).toMatch(/api repos\/o\/r\/contents\/docs\/superpowers\/metrics\/issue-12\.jsonl/)
-    limpiar(b)
+    expect(argvOf(b)).toMatch(/api repos\/o\/r\/contents\/docs\/superpowers\/metrics\/issue-12\.jsonl/)
+    cleanup(b)
   })
 
   it('the harvest still mutates nothing: not one write call', () => {
-    const b = bancada()
+    const b = bench()
     const filesJson = JSON.stringify({
-      'issue-12.jsonl': veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
+      'issue-12.jsonl': verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
     })
-    const res = correr(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
     expect(res.status).toBe(0)
-    const lineas = argvDe(b).split('\n').filter(Boolean)
-    expect(lineas.length).toBeGreaterThan(0)
-    for (const linea of lineas) {
-      expect(linea).not.toMatch(/issue edit|issue create|label create|--method (POST|PATCH|PUT|DELETE)|-X (POST|PATCH|PUT|DELETE)/)
+    const lines = argvOf(b).split('\n').filter(Boolean)
+    expect(lines.length).toBeGreaterThan(0)
+    for (const line of lines) {
+      expect(line).not.toMatch(/issue edit|issue create|label create|--method (POST|PATCH|PUT|DELETE)|-X (POST|PATCH|PUT|DELETE)/)
     }
-    limpiar(b)
+    cleanup(b)
   })
 })

@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url'
 import { VERDICT_RULES, SLICE_VERDICT_RULES } from '../../scripts/step-contracts.js'
 // Slice 10: renderState seeds the SLICE.md of the signal tests through the same
 // path as buildStateSeed (it folds and quotes long values — the reason ct-step
-// reads `senal:` with parseStateSafe and not with a regex), and SENAL_AUSENTE
+// reads `senal:` with parseStateSafe and not with a regex), and SIGNAL_ABSENT
 // is the single constant the slice judge's package declares absence with.
 import { renderState } from '../../scripts/state.js'
 
@@ -199,7 +199,7 @@ export function makeHelpers(ref) {
   // header into the `review_token` field of its verdict. The fixture does
   // exactly that, and that is why it SEALS AFTER `next`: when
   // `writeVerdict(...)` writes the file, the package does not exist yet
-  // (`escribirPaquete` only runs in `next`). A file that is not JSON
+  // (`writeReviewPackage` only runs in `next`). A file that is not JSON
   // (`writeRaw`) is left untouched — that is the retry for unreadable JSON,
   // which has to go on being discarded for THAT reason and not for the token.
   const packageToken = (path) => {
@@ -216,7 +216,7 @@ export function makeHelpers(ref) {
   }
 
   // Slice 3 — `next` is the ONLY verb that writes the package the judge judges
-  // (`escribirPaquete` / `escribirPaqueteDeSlice` in ct-step.mjs), and from this
+  // (`writeReviewPackage` / `writeSliceReviewPackage` in ct-step.mjs), and from this
   // slice on a `verdict` with no package on disk is DISCARDED. A real run always
   // goes through `next` before dispatching to the judge — the kickoff orders it:
   // "come back to next after every step" — so these tests do too: asking for the

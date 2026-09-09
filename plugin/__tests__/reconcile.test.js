@@ -243,7 +243,7 @@ describe('diffIssue — it compares title, milestone, link-to-the-spec (anchor),
     expect(d.descripcionDiffers).toBe(true)
   })
   it('Descripción absent from the issue when the spec DOES ask for it → it diverges', () => {
-    const withoutDescripcion = existingWith({
+    const withoutDescription = existingWith({
       body: [
         SPEC_LINK, '',
         '## Acceptance criteria (EARS, 1:1 con tests)', '- AC-2.1', '',
@@ -252,18 +252,18 @@ describe('diffIssue — it compares title, milestone, link-to-the-spec (anchor),
         '<!-- ct-order:2 -->',
       ].join('\n'),
     })
-    const d = diffIssue(withoutDescripcion, WANTED_ISSUE, 'Epic', ALL_PREFIXES)
+    const d = diffIssue(withoutDescription, WANTED_ISSUE, 'Epic', ALL_PREFIXES)
     expect(d.descripcionDiffers).toBe(true)
   })
   it('with no Descripción on either side → it does not diverge (real silence)', () => {
-    const noDescripcionBody = [
+    const noDescriptionBody = [
       SPEC_LINK, '',
       '## Acceptance criteria (EARS, 1:1 con tests)', '- AC-2.1', '',
       '## Dependencias', '- merge-after #1', '',
       '## Out of scope / Protected', '- 🚫 schema §6', '',
       '<!-- ct-order:2 -->',
     ].join('\n')
-    const d = diffIssue(existingWith({ body: noDescripcionBody }), { ...WANTED_ISSUE, descripcion: null }, 'Epic', ALL_PREFIXES)
+    const d = diffIssue(existingWith({ body: noDescriptionBody }), { ...WANTED_ISSUE, descripcion: null }, 'Epic', ALL_PREFIXES)
     expect(d.descripcionDiffers).toBe(false)
   })
   it('divergent Protegido → protectedDiffers true', () => {
@@ -568,8 +568,8 @@ describe('reconcileGaps / hasReconcileGap — real divergence that --reconcile c
   })
   it('with no duplicateMachineSections (or the field absent) → gap.duplicates = false', () => {
     expect(reconcileGaps(DIFF_CLEAN, { body: null, unresolvedAc: false, unresolvedDeps: false }).duplicates).toBe(false)
-    const diffSinCampo = { ac: { missing: [], extra: [] }, deps: { missing: [], extra: [] } }
-    expect(reconcileGaps(diffSinCampo, { body: null, unresolvedAc: false, unresolvedDeps: false }).duplicates).toBe(false)
+    const diffWithoutField = { ac: { missing: [], extra: [] }, deps: { missing: [], extra: [] } }
+    expect(reconcileGaps(diffWithoutField, { body: null, unresolvedAc: false, unresolvedDeps: false }).duplicates).toBe(false)
   })
 })
 
@@ -615,10 +615,10 @@ describe('buildReconcileBody — a surgical splice of link-to-the-spec/AC/Depend
   // independent domains and one of them giving up does not block the other.
   // With the inherited section present things change, and that case has its
   // own test right below — see there for why.
-  const SIN_HEREDADA = GENERATED.replace(/## Contexto heredado\n.*\n\n/, '')
+  const WITHOUT_INHERITED = GENERATED.replace(/## Contexto heredado\n.*\n\n/, '')
 
   it('the "## Acceptance criteria" heading renamed/absent → unresolvedAc: true, NO position is invented, and the rest of the deps section CAN still be applied', () => {
-    const renamed = SIN_HEREDADA.replace('## Acceptance criteria (EARS, 1:1 con tests)', '## Criterios')
+    const renamed = WITHOUT_INHERITED.replace('## Acceptance criteria (EARS, 1:1 con tests)', '## Criterios')
     expect(renamed).not.toContain('## Contexto heredado') // the premise of the case, explicit
     const r = buildReconcileBody(renamed, { ...WANTED_BASE, ac: ['AC-2.1', 'AC-2.2'], deps: [1, 3] })
     expect(r.unresolvedAc).toBe(true)
@@ -731,18 +731,18 @@ describe('buildReconcileBody — a surgical splice of link-to-the-spec/AC/Depend
   // from the repository, not from argv), so a difference can now only mean a
   // real change (another section, another file, or the broken relative link
   // from before F10).
-  const OTRA_SECCION = '> Slice `#2` del epic. Spec: [spec.md § 10. Riesgos](https://github.com/o/r/blob/main/spec.md#10-riesgos)'
+  const OTHER_SECTION = '> Slice `#2` del epic. Spec: [spec.md § 10. Riesgos](https://github.com/o/r/blob/main/spec.md#10-riesgos)'
   it('a link to the spec with another section → the line is replaced, everything else preserved', () => {
-    const { body: newBody } = buildReconcileBody(GENERATED, { ...WANTED_BASE, specLink: OTRA_SECCION })
-    expect(extractSpecLink(newBody)).toBe(OTRA_SECCION)
+    const { body: newBody } = buildReconcileBody(GENERATED, { ...WANTED_BASE, specLink: OTHER_SECTION })
+    expect(extractSpecLink(newBody)).toBe(OTHER_SECTION)
     expect(extractAc(newBody)).toEqual(['AC-2.1'])
     expect(extractDeps(newBody)).toEqual([1])
     expect(newBody).toContain('<!-- ct-order:2 -->')
   })
-  const OTRO_FICHERO = '> Slice `#2` del epic. Spec: [docs/viejo.md § 9. Slices](https://github.com/o/r/blob/main/docs/viejo.md#9-slices)'
+  const OTHER_FILE = '> Slice `#2` del epic. Spec: [docs/viejo.md § 9. Slices](https://github.com/o/r/blob/main/docs/viejo.md#9-slices)'
   it('a link to the spec at another file (the same section) → it is ALSO replaced — before F10 this was never touched', () => {
-    const { body: newBody } = buildReconcileBody(GENERATED, { ...WANTED_BASE, specLink: OTRO_FICHERO })
-    expect(extractSpecLink(newBody)).toBe(OTRO_FICHERO)
+    const { body: newBody } = buildReconcileBody(GENERATED, { ...WANTED_BASE, specLink: OTHER_FILE })
+    expect(extractSpecLink(newBody)).toBe(OTHER_FILE)
   })
   it('an identical link to the spec → it is NOT rewritten: body unchanged as far as that field goes', () => {
     const r = buildReconcileBody(GENERATED, WANTED_BASE)
@@ -844,15 +844,15 @@ describe('buildReconcileBody — a surgical splice of link-to-the-spec/AC/Depend
 describe('buildReconcileBody — the "## E2E" section', () => {
   const SLICE = { n: 2, name: 'refresh', type: 'backend', entrega: 'flujo de refresco', deps: [1], ac: ['AC-2.1'], protected: 'schema §6' }
   const SPEC_OPTS = { path: 'spec.md', heading: '9. Slices', url: 'https://github.com/o/r/blob/main/spec.md#9-slices', reason: null }
-  const SIN_E2E = buildIssueBody(SLICE, SPEC_OPTS)
-  const CON_E2E = buildIssueBody({ ...SLICE, e2e: 'curl -i :9115/metrics responde 200' }, SPEC_OPTS)
+  const WITHOUT_E2E = buildIssueBody(SLICE, SPEC_OPTS)
+  const WITH_E2E = buildIssueBody({ ...SLICE, e2e: 'curl -i :9115/metrics responde 200' }, SPEC_OPTS)
   const WANTED_BASE = { deps: [1], ac: ['AC-2.1'], specLink: '> Slice `#2` del epic. Spec: [spec.md § 9. Slices](https://github.com/o/r/blob/main/spec.md#9-slices)' }
-  const RECORRIDO = '- curl -i :9115/metrics responde 200'
+  const JOURNEY = '- curl -i :9115/metrics responde 200'
 
   it('the issue does not have the section and the spec now asks for runs → it is inserted whole, right before "## Out of scope / Protected"', () => {
-    const { body, unresolvedE2e } = buildReconcileBody(SIN_E2E, { ...WANTED_BASE, e2eContent: RECORRIDO })
+    const { body, unresolvedE2e } = buildReconcileBody(WITHOUT_E2E, { ...WANTED_BASE, e2eContent: JOURNEY })
     expect(unresolvedE2e).toBeNull()
-    expect(extractSectionContent(body, '## E2E')).toBe(RECORRIDO)
+    expect(extractSectionContent(body, '## E2E')).toBe(JOURNEY)
     expect(body.indexOf('## E2E')).toBeLessThan(body.indexOf('## Out of scope / Protected'))
     expect(body.indexOf('## Gates')).toBeLessThan(body.indexOf('## E2E'))
     // Nothing else has been touched: the dispatcher's marker is still there
@@ -862,15 +862,15 @@ describe('buildReconcileBody — the "## E2E" section', () => {
   })
 
   it('the issue has something else in the section → ONLY its content is replaced', () => {
-    const editado = CON_E2E.replace(RECORRIDO, '- un recorrido que alguien escribió a mano')
-    const { body } = buildReconcileBody(editado, { ...WANTED_BASE, e2eContent: RECORRIDO })
-    expect(extractSectionContent(body, '## E2E')).toBe(RECORRIDO)
+    const edited = WITH_E2E.replace(JOURNEY, '- un recorrido que alguien escribió a mano')
+    const { body } = buildReconcileBody(edited, { ...WANTED_BASE, e2eContent: JOURNEY })
+    expect(extractSectionContent(body, '## E2E')).toBe(JOURNEY)
     expect(body).not.toContain('un recorrido que alguien escribió a mano')
     expect(body).toContain('<!-- ct-order:2 -->')
   })
 
   it('the spec no longer declares runs (the cell turned to "no") → the section is withdrawn WHOLE', () => {
-    const { body } = buildReconcileBody(CON_E2E, WANTED_BASE) // with no e2eContent
+    const { body } = buildReconcileBody(WITH_E2E, WANTED_BASE) // with no e2eContent
     expect(body).not.toContain('## E2E')
     expect(body).toContain('## Out of scope / Protected')
     expect(body).toContain('<!-- ct-order:2 -->')
@@ -878,19 +878,19 @@ describe('buildReconcileBody — the "## E2E" section', () => {
   })
 
   it('both sides in agreement (neither the issue nor the spec carries runs) → body: null', () => {
-    expect(buildReconcileBody(SIN_E2E, WANTED_BASE).body).toBeNull()
+    expect(buildReconcileBody(WITHOUT_E2E, WANTED_BASE).body).toBeNull()
   })
 
   it('it has to be inserted but the "## Out of scope / Protected" anchor is not located → it gives up out loud, it does not invent a position', () => {
-    const sinAncla = SIN_E2E.replace('## Out of scope / Protected', '## Fuera de alcance (renombrada a mano)')
-    const { body, unresolvedE2e } = buildReconcileBody(sinAncla, { ...WANTED_BASE, e2eContent: RECORRIDO })
+    const withoutAnchor = WITHOUT_E2E.replace('## Out of scope / Protected', '## Fuera de alcance (renombrada a mano)')
+    const { body, unresolvedE2e } = buildReconcileBody(withoutAnchor, { ...WANTED_BASE, e2eContent: JOURNEY })
     expect(unresolvedE2e).toBe('sin-ancla')
     expect(body).toBeNull() // there was nothing else to apply, and this was not applied
   })
 
   it('the section appears twice → it is written in neither (one of them may be text pasted into "## Contexto heredado")', () => {
-    const duplicada = CON_E2E.replace('## Out of scope / Protected', '## E2E\n- copia pegada por error\n\n## Out of scope / Protected')
-    const { unresolvedE2e } = buildReconcileBody(duplicada, { ...WANTED_BASE, e2eContent: '- otro recorrido' })
+    const duplicated = WITH_E2E.replace('## Out of scope / Protected', '## E2E\n- copia pegada por error\n\n## Out of scope / Protected')
+    const { unresolvedE2e } = buildReconcileBody(duplicated, { ...WANTED_BASE, e2eContent: '- otro recorrido' })
     expect(unresolvedE2e).toBe('duplicada')
   })
 })
@@ -903,9 +903,9 @@ describe('buildReconcileBody — the "## E2E" section', () => {
 // `senalDiffers` enters neither hasDrift nor reconcileGaps, and
 // buildReconcileBody never writes or withdraws it.
 describe('the signal in the reconciliation (Slice 10)', () => {
-  const SENAL_SECTION = '## Señal de observabilidad'
-  const bodyConSenal = (texto) =>
-    existingWith({}).body.replace('## Dependencias', `${SENAL_SECTION}\n${texto}\n\n## Dependencias`)
+  const SIGNAL_SECTION = '## Señal de observabilidad'
+  const bodyWithSignal = (text) =>
+    existingWith({}).body.replace('## Dependencias', `${SIGNAL_SECTION}\n${text}\n\n## Dependencias`)
 
   it('senalDiffers: agreement when neither of the two sides has the section', () => {
     // WANTED_ISSUE carries no `senal` (→ null) and existingWith's body does
@@ -917,18 +917,18 @@ describe('the signal in the reconciliation (Slice 10)', () => {
 
   it('senalDiffers: one side with the section and the other without it differs; different text differs', () => {
     // Issue with the section, spec with no signal → it differs.
-    const conSeccion = existingWith({ body: bodyConSenal('métrica x') })
-    expect(diffIssue(conSeccion, WANTED_ISSUE, 'Epic', ALL_PREFIXES).senalDiffers).toBe(true)
+    const withSection = existingWith({ body: bodyWithSignal('métrica x') })
+    expect(diffIssue(withSection, WANTED_ISSUE, 'Epic', ALL_PREFIXES).senalDiffers).toBe(true)
     // Issue with no section, spec with a signal → it differs.
     expect(diffIssue(existingWith({}), { ...WANTED_ISSUE, senal: 'métrica x' }, 'Epic', ALL_PREFIXES).senalDiffers).toBe(true)
     // Both with text, different → it differs; equal (modulo trim) → agreement.
-    expect(diffIssue(conSeccion, { ...WANTED_ISSUE, senal: 'métrica y' }, 'Epic', ALL_PREFIXES).senalDiffers).toBe(true)
-    expect(diffIssue(conSeccion, { ...WANTED_ISSUE, senal: '  métrica x  ' }, 'Epic', ALL_PREFIXES).senalDiffers).toBe(false)
+    expect(diffIssue(withSection, { ...WANTED_ISSUE, senal: 'métrica y' }, 'Epic', ALL_PREFIXES).senalDiffers).toBe(true)
+    expect(diffIssue(withSection, { ...WANTED_ISSUE, senal: '  métrica x  ' }, 'Epic', ALL_PREFIXES).senalDiffers).toBe(false)
   })
 
   it('the signal divergence comes out as nota: and counts neither towards hasDrift nor towards reconcileGaps', () => {
     // The only divergence of the diff is the signal: everything else matches.
-    const d = diffIssue(existingWith({ body: bodyConSenal('métrica x') }), WANTED_ISSUE, 'Epic', ALL_PREFIXES)
+    const d = diffIssue(existingWith({ body: bodyWithSignal('métrica x') }), WANTED_ISSUE, 'Epic', ALL_PREFIXES)
     expect(d.senalDiffers).toBe(true)
     expect(hasDrift(d)).toBe(false)
     const lines = formatDrift(d)
@@ -953,15 +953,15 @@ describe('the signal in the reconciliation (Slice 10)', () => {
     // Case A: the body DOES have the section, the spec no longer declares a
     // signal, and there is a real AC divergence that forces a splice — the
     // section survives verbatim into the rewritten body.
-    const generado = buildIssueBody(SLICE_S, SPEC_OPTS)
-    const rA = buildReconcileBody(generado, { ...WANTED, ac: ['AC-2.1', 'AC-2.2'] })
+    const generated = buildIssueBody(SLICE_S, SPEC_OPTS)
+    const rA = buildReconcileBody(generated, { ...WANTED, ac: ['AC-2.1', 'AC-2.2'] })
     expect(rA.body).not.toBeNull()
-    expect(extractSectionContent(rA.body, SENAL_SECTION)).toBe('métrica `x` con label `y`')
+    expect(extractSectionContent(rA.body, SIGNAL_SECTION)).toBe('métrica `x` con label `y`')
     // Case B: the body does NOT have the section and the spec does declare a
     // signal — the AC splice does not insert it.
-    const sinSenal = buildIssueBody({ ...SLICE_S, senal: '' }, SPEC_OPTS)
-    const rB = buildReconcileBody(sinSenal, { ...WANTED, ac: ['AC-2.1', 'AC-2.2'], senal: 'métrica nueva' })
+    const withoutSignal = buildIssueBody({ ...SLICE_S, senal: '' }, SPEC_OPTS)
+    const rB = buildReconcileBody(withoutSignal, { ...WANTED, ac: ['AC-2.1', 'AC-2.2'], senal: 'métrica nueva' })
     expect(rB.body).not.toBeNull()
-    expect(rB.body).not.toContain(SENAL_SECTION)
+    expect(rB.body).not.toContain(SIGNAL_SECTION)
   })
 })

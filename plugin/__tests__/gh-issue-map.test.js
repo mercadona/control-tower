@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractAc, extractDeps, extractOrder, extractSpecLink, normalizeSpecLink, specTarget, locateSection, countHeadingLines, detectLineEnding, normalizeToLF, mapGhIssue, filterMergedIssues, buildOrderIndex, buildDispatchInput, AC_HEADING_FORMS, NO_MILESTONE_KEY, epicKeyOf, extractDepsInSection, extractStrayDeps, extractE2eRuns, extractSenal, SENAL_HEADING } from '../scripts/gh-issue-map.js'
+import { extractAc, extractDeps, extractOrder, extractSpecLink, normalizeSpecLink, specTarget, locateSection, countHeadingLines, detectLineEnding, normalizeToLF, mapGhIssue, filterMergedIssues, buildOrderIndex, buildDispatchInput, AC_HEADING_FORMS, NO_MILESTONE_KEY, epicKeyOf, extractDepsInSection, extractStrayDeps, extractE2eRuns, extractSignal, SIGNAL_HEADING } from '../scripts/gh-issue-map.js'
 import { selectNext } from '../scripts/dispatch.js'
 import { buildIssueBody } from '../scripts/groom.js'
 
@@ -553,13 +553,13 @@ describe('locateSection — anchored to column 0 and aware of code fences (revie
     const depsLoc = locateSection(body, '## Dependencias')
     expect(extractDeps(depsLoc.content)).toEqual([1]) // the REAL section, not the one inside the fence (#99)
 
-    const descripcionLoc = locateSection(body, '## Descripción')
+    const descriptionLoc = locateSection(body, '## Descripción')
     // The Descripción section must include the WHOLE fence (opening AND
     // closing) — if the closing "```" is lost, the rest of the body renders as
     // code.
-    expect(descripcionLoc.content).toContain('```\n## Dependencias\n- merge-after #99\n```')
-    expect(descripcionLoc.content).toContain('fin del ejemplo.')
-    expect(descripcionLoc.content).not.toContain('## Acceptance criteria') // it did not eat the next real heading
+    expect(descriptionLoc.content).toContain('```\n## Dependencias\n- merge-after #99\n```')
+    expect(descriptionLoc.content).toContain('fin del ejemplo.')
+    expect(descriptionLoc.content).not.toContain('## Acceptance criteria') // it did not eat the next real heading
   })
 })
 
@@ -597,10 +597,10 @@ describe('locateSection / stepFence — real CommonMark: it closes only with the
     ].join('\n')
     const depsLoc = locateSection(body, '## Dependencias')
     expect(extractDeps(depsLoc.content)).toEqual([1]) // the REAL section, not the nested example's (#99)
-    const descripcionLoc = locateSection(body, '## Descripción')
-    expect(descripcionLoc.content).toContain('````\n```\n## Dependencias\n- merge-after #99\n```\n````')
-    expect(descripcionLoc.content).toContain('fin del ejemplo real.')
-    expect(descripcionLoc.content).not.toContain('## Acceptance criteria')
+    const descriptionLoc = locateSection(body, '## Descripción')
+    expect(descriptionLoc.content).toContain('````\n```\n## Dependencias\n- merge-after #99\n```\n````')
+    expect(descriptionLoc.content).toContain('fin del ejemplo real.')
+    expect(descriptionLoc.content).not.toContain('## Acceptance criteria')
   })
 
   it('a delimiter of ANOTHER character ("~~~~" inside a fence opened with "```") does NOT close the fence', () => {
@@ -628,9 +628,9 @@ describe('locateSection / stepFence — real CommonMark: it closes only with the
     ].join('\n')
     const depsLoc = locateSection(body, '## Dependencias')
     expect(extractDeps(depsLoc.content)).toEqual([1])
-    const descripcionLoc = locateSection(body, '## Descripción')
-    expect(descripcionLoc.content).toContain('~~~~\n## Dependencias\n- merge-after #99\n~~~~')
-    expect(descripcionLoc.content).not.toContain('## Acceptance criteria')
+    const descriptionLoc = locateSection(body, '## Descripción')
+    expect(descriptionLoc.content).toContain('~~~~\n## Dependencias\n- merge-after #99\n~~~~')
+    expect(descriptionLoc.content).not.toContain('## Acceptance criteria')
   })
 
   it('a LONGER delimiter of the same character DOES close it (real CommonMark: length >= the opening)', () => {
@@ -646,8 +646,8 @@ describe('locateSection / stepFence — real CommonMark: it closes only with the
       '',
       '<!-- ct-order:1 -->',
     ].join('\n')
-    const descripcionLoc = locateSection(body, '## Descripción')
-    expect(descripcionLoc.content).toContain('esto ya está FUERA de la valla')
+    const descriptionLoc = locateSection(body, '## Descripción')
+    expect(descriptionLoc.content).toContain('esto ya está FUERA de la valla')
     // The AC heading is located as normal — it did not end up "inside" anything.
     const acLoc = locateSection(body, AC_HEADING_FORMS)
     expect(acLoc).not.toBeNull()
@@ -674,11 +674,11 @@ describe('locateSection / stepFence — real CommonMark: it closes only with the
       '',
       '<!-- ct-order:1 -->',
     ].join('\n')
-    const descripcionLoc = locateSection(body, '## Descripción')
+    const descriptionLoc = locateSection(body, '## Descripción')
     // The example's three delimiters (the opening, the inner "```js" that does
     // NOT close, and the real closing) survive intact inside the section.
-    expect(descripcionLoc.content).toContain('```\nejemplo mostrando cómo abrir un fence con lenguaje:\n```js\nesto sigue siendo CONTENIDO del ejemplo exterior, no un cierre real\n```')
-    expect(descripcionLoc.content).not.toContain('## Dependencias')
+    expect(descriptionLoc.content).toContain('```\nejemplo mostrando cómo abrir un fence con lenguaje:\n```js\nesto sigue siendo CONTENIDO del ejemplo exterior, no un cierre real\n```')
+    expect(descriptionLoc.content).not.toContain('## Dependencias')
     const depsLoc = locateSection(body, '## Dependencias')
     expect(extractDeps(depsLoc.content)).toEqual([1])
   })
@@ -805,10 +805,10 @@ describe('locateSection / stepLine — multiline HTML comments hide their interi
       '',
       '<!-- ct-order:1 -->',
     ].join('\n')
-    const descripcionLoc = locateSection(body, '## Descripción')
-    expect(descripcionLoc.content).toContain('<!--\n## Dependencias\n- merge-after #99\n-->')
-    expect(descripcionLoc.content).toContain('después del comentario, misma sección.')
-    expect(descripcionLoc.content).not.toContain('## Acceptance criteria') // it did not eat the next real heading
+    const descriptionLoc = locateSection(body, '## Descripción')
+    expect(descriptionLoc.content).toContain('<!--\n## Dependencias\n- merge-after #99\n-->')
+    expect(descriptionLoc.content).toContain('después del comentario, misma sección.')
+    expect(descriptionLoc.content).not.toContain('## Acceptance criteria') // it did not eat the next real heading
   })
 
   it('an UNCLOSED comment: everything that follows (real headings included) is hidden until EOF — just like an unclosed fence', () => {
@@ -884,8 +884,8 @@ describe('locateSection / stepLine — multiline HTML comments hide their interi
     const depsLoc = locateSection(body, '## Dependencias')
     expect(depsLoc).not.toBeNull()
     expect(extractDeps(depsLoc.content)).toEqual([1])
-    const descripcionLoc = locateSection(body, '## Descripción')
-    expect(descripcionLoc.content).toContain('fin del ejemplo — esto ya está fuera de la valla')
+    const descriptionLoc = locateSection(body, '## Descripción')
+    expect(descriptionLoc.content).toContain('fin del ejemplo — esto ya está fuera de la valla')
   })
 
   it('countHeadingLines also ignores a heading "commented out" inside a multiline comment — it does not count as a duplicate', () => {
@@ -923,9 +923,9 @@ describe('locateSection — any ATX heading (not just "## ") terminates a sectio
       '',
       '<!-- ct-order:1 -->',
     ].join('\n')
-    const descripcionLoc = locateSection(body, '## Descripción')
-    expect(descripcionLoc.content).not.toContain('NO tocar sin hablar con Ana')
-    expect(descripcionLoc.content).not.toContain('### Notas de implementación')
+    const descriptionLoc = locateSection(body, '## Descripción')
+    expect(descriptionLoc.content).not.toContain('NO tocar sin hablar con Ana')
+    expect(descriptionLoc.content).not.toContain('### Notas de implementación')
   })
 
   it('an H1 ("# Algo") also terminates the previous section', () => {
@@ -1010,8 +1010,8 @@ describe('normalizeSpecLink — it compares the whole line, normalising only the
     expect(normalizeSpecLink(`${LINK}  `)).toBe(normalizeSpecLink(LINK))
   })
   it('the SAME anchor in ANOTHER file is NO longer considered equal — the hole the anchor comparison left', () => {
-    const otroFichero = '> Slice `#2` del epic. Spec: [docs/viejo.md § 9. Slices](https://github.com/o/r/blob/main/docs/viejo.md#9-slices)'
-    expect(normalizeSpecLink(otroFichero)).not.toBe(normalizeSpecLink(LINK))
+    const anotherFile = '> Slice `#2` del epic. Spec: [docs/viejo.md § 9. Slices](https://github.com/o/r/blob/main/docs/viejo.md#9-slices)'
+    expect(normalizeSpecLink(anotherFile)).not.toBe(normalizeSpecLink(LINK))
   })
   it('the RELATIVE link from before F10 is not considered equal to today\u2019s absolute one', () => {
     expect(normalizeSpecLink('> Slice `#2` del epic. Spec: [docs/spec.md#9](docs/spec.md#9)')).not.toBe(normalizeSpecLink(LINK))
@@ -1457,18 +1457,18 @@ describe('mapGhIssue — an "area:"/"touches:" label with no value produces no c
 // by comparing the whole line, and it must go on doing so).
 describe('specTarget', () => {
   it('it returns what comes after "Spec: " in the link\u2019s current form', () => {
-    const linea = '> Slice `#2` del epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)'
-    expect(specTarget(linea)).toBe('[docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)')
+    const line = '> Slice `#2` del epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)'
+    expect(specTarget(line)).toBe('[docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)')
   })
   it('the form from BEFORE F6 (with no backticks) gives the SAME target — that is the reason for comparing the target and not the line', () => {
-    const destino = '[docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)'
-    expect(specTarget(`> Slice #2 del epic. Spec: ${destino}`)).toBe(destino)
-    expect(specTarget(`> Slice \`#2\` del epic. Spec: ${destino}`)).toBe(destino)
+    const target = '[docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)'
+    expect(specTarget(`> Slice #2 del epic. Spec: ${target}`)).toBe(target)
+    expect(specTarget(`> Slice \`#2\` del epic. Spec: ${target}`)).toBe(target)
   })
   it('the slice\u2019s ORDER is not part of the target: two different slices of the same spec match', () => {
-    const destino = '`docs/spec.md` § `9. Slices` — sin enlace: el fichero no está publicado'
-    expect(specTarget(`> Slice \`#1\` del epic. Spec: ${destino}`))
-      .toBe(specTarget(`> Slice \`#7\` del epic. Spec: ${destino}`))
+    const target = '`docs/spec.md` § `9. Slices` — sin enlace: el fichero no está publicado'
+    expect(specTarget(`> Slice \`#1\` del epic. Spec: ${target}`))
+      .toBe(specTarget(`> Slice \`#7\` del epic. Spec: ${target}`))
   })
   it('different specs give different targets', () => {
     const a = specTarget('> Slice `#1` del epic. Spec: [docs/a.md](https://github.com/o/r/blob/main/docs/a.md)')
@@ -1487,27 +1487,27 @@ describe('specTarget', () => {
   })
 })
 
-// Slice 10 — extractSenal: the body's "## Señal de observabilidad" section,
+// Slice 10 — extractSignal: the body's "## Señal de observabilidad" section,
 // section-scoped with extractSectionContent and first occurrence wins — the same
 // stance as extractAc. It is the first link of the end-to-end program channel
 // (issue → SLICE.md → the slice judge's package): no agent decides to copy the
 // signal at any point.
-describe('extractSenal — the body\u2019s signal (Slice 10)', () => {
+describe('extractSignal — the body\u2019s signal (Slice 10)', () => {
   it('it reads the content of "## Señal de observabilidad" and returns it verbatim', () => {
     const body = '## Señal de observabilidad\nmétrica `backfill_progress` con label `estado`\n\n## Dependencias\n- merge-after #1'
-    expect(extractSenal(body)).toBe('métrica `backfill_progress` con label `estado`')
+    expect(extractSignal(body)).toBe('métrica `backfill_progress` con label `estado`')
     // The reasoned exemption travels verbatim too — the consumer tells it apart
     // only by its N/A prefix.
-    const exenta = `${SENAL_HEADING}\nN/A — pantalla sin telemetría nueva\n\n## Gates\nx`
-    expect(extractSenal(exenta)).toBe('N/A — pantalla sin telemetría nueva')
+    const exempt = `${SIGNAL_HEADING}\nN/A — pantalla sin telemetría nueva\n\n## Gates\nx`
+    expect(extractSignal(exempt)).toBe('N/A — pantalla sin telemetría nueva')
   })
   it('with no section it returns null; an empty section counts as absent in mapGhIssue', () => {
-    expect(extractSenal('body sin esa sección')).toBe(null)
-    expect(extractSenal('')).toBe(null)
-    // A section that is present but empty: extractSenal returns '' (trimmed
+    expect(extractSignal('body sin esa sección')).toBe(null)
+    expect(extractSignal('')).toBe(null)
+    // A section that is present but empty: extractSignal returns '' (trimmed
     // content) and mapGhIssue collapses it to null — empty content = absent.
-    const vacia = `${SENAL_HEADING}\n\n## Dependencias\n- merge-after #1\n\n<!-- ct-order:7 -->`
-    const mapped = mapGhIssue({ number: 9, title: '#9 x', labels: [], body: vacia })
+    const empty = `${SIGNAL_HEADING}\n\n## Dependencias\n- merge-after #1\n\n<!-- ct-order:7 -->`
+    const mapped = mapGhIssue({ number: 9, title: '#9 x', labels: [], body: empty })
     expect(mapped.senal).toBe(null)
   })
   it('mapGhIssue exposes senal alongside ac and gates', () => {
@@ -1522,7 +1522,7 @@ describe('extractSenal — the body\u2019s signal (Slice 10)', () => {
     expect(mapped.ac).toEqual(['AC-1'])
     expect(mapped.gates).toEqual(['visual'])
     // With no section → null, not undefined: the absence is a declared value.
-    const sinSenal = mapGhIssue({ number: 9, title: '#9 x', labels: [], body: '' })
-    expect(sinSenal.senal).toBe(null)
+    const withoutSignal = mapGhIssue({ number: 9, title: '#9 x', labels: [], body: '' })
+    expect(withoutSignal.senal).toBe(null)
   })
 })

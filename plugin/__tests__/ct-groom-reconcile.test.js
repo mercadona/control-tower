@@ -161,7 +161,7 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
   // that it read page 2.
   it('pagination: the issue that matches on PAGE 2 is seen → idempotent, it does not recreate it', () => {
     const { dir, spec } = writeSpec(ONE_SLICE_SPEC)
-    const OTRO = { number: 601, title: 'otro epic', state: 'open', milestone: { title: 'Otro Epic' }, labels: [], body: 'sin marcador' }
+    const OTHER = { number: 601, title: 'otro epic', state: 'open', milestone: { title: 'Otro Epic' }, labels: [], body: 'sin marcador' }
     const MATCHING_ISSUE = {
       number: 501,
       title: '#1 login',
@@ -172,8 +172,8 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
     }
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {
       FAKE_GH_MILESTONES_LIST: JSON.stringify([{ title: 'Epic', number: 7 }]),
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[OTRO, MATCHING_ISSUE]]),
-      FAKE_GH_GRAPHQL_PAGE_SIZE: '1', // forces 2 pages: OTRO on page 1, #501 on page 2
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[OTHER, MATCHING_ISSUE]]),
+      FAKE_GH_GRAPHQL_PAGE_SIZE: '1', // forces 2 pages: OTHER on page 1, #501 on page 2
     })
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/ya existe \(#501\), no se duplica/) // it saw page 2
@@ -420,13 +420,13 @@ describe('ct-groom (real run) — divergent AC/Dependencias: they are detected a
   // coordinating session's zone with no known boundary and Dependencias is not
   // applied either — that has its own test right below (the second wave of the
   // branch's final review), with its own reason, instead of diluting this one.
-  const sinHeredada = (body) => body.replace(/## Contexto heredado\n.*\n\n/, '')
+  const withoutInherited = (body) => body.replace(/## Contexto heredado\n.*\n\n/, '')
 
   it('the "## Acceptance criteria" heading renamed by hand → --reconcile does NOT apply it, it warns precisely (never "solo prosa"), the exit stays at 3', () => {
     const { dir, spec } = writeSpec(SPEC_2)
     const renamedIssue1 = {
       ...issue1Drift(spec),
-      body: sinHeredada(issue1Drift(spec).body).replace('## Acceptance criteria (EARS, 1:1 con tests)', '## Criterios'),
+      body: withoutInherited(issue1Drift(spec).body).replace('## Acceptance criteria (EARS, 1:1 con tests)', '## Criterios'),
     }
     const argvLog = join(dir, 'argv.log')
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--reconcile'], {

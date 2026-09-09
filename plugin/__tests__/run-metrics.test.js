@@ -15,7 +15,7 @@ import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   metricRow, metricLine, metricsPath, planSha256, verdictMeasures, IDENTITY_FIELDS, aggregateVerdictMeasures,
-  metricsRepoRelPath, METRICS_REPO_DIR, briefVaraCtMeasures, aggregateBriefMeasures,
+  metricsRepoRelPath, METRICS_REPO_DIR, briefCtYardstickMeasures, aggregateBriefMeasures,
   aggregateRoleBytesMeasures,
 } from '../scripts/run-metrics.js'
 import { PluginYardstick } from '../scripts/plugin-yardstick.js'
@@ -24,7 +24,7 @@ import { SEVERITIES } from '../scripts/step-contracts.js'
 const here = dirname(fileURLToPath(import.meta.url))
 const SCRIPT = join(here, '..', 'scripts', 'ct-step.mjs')
 const F = '```'
-const AHORA = '2026-08-18T10:00:00.000Z'
+const NOW = '2026-08-18T10:00:00.000Z'
 
 const IDENT = {
   repo: 'josemerca/control-tower-plugin', epic: '12', issue: 7,
@@ -35,15 +35,15 @@ const IDENT = {
 
 describe('the identity of the row', () => {
   it('carries the twelve fields of the design, not one less', () => {
-    const fila = metricRow(IDENT, {}, { now: AHORA })
+    const row = metricRow(IDENT, {}, { now: NOW })
     expect(IDENTITY_FIELDS).toHaveLength(12)
-    for (const campo of IDENTITY_FIELDS) expect(fila).toHaveProperty(campo)
-    expect(fila.written_at).toBe(AHORA)
+    for (const field of IDENTITY_FIELDS) expect(row).toHaveProperty(field)
+    expect(row.written_at).toBe(NOW)
   })
 
   it('an issue with no milestone is recorded as "(sin milestone)", never empty', () => {
-    for (const vacio of [null, undefined, '']) {
-      expect(metricRow({ ...IDENT, epic: vacio }, {}, { now: AHORA }).epic).toBe('(sin milestone)')
+    for (const empty of [null, undefined, '']) {
+      expect(metricRow({ ...IDENT, epic: empty }, {}, { now: NOW }).epic).toBe('(sin milestone)')
     }
   })
 
@@ -56,7 +56,7 @@ describe('the identity of the row', () => {
   // with 0.36.1: without the field, that figure only exists in the memory of
   // whoever was sitting in front of it.
   it('the plugin version travels in the row: a rewritten ct-step makes two runs incomparable', () => {
-    expect(metricRow(IDENT, {}, { now: AHORA }).plugin_version).toBe('0.36.1')
+    expect(metricRow(IDENT, {}, { now: NOW }).plugin_version).toBe('0.36.1')
     expect(IDENTITY_FIELDS).toContain('plugin_version')
   })
 
@@ -66,7 +66,7 @@ describe('the identity of the row', () => {
   // from two different machines and with no actor there is no knowing whose the
   // cost is — which is exactly the datum this file gets looked at for.
   it('the actor travels in the row: as soon as the rows mix, the cost has an owner', () => {
-    expect(metricRow(IDENT, {}, { now: AHORA }).actor).toBe('alcaptar')
+    expect(metricRow(IDENT, {}, { now: NOW }).actor).toBe('alcaptar')
     expect(IDENTITY_FIELDS).toContain('actor')
   })
 
@@ -77,10 +77,10 @@ describe('the identity of the row', () => {
   // out loud that there was no datum there, just as `epic` has spent years
   // saying `(sin milestone)`.
   it('with no version and no actor the absence is declared, the gap is not left', () => {
-    for (const vacio of [null, undefined, '']) {
-      const fila = metricRow({ ...IDENT, plugin_version: vacio, actor: vacio }, {}, { now: AHORA })
-      expect(fila.plugin_version).toBe('(sin versión)')
-      expect(fila.actor).toBe('(sin actor)')
+    for (const empty of [null, undefined, '']) {
+      const row = metricRow({ ...IDENT, plugin_version: empty, actor: empty }, {}, { now: NOW })
+      expect(row.plugin_version).toBe('(sin versión)')
+      expect(row.actor).toBe('(sin actor)')
     }
   })
 
@@ -90,15 +90,15 @@ describe('the identity of the row', () => {
   // itself, the row would say who WRITES the metric instead of who ran the step,
   // and the module would stop being testable without mounting a disk.
   it('it does not go to the environment for the actor: the value arrives INSIDE the identity', () => {
-    const previo = process.env.USER
+    const previous = process.env.USER
     process.env.USER = 'un-actor-del-entorno'
     try {
-      const { plugin_version: version, actor } = metricRow({ ...IDENT, plugin_version: null, actor: null }, {}, { now: AHORA })
+      const { plugin_version: version, actor } = metricRow({ ...IDENT, plugin_version: null, actor: null }, {}, { now: NOW })
       expect(actor).toBe('(sin actor)')
       expect(version).toBe('(sin versión)')
     } finally {
-      if (previo === undefined) delete process.env.USER
-      else process.env.USER = previo
+      if (previous === undefined) delete process.env.USER
+      else process.env.USER = previous
     }
   })
 
@@ -110,26 +110,26 @@ describe('the identity of the row', () => {
   // skipped right behind. It comes back the day there is something to put in it.
   it('`session` is no longer a field: an always-null column teaches you to ignore the file', () => {
     expect(IDENTITY_FIELDS).not.toContain('session')
-    expect(metricRow({ ...IDENT, session: 'sesion-1' }, {}, { now: AHORA })).not.toHaveProperty('session')
+    expect(metricRow({ ...IDENT, session: 'sesion-1' }, {}, { now: NOW })).not.toHaveProperty('session')
   })
 
   it('the attempt is a dimension of the row, not an aggregated counter', () => {
     // It is what lets you measure how many times the judge vetoed and how many
     // rounds each task cost, which is the datum that decides if this is worth it.
-    const vueltas = [1, 2, 3].map((attempt) => metricRow({ ...IDENT, attempt }, {}, { now: AHORA }))
-    expect(vueltas.map((f) => f.attempt)).toEqual([1, 2, 3])
+    const rounds = [1, 2, 3].map((attempt) => metricRow({ ...IDENT, attempt }, {}, { now: NOW }))
+    expect(rounds.map((f) => f.attempt)).toEqual([1, 2, 3])
   })
 
   it('the measures travel apart from the identity and cannot tread on it', () => {
-    const fila = metricRow(IDENT, { cost_usd: 0.03, outcome: 'done' }, { now: AHORA })
-    expect(fila.cost_usd).toBe(0.03)
-    expect(fila.issue).toBe(7)
+    const row = metricRow(IDENT, { cost_usd: 0.03, outcome: 'done' }, { now: NOW })
+    expect(row.cost_usd).toBe(0.03)
+    expect(row.issue).toBe(7)
   })
 
   it('every row is one line of JSON, which is what makes the file append-only', () => {
-    const linea = metricLine(metricRow(IDENT, {}, { now: AHORA }))
-    expect(linea.endsWith('\n')).toBe(true)
-    expect(JSON.parse(linea).step).toBe('judge')
+    const line = metricLine(metricRow(IDENT, {}, { now: NOW }))
+    expect(line.endsWith('\n')).toBe(true)
+    expect(JSON.parse(line).step).toBe('judge')
   })
 })
 
@@ -228,24 +228,24 @@ describe('the count by severity', () => {
 // for one, every finding for the other—.
 // ---------------------------------------------------------------------------
 describe('rubric_vara_ct_docs — how many documents of the yardstick actually got used', () => {
-  const recorrido = (pasos) => verdictMeasures({ ruling: 'PASS', findings: [], rubric: pasos })
+  const walk = (steps) => verdictMeasures({ ruling: 'PASS', findings: [], rubric: steps })
 
   it('it counts DISTINCT documents over the result of ALL the items, not just of patrones', () => {
-    expect(recorrido([
+    expect(walk([
       { rule: 'patrones', result: 'medí contra conventions/style.md', outcome: 'conforme' },
       { rule: 'decisiones-cerradas', result: 'y conventions/defects.md manda esto', outcome: 'conforme' },
     ]).rubric_vara_ct_docs).toBe(2)
   })
 
   it('the same document cited in two different items is still ONE document read', () => {
-    expect(recorrido([
+    expect(walk([
       { rule: 'patrones', result: 'conventions/style.md', outcome: 'conforme' },
       { rule: 'contrato', result: 'conventions/style.md otra vez', outcome: 'conforme' },
     ]).rubric_vara_ct_docs).toBe(1)
   })
 
   it('a walk that cites no document counts zero, and the zero is real: it was measured', () => {
-    expect(recorrido([{ rule: 'patrones', result: 'todo bien', outcome: 'conforme' }]).rubric_vara_ct_docs).toBe(0)
+    expect(walk([{ rule: 'patrones', result: 'todo bien', outcome: 'conforme' }]).rubric_vara_ct_docs).toBe(0)
   })
 
   it('a verdict with no rubric walk does not blow up', () => {
@@ -253,7 +253,7 @@ describe('rubric_vara_ct_docs — how many documents of the yardstick actually g
   })
 
   it("the REPO's yardstick cited in the walk does not count as ct", () => {
-    expect(recorrido([
+    expect(walk([
       { rule: 'patrones', result: 'medí contra `docs/conventions/style.md`', outcome: 'conforme' },
     ]).rubric_vara_ct_docs).toBe(0)
   })
@@ -294,16 +294,16 @@ describe('findings_vara_ct — findings that cite the yardstick, IN ANY rule', (
 // `{ruling:'PASS'}`: the aggregator reads real lines, not idealised test objects.
 // ---------------------------------------------------------------------------
 describe('the aggregate of what the judge left written (§3.4)', () => {
-  const veredicto = (measures) => metricLine(metricRow({ ...IDENT, step: 'judge' }, measures, { now: AHORA }))
-  const pasoNoVeredicto = (step, measures) => metricLine(metricRow({ ...IDENT, step }, measures, { now: AHORA }))
+  const verdict = (measures) => metricLine(metricRow({ ...IDENT, step: 'judge' }, measures, { now: NOW }))
+  const nonVerdictStep = (step, measures) => metricLine(metricRow({ ...IDENT, step }, measures, { now: NOW }))
 
   it('it sums the sin-vara of every verdict of the file: the row is per attempt and aggregating is summing', () => {
-    const texto = [
-      veredicto({ ruling: 'PASS', rubric_sin_vara: 1 }),
-      veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
-      veredicto({ ruling: 'FAIL', rubric_sin_vara: 2 }),
+    const text = [
+      verdict({ ruling: 'PASS', rubric_sin_vara: 1 }),
+      verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
+      verdict({ ruling: 'FAIL', rubric_sin_vara: 2 }),
     ].join('')
-    const r = aggregateVerdictMeasures(texto)
+    const r = aggregateVerdictMeasures(text)
     expect(r.rubricSinVara).toBe(3)
     expect(r.verdicts).toBe(3)
     expect(r.measured).toBe(3)
@@ -311,53 +311,53 @@ describe('the aggregate of what the judge left written (§3.4)', () => {
   })
 
   it('the rows that are not a verdict (implement, controls, commit) do not enter the count', () => {
-    const texto = [
-      pasoNoVeredicto('implement', { outcome: 'done' }),
-      pasoNoVeredicto('controls', { outcome: 'done' }),
-      pasoNoVeredicto('commit', { outcome: 'done' }),
-      veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
+    const text = [
+      nonVerdictStep('implement', { outcome: 'done' }),
+      nonVerdictStep('controls', { outcome: 'done' }),
+      nonVerdictStep('commit', { outcome: 'done' }),
+      verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
     ].join('')
-    const r = aggregateVerdictMeasures(texto)
+    const r = aggregateVerdictMeasures(text)
     expect(r.verdicts).toBe(1)
     expect(r.rows).toBe(4)
   })
 
   it('a DISCARDED judge row is not a verdict: it does not inflate the denominator', () => {
     // ct-step.mjs:652 writes these rows WITHOUT any verdict measure at all.
-    const texto = metricLine(metricRow({ ...IDENT, step: 'judge' }, { outcome: 'discarded', why: 'sin outcome' }, { now: AHORA }))
-    const r = aggregateVerdictMeasures(texto)
+    const text = metricLine(metricRow({ ...IDENT, step: 'judge' }, { outcome: 'discarded', why: 'sin outcome' }, { now: NOW }))
+    const r = aggregateVerdictMeasures(text)
     expect(r.verdicts).toBe(0)
   })
 
   it('a row predating the column counts as old and NOT as a zero', () => {
-    const texto = [
-      veredicto({ ruling: 'PASS', rubric_sin_vara: 2 }),
-      veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }),
-      veredicto({ ruling: 'PASS' }), // old schema: no rubric_sin_vara
+    const text = [
+      verdict({ ruling: 'PASS', rubric_sin_vara: 2 }),
+      verdict({ ruling: 'PASS', rubric_sin_vara: 0 }),
+      verdict({ ruling: 'PASS' }), // old schema: no rubric_sin_vara
     ].join('')
-    const r = aggregateVerdictMeasures(texto)
+    const r = aggregateVerdictMeasures(text)
     expect(r.measured).toBe(2)
     expect(r.legacy).toBe(1)
   })
 
   it('if no verdict carries the column, sin-vara is null and not 0 — a zero would assert a measure that was never taken', () => {
-    const texto = [veredicto({ ruling: 'PASS' }), veredicto({ ruling: 'FAIL' })].join('')
-    const r = aggregateVerdictMeasures(texto)
+    const text = [verdict({ ruling: 'PASS' }), verdict({ ruling: 'FAIL' })].join('')
+    const r = aggregateVerdictMeasures(text)
     expect(r.rubricSinVara).toBeNull()
     expect(r.legacy).toBe(2)
   })
 
   it('the findings are aggregated by rule by summing findings_by_rule of every row', () => {
-    const texto = [
-      veredicto({ ruling: 'FAIL', findings_by_rule: { patrones: 2, alcance: 1 } }),
-      veredicto({ ruling: 'FAIL', findings_by_rule: { patrones: 1 } }),
+    const text = [
+      verdict({ ruling: 'FAIL', findings_by_rule: { patrones: 2, alcance: 1 } }),
+      verdict({ ruling: 'FAIL', findings_by_rule: { patrones: 1 } }),
     ].join('')
-    expect(aggregateVerdictMeasures(texto).findingsByRule).toEqual({ patrones: 3, alcance: 1 })
+    expect(aggregateVerdictMeasures(text).findingsByRule).toEqual({ patrones: 3, alcance: 1 })
   })
 
   it("a rule no longer in the rubric goes on being counted: filtering against today's enum would erase history", () => {
-    const texto = veredicto({ ruling: 'FAIL', findings_by_rule: { 'una-regla-retirada': 4 } })
-    expect(aggregateVerdictMeasures(texto).findingsByRule).toEqual({ 'una-regla-retirada': 4 })
+    const text = verdict({ ruling: 'FAIL', findings_by_rule: { 'una-regla-retirada': 4 } })
+    expect(aggregateVerdictMeasures(text).findingsByRule).toEqual({ 'una-regla-retirada': 4 })
   })
 
   // SEVERITY, which had been written in every row since `verdictMeasures`
@@ -367,11 +367,11 @@ describe('the aggregate of what the judge left written (§3.4)', () => {
   // another round (`medium`) or was merely noted down (`low`). Without it, three
   // `alcance` findings in the table are indistinguishable from three vetoes.
   it('the three severities are summed over every verdict of the file', () => {
-    const texto = [
-      veredicto({ ruling: 'FAIL', findings_high: 1, findings_medium: 0, findings_low: 2 }),
-      veredicto({ ruling: 'PASS', findings_high: 0, findings_medium: 1, findings_low: 1 }),
+    const text = [
+      verdict({ ruling: 'FAIL', findings_high: 1, findings_medium: 0, findings_low: 2 }),
+      verdict({ ruling: 'PASS', findings_high: 0, findings_medium: 1, findings_low: 1 }),
     ].join('')
-    const r = aggregateVerdictMeasures(texto)
+    const r = aggregateVerdictMeasures(text)
     expect(r.findingsHigh).toBe(1)
     expect(r.findingsMedium).toBe(1)
     expect(r.findingsLow).toBe(3)
@@ -388,22 +388,22 @@ describe('the aggregate of what the judge left written (§3.4)', () => {
   // `decisions.md`: an unavoidable copy of the two halves of a contract asks for
   // the test that compares them.
   it('every severity of the closed vocabulary has its key written and aggregated: a fourth member turns this red', () => {
-    const escritas = verdictMeasures({
+    const written = verdictMeasures({
       ruling: 'PASS',
       findings: SEVERITIES.map((severity) => ({ rule: 'alcance', severity })),
     })
-    for (const severidad of SEVERITIES) expect(escritas[`findings_${severidad}`]).toBe(1)
-    expect(escritas.findings_total).toBe(SEVERITIES.length)
+    for (const severity of SEVERITIES) expect(written[`findings_${severity}`]).toBe(1)
+    expect(written.findings_total).toBe(SEVERITIES.length)
 
-    const unaDeCada = Object.fromEntries(SEVERITIES.map((severidad) => [`findings_${severidad}`, 1]))
-    const r = aggregateVerdictMeasures(veredicto({ ruling: 'PASS', ...unaDeCada }))
+    const oneOfEach = Object.fromEntries(SEVERITIES.map((severity) => [`findings_${severity}`, 1]))
+    const r = aggregateVerdictMeasures(verdict({ ruling: 'PASS', ...oneOfEach }))
     expect(r.measuredSeverities).toBe(1)
     expect(r.findingsHigh + r.findingsMedium + r.findingsLow).toBe(SEVERITIES.length)
   })
 
   it('a clean PASS sums three zeros and they are real: it was measured and there were no findings', () => {
-    const texto = veredicto({ ruling: 'PASS', findings_high: 0, findings_medium: 0, findings_low: 0 })
-    const r = aggregateVerdictMeasures(texto)
+    const text = verdict({ ruling: 'PASS', findings_high: 0, findings_medium: 0, findings_low: 0 })
+    const r = aggregateVerdictMeasures(text)
     expect(r.findingsHigh).toBe(0)
     expect(r.findingsMedium).toBe(0)
     expect(r.findingsLow).toBe(0)
@@ -411,19 +411,19 @@ describe('the aggregate of what the judge left written (§3.4)', () => {
   })
 
   it('a verdict predating the severity columns counts as old and NOT as three zeros', () => {
-    const texto = [
-      veredicto({ ruling: 'PASS', findings_high: 0, findings_medium: 1, findings_low: 0 }),
-      veredicto({ ruling: 'PASS' }),
+    const text = [
+      verdict({ ruling: 'PASS', findings_high: 0, findings_medium: 1, findings_low: 0 }),
+      verdict({ ruling: 'PASS' }),
     ].join('')
-    const r = aggregateVerdictMeasures(texto)
+    const r = aggregateVerdictMeasures(text)
     expect(r.measuredSeverities).toBe(1)
     expect(r.legacySeverities).toBe(1)
     expect(r.findingsMedium).toBe(1)
   })
 
   it('if no verdict carries the severities, the three of them are null and not 0', () => {
-    const texto = [veredicto({ ruling: 'PASS' }), veredicto({ ruling: 'FAIL' })].join('')
-    const r = aggregateVerdictMeasures(texto)
+    const text = [verdict({ ruling: 'PASS' }), verdict({ ruling: 'FAIL' })].join('')
+    const r = aggregateVerdictMeasures(text)
     expect(r.findingsHigh).toBeNull()
     expect(r.findingsMedium).toBeNull()
     expect(r.findingsLow).toBeNull()
@@ -431,16 +431,16 @@ describe('the aggregate of what the judge left written (§3.4)', () => {
   })
 
   it('the three go together: a row missing a single one of them is old entirely', () => {
-    const texto = veredicto({ ruling: 'PASS', findings_high: 0, findings_low: 1 })
-    const r = aggregateVerdictMeasures(texto)
+    const text = verdict({ ruling: 'PASS', findings_high: 0, findings_low: 1 })
+    const r = aggregateVerdictMeasures(text)
     expect(r.legacySeverities).toBe(1)
     expect(r.findingsLow).toBeNull()
   })
 
   it('a severity that is not a non-negative integer treats the row as old, just like sin-vara', () => {
-    for (const basura of ['1', -1, 1.5, null]) {
-      const texto = veredicto({ ruling: 'PASS', findings_high: basura, findings_medium: 0, findings_low: 0 })
-      const r = aggregateVerdictMeasures(texto)
+    for (const garbage of ['1', -1, 1.5, null]) {
+      const text = verdict({ ruling: 'PASS', findings_high: garbage, findings_medium: 0, findings_low: 0 })
+      const r = aggregateVerdictMeasures(text)
       expect(r.measuredSeverities).toBe(0)
       expect(r.legacySeverities).toBe(1)
     }
@@ -452,57 +452,57 @@ describe('the aggregate of what the judge left written (§3.4)', () => {
   // (the judge signs it), and a file of old telemetry always has `ruling` —it is
   // the key that defines the row— so this count is never legacy.
   it('the FAILs are counted separately, and a file with no severities still knows how many vetoes there were', () => {
-    const texto = [
-      veredicto({ ruling: 'FAIL' }),
-      veredicto({ ruling: 'PASS' }),
-      veredicto({ ruling: 'FAIL' }),
+    const text = [
+      verdict({ ruling: 'FAIL' }),
+      verdict({ ruling: 'PASS' }),
+      verdict({ ruling: 'FAIL' }),
     ].join('')
-    const r = aggregateVerdictMeasures(texto)
+    const r = aggregateVerdictMeasures(text)
     expect(r.fails).toBe(2)
     expect(r.verdicts).toBe(3)
     expect(r.findingsHigh).toBeNull()
   })
 
   it('a discarded judge row is not a veto: with no ruling it counts neither as a verdict nor as a fail', () => {
-    const texto = pasoNoVeredicto('judge', { outcome: 'discarded', why: 'sin outcome' })
-    const r = aggregateVerdictMeasures(texto)
+    const text = nonVerdictStep('judge', { outcome: 'discarded', why: 'sin outcome' })
+    const r = aggregateVerdictMeasures(text)
     expect(r.verdicts).toBe(0)
     expect(r.fails).toBe(0)
   })
 
   it('an unreadable line is counted and does not throw the file away: the good ones go on being aggregated', () => {
-    const texto = [veredicto({ ruling: 'PASS', rubric_sin_vara: 1 }), '{no es json\n', veredicto({ ruling: 'PASS', rubric_sin_vara: 1 })].join('')
-    const r = aggregateVerdictMeasures(texto)
+    const text = [verdict({ ruling: 'PASS', rubric_sin_vara: 1 }), '{no es json\n', verdict({ ruling: 'PASS', rubric_sin_vara: 1 })].join('')
+    const r = aggregateVerdictMeasures(text)
     expect(r.malformed).toBe(1)
     expect(r.verdicts).toBe(2)
     expect(r.rubricSinVara).toBe(2)
   })
 
   it('a line that is valid JSON but not an object is unreadable too', () => {
-    const texto = ['[1,2]', 'null', '"x"'].join('\n') + '\n'
-    expect(aggregateVerdictMeasures(texto).malformed).toBe(3)
+    const text = ['[1,2]', 'null', '"x"'].join('\n') + '\n'
+    expect(aggregateVerdictMeasures(text).malformed).toBe(3)
   })
 
   it('the empty lines and the trailing newline are not unreadable lines', () => {
-    const texto = veredicto({ ruling: 'PASS', rubric_sin_vara: 0 }) + '\n\n'
-    expect(aggregateVerdictMeasures(texto).malformed).toBe(0)
+    const text = verdict({ ruling: 'PASS', rubric_sin_vara: 0 }) + '\n\n'
+    expect(aggregateVerdictMeasures(text).malformed).toBe(0)
   })
 
   it('a rubric_sin_vara that is not a non-negative integer is not summed: it is treated as an old row', () => {
-    const texto = [
-      veredicto({ ruling: 'PASS', rubric_sin_vara: '2' }),
-      veredicto({ ruling: 'PASS', rubric_sin_vara: -1 }),
-      veredicto({ ruling: 'PASS', rubric_sin_vara: 1.5 }),
+    const text = [
+      verdict({ ruling: 'PASS', rubric_sin_vara: '2' }),
+      verdict({ ruling: 'PASS', rubric_sin_vara: -1 }),
+      verdict({ ruling: 'PASS', rubric_sin_vara: 1.5 }),
     ].join('')
-    const r = aggregateVerdictMeasures(texto)
+    const r = aggregateVerdictMeasures(text)
     expect(r.measured).toBe(0)
     expect(r.legacy).toBe(3)
     expect(r.rubricSinVara).toBeNull()
   })
 
   it('an empty file does not blow up and asserts nothing', () => {
-    for (const vacio of ['', undefined]) {
-      const r = aggregateVerdictMeasures(vacio)
+    for (const empty of ['', undefined]) {
+      const r = aggregateVerdictMeasures(empty)
       expect(r).toEqual({
         rows: 0, malformed: 0, verdicts: 0, fails: 0, measured: 0, legacy: 0, rubricSinVara: null, findingsByRule: {},
         measuredVaraCtDocs: 0, legacyVaraCtDocs: 0, varaCtDocs: null,
@@ -520,12 +520,12 @@ describe('the aggregate of what the judge left written (§3.4)', () => {
   // MEASURE 1, traced from rubric_sin_vara: measured/legacy OF THEIR OWN for
   // EACH of the two columns, and a row without the column never counts as zero.
   it('it sums rubric_vara_ct_docs and findings_vara_ct of every verdict of the file', () => {
-    const texto = [
-      veredicto({ ruling: 'PASS', rubric_vara_ct_docs: 5, findings_vara_ct: 1 }),
-      veredicto({ ruling: 'PASS', rubric_vara_ct_docs: 3, findings_vara_ct: 0 }),
-      veredicto({ ruling: 'FAIL', rubric_vara_ct_docs: 4, findings_vara_ct: 2 }),
+    const text = [
+      verdict({ ruling: 'PASS', rubric_vara_ct_docs: 5, findings_vara_ct: 1 }),
+      verdict({ ruling: 'PASS', rubric_vara_ct_docs: 3, findings_vara_ct: 0 }),
+      verdict({ ruling: 'FAIL', rubric_vara_ct_docs: 4, findings_vara_ct: 2 }),
     ].join('')
-    const r = aggregateVerdictMeasures(texto)
+    const r = aggregateVerdictMeasures(text)
     expect(r.varaCtDocs).toBe(12)
     expect(r.measuredVaraCtDocs).toBe(3)
     expect(r.legacyVaraCtDocs).toBe(0)
@@ -535,11 +535,11 @@ describe('the aggregate of what the judge left written (§3.4)', () => {
   })
 
   it('a row predating these columns counts as old and NOT as a zero', () => {
-    const texto = [
-      veredicto({ ruling: 'PASS', rubric_vara_ct_docs: 2, findings_vara_ct: 1 }),
-      veredicto({ ruling: 'PASS' }),
+    const text = [
+      verdict({ ruling: 'PASS', rubric_vara_ct_docs: 2, findings_vara_ct: 1 }),
+      verdict({ ruling: 'PASS' }),
     ].join('')
-    const r = aggregateVerdictMeasures(texto)
+    const r = aggregateVerdictMeasures(text)
     expect(r.legacyVaraCtDocs).toBe(1)
     expect(r.varaCtDocs).toBe(2)
     expect(r.legacyFindingsVaraCt).toBe(1)
@@ -547,8 +547,8 @@ describe('the aggregate of what the judge left written (§3.4)', () => {
   })
 
   it('if no verdict carries the columns, both figures are null and not 0', () => {
-    const texto = [veredicto({ ruling: 'PASS' }), veredicto({ ruling: 'FAIL' })].join('')
-    const r = aggregateVerdictMeasures(texto)
+    const text = [verdict({ ruling: 'PASS' }), verdict({ ruling: 'FAIL' })].join('')
+    const r = aggregateVerdictMeasures(text)
     expect(r.varaCtDocs).toBeNull()
     expect(r.findingsVaraCt).toBeNull()
     expect(r.legacyVaraCtDocs).toBe(2)
@@ -556,8 +556,8 @@ describe('the aggregate of what the judge left written (§3.4)', () => {
   })
 
   it("the yardstick's two columns carry counters SEPARATE from each other: a row can carry one and not the other", () => {
-    const texto = veredicto({ ruling: 'PASS', rubric_vara_ct_docs: 4 })
-    const r = aggregateVerdictMeasures(texto)
+    const text = verdict({ ruling: 'PASS', rubric_vara_ct_docs: 4 })
+    const r = aggregateVerdictMeasures(text)
     expect(r.measuredVaraCtDocs).toBe(1)
     expect(r.varaCtDocs).toBe(4)
     expect(r.legacyFindingsVaraCt).toBe(1)
@@ -565,8 +565,8 @@ describe('the aggregate of what the judge left written (§3.4)', () => {
   })
 
   it("the yardstick's counters are independent of rubric_sin_vara's: different birth dates", () => {
-    const texto = veredicto({ ruling: 'PASS', rubric_sin_vara: 0 })
-    const r = aggregateVerdictMeasures(texto)
+    const text = verdict({ ruling: 'PASS', rubric_sin_vara: 0 })
+    const r = aggregateVerdictMeasures(text)
     expect(r.measured).toBe(1)
     expect(r.legacyVaraCtDocs).toBe(1)
     expect(r.varaCtDocs).toBeNull()
@@ -575,13 +575,13 @@ describe('the aggregate of what the judge left written (§3.4)', () => {
 
 // ---------------------------------------------------------------------------
 // MEASURE 2: whether the yardstick reached the brief, and how much it weighed.
-// `briefVaraCtMeasures` is PURE (it does not read disk: it receives the content
+// `briefCtYardstickMeasures` is PURE (it does not read disk: it receives the content
 // already read) and counts `## Vara de ct: conventions/` headings — exactly what
 // `PluginYardstick.composeSection` (scripts/plugin-yardstick.js) writes per
 // document — instead of comparing against `PluginYardstick.FILES.length`, so
 // that a fifth document tomorrow also counts without touching this function.
 // ---------------------------------------------------------------------------
-describe('briefVaraCtMeasures — how many documents the brief carries and how much it weighs', () => {
+describe('briefCtYardstickMeasures — how many documents the brief carries and how much it weighs', () => {
   const brief = (docs) => [
     '# Task 1',
     '',
@@ -591,37 +591,37 @@ describe('briefVaraCtMeasures — how many documents the brief carries and how m
   ].join('\n')
 
   it('it counts the four headings of today', () => {
-    const contenido = brief(['code.md', 'decisions.md', 'architecture.md', 'testing.md'])
-    expect(briefVaraCtMeasures(contenido).brief_vara_ct_docs).toBe(4)
+    const content = brief(['code.md', 'decisions.md', 'architecture.md', 'testing.md'])
+    expect(briefCtYardstickMeasures(content).brief_vara_ct_docs).toBe(4)
   })
 
   it("it does not depend on today's names: a fifth document is counted too", () => {
-    const contenido = brief(['code.md', 'decisions.md', 'architecture.md', 'testing.md', 'naming.md'])
-    expect(briefVaraCtMeasures(contenido).brief_vara_ct_docs).toBe(5)
+    const content = brief(['code.md', 'decisions.md', 'architecture.md', 'testing.md', 'naming.md'])
+    expect(briefCtYardstickMeasures(content).brief_vara_ct_docs).toBe(5)
   })
 
   it('a brief with no heading at all counts zero, and it is a real zero: it could be measured', () => {
-    expect(briefVaraCtMeasures('# Task 1\n\nsin vara de ct por aquí\n').brief_vara_ct_docs).toBe(0)
+    expect(briefCtYardstickMeasures('# Task 1\n\nsin vara de ct por aquí\n').brief_vara_ct_docs).toBe(0)
   })
 
   it('it weighs the brief in bytes, not in characters — real UTF-8', () => {
-    const conAcentos = '## Vara de ct: conventions/code.md\ncondición, año, ñ\n'
-    const { brief_bytes: bytes } = briefVaraCtMeasures(conAcentos)
-    expect(bytes).toBe(Buffer.byteLength(conAcentos, 'utf8'))
-    expect(bytes).toBeGreaterThan(conAcentos.length) // the accents weigh more than 1 byte
+    const withAccents = '## Vara de ct: conventions/code.md\ncondición, año, ñ\n'
+    const { brief_bytes: bytes } = briefCtYardstickMeasures(withAccents)
+    expect(bytes).toBe(Buffer.byteLength(withAccents, 'utf8'))
+    expect(bytes).toBeGreaterThan(withAccents.length) // the accents weigh more than 1 byte
   })
 })
 
 describe('aggregateBriefMeasures — the reader of what the brief measured, brother of aggregateVerdictMeasures', () => {
-  const intento = (measures) => metricLine(metricRow({ ...IDENT, step: 'implement' }, measures, { now: AHORA }))
-  const otroPaso = (step, measures) => metricLine(metricRow({ ...IDENT, step }, measures, { now: AHORA }))
+  const attemptRow = (measures) => metricLine(metricRow({ ...IDENT, step: 'implement' }, measures, { now: NOW }))
+  const anotherStep = (step, measures) => metricLine(metricRow({ ...IDENT, step }, measures, { now: NOW }))
 
   it('it sums docs and bytes of every implement attempt of the file', () => {
-    const texto = [
-      intento({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 500 }),
-      intento({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 520 }),
+    const text = [
+      attemptRow({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 500 }),
+      attemptRow({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 520 }),
     ].join('')
-    const r = aggregateBriefMeasures(texto)
+    const r = aggregateBriefMeasures(text)
     expect(r.briefAttempts).toBe(2)
     expect(r.briefMeasured).toBe(2)
     expect(r.briefLegacy).toBe(0)
@@ -633,25 +633,25 @@ describe('aggregateBriefMeasures — the reader of what the brief measured, brot
   // ignores them by design (tolerance nº3 up above), and why an aggregator of
   // its own is needed instead of reusing that one.
   it('the judge/controls/commit rows do not enter the count of brief attempts', () => {
-    const texto = [
-      otroPaso('judge', { ruling: 'PASS', rubric_sin_vara: 0 }),
-      otroPaso('controls', { outcome: 'done' }),
-      otroPaso('commit', { outcome: 'done' }),
-      intento({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 500 }),
+    const text = [
+      anotherStep('judge', { ruling: 'PASS', rubric_sin_vara: 0 }),
+      anotherStep('controls', { outcome: 'done' }),
+      anotherStep('commit', { outcome: 'done' }),
+      attemptRow({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 500 }),
     ].join('')
-    expect(aggregateBriefMeasures(texto).briefAttempts).toBe(1)
+    expect(aggregateBriefMeasures(text).briefAttempts).toBe(1)
   })
 
   // THE RULE OF THIS FILE: a row without the field (telemetry predating this
   // measure, or an attempt in which the brief could not be read) does NOT count
   // as zero.
   it('a row predating the measure, or with the brief unread (null), counts as old and NOT as zero', () => {
-    const texto = [
-      intento({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 500 }),
-      intento({ outcome: 'done' }), // old schema: without the two fields
-      intento({ outcome: 'discarded', brief_vara_ct_docs: null, brief_bytes: null }), // the brief could not be read
+    const text = [
+      attemptRow({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 500 }),
+      attemptRow({ outcome: 'done' }), // old schema: without the two fields
+      attemptRow({ outcome: 'discarded', brief_vara_ct_docs: null, brief_bytes: null }), // the brief could not be read
     ].join('')
-    const r = aggregateBriefMeasures(texto)
+    const r = aggregateBriefMeasures(text)
     expect(r.briefAttempts).toBe(3)
     expect(r.briefMeasured).toBe(1)
     expect(r.briefLegacy).toBe(2)
@@ -659,32 +659,32 @@ describe('aggregateBriefMeasures — the reader of what the brief measured, brot
   })
 
   it('if no attempt carries the column, briefVaraCtDocs and briefBytes are null and not 0', () => {
-    const texto = [intento({ outcome: 'done' }), intento({ outcome: 'discarded' })].join('')
-    const r = aggregateBriefMeasures(texto)
+    const text = [attemptRow({ outcome: 'done' }), attemptRow({ outcome: 'discarded' })].join('')
+    const r = aggregateBriefMeasures(text)
     expect(r.briefVaraCtDocs).toBeNull()
     expect(r.briefBytes).toBeNull()
     expect(r.briefLegacy).toBe(2)
   })
 
   it('a brief with zero documents (genuinely broken) is summed as the zero it is: it is not confused with "unmeasured"', () => {
-    const texto = intento({ outcome: 'done', brief_vara_ct_docs: 0, brief_bytes: 40 })
-    const r = aggregateBriefMeasures(texto)
+    const text = attemptRow({ outcome: 'done', brief_vara_ct_docs: 0, brief_bytes: 40 })
+    const r = aggregateBriefMeasures(text)
     expect(r.briefMeasured).toBe(1)
     expect(r.briefVaraCtDocs).toBe(0)
   })
 
   it('an empty file does not blow up and asserts nothing', () => {
-    for (const vacio of ['', undefined]) {
-      expect(aggregateBriefMeasures(vacio)).toEqual({
+    for (const empty of ['', undefined]) {
+      expect(aggregateBriefMeasures(empty)).toEqual({
         briefAttempts: 0, briefMeasured: 0, briefLegacy: 0, briefVaraCtDocs: null, briefBytes: null,
       })
     }
   })
 
   it('an unreadable line does not blow up the aggregator', () => {
-    const texto = [intento({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 500 }), '{no es json\n'].join('')
-    expect(() => aggregateBriefMeasures(texto)).not.toThrow()
-    expect(aggregateBriefMeasures(texto).briefAttempts).toBe(1)
+    const text = [attemptRow({ outcome: 'done', brief_vara_ct_docs: 4, brief_bytes: 500 }), '{no es json\n'].join('')
+    expect(() => aggregateBriefMeasures(text)).not.toThrow()
+    expect(aggregateBriefMeasures(text).briefAttempts).toBe(1)
   })
 })
 
@@ -692,17 +692,17 @@ describe('aggregateBriefMeasures — the reader of what the brief measured, brot
 // other two aggregators, and for the same reason: the columns travelled in the
 // pull request and with no reader of their own nobody would look at them.
 describe('aggregateRoleBytesMeasures — how much fixed material each role of the slice read', () => {
-  const papel = (step, measures) => metricLine(metricRow({ ...IDENT, step }, measures, { now: AHORA }))
-  const bytes = (agent, skill, paquete) => ({ agent_bytes: agent, skill_bytes: skill, package_bytes: paquete })
+  const roleRow = (step, measures) => metricLine(metricRow({ ...IDENT, step }, measures, { now: NOW }))
+  const bytes = (agent, skill, packageBytes) => ({ agent_bytes: agent, skill_bytes: skill, package_bytes: packageBytes })
 
   it('it sums the three sizes of every dispatched role, whatever the step', () => {
-    const texto = [
-      papel('implement', { outcome: 'done', ...bytes(100, 50, 900) }),
-      papel('judge', { ruling: 'PASS', ...bytes(5000, 50, 300) }),
-      papel('slice-judge', { ruling: 'PASS', ...bytes(3000, 0, 400) }),
-      papel('reconcile', { outcome: 'conflicting', ...bytes(2000, 0, 100) }),
+    const text = [
+      roleRow('implement', { outcome: 'done', ...bytes(100, 50, 900) }),
+      roleRow('judge', { ruling: 'PASS', ...bytes(5000, 50, 300) }),
+      roleRow('slice-judge', { ruling: 'PASS', ...bytes(3000, 0, 400) }),
+      roleRow('reconcile', { outcome: 'conflicting', ...bytes(2000, 0, 100) }),
     ].join('')
-    const r = aggregateRoleBytesMeasures(texto)
+    const r = aggregateRoleBytesMeasures(text)
     expect(r.roleAttempts).toBe(4)
     expect(r.roleMeasured).toBe(4)
     expect(r.roleLegacy).toBe(0)
@@ -712,21 +712,21 @@ describe('aggregateRoleBytesMeasures — how much fixed material each role of th
   })
 
   it('the steps that dispatch nobody —controls, commit, global— do not enter the count', () => {
-    const texto = [
-      papel('controls', { outcome: 'done', duration_ms: 3 }),
-      papel('commit', { outcome: 'done' }),
-      papel('global', { outcome: 'done' }),
-      papel('judge', { ruling: 'PASS', ...bytes(5000, 50, 300) }),
+    const text = [
+      roleRow('controls', { outcome: 'done', duration_ms: 3 }),
+      roleRow('commit', { outcome: 'done' }),
+      roleRow('global', { outcome: 'done' }),
+      roleRow('judge', { ruling: 'PASS', ...bytes(5000, 50, 300) }),
     ].join('')
-    expect(aggregateRoleBytesMeasures(texto).roleAttempts).toBe(1)
+    expect(aggregateRoleBytesMeasures(text).roleAttempts).toBe(1)
   })
 
   it('an implement attempt predating the measure counts as old and NOT as zero', () => {
-    const texto = [
-      papel('implement', { outcome: 'done', ...bytes(100, 50, 900) }),
-      papel('implement', { outcome: 'done', brief_bytes: 900 }),
+    const text = [
+      roleRow('implement', { outcome: 'done', ...bytes(100, 50, 900) }),
+      roleRow('implement', { outcome: 'done', brief_bytes: 900 }),
     ].join('')
-    const r = aggregateRoleBytesMeasures(texto)
+    const r = aggregateRoleBytesMeasures(text)
     expect(r.roleAttempts).toBe(2)
     expect(r.roleMeasured).toBe(1)
     expect(r.roleLegacy).toBe(1)
@@ -738,11 +738,11 @@ describe('aggregateRoleBytesMeasures — how much fixed material each role of th
   // them as old telemetry would say there was a judgement nobody measured when
   // what there was is a judgement that was not accepted.
   it('a discarded judge is not an unmeasured role: it does not even enter as old', () => {
-    const texto = [
-      papel('judge', { outcome: 'discarded', why: 'el paquete no existe' }),
-      papel('slice-judge', { outcome: 'discarded', why: 'token ajeno' }),
+    const text = [
+      roleRow('judge', { outcome: 'discarded', why: 'el packageBytes no existe' }),
+      roleRow('slice-judge', { outcome: 'discarded', why: 'token ajeno' }),
     ].join('')
-    const r = aggregateRoleBytesMeasures(texto)
+    const r = aggregateRoleBytesMeasures(text)
     expect(r.roleAttempts).toBe(0)
     expect(r.roleLegacy).toBe(0)
   })
@@ -751,38 +751,38 @@ describe('aggregateRoleBytesMeasures — how much fixed material each role of th
   // dispatched `ct-reconciler`. Counting it as old would inflate the denominator
   // with calls to the model that were never made.
   it('a reconcile round that dispatched nobody does not count as an unmeasured role', () => {
-    const texto = papel('reconcile', { outcome: 'up-to-date', files: [] })
-    const r = aggregateRoleBytesMeasures(texto)
+    const text = roleRow('reconcile', { outcome: 'up-to-date', files: [] })
+    const r = aggregateRoleBytesMeasures(text)
     expect(r.roleAttempts).toBe(0)
     expect(r.roleLegacy).toBe(0)
   })
 
   it('a role that is ordered no skill sums the zero it is, and is not confused with unmeasured', () => {
-    const texto = papel('slice-judge', { ruling: 'PASS', ...bytes(3000, 0, 400) })
-    const r = aggregateRoleBytesMeasures(texto)
+    const text = roleRow('slice-judge', { ruling: 'PASS', ...bytes(3000, 0, 400) })
+    const r = aggregateRoleBytesMeasures(text)
     expect(r.roleMeasured).toBe(1)
     expect(r.skillBytes).toBe(0)
   })
 
   it('if no role carries the columns, the three sums are null and not 0', () => {
-    const texto = papel('implement', { outcome: 'done', brief_bytes: 900 })
-    expect(aggregateRoleBytesMeasures(texto)).toEqual({
+    const text = roleRow('implement', { outcome: 'done', brief_bytes: 900 })
+    expect(aggregateRoleBytesMeasures(text)).toEqual({
       roleAttempts: 1, roleMeasured: 0, roleLegacy: 1, agentBytes: null, skillBytes: null, packageBytes: null,
     })
   })
 
   it('an empty file does not blow up and asserts nothing', () => {
-    for (const vacio of ['', undefined]) {
-      expect(aggregateRoleBytesMeasures(vacio)).toEqual({
+    for (const empty of ['', undefined]) {
+      expect(aggregateRoleBytesMeasures(empty)).toEqual({
         roleAttempts: 0, roleMeasured: 0, roleLegacy: 0, agentBytes: null, skillBytes: null, packageBytes: null,
       })
     }
   })
 
   it('an unreadable line does not blow up the aggregator', () => {
-    const texto = [papel('judge', { ruling: 'PASS', ...bytes(5000, 50, 300) }), '{no es json\n'].join('')
-    expect(() => aggregateRoleBytesMeasures(texto)).not.toThrow()
-    expect(aggregateRoleBytesMeasures(texto).roleAttempts).toBe(1)
+    const text = [roleRow('judge', { ruling: 'PASS', ...bytes(5000, 50, 300) }), '{no es json\n'].join('')
+    expect(() => aggregateRoleBytesMeasures(text)).not.toThrow()
+    expect(aggregateRoleBytesMeasures(text).roleAttempts).toBe(1)
   })
 })
 
@@ -815,11 +815,11 @@ describe('the telemetry of a real step', () => {
     '',
   ].join('\n')
 
-  let repo, casa
+  let repo, homeDir
 
   beforeEach(() => {
     repo = mkdtempSync(join(tmpdir(), 'ct-metrics-'))
-    casa = mkdtempSync(join(tmpdir(), 'ct-casa-'))
+    homeDir = mkdtempSync(join(tmpdir(), 'ct-casa-'))
     const g = (...a) => execFileSync('git', a, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
     g('init', '-q', '-b', 'main')
     g('config', 'user.email', 't@e.com')
@@ -836,7 +836,7 @@ describe('the telemetry of a real step', () => {
   })
   afterEach(() => {
     rmSync(repo, { recursive: true, force: true })
-    rmSync(casa, { recursive: true, force: true })
+    rmSync(homeDir, { recursive: true, force: true })
   })
 
   const ct = (configDir, ...args) => spawnSync('node', [SCRIPT, ...args, '--plan', 'plan.md', '--issue', '7'], {
@@ -845,12 +845,12 @@ describe('the telemetry of a real step', () => {
   })
 
   it('the row carries the complete identity, with the seeded epic and the hash of the plan', () => {
-    const r = ct(casa, 'report', 'report.json')
+    const r = ct(homeDir, 'report', 'report.json')
     expect(r.status).toBe(0)
-    const filas = readFileSync(join(casa, 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
+    const rows = readFileSync(join(homeDir, 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
       .trim().split('\n').map((l) => JSON.parse(l))
-    expect(filas).toHaveLength(1)
-    const f = filas[0]
+    expect(rows).toHaveLength(1)
+    const f = rows[0]
     expect(f.repo).toBe('josemerca/control-tower-plugin')
     expect(f.epic).toBe('12')            // read from the SLICE.md the dispatch seeded
     expect(f.issue).toBe(7)
@@ -862,9 +862,9 @@ describe('the telemetry of a real step', () => {
 
   it('if it cannot be written, the step does the SAME and merely warns', () => {
     // A file where the directory should go: mkdir fails with ENOTDIR.
-    const bloqueado = join(casa, 'bloqueado')
-    writeFileSync(bloqueado, 'no soy un directorio\n')
-    const r = ct(bloqueado, 'report', 'report.json')
+    const blockedDir = join(homeDir, 'bloqueado')
+    writeFileSync(blockedDir, 'no soy un directorio\n')
+    const r = ct(blockedDir, 'report', 'report.json')
     expect(r.status).toBe(0)                            // the same code as with telemetry
     expect(r.stdout).toMatch(/stageados 1 fichero/)     // and the step was applied all the same
     expect(r.stderr).toMatch(/no se pudo escribir la telemetría/)
@@ -873,20 +873,20 @@ describe('the telemetry of a real step', () => {
   })
 
   // MEASURE 2 against the real oracle: `ct-step next` writes the REAL brief to
-  // disk (with the plugin's ct yardstick pasted in by `escribirBrief`), and
+  // disk (with the plugin's ct yardstick pasted in by `writeBrief`), and
   // `ct-step report` measures it by reading exactly that path.
   it('if the brief reached disk, the row counts its ct yardstick documents and its weight', () => {
-    const n = ct(casa, 'next')
+    const n = ct(homeDir, 'next')
     expect(n.status).toBe(0)
-    const r = ct(casa, 'report', 'report.json')
+    const r = ct(homeDir, 'report', 'report.json')
     expect(r.status).toBe(0)
-    const filas = readFileSync(join(casa, 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
+    const rows = readFileSync(join(homeDir, 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
       .trim().split('\n').map((l) => JSON.parse(l))
-    const f = filas[0]
+    const f = rows[0]
     // The plugin's conventions/ documents, counted by heading and not by
     // comparing against PluginYardstick.FILES.length. That is why neither the
     // fifth (defects.md, when code.md was split) nor the ones that arrived
-    // afterwards forced anyone to touch briefVaraCtMeasures.
+    // afterwards forced anyone to touch briefCtYardstickMeasures.
     // All eight: the ct yardstick is no longer filtered by whatever `**Files:**`
     // declares, so the brief carries the whole list whether or not the task
     // creates a module.
@@ -899,11 +899,11 @@ describe('the telemetry of a real step', () => {
   // to `null`, never to `0` — a zero would assert a brief with no yardstick, and
   // what happened is that it could not be looked at.
   it('if the brief cannot be read, the two fields go to null, not to 0', () => {
-    const r = ct(casa, 'report', 'report.json')
+    const r = ct(homeDir, 'report', 'report.json')
     expect(r.status).toBe(0)
-    const filas = readFileSync(join(casa, 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
+    const rows = readFileSync(join(homeDir, 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
       .trim().split('\n').map((l) => JSON.parse(l))
-    const f = filas[0]
+    const f = rows[0]
     expect(f.brief_vara_ct_docs).toBeNull()
     expect(f.brief_bytes).toBeNull()
   })

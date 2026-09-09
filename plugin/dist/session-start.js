@@ -7412,8 +7412,8 @@ function composeHydration(stateText, gitLog, { stateRel: stateRel2 = STATE_REL_P
   const parts = [];
   if (blocked.state === "unreadable") parts.push(unreadableNotice(error || blocked.why, { stateRel: stateRel2 }));
   else if (blocked.state === "blocked") parts.push(blockNotice(blocked, { nextAction: meta?.next_action, stateRel: stateRel2 }));
-  const titulo = stateRel2 === SLICE_REL_PATH ? "Estado del slice" : "Estado del repo";
-  parts.push(`# ${titulo} (hidrataci\xF3n autom\xE1tica)
+  const title = stateRel2 === SLICE_REL_PATH ? "Estado del slice" : "Estado del repo";
+  parts.push(`# ${title} (hidrataci\xF3n autom\xE1tica)
 
 ${stripFrontmatterComments(stateText).trim()}`);
   const guide = fieldReadingGuide(meta, { blocked: blocked.state === "blocked" });

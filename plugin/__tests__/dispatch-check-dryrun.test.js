@@ -401,13 +401,13 @@ describe('dispatch-check — fix review round 1 (Critical 2: gh() failures leave
     // (number/labels[].name), not the internal {n,labels} — allOpen() does that
     // mapping, and the stub must imitate exactly what the real gh would
     // return.
-    const readbackConLoss = [
+    const readbackWithLoss = [
       { number: 17, labels: [{ name: 'status:in-progress' }, { name: 'touches:db' }] }, // us
       { number: 5, labels: [{ name: 'status:in-progress' }, { name: 'touches:db' }] },  // another one, a lower number → we lose
     ]
     const r = runReal(['17', '--repo', 'o/r'], {
       FAKE_GH_VIEW_LABELS: JSON.stringify(['touches:db']),
-      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[], readbackConLoss]), // 1st: no clash; 2nd: readback with a loss
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[], readbackWithLoss]), // 1st: no clash; 2nd: readback with a loss
       FAKE_GH_COUNTER_FILE: counterFile,
       FAKE_GH_EDIT_FAIL_SUBSTR: '--add-label status:ready', // the revert (not the initial claim) fails
     })
@@ -574,14 +574,14 @@ describe('dispatch-check — the T11 CT_CLAIM_PRECLAIM_DELAY_MS hook', () => {
       { encoding: 'utf8', stdio: QUIET_STDIO, env: { ...process.env, CT_CLAIM_FIXTURE: JSON.stringify(fixture), ...env } })
 
     const control = timed(() => dryRun({}))
-    const conHook = timed(() => dryRun({ CT_CLAIM_PRECLAIM_DELAY_MS: String(NOMINAL_MS) }))
+    const withHook = timed(() => dryRun({ CT_CLAIM_PRECLAIM_DELAY_MS: String(NOMINAL_MS) }))
 
     expect(control.r).toMatch(/claimed #3/)
-    expect(conHook.r).toMatch(/claimed #3/)
+    expect(withHook.r).toMatch(/claimed #3/)
     // If the hook had touched the pure path, the difference would be ~5000ms.
     // It is required to be below HALF: plenty of margin for the noise of two
     // consecutive node start-ups, and nowhere near enough to hide the sleep.
-    expect(conHook.elapsed - control.elapsed).toBeLessThan(NOMINAL_MS / 2)
+    expect(withHook.elapsed - control.elapsed).toBeLessThan(NOMINAL_MS / 2)
   })
 
   // Fix round 1 (T11 review), Minor 1: the validation of

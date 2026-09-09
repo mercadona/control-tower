@@ -35,30 +35,30 @@ import { renderKickoff } from '../scripts/kickoff.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-class ConteoDeNegaciones {
+class NegationCount {
   // Contract literals: discounted before counting (see the header).
-  static LITERALES_DE_CONTRATO = [/no-aplica/g, /No TDD/g]
+  static CONTRACT_LITERALS = [/no-aplica/g, /No TDD/g]
 
-  static PALABRAS_INGLESAS = /\b(not|never|cannot|no)\b/gi
+  static ENGLISH_WORDS = /\b(not|never|cannot|no)\b/gi
 
-  static PALABRAS_CASTELLANAS = /\b(no|nunca|jamás|tampoco)\b/gi
+  static SPANISH_WORDS = /\b(no|nunca|jamás|tampoco)\b/gi
 
-  static #sinLiterales(texto) {
-    let limpio = texto
-    for (const literal of ConteoDeNegaciones.LITERALES_DE_CONTRATO) limpio = limpio.replace(literal, ' ')
-    return limpio
+  static #withoutLiterals(text) {
+    let cleaned = text
+    for (const literal of NegationCount.CONTRACT_LITERALS) cleaned = cleaned.replace(literal, ' ')
+    return cleaned
   }
 
-  static enIngles(texto) {
-    return (ConteoDeNegaciones.#sinLiterales(texto).match(ConteoDeNegaciones.PALABRAS_INGLESAS) || []).length
+  static inEnglish(text) {
+    return (NegationCount.#withoutLiterals(text).match(NegationCount.ENGLISH_WORDS) || []).length
   }
 
-  static enCastellano(texto) {
-    return (ConteoDeNegaciones.#sinLiterales(texto).match(ConteoDeNegaciones.PALABRAS_CASTELLANAS) || []).length
+  static inSpanish(text) {
+    return (NegationCount.#withoutLiterals(text).match(NegationCount.SPANISH_WORDS) || []).length
   }
 
-  static enMayusculas(texto) {
-    return (texto.match(/\b(NO|NUNCA|JAMÁS)\b/g) || []).length
+  static inUppercase(text) {
+    return (text.match(/\b(NO|NUNCA|JAMÁS)\b/g) || []).length
   }
 }
 
@@ -66,8 +66,8 @@ class ConteoDeNegaciones {
 // render —signal, e2e runs, type addendum— so that the count measures the
 // longest kickoff the dispatcher can end up typing, and not a short version
 // that hides the conditional lines.
-class SliceDeReferencia {
-  static conTodoDeclarado() {
+class ReferenceSlice {
+  static withEverythingDeclared() {
     return {
       n: 42,
       name: 'card de resumen',
@@ -79,7 +79,7 @@ class SliceDeReferencia {
     }
   }
 
-  static opciones() {
+  static options() {
     return {
       repo: 'o/r',
       dispatchCheckPath: '/x/dispatch-check.mjs',
@@ -90,20 +90,20 @@ class SliceDeReferencia {
   }
 }
 
-const leer = (...partes) => readFileSync(join(ROOT, ...partes), 'utf8')
+const read = (...parts) => readFileSync(join(ROOT, ...parts), 'utf8')
 
 // The thresholds, in a single place, with the count of the day they were
 // measured. The «measured» column is documentation: what breaks the test is
 // the threshold.
-const UMBRALES = [
+const THRESHOLDS = [
   ['agents/ct-judge.md', ['agents', 'ct-judge.md'], 50], // measured: 40 (before #99: 151)
   ['agents/ct-slice-judge.md', ['agents', 'ct-slice-judge.md'], 40], // measured: 29 (before: 88)
   ['prompts/task-implementer.md', ['prompts', 'task-implementer.md'], 25], // measured: 17 (before: 56)
 ]
 
 describe("#99 — the judge's and the implementer's texts describe the target", () => {
-  it.each(UMBRALES)('%s stays below its negation threshold', (_, partes, umbral) => {
-    expect(ConteoDeNegaciones.enIngles(leer(...partes))).toBeLessThanOrEqual(umbral)
+  it.each(THRESHOLDS)('%s stays below its negation threshold', (_, parts, threshold) => {
+    expect(NegationCount.inEnglish(read(...parts))).toBeLessThanOrEqual(threshold)
   })
 
   // The rewrite deliberately keeps the negations that are MECHANISM, and this
@@ -111,27 +111,27 @@ describe("#99 — the judge's and the implementer's texts describe the target", 
   // field the program writes, and the two items whose vocabulary is closed by
   // the schema.
   it('the negations that are mechanism are still standing', () => {
-    const juez = leer('agents', 'ct-judge.md')
-    expect(juez).toContain('There is no `review_token` for you to write')
-    expect(juez).toContain('never `sin-vara`')
-    expect(juez).toMatch(/never reports `medium`/)
-    expect(leer('agents', 'ct-slice-judge.md')).toContain('There is no `review_token` for you to write')
+    const judge = read('agents', 'ct-judge.md')
+    expect(judge).toContain('There is no `review_token` for you to write')
+    expect(judge).toContain('never `sin-vara`')
+    expect(judge).toMatch(/never reports `medium`/)
+    expect(read('agents', 'ct-slice-judge.md')).toContain('There is no `review_token` for you to write')
   })
 })
 
 describe('#99 — the kickoff is a sequence of what gets done', () => {
-  const kickoff = () => renderKickoff(SliceDeReferencia.conTodoDeclarado(), SliceDeReferencia.opciones())
+  const kickoff = () => renderKickoff(ReferenceSlice.withEverythingDeclared(), ReferenceSlice.options())
 
   // #99's literal criterion. Uppercase was the emphasis with which the kickoff
   // shouted its prohibitions —«NO mergees», «NO crees worktrees», «NO está en
   // este kickoff»— and it is also what weighs most in the bleedthrough.
   it('no uppercase negation, not even in the gate lines', () => {
-    expect(ConteoDeNegaciones.enMayusculas(kickoff())).toBe(0)
+    expect(NegationCount.inUppercase(kickoff())).toBe(0)
   })
 
   it('the whole kickoff stays below its negation threshold', () => {
     // measured: 19 (the longest kickoff, with signal, e2e and the four gates).
-    expect(ConteoDeNegaciones.enCastellano(kickoff())).toBeLessThanOrEqual(25)
+    expect(NegationCount.inSpanish(kickoff())).toBeLessThanOrEqual(25)
   })
 
   // What the kickoff says NOW where it used to forbid: the machine dictates

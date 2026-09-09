@@ -351,7 +351,7 @@ export function renderGateKickoffLines(gates) {
 }
 
 // renderGatesIssueContent: the body of the issue's "## Gates" section. It
-// ALWAYS returns content (never null, unlike groom.js#renderDescripcion): the
+// ALWAYS returns content (never null, unlike groom.js#renderDescription): the
 // section is always emitted, including when there is no gate at all. "This
 // slice has no gates" is a statement a human who opens the PR needs to be able
 // to read; its absence would only say "this issue is old, or nobody thought

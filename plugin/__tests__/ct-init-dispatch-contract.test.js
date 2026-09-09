@@ -27,9 +27,9 @@ const script = join(root, 'scripts', 'ct-init.sh')
 function seed() {
   const dir = mkdtempSync(join(tmpdir(), 'ct-'))
   execFileSync('bash', [script, dir], { encoding: 'utf8' })
-  const contrato = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
+  const contractText = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
   rmSync(dir, { recursive: true, force: true })
-  return contrato
+  return contractText
 }
 
 const V1 = readFileSync(join(root, '__tests__', 'fixtures', 'slices-contract-v1.md'), 'utf8')
@@ -315,9 +315,9 @@ describe('contract §9 (F15): the return of a rejected PR and the order of /ct-g
     expect(a).toMatch(/no desbloquea a sus vecinos/i)
     // Check against the code: a ready that shares a token with the reopened one
     // (already at in-progress) is NOT selected, not even with cap to spare.
-    const reabierto = { n: 1, order: 1, status: 'in-progress', deps: [], touches: ['api'] }
-    const vecino = { n: 2, order: 2, status: 'ready', deps: [], touches: ['api'] }
-    expect(planDispatch([reabierto, vecino], { mergedIssues: [], cap: 5 }).selected).toEqual([])
+    const reopened = { n: 1, order: 1, status: 'in-progress', deps: [], touches: ['api'] }
+    const neighbour = { n: 2, order: 2, status: 'ready', deps: [], touches: ['api'] }
+    expect(planDispatch([reopened, neighbour], { mergedIssues: [], cap: 5 }).selected).toEqual([])
   })
 
   it('it documents --requeue as the only transition that releases tokens without a merge, and what it checks', () => {

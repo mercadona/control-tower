@@ -8,7 +8,7 @@ import { renderSpecLink } from '../scripts/groom.js'
 // pushed or not) is tested without a network and without a repo.
 
 describe('parseRemote — the shapes in which git can return the same repo', () => {
-  const CASOS = [
+  const CASES = [
     ['https://github.com/o/r.git', { host: 'github.com', owner: 'o', repo: 'r' }],
     ['https://github.com/o/r', { host: 'github.com', owner: 'o', repo: 'r' }],
     ['https://github.com/o/r/', { host: 'github.com', owner: 'o', repo: 'r' }],
@@ -20,9 +20,9 @@ describe('parseRemote — the shapes in which git can return the same repo', () 
     // turn a perfectly buildable link into a degradation.
     ['git@ghe.empresa.com:equipo/proyecto.git', { host: 'ghe.empresa.com', owner: 'equipo', repo: 'proyecto' }],
   ]
-  for (const [url, esperado] of CASOS) {
-    it(`${url} → ${esperado.owner}/${esperado.repo} on ${esperado.host}`, () => {
-      expect(parseRemote(url)).toEqual(esperado)
+  for (const [url, expected] of CASES) {
+    it(`${url} → ${expected.owner}/${expected.repo} on ${expected.host}`, () => {
+      expect(parseRemote(url)).toEqual(expected)
     })
   }
   it('a remote that is not a recognisable URL → null (nothing is guessed)', () => {
@@ -83,26 +83,26 @@ describe('renderedHtmlHasAnchor — the PREFIXED form is looked for, which is th
 const HEADING = { text: '9. Slices', anchor: '9-slices' }
 const OK_HTML = '<a id="user-content-9-slices" class="anchor" href="#9-slices"></a>'
 
-// fakeRun: answers the four commands of the sequence. `fallos` names which
+// fakeRun: answers the four commands of the sequence. `failures` names which
 // one the attempt gives up at (the same point at which it would really give
 // up: spec outside a repo, no remote, gh down, spec not pushed).
-function fakeRun({ fallos = {}, remote = 'https://github.com/o/r.git', branch = 'main', html = OK_HTML, log = [] } = {}) {
+function fakeRun({ failures = {}, remote = 'https://github.com/o/r.git', branch = 'main', html = OK_HTML, log = [] } = {}) {
   return (cmd, args) => {
     log.push([cmd, ...args].join(' '))
     if (cmd === 'git' && args.includes('--show-toplevel')) {
-      if (fallos.toplevel) throw new Error('not a git repository')
+      if (failures.toplevel) throw new Error('not a git repository')
       return '/repo'
     }
     if (cmd === 'git' && args.includes('get-url')) {
-      if (fallos.remote) throw new Error('No such remote')
+      if (failures.remote) throw new Error('No such remote')
       return remote
     }
     if (cmd === 'gh' && args[0] === 'repo') {
-      if (fallos.branch) throw new Error('gh: not found')
+      if (failures.branch) throw new Error('gh: not found')
       return branch
     }
     if (cmd === 'gh' && args[0] === 'api') {
-      if (fallos.contents) throw new Error('gh: Not Found (HTTP 404)')
+      if (failures.contents) throw new Error('gh: Not Found (HTTP 404)')
       return html
     }
     throw new Error(`comando inesperado: ${cmd} ${args.join(' ')}`)
@@ -112,12 +112,12 @@ function fakeRun({ fallos = {}, remote = 'https://github.com/o/r.git', branch = 
 const relativize = (root, file) => file.startsWith(`${root}/`) ? file.slice(root.length + 1) : '../fuera.md'
 
 function resolve(opts = {}) {
-  const { fallos, remote, branch, html, heading = HEADING, specFile = '/repo/docs/spec.md', log } = opts
+  const { failures, remote, branch, html, heading = HEADING, specFile = '/repo/docs/spec.md', log } = opts
   return resolveSpecRef({
     specFile,
     displayPath: 'docs/spec.md',
     heading,
-    run: fakeRun({ fallos, remote, branch, html, log }),
+    run: fakeRun({ failures, remote, branch, html, log }),
     relativize,
   })
 }
@@ -156,20 +156,20 @@ describe('resolveSpecRef — the normal path', () => {
 })
 
 describe('resolveSpecRef — when a good link canNOT be built, it is said: a broken one is never emitted', () => {
-  const RENDIDAS = [
-    ['the spec is not in a git repo', { fallos: { toplevel: true } }, SPEC_REF_REASONS.notInRepo],
-    ['the repo has no origin remote', { fallos: { remote: true } }, SPEC_REF_REASONS.noRemote],
+  const GIVE_UP_CASES = [
+    ['the spec is not in a git repo', { failures: { toplevel: true } }, SPEC_REF_REASONS.notInRepo],
+    ['the repo has no origin remote', { failures: { remote: true } }, SPEC_REF_REASONS.noRemote],
     ['the remote is not a recognisable GitHub URL', { remote: '/ruta/local' }, SPEC_REF_REASONS.unparsableRemote],
-    ['the default branch cannot be resolved', { fallos: { branch: true } }, SPEC_REF_REASONS.noDefaultBranch],
+    ['the default branch cannot be resolved', { failures: { branch: true } }, SPEC_REF_REASONS.noDefaultBranch],
     ['the default branch comes back empty', { branch: '' }, SPEC_REF_REASONS.noDefaultBranch],
   ]
-  for (const [caso, opts, motivo] of RENDIDAS) {
-    it(`${caso} → no url, with a reason and with a warning`, () => {
+  for (const [caseName, opts, reason] of GIVE_UP_CASES) {
+    it(`${caseName} → no url, with a reason and with a warning`, () => {
       const { ref, warnings } = resolve(opts)
       expect(ref.url).toBeNull()
-      expect(ref.reason).toBe(motivo)
+      expect(ref.reason).toBe(reason)
       expect(warnings).toHaveLength(1)
-      expect(warnings[0]).toContain(motivo)
+      expect(warnings[0]).toContain(reason)
     })
   }
 
@@ -177,7 +177,7 @@ describe('resolveSpecRef — when a good link canNOT be built, it is said: a bro
   // yet pushed. It was exactly the one that produced a broken link without
   // saying anything.
   it('the spec is not published on the default branch → no url, and the reason names repo and branch', () => {
-    const { ref, warnings } = resolve({ fallos: { contents: true } })
+    const { ref, warnings } = resolve({ failures: { contents: true } })
     expect(ref.url).toBeNull()
     expect(ref.reason).toBe(`${SPEC_REF_REASONS.notPublished} (o/r, rama main)`)
     expect(warnings[0]).toMatch(/sin publicar|no está publicado/i)
@@ -192,7 +192,7 @@ describe('resolveSpecRef — when a good link canNOT be built, it is said: a bro
   // Hard rule: if there is no url, there is a warning. The link falling over
   // in silence IS the original defect.
   it('NO degradation is silent', () => {
-    for (const [, opts] of [...RENDIDAS, ['not published', { fallos: { contents: true } }], ['outside', { specFile: '/otro/spec.md' }]]) {
+    for (const [, opts] of [...GIVE_UP_CASES, ['not published', { failures: { contents: true } }], ['outside', { specFile: '/otro/spec.md' }]]) {
       const { ref, warnings } = resolve(opts)
       if (ref.url === null) expect(warnings.length).toBeGreaterThan(0)
     }
@@ -202,7 +202,7 @@ describe('resolveSpecRef — when a good link canNOT be built, it is said: a bro
   // that /ct-groom will NOT fix it on its own on the next run (F5 is
   // idempotent by existence): the moment to fix it is BEFORE.
   it('the warning says a later run does not fix it without --reconcile', () => {
-    const { warnings } = resolve({ fallos: { toplevel: true } })
+    const { warnings } = resolve({ failures: { toplevel: true } })
     expect(warnings[0]).toMatch(/--reconcile/)
     expect(warnings[0]).toMatch(/ANTES de la corrida real/)
   })

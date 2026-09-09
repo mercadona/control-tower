@@ -114,7 +114,7 @@ beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'seccion-del-plan-')); awk =
 afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
 
 describe('the same rule written twice: extract_section in awk and seccionDelPlan in JavaScript', () => {
-  const planes = [
+  const plans = [
     ['a_section_closed_by_the_next_heading_of_the_same_level', PlanMother.aSectionClosedByTheNextHeadingOfTheSameLevel()],
     ['a_fenced_block_carrying_something_that_looks_like_a_heading', PlanMother.aSectionWhoseFencedBlockCarriesSomethingThatLooksLikeAHeading()],
     ['a_plan_that_never_declared_the_section', PlanMother.aPlanThatNeverDeclaredTheSection()],
@@ -123,7 +123,7 @@ describe('the same rule written twice: extract_section in awk and seccionDelPlan
     ['a_section_closed_by_a_sibling_heading_at_the_same_level', PlanMother.a_section_closed_by_a_sibling_heading_at_the_same_level()],
   ]
 
-  it.each(planes)('both implementations say the same thing about %s', (_nombre, plan) => {
+  it.each(plans)('both implementations say the same thing about %s', (_name, plan) => {
     const planPath = join(dir, 'plan.md')
     writeFileSync(planPath, plan)
 

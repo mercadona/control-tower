@@ -35,9 +35,9 @@ function initIn(existingAgents) {
   // #93 — the contract moved out of AGENTS.md into its own file in the
   // governed repo. This suite looks at BOTH things: the traversal section,
   // which is still in AGENTS.md, and the contract version, which no longer is.
-  const contrato = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
+  const contractText = readFileSync(join(dir, 'docs', 'superpowers', 'CONTRATO-SLICES.md'), 'utf8')
   rmSync(dir, { recursive: true, force: true })
-  return { r, agents, contrato }
+  return { r, agents, contractText }
 }
 
 describe('the traversal section in AGENTS.md', () => {
@@ -52,10 +52,10 @@ describe('the traversal section in AGENTS.md', () => {
 
   it('filling it in does NOT stop the plugin from recognising it', () => {
     const { agents } = initIn(null)
-    const relleno = agents.replace('- Levantar:', '- Levantar:      cargo run --example serve')
+    const filler = agents.replace('- Levantar:', '- Levantar:      cargo run --example serve')
     const dir = mkdtempSync(join(tmpdir(), 'ct-init-e2e2-'))
     spawnSync('git', ['init', '-q', dir], { encoding: 'utf8' })
-    writeFileSync(join(dir, 'AGENTS.md'), relleno)
+    writeFileSync(join(dir, 'AGENTS.md'), filler)
     const r = spawnSync('bash', [INIT, dir], { encoding: 'utf8' })
     const after = readFileSync(join(dir, 'AGENTS.md'), 'utf8')
     rmSync(dir, { recursive: true, force: true })
@@ -91,8 +91,8 @@ describe('the traversal section in AGENTS.md', () => {
   // it goes by the version the script declares and that it documents the E2E
   // column.
   it('the slices-table contract goes by the version the script declares and documents the E2E column', () => {
-    const { contrato } = initIn(null)
-    expect(contrato).toContain(`<!-- ct-init:slices-contract-version: ${CONTRACT_VERSION} -->`)
-    expect(contrato).toContain('E2E')
+    const { contractText } = initIn(null)
+    expect(contractText).toContain(`<!-- ct-init:slices-contract-version: ${CONTRACT_VERSION} -->`)
+    expect(contractText).toContain('E2E')
   })
 })

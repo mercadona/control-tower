@@ -126,15 +126,15 @@ const isText = (path) => ends(path, TEXT_EXTENSIONS)
 
 // Whether a backticked token of §3 is a repo path that has to be checked. See
 // the long why next to the `reference-paths` rule, at the end of validatePlan.
-const esRutaCitada = (t) => !t.endsWith('/') && !/\s/.test(t) && (t.includes('/') || isText(t))
+const isCitedPath = (t) => !t.endsWith('/') && !/\s/.test(t) && (t.includes('/') || isText(t))
 const isTest = (path) => TEST_PATH.test(path)
 const isConfig = (path) =>
   ends(path, CONFIG_EXTENSIONS) || CONFIG_BASENAMES.includes(path.split('/').pop())
 
 function roleOf(line) {
-  for (const [rol, re] of ROLE_LABELS) {
+  for (const [role, re] of ROLE_LABELS) {
     const m = re.exec(line)
-    if (m) return { rol, path: m[1].trim() }
+    if (m) return { role, path: m[1].trim() }
   }
   return null
 }
@@ -287,9 +287,9 @@ export function validatePlan(markdown, { readFile } = {}) {
     'verification-block', 'verification-predicate',
     'global-verification-block', 'global-verification-predicate',
   ]
-  for (const problema of extractTasks(markdown).problems) {
-    if (!VERIFICATION_RULES.includes(problema.rule)) continue
-    push('verification', problema.detail)
+  for (const problem of extractTasks(markdown).problems) {
+    if (!VERIFICATION_RULES.includes(problem.rule)) continue
+    push('verification', problem.detail)
   }
 
   // F-jjponz-4, pass A — the blocks WITH a role. It checks where each one
@@ -300,12 +300,12 @@ export function validatePlan(markdown, { readFile } = {}) {
     if (!l.structural) return
     const found = roleOf(l.line)
     if (!found) return
-    const { rol, path } = found
+    const { role, path } = found
     const body = fenceBodyAfter(lines, i + 1)
     if (body === null) {
       // For "Current state" that warning is already emitted by the literality
       // pass, which has owned it since F-jjponz-1: it is not duplicated.
-      if (rol !== 'Current state') {
+      if (role !== 'Current state') {
         push('roles', `línea ${i + 1}: "${l.line.trim()}" no lleva bloque de código a continuación.`)
       }
       return
@@ -317,28 +317,28 @@ export function validatePlan(markdown, { readFile } = {}) {
     }
     if (isConfig(path)) {
       push('config', `línea ${i + 1}: "${l.line.trim()}" apunta a configuración (${path}). Las configuraciones NO llevan bloque: describe el cambio en prosa con el valor inline — p.ej. «el script \`build\` pasa a \`tsc -p tsconfig.build.json\`». Solo el código lleva bloque.`)
-    } else if (rol !== 'Current state' && isTest(path)) {
+    } else if (role !== 'Current state' && isTest(path)) {
       push('tests', `línea ${i + 1}: "${l.line.trim()}" apunta a un fichero de test (${path}). El cuerpo del test lo escribe el implementador en rojo primero: en el plan van el NOMBRE literal del test y su aserción clave, en **TDD:** y **Tests:**. Si lo que citas es una aserción que YA existe y hay que cambiar, cítala con "Current state (${path}, lines A-B):".`)
     }
-    if (rol === 'Final text' && !isText(path)) {
+    if (role === 'Final text' && !isText(path)) {
       push('roles', `línea ${i + 1}: "Final text (${path})" solo vale para texto cuyo valor literal es el entregable (${TEXT_EXTENSIONS.join(', ')}). Para código, el plan lleva su contrato y el cuerpo lo escribe el implementador con TDD.`)
     }
-    if (len > ROLE_BUDGETS[rol]) {
-      push('budget', `línea ${i + 1}: el bloque "${l.line.trim()}" tiene ${len} líneas y su presupuesto son ${ROLE_BUDGETS[rol]}. ${BUDGET_REMEDY[rol]}`)
+    if (len > ROLE_BUDGETS[role]) {
+      push('budget', `línea ${i + 1}: el bloque "${l.line.trim()}" tiene ${len} líneas y su presupuesto son ${ROLE_BUDGETS[role]}. ${BUDGET_REMEDY[role]}`)
     }
-    roleBlocks.push({ rol, path, at: i, len, task })
+    roleBlocks.push({ role, path, at: i, len, task })
   })
 
-  for (const rol of ['Contract', 'Call site']) {
-    const vistos = new Map()
+  for (const role of ['Contract', 'Call site']) {
+    const seen = new Map()
     for (const b of roleBlocks) {
-      if (b.rol !== rol || !b.task) continue
-      const clave = `${b.task.name}::${b.path}`
-      if (vistos.has(clave)) {
-        push('roles', `${b.task.name}: dos bloques "${rol} (${b.path})" (líneas ${vistos.get(clave) + 1} y ${b.at + 1}). El contrato de un fichero se escribe UNA vez por tarea: junta las declaraciones en un solo bloque — trocearlo no compra presupuesto.`)
+      if (b.role !== role || !b.task) continue
+      const key = `${b.task.name}::${b.path}`
+      if (seen.has(key)) {
+        push('roles', `${b.task.name}: dos bloques "${role} (${b.path})" (líneas ${seen.get(key) + 1} y ${b.at + 1}). El contrato de un fichero se escribe UNA vez por tarea: junta las declaraciones en un solo bloque — trocearlo no compra presupuesto.`)
         continue
       }
-      vistos.set(clave, b.at)
+      seen.set(key, b.at)
     }
   }
 
@@ -346,26 +346,26 @@ export function validatePlan(markdown, { readFile } = {}) {
   // the "Final content:"/"Current state: does not exist." idiom that produced
   // the dumps. A command block is exempt: it gives itself away by its language
   // or by coming after **Verification:**.
-  let menuPendiente = true
+  let menuPending = true
   lines.forEach((l, i) => {
     if (!l.fence || !l.opens) return
     let prev = i - 1
     while (prev >= 0 && lines[prev].line.trim() === '') prev--
-    const etiqueta = prev >= 0 ? lines[prev].line.trim() : ''
+    const label = prev >= 0 ? lines[prev].line.trim() : ''
     if (prev >= 0 && lines[prev].structural && roleOf(lines[prev].line)) return
     const lang = langAt(l.line)
-    const esComando = COMMAND_LANGS.has(lang) || etiqueta.includes('**Verification:**')
+    const isCommand = COMMAND_LANGS.has(lang) || label.includes('**Verification:**')
     const body = bodyAtFence(lines, i)
-    if (!esComando) {
+    if (!isCommand) {
       // The menu of roles goes out ONCE: a plan with twenty dumps produced
       // twenty copies of the same paragraph, and a message that cannot be read
       // is not a remedy.
-      push('roles', `línea ${i + 1}: bloque de código sin etiqueta de rol${etiqueta ? ` (lo precede "${etiqueta}")` : ''}.${menuPendiente ? ` ${ROLE_MENU}` : ''}`)
-      menuPendiente = false
+      push('roles', `línea ${i + 1}: bloque de código sin etiqueta de rol${label ? ` (lo precede "${label}")` : ''}.${menuPending ? ` ${ROLE_MENU}` : ''}`)
+      menuPending = false
       return
     }
     if (body === null) return
-    if (body.some((linea) => linea.includes('<<'))) {
+    if (body.some((bodyLine) => bodyLine.includes('<<'))) {
       push('commands', `línea ${i + 1}: el bloque de comandos lleva un heredoc (<<). Un heredoc es un fichero entero colado por la puerta de atrás: si su contenido importa, va como "Contract (path):"; si no, no va.`)
     }
     if (body.length > COMMAND_BUDGET) {
@@ -387,8 +387,8 @@ export function validatePlan(markdown, { readFile } = {}) {
     // is the shape cargo, pytest, jest and mocha print. A count bounded to the
     // task's module —`grep -c '^test log_timestamp::'`— does not have it, and
     // that is exactly the alternative the message offers.
-    for (const [j, linea] of body.entries()) {
-      const total = /\b\d+\s+pass(?:ed|ing)\b/i.exec(linea)
+    for (const [j, bodyLine] of body.entries()) {
+      const total = /\b\d+\s+pass(?:ed|ing)\b/i.exec(bodyLine)
       if (!total) continue
       push('commands', `línea ${i + 2 + j}: el control clava el número de tests de la suite ("${total[0]}"). Es un proxy: el juez puede exigir con razón una aserción más, y entonces el número caduca en todos los controles que lo repiten; y mientras esté clavado no queda hueco para conducir en rojo la aserción que conventions/testing.md exige, así que una rama se entrega sin test para que el control siga verde. Cuenta los tests DE ESTA TAREA por su prefijo de módulo (por ejemplo: grep -c '^test <modulo>::'), no el total.`)
     }
@@ -399,10 +399,10 @@ export function validatePlan(markdown, { readFile } = {}) {
   // was always satisfied and checked nothing.
   for (const t of tasks) {
     if (roleBlocks.some((b) => b.task === t)) continue
-    const declara = lines
+    const declares = lines
       .slice(t.at + 1, t.boundary)
       .some((l) => l.structural && NO_CODE.test(l.line.trim()))
-    if (!declara) {
+    if (!declares) {
       push('tasks', `${t.name}: no lleva ningún bloque con etiqueta de rol (Current state / Contract / Call site / Final text), y un bloque de comandos no cuenta. Si la tarea de verdad no lleva código —configuración descrita en prosa, o documentación—, dilo con la línea exacta: "No code — <razón>".`)
     }
   }
@@ -414,10 +414,10 @@ export function validatePlan(markdown, { readFile } = {}) {
     }
   }
   for (const t of tasks) {
-    const largo = lines.slice(t.at, t.boundary).map((l) => l.line).join('\n').length
-    if (largo > CODE_BUDGETS.chars) {
-      const folios = (largo / CODE_BUDGETS.chars).toFixed(1)
-      push('size', `${t.name}: la tarea mide ${largo} caracteres — ${folios} folios — y el máximo es UN folio A4 (${CODE_BUDGETS.chars} caracteres, unas 50 líneas). Es lo que un humano lee de una sentada en el gate \`plan\`, y es también lo que el implementador recibe como task brief. Recorta a las decisiones (contrato, call site y el tramo que cambia) y, si aun así no cabe, la tarea son dos: una tarea es un commit, y partir un commit sí está en tu mano.`)
+    const length = lines.slice(t.at, t.boundary).map((l) => l.line).join('\n').length
+    if (length > CODE_BUDGETS.chars) {
+      const sheets = (length / CODE_BUDGETS.chars).toFixed(1)
+      push('size', `${t.name}: la tarea mide ${length} caracteres — ${sheets} folios — y el máximo es UN folio A4 (${CODE_BUDGETS.chars} caracteres, unas 50 líneas). Es lo que un humano lee de una sentada en el gate \`plan\`, y es también lo que el implementador recibe como task brief. Recorta a las decisiones (contrato, call site y el tramo que cambia) y, si aun así no cabe, la tarea son dos: una tarea es un commit, y partir un commit sí está en tu mano.`)
     }
   }
 
@@ -484,19 +484,19 @@ export function validatePlan(markdown, { readFile } = {}) {
   // invented directory gets through) is smaller than the seam.
   // ---------------------------------------------------------------------------
   if (readFile) {
-    const desde = lines.findIndex((l) => l.structural && l.line.startsWith('## 3. Reference patterns'))
-    if (desde !== -1) {
-      let hasta = lines.findIndex((l, i) => i > desde && l.structural && /^## /.test(l.line))
-      if (hasta === -1) hasta = lines.length
-      for (let i = desde + 1; i < hasta; i++) {
+    const from = lines.findIndex((l) => l.structural && l.line.startsWith('## 3. Reference patterns'))
+    if (from !== -1) {
+      let to = lines.findIndex((l, i) => i > from && l.structural && /^## /.test(l.line))
+      if (to === -1) to = lines.length
+      for (let i = from + 1; i < to; i++) {
         if (!lines[i].structural) continue
-        for (const cita of lines[i].line.match(/`[^`]+`/g) || []) {
-          const ruta = cita.slice(1, -1).trim()
-          if (!esRutaCitada(ruta)) continue
+        for (const citation of lines[i].line.match(/`[^`]+`/g) || []) {
+          const path = citation.slice(1, -1).trim()
+          if (!isCitedPath(path)) continue
           try {
-            readFile(ruta)
+            readFile(path)
           } catch {
-            push('reference-paths', `línea ${i + 1}: §3 nombra "${ruta}" y no se puede leer en el repo. §3 es la vara con la que el implementador escribe y el juez bloquea: una ruta citada de memoria deja a los dos midiendo contra un fichero que no está. Cita una ruta real, o quítala.`)
+            push('reference-paths', `línea ${i + 1}: §3 nombra "${path}" y no se puede leer en el repo. §3 es la vara con la que el implementador escribe y el juez bloquea: una ruta citada de memoria deja a los dos midiendo contra un fichero que no está. Cita una ruta real, o quítala.`)
           }
         }
       }

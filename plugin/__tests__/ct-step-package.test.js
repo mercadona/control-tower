@@ -24,18 +24,18 @@ afterEach(() => { rmSyncBestEffort(repo) })
 // judge opens only what it is going to cite, instead of reading 24 KB ahead of
 // the diff.
 describe('the review package gives the ct yardstick by path, not pasted', () => {
-  const paquete = () => readFileSync(taskPackage(), 'utf8')
+  const reviewPackage = () => readFileSync(taskPackage(), 'utf8')
 
   it('the section opens the package and lists the path of every document that reaches the task', () => {
     ct('report', writeReport(['uno.txt']))
     ct('controls')
     ct('next')
-    const texto = paquete()
-    expect(texto).toContain('## Vara de ct')
-    for (const nombre of PluginYardstick.FILES) {
-      expect(texto, `${nombre} no llega ni por ruta`).toContain(join(PLUGIN_ROOT_TEST, 'conventions', nombre))
+    const text = reviewPackage()
+    expect(text).toContain('## Vara de ct')
+    for (const name of PluginYardstick.FILES) {
+      expect(text, `${name} no llega ni por ruta`).toContain(join(PLUGIN_ROOT_TEST, 'conventions', name))
     }
-    expect(texto.indexOf('## Vara de ct')).toBeLessThan(texto.indexOf('## Diff'))
+    expect(text.indexOf('## Vara de ct')).toBeLessThan(text.indexOf('## Diff'))
   })
 
   it('it pastes the text of no document at all', () => {
@@ -43,7 +43,7 @@ describe('the review package gives the ct yardstick by path, not pasted', () => 
     ct('controls')
     ct('next')
     const style = readFileSync(join(PLUGIN_ROOT_TEST, 'conventions', 'style.md'), 'utf8')
-    expect(paquete()).not.toContain(style.trim())
+    expect(reviewPackage()).not.toContain(style.trim())
   })
 })
 
@@ -91,14 +91,14 @@ describe('the review package is single-use: the verdict that reads it consumes i
 
     // The TELEMETRY, which is the layer where the failure was mute: two judge
     // rows, and the one from attempt 2 asserts no package at all.
-    const filas = readFileSync(join(repo, '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
+    const rows = readFileSync(join(repo, '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
       .trim().split('\n').map((l) => JSON.parse(l))
-    const juez = filas.filter((f) => f.step === 'judge')
-    expect(juez).toHaveLength(2)
-    expect(juez[0].ruling).toBe('FAIL')          // attempt 1 did judge, and over its own diff
-    expect(juez[1].outcome).toBe('discarded')
-    expect(juez[1].ruling).toBeUndefined()
-    expect(juez[1].review_package).toBeUndefined()
+    const judge = rows.filter((f) => f.step === 'judge')
+    expect(judge).toHaveLength(2)
+    expect(judge[0].ruling).toBe('FAIL')          // attempt 1 did judge, and over its own diff
+    expect(judge[1].outcome).toBe('discarded')
+    expect(judge[1].ruling).toBeUndefined()
+    expect(judge[1].review_package).toBeUndefined()
 
     // And the honest path stays open: `next` regenerates the package from the
     // NEW index, the judge sees it, and the PASS gets through.
@@ -113,14 +113,14 @@ describe('the review package is single-use: the verdict that reads it consumes i
     ct('report', writeReport(['uno.txt']))
     ct('controls')
     ct('next')
-    const antes = readFileSync(taskPackage(), 'utf8')
+    const before = readFileSync(taskPackage(), 'utf8')
 
     const r1 = ct('verdict', writeRaw('esto no es json'))
     expect(r1.stdout).toMatch(/veredicto descartado: no se pudo leer/)
     expect(runState().step).toBe('judge')
     expect(runState().discards).toBe(1)
     expect(existsSync(taskPackage())).toBe(true)
-    expect(readFileSync(taskPackage(), 'utf8')).toBe(antes)   // byte for byte: the same input
+    expect(readFileSync(taskPackage(), 'utf8')).toBe(before)   // byte for byte: the same input
 
     // The judge is asked again WITHOUT going through `next`, which is
     // legitimate: the step has not changed and the package it was going to
@@ -145,12 +145,12 @@ describe('the review package is single-use: the verdict that reads it consumes i
   it('THE SLICE TWIN: the discard keeps the package and the accepted verdict spends it', () => {
     taskOk('uno.txt'); taskOk('dos.txt'); ct('reconcile'); ct('global')
     ct('next')
-    const antes = readFileSync(slicePackage(), 'utf8')
+    const before = readFileSync(slicePackage(), 'utf8')
 
     expect(ct('slice-verdict', writeRaw('ni json ni nada')).stdout).toMatch(/veredicto de slice descartado/)
     expect(runState().step).toBe('slice-judge')
     expect(existsSync(slicePackage())).toBe(true)
-    expect(readFileSync(slicePackage(), 'utf8')).toBe(antes)
+    expect(readFileSync(slicePackage(), 'utf8')).toBe(before)
 
     // Asked again without `next` (legitimate: the step did not change) and
     // accepted: it delivers and takes its input away with it. Sealed with the
@@ -193,8 +193,8 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     expect(runState().step).toBe('commit')
     expect(ct('commit').status).toBe(0)
     // The token travels in the pull request's verdict and in its row.
-    const guardado = JSON.parse(execFileSync('git', ['show', 'HEAD:docs/superpowers/verdicts/issue-7-task-1.json'], { cwd: repo, encoding: 'utf8' }))
-    expect(guardado.verdict.review_token).toBe(token)
+    const saved = JSON.parse(execFileSync('git', ['show', 'HEAD:docs/superpowers/verdicts/issue-7-task-1.json'], { cwd: repo, encoding: 'utf8' }))
+    expect(saved.verdict.review_token).toBe(token)
     expect(judgeRows().at(-1).review_token).toBe(token)
     expect(judgeRows().at(-1).ruling).toBe('PASS')
   })
@@ -227,12 +227,12 @@ describe('the verdict is tied to the package: the content-addressed token the ju
 
     // The TELEMETRY, which is where the failure was mute: the row of the
     // recycled one asserts neither a judging nor an input.
-    const juez = judgeRows()
-    expect(juez).toHaveLength(2)
-    expect(juez[1].outcome).toBe('discarded')
-    expect(juez[1].ruling).toBeUndefined()
-    expect(juez[1].review_package).toBeUndefined()
-    expect(juez[1].review_token).toBeUndefined()
+    const judge = judgeRows()
+    expect(judge).toHaveLength(2)
+    expect(judge[1].outcome).toBe('discarded')
+    expect(judge[1].ruling).toBeUndefined()
+    expect(judge[1].review_package).toBeUndefined()
+    expect(judge[1].review_token).toBeUndefined()
 
     // And the honest path stays open: the judge is redispatched, and copies
     // the token of the NEW package.
@@ -264,9 +264,9 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     expect(runState().discards).toBe(2)
     expect(commits()).toBe(1)
     expect(existsSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-task-1.json'))).toBe(false)
-    const juez = judgeRows()
-    expect(juez).toHaveLength(2)
-    expect(juez[1].review_package).toBeUndefined()
+    const judge = judgeRows()
+    expect(judge).toHaveLength(2)
+    expect(judge[1].review_package).toBeUndefined()
 
     // The honest path: `next` regenerates the package from the index of NOW
     // and the PASS gets through over the code that is really going to be
@@ -294,9 +294,9 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     ct('report', writeReport(['uno.txt']))
     ct('controls')
     ct('next')
-    const antes = readFileSync(taskPackage(), 'utf8')
+    const before = readFileSync(taskPackage(), 'utf8')
     expect(ct('verdict', writeRaw('nada de json')).stdout).toMatch(/descartado/)
-    expect(readFileSync(taskPackage(), 'utf8')).toBe(antes)
+    expect(readFileSync(taskPackage(), 'utf8')).toBe(before)
     const r = ct('verdict', seal(writeVerdict('PASS'), taskPackage()))
     expect(r.stdout).toMatch(/veredicto PASS/)
     expect(runState().discards).toBe(1)             // the retry did not spend a second discard
@@ -320,8 +320,8 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     // package, just as when the judge copied it: the field is not lost, it
     // changes author.
     expect(judgeRows().at(-1).review_token).toMatch(/^[0-9a-f]{64}$/)
-    const guardado = JSON.parse(readFileSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-task-1.json'), 'utf8'))
-    expect(guardado.verdict.review_token).toBe(judgeRows().at(-1).review_token)
+    const saved = JSON.parse(readFileSync(join(repo, 'docs', 'superpowers', 'verdicts', 'issue-7-task-1.json'), 'utf8'))
+    expect(saved.verdict.review_token).toBe(judgeRows().at(-1).review_token)
   })
 
   it('a verdict carrying the token of ANOTHER package is still discarded: the defence in depth is not touched', () => {
@@ -340,8 +340,8 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     ct('report', writeReport(['uno.txt']))
     ct('controls')
     ct('next')
-    const sinCabecera = readFileSync(taskPackage(), 'utf8').split('\n').filter((l) => !l.startsWith('Review token: ')).join('\n')
-    writeFileSync(taskPackage(), sinCabecera)
+    const withoutHeader = readFileSync(taskPackage(), 'utf8').split('\n').filter((l) => !l.startsWith('Review token: ')).join('\n')
+    writeFileSync(taskPackage(), withoutHeader)
     const r = ct('verdict', writeVerdict('PASS'))
     expect(r.stdout).toMatch(/no declara su "Review token"/)
     expect(runState().step).toBe('judge')
@@ -359,8 +359,8 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     const r = ct('slice-verdict', seal(writeSliceVerdict('PASS'), slicePackage()))
     expect(r.status).toBe(0)
     expect(runState().closed).toBe('delivered')
-    const guardado = JSON.parse(execFileSync('git', ['show', 'HEAD:docs/superpowers/verdicts/issue-7-slice.json'], { cwd: repo, encoding: 'utf8' }))
-    expect(guardado.verdict.review_token).toBe(token)
+    const saved = JSON.parse(execFileSync('git', ['show', 'HEAD:docs/superpowers/verdicts/issue-7-slice.json'], { cwd: repo, encoding: 'utf8' }))
+    expect(saved.verdict.review_token).toBe(token)
     expect(judgeRows('slice-judge').at(-1).review_token).toBe(token)
   })
 
@@ -371,8 +371,8 @@ describe('the verdict is tied to the package: the content-addressed token the ju
     const r = ct('slice-verdict', writeSliceVerdict('PASS'))
     expect(r.status).toBe(0)
     expect(runState().closed).toBe('delivered')
-    const guardado = JSON.parse(execFileSync('git', ['show', 'HEAD:docs/superpowers/verdicts/issue-7-slice.json'], { cwd: repo, encoding: 'utf8' }))
-    expect(guardado.verdict.review_token).toBe(token)
+    const saved = JSON.parse(execFileSync('git', ['show', 'HEAD:docs/superpowers/verdicts/issue-7-slice.json'], { cwd: repo, encoding: 'utf8' }))
+    expect(saved.verdict.review_token).toBe(token)
   })
 
   it('THE SLICE TWIN: a slice verdict carrying the token of another package does not deliver the run', () => {

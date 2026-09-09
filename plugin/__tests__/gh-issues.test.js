@@ -110,8 +110,8 @@ describe('partitionByEpic', () => {
     expect(sinMilestone.length + otrosEpics.length).toBe(issues.length)
   })
   it('defensive: an empty or absent list returns the three buckets empty', () => {
-    for (const entrada of [[], undefined, null]) {
-      const p = partitionByEpic(entrada, 'Epic A')
+    for (const input of [[], undefined, null]) {
+      const p = partitionByEpic(input, 'Epic A')
       expect(p).toEqual({ inEpic: [], sinMilestone: [], otrosEpics: [] })
     }
   })

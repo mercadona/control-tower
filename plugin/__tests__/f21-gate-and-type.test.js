@@ -257,14 +257,14 @@ describe('F21 — the Gate column in the §9 table', () => {
 // ============================================================================
 describe('F21 — the gate reaches GitHub, not just the kickoff', () => {
   const uiSlice = { n: 1, name: 'pantalla', type: 'ui', gate: '', ac: [], deps: [], area: [], touches: [] }
-  const backendConGate = { ...uiSlice, type: 'backend', gate: 'visual' }
-  const backendPelado = { ...uiSlice, type: 'backend', gate: '' }
+  const backendWithGate = { ...uiSlice, type: 'backend', gate: 'visual' }
+  const bareBackend = { ...uiSlice, type: 'backend', gate: '' }
 
   it('a slice with a gate carries its gate:<token> label, in a deterministic position', () => {
     const labels = buildLabels(uiSlice)
     expect(labels).toContain('gate:visual')
     expect(labels.indexOf('gate:visual')).toBeLessThan(labels.indexOf('status:backlog'))
-    expect(buildLabels(backendConGate)).toContain('gate:visual')
+    expect(buildLabels(backendWithGate)).toContain('gate:visual')
   })
 
   it('a slice with no technical gates carries the default `gate:plan`; `gate:none` is left for the total waiver', () => {
@@ -273,9 +273,9 @@ describe('F21 — the gate reaches GitHub, not just the kickoff', () => {
     // gates" (see the redispatch block, further down). With the universal
     // default of F-jjponz-2, the only way to end up with no gates is to waive
     // them all explicitly — `!plan` on a Tipo with no technical gate.
-    expect(buildLabels(backendPelado)).toContain('gate:plan')
-    expect(buildLabels(backendPelado)).not.toContain(GATE_LABEL_NONE)
-    expect(buildLabels({ ...backendPelado, gate: '!plan' })).toContain(GATE_LABEL_NONE)
+    expect(buildLabels(bareBackend)).toContain('gate:plan')
+    expect(buildLabels(bareBackend)).not.toContain(GATE_LABEL_NONE)
+    expect(buildLabels({ ...bareBackend, gate: '!plan' })).toContain(GATE_LABEL_NONE)
     expect(buildLabels(uiSlice)).not.toContain(GATE_LABEL_NONE)
   })
 
@@ -287,7 +287,7 @@ describe('F21 — the gate reaches GitHub, not just the kickoff', () => {
   })
 
   it('the gates section ALWAYS exists, also when there is none (a declared absence, not silence)', () => {
-    const body = buildIssueBody(backendPelado, {})
+    const body = buildIssueBody(bareBackend, {})
     expect(body).toContain('## Gates')
     expect(body.toLowerCase()).toMatch(/ninguno/)
   })
@@ -300,7 +300,7 @@ describe('F21 — the gate reaches GitHub, not just the kickoff', () => {
   })
 
   it('groomPlan exposes the resolved gates as structured data', () => {
-    const plan = groomPlan([backendConGate], { milestone: 'Epic', specRef: {} })
+    const plan = groomPlan([backendWithGate], { milestone: 'Epic', specRef: {} })
     expect(plan.issues[0].gates).toEqual(['visual', 'plan'])
   })
 })
