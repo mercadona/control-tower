@@ -4,7 +4,7 @@ import {
 } from '../../../plugin/scripts/launch-sentinel.js'
 import { shQuote } from '../../../plugin/scripts/shquote.js'
 import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.js'
-import { ProcessOutput } from '../../src/infrastructure/tool-runner.js'
+import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { LaunchPolicy, LaunchBudget, LaunchStep } from '../../src/domain/policies/launch-policy.ts'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'

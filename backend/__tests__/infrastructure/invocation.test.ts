@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { Invocation, InvocationOutcome } from '../../src/infrastructure/invocation.js'
+import { Invocation, InvocationOutcome } from '../../src/infrastructure/invocation.ts'
 
 class PluginEnvironment {
   static SCRIPT = join(
@@ -28,7 +28,7 @@ class Invoked {
   static HOME = '/home/someone'
   static SECONDS_FOR_GH = 60
 
-  static withPort(given) {
+  static withPort(given: string) {
     return Invocation.from([], { [Invocation.PORT_VARIABLE]: given }, Invoked.HOME)
   }
 
@@ -36,19 +36,19 @@ class Invoked {
     return Invocation.from([], {}, Invoked.HOME)
   }
 
-  static withConfigDirectory(given) {
+  static withConfigDirectory(given: string) {
     return Invocation.from([], { [Invocation.CONFIG_VARIABLE]: given }, Invoked.HOME)
   }
 
-  static withHome(given) {
+  static withHome(given: string) {
     return Invocation.from([], {}, given)
   }
 
-  static withHarvestTable(given) {
+  static withHarvestTable(given: string) {
     return Invocation.from([], { [Invocation.HARVEST_TABLE_VARIABLE]: given }, Invoked.HOME)
   }
 
-  static harvesting(environment) {
+  static harvesting(environment: NodeJS.ProcessEnv) {
     return Invocation.harvestEnvironment(environment, { ghTimeoutMs: Invoked.SECONDS_FOR_GH * 1000 })
   }
 }
@@ -85,14 +85,14 @@ describe('Invocation', () => {
   })
 
   it('an_argument_is_refused_because_this_program_takes_none_and_would_otherwise_ignore_it', () => {
-    const refused = Invocation.from(['--port', '9000'], {})
+    const refused = Invocation.from(['--port', '9000'], {}, Invoked.HOME)
 
     expect(refused.outcome).toBe(InvocationOutcome.UNEXPECTED_ARGUMENT)
     expect(refused.reason).toBe('unexpected argument: "--port"')
   })
 
   it('an_argument_is_refused_before_the_port_is_even_read_so_the_first_wrong_thing_is_the_one_named', () => {
-    const refused = Invocation.from(['--port'], { [Invocation.PORT_VARIABLE]: 'abc' })
+    const refused = Invocation.from(['--port'], { [Invocation.PORT_VARIABLE]: 'abc' }, Invoked.HOME)
 
     expect(refused.outcome).toBe(InvocationOutcome.UNEXPECTED_ARGUMENT)
   })
@@ -136,7 +136,7 @@ describe('Invocation', () => {
 })
 
 class PathFixture {
-  static #created = []
+  static #created: string[] = []
 
   static directory() {
     const dir = mkdtempSync(join(tmpdir(), 'ct-lookup-'))
@@ -145,7 +145,7 @@ class PathFixture {
     return dir
   }
 
-  static executable(dir, name) {
+  static executable(dir: string, name: string) {
     const path = join(dir, name)
     writeFileSync(path, '#!/bin/sh\nexit 1\n')
     chmodSync(path, 0o755)
@@ -153,7 +153,7 @@ class PathFixture {
     return path
   }
 
-  static nonExecutable(dir, name) {
+  static nonExecutable(dir: string, name: string) {
     const path = join(dir, name)
     writeFileSync(path, '#!/bin/sh\nexit 1\n')
     chmodSync(path, 0o644)
@@ -161,7 +161,7 @@ class PathFixture {
     return path
   }
 
-  static executableDirectory(dir, name) {
+  static executableDirectory(dir: string, name: string) {
     const path = join(dir, name)
     mkdirSync(path)
     chmodSync(path, 0o755)

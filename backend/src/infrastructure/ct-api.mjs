@@ -42,12 +42,12 @@ import { ReadPlanStory, ReadPlanStoryParams } from '../application/queries/read-
 import { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
 import { HarvestDelivery, HarvestDeliveryParams } from '../application/actions/harvest-delivery.ts'
 import { ProbedToolSessions } from './probed-tool-sessions.js'
-import { ToolRunner } from './tool-runner.js'
-import { Gh } from './gh.js'
-import { ExternalTool } from './external-tool.js'
+import { ToolRunner } from './tool-runner.ts'
+import { Gh } from './gh.ts'
+import { ExternalTool } from './external-tool.ts'
 import { RetryPolicy, RetryBudget } from '../domain/policies/retry-policy.ts'
 import { LaunchPolicy, LaunchBudget } from '../domain/policies/launch-policy.ts'
-import { Invocation, InvocationOutcome } from './invocation.js'
+import { Invocation, InvocationOutcome } from './invocation.ts'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
 
 class FrontendBuild {

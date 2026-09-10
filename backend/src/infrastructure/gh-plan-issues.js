@@ -22,7 +22,7 @@ import {
   PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed, PlanGoNotAnswered,
   PlanChangesNotRead, PlanChangesNotUnderstood, PlanChangesNotAsked, PlanStoryNotRead, PlanStoryNotUnderstood,
 } from '../domain/exceptions.ts'
-import { Gh } from './gh.js'
+import { Gh } from './gh.ts'
 import { Projection } from './projection.js'
 
 export class GhPlanIssues extends PlanIssues {
