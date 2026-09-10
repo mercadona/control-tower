@@ -6,11 +6,12 @@ type ButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'link' | 'danger' | 
 type ButtonSize = 'desktop' | 'mobile'
 
 interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> {
-  children: ReactNode
+  children?: ReactNode
   variant?: ButtonVariant
   size?: ButtonSize
   type?: 'button' | 'submit' | 'reset'
   fullWidth?: boolean
+  iconStart?: ReactNode
 }
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
@@ -33,17 +34,30 @@ const Button = ({
   size = 'desktop',
   type = 'button',
   fullWidth = false,
+  iconStart,
   className,
   ...rest
 }: ButtonProps) => {
+  const hasLabel = children !== undefined && children !== null && children !== ''
+  const isIconOnly = !hasLabel && iconStart !== undefined
+
   return (
     <button
       {...rest}
       type={type}
-      className={classNames('button', VARIANT_CLASS[variant], SIZE_CLASS[size], { 'button--full-width': fullWidth }, className)}
+      className={classNames(
+        'button',
+        VARIANT_CLASS[variant],
+        SIZE_CLASS[size],
+        { 'button--full-width': fullWidth, 'button--icon-only': isIconOnly },
+        className,
+      )}
     >
       <span className="button__state-layer">
-        <span className="button__label lg-footnote-medium">{children}</span>
+        {iconStart !== undefined && (
+          <span className="button__icon-start" aria-hidden="true">{iconStart}</span>
+        )}
+        {hasLabel && <span className="button__label lg-footnote-medium">{children}</span>}
       </span>
     </button>
   )

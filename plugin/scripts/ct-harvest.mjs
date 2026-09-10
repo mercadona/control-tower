@@ -9,7 +9,7 @@
 // datum in the whole measure —the minutes of human intervention— lives in the
 // epic's outcome and is NOT asked for here: the moment a harvester admits one
 // manual field it turns into a form, and a form is exactly how
-// docs/medicion-slices.md died (2 rows, the key column at «no medido»).
+// docs/medicion-slices.md died (2 rows, the key column left unmeasured).
 //
 // IT WAS WRITTEN AFTER DISPATCH 1, on purpose and by order of the handoff. The
 // three decisions of scripts/harvest.js come from having harvested menoplus's
@@ -102,7 +102,7 @@ const gh = (a) => {
   try {
     return execFileSync('gh', a, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: GH_MAX_BUFFER, timeout: CHILD_TIMEOUT_MS, killSignal: 'SIGKILL' })
   } catch (e) {
-    const detail = (e && e.stderr ? String(e.stderr).trim() : '') || (e && e.message) || 'error desconocido'
+    const detail = (e && e.stderr ? String(e.stderr).trim() : '') || (e && e.message) || 'unknown error'
     throw new Error(detail)
   }
 }
@@ -206,6 +206,13 @@ else if (bqTable) {
 }
 
 if (asJson) {
+  // `filas` and `motivos` are CONTRACT: they are the keys this command has been
+  // emitting under `--json` since it existed, and whoever pastes that document
+  // into an epic's outcome reads them. They keep their spelling for the same
+  // reason `status:ready` and `sin-fichero` keep theirs — the English rule
+  // exempts a value an external reader already depends on. The bindings behind
+  // them are English, and the mapping is written out so the two cannot be
+  // confused for each other.
   console.log(JSON.stringify({ repo, milestone, filas: rows, motivos: reasons, telemetry: { dir: METRICS_REPO_DIR, status: telemetryDir.status, why: telemetryDir.why } }, null, 2))
 } else {
   console.log(`# Harvest — ${milestone}`)
@@ -250,8 +257,8 @@ if (asJson) {
   if (telemetryDir.status === 'no-leido') {
     console.log(`could not list \`${METRICS_REPO_DIR}\` in ${repo} (${telemetryDir.why}). This repo may have no judge telemetry, or the read may have failed: **nothing is counted**, and the gap is NOT a zero.`)
   } else {
-    console.log('| Issue | Slice | Verdicts | sin-vara | Findings by rule | high/medium/low | vara ct | brief | bytes per role |')
-    console.log('|---|---|---|---|---|---|---|---|---|')
+    console.log('| Issue | Slice | Verdicts | sin-vara | Findings by rule | high/medium/low | vara ct | brief | bytes per role | returns | tool | tokens |')
+    console.log('|---|---|---|---|---|---|---|---|---|---|---|---|')
     for (const f of rows) {
       const t = f.telemetry
       let verdicts = '—'
@@ -283,6 +290,20 @@ if (asJson) {
       // measure, and the question that motivated the column (how much fixed
       // material is saved per slice) is their sum, not each one on its own.
       let bytesPerRole = '—'
+      // WHAT THE TOOL SPENT, and how many times the task judge sent the work
+      // back. The two columns that let two coding tools be compared on the same
+      // slice: `tool` names whose cost it is —without it every figure aggregates
+      // tools that share nothing— and `tokens` adds up the exact usage the tool
+      // reported, cached input counted ONCE and never estimated.
+      //
+      // `returns` is the judge's, not the verdict's: a veto (`failed`) plus an
+      // ordered correction (`corrections-ordered`) are the two ways a task goes
+      // back to the implementer, and both cost a round. The `Verdicts` column's
+      // vetoes are NOT the same figure — that one counts every `FAIL` ruling,
+      // the slice judge's included.
+      let returns = '—'
+      let tool = '—'
+      let tokens = '—'
       // THE SEVERITY, in one cell and in the order in which it is decided: a
       // high VETOES —the verdict's contract does not admit a PASS with a high—,
       // a medium buys a paid round trip to the implementer, a low is only noted
@@ -330,6 +351,20 @@ if (asJson) {
           brief = `${t.briefVaraCtDocs} docs · ${t.briefBytes}B`
           if (t.briefLegacy > 0) brief += ` (${t.briefLegacy} no column)`
         }
+        // The judge's returns print their three figures over the attempts that
+        // ruled: a `0/0 of 4` is a slice the judge passed at the first go, and a
+        // «—» is a slice whose telemetry carries no judge attempt that ruled.
+        if (t.judgeAttempts > 0) returns = `${t.judgeVetoes}+${t.judgeCorrectionsOrdered}=${t.judgeReturns} of ${t.judgeAttempts}`
+        // Same rule as everything else in this table: nothing measured prints
+        // «—», never a zero. The status travels beside the figure because
+        // «nobody measured» and «it cost nothing» are not the same slice.
+        if (t.tool !== null) tool = t.toolVersion === null ? t.tool : `${t.tool} ${t.toolVersion}`
+        if (t.toolUsageMeasured > 0) {
+          tokens = `${t.toolTotalTokens} (${t.toolInputTokens} in · ${t.toolCachedInputTokens} cached · ${t.toolOutputTokens} out)`
+          if (t.toolUsageMeasured < t.toolUsageAttempts) tokens += ` (${t.toolUsageAttempts - t.toolUsageMeasured} ${t.toolUsageStatus})`
+        } else if (t.toolUsageAttempts > 0) {
+          tokens = `(${t.toolUsageStatus})`
+        }
         // And the same one again: roleMeasured === 0 prints «—» and never
         // three zeros, which would assert dispatched roles with no material.
         if (t.roleMeasured > 0) {
@@ -337,7 +372,7 @@ if (asJson) {
           if (t.roleLegacy > 0) bytesPerRole += ` (${t.roleLegacy} no column)`
         }
       }
-      console.log(`| #${f.issue} | ${f.title ?? '—'} | ${verdicts} | ${withoutYardstick} | ${byRule} | ${severities} | ${ctYardstick} | ${brief} | ${bytesPerRole} |`)
+      console.log(`| #${f.issue} | ${f.title ?? '—'} | ${verdicts} | ${withoutYardstick} | ${byRule} | ${severities} | ${ctYardstick} | ${brief} | ${bytesPerRole} | ${returns} | ${tool} | ${tokens} |`)
     }
     console.log('')
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.verdicts > 0 && f.telemetry.measured === 0)) {
@@ -354,6 +389,9 @@ if (asJson) {
     }
     if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.roleAttempts > 0 && f.telemetry.roleMeasured === 0)) {
       console.log('`—` in `bytes per role`: no dispatched role of that slice carried `agent_bytes`/`skill_bytes`/`package_bytes` (telemetry older than this measure). It is not a zero.')
+    }
+    if (rows.some((f) => f.telemetry.status === 'ok' && f.telemetry.toolUsageAttempts === 0)) {
+      console.log('`—` in `tool`/`tokens`: no attempt of that slice carried the normalized tool usage (telemetry older than this measure). It is not a zero.')
     }
     if (rows.some((f) => f.telemetry.status === 'sin-fichero')) {
       console.log(`\`(no telemetry)\`: the repo does not bring \`${METRICS_REPO_DIR}/issue-<n>.jsonl\` for that slice. Nobody measured — it is not a zero.`)

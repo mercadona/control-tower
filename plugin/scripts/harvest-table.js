@@ -186,6 +186,22 @@ export class HarvestTable {
     new HarvestColumn({ name: 'agent_bytes', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryMeasured('roleMeasured', 'agentBytes') }),
     new HarvestColumn({ name: 'skill_bytes', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryMeasured('roleMeasured', 'skillBytes') }),
     new HarvestColumn({ name: 'package_bytes', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryMeasured('roleMeasured', 'packageBytes') }),
+    new HarvestColumn({ name: 'tool', type: HarvestColumn.STRING, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('tool') }),
+    new HarvestColumn({ name: 'tool_version', type: HarvestColumn.STRING, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('toolVersion') }),
+    new HarvestColumn({ name: 'tool_usage_status', type: HarvestColumn.STRING, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('toolUsageStatus') }),
+    new HarvestColumn({ name: 'tool_usage_attempts', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('toolUsageAttempts') }),
+    new HarvestColumn({ name: 'tool_usage_measured', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('toolUsageMeasured') }),
+    new HarvestColumn({ name: 'tool_usage_gaps', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('toolUsageGaps') }),
+    new HarvestColumn({ name: 'tool_input_tokens', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryMeasured('toolUsageMeasured', 'toolInputTokens') }),
+    new HarvestColumn({ name: 'tool_cached_input_tokens', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryMeasured('toolUsageMeasured', 'toolCachedInputTokens') }),
+    new HarvestColumn({ name: 'tool_output_tokens', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryMeasured('toolUsageMeasured', 'toolOutputTokens') }),
+    new HarvestColumn({ name: 'tool_total_tokens', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryMeasured('toolUsageMeasured', 'toolTotalTokens') }),
+    new HarvestColumn({ name: 'tool_duration_status', type: HarvestColumn.STRING, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('toolDurationStatus') }),
+    new HarvestColumn({ name: 'tool_active_duration_ms', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryMeasured('toolDurationMeasured', 'toolActiveDurationMs') }),
+    new HarvestColumn({ name: 'judge_attempts', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('judgeAttempts') }),
+    new HarvestColumn({ name: 'judge_vetoes', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('judgeVetoes') }),
+    new HarvestColumn({ name: 'judge_corrections_ordered', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('judgeCorrectionsOrdered') }),
+    new HarvestColumn({ name: 'judge_returns', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('judgeReturns') }),
   ]
 
   static schemaJson() {

@@ -6,6 +6,7 @@ import { ReviewsSpy } from '../reviews-spy.ts'
 import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import { SurveyExternalTools, SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.ts'
 import { ToolSessions } from '../../src/domain/ports/tool-sessions.ts'
+import { MetricsDelivery } from '../../src/domain/value-objects/metrics-delivery.ts'
 import { SessionState, ToolSession } from '../../src/domain/value-objects/tool-session.ts'
 
 class SurveySpy extends SurveyExternalTools {
@@ -13,6 +14,9 @@ class SurveySpy extends SurveyExternalTools {
   static readonly BQ_MISSING = new ToolSession({
     tool: 'bq', installed: true, state: SessionState.MISSING,
     fix: 'fixture-fix-bq-do-not-copy-into-production',
+  })
+  static readonly BQ_READY = new ToolSession({
+    tool: 'bq', installed: true, state: SessionState.READY, fix: null,
   })
   static readonly CLAUDE_UNKNOWN = new ToolSession({
     tool: 'claude', installed: true, state: SessionState.UNKNOWN, fix: 'fixture-fix-claude-do-not-copy-into-production',
@@ -22,37 +26,49 @@ class SurveySpy extends SurveyExternalTools {
     fix: 'fixture-fix-git-do-not-copy-into-production',
   })
 
+  static readonly DESTINATION = 'fixture-project:fixture_dataset.fixture_table'
+
   asked: number
   readonly sessions: readonly ToolSession[]
 
-  constructor(sessions: readonly ToolSession[]) {
-    super({ toolSessions: new ToolSessions() })
+  constructor(sessions: readonly ToolSession[], metricsDelivery: MetricsDelivery) {
+    super({ toolSessions: new ToolSessions(), metricsDelivery })
     this.asked = 0
     this.sessions = sessions
   }
 
   static answeringGhReadyAndBqMissing(): SurveySpy {
-    return new SurveySpy([SurveySpy.GH_READY, SurveySpy.BQ_MISSING])
+    return new SurveySpy([SurveySpy.GH_READY, SurveySpy.BQ_MISSING], MetricsDelivery.disabled())
   }
 
   static answeringOnlyAReadyTool(): SurveySpy {
-    return new SurveySpy([SurveySpy.GH_READY])
+    return new SurveySpy([SurveySpy.GH_READY], MetricsDelivery.disabled())
   }
 
   static answeringAnUnknownAndAnUninstalledTool(): SurveySpy {
-    return new SurveySpy([SurveySpy.CLAUDE_UNKNOWN, SurveySpy.GIT_NOT_INSTALLED])
+    return new SurveySpy([SurveySpy.CLAUDE_UNKNOWN, SurveySpy.GIT_NOT_INSTALLED], MetricsDelivery.disabled())
+  }
+
+  static answeringADeliveryConfiguredAndBqReady(): SurveySpy {
+    return new SurveySpy([SurveySpy.BQ_READY], MetricsDelivery.to(SurveySpy.DESTINATION))
+  }
+
+  static answeringADeliveryConfiguredAndBqMissing(): SurveySpy {
+    return new SurveySpy([SurveySpy.GH_READY, SurveySpy.BQ_MISSING], MetricsDelivery.to(SurveySpy.DESTINATION))
   }
 
   async execute(): Promise<SurveyExternalToolsResult> {
     this.asked += 1
 
-    return new SurveyExternalToolsResult({ sessions: this.sessions })
+    return new SurveyExternalToolsResult({ sessions: this.sessions, metricsDelivery: this.metricsDelivery })
   }
 }
 
 type ToolRow = { tool: string, installed: boolean, session: string, fix: string | null }
 
-type SurveyedTools = { ready: boolean, tools: ToolRow[] }
+type DeliveredMetrics = { enabled: boolean, variable: string, destination: string | null }
+
+type SurveyedTools = { ready: boolean, tools: ToolRow[], metricsDelivery: DeliveredMetrics }
 
 type Answered = { response: Response, spy: SurveySpy }
 
@@ -128,7 +144,7 @@ describe('ExternalToolsRoute', () => {
 
     expect(response.status).toBe(200)
     expect(await response.text()).toBe(JSON.stringify({
-      ready: false,
+      ready: true,
       tools: [
         { tool: 'gh', installed: true, session: 'ready', fix: null },
         {
@@ -136,6 +152,7 @@ describe('ExternalToolsRoute', () => {
           fix: 'fixture-fix-bq-do-not-copy-into-production',
         },
       ],
+      metricsDelivery: { enabled: false, variable: 'CT_HARVEST_BQ_TABLE', destination: null },
     }))
   })
 
@@ -155,6 +172,39 @@ describe('ExternalToolsRoute', () => {
 
     expect(body.ready).toBe(false)
     expect(body.tools.find((row) => row.tool === 'git')?.installed).toBe(false)
+  })
+
+  it('a_disabled_delivery_answers_its_variable_with_no_destination_and_leaves_a_missing_bq_unblocking', async () => {
+    const { response } = await RunningApi.asking(SurveySpy.answeringGhReadyAndBqMissing())
+
+    const body = await response.json() as SurveyedTools
+
+    expect(body.metricsDelivery).toEqual({
+      enabled: false, variable: 'CT_HARVEST_BQ_TABLE', destination: null,
+    })
+    expect(body.ready).toBe(true)
+  })
+
+  it('an_enabled_delivery_answers_its_destination_and_is_ready_when_bq_is_ready', async () => {
+    const { response } = await RunningApi.asking(SurveySpy.answeringADeliveryConfiguredAndBqReady())
+
+    const body = await response.json() as SurveyedTools
+
+    expect(body.metricsDelivery).toEqual({
+      enabled: true, variable: 'CT_HARVEST_BQ_TABLE', destination: SurveySpy.DESTINATION,
+    })
+    expect(body.ready).toBe(true)
+  })
+
+  it('an_enabled_delivery_whose_bq_is_missing_answers_not_ready_and_still_names_its_destination', async () => {
+    const { response } = await RunningApi.asking(SurveySpy.answeringADeliveryConfiguredAndBqMissing())
+
+    const body = await response.json() as SurveyedTools
+
+    expect(body.ready).toBe(false)
+    expect(body.metricsDelivery.destination).toBe(SurveySpy.DESTINATION)
+    expect(body.tools.find((row) => row.tool === 'bq')?.fix)
+      .toBe('fixture-fix-bq-do-not-copy-into-production')
   })
 
   it('a_post_is_refused_with_405_and_allow_get_without_asking_the_use_case', async () => {

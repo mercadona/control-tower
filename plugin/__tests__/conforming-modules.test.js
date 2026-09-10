@@ -56,9 +56,16 @@ class BornConforming {
     'scripts/judge-bench.mjs',
     '__tests__/judge-bench.test.js',
     '__tests__/judge-bench-real-process.test.js',
+    'scripts/telemetry-lines.js',
+    'scripts/tool-usage.js',
+    'scripts/claude-code-usage.js',
+    'scripts/judge-returns.js',
+    '__tests__/tool-usage.test.js',
+    '__tests__/claude-code-usage.test.js',
+    '__tests__/judge-returns.test.js',
   ]
 
-  static PALABRAS_CASTELLANAS = [
+  static SPANISH_WORDS = [
     'cita', 'citas', 'nombre', 'nombres', 'texto', 'fila', 'filas', 'vara', 'documento', 'documentos',
     'encontrados', 'medir', 'medida', 'paso', 'pasos', 'regla', 'reglas', 'hallazgo', 'hallazgos',
     'intento', 'cuerpo', 'previos', 'comentario', 'comentarios', 'recorrido', 'alcance', 'sujeto',
@@ -97,7 +104,7 @@ class BornConforming {
     const declared = [...source.matchAll(/\b(?:class|const|let|var|function|static)\s+#?([A-Za-z_$][\w$]*)/g)]
       .map((match) => match[1])
     return [...new Set(declared.filter((identifier) =>
-      BornConforming.PALABRAS_CASTELLANAS.includes(identifier.toLowerCase())
+      BornConforming.SPANISH_WORDS.includes(identifier.toLowerCase())
     ))]
   }
 
@@ -125,7 +132,7 @@ class BornConforming {
   static spanishTestNamesIn(path) {
     return BornConforming.#testStringsIn(path)
       .filter(([, text]) => text.split(/[^A-Za-z]+/).some((word) =>
-        BornConforming.PALABRAS_CASTELLANAS.includes(word.toLowerCase())
+        BornConforming.SPANISH_WORDS.includes(word.toLowerCase())
       ))
       .map(([number]) => number)
   }
@@ -197,7 +204,7 @@ describe('the language of identifiers, by an EXACT block list', () => {
   }
 
   it('the match is exact and not by prefix: by prefix it flagged `citation`, which is perfect English', () => {
-    expect(BornConforming.PALABRAS_CASTELLANAS).toContain('cita')
+    expect(BornConforming.SPANISH_WORDS).toContain('cita')
     expect(BornConforming.spanishIdentifiersIn('scripts/yardstick-citation.js')).toEqual([])
   })
 })

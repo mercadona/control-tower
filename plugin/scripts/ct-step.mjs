@@ -13,9 +13,9 @@
 // `dispatch-check --release` demands the run delivered (exit 7 if not).
 //
 //   ct-step next                    → "task 3 is the one to implement; the brief is at X"
-//   ct-step report informe.json     → validates the paths, stages them, transitions
+//   ct-step report report.json      → validates the paths, stages them, transitions
 //   ct-step controls                → runs the plan's commands and MEASURES
-//   ct-step verdict veredicto.json  → validates against the schema, transitions
+//   ct-step verdict verdict.json    → validates against the schema, transitions
 //   ct-step commit                  → validates the message and commits
 //
 // There is no loop here and there is not one single call to the model. This
@@ -59,6 +59,7 @@
 
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, unlinkSync, writeSync, readdirSync, statSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
+import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, relative, resolve } from 'node:path'
 import { after, newRun, STEPS, OUTCOMES, RUN_STATES, DEFAULT_BUDGETS, outcomeOfReconcile, reconcileBudgetSpent } from './run-machine.js'
@@ -80,6 +81,8 @@ import {
 } from './step-contracts.js'
 import { metricRow, metricLine, metricsPath, planSha256, verdictMeasures, metricsRepoRelPath, briefCtYardstickMeasures } from './run-metrics.js'
 import { RoleBytes } from './role-bytes.js'
+import { ClaudeCodeTranscript, ClaudeCodeUsage } from './claude-code-usage.js'
+import { ToolIdentity, ToolUsage } from './tool-usage.js'
 // Slice 10: parseStateSafe reads the `senal:` field of the SLICE.md (see
 // sliceSignal, below, for why the `epic:` regex will not do), and
 // SIGNAL_ABSENT is the ONE constant with which the two writers of the channel
@@ -154,10 +157,10 @@ const USAGE = `usage: ct-step <verb> [args] --plan <file> --issue <n>
 The sequence is decided by run-machine.js: a verb that is not the step that is due
 exits with 9 and says which one it is. The state lives in .agent/run-<issue>.json.`
 
-const verbo = process.argv[2]
-if (!verbo || verbo.startsWith('--')) die(USAGE, EXIT.USAGE)
-if (!['next', 'report', 'controls', 'verdict', 'advice', 'commit', 'reconcile', 'global', 'slice-verdict', 'e2e'].includes(verbo)) {
-  die(`verbo desconocido: ${verbo}\n\n${USAGE}`, EXIT.USAGE)
+const verb = process.argv[2]
+if (!verb || verb.startsWith('--')) die(USAGE, EXIT.USAGE)
+if (!['next', 'report', 'controls', 'verdict', 'advice', 'commit', 'reconcile', 'global', 'slice-verdict', 'e2e'].includes(verb)) {
+  die(`unknown verb: ${verb}\n\n${USAGE}`, EXIT.USAGE)
 }
 
 const planPath = arg('--plan')
@@ -227,8 +230,9 @@ const headSha = () => (git(['rev-parse', 'HEAD']) || '').trim()
 // the merge-base is the wrong answer: `run.baseSha` is NOT where the branch was
 // cut, it is `headSha()` at the moment the run's file is created (further
 // down), and by then the kickoff has already ordered the plan to be committed
-// (`kickoff.js`: «commitéalo: viaja en el PR» … «Con el plan commiteado…
-// Pregunta el paso con ct-step next»). The real history in production is
+// (`kickoff.js` tells the slice agent to commit the plan because it travels in
+// the pull request, and only then to ask `ct-step next` for the first step).
+// The real history in production is
 // `B (the cut) → P (the plan's commit) → the run is born`, with
 // `run.baseSha = P` while the merge-base is `B`. Measuring from `B` puts the
 // plan's commit inside the count, `hechos` comes out permanently one too many,
@@ -301,7 +305,7 @@ if (existsSync(stateFile)) {
   // `dispatch-check --release` reads). `next` answers "it is done" and exits
   // well; any verb that transitions is the usual sequence error.
   if (run.closed === RUN_STATES.DELIVERED) {
-    if (verbo === 'next') {
+    if (verb === 'next') {
       out(`run delivered: the ${run.tasksTotal} tasks of issue ${issue} are committed with a verdict, the Global verification is green and the slice is judged. No step is left — open the pull request and release with dispatch-check --release.`)
       process.exit(EXIT.OK)
     }
@@ -427,6 +431,56 @@ const ACTOR = (git(['config', 'user.email'], { allowFail: true }) || '').trim() 
 // /ct-harvest: the writer and the reader cannot diverge.
 const METRICS_REL = metricsRepoRelPath(issue)
 
+// WHERE THE TOKENS COME FROM, and why they are not estimated. The runtime this
+// plugin ships for is Claude Code, and the only exact record of what a call to
+// the model spent is the session transcript it writes on its own: one entry per
+// assistant turn, with `usage` and the `requestId` that identifies the request.
+// Nothing here counts bytes of text: a tool that reports no usage lands its
+// status and NULL, never a number nobody measured.
+//
+// The transcript is PRIVATE TO THE MACHINE, so what travels in the pull request
+// is the row's normalized usage plus the request ids it claimed — never the
+// transcript. That is what lets a slice be re-harvested years later from the
+// repository alone.
+//
+// THE CLAIM IS EXCLUSIVE: a request id already written into this slice's
+// telemetry is not attributed again, so a resumed session (the same transcript
+// read twice) and a transcript that repeats the same request across entries
+// —which Claude Code does— add up once and only once.
+const CLAUDE_DIRECTORY = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
+
+const USAGE_ADAPTERS = [{
+  detects: (env) => ClaudeCodeUsage.detects(env),
+  usageFor: (claimed) => new ClaudeCodeUsage({
+    env: process.env,
+    transcript: new ClaudeCodeTranscript({
+      claudeDirectory: CLAUDE_DIRECTORY,
+      cwd: process.cwd(),
+      listNames: (directory) => readdirSync(directory),
+      readText: (path) => readFileSync(path, 'utf8'),
+    }),
+  }).usageFor(claimed),
+}]
+
+function claimedRequests() {
+  try {
+    return ToolUsage.claimedIn(readFileSync(join(repoRoot, METRICS_REL), 'utf8'))
+  } catch {
+    return new Set()
+  }
+}
+
+function toolUsageMeasures() {
+  const adapter = USAGE_ADAPTERS.find((candidate) => candidate.detects(process.env))
+  if (!adapter) return ToolUsage.unsupported().measures()
+  try {
+    return adapter.usageFor(claimedRequests()).measures()
+  } catch (e) {
+    err(`warning: the tool usage could not be measured (${String(e.message).trim()}). This carries on: no transition depends on the measurement.`)
+    return ToolUsage.notRead({ identity: ToolIdentity.unknown() }).measures()
+  }
+}
+
 function measure(step, measures) {
   // `global`, `slice-judge` and `e2e` belong to no task: a `task: 3` on that row
   // would be a gap read as an assertion (the same doctrine that already forbids
@@ -438,7 +492,7 @@ function measure(step, measures) {
     repo: repoSlug, epic: sliceEpic, issue, plan: planPath, plan_sha256: PLAN_SHA,
     task: isSliceStep ? null : run.task, task_name: isSliceStep ? null : (currentTask()?.name ?? null), tasks_total: run.tasksTotal,
     step, attempt: currentAttempt(), plugin_version: PLUGIN_VERSION, actor: ACTOR,
-  }, measures, { now: new Date().toISOString() }))
+  }, { ...measures, ...toolUsageMeasures() }, { now: new Date().toISOString() }))
   // The two destinations are attempted separately: the account's disk being
   // full cannot cost the repo the row that travels, nor the other way round.
   for (const destination of [metricsPath('ct-step', { configDir: process.env.CLAUDE_CONFIG_DIR }), join(repoRoot, METRICS_REL)]) {
@@ -1969,7 +2023,7 @@ function sliceVerdictVerb() {
     // verdict's commit without anyone having judged it — and nothing caught it,
     // because the slice package measures `baseSha..HEAD` and the index does not
     // show up in that diff. Measured: `git add colado.txt` before this verb and
-    // `colado.txt` ended up inside "Veredicto del slice entero (#7)", with the
+    // `colado.txt` ended up inside "Verdict of the whole slice (#7)", with the
     // run delivering.
     //
     // BELONGING is enough (see `foreignInIndex`): here the index has to carry
@@ -1983,8 +2037,8 @@ function sliceVerdictVerb() {
     // lying about the judgement in order to punish a dirty index. So it warns,
     // it does not commit, and the delivery goes on — the two paths stay STAGED,
     // so taking the foreign material out and committing them by hand is one
-    // line. Same doctrine as the `else` further down ("nada que commitear del
-    // veredicto del slice ... la entrega sigue") and as the three `allowFail`.
+    // line. Same doctrine as the `else` further down ("nothing to commit of the
+    // slice's verdict ... the delivery carries on") and as the three `allowFail`.
     const foreign = foreignInIndex([path, METRICS_REL])
     if (foreign.length) {
       err(`warning: the index carried ${foreign.length} path(s) foreign to the machinery (${foreign.join(', ')}) and this commit would take them inside without any judge having seen them — the slice's verdict is NOT committed. The delivery carries on: the slice's work is already committed in full. The verdict is written and STAGED at ${path}: take what is foreign out of the index ("git restore --staged ${foreign[0]}", which does not touch your worktree) and commit it by hand before opening the pull request.`)
@@ -2115,9 +2169,9 @@ function verdictVerb() {
     lastFindings: major.length ? major.map((f) => `- [${f.severity}] ${findingLocation(f)}: ${f.what}`).join('\n') : null,
   }
   if (verdict.ruling === 'PASS') {
-    // The verdict TRAVELS in the pull request (F37's closure criterion: "el
-    // PR de un slice trae un veredicto emitido por un agente que no ejecutó
-    // nada"): the one that approves the task is written to a tracked path and
+    // The verdict TRAVELS in the pull request (F37's closure criterion: a
+    // slice's pull request brings a verdict issued by an agent that executed
+    // nothing): the one that approves the task is written to a tracked path and
     // staged, so `commit` carries it inside its task's commit. What reaches
     // the PR is the judge's JSON, not a sentence of the commit message
     // claiming it. With `ruling` and not with the outcome, on purpose: a PASS
@@ -2310,8 +2364,8 @@ function commitVerb() {
   // and none is left out of the pull request.
   // `allowFail`, and not out of generic prudence: without it this `git add` is
   // the first road by which the telemetry could bring a run down, which is
-  // exactly what the design forbids ("ninguna transición depende de la
-  // medida"). Measured: with `docs/` in the repo's .gitignore, `git add` exits
+  // exactly what the design forbids: no transition depends on the
+  // measurement. Measured: with `docs/` in the repo's .gitignore, `git add` exits
   // with 1, the exception climbs up and the task is left UNCOMMITTED with the
   // run stuck. The measure is lost and the work is committed, never the other
   // way round.
@@ -2481,13 +2535,13 @@ Co-Authored-By: Claude <noreply@anthropic.com>`
 // Apply the outcome to the table, and say what comes now.
 // ---------------------------------------------------------------------------
 try {
-  if (verbo === 'next') nextVerb()
+  if (verb === 'next') nextVerb()
 
-  requireStep(verbo)
+  requireStep(verb)
   const outcome = {
     report: reportVerb, controls: controlsVerb, verdict: verdictVerb, advice: adviceVerb, commit: commitVerb,
     reconcile: reconcileVerb, global: globalVerb, 'slice-verdict': sliceVerdictVerb, e2e: e2eVerb,
-  }[verbo]()
+  }[verb]()
 
   if (run.discards >= MAX_DISCARDS && outcome === OUTCOMES.DISCARDED) {
     save()
@@ -2508,7 +2562,7 @@ try {
   // the verb just applied was `e2e` and the transition closed the run in
   // DELIVERED — see `commitE2eReport`'s comment for why that exact
   // condition (and for why the red road commits NOTHING).
-  if (verbo === 'e2e' && transition.state === RUN_STATES.DELIVERED) {
+  if (verb === 'e2e' && transition.state === RUN_STATES.DELIVERED) {
     commitE2eReport()
   }
 

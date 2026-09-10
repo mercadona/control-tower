@@ -16,8 +16,8 @@ class Subjects {
 
   static rootGuardWords(): string[] {
     const source = readFileSync(join(Subjects.REPOSITORY, Subjects.ROOT_GUARD), 'utf8')
-    const declared = source.match(/PALABRAS_CASTELLANAS\s*=\s*\[([\s\S]*?)\]/)
-    if (declared === null) throw new Error('the root guard no longer declares PALABRAS_CASTELLANAS')
+    const declared = source.match(/SPANISH_WORDS\s*=\s*\[([\s\S]*?)\]/)
+    if (declared === null) throw new Error('the root guard no longer declares SPANISH_WORDS')
     return [...declared[1].matchAll(/'([^']+)'/g)].map((found) => found[1])
   }
 }

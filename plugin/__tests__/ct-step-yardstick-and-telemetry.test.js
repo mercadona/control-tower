@@ -13,7 +13,7 @@ import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo, PLUGIN_ROOT_TEST } from './fixtures/ct-step-harness.js'
 
 let repo
-const { ct, writeReport, writeVerdict, writeSliceVerdict, log, commits, runState, judgeTask,
+const { ct, ctIn, writeReport, writeVerdict, writeSliceVerdict, log, commits, runState, judgeTask,
   judgeSlice, taskOk, taskPackage, slicePackage, judgeRows, seal } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })
@@ -87,6 +87,69 @@ describe('what the implementer warns about, and the telemetry, do not stay where
     expect(controlsRow.duration_ms).toBeGreaterThanOrEqual(0)
   })
 
+  it('the row of every step carries the tool that spent the tokens and the exact usage it reported', () => {
+    const session = '11111111-2222-4333-8444-555555555555'
+    const runtimeDir = `${repo}-runtime`
+    const transcript = join(runtimeDir, 'projects', 'whatever', `${session}.jsonl`)
+    mkdirSync(join(runtimeDir, 'projects', 'whatever'), { recursive: true })
+    writeFileSync(transcript, [
+      { type: 'assistant', requestId: 'req_1', message: { usage: { input_tokens: 3, cache_read_input_tokens: 900, cache_creation_input_tokens: 100, output_tokens: 40 } } },
+      { type: 'assistant', requestId: 'req_1', message: { usage: { input_tokens: 3, cache_read_input_tokens: 900, cache_creation_input_tokens: 100, output_tokens: 40 } } },
+    ].map((entry) => `${JSON.stringify(entry)}\n`).join(''))
+    const runtime = {
+      CLAUDECODE: '1',
+      CLAUDE_CODE_SESSION_ID: session,
+      AI_AGENT: 'claude-code_2-1-266_agent',
+      CLAUDE_CONFIG_DIR: runtimeDir,
+    }
+
+    const reported = ctIn(runtime, 'report', writeReport(['uno.txt']))
+    expect(reported.status).toBe(0)
+    const first = readFileSync(join(repo, 'docs', 'superpowers', 'metrics', 'issue-7.jsonl'), 'utf8')
+      .trim().split('\n').map((l) => JSON.parse(l))
+    expect(first).toHaveLength(1)
+    expect(first[0].tool).toBe('claude-code')
+    expect(first[0].tool_version).toBe('2.1.266')
+    expect(first[0].tool_usage_status).toBe('measured')
+    expect(first[0].tool_input_tokens).toBe(3)
+    expect(first[0].tool_cached_input_tokens).toBe(1000)
+    expect(first[0].tool_output_tokens).toBe(40)
+    expect(first[0].tool_total_tokens).toBe(1043)
+    expect(first[0].tool_usage_evidence).toEqual(['req_1'])
+    expect(first[0].tool_duration_status).toBe('unsupported')
+    expect(first[0].tool_active_duration_ms).toBeNull()
+
+    ctIn(runtime, 'controls')
+    const rows = readFileSync(join(repo, 'docs', 'superpowers', 'metrics', 'issue-7.jsonl'), 'utf8')
+      .trim().split('\n').map((l) => JSON.parse(l))
+    const controls = rows.at(-1)
+    expect(controls.step).toBe(STEPS.CONTROLS)
+    expect(controls.tool_usage_status).toBe('measured')
+    expect(controls.tool_usage_evidence).toEqual([])
+    expect(controls.tool_total_tokens).toBe(0)
+  })
+
+  it('a_runtime_that_publishes_no_usage_lands_its_status_and_no_number_instead_of_an_estimate', () => {
+    ct('report', writeReport(['uno.txt']))
+    const rows = readFileSync(join(repo, 'docs', 'superpowers', 'metrics', 'issue-7.jsonl'), 'utf8')
+      .trim().split('\n').map((l) => JSON.parse(l))
+    expect(rows[0].tool_usage_status).toBe('unsupported')
+    expect(rows[0].tool).toBeNull()
+    expect(rows[0].tool_total_tokens).toBeNull()
+    expect(rows[0].tool_input_tokens).toBeNull()
+  })
+
+  it('a_runtime_whose_transcript_cannot_be_found_is_not_read_and_keeps_the_tool_identity', () => {
+    const rows = (() => {
+      ctIn({ CLAUDECODE: '1', CLAUDE_CODE_SESSION_ID: 'no-such-session', AI_AGENT: 'claude-code_2-1-266_agent' }, 'report', writeReport(['uno.txt']))
+      return readFileSync(join(repo, 'docs', 'superpowers', 'metrics', 'issue-7.jsonl'), 'utf8')
+        .trim().split('\n').map((l) => JSON.parse(l))
+    })()
+    expect(rows[0].tool_usage_status).toBe('not-read')
+    expect(rows[0].tool).toBe('claude-code')
+    expect(rows[0].tool_total_tokens).toBeNull()
+  })
+
   it('Step 6: there is no `commit` row: its sha and its fact are whole in git log', () => {
     taskOk('uno.txt')
     const rows = readFileSync(join(repo, '.telemetria', 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
@@ -106,7 +169,7 @@ describe('a failure of the telemetry cannot bring the task down', () => {
     // in the run's folder.
     appendFileSync(join(repo, '.gitignore'), 'docs/superpowers/verdicts/\n')
     execFileSync('git', ['add', '--', '.gitignore'], { cwd: repo })
-    execFileSync('git', ['commit', '-q', '-m', 'ignora los veredictos'], { cwd: repo })
+    execFileSync('git', ['commit', '-q', '-m', 'ignore the verdicts'], { cwd: repo })
     const r = taskOk('uno.txt')
     expect(r.status).toBe(0)
     expect(commits()).toBe(3)
@@ -114,8 +177,8 @@ describe('a failure of the telemetry cannot bring the task down', () => {
   })
 
   it('if the metrics path is gitignored, `git add` fails and the task is committed all the same', () => {
-    // The principle belongs to the design and it is old: "ninguna transición
-    // depende de la medida". Making the telemetry TRAVEL opens a new path by
+    // The principle belongs to the design and it is old: no transition
+    // depends on the measurement. Making the telemetry TRAVEL opens a new path by
     // which it could break that — the `git add` of the file — and `git add` on
     // an ignored path exits with 1. A repo that ignores `docs/` is not unusual.
     // ONLY the metrics path is ignored, not the whole of `docs/`: with `docs/`
@@ -128,7 +191,7 @@ describe('a failure of the telemetry cannot bring the task down', () => {
     // then the SCOPE check would veto the task (a `(create)` of a file that is
     // already in the previous commit) and the failure would be a different one.
     execFileSync('git', ['add', '--', '.gitignore'], { cwd: repo })
-    execFileSync('git', ['commit', '-q', '-m', 'ignora las metricas'], { cwd: repo })
+    execFileSync('git', ['commit', '-q', '-m', 'ignore the metrics'], { cwd: repo })
     const r = taskOk('uno.txt')
     expect(r.status).toBe(0)
     expect(commits()).toBe(3)
@@ -143,7 +206,7 @@ describe('a failure of the telemetry cannot bring the task down', () => {
     // work is already committed whole.
     appendFileSync(join(repo, '.gitignore'), 'docs/superpowers/\n')
     execFileSync('git', ['add', '--', '.gitignore'], { cwd: repo })
-    execFileSync('git', ['commit', '-q', '-m', 'ignora la evidencia'], { cwd: repo })
+    execFileSync('git', ['commit', '-q', '-m', 'ignore the evidence'], { cwd: repo })
     taskOk('uno.txt')
     taskOk('dos.txt')
     ct('reconcile')

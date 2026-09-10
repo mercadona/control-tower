@@ -325,181 +325,183 @@ const Home = () => {
       <TopBar
         productName="Control Tower"
         logo={<span className="home__logo">CT</span>}
-        actions={<ToolsStatus />}
       />
-      <main className="home__content">
-        <nav className="home__flow" aria-label="Flujo del plan">
-          <ol>
-            {[
-              { number: 1, name: 'Solicitud', stage: 'request', status: requestStatus },
-              { number: 2, name: 'Revisar plan', stage: 'review', status: reviewStatus },
-              { number: 3, name: 'Implementación', stage: 'implementation', status: implementationStatus },
-            ].map((step) => (
-              <li
-                key={step.stage}
-                className={`home__flow-step home__flow-step--${step.status}`}
-                aria-current={step.stage === currentStage ? 'step' : undefined}
-              >
-                <span className="home__flow-number">{step.number}</span>
-                <span>{step.name}</span>
-                <span className="lg-caption1-regular">
-                  {step.status === 'completed' ? 'Completado' : step.status === 'active' ? 'En curso' : 'Pendiente'}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </nav>
+      <div className="home__work-area">
+        <main className="home__content">
+          <nav className="home__flow" aria-label="Flujo del plan">
+            <ol>
+              {[
+                { number: 1, name: 'Solicitud', stage: 'request', status: requestStatus },
+                { number: 2, name: 'Revisar plan', stage: 'review', status: reviewStatus },
+                { number: 3, name: 'Implementación', stage: 'implementation', status: implementationStatus },
+              ].map((step) => (
+                <li
+                  key={step.stage}
+                  className={`home__flow-step home__flow-step--${step.status}`}
+                  aria-current={step.stage === currentStage ? 'step' : undefined}
+                >
+                  <span className="home__flow-number">{step.number}</span>
+                  <span>{step.name}</span>
+                  <span className="lg-caption1-regular">
+                    {step.status === 'completed' ? 'Completado' : step.status === 'active' ? 'En curso' : 'Pendiente'}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </nav>
 
-        <section className="home__workspace" aria-labelledby={`workspace-${currentStage}`}>
-          {currentStage === 'request' && (
-            <>
-              <header className="home__workspace-heading">
-                <span className="home__workspace-number">1</span>
-                <div>
-                  <h1 id="workspace-request" className="lg-title3-semibold">Solicitud</h1>
-                  <p>Cuéntanos qué quieres planificar y dónde está el repositorio.</p>
-                </div>
-              </header>
-              {recovery}
-              {candidates.length > 1 && (
-                <ul className="home__active-plans" aria-label="Planes activos">
-                  {candidates.map((candidate) => (
-                    <li key={`${candidate.plan.repo}:${candidate.plan.issue.number}`} className="home__active-plan">
-                      <span>
-                        <strong>{candidate.request.id}</strong> · <code>{candidate.request.repo}</code> · issue #{candidate.plan.issue.number}
-                      </span>
-                      <Button
-                        variant="secondary"
-                        aria-label={`Continuar plan ${candidate.request.id}, ${candidate.request.repo}, issue #${candidate.plan.issue.number}`}
-                        onClick={() => selectActivePlan(candidate)}
-                      >
-                        Continuar plan
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <StartPlanForm
-                key={requestFormVersion}
-                onStarted={planStarted}
-                onBackendUnreachable={planStartUncertain}
-                onInteraction={formInteracted}
-                isLocked={uncertainRequest !== null}
-                isMutationBlocked={reconciliation === 'unavailable' || reconciliation === 'inconclusive' || (reconciliation === 'checking' && retryingRef.current)}
-                request={uncertainRequest ?? undefined}
-              />
-            </>
-          )}
-
-          {currentStage === 'review' && workflow !== null && (
-            <>
-              <header className="home__workspace-heading">
-                <span className="home__workspace-number">2</span>
-                <div>
-                  <h1 id="workspace-review" className="lg-title3-semibold">Revisar plan</h1>
-                  <p>{reviewDescription}</p>
-                </div>
-              </header>
-              {recovery}
-              <BaselineNotice baseline={workflow.plan.baseline} />
-              <PlanProgress
-                key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
-                plan={workflow.plan}
-                onReady={planReady}
-                onReviewing={planReviewing}
-                observe={restoredIsConfirmed}
-              />
-              {workflow.phase === 'ready' && restoredIsConfirmed && (
-                <div className="home__review-action">
-                  <a href={workflow.plan.issue.url} target="_blank" rel="noreferrer" className="home__issue-link lg-body-medium">
-                    Abrir el plan en GitHub
-                  </a>
-                  <AskPlanChanges plan={workflow.plan} />
-                  <ImplementPlanAction
-                    plan={workflow.plan}
-                    onImplementationStarted={implementationStarted}
-                  />
-                </div>
-              )}
-              {showRestoredDiscard && workflow.phase === 'planning' && (
-                <Button className="home__discard" variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
-              )}
-              {showRestoredDiscard && workflow.phase === 'ready' && (
-                <Button className="home__discard" variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
-              )}
-            </>
-          )}
-
-          {currentStage === 'implementation' && workflow !== null && (
-            <>
-              <header className="home__workspace-heading">
-                <span className="home__workspace-number">3</span>
-                <div>
-                  <h1 id="workspace-implementation" className="lg-title3-semibold">Implementación</h1>
-                  <p>Seguimos la implementación. Aquí verás el progreso que comunica el backend.</p>
-                </div>
-              </header>
-              {recovery}
-              {restoredIsConfirmed && (
-                <ImplementPlanAction
-                  plan={workflow.plan}
-                  onImplementationStarted={implementationStarted}
-                  isImplementationStarted
+          <section className="home__workspace" aria-labelledby={`workspace-${currentStage}`}>
+            {currentStage === 'request' && (
+              <>
+                <header className="home__workspace-heading">
+                  <span className="home__workspace-number">1</span>
+                  <div>
+                    <h1 id="workspace-request" className="lg-title3-semibold">Solicitud</h1>
+                    <p>Cuéntanos qué quieres planificar y dónde está el repositorio.</p>
+                  </div>
+                </header>
+                {recovery}
+                {candidates.length > 1 && (
+                  <ul className="home__active-plans" aria-label="Planes activos">
+                    {candidates.map((candidate) => (
+                      <li key={`${candidate.plan.repo}:${candidate.plan.issue.number}`} className="home__active-plan">
+                        <span>
+                          <strong>{candidate.request.id}</strong> · <code>{candidate.request.repo}</code> · issue #{candidate.plan.issue.number}
+                        </span>
+                        <Button
+                          variant="secondary"
+                          aria-label={`Continuar plan ${candidate.request.id}, ${candidate.request.repo}, issue #${candidate.plan.issue.number}`}
+                          onClick={() => selectActivePlan(candidate)}
+                        >
+                          Continuar plan
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <StartPlanForm
+                  key={requestFormVersion}
+                  onStarted={planStarted}
+                  onBackendUnreachable={planStartUncertain}
+                  onInteraction={formInteracted}
+                  isLocked={uncertainRequest !== null}
+                  isMutationBlocked={reconciliation === 'unavailable' || reconciliation === 'inconclusive' || (reconciliation === 'checking' && retryingRef.current)}
+                  request={uncertainRequest ?? undefined}
                 />
-              )}
-              {restoredIsConfirmed && (
-                <ImplementProgress
-                  key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
-                  issue={workflow.plan.issue.number}
-                  root={workflow.plan.root ?? workflow.request.path}
-                  repo={workflow.plan.repo}
-                />
-              )}
-              {restoredIsConfirmed && (
-                <Button className="home__start-another" type="button" variant="secondary" onClick={discardWorkflow}>
-                  Arrancar otro plan
-                </Button>
-              )}
-            </>
-          )}
-        </section>
+              </>
+            )}
 
-        {workflow !== null && (
-          <section className="home__completed" aria-label="Etapas completadas">
-            <WorkflowStep
-              title="Solicitud"
-              status="completed"
-              isExpanded={expandedSummary === 'request'}
-              onExpandedChange={expandSummary('request')}
-            >
-              <StartPlanForm
-                key={requestFormVersion}
-                onStarted={planStarted}
-                onBackendUnreachable={planStartUncertain}
-                onInteraction={formInteracted}
-                isLocked
-                request={workflow.request}
-              />
-            </WorkflowStep>
-            {reviewIsComplete && (
-              <WorkflowStep
-                title="Revisar plan"
-                subtitle="Plan revisado"
-                status="completed"
-                isExpanded={expandedSummary === 'review'}
-                onExpandedChange={expandSummary('review')}
-              >
+            {currentStage === 'review' && workflow !== null && (
+              <>
+                <header className="home__workspace-heading">
+                  <span className="home__workspace-number">2</span>
+                  <div>
+                    <h1 id="workspace-review" className="lg-title3-semibold">Revisar plan</h1>
+                    <p>{reviewDescription}</p>
+                  </div>
+                </header>
+                {recovery}
+                <BaselineNotice baseline={workflow.plan.baseline} />
                 <PlanProgress
+                  key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
                   plan={workflow.plan}
                   onReady={planReady}
                   onReviewing={planReviewing}
-                  observe={false}
+                  observe={restoredIsConfirmed}
                 />
-              </WorkflowStep>
+                {workflow.phase === 'ready' && restoredIsConfirmed && (
+                  <div className="home__review-action">
+                    <a href={workflow.plan.issue.url} target="_blank" rel="noreferrer" className="home__issue-link lg-body-medium">
+                      Abrir el plan en GitHub
+                    </a>
+                    <AskPlanChanges plan={workflow.plan} />
+                    <ImplementPlanAction
+                      plan={workflow.plan}
+                      onImplementationStarted={implementationStarted}
+                    />
+                  </div>
+                )}
+                {showRestoredDiscard && workflow.phase === 'planning' && (
+                  <Button className="home__discard" variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
+                )}
+                {showRestoredDiscard && workflow.phase === 'ready' && (
+                  <Button className="home__discard" variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
+                )}
+              </>
+            )}
+
+            {currentStage === 'implementation' && workflow !== null && (
+              <>
+                <header className="home__workspace-heading">
+                  <span className="home__workspace-number">3</span>
+                  <div>
+                    <h1 id="workspace-implementation" className="lg-title3-semibold">Implementación</h1>
+                    <p>Seguimos la implementación. Aquí verás el progreso que comunica el backend.</p>
+                  </div>
+                </header>
+                {recovery}
+                {restoredIsConfirmed && (
+                  <ImplementPlanAction
+                    plan={workflow.plan}
+                    onImplementationStarted={implementationStarted}
+                    isImplementationStarted
+                  />
+                )}
+                {restoredIsConfirmed && (
+                  <ImplementProgress
+                    key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
+                    issue={workflow.plan.issue.number}
+                    root={workflow.plan.root ?? workflow.request.path}
+                    repo={workflow.plan.repo}
+                  />
+                )}
+                {restoredIsConfirmed && (
+                  <Button className="home__start-another" type="button" variant="secondary" onClick={discardWorkflow}>
+                    Arrancar otro plan
+                  </Button>
+                )}
+              </>
             )}
           </section>
-        )}
-      </main>
+
+          {workflow !== null && (
+            <section className="home__completed" aria-label="Etapas completadas">
+              <WorkflowStep
+                title="Solicitud"
+                status="completed"
+                isExpanded={expandedSummary === 'request'}
+                onExpandedChange={expandSummary('request')}
+              >
+                <StartPlanForm
+                  key={requestFormVersion}
+                  onStarted={planStarted}
+                  onBackendUnreachable={planStartUncertain}
+                  onInteraction={formInteracted}
+                  isLocked
+                  request={workflow.request}
+                />
+              </WorkflowStep>
+              {reviewIsComplete && (
+                <WorkflowStep
+                  title="Revisar plan"
+                  subtitle="Plan revisado"
+                  status="completed"
+                  isExpanded={expandedSummary === 'review'}
+                  onExpandedChange={expandSummary('review')}
+                >
+                  <PlanProgress
+                    plan={workflow.plan}
+                    onReady={planReady}
+                    onReviewing={planReviewing}
+                    observe={false}
+                  />
+                </WorkflowStep>
+              )}
+            </section>
+          )}
+        </main>
+        <ToolsStatus />
+      </div>
     </div>
   )
 }

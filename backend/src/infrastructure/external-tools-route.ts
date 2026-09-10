@@ -1,6 +1,13 @@
 import type { Request, RequestHandler, Response } from 'express'
 import { Answer } from './http.ts'
 import type { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
+import { MetricsDelivery } from '../domain/value-objects/metrics-delivery.ts'
+
+type DeliveredMetrics = {
+  enabled: boolean,
+  variable: typeof MetricsDelivery.VARIABLE,
+  destination: string | null,
+}
 
 export class ExternalToolsRoute {
   static readonly PATH = '/external-tools'
@@ -17,7 +24,16 @@ export class ExternalToolsRoute {
           session: session.state,
           fix: session.fix,
         })),
+        metricsDelivery: ExternalToolsRoute.#deliveryOf(surveyed.metricsDelivery),
       })
+    }
+  }
+
+  static #deliveryOf(metricsDelivery: MetricsDelivery): DeliveredMetrics {
+    return {
+      enabled: metricsDelivery.enabled,
+      variable: MetricsDelivery.VARIABLE,
+      destination: metricsDelivery.destination,
     }
   }
 

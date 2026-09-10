@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { harvestSlice } from '../scripts/harvest.js'
 import { TelemetryStatus } from '../scripts/harvest-table.js'
+import { JudgeReturns } from '../scripts/judge-returns.js'
+import { ToolUsageTotal } from '../scripts/tool-usage.js'
 import { METRICS_REPO_DIR, aggregateBriefMeasures, aggregateRoleBytesMeasures, aggregateVerdictMeasures, metricsRepoRelPath } from '../scripts/run-metrics.js'
 import {
   IndexOutcome,
@@ -236,6 +238,8 @@ describe('SliceHarvest reproduces, by an injected gh, the reads ct-harvest.mjs d
       ...aggregateVerdictMeasures(GitHubAnswers.telemetryText()),
       ...aggregateBriefMeasures(GitHubAnswers.telemetryText()),
       ...aggregateRoleBytesMeasures(GitHubAnswers.telemetryText()),
+      ...ToolUsageTotal.of(GitHubAnswers.telemetryText()).measures(),
+      ...JudgeReturns.of(GitHubAnswers.telemetryText()).measures(),
     }
 
     expect(report.outcome).toBe(SliceHarvestOutcome.COMPLETE)

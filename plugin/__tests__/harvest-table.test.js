@@ -77,6 +77,23 @@ class HarvestRows {
       agentBytes: 30000,
       skillBytes: 18000,
       packageBytes: 9000,
+      tool: 'claude-code',
+      toolVersion: '2.1.266',
+      toolUsageStatus: 'measured',
+      toolUsageAttempts: 6,
+      toolUsageMeasured: 6,
+      toolUsageGaps: 0,
+      toolInputTokens: 700,
+      toolCachedInputTokens: 400000,
+      toolOutputTokens: 21000,
+      toolTotalTokens: 421700,
+      toolDurationStatus: 'unsupported',
+      toolDurationMeasured: 0,
+      toolActiveDurationMs: null,
+      judgeAttempts: 4,
+      judgeVetoes: 1,
+      judgeCorrectionsOrdered: 2,
+      judgeReturns: 3,
     }
   }
 
@@ -123,6 +140,23 @@ class HarvestRows {
         agentBytes: 9,
         skillBytes: 9,
         packageBytes: 9,
+        tool: 'claude-code',
+        toolVersion: '9.9.9',
+        toolUsageStatus: 'measured',
+        toolUsageAttempts: 9,
+        toolUsageMeasured: 9,
+        toolUsageGaps: 9,
+        toolInputTokens: 9,
+        toolCachedInputTokens: 9,
+        toolOutputTokens: 9,
+        toolTotalTokens: 9,
+        toolDurationStatus: 'measured',
+        toolDurationMeasured: 9,
+        toolActiveDurationMs: 9,
+        judgeAttempts: 9,
+        judgeVetoes: 9,
+        judgeCorrectionsOrdered: 9,
+        judgeReturns: 9,
       },
     }
   }
@@ -212,6 +246,22 @@ describe('a slice row projects to the wire object under the schema names', () =>
       agent_bytes: 30000,
       skill_bytes: 18000,
       package_bytes: 9000,
+      tool: 'claude-code',
+      tool_version: '2.1.266',
+      tool_usage_status: 'measured',
+      tool_usage_attempts: 6,
+      tool_usage_measured: 6,
+      tool_usage_gaps: 0,
+      tool_input_tokens: 700,
+      tool_cached_input_tokens: 400000,
+      tool_output_tokens: 21000,
+      tool_total_tokens: 421700,
+      tool_duration_status: 'unsupported',
+      tool_active_duration_ms: null,
+      judge_attempts: 4,
+      judge_vetoes: 1,
+      judge_corrections_ordered: 2,
+      judge_returns: 3,
     })
   })
 
@@ -349,6 +399,22 @@ describe('a slice row projects to the wire object under the schema names', () =>
     expect(row.agent_bytes).toBeNull()
     expect(row.skill_bytes).toBeNull()
     expect(row.package_bytes).toBeNull()
+    expect(row.tool).toBeNull()
+    expect(row.tool_version).toBeNull()
+    expect(row.tool_usage_status).toBeNull()
+    expect(row.tool_usage_attempts).toBeNull()
+    expect(row.tool_usage_measured).toBeNull()
+    expect(row.tool_usage_gaps).toBeNull()
+    expect(row.tool_input_tokens).toBeNull()
+    expect(row.tool_cached_input_tokens).toBeNull()
+    expect(row.tool_output_tokens).toBeNull()
+    expect(row.tool_total_tokens).toBeNull()
+    expect(row.tool_duration_status).toBeNull()
+    expect(row.tool_active_duration_ms).toBeNull()
+    expect(row.judge_attempts).toBeNull()
+    expect(row.judge_vetoes).toBeNull()
+    expect(row.judge_corrections_ordered).toBeNull()
+    expect(row.judge_returns).toBeNull()
   })
 
   it('findings_by_rule_land_as_repeated_records_sorted_by_rule', () => {
@@ -365,6 +431,98 @@ describe('a slice row projects to the wire object under the schema names', () =>
   it('a_telemetry_status_outside_the_vocabulary_raises_instead_of_landing', () => {
     const row = HarvestRows.withTelemetry({ status: 'unexpected' })
     expect(() => HarvestTable.rowFor({ row, identity: Identities.today() })).toThrow(/unknown telemetry status/)
+  })
+
+  it('a_slice_whose_tool_reported_zero_tokens_lands_four_real_zeros_and_not_a_hole', () => {
+    const row = HarvestTable.rowFor({
+      row: HarvestRows.withTelemetry({
+        toolUsageAttempts: 2, toolUsageMeasured: 2, toolUsageGaps: 0,
+        toolInputTokens: 0, toolCachedInputTokens: 0, toolOutputTokens: 0, toolTotalTokens: 0,
+      }),
+      identity: Identities.today(),
+    })
+    expect(row.tool_input_tokens).toBe(0)
+    expect(row.tool_cached_input_tokens).toBe(0)
+    expect(row.tool_output_tokens).toBe(0)
+    expect(row.tool_total_tokens).toBe(0)
+    expect(row.tool_usage_status).toBe('measured')
+  })
+
+  it('a_token_count_no_attempt_carried_lands_as_null_with_the_status_saying_which_case_it_is', () => {
+    const absent = HarvestTable.rowFor({
+      row: HarvestRows.withTelemetry({
+        tool: null, toolVersion: null, toolUsageStatus: 'absent',
+        toolUsageAttempts: 0, toolUsageMeasured: 0, toolUsageGaps: null,
+        toolInputTokens: null, toolCachedInputTokens: null, toolOutputTokens: null, toolTotalTokens: null,
+      }),
+      identity: Identities.today(),
+    })
+    expect(absent.tool_usage_status).toBe('absent')
+    expect(absent.tool_total_tokens).toBeNull()
+
+    const unsupported = HarvestTable.rowFor({
+      row: HarvestRows.withTelemetry({
+        tool: null, toolVersion: null, toolUsageStatus: 'unsupported',
+        toolUsageAttempts: 3, toolUsageMeasured: 0,
+        toolInputTokens: null, toolCachedInputTokens: null, toolOutputTokens: null, toolTotalTokens: null,
+      }),
+      identity: Identities.today(),
+    })
+    expect(unsupported.tool_usage_status).toBe('unsupported')
+    expect(unsupported.tool_usage_attempts).toBe(3)
+    expect(unsupported.tool_total_tokens).toBeNull()
+
+    const notRead = HarvestTable.rowFor({
+      row: HarvestRows.withTelemetry({
+        toolUsageStatus: 'not-read', toolUsageAttempts: 1, toolUsageMeasured: 0,
+        toolInputTokens: null, toolCachedInputTokens: null, toolOutputTokens: null, toolTotalTokens: null,
+      }),
+      identity: Identities.today(),
+    })
+    expect(notRead.tool_usage_status).toBe('not-read')
+    expect(notRead.tool_total_tokens).toBeNull()
+  })
+
+  it('a_token_count_no_attempt_measured_lands_as_null_even_when_the_aggregate_says_zero', () => {
+    const row = HarvestTable.rowFor({
+      row: HarvestRows.withTelemetry({
+        toolUsageAttempts: 2, toolUsageMeasured: 0,
+        toolInputTokens: 0, toolCachedInputTokens: 0, toolOutputTokens: 0, toolTotalTokens: 0,
+      }),
+      identity: Identities.today(),
+    })
+    expect(row.tool_input_tokens).toBeNull()
+    expect(row.tool_cached_input_tokens).toBeNull()
+    expect(row.tool_output_tokens).toBeNull()
+    expect(row.tool_total_tokens).toBeNull()
+    expect(row.tool_usage_attempts).toBe(2)
+  })
+
+  it('the_duration_no_tool_reported_lands_as_null_even_when_the_status_travels', () => {
+    const row = HarvestTable.rowFor({ row: HarvestRows.merged(), identity: Identities.today() })
+    expect(row.tool_duration_status).toBe('unsupported')
+    expect(row.tool_active_duration_ms).toBeNull()
+  })
+
+  it('the_judge_returns_land_as_the_two_ways_back_to_the_implementer_and_their_sum', () => {
+    const row = HarvestTable.rowFor({ row: HarvestRows.merged(), identity: Identities.today() })
+    expect(row.judge_vetoes).toBe(1)
+    expect(row.judge_corrections_ordered).toBe(2)
+    expect(row.judge_returns).toBe(3)
+    expect(row.judge_attempts).toBe(4)
+  })
+
+  it('every_column_of_the_tool_usage_contract_is_additive_and_nullable_so_old_telemetry_stays_valid', () => {
+    const schema = JSON.parse(HarvestTable.schemaJson())
+    const declared = Object.fromEntries(schema.map((column) => [column.name, column]))
+    const strings = ['tool', 'tool_version', 'tool_usage_status', 'tool_duration_status']
+    const integers = [
+      'tool_usage_attempts', 'tool_usage_measured', 'tool_usage_gaps',
+      'tool_input_tokens', 'tool_cached_input_tokens', 'tool_output_tokens', 'tool_total_tokens',
+      'tool_active_duration_ms', 'judge_attempts', 'judge_vetoes', 'judge_corrections_ordered', 'judge_returns',
+    ]
+    for (const column of strings) expect(declared[column]).toEqual({ name: column, type: 'STRING', mode: 'NULLABLE' })
+    for (const column of integers) expect(declared[column]).toEqual({ name: column, type: 'INTEGER', mode: 'NULLABLE' })
   })
 
   it('a_slice_without_milestone_lands_with_null_and_the_schema_admits_it', () => {
