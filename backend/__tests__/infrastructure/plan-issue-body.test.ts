@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PlanIssueBody, GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.js'
+import { PlanIssueBody, GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.ts'
 import { UserStory } from '../../src/domain/value-objects/user-story.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
@@ -8,21 +8,32 @@ import { mapGhIssue, extractAc, extractOrder } from '../../../plugin/scripts/gh-
 import { parseScope } from '../../../plugin/scripts/scope.js'
 import { buildIssueBody } from '../../../plugin/scripts/groom.js'
 
+type GroomedIssueBody = (
+  slice: unknown,
+  specRef: { path: string, reason: string },
+  epicContext: string | null,
+  frozenDecisions: string | null,
+) => string
+
 class Groomed {
   static #ROW = {
     n: 1, name: 'un slice', entrega: 'lo que entrega', type: '', gate: '', e2e: '',
     ac: ['un criterio'], deps: [], protected: '',
   }
 
+  static #BUILD = buildIssueBody as unknown as GroomedIssueBody
+
   static body() {
-    return buildIssueBody(Groomed.#ROW, { path: 'spec.md', reason: 'sin remoto' }, 'contexto', null)
+    return Groomed.#BUILD(Groomed.#ROW, { path: 'spec.md', reason: 'sin remoto' }, 'contexto', null)
   }
 }
 
 class Opened {
   static NUMBER = 41
 
-  static story({ summary = 'El buscador acepta acentos', description = 'como comprador quiero' } = {}) {
+  static story({ summary = 'El buscador acepta acentos', description = 'como comprador quiero' }: {
+    summary?: string, description?: string,
+  } = {}) {
     return new UserStory({ key: new UserStoryKey('MO_SHOP-42'), summary, description })
   }
 
@@ -30,11 +41,13 @@ class Opened {
 
   static githubStory({
     summary = 'El buscador acepta acentos', description = 'como comprador quiero', url = Opened.ISSUE_URL,
-  } = {}) {
+  }: { summary?: string, description?: string, url?: string } = {}) {
     return new UserStory({ key: new UserStoryUrl(url), summary, description })
   }
 
-  static asGithubSees({ story = Opened.story(), comment = null } = {}) {
+  static asGithubSees({ story = Opened.story(), comment = null }: {
+    story?: UserStory | null, comment?: PlanComment | null,
+  } = {}) {
     return {
       number: Opened.NUMBER,
       title: PlanIssueBody.titleFor({ story, comment }),
@@ -44,11 +57,11 @@ class Opened {
     }
   }
 
-  static asTheDispatcherReadsIt(story = Opened.story()) {
+  static asTheDispatcherReadsIt(story: UserStory = Opened.story()) {
     return mapGhIssue(Opened.asGithubSees({ story }))
   }
 
-  static commentOnly(text = 'lo que pide el humano') {
+  static commentOnly(text = 'lo que pide el humano'): { story: null, comment: PlanComment } {
     return { story: null, comment: new PlanComment(text) }
   }
 }
@@ -303,13 +316,13 @@ describe('reading back which user story a plan issue came from', () => {
   it('a_plan_that_came_from_a_jira_story_is_read_back_as_that_story', () => {
     const seen = Opened.asGithubSees({ story: Opened.story() })
 
-    expect(PlanIssueBody.storyIn(seen).text).toBe('MO_SHOP-42')
+    expect(PlanIssueBody.storyIn(seen)?.text).toBe('MO_SHOP-42')
   })
 
   it('a_plan_that_came_from_a_github_issue_url_is_read_back_as_that_same_url', () => {
     const seen = Opened.asGithubSees({ story: Opened.githubStory() })
 
-    expect(PlanIssueBody.storyIn(seen).text).toBe(Opened.ISSUE_URL)
+    expect(PlanIssueBody.storyIn(seen)?.text).toBe(Opened.ISSUE_URL)
   })
 
   it('a_plan_asked_for_by_hand_is_read_back_as_having_no_story_because_its_body_says_so', () => {
@@ -329,6 +342,6 @@ describe('reading back which user story a plan issue came from', () => {
   it('a_url_the_marker_line_wrote_backticked_is_unfenced_before_it_is_parsed_back', () => {
     const seen = { body: `${PlanIssueBody.ISSUE_LINE}\`${Opened.ISSUE_URL}\`\n` }
 
-    expect(PlanIssueBody.storyIn(seen).text).toBe(Opened.ISSUE_URL)
+    expect(PlanIssueBody.storyIn(seen)?.text).toBe(Opened.ISSUE_URL)
   })
 })

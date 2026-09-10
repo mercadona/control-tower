@@ -90,7 +90,7 @@ of transcribing their headings or their formats: the plugin is the authority on
 what an issue says and how it is read. The plugin is distributed alone and must
 never import from `backend/`. What the plugin does not export is copied here
 as a literal, with a contract test that renders the plugin's own output and
-compares — `backend/__tests__/infrastructure/plugin-contract.test.js` — the
+compares — `backend/__tests__/infrastructure/plugin-contract.test.ts` — the
 declared-copy rule for the one contract that crosses this boundary.
 
 ## Talking to a tool

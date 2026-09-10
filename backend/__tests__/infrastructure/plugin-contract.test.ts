@@ -15,7 +15,7 @@ import {
 import { StepSeal } from '../../../plugin/scripts/dispatch-gate.js'
 import { extractTasks } from '../../../plugin/scripts/plan-tasks.js'
 import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.ts'
-import { GhPlanIssues, PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.js'
+import { GhPlanIssues, PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { RunFileProgress } from '../../src/infrastructure/run-file-progress.js'
 import { UserStory } from '../../src/domain/value-objects/user-story.ts'
@@ -25,13 +25,35 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
+import type { ImplementationProgress } from '../../src/domain/ports/implementation-progress.ts'
+
+type GoCommitment = { missing?: unknown, error?: unknown, commitment?: string }
+
+class PluginGoRegistry {
+  static readonly read = readGoCommitment as unknown as
+    (asked: { repo: string, issue: number, configDir: string }) => GoCommitment
+
+  static readonly pathFor = goPath as unknown as
+    (asked: { repo: string, issue: number, configDir: string, home: string }) => string
+
+  static readonly stateRootIn = controlTowerDir as unknown as
+    (asked: { configDir: string | null, home: string }) => string
+}
+
+class PluginRunMachine {
+  static stepped(...asked: Parameters<typeof after>): Exclude<ReturnType<typeof after>, void> {
+    return after(...asked) as Exclude<ReturnType<typeof after>, void>
+  }
+}
 
 class Both {
   static ISSUE = 33
   static REPOSITORY = new RepositoryName('jjponz/repo-pulse')
   static FILL = 127
 
-  constructor(configDir) {
+  readonly configDir: string
+
+  constructor(configDir: string) {
     this.configDir = configDir
   }
 
@@ -45,8 +67,8 @@ class Both {
 
   async mint() {
     const registry = new DiskGoRegistry({
-      random: (bytes) => Buffer.alloc(bytes, Both.FILL),
-      write: async (path, text) => {
+      random: (bytes: number) => Buffer.alloc(bytes, Both.FILL),
+      write: async (path: string, text: string) => {
         await mkdir(dirname(path), { recursive: true })
         await writeFile(path, text)
       },
@@ -57,14 +79,14 @@ class Both {
   }
 
   readBack() {
-    return readGoCommitment({
+    return PluginGoRegistry.read({
       repo: Both.REPOSITORY.text, issue: Both.ISSUE, configDir: this.configDir,
     })
   }
 }
 
 describe('the two halves of the go the plugin reads', () => {
-  let both = null
+  let both: Both | null = null
 
   afterEach(async () => {
     if (both !== null) await both.remove()
@@ -99,7 +121,7 @@ describe('the directory both halves write the go into', () => {
     const asked = [{}, { [Invocation.CONFIG_VARIABLE]: '/elsewhere/cfg' }]
 
     const ours = asked.map((environment) => Invocation.stateRootIn(environment, HOME))
-    const theirs = asked.map((environment) => controlTowerDir({
+    const theirs = asked.map((environment) => PluginGoRegistry.stateRootIn({
       configDir: environment[Invocation.CONFIG_VARIABLE] || null, home: HOME,
     }))
 
@@ -109,13 +131,16 @@ describe('the directory both halves write the go into', () => {
   it('the_whole_path_of_the_registry_is_the_one_the_release_gate_opens', () => {
     const environment = { [Invocation.CONFIG_VARIABLE]: '/elsewhere/cfg' }
 
+    const root = Invocation.stateRootIn(environment, HOME)
+    if (root === null) throw new Error(`${Invocation.CONFIG_VARIABLE} is absolute here, so a state root is always resolved`)
+
     const ours = DiskGoRegistry.pathFor({
       issueNumber: Both.ISSUE,
       repository: Both.REPOSITORY,
-      root: Invocation.stateRootIn(environment, HOME),
+      root,
     })
 
-    expect(ours).toBe(goPath({
+    expect(ours).toBe(PluginGoRegistry.pathFor({
       repo: Both.REPOSITORY.text, issue: Both.ISSUE, configDir: '/elsewhere/cfg', home: HOME,
     }))
   })
@@ -148,7 +173,7 @@ describe('the harvest table this backend hands the plugin', () => {
   const HOME = '/home/someone'
   const WELL_FORMED = ['p:d.t', 'my-project:control_tower.harvest', 'proj123:ds_1.tbl_1']
 
-  const started = (given) => Invocation.from([], { [Invocation.HARVEST_TABLE_VARIABLE]: given }, HOME)
+  const started = (given: string) => Invocation.from([], { [Invocation.HARVEST_TABLE_VARIABLE]: given }, HOME)
 
   it('every_table_this_backend_starts_with_is_one_the_plugin_parses_back_into_the_very_same_table', () => {
     const ours = WELL_FORMED.map((given) => started(given).harvestTable)
@@ -202,15 +227,15 @@ class RunDouble {
     })
   }
 
-  static bytesOf(run) {
+  static bytesOf(run: unknown) {
     return JSON.stringify(run, null, 2) + '\n'
   }
 
-  static async read(run, extraFiles = {}) {
-    const files = { [RunDouble.path()]: RunDouble.bytesOf(run), ...extraFiles }
-    const progress = new RunFileProgress({
-      exists: async (candidate) => candidate === RunDouble.worktree(),
-      read: async (candidate) => (candidate in files ? files[candidate] : null),
+  static async read(run: unknown, extraFiles: Record<string, string> = {}) {
+    const files: Record<string, string> = { [RunDouble.path()]: RunDouble.bytesOf(run), ...extraFiles }
+    const progress: ImplementationProgress = new RunFileProgress({
+      exists: async (candidate: string) => candidate === RunDouble.worktree(),
+      read: async (candidate: string) => (candidate in files ? files[candidate] : null),
     })
 
     return progress.of({ root: RunDouble.ROOT, issue: RunDouble.ISSUE })
@@ -232,14 +257,17 @@ describe('the run machine and the run file this backend reads back', () => {
   })
 
   it('the_only_steps_our_vocabulary_adds_are_the_ones_the_machine_never_reports', () => {
-    const added = Object.values(ImplementationStep).filter((step) => !Object.values(STEPS).includes(step))
+    const reported: string[] = Object.values(STEPS)
+    const added = Object.values(ImplementationStep).filter((step) => !reported.includes(step))
 
     expect(added.sort()).toEqual([...StepsNoRunFileReports.VALUES].sort())
   })
 
   it('a_run_the_machine_parked_at_advise_is_read_back_as_a_step_of_the_task_it_advises_on', async () => {
     let run = RunDouble.freshRun()
-    run = after({ ...run, step: STEPS.JUDGE, judgeRetries: 1 }, OUTCOMES.FAILED, DEFAULT_BUDGETS).run
+    run = PluginRunMachine.stepped(
+      { ...run, step: STEPS.JUDGE, judgeRetries: 1 }, OUTCOMES.FAILED, DEFAULT_BUDGETS
+    ).run
 
     const state = await RunDouble.read(run)
 
@@ -258,9 +286,9 @@ describe('the run machine and the run file this backend reads back', () => {
   })
 
   it('our_attempt_is_the_one_the_dispatch_gate_counts', () => {
-    let run = after(RunDouble.freshRun(), OUTCOMES.DONE, DEFAULT_BUDGETS).run
+    let run = PluginRunMachine.stepped(RunDouble.freshRun(), OUTCOMES.DONE, DEFAULT_BUDGETS).run
     while (run.controlRetries + run.judgeRetries + run.correctionRetries === 0) {
-      run = after(run, OUTCOMES.FAILED, DEFAULT_BUDGETS).run
+      run = PluginRunMachine.stepped(run, OUTCOMES.FAILED, DEFAULT_BUDGETS).run
     }
 
     expect(RunFileProgress.attemptOf(run)).toBe(StepSeal.attemptOf(run))

@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.js'
+import { GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.ts'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { Gh } from '../../src/infrastructure/gh.ts'
-import { PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.js'
+import { PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.ts'
 import { SleepDouble } from '../sleep-double.ts'
@@ -16,6 +16,25 @@ import {
   PlanChangesNotRead, PlanChangesNotUnderstood, PlanChangesNotAsked, PlanStoryNotRead, PlanStoryNotUnderstood,
 } from '../../src/domain/exceptions.ts'
 
+class GhRecording extends Gh {
+  readonly asked: { argv: string[], options: { safeToRepeat: boolean } }[]
+
+  constructor(answer: ProcessOutput) {
+    super({
+      launch: () => Promise.resolve(answer),
+      policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
+      sleep: () => Promise.resolve(),
+    })
+    this.asked = []
+  }
+
+  async run(argv: string[], options: { safeToRepeat: boolean }): Promise<ProcessOutput> {
+    this.asked.push({ argv, options })
+
+    return this.launch(argv)
+  }
+}
+
 class GhDouble {
   static REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static CREATED = 'https://github.com/josemerca/ct-loop-sandbox/issues/7\n'
@@ -24,7 +43,12 @@ class GhDouble {
     number: 7, url: 'https://github.com/josemerca/ct-loop-sandbox/issues/7',
   })
 
-  constructor(answers) {
+  readonly answers: ProcessOutput[]
+  readonly calls: string[][]
+  readonly warnings: string[]
+  readonly sleeping: SleepDouble
+
+  constructor(answers: ProcessOutput[]) {
     this.answers = answers
     this.calls = []
     this.warnings = []
@@ -35,17 +59,19 @@ class GhDouble {
     return new GhDouble([new ProcessOutput({ code: 0, stdout: printed, stderr: '' })])
   }
 
-  static refusing(said, times = 1) {
+  static refusing(said: string, times = 1) {
     return new GhDouble(Array(times).fill(new ProcessOutput({ code: 1, stdout: '', stderr: said })))
   }
 
   static #DONE = new ProcessOutput({ code: 0, stdout: '', stderr: '' })
 
-  static claiming(...answers) {
+  static claiming(...answers: ProcessOutput[]) {
     return new GhDouble([GhDouble.#DONE, ...(answers.length === 0 ? [GhDouble.#DONE] : answers)])
   }
 
-  static story({ summary = 'El buscador acepta acentos', description = 'como comprador quiero' } = {}) {
+  static story({ summary = 'El buscador acepta acentos', description = 'como comprador quiero' }: {
+    summary?: string, description?: string,
+  } = {}) {
     return new UserStory({ key: new UserStoryKey('MO_SHOP-42'), summary, description })
   }
 
@@ -104,13 +130,13 @@ class GhDouble {
     viewerDidAuthor: true,
   }
 
-  static commented(...bodies) {
+  static commented(...bodies: { id: string, body: string }[]) {
     return GhDouble.printing(JSON.stringify({
       comments: bodies.map(({ id, body }) => ({ ...GhDouble.#COMMENT, id, body })),
     }))
   }
 
-  static printing(printed) {
+  static printing(printed: string) {
     return new GhDouble([new ProcessOutput({ code: 0, stdout: printed, stderr: '' })])
   }
 
@@ -144,7 +170,7 @@ class GhDouble {
     return this.openFor({ story, comment }).catch((cause) => cause)
   }
 
-  static labelled(...names) {
+  static labelled(...names: string[]) {
     return GhDouble.created(JSON.stringify({ labels: names.map((name) => ({ name })) }))
   }
 
@@ -152,7 +178,7 @@ class GhDouble {
     return this.issues().statusOf({ issueNumber: issue.number, repository: GhDouble.REPOSITORY })
   }
 
-  static bodied(body) {
+  static bodied(body: string) {
     return GhDouble.printing(`${JSON.stringify({ body })}\n`)
   }
 
@@ -570,7 +596,7 @@ describe('GhPlanIssues reading the changes asked for on the issue', () => {
     const printed = JSON.stringify({ comments: [
       { id: 'IC_1', body: '-REVIEW parte la tarea 2', createdAt: '2026-09-09T09:54:05Z' },
     ] })
-    const gh = { run: async () => ({ failed: false, stdout: printed, stderr: '' }) }
+    const gh = new GhRecording(new ProcessOutput({ code: 0, stdout: printed, stderr: '' }))
     const issues = new GhPlanIssues({ gh, stderr: () => {} })
 
     const [change] = await issues.changesAsked({ issue: GhDouble.OPENED, repository: GhDouble.REPOSITORY })
@@ -580,7 +606,7 @@ describe('GhPlanIssues reading the changes asked for on the issue', () => {
 
   it('a_comment_that_arrives_without_its_date_is_refused_because_the_review_state_is_read_from_it', async () => {
     const printed = JSON.stringify({ comments: [{ id: 'IC_1', body: '-REVIEW parte la tarea 2' }] })
-    const gh = { run: async () => ({ failed: false, stdout: printed, stderr: '' }) }
+    const gh = new GhRecording(new ProcessOutput({ code: 0, stdout: printed, stderr: '' }))
     const issues = new GhPlanIssues({ gh, stderr: () => {} })
 
     await expect(issues.changesAsked({ issue: GhDouble.OPENED, repository: GhDouble.REPOSITORY }))
@@ -731,7 +757,7 @@ describe('asking for changes to the plan publishes them as a comment', () => {
   })
 
   it('a_gh_that_refuses_is_told_apart_from_one_that_answered', async () => {
-    const gh = { run: async () => ({ failed: true, stdout: '', stderr: 'gh: not found\n' }) }
+    const gh = new GhRecording(new ProcessOutput({ code: 1, stdout: '', stderr: 'gh: not found\n' }))
     const issues = new GhPlanIssues({ gh, stderr: () => {} })
 
     await expect(issues.askChanges({
@@ -742,8 +768,7 @@ describe('asking for changes to the plan publishes them as a comment', () => {
   })
 
   it('a_comment_is_never_repeated_because_a_repeated_comment_is_a_second_change_asked_for', async () => {
-    const asked = []
-    const gh = { run: async (argv, options) => { asked.push({ argv, options }); return { failed: false, stdout: '', stderr: '' } } }
+    const gh = new GhRecording(new ProcessOutput({ code: 0, stdout: '', stderr: '' }))
     const issues = new GhPlanIssues({ gh, stderr: () => {} })
 
     await issues.askChanges({
@@ -752,8 +777,8 @@ describe('asking for changes to the plan publishes them as a comment', () => {
       changes: 'parte la tarea 2',
     })
 
-    expect(asked).toHaveLength(1)
-    expect(asked[0].options).toEqual({ safeToRepeat: false })
+    expect(gh.asked).toHaveLength(1)
+    expect(gh.asked[0].options).toEqual({ safeToRepeat: false })
   })
 
   it('a_blip_while_asking_for_changes_is_not_retried_because_the_comment_may_have_been_the_one_lost', async () => {
@@ -784,7 +809,7 @@ describe('GhPlanIssues asking which user story a plan came from', () => {
   it('the_story_of_a_plan_that_came_from_jira_is_the_key_the_line_of_its_body_names', async () => {
     const story = await GhDouble.bodied('> Historia de usuario: MO_SHOP-42\n\n## Descripción\n').storyFor()
 
-    expect(story.text).toBe('MO_SHOP-42')
+    expect(story?.text).toBe('MO_SHOP-42')
   })
 
   it('a_body_with_no_such_line_is_no_story_instead_of_a_made_up_one', async () => {
@@ -794,7 +819,7 @@ describe('GhPlanIssues asking which user story a plan came from', () => {
   it('a_renamed_issue_still_names_the_story_its_body_carries', async () => {
     const story = await GhDouble.bodied('> Historia de usuario: MO_SHOP-42\n').storyFor()
 
-    expect(story.text).toBe('MO_SHOP-42')
+    expect(story?.text).toBe('MO_SHOP-42')
   })
 
   it('a_command_that_failed_travels_out_as_not_read', async () => {
