@@ -1,12 +1,13 @@
 import { PlanFailure } from '../domain/exceptions.ts'
 
 export class ReviewWatch {
-  constructor({ asked, review, sleep, stderr, label }) {
+  constructor({ asked, review, sleep, stderr, label, log }) {
     this.asked = asked
     this.review = review
     this.sleep = sleep
     this.stderr = stderr
     this.label = label
+    this.log = log
     this.live = new Map()
   }
 
@@ -73,12 +74,22 @@ export class ReviewWatch {
 
   async #sound(watch) {
     try {
-      return await this.asked(watch)
+      const read = await this.asked(watch)
+      this.#note(watch, read.changes)
+
+      return read
     } catch (cause) {
       if (!(cause instanceof PlanFailure)) throw cause
       this.#warn(watch, `could not be asked what changes were asked for: ${cause.message}`)
 
       return null
+    }
+  }
+
+  #note(watch, changes) {
+    for (const change of changes) {
+      if (change.askedAt === null) continue
+      this.log.noted({ issue: watch.issue.number, repository: watch.repository, at: change.askedAt })
     }
   }
 
