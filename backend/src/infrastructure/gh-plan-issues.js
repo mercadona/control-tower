@@ -159,6 +159,7 @@ export class GhPlanIssues extends PlanIssues {
       asked.push(new ChangeAsked({
         id: comment.id,
         text: comment.body.slice(GhPlanIssues.CHANGES_TOKEN.length).trim(),
+        askedAt: comment.createdAt,
       }))
     }
 
@@ -184,10 +185,11 @@ export class GhPlanIssues extends PlanIssues {
   }
 
   static #demandRead(comment, issue) {
-    if (typeof comment?.id === 'string' && typeof comment?.body === 'string') return
+    if (typeof comment?.id === 'string' && typeof comment?.body === 'string' &&
+      typeof comment?.createdAt === 'string') return
 
     throw new PlanChangesNotUnderstood(
-      `${Gh.BIN} answered a comment of ${issue.number} without the id and the body this reads, it printed ${JSON.stringify(comment)}`
+      `${Gh.BIN} answered a comment of ${issue.number} without the id, the body and the date this reads, it printed ${JSON.stringify(comment)}`
     )
   }
 
