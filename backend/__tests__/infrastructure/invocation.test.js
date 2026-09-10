@@ -4,6 +4,8 @@ import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { Invocation, InvocationOutcome } from '../../src/infrastructure/invocation.js'
+import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.js'
+import { HeadlessPlanAgents } from '../../src/infrastructure/headless-plan-agents.js'
 
 class PluginEnvironment {
   static SCRIPT = join(
@@ -46,6 +48,14 @@ class Invoked {
 
   static withHarvestTable(given) {
     return Invocation.from([], { [Invocation.HARVEST_TABLE_VARIABLE]: given }, Invoked.HOME)
+  }
+
+  static withTransport(given) {
+    return Invocation.from([], { [Invocation.TRANSPORT_VARIABLE]: given }, Invoked.HOME)
+  }
+
+  static withModel(given) {
+    return Invocation.from([], { [Invocation.MODEL_VARIABLE]: given }, Invoked.HOME)
   }
 
   static harvesting(environment) {
@@ -320,5 +330,38 @@ describe('Invocation resolving the BigQuery harvest table', () => {
     expect(Invoked.withHarvestTable('p:d').outcome).toBe(InvocationOutcome.MALFORMED_HARVEST_TABLE)
     expect(Invoked.withHarvestTable('p.d.t').outcome).toBe(InvocationOutcome.MALFORMED_HARVEST_TABLE)
     expect(Invoked.withHarvestTable('p:d.t extra').outcome).toBe(InvocationOutcome.MALFORMED_HARVEST_TABLE)
+  })
+})
+
+describe('Invocation resolving the plan transport and model', () => {
+  it('an_environment_that_names_no_transport_asks_for_the_one_that_types_into_a_window', () => {
+    expect(Invoked.bare().transport).toBe('cmux')
+  })
+
+  it('the_headless_transport_is_asked_for_by_its_name', () => {
+    expect(Invoked.withTransport(HeadlessPlanAgents.TRANSPORT).transport).toBe(HeadlessPlanAgents.TRANSPORT)
+  })
+
+  it('a_transport_that_is_neither_of_the_two_refuses_the_invocation_quoting_what_it_got', () => {
+    const refused = Invoked.withTransport('bogus')
+
+    expect(refused.outcome).toBe(InvocationOutcome.MALFORMED_TRANSPORT)
+    expect(refused.reason).toContain('bogus')
+  })
+
+  it('an_environment_that_names_no_model_asks_for_the_one_the_window_used_to_type', () => {
+    expect(Invoked.bare().model).toBe('opus')
+  })
+
+  it('the_model_of_every_headless_call_comes_from_the_environment', () => {
+    expect(Invoked.withModel('sonnet').model).toBe('sonnet')
+  })
+
+  it('a_model_whose_name_could_become_another_argument_refuses_the_invocation', () => {
+    const withASpace = Invoked.withModel('claude opus')
+    const startingWithADash = Invoked.withModel('-dangerous-flag')
+
+    expect(withASpace.outcome).toBe(InvocationOutcome.MALFORMED_MODEL)
+    expect(startingWithADash.outcome).toBe(InvocationOutcome.MALFORMED_MODEL)
   })
 })

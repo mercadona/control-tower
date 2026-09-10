@@ -13,6 +13,7 @@ import { PlanAgentNotLaunched, PlanAgentNotNamed, PlanAgentNotResumed } from '..
 
 export class CmuxPlanAgents extends PlanAgents {
   static BIN = 'cmux'
+  static TRANSPORT = 'cmux'
   static AGENT = 'claude'
   static MODEL = 'opus'
   static #REF = /^OK\s+(workspace:\d+)\s*$/m
