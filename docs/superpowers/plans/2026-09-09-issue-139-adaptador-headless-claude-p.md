@@ -333,7 +333,8 @@ Contract (backend/src/infrastructure/headless-plan-agents.js):
 export class HeadlessPlanAgents extends PlanAgents {
   static CONVERSATION_FILE = 'conversation.json'   // { worktree }, written by launch
 
-  async #worktreeOf(agent)   // raises PlanAgentNotResumed naming the agent when unrecorded
+  async #worktreeOf(agent)   // raises PlanAgentNotResumed naming the agent when unrecorded,
+                             // reached from a test only in Task 4, which gives it its callers
 }
 ```
 
@@ -347,11 +348,11 @@ always a conversation's first call and the only method that gets `briefing.locat
 **TDD:** red first — `it('a_conversation_records_the_worktree_its_calls_have_to_run_in')`: `launch`
 against a named worktree, then read `conversation.json` back and assert its `worktree` is that
 path. Then `it('two_conversations_do_not_share_the_worktree_they_recorded')` — two `launch`es on
-different worktrees, each file its own. Then the failure:
-`it('a_conversation_whose_worktree_was_never_recorded_refuses_instead_of_guessing_one')`, asserting
-`PlanAgentNotResumed` and that its message names the agent.
+different worktrees, each file its own. The refusal `#worktreeOf` owes is **Task 4's** case, not
+this one's: a `#`-private method has no caller a test can reach until `resume` exists, and
+`testing.md` reaches an internal through the use case that carries it, never directly.
 
-**Tests:** added: the three above. Removed: none.
+**Tests:** added: the two above. Removed: none.
 
 **Verification:** the worktree is recorded once per conversation and an unrecorded one refuses.
 
@@ -397,9 +398,11 @@ the whole argv with `--resume <agent>` and no `--session-id`, and the errand the
 under the same agent, steps `write-plan` and `implement`. Then
 `it('the_changes_a_person_asked_for_travel_in_the_errand_of_the_review_call')` and
 `it('the_fixes_of_a_pull_request_are_asked_for_with_the_step_that_says_so')`, asserting
-`step === 'fix-pull-request'` on disk.
+`step === 'fix-pull-request'` on disk. Last, now that `resume` reaches it,
+`it('a_conversation_whose_worktree_was_never_recorded_refuses_instead_of_guessing_one')` —
+`PlanAgentNotResumed`, its message naming the agent.
 
-**Tests:** added: the five above. Removed: none.
+**Tests:** added: the six above. Removed: none, and `worktreeOf` becomes `#worktreeOf` here.
 
 **Verification:** the three resume instead of starting, and none can run outside the worktree.
 
