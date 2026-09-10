@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ReviewWatch } from '../../src/infrastructure/review-watch.js'
+import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
 import { MemoryReviewLog } from '../../src/infrastructure/memory-review-log.ts'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
@@ -7,6 +7,9 @@ import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanChangesNotRead, PlanAgentNotResumed, SliceNotReopened } from '../../src/domain/exceptions.ts'
+import type { ChangesAsked, Delivered } from '../../src/infrastructure/review-watch.ts'
+
+type Sounding = ChangeAsked[] | Error
 
 class WatchDouble {
   static LABEL = 'plan review watch'
@@ -17,6 +20,7 @@ class WatchDouble {
   })
   static REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static SUBJECT = new PlanWatch({
+    story: null,
     issue: WatchDouble.ISSUE,
     located: new WorkspaceLocation({ path: '/repo/.worktrees/7', branch: 'feat/7' }),
     repository: WatchDouble.REPOSITORY,
@@ -24,6 +28,19 @@ class WatchDouble {
   })
 
   static STOPPING = { issue: WatchDouble.NUMBER, repository: WatchDouble.REPOSITORY }
+
+  readonly soundings: Sounding[]
+  readonly refusingTheDelivery: Error | null
+  refusalsLeft: number
+  readonly stoppingOnDelivery: boolean
+  readonly waits: number
+  readonly label: string
+  readonly asked: PlanWatch[]
+  readonly reviewed: Delivered[]
+  readonly warnings: string[]
+  slept: number
+  watch: ReviewWatch | null
+  readonly log: MemoryReviewLog
 
   static A_CHANGE = new ChangeAsked({
     id: 'IC_kwDOT9lB5c8AAAABRCF0GG',
@@ -37,9 +54,15 @@ class WatchDouble {
     askedAt: '2026-09-09T10:00:00Z',
   })
 
-  constructor(soundings, {
+  constructor(soundings: Sounding[], {
     refusingTheDelivery = null, waits = null, stoppingOnDelivery = false,
     label = WatchDouble.LABEL, refusalsLeft = Number.POSITIVE_INFINITY,
+  }: {
+    refusingTheDelivery?: Error | null,
+    waits?: number | null,
+    stoppingOnDelivery?: boolean,
+    label?: string,
+    refusalsLeft?: number,
   } = {}) {
     this.soundings = soundings
     this.refusingTheDelivery = refusingTheDelivery
@@ -55,42 +78,42 @@ class WatchDouble {
     this.log = new MemoryReviewLog()
   }
 
-  static answering(...soundings) {
+  static answering(...soundings: Sounding[]): WatchDouble {
     return new WatchDouble(soundings)
   }
 
-  static recovering(...soundings) {
+  static recovering(...soundings: Sounding[]): WatchDouble {
     return new WatchDouble(soundings, { waits: soundings.length - 1 })
   }
 
-  static stoppedBeforeTheFirstWait() {
+  static stoppedBeforeTheFirstWait(): WatchDouble {
     return new WatchDouble([[WatchDouble.A_CHANGE]], { waits: 0 })
   }
 
-  static stoppedWhileDelivering() {
+  static stoppedWhileDelivering(): WatchDouble {
     return new WatchDouble([[WatchDouble.A_CHANGE, WatchDouble.ANOTHER_CHANGE]], {
       stoppingOnDelivery: true,
     })
   }
 
-  static refusingTheDelivery(cause) {
+  static refusingTheDelivery(cause: Error): WatchDouble {
     return new WatchDouble([[WatchDouble.A_CHANGE], [WatchDouble.A_CHANGE]], {
       refusingTheDelivery: cause,
     })
   }
 
-  static refusingTheFirstDeliveryOnly(cause) {
+  static refusingTheFirstDeliveryOnly(cause: Error): WatchDouble {
     return new WatchDouble([[WatchDouble.A_CHANGE], [WatchDouble.A_CHANGE]], {
       refusingTheDelivery: cause,
       refusalsLeft: 1,
     })
   }
 
-  static labelled(label) {
+  static labelled(label: string): WatchDouble {
     return new WatchDouble([new PlanChangesNotRead('HTTP 502')], { label })
   }
 
-  #reviews() {
+  #reviews(): ReviewWatch {
     return new ReviewWatch({
       asked: (watch) => {
         this.asked.push(watch)
@@ -104,7 +127,7 @@ class WatchDouble {
       },
       review: (params) => {
         this.reviewed.push(params)
-        if (this.stoppingOnDelivery) this.watch.stop(WatchDouble.STOPPING)
+        if (this.stoppingOnDelivery) this.watch!.stop(WatchDouble.STOPPING)
         if (this.refusingTheDelivery !== null && this.refusalsLeft > 0) {
           this.refusalsLeft -= 1
 
@@ -115,7 +138,7 @@ class WatchDouble {
       },
       sleep: () => {
         this.slept += 1
-        if (this.slept > this.waits) this.watch.stop(WatchDouble.STOPPING)
+        if (this.slept > this.waits) this.watch!.stop(WatchDouble.STOPPING)
 
         return Promise.resolve()
       },
@@ -125,13 +148,13 @@ class WatchDouble {
     })
   }
 
-  async run() {
+  async run(): Promise<void> {
     this.watch = this.#reviews()
 
     return this.watch.start(WatchDouble.SUBJECT)
   }
 
-  async runRecovered() {
+  async runRecovered(): Promise<void> {
     this.watch = this.#reviews()
 
     return this.watch.startRecovered(WatchDouble.SUBJECT)
@@ -265,7 +288,7 @@ describe('ReviewWatch', () => {
 
     await watched.run()
 
-    expect(watched.watch.live.size).toBe(0)
+    expect(watched.watch!.live.size).toBe(0)
   })
 
   it('a_stop_in_the_middle_of_a_round_is_honoured_before_the_next_change_is_typed', async () => {
@@ -281,7 +304,7 @@ describe('ReviewWatch', () => {
 
     await watched.run()
 
-    expect(() => watched.watch.stop(WatchDouble.STOPPING)).not.toThrow()
+    expect(() => watched.watch!.stop(WatchDouble.STOPPING)).not.toThrow()
   })
 
   it('the_label_it_was_given_prefixes_what_it_writes_so_two_watches_can_be_told_apart', async () => {
@@ -333,13 +356,14 @@ describe('ReviewWatch', () => {
   })
 
   it('stopping_a_recovered_watch_during_its_baseline_does_not_start_its_live_loop', async () => {
-    const baseline = Promise.withResolvers()
+    let readBaseline!: (read: ChangesAsked) => void
+    const baseline = new Promise<ChangesAsked>((resolve) => { readBaseline = resolve })
     let slept = 0
     let reviewed = 0
     const watch = new ReviewWatch({
-      asked: () => baseline.promise,
-      review: () => { reviewed += 1 },
-      sleep: () => { slept += 1 },
+      asked: () => baseline,
+      review: () => { reviewed += 1; return Promise.resolve() },
+      sleep: () => { slept += 1; return Promise.resolve() },
       stderr: () => {},
       label: WatchDouble.LABEL,
       log: new MemoryReviewLog(),
@@ -347,7 +371,7 @@ describe('ReviewWatch', () => {
 
     const following = watch.startRecovered(WatchDouble.SUBJECT)
     watch.stop(WatchDouble.STOPPING)
-    baseline.resolve({ changes: [WatchDouble.A_CHANGE] })
+    readBaseline({ changes: [WatchDouble.A_CHANGE] })
     await following
 
     expect(slept).toBe(0)
@@ -357,7 +381,8 @@ describe('ReviewWatch', () => {
 })
 
 describe('ReviewWatch telling two plans apart', () => {
-  const watchFor = (repo, number) => new PlanWatch({
+  const watchFor = (repo: string, number: number) => new PlanWatch({
+    story: null,
     issue: new PlanIssue({ number, url: `https://github.com/${repo}/issues/${number}` }),
     located: new WorkspaceLocation({ path: `/repo/${repo}/.worktrees/${number}`, branch: `feat/${number}` }),
     repository: new RepositoryName(repo),
@@ -372,6 +397,10 @@ describe('ReviewWatch telling two plans apart', () => {
   const BUDGET = ROUNDS * 6
 
   class TwoPlans {
+    sounded: string[]
+    rounds: number
+    readonly reviews: ReviewWatch
+
     constructor() {
       this.sounded = []
       this.rounds = 0
@@ -386,26 +415,26 @@ describe('ReviewWatch telling two plans apart', () => {
           return Promise.resolve({ changes: [] })
         },
         review: () => Promise.resolve(),
-        sleep: () => new Promise((resolve) => setTimeout(resolve, ROUND_MS)),
+        sleep: () => new Promise<void>((resolve) => { setTimeout(resolve, ROUND_MS) }),
         stderr: () => {},
         label: 'plan review watch',
         log: new MemoryReviewLog(),
       })
     }
 
-    static #nameOf(watch) {
+    static #nameOf(watch: PlanWatch): string {
       return `${watch.repository.text}#${watch.issue.number}`
     }
 
-    static #settling() {
-      return new Promise((resolve) => setTimeout(resolve, ROUND_MS * ROUNDS))
+    static #settling(): Promise<void> {
+      return new Promise<void>((resolve) => { setTimeout(resolve, ROUND_MS * ROUNDS) })
     }
 
-    static #stopping(watch) {
+    static #stopping(watch: PlanWatch): { issue: number, repository: RepositoryName } {
       return { issue: watch.issue.number, repository: watch.repository }
     }
 
-    async soundedAfterStopping(stopped, kept) {
+    async soundedAfterStopping(stopped: PlanWatch, kept: PlanWatch): Promise<string[]> {
       this.reviews.start(stopped)
       this.reviews.start(kept)
       await TwoPlans.#settling()
@@ -450,6 +479,12 @@ describe('ReviewWatch telling two plans apart', () => {
 
 describe('ReviewWatch delivering while the gate can close underneath it', () => {
   class GateContention {
+    busy: boolean
+    tick: number
+    readonly reviewed: string[]
+    readonly warnings: string[]
+    watch: ReviewWatch | null
+
     constructor() {
       this.busy = false
       this.tick = 0
@@ -458,11 +493,11 @@ describe('ReviewWatch delivering while the gate can close underneath it', () => 
       this.watch = null
     }
 
-    static racing() {
+    static racing(): GateContention {
       return new GateContention()
     }
 
-    #asked() {
+    #asked(): Promise<{ changes: ChangeAsked[] }> {
       this.tick += 1
       if (this.tick === 1) {
         return Promise.resolve({ changes: [WatchDouble.A_CHANGE, WatchDouble.ANOTHER_CHANGE] })
@@ -471,11 +506,11 @@ describe('ReviewWatch delivering while the gate can close underneath it', () => 
         this.busy = false
         return Promise.resolve({ changes: [WatchDouble.ANOTHER_CHANGE] })
       }
-      this.watch.stop(WatchDouble.STOPPING)
+      this.watch!.stop(WatchDouble.STOPPING)
       return Promise.resolve({ changes: [] })
     }
 
-    #review() {
+    #review(): Promise<void> {
       if (this.busy) return Promise.reject(new SliceNotReopened('sigue en status:in-progress'))
       this.busy = true
       this.reviewed.push('delivered')
@@ -483,7 +518,7 @@ describe('ReviewWatch delivering while the gate can close underneath it', () => 
       return Promise.resolve()
     }
 
-    async run() {
+    async run(): Promise<void> {
       this.watch = new ReviewWatch({
         asked: () => this.#asked(),
         review: () => this.#review(),

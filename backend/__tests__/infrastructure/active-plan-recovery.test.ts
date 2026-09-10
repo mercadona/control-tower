@@ -13,9 +13,10 @@ import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
 import { ImplementationProgress } from '../../src/domain/ports/implementation-progress.ts'
+import { ReviewLog } from '../../src/domain/ports/review-log.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.ts'
-import { ReviewWatch } from '../../src/infrastructure/review-watch.js'
+import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
 import { WorktreePlans } from '../../src/infrastructure/worktree-plans.ts'
 import type { Mock } from 'vitest'
 
@@ -65,7 +66,7 @@ class RecordingReviews extends ReviewWatch {
       sleep: () => { throw new Error(`${label} never sleeps`) },
       stderr: () => undefined,
       label,
-      log: null,
+      log: new ReviewLog(),
     })
     this.startRecovered = vi.fn((): Promise<void> => Promise.resolve())
   }

@@ -10,7 +10,7 @@ import type { DiskImplementationStartRegistry } from './disk-implementation-star
 import type { WorktreePlans } from './worktree-plans.ts'
 import type { ActivePlans } from './active-plans-route.js'
 import type { PlanSessions } from './plan-events-route.js'
-import type { ReviewWatch } from './review-watch.js'
+import type { ReviewWatch } from './review-watch.ts'
 
 export class ActivePlanRecovery {
   readonly plans: WorktreePlans
