@@ -1,36 +1,41 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { execFileSync, spawn } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
 import { realpathSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-class HostCheckout {
-  static #HERE = dirname(fileURLToPath(import.meta.url))
-  static #NAMED = /^(?:git@github\.com:|https:\/\/github\.com\/)([^/]+\/[^/]+?)(?:\.git)?$/
+type Started = { port: number, saidLater: () => string }
+type Failure = { code: string, detail: string }
+type ToolRow = { tool: string, installed: boolean, session: string, fix: string | null }
 
-  static path() {
+class HostCheckout {
+  static readonly #HERE = dirname(fileURLToPath(import.meta.url))
+  static readonly #NAMED = /^(?:git@github\.com:|https:\/\/github\.com\/)([^/]+\/[^/]+?)(?:\.git)?$/
+
+  static path(): string {
     return HostCheckout.#HERE
   }
 
-  static repository() {
+  static repository(): string {
     const url = execFileSync('git', ['-C', HostCheckout.#HERE, 'remote', 'get-url', 'origin'], { encoding: 'utf8' }).trim()
     const named = url.match(HostCheckout.#NAMED)
     if (named === null) {
       throw new Error(`the origin of this checkout is ${JSON.stringify(url)}, and no owner/name can be read out of it`)
     }
 
-    return named[1]
+    return named[1] as string
   }
 }
 
 class Entrypoint {
-  static #PATH = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'infrastructure', 'ct-api.mjs')
-  static #TIMEOUT_MS = 30_000
-  static #spawned = []
+  static readonly #PATH = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'infrastructure', 'ct-api.ts')
+  static readonly #TIMEOUT_MS = 30_000
+  static readonly #spawned: ChildProcess[] = []
 
-  static startPlan(port, body = '{"id":"ABC-123"}') {
+  static startPlan(port: number, body: string = '{"id":"ABC-123"}'): Promise<Response> {
     return fetch(`http://127.0.0.1:${port}/start-plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -38,38 +43,38 @@ class Entrypoint {
     })
   }
 
-  static killAll() {
+  static killAll(): void {
     for (const child of Entrypoint.#spawned.splice(0)) child.kill('SIGKILL')
   }
 
-  static async listening(environment) {
+  static async listening(environment: NodeJS.ProcessEnv): Promise<number> {
     return (await Entrypoint.#started(environment)).port
   }
 
-  static async #started(environment) {
+  static async #started(environment: NodeJS.ProcessEnv): Promise<Started> {
     const child = spawn(process.execPath, [Entrypoint.#PATH], {
       env: { ...process.env, ...environment },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     Entrypoint.#spawned.push(child)
     let stderr = ''
-    child.stderr.on('data', (chunk) => { stderr += chunk })
+    child.stderr.on('data', (chunk) => { stderr += String(chunk) })
 
-    return new Promise((resolve, reject) => {
+    return new Promise<Started>((resolve, reject) => {
       let stdout = ''
       const timer = setTimeout(() => reject(new Error(`no port line in ${stdout}`)), Entrypoint.#TIMEOUT_MS)
       child.stdout.on('data', (chunk) => {
-        stdout += chunk
+        stdout += String(chunk)
         const end = stdout.indexOf('\n')
         if (end === -1) return
         clearTimeout(timer)
-        resolve({ port: JSON.parse(stdout.slice(0, end)).port, saidLater: () => stderr })
+        resolve({ port: (JSON.parse(stdout.slice(0, end)) as { port: number }).port, saidLater: () => stderr })
       })
       child.once('error', reject)
     })
   }
 
-  static async recovering(environment) {
+  static async recovering(environment: NodeJS.ProcessEnv): Promise<Started> {
     const started = await Entrypoint.#started(environment)
     for (let waited = 0; waited < 60; waited += 1) {
       if (started.saidLater().length > 0) break
@@ -81,13 +86,13 @@ class Entrypoint {
 }
 
 class ACmuxWithNoWindows {
-  static SCRIPT = [
+  static readonly SCRIPT = [
     '#!/bin/sh',
     'if [ "$1" = "list-windows" ]; then echo \'[]\'; exit 0; fi',
     'exit 1',
   ].join('\n')
 
-  static async onThePath() {
+  static async onThePath(): Promise<{ directory: string, path: string }> {
     const directory = await mkdtemp(join(tmpdir(), 'ct-api-cmux-'))
     const binary = join(directory, 'cmux')
     await writeFile(binary, `${ACmuxWithNoWindows.SCRIPT}\n`, { mode: 0o755 })
@@ -97,15 +102,15 @@ class ACmuxWithNoWindows {
 }
 
 class ACheckoutReachableByTwoPaths {
-  static ISSUE = 33
-  static REPOSITORY = 'acme/widget'
-  static TITLE = `ct-plan-acme__widget-issue-${ACheckoutReachableByTwoPaths.ISSUE}`
+  static readonly ISSUE = 33
+  static readonly REPOSITORY = 'acme/widget'
+  static readonly TITLE = `ct-plan-acme__widget-issue-${ACheckoutReachableByTwoPaths.ISSUE}`
 
-  static #git(cwd, ...argv) {
+  static #git(cwd: string, ...argv: string[]): void {
     execFileSync('git', argv, { cwd, stdio: 'ignore' })
   }
 
-  static async cut() {
+  static async cut(): Promise<{ base: string, logical: string, physical: string }> {
     const base = await mkdtemp(join(tmpdir(), 'ct-api-two-paths-'))
     const physical = join(base, 'physical')
     await mkdir(physical, { recursive: true })
@@ -132,14 +137,17 @@ class ACheckoutReachableByTwoPaths {
 }
 
 class ACmuxAttendingOnePlan {
-  static SCRIPT = [
+  static readonly SCRIPT = [
     '#!/bin/sh',
     'if [ "$1" = "list-windows" ]; then echo \'[{"id":"w1"}]\'; exit 0; fi',
     'if [ "$1" = "workspace" ]; then printf %s "$CMUX_FAKE"; exit 0; fi',
     'exit 1',
   ].join('\n')
 
-  static async attending(worktree, ref = 'workspace:97') {
+  static async attending(
+    worktree: string,
+    ref: string = 'workspace:97'
+  ): Promise<{ directory: string, path: string, said: string }> {
     const directory = await mkdtemp(join(tmpdir(), 'ct-api-cmux-plan-'))
     await writeFile(join(directory, 'cmux'), `${ACmuxAttendingOnePlan.SCRIPT}\n`, { mode: 0o755 })
 
@@ -159,13 +167,13 @@ class ACmuxAttendingOnePlan {
 }
 
 class ACmuxThatRefusesTheConnection {
-  static SCRIPT = [
+  static readonly SCRIPT = [
     '#!/bin/sh',
     'echo "Error: ERROR: Access denied - only processes started inside cmux can connect" >&2',
     'exit 1',
   ].join('\n')
 
-  static async onThePath() {
+  static async onThePath(): Promise<{ directory: string, path: string }> {
     const directory = await mkdtemp(join(tmpdir(), 'ct-api-cmux-refusing-'))
     const binary = join(directory, 'cmux')
     await writeFile(binary, `${ACmuxThatRefusesTheConnection.SCRIPT}\n`, { mode: 0o755 })
@@ -175,19 +183,19 @@ class ACmuxThatRefusesTheConnection {
 }
 
 class ExternalTools {
-  static async cmuxRowOf(port) {
+  static async cmuxRowOf(port: number): Promise<{ installed: boolean, session: string, fix: string | null }> {
     const response = await fetch(`http://127.0.0.1:${port}/external-tools`)
-    const body = await response.json()
-    const row = body.tools.find((candidate) => candidate.tool === 'cmux')
+    const body = await response.json() as { tools: ToolRow[] }
+    const row = body.tools.find((candidate) => candidate.tool === 'cmux') as ToolRow
 
     return { installed: row.installed, session: row.session, fix: row.fix }
   }
 }
 
 class RunFileFixture {
-  static ISSUE = 7
+  static readonly ISSUE = 7
 
-  static async inATemporaryRoot(step = 'implement') {
+  static async inATemporaryRoot(step: string = 'implement'): Promise<string> {
     const root = await mkdtemp(join(tmpdir(), 'ct-api-progress-'))
     const worktree = join(root, '.worktrees', String(RunFileFixture.ISSUE))
     await mkdir(join(worktree, '.agent'), { recursive: true })
@@ -206,7 +214,7 @@ class RunFileFixture {
     return root
   }
 
-  static async remove(root) {
+  static async remove(root: string): Promise<void> {
     await rm(root, { recursive: true, force: true })
   }
 }
@@ -246,7 +254,8 @@ describe('ct-api entrypoint', () => {
     const port = await Entrypoint.listening({
       CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state, PATH: cmux.path, CMUX_FAKE: cmux.said,
     })
-    const served = await (await fetch(`http://127.0.0.1:${port}/active-plans`)).json()
+    const served = await (await fetch(`http://127.0.0.1:${port}/active-plans`)).json() as
+      { plans: { plan: unknown }[] }
 
     expect(served.plans).toHaveLength(1)
     expect(served.plans[0].plan).toMatchObject({
@@ -287,10 +296,10 @@ describe('ct-api entrypoint', () => {
     const response = await fetch(`http://127.0.0.1:${port}/external-tools`)
 
     expect(response.status).toBe(200)
-    const body = await response.json()
+    const body = await response.json() as { tools: ToolRow[] }
     expect(body.tools.map((row) => row.tool)).toEqual(['gh', 'acli', 'claude', 'git', 'bq', 'cmux'])
     expect(body.tools.every((row) => ['ready', 'missing', 'unknown'].includes(row.session))).toBe(true)
-    const claude = body.tools.find((row) => row.tool === 'claude')
+    const claude = body.tools.find((row) => row.tool === 'claude') as ToolRow
     expect(claude.session).toBe('unknown')
     expect(claude.fix).toBe('claude, then /login — not observable from this process')
   }, 600_000)
@@ -304,7 +313,7 @@ describe('ct-api entrypoint', () => {
     )
 
     expect(response.status).toBe(400)
-    const body = await response.json()
+    const body = await response.json() as Failure
     expect(body.code).toBe('user-story-not-read')
     expect(body.detail).toMatch(/^acli jira failed: /)
   })
@@ -319,7 +328,7 @@ describe('ct-api entrypoint', () => {
     )
 
     expect(response.status).toBe(400)
-    const body = await response.json()
+    const body = await response.json() as Failure
     expect(body.code).toBe('user-story-not-read')
     expect(body.detail).toMatch(/^gh issue view failed: /)
   })
@@ -334,7 +343,8 @@ describe('ct-api entrypoint', () => {
       )
 
       expect(response.status).toBe(200)
-      const body = await response.json()
+      const body = await response.json() as
+        { step: string, task: number, total_tasks: number, attempt: number }
       expect(body.step).toBe('implement')
       expect(body.task).toBe(1)
       expect(body.total_tasks).toBe(1)
@@ -354,7 +364,7 @@ describe('ct-api entrypoint', () => {
       )
 
       expect(response.status).toBe(200)
-      const body = await response.json()
+      const body = await response.json() as { step: string, task: number }
       expect(body.step).toBe('advise')
       expect(body.task).toBe(1)
     } finally {
@@ -368,7 +378,7 @@ describe('ct-api entrypoint', () => {
     const response = await fetch(`http://127.0.0.1:${port}/plan-events/54?repo=jjponz%2Frepo-pulse`)
 
     expect(response.status).toBe(400)
-    expect((await response.json()).code).toBe('not-watched')
+    expect((await response.json() as Failure).code).toBe('not-watched')
   })
 
   it('review_plan_is_mounted_in_the_real_process_and_not_only_in_the_test_server', async () => {
@@ -381,6 +391,6 @@ describe('ct-api entrypoint', () => {
     })
 
     expect(response.status).toBe(400)
-    expect((await response.json()).code).toBe('no-live-planning-session')
+    expect((await response.json() as Failure).code).toBe('no-live-planning-session')
   })
 })

@@ -42,7 +42,7 @@ build-frontend:
 	npm run build --prefix frontend --if-present
 
 run-backend: install-backend
-	CT_API_PORT=$(CT_API_PORT) CT_HARVEST_BQ_TABLE=$(CT_HARVEST_BQ_TABLE) node backend/src/infrastructure/ct-api.mjs
+	CT_API_PORT=$(CT_API_PORT) CT_HARVEST_BQ_TABLE=$(CT_HARVEST_BQ_TABLE) node backend/src/infrastructure/ct-api.ts
 
 run-frontend: install-frontend build-frontend run-backend
 
