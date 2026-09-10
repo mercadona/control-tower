@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ExternalToolsClient } from 'app/external-tools/client'
-import { SessionState, ToolSession } from 'app/external-tools/ExternalTools.types'
+import { MetricsDelivery, ToolSession } from 'app/external-tools/ExternalTools.types'
+
+type Surveyed = { tools: ToolSession[]; metricsDelivery: MetricsDelivery }
 
 type ExternalTools =
   | { phase: 'checking' }
-  | { phase: 'ready'; tools: ToolSession[] }
-  | { phase: 'attention'; tools: ToolSession[] }
+  | ({ phase: 'ready' } & Surveyed)
+  | ({ phase: 'attention' } & Surveyed)
   | { phase: 'unknown' }
 
 const useExternalTools = () => {
@@ -21,10 +23,11 @@ const useExternalTools = () => {
       setTools({ phase: 'unknown' })
       return
     }
-    const phase = outcome.tools.some((tool) => tool.session !== SessionState.READY)
-      ? 'attention'
-      : 'ready'
-    setTools({ phase, tools: outcome.tools })
+    setTools({
+      phase: outcome.ready ? 'ready' : 'attention',
+      tools: outcome.tools,
+      metricsDelivery: outcome.metricsDelivery,
+    })
   }, [])
 
   useEffect(() => {

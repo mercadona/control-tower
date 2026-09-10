@@ -13,9 +13,18 @@ type ToolSession = {
   fix: string | null
 }
 
+const METRICS_DELIVERY_TOOL = 'bq'
+const METRICS_DELIVERY_VARIABLE = 'CT_HARVEST_BQ_TABLE'
+
+type MetricsDelivery = {
+  enabled: boolean
+  variable: typeof METRICS_DELIVERY_VARIABLE
+  destination: string | null
+}
+
 type ExternalToolsOutcome =
-  | { kind: 'surveyed'; tools: ToolSession[] }
+  | { kind: 'surveyed'; ready: boolean; tools: ToolSession[]; metricsDelivery: MetricsDelivery }
   | { kind: 'unavailable' }
 
-export { SessionState }
-export type { ExternalToolsOutcome, ToolSession }
+export { METRICS_DELIVERY_TOOL, METRICS_DELIVERY_VARIABLE, SessionState }
+export type { ExternalToolsOutcome, MetricsDelivery, ToolSession }

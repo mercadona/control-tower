@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { SurveyExternalTools } from '../../src/application/queries/survey-external-tools.ts'
+import {
+  SurveyExternalTools,
+  SurveyExternalToolsResult,
+} from '../../src/application/queries/survey-external-tools.ts'
 import { ToolSessions } from '../../src/domain/ports/tool-sessions.ts'
+import { MetricsDelivery } from '../../src/domain/value-objects/metrics-delivery.ts'
 import { ToolSession, SessionState } from '../../src/domain/value-objects/tool-session.ts'
 
 class ToolSessionMother {
@@ -18,6 +22,18 @@ class ToolSessionMother {
 
   static notInstalled(tool: string) {
     return new ToolSession({ tool, installed: false, state: SessionState.READY, fix: null })
+  }
+}
+
+class Deliveries {
+  static readonly DESTINATION = 'fixture-project:fixture_dataset.fixture_table'
+
+  static enabled() {
+    return MetricsDelivery.to(Deliveries.DESTINATION)
+  }
+
+  static disabled() {
+    return MetricsDelivery.disabled()
   }
 }
 
@@ -45,8 +61,8 @@ class ToolSessionsDouble extends ToolSessions {
     return this.sessions
   }
 
-  asked() {
-    return new SurveyExternalTools({ toolSessions: this }).execute()
+  asked(metricsDelivery: MetricsDelivery = Deliveries.disabled()) {
+    return new SurveyExternalTools({ toolSessions: this, metricsDelivery }).execute()
   }
 }
 
@@ -74,7 +90,7 @@ describe('SurveyExternalTools', () => {
   })
 
   it('a_tool_that_is_not_installed_blocks_however_ready_its_session_reads', async () => {
-    const toolSessions = ToolSessionsDouble.with([ToolSessionMother.notInstalled('bq')])
+    const toolSessions = ToolSessionsDouble.with([ToolSessionMother.notInstalled('acli')])
 
     const result = await toolSessions.asked()
 
@@ -90,6 +106,90 @@ describe('SurveyExternalTools', () => {
     const result = await toolSessions.asked()
 
     expect(result.sessions.map((session) => session.tool)).toEqual(['gh', 'acli', 'bq'])
+  })
+
+  it('bq_does_not_block_when_no_metrics_destination_is_configured_because_nothing_is_delivered', async () => {
+    const toolSessions = ToolSessionsDouble.with([
+      ToolSessionMother.ready('gh'),
+      ToolSessionMother.missing('bq'),
+    ])
+
+    const result = await toolSessions.asked(Deliveries.disabled())
+
+    expect(result.ready).toBe(true)
+    expect(result.metricsDelivery.enabled).toBe(false)
+  })
+
+  it('bq_that_is_not_even_installed_does_not_block_either_when_metrics_delivery_is_disabled', async () => {
+    const toolSessions = ToolSessionsDouble.with([ToolSessionMother.notInstalled('bq')])
+
+    const result = await toolSessions.asked(Deliveries.disabled())
+
+    expect(result.ready).toBe(true)
+  })
+
+  it('bq_blocks_once_a_metrics_destination_is_configured_and_its_session_is_missing', async () => {
+    const toolSessions = ToolSessionsDouble.with([
+      ToolSessionMother.ready('gh'),
+      ToolSessionMother.missing('bq'),
+    ])
+
+    const result = await toolSessions.asked(Deliveries.enabled())
+
+    expect(result.ready).toBe(false)
+    expect(result.metricsDelivery.destination).toBe(Deliveries.DESTINATION)
+  })
+
+  it('bq_that_is_not_installed_blocks_once_a_metrics_destination_is_configured', async () => {
+    const toolSessions = ToolSessionsDouble.with([ToolSessionMother.notInstalled('bq')])
+
+    const result = await toolSessions.asked(Deliveries.enabled())
+
+    expect(result.ready).toBe(false)
+  })
+
+  it('an_enabled_delivery_with_bq_ready_is_ready_and_an_unknown_claude_beside_it_still_does_not_block', async () => {
+    const toolSessions = ToolSessionsDouble.with([
+      ToolSessionMother.ready('bq'),
+      ToolSessionMother.unknown('claude'),
+    ])
+
+    const result = await toolSessions.asked(Deliveries.enabled())
+
+    expect(result.ready).toBe(true)
+  })
+
+  it('every_other_tool_keeps_blocking_whatever_the_metrics_delivery_says', async () => {
+    const toolSessions = ToolSessionsDouble.with([ToolSessionMother.missing('gh')])
+
+    expect((await toolSessions.asked(Deliveries.disabled())).ready).toBe(false)
+    expect((await toolSessions.asked(Deliveries.enabled())).ready).toBe(false)
+  })
+
+  it('a_survey_that_does_not_know_whether_metrics_delivery_is_configured_cannot_be_constructed', () => {
+    expect(() => new SurveyExternalToolsResult({ sessions: [], metricsDelivery: null }))
+      .toThrow(/without knowing whether metrics delivery is configured/)
+  })
+
+  it('a_destination_that_is_neither_a_table_nor_an_absence_cannot_be_constructed', () => {
+    expect(() => MetricsDelivery.to('')).toThrow(/non-empty string/)
+    expect(() => new MetricsDelivery({ destination: 7 })).toThrow(/got 7/)
+  })
+
+  it('an_unset_variable_reads_as_disabled_with_no_destination_and_never_as_an_empty_table', () => {
+    const absent = MetricsDelivery.to(undefined)
+
+    expect(absent.enabled).toBe(false)
+    expect(absent.destination).toBe(null)
+    expect(MetricsDelivery.disabled().enabled).toBe(false)
+  })
+
+  it('a_configured_delivery_demands_bq_and_demands_nothing_else', () => {
+    const enabled = Deliveries.enabled()
+
+    expect(enabled.demands('bq')).toBe(true)
+    expect(enabled.demands('gh')).toBe(false)
+    expect(Deliveries.disabled().demands('bq')).toBe(false)
   })
 
   it('a_state_outside_the_vocabulary_cannot_be_constructed', () => {

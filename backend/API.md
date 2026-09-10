@@ -527,9 +527,10 @@ curl -s http://127.0.0.1:8787/active-plans
 
 ## `GET /external-tools`
 
-Whether the six external tools this backend drives can be used right now. No
-parameters. It exists to be asked **before** starting work: until now each of
-these failed at the moment it was used, mid-flow, in the tool's own words.
+Whether the six external tools this backend drives can be used right now, and
+whether a merged slice's metrics have anywhere to go. No parameters. It exists
+to be asked **before** starting work: until now each of these failed at the
+moment it was used, mid-flow, in the tool's own words.
 
 Five of them are asked about a credential. `cmux` is asked about something else
 — whether it answers the query this backend recovers plans with — because that
@@ -547,12 +548,23 @@ forever.
     "fix":"claude, then /login \u2014 not observable from this process"},
   {"tool":"git","installed":true,"session":"ready","fix":null},
   {"tool":"bq","installed":true,"session":"ready","fix":null},
-  {"tool":"cmux","installed":true,"session":"ready","fix":null}]}
+  {"tool":"cmux","installed":true,"session":"ready","fix":null}],
+ "metricsDelivery":{"enabled":true,"variable":"CT_HARVEST_BQ_TABLE",
+  "destination":"my-project:control_tower.harvest"}}
 ```
 
 Six rows, always, in that order. `ready` is the whole verdict: `true` when no
-tool blocks. A tool blocks when it is not installed or its session is `missing`
-— `unknown` never blocks, or `claude` would pin the verdict to `false` forever.
+tool that is **required right now** blocks. A tool blocks when it is not
+installed or its session is `missing` — `unknown` never blocks, or `claude`
+would pin the verdict to `false` forever.
+
+`bq` is the one row that is **conditionally** required, and `metricsDelivery`
+says by which condition. With the delivery disabled a `bq` that is missing or
+not installed does **not** move `ready`: nothing is being uploaded, so nothing
+is broken. With the delivery enabled the same row does move it, because the
+delivery that was configured cannot proceed: the merged slice stays **pending
+collection**, sweep after sweep, until `bq` can upload its row. Nothing is
+lost — see below — but nothing advances either.
 
 | `session` | Meaning | What the UI can do |
 |---|---|---|
@@ -578,6 +590,37 @@ and presupposes an installation `installed` already says you do not have. So a
 `missing` row is either a tool that was asked and has no usable credential, or a
 tool that was never asked because it is not there — `installed` is what tells
 them apart, and the UI reads both before it reads `fix`.
+
+### `metricsDelivery` — whether a merged slice's metrics go anywhere
+
+| Field | Meaning |
+|---|---|
+| `enabled` | whether the harvest uploads anything at all |
+| `variable` | the environment variable that decides it: `CT_HARVEST_BQ_TABLE` |
+| `destination` | the `project:dataset.table` it uploads to, or `null` |
+
+`enabled` is `true` exactly when `destination` is not `null`; the two can never
+disagree, because `enabled` is derived from the destination and never stored
+beside it.
+
+**It is read-only, and it is read once.** The value comes from the invocation
+this process started with (`invocation.js`), already validated against
+`project:dataset.table` — a malformed one refuses the start rather than reaching
+this answer. Nothing re-reads `process.env`, so the answer cannot drift from
+what the harvest is actually doing, and **there is no endpoint that changes it**:
+changing the destination means restarting the backend with a different value.
+
+**What an unset variable costs.** Plans, dispatch and the harvest itself keep
+working: a merged slice's worktree and branch are still collected. What does not
+happen is the upload — the slice leaves no row in the harvest ledger, so it
+never appears in any comparison of coding tools. The telemetry the slice
+committed under `docs/superpowers/metrics/issue-<n>.jsonl` is not lost and a
+later `/ct-harvest --bq` can still load that epic by hand.
+
+**When it is enabled and `bq` is not usable**, the sweep loads nothing and
+**deletes nothing**: `dispatch-check --collect --bq` refuses to remove a
+worktree whose row did not land, so the next sweep retries it. That is why the
+row moves `ready`: the work is not lost, but it piles up.
 
 How each one is asked:
 

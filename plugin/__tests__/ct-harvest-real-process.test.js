@@ -45,6 +45,17 @@ const DIR_JSON = JSON.stringify([
 const verdict = (m) => JSON.stringify({ step: 'judge', ...m }) + '\n'
 const implementAttempt = (m) => JSON.stringify({ step: 'implement', ...m }) + '\n'
 
+// The normalized tool usage of one attempt: the tool that spent it, the exact
+// tokens it reported and the request ids that name the evidence it claimed.
+const usage = ({ evidence, input, cached, output, ...rest }) => ({
+  tool: 'claude-code', tool_version: '2.1.266', tool_usage_status: 'measured',
+  tool_input_tokens: input, tool_cached_input_tokens: cached, tool_output_tokens: output,
+  tool_total_tokens: input + cached + output,
+  tool_duration_status: 'unsupported', tool_active_duration_ms: null,
+  tool_usage_evidence: evidence, tool_usage_gaps: 0,
+  ...rest,
+})
+
 function bench() {
   const dir = mkdtempSync(join(tmpdir(), 'ct-hv-'))
   return { dir, counter: join(dir, 'gh-count'), argvLog: join(dir, 'gh-argv') }
@@ -203,6 +214,60 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     expect(res.status).toBe(0)
     expect(res.stdout).toMatch(/\| #12 \| Slice 1 \| 1 \| 0 \| \(none\) \| — \| — \| — \|/)
     expect(res.stdout).toMatch(/`—` in `brief`: no `implement` attempt of that slice carried `brief_vara_ct_docs`\/`brief_bytes`/)
+    cleanup(b)
+  })
+
+  it('the tool and its exact tokens come out in the two columns that let two tools be compared', () => {
+    const b = bench()
+    const filesJson = JSON.stringify({
+      'issue-12.jsonl':
+        implementAttempt(usage({ evidence: ['req_a'], input: 10, cached: 1000, output: 100, outcome: 'done' }))
+        + verdict(usage({ evidence: ['req_b'], input: 5, cached: 500, output: 50, outcome: 'failed', ruling: 'FAIL' }))
+        + verdict(usage({ evidence: ['req_c'], input: 5, cached: 500, output: 50, outcome: 'corrections-ordered', ruling: 'PASS' })),
+    })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    expect(res.status).toBe(0)
+    expect(res.stdout).toMatch(/\| 1\+1=2 of 2 \| claude-code 2\.1\.266 \| 2220 \(20 in · 2000 cached · 200 out\) \|/)
+    cleanup(b)
+  })
+
+  it('a slice whose telemetry is older than the tool usage prints «—» in tool and tokens, never a zero', () => {
+    const b = bench()
+    const filesJson = JSON.stringify({
+      'issue-12.jsonl': verdict({ outcome: 'done', ruling: 'PASS', rubric_sin_vara: 0 }),
+    })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    expect(res.status).toBe(0)
+    expect(res.stdout).toMatch(/\| 0\+0=0 of 1 \| — \| — \|/)
+    expect(res.stdout).toMatch(/`—` in `tool`\/`tokens`: no attempt of that slice carried the normalized tool usage/)
+    cleanup(b)
+  })
+
+  it('a slice whose telemetry carries no judge attempt that ruled prints «—» in returns, never a zero out of zero', () => {
+    const b = bench()
+    const filesJson = JSON.stringify({
+      'issue-12.jsonl': implementAttempt({ outcome: 'done' }) + verdict({ outcome: 'discarded', why: 'no verdict' }),
+    })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    expect(res.status).toBe(0)
+    expect(res.stdout).toMatch(/\| #12 \| Slice 1 \|.*\| — \| — \| — \|$/m)
+    cleanup(b)
+  })
+
+  it('a runtime that reported no usage prints its status instead of a token count nobody measured', () => {
+    const b = bench()
+    const filesJson = JSON.stringify({
+      'issue-12.jsonl': verdict({
+        outcome: 'done', ruling: 'PASS',
+        tool: 'claude-code', tool_version: '2.1.266', tool_usage_status: 'not-read',
+        tool_input_tokens: null, tool_cached_input_tokens: null, tool_output_tokens: null, tool_total_tokens: null,
+        tool_duration_status: 'not-read', tool_active_duration_ms: null,
+        tool_usage_evidence: [], tool_usage_gaps: null,
+      }),
+    })
+    const res = run(b, { FAKE_GH_METRICS_DIR_JSON: DIR_JSON, FAKE_GH_METRICS_FILES: filesJson })
+    expect(res.status).toBe(0)
+    expect(res.stdout).toMatch(/\| claude-code 2\.1\.266 \| \(not-read\) \|/)
     cleanup(b)
   })
 

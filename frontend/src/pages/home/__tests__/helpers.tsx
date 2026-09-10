@@ -10,7 +10,14 @@ type User = ReturnType<typeof userEvent.setup>
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 const NO_ACTIVE_PLANS = { status: 200, body: '{"plans":[]}' }
-const EXTERNAL_TOOLS_READY = { status: 200, body: '{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}' }
+const EXTERNAL_TOOLS_READY = {
+  status: 200,
+  body: JSON.stringify({
+    ready: true,
+    tools: [{ tool: 'gh', installed: true, session: 'ready', fix: null }],
+    metricsDelivery: { enabled: false, variable: 'CT_HARVEST_BQ_TABLE', destination: null },
+  }),
+}
 const NO_IMPLEMENTATION_RUN_YET = {
   status: 400,
   body: '{"code":"implementation-progress-not-read","detail":"the worktree is not there yet"}',

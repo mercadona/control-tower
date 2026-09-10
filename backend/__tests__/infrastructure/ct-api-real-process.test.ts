@@ -11,6 +11,10 @@ type Started = { port: number, saidLater: () => string }
 type Failure = { code: string, detail: string }
 type ToolRow = { tool: string, installed: boolean, session: string, fix: string | null }
 
+type DeliveredMetrics = { enabled: boolean, variable: string, destination: string | null }
+
+type SurveyedTools = { ready: boolean, tools: ToolRow[], metricsDelivery: DeliveredMetrics }
+
 class HostCheckout {
   static readonly #HERE = dirname(fileURLToPath(import.meta.url))
   static readonly #NAMED = /^(?:git@github\.com:|https:\/\/github\.com\/)([^/]+\/[^/]+?)(?:\.git)?$/
@@ -183,6 +187,8 @@ class ACmuxThatRefusesTheConnection {
 }
 
 class ExternalTools {
+  static readonly DESTINATION = 'fixture-project:fixture_dataset.fixture_table'
+
   static async cmuxRowOf(port: number): Promise<{ installed: boolean, session: string, fix: string | null }> {
     const response = await fetch(`http://127.0.0.1:${port}/external-tools`)
     const body = await response.json() as { tools: ToolRow[] }
@@ -291,17 +297,35 @@ describe('ct-api entrypoint', () => {
   })
 
   it('a_whole_request_to_external_tools_reaches_every_probe_client_the_entrypoint_wired_up', async () => {
-    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+    const port = await Entrypoint.listening({
+      CT_API_PORT: '0', CT_HARVEST_BQ_TABLE: ExternalTools.DESTINATION,
+    })
 
     const response = await fetch(`http://127.0.0.1:${port}/external-tools`)
 
     expect(response.status).toBe(200)
-    const body = await response.json() as { tools: ToolRow[] }
+    const body = await response.json() as SurveyedTools
     expect(body.tools.map((row) => row.tool)).toEqual(['gh', 'acli', 'claude', 'git', 'bq', 'cmux'])
     expect(body.tools.every((row) => ['ready', 'missing', 'unknown'].includes(row.session))).toBe(true)
     const claude = body.tools.find((row) => row.tool === 'claude') as ToolRow
     expect(claude.session).toBe('unknown')
     expect(claude.fix).toBe('claude, then /login — not observable from this process')
+    expect(body.metricsDelivery).toEqual({
+      enabled: true,
+      variable: 'CT_HARVEST_BQ_TABLE',
+      destination: ExternalTools.DESTINATION,
+    })
+  }, 600_000)
+
+  it('without_the_harvest_table_the_entrypoint_answers_a_disabled_delivery_read_from_the_startup_configuration', async () => {
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CT_HARVEST_BQ_TABLE: '' })
+
+    const response = await fetch(`http://127.0.0.1:${port}/external-tools`)
+
+    const body = await response.json() as SurveyedTools
+    expect(body.metricsDelivery).toEqual({
+      enabled: false, variable: 'CT_HARVEST_BQ_TABLE', destination: null,
+    })
   }, 600_000)
 
   it('a_whole_request_reaches_acli_so_a_typo_in_the_key_that_wires_the_user_stories_would_show_up_here_and_not_only_in_the_first_real_use', async () => {

@@ -18,6 +18,33 @@ class Bench {
 
   static METRICS_DIR = JSON.stringify([{ name: 'issue-12.jsonl', type: 'file' }])
 
+  static TELEMETRY = [
+    {
+      step: 'implement', outcome: 'done',
+      tool: 'claude-code', tool_version: '2.1.266', tool_usage_status: 'measured',
+      tool_input_tokens: 10, tool_cached_input_tokens: 1000, tool_output_tokens: 100, tool_total_tokens: 1110,
+      tool_duration_status: 'unsupported', tool_active_duration_ms: null,
+      tool_usage_evidence: ['req_a'], tool_usage_gaps: 0,
+    },
+    {
+      step: 'judge', outcome: 'failed', ruling: 'FAIL',
+      tool: 'claude-code', tool_version: '2.1.266', tool_usage_status: 'measured',
+      tool_input_tokens: 5, tool_cached_input_tokens: 500, tool_output_tokens: 50, tool_total_tokens: 555,
+      tool_duration_status: 'unsupported', tool_active_duration_ms: null,
+      tool_usage_evidence: ['req_b'], tool_usage_gaps: 0,
+    },
+    {
+      step: 'judge', outcome: 'corrections-ordered', ruling: 'PASS',
+      tool: 'claude-code', tool_version: '2.1.266', tool_usage_status: 'measured',
+      tool_input_tokens: 5, tool_cached_input_tokens: 500, tool_output_tokens: 50, tool_total_tokens: 555,
+      tool_duration_status: 'unsupported', tool_active_duration_ms: null,
+      tool_usage_evidence: ['req_c'], tool_usage_gaps: 0,
+    },
+    { step: 'slice-judge', outcome: 'failed', ruling: 'FAIL' },
+    { step: 'slice-judge', outcome: 'failed', ruling: 'FAIL' },
+    { step: 'judge', outcome: 'discarded', why: 'the judge wrote no verdict' },
+  ].map((row) => `${JSON.stringify(row)}\n`).join('')
+
   static TIMELINE = JSON.stringify([
     { event: 'labeled', label: { name: 'status:ready' }, created_at: '2026-08-20T09:00:00Z' },
     { event: 'labeled', label: { name: 'status:in-progress' }, created_at: '2026-08-20T09:05:00Z' },
@@ -103,6 +130,56 @@ describe('ct-harvest.mjs accepts and validates --bq', () => {
     const rows = readFileSync(join(captureDir, 'rows.ndjson'), 'utf8').trim().split('\n').map((line) => JSON.parse(line))
     expect(rows.map((row) => row.issue)).toEqual([12, 13])
     expect(rows.map((row) => row.telemetry_status)).toEqual(['ok', 'sin-fichero'])
+    bench.cleanup()
+  })
+
+  it('the_loaded_row_carries_the_tool_the_tokens_and_the_judge_returns_of_the_slice_that_brought_telemetry', () => {
+    const bench = new Bench()
+    const captureDir = join(bench.dir, 'capture')
+    const result = bench.run(['--repo', 'o/r', '--milestone', 'E', '--bq', 'p:d.t'], {
+      FAKE_GH_METRICS_DIR_JSON: Bench.METRICS_DIR,
+      FAKE_GH_METRICS_FILES: JSON.stringify({ 'issue-12.jsonl': Bench.TELEMETRY }),
+      FAKE_BQ_CAPTURE_DIR: captureDir,
+    })
+    expect(result.status).toBe(0)
+    const rows = readFileSync(join(captureDir, 'rows.ndjson'), 'utf8').trim().split('\n').map((line) => JSON.parse(line))
+    const [measured, withoutTelemetry] = rows
+    expect(measured.tool).toBe('claude-code')
+    expect(measured.tool_version).toBe('2.1.266')
+    expect(measured.tool_usage_status).toBe('measured')
+    expect(measured.tool_usage_attempts).toBe(3)
+    expect(measured.tool_usage_measured).toBe(3)
+    expect(measured.tool_input_tokens).toBe(20)
+    expect(measured.tool_cached_input_tokens).toBe(2000)
+    expect(measured.tool_output_tokens).toBe(200)
+    expect(measured.tool_total_tokens).toBe(2220)
+    expect(measured.tool_duration_status).toBe('unsupported')
+    expect(measured.tool_active_duration_ms).toBeNull()
+    expect(measured.judge_attempts).toBe(2)
+    expect(measured.judge_vetoes).toBe(1)
+    expect(measured.judge_corrections_ordered).toBe(1)
+    expect(measured.judge_returns).toBe(2)
+    expect(measured.verdicts_fail).toBe(3)
+    expect(withoutTelemetry.tool).toBeNull()
+    expect(withoutTelemetry.tool_total_tokens).toBeNull()
+    expect(withoutTelemetry.judge_returns).toBeNull()
+    bench.cleanup()
+  })
+
+  it('the_schema_bq_receives_declares_every_new_column_as_additive_and_nullable', () => {
+    const bench = new Bench()
+    const captureDir = join(bench.dir, 'capture')
+    bench.run(['--repo', 'o/r', '--milestone', 'E', '--bq', 'p:d.t'], { FAKE_BQ_CAPTURE_DIR: captureDir })
+    const schema = JSON.parse(readFileSync(join(captureDir, 'schema.json'), 'utf8'))
+    const modes = Object.fromEntries(schema.map((column) => [column.name, column.mode]))
+    for (const column of [
+      'tool', 'tool_version', 'tool_usage_status', 'tool_usage_attempts', 'tool_usage_measured', 'tool_usage_gaps',
+      'tool_input_tokens', 'tool_cached_input_tokens', 'tool_output_tokens', 'tool_total_tokens',
+      'tool_duration_status', 'tool_active_duration_ms',
+      'judge_attempts', 'judge_vetoes', 'judge_corrections_ordered', 'judge_returns',
+    ]) {
+      expect(modes[column]).toBe('NULLABLE')
+    }
     bench.cleanup()
   })
 

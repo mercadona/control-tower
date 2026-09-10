@@ -32,6 +32,7 @@ import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
 import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
 import { ReviewLog } from '../../src/domain/ports/review-log.ts'
 import { ToolSessions } from '../../src/domain/ports/tool-sessions.ts'
+import { MetricsDelivery } from '../../src/domain/value-objects/metrics-delivery.ts'
 import { UserStories } from '../../src/domain/ports/user-stories.ts'
 import { Workspace } from '../../src/domain/ports/workspace.ts'
 import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.ts'
@@ -200,11 +201,11 @@ class ProgressSpy {
 
 class ExternalToolsSpy extends SurveyExternalTools {
   constructor() {
-    super({ toolSessions: new ToolSessions() })
+    super({ toolSessions: new ToolSessions(), metricsDelivery: MetricsDelivery.disabled() })
   }
 
   async execute(): Promise<SurveyExternalToolsResult> {
-    return new SurveyExternalToolsResult({ sessions: [] })
+    return new SurveyExternalToolsResult({ sessions: [], metricsDelivery: MetricsDelivery.disabled() })
   }
 }
 

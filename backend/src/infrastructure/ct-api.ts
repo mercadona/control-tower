@@ -41,6 +41,7 @@ import { RequestFixes, RequestFixesParams } from '../application/actions/request
 import { SurveyWorkspaces, SurveyWorkspacesParams } from '../application/queries/survey-workspaces.ts'
 import { ReadPlanStory, ReadPlanStoryParams } from '../application/queries/read-plan-story.ts'
 import { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
+import { MetricsDelivery } from '../domain/value-objects/metrics-delivery.ts'
 import { HarvestDelivery, HarvestDeliveryParams } from '../application/actions/harvest-delivery.ts'
 import { ProbedToolSessions } from './probed-tool-sessions.ts'
 import { ToolRunner } from './tool-runner.ts'
@@ -447,7 +448,10 @@ class CtApi {
       readPlanProgress,
       sessions,
       activePlans,
-      externalTools: new SurveyExternalTools({ toolSessions: CtApi.#toolSessions(environment) }),
+      externalTools: new SurveyExternalTools({
+        toolSessions: CtApi.#toolSessions(environment),
+        metricsDelivery: MetricsDelivery.to(asked.harvestTable),
+      }),
       implementationStarts,
       recovery,
       stderr: (line) => process.stderr.write(line),
