@@ -21,6 +21,7 @@ import { PlanAgentBrief } from './plan-agent-brief.js'
 import { PlanContractProgress } from './plan-contract-progress.js'
 import { PlanEvents, PlanSessions } from './plan-events-route.js'
 import { ReviewWatch } from './review-watch.js'
+import { MemoryReviewLog } from './memory-review-log.ts'
 import { GhPullRequests } from './gh-pull-requests.ts'
 import { DispatchCheckWorkbench } from './dispatch-check-workbench.js'
 import { RunFileProgress } from './run-file-progress.js'
@@ -256,13 +257,14 @@ class CtApi {
     })
   }
 
-  static #planEvents(git) {
+  static #planEvents(git, log) {
     const readPlanProgress = new ReadPlanProgress({
       planProgress: new PlanContractProgress({
         node: CtApi.#tool(process.execPath),
         git,
         dispatchCheck: PluginTree.dispatchCheck(),
       }),
+      reviewLog: log,
     })
 
     return new PlanEvents({
@@ -271,7 +273,7 @@ class CtApi {
     })
   }
 
-  static #planReviews(planIssues, planAgents) {
+  static #planReviews(planIssues, planAgents, log) {
     const readChangesAsked = new ReadChangesAsked({ planIssues })
     const reviewPlan = new ReviewPlan({ planAgents })
 
@@ -281,6 +283,7 @@ class CtApi {
       sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_ASKS),
       stderr: (line) => process.stderr.write(line),
       label: 'plan review watch',
+      log,
     })
   }
 
@@ -294,6 +297,7 @@ class CtApi {
       sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_ASKS),
       stderr: (line) => process.stderr.write(line),
       label: 'pull request review watch',
+      log: new MemoryReviewLog(),
     })
   }
 
@@ -345,7 +349,8 @@ class CtApi {
       dispatchCheck: PluginTree.dispatchCheck(),
     })
     const sessions = new PlanSessions()
-    const reviews = CtApi.#planReviews(planIssues, planAgents)
+    const planReviewLog = new MemoryReviewLog()
+    const reviews = CtApi.#planReviews(planIssues, planAgents, planReviewLog)
     const activePlans = new ActivePlans({ sessions })
     const implementationStarts = new DiskImplementationStartRegistry({
       read: (path) => readFileSync(path, 'utf8'),
@@ -398,7 +403,7 @@ class CtApi {
         pullRequests,
         planIssues,
       }),
-      planEvents: CtApi.#planEvents(git),
+      planEvents: CtApi.#planEvents(git, planReviewLog),
       sessions,
       activePlans,
       externalTools: new SurveyExternalTools({ toolSessions: CtApi.#toolSessions(environment) }),

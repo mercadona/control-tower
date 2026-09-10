@@ -13,4 +13,10 @@ export class PlanProgress {
       `${this.constructor.name} must implement of({ located, issue, repository }), asked for ${issue?.number} at ${located?.path} in ${repository}`
     )
   }
+
+  async committedAt({ located }: { located: WorkspaceLocation }): Promise<string | null> {
+    throw new Error(
+      `${this.constructor.name} must implement committedAt({ located }), asked for ${located?.path}`
+    )
+  }
 }

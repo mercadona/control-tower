@@ -173,4 +173,39 @@ describe('Home · implement plan', () => {
     await screen.findByRole('status')
     expect(FakeEventSource.last().url).toContain(encodeURIComponent(StartPlanMother.ANOTHER_REPO))
   })
+
+  it('should not readopt the plan it just left when starting another one, even if the backend still reports it', async () => {
+    const { user } = await planReady()
+    backendAnswering(ImplementPlanMother.implementing())
+    await pressImplement(user)
+    await screen.findByRole('button', { name: 'Arrancar otro plan' })
+
+    const stillReported = JSON.stringify({
+      plans: [{
+        phase: 'implementing',
+        request: { id: StartPlanMother.TICKET, repo: StartPlanMother.REPO, path: StartPlanMother.PATH },
+        plan: {
+          id: StartPlanMother.TICKET,
+          repo: StartPlanMother.REPO,
+          issue: StartPlanMother.ISSUE,
+          agent: StartPlanMother.AGENT,
+          branch: StartPlanMother.BRANCH,
+          worktree: StartPlanMother.WORKTREE,
+        },
+      }],
+    })
+    const fetching = vi.fn(async (input: string | URL | Request) => {
+      if (input === '/active-plans') return new Response(stillReported, { status: 200 })
+      if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
+      throw new Error(`unexpected fetch to ${String(input)}`)
+    })
+    vi.stubGlobal('fetch', fetching)
+
+    await user.click(screen.getByRole('button', { name: 'Arrancar otro plan' }))
+
+    expect(screen.getByLabelText('Ticket')).toBeEnabled()
+    expect(screen.getByLabelText('Ticket')).toHaveValue('')
+    expect(screen.queryByText('Agente asignado')).toBeNull()
+    expect(fetching.mock.calls.filter(([calledInput]) => calledInput === '/active-plans')).toHaveLength(0)
+  })
 })

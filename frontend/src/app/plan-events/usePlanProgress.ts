@@ -5,6 +5,7 @@ type PlanProgress =
   | { phase: 'connecting' }
   | { phase: 'writing' }
   | { phase: 'ready' }
+  | { phase: 'reviewing' }
   | { phase: 'failed'; code: string; detail: string }
   | { phase: 'refused' }
   | { phase: 'unreachable' }

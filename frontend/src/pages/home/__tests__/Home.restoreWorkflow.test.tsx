@@ -83,7 +83,7 @@ describe('Home · restore workflow', () => {
     expect(fetching).toHaveBeenCalledTimes(1)
   })
 
-  it('should restore ready into review without reopening its plan stream', async () => {
+  it('should restore ready into review and resume listening for a possible review once confirmed', async () => {
     const { unmount, fetching } = await startPlanning()
     await streamFrame(PlanEventsMother.ready())
 
@@ -94,7 +94,7 @@ describe('Home · restore workflow', () => {
     expect(await screen.findByRole('button', { name: 'Implementar plan' })).toBeEnabled()
     expect(screen.getByRole('heading', { name: 'Revisar plan' })).toBeInTheDocument()
     expect(screen.getByText('El plan está listo. Revísalo antes de decidir si quieres implementarlo.')).toBeInTheDocument()
-    expect(FakeEventSource.opened).toHaveLength(0)
+    await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
     expect(fetching).toHaveBeenCalledTimes(1)
   })
 
@@ -239,7 +239,7 @@ describe('Home · restore workflow', () => {
 
     expect(await screen.findByRole('button', { name: 'Implementar plan' })).toBeEnabled()
     expect(fetching).toHaveBeenCalledTimes(2)
-    expect(FakeEventSource.opened).toHaveLength(0)
+    await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
   })
 
   it('should block implementation when the backend reports a stored plan as uncertain', async () => {
@@ -274,8 +274,8 @@ describe('Home · restore workflow', () => {
     await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
   })
 
-  it('should discard an uncertain candidate and unlock a fresh request', async () => {
-    backendRecovering(activePlansAnswer(activePlan('uncertain')))
+  it('should discard an uncertain candidate and unlock a fresh request even if the backend still reports it', async () => {
+    const fetching = backendRecovering(activePlansAnswer(activePlan('uncertain')))
     const { user } = openHome()
     await screen.findByRole('alert')
 
@@ -283,6 +283,7 @@ describe('Home · restore workflow', () => {
 
     expect(screen.getByLabelText('Ticket')).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(fetching).toHaveBeenCalledTimes(1)
   })
 
   it.each(['planning', 'ready'] as const)('should reconcile restored %s with backend planning', async (phase) => {
@@ -299,8 +300,7 @@ describe('Home · restore workflow', () => {
     }
     expect(screen.getByRole('button', { name: 'Descartar estado' })).toBeEnabled()
     expect(fetching).toHaveBeenCalledTimes(1)
-    if (phase === 'planning') await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
-    if (phase === 'ready') expect(FakeEventSource.opened).toHaveLength(0)
+    await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
   })
 
   it('should promote a restored planning workflow when the backend is implementing', async () => {
@@ -327,6 +327,24 @@ describe('Home · restore workflow', () => {
     expect(localStorage.getItem(WORKFLOW_SNAPSHOT_KEY)).toBeNull()
     expect(screen.getByLabelText('Ticket')).toBeEnabled()
     expect(screen.queryByText('Implementación')).toBeInTheDocument()
+  })
+
+  it('should adopt a live plan after discarding a saved one the backend no longer knows, without a reload', async () => {
+    storeWorkflow('ready')
+    const live = activePlan('planning', StartPlanMother.ANOTHER_REPO, 9)
+    const fetching = vi.fn()
+      .mockResolvedValueOnce(new Response(activePlansAnswer(live).body, { status: 200 }))
+      .mockResolvedValueOnce(new Response(activePlansAnswer(live).body, { status: 200 }))
+    withReadyTools(fetching)
+    const { user } = openHome()
+    await screen.findByRole('alert')
+
+    await user.click(screen.getByRole('button', { name: 'Descartar estado' }))
+
+    expect(await screen.findByText('Plan arrancado')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Revisar plan' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Progreso del plan')).toHaveTextContent(StartPlanMother.ANOTHER_REPO)
+    expect(fetching).toHaveBeenCalledTimes(2)
   })
 
   it('should open one GET and one SSE for restored planning under StrictMode', async () => {

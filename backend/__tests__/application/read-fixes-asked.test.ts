@@ -74,7 +74,7 @@ class Flow {
   static PULL_REQUEST: ReviewedPullRequest = Object.freeze({
     number: 42, url: 'https://github.com/josemerca/ct-loop-sandbox/pull/42',
   })
-  static A_CHANGE = new ChangeAsked({ id: '101', text: 'src/foo.js:42: revienta con []' })
+  static A_CHANGE = new ChangeAsked({ id: '101', text: 'src/foo.js:42: revienta con []', askedAt: null })
 
   pullRequests: PullRequestsDouble
   planIssues: PlanIssuesDouble

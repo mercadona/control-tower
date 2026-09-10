@@ -111,6 +111,7 @@ describe('PlanSessions', () => {
 describe('PlanEvents', () => {
   it('a_frame_is_the_server_sent_event_a_browser_can_parse', () => {
     expect(PlanEvents.frameFor(PlanState.READY)).toBe('data: {"state":"ready"}\n\n')
+    expect(PlanEvents.frameFor(PlanState.REVIEWING)).toBe('data: {"state":"reviewing"}\n\n')
   })
 
   it('it_emits_the_first_state_it_reads_so_a_late_subscriber_is_not_left_blank', async () => {

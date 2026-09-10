@@ -362,6 +362,15 @@ describe('ct-api entrypoint', () => {
     }
   })
 
+  it('plan_events_is_mounted_in_the_real_process_and_not_only_in_the_test_server', async () => {
+    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+
+    const response = await fetch(`http://127.0.0.1:${port}/plan-events/54?repo=jjponz%2Frepo-pulse`)
+
+    expect(response.status).toBe(400)
+    expect((await response.json()).code).toBe('not-watched')
+  })
+
   it('review_plan_is_mounted_in_the_real_process_and_not_only_in_the_test_server', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })
 

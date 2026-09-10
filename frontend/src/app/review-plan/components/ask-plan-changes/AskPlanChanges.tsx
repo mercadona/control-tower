@@ -10,7 +10,7 @@ import './AskPlanChanges.css'
 
 const FIELD_LABEL = 'Qué quieres cambiar del plan'
 const FIELD_MESSAGE = 'Lo que escribas es lo que se le pide al agente'
-const WHERE_MESSAGE = 'El plan está publicado como el último comentario del issue.'
+const WHERE_MESSAGE = 'El plan se publica como comentario del issue, y el rehecho también.'
 const ASKED_MESSAGE = 'Cambios pedidos. El agente los recibe en unos 30 segundos y publicará el plan rehecho en el issue.'
 const STALE_TITLE = 'El backend ya no tiene este plan activo'
 const STALE_DESCRIPTION = 'Nadie leería los cambios. Recupera el plan activo antes de volver a pedirlos.'

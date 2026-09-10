@@ -202,6 +202,8 @@ describe('Home · start plan', () => {
     expect(screen.getByLabelText(/Repositorio/)).toHaveValue('')
     expect(screen.getByLabelText(/Ruta local/)).toHaveValue('')
     expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(fetching.mock.calls.filter(([input]) => input === '/start-plan')).toHaveLength(1)
+    expect(fetching.mock.calls.filter(([input]) => input === '/active-plans')).toHaveLength(2)
   })
 
   it('should keep the start button disabled until the ticket key is well formed', async () => {

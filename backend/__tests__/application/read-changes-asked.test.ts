@@ -31,8 +31,16 @@ describe('ReadChangesAsked', () => {
 
   it('what_it_hands_back_is_every_change_asked_for_in_the_order_the_issue_holds_them', async () => {
     const wanted = [
-      { id: 'IC_kwDOT9lB5c8AAAABRB_tVQ', text: 'añade el caso de la issue sin descripción' },
-      { id: 'IC_kwDOT9lB5c8AAAABRCF0FA', text: 'y parte la tarea 3 en dos' },
+      {
+        id: 'IC_kwDOT9lB5c8AAAABRB_tVQ',
+        text: 'añade el caso de la issue sin descripción',
+        askedAt: '2026-09-09T09:00:00Z',
+      },
+      {
+        id: 'IC_kwDOT9lB5c8AAAABRCF0FA',
+        text: 'y parte la tarea 3 en dos',
+        askedAt: '2026-09-09T10:00:00Z',
+      },
     ]
 
     const read = await asking(new PlanIssuesDouble(wanted))
