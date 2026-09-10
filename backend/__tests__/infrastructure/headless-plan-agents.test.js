@@ -315,7 +315,7 @@ describe('HeadlessPlanAgents recording the worktree of a conversation', () => {
     const refusal = await headless.worktreeRefusal(HeadlessAgent.NEVER_LAUNCHED)
 
     expect(refusal).toBeInstanceOf(PlanAgentNotResumed)
-    expect(refusal.message).toContain(HeadlessAgent.NEVER_LAUNCHED)
+    expect(refusal.message.startsWith(HeadlessAgent.NEVER_LAUNCHED)).toBe(true)
   })
 
   it('a_conversation_file_that_cannot_be_read_raises_the_same_family_as_a_refused_resume_so_nothing_sees_a_raw_node_error', async () => {
