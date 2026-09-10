@@ -25,7 +25,7 @@ export class Yardstick {
   static #TEST_NAME = /^\s*(?:describe|it|test)(?:\.\w+)?\(\s*(['"`])((?:\\.|(?!\1).)*)\1/
   static #INVERTED_MARKS = ['¿', '¡']
 
-  static filesUnder(root, directory = root) {
+  static filesUnder(root: string, directory: string = root): string[] {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
       const full = join(directory, entry.name)
       if (entry.isDirectory()) {
@@ -35,56 +35,56 @@ export class Yardstick {
     })
   }
 
-  static measuredUnder(root) {
+  static measuredUnder(root: string): string[] {
     return Yardstick.filesUnder(root).filter((file) =>
       Yardstick.MEASURED_EXTENSIONS.includes(extname(file))
     )
   }
 
-  static unclassifiedUnder(root) {
+  static unclassifiedUnder(root: string): string[] {
     return Yardstick.filesUnder(root).filter((file) =>
       !Yardstick.MEASURED_EXTENSIONS.includes(extname(file)) &&
       !Yardstick.UNMEASURED_EXTENSIONS.includes(extname(file))
     )
   }
 
-  static #read(root, file) {
+  static #read(root: string, file: string): string {
     return readFileSync(join(root, file), 'utf8')
   }
 
-  static #numbered(source) {
+  static #numbered(source: string): [number, string][] {
     return source.split('\n').map((line, index) => [index + 1, line])
   }
 
-  static #bare(line) {
+  static #bare(line: string): string {
     return line.replace(Yardstick.#STRINGS, '""').replace(Yardstick.#REGEXES, 'RE')
   }
 
-  static proseIn(root, file) {
+  static proseIn(root: string, file: string): number[] {
     return Yardstick.proseInSource(Yardstick.#read(root, file))
   }
 
-  static proseInSource(source) {
+  static proseInSource(source: string): number[] {
     return Yardstick.#numbered(source)
       .filter(([, line]) => Yardstick.#PROSE.test(Yardstick.#bare(line)))
       .map(([number]) => number)
   }
 
-  static looseFunctionsIn(root, file) {
+  static looseFunctionsIn(root: string, file: string): number[] {
     return Yardstick.looseFunctionsInSource(Yardstick.#read(root, file))
   }
 
-  static looseFunctionsInSource(source) {
+  static looseFunctionsInSource(source: string): number[] {
     return Yardstick.#numbered(source)
       .filter(([, line]) => Yardstick.#LOOSE.test(line) || Yardstick.#DISGUISED.test(line))
       .map(([number]) => number)
   }
 
-  static spanishIdentifiersIn(root, file) {
+  static spanishIdentifiersIn(root: string, file: string): string[] {
     return Yardstick.spanishIdentifiersInSource(Yardstick.#read(root, file))
   }
 
-  static spanishIdentifiersInSource(source) {
+  static spanishIdentifiersInSource(source: string): string[] {
     const bare = Yardstick.#numbered(source)
       .map(([, line]) => Yardstick.#bare(line))
       .join('\n')
@@ -92,23 +92,23 @@ export class Yardstick {
     return [...new Set(used.filter((name) => Yardstick.SPANISH_WORDS.includes(name.toLowerCase())))]
   }
 
-  static #testNames(source) {
+  static #testNames(source: string): [number, string][] {
     return Yardstick.#numbered(source)
-      .map(([number, line]) => [number, line.match(Yardstick.#TEST_NAME)])
+      .map(([number, line]): [number, RegExpMatchArray | null] => [number, line.match(Yardstick.#TEST_NAME)])
       .filter(([, found]) => found !== null)
-      .map(([number, found]) => [number, found[2].replace(/\$\{[^}]*\}/g, ' ')])
+      .map(([number, found]) => [number, found![2].replace(/\$\{[^}]*\}/g, ' ')])
   }
 
-  static foreignTestNamesIn(root, file) {
+  static foreignTestNamesIn(root: string, file: string): number[] {
     return Yardstick.foreignTestNamesInSource(Yardstick.#read(root, file))
   }
 
-  static foreignTestNamesInSource(source) {
+  static foreignTestNamesInSource(source: string): number[] {
     return Yardstick.#testNames(source)
       .filter(([, name]) =>
         [...name].some((character) =>
           Yardstick.#INVERTED_MARKS.includes(character) ||
-          (character.codePointAt(0) > 127 && /\p{L}/u.test(character))
+          (character.codePointAt(0)! > 127 && /\p{L}/u.test(character))
         ) ||
         name.split(/[^A-Za-z]+/).some((word) => Yardstick.SPANISH_WORDS.includes(word.toLowerCase()))
       )

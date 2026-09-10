@@ -37,11 +37,11 @@ class Subjects {
     'A controller under `infrastructure/` is named `<endpoint>-route.js`, one\nfile per endpoint.',
   ]
 
-  static ownDocument() {
+  static ownDocument(): string {
     return readFileSync(join(Subjects.OWN_CONVENTIONS, 'this-repository.md'), 'utf8')
   }
 
-  static everyTravellingRule() {
+  static everyTravellingRule(): string {
     return readdirSync(Subjects.TRAVELLING_YARDSTICK, { withFileTypes: true })
       .filter((entry) => entry.isFile())
       .map((entry) => readFileSync(join(Subjects.TRAVELLING_YARDSTICK, entry.name), 'utf8'))

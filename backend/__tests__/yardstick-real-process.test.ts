@@ -2,18 +2,18 @@ import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Yardstick } from './yardstick.js'
+import { Yardstick } from './yardstick.ts'
 
 class Census {
   static HERE = dirname(fileURLToPath(import.meta.url))
   static BACKEND = join(Census.HERE, '..')
   static REPOSITORY = join(Census.BACKEND, '..')
 
-  static measured() {
+  static measured(): string[] {
     return Yardstick.measuredUnder(Census.BACKEND)
   }
 
-  static tracked() {
+  static tracked(): string[] {
     const listing = ['ls-files', '--cached', '--others', '--exclude-standard', 'backend']
     return execFileSync('git', listing, { cwd: Census.REPOSITORY, encoding: 'utf8' })
       .split('\n')
@@ -21,7 +21,7 @@ class Census {
       .map((line) => line.replace(/^backend\//, ''))
   }
 
-  static measurable(files) {
+  static measurable(files: string[]): string[] {
     return files.filter((file) => Yardstick.MEASURED_EXTENSIONS.includes(`.${file.split('.').pop()}`))
   }
 }

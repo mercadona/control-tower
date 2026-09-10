@@ -79,9 +79,7 @@ describe('no new JavaScript is born in the backend while it migrates to TypeScri
   it('the_census_finds_its_subjects_by_walking_so_a_new_file_is_covered_without_anyone_listing_it', () => {
     const present = MigrationBoundary.present()
 
-    expect(present).toContain('__tests__/conventions-no-restatement.test.js')
-    expect(present).toContain('__tests__/infrastructure/no-window-titles-parsed.test.js')
-    expect(present).toContain('__tests__/yardstick.js')
+    expect(present, `still JavaScript under the backend: ${present.join(', ')}`).toEqual([])
     expect(present).not.toContain('__tests__/typescript-migration-boundary.test.ts')
   })
 
