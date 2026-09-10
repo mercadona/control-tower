@@ -41,7 +41,7 @@ import { SurveyWorkspaces, SurveyWorkspacesParams } from '../application/queries
 import { ReadPlanStory, ReadPlanStoryParams } from '../application/queries/read-plan-story.ts'
 import { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
 import { HarvestDelivery, HarvestDeliveryParams } from '../application/actions/harvest-delivery.ts'
-import { ProbedToolSessions } from './probed-tool-sessions.js'
+import { ProbedToolSessions } from './probed-tool-sessions.ts'
 import { ToolRunner } from './tool-runner.ts'
 import { Gh } from './gh.ts'
 import { ExternalTool } from './external-tool.ts'
