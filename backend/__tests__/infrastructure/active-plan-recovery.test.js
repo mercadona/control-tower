@@ -3,7 +3,7 @@ import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recover
 import { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.js'
 import { PlanSessions } from '../../src/infrastructure/plan-events-route.js'
-import { DiskImplementationStartRegistry } from '../../src/infrastructure/disk-implementation-start-registry.js'
+import { DiskImplementationStartRegistry } from '../../src/infrastructure/disk-implementation-start-registry.ts'
 import { ImplementationState, ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
 import { ImplementationProgressNotRead } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'

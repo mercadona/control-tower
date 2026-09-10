@@ -14,7 +14,7 @@ import {
 } from '../../../plugin/scripts/run-machine.js'
 import { StepSeal } from '../../../plugin/scripts/dispatch-gate.js'
 import { extractTasks } from '../../../plugin/scripts/plan-tasks.js'
-import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.js'
+import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.ts'
 import { GhPlanIssues, PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.js'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.js'
 import { RunFileProgress } from '../../src/infrastructure/run-file-progress.js'
