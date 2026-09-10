@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   EventsRequest, EventsRequestOutcome, EventsRefusal, PlanSessions,
-} from '../../src/infrastructure/plan-events-route.js'
+} from '../../src/infrastructure/plan-events-route.ts'
 import { PlanRequest, PlanRequestOutcome, PlanRefusal } from '../../src/infrastructure/start-plan-route.ts'
 import { Refusal } from '../../src/infrastructure/http.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
@@ -10,35 +10,39 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 
 class Watched {
-  static REPO = 'owner/name'
-  static WATCH = new PlanWatch({
+  static readonly REPO = 'owner/name'
+  static readonly WATCH = new PlanWatch({
+    story: null,
     issue: new PlanIssue({ number: 42, url: 'https://github.com/owner/name/issues/42' }),
     located: new WorkspaceLocation({ path: '/repo/.worktrees/42', branch: 'feat/42' }),
     repository: new RepositoryName(Watched.REPO),
+    agent: 'workspace:1',
   })
 
-  static OTHER_REPO = 'other/name'
-  static IN_ANOTHER_REPOSITORY = new PlanWatch({
+  static readonly OTHER_REPO = 'other/name'
+  static readonly IN_ANOTHER_REPOSITORY = new PlanWatch({
+    story: null,
     issue: new PlanIssue({ number: 42, url: 'https://github.com/other/name/issues/42' }),
     located: new WorkspaceLocation({ path: '/other/.worktrees/42', branch: 'feat/42' }),
     repository: new RepositoryName(Watched.OTHER_REPO),
+    agent: 'workspace:2',
   })
 
-  static sessions() {
+  static sessions(): PlanSessions {
     const sessions = new PlanSessions()
     sessions.remember(Watched.WATCH)
 
     return sessions
   }
 
-  static inTwoRepositories() {
+  static inTwoRepositories(): PlanSessions {
     const sessions = Watched.sessions()
     sessions.remember(Watched.IN_ANOTHER_REPOSITORY)
 
     return sessions
   }
 
-  static none() {
+  static none(): PlanSessions {
     return new PlanSessions()
   }
 }
@@ -128,7 +132,7 @@ describe('EventsRefusal', () => {
     const missing = EventsRefusal.of(EventsRequest.from('42', undefined, Watched.none()))
     const malformed = EventsRefusal.of(EventsRequest.from('42', 'nope', Watched.none()))
     const startPlanMalformedRepo = PlanRefusal.of(
-      PlanRequest.refused(PlanRequestOutcome.MALFORMED_REPO, PlanRequest.REPO_FIELD)
+      PlanRequest.refused(PlanRequestOutcome.MALFORMED_REPO, PlanRequest.REPO_FIELD as unknown as null)
     )
 
     expect(missing.status).toBe(400)

@@ -8,8 +8,8 @@ import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { DiskGoRegistry } from './disk-go-registry.ts'
 import type { DiskImplementationStartRegistry } from './disk-implementation-start-registry.ts'
 import type { WorktreePlans } from './worktree-plans.ts'
-import type { ActivePlans } from './active-plans-route.js'
-import type { PlanSessions } from './plan-events-route.js'
+import type { ActivePlans } from './active-plans-route.ts'
+import type { PlanSessions } from './plan-events-route.ts'
 import type { ReviewWatch } from './review-watch.ts'
 
 export class ActivePlanRecovery {

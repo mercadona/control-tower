@@ -1,11 +1,13 @@
+import type { Request, RequestHandler, Response } from 'express'
 import { Answer } from './http.ts'
+import type { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
 
 export class ExternalToolsRoute {
-  static PATH = '/external-tools'
-  static METHOD = 'GET'
+  static readonly PATH = '/external-tools'
+  static readonly METHOD = 'GET'
 
-  static handledBy(surveyExternalTools) {
-    return async (request, response) => {
+  static handledBy(surveyExternalTools: SurveyExternalTools): RequestHandler {
+    return async (request: Request, response: Response): Promise<void> => {
       const surveyed = await surveyExternalTools.execute()
       Answer.send(response, 200, {
         ready: surveyed.ready,
@@ -19,7 +21,7 @@ export class ExternalToolsRoute {
     }
   }
 
-  static refuseOtherMethods(request, response) {
+  static refuseOtherMethods(request: Request, response: Response): void {
     response.setHeader('Allow', ExternalToolsRoute.METHOD)
     Answer.refuse(response, 405, 'method-not-allowed', 'method not allowed')
   }

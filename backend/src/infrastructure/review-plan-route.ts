@@ -1,5 +1,5 @@
 import { Answer, JsonBody, Refusal } from './http.ts'
-import { ActivePlanPhase } from './active-plans-route.js'
+import { ActivePlanPhase } from './active-plans-route.ts'
 import { Projection } from './projection.ts'
 import { AskPlanChangesParams } from '../application/actions/ask-plan-changes.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
