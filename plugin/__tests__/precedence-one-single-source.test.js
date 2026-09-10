@@ -2,7 +2,7 @@
 //
 // It was written in five files —`plugin-yardstick.js`, `kickoff.js`,
 // `prompts/task-implementer.md`, `agents/ct-judge.md` and, in the backend,
-// `plan-agent-brief.js`— and the judge read it three times in a single call.
+// `plan-agent-brief.ts`— and the judge read it three times in a single call.
 // What two copies buy is that they diverge, and that is not a hypothesis: the
 // one in the backend ended up saying that `architecture.md` applies ALWAYS,
 // exactly the opposite of what the header of the plugin says and of what the
@@ -55,7 +55,7 @@ class PrecedenceRule {
 class RepoText {
   static SKIPPED_DIRECTORIES = ['node_modules', '.git', '__tests__', 'dist', 'coverage']
 
-  static EXTENSIONS = ['.js', '.mjs', '.md', '.sh', '.json']
+  static EXTENSIONS = ['.js', '.mjs', '.ts', '.md', '.sh', '.json']
 
   static #filesOf(root) {
     if (!existsSync(root)) return []
@@ -101,6 +101,6 @@ describe('the precedence rule is written in a single place in the whole reposito
     expect(all).toContain('plugin/agents/ct-judge.md')
     expect(all).toContain('plugin/prompts/task-implementer.md')
     expect(all).toContain('plugin/scripts/kickoff.js')
-    expect(all).toContain('backend/src/infrastructure/plan-agent-brief.js')
+    expect(all).toContain('backend/src/infrastructure/plan-agent-brief.ts')
   })
 })
