@@ -52,7 +52,8 @@ kills it as long as the parent lives.
 - **`claude -p` is the transport, not an option.** The entrypoint builds `HeadlessPlanAgents`
   and nothing chooses: `POST /start-plan` writes a plan **without opening any window**, `claude -p`
   runs in the prepared worktree, and the agent it answers with is a UUID.
-- `CT_PLAN_MODEL` names the model of every call; unset, it is `opus` — today's constant.
+- The model is `fable`, a constant of the adapter — the shape `CmuxPlanAgents.MODEL` already had.
+  No variable configures it, and `call.json` records what was asked for.
 - Every headless call leaves a directory under the state root holding three files: `call.json`
   (the step, the issue, the repository, the model, the argv and the pid — the data that is **not**
   in the stream), `stream.ndjson` (claude's events, byte for byte and untrimmed) and `stderr.log`.
@@ -107,8 +108,7 @@ kills it as long as the parent lives.
 | Where a call's record lives | `<state root>/harness/<agent>/<step>-<startedAt>/` |
 | Where a continuation runs | the worktree `launch` recorded in `<state root>/harness/<agent>/conversation.json`. The port is **not** changed to carry it |
 | The transport | `claude -p`, always. There is no variable and no fallback |
-| Default model | `opus`, today's `CmuxPlanAgents.MODEL` |
-| A malformed `CT_PLAN_MODEL` | refuses the invocation, like `CT_HARVEST_BQ_TABLE` already does |
+| The model | `fable`, a static of the adapter. Not a variable, not a collaborator |
 | The errands | unchanged, all four |
 
 ## 3. Reference patterns
@@ -288,14 +288,15 @@ export class HeadlessPlanAgents extends PlanAgents {
   static FORMAT = ['--output-format', 'stream-json', '--verbose']
   static PERMISSION = ['--permission-mode', 'bypassPermissions']
 
-  static argvFor({ errand, model, pluginRoot, agent, resuming })
-  constructor({ start, makeDirectory, write, mint, clock, brief, runsIn, model, pluginRoot })
+  static MODEL = 'fable'
+  static argvFor({ errand, pluginRoot, agent, resuming })
+  constructor({ start, makeDirectory, write, read, mint, clock, brief, runsIn, pluginRoot })
   async launch(briefing)            // the agent: a UUID
 }
 ```
 
-`argvFor` answers `[PRINT, errand, ...FORMAT, ...PERMISSION, '--model', model, '--plugin-dir',
-pluginRoot]`, then `['--session-id', agent]` or, when `resuming`, `['--resume', agent]`. `launch`
+`argvFor` answers `[PRINT, errand, ...FORMAT, ...PERMISSION, '--model', MODEL, '--plugin-dir',
+pluginRoot]`, then `['--session-id', agent]` or `['--resume', agent]`. `launch`
 mints the agent, composes `${runsIn}/${agent}/${HarnessStep.WRITE_PLAN}-${clock()}`, **makes that
 directory** — `DetachedRun` opens its paths and fails without it — starts the call with `cwd` at
 `briefing.located.path`, and only then writes `HarnessCall.CALL_FILE`, which carries the pid just
@@ -424,69 +425,27 @@ cd backend && test "$(grep -c "'fix-pull-request'" src/infrastructure/headless-p
 cd backend && npx vitest run --exclude '**/*-real-process.test.js'   # exit 0: nothing regressed
 ```
 
-### Task 5 — The model is read from the environment, or refused
+### Task 5 — N/A — the model is a constant, so nothing reads the environment for it
 
-**Objective:** `Invocation` answers which model every call must ask for, and refuses an invocation
-that names one malformed.
+**Objective:** N/A — withdrawn on 2026-09-10. The issue asks for "the model as an argument", which
+`argvFor`'s `--model` already is; turning that into `CT_PLAN_MODEL` was configuration nobody asked
+for, and `Invocation` goes back to exactly what it was before this slice.
 
-**Files:**
-- Modify: `backend/src/infrastructure/invocation.js`
-- Modify: `backend/__tests__/infrastructure/invocation.test.js`
+**Files:** N/A — none.
 
-Current state (backend/src/infrastructure/invocation.js, lines 19-25):
+No code — the task is withdrawn, and §9.10 records why rather than leaving the number unexplained.
 
-```javascript
-  static CLAIM_PREFIX = 'CT_CLAIM_'
-  static CHILD_TIMEOUT_VARIABLE = 'CT_CLAIM_CHILD_TIMEOUT_MS'
-  static HARVEST_TABLE_VARIABLE = 'CT_HARVEST_BQ_TABLE'
-  static HARVEST_TABLE_SHAPE = 'project:dataset.table'
-  static #MAX_PORT = 65535
-  static #WHOLE_NUMBER = /^\d+$/
-  static #HARVEST_TABLE = /^[A-Za-z0-9][A-Za-z0-9-]*:[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/
-```
+**TDD:** No TDD — nothing is added.
 
-Contract (backend/src/infrastructure/invocation.js):
+**Tests:** removed on purpose: every case about `CT_PLAN_MODEL` and about the transport.
 
-```javascript
-export const InvocationOutcome = Object.freeze({
-  // the four that are already there, plus:
-  MALFORMED_MODEL: 'malformed-model',
-})
-
-export class Invocation {
-  static MODEL_VARIABLE = 'CT_PLAN_MODEL'
-  static DEFAULT_MODEL = CmuxPlanAgents.MODEL
-  static #MODEL = /^[^\s-]\S*$/   // no whitespace, no leading dash
-
-  get model()
-}
-```
-
-An unset or empty `CT_PLAN_MODEL` answers `DEFAULT_MODEL`. One that fails `#MODEL` refuses with its
-outcome and a reason quoting what it got — the shape `MALFORMED_HARVEST_TABLE` already uses
-(`invocation.js:118-123`). `#MODEL` enforces exactly what its refusal says, no more: what matters
-is that the value cannot be read as another argument. A tighter pattern refuses
-`claude-opus-5[1m]` and every Bedrock-style id, and this issue is titled *choose whichever model we
-want*. **No transport variable exists**: `claude -p` is not a choice.
-
-**TDD:** red first — `it('an_environment_that_names_no_model_asks_for_the_one_the_window_used_to_type')`
-(`model === 'opus'`), then `it('the_model_of_every_call_comes_from_the_environment')`, then
-`it('a_model_whose_name_could_become_another_argument_refuses_the_invocation')` — a value with a
-space and one starting with `-`. Last `it('a_long_context_model_is_named_like_any_other')`, which
-pins that a bracketed id is accepted, since a tighter pattern refusing it is the defect this task
-was corrected for.
-
-**Tests:** added: the four above. Removed on purpose: every case about `CT_PLAN_TRANSPORT`, with the
-variable itself.
-
-**Verification:** the default is today's constant, decided in one place, and no transport variable
-survives anywhere.
+**Verification:** neither variable survives anywhere, and `Invocation` declares no member this
+slice added.
 
 ```bash
-cd backend && npx vitest run __tests__/infrastructure/invocation.test.js   # exit 0: its cases and the four new ones
-cd backend && test -z "$(grep -rl 'CT_PLAN_TRANSPORT' src)"
-cd backend && test "$(grep -c 'DEFAULT_MODEL = CmuxPlanAgents.MODEL' src/infrastructure/invocation.js)" -eq 1
-cd backend && npx vitest run --exclude '**/*-real-process.test.js'   # exit 0: nothing regressed
+cd backend && test -z "$(grep -rl 'CT_PLAN_MODEL\|CT_PLAN_TRANSPORT' src __tests__)"
+cd backend && test -z "$(grep -l 'MALFORMED_MODEL' src/infrastructure/invocation.js)"
+cd backend && npx vitest run __tests__/infrastructure/invocation.test.js   # exit 0: its own cases, none of mine
 ```
 
 
@@ -503,14 +462,15 @@ Call site (backend/src/infrastructure/ct-api.mjs):
 
 ```javascript
 // line 309 built CmuxPlanAgents; now nothing chooses, because there is nothing to choose
-const planAgents = CtApi.#headlessAgents(asked.model)
+const planAgents = CtApi.#headlessAgents(environment, asked.stateRoot)
 ```
 
 `#headlessAgents` builds `new HeadlessPlanAgents({ start: new DetachedRun({ bin:
 HeadlessPlanAgents.BIN, budgetMs: CtApi.#PLAN_CALL_TIMEOUT_MS, env: environment }),
 makeDirectory: Disk.makeDirectory, write: Disk.atomicWrite, read: Disk.read, mint: randomUUID,
 clock: Date.now, brief: <as `#cmuxAgents` builds it>, runsIn: join(asked.stateRoot, 'harness'),
-model, pluginRoot: PluginTree.root() })`. `#PLAN_CALL_TIMEOUT_MS` is new beside the three at `ct-api.mjs:142-144`: 60 minutes.
+pluginRoot: PluginTree.root() })`. `#PLAN_CALL_TIMEOUT_MS` is new beside the three at
+`ct-api.mjs:142-144`: 60 minutes.
 `PluginTree.#root()` goes public (`ct-api.mjs:61`); `Disk` gains `makeDirectory`.
 
 Final text (backend/conventions/this-repository.md):
@@ -602,7 +562,15 @@ node plugin/scripts/dispatch-check.mjs 139 --repo mercadona/control-tower --chec
    issue's decision 7 ("an interrupted run is relaunched, it does not survive"), but it was
    hypothetical while cmux was the default and it is the only behaviour now. Phase 1 is what
    repairs it, and it is the phase that owns recovery. Provenance: the human, explicitly.
-9. **The worktree of a continuation is remembered on disk, not added to the port.** The port hands
+9. **`CT_PLAN_MODEL` was mine, not the issue's, and it is withdrawn.** The issue asks for
+   "Choosing the model … there is no invocation to put `--model` in" and "the model as an
+   argument"; `argvFor`'s `--model` **is** that argument. Making where it comes from an environment
+   variable was configuration nobody asked for, born in this plan's own first commit (`770a7cc`),
+   never in the issue. The model is now `HeadlessPlanAgents.MODEL = 'fable'`, named by the human on
+   2026-09-10 — one constant for the adapter, the shape `CmuxPlanAgents.MODEL = 'opus'` already
+   had. **A model per step is not invented here**: that is what `harness_calls` exists to inform,
+   and it is a one-line change once there is data to decide it on.
+10. **The worktree of a continuation is remembered on disk, not added to the port.** The port hands
    `resume`, `review` and `fix` no worktree, and a headless call needs a `cwd`. Adding `located` to
    those three methods is arguably the tidier model, but it changes the port, `CmuxPlanAgents`, the
    three use cases that call them and their tests — which is what this slice set out not to touch.
