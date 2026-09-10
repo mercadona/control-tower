@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { WorktreePlans } from '../../src/infrastructure/worktree-plans.js'
+import { WorktreePlans } from '../../src/infrastructure/worktree-plans.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { PreparedWorkspace } from '../../src/domain/value-objects/prepared-workspace.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
@@ -9,14 +9,31 @@ import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey
 import { PlanStoryNotRead, WorkspaceNotRead } from '../../src/domain/exceptions.ts'
 import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.ts'
 import { CmuxAnswer } from '../../../plugin/scripts/cmux.js'
+import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
+import type { RealpathOf } from '../../src/infrastructure/cmux-plan-agents.ts'
+import type { DiagnosticWriter } from '../../src/infrastructure/git-workspace.ts'
+import type { SessionsAsked, StoryOf } from '../../src/infrastructure/worktree-plans.ts'
+
+class KnownCheckouts extends CheckoutRegistry {
+  readonly #roots: CheckoutRoot[] | null
+
+  constructor(roots: CheckoutRoot[] | null) {
+    super()
+    this.#roots = roots
+  }
+
+  known(): CheckoutRoot[] | null {
+    return this.#roots
+  }
+}
 
 class SurveyedCheckout {
   static REPOSITORY = new RepositoryName('owner/repo')
 
-  static of(root, issueNumbers) {
+  static of(root: string, issueNumbers: number[]): WorkspaceSurvey {
     return new WorkspaceSurvey({
       repository: SurveyedCheckout.REPOSITORY,
-      prepared: issueNumbers.map((issueNumber) => new PreparedWorkspace({
+      prepared: issueNumbers.map((issueNumber: number) => new PreparedWorkspace({
         issueNumber,
         located: new WorkspaceLocation({
           root,
@@ -38,19 +55,21 @@ class SessionsOfCmux {
   static DISPATCHED_TITLE = 'owner/repo \u00b7 #33 un slice del dispatcher'
   static REFUSAL = 'cmux could not be asked for its windows: Error: ERROR: Access denied - only processes started inside cmux can connect'
 
-  static attending(worktree, { ref = 'workspace:20', title = SessionsOfCmux.PLAN_TITLE } = {}) {
+  static attending(worktree: string | null, {
+    ref = 'workspace:20', title = SessionsOfCmux.PLAN_TITLE,
+  }: { ref?: string | null, title?: string } = {}): CmuxAnswer {
     return SessionsOfCmux.listing([{ cwd: worktree, cwdKnown: true, ref, title }])
   }
 
-  static listing(entries) {
+  static listing(entries: unknown[]): CmuxAnswer {
     return CmuxAnswer.answered(entries)
   }
 
-  static none() {
+  static none(): CmuxAnswer {
     return SessionsOfCmux.listing([])
   }
 
-  static couldNotBeListed() {
+  static couldNotBeListed(): CmuxAnswer {
     return CmuxAnswer.refused(SessionsOfCmux.REFUSAL)
   }
 }
@@ -58,17 +77,19 @@ class SessionsOfCmux {
 class PlansOf {
   static ONE_CHECKOUT = '/repos/one'
 
-  static aCheckoutRegistryThatCannotBeRead({ stderr }) {
+  static aCheckoutRegistryThatCannotBeRead({ stderr }: { stderr: DiagnosticWriter }): WorktreePlans {
     return PlansOf.aWorktreeAttendedBy(
       () => SessionsOfCmux.attending(`${PlansOf.ONE_CHECKOUT}/.worktrees/33`),
-      { stderr, checkouts: { known: () => null } }
+      { stderr, checkouts: new KnownCheckouts(null) }
     )
   }
 
-  static aWorktreeAttendedBy(sessions, {
-    story = () => new UserStoryKey('ABC-123'), stderr = vi.fn(), realpathOf = (path) => path,
-    checkouts = { known: () => [new CheckoutRoot(PlansOf.ONE_CHECKOUT)] },
-  } = {}) {
+  static aWorktreeAttendedBy(sessions: SessionsAsked, {
+    story = () => new UserStoryKey('ABC-123'), stderr = vi.fn(), realpathOf = (path: string) => path,
+    checkouts = new KnownCheckouts([new CheckoutRoot(PlansOf.ONE_CHECKOUT)]),
+  }: {
+    story?: StoryOf, stderr?: DiagnosticWriter, realpathOf?: RealpathOf, checkouts?: CheckoutRegistry,
+  } = {}): WorktreePlans {
     return new WorktreePlans({
       checkouts,
       survey: () => SurveyedCheckout.of(PlansOf.ONE_CHECKOUT, [33]),
@@ -86,7 +107,7 @@ describe('WorktreePlans', () => {
       () => SessionsOfCmux.attending('/repos/one/.worktrees/33')
     )
 
-    const [watch] = (await plans.inFlight()).watches
+    const [watch] = (await plans.inFlight()).watches ?? []
 
     expect({
       story: watch.storyText(),
@@ -148,7 +169,7 @@ describe('WorktreePlans', () => {
     const found = await PlansOf.aWorktreeAttendedBy(SessionsOfCmux.couldNotBeListed, { stderr }).inFlight()
 
     expect(found.reason).toBe(SessionsOfCmux.REFUSAL)
-    expect(stderr).toHaveBeenCalledWith(expect.stringContaining(found.reason))
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining(String(found.reason)))
   })
 
   it('when_no_session_exposes_its_directory_the_error_channel_says_that_is_why', async () => {
@@ -178,7 +199,7 @@ describe('WorktreePlans', () => {
       { story: () => { throw new PlanStoryNotRead('gh: not authenticated') }, stderr }
     )
 
-    const [watch] = (await plans.inFlight()).watches
+    const [watch] = (await plans.inFlight()).watches ?? []
 
     expect(watch.storyText()).toBeNull()
     expect(watch.issue.number).toBe(33)
@@ -188,19 +209,19 @@ describe('WorktreePlans', () => {
   it('a_checkout_that_cannot_be_surveyed_does_not_take_the_other_checkouts_with_it', async () => {
     const stderr = vi.fn()
     const plans = new WorktreePlans({
-      checkouts: { known: () => [new CheckoutRoot('/repos/broken'), new CheckoutRoot('/repos/one')] },
-      survey: (root) => {
+      checkouts: new KnownCheckouts([new CheckoutRoot('/repos/broken'), new CheckoutRoot('/repos/one')]),
+      survey: (root: CheckoutRoot) => {
         if (root.text === '/repos/broken') throw new WorkspaceNotRead('git worktree list refused')
 
         return SurveyedCheckout.of('/repos/one', [33])
       },
       sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
       story: () => null,
-      realpathOf: (path) => path,
+      realpathOf: (path: string) => path,
       stderr,
     })
 
-    const recovered = (await plans.inFlight()).watches
+    const recovered = (await plans.inFlight()).watches ?? []
 
     expect(recovered.map((watch) => watch.issue.number)).toEqual([33])
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining('/repos/broken'))
@@ -236,25 +257,25 @@ describe('WorktreePlans', () => {
 
   it('a_plan_in_flight_is_recovered_even_when_the_registry_has_never_been_written', async () => {
     const plans = new WorktreePlans({
-      checkouts: { known: () => [] },
+      checkouts: new KnownCheckouts([]),
       survey: () => SurveyedCheckout.of('/repos/one', [33]),
       sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
       story: () => null,
-      realpathOf: (path) => path,
+      realpathOf: (path: string) => path,
       stderr: vi.fn(),
     })
 
-    const [watch] = (await plans.inFlight()).watches
+    const [watch] = (await plans.inFlight()).watches ?? []
 
     expect(watch.issue.number).toBe(33)
     expect(watch.located.root).toBe('/repos/one')
   })
 
   it('a_session_the_dispatcher_opened_does_not_put_its_checkout_on_the_list_to_survey', async () => {
-    const surveyed = []
+    const surveyed: string[] = []
     const plans = new WorktreePlans({
-      checkouts: { known: () => [] },
-      survey: (root) => {
+      checkouts: new KnownCheckouts([]),
+      survey: (root: CheckoutRoot) => {
         surveyed.push(root.text)
 
         return SurveyedCheckout.of(root.text, [])
@@ -263,7 +284,7 @@ describe('WorktreePlans', () => {
         '/repos/dispatched/.worktrees/41', { title: SessionsOfCmux.DISPATCHED_TITLE }
       ),
       story: () => null,
-      realpathOf: (path) => path,
+      realpathOf: (path: string) => path,
       stderr: vi.fn(),
     })
 
@@ -273,11 +294,11 @@ describe('WorktreePlans', () => {
 
   it('a_checkout_registry_that_could_not_be_read_is_not_the_same_as_no_checkouts', async () => {
     const plans = new WorktreePlans({
-      checkouts: { known: () => null },
+      checkouts: new KnownCheckouts(null),
       survey: () => SurveyedCheckout.of('/repos/one', [33]),
       sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
       story: () => null,
-      realpathOf: (path) => path,
+      realpathOf: (path: string) => path,
       stderr: vi.fn(),
     })
 
@@ -287,10 +308,10 @@ describe('WorktreePlans', () => {
   it('a_session_sitting_in_the_same_place_through_a_symlink_still_names_its_agent', async () => {
     const plans = PlansOf.aWorktreeAttendedBy(
       () => SessionsOfCmux.attending('/private/repos/one/.worktrees/33'),
-      { realpathOf: (path) => path.replace(/^\/(private\/)?repos\/one/, '/private/repos/one') }
+      { realpathOf: (path: string) => path.replace(/^\/(private\/)?repos\/one/, '/private/repos/one') }
     )
 
-    const [watch] = (await plans.inFlight()).watches
+    const [watch] = (await plans.inFlight()).watches ?? []
 
     expect(watch.agent).toBe('workspace:20')
   })
@@ -298,26 +319,26 @@ describe('WorktreePlans', () => {
   it('a_session_that_names_the_logical_path_while_git_names_the_physical_one_still_names_its_agent', async () => {
     const plans = PlansOf.aWorktreeAttendedBy(
       () => SessionsOfCmux.attending('/logical/one/.worktrees/33'),
-      { realpathOf: (path) => path.replace(/^\/(logical|repos)\/one/, '/physical/one') }
+      { realpathOf: (path: string) => path.replace(/^\/(logical|repos)\/one/, '/physical/one') }
     )
 
-    const [watch] = (await plans.inFlight()).watches
+    const [watch] = (await plans.inFlight()).watches ?? []
 
     expect(watch.agent).toBe('workspace:20')
   })
 
   it('the_checkout_a_session_names_is_surveyed_by_the_path_git_itself_uses', async () => {
-    const surveyed = []
+    const surveyed: string[] = []
     const plans = new WorktreePlans({
-      checkouts: { known: () => [] },
-      survey: (root) => {
+      checkouts: new KnownCheckouts([]),
+      survey: (root: CheckoutRoot) => {
         surveyed.push(root.text)
 
         return SurveyedCheckout.of(root.text, [])
       },
       sessions: () => SessionsOfCmux.attending('/logical/one/.worktrees/33'),
       story: () => null,
-      realpathOf: (path) => path.replace('/logical/one', '/physical/one'),
+      realpathOf: (path: string) => path.replace('/logical/one', '/physical/one'),
       stderr: vi.fn(),
     })
 
@@ -332,18 +353,18 @@ describe('WorktreePlans', () => {
       ...SessionsOfCmux.attending('/repos/one/.worktrees/33').entries,
     ]))
 
-    const [watch] = (await plans.inFlight()).watches
+    const [watch] = (await plans.inFlight()).watches ?? []
 
     expect(watch.agent).toBe('workspace:20')
   })
 
   it('a_failure_of_another_kind_of_domain_is_not_swallowed_as_this_checkout_having_no_plans', async () => {
     const plans = new WorktreePlans({
-      checkouts: { known: () => [new CheckoutRoot('/repos/one')] },
+      checkouts: new KnownCheckouts([new CheckoutRoot('/repos/one')]),
       survey: () => { throw new PlanStoryNotRead('a failure that is not the survey\'s') },
       sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
       story: () => null,
-      realpathOf: (path) => path,
+      realpathOf: (path: string) => path,
       stderr: vi.fn(),
     })
 
@@ -352,11 +373,11 @@ describe('WorktreePlans', () => {
 
   it('a_failure_that_is_not_the_ones_this_reader_degrades_travels_out_instead_of_passing_for_nothing', async () => {
     const surveyBroke = new WorktreePlans({
-      checkouts: { known: () => [new CheckoutRoot('/repos/one')] },
+      checkouts: new KnownCheckouts([new CheckoutRoot('/repos/one')]),
       survey: () => { throw new TypeError('git-workspace has a bug') },
       sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
       story: () => null,
-      realpathOf: (path) => path,
+      realpathOf: (path: string) => path,
       stderr: vi.fn(),
     })
     const storyBroke = PlansOf.aWorktreeAttendedBy(

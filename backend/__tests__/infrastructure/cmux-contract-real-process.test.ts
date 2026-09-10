@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { CmuxWorkspaceQuery, findWorkspaceByCwd } from '../../../plugin/scripts/cmux.js'
-import { WorktreePlans } from '../../src/infrastructure/worktree-plans.js'
+import { WorktreePlans } from '../../src/infrastructure/worktree-plans.ts'
 import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { PreparedWorkspace } from '../../src/domain/value-objects/prepared-workspace.ts'
@@ -11,8 +11,26 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.ts'
+import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
+import type { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.ts'
+
+class KnownCheckouts extends CheckoutRegistry {
+  readonly #roots: CheckoutRoot[]
+
+  constructor(roots: CheckoutRoot[]) {
+    super()
+    this.#roots = roots
+  }
+
+  known(): CheckoutRoot[] {
+    return this.#roots
+  }
+}
 
 class ACmuxThatAnswers {
+  readonly directory: string
+  readonly path: string | undefined
+
   static SCRIPT = [
     '#!/bin/sh',
     'if [ "$1" = "list-windows" ]; then echo \'[{"id":"w1"}]\'; exit 0; fi',
@@ -29,13 +47,13 @@ class ACmuxThatAnswers {
     process.env.PATH = `${this.directory}:${this.path}`
   }
 
-  saying(workspaces) {
+  saying(workspaces: unknown[]): ACmuxThatAnswers {
     process.env.CMUX_FAKE_WORKSPACES = JSON.stringify({ workspaces })
 
     return this
   }
 
-  stop() {
+  stop(): void {
     process.env.PATH = this.path
     delete process.env.CMUX_FAKE_WORKSPACES
     rmSync(this.directory, { recursive: true, force: true })
@@ -53,13 +71,13 @@ class TheSameQuestion {
     issueNumber: 33,
   })
 
-  static askedOfThePlugin() {
+  static askedOfThePlugin(): { consultado: boolean, ref: string | null } {
     return findWorkspaceByCwd(TheSameQuestion.WORKTREE, { requireComplete: true })
   }
 
-  static askedOfTheBackend() {
+  static askedOfTheBackend(): Promise<PlansInFlight> {
     return new WorktreePlans({
-      checkouts: { known: () => [new CheckoutRoot(TheSameQuestion.ROOT)] },
+      checkouts: new KnownCheckouts([new CheckoutRoot(TheSameQuestion.ROOT)]),
       survey: () => new WorkspaceSurvey({
         repository: TheSameQuestion.REPOSITORY,
         prepared: [new PreparedWorkspace({
@@ -73,14 +91,14 @@ class TheSameQuestion {
       }),
       sessions: () => CmuxWorkspaceQuery.ask({ requireComplete: true }),
       story: () => null,
-      realpathOf: (path) => path,
+      realpathOf: (path: string) => path,
       stderr: vi.fn(),
     }).inFlight()
   }
 }
 
 describe('the backend and the plugin answer the same question about a directory the same way', () => {
-  let cmux
+  let cmux: ACmuxThatAnswers
 
   beforeEach(() => {
     cmux = new ACmuxThatAnswers()
@@ -97,7 +115,7 @@ describe('the backend and the plugin answer the same question about a directory 
       ref: 'workspace:97',
     }])
 
-    const [watch] = (await TheSameQuestion.askedOfTheBackend()).watches
+    const [watch] = (await TheSameQuestion.askedOfTheBackend()).watches ?? []
 
     expect(TheSameQuestion.askedOfThePlugin()).toEqual({ consultado: true, ref: 'workspace:97' })
     expect(watch.agent).toBe('workspace:97')
