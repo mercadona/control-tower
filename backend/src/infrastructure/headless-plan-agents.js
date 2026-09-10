@@ -28,7 +28,7 @@ export class HarnessCall {
     return {
       step: this.step,
       agent: this.agent,
-      issue: this.issue.number,
+      issue: this.issue,
       repository: this.repository.text,
       model: this.model,
       argv: this.argv,
@@ -85,7 +85,7 @@ export class HeadlessPlanAgents extends PlanAgents {
     await this.write(`${directory}/${HarnessCall.CALL_FILE}`, JSON.stringify(new HarnessCall({
       step: HarnessStep.WRITE_PLAN,
       agent,
-      issue: briefing.issue,
+      issue: briefing.issue.number,
       repository: briefing.repository,
       model: this.model,
       argv,

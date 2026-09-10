@@ -223,7 +223,7 @@ describe('HarnessCall', () => {
     const call = new HarnessCall({
       step: HarnessStep.WRITE_PLAN,
       agent: HeadlessAgent.AGENT,
-      issue: HeadlessAgent.ISSUE,
+      issue: HeadlessAgent.ISSUE.number,
       repository: HeadlessAgent.REPOSITORY,
       model: HeadlessAgent.MODEL,
       argv: [],
