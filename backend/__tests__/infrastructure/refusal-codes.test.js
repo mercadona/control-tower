@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { PlanRequestOutcome, PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
-import { ImplementRequestOutcome, ImplementCollapse } from '../../src/infrastructure/implement-plan-route.js'
+import { ImplementRequestOutcome, ImplementCollapse } from '../../src/infrastructure/implement-plan-route.ts'
 import { EventsRequestOutcome, PlanEvents } from '../../src/infrastructure/plan-events-route.js'
 import { ActivePlansOutcome } from '../../src/infrastructure/active-plans-route.js'
-import { ProgressRequestOutcome, ProgressCollapse } from '../../src/infrastructure/implement-progress-route.js'
+import { ProgressRequestOutcome, ProgressCollapse } from '../../src/infrastructure/implement-progress-route.ts'
 import { ReviewRequestOutcome, ReviewCollapse } from '../../src/infrastructure/review-plan-route.ts'
 
 class RequestVocabularies {
