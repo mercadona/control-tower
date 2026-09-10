@@ -1,5 +1,5 @@
 import { PlanAgents } from '../domain/ports/plan-agents.js'
-import { PlanAgentNotLaunched } from '../domain/exceptions.js'
+import { PlanAgentNotLaunched, PlanAgentNotResumed } from '../domain/exceptions.js'
 
 export const HarnessStep = Object.freeze({
   WRITE_PLAN: 'write-plan',
@@ -66,6 +66,7 @@ export class HeadlessPlanAgents extends PlanAgents {
   static PRINT = '-p'
   static FORMAT = ['--output-format', 'stream-json', '--verbose']
   static PERMISSION = ['--permission-mode', 'bypassPermissions']
+  static CONVERSATION_FILE = 'conversation.json'
 
   static argvFor({ errand, model, pluginRoot, agent, resuming }) {
     return [
@@ -78,11 +79,12 @@ export class HeadlessPlanAgents extends PlanAgents {
     ]
   }
 
-  constructor({ start, makeDirectory, write, mint, clock, brief, runsIn, model, pluginRoot }) {
+  constructor({ start, makeDirectory, write, read, mint, clock, brief, runsIn, model, pluginRoot }) {
     super()
     this.start = start
     this.makeDirectory = makeDirectory
     this.write = write
+    this.read = read
     this.mint = mint
     this.clock = clock
     this.brief = brief
@@ -116,8 +118,28 @@ export class HeadlessPlanAgents extends PlanAgents {
       pid: started.pid,
       startedAt,
     }).json))
+    await this.#writeRecord(
+      this.#conversationPathFor(agent),
+      JSON.stringify({ worktree: briefing.located.path })
+    )
 
     return agent
+  }
+
+  async worktreeOf(agent) {
+    const path = this.#conversationPathFor(agent)
+    const text = await this.#readRecord(path)
+    if (text === null) {
+      throw new PlanAgentNotResumed(
+        `${agent} never recorded a worktree at ${path}: launch was never called for it`
+      )
+    }
+
+    return JSON.parse(text).worktree
+  }
+
+  #conversationPathFor(agent) {
+    return `${this.runsIn}/${agent}/${HeadlessPlanAgents.CONVERSATION_FILE}`
   }
 
   async #ensureDirectory(directory) {
@@ -133,6 +155,14 @@ export class HeadlessPlanAgents extends PlanAgents {
       await this.write(path, text)
     } catch (failure) {
       throw new PlanAgentNotLaunched(`${path} could not be written: ${failure.message}`)
+    }
+  }
+
+  async #readRecord(path) {
+    try {
+      return await this.read(path)
+    } catch (failure) {
+      throw new PlanAgentNotResumed(`${path} could not be read: ${failure.message}`)
     }
   }
 }

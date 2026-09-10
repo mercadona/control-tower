@@ -7,7 +7,7 @@ import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.js'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
-import { PlanAgentNotLaunched } from '../../src/domain/exceptions.js'
+import { PlanAgentNotLaunched, PlanAgentNotResumed } from '../../src/domain/exceptions.js'
 
 class BriefDouble {
   static ERRAND = 'escribe el plan de #42 en josemerca/ct-loop-sandbox'
@@ -31,6 +31,9 @@ class HeadlessAgent {
   static MODEL = 'opus'
   static PLUGIN_ROOT = '/plugin'
   static AGENT = '11111111-2222-3333-4444-555555555555'
+  static OTHER_AGENT = '66666666-7777-8888-9999-000000000000'
+  static NEVER_LAUNCHED = 'ffffffff-1111-2222-3333-444444444444'
+  static OTHER_WORKTREE = '/repo/.worktrees/99'
   static STARTED_AT = 1_700_000_000_000
   static PID = 4321
   static DIRECTORY =
@@ -39,24 +42,35 @@ class HeadlessAgent {
   static STREAM_PATH = `${HeadlessAgent.DIRECTORY}/${HarnessCall.STREAM_FILE}`
   static ERROR_PATH = `${HeadlessAgent.DIRECTORY}/${HarnessCall.ERROR_FILE}`
   static CALL_PATH = `${HeadlessAgent.DIRECTORY}/${HarnessCall.CALL_FILE}`
+  static CONVERSATION_PATH = `${HeadlessAgent.RUNS_IN}/${HeadlessAgent.AGENT}/conversation.json`
+  static OTHER_CONVERSATION_PATH = `${HeadlessAgent.RUNS_IN}/${HeadlessAgent.OTHER_AGENT}/conversation.json`
 
   constructor({
     startAnswer = new StartedRun({ pid: HeadlessAgent.PID }),
     makeDirectoryAnswer = null,
     writeAnswer = null,
+    readAnswer = null,
+    mintAnswers = [HeadlessAgent.AGENT],
   } = {}) {
     this.brief = new BriefDouble()
     this.startCalls = []
     this.startAnswer = startAnswer
     this.makeDirectoryAnswer = makeDirectoryAnswer
     this.writeAnswer = writeAnswer
+    this.readAnswer = readAnswer
+    this.mintAnswers = [...mintAnswers]
     this.writeCalls = []
     this.makeDirectoryCalls = []
+    this.readCalls = []
     this.trace = []
   }
 
   static launching() {
     return new HeadlessAgent()
+  }
+
+  static launchingTwoConversations() {
+    return new HeadlessAgent({ mintAnswers: [HeadlessAgent.AGENT, HeadlessAgent.OTHER_AGENT] })
   }
 
   static refusing(failure) {
@@ -69,6 +83,10 @@ class HeadlessAgent {
 
   static callUnwritable(failure) {
     return new HeadlessAgent({ writeAnswer: failure })
+  }
+
+  static conversationUnreadable(failure) {
+    return new HeadlessAgent({ readAnswer: failure })
   }
 
   agents() {
@@ -96,7 +114,16 @@ class HeadlessAgent {
 
         return Promise.resolve()
       },
-      mint: () => HeadlessAgent.AGENT,
+      read: (path) => {
+        this.trace.push('read')
+        this.readCalls.push(path)
+        if (this.readAnswer instanceof Error) throw this.readAnswer
+
+        const found = this.writeCalls.find(([written]) => written === path)
+
+        return Promise.resolve(found === undefined ? null : found[1])
+      },
+      mint: () => (this.mintAnswers.length > 1 ? this.mintAnswers.shift() : this.mintAnswers[0]),
       clock: () => HeadlessAgent.STARTED_AT,
       brief: this.brief,
       runsIn: HeadlessAgent.RUNS_IN,
@@ -114,12 +141,29 @@ class HeadlessAgent {
     })
   }
 
+  static otherBriefing() {
+    return new PlanBriefing({
+      story: null,
+      issue: HeadlessAgent.ISSUE,
+      located: new WorkspaceLocation({ path: HeadlessAgent.OTHER_WORKTREE, branch: 'feat/99' }),
+      repository: HeadlessAgent.REPOSITORY,
+    })
+  }
+
   launch(briefing = HeadlessAgent.briefing()) {
     return this.agents().launch(briefing)
   }
 
+  worktreeOf(agent) {
+    return this.agents().worktreeOf(agent)
+  }
+
   refusal() {
     return this.launch().catch((cause) => cause)
+  }
+
+  worktreeRefusal(agent) {
+    return this.worktreeOf(agent).catch((cause) => cause)
   }
 
   captured() {
@@ -218,7 +262,7 @@ describe('HeadlessPlanAgents', () => {
 
     await headless.launch()
 
-    expect(headless.trace).toEqual(['makeDirectory', 'start', 'write'])
+    expect(headless.trace).toEqual(['makeDirectory', 'start', 'write', 'write'])
   })
 
   it('a_directory_that_cannot_be_made_raises_the_same_family_as_a_refused_launch_so_start_plan_never_sees_a_raw_node_error', async () => {
@@ -241,6 +285,46 @@ describe('HeadlessPlanAgents', () => {
 
   it('bin_names_the_binary_that_gets_spawned_as_claude_p_and_is_pinned_because_it_crosses_the_edge_into_a_real_process', () => {
     expect(HeadlessPlanAgents.BIN).toBe('claude')
+  })
+})
+
+describe('HeadlessPlanAgents recording the worktree of a conversation', () => {
+  it('a_conversation_records_the_worktree_its_calls_have_to_run_in', async () => {
+    const headless = HeadlessAgent.launching()
+
+    const agent = await headless.launch()
+
+    await expect(headless.worktreeOf(agent)).resolves.toBe(HeadlessAgent.WORKTREE)
+    expect(headless.writeCalls.some(([path]) => path === HeadlessAgent.CONVERSATION_PATH)).toBe(true)
+  })
+
+  it('two_conversations_do_not_share_the_worktree_they_recorded', async () => {
+    const headless = HeadlessAgent.launchingTwoConversations()
+
+    const first = await headless.launch(HeadlessAgent.briefing())
+    const second = await headless.launch(HeadlessAgent.otherBriefing())
+
+    expect(first).not.toBe(second)
+    await expect(headless.worktreeOf(first)).resolves.toBe(HeadlessAgent.WORKTREE)
+    await expect(headless.worktreeOf(second)).resolves.toBe(HeadlessAgent.OTHER_WORKTREE)
+  })
+
+  it('a_conversation_whose_worktree_was_never_recorded_refuses_instead_of_guessing_one', async () => {
+    const headless = HeadlessAgent.launching()
+
+    const refusal = await headless.worktreeRefusal(HeadlessAgent.NEVER_LAUNCHED)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotResumed)
+    expect(refusal.message).toContain(HeadlessAgent.NEVER_LAUNCHED)
+  })
+
+  it('a_conversation_file_that_cannot_be_read_raises_the_same_family_as_a_refused_resume_so_nothing_sees_a_raw_node_error', async () => {
+    const headless = HeadlessAgent.conversationUnreadable(new Error('EACCES: permission denied'))
+
+    const refusal = await headless.worktreeRefusal(HeadlessAgent.AGENT)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotResumed)
+    expect(refusal.message).toContain(HeadlessAgent.CONVERSATION_PATH)
   })
 })
 
