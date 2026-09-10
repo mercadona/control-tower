@@ -1,8 +1,9 @@
 import { PlanFailure } from '../domain/exceptions.ts'
 
 export class ReviewWatch {
-  constructor({ asked, review, sleep, stderr, label }) {
+  constructor({ asked, baseline = asked, review, sleep, stderr, label }) {
     this.asked = asked
+    this.readBaseline = baseline
     this.review = review
     this.sleep = sleep
     this.stderr = stderr
@@ -28,6 +29,7 @@ export class ReviewWatch {
     this.live.set(key, attended)
 
     return this.#follow(watch, key, attended, recovered).catch((cause) => {
+      if (!this.#isCurrent(key, attended)) return
       this.stop({ issue: watch.issue.number, repository: watch.repository })
       this.#warn(watch, `is no longer watched: ${cause.message}`)
     })
@@ -37,25 +39,30 @@ export class ReviewWatch {
     this.live.delete(ReviewWatch.#keyFor(repository, issue))
   }
 
+  #isCurrent(key, attended) {
+    return this.live.get(key) === attended
+  }
+
   async #follow(watch, key, attended, recovering) {
     if (recovering) {
       recovering = !(await this.#baseline(watch, attended))
-      if (!this.live.has(key)) return
+      if (!this.#isCurrent(key, attended)) return
     }
     for (;;) {
       await this.sleep()
-      if (!this.live.has(key)) return
+      if (!this.#isCurrent(key, attended)) return
       if (recovering) {
         recovering = !(await this.#baseline(watch, attended))
-        if (!this.live.has(key)) return
+        if (!this.#isCurrent(key, attended)) return
         continue
       }
       await this.#attend(watch, key, attended)
+      if (!this.#isCurrent(key, attended)) return
     }
   }
 
   async #baseline(watch, attended) {
-    const read = await this.#sound(watch)
+    const read = await this.#sound(watch, this.readBaseline)
     if (read === null) return false
     for (const change of read.changes) attended.add(change.id)
 
@@ -67,13 +74,13 @@ export class ReviewWatch {
     if (read === null) return
     const change = read.changes.find((candidate) => !attended.has(candidate.id))
     if (change === undefined) return
-    if (!this.live.has(key)) return
+    if (!this.#isCurrent(key, attended)) return
     if (await this.#deliver(watch, change)) attended.add(change.id)
   }
 
-  async #sound(watch) {
+  async #sound(watch, read = this.asked) {
     try {
-      return await this.asked(watch)
+      return await read(watch)
     } catch (cause) {
       if (!(cause instanceof PlanFailure)) throw cause
       this.#warn(watch, `could not be asked what changes were asked for: ${cause.message}`)

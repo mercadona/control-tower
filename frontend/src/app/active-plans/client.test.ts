@@ -56,6 +56,22 @@ describe('ActivePlansClient', () => {
     expect(await ActivePlansClient.get()).toEqual({ kind: 'loaded', plans: [plan] })
   })
 
+  it('loads multiple phases without requiring new fields from the backend', async () => {
+    const plans = ['planning', 'implementing', 'uncertain'].map((phase, index) => ({
+      ...activePlanWithoutStory(),
+      phase,
+      plan: {
+        ...activePlanWithoutStory().plan,
+        issue: { number: index + 7, url: `https://github.com/owner/name/issues/${index + 7}` },
+        branch: `feat/${index + 7}`,
+        worktree: `${StartPlanMother.PATH}/.worktrees/${index + 7}`,
+      },
+    }))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ plans, observed_at: 123 }))))
+
+    expect(await ActivePlansClient.get()).toEqual({ kind: 'loaded', plans })
+  })
+
   it.each([
     ['invalid request ticket', (value: ActivePlan) => { value.request.id = 'abc-123' }],
     ['invalid request repository', (value: ActivePlan) => { value.request.repo = 'name' }],

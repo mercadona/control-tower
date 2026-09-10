@@ -217,25 +217,30 @@ export class ImplementPlanRoute {
       ImplementPlanRoute.#answerAccepted(response, asked)
       return
     }
-    try {
-      await implementPlan.execute(new ImplementPlanParams({
-        agent: asked.agent, issue: asked.issue, repository: asked.repository,
-      }))
-    } catch (cause) {
-      if (!(cause instanceof PlanFailure)) throw cause
-      Answer.refuseAs(response, ImplementCollapse.of(cause))
-      return
-    }
     const watch = active.watch
-    activePlans.rememberImplementing(watch)
+    activePlans.beginImplementation(watch)
     try {
-      await implementationStarts.remember(watch)
-    } catch (failure) {
-      stderr(`could not persist implementation start for ${asked.repository.text}#${asked.issue}: ${failure.message}\n`)
+      try {
+        await implementPlan.execute(new ImplementPlanParams({
+          agent: asked.agent, issue: asked.issue, repository: asked.repository,
+        }))
+      } catch (cause) {
+        if (!(cause instanceof PlanFailure)) throw cause
+        Answer.refuseAs(response, ImplementCollapse.of(cause))
+        return
+      }
+      activePlans.rememberImplementing(watch)
+      try {
+        await implementationStarts.remember(watch)
+      } catch (failure) {
+        stderr(`could not persist implementation start for ${asked.repository.text}#${asked.issue}: ${failure.message}\n`)
+      }
+      reviews.stop({ issue: asked.issue, repository: asked.repository })
+      pullRequestReviews.start(watch)
+      ImplementPlanRoute.#answerAccepted(response, asked)
+    } finally {
+      activePlans.endImplementation(watch)
     }
-    reviews.stop({ issue: asked.issue, repository: asked.repository })
-    pullRequestReviews.start(watch)
-    ImplementPlanRoute.#answerAccepted(response, asked)
   }
 
   static #answerAccepted(response, asked) {

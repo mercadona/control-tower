@@ -112,9 +112,9 @@ class Flow {
     })
   }
 
-  async run() {
+  async run(includeHistory = false) {
     return new ReadFixesAsked(this).execute(new ReadFixesAskedParams({
-      issue: Flow.ISSUE, repository: Flow.REPOSITORY,
+      issue: Flow.ISSUE, repository: Flow.REPOSITORY, includeHistory,
     }))
   }
 }
@@ -145,6 +145,15 @@ describe('ReadFixesAsked', () => {
 
     expect(read.changes).toEqual([])
     expect(flow.pullRequests.read).toEqual([])
+  })
+
+  it('recovery_reads_historical_reviews_even_while_the_issue_is_being_fixed', async () => {
+    const flow = Flow.fixing()
+
+    const read = await flow.run(true)
+
+    expect(read.changes).toEqual([Flow.A_CHANGE])
+    expect(flow.planIssues.asked).toEqual([])
   })
 
   it('an_issue_requeued_with_its_pull_request_still_open_hands_nothing_over_because_nobody_is_on_it', async () => {

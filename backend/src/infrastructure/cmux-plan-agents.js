@@ -97,19 +97,22 @@ export class CmuxPlanAgents extends PlanAgents {
 
   async resume({ agent, issue, repository }) {
     const errand = this.brief.implementationErrandFor({ issueNumber: issue, repository })
-    await this.#type(CmuxPlanAgents.sendArgvFor(agent, errand))
-    await this.#type(CmuxPlanAgents.enterArgvFor(agent))
+    await this.#submit(agent, errand)
   }
 
   async review({ agent, issue, repository, changes }) {
     const errand = this.brief.reviewErrandFor({ issueNumber: issue, repository, changes })
-    await this.#type(CmuxPlanAgents.sendArgvFor(agent, errand))
-    await this.#type(CmuxPlanAgents.enterArgvFor(agent))
+    await this.#submit(agent, errand)
   }
 
   async fix({ agent, issue, repository, changes }) {
     const errand = this.brief.fixErrandFor({ issueNumber: issue, repository, changes })
+    await this.#submit(agent, errand)
+  }
+
+  async #submit(agent, errand) {
     await this.#type(CmuxPlanAgents.sendArgvFor(agent, errand))
+    await this.sleep()
     await this.#type(CmuxPlanAgents.enterArgvFor(agent))
   }
 

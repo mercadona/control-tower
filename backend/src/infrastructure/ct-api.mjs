@@ -156,6 +156,7 @@ class CtApi {
   static #SECONDS_BETWEEN_PROBES = 1
   static #SECONDS_BETWEEN_READS = 2
   static #SECONDS_BETWEEN_ASKS = 30
+  static #PLAN_LIST_FRESHNESS_MS = 15_000
   static #LAUNCH_DIRECTORY = 'ct-plan'
 
   static #refuseUsage(reason) {
@@ -290,6 +291,7 @@ class CtApi {
 
     return new ReviewWatch({
       asked: (watch) => readFixesAsked.execute(new ReadFixesAskedParams(watch)),
+      baseline: (watch) => readFixesAsked.execute(new ReadFixesAskedParams({ ...watch, includeHistory: true })),
       review: (params) => requestFixes.execute(new RequestFixesParams(params)),
       sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_ASKS),
       stderr: (line) => process.stderr.write(line),
@@ -365,6 +367,8 @@ class CtApi {
     const surveyWorkspaces = new SurveyWorkspaces({ workspace })
     const readPlanStory = new ReadPlanStory({ planIssues })
     const recovery = new ActivePlanRecovery({
+      now: Date.now,
+      freshnessMs: CtApi.#PLAN_LIST_FRESHNESS_MS,
       plans: new WorktreePlans({
         checkouts,
         survey: async (root) => (await surveyWorkspaces.execute(new SurveyWorkspacesParams({ root }))).survey,

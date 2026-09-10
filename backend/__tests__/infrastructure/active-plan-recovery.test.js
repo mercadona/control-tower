@@ -51,6 +51,8 @@ describe('ActivePlanRecovery', () => {
     const checkouts = { remembered: [], remember(root) { this.remembered.push(root.text) } }
     const plans = { inFlight: vi.fn(async () => (watches === null ? PlansInFlight.refused('cmux said no') : PlansInFlight.listed(watches))) }
     const recovery = new ActivePlanRecovery({
+      now: () => 0,
+      freshnessMs: 15_000,
       plans,
       checkouts,
       implementationStarts,

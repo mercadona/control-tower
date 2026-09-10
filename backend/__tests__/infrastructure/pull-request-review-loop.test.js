@@ -123,7 +123,9 @@ class PullRequestReviewLoop {
       node: (argv) => this.node.run(argv),
       dispatchCheck: PullRequestReviewLoop.DISPATCH_CHECK,
     })
-    const planAgents = new CmuxPlanAgents({ brief: this.brief, run: (argv) => this.cmux.run(argv) })
+    const planAgents = new CmuxPlanAgents({
+      brief: this.brief, run: (argv) => this.cmux.run(argv), sleep: () => Promise.resolve(),
+    })
     const requestFixes = new RequestFixes({ workbench, planAgents })
     const sweep = new Sweep(null)
     const reviews = new ReviewWatch({

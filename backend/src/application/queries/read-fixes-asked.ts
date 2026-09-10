@@ -8,10 +8,14 @@ import type { RepositoryName } from '../../domain/value-objects/repository-name.
 export class ReadFixesAskedParams {
   readonly issue: PlanIssue
   readonly repository: RepositoryName
+  readonly includeHistory: boolean
 
-  constructor({ issue, repository }: { issue: PlanIssue, repository: RepositoryName }) {
+  constructor({ issue, repository, includeHistory = false }: {
+    issue: PlanIssue, repository: RepositoryName, includeHistory?: boolean,
+  }) {
     this.issue = issue
     this.repository = repository
+    this.includeHistory = includeHistory
     Object.freeze(this)
   }
 }
@@ -40,11 +44,13 @@ export class ReadFixesAsked {
     })
     if (pullRequest === null) return new ReadFixesAskedResult({ changes: [] })
 
-    const status = await this.planIssues.statusOf({
-      issueNumber: params.issue.number, repository: params.repository,
-    })
-    if (DeliveryPolicy.of({ status }) !== DeliveryState.IN_REVIEW) {
-      return new ReadFixesAskedResult({ changes: [] })
+    if (!params.includeHistory) {
+      const status = await this.planIssues.statusOf({
+        issueNumber: params.issue.number, repository: params.repository,
+      })
+      if (DeliveryPolicy.of({ status }) !== DeliveryState.IN_REVIEW) {
+        return new ReadFixesAskedResult({ changes: [] })
+      }
     }
 
     return new ReadFixesAskedResult({

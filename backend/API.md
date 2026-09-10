@@ -292,6 +292,11 @@ serialised.
 `no-live-planning-session` is the one to expect after a backend restart: send the
 `agent` from `/active-plans`, not one the page remembered from an older run.
 
+Agent instructions are pasted, followed by a one-second settling interval before
+Enter is sent. The interval is supplied by the backend composition and is shared
+by implementation, plan-review and pull-request-correction instructions. Successful
+cmux commands are not a positive acknowledgement that Claude processed the request.
+
 ```
 curl -s -X POST -H 'Content-Type: application/json' \
   http://127.0.0.1:8787/implement-plan \
@@ -434,8 +439,38 @@ curl -s 'http://127.0.0.1:8787/implement-progress/7?root=/repo/checkout&repo=own
 
 ## `GET /active-plans`
 
-Every plan this backend knows about. No parameters. The page calls it on load to
-recover a session it lost — a reload, or a backend restart.
+The live plans this backend knows about. No parameters. The page calls it on load
+to recover a session it lost — a reload, or a backend restart.
+
+Discovery is refreshed on demand after a successful inventory is 15 seconds old.
+Concurrent callers share one discovery; requests inside the freshness interval
+still return the current registry, including plans started or authorized since
+that inventory. A failed refresh is not cached and the next call can retry.
+
+A conclusive refresh discovers new sessions, resolves uncertain phases when new
+evidence permits it, replaces changed sessions and removes confirmed absent ones.
+Unchanged sessions keep their review watchers and the comments already attended.
+A start or phase transition that happens while discovery is waiting is not
+overwritten by the older inventory.
+
+Recovered pull-request watchers read historical review identifiers independently
+of the issue's current status. This prevents a restart during corrections from
+replaying those old reviews when the issue returns to review. Normal polling still
+offers new corrections only while the issue is in review; loading the history does
+not send instructions to an agent.
+
+A pending implementation authorization protects that session from replacement or
+removal until its agent command, marker persistence and watcher transition settle.
+Other plans can still be refreshed during that interval. A listed agent whose
+current directory or title no longer identifies its known worktree is unresolved,
+not confirmed absent.
+
+An incomplete session listing, a failed checkout survey or an unreadable checkout
+registry cannot establish absence. The route then returns
+`active-plans-recovery-inconclusive`, preserving the previous registry internally.
+Story metadata can still degrade to a null `id` without losing a discovered plan.
+Removing an absent session from this list does **not** mean its work succeeded
+or its pull request merged.
 
 **200 OK**
 

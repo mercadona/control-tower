@@ -12,6 +12,10 @@ export class PlansInFlight {
     return new PlansInFlight(null, reason)
   }
 
+  static incomplete(watches: readonly PlanWatch[], reason: string): PlansInFlight {
+    return new PlansInFlight(watches, reason)
+  }
+
   constructor(watches: readonly PlanWatch[] | null, reason: string | null) {
     this.watches = watches
     this.reason = reason

@@ -62,7 +62,7 @@ export class WorktreePlans {
     return knowable
   }
 
-  async inFlight() {
+  async inFlight(known = []) {
     const listed = this.sessions()
     if (!listed.wasAnswered) return this.#refuse(listed.reason)
     const knowable = WorktreePlans.#knowableIn(listed.entries)
@@ -70,28 +70,45 @@ export class WorktreePlans {
     const roots = this.#toSurvey(knowable)
     if (roots === null) return this.#refuse('the checkouts it serves could not be read')
     const watches = []
-    for (const root of roots) {
-      for (const watch of await this.#of(root, knowable)) watches.push(watch)
+    const failures = []
+    if (listed.entries.some((entry) => WorktreePlans.#opensAPlan(entry) && entry.cwdKnown !== true)) {
+      failures.push('a plan session does not expose its directory')
     }
+    for (const root of roots) {
+      try {
+        for (const watch of await this.#of(root, knowable, known)) watches.push(watch)
+      } catch (failure) {
+        if (!(failure instanceof WorkspaceFailure)) throw failure
+        failures.push(`${root.text} could not be surveyed: ${failure.message}`)
+      }
+    }
+    for (const watch of known) {
+      const stillListed = listed.entries.some((entry) => entry !== null && typeof entry === 'object' && entry.ref === watch.agent)
+      const matched = watches.some((found) => found.agent === watch.agent &&
+        found.repository.text === watch.repository.text && found.issue.number === watch.issue.number)
+      if (stillListed && !matched) failures.push(`${watch.agent} is still listed but cannot be matched to its plan worktree`)
+    }
+    if (failures.length > 0) return this.#refuse(failures.join('; '), watches)
 
     return PlansInFlight.listed(watches)
   }
 
-  #refuse(reason) {
+  #refuse(reason, watches = null) {
     this.stderr(`plans in flight: ${reason}, so no plan in flight can be recovered\n`)
 
-    return PlansInFlight.refused(reason)
+    return watches === null ? PlansInFlight.refused(reason) : PlansInFlight.incomplete(watches, reason)
   }
 
-  async #of(root, knowable) {
-    const surveyed = await this.#surveyed(root)
-    if (surveyed === null) return []
+  async #of(root, knowable, known) {
+    const surveyed = await this.survey(root)
     const watches = []
     for (const prepared of surveyed.prepared) {
       const agent = this.#agentOf(knowable, prepared.located.path)
       if (agent === null) continue
+      const remembered = known.find((watch) => watch.repository.text === surveyed.repository.text &&
+        watch.issue.number === prepared.issueNumber)
       watches.push(new PlanWatch({
-        story: await this.#storyOf(prepared.issueNumber, surveyed.repository),
+        story: remembered?.story ?? await this.#storyOf(prepared.issueNumber, surveyed.repository),
         issue: new PlanIssue({
           number: prepared.issueNumber,
           url: WorktreePlans.#urlOf({ repository: surveyed.repository, issueNumber: prepared.issueNumber }),
@@ -103,19 +120,6 @@ export class WorktreePlans {
     }
 
     return watches
-  }
-
-  async #surveyed(root) {
-    try {
-      return await this.survey(root)
-    } catch (failure) {
-      if (!(failure instanceof WorkspaceFailure)) throw failure
-      this.stderr(
-        `plans in flight: ${root.text} could not be surveyed, so its plans are not recovered: ${failure.message}\n`
-      )
-
-      return null
-    }
   }
 
   async #storyOf(issueNumber, repository) {

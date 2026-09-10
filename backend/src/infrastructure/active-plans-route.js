@@ -15,6 +15,7 @@ export class ActivePlans {
     this.sessions = sessions
     this.implementing = new Map()
     this.uncertain = new Map()
+    this.pendingImplementations = new Set()
   }
 
   static #keyFor(watch) {
@@ -46,6 +47,35 @@ export class ActivePlans {
     const watch = this.sessions.find({ issue, repository })
 
     return watch === null ? null : { phase: ActivePlanPhase.PLANNING, watch }
+  }
+
+  snapshot() {
+    const watches = [...this.sessions.known(), ...this.implementing.values(), ...this.uncertain.values()]
+    return new Map(watches.map((watch) => [ActivePlans.#keyFor(watch),
+      this.find({ issue: watch.issue.number, repository: watch.repository })]))
+  }
+
+  isUnchanged(captured) {
+    const current = this.find({ issue: captured.watch.issue.number, repository: captured.watch.repository })
+    return current !== null && current.watch === captured.watch && current.phase === captured.phase &&
+      !this.pendingImplementations.has(captured.watch)
+  }
+
+  beginImplementation(watch) {
+    this.pendingImplementations.add(watch)
+  }
+
+  endImplementation(watch) {
+    this.pendingImplementations.delete(watch)
+  }
+
+  forgetIfUnchanged(captured) {
+    if (!this.isUnchanged(captured)) return false
+    const key = ActivePlans.#keyFor(captured.watch)
+    this.sessions.forget({ issue: captured.watch.issue.number, repository: captured.watch.repository })
+    this.implementing.delete(key)
+    this.uncertain.delete(key)
+    return true
   }
 
   known() {

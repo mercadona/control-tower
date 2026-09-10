@@ -519,6 +519,7 @@ class ResumeDouble {
   agents() {
     return new CmuxPlanAgents({
       brief: this.brief,
+      sleep: async () => {},
       run: (argv) => {
         this.calls.push(argv)
         const answer = this.answers[this.calls.length - 1]

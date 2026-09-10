@@ -1263,7 +1263,12 @@ describe('ApiServer', () => {
 
   it('the_detail_of_an_inconclusive_recovery_carries_what_cmux_answered_and_not_a_fixed_sentence', async () => {
     const answered = 'cmux listed workspaces and none of them exposes custom_title: it answered with title'
-    const recovery = new ActivePlanRecovery({ plans: { inFlight: async () => PlansInFlight.refused(answered) } })
+    const recovery = new ActivePlanRecovery({
+      plans: { inFlight: async () => PlansInFlight.refused(answered) },
+      activePlans: new ActivePlans({ sessions: new PlanSessions() }),
+      now: () => 0,
+      freshnessMs: 15_000,
+    })
     const port = await RunningApi.listening({ recovery })
 
     const response = await fetch(`http://127.0.0.1:${port}/active-plans`)
