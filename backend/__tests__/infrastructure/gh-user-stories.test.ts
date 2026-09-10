@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { GhUserStories } from '../../src/infrastructure/gh-user-stories.js'
+import { GhUserStories } from '../../src/infrastructure/gh-user-stories.ts'
 import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
 import { UserStoryNotRead, UserStoryNotUnderstood, UserStoryFailure } from '../../src/domain/exceptions.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
@@ -10,17 +10,21 @@ import { SleepDouble } from '../sleep-double.ts'
 const URL = 'https://github.com/mercadona/control-tower/issues/141'
 
 class GhDouble {
-  constructor(printed) {
+  readonly printed: string | ProcessOutput
+  readonly calls: string[][]
+  readonly sleeping: SleepDouble
+
+  constructor(printed: string | ProcessOutput) {
     this.printed = printed
     this.calls = []
     this.sleeping = new SleepDouble()
   }
 
-  static answering(fields) {
+  static answering(fields: Record<string, unknown>) {
     return new GhDouble(JSON.stringify(fields))
   }
 
-  static refusing(said) {
+  static refusing(said: string) {
     return new GhDouble(new ProcessOutput({ code: 1, stdout: '', stderr: said }))
   }
 
@@ -38,11 +42,11 @@ class GhDouble {
     })
   }
 
-  async detailFor(url = URL) {
+  async detailFor(url: string = URL) {
     return this.userStories().detail(new UserStoryUrl(url))
   }
 
-  async refusalFor(url = URL) {
+  async refusalFor(url: string = URL) {
     return this.detailFor(url).catch((cause) => cause)
   }
 }
