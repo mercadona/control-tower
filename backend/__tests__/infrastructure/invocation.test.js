@@ -338,6 +338,10 @@ describe('Invocation resolving the plan transport and model', () => {
     expect(Invoked.bare().transport).toBe('cmux')
   })
 
+  it('a_transport_asked_for_as_empty_falls_back_to_the_one_that_types_into_a_window_too', () => {
+    expect(Invoked.withTransport('').transport).toBe('cmux')
+  })
+
   it('the_headless_transport_is_asked_for_by_its_name', () => {
     expect(Invoked.withTransport(HeadlessPlanAgents.TRANSPORT).transport).toBe(HeadlessPlanAgents.TRANSPORT)
   })
@@ -353,6 +357,10 @@ describe('Invocation resolving the plan transport and model', () => {
     expect(Invoked.bare().model).toBe('opus')
   })
 
+  it('a_model_asked_for_as_empty_falls_back_to_the_one_the_window_used_to_type_too', () => {
+    expect(Invoked.withModel('').model).toBe('opus')
+  })
+
   it('the_model_of_every_headless_call_comes_from_the_environment', () => {
     expect(Invoked.withModel('sonnet').model).toBe('sonnet')
   })
@@ -362,6 +370,15 @@ describe('Invocation resolving the plan transport and model', () => {
     const startingWithADash = Invoked.withModel('-dangerous-flag')
 
     expect(withASpace.outcome).toBe(InvocationOutcome.MALFORMED_MODEL)
+    expect(withASpace.reason).toContain('claude opus')
     expect(startingWithADash.outcome).toBe(InvocationOutcome.MALFORMED_MODEL)
+    expect(startingWithADash.reason).toContain('-dangerous-flag')
+  })
+
+  it('a_refused_invocation_carries_no_transport_or_model_a_consumer_could_launch_by_mistake', () => {
+    const refused = Invoked.withPort('abc')
+
+    expect(refused.transport).toBe(null)
+    expect(refused.model).toBe(null)
   })
 })
