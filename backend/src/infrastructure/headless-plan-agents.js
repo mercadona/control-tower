@@ -12,6 +12,17 @@ export class HarnessCall {
   static STREAM_FILE = 'stream.ndjson'
   static ERROR_FILE = 'stderr.log'
 
+  static pathsFor({ runsIn, agent, step, startedAt }) {
+    const directory = `${runsIn}/${agent}/${step}-${startedAt}`
+
+    return {
+      directory,
+      out: `${directory}/${HarnessCall.STREAM_FILE}`,
+      err: `${directory}/${HarnessCall.ERROR_FILE}`,
+      call: `${directory}/${HarnessCall.CALL_FILE}`,
+    }
+  }
+
   constructor({ step, agent, issue, repository, model, argv, pid, startedAt }) {
     this.step = step
     this.agent = agent
@@ -29,7 +40,7 @@ export class HarnessCall {
       step: this.step,
       agent: this.agent,
       issue: this.issue,
-      repository: this.repository.text,
+      repository: this.repository,
       model: this.model,
       argv: this.argv,
       pid: this.pid,
@@ -56,9 +67,10 @@ export class HeadlessPlanAgents extends PlanAgents {
     ]
   }
 
-  constructor({ start, write, mint, clock, brief, runsIn, model, pluginRoot }) {
+  constructor({ start, makeDirectory, write, mint, clock, brief, runsIn, model, pluginRoot }) {
     super()
     this.start = start
+    this.makeDirectory = makeDirectory
     this.write = write
     this.mint = mint
     this.clock = clock
@@ -75,18 +87,18 @@ export class HeadlessPlanAgents extends PlanAgents {
       errand, model: this.model, pluginRoot: this.pluginRoot, agent, resuming: false,
     })
     const startedAt = this.clock()
-    const directory = `${this.runsIn}/${agent}/${HarnessStep.WRITE_PLAN}-${startedAt}`
-    const out = `${directory}/${HarnessCall.STREAM_FILE}`
-    const err = `${directory}/${HarnessCall.ERROR_FILE}`
+    const { directory, out, err, call } = HarnessCall.pathsFor({
+      runsIn: this.runsIn, agent, step: HarnessStep.WRITE_PLAN, startedAt,
+    })
 
-    await this.write(out, '')
+    await this.makeDirectory(directory)
     const started = this.start.start({ argv, cwd: briefing.located.path, out, err })
 
-    await this.write(`${directory}/${HarnessCall.CALL_FILE}`, JSON.stringify(new HarnessCall({
+    await this.write(call, JSON.stringify(new HarnessCall({
       step: HarnessStep.WRITE_PLAN,
       agent,
       issue: briefing.issue.number,
-      repository: briefing.repository,
+      repository: briefing.repository.text,
       model: this.model,
       argv,
       pid: started.pid,

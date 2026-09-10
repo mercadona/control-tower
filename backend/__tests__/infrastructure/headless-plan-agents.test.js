@@ -43,6 +43,7 @@ class HeadlessAgent {
     this.startCalls = []
     this.startAnswer = startAnswer
     this.writeCalls = []
+    this.makeDirectoryCalls = []
     this.trace = []
   }
 
@@ -64,6 +65,12 @@ class HeadlessAgent {
 
           return this.startAnswer
         },
+      },
+      makeDirectory: (path) => {
+        this.trace.push('makeDirectory')
+        this.makeDirectoryCalls.push(path)
+
+        return Promise.resolve()
       },
       write: (path, text) => {
         this.trace.push('write')
@@ -170,7 +177,7 @@ describe('HeadlessPlanAgents', () => {
     expect(headless.startCalls[0].cwd).not.toBe(process.cwd())
   })
 
-  it('a_call_that_cannot_be_started_refuses_without_leaving_a_conversation_behind', async () => {
+  it('a_call_that_cannot_be_started_leaves_no_record_of_a_call_that_never_ran', async () => {
     const headless = HeadlessAgent.refusing(new PlanAgentNotLaunched('spawn assigned no pid to "claude"'))
 
     const refusal = await headless.refusal()
@@ -179,13 +186,24 @@ describe('HeadlessPlanAgents', () => {
     expect(headless.writeCalls.some(([path]) => path === HeadlessAgent.CALL_PATH)).toBe(false)
   })
 
-  it('the_out_file_is_touched_before_the_process_is_started_so_its_directory_already_exists', async () => {
+  it('the_run_directory_is_made_with_the_composed_path_so_the_files_inside_it_have_somewhere_to_land', async () => {
     const headless = HeadlessAgent.launching()
 
     await headless.launch()
 
-    expect(headless.trace).toEqual(['write', 'start', 'write'])
-    expect(headless.writeCalls[0]).toEqual([HeadlessAgent.STREAM_PATH, ''])
+    expect(headless.makeDirectoryCalls).toEqual([HeadlessAgent.DIRECTORY])
+  })
+
+  it('the_directory_is_made_before_the_call_is_started_because_detached_run_opens_its_paths_and_fails_without_it', async () => {
+    const headless = HeadlessAgent.launching()
+
+    await headless.launch()
+
+    expect(headless.trace).toEqual(['makeDirectory', 'start', 'write'])
+  })
+
+  it('names_the_binary_claude_p_spawns', () => {
+    expect(HeadlessPlanAgents.BIN).toBe('claude')
   })
 })
 
@@ -219,11 +237,25 @@ describe('HarnessCall', () => {
     expect(HarnessCall.ERROR_FILE).toBe('stderr.log')
   })
 
-  it('is_frozen_so_nothing_downstream_of_launch_can_mutate_the_record_it_wrote', () => {
+  it('pathsFor_composes_the_directory_and_the_three_files_a_call_leaves_inside_it', () => {
+    const paths = HarnessCall.pathsFor({
+      runsIn: HeadlessAgent.RUNS_IN,
+      agent: HeadlessAgent.AGENT,
+      step: HarnessStep.WRITE_PLAN,
+      startedAt: HeadlessAgent.STARTED_AT,
+    })
+
+    expect(paths.directory).toBe(HeadlessAgent.DIRECTORY)
+    expect(paths.out).toBe(HeadlessAgent.STREAM_PATH)
+    expect(paths.err).toBe(HeadlessAgent.ERROR_PATH)
+    expect(paths.call).toBe(HeadlessAgent.CALL_PATH)
+  })
+
+  it('projects_every_field_straight_through_so_a_value_object_handed_by_mistake_surfaces_instead_of_vanishing', () => {
     const call = new HarnessCall({
       step: HarnessStep.WRITE_PLAN,
       agent: HeadlessAgent.AGENT,
-      issue: HeadlessAgent.ISSUE.number,
+      issue: HeadlessAgent.ISSUE,
       repository: HeadlessAgent.REPOSITORY,
       model: HeadlessAgent.MODEL,
       argv: [],
@@ -231,6 +263,7 @@ describe('HarnessCall', () => {
       startedAt: HeadlessAgent.STARTED_AT,
     })
 
-    expect(Object.isFrozen(call)).toBe(true)
+    expect(call.json.issue).toBe(HeadlessAgent.ISSUE)
+    expect(call.json.repository).toBe(HeadlessAgent.REPOSITORY)
   })
 })
