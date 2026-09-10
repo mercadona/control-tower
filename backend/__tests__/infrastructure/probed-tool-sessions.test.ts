@@ -1,12 +1,68 @@
 import { describe, it, expect } from 'vitest'
-import { ProbedToolSessions } from '../../src/infrastructure/probed-tool-sessions.js'
+import { ProbedToolSessions } from '../../src/infrastructure/probed-tool-sessions.ts'
+import type { CmuxAnswers, ToolLookUp } from '../../src/infrastructure/probed-tool-sessions.ts'
 import { SessionState } from '../../src/domain/value-objects/tool-session.ts'
+import type { ToolSession } from '../../src/domain/value-objects/tool-session.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
+import { ExternalTool } from '../../src/infrastructure/external-tool.ts'
+import { RetryBudget, RetryPolicy } from '../../src/domain/policies/retry-policy.ts'
+
+type RecordedCall = { bin: string, argv: string[], options: { safeToRepeat: boolean } }
+type RecordingLookUp = ToolLookUp & { calls: string[] }
+
+class ClientDouble extends ExternalTool {
+  static readonly #NEVER_RETRIES = new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) })
+
+  readonly bin: string
+  readonly answer: () => ProcessOutput
+  readonly calls: RecordedCall[]
+
+  constructor({ bin, answer, calls }: { bin: string, answer: () => ProcessOutput, calls: RecordedCall[] }) {
+    super({
+      launch: async () => answer(),
+      policy: ClientDouble.#NEVER_RETRIES,
+      sleep: async () => undefined,
+    })
+    this.bin = bin
+    this.answer = answer
+    this.calls = calls
+  }
+
+  async run(argv: string[], options: { safeToRepeat: boolean }): Promise<ProcessOutput> {
+    const output = this.answer()
+    this.calls.push({ bin: this.bin, argv, options })
+
+    return output
+  }
+}
+
+class Surveyed {
+  readonly sessions: ToolSession[]
+
+  constructor(sessions: ToolSession[]) {
+    this.sessions = sessions
+  }
+
+  static of(sessions: ToolSession[]) {
+    return new Surveyed(sessions)
+  }
+
+  about(tool: string): ToolSession {
+    const session = this.sessions.find((candidate) => candidate.tool === tool)
+    if (session === undefined) throw new Error(`ProbedToolSessions answered nothing about "${tool}"`)
+
+    return session
+  }
+}
 
 class ClientsDouble {
   static #BINS = ['gh', 'acli', 'ssh', 'gcloud']
 
-  constructor(answers = {}) {
+  answers: Record<string, ProcessOutput>
+  readonly calls: RecordedCall[]
+  cmux: CmuxAnswers
+
+  constructor(answers: Record<string, ProcessOutput> = {}) {
     this.answers = answers
     this.calls = []
     this.cmux = () => true
@@ -23,60 +79,61 @@ class ClientsDouble {
       .saying('gcloud', new ProcessOutput({ code: 0, stdout: 'jponzvan@mercadona.es\n', stderr: '' }))
   }
 
-  saying(bin, output) {
+  saying(bin: string, output: ProcessOutput) {
     this.answers = { ...this.answers, [bin]: output }
     return this
   }
 
   clients() {
-    const built = {}
+    const built: Record<string, ExternalTool> = {}
     for (const bin of ClientsDouble.#BINS) built[bin] = this.#clientFor(bin)
 
     return built
   }
 
-  #clientFor(bin) {
-    return {
-      run: async (argv, options) => {
+  #clientFor(bin: string) {
+    return new ClientDouble({
+      bin,
+      answer: () => {
         if (!(bin in this.answers)) {
           throw new Error(`ClientsDouble: nobody wrote an answer for "${bin}"`)
         }
-        this.calls.push({ bin, argv, options })
 
         return this.answers[bin]
       },
-    }
+      calls: this.calls,
+    })
   }
 
-  whoseCmuxAnswers(cmuxAnswers) {
+  whoseCmuxAnswers(cmuxAnswers: CmuxAnswers) {
     this.cmux = cmuxAnswers
 
     return this
   }
 
-  sessions(lookUp = LookUpDouble.installedEverywhere()) {
+  sessions(lookUp: ToolLookUp = LookUpDouble.installedEverywhere()) {
     return new ProbedToolSessions({ clients: this.clients(), lookUp, cmuxAnswers: () => this.cmux() })
   }
 }
 
 class LookUpDouble {
-  static installedEverywhere() {
+  static installedEverywhere(): RecordingLookUp {
     return LookUpDouble.#recording(() => true)
   }
 
-  static missing(bin) {
+  static missing(bin: string): RecordingLookUp {
     return LookUpDouble.#recording((candidate) => candidate !== bin)
   }
 
-  static #recording(isInstalled) {
-    const calls = []
-    const lookUp = (bin) => {
+  static #recording(isInstalled: (bin: string) => boolean): RecordingLookUp {
+    const calls: string[] = []
+    const lookUp = (bin: string) => {
       calls.push(bin)
+
       return isInstalled(bin) ? `/usr/local/bin/${bin}` : null
     }
-    lookUp.calls = calls
 
-    return lookUp
+    return Object.assign(lookUp, { calls })
   }
 }
 
@@ -113,7 +170,7 @@ describe('ProbedToolSessions', () => {
   it('git_is_ready_when_ssh_says_it_authenticated_even_though_it_exits_1', async () => {
     const sessions = await ClientsDouble.allHappy().sessions().all()
 
-    const git = sessions.find((session) => session.tool === 'git')
+    const git = Surveyed.of(sessions).about('git')
 
     expect(git.state).toBe(SessionState.READY)
     expect(git.fix).toBeNull()
@@ -124,7 +181,7 @@ describe('ProbedToolSessions', () => {
 
     const sessions = await clients.sessions().all()
 
-    const bq = sessions.find((session) => session.tool === 'bq')
+    const bq = Surveyed.of(sessions).about('bq')
     expect(bq.state).toBe(SessionState.MISSING)
     expect(bq.fix).toBe('gcloud auth login && gcloud auth application-default login')
   })
@@ -132,7 +189,7 @@ describe('ProbedToolSessions', () => {
   it('bq_is_ready_when_gcloud_prints_an_active_account', async () => {
     const sessions = await ClientsDouble.allHappy().sessions().all()
 
-    const bq = sessions.find((session) => session.tool === 'bq')
+    const bq = Surveyed.of(sessions).about('bq')
 
     expect(bq.state).toBe(SessionState.READY)
     expect(bq.fix).toBeNull()
@@ -141,7 +198,7 @@ describe('ProbedToolSessions', () => {
   it('claude_is_always_unknown_and_says_where_to_log_in', async () => {
     const sessions = await ClientsDouble.allHappy().sessions().all()
 
-    const claude = sessions.find((session) => session.tool === 'claude')
+    const claude = Surveyed.of(sessions).about('claude')
 
     expect(claude.state).toBe(SessionState.UNKNOWN)
     expect(claude.fix).toBe('claude, then /login — not observable from this process')
@@ -150,7 +207,7 @@ describe('ProbedToolSessions', () => {
   it('claude_is_unknown_even_when_its_binary_is_missing_because_its_login_is_never_observable', async () => {
     const sessions = await ClientsDouble.allHappy().sessions(LookUpDouble.missing('claude')).all()
 
-    const claude = sessions.find((session) => session.tool === 'claude')
+    const claude = Surveyed.of(sessions).about('claude')
 
     expect(claude.installed).toBe(false)
     expect(claude.state).toBe(SessionState.UNKNOWN)
@@ -168,7 +225,7 @@ describe('ProbedToolSessions', () => {
 
     const sessions = await clients.sessions(LookUpDouble.missing('gh')).all()
 
-    const gh = sessions.find((session) => session.tool === 'gh')
+    const gh = Surveyed.of(sessions).about('gh')
     expect(gh.installed).toBe(false)
     expect(gh.state).toBe(SessionState.MISSING)
   })
@@ -176,7 +233,7 @@ describe('ProbedToolSessions', () => {
   it('a_ready_tool_carries_no_fix', async () => {
     const sessions = await ClientsDouble.allHappy().sessions().all()
 
-    const gh = sessions.find((session) => session.tool === 'gh')
+    const gh = Surveyed.of(sessions).about('gh')
 
     expect(gh.state).toBe(SessionState.READY)
     expect(gh.fix).toBeNull()
@@ -190,7 +247,7 @@ describe('ProbedToolSessions', () => {
 
     const sessions = await clients.sessions().all()
 
-    const gh = sessions.find((session) => session.tool === 'gh')
+    const gh = Surveyed.of(sessions).about('gh')
     expect(gh.state).toBe(SessionState.MISSING)
     expect(gh.fix).toBe('gh auth login')
   })
@@ -203,7 +260,7 @@ describe('ProbedToolSessions', () => {
 
     const sessions = await clients.sessions().all()
 
-    const acli = sessions.find((session) => session.tool === 'acli')
+    const acli = Surveyed.of(sessions).about('acli')
     expect(acli.state).toBe(SessionState.MISSING)
     expect(acli.fix).toBe('acli jira auth login')
   })
@@ -216,7 +273,7 @@ describe('ProbedToolSessions', () => {
 
     const sessions = await clients.sessions().all()
 
-    const git = sessions.find((session) => session.tool === 'git')
+    const git = Surveyed.of(sessions).about('git')
     expect(git.state).toBe(SessionState.MISSING)
     expect(git.fix).toBe('add an SSH key to your GitHub account')
   })
@@ -224,7 +281,7 @@ describe('ProbedToolSessions', () => {
   it('cmux_is_ready_when_it_answers_and_carries_no_fix', async () => {
     const sessions = await ClientsDouble.allHappy().sessions().all()
 
-    const cmux = sessions.find((session) => session.tool === 'cmux')
+    const cmux = Surveyed.of(sessions).about('cmux')
 
     expect(cmux.state).toBe(SessionState.READY)
     expect(cmux.fix).toBeNull()
@@ -235,13 +292,13 @@ describe('ProbedToolSessions', () => {
 
     const sessions = await clients.sessions().all()
 
-    const cmux = sessions.find((session) => session.tool === 'cmux')
+    const cmux = Surveyed.of(sessions).about('cmux')
     expect(cmux.state).toBe(SessionState.MISSING)
     expect(cmux.fix).toBe('update cmux and restart the app, then start this backend from a terminal inside cmux')
   })
 
   it('a_cmux_that_is_not_installed_is_missing_without_being_asked', async () => {
-    const asked = []
+    const asked: string[] = []
     const clients = ClientsDouble.allHappy().whoseCmuxAnswers(() => {
       asked.push('cmux')
 
@@ -250,7 +307,7 @@ describe('ProbedToolSessions', () => {
 
     const sessions = await clients.sessions(LookUpDouble.missing('cmux')).all()
 
-    const cmux = sessions.find((session) => session.tool === 'cmux')
+    const cmux = Surveyed.of(sessions).about('cmux')
     expect(cmux.installed).toBe(false)
     expect(cmux.state).toBe(SessionState.MISSING)
     expect(asked).toEqual([])
