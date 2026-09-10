@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DiskImplementationStartRegistry } from '../../src/infrastructure/disk-implementation-start-registry.js'
+import { DiskImplementationStartRegistry } from '../../src/infrastructure/disk-implementation-start-registry.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'

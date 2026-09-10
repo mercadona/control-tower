@@ -1,20 +1,35 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createHash } from 'node:crypto'
-import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.js'
+import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
+import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
+import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { GoNotRecorded } from '../../src/domain/exceptions.ts'
+
+const WATCH = new PlanWatch({
+  story: new UserStoryKey('ABC-123'),
+  issue: new PlanIssue({ number: 33, url: 'https://github.com/jjponz/repo-pulse/issues/33' }),
+  located: new WorkspaceLocation({ root: '/repo', path: '/repo/.worktrees/33', branch: 'feat/33' }),
+  repository: new RepositoryName('jjponz/repo-pulse'),
+  agent: 'workspace:20',
+})
 
 class DiskDouble {
   static ROOT = '/home/someone/.claude/control-tower'
   static FILL = 7
   static NONCE = '07070707'
 
-  constructor(failure = null) {
+  readonly failure: Error | null
+  readonly written: { path: string, text: string }[]
+
+  constructor(failure: Error | null = null) {
     this.failure = failure
     this.written = []
   }
 
-  static refusing(said) {
+  static refusing(said: string) {
     return new DiskDouble(new Error(said))
   }
 
@@ -99,18 +114,17 @@ describe('DiskGoRegistry', () => {
   })
 
   it('matches_a_valid_go_record_for_the_same_repository_and_issue', () => {
-    const repository = new RepositoryName('jjponz/repo-pulse')
     const registry = new DiskGoRegistry({
-      random: null,
+      random: vi.fn(),
       read: vi.fn(() => JSON.stringify({
-        repo: repository.text, issue: 33, commitment: 'a'.repeat(64),
+        repo: WATCH.repository.text, issue: 33, commitment: 'a'.repeat(64),
       })),
       stat: vi.fn(() => ({ isFile: () => true })),
-      write: null,
+      write: vi.fn(),
       root: DiskDouble.ROOT,
     })
 
-    expect(registry.matches({ repository, issue: { number: 33 } })).toBe(true)
+    expect(registry.matches(WATCH)).toBe(true)
   })
 
   it.each([
@@ -120,9 +134,8 @@ describe('DiskGoRegistry', () => {
     JSON.stringify({ repo: 'jjponz/repo-pulse', issue: 34, commitment: 'a'.repeat(64) }),
     JSON.stringify({ repo: 'jjponz/repo-pulse', issue: 33, commitment: 'not-a-digest' }),
   ])('does_not_match_an_absent_or_invalid_go_record %#', (record) => {
-    const repository = new RepositoryName('jjponz/repo-pulse')
     const registry = new DiskGoRegistry({
-      random: null,
+      random: vi.fn(),
       read: vi.fn(() => {
         if (record === null) throw new Error('ENOENT')
         return record
@@ -131,10 +144,10 @@ describe('DiskGoRegistry', () => {
         if (record === null) throw new Error('ENOENT')
         return { isFile: () => true }
       }),
-      write: null,
+      write: vi.fn(),
       root: DiskDouble.ROOT,
     })
 
-    expect(registry.matches({ repository, issue: { number: 33 } })).toBe(false)
+    expect(registry.matches(WATCH)).toBe(false)
   })
 })

@@ -1,22 +1,25 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DiskCheckoutRegistry } from '../../src/infrastructure/disk-checkout-registry.js'
+import { DiskCheckoutRegistry } from '../../src/infrastructure/disk-checkout-registry.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
 
 class StoredCheckouts {
   static A_FILE = { isFile: () => true }
 
-  static #missing() {
+  static #missing(): never {
     throw Object.assign(new Error('no such file or directory'), { code: 'ENOENT' })
   }
 
-  static empty(write = vi.fn(), stderr = vi.fn()) {
+  static empty(
+    write: (path: string, text: string) => void = vi.fn(),
+    stderr: (line: string) => void = vi.fn()
+  ) {
     return new DiskCheckoutRegistry({
       read: vi.fn(), stat: StoredCheckouts.#missing, write, stderr, root: '/state',
     })
   }
 
-  static holding(roots, write = vi.fn()) {
+  static holding(roots: unknown[], write = vi.fn()) {
     const stored = `${JSON.stringify({ roots }, null, 2)}\n`
 
     return new DiskCheckoutRegistry({
@@ -28,7 +31,7 @@ class StoredCheckouts {
     })
   }
 
-  static unreadable(printed, { write = vi.fn(), stderr = vi.fn() } = {}) {
+  static unreadable(printed: string, { write = vi.fn(), stderr = vi.fn() } = {}) {
     return new DiskCheckoutRegistry({
       read: () => printed,
       stat: () => StoredCheckouts.A_FILE,
@@ -77,11 +80,11 @@ describe('DiskCheckoutRegistry', () => {
   it('what_was_written_before_a_restart_is_what_it_knows_after_one', () => {
     const known = StoredCheckouts.holding(['/repos/one', '/repos/two']).known()
 
-    expect(known.map((root) => root.text)).toEqual(['/repos/one', '/repos/two'])
+    expect(known?.map((root) => root.text)).toEqual(['/repos/one', '/repos/two'])
   })
 
   it('every_checkout_it_knows_travels_out_as_the_value_object_a_sweep_can_use', () => {
-    const [first] = StoredCheckouts.holding(['/repos/one']).known()
+    const [first] = StoredCheckouts.holding(['/repos/one']).known() ?? []
 
     expect(first).toBeInstanceOf(CheckoutRoot)
   })
@@ -142,9 +145,9 @@ describe('DiskCheckoutRegistry', () => {
   })
 
   it('what_it_writes_is_what_it_reads_back_so_the_two_halves_cannot_drift_apart', () => {
-    let stored = null
+    let stored: string | null = null
     const registry = new DiskCheckoutRegistry({
-      read: () => stored,
+      read: () => stored ?? '',
       stat: () => {
         if (stored === null) throw Object.assign(new Error('no such file or directory'), { code: 'ENOENT' })
 
@@ -158,12 +161,12 @@ describe('DiskCheckoutRegistry', () => {
     registry.remember(new CheckoutRoot('/repos/one'))
     registry.remember(new CheckoutRoot('/repos/two'))
 
-    expect(registry.known().map((root) => root.text)).toEqual(['/repos/one', '/repos/two'])
+    expect(registry.known()?.map((root) => root.text)).toEqual(['/repos/one', '/repos/two'])
   })
 
   it('one_unusable_entry_does_not_take_the_usable_ones_with_it', () => {
     const known = StoredCheckouts.holding(['relative/path', '/repos/two']).known()
 
-    expect(known.map((root) => root.text)).toEqual(['/repos/two'])
+    expect(known?.map((root) => root.text)).toEqual(['/repos/two'])
   })
 })
