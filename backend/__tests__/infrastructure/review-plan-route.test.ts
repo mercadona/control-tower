@@ -9,38 +9,43 @@ import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
-import { ReviewRequestOutcome, ReviewRefusal, ReviewPhases } from '../../src/infrastructure/review-plan-route.js'
+import { ReviewRequestOutcome, ReviewRefusal, ReviewPhases } from '../../src/infrastructure/review-plan-route.ts'
 import { PlanChangesNotAsked } from '../../src/domain/exceptions.ts'
 import { ActivePlans, ActivePlanPhase } from '../../src/infrastructure/active-plans-route.js'
+import type { AskPlanChangesParams } from '../../src/application/actions/ask-plan-changes.ts'
+
+type AskedChange = { issue: number, repository: string, changes: string }
 
 class AskPlanChangesSpy {
+  readonly asked: AskedChange[]
+
   constructor() {
     this.asked = []
   }
 
-  static failingWith(cause) {
+  static failingWith(cause: unknown): AskPlanChangesSpy {
     const spy = new AskPlanChangesSpy()
     spy.execute = async () => { throw cause }
 
     return spy
   }
 
-  async execute(params) {
+  async execute(params: AskPlanChangesParams): Promise<void> {
     this.asked.push({ issue: params.issue.number, repository: params.repository.text, changes: params.changes })
   }
 }
 
 class RunningApi {
-  static #started = []
+  static #started: ApiServer[] = []
   static PATH = '/review-plan'
   static ACCEPTED_BODY = '{"issue":33,"repo":"jjponz/repo-pulse","changes":"parte la tarea 2"}'
   static PADDED_BODY = '{"issue":33,"repo":"jjponz/repo-pulse","changes":"   parte la tarea 2   "}'
   static TWO_LINE_CHANGES = 'parte la tarea 2\ny renumera las siguientes'
   static TWO_LINE_BODY = '{"issue":33,"repo":"jjponz/repo-pulse","changes":"parte la tarea 2\\ny renumera las siguientes"}'
   static MALFORMED_IN_TWO_FIELDS_BODY = '{"issue":0,"repo":"repo-pulse","changes":"x"}'
-  static activePlans = null
+  static activePlans: ActivePlans | null = null
 
-  static watchOf(number) {
+  static watchOf(number: number): PlanWatch {
     return new PlanWatch({
       story: new UserStoryKey('ABC-123'),
       issue: new PlanIssue({ number, url: `https://github.com/jjponz/repo-pulse/issues/${number}` }),
@@ -58,11 +63,13 @@ class RunningApi {
   static NO_FRONTEND = join(tmpdir(), 'ct-frontend-never-built')
   static NO_EVENTS = new PlanEvents({
     read: () => Promise.reject(new Error('this suite never streams plan events')),
-    readDelivery: () => Promise.reject(new Error('this suite never streams delivery events')),
     sleep: () => Promise.resolve(),
   })
 
-  static async listening(spy = new AskPlanChangesSpy(), options = {}) {
+  static async listening(
+    spy: AskPlanChangesSpy = new AskPlanChangesSpy(),
+    options: { watched?: boolean, watch?: PlanWatch } = {}
+  ): Promise<number> {
     const reviews = new ReviewsSpy()
     const pullRequestReviews = new ReviewsSpy()
     const sessions = new PlanSessions()
@@ -74,6 +81,8 @@ class RunningApi {
       startPlan: null,
       implementPlan: null,
       askPlanChanges: spy,
+      implementProgress: undefined,
+      externalTools: undefined,
       reviews,
       pullRequestReviews,
       sessions,
@@ -89,16 +98,18 @@ class RunningApi {
     return port
   }
 
-  static async stopAll() {
+  static async stopAll(): Promise<void> {
     const running = RunningApi.#started.splice(0)
     await Promise.all(running.map((server) => server.stop()))
   }
 
-  static async post(port, body, headers = { 'Content-Type': 'application/json' }) {
+  static async post(
+    port: number, body: string, headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  ): Promise<globalThis.Response> {
     return fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`, { method: 'POST', body, headers })
   }
 
-  static async asking(body) {
+  static async asking(body: string): Promise<globalThis.Response> {
     return RunningApi.post(await RunningApi.listening(), body)
   }
 }
@@ -131,7 +142,7 @@ describe('ReviewPlanRoute', () => {
   it('a_plan_already_being_implemented_is_told_apart_from_one_this_process_never_watched', async () => {
     const spy = new AskPlanChangesSpy()
     const port = await RunningApi.listening(spy)
-    RunningApi.activePlans.rememberImplementing(RunningApi.WATCHED)
+    RunningApi.activePlans!.rememberImplementing(RunningApi.WATCHED)
 
     const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
     const refusal = JSON.parse(await response.text())
@@ -145,7 +156,7 @@ describe('ReviewPlanRoute', () => {
   it('a_plan_whose_phase_is_uncertain_is_refused_with_the_code_implement_plan_already_uses_for_it', async () => {
     const spy = new AskPlanChangesSpy()
     const port = await RunningApi.listening(spy)
-    RunningApi.activePlans.rememberUncertain(RunningApi.WATCHED)
+    RunningApi.activePlans!.rememberUncertain(RunningApi.WATCHED)
 
     const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
     const refusal = JSON.parse(await response.text())
