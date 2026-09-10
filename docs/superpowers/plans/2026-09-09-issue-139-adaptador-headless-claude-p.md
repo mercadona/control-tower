@@ -570,7 +570,7 @@ The predicates below are what a program can score.
 cd backend && npx vitest run   # exit 0: the whole suite, real-process tests included
 cd backend && test -z "$(grep -rl 'cmux' src/infrastructure/headless-plan-agents.js src/infrastructure/detached-run.js)"
 cd backend && npx vitest run __tests__/infrastructure/no-window-titles-parsed.test.js   # exit 0: one module names a window
-cd backend && test "$(grep -rc 'plugin/scripts' src/infrastructure/headless-plan-agents.js)" -eq 0
+cd backend && test "$(grep -c 'plugin/scripts' src/infrastructure/headless-plan-agents.js)" -eq 0
 cd backend && test -z "$(git status --porcelain)"
 node plugin/scripts/dispatch-check.mjs 139 --repo mercadona/control-tower --check-plan   # exit 0: the plan is contract-valid
 ```
