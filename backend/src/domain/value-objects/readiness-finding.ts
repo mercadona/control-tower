@@ -1,13 +1,24 @@
 export type ReadinessStatus = 'ready' | 'changes-required' | 'unverified'
+export type ReadinessId =
+  | 'checkout' | 'base' | 'commands' | 'conventions' | 'test-workers'
+  | 'checkout-drift' | 'git-ignore' | 'docker' | 'compose' | 'container-resources'
+  | 'database-readiness' | 'worktree-config' | 'build-context' | 'container-mounts'
+  | 'image-provenance' | 'execution' | 'inspection'
+export type ReadinessAction =
+  | 'confirm-checkout' | 'update-checkout' | 'declare-commands' | 'declare-conventions'
+  | 'limit-workers' | 'inspect-command' | 'fix-ignore' | 'declare-compose'
+  | 'start-docker' | 'review-compose' | 'limit-resources' | 'wait-for-database'
+  | 'isolate-worktrees' | 'verify-dependencies' | 'recreate-environment'
+  | 'verify-execution' | 'retry-inspection'
 
 export class ReadinessFinding {
-  readonly id: string
+  readonly id: ReadinessId
   readonly status: ReadinessStatus
   readonly evidence: readonly string[]
-  readonly action: string | null
+  readonly action: ReadinessAction | null
 
   constructor({ id, status, evidence, action }: {
-    id: string, status: ReadinessStatus, evidence: readonly string[], action: string | null,
+    id: ReadinessId, status: ReadinessStatus, evidence: readonly string[], action: ReadinessAction | null,
   }) {
     this.id = id
     this.status = status

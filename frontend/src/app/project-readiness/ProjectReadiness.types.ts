@@ -1,4 +1,8 @@
-export type ReadinessStatus = 'ready' | 'changes-required' | 'unverified'
+export const STATUS_LABELS = {
+  ready: 'Preparado', 'changes-required': 'Requiere cambios', unverified: 'Sin verificar',
+}
+
+export type ReadinessStatus = keyof typeof STATUS_LABELS
 
 export const CHECK_LABELS = {
   checkout: 'Repositorio y ruta local',
@@ -40,20 +44,51 @@ export const NEXT_ACTIONS = {
   'retry-inspection': 'Hay otra inspección activa o no se pudo leer la información dentro del plazo. Espera un momento y vuelve a comprobar.',
 }
 
-export type ReadinessFinding = {
-  id: keyof typeof CHECK_LABELS
-  status: ReadinessStatus
-  evidence: string[]
-  action: keyof typeof NEXT_ACTIONS | null
+export class ReadinessFinding {
+  readonly id: keyof typeof CHECK_LABELS
+  readonly status: ReadinessStatus
+  readonly evidence: readonly string[]
+  readonly action: keyof typeof NEXT_ACTIONS | null
+
+  constructor({ id, status, evidence, action }: {
+    id: keyof typeof CHECK_LABELS, status: ReadinessStatus,
+    evidence: readonly string[], action: keyof typeof NEXT_ACTIONS | null,
+  }) {
+    this.id = id
+    this.status = status
+    this.evidence = Object.freeze([...evidence])
+    this.action = action
+    Object.freeze(this)
+  }
 }
 
-export type ProjectReadinessReport = {
-  repo: string
-  path: string
-  base_revision: string | null
-  observed_at: string
-  status: ReadinessStatus
-  findings: ReadinessFinding[]
+export class ProjectReadinessReport {
+  readonly kind = 'inspected'
+  readonly repository: string
+  readonly path: string
+  readonly baseRevision: string | null
+  readonly observedAt: string
+  readonly status: ReadinessStatus
+  readonly findings: readonly ReadinessFinding[]
+
+  constructor({ repository, path, baseRevision, observedAt, status, findings }: {
+    repository: string, path: string, baseRevision: string | null, observedAt: string,
+    status: ReadinessStatus, findings: readonly ReadinessFinding[],
+  }) {
+    this.repository = repository
+    this.path = path
+    this.baseRevision = baseRevision
+    this.observedAt = observedAt
+    this.status = status
+    this.findings = Object.freeze([...findings])
+    Object.freeze(this)
+  }
 }
 
-export type ProjectReadinessOutcome = { kind: 'inspected', report: ProjectReadinessReport } | { kind: 'unavailable' }
+export class InspectionUnavailable {
+  readonly kind = 'unavailable'
+
+  constructor() { Object.freeze(this) }
+}
+
+export type ProjectReadinessOutcome = ProjectReadinessReport | InspectionUnavailable

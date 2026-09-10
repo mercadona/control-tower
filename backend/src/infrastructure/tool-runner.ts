@@ -19,38 +19,31 @@ export class ProcessOutput {
 }
 
 export class ToolRunner {
-  static readonly #UNKNOWN_EXIT = 1
+  static readonly #UNKNOWN_EXIT = 125
 
   readonly bin: string
   readonly budgetMs: number
   readonly env: NodeJS.ProcessEnv | undefined
-  readonly maxBufferBytes: number | undefined
-  readonly killSignal: NodeJS.Signals | undefined
-  readonly ownProcessGroup: boolean
+  readonly ownedProcessGroup: Readonly<{ maxBufferBytes: number }> | undefined
 
-  constructor({ bin, budgetMs, env, maxBufferBytes, killSignal, ownProcessGroup = false }: {
+  constructor({ bin, budgetMs, env, ownedProcessGroup }: {
     bin: string, budgetMs: number, env?: NodeJS.ProcessEnv,
-    maxBufferBytes?: number, killSignal?: NodeJS.Signals, ownProcessGroup?: boolean,
+    ownedProcessGroup?: { maxBufferBytes: number },
   }) {
     this.bin = bin
     this.budgetMs = budgetMs
     this.env = env
-    this.maxBufferBytes = maxBufferBytes
-    this.killSignal = killSignal
-    this.ownProcessGroup = ownProcessGroup
-    if (ownProcessGroup && (!Number.isInteger(maxBufferBytes) || maxBufferBytes! <= 0 || !Number.isInteger(budgetMs) || budgetMs <= 0)) {
+    if (ownedProcessGroup !== undefined && (!Number.isInteger(ownedProcessGroup.maxBufferBytes)
+      || ownedProcessGroup.maxBufferBytes <= 0 || !Number.isInteger(budgetMs) || budgetMs <= 0)) {
       throw new Error('an owned process group requires positive time and output bounds')
     }
+    this.ownedProcessGroup = ownedProcessGroup === undefined ? undefined : Object.freeze({ ...ownedProcessGroup })
   }
 
   run(argv: string[], { cwd }: { cwd?: string } = {}): Promise<ProcessOutput> {
-    if (this.ownProcessGroup) return this.#runOwned(argv, cwd)
+    if (this.ownedProcessGroup !== undefined) return this.#runOwned(argv, cwd, this.ownedProcessGroup.maxBufferBytes)
     return new Promise((resolve) => {
-      execFile(this.bin, argv, {
-        timeout: this.budgetMs, cwd, env: this.env,
-        ...(this.maxBufferBytes === undefined ? {} : { maxBuffer: this.maxBufferBytes }),
-        ...(this.killSignal === undefined ? {} : { killSignal: this.killSignal }),
-      }, (failure, stdout, stderr) => {
+      execFile(this.bin, argv, { timeout: this.budgetMs, cwd, env: this.env }, (failure, stdout, stderr) => {
         resolve(new ProcessOutput({
           code: ToolRunner.#codeOf(failure),
           stdout,
@@ -60,9 +53,9 @@ export class ToolRunner {
     })
   }
 
-  #runOwned(argv: string[], cwd: string | undefined): Promise<ProcessOutput> {
+  #runOwned(argv: string[], cwd: string | undefined, maxBufferBytes: number): Promise<ProcessOutput> {
     if (process.platform === 'win32') {
-      return Promise.resolve(new ProcessOutput({ code: 1, stdout: '', stderr: 'owned process groups require a POSIX host' }))
+      return Promise.resolve(new ProcessOutput({ code: ToolRunner.#UNKNOWN_EXIT, stdout: '', stderr: 'owned process groups require a POSIX host' }))
     }
     return new Promise((resolve) => {
       const child = spawn(this.bin, argv, { cwd, env: this.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
@@ -85,19 +78,19 @@ export class ToolRunner {
         killGroup()
         child.stdout.destroy()
         child.stderr.destroy()
-        finish(1, reason)
+        finish(ToolRunner.#UNKNOWN_EXIT, reason)
       }
       const timer = setTimeout(() => stop('command exceeded its time budget'), this.budgetMs)
       const collect = (stream: 'stdout' | 'stderr', chunk: Buffer) => {
         if (finished) return
-        const remaining = this.maxBufferBytes! - output[stream].length
+        const remaining = maxBufferBytes - output[stream].length
         output[stream] = Buffer.concat([output[stream], chunk.subarray(0, remaining)])
         if (chunk.length > remaining) stop('command exceeded its output budget')
       }
       child.stdout.on('data', (chunk: Buffer) => collect('stdout', chunk))
       child.stderr.on('data', (chunk: Buffer) => collect('stderr', chunk))
-      child.once('error', (failure) => { killGroup(); finish(1, failure.message) })
-      child.once('close', (code, signal) => { killGroup(); finish(code ?? 1, signal ?? '') })
+      child.once('error', (failure) => { killGroup(); finish(ToolRunner.#UNKNOWN_EXIT, failure.message) })
+      child.once('close', (code, signal) => { killGroup(); finish(code ?? ToolRunner.#UNKNOWN_EXIT, signal ?? '') })
     })
   }
 

@@ -166,7 +166,7 @@ const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocke
           }}
         />
       </FormField>
-      <ProjectReadiness repository={repository} path={path} disabled={isSending || isMutationBlocked} />
+      <ProjectReadiness.View repository={repository} path={path} disabled={isSending || isMutationBlocked} />
       <div className="start-plan-form__actions">
         <Button type="submit" disabled={!canStart} aria-describedby={!canStart ? 'start-plan-help' : undefined}>
           {isSending ? <><Loading aria-label="Enviando la solicitud" /> Enviando solicitud</> : 'Arrancar plan'}

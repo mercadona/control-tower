@@ -3,11 +3,11 @@ import { TestCommandDeclaration } from '../../../plugin/scripts/baseline.js'
 import { ProjectSetup } from '../domain/ports/project-setup.ts'
 import { ProjectReadiness } from '../domain/value-objects/project-readiness.ts'
 import { ReadinessFinding } from '../domain/value-objects/readiness-finding.ts'
-import type { ReadinessStatus } from '../domain/value-objects/readiness-finding.ts'
+import type { ReadinessId, ReadinessAction, ReadinessStatus } from '../domain/value-objects/readiness-finding.ts'
 import type { PlanTarget } from '../domain/value-objects/plan-target.ts'
 import { ProcessOutput } from './tool-runner.ts'
 
-export type InspectionCommand = (
+type InspectionCommand = (
   bin: string, argv: string[], cwd: string, budgetMs: number,
 ) => Promise<ProcessOutput>
 
@@ -26,9 +26,9 @@ class InspectionJson {
   }
 }
 
-type BindMount = { source: string, target: string }
+type BindMount = { readonly source: string, readonly target: string }
 type ServiceSetup = {
-  name: string, image: string, bounded: boolean, healthy: boolean,
+  name: string, image: string | null, bounded: boolean, healthy: boolean,
   dependencies: readonly string[], binds: readonly BindMount[], sharedNames: boolean,
   buildContext: string | null,
   startupDependencies: readonly string[],
@@ -87,7 +87,7 @@ class ComposeSetup {
           else startupDependencies.push(dependency)
         }
       }
-      services.push({ name, image: service.image ?? '', bounded, healthy, dependencies, startupDependencies, binds, sharedNames, buildContext })
+      services.push({ name, image: service.image ?? null, bounded, healthy, dependencies, startupDependencies, binds, sharedNames, buildContext })
     }
     return new ComposeSetup(value.name, services)
   }
@@ -101,9 +101,47 @@ class ComposeSetup {
   }
 }
 
+class ContainerSetup {
+  readonly service: ServiceSetup
+  readonly name: string
+  readonly running: boolean
+  readonly binds: readonly BindMount[]
+  readonly image: string | null
+
+  constructor({ service, name, running, binds, image }: {
+    service: ServiceSetup, name: string, running: boolean, binds: BindMount[], image: string | null,
+  }) {
+    this.service = service
+    this.name = name
+    this.running = running
+    this.binds = Object.freeze(binds)
+    this.image = image
+    Object.freeze(this)
+  }
+
+  static from(value: unknown, compose: ComposeSetup): ContainerSetup | null {
+    if (!InspectionJson.record(value) || !InspectionJson.record(value.Config) || !InspectionJson.record(value.Config.Labels)
+      || !InspectionJson.record(value.State) || typeof value.State.Status !== 'string' || !Array.isArray(value.Mounts)) return null
+    const name = value.Config.Labels['com.docker.compose.service']
+    const service = compose.services.find((item) => item.name === name)
+    if (service === undefined) return null
+    const binds: BindMount[] = []
+    for (const mount of value.Mounts) {
+      if (!InspectionJson.record(mount) || typeof mount.Type !== 'string' || typeof mount.Source !== 'string' || typeof mount.Destination !== 'string') return null
+      if (mount.Type === 'bind') binds.push(Object.freeze({ source: mount.Source, target: mount.Destination }))
+    }
+    return new ContainerSetup({
+      service, name: typeof value.Name === 'string' ? value.Name : service.name,
+      running: value.State.Status === 'running', binds,
+      image: typeof value.Image === 'string' && /^sha256:[a-f0-9]{64}$/.test(value.Image) ? value.Image : null,
+    })
+  }
+}
+
 class InspectionSession {
   static readonly COMPOSE_FILES = ['compose.yaml', 'compose.yml', 'docker-compose.yml', 'docker-compose.yaml', 'docker/docker-compose.yml']
-  static readonly FILES = ['AGENTS.md', '.agent/conventions.md', '.gitignore', 'Makefile', 'scripts/test-command.sh', 'package.json', ...InspectionSession.COMPOSE_FILES]
+  static readonly CONTENT_FILES = ['AGENTS.md', '.agent/conventions.md', 'Makefile', 'scripts/test-command.sh']
+  static readonly FILES = [...InspectionSession.CONTENT_FILES, '.gitignore', 'package.json', ...InspectionSession.COMPOSE_FILES]
   static readonly RUNTIME_PATHS = ['.worktrees/__readiness__/probe', '.agent/SLICE.md', '.agent/run-1.json']
   static readonly PLAN_PATH = 'docs/superpowers/plans/__readiness__.md'
   readonly options: InspectionOptions
@@ -124,7 +162,7 @@ class InspectionSession {
     this.started = options.now()
   }
 
-  finding(id: string, status: ReadinessStatus, evidence: string[], action: string | null): void {
+  finding(id: ReadinessId, status: ReadinessStatus, evidence: string[], action: ReadinessAction | null): void {
     this.findings.push(new ReadinessFinding({ id, status, evidence, action }))
   }
 
@@ -220,7 +258,7 @@ class InspectionSession {
     }
     const available = listed.stdout.split('\n').filter(Boolean)
     for (const path of available) this.available.add(path)
-    for (const path of available.filter((path) => InspectionSession.FILES.includes(path))) await this.readTracked(path)
+    for (const path of available.filter((path) => InspectionSession.CONTENT_FILES.includes(path))) await this.readTracked(path)
     const agents = this.files.get('AGENTS.md') ?? ''
     const conventions = this.files.get('.agent/conventions.md') ?? ''
     const test = TestCommandDeclaration.in('', (path: string) => this.files.get(path) ?? null)
@@ -259,6 +297,7 @@ class InspectionSession {
     }
     const lines = executable.split('\n').map((line) => line.trim()).filter((line) => line && !/^(?:#|set\s)/.test(line))
     if (lines.length !== 1 || !/^(?:python(?:3)? -m )?pytest\s/.test(lines[0]) || /[;&|`]/.test(lines[0])
+      || /[$<>{}()[\]*?~\\]/.test(lines[0].replace(/(\s-n\s+)"\$\{PYTEST_WORKERS:-\d+\}"/, '$1value'))
       || (lines[0].match(/\s(?:-n(?=\s|\d)|--numprocesses(?=\s|=))/g)?.length ?? 0) !== 1) {
       this.finding('test-workers', 'unverified', ['AGENTS.md', 'Makefile', 'scripts/test-command.sh'], 'inspect-command')
       return
@@ -276,6 +315,7 @@ class InspectionSession {
 
   static referenceRecipe(make: string, recipe: string): boolean {
     if (/[;&|`]/.test(recipe)
+      || /[$<>]/.test(recipe.replace(/\$\([A-Z_]+\)/g, ''))
       || !/^(?:@?\$\((?:DOCKER_EXEC|DOCKER_CHECK_EXEC)\)|@?docker compose\b).*\s(?:\$\([A-Z_]+\)|\/app)\/scripts\/test-command\.sh$/.test(recipe)) return false
     const macro = recipe.match(/^@?\$\((DOCKER_EXEC|DOCKER_CHECK_EXEC)\)/)?.[1]
     if (macro === undefined) return true
@@ -297,7 +337,7 @@ class InspectionSession {
   }
 
   async docker(): Promise<void> {
-    const candidates = InspectionSession.COMPOSE_FILES.filter((path) => this.files.has(path))
+    const candidates = InspectionSession.COMPOSE_FILES.filter((path) => this.available.has(path))
     if (candidates.length !== 1) {
       this.finding('compose', 'unverified', candidates, 'declare-compose')
       return
@@ -319,7 +359,7 @@ class InspectionSession {
     this.finding('compose', 'ready', [candidates[0], compose.name], null)
     const unbounded = compose.services.filter((service) => !service.bounded).map((service) => service.name)
     this.finding('container-resources', unbounded.length ? 'changes-required' : 'ready', unbounded, unbounded.length ? 'limit-resources' : null)
-    const databases = compose.services.filter((service) => /(?:^|\/)(?:postgres|postgresql)(?::|@|$)/i.test(service.image))
+    const databases = compose.services.filter((service) => service.image !== null && /(?:^|\/)(?:postgres|postgresql)(?::|@|$)/i.test(service.image))
     const unready = databases.filter((db) => !db.healthy
       || !compose.services.some((service) => service.dependencies.includes(db.name))
       || compose.services.some((service) => service.startupDependencies.includes(db.name))).map((db) => db.name)
@@ -348,39 +388,34 @@ class InspectionSession {
       return
     }
     const inspected = await this.ask('docker', ['inspect', ...ids])
-    const containers = InspectionJson.parse(inspected.stdout)
-    if (inspected.failed || !Array.isArray(containers) || containers.length !== ids.length) {
+    const parsed = InspectionJson.parse(inspected.stdout)
+    if (inspected.failed || !Array.isArray(parsed) || parsed.length !== ids.length) {
       this.finding('container-mounts', 'unverified', [compose.name], 'retry-inspection')
       return
+    }
+    const containers: ContainerSetup[] = []
+    for (const value of parsed) {
+      const container = ContainerSetup.from(value, compose)
+      if (container === null) {
+        this.finding('container-mounts', 'unverified', [compose.name], 'review-compose')
+        return
+      }
+      containers.push(container)
     }
     const mismatched: string[] = []
     const observed = new Set<string>()
     let running = true
     for (const container of containers) {
-      if (!InspectionJson.record(container) || !InspectionJson.record(container.Config) || !InspectionJson.record(container.Config.Labels)
-        || !InspectionJson.record(container.State) || typeof container.State.Status !== 'string' || !Array.isArray(container.Mounts)
-        || !container.Mounts.every((mount: unknown) => InspectionJson.record(mount) && typeof mount.Type === 'string'
-          && typeof mount.Source === 'string' && typeof mount.Destination === 'string')) {
-        this.finding('container-mounts', 'unverified', [compose.name], 'retry-inspection')
-        return
-      }
-      const name = container.Config.Labels['com.docker.compose.service']
-      const service = compose.services.find((item) => item.name === name)
-      if (service === undefined) {
-        this.finding('container-mounts', 'unverified', [compose.name], 'review-compose')
-        return
-      }
-      running &&= container.State.Status === 'running'
+      const service = container.service
+      running &&= container.running
       observed.add(service.name)
       for (const expected of service.binds) {
-        const matches = container.Mounts.some((mount: unknown) => InspectionJson.record(mount)
-          && mount.Type === 'bind' && mount.Source === expected.source && mount.Destination === expected.target)
+        const matches = container.binds.some((mount) => mount.source === expected.source && mount.target === expected.target)
         if (!matches) mismatched.push(`- ${service.name}:${expected.source} -> ${expected.target}`)
       }
-      for (const mount of container.Mounts) {
-        if (InspectionJson.record(mount) && mount.Type === 'bind'
-          && !service.binds.some((bind) => bind.source === mount.Source && bind.target === mount.Destination)) {
-          mismatched.push(`+ ${service.name}:${mount.Source} -> ${mount.Destination}`)
+      for (const mount of container.binds) {
+        if (!service.binds.some((bind) => bind.source === mount.source && bind.target === mount.target)) {
+          mismatched.push(`+ ${service.name}:${mount.source} -> ${mount.target}`)
         }
       }
     }
@@ -390,9 +425,9 @@ class InspectionSession {
     await this.images(compose, containers)
   }
 
-  async images(compose: ComposeSetup, containers: unknown[]): Promise<void> {
+  async images(compose: ComposeSetup, containers: readonly ContainerSetup[]): Promise<void> {
     const images = [...new Set(compose.services.map((service) => service.image))]
-    if (images.some((image) => !/^[\w][\w./:@-]*$/.test(image))) {
+    if (!images.every((image): image is string => image !== null) || images.some((image) => !/^[\w][\w./:@-]*$/.test(image))) {
       this.finding('image-provenance', 'unverified', [compose.name], 'verify-dependencies')
       return
     }
@@ -405,21 +440,14 @@ class InspectionSession {
     const mismatched: string[] = []
     const observed = new Set<string>()
     for (const container of containers) {
-      if (!InspectionJson.record(container) || typeof container.Image !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(container.Image)
-        || !InspectionJson.record(container.Config) || !InspectionJson.record(container.Config.Labels)) {
+      if (container.image === null) {
         this.finding('image-provenance', 'unverified', [compose.name], 'verify-dependencies')
         return
       }
-      const name = container.Config.Labels['com.docker.compose.service']
-      const service = compose.services.find((item) => item.name === name)
-      if (service === undefined) {
-        this.finding('image-provenance', 'unverified', [compose.name], 'verify-dependencies')
-        return
-      }
+      const service = container.service
       observed.add(service.name)
-      if (container.Image !== identities[images.indexOf(service.image)]) {
-        const identity = typeof container.Name === 'string' ? container.Name : service.name
-        mismatched.push(`${identity}:${container.Image}`)
+      if (container.image !== identities[images.findIndex((image) => image === service.image)]) {
+        mismatched.push(`${container.name}:${container.image}`)
       }
     }
     const complete = compose.services.every((service) => observed.has(service.name))

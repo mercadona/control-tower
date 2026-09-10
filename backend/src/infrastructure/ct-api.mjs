@@ -411,7 +411,7 @@ class CtApi {
       externalTools: new SurveyExternalTools({ toolSessions: CtApi.#toolSessions(environment) }),
       inspectProject: new InspectProject({ setup: new GitDockerProjectSetup({
         run: (bin, argv, cwd, budgetMs) => new ToolRunner({
-          bin, budgetMs, maxBufferBytes: 128 * 1024, killSignal: 'SIGKILL', ownProcessGroup: true,
+          bin, budgetMs, ownedProcessGroup: { maxBufferBytes: 128 * 1024 },
         }).run(argv, { cwd }),
         now: Date.now, budgetMs: 30_000, commandBudgetMs: 2_000,
         maxFiles: 24, maxContainers: 12,

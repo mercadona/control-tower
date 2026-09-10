@@ -342,3 +342,35 @@ commands are not certified bounded, unexpected bind mounts are detected, all
 replica images are checked, and every declared database consumer must wait for
 health. The diagnostic implementation remains uncommitted in the Control Tower
 worktree pending the user's publication request.
+
+## Follow-up: adversarial convention corrections
+
+The diagnostic was published in https://github.com/mercadona/control-tower/pull/300
+at `932cab7b376eb4263c94589ec059794190e60079`. An independent adversarial convention
+judge requested changes in 13 findings. The user approved applying those corrections.
+
+- F1–F2: execution failures are distinguished from completed-command exit code 1,
+  and unresolved shell expansions remain unverified.
+- F3: finding identifiers and actions are closed backend types. The frontend
+  vocabulary copy is compared during backend typechecking, with runtime checks
+  for nonempty presentation text.
+- F4/F8: container metadata is projected once with its resolved service; absent
+  image names remain explicit null values.
+- F5/F7/F12: unused signal/output options, unused content reads, repeated
+  validation, and unsupported public helpers were removed.
+- F6/F9/F10: the frontend accepts the backend classification, constructs immutable
+  owned values, and maintains one request-lifecycle state.
+- F11: the deadline test controls the clock; the real descendant test uses an
+  interprocess readiness signal before triggering overflow and observing cleanup.
+- F13: component functions belong to their named owner, with one public View.
+
+Verification after the corrections: 1,461 backend tests and 709 frontend tests
+passed; backend typechecking and the production frontend build passed. A real
+HTTP smoke test again served the built frontend and inspected the local reference
+checkout without running its tests or changing its environment.
+
+The same independent judge re-read the corrected files and callers and marked
+all F1–F13 resolved, with an APPROVE correction-review verdict. It ran no tests
+or commands and raised no new correction-induced finding. This remains an
+advisory whole-PR review, not a formal ct-step gate or a diagnosis of the original
+beta tester slowdown.

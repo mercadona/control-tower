@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { GitDockerProjectSetup } from '../../src/infrastructure/git-docker-project-setup.ts'
-import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
+import { ProcessOutput, ToolRunner } from '../../src/infrastructure/tool-runner.ts'
 import { PlanTarget } from '../../src/domain/value-objects/plan-target.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
@@ -291,5 +291,44 @@ describe('GitDockerProjectSetup', () => {
     world.files.set('Makefile', 'DOCKER_EXEC := pytest -n auto && docker compose exec app\ntest:\n\t@$(DOCKER_EXEC) $(CONTAINER_FOLDER)/scripts/test-command.sh')
     world.files.set('scripts/test-command.sh', 'pytest -n 2')
     expect((await world.inspect()).findings).toContainEqual(expect.objectContaining({ id: 'test-workers', status: 'unverified' }))
+  })
+
+  it('keeps_a_failed_ignore_probe_unverified_instead_of_prescribing_gitignore_changes', async () => {
+    const world = InspectionWorld.ready()
+    const original = world.run.bind(world)
+    const runner = new ToolRunner({ bin: 'ct-missing-inspection-probe', budgetMs: 2_000, ownedProcessGroup: { maxBufferBytes: 128 } })
+    world.run = async (...args) => args[0] === 'git' && args[1][0] === 'check-ignore' ? runner.run([]) : original(...args)
+    expect((await world.inspect()).findings).toContainEqual(expect.objectContaining({ id: 'git-ignore', status: 'unverified', action: 'retry-inspection' }))
+  })
+
+  it.each([
+    'pytest -n 2 $(cat pytest.args)',
+    'pytest -n 2 $PYTEST_ARGS',
+    'pytest -n 2 ${PYTEST_ARGS}',
+    'pytest -n 2 <(cat pytest.args)',
+  ])('does_not_certify_unresolved_shell_expansion: %s', async (command) => {
+    const world = InspectionWorld.ready()
+    world.files.set('AGENTS.md', `- test: \`${command}\``)
+    expect((await world.inspect()).findings).toContainEqual(expect.objectContaining({ id: 'test-workers', status: 'unverified' }))
+  })
+
+  it('does_not_read_contents_used_only_for_discovery_or_drift', async () => {
+    const world = InspectionWorld.ready()
+    world.files.set('package.json', '{"scripts":{"test":"custom"}}')
+    world.files.set('.gitignore', '.worktrees/')
+    const report = await world.inspect()
+    const reads = world.commands.filter(({ bin, argv }) => bin === 'git' && argv[0] === 'show').map(({ argv }) => argv[1].slice(41))
+    expect(reads).not.toContain('package.json')
+    expect(reads).not.toContain('.gitignore')
+    expect(reads).not.toContain('docker/docker-compose.yml')
+    expect(report.findings).toContainEqual(expect.objectContaining({ id: 'compose', status: 'ready' }))
+    expect(world.commands.find(({ argv }) => argv[0] === 'diff')?.argv).toContain('package.json')
+  })
+
+  it('leaves_a_build_only_service_image_unverified_without_inventing_a_name', async () => {
+    const world = InspectionWorld.ready()
+    world.config = { name: 'example', services: { app: { build: { context: '/repo' } } } }
+    expect((await world.inspect()).findings).toContainEqual(expect.objectContaining({ id: 'image-provenance', status: 'unverified' }))
+    expect(world.commands.some(({ bin, argv }) => bin === 'docker' && argv[0] === 'image')).toBe(false)
   })
 })
