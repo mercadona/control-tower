@@ -1,16 +1,19 @@
 import { describe, it, expect } from 'vitest'
-import { ReferredUserStories } from '../../src/infrastructure/referred-user-stories.js'
+import { ReferredUserStories } from '../../src/infrastructure/referred-user-stories.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
 import { UserStory } from '../../src/domain/value-objects/user-story.ts'
 
 class UserStoriesDouble {
-  constructor(name) {
+  readonly name: string
+  readonly asked: (UserStoryKey | UserStoryUrl)[]
+
+  constructor(name: string) {
     this.name = name
     this.asked = []
   }
 
-  async detail(reference) {
+  async detail(reference: UserStoryKey | UserStoryUrl): Promise<UserStory> {
     this.asked.push(reference)
 
     return new UserStory({ key: reference, summary: `answered by ${this.name}`, description: '' })
@@ -18,11 +21,13 @@ class UserStoriesDouble {
 }
 
 class RefusingUserStoriesDouble {
-  constructor(failure) {
+  readonly failure: Error
+
+  constructor(failure: Error) {
     this.failure = failure
   }
 
-  async detail() {
+  async detail(): Promise<UserStory> {
     throw this.failure
   }
 }

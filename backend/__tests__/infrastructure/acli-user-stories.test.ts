@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { AcliUserStories } from '../../src/infrastructure/acli-user-stories.js'
+import { AcliUserStories } from '../../src/infrastructure/acli-user-stories.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { UserStoryNotRead, UserStoryNotUnderstood, UserStoryFailure } from '../../src/domain/exceptions.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
@@ -8,17 +8,21 @@ import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy
 import { SleepDouble } from '../sleep-double.ts'
 
 class AcliDouble {
-  constructor(printed) {
+  readonly printed: string | ProcessOutput
+  readonly calls: string[][]
+  readonly sleeping: SleepDouble
+
+  constructor(printed: string | ProcessOutput) {
     this.printed = printed
     this.calls = []
     this.sleeping = new SleepDouble()
   }
 
-  static answering(fields) {
+  static answering(fields: Record<string, unknown>) {
     return new AcliDouble(JSON.stringify({ key: 'MO_SHOP-42', fields }))
   }
 
-  static refusing(said) {
+  static refusing(said: string) {
     return new AcliDouble(new ProcessOutput({ code: 1, stdout: '', stderr: said }))
   }
 
@@ -36,11 +40,11 @@ class AcliDouble {
     })
   }
 
-  async detailFor(text = 'MO_SHOP-42') {
+  async detailFor(text: string = 'MO_SHOP-42') {
     return this.userStories().detail(new UserStoryKey(text))
   }
 
-  async refusalFor(text = 'MO_SHOP-42') {
+  async refusalFor(text: string = 'MO_SHOP-42') {
     return this.detailFor(text).catch((cause) => cause)
   }
 }
