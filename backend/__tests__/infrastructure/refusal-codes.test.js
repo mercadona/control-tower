@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PlanRequestOutcome, PlanCollapse } from '../../src/infrastructure/start-plan-route.js'
+import { PlanRequestOutcome, PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
 import { ImplementRequestOutcome, ImplementCollapse } from '../../src/infrastructure/implement-plan-route.js'
 import { EventsRequestOutcome, PlanEvents } from '../../src/infrastructure/plan-events-route.js'
 import { ActivePlansOutcome } from '../../src/infrastructure/active-plans-route.js'

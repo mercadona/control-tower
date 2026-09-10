@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PlanRequest, PlanRequestOutcome } from '../../src/infrastructure/start-plan-route.js'
+import { PlanRequest, PlanRequestOutcome } from '../../src/infrastructure/start-plan-route.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
 import { PlanComment } from '../../src/domain/value-objects/plan-comment.ts'
@@ -49,7 +49,7 @@ describe('PlanRequest', () => {
     const accepted = PlanRequest.from('{"id":"MO_SHOP-42","repo":"josemerca/ct-loop-sandbox","path":"/repo/checkout"}')
 
     expect(accepted.story).toBeInstanceOf(UserStoryKey)
-    expect(accepted.story.text).toBe('MO_SHOP-42')
+    expect(accepted.story!.text).toBe('MO_SHOP-42')
   })
 
   it('an_id_that_is_a_github_issue_url_is_accepted_and_hands_back_a_user_story_url', () => {
@@ -58,7 +58,7 @@ describe('PlanRequest', () => {
 
     expect(accepted.outcome).toBe(PlanRequestOutcome.ACCEPTED)
     expect(accepted.story).toBeInstanceOf(UserStoryUrl)
-    expect(accepted.story.text).toBe(url)
+    expect(accepted.story!.text).toBe(url)
   })
 
   it('a_near_miss_of_a_github_issue_url_is_refused_as_a_malformed_id_and_not_silently_read_as_a_jira_key', () => {
@@ -79,8 +79,8 @@ describe('PlanRequest', () => {
   it('an_accepted_body_hands_back_the_repository_as_a_domain_value_too', () => {
     const accepted = PlanRequest.from('{"id":"MO_SHOP-42","repo":"josemerca/ct-loop-sandbox","path":"/repo/checkout"}')
 
-    expect(accepted.targets[0].repository).toBeInstanceOf(RepositoryName)
-    expect(accepted.targets[0].repository.text).toBe('josemerca/ct-loop-sandbox')
+    expect(accepted.targets![0].repository).toBeInstanceOf(RepositoryName)
+    expect(accepted.targets![0].repository.text).toBe('josemerca/ct-loop-sandbox')
   })
 
   it('a_body_whose_path_is_not_an_absolute_path_comes_back_refused_and_not_as_a_malformed_repo', () => {
@@ -115,8 +115,8 @@ describe('PlanRequest', () => {
       '{"id":"MO_SHOP-42","repo":"josemerca/ct-loop-sandbox","path":"/Users/someone/repos/ct-loop-sandbox"}'
     )
 
-    expect(accepted.targets[0].root).toBeInstanceOf(CheckoutRoot)
-    expect(accepted.targets[0].root.text).toBe('/Users/someone/repos/ct-loop-sandbox')
+    expect(accepted.targets![0].root).toBeInstanceOf(CheckoutRoot)
+    expect(accepted.targets![0].root.text).toBe('/Users/someone/repos/ct-loop-sandbox')
   })
 
   it('a_path_with_spaces_in_a_segment_is_still_well_formed_because_a_home_directory_can_carry_one', () => {
@@ -160,7 +160,7 @@ describe('PlanRequest', () => {
     )
 
     expect(accepted.comment).toBeInstanceOf(PlanComment)
-    expect(accepted.comment.text).toBe('añade el endpoint de salud')
+    expect(accepted.comment!.text).toBe('añade el endpoint de salud')
   })
 
   it('the_refusal_about_a_field_carries_the_name_of_the_field_it_is_about', () => {
@@ -229,10 +229,10 @@ describe('PlanRequest', () => {
 
     expect(accepted.listed).toBe(true)
     expect(accepted.targets).toHaveLength(1)
-    expect(accepted.targets[0].repository).toBeInstanceOf(RepositoryName)
-    expect(accepted.targets[0].repository.text).toBe('owner/name')
-    expect(accepted.targets[0].root).toBeInstanceOf(CheckoutRoot)
-    expect(accepted.targets[0].root.text).toBe('/repo/checkout')
+    expect(accepted.targets![0].repository).toBeInstanceOf(RepositoryName)
+    expect(accepted.targets![0].repository.text).toBe('owner/name')
+    expect(accepted.targets![0].root).toBeInstanceOf(CheckoutRoot)
+    expect(accepted.targets![0].root.text).toBe('/repo/checkout')
 
     const single = PlanRequest.from('{"id":"ABC-1","repo":"owner/name","path":"/repo/checkout"}')
     expect(single.listed).toBe(false)
