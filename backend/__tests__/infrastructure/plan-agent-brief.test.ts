@@ -4,7 +4,7 @@ import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PluginYardstick } from '../../../plugin/scripts/plugin-yardstick.js'
-import { PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.js'
+import { PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.ts'
 
 describe('PlanAgentBrief', () => {
   const errand = () => new PlanAgentBrief({

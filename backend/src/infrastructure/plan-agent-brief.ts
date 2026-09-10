@@ -1,6 +1,6 @@
 import { SLICE_REL_PATH } from '../../../plugin/scripts/state-paths.js'
 import { PluginYardstick } from '../../../plugin/scripts/plugin-yardstick.js'
-import { PlanIssueBody } from './gh-plan-issues.js'
+import { PlanIssueBody } from './gh-plan-issues.ts'
 import type { PlanIssue } from '../domain/value-objects/plan-issue.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 

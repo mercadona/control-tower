@@ -64,7 +64,7 @@ prose and they are still Spanish, and they are contract anyway:
 | `## Contexto heredado` | `plugin/scripts/groom.js` `INHERITED_CONTEXT_HEADING` |
 | `## Decisiones congeladas` | `plugin/scripts/groom.js` `FROZEN_DECISIONS_HEADING` |
 | `## Dependencias` | `plugin/scripts/gh-issue-map.js` `DEPS_HEADING` |
-| `## Acceptance criteria (EARS, 1:1 con tests)` | `backend/src/infrastructure/gh-plan-issues.js` `AC_HEADING` |
+| `## Acceptance criteria (EARS, 1:1 con tests)` | `backend/src/infrastructure/gh-plan-issues.ts` `AC_HEADING` |
 | `## Descripción`, `## Hipótesis`, `## Señal de observabilidad`, the judge's telemetry heading, `## Current State` with its dispatched-slice subtitle | literals in `plugin/scripts` and `backend/src` |
 
 Each lives in three places at once: the constant, the body of every live GitHub

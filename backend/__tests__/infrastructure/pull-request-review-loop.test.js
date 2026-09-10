@@ -4,7 +4,7 @@ import { DispatchCheckWorkbench } from '../../src/infrastructure/dispatch-check-
 import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { GhPullRequests } from '../../src/infrastructure/gh-pull-requests.ts'
-import { GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.js'
+import { GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.ts'
 import { Gh } from '../../src/infrastructure/gh.ts'
 import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.ts'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
