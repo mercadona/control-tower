@@ -356,9 +356,9 @@ class CtApi {
       stderr: (line) => process.stderr.write(line),
       root: asked.stateRoot,
     })
-    const planAgents = asked.transport === HeadlessPlanAgents.TRANSPORT
-      ? CtApi.#headlessAgents(asked.model, environment, asked.stateRoot)
-      : CtApi.#cmuxAgents()
+    const { transport, planAgents } = asked.transport === HeadlessPlanAgents.TRANSPORT
+      ? { transport: HeadlessPlanAgents.TRANSPORT, planAgents: CtApi.#headlessAgents(asked.model, environment, asked.stateRoot) }
+      : { transport: CmuxPlanAgents.TRANSPORT, planAgents: CtApi.#cmuxAgents() }
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
     const planIssues = new GhPlanIssues({
       gh,
@@ -437,7 +437,7 @@ class CtApi {
     } catch (error) {
       CtApi.#refuseListen(`could not listen on ${LOOPBACK}: ${error.message}`)
     }
-    process.stdout.write(`${JSON.stringify({ port })}\n`)
+    process.stdout.write(`${JSON.stringify({ port, transport })}\n`)
     await recovery.recover()
     CtApi.#sweepUntilItBreaks(CtApi.#harvestClock({
       workspace, checkouts, environment, harvestTable: asked.harvestTable,
