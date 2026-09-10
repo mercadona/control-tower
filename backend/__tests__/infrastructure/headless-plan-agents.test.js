@@ -7,7 +7,7 @@ import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.js'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
-import { PlanAgentNotLaunched, PlanAgentNotResumed } from '../../src/domain/exceptions.js'
+import { PlanAgentNotLaunched, PlanAgentNotNamed, PlanAgentNotResumed } from '../../src/domain/exceptions.js'
 
 class BriefDouble {
   static ERRAND = 'escribe el plan de #42 en josemerca/ct-loop-sandbox'
@@ -47,7 +47,8 @@ class HeadlessAgent {
   constructor({
     startAnswer = new StartedRun({ pid: HeadlessAgent.PID }),
     makeDirectoryAnswer = null,
-    writeAnswer = null,
+    conversationWriteAnswer = null,
+    callWriteAnswer = null,
     readAnswer = null,
     mintAnswers = [HeadlessAgent.AGENT],
   } = {}) {
@@ -55,12 +56,12 @@ class HeadlessAgent {
     this.startCalls = []
     this.startAnswer = startAnswer
     this.makeDirectoryAnswer = makeDirectoryAnswer
-    this.writeAnswer = writeAnswer
+    this.conversationWriteAnswer = conversationWriteAnswer
+    this.callWriteAnswer = callWriteAnswer
     this.readAnswer = readAnswer
     this.mintAnswers = [...mintAnswers]
     this.writeCalls = []
     this.makeDirectoryCalls = []
-    this.readCalls = []
     this.trace = []
   }
 
@@ -80,12 +81,34 @@ class HeadlessAgent {
     return new HeadlessAgent({ makeDirectoryAnswer: failure })
   }
 
-  static callUnwritable(failure) {
-    return new HeadlessAgent({ writeAnswer: failure })
+  static conversationUnwritable(failure) {
+    return new HeadlessAgent({ conversationWriteAnswer: failure })
   }
 
-  static conversationUnreadable(failure) {
+  static callUnwritable(failure) {
+    return new HeadlessAgent({ callWriteAnswer: failure })
+  }
+
+  static conversationReadRefused(failure) {
     return new HeadlessAgent({ readAnswer: failure })
+  }
+
+  static conversationUnreadable() {
+    const headless = new HeadlessAgent()
+    headless.recordConversation('not-json{')
+
+    return headless
+  }
+
+  static conversationMissingWorktree() {
+    const headless = new HeadlessAgent()
+    headless.recordConversation(JSON.stringify({ note: 'no worktree in here' }))
+
+    return headless
+  }
+
+  recordConversation(text) {
+    this.writeCalls.push([HeadlessAgent.CONVERSATION_PATH, text])
   }
 
   agents() {
@@ -108,21 +131,25 @@ class HeadlessAgent {
       },
       write: (path, text) => {
         this.trace.push('write')
+        const failure = path === HeadlessAgent.CONVERSATION_PATH ? this.conversationWriteAnswer : this.callWriteAnswer
+        if (failure instanceof Error) throw failure
         this.writeCalls.push([path, text])
-        if (this.writeAnswer instanceof Error) throw this.writeAnswer
 
         return Promise.resolve()
       },
       read: (path) => {
         this.trace.push('read')
-        this.readCalls.push(path)
         if (this.readAnswer instanceof Error) throw this.readAnswer
 
         const found = this.writeCalls.find(([written]) => written === path)
 
         return Promise.resolve(found === undefined ? null : found[1])
       },
-      mint: () => (this.mintAnswers.length > 1 ? this.mintAnswers.shift() : this.mintAnswers[0]),
+      mint: () => {
+        if (this.mintAnswers.length === 0) throw new Error('no mint answer queued for launch')
+
+        return this.mintAnswers.shift()
+      },
       clock: () => HeadlessAgent.STARTED_AT,
       brief: this.brief,
       runsIn: HeadlessAgent.RUNS_IN,
@@ -256,12 +283,12 @@ describe('HeadlessPlanAgents', () => {
     expect(headless.makeDirectoryCalls).toEqual([HeadlessAgent.DIRECTORY])
   })
 
-  it('the_directory_is_made_before_the_call_is_started_because_detached_run_opens_its_paths_and_fails_without_it', async () => {
+  it('the_directory_is_made_and_the_conversation_recorded_before_the_call_is_started_because_detached_run_opens_its_paths_and_fails_without_it', async () => {
     const headless = HeadlessAgent.launching()
 
     await headless.launch()
 
-    expect(headless.trace).toEqual(['makeDirectory', 'start', 'write', 'write'])
+    expect(headless.trace).toEqual(['makeDirectory', 'write', 'start', 'write'])
   })
 
   it('a_directory_that_cannot_be_made_raises_the_same_family_as_a_refused_launch_so_start_plan_never_sees_a_raw_node_error', async () => {
@@ -282,6 +309,16 @@ describe('HeadlessPlanAgents', () => {
     expect(refusal.message).toContain(HeadlessAgent.CALL_PATH)
   })
 
+  it('a_conversation_record_that_cannot_be_written_refuses_before_anything_starts_so_a_filesystem_that_cannot_take_it_never_launches_a_call', async () => {
+    const headless = HeadlessAgent.conversationUnwritable(new Error('ENOSPC: no space left on device'))
+
+    const refusal = await headless.refusal()
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotLaunched)
+    expect(refusal.message).toContain(HeadlessAgent.CONVERSATION_PATH)
+    expect(headless.startCalls).toEqual([])
+  })
+
   it('bin_names_the_binary_that_gets_spawned_as_claude_p_and_is_pinned_because_it_crosses_the_edge_into_a_real_process', () => {
     expect(HeadlessPlanAgents.BIN).toBe('claude')
   })
@@ -291,11 +328,11 @@ describe('HeadlessPlanAgents recording the worktree of a conversation', () => {
   it('a_conversation_records_the_worktree_its_calls_have_to_run_in', async () => {
     const headless = HeadlessAgent.launching()
 
-    const agent = await headless.launch()
+    await headless.launch()
 
-    await expect(headless.worktreeOf(agent)).resolves.toBe(HeadlessAgent.WORKTREE)
-    expect(headless.writeCalls.some(([path]) => path === HeadlessAgent.CONVERSATION_PATH)).toBe(true)
-    expect(headless.readCalls).toContain(HeadlessAgent.CONVERSATION_PATH)
+    const written = headless.writeCalls.find(([path]) => path === HeadlessAgent.CONVERSATION_PATH)
+
+    expect(written[1]).toBe(JSON.stringify({ worktree: HeadlessAgent.WORKTREE }))
   })
 
   it('two_conversations_do_not_share_the_worktree_they_recorded', async () => {
@@ -319,12 +356,42 @@ describe('HeadlessPlanAgents recording the worktree of a conversation', () => {
   })
 
   it('a_conversation_file_that_cannot_be_read_raises_the_same_family_as_a_refused_resume_so_nothing_sees_a_raw_node_error', async () => {
-    const headless = HeadlessAgent.conversationUnreadable(new Error('EACCES: permission denied'))
+    const headless = HeadlessAgent.conversationReadRefused(new Error('EACCES: permission denied'))
 
     const refusal = await headless.worktreeRefusal(HeadlessAgent.AGENT)
 
     expect(refusal).toBeInstanceOf(PlanAgentNotResumed)
     expect(refusal.message).toContain(HeadlessAgent.CONVERSATION_PATH)
+  })
+
+  it('a_conversation_recorded_as_something_that_is_not_json_refuses_instead_of_letting_a_syntax_error_escape', async () => {
+    const headless = HeadlessAgent.conversationUnreadable()
+
+    const refusal = await headless.worktreeRefusal(HeadlessAgent.AGENT)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
+    expect(refusal.message.startsWith(HeadlessAgent.AGENT)).toBe(true)
+  })
+
+  it('a_conversation_recorded_with_no_worktree_refuses_instead_of_answering_undefined_as_a_cwd', async () => {
+    const headless = HeadlessAgent.conversationMissingWorktree()
+
+    const refusal = await headless.worktreeRefusal(HeadlessAgent.AGENT)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
+    expect(refusal.message.startsWith(HeadlessAgent.AGENT)).toBe(true)
+  })
+
+  it('a_conversation_that_cannot_be_understood_is_not_the_same_family_as_one_whose_read_was_refused', async () => {
+    const notUnderstood = await HeadlessAgent.conversationUnreadable().worktreeRefusal(HeadlessAgent.AGENT)
+    const refused = await HeadlessAgent.conversationReadRefused(
+      new Error('EACCES: permission denied')
+    ).worktreeRefusal(HeadlessAgent.AGENT)
+
+    expect(notUnderstood).toBeInstanceOf(PlanAgentNotNamed)
+    expect(refused).toBeInstanceOf(PlanAgentNotResumed)
+    expect(notUnderstood).not.toBeInstanceOf(PlanAgentNotResumed)
+    expect(refused).not.toBeInstanceOf(PlanAgentNotNamed)
   })
 })
 

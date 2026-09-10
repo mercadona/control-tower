@@ -4,7 +4,7 @@ import { ImplementPlanParams } from '../application/actions/implement-plan.js'
 import { RepositoryName } from '../domain/value-objects/repository-name.js'
 import { ActivePlanPhase } from './active-plans-route.js'
 import {
-  PlanFailure, PlanAgentNotResumed, PlanGoNotAnswered, GoNotRecorded,
+  PlanFailure, PlanAgentNotResumed, PlanAgentNotNamed, PlanGoNotAnswered, GoNotRecorded,
 } from '../domain/exceptions.js'
 
 export const ImplementRequestOutcome = Object.freeze({
@@ -155,6 +155,7 @@ export class ImplementCollapse {
     [GoNotRecorded, ImplementCollapse.#collapsed('go-not-recorded')],
     [PlanGoNotAnswered, ImplementCollapse.#collapsed('plan-go-not-answered')],
     [PlanAgentNotResumed, ImplementCollapse.#collapsed('plan-agent-not-resumed')],
+    [PlanAgentNotNamed, ImplementCollapse.#collapsed('plan-agent-worktree-not-understood')],
   ])
 
   static of(cause) {

@@ -56,7 +56,11 @@ describe('PlanCollapse', () => {
     'ImplementationProgressFailure', 'PullRequestFailure', 'WorkbenchFailure',
   ]
 
-  const RESUMING_AN_AGENT = ImplementCollapse.declaredFailures()
+  const SHARED_WITH_RESUMING_AN_AGENT_ON_PURPOSE = ['PlanAgentNotNamed']
+
+  const RESUMING_AN_AGENT = ImplementCollapse.declaredFailures().filter(
+    (name) => !SHARED_WITH_RESUMING_AN_AGENT_ON_PURPOSE.includes(name)
+  )
 
   const startingAPlan = ([name, thrown]) =>
     thrown.prototype instanceof exceptions.PlanFailure &&

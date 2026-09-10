@@ -13,7 +13,7 @@ import {
   ImplementRequestOutcome, ImplementRefusal, ImplementCollapse,
 } from '../../src/infrastructure/implement-plan-route.js'
 import {
-  PlanAgentNotResumed, PlanFailure, PlanGoNotAnswered, GoFailure, GoNotRecorded,
+  PlanAgentNotResumed, PlanAgentNotNamed, PlanFailure, PlanGoNotAnswered, GoFailure, GoNotRecorded,
 } from '../../src/domain/exceptions.js'
 import { ActivePlans, ActivePlanPhase } from '../../src/infrastructure/active-plans-route.js'
 
@@ -277,7 +277,7 @@ describe('ImplementRefusal', () => {
 })
 
 describe('ImplementCollapse', () => {
-  const RESUMING_AN_AGENT = ['GoNotRecorded', 'PlanGoNotAnswered', 'PlanAgentNotResumed']
+  const RESUMING_AN_AGENT = ['GoNotRecorded', 'PlanGoNotAnswered', 'PlanAgentNotResumed', 'PlanAgentNotNamed']
 
   it('every_way_resuming_an_agent_can_collapse_has_a_refusal_declared_so_adding_one_cannot_reach_the_client_as_a_crash', () => {
     expect(ImplementCollapse.declaredFailures().sort()).toEqual(RESUMING_AN_AGENT.sort())
@@ -294,9 +294,17 @@ describe('ImplementCollapse', () => {
       new GoNotRecorded('the directory is not writable'),
       new PlanGoNotAnswered('gh issue comment failed: nope'),
       new PlanAgentNotResumed('cmux send failed: no such workspace'),
+      new PlanAgentNotNamed('the conversation record could not be understood'),
     ]
 
     expect(causes.map((cause) => ImplementCollapse.of(cause).status)).toEqual(Array(causes.length).fill(400))
+  })
+
+  it('a_conversation_record_nobody_could_understand_names_the_specific_way_it_failed_and_keeps_why', () => {
+    const collapse = ImplementCollapse.of(new PlanAgentNotNamed('the conversation record could not be understood'))
+
+    expect(collapse.code).toBe('plan-agent-worktree-not-understood')
+    expect(collapse.detail).toBe('the conversation record could not be understood')
   })
 
   it('a_go_nobody_could_record_names_the_specific_way_it_failed_and_keeps_why', () => {

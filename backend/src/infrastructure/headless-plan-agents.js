@@ -1,5 +1,5 @@
 import { PlanAgents } from '../domain/ports/plan-agents.js'
-import { PlanAgentNotLaunched, PlanAgentNotResumed } from '../domain/exceptions.js'
+import { PlanAgentNotLaunched, PlanAgentNotNamed, PlanAgentNotResumed } from '../domain/exceptions.js'
 
 export const HarnessStep = Object.freeze({
   WRITE_PLAN: 'write-plan',
@@ -106,6 +106,10 @@ export class HeadlessPlanAgents extends PlanAgents {
     })
 
     await this.#ensureDirectory(directory)
+    await this.#writeRecord(
+      this.#conversationPathFor(agent),
+      JSON.stringify({ worktree: briefing.located.path })
+    )
     const started = this.start.start({ argv, cwd: briefing.located.path, out, err })
 
     await this.#writeRecord(call, JSON.stringify(new HarnessCall({
@@ -118,10 +122,6 @@ export class HeadlessPlanAgents extends PlanAgents {
       pid: started.pid,
       startedAt,
     }).json))
-    await this.#writeRecord(
-      this.#conversationPathFor(agent),
-      JSON.stringify({ worktree: briefing.located.path })
-    )
 
     return agent
   }
@@ -135,7 +135,19 @@ export class HeadlessPlanAgents extends PlanAgents {
       )
     }
 
-    return JSON.parse(text).worktree
+    let record
+    try {
+      record = JSON.parse(text)
+    } catch (cause) {
+      throw new PlanAgentNotNamed(
+        `${agent} recorded a conversation at ${path} that is not JSON: ${cause.message}`
+      )
+    }
+    if (record === null || typeof record !== 'object' || typeof record.worktree !== 'string') {
+      throw new PlanAgentNotNamed(`${agent} recorded a conversation at ${path} with no worktree`)
+    }
+
+    return record.worktree
   }
 
   #conversationPathFor(agent) {
