@@ -129,7 +129,7 @@ repository's own choice of names, not a pattern:
 ```
 infrastructure/
   ct-api.mjs         the entrypoint
-  api-server.js      what every endpoint shares: mounting, the last net, listen, stop
+  api-server.ts      what every endpoint shares: mounting, the last net, listen, stop
   http.ts            generic plumbing: answering, routing hygiene, the origin filter, the body reader
   harvest-clock.ts   the sweep: every minute, asks a registry which clones
                       it served a plan for and surveys each in turn

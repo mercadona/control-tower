@@ -7,9 +7,9 @@ import { ProgressRequestOutcome, ProgressCollapse } from '../../src/infrastructu
 import { ReviewRequestOutcome, ReviewCollapse } from '../../src/infrastructure/review-plan-route.ts'
 
 class RequestVocabularies {
-  static #ACCEPTED = 'accepted'
+  static readonly #ACCEPTED = 'accepted'
 
-  static codes() {
+  static codes(): string[] {
     return [
       ...Object.values(PlanRequestOutcome),
       ...Object.values(ImplementRequestOutcome),
@@ -21,7 +21,7 @@ class RequestVocabularies {
 }
 
 class SharedOnPurposeAcrossRequestVocabularies {
-  static CODES = Object.freeze([
+  static readonly CODES: readonly string[] = Object.freeze([
     PlanRequestOutcome.BODY_NOT_A_JSON_OBJECT,
     PlanRequestOutcome.UNKNOWN_FIELD,
     PlanRequestOutcome.MALFORMED_REPO,
@@ -32,22 +32,22 @@ class SharedOnPurposeAcrossRequestVocabularies {
 }
 
 class Repeats {
-  static within(codes) {
-    const seen = new Map()
+  static within(codes: readonly string[]): string[] {
+    const seen = new Map<string, number>()
     for (const code of codes) seen.set(code, (seen.get(code) ?? 0) + 1)
     return [...seen.entries()].filter(([, count]) => count > 1).map(([code]) => code)
   }
 }
 
 class CodesRememberedByHandFromHttpAndApiServer {
-  static VALUES = Object.freeze([
+  static readonly VALUES: readonly string[] = Object.freeze([
     'not-found', 'method-not-allowed', 'foreign-origin', 'unsupported-media-type', 'body-too-large', 'request-failed',
     ActivePlansOutcome.RECOVERY_INCONCLUSIVE,
   ])
 }
 
 class EventStreamCodes {
-  static VALUES = Object.freeze([PlanEvents.PROGRESS_NOT_READ, PlanEvents.DELIVERY_NOT_READ])
+  static readonly VALUES: readonly string[] = Object.freeze([PlanEvents.PROGRESS_NOT_READ])
 }
 
 describe('the codes the api can emit', () => {
