@@ -5,58 +5,94 @@ import { dirname, join } from 'node:path'
 import { parseStateSafe } from '../../../plugin/scripts/state.js'
 import { buildStateSeed } from '../../../plugin/scripts/kickoff.js'
 import { resolveStatePath } from '../../../plugin/scripts/state-paths.js'
-import { BaselineOutcome, BaselineResult } from '../../../plugin/scripts/baseline.js'
-import { GitWorkspace, SliceSeed } from '../../src/infrastructure/git-workspace.js'
+import { Baseline, BaselineOutcome, BaselineResult } from '../../../plugin/scripts/baseline.js'
+import { GitWorkspace, SliceSeed } from '../../src/infrastructure/git-workspace.ts'
+import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import {
   WorkspaceFailure, WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood, CheckoutNotConfirmed,
 } from '../../src/domain/exceptions.ts'
+import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 
-class BaselineDouble {
-  constructor(result = BaselineDouble.green()) {
-    this.result = result
-    this.measured = []
+class BaselineDouble extends Baseline {
+  readonly #result: BaselineResult
+  readonly #measured: string[] = []
+
+  constructor(result: BaselineResult = BaselineDouble.green()) {
+    super({ run: () => { throw new Error('a baseline double never runs a command') } })
+    this.#result = result
   }
 
-  measure(worktree) {
-    this.measured.push(worktree)
-    return Promise.resolve(this.result)
+  get measured(): string[] {
+    return this.#measured
   }
 
-  static green() {
+  measure(worktree: string): Promise<BaselineResult> {
+    this.#measured.push(worktree)
+    return Promise.resolve(this.#result)
+  }
+
+  static green(): BaselineResult {
     return new BaselineResult({ outcome: BaselineOutcome.GREEN, command: 'npm test', summary: 'exit 0 · 12 passed' })
   }
 
-  static red() {
+  static red(): BaselineResult {
     return new BaselineResult({ outcome: BaselineOutcome.RED, command: 'npm test', summary: 'exit 1 · 2 failed' })
   }
 
-  static unverified() {
+  static unverified(): BaselineResult {
     return BaselineResult.notMeasured('no test command declared in AGENTS.md nor in .agent/conventions.md')
   }
 
-  static answering(result) {
+  static answering(result: BaselineResult): BaselineDouble {
     return new BaselineDouble(result)
   }
 }
 
 class GitDouble {
-  static ROOT = '/repo/checkout'
-  static CHECKOUT = new CheckoutRoot(GitDouble.ROOT)
-  static REPOSITORY = new RepositoryName('owner/name')
-  static REMOTE_URL = 'git@github.com:owner/name.git'
-  static BASE = 'main'
-  static DECLARED = `refs/remotes/origin/${GitDouble.BASE}\n`
-  static CUT = 'a1b2c3d'
-  static COMMON_DIR = '/repo/checkout/.git'
-  static WORKTREE = '/repo/checkout/.worktrees/42'
-  static EXCLUDE_PATH = `${GitDouble.COMMON_DIR}/info/exclude`
+  static readonly ROOT = '/repo/checkout'
+  static readonly CHECKOUT = new CheckoutRoot(GitDouble.ROOT)
+  static readonly REPOSITORY = new RepositoryName('owner/name')
+  static readonly REMOTE_URL = 'git@github.com:owner/name.git'
+  static readonly BASE = 'main'
+  static readonly DECLARED = `refs/remotes/origin/${GitDouble.BASE}\n`
+  static readonly CUT = 'a1b2c3d'
+  static readonly COMMON_DIR = '/repo/checkout/.git'
+  static readonly WORKTREE = '/repo/checkout/.worktrees/42'
+  static readonly EXCLUDE_PATH = `${GitDouble.COMMON_DIR}/info/exclude`
+
+  baseline: BaselineDouble
+  answer: ProcessOutput
+  removal: ProcessOutput | null
+  deletion: ProcessOutput | null
+  remote: ProcessOutput
+  status: ProcessOutput
+  existingExclude: string | null
+  commonDir: string
+  declared: ProcessOutput
+  toplevel: ProcessOutput
+  calls: string[][]
+  written: [string, string][]
+  reads: string[]
+  stderr: string[]
 
   constructor({
     answer, status, existingExclude = null, commonDir, declared, remote, toplevel, removal = null, deletion = null,
     baseline,
+  }: {
+    answer?: ProcessOutput,
+    status?: ProcessOutput,
+    existingExclude?: string | null,
+    commonDir?: string,
+    declared?: ProcessOutput,
+    remote?: ProcessOutput,
+    toplevel?: ProcessOutput,
+    removal?: ProcessOutput | null,
+    deletion?: ProcessOutput | null,
+    baseline?: BaselineDouble,
   } = {}) {
     this.baseline = baseline ?? new BaselineDouble()
     this.answer = answer ?? GitDouble.ok()
@@ -74,7 +110,7 @@ class GitDouble {
     this.stderr = []
   }
 
-  workspace() {
+  workspace(): GitWorkspace {
     return new GitWorkspace({
       baseline: this.baseline,
       read: (path) => {
@@ -95,12 +131,12 @@ class GitDouble {
     })
   }
 
-  answering(argv) {
+  answering(argv: string[]): ProcessOutput {
     if (argv.includes('get-url')) return this.remote
     if (argv.includes('--show-toplevel')) return this.toplevel
     if (argv.includes('symbolic-ref')) return this.declared
-    if (argv.includes('--git-common-dir')) return { failed: false, stdout: `${this.commonDir}\n`, stderr: '' }
-    if (argv.includes('HEAD')) return { failed: false, stdout: `${GitDouble.CUT}\n`, stderr: '' }
+    if (argv.includes('--git-common-dir')) return GitDouble.printing(`${this.commonDir}\n`)
+    if (argv.includes('HEAD')) return GitDouble.printing(`${GitDouble.CUT}\n`)
     if (argv.includes('status')) return this.status
     if (argv.includes('remove') && this.removal !== null) return this.removal
     if (argv.includes('-D') && this.deletion !== null) return this.deletion
@@ -108,62 +144,70 @@ class GitDouble {
     throw new Error(`nobody wrote an answer for git ${argv.join(' ')}`)
   }
 
-  asking(order) {
+  asking(order: string): string[] | undefined {
     return this.calls.find((argv) => argv.includes(order))
   }
 
-  prepared(issue = { number: 42 }) {
+  prepared(issue: PlanIssue = GitDouble.issue()) {
     return this.workspace().prepare({ issue, repository: GitDouble.REPOSITORY, root: GitDouble.CHECKOUT })
   }
 
-  confirmed() {
+  confirmed(): Promise<CheckoutRoot> {
     return this.workspace().confirm({ root: GitDouble.CHECKOUT, repository: GitDouble.REPOSITORY })
   }
 
-  refusedTo(asking) {
+  refusedTo(asking: Promise<CheckoutRoot>) {
     return asking.catch((cause) => cause)
   }
 
-  cut() {
+  cut(): string[] | undefined {
     return this.asking('worktree')
   }
 
-  static ok() {
-    return { failed: false, stdout: '', stderr: '' }
+  static issue(number = 42): PlanIssue {
+    return new PlanIssue({ number, url: `https://github.com/${GitDouble.REPOSITORY.text}/issues/${number}` })
   }
 
-  static declaring(stdout = GitDouble.DECLARED) {
-    return { failed: false, stdout, stderr: '' }
+  static printing(stdout: string): ProcessOutput {
+    return new ProcessOutput({ code: 0, stdout, stderr: '' })
   }
 
-  static naming(url) {
-    return { failed: false, stdout: `${url}\n`, stderr: '' }
+  static ok(): ProcessOutput {
+    return GitDouble.printing('')
   }
 
-  static canonical(path = GitDouble.ROOT) {
-    return { failed: false, stdout: `${path}\n`, stderr: '' }
+  static declaring(stdout: string = GitDouble.DECLARED): ProcessOutput {
+    return GitDouble.printing(stdout)
   }
 
-  static declaringNothing(argv) {
+  static naming(url: string): ProcessOutput {
+    return GitDouble.printing(`${url}\n`)
+  }
+
+  static canonical(path: string = GitDouble.ROOT): ProcessOutput {
+    return GitDouble.printing(`${path}\n`)
+  }
+
+  static declaringNothing(argv: string[]): ProcessOutput | null {
     if (argv.includes('get-url')) return GitDouble.naming(GitDouble.REMOTE_URL)
 
     return argv.includes('symbolic-ref') ? GitDouble.declaring() : null
   }
 
-  static refused(stderr) {
-    return { failed: true, stdout: '', stderr }
+  static refused(stderr: string): ProcessOutput {
+    return new ProcessOutput({ code: 1, stdout: '', stderr })
   }
 
-  static clean() {
-    return { failed: false, stdout: '', stderr: '' }
+  static clean(): ProcessOutput {
+    return GitDouble.printing('')
   }
 
-  static located() {
+  static located(): WorkspaceLocation {
     return new WorkspaceLocation({ root: GitDouble.ROOT, path: GitDouble.WORKTREE, branch: 'feat/42' })
   }
 
-  static stillVisible() {
-    return { failed: false, stdout: `?? ${SliceSeed.RELATIVE_PATH}\n`, stderr: '' }
+  static stillVisible(): ProcessOutput {
+    return GitDouble.printing(`?? ${SliceSeed.RELATIVE_PATH}\n`)
   }
 }
 
@@ -190,7 +234,7 @@ describe('GitWorkspace', () => {
     expect(git.asking('symbolic-ref')).toEqual([
       '-C', GitDouble.ROOT, 'symbolic-ref', 'refs/remotes/origin/HEAD',
     ])
-    expect(git.cut().at(-1)).toBe('origin/trunk')
+    expect(git.cut()?.at(-1)).toBe('origin/trunk')
   })
 
   it('the_base_the_remote_declares_is_the_one_the_seed_records_so_a_rehydrated_agent_reads_the_truth', async () => {
@@ -340,7 +384,7 @@ describe('GitWorkspace', () => {
   })
 
   it('git_show_toplevel_printing_nothing_is_our_contract_with_git_broken_not_a_mismatched_repository', async () => {
-    const git = new GitDouble({ toplevel: { failed: false, stdout: '', stderr: '' } })
+    const git = new GitDouble({ toplevel: GitDouble.printing('') })
 
     const refusal = await git.refusedTo(git.confirmed())
 
@@ -357,7 +401,7 @@ describe('GitWorkspace', () => {
     const notCanonicalised = new GitDouble({
       toplevel: GitDouble.refused('fatal: not a git repository'),
     })
-    const unprintable = new GitDouble({ toplevel: { failed: false, stdout: '', stderr: '' } })
+    const unprintable = new GitDouble({ toplevel: GitDouble.printing('') })
 
     const refusals = await Promise.all(
       [mismatched, unreadable, unread, notCanonicalised, unprintable].map((git) => git.refusedTo(git.confirmed()))
@@ -395,7 +439,7 @@ describe('GitWorkspace', () => {
   it('it_never_reuses_a_directory_it_did_not_create_because_git_is_the_one_that_refuses', async () => {
     const git = new GitDouble({ answer: GitDouble.refused('fatal: destination path already exists') })
 
-    await expect(git.prepared({ number: 7 })).rejects.toBeInstanceOf(WorkspaceNotPrepared)
+    await expect(git.prepared(GitDouble.issue(7))).rejects.toBeInstanceOf(WorkspaceNotPrepared)
   })
 
   it('the_rule_that_hides_the_state_is_written_before_the_state_itself_in_the_directory_git_actually_reads', async () => {
@@ -454,11 +498,12 @@ describe('GitWorkspace', () => {
   it('a_common_dir_it_cannot_resolve_stops_the_seeding_because_the_state_would_be_visible_to_git', async () => {
     const git = new GitDouble()
     git.workspace = () => new GitWorkspace({
-      baseline: this.baseline,
+      baseline: git.baseline,
       read: () => Promise.resolve(null),
       write: () => Promise.resolve(),
+      stderr: (line) => { git.stderr.push(line) },
       run: (argv) => Promise.resolve(GitDouble.declaringNothing(argv) ?? (argv.includes('--git-common-dir')
-        ? { failed: true, stdout: '', stderr: 'not a git repository' }
+        ? GitDouble.refused('not a git repository')
         : GitDouble.ok())),
     })
 
@@ -550,13 +595,14 @@ describe('GitWorkspace', () => {
   it('a_head_it_cannot_measure_stops_the_seeding_instead_of_writing_a_state_without_a_cut', async () => {
     const git = new GitDouble()
     git.workspace = () => new GitWorkspace({
-      baseline: this.baseline,
+      baseline: git.baseline,
       read: () => Promise.resolve(null),
       write: () => Promise.resolve(),
+      stderr: (line) => { git.stderr.push(line) },
       run: (argv) => Promise.resolve(GitDouble.declaringNothing(argv) ?? (argv.includes('HEAD')
-        ? { failed: true, stdout: '', stderr: 'fatal: ambiguous argument HEAD' }
+        ? GitDouble.refused('fatal: ambiguous argument HEAD')
         : argv.includes('--git-common-dir')
-          ? { failed: false, stdout: `${GitDouble.COMMON_DIR}\n`, stderr: '' }
+          ? GitDouble.printing(`${GitDouble.COMMON_DIR}\n`)
           : GitDouble.ok()))
     })
 
@@ -614,13 +660,14 @@ describe('GitWorkspace undoes what it already created when preparing the ground 
   it('a_common_dir_git_refuses_to_resolve_still_gets_the_worktree_and_branch_undone', async () => {
     const git = new GitDouble()
     git.workspace = () => new GitWorkspace({
-      baseline: this.baseline,
+      baseline: git.baseline,
       read: () => Promise.resolve(null),
       write: () => Promise.resolve(),
+      stderr: (line) => { git.stderr.push(line) },
       run: (argv) => {
         git.calls.push(argv)
         return Promise.resolve(GitDouble.declaringNothing(argv) ?? (argv.includes('--git-common-dir')
-          ? { failed: true, stdout: '', stderr: 'not a git repository' }
+          ? GitDouble.refused('not a git repository')
           : GitDouble.ok()))
       },
     })
@@ -635,15 +682,16 @@ describe('GitWorkspace undoes what it already created when preparing the ground 
   it('a_head_git_cannot_measure_still_gets_the_worktree_and_branch_undone', async () => {
     const git = new GitDouble()
     git.workspace = () => new GitWorkspace({
-      baseline: this.baseline,
+      baseline: git.baseline,
       read: () => Promise.resolve(null),
       write: () => Promise.resolve(),
+      stderr: (line) => { git.stderr.push(line) },
       run: (argv) => {
         git.calls.push(argv)
         return Promise.resolve(GitDouble.declaringNothing(argv) ?? (argv.includes('HEAD')
-          ? { failed: true, stdout: '', stderr: 'fatal: ambiguous argument HEAD' }
+          ? GitDouble.refused('fatal: ambiguous argument HEAD')
           : argv.includes('--git-common-dir')
-            ? { failed: false, stdout: `${GitDouble.COMMON_DIR}\n`, stderr: '' }
+            ? GitDouble.printing(`${GitDouble.COMMON_DIR}\n`)
             : GitDouble.ok()))
       },
     })
@@ -675,10 +723,11 @@ describe('GitWorkspace undoes what it already created when preparing the ground 
   })
 
   it('a_cleanup_that_also_fails_after_a_common_dir_refusal_does_not_replace_the_original_failure', async () => {
-    const git = new GitDouble({ removal: GitDouble.refused('fatal: worktree remove refused') })
+    const removal = GitDouble.refused('fatal: worktree remove refused')
+    const git = new GitDouble({ removal })
     git.answering = (argv) => {
       if (argv.includes('--git-common-dir')) return GitDouble.refused('not a git repository')
-      if (argv.includes('remove')) return git.removal
+      if (argv.includes('remove')) return removal
 
       return GitDouble.declaringNothing(argv) ?? GitDouble.ok()
     }
@@ -723,16 +772,16 @@ describe('GitWorkspace tells its diagnostic writer what git refused to undo, bec
 })
 
 class SeedFixture {
-  static CUT = 'a1b2c3d'
-  static #made = []
+  static readonly CUT = 'a1b2c3d'
+  static readonly #made: string[] = []
 
-  static text() {
+  static text(): string {
     return SliceSeed.textFor({
       issue: { number: 42 }, branch: 'feat/42', base: 'main', cut: SeedFixture.CUT,
     })
   }
 
-  static sownWorktree() {
+  static sownWorktree(): string {
     const worktree = mkdtempSync(join(tmpdir(), 'ct-slice-'))
     SeedFixture.#made.push(worktree)
     const state = join(worktree, SliceSeed.RELATIVE_PATH)
@@ -742,7 +791,7 @@ class SeedFixture {
     return worktree
   }
 
-  static sweep() {
+  static sweep(): void {
     for (const worktree of SeedFixture.#made.splice(0)) {
       rmSync(worktree, { recursive: true, force: true })
     }
@@ -780,7 +829,7 @@ describe('SliceSeed', () => {
 })
 
 class PluginSeed {
-  static NOT_OURS = Object.freeze({
+  static readonly NOT_OURS = Object.freeze({
     epic: 'the plan of one issue belongs to no milestone: the epic is groomed, this is not',
     senal: 'an observability signal is declared by an implementation slice, not by writing a plan',
     gates: 'the human gates close on the pull request of an implementation, and no plan opens one',
@@ -789,14 +838,14 @@ class PluginSeed {
     verify: 'the verification of a plan is --check-plan, which the errand already names',
   })
 
-  static keys() {
+  static keys(): string[] {
     return Object.keys(parseStateSafe(buildStateSeed(
       { name: 'a slice', issue: '#42', ac: ['does the thing'] },
       { branch: 'feat/42', base: 'main', baseSha: SeedFixture.CUT }
     )).meta)
   }
 
-  static expectedOfUs() {
+  static expectedOfUs(): string[] {
     return PluginSeed.keys().filter((key) => !(key in PluginSeed.NOT_OURS))
   }
 }
@@ -856,7 +905,7 @@ describe('what the backend sows is read back by the plugin that has to read it',
 })
 
 class SurveyDouble extends GitDouble {
-  static PORCELAIN = [
+  static readonly PORCELAIN = [
     'worktree /repo/checkout',
     'HEAD 368980b38f86b03e0f228da7388d33626c521c48',
     'branch refs/heads/main',
@@ -894,18 +943,20 @@ class SurveyDouble extends GitDouble {
     '',
   ].join('\n')
 
-  constructor({ listed, remote } = {}) {
+  listed: ProcessOutput
+
+  constructor({ listed, remote }: { listed?: ProcessOutput, remote?: ProcessOutput } = {}) {
     super({ remote })
     this.listed = listed ?? SurveyDouble.listing()
   }
 
-  answering(argv) {
+  answering(argv: string[]): ProcessOutput {
     if (argv.includes('list')) return this.listed
 
     return super.answering(argv)
   }
 
-  surveyed() {
+  surveyed(): Promise<WorkspaceSurvey> {
     return this.workspace().survey(GitDouble.CHECKOUT)
   }
 
@@ -913,12 +964,12 @@ class SurveyDouble extends GitDouble {
     return this.surveyed().catch((cause) => cause)
   }
 
-  numbers() {
+  numbers(): Promise<number[]> {
     return this.surveyed().then((survey) => survey.prepared.map((prepared) => prepared.issueNumber))
   }
 
-  static listing(stdout = SurveyDouble.PORCELAIN) {
-    return { failed: false, stdout, stderr: '' }
+  static listing(stdout: string = SurveyDouble.PORCELAIN): ProcessOutput {
+    return GitDouble.printing(stdout)
   }
 }
 
