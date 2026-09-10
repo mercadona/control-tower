@@ -149,6 +149,7 @@ class RealComposition {
       stream: `${directory}/${HarnessCall.STREAM_FILE}`,
       error: `${directory}/${HarnessCall.ERROR_FILE}`,
       call: `${directory}/${HarnessCall.CALL_FILE}`,
+      conversation: `${runsIn}/${RealComposition.AGENT}/${HeadlessPlanAgents.CONVERSATION_FILE}`,
     }
   }
 }
@@ -245,6 +246,29 @@ describe('the real DetachedRun composed with the real HeadlessPlanAgents', () =>
 
     expect(call.argv).toEqual(capturedArgv)
     expect(call.pid).toBe(capturedPid)
+  })
+
+  it('the_conversation_a_real_launch_writes_names_the_plan_it_belongs_to_and_when_it_started', async () => {
+    const env = {
+      ...process.env,
+      PATH: claude.pathPrefixedWith(process.env.PATH),
+      CT_FAKE_CLAUDE_CAPTURE_DIR: captureDirectory,
+    }
+    const headless = RealComposition.headless({ runsIn, env })
+
+    await headless.launch(RealComposition.briefing(worktree))
+    const paths = RealComposition.expectedPaths(runsIn)
+    const capturedPid = await Capture.eventuallyPidIn(captureDirectory)
+    GroupTracking.track(capturedPid)
+
+    const conversation = JSON.parse(readFileSync(paths.conversation, 'utf8'))
+
+    expect(conversation).toEqual({
+      worktree,
+      issue: RealComposition.ISSUE.number,
+      repository: RealComposition.REPOSITORY.text,
+      startedAt: RealComposition.STARTED_AT,
+    })
   })
 
   it('the_envelope_a_launch_composes_keeps_landing_after_the_process_that_launched_it_has_already_exited', async () => {

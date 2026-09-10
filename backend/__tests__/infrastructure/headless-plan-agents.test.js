@@ -143,7 +143,41 @@ class HeadlessAgent {
 
   static conversationMissingWorktree() {
     const headless = new HeadlessAgent()
-    headless.recordConversation(JSON.stringify({ note: 'no worktree in here' }))
+    headless.recordConversation(JSON.stringify({
+      issue: HeadlessAgent.ISSUE_NUMBER,
+      repository: HeadlessAgent.REPOSITORY.text,
+      startedAt: HeadlessAgent.STARTED_AT,
+    }))
+
+    return headless
+  }
+
+  static conversationMissingIssue() {
+    const headless = new HeadlessAgent()
+    headless.recordConversation(JSON.stringify({
+      worktree: HeadlessAgent.WORKTREE,
+      repository: HeadlessAgent.REPOSITORY.text,
+      startedAt: HeadlessAgent.STARTED_AT,
+    }))
+
+    return headless
+  }
+
+  static conversationRecordedAsAnArray() {
+    const headless = new HeadlessAgent()
+    headless.recordConversation(JSON.stringify([HeadlessAgent.WORKTREE]))
+
+    return headless
+  }
+
+  static conversationWithEmptyRepository() {
+    const headless = new HeadlessAgent()
+    headless.recordConversation(JSON.stringify({
+      worktree: HeadlessAgent.WORKTREE,
+      issue: HeadlessAgent.ISSUE_NUMBER,
+      repository: '',
+      startedAt: HeadlessAgent.STARTED_AT,
+    }))
 
     return headless
   }
@@ -157,7 +191,12 @@ class HeadlessAgent {
 
   static resuming(overrides = {}) {
     const headless = new HeadlessAgent(overrides)
-    headless.recordConversation(JSON.stringify({ worktree: HeadlessAgent.WORKTREE }))
+    headless.recordConversation(JSON.stringify({
+      worktree: HeadlessAgent.WORKTREE,
+      issue: HeadlessAgent.ISSUE_NUMBER,
+      repository: HeadlessAgent.REPOSITORY.text,
+      startedAt: HeadlessAgent.STARTED_AT,
+    }))
 
     return headless
   }
@@ -442,14 +481,58 @@ describe('HeadlessPlanAgents', () => {
 })
 
 describe('HeadlessPlanAgents recording the worktree of a conversation', () => {
-  it('a_conversation_records_the_worktree_its_calls_have_to_run_in', async () => {
+  it('launch_records_which_plan_the_conversation_attends_and_when_it_started', async () => {
     const headless = HeadlessAgent.launching()
+    const briefing = new PlanBriefing({
+      story: null,
+      issue: new PlanIssue({ number: 33, url: 'https://github.com/owner/repo/issues/33' }),
+      located: new WorkspaceLocation({ path: HeadlessAgent.WORKTREE, branch: 'feat/42' }),
+      repository: new RepositoryName('owner/repo'),
+    })
 
-    await headless.launch()
+    await headless.launch(briefing)
 
-    const written = headless.writeCalls.find(([path]) => path === HeadlessAgent.CONVERSATION_PATH)
+    const written = headless.capturedAt(HeadlessAgent.CONVERSATION_PATH)
 
-    expect(written?.[1]).toBe(`{"worktree":"${HeadlessAgent.WORKTREE}"}`)
+    expect(written).toEqual({
+      worktree: HeadlessAgent.WORKTREE,
+      issue: 33,
+      repository: 'owner/repo',
+      startedAt: HeadlessAgent.STARTED_AT,
+    })
+  })
+
+  it('a_conversation_recorded_without_the_issue_it_belongs_to_refuses_instead_of_resuming_a_plan_it_cannot_name', async () => {
+    const headless = HeadlessAgent.conversationMissingIssue()
+
+    const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
+    expect(refusal.message).toBe(
+      `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} that is not a well-formed record`
+    )
+  })
+
+  it('a_conversation_recorded_as_a_json_array_refuses_instead_of_reading_fields_off_a_list', async () => {
+    const headless = HeadlessAgent.conversationRecordedAsAnArray()
+
+    const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
+    expect(refusal.message).toBe(
+      `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} that is not a well-formed record`
+    )
+  })
+
+  it('a_conversation_whose_repository_is_the_empty_string_refuses_instead_of_naming_no_repository', async () => {
+    const headless = HeadlessAgent.conversationWithEmptyRepository()
+
+    const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
+    expect(refusal.message).toBe(
+      `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} that is not a well-formed record`
+    )
   })
 
   it('two_conversations_do_not_share_the_worktree_they_recorded', async () => {
@@ -509,7 +592,7 @@ describe('HeadlessPlanAgents recording the worktree of a conversation', () => {
 
     expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
     expect(refusal.message).toBe(
-      `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} with no worktree`
+      `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} that is not a well-formed record`
     )
   })
 
@@ -520,7 +603,7 @@ describe('HeadlessPlanAgents recording the worktree of a conversation', () => {
 
     expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
     expect(refusal.message).toBe(
-      `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} with no worktree`
+      `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} that is not a well-formed record`
     )
   })
 

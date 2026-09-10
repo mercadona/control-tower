@@ -61,6 +61,38 @@ export class HarnessCall {
   }
 }
 
+export class HarnessConversation {
+  static isWellFormed(record) {
+    return (
+      record !== null &&
+      typeof record === 'object' &&
+      !Array.isArray(record) &&
+      typeof record.worktree === 'string' && record.worktree.length > 0 &&
+      typeof record.repository === 'string' && record.repository.length > 0 &&
+      Number.isInteger(record.issue) && record.issue > 0 &&
+      Number.isInteger(record.startedAt) && record.startedAt > 0
+    )
+  }
+
+  constructor({ agent, worktree, issue, repository, startedAt }) {
+    this.agent = agent
+    this.worktree = worktree
+    this.issue = issue
+    this.repository = repository
+    this.startedAt = startedAt
+    Object.freeze(this)
+  }
+
+  get json() {
+    return {
+      worktree: this.worktree,
+      issue: this.issue,
+      repository: this.repository,
+      startedAt: this.startedAt,
+    }
+  }
+}
+
 export class HeadlessPlanAgents extends PlanAgents {
   static TRANSPORT = 'headless'
   static BIN = 'claude'
@@ -116,7 +148,13 @@ export class HeadlessPlanAgents extends PlanAgents {
     await this.#ensureDirectory(directory, PlanAgentNotLaunched)
     await this.#writeRecord(
       this.#conversationPathFor(agent),
-      JSON.stringify({ worktree: briefing.located.path }),
+      JSON.stringify(new HarnessConversation({
+        agent,
+        worktree: briefing.located.path,
+        issue: briefing.issue.number,
+        repository: briefing.repository.text,
+        startedAt,
+      }).json),
       PlanAgentNotLaunched
     )
     const started = this.#startRun({ argv, cwd: briefing.located.path, out, err }, PlanAgentNotLaunched)
@@ -195,8 +233,10 @@ export class HeadlessPlanAgents extends PlanAgents {
         `${agent} recorded a conversation at ${path} that is not JSON: ${cause.message}`
       )
     }
-    if (record === null || typeof record.worktree !== 'string') {
-      throw new PlanAgentNotNamed(`${agent} recorded a conversation at ${path} with no worktree`)
+    if (!HarnessConversation.isWellFormed(record)) {
+      throw new PlanAgentNotNamed(
+        `${agent} recorded a conversation at ${path} that is not a well-formed record`
+      )
     }
 
     return record.worktree
