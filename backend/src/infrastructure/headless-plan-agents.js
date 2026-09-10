@@ -108,6 +108,10 @@ export class HeadlessPlanAgents extends PlanAgents {
     [HarnessStep.FIX_PULL_REQUEST, 'sonnet'],
   ])
 
+  static conversationPathFor({ runsIn, agent }) {
+    return `${runsIn}/${agent}/${HeadlessPlanAgents.CONVERSATION_FILE}`
+  }
+
   static argvFor({ errand, step, pluginRoot, agent, resuming }) {
     return [
       HeadlessPlanAgents.PRINT, errand,
@@ -243,7 +247,7 @@ export class HeadlessPlanAgents extends PlanAgents {
   }
 
   #conversationPathFor(agent) {
-    return `${this.runsIn}/${agent}/${HeadlessPlanAgents.CONVERSATION_FILE}`
+    return HeadlessPlanAgents.conversationPathFor({ runsIn: this.runsIn, agent })
   }
 
   #startRun({ argv, cwd, out, err }, Failure) {

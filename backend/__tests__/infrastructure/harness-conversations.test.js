@@ -30,14 +30,17 @@ class Harness {
   static #recordFor({
     worktree = Harness.WORKTREE, issue = Harness.ISSUE, repository = Harness.REPOSITORY, startedAt = Harness.STARTED_AT,
   } = {}) {
-    return JSON.stringify({ worktree, issue, repository, startedAt })
+    return JSON.stringify(new HarnessConversation({ agent: Harness.AGENT, worktree, issue, repository, startedAt }).json)
   }
 
-  constructor({ agentNames = [], listFailure = null, texts = new Map(), readFailures = new Map() } = {}) {
+  constructor({
+    agentNames = [], listFailure = null, texts = new Map(), readFailures = new Map(), noRecordAgents = [],
+  } = {}) {
     this.agentNames = agentNames
     this.listFailure = listFailure
     this.texts = texts
     this.readFailures = readFailures
+    this.noRecordAgents = noRecordAgents
     this.stderr = vi.fn()
     this.listCalls = []
     this.readCalls = []
@@ -97,7 +100,7 @@ class Harness {
   }
 
   static holdingADirectoryWithNoConversationRecord() {
-    return new Harness({ agentNames: [Harness.AGENT] })
+    return new Harness({ agentNames: [Harness.AGENT], noRecordAgents: [Harness.AGENT] })
   }
 
   conversations() {
@@ -111,9 +114,12 @@ class Harness {
       read: async (path) => {
         this.readCalls.push(path)
         const agent = this.agentNames.find((name) => Harness.#pathFor(name) === path)
+        if (agent === undefined) throw new Error(`this double was never told what ${path} holds`)
         if (this.readFailures.has(agent)) throw this.readFailures.get(agent)
+        if (this.noRecordAgents.includes(agent)) return null
+        if (this.texts.has(agent)) return this.texts.get(agent)
 
-        return this.texts.has(agent) ? this.texts.get(agent) : null
+        throw new Error(`this double was never told what ${path} holds`)
       },
       stderr: this.stderr,
       runsIn: Harness.RUNS_IN,
@@ -122,6 +128,16 @@ class Harness {
 }
 
 describe('HarnessConversations', () => {
+  it('the_path_a_conversation_is_read_from_is_the_one_headlessplanagents_composes_for_the_same_runs_in_and_agent', async () => {
+    const harness = Harness.holdingOneWellFormedRecord()
+
+    await harness.conversations().known()
+
+    expect(harness.readCalls).toEqual([
+      HeadlessPlanAgents.conversationPathFor({ runsIn: Harness.RUNS_IN, agent: Harness.AGENT }),
+    ])
+  })
+
   it('a_record_names_its_plan_by_its_fields_and_its_agent_by_the_directory_it_sits_in', async () => {
     const harness = Harness.holdingOneWellFormedRecord()
 
@@ -160,8 +176,8 @@ describe('HarnessConversations', () => {
 
     expect(known).toHaveLength(1)
     expect(known[0].worktree).toBe(Harness.OTHER_WORKTREE)
-    expect(harness.stderr).toHaveBeenCalledWith(expect.stringContaining(Harness.PATH))
-    expect(harness.stderr.mock.calls[0][0].startsWith('plans in flight: ')).toBe(true)
+    expect(harness.stderr).toHaveBeenCalledWith(expect.stringContaining(`${Harness.PATH} is not JSON`))
+    expect(harness.stderr).toHaveBeenCalledWith(expect.stringMatching(/^plans in flight: /))
   })
 
   it('a_record_whose_issue_is_zero_is_skipped_instead_of_attending_a_worktree', async () => {
@@ -170,7 +186,7 @@ describe('HarnessConversations', () => {
     const known = await harness.conversations().known()
 
     expect(known).toEqual([])
-    expect(harness.stderr).toHaveBeenCalledWith(expect.stringContaining(Harness.PATH))
+    expect(harness.stderr).toHaveBeenCalledWith(expect.stringContaining(`${Harness.PATH} is not a well-formed record`))
   })
 
   it('a_record_whose_issue_is_one_is_the_smallest_one_that_attends_a_worktree', async () => {
@@ -186,7 +202,7 @@ describe('HarnessConversations', () => {
     const known = await harness.conversations().known()
 
     expect(known).toEqual([])
-    expect(harness.stderr).toHaveBeenCalledWith(expect.stringContaining(Harness.PATH))
+    expect(harness.stderr).toHaveBeenCalledWith(expect.stringContaining(`${Harness.PATH} is not a well-formed record`))
   })
 
   it('a_record_that_cannot_be_read_is_skipped_with_its_path_on_stderr', async () => {
@@ -195,7 +211,7 @@ describe('HarnessConversations', () => {
     const known = await harness.conversations().known()
 
     expect(known).toEqual([])
-    expect(harness.stderr).toHaveBeenCalledWith(expect.stringContaining(Harness.PATH))
+    expect(harness.stderr).toHaveBeenCalledWith(expect.stringContaining(`${Harness.PATH} could not be read`))
   })
 
   it('a_directory_with_no_conversation_record_is_not_a_plan_and_says_nothing', async () => {

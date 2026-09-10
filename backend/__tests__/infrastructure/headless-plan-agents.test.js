@@ -892,6 +892,20 @@ describe('HeadlessPlanAgents.MODELS', () => {
   })
 })
 
+describe('HeadlessPlanAgents.conversationPathFor', () => {
+  it('composes_the_same_path_launch_writes_the_conversation_record_to', async () => {
+    const headless = HeadlessAgent.launching()
+
+    await headless.launch()
+
+    const [conversationWrittenTo] = headless.writeCalls[0]
+
+    expect(conversationWrittenTo).toBe(
+      HeadlessPlanAgents.conversationPathFor({ runsIn: HeadlessAgent.RUNS_IN, agent: HeadlessAgent.AGENT })
+    )
+  })
+})
+
 describe('HarnessStep', () => {
   it('names_the_four_literal_steps_a_call_can_be_and_is_frozen_so_none_can_be_added', () => {
     expect(HarnessStep).toEqual({

@@ -26,7 +26,7 @@ export class HarnessConversations {
   }
 
   #pathFor(agent) {
-    return `${this.runsIn}/${agent}/${HeadlessPlanAgents.CONVERSATION_FILE}`
+    return HeadlessPlanAgents.conversationPathFor({ runsIn: this.runsIn, agent })
   }
 
   async #read(agent) {
