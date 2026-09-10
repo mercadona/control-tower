@@ -49,11 +49,10 @@ kills it as long as the parent lives.
 
 ### Desired end state
 
-- `PlanAgents` has two implementations. `CT_PLAN_TRANSPORT` picks one at the entrypoint;
-  unset, or `cmux`, and the behaviour and the graph are exactly today's.
-- With `CT_PLAN_TRANSPORT=headless`, `POST /start-plan` writes a plan **without opening any
-  window**: `claude -p` runs in the prepared worktree and the agent it answers with is a UUID.
-- `CT_PLAN_MODEL` names the model of every headless call; unset, it is `opus` — today's constant.
+- **`claude -p` is the transport, not an option.** The entrypoint builds `HeadlessPlanAgents`
+  and nothing chooses: `POST /start-plan` writes a plan **without opening any window**, `claude -p`
+  runs in the prepared worktree, and the agent it answers with is a UUID.
+- `CT_PLAN_MODEL` names the model of every call; unset, it is `opus` — today's constant.
 - Every headless call leaves a directory under the state root holding three files: `call.json`
   (the step, the issue, the repository, the model, the argv and the pid — the data that is **not**
   in the stream), `stream.ndjson` (claude's events, byte for byte and untrimmed) and `stderr.log`.
@@ -82,7 +81,10 @@ kills it as long as the parent lives.
   plan without its agent. Phase 1 of the issue owns recovery and already has its own plan; this
   slice must not break it, and §9.4 states the consequence.
 - **Who conducts the implementation.** `resume` keeps today's errand, `ct-step` included. Phase 4.
-- **`cmux` itself.** `CmuxPlanAgents` is not touched, not deprecated and stays the default.
+- **Deleting `CmuxPlanAgents`.** It stops being constructed, but `worktree-plans.js:24-25` still
+  reads its `isHandle` and `NAME_PREFIX` to recover a plan in flight, and recovery is phase 1's.
+  So it stays in the tree as an implementation nobody builds — the seam phase 1 inherits, named in
+  §9.9 with what it costs today.
 - **The plugin.** Not one line. `PlanAgentBrief`, `ct-step`, `dispatch-check` unchanged.
 - **The frontend.** `/implement-plan` goes on receiving `agent`; its well-formedness rule already
   admits a UUID (`implement-plan-route.js:61-63`), so no contract moves.
@@ -104,9 +106,9 @@ kills it as long as the parent lives.
 | A failed spawn | `child.on('error', …)` is registered before `child.pid` is read: measured, an unhandled `'error'` event kills the API and no `try`/`catch` sees it |
 | Where a call's record lives | `<state root>/harness/<agent>/<step>-<startedAt>/` |
 | Where a continuation runs | the worktree `launch` recorded in `<state root>/harness/<agent>/conversation.json`. The port is **not** changed to carry it |
-| Default transport | `cmux`. With `CT_PLAN_TRANSPORT` unset nothing changes |
+| The transport | `claude -p`, always. There is no variable and no fallback |
 | Default model | `opus`, today's `CmuxPlanAgents.MODEL` |
-| A malformed `CT_PLAN_TRANSPORT` or `CT_PLAN_MODEL` | refuses the invocation, like `CT_HARVEST_BQ_TABLE` already does |
+| A malformed `CT_PLAN_MODEL` | refuses the invocation, like `CT_HARVEST_BQ_TABLE` already does |
 | The errands | unchanged, all four |
 
 ## 3. Reference patterns
@@ -154,8 +156,7 @@ And `PlanAgentBrief` — `errandFor({ issue, repository })`,
 
 Produces: `DetachedRun` with `start({ argv, cwd, out, err }) => StartedRun` and `StartedRun.pid`.
 `HeadlessPlanAgents`, the second implementation of `PlanAgents`, with the static
-`HeadlessPlanAgents.TRANSPORT` naming it in `CT_PLAN_TRANSPORT`. `HarnessStep`, the closed
-vocabulary of a call's step. `Invocation.transport` and `Invocation.model`.
+`HarnessStep`, the closed vocabulary of a call's step. `Invocation.model`.
 
 ## 6. Test strategy
 
@@ -423,10 +424,10 @@ cd backend && test "$(grep -c "'fix-pull-request'" src/infrastructure/headless-p
 cd backend && npx vitest run --exclude '**/*-real-process.test.js'   # exit 0: nothing regressed
 ```
 
-### Task 5 — The transport and the model are read from the environment, or refused
+### Task 5 — The model is read from the environment, or refused
 
-**Objective:** `Invocation` answers which transport and which model were asked for, and refuses an
-invocation that names either of them malformed.
+**Objective:** `Invocation` answers which model every call must ask for, and refuses an invocation
+that names one malformed.
 
 **Files:**
 - Modify: `backend/src/infrastructure/invocation.js`
@@ -449,52 +450,45 @@ Contract (backend/src/infrastructure/invocation.js):
 ```javascript
 export const InvocationOutcome = Object.freeze({
   // the four that are already there, plus:
-  MALFORMED_TRANSPORT: 'malformed-transport',
   MALFORMED_MODEL: 'malformed-model',
 })
 
 export class Invocation {
-  static TRANSPORT_VARIABLE = 'CT_PLAN_TRANSPORT'
   static MODEL_VARIABLE = 'CT_PLAN_MODEL'
-  static DEFAULT_MODEL = 'opus'
+  static DEFAULT_MODEL = CmuxPlanAgents.MODEL
   static #MODEL = /^[^\s-]\S*$/   // no whitespace, no leading dash
 
-  get transport()   // CmuxPlanAgents.TRANSPORT or HeadlessPlanAgents.TRANSPORT
   get model()
 }
 ```
 
-`CmuxPlanAgents` gains `static TRANSPORT = 'cmux'` so neither name is written twice, and both
-reach `Invocation` as data. An unset or empty `CT_PLAN_TRANSPORT` answers `cmux`; an unset or
-empty `CT_PLAN_MODEL` answers `DEFAULT_MODEL`. A value outside the two transports, or a model
-that fails `#MODEL`, refuses with its outcome and a reason quoting what it got — the shape
-`MALFORMED_HARVEST_TABLE` already uses (`invocation.js:118-123`). `#MODEL` enforces exactly what
-its refusal says, no more: what matters is that the value cannot be read as another argument. A
-tighter pattern refuses `claude-opus-5[1m]` and every Bedrock-style id, and this issue is titled
-*choose whichever model we want*.
+An unset or empty `CT_PLAN_MODEL` answers `DEFAULT_MODEL`. One that fails `#MODEL` refuses with its
+outcome and a reason quoting what it got — the shape `MALFORMED_HARVEST_TABLE` already uses
+(`invocation.js:118-123`). `#MODEL` enforces exactly what its refusal says, no more: what matters
+is that the value cannot be read as another argument. A tighter pattern refuses
+`claude-opus-5[1m]` and every Bedrock-style id, and this issue is titled *choose whichever model we
+want*. **No transport variable exists**: `claude -p` is not a choice.
 
-**TDD:** red first — `it('an_environment_that_names_no_transport_asks_for_the_one_that_types_into_a_window')`,
-`transport === 'cmux'`. Then the boundary on both sides:
-`it('the_headless_transport_is_asked_for_by_its_name')` and
-`it('a_transport_that_is_neither_of_the_two_refuses_the_invocation_quoting_what_it_got')`,
-asserting the reason contains the rejected value. Then
-`it('an_environment_that_names_no_model_asks_for_the_one_the_window_used_to_type')`
-(`model === 'opus'`), `it('the_model_of_every_headless_call_comes_from_the_environment')`, and
+**TDD:** red first — `it('an_environment_that_names_no_model_asks_for_the_one_the_window_used_to_type')`
+(`model === 'opus'`), then `it('the_model_of_every_call_comes_from_the_environment')`, then
 `it('a_model_whose_name_could_become_another_argument_refuses_the_invocation')` — a value with a
-space and one starting with `-`.
+space and one starting with `-`. Last `it('a_long_context_model_is_named_like_any_other')`, which
+pins that a bracketed id is accepted, since a tighter pattern refusing it is the defect this task
+was corrected for.
 
-**Tests:** added: the six above. Removed: none.
+**Tests:** added: the four above. Removed on purpose: every case about `CT_PLAN_TRANSPORT`, with the
+variable itself.
 
-**Verification:** the two defaults are today's behaviour, both refusals quote their input, and
-neither transport name is spelled twice in the tree.
+**Verification:** the default is today's constant, decided in one place, and no transport variable
+survives anywhere.
 
 ```bash
-cd backend && npx vitest run __tests__/infrastructure/invocation.test.js   # exit 0: its cases and the six new ones
-cd backend && test "$(grep -c "'headless'" src/infrastructure/headless-plan-agents.js)" -eq 1
-cd backend && test "$(grep -c "'cmux'" src/infrastructure/cmux-plan-agents.js)" -eq 2
-cd backend && test -z "$(grep -l "'headless'" src/infrastructure/invocation.js)"
+cd backend && npx vitest run __tests__/infrastructure/invocation.test.js   # exit 0: its cases and the four new ones
+cd backend && test -z "$(grep -rl 'CT_PLAN_TRANSPORT' src)"
+cd backend && test "$(grep -c 'DEFAULT_MODEL = CmuxPlanAgents.MODEL' src/infrastructure/invocation.js)" -eq 1
 cd backend && npx vitest run --exclude '**/*-real-process.test.js'   # exit 0: nothing regressed
 ```
+
 
 ### Task 6 — The entrypoint picks the adapter, and the repository says what a harness call is
 
@@ -508,10 +502,8 @@ cd backend && npx vitest run --exclude '**/*-real-process.test.js'   # exit 0: n
 Call site (backend/src/infrastructure/ct-api.mjs):
 
 ```javascript
-// line 309 built CmuxPlanAgents unconditionally; now one private static per adapter
-const planAgents = asked.transport === HeadlessPlanAgents.TRANSPORT
-  ? CtApi.#headlessAgents(asked.model)
-  : CtApi.#cmuxAgents()
+// line 309 built CmuxPlanAgents; now nothing chooses, because there is nothing to choose
+const planAgents = CtApi.#headlessAgents(asked.model)
 ```
 
 `#headlessAgents` builds `new HeadlessPlanAgents({ start: new DetachedRun({ bin:
@@ -524,32 +516,26 @@ model, pluginRoot: PluginTree.root() })`. `#PLAN_CALL_TIMEOUT_MS` is new beside 
 Final text (backend/conventions/this-repository.md):
 
 ```markdown
-| **Plan agent** | Whoever writes the plan for a story; a Claude reached one of two ways — typed at in a cmux tab, or invoked per step with `claude -p` (`CT_PLAN_TRANSPORT`) |
+| **Plan agent** | Whoever writes the plan for a story; a Claude invoked per step with `claude -p`, never a session typed into |
 | **Harness call** | One invocation of the plan agent: its step, its model, its argv and the stream of events it wrote. It lives in its own directory under the state root and outlives the backend that started it |
 | **Step of a call** | Which errand that invocation carried — `write-plan`, `review-plan`, `implement`, `fix-pull-request`. The one datum no reader recovers afterwards, so it is written at the source |
 ```
 
 The `Plan agent` row **replaces** `this-repository.md:31`; the other two are new.
 
-**The entrypoint says which transport it took**, on the line it already prints:
-`{"port": N, "transport": "headless"}`. Without it the choice is unmeasurable — both adapters
-construct without throwing, so inverting the comparison swaps them with the suite green. Only the
-tests read that line, by key.
+**TDD:** red first — `it('the_entrypoint_assembles_the_headless_plan_agent_and_listens')` in
+`ct-api-real-process.test.js`, starting the entrypoint with nothing set and asserting it listens.
+**Not optional, and no grep replaces it**: §6 carries the precedent, and there is no longer a
+second branch to fall back to if the construction is wrong.
 
-**TDD:** red first — `it('the_entrypoint_assembles_the_headless_transport_and_listens')` in
-`ct-api-real-process.test.js`, starting the entrypoint with `CT_PLAN_TRANSPORT=headless` and
-asserting the transport it declares as well as that it listens. **Not optional, and no grep replaces
-it**: §6 carries the precedent. Then
-`it('the_entrypoint_asked_for_no_transport_still_assembles_the_one_that_types_into_a_window')`.
-
-**Tests:** added: the two above, reusing the entrypoint helper that file already has. Removed:
-none.
+**Tests:** added: the one above. Removed on purpose: the case that started a second transport, and
+`#cmuxAgents`, which loses its caller.
 
 **Verification:** both branches are assembled by a process the suite starts.
 
 ```bash
 cd backend && npx vitest run __tests__/infrastructure/ct-api-real-process.test.js   # exit 0: both transports assemble
-cd backend && test "$(grep -c 'CT_PLAN_TRANSPORT' __tests__/infrastructure/ct-api-real-process.test.js)" -ge 1
+cd backend && test -z "$(grep -rl 'CT_PLAN_TRANSPORT' src __tests__)"
 cd backend && test "$(grep -c 'PLAN_CALL_TIMEOUT_MS' src/infrastructure/ct-api.mjs)" -eq 2
 cd backend && test "$(grep -c 'Harness call' conventions/this-repository.md)" -eq 1
 cd backend && test -z "$(grep 'a Claude in a cmux tab' conventions/this-repository.md)"
@@ -560,7 +546,7 @@ cd backend && npx vitest run   # exit 0: the whole suite, real processes include
 
 The suite proves the pieces; what it cannot prove is that a real `claude -p` writes a real plan
 with no window. That end-to-end is run by hand, once, and it is the acceptance criterion of the
-issue's phase 2: start the backend with `CT_PLAN_TRANSPORT=headless` and `CT_PLAN_MODEL=opus`,
+issue's phase 2: start the backend — nothing to set, `claude -p` is the transport —
 `POST /start-plan` for a repository with a plan issue, and watch three things with human eyes —
 no cmux window opens, `stream.ndjson` grows under
 `~/.claude/control-tower/harness/<uuid>/write-plan-*/`, and the plan lands committed and
@@ -609,7 +595,14 @@ node plugin/scripts/dispatch-check.mjs 139 --repo mercadona/control-tower --chec
 7. **The four errands are not touched**, so `resume` still tells the model to drive itself with
    `ct-step`. This is option A, chosen in the session that dispatched this plan over driving the
    implementation from the backend. Provenance: the dispatching session.
-8. **The worktree of a continuation is remembered on disk, not added to the port.** The port hands
+8. **`claude -p` is the transport with no fallback, decided on 2026-09-10 by the human, mid-slice.**
+   What it costs, so nobody discovers it: `worktree-plans.js` recovers a plan in flight by looking
+   for a cmux window, and there will never be one again — so after a restart no plan in flight is
+   found, `/active-plans` loses it, and the two watchers lose their baseline. That was already the
+   issue's decision 7 ("an interrupted run is relaunched, it does not survive"), but it was
+   hypothetical while cmux was the default and it is the only behaviour now. Phase 1 is what
+   repairs it, and it is the phase that owns recovery. Provenance: the human, explicitly.
+9. **The worktree of a continuation is remembered on disk, not added to the port.** The port hands
    `resume`, `review` and `fix` no worktree, and a headless call needs a `cwd`. Adding `located` to
    those three methods is arguably the tidier model, but it changes the port, `CmuxPlanAgents`, the
    three use cases that call them and their tests — which is what this slice set out not to touch.
