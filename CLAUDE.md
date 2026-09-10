@@ -136,6 +136,47 @@ gh project item-edit 16 --owner mercadona --url "<issue URL>" --field "Status" -
 The add is safe if the auto-add workflow already added the item. If either
 command fails, stop before implementation and report the Project error.
 
+## A repository control is not an obstacle to route around
+
+The hooks, the branch protections, the CI gates and the permission prompts are
+this repository's controls. An agent working here does not disable one, does not
+pass a flag that skips one, and does not shape a command so that one stops
+looking.
+
+Named, because these are the forms it actually takes:
+
+- `--no-verify` on a commit or a push;
+- `git -c core.hooksPath=…`, or any invocation that moves the hooks aside;
+- editing, renaming or deleting a hook to get a command through;
+- `--force` past a protection that refused;
+- weakening a test, a gate or an assertion until it stops failing.
+
+**A control that refuses when it should not is a finding, not an obstacle.** Stop,
+say what refused and why you believe it is wrong, and let a person decide. A
+control that was routed around is worth nothing afterwards: nobody can tell any
+more whether it ever protected anything.
+
+This binds whatever the permission mode is. `bypassPermissions` says the human
+stopped being asked; it does not say the repository stopped deciding.
+
+### The one control known to be wrong, and the route that is not a workaround
+
+`branch-protection.py` resolves the current branch by running `git rev-parse`
+with no `cwd`, so it inherits the working directory of the session that invoked
+it. A session sitting in the main checkout on `main` therefore has every push
+refused as if it targeted `main` — including the push of a feature branch from a
+worktree, which is exactly what the hook exists to allow.
+
+The legitimate answer is to make the session's own working directory the
+worktree, so the hook resolves the branch that is really being pushed. That is
+not a workaround: it makes the hook see the truth instead of hiding it. An agent
+whose working directory is pinned elsewhere — a subagent, for instance — cannot
+do that, and hands the push back instead of getting past the hook another way.
+
+The real fix is one argument, `cwd`, on that `subprocess.run`. It lives in a
+cached plugin outside this repository, so until it lands, the route above is the
+route.
+
 ## What to do when you are unsure
 
 - **Is this string read by a person using the product?** If yes, Spanish. If it
@@ -146,4 +187,6 @@ command fails, stop before implementation and report the Project error.
   `backend/conventions/this-repository.md` holds the whole migration policy.
 - **Is there already an English word for this in the tree?** Use that one. Check
   `docs/glossary.md` first, then grep `plugin/conventions/`.
+- **Did a hook, a gate or a protection just refuse me?** Stop and report it.
+  Never disable it, skip it, or command your way past it.
 - **Anything else:** English.
