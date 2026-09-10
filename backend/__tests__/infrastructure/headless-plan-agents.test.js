@@ -73,6 +73,8 @@ class HeadlessAgent {
   static IMPLEMENT_DIRECTORY =
     `${HeadlessAgent.RUNS_IN}/${HeadlessAgent.AGENT}/${HarnessStep.IMPLEMENT}-${HeadlessAgent.STARTED_AT}`
   static IMPLEMENT_CALL_PATH = `${HeadlessAgent.IMPLEMENT_DIRECTORY}/${HarnessCall.CALL_FILE}`
+  static IMPLEMENT_STREAM_PATH = `${HeadlessAgent.IMPLEMENT_DIRECTORY}/${HarnessCall.STREAM_FILE}`
+  static IMPLEMENT_ERROR_PATH = `${HeadlessAgent.IMPLEMENT_DIRECTORY}/${HarnessCall.ERROR_FILE}`
   static REVIEW_DIRECTORY =
     `${HeadlessAgent.RUNS_IN}/${HeadlessAgent.AGENT}/${HarnessStep.REVIEW_PLAN}-${HeadlessAgent.STARTED_AT}`
   static REVIEW_CALL_PATH = `${HeadlessAgent.REVIEW_DIRECTORY}/${HarnessCall.CALL_FILE}`
@@ -230,32 +232,29 @@ class HeadlessAgent {
     return this.agents().launch(briefing)
   }
 
-  resume(agent = HeadlessAgent.AGENT, overrides = {}) {
+  resume(agent = HeadlessAgent.AGENT) {
     return this.agents().resume({
       agent,
       issue: HeadlessAgent.ISSUE_NUMBER,
       repository: HeadlessAgent.REPOSITORY,
-      ...overrides,
     })
   }
 
-  review(agent = HeadlessAgent.AGENT, overrides = {}) {
+  review(agent = HeadlessAgent.AGENT) {
     return this.agents().review({
       agent,
       issue: HeadlessAgent.ISSUE_NUMBER,
       repository: HeadlessAgent.REPOSITORY,
       changes: HeadlessAgent.CHANGES,
-      ...overrides,
     })
   }
 
-  fix(agent = HeadlessAgent.AGENT, overrides = {}) {
+  fix(agent = HeadlessAgent.AGENT) {
     return this.agents().fix({
       agent,
       issue: HeadlessAgent.ISSUE_NUMBER,
       repository: HeadlessAgent.REPOSITORY,
       changes: HeadlessAgent.CHANGES,
-      ...overrides,
     })
   }
 
@@ -528,6 +527,34 @@ describe('HeadlessPlanAgents continuing a conversation', () => {
     expect(headless.startCalls[0].cwd).not.toBe(process.cwd())
   })
 
+  it('the_continuation_leaves_its_agent_model_argv_and_pid_on_disk_because_no_reader_can_recover_them_later', async () => {
+    const headless = HeadlessAgent.resuming()
+
+    await headless.resume()
+
+    const call = headless.capturedAt(HeadlessAgent.IMPLEMENT_CALL_PATH)
+
+    expect(Object.keys(call)).toEqual([
+      'step', 'agent', 'issue', 'repository', 'model', 'argv', 'pid', 'startedAt',
+    ])
+    expect(call.step).toBe(HarnessStep.IMPLEMENT)
+    expect(call.agent).toBe(HeadlessAgent.AGENT)
+    expect(call.issue).toBe(HeadlessAgent.ISSUE_NUMBER)
+    expect(call.repository).toBe(HeadlessAgent.REPOSITORY.text)
+    expect(call.model).toBe(HeadlessAgent.MODEL)
+    expect(call.pid).toBe(HeadlessAgent.PID)
+    expect(call.startedAt).toBe(HeadlessAgent.STARTED_AT)
+    expect(call.argv).toEqual(headless.startCalls[0].argv)
+  })
+
+  it('the_directory_of_a_continuation_is_made_before_the_call_starts_because_detached_run_opens_its_paths_and_fails_without_it', async () => {
+    const headless = HeadlessAgent.resuming()
+
+    await headless.resume()
+
+    expect(headless.trace).toEqual(['read', 'makeDirectory', 'start', 'write'])
+  })
+
   it('a_second_call_on_one_conversation_leaves_a_second_record_beside_the_first', async () => {
     const headless = HeadlessAgent.launching()
 
@@ -537,8 +564,8 @@ describe('HeadlessPlanAgents continuing a conversation', () => {
     expect(headless.makeDirectoryCalls).toEqual([HeadlessAgent.DIRECTORY, HeadlessAgent.IMPLEMENT_DIRECTORY])
     expect(headless.capturedAt(HeadlessAgent.CALL_PATH).step).toBe(HarnessStep.WRITE_PLAN)
     expect(headless.capturedAt(HeadlessAgent.IMPLEMENT_CALL_PATH).step).toBe(HarnessStep.IMPLEMENT)
-    expect(headless.startCalls[1].out).toBe(`${HeadlessAgent.IMPLEMENT_DIRECTORY}/${HarnessCall.STREAM_FILE}`)
-    expect(headless.startCalls[1].err).toBe(`${HeadlessAgent.IMPLEMENT_DIRECTORY}/${HarnessCall.ERROR_FILE}`)
+    expect(headless.startCalls[1].out).toBe(HeadlessAgent.IMPLEMENT_STREAM_PATH)
+    expect(headless.startCalls[1].err).toBe(HeadlessAgent.IMPLEMENT_ERROR_PATH)
   })
 
   it('the_changes_a_person_asked_for_travel_in_the_errand_of_the_review_call', async () => {
@@ -569,6 +596,17 @@ describe('HeadlessPlanAgents continuing a conversation', () => {
 
     expect(refusal).toBeInstanceOf(PlanAgentNotResumed)
     expect(refusal.message).toContain(HeadlessAgent.IMPLEMENT_CALL_PATH)
+  })
+
+  it('a_call_that_cannot_be_started_for_a_continuation_raises_the_same_family_as_a_refused_resume_and_not_the_launch_cause', async () => {
+    const headless = HeadlessAgent.resuming({
+      startAnswer: new PlanAgentNotLaunched('spawn assigned no pid to "claude"'),
+    })
+
+    const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotResumed)
+    expect(refusal).not.toBeInstanceOf(PlanAgentNotLaunched)
   })
 
   it('the_fixes_of_a_pull_request_are_asked_for_with_the_step_that_says_so', async () => {

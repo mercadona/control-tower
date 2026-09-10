@@ -105,12 +105,13 @@ export class HeadlessPlanAgents extends PlanAgents {
       runsIn: this.runsIn, agent, step, startedAt,
     })
 
-    await this.#ensureDirectory(directory)
+    await this.#ensureDirectory(directory, PlanAgentNotLaunched)
     await this.#writeRecord(
       this.#conversationPathFor(agent),
-      JSON.stringify({ worktree: briefing.located.path })
+      JSON.stringify({ worktree: briefing.located.path }),
+      PlanAgentNotLaunched
     )
-    const started = this.start.start({ argv, cwd: briefing.located.path, out, err })
+    const started = this.#startRun({ argv, cwd: briefing.located.path, out, err }, PlanAgentNotLaunched)
 
     await this.#writeRecord(call, JSON.stringify(new HarnessCall({
       step,
@@ -121,7 +122,7 @@ export class HeadlessPlanAgents extends PlanAgents {
       argv,
       pid: started.pid,
       startedAt,
-    }).json))
+    }).json), PlanAgentNotLaunched)
 
     return agent
   }
@@ -167,7 +168,7 @@ export class HeadlessPlanAgents extends PlanAgents {
     })
 
     await this.#ensureDirectory(directory, PlanAgentNotResumed)
-    const started = this.start.start({ argv, cwd, out, err })
+    const started = this.#startRun({ argv, cwd, out, err }, PlanAgentNotResumed)
 
     await this.#writeRecord(call, JSON.stringify(new HarnessCall({
       step,
@@ -209,7 +210,16 @@ export class HeadlessPlanAgents extends PlanAgents {
     return `${this.runsIn}/${agent}/${HeadlessPlanAgents.CONVERSATION_FILE}`
   }
 
-  async #ensureDirectory(directory, Failure = PlanAgentNotLaunched) {
+  #startRun({ argv, cwd, out, err }, Failure) {
+    try {
+      return this.start.start({ argv, cwd, out, err })
+    } catch (failure) {
+      if (failure instanceof Failure) throw failure
+      throw new Failure(failure.message)
+    }
+  }
+
+  async #ensureDirectory(directory, Failure) {
     try {
       await this.makeDirectory(directory)
     } catch (failure) {
@@ -217,7 +227,7 @@ export class HeadlessPlanAgents extends PlanAgents {
     }
   }
 
-  async #writeRecord(path, text, Failure = PlanAgentNotLaunched) {
+  async #writeRecord(path, text, Failure) {
     try {
       await this.write(path, text)
     } catch (failure) {
