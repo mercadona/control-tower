@@ -52,8 +52,9 @@ kills it as long as the parent lives.
 - **`claude -p` is the transport, not an option.** The entrypoint builds `HeadlessPlanAgents`
   and nothing chooses: `POST /start-plan` writes a plan **without opening any window**, `claude -p`
   runs in the prepared worktree, and the agent it answers with is a UUID.
-- The model is `fable`, a constant of the adapter — the shape `CmuxPlanAgents.MODEL` already had.
-  No variable configures it, and `call.json` records what was asked for.
+- **The model is a function of the step**: `fable` writes and reviews the plan, `sonnet`
+  implements and fixes. Declared as a `Projection`, so a step with no model raises instead of
+  answering `undefined`. No variable configures it, and `call.json` records what was asked for.
 - Every headless call leaves a directory under the state root holding three files: `call.json`
   (the step, the issue, the repository, the model, the argv and the pid — the data that is **not**
   in the stream), `stream.ndjson` (claude's events, byte for byte and untrimmed) and `stderr.log`.
@@ -108,7 +109,7 @@ kills it as long as the parent lives.
 | Where a call's record lives | `<state root>/harness/<agent>/<step>-<startedAt>/` |
 | Where a continuation runs | the worktree `launch` recorded in `<state root>/harness/<agent>/conversation.json`. The port is **not** changed to carry it |
 | The transport | `claude -p`, always. There is no variable and no fallback |
-| The model | `fable`, a static of the adapter. Not a variable, not a collaborator |
+| The model | one per step: `write-plan` and `review-plan` → `fable`, `implement` and `fix-pull-request` → `sonnet`. A `Projection`, not a variable |
 | The errands | unchanged, all four |
 
 ## 3. Reference patterns
@@ -258,7 +259,7 @@ cd backend && npx vitest run --exclude '**/*-real-process.test.js'   # exit 0: n
 ### Task 2 — The plan is written by an invocation, and the call leaves its record
 
 **Objective:** `HeadlessPlanAgents.launch` mints the conversation's id, leaves the call's record
-under the state root and invokes `claude -p` in the prepared worktree, answering that id at once.
+under the state root and invokes `claude -p` in the worktree, answering that id at once.
 
 **Files:**
 - Create: `backend/src/infrastructure/headless-plan-agents.js`
@@ -268,57 +269,51 @@ under the state root and invokes `claude -p` in the prepared worktree, answering
 Contract (backend/src/infrastructure/headless-plan-agents.js):
 
 ```javascript
-export const HarnessStep = Object.freeze({
-  WRITE_PLAN: 'write-plan', REVIEW_PLAN: 'review-plan',
-  IMPLEMENT: 'implement', FIX_PULL_REQUEST: 'fix-pull-request',
-})
+export const HarnessStep = Object.freeze({ WRITE_PLAN: 'write-plan',
+  REVIEW_PLAN: 'review-plan', IMPLEMENT: 'implement', FIX_PULL_REQUEST: 'fix-pull-request' })
 
 export class HarnessCall {          // what is NOT in claude's stream
-  static CALL_FILE = 'call.json'
-  static STREAM_FILE = 'stream.ndjson'
+  static CALL_FILE = 'call.json'; static STREAM_FILE = 'stream.ndjson'
   static ERROR_FILE = 'stderr.log'
   constructor({ step, agent, issue, repository, model, argv, pid, startedAt })
   get json()                        // what CALL_FILE holds, keys in this order
 }
 
 export class HeadlessPlanAgents extends PlanAgents {
-  static TRANSPORT = 'headless'
-  static BIN = 'claude'
-  static PRINT = '-p'
+  static BIN = 'claude'; static PRINT = '-p'
   static FORMAT = ['--output-format', 'stream-json', '--verbose']
   static PERMISSION = ['--permission-mode', 'bypassPermissions']
-
-  static MODEL = 'fable'
-  static argvFor({ errand, pluginRoot, agent, resuming })
+  static MODELS = new Projection('model', [['write-plan', 'fable'],
+    ['review-plan', 'fable'], ['implement', 'sonnet'], ['fix-pull-request', 'sonnet']])
+  static argvFor({ errand, step, pluginRoot, agent, resuming })
   constructor({ start, makeDirectory, write, read, mint, clock, brief, runsIn, pluginRoot })
   async launch(briefing)            // the agent: a UUID
 }
 ```
 
-`argvFor` answers `[PRINT, errand, ...FORMAT, ...PERMISSION, '--model', MODEL, '--plugin-dir',
-pluginRoot]`, then `['--session-id', agent]` or `['--resume', agent]`. `launch`
-mints the agent, composes `${runsIn}/${agent}/${HarnessStep.WRITE_PLAN}-${clock()}`, **makes that
-directory** — `DetachedRun` opens its paths and fails without it — starts the call with `cwd` at
-`briefing.located.path`, and only then writes `HarnessCall.CALL_FILE`, which carries the pid just
-answered.
+`argvFor` answers `[PRINT, errand, ...FORMAT, ...PERMISSION, '--model', MODELS.of(step),
+'--plugin-dir', pluginRoot]` plus `['--session-id', agent]` or `['--resume', agent]`. `launch`
+mints the agent, composes `${runsIn}/${agent}/${step}-${clock()}`, **makes that directory** —
+`DetachedRun` opens its paths and fails without it — starts the call with `cwd` at
+`briefing.located.path`, and only then writes the record, which carries the pid just answered.
 
-**TDD:** red first — `it('the_plan_is_asked_for_with_the_errand_the_brief_composed_and_the_model_it_was_given')`,
-asserting the whole argv literally, `--model` included. Then
-`it('the_conversation_carries_the_id_the_adapter_imposed_and_not_one_read_back')` — the answer is
-the minted id, and the argv holds `--session-id` with it and no `--resume`. Then
-`it('the_call_leaves_its_step_and_its_model_on_disk_because_no_reader_can_recover_them_later')`,
-reading `call.json` back for `step === 'write-plan'`;
+**TDD:** red first — `it('the_plan_is_asked_for_with_the_errand_the_brief_composed_and_the_model_its_step_declares')`,
+asserting the whole argv literally. Then
+`it('the_conversation_carries_the_id_the_adapter_imposed_and_not_one_read_back')` — the minted id,
+`--session-id` holding it, no `--resume`. Then
+`it('the_call_leaves_its_step_and_its_model_on_disk_because_no_reader_can_recover_them_later')`;
 `it('the_stream_of_the_call_and_its_diagnosis_are_two_different_files')`;
-`it('the_plan_is_written_in_the_worktree_that_was_prepared_and_not_where_the_api_runs')`. Last the
-failure cause: `it('a_call_that_cannot_be_started_refuses_without_leaving_a_conversation_behind')`.
+`it('the_plan_is_written_in_the_worktree_that_was_prepared_and_not_where_the_api_runs')`;
+`it('a_step_no_model_was_declared_for_raises_instead_of_asking_for_undefined')`;
+`it('a_call_that_cannot_be_started_refuses_without_leaving_a_conversation_behind')`.
 
-**Tests:** added: the six above, plus the `HeadlessAgent` test type (`.launching()`, `.refusing()`,
-`.captured()`) and a `BriefDouble`. Removed: none.
+**Tests:** added: the seven above, the `HeadlessAgent` type and a `BriefDouble`. Removed: none.
 
-**Verification:** the argv is asserted whole, the step reaches disk, and the session is persisted.
+**Verification:** the argv is asserted whole, the step reaches disk, the session is persisted, and
+every step has a model.
 
 ```bash
-cd backend && npx vitest run __tests__/infrastructure/headless-plan-agents.test.js   # exit 0: the six cases
+cd backend && npx vitest run __tests__/infrastructure/headless-plan-agents.test.js   # exit 0: the seven cases
 cd backend && test "$(grep -c 'session-id' src/infrastructure/headless-plan-agents.js)" -eq 1
 cd backend && test -z "$(grep -l 'no-session-persistence' src/infrastructure/headless-plan-agents.js)"
 cd backend && npx vitest run --exclude '**/*-real-process.test.js'   # exit 0: nothing regressed
@@ -562,7 +557,14 @@ node plugin/scripts/dispatch-check.mjs 139 --repo mercadona/control-tower --chec
    issue's decision 7 ("an interrupted run is relaunched, it does not survive"), but it was
    hypothetical while cmux was the default and it is the only behaviour now. Phase 1 is what
    repairs it, and it is the phase that owns recovery. Provenance: the human, explicitly.
-9. **`CT_PLAN_MODEL` was mine, not the issue's, and it is withdrawn.** The issue asks for
+9. **A model per step, named by the human on 2026-09-10; and the judge is beyond this slice.**
+   The human's words: the plan runs on fable/opus, the implementer on sonnet, the judge on
+   opus/fable. Where two are given, the first is taken and the other is one entry away. **The judge
+   is not deliverable here**: `resume`'s errand tells the model to drive itself by asking
+   `ct-step`, and `ct-step` dispatches the judge *inside that same session* — so today the judge
+   inherits the implementer's model, `sonnet`. Giving it its own call with its own model is exactly
+   what phase 4 is, and option A cannot do it. Said plainly rather than quietly approximated.
+   `CT_PLAN_MODEL` was mine, not the issue's, and it is withdrawn.** The issue asks for
    "Choosing the model … there is no invocation to put `--model` in" and "the model as an
    argument"; `argvFor`'s `--model` **is** that argument. Making where it comes from an environment
    variable was configuration nobody asked for, born in this plan's own first commit (`770a7cc`),
