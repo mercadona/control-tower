@@ -220,7 +220,7 @@ describe('the real DetachedRun composed with the real HeadlessPlanAgents', () =>
     rmSync(worktree, { recursive: true, force: true })
   })
 
-  it('the_three_files_a_launch_leaves_land_where_harnesscall_pathsfor_says_and_agree_with_what_the_real_process_actually_received', async () => {
+  it('the_files_a_real_launch_leaves_agree_with_what_the_process_received_and_the_conversation_names_the_plan_it_belongs_to', async () => {
     const env = {
       ...process.env,
       PATH: claude.pathPrefixedWith(process.env.PATH),
@@ -246,20 +246,6 @@ describe('the real DetachedRun composed with the real HeadlessPlanAgents', () =>
 
     expect(call.argv).toEqual(capturedArgv)
     expect(call.pid).toBe(capturedPid)
-  })
-
-  it('the_conversation_a_real_launch_writes_names_the_plan_it_belongs_to_and_when_it_started', async () => {
-    const env = {
-      ...process.env,
-      PATH: claude.pathPrefixedWith(process.env.PATH),
-      CT_FAKE_CLAUDE_CAPTURE_DIR: captureDirectory,
-    }
-    const headless = RealComposition.headless({ runsIn, env })
-
-    await headless.launch(RealComposition.briefing(worktree))
-    const paths = RealComposition.expectedPaths(runsIn)
-    const capturedPid = await Capture.eventuallyPidIn(captureDirectory)
-    GroupTracking.track(capturedPid)
 
     const conversation = JSON.parse(readFileSync(paths.conversation, 'utf8'))
 

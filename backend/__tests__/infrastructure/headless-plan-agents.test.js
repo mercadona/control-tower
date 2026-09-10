@@ -91,6 +91,7 @@ class HeadlessAgent {
     callWriteAnswer = null,
     readAnswer = null,
     mintAnswers = [HeadlessAgent.AGENT],
+    clockAnswers = null,
   } = {}) {
     this.brief = new BriefDouble()
     this.startCalls = []
@@ -100,6 +101,7 @@ class HeadlessAgent {
     this.callWriteAnswer = callWriteAnswer
     this.readAnswer = readAnswer
     this.mintAnswers = [...mintAnswers]
+    this.clockAnswers = clockAnswers === null ? null : [...clockAnswers]
     this.writeCalls = []
     this.makeDirectoryCalls = []
     this.stopCalls = []
@@ -112,6 +114,10 @@ class HeadlessAgent {
 
   static launchingTwoConversations() {
     return new HeadlessAgent({ mintAnswers: [HeadlessAgent.AGENT, HeadlessAgent.OTHER_AGENT] })
+  }
+
+  static launchingWithAnIncrementingClock() {
+    return new HeadlessAgent({ clockAnswers: [HeadlessAgent.STARTED_AT, HeadlessAgent.STARTED_AT + 1] })
   }
 
   static refusing(failure) {
@@ -163,6 +169,18 @@ class HeadlessAgent {
     return headless
   }
 
+  static conversationWithIssueZero() {
+    const headless = new HeadlessAgent()
+    headless.recordConversation(JSON.stringify({
+      worktree: HeadlessAgent.WORKTREE,
+      issue: 0,
+      repository: HeadlessAgent.REPOSITORY.text,
+      startedAt: HeadlessAgent.STARTED_AT,
+    }))
+
+    return headless
+  }
+
   static conversationRecordedAsAnArray() {
     const headless = new HeadlessAgent()
     headless.recordConversation(JSON.stringify([HeadlessAgent.WORKTREE]))
@@ -177,6 +195,30 @@ class HeadlessAgent {
       issue: HeadlessAgent.ISSUE_NUMBER,
       repository: '',
       startedAt: HeadlessAgent.STARTED_AT,
+    }))
+
+    return headless
+  }
+
+  static conversationWithEmptyWorktree() {
+    const headless = new HeadlessAgent()
+    headless.recordConversation(JSON.stringify({
+      worktree: '',
+      issue: HeadlessAgent.ISSUE_NUMBER,
+      repository: HeadlessAgent.REPOSITORY.text,
+      startedAt: HeadlessAgent.STARTED_AT,
+    }))
+
+    return headless
+  }
+
+  static conversationWithStartedAtNotANumber() {
+    const headless = new HeadlessAgent()
+    headless.recordConversation(JSON.stringify({
+      worktree: HeadlessAgent.WORKTREE,
+      issue: HeadlessAgent.ISSUE_NUMBER,
+      repository: HeadlessAgent.REPOSITORY.text,
+      startedAt: '2026-09-10',
     }))
 
     return headless
@@ -260,7 +302,12 @@ class HeadlessAgent {
 
         return this.mintAnswers.shift()
       },
-      clock: () => HeadlessAgent.STARTED_AT,
+      clock: () => {
+        if (this.clockAnswers === null) return HeadlessAgent.STARTED_AT
+        if (this.clockAnswers.length === 0) throw new Error('no clock answer queued for launch')
+
+        return this.clockAnswers.shift()
+      },
       brief: this.brief,
       runsIn: HeadlessAgent.RUNS_IN,
       pluginRoot: HeadlessAgent.PLUGIN_ROOT,
@@ -282,6 +329,15 @@ class HeadlessAgent {
       issue: HeadlessAgent.ISSUE,
       located: new WorkspaceLocation({ path: HeadlessAgent.OTHER_WORKTREE, branch: 'feat/99' }),
       repository: HeadlessAgent.REPOSITORY,
+    })
+  }
+
+  static briefingOfAnotherPlan() {
+    return new PlanBriefing({
+      story: null,
+      issue: new PlanIssue({ number: 33, url: 'https://github.com/owner/repo/issues/33' }),
+      located: new WorkspaceLocation({ path: HeadlessAgent.WORKTREE, branch: 'feat/42' }),
+      repository: new RepositoryName('owner/repo'),
     })
   }
 
@@ -480,17 +536,11 @@ describe('HeadlessPlanAgents', () => {
   })
 })
 
-describe('HeadlessPlanAgents recording the worktree of a conversation', () => {
+describe('HeadlessPlanAgents recording which plan a conversation attends and refusing an ill-formed record', () => {
   it('launch_records_which_plan_the_conversation_attends_and_when_it_started', async () => {
     const headless = HeadlessAgent.launching()
-    const briefing = new PlanBriefing({
-      story: null,
-      issue: new PlanIssue({ number: 33, url: 'https://github.com/owner/repo/issues/33' }),
-      located: new WorkspaceLocation({ path: HeadlessAgent.WORKTREE, branch: 'feat/42' }),
-      repository: new RepositoryName('owner/repo'),
-    })
 
-    await headless.launch(briefing)
+    await headless.launch(HeadlessAgent.briefingOfAnotherPlan())
 
     const written = headless.capturedAt(HeadlessAgent.CONVERSATION_PATH)
 
@@ -500,6 +550,17 @@ describe('HeadlessPlanAgents recording the worktree of a conversation', () => {
       repository: 'owner/repo',
       startedAt: HeadlessAgent.STARTED_AT,
     })
+  })
+
+  it('launch_reads_the_clock_once_so_the_conversation_and_its_first_call_share_the_same_instant', async () => {
+    const headless = HeadlessAgent.launchingWithAnIncrementingClock()
+
+    await headless.launch()
+
+    const conversation = headless.capturedAt(HeadlessAgent.CONVERSATION_PATH)
+    const call = headless.capturedAt(HeadlessAgent.CALL_PATH)
+
+    expect(conversation.startedAt).toBe(call.startedAt)
   })
 
   it('a_conversation_recorded_without_the_issue_it_belongs_to_refuses_instead_of_resuming_a_plan_it_cannot_name', async () => {
@@ -526,6 +587,39 @@ describe('HeadlessPlanAgents recording the worktree of a conversation', () => {
 
   it('a_conversation_whose_repository_is_the_empty_string_refuses_instead_of_naming_no_repository', async () => {
     const headless = HeadlessAgent.conversationWithEmptyRepository()
+
+    const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
+    expect(refusal.message).toBe(
+      `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} that is not a well-formed record`
+    )
+  })
+
+  it('a_conversation_whose_worktree_is_the_empty_string_refuses_instead_of_naming_no_worktree', async () => {
+    const headless = HeadlessAgent.conversationWithEmptyWorktree()
+
+    const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
+    expect(refusal.message).toBe(
+      `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} that is not a well-formed record`
+    )
+  })
+
+  it('a_conversation_whose_issue_is_zero_refuses_instead_of_naming_an_issue_that_does_not_exist', async () => {
+    const headless = HeadlessAgent.conversationWithIssueZero()
+
+    const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
+    expect(refusal.message).toBe(
+      `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} that is not a well-formed record`
+    )
+  })
+
+  it('a_conversation_whose_startedat_is_not_a_number_refuses_instead_of_sorting_wrong_when_a_relaunch_names_the_same_worktree', async () => {
+    const headless = HeadlessAgent.conversationWithStartedAtNotANumber()
 
     const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
 
