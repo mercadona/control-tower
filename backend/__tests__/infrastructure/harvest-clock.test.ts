@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { HarvestClock, SweepLine } from '../../src/infrastructure/harvest-clock.js'
+import { HarvestClock, SweepLine } from '../../src/infrastructure/harvest-clock.ts'
 import { HarvestDeliveryResult } from '../../src/application/actions/harvest-delivery.ts'
 import { SurveyWorkspacesResult } from '../../src/application/queries/survey-workspaces.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
@@ -12,6 +12,11 @@ import {
   HarvestFailure, HarvestNotRead, HarvestNotUnderstood, WorkspaceNotRead,
 } from '../../src/domain/exceptions.ts'
 import * as exceptions from '../../src/domain/exceptions.ts'
+import type { HarvestOutcomeValue } from '../../src/domain/value-objects/harvest-outcome.ts'
+
+type Surveyed = SurveyWorkspacesResult | Error
+type Harvested = HarvestOutcomeValue | Error
+type Scripted = [number, Harvested][]
 
 class Sweeping {
   static ROOT = '/repo/checkout'
@@ -21,7 +26,22 @@ class Sweeping {
   static SURVEY = 'survey'
   static SLEEP = 'sleep'
 
-  constructor({ checkouts, harvests, known = [Sweeping.CHECKOUT], sweeps = 1 }) {
+  readonly checkouts: Map<string, Surveyed[]>
+  readonly harvests: Map<number, Harvested>
+  known: CheckoutRoot[] | null
+  readonly sweeps: number
+  trace: string[]
+  readonly written: string[]
+  slept: number
+  readonly enough: Promise<void>
+  sweptEnough!: () => void
+
+  constructor({ checkouts, harvests, known = [Sweeping.CHECKOUT], sweeps = 1 }: {
+    checkouts: [string, Surveyed[]][],
+    harvests: Scripted,
+    known?: CheckoutRoot[],
+    sweeps?: number,
+  }) {
     this.checkouts = new Map(checkouts)
     this.harvests = new Map(harvests)
     this.known = known
@@ -34,7 +54,7 @@ class Sweeping {
     })
   }
 
-  static preparedFor(issueNumber, root = Sweeping.ROOT) {
+  static preparedFor(issueNumber: number, root: string = Sweeping.ROOT): PreparedWorkspace {
     return new PreparedWorkspace({
       issueNumber,
       located: new WorkspaceLocation({
@@ -45,7 +65,7 @@ class Sweeping {
     })
   }
 
-  static checkoutHolding(harvests, root = Sweeping.ROOT) {
+  static checkoutHolding(harvests: Scripted, root: string = Sweeping.ROOT): SurveyWorkspacesResult {
     return new SurveyWorkspacesResult({
       survey: new WorkspaceSurvey({
         repository: Sweeping.REPOSITORY,
@@ -54,11 +74,11 @@ class Sweeping {
     })
   }
 
-  static answering(harvests) {
+  static answering(harvests: Scripted): Sweeping {
     return new Sweeping({ checkouts: [[Sweeping.ROOT, [Sweeping.checkoutHolding(harvests)]]], harvests })
   }
 
-  static answeringTwice(harvests) {
+  static answeringTwice(harvests: Scripted): Sweeping {
     return new Sweeping({
       checkouts: [[Sweeping.ROOT, [Sweeping.checkoutHolding(harvests), Sweeping.checkoutHolding(harvests)]]],
       harvests,
@@ -66,11 +86,11 @@ class Sweeping {
     })
   }
 
-  static unableToSurvey(failure) {
+  static unableToSurvey(failure: Error): Sweeping {
     return new Sweeping({ checkouts: [[Sweeping.ROOT, [failure]]], harvests: [] })
   }
 
-  static knowingTwo({ here, there }) {
+  static knowingTwo({ here, there }: { here: Scripted | Error, there: Scripted }): Sweeping {
     return new Sweeping({
       known: [Sweeping.CHECKOUT, Sweeping.ELSEWHERE],
       checkouts: [
@@ -81,37 +101,37 @@ class Sweeping {
     })
   }
 
-  static knowingNone() {
+  static knowingNone(): Sweeping {
     return new Sweeping({ known: [], checkouts: [], harvests: [] })
   }
 
-  #surveyed(root) {
+  #surveyed(root: CheckoutRoot): Promise<SurveyWorkspacesResult> {
     this.trace.push(`${Sweeping.SURVEY} ${root.text}`)
     const answers = this.checkouts.get(root.text) ?? []
-    if (answers.length === 0) {
+    const answer = answers.shift()
+    if (answer === undefined) {
       throw new Error(`${root.text} was surveyed more times than this test scripted an answer for`)
     }
-    const answer = answers.shift()
     if (answer instanceof Error) return Promise.reject(answer)
 
     return Promise.resolve(answer)
   }
 
-  #harvested(prepared, repository) {
+  #harvested(prepared: PreparedWorkspace, repository: RepositoryName): Promise<HarvestDeliveryResult> {
     this.trace.push(`harvest #${prepared.issueNumber}`)
     if (repository !== Sweeping.REPOSITORY) {
       throw new Error(`the harvest of #${prepared.issueNumber} was asked for in ${repository?.text}`)
     }
-    if (!this.harvests.has(prepared.issueNumber)) {
+    const answer = this.harvests.get(prepared.issueNumber)
+    if (answer === undefined) {
       throw new Error(`the harvest of #${prepared.issueNumber} was asked for and no answer was scripted`)
     }
-    const answer = this.harvests.get(prepared.issueNumber)
     if (answer instanceof Error) return Promise.reject(answer)
 
     return Promise.resolve(new HarvestDeliveryResult({ outcome: answer }))
   }
 
-  #slept() {
+  #slept(): Promise<void> {
     this.trace.push(Sweeping.SLEEP)
     this.slept += 1
     if (this.slept < this.sweeps) return Promise.resolve()
@@ -120,9 +140,9 @@ class Sweeping {
     return Sweeping.#NEVER
   }
 
-  static #NEVER = new Promise(() => {})
+  static #NEVER: Promise<void> = new Promise(() => {})
 
-  async run() {
+  async run(): Promise<Sweeping> {
     const clock = new HarvestClock({
       checkouts: () => this.known,
       survey: (root) => this.#surveyed(root),
@@ -135,15 +155,15 @@ class Sweeping {
     return this
   }
 
-  static withAnUnreadableRegistry() {
+  static withAnUnreadableRegistry(): Sweeping {
     const sweeping = new Sweeping({ checkouts: [], harvests: [] })
     sweeping.known = null
 
     return sweeping
   }
 
-  broke() {
-    return this.run().catch((cause) => cause)
+  broke(): Promise<Error> {
+    return this.run().catch((cause: Error) => cause) as Promise<Error>
   }
 }
 
@@ -292,13 +312,13 @@ describe('SweepLine', () => {
   })
 
   it('an_outcome_nobody_declared_a_line_for_raises_instead_of_being_swept_past_without_a_word', async () => {
-    const broken = Sweeping.answering([[42, 'invented']])
+    const broken = Sweeping.answering([[42, 'invented' as HarvestOutcomeValue]])
 
     expect((await broken.broke()).message).toBe('no harvest outcome sweep line declared for invented')
   })
 
   it('every_harvest_failure_the_catalogue_declares_has_a_line_so_a_third_one_cannot_kill_the_server_unnamed', () => {
-    const byName = (one, other) => one.name.localeCompare(other.name)
+    const byName = (one: { name: string }, other: { name: string }) => one.name.localeCompare(other.name)
     const ways = Object.values(exceptions).filter((thrown) => thrown.prototype instanceof HarvestFailure)
 
     expect([...SweepLine.declaredFailures()].sort(byName)).toEqual(ways.sort(byName))

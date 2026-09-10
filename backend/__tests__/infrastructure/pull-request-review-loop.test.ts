@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ReviewWatch } from '../../src/infrastructure/review-watch.js'
+import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
 import { DispatchCheckWorkbench } from '../../src/infrastructure/dispatch-check-workbench.ts'
 import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
@@ -7,6 +7,7 @@ import { GhPullRequests } from '../../src/infrastructure/gh-pull-requests.ts'
 import { GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.ts'
 import { Gh } from '../../src/infrastructure/gh.ts'
 import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.ts'
+import { LaunchPolicy, LaunchBudget } from '../../src/domain/policies/launch-policy.ts'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -15,14 +16,18 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { ReadFixesAsked, ReadFixesAskedParams } from '../../src/application/queries/read-fixes-asked.ts'
 import { RequestFixes, RequestFixesParams } from '../../src/application/actions/request-fixes.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
+import { MemoryReviewLog } from '../../src/infrastructure/memory-review-log.ts'
 
 class GhProcessDouble {
-  constructor(answers) {
+  readonly answers: ProcessOutput[]
+  readonly calls: string[][]
+
+  constructor(answers: ProcessOutput[]) {
     this.answers = answers
     this.calls = []
   }
 
-  launch(argv) {
+  launch(argv: string[]): Promise<ProcessOutput> {
     this.calls.push(argv)
     const answer = this.answers[this.calls.length - 1]
     if (answer === undefined) {
@@ -34,11 +39,13 @@ class GhProcessDouble {
 }
 
 class NodeDouble {
+  readonly calls: string[][]
+
   constructor() {
     this.calls = []
   }
 
-  async run(argv) {
+  async run(argv: string[]): Promise<ProcessOutput> {
     this.calls.push(argv)
 
     return new ProcessOutput({ code: 0, stdout: '', stderr: '' })
@@ -46,26 +53,59 @@ class NodeDouble {
 }
 
 class CmuxDouble {
+  readonly calls: string[][]
+
   constructor() {
     this.calls = []
   }
 
-  async run(argv) {
+  async run(argv: string[]): Promise<ProcessOutput> {
     this.calls.push(argv)
 
     return new ProcessOutput({ code: 0, stdout: '', stderr: '' })
   }
 }
 
+class Untouched {
+  static readonly RUNS_IN = '/tmp/ct-plan'
+
+  static write(path: string): Promise<void> {
+    throw new Error(`asking an agent for fixes writes no launcher, it was asked to write ${path}`)
+  }
+
+  static read(path: string): Promise<string | null> {
+    throw new Error(`asking an agent for fixes reads no sentinel, it was asked to read ${path}`)
+  }
+
+  static remove(path: string): Promise<void> {
+    throw new Error(`asking an agent for fixes removes no sentinel, it was asked to remove ${path}`)
+  }
+
+  static sleep(): Promise<void> {
+    throw new Error('asking an agent for fixes waits for no sentinel')
+  }
+
+  static realpathOf(path: string): string | null {
+    throw new Error(`asking an agent for fixes resolves no directory, it was asked for ${path}`)
+  }
+
+  static policy(): LaunchPolicy {
+    return new LaunchPolicy({ budget: new LaunchBudget({ attempts: 1, resends: 0 }) })
+  }
+}
+
 class Sweep {
-  constructor(reviews) {
+  reviews: ReviewWatch | null
+  ticks: number
+
+  constructor(reviews: ReviewWatch | null) {
     this.reviews = reviews
     this.ticks = 0
   }
 
-  sleep(watch) {
+  sleep(watch: PlanWatch): Promise<void> {
     this.ticks += 1
-    if (this.ticks > 1) this.reviews.stop({ issue: watch.issue.number, repository: watch.repository })
+    if (this.ticks > 1) this.reviews?.stop({ issue: watch.issue.number, repository: watch.repository })
 
     return Promise.resolve()
   }
@@ -78,7 +118,7 @@ class PullRequestReviewLoop {
     number: 7, url: 'https://github.com/josemerca/ct-loop-sandbox/issues/7',
   })
   static AGENT = 'workspace:9'
-  static CHANGE = new ChangeAsked({ id: '101', text: 'arregla el guard de []' })
+  static CHANGE = new ChangeAsked({ id: '101', text: 'arregla el guard de []', askedAt: null })
   static PULL_REQUEST_LISTED = JSON.stringify([
     { number: 42, url: 'https://github.com/josemerca/ct-loop-sandbox/pull/42' },
   ])
@@ -88,11 +128,19 @@ class PullRequestReviewLoop {
   ]])
   static COMMENTS_PAGE = '[[]]'
   static SUBJECT = new PlanWatch({
+    story: null,
     issue: PullRequestReviewLoop.ISSUE,
     located: new WorkspaceLocation({ path: '/repo/.worktrees/7', branch: 'feat/7' }),
     repository: PullRequestReviewLoop.REPOSITORY,
     agent: PullRequestReviewLoop.AGENT,
   })
+
+  readonly node: NodeDouble
+  readonly cmux: CmuxDouble
+  readonly ghProcess: GhProcessDouble
+  readonly pullRequests: GhPullRequests
+  readonly planIssues: GhPlanIssues
+  readonly brief: PlanAgentBrief
 
   constructor() {
     this.node = new NodeDouble()
@@ -117,13 +165,23 @@ class PullRequestReviewLoop {
     })
   }
 
-  #graph() {
+  #graph(): ReviewWatch {
     const readFixesAsked = new ReadFixesAsked({ pullRequests: this.pullRequests, planIssues: this.planIssues })
     const workbench = new DispatchCheckWorkbench({
       node: (argv) => this.node.run(argv),
       dispatchCheck: PullRequestReviewLoop.DISPATCH_CHECK,
     })
-    const planAgents = new CmuxPlanAgents({ brief: this.brief, run: (argv) => this.cmux.run(argv) })
+    const planAgents = new CmuxPlanAgents({
+      brief: this.brief,
+      run: (argv) => this.cmux.run(argv),
+      write: Untouched.write,
+      read: Untouched.read,
+      remove: Untouched.remove,
+      sleep: Untouched.sleep,
+      realpathOf: Untouched.realpathOf,
+      runsIn: Untouched.RUNS_IN,
+      policy: Untouched.policy(),
+    })
     const requestFixes = new RequestFixes({ workbench, planAgents })
     const sweep = new Sweep(null)
     const reviews = new ReviewWatch({
@@ -132,13 +190,14 @@ class PullRequestReviewLoop {
       sleep: () => sweep.sleep(PullRequestReviewLoop.SUBJECT),
       stderr: () => {},
       label: 'pull request review watch',
+      log: new MemoryReviewLog(),
     })
     sweep.reviews = reviews
 
     return reviews
   }
 
-  async run() {
+  async run(): Promise<void> {
     return this.#graph().start(PullRequestReviewLoop.SUBJECT)
   }
 }
