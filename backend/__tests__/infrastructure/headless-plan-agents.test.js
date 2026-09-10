@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  HeadlessPlanAgents, HarnessCall, HarnessStep, HarnessPaths,
+  HeadlessPlanAgents, HarnessCall, HarnessStep,
 } from '../../src/infrastructure/headless-plan-agents.js'
-import { StartedRun } from '../../src/infrastructure/detached-run.js'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.js'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
@@ -83,7 +82,7 @@ class HeadlessAgent {
   static FIX_CALL_PATH = `${HeadlessAgent.FIX_DIRECTORY}/${HarnessCall.CALL_FILE}`
 
   constructor({
-    startAnswer = new StartedRun({ pid: HeadlessAgent.PID }),
+    startAnswer = { pid: HeadlessAgent.PID },
     makeDirectoryAnswer = null,
     conversationWriteAnswer = null,
     callWriteAnswer = null,
@@ -360,13 +359,14 @@ describe('HeadlessPlanAgents', () => {
     expect(headless.startCalls[0].cwd).not.toBe(process.cwd())
   })
 
-  it('a_call_that_cannot_be_started_leaves_no_record_of_a_call_that_never_ran', async () => {
+  it('a_call_that_cannot_be_started_writes_no_call_json_even_though_its_directory_and_conversation_record_already_landed', async () => {
     const headless = HeadlessAgent.refusing(new PlanAgentNotLaunched('spawn assigned no pid to "claude"'))
 
     const refusal = await headless.refusal()
 
     expect(refusal).toBeInstanceOf(PlanAgentNotLaunched)
     expect(headless.writeCalls.some(([path]) => path === HeadlessAgent.CALL_PATH)).toBe(false)
+    expect(headless.writeCalls.some(([path]) => path === HeadlessAgent.CONVERSATION_PATH)).toBe(true)
     expect(headless.makeDirectoryCalls).toEqual([HeadlessAgent.DIRECTORY])
   })
 
@@ -710,7 +710,6 @@ describe('HarnessCall', () => {
       startedAt: HeadlessAgent.STARTED_AT,
     })
 
-    expect(paths).toBeInstanceOf(HarnessPaths)
     expect(paths.directory).toBe(HeadlessAgent.DIRECTORY)
     expect(paths.out).toBe(HeadlessAgent.STREAM_PATH)
     expect(paths.err).toBe(HeadlessAgent.ERROR_PATH)
@@ -729,7 +728,9 @@ describe('HarnessCall', () => {
       startedAt: HeadlessAgent.STARTED_AT,
     })
 
-    expect(call.json.issue).toBe(HeadlessAgent.ISSUE)
-    expect(call.json.repository).toBe(HeadlessAgent.REPOSITORY)
+    const stringified = JSON.parse(JSON.stringify(call.json))
+
+    expect(stringified.issue).toEqual({ number: HeadlessAgent.ISSUE.number, url: HeadlessAgent.ISSUE.url })
+    expect(stringified.repository).toEqual({ text: HeadlessAgent.REPOSITORY.text })
   })
 })

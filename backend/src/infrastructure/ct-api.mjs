@@ -161,6 +161,7 @@ class CtApi {
   static #SECONDS_BETWEEN_READS = 2
   static #SECONDS_BETWEEN_ASKS = 30
   static #LAUNCH_DIRECTORY = 'ct-plan'
+  static #HARNESS_DIRECTORY = 'harness'
 
   static #refuseUsage(reason) {
     process.stderr.write(`${reason}\n${CtApi.#USAGE}\n`)
@@ -200,6 +201,14 @@ class CtApi {
     return after(seconds * 1000)
   }
 
+  static #brief() {
+    return new PlanAgentBrief({
+      dispatchCheck: PluginTree.dispatchCheck(),
+      conventions: PluginTree.conventions(),
+      ctStep: PluginTree.ctStep(),
+    })
+  }
+
   static #cmuxAgents() {
     return new CmuxPlanAgents({
       run: CtApi.#tool(CmuxPlanAgents.BIN),
@@ -212,11 +221,7 @@ class CtApi {
       policy: new LaunchPolicy({
         budget: new LaunchBudget({ attempts: CtApi.#PROBES_PER_SEND, resends: CtApi.#RESENDS }),
       }),
-      brief: new PlanAgentBrief({
-        dispatchCheck: PluginTree.dispatchCheck(),
-        conventions: PluginTree.conventions(),
-        ctStep: PluginTree.ctStep(),
-      }),
+      brief: CtApi.#brief(),
     })
   }
 
@@ -232,12 +237,8 @@ class CtApi {
       read: Disk.read,
       mint: randomUUID,
       clock: Date.now,
-      brief: new PlanAgentBrief({
-        dispatchCheck: PluginTree.dispatchCheck(),
-        conventions: PluginTree.conventions(),
-        ctStep: PluginTree.ctStep(),
-      }),
-      runsIn: join(stateRoot, 'harness'),
+      brief: CtApi.#brief(),
+      runsIn: join(stateRoot, CtApi.#HARNESS_DIRECTORY),
       model,
       pluginRoot: PluginTree.root(),
     })

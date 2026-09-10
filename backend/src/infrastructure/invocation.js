@@ -26,7 +26,7 @@ export class Invocation {
   static HARVEST_TABLE_SHAPE = 'project:dataset.table'
   static TRANSPORT_VARIABLE = 'CT_PLAN_TRANSPORT'
   static MODEL_VARIABLE = 'CT_PLAN_MODEL'
-  static DEFAULT_MODEL = 'opus'
+  static DEFAULT_MODEL = CmuxPlanAgents.MODEL
   static #MAX_PORT = 65535
   static #WHOLE_NUMBER = /^\d+$/
   static #HARVEST_TABLE = /^[A-Za-z0-9][A-Za-z0-9-]*:[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/

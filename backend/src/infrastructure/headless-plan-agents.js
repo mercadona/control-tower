@@ -8,7 +8,7 @@ export const HarnessStep = Object.freeze({
   FIX_PULL_REQUEST: 'fix-pull-request',
 })
 
-export class HarnessPaths {
+class HarnessPaths {
   constructor({ directory, out, err, call }) {
     this.directory = directory
     this.out = out
@@ -113,16 +113,10 @@ export class HeadlessPlanAgents extends PlanAgents {
     )
     const started = this.#startRun({ argv, cwd: briefing.located.path, out, err }, PlanAgentNotLaunched)
 
-    await this.#writeRecord(call, JSON.stringify(new HarnessCall({
-      step,
-      agent,
-      issue: briefing.issue.number,
-      repository: briefing.repository.text,
-      model: this.model,
-      argv,
-      pid: started.pid,
-      startedAt,
-    }).json), PlanAgentNotLaunched, started)
+    await this.#recordCall({
+      call, step, agent, issue: briefing.issue.number, repository: briefing.repository.text,
+      argv, started, startedAt, Failure: PlanAgentNotLaunched,
+    })
 
     return agent
   }
@@ -170,16 +164,10 @@ export class HeadlessPlanAgents extends PlanAgents {
     await this.#ensureDirectory(directory, PlanAgentNotResumed)
     const started = this.#startRun({ argv, cwd, out, err }, PlanAgentNotResumed)
 
-    await this.#writeRecord(call, JSON.stringify(new HarnessCall({
-      step,
-      agent,
-      issue,
-      repository: repository.text,
-      model: this.model,
-      argv,
-      pid: started.pid,
-      startedAt,
-    }).json), PlanAgentNotResumed, started)
+    await this.#recordCall({
+      call, step, agent, issue, repository: repository.text,
+      argv, started, startedAt, Failure: PlanAgentNotResumed,
+    })
   }
 
   async #worktreeOf(agent) {
@@ -224,6 +212,19 @@ export class HeadlessPlanAgents extends PlanAgents {
     } catch (failure) {
       throw new Failure(`the run directory ${directory} could not be made: ${failure.message}`)
     }
+  }
+
+  async #recordCall({ call, step, agent, issue, repository, argv, started, startedAt, Failure }) {
+    await this.#writeRecord(call, JSON.stringify(new HarnessCall({
+      step,
+      agent,
+      issue,
+      repository,
+      model: this.model,
+      argv,
+      pid: started.pid,
+      startedAt,
+    }).json), Failure, started)
   }
 
   async #writeRecord(path, text, Failure, started = null) {

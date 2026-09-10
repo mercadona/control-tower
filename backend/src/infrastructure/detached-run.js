@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { appendFileSync, closeSync, openSync } from 'node:fs'
 import { PlanAgentNotLaunched } from '../domain/exceptions.js'
 
-export class StartedRun {
+class StartedRun {
   constructor({ pid }) {
     this.pid = pid
     Object.freeze(this)
@@ -22,6 +22,16 @@ export class DetachedRun {
     }
   }
 
+  static #openPair(out, err) {
+    const outFd = openSync(out, DetachedRun.APPEND)
+    try {
+      return { outFd, errFd: openSync(err, DetachedRun.APPEND) }
+    } catch (failure) {
+      closeSync(outFd)
+      throw failure
+    }
+  }
+
   constructor({ bin, budgetMs, env }) {
     this.bin = bin
     this.budgetMs = budgetMs
@@ -29,8 +39,7 @@ export class DetachedRun {
   }
 
   start({ argv, cwd, out, err }) {
-    const outFd = openSync(out, DetachedRun.APPEND)
-    const errFd = openSync(err, DetachedRun.APPEND)
+    const { outFd, errFd } = DetachedRun.#openPair(out, err)
     const child = spawn(this.bin, argv, {
       cwd,
       env: this.env,

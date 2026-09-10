@@ -546,6 +546,24 @@ describe('DetachedRun', () => {
     expect(afterStart).toBe(beforeStart)
   })
 
+  it('out_is_closed_instead_of_leaked_when_opening_err_afterwards_fails', () => {
+    const files = Files.named()
+    const run = Child.running()
+    const beforeStart = Files.lowestFreeDescriptorProbedAgainst(files.out)
+
+    let thrown = null
+    try {
+      run.start({ argv: [], cwd: process.cwd(), out: files.out, err: join(files.out, 'nested', 'err.log') })
+    } catch (failure) {
+      thrown = failure
+    }
+
+    const afterStart = Files.lowestFreeDescriptorProbedAgainst(files.out)
+
+    expect(thrown?.code).toBe('ENOTDIR')
+    expect(afterStart).toBe(beforeStart)
+  })
+
   it('the_process_that_called_start_is_free_to_exit_right_away_because_nothing_it_holds_keeps_its_loop_open', async () => {
     const files = Files.named()
     const wrapper = spawn(
