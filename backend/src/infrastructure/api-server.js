@@ -43,7 +43,8 @@ class Failures {
 export class ApiServer {
   constructor({
     port, startPlan, implementPlan, askPlanChanges, implementProgress, reviews, pullRequestReviews, planEvents,
-    sessions, activePlans, externalTools, implementationStarts, recovery = null, stderr, frontendRoot,
+    readPlanProgress, sessions, activePlans, externalTools, implementationStarts, recovery = null, stderr,
+    frontendRoot,
   }) {
     this.requestedPort = port
     this.startPlan = startPlan
@@ -53,6 +54,7 @@ export class ApiServer {
     this.reviews = reviews
     this.pullRequestReviews = pullRequestReviews
     this.planEvents = planEvents
+    this.readPlanProgress = readPlanProgress
     this.sessions = sessions
     this.activePlans = activePlans
     this.externalTools = externalTools
@@ -83,8 +85,8 @@ export class ApiServer {
       JsonBody.demandDeclared,
       JsonBody.reader(),
       ImplementPlanRoute.handledBy(
-        this.implementPlan, this.sessions, this.reviews, this.pullRequestReviews,
-        this.activePlans, this.implementationStarts, this.stderr
+        this.implementPlan, this.reviews, this.pullRequestReviews,
+        this.activePlans, this.implementationStarts, this.readPlanProgress, this.stderr
       )
     )
     app.all(ImplementPlanRoute.PATH, ImplementPlanRoute.refuseOtherMethods)

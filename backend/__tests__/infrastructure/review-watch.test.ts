@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
 import { MemoryReviewLog } from '../../src/infrastructure/memory-review-log.ts'
+import { ReviewInFlight, type ReviewInFlightValue } from '../../src/domain/policies/review-gate-policy.ts'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -41,6 +42,9 @@ class WatchDouble {
   slept: number
   watch: ReviewWatch | null
   readonly log: MemoryReviewLog
+  readonly parking: boolean
+  readonly parked: Promise<void>
+  readonly wakeParked: () => void
 
   static A_CHANGE = new ChangeAsked({
     id: 'IC_kwDOT9lB5c8AAAABRCF0GG',
@@ -54,15 +58,18 @@ class WatchDouble {
     askedAt: '2026-09-09T10:00:00Z',
   })
 
+  static #NEVER_WAKES: Promise<void> = new Promise(() => {})
+
   constructor(soundings: Sounding[], {
     refusingTheDelivery = null, waits = null, stoppingOnDelivery = false,
-    label = WatchDouble.LABEL, refusalsLeft = Number.POSITIVE_INFINITY,
+    label = WatchDouble.LABEL, refusalsLeft = Number.POSITIVE_INFINITY, parking = false,
   }: {
     refusingTheDelivery?: Error | null,
     waits?: number | null,
     stoppingOnDelivery?: boolean,
     label?: string,
     refusalsLeft?: number,
+    parking?: boolean,
   } = {}) {
     this.soundings = soundings
     this.refusingTheDelivery = refusingTheDelivery
@@ -70,6 +77,10 @@ class WatchDouble {
     this.stoppingOnDelivery = stoppingOnDelivery
     this.waits = waits ?? soundings.length
     this.label = label
+    this.parking = parking
+    let wakeParked!: () => void
+    this.parked = new Promise<void>((resolve) => { wakeParked = resolve })
+    this.wakeParked = wakeParked
     this.asked = []
     this.reviewed = []
     this.warnings = []
@@ -113,6 +124,18 @@ class WatchDouble {
     return new WatchDouble([new PlanChangesNotRead('HTTP 502')], { label })
   }
 
+  static parkedBeforeItsFirstSweep(...soundings: Sounding[]): WatchDouble {
+    return new WatchDouble(soundings, { waits: 0, parking: true })
+  }
+
+  static parkedAfterOneSweep(...soundings: Sounding[]): WatchDouble {
+    return new WatchDouble(soundings, { waits: 1, parking: true })
+  }
+
+  static watchingNothing(): WatchDouble {
+    return new WatchDouble([])
+  }
+
   #reviews(): ReviewWatch {
     return new ReviewWatch({
       asked: (watch) => {
@@ -138,7 +161,13 @@ class WatchDouble {
       },
       sleep: () => {
         this.slept += 1
-        if (this.slept > this.waits) this.watch!.stop(WatchDouble.STOPPING)
+        if (this.slept <= this.waits) return Promise.resolve()
+        if (this.parking) {
+          this.wakeParked()
+
+          return WatchDouble.#NEVER_WAKES
+        }
+        this.watch!.stop(WatchDouble.STOPPING)
 
         return Promise.resolve()
       },
@@ -158,6 +187,20 @@ class WatchDouble {
     this.watch = this.#reviews()
 
     return this.watch.startRecovered(WatchDouble.SUBJECT)
+  }
+
+  async parkedMidSleep(): Promise<WatchDouble> {
+    this.watch = this.#reviews()
+    void this.watch.start(WatchDouble.SUBJECT)
+    await this.parked
+
+    return this
+  }
+
+  refresh(): Promise<ReviewInFlightValue> {
+    this.watch = this.watch ?? this.#reviews()
+
+    return this.watch.refresh(WatchDouble.SUBJECT)
   }
 }
 
@@ -568,5 +611,72 @@ describe('the watch notes when changes were asked for, so the plan state can be 
 
     expect(watched.log.lastAskedAt(WatchDouble.STOPPING)).toBeNull()
     expect(watched.warnings).toHaveLength(1)
+  })
+})
+
+describe('the watch answers whether a change is waiting to be delivered', () => {
+  it('a_change_nobody_has_delivered_yet_is_in_flight', async () => {
+    const watched = await WatchDouble.parkedBeforeItsFirstSweep([WatchDouble.A_CHANGE]).parkedMidSleep()
+
+    expect(await watched.refresh()).toBe(ReviewInFlight.IN_FLIGHT)
+    expect(watched.reviewed).toEqual([])
+  })
+
+  it('the_issue_it_sounds_when_asked_is_the_one_it_was_told_to_watch', async () => {
+    const watched = await WatchDouble.parkedBeforeItsFirstSweep([WatchDouble.A_CHANGE]).parkedMidSleep()
+
+    await watched.refresh()
+
+    expect(watched.asked).toEqual([WatchDouble.SUBJECT])
+  })
+
+  it('a_change_already_delivered_is_not_in_flight', async () => {
+    const watched = await WatchDouble.parkedAfterOneSweep(
+      [WatchDouble.A_CHANGE], [WatchDouble.A_CHANGE]
+    ).parkedMidSleep()
+
+    expect(watched.reviewed).toHaveLength(1)
+    expect(await watched.refresh()).toBe(ReviewInFlight.CLEAR)
+  })
+
+  it('one_change_delivered_and_a_newer_one_not_still_leaves_one_in_flight', async () => {
+    const watched = await WatchDouble.parkedAfterOneSweep(
+      [WatchDouble.A_CHANGE], [WatchDouble.A_CHANGE, WatchDouble.ANOTHER_CHANGE]
+    ).parkedMidSleep()
+
+    expect(watched.reviewed).toHaveLength(1)
+    expect(await watched.refresh()).toBe(ReviewInFlight.IN_FLIGHT)
+  })
+
+  it('an_issue_with_no_change_asked_for_has_nothing_in_flight', async () => {
+    const watched = await WatchDouble.parkedBeforeItsFirstSweep([]).parkedMidSleep()
+
+    expect(await watched.refresh()).toBe(ReviewInFlight.CLEAR)
+  })
+
+  it('a_sounding_that_could_not_be_read_says_so_instead_of_saying_nothing_is_in_flight', async () => {
+    const watched = await WatchDouble.parkedBeforeItsFirstSweep(
+      new PlanChangesNotRead('HTTP 502')
+    ).parkedMidSleep()
+
+    expect(await watched.refresh()).toBe(ReviewInFlight.UNREADABLE)
+    expect(watched.warnings).toHaveLength(1)
+  })
+
+  it('a_plan_this_process_is_not_watching_has_nothing_in_flight_because_no_watch_can_drop_it', async () => {
+    const watched = WatchDouble.watchingNothing()
+
+    expect(await watched.refresh()).toBe(ReviewInFlight.CLEAR)
+    expect(watched.asked).toEqual([])
+  })
+
+  it('asking_what_is_in_flight_notes_the_dates_it_reads_so_the_state_does_not_wait_for_a_sweep', async () => {
+    const watched = await WatchDouble.parkedBeforeItsFirstSweep([WatchDouble.A_CHANGE]).parkedMidSleep()
+
+    expect(watched.log.lastAskedAt(WatchDouble.STOPPING)).toBeNull()
+
+    await watched.refresh()
+
+    expect(watched.log.lastAskedAt(WatchDouble.STOPPING)).toBe(WatchDouble.A_CHANGE.askedAt)
   })
 })
