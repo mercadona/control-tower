@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { HeadlessPlanAgents, HarnessCall, HarnessStep } from '../../src/infrastructure/headless-plan-agents.js'
+import {
+  HeadlessPlanAgents, HarnessCall, HarnessStep, HarnessPaths,
+} from '../../src/infrastructure/headless-plan-agents.js'
 import { StartedRun } from '../../src/infrastructure/detached-run.js'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.js'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
@@ -38,10 +40,16 @@ class HeadlessAgent {
   static ERROR_PATH = `${HeadlessAgent.DIRECTORY}/${HarnessCall.ERROR_FILE}`
   static CALL_PATH = `${HeadlessAgent.DIRECTORY}/${HarnessCall.CALL_FILE}`
 
-  constructor({ startAnswer = new StartedRun({ pid: HeadlessAgent.PID }) } = {}) {
+  constructor({
+    startAnswer = new StartedRun({ pid: HeadlessAgent.PID }),
+    makeDirectoryAnswer = null,
+    writeAnswer = null,
+  } = {}) {
     this.brief = new BriefDouble()
     this.startCalls = []
     this.startAnswer = startAnswer
+    this.makeDirectoryAnswer = makeDirectoryAnswer
+    this.writeAnswer = writeAnswer
     this.writeCalls = []
     this.makeDirectoryCalls = []
     this.trace = []
@@ -53,6 +61,14 @@ class HeadlessAgent {
 
   static refusing(failure) {
     return new HeadlessAgent({ startAnswer: failure })
+  }
+
+  static directoryUnwritable(failure) {
+    return new HeadlessAgent({ makeDirectoryAnswer: failure })
+  }
+
+  static callUnwritable(failure) {
+    return new HeadlessAgent({ writeAnswer: failure })
   }
 
   agents() {
@@ -69,12 +85,14 @@ class HeadlessAgent {
       makeDirectory: (path) => {
         this.trace.push('makeDirectory')
         this.makeDirectoryCalls.push(path)
+        if (this.makeDirectoryAnswer instanceof Error) throw this.makeDirectoryAnswer
 
         return Promise.resolve()
       },
       write: (path, text) => {
         this.trace.push('write')
         this.writeCalls.push([path, text])
+        if (this.writeAnswer instanceof Error) throw this.writeAnswer
 
         return Promise.resolve()
       },
@@ -184,6 +202,7 @@ describe('HeadlessPlanAgents', () => {
 
     expect(refusal).toBeInstanceOf(PlanAgentNotLaunched)
     expect(headless.writeCalls.some(([path]) => path === HeadlessAgent.CALL_PATH)).toBe(false)
+    expect(headless.makeDirectoryCalls).toEqual([HeadlessAgent.DIRECTORY])
   })
 
   it('the_run_directory_is_made_with_the_composed_path_so_the_files_inside_it_have_somewhere_to_land', async () => {
@@ -202,7 +221,25 @@ describe('HeadlessPlanAgents', () => {
     expect(headless.trace).toEqual(['makeDirectory', 'start', 'write'])
   })
 
-  it('names_the_binary_claude_p_spawns', () => {
+  it('a_directory_that_cannot_be_made_raises_the_same_family_as_a_refused_launch_so_start_plan_never_sees_a_raw_node_error', async () => {
+    const headless = HeadlessAgent.directoryUnwritable(new Error('EACCES: permission denied'))
+
+    const refusal = await headless.refusal()
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotLaunched)
+    expect(refusal.message).toContain(HeadlessAgent.DIRECTORY)
+  })
+
+  it('a_call_record_that_cannot_be_written_raises_the_same_family_as_a_refused_launch_so_start_plan_never_sees_a_raw_node_error', async () => {
+    const headless = HeadlessAgent.callUnwritable(new Error('ENOSPC: no space left on device'))
+
+    const refusal = await headless.refusal()
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotLaunched)
+    expect(refusal.message).toContain(HeadlessAgent.CALL_PATH)
+  })
+
+  it('bin_names_the_binary_that_gets_spawned_as_claude_p_and_is_pinned_because_it_crosses_the_edge_into_a_real_process', () => {
     expect(HeadlessPlanAgents.BIN).toBe('claude')
   })
 })
@@ -245,6 +282,7 @@ describe('HarnessCall', () => {
       startedAt: HeadlessAgent.STARTED_AT,
     })
 
+    expect(paths).toBeInstanceOf(HarnessPaths)
     expect(paths.directory).toBe(HeadlessAgent.DIRECTORY)
     expect(paths.out).toBe(HeadlessAgent.STREAM_PATH)
     expect(paths.err).toBe(HeadlessAgent.ERROR_PATH)

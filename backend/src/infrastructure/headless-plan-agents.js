@@ -1,4 +1,5 @@
 import { PlanAgents } from '../domain/ports/plan-agents.js'
+import { PlanAgentNotLaunched } from '../domain/exceptions.js'
 
 export const HarnessStep = Object.freeze({
   WRITE_PLAN: 'write-plan',
@@ -6,6 +7,16 @@ export const HarnessStep = Object.freeze({
   IMPLEMENT: 'implement',
   FIX_PULL_REQUEST: 'fix-pull-request',
 })
+
+export class HarnessPaths {
+  constructor({ directory, out, err, call }) {
+    this.directory = directory
+    this.out = out
+    this.err = err
+    this.call = call
+    Object.freeze(this)
+  }
+}
 
 export class HarnessCall {
   static CALL_FILE = 'call.json'
@@ -15,12 +26,12 @@ export class HarnessCall {
   static pathsFor({ runsIn, agent, step, startedAt }) {
     const directory = `${runsIn}/${agent}/${step}-${startedAt}`
 
-    return {
+    return new HarnessPaths({
       directory,
       out: `${directory}/${HarnessCall.STREAM_FILE}`,
       err: `${directory}/${HarnessCall.ERROR_FILE}`,
       call: `${directory}/${HarnessCall.CALL_FILE}`,
-    }
+    })
   }
 
   constructor({ step, agent, issue, repository, model, argv, pid, startedAt }) {
@@ -87,15 +98,16 @@ export class HeadlessPlanAgents extends PlanAgents {
       errand, model: this.model, pluginRoot: this.pluginRoot, agent, resuming: false,
     })
     const startedAt = this.clock()
+    const step = HarnessStep.WRITE_PLAN
     const { directory, out, err, call } = HarnessCall.pathsFor({
-      runsIn: this.runsIn, agent, step: HarnessStep.WRITE_PLAN, startedAt,
+      runsIn: this.runsIn, agent, step, startedAt,
     })
 
-    await this.makeDirectory(directory)
+    await this.#ensureDirectory(directory)
     const started = this.start.start({ argv, cwd: briefing.located.path, out, err })
 
-    await this.write(call, JSON.stringify(new HarnessCall({
-      step: HarnessStep.WRITE_PLAN,
+    await this.#writeRecord(call, JSON.stringify(new HarnessCall({
+      step,
       agent,
       issue: briefing.issue.number,
       repository: briefing.repository.text,
@@ -106,5 +118,21 @@ export class HeadlessPlanAgents extends PlanAgents {
     }).json))
 
     return agent
+  }
+
+  async #ensureDirectory(directory) {
+    try {
+      await this.makeDirectory(directory)
+    } catch (failure) {
+      throw new PlanAgentNotLaunched(`the run directory ${directory} could not be made: ${failure.message}`)
+    }
+  }
+
+  async #writeRecord(path, text) {
+    try {
+      await this.write(path, text)
+    } catch (failure) {
+      throw new PlanAgentNotLaunched(`${path} could not be written: ${failure.message}`)
+    }
   }
 }
