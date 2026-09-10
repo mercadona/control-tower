@@ -159,6 +159,18 @@ class HeadlessAgent {
     return headless
   }
 
+  static continuationDirectoryUnwritable(failure) {
+    return HeadlessAgent.resuming({ makeDirectoryAnswer: failure })
+  }
+
+  static continuationCallUnwritable(failure) {
+    return HeadlessAgent.resuming({ callWriteAnswer: failure })
+  }
+
+  static continuationRefusing(failure) {
+    return HeadlessAgent.resuming({ startAnswer: failure })
+  }
+
   recordConversation(text) {
     this.writeCalls.push([HeadlessAgent.CONVERSATION_PATH, text])
   }
@@ -240,18 +252,18 @@ class HeadlessAgent {
     })
   }
 
-  review(agent = HeadlessAgent.AGENT) {
+  review() {
     return this.agents().review({
-      agent,
+      agent: HeadlessAgent.AGENT,
       issue: HeadlessAgent.ISSUE_NUMBER,
       repository: HeadlessAgent.REPOSITORY,
       changes: HeadlessAgent.CHANGES,
     })
   }
 
-  fix(agent = HeadlessAgent.AGENT) {
+  fix() {
     return this.agents().fix({
-      agent,
+      agent: HeadlessAgent.AGENT,
       issue: HeadlessAgent.ISSUE_NUMBER,
       repository: HeadlessAgent.REPOSITORY,
       changes: HeadlessAgent.CHANGES,
@@ -351,6 +363,15 @@ describe('HeadlessPlanAgents', () => {
     expect(refusal).toBeInstanceOf(PlanAgentNotLaunched)
     expect(headless.writeCalls.some(([path]) => path === HeadlessAgent.CALL_PATH)).toBe(false)
     expect(headless.makeDirectoryCalls).toEqual([HeadlessAgent.DIRECTORY])
+  })
+
+  it('a_raw_error_that_escapes_the_start_of_a_launch_becomes_the_launch_cause_with_its_message_kept', async () => {
+    const headless = HeadlessAgent.refusing(new Error('ENOENT: no such file or directory, open \'stream.ndjson\''))
+
+    const refusal = await headless.refusal()
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotLaunched)
+    expect(refusal.message).toBe('ENOENT: no such file or directory, open \'stream.ndjson\'')
   })
 
   it('the_run_directory_is_made_with_the_composed_path_so_the_files_inside_it_have_somewhere_to_land', async () => {
@@ -581,7 +602,7 @@ describe('HeadlessPlanAgents continuing a conversation', () => {
   })
 
   it('a_directory_that_cannot_be_made_for_a_continuation_raises_the_same_family_as_a_refused_resume_so_nothing_sees_a_raw_node_error', async () => {
-    const headless = HeadlessAgent.resuming({ makeDirectoryAnswer: new Error('EACCES: permission denied') })
+    const headless = HeadlessAgent.continuationDirectoryUnwritable(new Error('EACCES: permission denied'))
 
     const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
 
@@ -590,7 +611,7 @@ describe('HeadlessPlanAgents continuing a conversation', () => {
   })
 
   it('a_call_record_that_cannot_be_written_for_a_continuation_raises_the_same_family_as_a_refused_resume_so_nothing_sees_a_raw_node_error', async () => {
-    const headless = HeadlessAgent.resuming({ callWriteAnswer: new Error('ENOSPC: no space left on device') })
+    const headless = HeadlessAgent.continuationCallUnwritable(new Error('ENOSPC: no space left on device'))
 
     const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
 
@@ -599,14 +620,15 @@ describe('HeadlessPlanAgents continuing a conversation', () => {
   })
 
   it('a_call_that_cannot_be_started_for_a_continuation_raises_the_same_family_as_a_refused_resume_and_not_the_launch_cause', async () => {
-    const headless = HeadlessAgent.resuming({
-      startAnswer: new PlanAgentNotLaunched('spawn assigned no pid to "claude"'),
-    })
+    const headless = HeadlessAgent.continuationRefusing(
+      new PlanAgentNotLaunched('spawn assigned no pid to "claude"')
+    )
 
     const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
 
     expect(refusal).toBeInstanceOf(PlanAgentNotResumed)
     expect(refusal).not.toBeInstanceOf(PlanAgentNotLaunched)
+    expect(refusal.message).toBe('spawn assigned no pid to "claude"')
   })
 
   it('the_fixes_of_a_pull_request_are_asked_for_with_the_step_that_says_so', async () => {

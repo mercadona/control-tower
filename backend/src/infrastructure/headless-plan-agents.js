@@ -214,7 +214,6 @@ export class HeadlessPlanAgents extends PlanAgents {
     try {
       return this.start.start({ argv, cwd, out, err })
     } catch (failure) {
-      if (failure instanceof Failure) throw failure
       throw new Failure(failure.message)
     }
   }
