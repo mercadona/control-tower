@@ -15,6 +15,9 @@ import {
   PlanAgentNotLaunched, PlanAgentNotNamed, WorkspaceNotPrepared, WorkspaceNotRead,
   WorkspaceNotUnderstood, CheckoutNotConfirmed,
 } from '../domain/exceptions.ts'
+import type { Request, Response } from 'express'
+import type { PlanStarted, StartPlan, StartPlanResult } from '../application/actions/start-plan.ts'
+import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 
 export const PlanRequestOutcome = Object.freeze({
   ACCEPTED: 'accepted',
@@ -29,21 +32,53 @@ export const PlanRequestOutcome = Object.freeze({
   MALFORMED_PATH: 'malformed-path',
   REPO_LISTED_TWICE: 'repo-listed-twice',
   NO_PLAN_STARTED: 'no-plan-started',
-})
+} as const)
+
+export type PlanRequestOutcomeValue = (typeof PlanRequestOutcome)[keyof typeof PlanRequestOutcome]
+
+export type PlanRequestEntry = Record<string, unknown>
+
+export type RefusedPlanRequest = {
+  readonly outcome: unknown,
+  readonly named?: string | null,
+  readonly fields?: readonly string[],
+}
+
+export type PlanSessionRegistry = { remember(watch: PlanWatch): void }
+
+export type PlanReviewStarts = { start(watch: PlanWatch): void }
 
 export class PlanRequest {
-  static ID_FIELD = 'id'
-  static COMMENT_FIELD = 'user_comment'
-  static REPO_FIELD = 'repo'
-  static PATH_FIELD = 'path'
-  static REPO_LIST_FIELD = 'repo_list'
-  static ENTRY_FIELDS = Object.freeze([PlanRequest.REPO_FIELD, PlanRequest.PATH_FIELD])
-  static KNOWN_FIELDS = Object.freeze([
+  static readonly ID_FIELD = 'id'
+  static readonly COMMENT_FIELD = 'user_comment'
+  static readonly REPO_FIELD = 'repo'
+  static readonly PATH_FIELD = 'path'
+  static readonly REPO_LIST_FIELD = 'repo_list'
+  static readonly ENTRY_FIELDS: readonly string[] =
+    Object.freeze([PlanRequest.REPO_FIELD, PlanRequest.PATH_FIELD])
+
+  static readonly KNOWN_FIELDS: readonly string[] = Object.freeze([
     PlanRequest.ID_FIELD, PlanRequest.COMMENT_FIELD, PlanRequest.REPO_FIELD, PlanRequest.PATH_FIELD,
     PlanRequest.REPO_LIST_FIELD,
   ])
 
-  constructor({ outcome, story, comment, targets, fields, named = null, listed = false }) {
+  readonly outcome: PlanRequestOutcomeValue
+  readonly story: UserStoryKey | UserStoryUrl | null
+  readonly comment: PlanComment | null
+  readonly targets: readonly PlanTarget[] | null
+  readonly listed: boolean
+  readonly fields: readonly string[]
+  readonly named: string | null
+
+  constructor({ outcome, story, comment, targets, fields, named = null, listed = false }: {
+    outcome: PlanRequestOutcomeValue,
+    story: UserStoryKey | UserStoryUrl | null,
+    comment: PlanComment | null,
+    targets: readonly PlanTarget[] | null,
+    fields: readonly string[],
+    named?: string | null,
+    listed?: boolean,
+  }) {
     this.outcome = outcome
     this.story = story
     this.comment = comment
@@ -54,30 +89,35 @@ export class PlanRequest {
     Object.freeze(this)
   }
 
-  static accepted(story, comment, targets, listed = false) {
+  static accepted(
+    story: UserStoryKey | UserStoryUrl | null,
+    comment: PlanComment | null,
+    targets: readonly PlanTarget[],
+    listed = false
+  ): PlanRequest {
     return new PlanRequest({ outcome: PlanRequestOutcome.ACCEPTED, story, comment, targets, listed, fields: [] })
   }
 
-  static refused(outcome, named = null) {
+  static refused(outcome: PlanRequestOutcomeValue, named: string | null = null): PlanRequest {
     return new PlanRequest({
       outcome, story: null, comment: null, targets: null, fields: [], named,
     })
   }
 
-  static withUnknownFields(fields) {
+  static withUnknownFields(fields: readonly string[]): PlanRequest {
     return new PlanRequest({
       outcome: PlanRequestOutcome.UNKNOWN_FIELD, story: null, comment: null, targets: null, fields,
     })
   }
 
-  static from(raw) {
-    let parsed
+  static from(raw: string): PlanRequest {
+    let parsed: unknown
     try {
       parsed = JSON.parse(raw)
     } catch {
       return PlanRequest.refused(PlanRequestOutcome.BODY_NOT_A_JSON_OBJECT)
     }
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    if (!PlanRequest.#isJsonObject(parsed)) {
       return PlanRequest.refused(PlanRequestOutcome.BODY_NOT_A_JSON_OBJECT)
     }
     const unknown = Object.keys(parsed).filter((field) => !PlanRequest.KNOWN_FIELDS.includes(field))
@@ -123,14 +163,26 @@ export class PlanRequest {
     ])
   }
 
-  static #isEntryShaped(entry) {
+  static #isJsonObject(parsed: unknown): parsed is Record<string, unknown> {
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+  }
+
+  static #isEntryShaped(entry: unknown): entry is PlanRequestEntry {
     return entry !== null && typeof entry === 'object' && !Array.isArray(entry) &&
       Object.keys(entry).length === PlanRequest.ENTRY_FIELDS.length &&
       PlanRequest.ENTRY_FIELDS.every((field) => Object.hasOwn(entry, field))
   }
 
-  static #fromList(list, story, comment) {
-    if (!Array.isArray(list) || list.length === 0 || !list.every(PlanRequest.#isEntryShaped)) {
+  static #isEntryList(list: unknown): list is PlanRequestEntry[] {
+    return Array.isArray(list) && list.length !== 0 && list.every(PlanRequest.#isEntryShaped)
+  }
+
+  static #fromList(
+    list: unknown,
+    story: UserStoryKey | UserStoryUrl | null,
+    comment: PlanComment | null
+  ): PlanRequest {
+    if (!PlanRequest.#isEntryList(list)) {
       return PlanRequest.refused(PlanRequestOutcome.MALFORMED_REPO_LIST)
     }
     for (const [index, entry] of list.entries()) {
@@ -147,9 +199,9 @@ export class PlanRequest {
         )
       }
     }
-    const seen = new Set()
+    const seen = new Set<string>()
     for (const entry of list) {
-      const repo = entry[PlanRequest.REPO_FIELD]
+      const repo = entry[PlanRequest.REPO_FIELD] as string
       if (seen.has(repo)) {
         return PlanRequest.refused(PlanRequestOutcome.REPO_LISTED_TWICE, repo)
       }
@@ -164,8 +216,11 @@ export class PlanRequest {
   }
 }
 
+type PlanRefusalOf = (asked: RefusedPlanRequest) => Refusal
+
 export class PlanRefusal {
-  static #BY_OUTCOME = new Projection('refusal', [
+  static readonly #BY_OUTCOME: Projection<PlanRefusalOf, PlanRequestOutcomeValue> =
+    new Projection<PlanRefusalOf, PlanRequestOutcomeValue>('refusal', [
     [PlanRequestOutcome.BODY_NOT_A_JSON_OBJECT, () => new Refusal({
       status: 400,
       code: PlanRequestOutcome.BODY_NOT_A_JSON_OBJECT,
@@ -222,27 +277,32 @@ export class PlanRefusal {
     [PlanRequestOutcome.UNKNOWN_FIELD, (asked) => new Refusal({
       status: 400,
       code: PlanRequestOutcome.UNKNOWN_FIELD,
-      detail: `unknown field: ${asked.fields.join(', ')}`,
+      detail: `unknown field: ${asked.fields!.join(', ')}`,
     })],
   ])
 
-  static of(asked) {
+  static of(asked: RefusedPlanRequest): Refusal {
     return PlanRefusal.#BY_OUTCOME.of(asked.outcome)(asked)
   }
 
-  static declaredOutcomes() {
+  static declaredOutcomes(): PlanRequestOutcomeValue[] {
     return PlanRefusal.#BY_OUTCOME.members()
   }
 }
 
-export class PlanCollapse {
-  static #STATUS = 400
+type PlanFailureClass = { new (reason: string): PlanFailure, readonly name: string }
 
-  static #collapsed(code) {
+type PlanCollapseOf = (cause: PlanFailure) => Refusal
+
+export class PlanCollapse {
+  static readonly #STATUS = 400
+
+  static #collapsed(code: string): PlanCollapseOf {
     return (cause) => new Refusal({ status: PlanCollapse.#STATUS, code, detail: cause.message })
   }
 
-  static #BY_FAILURE = new Projection('refusal', [
+  static readonly #BY_FAILURE: Projection<PlanCollapseOf, PlanFailureClass> =
+    new Projection<PlanCollapseOf, PlanFailureClass>('refusal', [
     [UserStoryNotRead, PlanCollapse.#collapsed('user-story-not-read')],
     [PlanIssueNotCreated, PlanCollapse.#collapsed('plan-issue-not-created')],
     [PlanIssueNotClaimed, PlanCollapse.#collapsed('plan-issue-not-claimed')],
@@ -260,24 +320,28 @@ export class PlanCollapse {
     [WorkspaceNotUnderstood, PlanCollapse.#collapsed('workspace-not-understood')],
   ])
 
-  static of(cause) {
+  static of(cause: PlanFailure): Refusal {
     return PlanCollapse.#BY_FAILURE.of(cause.constructor)(cause)
   }
 
-  static declaredFailures() {
+  static declaredFailures(): string[] {
     return PlanCollapse.#BY_FAILURE.members().map((failure) => failure.name)
   }
 
-  static declaredCodes() {
+  static declaredCodes(): string[] {
     return PlanCollapse.#BY_FAILURE.members().map((failure) => PlanCollapse.of(new failure('x')).code)
   }
 }
 
 export class StartPlanRoute {
-  static PATH = '/start-plan'
-  static METHOD = 'POST'
+  static readonly PATH = '/start-plan'
+  static readonly METHOD = 'POST'
 
-  static handledBy(startPlan, sessions, reviews) {
+  static handledBy(
+    startPlan: StartPlan,
+    sessions: PlanSessionRegistry,
+    reviews: PlanReviewStarts
+  ): (request: Request, response: Response) => Promise<void> {
     return async (request, response) => {
       const asked = PlanRequest.from(JsonBody.textOf(request))
       if (asked.outcome !== PlanRequestOutcome.ACCEPTED) {
@@ -288,11 +352,17 @@ export class StartPlanRoute {
     }
   }
 
-  static async #accept(startPlan, sessions, reviews, response, asked) {
-    let result
+  static async #accept(
+    startPlan: StartPlan,
+    sessions: PlanSessionRegistry,
+    reviews: PlanReviewStarts,
+    response: Response,
+    asked: PlanRequest
+  ): Promise<void> {
+    let result: StartPlanResult
     try {
       result = await startPlan.execute(
-        new StartPlanParams({ story: asked.story, comment: asked.comment, targets: asked.targets })
+        new StartPlanParams({ story: asked.story, comment: asked.comment, targets: asked.targets! })
       )
     } catch (cause) {
       if (!(cause instanceof PlanFailure)) throw cause
@@ -313,7 +383,12 @@ export class StartPlanRoute {
     Answer.send(response, 202, { status: 'started', ...StartPlanRoute.#startedAnswer(started) })
   }
 
-  static #sendListed(sessions, reviews, response, result) {
+  static #sendListed(
+    sessions: PlanSessionRegistry,
+    reviews: PlanReviewStarts,
+    response: Response,
+    result: StartPlanResult
+  ): void {
     const started = []
     for (const one of result.started) {
       sessions.remember(one.watch)
@@ -334,7 +409,7 @@ export class StartPlanRoute {
     Answer.send(response, 202, { status: 'started', started, failed })
   }
 
-  static #startedAnswer(started) {
+  static #startedAnswer(started: PlanStarted): Record<string, unknown> {
     return {
       [PlanRequest.ID_FIELD]: started.watch.storyText(),
       [PlanRequest.REPO_FIELD]: started.watch.repository.text,
@@ -347,7 +422,7 @@ export class StartPlanRoute {
     }
   }
 
-  static refuseOtherMethods(request, response) {
+  static refuseOtherMethods(request: Request, response: Response): void {
     response.setHeader('Allow', StartPlanRoute.METHOD)
     Answer.refuse(response, 405, 'method-not-allowed', 'method not allowed')
   }

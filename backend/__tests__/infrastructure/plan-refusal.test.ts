@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   PlanRequest, PlanRequestOutcome, PlanRefusal, PlanCollapse,
-} from '../../src/infrastructure/start-plan-route.js'
+} from '../../src/infrastructure/start-plan-route.ts'
 import { ImplementCollapse } from '../../src/infrastructure/implement-plan-route.js'
 import { Refusal } from '../../src/infrastructure/http.ts'
 import * as exceptions from '../../src/domain/exceptions.ts'
@@ -58,7 +58,7 @@ describe('PlanCollapse', () => {
 
   const RESUMING_AN_AGENT = ImplementCollapse.declaredFailures()
 
-  const startingAPlan = ([name, thrown]) =>
+  const startingAPlan = ([name, thrown]: [string, { prototype: object }]) =>
     thrown.prototype instanceof exceptions.PlanFailure &&
     !FAMILIES.includes(name) &&
     !RESUMING_AN_AGENT.includes(name) &&

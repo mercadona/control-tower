@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   EventsRequest, EventsRequestOutcome, EventsRefusal, PlanSessions,
 } from '../../src/infrastructure/plan-events-route.js'
-import { PlanRequest, PlanRequestOutcome, PlanRefusal } from '../../src/infrastructure/start-plan-route.js'
+import { PlanRequest, PlanRequestOutcome, PlanRefusal } from '../../src/infrastructure/start-plan-route.ts'
 import { Refusal } from '../../src/infrastructure/http.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
