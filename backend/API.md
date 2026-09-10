@@ -592,16 +592,18 @@ curl -s http://127.0.0.1:8787/external-tools
 | `POST /implement-plan` | `frontend/src/app/implement-plan/client.ts` | `ImplementPlan.types.ts` |
 | `GET /implement-progress` | `frontend/src/app/implement-progress/client.ts` | `ImplementProgress.types.ts` |
 | `GET /active-plans` | `frontend/src/app/active-plans/client.ts` | `ActivePlan.types.ts` |
-| `GET /external-tools` | none yet | none yet |
+| `GET /external-tools` | `frontend/src/app/external-tools/client.ts` | `ExternalTools.types.ts` |
 
 A client validates the wire shape before it reaches a component, and projects
 snake_case to camelCase. Add a field to the validator, or the component never
 sees it.
 
-`GET /external-tools` has no client because nothing renders it yet; the endpoint
-was the deliverable. Its path is already in `API_PATHS`
-(`frontend/vite.config.ts`), so the dev server proxies it instead of answering
-the page's HTML.
+`GET /external-tools` is rendered by `ToolsStatus`
+(`frontend/src/app/external-tools/components/tools-status/`) in the home page's
+top bar, which asks it once when it mounts and again when a person presses its
+retry button — never on a timer, for the two costs named above. Its path is in
+`API_PATHS` (`frontend/vite.config.ts`), so the dev server proxies it instead of
+answering the page's HTML.
 
 ## Where the contract is decided
 
