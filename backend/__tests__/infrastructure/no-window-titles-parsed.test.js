@@ -23,7 +23,8 @@ class SourceTree {
 }
 
 describe('the identity of a plan in flight does not come from the title of a window', () => {
-  it('the_only_module_that_names_a_cmux_workspace_is_the_one_that_opens_it', () => {
-    expect(SourceTree.containing('ct-plan-')).toEqual(['infrastructure/cmux-plan-agents.js'])
+  it('no_module_of_the_backend_names_a_cmux_workspace_now_that_nothing_opens_one', () => {
+    expect(SourceTree.containing('ct-plan-')).toEqual([])
+    expect(SourceTree.containing('plugin/scripts/cmux.js')).toEqual([])
   })
 })

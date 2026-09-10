@@ -162,7 +162,7 @@ describe('ImplementPlanRoute', () => {
     expect(RunningApi.spy.asked).toEqual([])
   })
 
-  it('an_agent_handle_with_whitespace_is_refused_before_it_can_become_an_argument_of_cmux', async () => {
+  it('an_agent_handle_with_whitespace_is_refused_before_it_can_become_an_argument_of_claude', async () => {
     const response = await RunningApi.asking('{"agent":"ct-plan XOP-4909","issue":33,"repo":"jjponz/repo-pulse"}')
 
     expect(response.status).toBe(400)

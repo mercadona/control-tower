@@ -31,7 +31,7 @@ class Subjects {
     'invocation.js      moved out of the entrypoint until it is observable',
     'The `backend-best-practices` skill — general guidance; it yields to both.',
     'owner/repo#N',
-    'Jira, GitHub, cmux, acli and gh exist only in',
+    'Jira, GitHub, acli and gh exist only in',
     'ToolRunner      launches a binary with its budget',
     'The flag is named `safeToRepeat`.** `gh issue create` never gets `true`.',
     'A controller under `infrastructure/` is named `<endpoint>-route.js`, one\nfile per endpoint.',

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { ReviewWatch } from '../../src/infrastructure/review-watch.js'
 import { DispatchCheckWorkbench } from '../../src/infrastructure/dispatch-check-workbench.js'
-import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.js'
+import { HeadlessPlanAgents } from '../../src/infrastructure/headless-plan-agents.js'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.js'
 import { GhPullRequests } from '../../src/infrastructure/gh-pull-requests.js'
 import { GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.js'
@@ -45,16 +45,18 @@ class NodeDouble {
   }
 }
 
-class CmuxDouble {
+class DetachedRunDouble {
   constructor() {
     this.calls = []
   }
 
-  async run(argv) {
-    this.calls.push(argv)
+  start(spec) {
+    this.calls.push(spec.argv)
 
-    return new ProcessOutput({ code: 0, stdout: '', stderr: '' })
+    return { pid: 4242 }
   }
+
+  stop() {}
 }
 
 class Sweep {
@@ -77,7 +79,7 @@ class PullRequestReviewLoop {
   static ISSUE = new PlanIssue({
     number: 7, url: 'https://github.com/josemerca/ct-loop-sandbox/issues/7',
   })
-  static AGENT = 'workspace:9'
+  static AGENT = '6f1a2b3c-0000-4000-8000-000000000001'
   static CHANGE = new ChangeAsked({ id: '101', text: 'arregla el guard de []' })
   static PULL_REQUEST_LISTED = JSON.stringify([
     { number: 42, url: 'https://github.com/josemerca/ct-loop-sandbox/pull/42' },
@@ -96,7 +98,7 @@ class PullRequestReviewLoop {
 
   constructor() {
     this.node = new NodeDouble()
-    this.cmux = new CmuxDouble()
+    this.detached = new DetachedRunDouble()
     this.ghProcess = new GhProcessDouble([
       new ProcessOutput({ code: 0, stdout: PullRequestReviewLoop.PULL_REQUEST_LISTED, stderr: '' }),
       new ProcessOutput({ code: 0, stdout: PullRequestReviewLoop.IN_REVIEW_LABELS, stderr: '' }),
@@ -123,7 +125,22 @@ class PullRequestReviewLoop {
       node: (argv) => this.node.run(argv),
       dispatchCheck: PullRequestReviewLoop.DISPATCH_CHECK,
     })
-    const planAgents = new CmuxPlanAgents({ brief: this.brief, run: (argv) => this.cmux.run(argv) })
+    const planAgents = new HeadlessPlanAgents({
+      start: this.detached,
+      makeDirectory: async () => {},
+      write: async () => {},
+      read: async () => JSON.stringify({
+        worktree: '/repo/.worktrees/7',
+        issue: 7,
+        repository: 'josemerca/ct-loop-sandbox',
+        startedAt: 1,
+      }),
+      mint: () => PullRequestReviewLoop.AGENT,
+      clock: () => 1,
+      brief: this.brief,
+      runsIn: '/state/harness',
+      pluginRoot: '/plugin',
+    })
     const requestFixes = new RequestFixes({ workbench, planAgents })
     const sweep = new Sweep(null)
     const reviews = new ReviewWatch({
@@ -143,7 +160,7 @@ class PullRequestReviewLoop {
   }
 }
 
-describe('the pull request review loop composed end to end, only gh, node and cmux doubled', () => {
+describe('the pull request review loop composed end to end, only gh, node and the detached run doubled', () => {
   it('reopens_the_exact_issue_the_review_named_instead_of_sending_undefined_to_dispatch_check', async () => {
     const loop = new PullRequestReviewLoop()
 
@@ -164,10 +181,11 @@ describe('the pull request review loop composed end to end, only gh, node and cm
       repository: PullRequestReviewLoop.REPOSITORY,
       changes: PullRequestReviewLoop.CHANGE.text,
     })
-    expect(loop.cmux.calls).toEqual([
-      ['send', '--workspace', PullRequestReviewLoop.AGENT, expectedErrand],
-      ['send-key', '--workspace', PullRequestReviewLoop.AGENT, 'Enter'],
-    ])
+    expect(loop.detached.calls).toEqual([[
+      '-p', expectedErrand, '--output-format', 'stream-json',
+      '--verbose', '--permission-mode', 'bypassPermissions', '--fallback-model', 'opus', '--model',
+      'sonnet', '--plugin-dir', '/plugin', '--resume', PullRequestReviewLoop.AGENT,
+    ]])
     expect(expectedErrand).toContain('#7')
     expect(expectedErrand).not.toContain('undefined')
   })

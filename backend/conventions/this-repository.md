@@ -53,7 +53,7 @@ failed** (`*NotRead`, `*NotCreated`, `*NotLaunched`) and **it answered
 something we cannot read** (`*NotUnderstood`, `*NotNamed`). The boundary
 projects each cause to its own `code`.
 
-Jira, GitHub, cmux, acli and gh exist only in `infrastructure/`.
+Jira, GitHub, acli and gh exist only in `infrastructure/`.
 
 ## The backend leans on the plugin, never the reverse
 
