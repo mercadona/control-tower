@@ -117,7 +117,7 @@ class ACheckoutReachableByTwoPaths {
 }
 
 class AConversationAttendingOnePlan {
-  static AGENT = 'workspace:97'
+  static AGENT = 'bbbbbbbb-1111-1111-1111-111111111111'
 
   static async recordedAt(state, worktree) {
     const path = HeadlessPlanAgents.conversationPathFor({

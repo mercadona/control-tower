@@ -29,12 +29,13 @@ class SurveyedCheckout {
 
 class ConversationsOf {
   static AGENT = 'aaaaaaaa-0000-0000-0000-000000000001'
-  static ISSUE = 33
 
   static attending(worktree, {
     agent = ConversationsOf.AGENT, repository = SurveyedCheckout.REPOSITORY.text, startedAt = 1,
   } = {}) {
-    return new HarnessConversation({ agent, worktree, issue: ConversationsOf.ISSUE, repository, startedAt })
+    return [new HarnessConversation({
+      agent, worktree, issue: ConversationsOf.#issueOf(worktree), repository, startedAt,
+    })]
   }
 
   static none() {
@@ -43,6 +44,10 @@ class ConversationsOf {
 
   static couldNotBeListed() {
     return null
+  }
+
+  static #issueOf(worktree) {
+    return Number(worktree.match(/\.worktrees\/([1-9]\d*)$/)[1])
   }
 }
 
@@ -66,7 +71,7 @@ class PlansOf {
 describe('WorktreePlans', () => {
   it('the_identity_of_a_plan_in_flight_comes_from_git_and_the_conversation_only_names_its_agent', async () => {
     const plans = PlansOf.aWorktreeAttendedBy(
-      () => [ConversationsOf.attending('/repos/one/.worktrees/33')]
+      () => ConversationsOf.attending('/repos/one/.worktrees/33')
     )
 
     const [watch] = await plans.inFlight()
@@ -98,7 +103,7 @@ describe('WorktreePlans', () => {
 
   it('a_conversation_sitting_somewhere_else_does_not_lend_its_agent_to_this_worktree', async () => {
     const plans = PlansOf.aWorktreeAttendedBy(
-      () => [ConversationsOf.attending('/repos/one/.worktrees/41')]
+      () => ConversationsOf.attending('/repos/one/.worktrees/41')
     )
 
     expect(await plans.inFlight()).toEqual([])
@@ -110,18 +115,19 @@ describe('WorktreePlans', () => {
 
   it('the_newest_launch_is_the_conversation_that_attends_a_worktree_two_of_them_name', async () => {
     const worktree = '/repos/one/.worktrees/33'
-    const older = ConversationsOf.attending(worktree, { agent: 'older-agent', startedAt: 1 })
-    const newer = ConversationsOf.attending(worktree, { agent: 'newer-agent', startedAt: 2 })
-    const plans = PlansOf.aWorktreeAttendedBy(() => [older, newer])
+    const [older] = ConversationsOf.attending(worktree, { agent: 'older-agent', startedAt: 1 })
+    const [newer] = ConversationsOf.attending(worktree, { agent: 'newer-agent', startedAt: 2 })
 
-    const [watch] = await plans.inFlight()
+    const [olderListedFirst] = await PlansOf.aWorktreeAttendedBy(() => [older, newer]).inFlight()
+    const [newerListedFirst] = await PlansOf.aWorktreeAttendedBy(() => [newer, older]).inFlight()
 
-    expect(watch.agent).toBe('newer-agent')
+    expect(olderListedFirst.agent).toBe('newer-agent')
+    expect(newerListedFirst.agent).toBe('newer-agent')
   })
 
   it('a_conversation_of_another_repository_does_not_attend_a_worktree_whose_path_it_matches', async () => {
     const plans = PlansOf.aWorktreeAttendedBy(
-      () => [ConversationsOf.attending('/repos/one/.worktrees/33', { repository: 'owner/other-repo' })]
+      () => ConversationsOf.attending('/repos/one/.worktrees/33', { repository: 'owner/other-repo' })
     )
 
     expect(await plans.inFlight()).toEqual([])
@@ -130,7 +136,7 @@ describe('WorktreePlans', () => {
   it('the_story_it_could_not_read_leaves_the_plan_recovered_without_one', async () => {
     const stderr = vi.fn()
     const plans = PlansOf.aWorktreeAttendedBy(
-      () => [ConversationsOf.attending('/repos/one/.worktrees/33')],
+      () => ConversationsOf.attending('/repos/one/.worktrees/33'),
       { story: () => { throw new PlanStoryNotRead('gh: not authenticated') }, stderr }
     )
 
@@ -150,7 +156,7 @@ describe('WorktreePlans', () => {
 
         return SurveyedCheckout.of('/repos/one', [33])
       },
-      conversations: () => [ConversationsOf.attending('/repos/one/.worktrees/33')],
+      conversations: () => ConversationsOf.attending('/repos/one/.worktrees/33'),
       story: () => null,
       realpathOf: (path) => path,
       stderr,
@@ -166,7 +172,7 @@ describe('WorktreePlans', () => {
     const plans = new WorktreePlans({
       checkouts: { known: () => [] },
       survey: () => SurveyedCheckout.of('/repos/one', [33]),
-      conversations: () => [ConversationsOf.attending('/repos/one/.worktrees/33')],
+      conversations: () => ConversationsOf.attending('/repos/one/.worktrees/33'),
       story: () => null,
       realpathOf: (path) => path,
       stderr: vi.fn(),
@@ -182,7 +188,7 @@ describe('WorktreePlans', () => {
     const plans = new WorktreePlans({
       checkouts: { known: () => null },
       survey: () => SurveyedCheckout.of('/repos/one', [33]),
-      conversations: () => [ConversationsOf.attending('/repos/one/.worktrees/33')],
+      conversations: () => ConversationsOf.attending('/repos/one/.worktrees/33'),
       story: () => null,
       realpathOf: (path) => path,
       stderr: vi.fn(),
@@ -193,7 +199,7 @@ describe('WorktreePlans', () => {
 
   it('a_conversation_sitting_in_the_same_place_through_a_symlink_still_names_its_agent', async () => {
     const plans = PlansOf.aWorktreeAttendedBy(
-      () => [ConversationsOf.attending('/private/repos/one/.worktrees/33')],
+      () => ConversationsOf.attending('/private/repos/one/.worktrees/33'),
       { realpathOf: (path) => path.replace(/^\/(private\/)?repos\/one/, '/private/repos/one') }
     )
 
@@ -204,7 +210,7 @@ describe('WorktreePlans', () => {
 
   it('a_conversation_that_names_the_logical_path_while_git_names_the_physical_one_still_names_its_agent', async () => {
     const plans = PlansOf.aWorktreeAttendedBy(
-      () => [ConversationsOf.attending('/logical/one/.worktrees/33')],
+      () => ConversationsOf.attending('/logical/one/.worktrees/33'),
       { realpathOf: (path) => path.replace(/^\/(logical|repos)\/one/, '/physical/one') }
     )
 
@@ -222,7 +228,7 @@ describe('WorktreePlans', () => {
 
         return SurveyedCheckout.of(root.text, [])
       },
-      conversations: () => [ConversationsOf.attending('/logical/one/.worktrees/33')],
+      conversations: () => ConversationsOf.attending('/logical/one/.worktrees/33'),
       story: () => null,
       realpathOf: (path) => path.replace('/logical/one', '/physical/one'),
       stderr: vi.fn(),
@@ -237,7 +243,7 @@ describe('WorktreePlans', () => {
     const plans = new WorktreePlans({
       checkouts: { known: () => [new CheckoutRoot('/repos/one')] },
       survey: () => { throw new PlanStoryNotRead('a failure that is not the survey\'s') },
-      conversations: () => [ConversationsOf.attending('/repos/one/.worktrees/33')],
+      conversations: () => ConversationsOf.attending('/repos/one/.worktrees/33'),
       story: () => null,
       realpathOf: (path) => path,
       stderr: vi.fn(),
@@ -250,13 +256,13 @@ describe('WorktreePlans', () => {
     const surveyBroke = new WorktreePlans({
       checkouts: { known: () => [new CheckoutRoot('/repos/one')] },
       survey: () => { throw new TypeError('git-workspace has a bug') },
-      conversations: () => [ConversationsOf.attending('/repos/one/.worktrees/33')],
+      conversations: () => ConversationsOf.attending('/repos/one/.worktrees/33'),
       story: () => null,
       realpathOf: (path) => path,
       stderr: vi.fn(),
     })
     const storyBroke = PlansOf.aWorktreeAttendedBy(
-      () => [ConversationsOf.attending('/repos/one/.worktrees/33')],
+      () => ConversationsOf.attending('/repos/one/.worktrees/33'),
       { story: () => { throw new TypeError('gh-plan-issues has a bug') } }
     )
 
