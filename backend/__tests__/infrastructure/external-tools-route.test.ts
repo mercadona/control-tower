@@ -1,13 +1,14 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ApiServer } from '../../src/infrastructure/api-server.js'
+import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { ReviewsSpy } from '../reviews-spy.ts'
 import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
-import { SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.ts'
+import { SurveyExternalTools, SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.ts'
+import { ToolSessions } from '../../src/domain/ports/tool-sessions.ts'
 import { SessionState, ToolSession } from '../../src/domain/value-objects/tool-session.ts'
 
-class SurveySpy {
+class SurveySpy extends SurveyExternalTools {
   static readonly GH_READY = new ToolSession({ tool: 'gh', installed: true, state: SessionState.READY, fix: null })
   static readonly BQ_MISSING = new ToolSession({
     tool: 'bq', installed: true, state: SessionState.MISSING,
@@ -25,6 +26,7 @@ class SurveySpy {
   readonly sessions: readonly ToolSession[]
 
   constructor(sessions: readonly ToolSession[]) {
+    super({ toolSessions: new ToolSessions() })
     this.asked = 0
     this.sessions = sessions
   }

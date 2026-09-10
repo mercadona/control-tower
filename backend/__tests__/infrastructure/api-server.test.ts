@@ -4,9 +4,11 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
-import { ApiServer } from '../../src/infrastructure/api-server.js'
+import { ApiServer } from '../../src/infrastructure/api-server.ts'
+import type { ApiCollaborators } from '../../src/infrastructure/api-server.ts'
 import { ReviewsSpy } from '../reviews-spy.ts'
-import { StartPlanResult, PlanStarted, PlanNotStarted } from '../../src/application/actions/start-plan.ts'
+import { StartPlan, StartPlanResult, PlanStarted, PlanNotStarted } from '../../src/application/actions/start-plan.ts'
+import type { StartPlanParams } from '../../src/application/actions/start-plan.ts'
 import { BaselineResult } from '../../../plugin/scripts/baseline.js'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
@@ -17,19 +19,32 @@ import {
 } from '../../src/domain/exceptions.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PlanState } from '../../src/domain/value-objects/plan-state.ts'
+import type { PlanStateValue } from '../../src/domain/value-objects/plan-state.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
 import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.ts'
 import { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.ts'
-import { SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.ts'
+import { SurveyExternalTools, SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.ts'
+import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
+import { ImplementationProgress } from '../../src/domain/ports/implementation-progress.ts'
+import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
+import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
+import { ReviewLog } from '../../src/domain/ports/review-log.ts'
+import { ToolSessions } from '../../src/domain/ports/tool-sessions.ts'
+import { UserStories } from '../../src/domain/ports/user-stories.ts'
+import { Workspace } from '../../src/domain/ports/workspace.ts'
+import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.ts'
+import { DiskImplementationStartRegistry } from '../../src/infrastructure/disk-implementation-start-registry.ts'
+import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
+import { WorktreePlans } from '../../src/infrastructure/worktree-plans.ts'
 
-class StartPlanSpy {
-  static AGENT = 'workspace:4'
-  static BASELINE = new BaselineResult({ outcome: 'verde', command: 'npm test', summary: '42 passed' })
-  static ISSUE = new PlanIssue({ number: 7, url: 'https://github.com/owner/name/issues/7' })
-  static LOCATED = new WorkspaceLocation({ root: '/repo/checkout', path: '/repo/checkout/.worktrees/7', branch: 'feat/7' })
-  static WATCH = new PlanWatch({
+class StartPlanSpy extends StartPlan {
+  static readonly AGENT = 'workspace:4'
+  static readonly BASELINE = new BaselineResult({ outcome: 'verde', command: 'npm test', summary: '42 passed' })
+  static readonly ISSUE = new PlanIssue({ number: 7, url: 'https://github.com/owner/name/issues/7' })
+  static readonly LOCATED = new WorkspaceLocation({ root: '/repo/checkout', path: '/repo/checkout/.worktrees/7', branch: 'feat/7' })
+  static readonly WATCH = new PlanWatch({
     story: new UserStoryKey('ABC-123'),
     issue: StartPlanSpy.ISSUE,
     located: StartPlanSpy.LOCATED,
@@ -37,14 +52,26 @@ class StartPlanSpy {
     agent: StartPlanSpy.AGENT,
   })
 
-  constructor({ failing = false } = {}) {
+  readonly asked: (string | null)[]
+  readonly repositories: string[]
+  readonly roots: string[]
+  readonly failing: boolean
+
+  constructor({ failing = false }: { failing?: boolean } = {}) {
+    super({
+      userStories: new UserStories(),
+      planIssues: new PlanIssues(),
+      workspace: new Workspace(),
+      planAgents: new PlanAgents(),
+      checkouts: new CheckoutRegistry(),
+    })
     this.asked = []
     this.repositories = []
     this.roots = []
     this.failing = failing
   }
 
-  static failingWith(cause) {
+  static failingWith(cause: Error): StartPlanSpy {
     const spy = new StartPlanSpy()
     spy.execute = async () => {
       throw cause
@@ -53,7 +80,7 @@ class StartPlanSpy {
     return spy
   }
 
-  static buggy() {
+  static buggy(): StartPlanSpy {
     const spy = new StartPlanSpy()
     spy.execute = async () => {
       throw new TypeError('a bug of ours')
@@ -62,14 +89,13 @@ class StartPlanSpy {
     return spy
   }
 
-  static failingOne() {
+  static failingOne(): StartPlanSpy {
     const spy = new StartPlanSpy()
     spy.execute = async (params) => {
       const [succeeding, failing] = params.targets
 
       return new StartPlanResult({
         started: [new PlanStarted({
-          repository: succeeding.repository,
           agent: StartPlanSpy.AGENT,
           baseline: StartPlanSpy.BASELINE,
           watch: new PlanWatch({
@@ -90,7 +116,7 @@ class StartPlanSpy {
     return spy
   }
 
-  static failingAll() {
+  static failingAll(): StartPlanSpy {
     const spy = new StartPlanSpy()
     spy.execute = async (params) => {
       const [first, second] = params.targets
@@ -107,7 +133,7 @@ class StartPlanSpy {
     return spy
   }
 
-  async execute(params) {
+  async execute(params: StartPlanParams): Promise<StartPlanResult> {
     this.asked.push(params.story === null ? null : params.story.text)
     const [target] = params.targets
     this.repositories.push(target.repository.text)
@@ -115,7 +141,6 @@ class StartPlanSpy {
     if (this.failing) throw new PlanAgentNotLaunched('cmux is not reachable')
     return new StartPlanResult({
       started: [new PlanStarted({
-        repository: target.repository,
         agent: StartPlanSpy.AGENT,
         baseline: StartPlanSpy.BASELINE,
         watch: new PlanWatch({
@@ -131,26 +156,32 @@ class StartPlanSpy {
   }
 }
 
-class ProgressSpy {
-  static UNREADABLE = 'git status could not say whether the plan is committed'
+type AnsweredProgress = { spy: ProgressSpy, planEvents: PlanEvents }
 
-  constructor(state, cause) {
+class ProgressSpy {
+  static readonly UNREADABLE = 'git status could not say whether the plan is committed'
+
+  readonly state: PlanStateValue | null
+  readonly cause: Error | null
+  asked: number
+
+  constructor(state: PlanStateValue | null, cause: Error | null) {
     this.state = state
     this.cause = cause
     this.asked = 0
   }
 
-  static events(state, { sleepMs = 0 } = {}) {
+  static events(state: PlanStateValue, { sleepMs = 0 }: { sleepMs?: number } = {}): AnsweredProgress {
     return ProgressSpy.answering(new ProgressSpy(state, null), sleepMs)
   }
 
-  static unable({ sleepMs = 0 } = {}) {
+  static unable({ sleepMs = 0 }: { sleepMs?: number } = {}): AnsweredProgress {
     const spy = new ProgressSpy(null, new PlanProgressNotRead(ProgressSpy.UNREADABLE))
 
     return ProgressSpy.answering(spy, sleepMs)
   }
 
-  static answering(spy, sleepMs) {
+  static answering(spy: ProgressSpy, sleepMs: number): AnsweredProgress {
     return {
       spy,
       planEvents: new PlanEvents({
@@ -160,49 +191,109 @@ class ProgressSpy {
     }
   }
 
-  async read() {
+  async read(): Promise<{ state: PlanStateValue }> {
     this.asked += 1
     if (this.cause !== null) throw this.cause
-    return { state: this.state }
+    return { state: this.state as PlanStateValue }
   }
 }
 
-class ExternalToolsSpy {
-  async execute() {
+class ExternalToolsSpy extends SurveyExternalTools {
+  constructor() {
+    super({ toolSessions: new ToolSessions() })
+  }
+
+  async execute(): Promise<SurveyExternalToolsResult> {
     return new SurveyExternalToolsResult({ sessions: [] })
   }
 }
 
-class FrontendFixture {
-  static INDEX = '<!doctype html><title>control tower</title>'
+class PlansRefusing extends WorktreePlans {
+  constructor(reason: string) {
+    super({
+      checkouts: new CheckoutRegistry(),
+      survey: () => { throw new Error('a plans double never surveys a checkout') },
+      sessions: () => { throw new Error('a plans double never asks cmux') },
+      story: () => { throw new Error('a plans double never reads a user story') },
+      realpathOf: () => null,
+      stderr: () => undefined,
+    })
+    this.inFlight = async () => PlansInFlight.refused(reason)
+  }
+}
 
-  static built() {
+class NeverWatching extends ReviewWatch {
+  constructor(label: string) {
+    super({
+      asked: () => { throw new Error(`${label} never asks`) },
+      review: () => { throw new Error(`${label} never reviews`) },
+      sleep: () => { throw new Error(`${label} never sleeps`) },
+      stderr: () => undefined,
+      label,
+      log: new ReviewLog(),
+    })
+  }
+}
+
+class RecoveryFixture {
+  static readonly #STATE_ROOT = '/state'
+
+  static refusingWith(reason: string): ActivePlanRecovery {
+    const sessions = new PlanSessions()
+
+    return new ActivePlanRecovery({
+      plans: new PlansRefusing(reason),
+      checkouts: new CheckoutRegistry(),
+      implementationStarts: new DiskImplementationStartRegistry({
+        read: () => { throw new Error('a recovery double never reads an implementation marker') },
+        stat: () => { throw new Error('a recovery double never stats an implementation marker') },
+        write: () => { throw new Error('a recovery double never writes an implementation marker') },
+        root: RecoveryFixture.#STATE_ROOT,
+      }),
+      goRegistry: new DiskGoRegistry({
+        random: () => { throw new Error('a recovery double never mints a go nonce') },
+        write: () => { throw new Error('a recovery double never writes a go record') },
+        root: RecoveryFixture.#STATE_ROOT,
+      }),
+      implementationProgress: new ImplementationProgress(),
+      sessions,
+      reviews: new NeverWatching('plan review watch double'),
+      pullRequestReviews: new NeverWatching('pull request review watch double'),
+      activePlans: new ActivePlans({ sessions }),
+    })
+  }
+}
+
+class FrontendFixture {
+  static readonly INDEX = '<!doctype html><title>control tower</title>'
+
+  static built(): string {
     const root = mkdtempSync(join(tmpdir(), 'ct-frontend-'))
     writeFileSync(join(root, 'index.html'), FrontendFixture.INDEX)
 
     return root
   }
 
-  static missing() {
+  static missing(): string {
     return join(tmpdir(), 'ct-frontend-never-built')
   }
 }
 
 class RunningApi {
-  static #started = []
-  static STORY = 'ABC-123'
-  static REPO = 'owner/name'
-  static ACCEPTED_BODY = `{"id":"ABC-123","repo":"owner/name","path":"/repo/checkout"}`
-  static REVIEW_BODY = `{"issue":7,"repo":"owner/name","changes":"parte la tarea 2"}`
-  static ANSWER =
+  static readonly #started: ApiServer[] = []
+  static readonly STORY = 'ABC-123'
+  static readonly REPO = 'owner/name'
+  static readonly ACCEPTED_BODY = `{"id":"ABC-123","repo":"owner/name","path":"/repo/checkout"}`
+  static readonly REVIEW_BODY = `{"issue":7,"repo":"owner/name","changes":"parte la tarea 2"}`
+  static readonly ANSWER =
     '{"status":"started","id":"ABC-123","repo":"owner/name",' +
     '"issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},"agent":"workspace:4",' +
     '"branch":"feat/7","worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout",' +
     '"baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}'
-  static spy = null
-  static reviews = null
+  static spy: StartPlanSpy = new StartPlanSpy()
+  static reviews: ReviewsSpy = new ReviewsSpy()
 
-  static server(options = {}) {
+  static server(options: Partial<ApiCollaborators> = {}): ApiServer {
     RunningApi.spy = new StartPlanSpy()
     RunningApi.reviews = new ReviewsSpy()
     const sessions = options.sessions ?? new PlanSessions()
@@ -222,19 +313,19 @@ class RunningApi {
     })
   }
 
-  static async listening(options = {}) {
+  static async listening(options: Partial<ApiCollaborators> = {}): Promise<number> {
     const server = RunningApi.server(options)
     const port = await server.start()
     RunningApi.#started.push(server)
     return port
   }
 
-  static async stopAll() {
+  static async stopAll(): Promise<void> {
     const running = RunningApi.#started.splice(0)
     await Promise.all(running.map((server) => server.stop()))
   }
 
-  static async post(port, path, body, headers = {}) {
+  static async post(port: number, path: string, body: string, headers: Record<string, string> = {}): Promise<Response> {
     return fetch(`http://127.0.0.1:${port}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
@@ -242,34 +333,34 @@ class RunningApi {
     })
   }
 
-  static async startPlan(port, body, headers = {}) {
+  static async startPlan(port: number, body: string, headers: Record<string, string> = {}): Promise<Response> {
     return RunningApi.post(port, '/start-plan', body, headers)
   }
 
-  static async accepted(port) {
+  static async accepted(port: number): Promise<Response> {
     return RunningApi.startPlan(port, RunningApi.ACCEPTED_BODY)
   }
 
-  static eventsPath() {
+  static eventsPath(): string {
     return `/plan-events/${StartPlanSpy.ISSUE.number}?repo=${encodeURIComponent(RunningApi.REPO)}`
   }
 
-  static async watching(port, headers = {}) {
+  static async watching(port: number, headers: Record<string, string> = {}): Promise<Response> {
     return fetch(`http://127.0.0.1:${port}${RunningApi.eventsPath()}`, {
       headers: { Origin: `http://127.0.0.1:${port}`, ...headers },
       signal: AbortSignal.timeout(1000),
     })
   }
 
-  static async firstFrame(response) {
-    const reader = response.body.getReader()
+  static async firstFrame(response: Response): Promise<string> {
+    const reader = response.body!.getReader()
     const { value } = await reader.read()
     await reader.cancel()
 
     return new TextDecoder().decode(value)
   }
 
-  static ask(port, lines) {
+  static ask(port: number, lines: string): Promise<string> {
     return new Promise((resolve) => {
       const socket = connect(port, '127.0.0.1', () => socket.write(lines))
       let said = ''
@@ -280,14 +371,14 @@ class RunningApi {
     })
   }
 
-  static asking(path, headers, body, host = '127.0.0.1') {
+  static asking(path: string, headers: string[], body?: string, host = '127.0.0.1'): string {
     const written = [`POST ${path} HTTP/1.1`, `Host: ${host}`, 'Connection: close', ...headers]
     if (body !== undefined) written.push(`Content-Length: ${Buffer.byteLength(body)}`)
 
     return `${written.join('\r\n')}\r\n\r\n${body ?? ''}`
   }
 
-  static cutMidBody(port) {
+  static cutMidBody(port: number): Promise<void> {
     return new Promise((resolve) => {
       const socket = connect(port, '127.0.0.1', () => {
         socket.write(
@@ -1016,7 +1107,7 @@ describe('ApiServer', () => {
     await server.start()
 
     try {
-      expect(() => server.server.emit('error', new Error('boom'))).toThrow('boom')
+      expect(() => server.server!.emit('error', new Error('boom'))).toThrow('boom')
     } finally {
       await server.stop()
     }
@@ -1113,7 +1204,7 @@ describe('ApiServer', () => {
     const opened = await fetch(`http://127.0.0.1:${port}${RunningApi.eventsPath()}`, {
       signal: controller.signal,
     })
-    await opened.body.getReader().read()
+    await opened.body!.getReader().read()
     controller.abort()
     await new Promise((resolve) => setTimeout(resolve, 30))
 
@@ -1160,7 +1251,7 @@ describe('ApiServer', () => {
     const opened = await fetch(`http://127.0.0.1:${port}${RunningApi.eventsPath()}`, {
       signal: controller.signal,
     })
-    await opened.body.getReader().read()
+    await opened.body!.getReader().read()
     controller.abort()
 
     await new Promise((resolve) => setTimeout(resolve, 30))
@@ -1263,7 +1354,7 @@ describe('ApiServer', () => {
 
   it('the_detail_of_an_inconclusive_recovery_carries_what_cmux_answered_and_not_a_fixed_sentence', async () => {
     const answered = 'cmux listed workspaces and none of them exposes custom_title: it answered with title'
-    const recovery = new ActivePlanRecovery({ plans: { inFlight: async () => PlansInFlight.refused(answered) } })
+    const recovery = RecoveryFixture.refusingWith(answered)
     const port = await RunningApi.listening({ recovery })
 
     const response = await fetch(`http://127.0.0.1:${port}/active-plans`)
