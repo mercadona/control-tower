@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { GhPullRequests, OpenPullRequest } from '../../src/infrastructure/gh-pull-requests.js'
+import { GhPullRequests, OpenPullRequest } from '../../src/infrastructure/gh-pull-requests.ts'
 import { Gh } from '../../src/infrastructure/gh.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.ts'
@@ -24,17 +24,21 @@ class GhDouble {
   })
   static LISTED = `[{"number":42,"url":"https://github.com/josemerca/ct-loop-sandbox/pull/42"}]\n`
 
-  constructor(answers) {
+  readonly answers: ProcessOutput[]
+  readonly calls: string[][]
+  readonly sleeping: SleepDouble
+
+  constructor(answers: ProcessOutput[]) {
     this.answers = answers
     this.calls = []
     this.sleeping = new SleepDouble()
   }
 
-  static answering(...printed) {
+  static answering(...printed: string[]) {
     return new GhDouble(printed.map((stdout) => new ProcessOutput({ code: 0, stdout, stderr: '' })))
   }
 
-  static refusing(said) {
+  static refusing(said: string) {
     return new GhDouble([new ProcessOutput({ code: 1, stdout: '', stderr: said })])
   }
 
