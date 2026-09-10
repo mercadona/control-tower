@@ -43,6 +43,17 @@ export class ProbedToolSessions extends ToolSessions {
 
   static readonly AUTHENTICATED = 'successfully authenticated'
 
+  static readonly #READINGS: Record<ProbeName, (output: ProcessOutput) => SessionStateValue> = {
+    gh: (output) => (output.failed ? SessionState.MISSING : SessionState.READY),
+    acli: (output) => (output.failed ? SessionState.MISSING : SessionState.READY),
+    ssh: (output) => (output.stderr.includes(ProbedToolSessions.AUTHENTICATED)
+      ? SessionState.READY
+      : SessionState.MISSING),
+    gcloud: (output) => (!output.failed && output.stdout.trim() !== ''
+      ? SessionState.READY
+      : SessionState.MISSING),
+  }
+
   readonly clients: Record<string, ExternalTool>
   readonly lookUp: ToolLookUp
   readonly cmuxAnswers: CmuxAnswers
@@ -76,6 +87,11 @@ export class ProbedToolSessions extends ToolSessions {
 
   async #sessionFor(row: ProbeRow): Promise<ToolSession> {
     const installed = this.lookUp(row.bin) !== null
+    if (installed && row.probe !== null && row.probe !== row.bin && this.lookUp(row.probe) === null) {
+      const asked = { ...row, fix: `install ${row.probe}, then ${row.fix}` }
+
+      return ProbedToolSessions.#sessionOf(asked, installed, SessionState.UNKNOWN)
+    }
 
     return ProbedToolSessions.#sessionOf(row, installed, await this.#resolvedState(row, installed))
   }
@@ -99,13 +115,6 @@ export class ProbedToolSessions extends ToolSessions {
   async #stateFor(row: CredentialRow): Promise<SessionStateValue> {
     const output = await this.clients[row.probe].run(row.argv, { safeToRepeat: true })
 
-    return ProbedToolSessions.#isReady(row, output) ? SessionState.READY : SessionState.MISSING
-  }
-
-  static #isReady(row: CredentialRow, output: ProcessOutput): boolean {
-    if (row.probe === 'ssh') return output.stderr.includes(ProbedToolSessions.AUTHENTICATED)
-    if (row.probe === 'gcloud') return !output.failed && output.stdout.trim() !== ''
-
-    return !output.failed
+    return ProbedToolSessions.#READINGS[row.probe](output)
   }
 }

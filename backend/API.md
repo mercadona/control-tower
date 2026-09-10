@@ -535,11 +535,24 @@ tool blocks. A tool blocks when it is not installed or its session is `missing`
 | `missing` | the tool was asked and has no usable credential | show `fix` as the command to run |
 | `unknown` | the credential cannot be observed from this process | show `fix` as guidance, never as a verdict |
 
-`installed` is a `PATH` lookup, which never executes anything; probing does execute a binary for every row but `claude`. `fix` is the
-literal repair, and `null` exactly when the session is `ready`. It repairs what
-was asked about — the **credential** for five of the rows, the **query** for
-`cmux` — so it presupposes the binaries are installed, which `installed`
-answers separately.
+`installed` is a `PATH` lookup, which never executes anything; probing does
+execute a binary for every row but `claude` and any row whose probing binary is
+absent. `fix` is the literal repair, and `null` exactly when the session is
+`ready`. It repairs what was asked about — the **credential** for five of the
+rows, the **query** for `cmux`.
+
+Two rows are probed with a binary that is not their own: `git` with `ssh`, `bq`
+with `gcloud`. When that binary is absent from `PATH` the row is never asked and
+reads `unknown` — nothing was observed — carrying a `fix` that starts by
+installing the probe. `installed` still answers for the tool's own binary, so
+such a row reads `installed: true` beside `session: unknown`.
+
+A tool whose **own** binary is absent is the other case, and it is not the same
+one: it stays `missing`, because that blocks, and its `fix` still names the login
+and presupposes an installation `installed` already says you do not have. So a
+`missing` row is either a tool that was asked and has no usable credential, or a
+tool that was never asked because it is not there — `installed` is what tells
+them apart, and the UI reads both before it reads `fix`.
 
 How each one is asked:
 
@@ -590,16 +603,18 @@ curl -s http://127.0.0.1:8787/external-tools
 | `POST /implement-plan` | `frontend/src/app/implement-plan/client.ts` | `ImplementPlan.types.ts` |
 | `GET /implement-progress` | `frontend/src/app/implement-progress/client.ts` | `ImplementProgress.types.ts` |
 | `GET /active-plans` | `frontend/src/app/active-plans/client.ts` | `ActivePlan.types.ts` |
-| `GET /external-tools` | none yet | none yet |
+| `GET /external-tools` | `frontend/src/app/external-tools/client.ts` | `ExternalTools.types.ts` |
 
 A client validates the wire shape before it reaches a component, and projects
 snake_case to camelCase. Add a field to the validator, or the component never
 sees it.
 
-`GET /external-tools` has no client because nothing renders it yet; the endpoint
-was the deliverable. Its path is already in `API_PATHS`
-(`frontend/vite.config.ts`), so the dev server proxies it instead of answering
-the page's HTML.
+`GET /external-tools` is rendered by `ToolsStatus`
+(`frontend/src/app/external-tools/components/tools-status/`) in the home page's
+top bar, which asks it once when it mounts and again when a person presses its
+retry button — never on a timer, for the two costs named above. Its path is in
+`API_PATHS` (`frontend/vite.config.ts`), so the dev server proxies it instead of
+answering the page's HTML.
 
 ## Where the contract is decided
 
