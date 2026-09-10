@@ -188,4 +188,20 @@ describe('the checks are measured by the program, not by the implementer', () =>
     expect(ct('controls').stdout).toMatch(/controls: failed/)
     expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/said it was adding the test 'uno pinta uno'/)
   })
+
+  it('a promised test that IS in a path the task staged is green', () => {
+    commitPlan(withTestsLine("añade `'uno pinta uno'`."))
+    writeFileSync(join(repo, 'uno.txt'), "it('uno pinta uno')\n")
+    ct('report', writeReport(['uno.txt']))
+    expect(ct('controls').stdout).toMatch(/controls: done/)
+  })
+
+  it('a test the task said it withdrew and is still in a staged path is red', () => {
+    commitPlan(withTestsLine("retira `'uno pinta uno'`."))
+    writeFileSync(join(repo, 'uno.txt'), "it('uno pinta uno')\n")
+    ct('report', writeReport(['uno.txt']))
+    const r = ct('controls')
+    expect(r.stdout).toMatch(/controls: failed/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/said it was removing the test 'uno pinta uno' and it is still there/)
+  })
 })

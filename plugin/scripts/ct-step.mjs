@@ -1547,8 +1547,8 @@ function amendmentOnlyAdds(t) {
 // that is a NO. Shared by `testsDeclarados` and `declaredBlocks`: same
 // question, same scope, same mechanism.
 function inIndex(name) {
-  const ambito = workingPathsInTheIndex()
-  if (!ambito.length) return false
+  const scope = workingPathsInTheIndex()
+  if (!scope.length) return false
   try {
     execFileSync('git', ['grep', '--cached', '--quiet', '-F', '-e', name, '--', ...scope], { cwd: repoRoot, stdio: 'ignore', timeout: 60_000 })
     return true
