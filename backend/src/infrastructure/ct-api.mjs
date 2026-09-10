@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { setTimeout as after } from 'node:timers/promises'
@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ApiServer, LOOPBACK } from './api-server.js'
 import { HeadlessPlanAgents } from './headless-plan-agents.js'
+import { HarnessConversations } from './harness-conversations.js'
 import { DetachedRun } from './detached-run.js'
 import { AcliUserStories } from './acli-user-stories.js'
 import { GhPlanIssues } from './gh-plan-issues.js'
@@ -26,7 +27,6 @@ import { RunFileProgress } from './run-file-progress.js'
 import { ActivePlans } from './active-plans-route.js'
 import { ActivePlanRecovery } from './active-plan-recovery.js'
 import { DiskImplementationStartRegistry } from './disk-implementation-start-registry.js'
-import { listCmuxWorkspaces } from '../../../plugin/scripts/cmux.js'
 import { StartPlan } from '../application/actions/start-plan.js'
 import { ImplementPlan } from '../application/actions/implement-plan.js'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../application/queries/read-plan-progress.js'
@@ -91,6 +91,10 @@ class Disk {
 
   static async makeDirectory(path) {
     await mkdir(path, { recursive: true })
+  }
+
+  static async list(path) {
+    return readdir(path)
   }
 
   static async atomicWrite(path, text) {
@@ -361,11 +365,17 @@ class CtApi {
     const runFileProgress = new RunFileProgress({ read: Disk.read, exists: Disk.exists })
     const surveyWorkspaces = new SurveyWorkspaces({ workspace })
     const readPlanStory = new ReadPlanStory({ planIssues })
+    const harness = new HarnessConversations({
+      list: Disk.list,
+      read: Disk.read,
+      stderr: (line) => process.stderr.write(line),
+      runsIn: join(asked.stateRoot, CtApi.#HARNESS_DIRECTORY),
+    })
     const recovery = new ActivePlanRecovery({
       plans: new WorktreePlans({
         checkouts,
         survey: async (root) => (await surveyWorkspaces.execute(new SurveyWorkspacesParams({ root }))).survey,
-        sessions: () => listCmuxWorkspaces({ requireComplete: true }),
+        conversations: () => harness.known(),
         realpathOf: Disk.realpathOf,
         story: async (subject) => (await readPlanStory.execute(new ReadPlanStoryParams(subject))).story,
         stderr: (line) => process.stderr.write(line),
