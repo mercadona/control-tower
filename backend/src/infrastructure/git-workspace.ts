@@ -3,6 +3,7 @@ import { SLICE_REL_PATH, excludeContentWith } from '../../../plugin/scripts/stat
 import { LOOP_BRANCH_PREFIX } from '../../../plugin/scripts/conventions.js'
 import { renderState } from '../../../plugin/scripts/state.js'
 import { BaselineOutcome, BaselineResult } from '../../../plugin/scripts/baseline.js'
+import type { Baseline } from '../../../plugin/scripts/baseline.js'
 import { SownWorkspace } from '../domain/value-objects/sown-workspace.ts'
 import { GhPlanIssues } from './gh-plan-issues.js'
 import { Workspace } from '../domain/ports/workspace.ts'
@@ -14,20 +15,34 @@ import { WorkspaceSurvey } from '../domain/value-objects/workspace-survey.ts'
 import {
   WorkspaceNotPrepared, WorkspaceNotRead, WorkspaceNotUnderstood, CheckoutNotConfirmed,
 } from '../domain/exceptions.ts'
+import type { PlanIssue } from '../domain/value-objects/plan-issue.ts'
+import type { ProcessOutput } from './tool-runner.ts'
+import type { ToolLaunch } from './external-tool.ts'
+
+export type NumberedIssue = { readonly number: number }
+export type DiskWrite = (path: string, text: string) => Promise<void>
+export type DiskRead = (path: string) => Promise<string | null>
+export type DiagnosticWriter = (line: string) => void
 
 export class SliceSeed {
-  static RELATIVE_PATH = SLICE_REL_PATH
-  static PLAN_GATE = 'plan'
-  static GATES =
+  static readonly RELATIVE_PATH = SLICE_REL_PATH
+  static readonly PLAN_GATE = 'plan'
+  static readonly GATES =
     `${SliceSeed.PLAN_GATE} — GATE HUMANO pendiente: lo cierra una persona desde la app cuando pide ` +
     'implementar el plan, NO tú. Y hasta entonces puede pedirte cambios comentando ' +
     `\`${GhPlanIssues.CHANGES_TOKEN}\` en el issue. ` +
     'Ojo: la sección "## Gates" del issue describe el carril de /ct-next y aquí no aplica.'
-  static EXCLUDE_PATH = 'info/exclude'
-  static EXCLUDE_RULE = SliceSeed.RELATIVE_PATH
-  static NOT_MEASURED = BaselineResult.notMeasured('nobody ran the baseline while sowing this seed')
+  static readonly EXCLUDE_PATH = 'info/exclude'
+  static readonly EXCLUDE_RULE = SliceSeed.RELATIVE_PATH
+  static readonly NOT_MEASURED = BaselineResult.notMeasured('nobody ran the baseline while sowing this seed')
 
-  static textFor({ issue, branch, base, cut, baseline = SliceSeed.NOT_MEASURED }) {
+  static textFor({ issue, branch, base, cut, baseline = SliceSeed.NOT_MEASURED }: {
+    issue: NumberedIssue,
+    branch: string,
+    base: string,
+    cut: string,
+    baseline?: BaselineResult,
+  }): string {
     return renderState({
       meta: {
         baseline: baseline.seedField,
@@ -54,11 +69,15 @@ export class SliceSeed {
 }
 
 class WorktreeListing {
-  static HEADING = 'worktree '
-  static BRANCH = 'branch refs/heads/'
-  static #NUMBERED = /^[1-9]\d*$/
+  static readonly HEADING = 'worktree '
+  static readonly BRANCH = 'branch refs/heads/'
+  static readonly #NUMBERED = /^[1-9]\d*$/
 
-  static surveyOf({ printed, root, repository }) {
+  static surveyOf({ printed, root, repository }: {
+    printed: string,
+    root: string,
+    repository: RepositoryName,
+  }): WorkspaceSurvey {
     const blocks = printed.split('\n\n').map((block) => block.trim()).filter((block) => block.length > 0)
     if (blocks.length === 0) {
       throw new WorkspaceNotUnderstood(
@@ -74,7 +93,7 @@ class WorktreeListing {
     })
   }
 
-  static #preparedIn(block, root) {
+  static #preparedIn(block: string, root: string): PreparedWorkspace | null {
     const lines = block.split('\n')
     if (!lines[0].startsWith(WorktreeListing.HEADING)) {
       throw new WorkspaceNotUnderstood(
@@ -82,7 +101,7 @@ class WorktreeListing {
       )
     }
     const path = lines[0].slice(WorktreeListing.HEADING.length)
-    const numbered = path.split('/').at(-1)
+    const numbered = path.split('/').at(-1) ?? ''
     if (!WorktreeListing.#NUMBERED.test(numbered)) return null
     const issue = { number: Number(numbered) }
     if (path !== GitWorkspace.pathFor(root, issue)) return null
@@ -94,14 +113,26 @@ class WorktreeListing {
 }
 
 export class GitWorkspace extends Workspace {
-  static BIN = 'git'
-  static DIRECTORY = '.worktrees'
-  static REMOTE_HEAD = 'refs/remotes/origin/HEAD'
-  static REMOTE = 'origin'
-  static #DECLARED = /^refs\/remotes\/origin\/(.+)$/
-  static #NAMED = /^(?:git@github\.com:|https:\/\/github\.com\/)([^/]+\/[^/]+?)(?:\.git)?$/
+  static readonly BIN = 'git'
+  static readonly DIRECTORY = '.worktrees'
+  static readonly REMOTE_HEAD = 'refs/remotes/origin/HEAD'
+  static readonly REMOTE = 'origin'
+  static readonly #DECLARED = /^refs\/remotes\/origin\/(.+)$/
+  static readonly #NAMED = /^(?:git@github\.com:|https:\/\/github\.com\/)([^/]+\/[^/]+?)(?:\.git)?$/
 
-  constructor({ run, write, read, stderr, baseline }) {
+  readonly run: ToolLaunch
+  readonly write: DiskWrite
+  readonly read: DiskRead
+  readonly stderr: DiagnosticWriter
+  readonly baseline: Baseline
+
+  constructor({ run, write, read, stderr, baseline }: {
+    run: ToolLaunch,
+    write: DiskWrite,
+    read: DiskRead,
+    stderr: DiagnosticWriter,
+    baseline: Baseline,
+  }) {
     super()
     this.run = run
     this.write = write
@@ -110,15 +141,15 @@ export class GitWorkspace extends Workspace {
     this.baseline = baseline
   }
 
-  static branchFor(issue) {
+  static branchFor(issue: NumberedIssue): string {
     return `${LOOP_BRANCH_PREFIX}${issue.number}`
   }
 
-  static pathFor(root, issue) {
+  static pathFor(root: string, issue: NumberedIssue): string {
     return `${root}/${GitWorkspace.DIRECTORY}/${issue.number}`
   }
 
-  static argvFor({ root, base, issue }) {
+  static argvFor({ root, base, issue }: { root: string, base: string, issue: NumberedIssue }): string[] {
     return [
       '-C', root,
       'worktree', 'add',
@@ -128,48 +159,48 @@ export class GitWorkspace extends Workspace {
     ]
   }
 
-  static remoteArgvFor(root) {
+  static remoteArgvFor(root: string): string[] {
     return ['-C', root, 'remote', 'get-url', GitWorkspace.REMOTE]
   }
 
-  static surveyArgvFor(root) {
+  static surveyArgvFor(root: string): string[] {
     return ['-C', root, 'worktree', 'list', '--porcelain']
   }
 
-  static toplevelArgvFor(root) {
+  static toplevelArgvFor(root: string): string[] {
     return ['-C', root, 'rev-parse', '--show-toplevel']
   }
 
-  static defaultBranchArgvFor(root) {
+  static defaultBranchArgvFor(root: string): string[] {
     return ['-C', root, 'symbolic-ref', GitWorkspace.REMOTE_HEAD]
   }
 
-  static cutArgvFor(path) {
+  static cutArgvFor(path: string): string[] {
     return ['-C', path, 'rev-parse', 'HEAD']
   }
 
-  static commonDirArgvFor(path) {
+  static commonDirArgvFor(path: string): string[] {
     return ['-C', path, 'rev-parse', '--git-common-dir']
   }
 
-  static statusArgvFor(path) {
+  static statusArgvFor(path: string): string[] {
     return ['-C', path, 'status', '--porcelain', '--untracked-files=all']
   }
 
-  static removeArgvFor(root, path) {
+  static removeArgvFor(root: string, path: string): string[] {
     return ['-C', root, 'worktree', 'remove', '--force', path]
   }
 
-  static deleteBranchArgvFor(root, branch) {
+  static deleteBranchArgvFor(root: string, branch: string): string[] {
     return ['-C', root, 'branch', '-D', branch]
   }
 
-  async confirm({ root, repository }) {
+  async confirm({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }): Promise<CheckoutRoot> {
     let held
     try {
       held = await this.#repositoryOfRoot(root.text)
     } catch (failure) {
-      throw new CheckoutNotConfirmed(`${repository.text}: ${failure.message}`)
+      throw new CheckoutNotConfirmed(`${repository.text}: ${(failure as Error).message}`)
     }
     if (held.text !== repository.text) {
       throw new CheckoutNotConfirmed(`${repository.text}: ${root.text} holds ${held.text}`)
@@ -178,7 +209,7 @@ export class GitWorkspace extends Workspace {
     return await this.#canonicalRootOf(root.text, repository.text)
   }
 
-  async #canonicalRootOf(root, repository) {
+  async #canonicalRootOf(root: string, repository: string): Promise<CheckoutRoot> {
     const asked = await this.run(GitWorkspace.toplevelArgvFor(root))
     if (asked.failed) {
       throw new CheckoutNotConfirmed(`${repository}: ${root} could not be resolved to its git top level: ${asked.stderr.trim()}`)
@@ -193,7 +224,11 @@ export class GitWorkspace extends Workspace {
     return new CheckoutRoot(printed)
   }
 
-  async prepare({ issue, repository, root }) {
+  async prepare({ issue, repository, root }: {
+    issue: PlanIssue,
+    repository: RepositoryName,
+    root: CheckoutRoot,
+  }): Promise<SownWorkspace> {
     const base = await this.#declaredBase(root.text)
     const path = GitWorkspace.pathFor(root.text, issue)
     const branch = GitWorkspace.branchFor(issue)
@@ -207,7 +242,7 @@ export class GitWorkspace extends Workspace {
     }
   }
 
-  async survey(root) {
+  async survey(root: CheckoutRoot): Promise<WorkspaceSurvey> {
     const repository = await this.#repositoryOfRoot(root.text)
     const listed = await this.run(GitWorkspace.surveyArgvFor(root.text))
     if (listed.failed) {
@@ -219,7 +254,7 @@ export class GitWorkspace extends Workspace {
     return WorktreeListing.surveyOf({ printed: listed.stdout, root: root.text, repository })
   }
 
-  async #repositoryOfRoot(root) {
+  async #repositoryOfRoot(root: string): Promise<RepositoryName> {
     const asked = await this.run(GitWorkspace.remoteArgvFor(root))
     if (asked.failed) {
       throw new WorkspaceNotRead(
@@ -237,7 +272,7 @@ export class GitWorkspace extends Workspace {
     return new RepositoryName(named[1])
   }
 
-  async #declaredBase(root) {
+  async #declaredBase(root: string): Promise<string> {
     const asked = await this.run(GitWorkspace.defaultBranchArgvFor(root))
     if (asked.failed) {
       throw new WorkspaceNotPrepared(
@@ -254,18 +289,19 @@ export class GitWorkspace extends Workspace {
     return declared[1]
   }
 
-  async undo(located) {
-    const removed = await this.run(GitWorkspace.removeArgvFor(located.root, located.path))
+  async undo(located: WorkspaceLocation): Promise<void> {
+    const root = located.root as string
+    const removed = await this.run(GitWorkspace.removeArgvFor(root, located.path))
     if (removed.failed) this.#warn(`the worktree ${located.path}`, removed)
-    const deleted = await this.run(GitWorkspace.deleteBranchArgvFor(located.root, located.branch))
+    const deleted = await this.run(GitWorkspace.deleteBranchArgvFor(root, located.branch))
     if (deleted.failed) this.#warn(`the branch ${located.branch}`, deleted)
   }
 
-  #warn(what, refused) {
+  #warn(what: string, refused: ProcessOutput): void {
     this.stderr(`git workspace: could not undo ${what}, it stays behind: ${refused.stderr.trim()}\n`)
   }
 
-  async #cut(root, issue, base) {
+  async #cut(root: string, issue: NumberedIssue, base: string): Promise<void> {
     const argv = GitWorkspace.argvFor({ root, base, issue })
     const output = await this.run(argv)
     if (output.failed) {
@@ -273,7 +309,7 @@ export class GitWorkspace extends Workspace {
     }
   }
 
-  async #seed(located, issue, base) {
+  async #seed(located: WorkspaceLocation, issue: NumberedIssue, base: string): Promise<BaselineResult> {
     await this.#exclude(located)
     const cut = await this.#cutOf(located)
     const baseline = await this.#baselineOf(located)
@@ -286,7 +322,7 @@ export class GitWorkspace extends Workspace {
     return baseline
   }
 
-  async #baselineOf(located) {
+  async #baselineOf(located: WorkspaceLocation): Promise<BaselineResult> {
     const measured = await this.baseline.measure(located.path)
     if (measured.outcome !== BaselineOutcome.GREEN) {
       this.stderr(
@@ -299,7 +335,7 @@ export class GitWorkspace extends Workspace {
     return measured
   }
 
-  async #exclude(located) {
+  async #exclude(located: WorkspaceLocation): Promise<void> {
     const commonDir = await this.#commonDirOf(located)
     const path = `${commonDir}/${SliceSeed.EXCLUDE_PATH}`
     const current = await this.read(path)
@@ -307,7 +343,7 @@ export class GitWorkspace extends Workspace {
     if (next.added) await this.write(path, next.content)
   }
 
-  async #commonDirOf(located) {
+  async #commonDirOf(located: WorkspaceLocation): Promise<string> {
     const asked = await this.run(GitWorkspace.commonDirArgvFor(located.path))
     if (asked.failed) {
       throw new WorkspaceNotPrepared(
@@ -324,7 +360,7 @@ export class GitWorkspace extends Workspace {
     return isAbsolute(answered) ? answered : `${located.root}/${answered}`
   }
 
-  async #cutOf(located) {
+  async #cutOf(located: WorkspaceLocation): Promise<string> {
     const measured = await this.run(GitWorkspace.cutArgvFor(located.path))
     if (measured.failed) {
       throw new WorkspaceNotPrepared(
@@ -335,7 +371,7 @@ export class GitWorkspace extends Workspace {
     return measured.stdout.trim()
   }
 
-  async #verifyHidden(located) {
+  async #verifyHidden(located: WorkspaceLocation): Promise<void> {
     const status = await this.run(GitWorkspace.statusArgvFor(located.path))
     if (status.failed) {
       throw new WorkspaceNotPrepared(

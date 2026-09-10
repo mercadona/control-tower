@@ -1,7 +1,7 @@
 import { ImplementationProgress } from '../domain/ports/implementation-progress.ts'
 import { ImplementationState, ImplementationStep } from '../domain/value-objects/implementation-state.ts'
 import { ImplementationProgressNotRead } from '../domain/exceptions.ts'
-import { GitWorkspace } from './git-workspace.js'
+import { GitWorkspace } from './git-workspace.ts'
 
 class PlanTaskNames {
   static HEADING = /^### Task (\d+) — (.*)$/
