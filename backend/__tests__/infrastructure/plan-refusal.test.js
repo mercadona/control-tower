@@ -80,6 +80,13 @@ describe('PlanCollapse', () => {
     expect(PlanCollapse.declaredFailures().sort()).toEqual(ways.sort())
   })
 
+  it('the_classes_starting_a_plan_and_resuming_an_agent_can_both_collapse_on_are_exactly_the_ones_declared_shared_on_purpose', () => {
+    const startingAPlanClasses = new Set(PlanCollapse.declaredFailures())
+    const actuallyShared = ImplementCollapse.declaredFailures().filter((name) => startingAPlanClasses.has(name))
+
+    expect(actuallyShared.sort()).toEqual([...SHARED_WITH_RESUMING_AN_AGENT_ON_PURPOSE].sort())
+  })
+
   it('every_way_the_plan_can_collapse_has_a_code_distinct_from_every_other_one', () => {
     const codes = PlanCollapse.declaredCodes()
 

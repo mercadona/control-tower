@@ -262,6 +262,7 @@ serialised.
 | `go-not-recorded` | 400 | the GO marker could not be written |
 | `plan-go-not-answered` | 400 | the GO comment on the issue failed |
 | `plan-agent-not-resumed` | 400 | cmux would not take the line |
+| `plan-agent-worktree-not-understood` | 400 | the agent's recorded conversation could not be read back as a worktree |
 
 `no-live-planning-session` is the one to expect after a backend restart: send the
 `agent` from `/active-plans`, not one the page remembered from an older run.

@@ -43,6 +43,7 @@ class HeadlessAgent {
   static ERROR_PATH = `${HeadlessAgent.DIRECTORY}/${HarnessCall.ERROR_FILE}`
   static CALL_PATH = `${HeadlessAgent.DIRECTORY}/${HarnessCall.CALL_FILE}`
   static CONVERSATION_PATH = `${HeadlessAgent.RUNS_IN}/${HeadlessAgent.AGENT}/conversation.json`
+  static NOT_JSON_TEXT = 'not-json{'
 
   constructor({
     startAnswer = new StartedRun({ pid: HeadlessAgent.PID }),
@@ -95,7 +96,7 @@ class HeadlessAgent {
 
   static conversationUnreadable() {
     const headless = new HeadlessAgent()
-    headless.recordConversation('not-json{')
+    headless.recordConversation(HeadlessAgent.NOT_JSON_TEXT)
 
     return headless
   }
@@ -103,6 +104,13 @@ class HeadlessAgent {
   static conversationMissingWorktree() {
     const headless = new HeadlessAgent()
     headless.recordConversation(JSON.stringify({ note: 'no worktree in here' }))
+
+    return headless
+  }
+
+  static conversationRecordedAsNull() {
+    const headless = new HeadlessAgent()
+    headless.recordConversation('null')
 
     return headless
   }
@@ -283,7 +291,7 @@ describe('HeadlessPlanAgents', () => {
     expect(headless.makeDirectoryCalls).toEqual([HeadlessAgent.DIRECTORY])
   })
 
-  it('the_directory_is_made_and_the_conversation_recorded_before_the_call_is_started_because_detached_run_opens_its_paths_and_fails_without_it', async () => {
+  it('the_directory_is_made_first_because_detached_run_opens_its_paths_and_fails_without_it_and_the_conversation_is_recorded_before_the_call_starts_because_spawning_cannot_be_undone', async () => {
     const headless = HeadlessAgent.launching()
 
     await headless.launch()
@@ -332,7 +340,7 @@ describe('HeadlessPlanAgents recording the worktree of a conversation', () => {
 
     const written = headless.writeCalls.find(([path]) => path === HeadlessAgent.CONVERSATION_PATH)
 
-    expect(written[1]).toBe(JSON.stringify({ worktree: HeadlessAgent.WORKTREE }))
+    expect(written?.[1]).toBe(`{"worktree":"${HeadlessAgent.WORKTREE}"}`)
   })
 
   it('two_conversations_do_not_share_the_worktree_they_recorded', async () => {
@@ -369,8 +377,18 @@ describe('HeadlessPlanAgents recording the worktree of a conversation', () => {
 
     const refusal = await headless.worktreeRefusal(HeadlessAgent.AGENT)
 
+    let parserSaid
+    try {
+      JSON.parse(HeadlessAgent.NOT_JSON_TEXT)
+      throw new Error('expected JSON.parse to throw on ' + HeadlessAgent.NOT_JSON_TEXT)
+    } catch (cause) {
+      parserSaid = cause.message
+    }
+
     expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
-    expect(refusal.message.startsWith(HeadlessAgent.AGENT)).toBe(true)
+    expect(refusal.message).toBe(
+      `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} that is not JSON: ${parserSaid}`
+    )
   })
 
   it('a_conversation_recorded_with_no_worktree_refuses_instead_of_answering_undefined_as_a_cwd', async () => {
@@ -379,7 +397,20 @@ describe('HeadlessPlanAgents recording the worktree of a conversation', () => {
     const refusal = await headless.worktreeRefusal(HeadlessAgent.AGENT)
 
     expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
-    expect(refusal.message.startsWith(HeadlessAgent.AGENT)).toBe(true)
+    expect(refusal.message).toBe(
+      `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} with no worktree`
+    )
+  })
+
+  it('a_conversation_recorded_as_the_json_literal_null_refuses_instead_of_crashing_on_null_dot_worktree', async () => {
+    const headless = HeadlessAgent.conversationRecordedAsNull()
+
+    const refusal = await headless.worktreeRefusal(HeadlessAgent.AGENT)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
+    expect(refusal.message).toBe(
+      `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} with no worktree`
+    )
   })
 
   it('a_conversation_that_cannot_be_understood_is_not_the_same_family_as_one_whose_read_was_refused', async () => {

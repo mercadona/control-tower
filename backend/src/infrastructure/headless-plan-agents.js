@@ -143,7 +143,7 @@ export class HeadlessPlanAgents extends PlanAgents {
         `${agent} recorded a conversation at ${path} that is not JSON: ${cause.message}`
       )
     }
-    if (record === null || typeof record !== 'object' || typeof record.worktree !== 'string') {
+    if (record === null || typeof record.worktree !== 'string') {
       throw new PlanAgentNotNamed(`${agent} recorded a conversation at ${path} with no worktree`)
     }
 
