@@ -31,6 +31,7 @@ yardstick — and this repository does not take it.
 | **Plan agent** | Whoever writes the plan for a story; a Claude invoked per step with `claude -p`, never a session typed into |
 | **Harness call** | One invocation of the plan agent: its step, its model, its argv and the stream of events it wrote. It lives in its own directory under the state root and outlives the backend that started it |
 | **Step of a call** | Which errand that invocation carried — `write-plan`, `review-plan`, `implement`, `fix-pull-request`. The one datum no reader recovers afterwards, so it is written at the source |
+| **Model of a step** | Which model a step of the loop asks for: `fable` writes and reviews a plan and judges, `sonnet` implements and fixes. A judge's model is declared in its own agent frontmatter, so it never inherits the session that dispatched it; every headless call carries `--fallback-model opus` for a model overloaded or absent |
 | **GO** | The human's `-OK <nonce>` on the issue that releases the agent |
 | **Repository name** | `owner/name`; validated because it becomes an argument of `gh` |
 | **Checkout root** | The absolute path of the local git clone where a plan's worktree is cut; validated because it becomes an argument of `git -C` |

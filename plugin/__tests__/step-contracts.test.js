@@ -1247,12 +1247,17 @@ describe('el modelo de cada subagente', () => {
   }
 
   it.each([
-    ['el juez de tarea', AGENTE_JUEZ],
-    ['el juez de slice', AGENTE_JUEZ_DE_SLICE],
     ['el reconciliador', AGENTE_RECONCILIADOR],
     ['el consejero', AGENTE_CONSEJERO],
   ])('%s declara su modelo, no lo hereda de la sesión', (_, fichero) => {
     expect(modeloDeAgente(fichero)).toBe('opus')
+  })
+
+  it.each([
+    ['el juez de tarea', AGENTE_JUEZ],
+    ['el juez de slice', AGENTE_JUEZ_DE_SLICE],
+  ])('%s declara su modelo en fable, y nunca lo hereda de la sesión', (_, fichero) => {
+    expect(modeloDeAgente(fichero)).toBe('fable')
   })
 })
 

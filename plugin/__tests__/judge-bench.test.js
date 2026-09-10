@@ -251,7 +251,7 @@ describe('AgentDefinition', () => {
     const agent = Agents.judge()
     expect(agent.name).toBe('ct-judge')
     expect(agent.tools).toEqual(JUDGE_TOOLS.split(', '))
-    expect(agent.model).toBe('opus')
+    expect(agent.model).toBe('fable')
     expect(agent.prompt.startsWith('You judge one task of a slice.')).toBe(true)
   })
 
@@ -284,7 +284,7 @@ describe('JudgeDispatch', () => {
     expect(argv[argv.indexOf('--plugin-dir') + 1]).toBe(PLUGIN_ROOT)
     const agents = JSON.parse(argv[argv.indexOf('--agents') + 1])
     expect(agents['ct-judge'].tools).toEqual(JUDGE_TOOLS.split(', '))
-    expect(agents['ct-judge'].model).toBe('opus')
+    expect(agents['ct-judge'].model).toBe('fable')
     expect(agents['ct-judge'].prompt).toBe(Agents.judge().prompt)
   })
 
