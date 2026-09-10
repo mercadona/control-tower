@@ -195,32 +195,6 @@ class CtApi {
     return after(seconds * 1000)
   }
 
-  static #brief() {
-    return new PlanAgentBrief({
-      dispatchCheck: PluginTree.dispatchCheck(),
-      conventions: PluginTree.conventions(),
-      ctStep: PluginTree.ctStep(),
-    })
-  }
-
-  static #headlessAgents(environment, stateRoot) {
-    return new HeadlessPlanAgents({
-      start: new DetachedRun({
-        bin: HeadlessPlanAgents.BIN,
-        budgetMs: CtApi.#PLAN_CALL_TIMEOUT_MS,
-        env: environment,
-      }),
-      makeDirectory: Disk.makeDirectory,
-      write: Disk.atomicWrite,
-      read: Disk.read,
-      mint: randomUUID,
-      clock: Date.now,
-      brief: CtApi.#brief(),
-      runsIn: join(stateRoot, CtApi.#HARNESS_DIRECTORY),
-      pluginRoot: PluginTree.root(),
-    })
-  }
-
   static #startPlan(workspace, planAgents, planIssues, checkouts) {
     return new StartPlan({
       userStories: new AcliUserStories({ acli: CtApi.#talkingTo(AcliUserStories.BIN, ExternalTool) }),
@@ -334,7 +308,18 @@ class CtApi {
       stderr: (line) => process.stderr.write(line),
       root: asked.stateRoot,
     })
-    const planAgents = CtApi.#headlessAgents(environment, asked.stateRoot)
+    const harnessRoot = join(asked.stateRoot, CtApi.#HARNESS_DIRECTORY)
+    const planAgents = new HeadlessPlanAgents({
+      start: new DetachedRun({ bin: HeadlessPlanAgents.BIN, budgetMs: CtApi.#PLAN_CALL_TIMEOUT_MS, env: environment }),
+      makeDirectory: Disk.makeDirectory,
+      write: Disk.atomicWrite,
+      read: Disk.read,
+      mint: randomUUID,
+      clock: Date.now,
+      brief: new PlanAgentBrief({ dispatchCheck: PluginTree.dispatchCheck(), conventions: PluginTree.conventions(), ctStep: PluginTree.ctStep() }),
+      runsIn: harnessRoot,
+      pluginRoot: PluginTree.root(),
+    })
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
     const planIssues = new GhPlanIssues({
       gh,
@@ -369,7 +354,7 @@ class CtApi {
       list: Disk.list,
       read: Disk.read,
       stderr: (line) => process.stderr.write(line),
-      runsIn: join(asked.stateRoot, CtApi.#HARNESS_DIRECTORY),
+      runsIn: harnessRoot,
     })
     const recovery = new ActivePlanRecovery({
       plans: new WorktreePlans({
