@@ -53,8 +53,10 @@ kills it as long as the parent lives.
   and nothing chooses: `POST /start-plan` writes a plan **without opening any window**, `claude -p`
   runs in the prepared worktree, and the agent it answers with is a UUID.
 - **The model is a function of the step**: `fable` writes and reviews the plan, `sonnet`
-  implements and fixes. Declared as a `Projection`, so a step with no model raises instead of
-  answering `undefined`. No variable configures it, and `call.json` records what was asked for.
+  implements and fixes, and **the two judges run on `fable`**. Declared as a `Projection`, so a
+  step with no model raises instead of answering `undefined`. Every call carries
+  `--fallback-model opus`, which the CLI uses when the model is overloaded **or not available**.
+  No variable configures any of it, and `call.json` records what was asked for.
 - Every headless call leaves a directory under the state root holding three files: `call.json`
   (the step, the issue, the repository, the model, the argv and the pid — the data that is **not**
   in the stream), `stream.ndjson` (claude's events, byte for byte and untrimmed) and `stderr.log`.
@@ -87,7 +89,11 @@ kills it as long as the parent lives.
   reads its `isHandle` and `NAME_PREFIX` to recover a plan in flight, and recovery is phase 1's.
   So it stays in the tree as an implementation nobody builds — the seam phase 1 inherits, named in
   §9.9 with what it costs today.
-- **The plugin.** Not one line. `PlanAgentBrief`, `ct-step`, `dispatch-check` unchanged.
+- **The plugin, except two lines of frontmatter.** `PlanAgentBrief`, `ct-step` and
+  `dispatch-check` are unchanged, but `plugin/agents/ct-judge.md` and `ct-slice-judge.md` each
+  move `model:` to `fable` — that is where a judge's model is declared, and §9.9 corrects what I
+  wrongly said about it. `ct-advisor.md` and `ct-reconciler.md` are left on `opus`: the human
+  named the judge.
 - **The frontend.** `/implement-plan` goes on receiving `agent`; its well-formedness rule already
   admits a UUID (`implement-plan-route.js:61-63`), so no contract moves.
 - **Aggregates, money budgets and comparing variants**, per the issue's protected list.
@@ -110,6 +116,8 @@ kills it as long as the parent lives.
 | Where a continuation runs | the worktree `launch` recorded in `<state root>/harness/<agent>/conversation.json`. The port is **not** changed to carry it |
 | The transport | `claude -p`, always. There is no variable and no fallback |
 | The model | one per step: `write-plan` and `review-plan` → `fable`, `implement` and `fix-pull-request` → `sonnet`. A `Projection`, not a variable |
+| When fable is unavailable | `--fallback-model opus` on every call — the CLI's own mechanism for a model overloaded or absent |
+| The judges | `fable`, in their own agent frontmatter. They never inherit a session's model |
 | The errands | unchanged, all four |
 
 ## 3. Reference patterns
@@ -272,9 +280,8 @@ Contract (backend/src/infrastructure/headless-plan-agents.js):
 export const HarnessStep = Object.freeze({ WRITE_PLAN: 'write-plan',
   REVIEW_PLAN: 'review-plan', IMPLEMENT: 'implement', FIX_PULL_REQUEST: 'fix-pull-request' })
 
-export class HarnessCall {          // what is NOT in claude's stream
-  static CALL_FILE = 'call.json'; static STREAM_FILE = 'stream.ndjson'
-  static ERROR_FILE = 'stderr.log'
+export class HarnessCall {   // what is NOT in claude's stream
+  static CALL_FILE = 'call.json'; static STREAM_FILE = 'stream.ndjson'; static ERROR_FILE = 'stderr.log'
   constructor({ step, agent, issue, repository, model, argv, pid, startedAt })
   get json()                        // what CALL_FILE holds, keys in this order
 }
@@ -282,6 +289,7 @@ export class HarnessCall {          // what is NOT in claude's stream
 export class HeadlessPlanAgents extends PlanAgents {
   static BIN = 'claude'; static PRINT = '-p'
   static FORMAT = ['--output-format', 'stream-json', '--verbose']
+  static FALLBACK = ['--fallback-model', 'opus']
   static PERMISSION = ['--permission-mode', 'bypassPermissions']
   static MODELS = new Projection('model', [['write-plan', 'fable'],
     ['review-plan', 'fable'], ['implement', 'sonnet'], ['fix-pull-request', 'sonnet']])
@@ -291,8 +299,8 @@ export class HeadlessPlanAgents extends PlanAgents {
 }
 ```
 
-`argvFor` answers `[PRINT, errand, ...FORMAT, ...PERMISSION, '--model', MODELS.of(step),
-'--plugin-dir', pluginRoot]` plus `['--session-id', agent]` or `['--resume', agent]`. `launch`
+`argvFor` answers `[PRINT, errand, ...FORMAT, ...PERMISSION, ...FALLBACK, '--model',
+MODELS.of(step), '--plugin-dir', pluginRoot]`, then `--session-id` or `--resume`. `launch`
 mints the agent, composes `${runsIn}/${agent}/${step}-${clock()}`, **makes that directory** —
 `DetachedRun` opens its paths and fails without it — starts the call with `cwd` at
 `briefing.located.path`, and only then writes the record, which carries the pid just answered.
@@ -307,10 +315,9 @@ asserting the whole argv literally. Then
 `it('a_step_no_model_was_declared_for_raises_instead_of_asking_for_undefined')`;
 `it('a_call_that_cannot_be_started_refuses_without_leaving_a_conversation_behind')`.
 
-**Tests:** added: the seven above, the `HeadlessAgent` type and a `BriefDouble`. Removed: none.
+**Tests:** added: the seven above, plus a `HeadlessAgent` type and a `BriefDouble`.
 
-**Verification:** the argv is asserted whole, the step reaches disk, the session is persisted, and
-every step has a model.
+**Verification:** the argv is asserted whole, the step reaches disk, and every step has a model.
 
 ```bash
 cd backend && npx vitest run __tests__/infrastructure/headless-plan-agents.test.js   # exit 0: the seven cases
@@ -420,27 +427,53 @@ cd backend && test "$(grep -c "'fix-pull-request'" src/infrastructure/headless-p
 cd backend && npx vitest run --exclude '**/*-real-process.test.js'   # exit 0: nothing regressed
 ```
 
-### Task 5 — N/A — the model is a constant, so nothing reads the environment for it
+### Task 5 — The judges run on fable, and the plan says so
 
-**Objective:** N/A — withdrawn on 2026-09-10. The issue asks for "the model as an argument", which
-`argvFor`'s `--model` already is; turning that into `CT_PLAN_MODEL` was configuration nobody asked
-for, and `Invocation` goes back to exactly what it was before this slice.
+**Objective:** the two judges of the loop declare `fable` in their own frontmatter, and
+`this-repository.md` records that a judge's model lives there and not in a session.
 
-**Files:** N/A — none.
+**Files:**
+- Modify: `plugin/agents/ct-judge.md`
+- Modify: `plugin/agents/ct-slice-judge.md`
+- Modify: `backend/conventions/this-repository.md`
 
-No code — the task is withdrawn, and §9.10 records why rather than leaving the number unexplained.
+Current state (plugin/agents/ct-judge.md, lines 1-5):
 
-**TDD:** No TDD — nothing is added.
+```markdown
+---
+name: ct-judge
+description: Judges one committed-ready task of a Control Tower slice against its plan. Declared without Bash on purpose — it judges by reading, so its verdict rests on the diff instead of on a suite it ran itself. Dispatch it after the task's own verification commands have already passed.
+tools: Read, Grep, Glob, Write, Skill
+model: opus
+```
 
-**Tests:** removed on purpose: every case about `CT_PLAN_MODEL` and about the transport.
+Both files move `model:` to `fable`. Nothing else in either changes — not the description, not
+`tools`, not a line of the body. `ct-advisor.md` and `ct-reconciler.md` stay on `opus`.
 
-**Verification:** neither variable survives anywhere, and `Invocation` declares no member this
-slice added.
+Final text (backend/conventions/this-repository.md):
+
+```markdown
+| **Model of a step** | Which model a step of the loop asks for: `fable` writes and reviews a plan and judges, `sonnet` implements and fixes. A judge's model is declared in its own agent frontmatter, so it never inherits the session that dispatched it; every headless call carries `--fallback-model opus` for a model overloaded or absent |
+```
+
+One new row of the ubiquitous-language table. It belongs in the repository's own conventions
+because it is the one place a reader looks for what a word means here.
+
+**TDD:** No TDD — two frontmatter values and a table row. What proves it is the plugin's own
+suite staying green and the predicates below, since nothing in either tree reads these values at
+test time.
+
+**Tests:** N/A — no behaviour is added; `plugin/__tests__` already asserts each agent's frontmatter
+parses.
+
+**Verification:** both judges ask for fable, neither of the other two agents moved, and the
+plugin's suite is untouched by it.
 
 ```bash
-cd backend && test -z "$(grep -rl 'CT_PLAN_MODEL\|CT_PLAN_TRANSPORT' src __tests__)"
-cd backend && test -z "$(grep -l 'MALFORMED_MODEL' src/infrastructure/invocation.js)"
-cd backend && npx vitest run __tests__/infrastructure/invocation.test.js   # exit 0: its own cases, none of mine
+test "$(grep -c '^model: fable' plugin/agents/ct-judge.md plugin/agents/ct-slice-judge.md | grep -c ':1')" -eq 2
+test "$(grep -c '^model: opus' plugin/agents/ct-advisor.md)" -eq 1
+cd backend && test "$(grep -c 'Model of a step' conventions/this-repository.md)" -eq 1
+cd plugin && npm test   # exit 0: the plugin's own suite, which this slice does not otherwise touch
 ```
 
 
@@ -557,21 +590,17 @@ node plugin/scripts/dispatch-check.mjs 139 --repo mercadona/control-tower --chec
    issue's decision 7 ("an interrupted run is relaunched, it does not survive"), but it was
    hypothetical while cmux was the default and it is the only behaviour now. Phase 1 is what
    repairs it, and it is the phase that owns recovery. Provenance: the human, explicitly.
-9. **A model per step, named by the human on 2026-09-10; and the judge is beyond this slice.**
-   The human's words: the plan runs on fable/opus, the implementer on sonnet, the judge on
-   opus/fable. Where two are given, the first is taken and the other is one entry away. **The judge
-   is not deliverable here**: `resume`'s errand tells the model to drive itself by asking
-   `ct-step`, and `ct-step` dispatches the judge *inside that same session* — so today the judge
-   inherits the implementer's model, `sonnet`. Giving it its own call with its own model is exactly
-   what phase 4 is, and option A cannot do it. Said plainly rather than quietly approximated.
-   `CT_PLAN_MODEL` was mine, not the issue's, and it is withdrawn.** The issue asks for
-   "Choosing the model … there is no invocation to put `--model` in" and "the model as an
-   argument"; `argvFor`'s `--model` **is** that argument. Making where it comes from an environment
-   variable was configuration nobody asked for, born in this plan's own first commit (`770a7cc`),
-   never in the issue. The model is now `HeadlessPlanAgents.MODEL = 'fable'`, named by the human on
-   2026-09-10 — one constant for the adapter, the shape `CmuxPlanAgents.MODEL = 'opus'` already
-   had. **A model per step is not invented here**: that is what `harness_calls` exists to inform,
-   and it is a one-line change once there is data to decide it on.
+9. **A model per step, and I was wrong about the judge.** The human's words, 2026-09-10: the plan
+   on fable, the implementer on sonnet, **the judge on fable**, and opus wherever fable is not
+   available. I first answered that the judge was not deliverable in option A, reasoning that
+   `ct-step` dispatches it inside the implementer's own session so it would inherit `sonnet`. That
+   was false, and one `grep` settles it: `plugin/agents/ct-judge.md` declares `model: opus` in its
+   own frontmatter, as all four agents of the loop do — a judge has never inherited a session's
+   model. I asserted a structural argument instead of opening the file that decides it. So the
+   judge on fable is two lines of frontmatter, which is Task 5, and `--fallback-model opus` on
+   every call is the CLI's own answer to "overloaded or not available". `CT_PLAN_MODEL` was mine,
+   not the issue's, and stays withdrawn.
+
 10. **The worktree of a continuation is remembered on disk, not added to the port.** The port hands
    `resume`, `review` and `fix` no worktree, and a headless call needs a `cwd`. Adding `located` to
    those three methods is arguably the tidier model, but it changes the port, `CmuxPlanAgents`, the
