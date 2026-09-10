@@ -6,17 +6,22 @@ import { ReviewsSpy } from '../reviews-spy.ts'
 import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.js'
 import {
   ProgressRequestOutcome, ProgressRefusal, ProgressCollapse,
-} from '../../src/infrastructure/implement-progress-route.js'
+} from '../../src/infrastructure/implement-progress-route.ts'
 import { ImplementationState, ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
 import { ImplementationProgressNotRead } from '../../src/domain/exceptions.ts'
 import * as exceptions from '../../src/domain/exceptions.ts'
+import type { ReadImplementationProgressParams } from '../../src/application/queries/read-implementation-progress.ts'
+
+type ProgressReading = { readonly state: ImplementationState }
 
 class ReadImplementationProgressSpy {
+  readonly asked: ReadImplementationProgressParams[]
+
   constructor() {
     this.asked = []
   }
 
-  static answering(state) {
+  static answering(state: ImplementationState): ReadImplementationProgressSpy {
     const spy = new ReadImplementationProgressSpy()
     spy.execute = async (params) => {
       spy.asked.push(params)
@@ -26,7 +31,7 @@ class ReadImplementationProgressSpy {
     return spy
   }
 
-  static failingWith(cause) {
+  static failingWith(cause: Error): ReadImplementationProgressSpy {
     const spy = new ReadImplementationProgressSpy()
     spy.execute = async (params) => {
       spy.asked.push(params)
@@ -36,7 +41,7 @@ class ReadImplementationProgressSpy {
     return spy
   }
 
-  static buggy() {
+  static buggy(): ReadImplementationProgressSpy {
     const spy = new ReadImplementationProgressSpy()
     spy.execute = async (params) => {
       spy.asked.push(params)
@@ -46,14 +51,14 @@ class ReadImplementationProgressSpy {
     return spy
   }
 
-  async execute(params) {
+  async execute(params: ReadImplementationProgressParams): Promise<ProgressReading> {
     this.asked.push(params)
     throw new Error('ReadImplementationProgressSpy was not given an answer')
   }
 }
 
 class RunningApi {
-  static #started = []
+  static #started: ApiServer[] = []
   static PATH = '/implement-progress/99'
   static ROOT = '/checkout'
   static IN_THE_MIDDLE_OF_A_TASK = ImplementationState.of({
@@ -71,14 +76,22 @@ class RunningApi {
     sleep: () => Promise.resolve(),
   })
 
-  static async listening(spy = ReadImplementationProgressSpy.answering(RunningApi.IN_THE_MIDDLE_OF_A_TASK)) {
+  static async listening(
+    spy: ReadImplementationProgressSpy = ReadImplementationProgressSpy.answering(RunningApi.IN_THE_MIDDLE_OF_A_TASK)
+  ): Promise<{ port: number, spy: ReadImplementationProgressSpy }> {
     const server = new ApiServer({
       port: 0,
       startPlan: null,
       implementPlan: null,
+      askPlanChanges: null,
       implementProgress: spy,
       reviews: new ReviewsSpy(),
+      pullRequestReviews: null,
       sessions: new PlanSessions(),
+      activePlans: null,
+      externalTools: null,
+      implementationStarts: null,
+      stderr: null,
       planEvents: RunningApi.NO_EVENTS,
       frontendRoot: RunningApi.NO_FRONTEND,
     })
@@ -93,11 +106,11 @@ class RunningApi {
     await Promise.all(running.map((server) => server.stop()))
   }
 
-  static async get(port, path) {
+  static async get(port: number, path: string): Promise<Response> {
     return fetch(`http://127.0.0.1:${port}${path}`)
   }
 
-  static async asking(path, spy) {
+  static async asking(path: string, spy?: ReadImplementationProgressSpy) {
     const running = await RunningApi.listening(spy)
 
     return { response: await RunningApi.get(running.port, path), spy: running.spy }

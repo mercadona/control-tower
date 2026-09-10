@@ -1,21 +1,50 @@
+import type { Request, RequestHandler, Response } from 'express'
 import { Answer, Refusal } from './http.ts'
 import { Projection } from './projection.ts'
 import { ReadImplementationProgressParams } from '../application/queries/read-implementation-progress.ts'
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { ImplementationProgressFailure, ImplementationProgressNotRead } from '../domain/exceptions.ts'
+import type { ImplementationState } from '../domain/value-objects/implementation-state.ts'
 
 export const ProgressRequestOutcome = Object.freeze({
   ACCEPTED: 'accepted',
   MALFORMED_ROOT: 'malformed-root',
   MALFORMED_REPO: 'malformed-progress-repo',
-})
+} as const)
+
+export type ProgressRequestOutcomeValue =
+  (typeof ProgressRequestOutcome)[keyof typeof ProgressRequestOutcome]
+
+type ProgressAsked = { readonly outcome: unknown }
+
+type ProgressRefusalOf = (asked: ProgressAsked) => Refusal
+
+type ProgressFailureConstructor = new (reason: string) => Error
+
+type ProgressCollapseOf = (cause: Error) => Refusal
+
+type ProgressReading = { readonly state: ImplementationState }
+
+type ImplementationProgressReader = {
+  execute(params: ReadImplementationProgressParams): Promise<ProgressReading>,
+}
 
 export class ProgressRequest {
-  static ROOT_FIELD = 'root'
-  static REPO_FIELD = 'repo'
+  static readonly ROOT_FIELD = 'root'
+  static readonly REPO_FIELD = 'repo'
 
-  constructor({ outcome, root, issue, repository }) {
+  readonly outcome: ProgressRequestOutcomeValue
+  readonly root: CheckoutRoot | null
+  readonly issue: number | null
+  readonly repository: RepositoryName | null
+
+  constructor({ outcome, root, issue, repository }: {
+    outcome: ProgressRequestOutcomeValue,
+    root: CheckoutRoot | null,
+    issue: number | null,
+    repository: RepositoryName | null,
+  }) {
     this.outcome = outcome
     this.root = root
     this.issue = issue
@@ -23,15 +52,19 @@ export class ProgressRequest {
     Object.freeze(this)
   }
 
-  static accepted({ root, issue, repository }) {
+  static accepted({ root, issue, repository }: {
+    root: CheckoutRoot,
+    issue: number,
+    repository: RepositoryName,
+  }): ProgressRequest {
     return new ProgressRequest({ outcome: ProgressRequestOutcome.ACCEPTED, root, issue, repository })
   }
 
-  static refused(outcome) {
+  static refused(outcome: ProgressRequestOutcomeValue): ProgressRequest {
     return new ProgressRequest({ outcome, root: null, issue: null, repository: null })
   }
 
-  static from(rawIssue, rawRoot, rawRepo) {
+  static from(rawIssue: unknown, rawRoot: unknown, rawRepo: unknown): ProgressRequest {
     if (!CheckoutRoot.isWellFormed(rawRoot)) {
       return ProgressRequest.refused(ProgressRequestOutcome.MALFORMED_ROOT)
     }
@@ -46,7 +79,7 @@ export class ProgressRequest {
 }
 
 export class ProgressRefusal {
-  static #BY_OUTCOME = new Projection('refusal', [
+  static readonly #BY_OUTCOME: Projection<ProgressRefusalOf> = new Projection<ProgressRefusalOf>('refusal', [
     [ProgressRequestOutcome.MALFORMED_ROOT, () => new Refusal({
       status: 400,
       code: ProgressRequestOutcome.MALFORMED_ROOT,
@@ -59,44 +92,48 @@ export class ProgressRefusal {
     })],
   ])
 
-  static of(asked) {
+  static of(asked: ProgressAsked): Refusal {
     return ProgressRefusal.#BY_OUTCOME.of(asked.outcome)(asked)
   }
 
-  static declaredOutcomes() {
+  static declaredOutcomes(): unknown[] {
     return ProgressRefusal.#BY_OUTCOME.members()
   }
 }
 
 export class ProgressCollapse {
-  static #STATUS = 400
+  static readonly #STATUS = 400
 
-  static #collapsed(code) {
+  static #collapsed(code: string): ProgressCollapseOf {
     return (cause) => new Refusal({ status: ProgressCollapse.#STATUS, code, detail: cause.message })
   }
 
-  static #BY_FAILURE = new Projection('refusal', [
+  static readonly #BY_FAILURE: Projection<ProgressCollapseOf, ProgressFailureConstructor> = new Projection<ProgressCollapseOf, ProgressFailureConstructor>('refusal', [
     [ImplementationProgressNotRead, ProgressCollapse.#collapsed('implementation-progress-not-read')],
   ])
 
-  static of(cause) {
+  static of(cause: Error): Refusal {
     return ProgressCollapse.#BY_FAILURE.of(cause.constructor)(cause)
   }
 
-  static declaredFailures() {
-    return ProgressCollapse.#BY_FAILURE.members().map((failure) => failure.name)
+  static #declared(): ProgressFailureConstructor[] {
+    return ProgressCollapse.#BY_FAILURE.members()
   }
 
-  static declaredCodes() {
-    return ProgressCollapse.#BY_FAILURE.members().map((failure) => ProgressCollapse.of(new failure('x')).code)
+  static declaredFailures(): string[] {
+    return ProgressCollapse.#declared().map((failure) => failure.name)
+  }
+
+  static declaredCodes(): string[] {
+    return ProgressCollapse.#declared().map((failure) => ProgressCollapse.of(new failure('x')).code)
   }
 }
 
 export class ImplementProgressRoute {
-  static PATH = '/implement-progress/:issue'
-  static METHOD = 'GET'
+  static readonly PATH = '/implement-progress/:issue'
+  static readonly METHOD = 'GET'
 
-  static handledBy(readImplementationProgress) {
+  static handledBy(readImplementationProgress: ImplementationProgressReader): RequestHandler {
     return async (request, response) => {
       const asked = ProgressRequest.from(
         request.params.issue,
@@ -111,7 +148,7 @@ export class ImplementProgressRoute {
       try {
         read = await readImplementationProgress.execute(
           new ReadImplementationProgressParams({
-            root: asked.root, issue: asked.issue, repository: asked.repository,
+            root: asked.root as CheckoutRoot, issue: asked.issue as number, repository: asked.repository as RepositoryName,
           })
         )
       } catch (cause) {
@@ -131,7 +168,7 @@ export class ImplementProgressRoute {
     }
   }
 
-  static refuseOtherMethods(request, response) {
+  static refuseOtherMethods(request: Request, response: Response): void {
     response.setHeader('Allow', ImplementProgressRoute.METHOD)
     Answer.refuse(response, 405, 'method-not-allowed', 'method not allowed')
   }

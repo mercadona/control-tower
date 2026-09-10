@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
+import type { Mock } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ApiServer } from '../../src/infrastructure/api-server.js'
@@ -11,18 +12,31 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import {
   ImplementRequestOutcome, ImplementRefusal, ImplementCollapse,
-} from '../../src/infrastructure/implement-plan-route.js'
+} from '../../src/infrastructure/implement-plan-route.ts'
 import {
   PlanAgentNotResumed, PlanFailure, PlanGoNotAnswered, GoFailure, GoNotRecorded,
 } from '../../src/domain/exceptions.ts'
 import { ActivePlans, ActivePlanPhase } from '../../src/infrastructure/active-plans-route.js'
+import type { ImplementPlanParams } from '../../src/application/actions/implement-plan.ts'
+
+type AskedImplementation = { agent: string, issue: number, repository: string }
+
+type ImplementationStartsDouble = { remember: Mock }
+
+type ListeningOptions = {
+  watched?: boolean,
+  implementationStarts?: ImplementationStartsDouble,
+  stderr?: Mock,
+}
 
 class ImplementPlanSpy {
+  readonly asked: AskedImplementation[]
+
   constructor() {
     this.asked = []
   }
 
-  static failingWith(cause) {
+  static failingWith(cause: Error): ImplementPlanSpy {
     const spy = new ImplementPlanSpy()
     spy.execute = async () => {
       throw cause
@@ -31,7 +45,7 @@ class ImplementPlanSpy {
     return spy
   }
 
-  static buggy() {
+  static buggy(): ImplementPlanSpy {
     const spy = new ImplementPlanSpy()
     spy.execute = async () => {
       throw new TypeError('a bug of ours')
@@ -40,7 +54,7 @@ class ImplementPlanSpy {
     return spy
   }
 
-  async execute(params) {
+  async execute(params: ImplementPlanParams): Promise<void> {
     this.asked.push({
       agent: params.agent,
       issue: params.issue,
@@ -50,17 +64,17 @@ class ImplementPlanSpy {
 }
 
 class RunningApi {
-  static #started = []
+  static #started: ApiServer[] = []
   static PATH = '/implement-plan'
   static ACCEPTED_BODY = '{"agent":"workspace:20","issue":33,"repo":"jjponz/repo-pulse"}'
   static ANSWER = '{"status":"implementing","agent":"workspace:20","issue":33}'
-  static spy = null
-  static reviews = null
-  static pullRequestReviews = null
-  static sessions = null
-  static activePlans = null
-  static implementationStarts = null
-  static stderr = null
+  static spy: ImplementPlanSpy = null!
+  static reviews: ReviewsSpy = null!
+  static pullRequestReviews: ReviewsSpy = null!
+  static sessions: PlanSessions = null!
+  static activePlans: ActivePlans = null!
+  static implementationStarts: ImplementationStartsDouble = null!
+  static stderr: Mock = null!
   static WATCHED = new PlanWatch({
     story: new UserStoryKey('ABC-123'),
     issue: new PlanIssue({ number: 33, url: 'https://github.com/jjponz/repo-pulse/issues/33' }),
@@ -70,13 +84,15 @@ class RunningApi {
   })
 
   static NO_FRONTEND = join(tmpdir(), 'ct-frontend-never-built')
-  static NO_EVENTS = new PlanEvents({
+  static #NEVER_STREAMS = {
     read: () => Promise.reject(new Error('this suite never streams plan events')),
     readDelivery: () => Promise.reject(new Error('this suite never streams delivery events')),
     sleep: () => Promise.resolve(),
-  })
+  }
 
-  static async listening(spy = new ImplementPlanSpy(), options = {}) {
+  static NO_EVENTS = new PlanEvents(RunningApi.#NEVER_STREAMS)
+
+  static async listening(spy = new ImplementPlanSpy(), options: ListeningOptions = {}): Promise<number> {
     RunningApi.spy = spy
     RunningApi.reviews = new ReviewsSpy()
     RunningApi.pullRequestReviews = new ReviewsSpy()
@@ -89,6 +105,9 @@ class RunningApi {
       port: 0,
       startPlan: null,
       implementPlan: spy,
+      askPlanChanges: null,
+      implementProgress: null,
+      externalTools: null,
       reviews: RunningApi.reviews,
       pullRequestReviews: RunningApi.pullRequestReviews,
       sessions: RunningApi.sessions,
@@ -109,11 +128,13 @@ class RunningApi {
     await Promise.all(running.map((server) => server.stop()))
   }
 
-  static async post(port, body, headers = { 'Content-Type': 'application/json' }) {
+  static async post(
+    port: number, body: string, headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  ): Promise<Response> {
     return fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`, { method: 'POST', body, headers })
   }
 
-  static async asking(body) {
+  static async asking(body: string): Promise<Response> {
     return RunningApi.post(await RunningApi.listening(), body)
   }
 }
@@ -166,7 +187,7 @@ describe('ImplementPlanRoute', () => {
     const response = await RunningApi.asking('{"agent":"ct-plan XOP-4909","issue":33,"repo":"jjponz/repo-pulse"}')
 
     expect(response.status).toBe(400)
-    const body = await response.json()
+    const body = await response.json() as { code: string, detail: string }
     expect(body.code).toBe('malformed-agent')
     expect(body.detail).toMatch(/^agent must be the handle/)
     expect(RunningApi.spy.asked).toEqual([])
@@ -228,7 +249,7 @@ describe('ImplementPlanRoute', () => {
     const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
 
     expect(response.status).toBe(400)
-    const body = await response.json()
+    const body = await response.json() as { code: string, detail: string }
     expect(body.code).toBe('plan-agent-not-resumed')
     expect(body.detail).toBe('cmux send failed: no such workspace')
   })
@@ -340,7 +361,7 @@ describe('implementing the plan lifts the watch on its issue', () => {
   it('the_plan_moves_to_the_implementing_phase_so_the_plan_stream_stops_answering_for_it', async () => {
     await RunningApi.post(await RunningApi.listening(), RunningApi.ACCEPTED_BODY)
 
-    const active = RunningApi.activePlans.find({ issue: 33, repository: RunningApi.WATCHED.repository })
+    const active = RunningApi.activePlans.find({ issue: 33, repository: RunningApi.WATCHED.repository })!
 
     expect(active.phase).toBe(ActivePlanPhase.IMPLEMENTING)
     expect(RunningApi.sessions.find({ issue: 33, repository: RunningApi.WATCHED.repository })).toBeNull()
@@ -349,7 +370,7 @@ describe('implementing the plan lifts the watch on its issue', () => {
   it('the_watch_it_starts_is_the_one_the_active_plan_carries_and_not_a_fresh_one', async () => {
     await RunningApi.post(await RunningApi.listening(), RunningApi.ACCEPTED_BODY)
 
-    const active = RunningApi.activePlans.find({ issue: 33, repository: RunningApi.WATCHED.repository })
+    const active = RunningApi.activePlans.find({ issue: 33, repository: RunningApi.WATCHED.repository })!
 
     expect(RunningApi.pullRequestReviews.started[0]).toBe(active.watch)
     expect(RunningApi.pullRequestReviews.started[0].agent).toBe(RunningApi.WATCHED.agent)
@@ -361,7 +382,7 @@ describe('implementing the plan lifts the watch on its issue', () => {
     const answered = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
 
     expect(answered.status).toBe(400)
-    expect((await answered.json()).code).toBe(ImplementRequestOutcome.NO_LIVE_SESSION)
+    expect((await answered.json() as { code: string }).code).toBe(ImplementRequestOutcome.NO_LIVE_SESSION)
     expect(RunningApi.pullRequestReviews.started).toEqual([])
   })
 
