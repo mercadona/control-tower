@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ApiServer } from '../../src/infrastructure/api-server.js'
 import { ReviewsSpy } from '../reviews-spy.ts'
-import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.js'
+import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
@@ -16,7 +16,7 @@ import {
 import {
   PlanAgentNotResumed, PlanFailure, PlanGoNotAnswered, GoFailure, GoNotRecorded,
 } from '../../src/domain/exceptions.ts'
-import { ActivePlans, ActivePlanPhase } from '../../src/infrastructure/active-plans-route.js'
+import { ActivePlans, ActivePlanPhase } from '../../src/infrastructure/active-plans-route.ts'
 import type { ImplementPlanParams } from '../../src/application/actions/implement-plan.ts'
 
 type AskedImplementation = { agent: string, issue: number, repository: string }

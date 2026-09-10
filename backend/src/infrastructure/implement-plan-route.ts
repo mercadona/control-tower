@@ -3,7 +3,7 @@ import { Answer, JsonBody, Refusal } from './http.ts'
 import { Projection } from './projection.ts'
 import { ImplementPlanParams } from '../application/actions/implement-plan.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
-import { ActivePlanPhase } from './active-plans-route.js'
+import { ActivePlanPhase } from './active-plans-route.ts'
 import {
   PlanFailure, PlanAgentNotResumed, PlanGoNotAnswered, GoNotRecorded,
 } from '../domain/exceptions.ts'

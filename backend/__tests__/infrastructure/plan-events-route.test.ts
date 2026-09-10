@@ -1,37 +1,38 @@
 import { describe, it, expect } from 'vitest'
-import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.js'
-import { PlanState } from '../../src/domain/value-objects/plan-state.ts'
+import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanState, type PlanStateValue } from '../../src/domain/value-objects/plan-state.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { PlanProgressNotRead, PullRequestNotRead } from '../../src/domain/exceptions.ts'
-import { DeliveryState } from '../../src/domain/policies/delivery-policy.ts'
+import { PlanProgressNotRead } from '../../src/domain/exceptions.ts'
+
+type ScriptedAnswer = PlanStateValue | Error
 
 class EventsDouble {
-  static SUBJECT = new PlanWatch({
+  static readonly SUBJECT = new PlanWatch({
+    story: null,
     issue: new PlanIssue({ number: 42, url: 'https://github.com/owner/name/issues/42' }),
     located: new WorkspaceLocation({ path: '/repo/.worktrees/42', branch: 'feat/42' }),
     repository: new RepositoryName('owner/name'),
+    agent: 'workspace:1',
   })
 
-  static PULL_REQUEST = { number: 42, url: 'https://github.com/owner/name/pull/42' }
+  readonly answers: ScriptedAnswer[]
+  slept: number
+  planReads: number
 
-  constructor(answers) {
+  constructor(answers: readonly ScriptedAnswer[]) {
     this.answers = [...answers]
     this.slept = 0
     this.planReads = 0
   }
 
-  static unable(said) {
+  static unable(said: string): EventsDouble {
     return new EventsDouble([new PlanProgressNotRead(said)])
   }
 
-  static inReview() {
-    return { state: DeliveryState.IN_REVIEW, pullRequest: EventsDouble.PULL_REQUEST }
-  }
-
-  events() {
+  events(): PlanEvents {
     return new PlanEvents({
       sleep: () => {
         this.slept += 1
@@ -39,34 +40,23 @@ class EventsDouble {
       },
       read: () => {
         this.planReads += 1
-        if (this.answers.length === 0) {
+        const answer = this.answers.shift()
+        if (answer === undefined) {
           throw new Error('the progress was read more times than this test scripted an answer for')
         }
-
-        const answer = this.answers.shift()
         if (answer instanceof Error) return Promise.reject(answer)
 
         return Promise.resolve({ state: answer })
       },
-      readDelivery: () => {
-        if (this.answers.length === 0) {
-          throw new Error('the delivery was read more times than this test scripted an answer for')
-        }
-
-        const answer = this.answers.shift()
-        if (answer instanceof Error) return Promise.reject(answer)
-
-        return Promise.resolve(answer)
-      },
     })
   }
 
-  cancellingWhenExhausted() {
+  cancellingWhenExhausted(): () => boolean {
     return () => this.answers.length === 0
   }
 
-  async collected(cancelled = () => false) {
-    const frames = []
+  async collected(cancelled: () => boolean = () => false): Promise<string[]> {
+    const frames: string[] = []
     for await (const frame of this.events().stream(EventsDouble.SUBJECT, cancelled)) frames.push(frame)
 
     return frames
@@ -75,7 +65,7 @@ class EventsDouble {
 }
 
 class Watched {
-  static sessions() {
+  static sessions(): PlanSessions {
     const sessions = new PlanSessions()
     sessions.remember(EventsDouble.SUBJECT)
 
@@ -96,9 +86,11 @@ describe('PlanSessions', () => {
     const sessions = Watched.sessions()
     const otherRepository = new RepositoryName('other/name')
     const inOtherRepository = new PlanWatch({
+      story: null,
       issue: new PlanIssue({ number: 42, url: 'https://github.com/other/name/issues/42' }),
       located: new WorkspaceLocation({ path: '/other/.worktrees/42', branch: 'feat/42' }),
       repository: otherRepository,
+      agent: 'workspace:2',
     })
 
     sessions.remember(inOtherRepository)

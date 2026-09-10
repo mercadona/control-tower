@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ApiServer } from '../../src/infrastructure/api-server.js'
 import { ReviewsSpy } from '../reviews-spy.ts'
-import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.js'
+import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
@@ -11,7 +11,7 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { ReviewRequestOutcome, ReviewRefusal, ReviewPhases } from '../../src/infrastructure/review-plan-route.ts'
 import { PlanChangesNotAsked } from '../../src/domain/exceptions.ts'
-import { ActivePlans, ActivePlanPhase } from '../../src/infrastructure/active-plans-route.js'
+import { ActivePlans, ActivePlanPhase } from '../../src/infrastructure/active-plans-route.ts'
 import type { AskPlanChangesParams } from '../../src/application/actions/ask-plan-changes.ts'
 
 type AskedChange = { issue: number, repository: string, changes: string }

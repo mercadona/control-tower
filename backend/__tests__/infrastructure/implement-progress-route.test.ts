@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ApiServer } from '../../src/infrastructure/api-server.js'
 import { ReviewsSpy } from '../reviews-spy.ts'
-import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.js'
+import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import {
   ProgressRequestOutcome, ProgressRefusal, ProgressCollapse,
 } from '../../src/infrastructure/implement-progress-route.ts'

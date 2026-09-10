@@ -5,10 +5,10 @@ import { Answer, Route, Browsers, JsonBody } from './http.ts'
 import { StartPlanRoute } from './start-plan-route.ts'
 import { ImplementPlanRoute } from './implement-plan-route.ts'
 import { ReviewPlanRoute } from './review-plan-route.ts'
-import { PlanEventsRoute } from './plan-events-route.js'
-import { ActivePlansRoute } from './active-plans-route.js'
+import { PlanEventsRoute } from './plan-events-route.ts'
+import { ActivePlansRoute } from './active-plans-route.ts'
 import { ImplementProgressRoute } from './implement-progress-route.ts'
-import { ExternalToolsRoute } from './external-tools-route.js'
+import { ExternalToolsRoute } from './external-tools-route.ts'
 
 export const LOOPBACK = '127.0.0.1'
 class FrontendPages {
