@@ -504,10 +504,7 @@ cd backend && npx vitest run --exclude '**/*-real-process.test.js'   # exit 0: n
 Call site (backend/src/infrastructure/ct-api.mjs):
 
 ```javascript
-// before, at line 309:
-const planAgents = new CmuxPlanAgents({ run: CtApi.#tool(CmuxPlanAgents.BIN), /* … */ })
-
-// after: one private static per adapter, chosen by what was asked for
+// line 309 built CmuxPlanAgents unconditionally; now one private static per adapter
 const planAgents = asked.transport === HeadlessPlanAgents.TRANSPORT
   ? CtApi.#headlessAgents(asked.model)
   : CtApi.#cmuxAgents()
@@ -516,11 +513,9 @@ const planAgents = asked.transport === HeadlessPlanAgents.TRANSPORT
 `#headlessAgents` builds `new HeadlessPlanAgents({ start: new DetachedRun({ bin:
 HeadlessPlanAgents.BIN, budgetMs: CtApi.#PLAN_CALL_TIMEOUT_MS, env: environment }),
 makeDirectory: Disk.makeDirectory, write: Disk.atomicWrite, read: Disk.read, mint: randomUUID,
-clock: Date.now, brief: <the same PlanAgentBrief
-`#cmuxAgents` builds today>, runsIn: join(asked.stateRoot, 'harness'), model, pluginRoot:
-PluginTree.root() })`. `#PLAN_CALL_TIMEOUT_MS` is new beside the three at `ct-api.mjs:142-144`: 60 minutes.
-`PluginTree.#root()` is private (`ct-api.mjs:61`) — make it public, its readers unchanged.
-`Disk` gains `makeDirectory`.
+clock: Date.now, brief: <as `#cmuxAgents` builds it>, runsIn: join(asked.stateRoot, 'harness'),
+model, pluginRoot: PluginTree.root() })`. `#PLAN_CALL_TIMEOUT_MS` is new beside the three at `ct-api.mjs:142-144`: 60 minutes.
+`PluginTree.#root()` goes public (`ct-api.mjs:61`); `Disk` gains `makeDirectory`.
 
 Final text (backend/conventions/this-repository.md):
 
@@ -530,21 +525,23 @@ Final text (backend/conventions/this-repository.md):
 | **Step of a call** | Which errand that invocation carried — `write-plan`, `review-plan`, `implement`, `fix-pull-request`. The one datum no reader recovers afterwards, so it is written at the source |
 ```
 
-The `Plan agent` row **replaces** `this-repository.md:31`; the other two are new. Nothing else in
-that document changes.
+The `Plan agent` row **replaces** `this-repository.md:31`; the other two are new.
+
+**The entrypoint says which transport it took**, on the line it already prints:
+`{"port": N, "transport": "headless"}`. Without it the choice is unmeasurable — both adapters
+construct without throwing, so inverting the comparison swaps them with the suite green. Only the
+tests read that line, by key.
 
 **TDD:** red first — `it('the_entrypoint_assembles_the_headless_transport_and_listens')` in
 `ct-api-real-process.test.js`, starting the entrypoint with `CT_PLAN_TRANSPORT=headless` and
-asserting it prints its port and is still up when asked. **Not optional, and no grep replaces
-it**: today's cases start the default transport, so the headless branch would never be assembled
-while the suite runs — §6 carries the precedent. Then
+asserting the transport it declares as well as that it listens. **Not optional, and no grep replaces
+it**: §6 carries the precedent. Then
 `it('the_entrypoint_asked_for_no_transport_still_assembles_the_one_that_types_into_a_window')`.
 
 **Tests:** added: the two above, reusing the entrypoint helper that file already has. Removed:
 none.
 
-**Verification:** both branches are assembled by a process the suite starts, and the vocabulary
-rows are in the document.
+**Verification:** both branches are assembled by a process the suite starts.
 
 ```bash
 cd backend && npx vitest run __tests__/infrastructure/ct-api-real-process.test.js   # exit 0: both transports assemble
