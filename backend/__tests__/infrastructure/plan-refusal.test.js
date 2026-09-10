@@ -3,7 +3,7 @@ import {
   PlanRequest, PlanRequestOutcome, PlanRefusal, PlanCollapse,
 } from '../../src/infrastructure/start-plan-route.js'
 import { ImplementCollapse } from '../../src/infrastructure/implement-plan-route.js'
-import { Refusal } from '../../src/infrastructure/http.js'
+import { Refusal } from '../../src/infrastructure/http.ts'
 import * as exceptions from '../../src/domain/exceptions.ts'
 
 describe('PlanRefusal', () => {
