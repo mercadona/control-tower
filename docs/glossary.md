@@ -164,7 +164,7 @@ the call site; do not guess.
   `<!-- ct-init:slices-contract -->`, `<!-- ct-order:N -->`.
 - **YAML keys** of `.agent/STATE.md` and `.agent/SLICE.md`.
 - **Contract paths**: `docs/superpowers/plans` is validated by
-  `plan-contract-progress.js` and read by `task-brief.test.js`.
+  `plan-contract-progress.ts` and read by `task-brief.test.js`.
 - **Frontend product copy** — `AGENTS.md` states the exemption.
 - **Filenames of the dated record**: the plans, specs and session prompts under
   `docs/` keep their Spanish names, because they are minutes of what happened.

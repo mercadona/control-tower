@@ -1,18 +1,23 @@
 import { Harvest } from '../domain/ports/harvest.ts'
 import { HarvestOutcome } from '../domain/value-objects/harvest-outcome.ts'
 import { HarvestNotRead, HarvestNotUnderstood } from '../domain/exceptions.ts'
+import type { HarvestOutcomeValue } from '../domain/value-objects/harvest-outcome.ts'
+import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
+import type { ProcessOutput, ToolRunner } from './tool-runner.ts'
+
+type HarvestProjection = (said: ProcessOutput, issueNumber: number) => HarvestOutcomeValue
 
 export class DispatchCheckHarvest extends Harvest {
-  static COMMAND = 'dispatch-check --collect'
-  static COLLECTED = 0
-  static WAITING = 1
-  static USAGE_REFUSED = 2
-  static NOT_READ = 3
-  static PARTIAL = 4
-  static KEPT = 10
-  static LEDGER_REFUSED = 11
+  static readonly COMMAND = 'dispatch-check --collect'
+  static readonly COLLECTED = 0
+  static readonly WAITING = 1
+  static readonly USAGE_REFUSED = 2
+  static readonly NOT_READ = 3
+  static readonly PARTIAL = 4
+  static readonly KEPT = 10
+  static readonly LEDGER_REFUSED = 11
 
-  static #BY_CODE = Object.freeze({
+  static readonly #BY_CODE = Object.freeze<Record<number, HarvestProjection | undefined>>({
     [DispatchCheckHarvest.COLLECTED]: () => HarvestOutcome.COLLECTED,
     [DispatchCheckHarvest.WAITING]: (said, issueNumber) => DispatchCheckHarvest.#waiting(said, issueNumber),
     [DispatchCheckHarvest.USAGE_REFUSED]: (said, issueNumber) => {
@@ -34,23 +39,40 @@ export class DispatchCheckHarvest extends Harvest {
     },
   })
 
-  constructor({ node, dispatchCheck, harvestTable }) {
+  readonly node: ToolRunner['run']
+  readonly dispatchCheck: string
+  readonly harvestTable: string | null
+
+  constructor({ node, dispatchCheck, harvestTable }: {
+    node: ToolRunner['run'],
+    dispatchCheck: string,
+    harvestTable: string | null,
+  }) {
     super()
     this.node = node
     this.dispatchCheck = dispatchCheck
     this.harvestTable = harvestTable
   }
 
-  static argvFor({ dispatchCheck, issueNumber, repository, harvestTable }) {
+  static argvFor({ dispatchCheck, issueNumber, repository, harvestTable }: {
+    dispatchCheck: string,
+    issueNumber: number,
+    repository: RepositoryName,
+    harvestTable: string | null,
+  }): string[] {
     const argv = [dispatchCheck, String(issueNumber), '--repo', repository.text, '--collect']
     return harvestTable === null ? argv : [...argv, '--bq', harvestTable]
   }
 
-  static declaredCodes() {
+  static declaredCodes(): number[] {
     return Object.keys(DispatchCheckHarvest.#BY_CODE).map(Number)
   }
 
-  async collect({ issueNumber, repository, root }) {
+  async collect({ issueNumber, repository, root }: {
+    issueNumber: number,
+    repository: RepositoryName,
+    root: string | undefined,
+  }): Promise<HarvestOutcomeValue> {
     const said = await this.node(
       DispatchCheckHarvest.argvFor({
         dispatchCheck: this.dispatchCheck,
@@ -70,7 +92,7 @@ export class DispatchCheckHarvest extends Harvest {
     return projected(said, issueNumber)
   }
 
-  static #waiting(said, issueNumber) {
+  static #waiting(said: ProcessOutput, issueNumber: number): HarvestOutcomeValue {
     if (said.stdout.trim().length === 0) {
       throw new HarvestNotUnderstood(
         `${DispatchCheckHarvest.COMMAND} exited ${DispatchCheckHarvest.WAITING} for #${issueNumber} without saying what it waits for, so it broke instead of waiting: ${DispatchCheckHarvest.#printed(said)}`
@@ -80,7 +102,7 @@ export class DispatchCheckHarvest extends Harvest {
     return HarvestOutcome.WAITING
   }
 
-  static #printed(said) {
+  static #printed(said: ProcessOutput): string {
     return `stdout ${JSON.stringify(said.stdout.trim())}, stderr ${JSON.stringify(said.stderr.trim())}`
   }
 }

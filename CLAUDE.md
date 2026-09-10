@@ -50,7 +50,7 @@ labels of the loop's ladder (`status:backlog`, `status:ready`,
 `gate:none`) are already English and do not move. Neither do the block markers
 `ct-init` writes into governed repositories (`<!-- ct-init:slices-contract -->`),
 the YAML keys of `.agent/STATE.md`, or the paths that code validates against —
-`docs/superpowers/plans` is checked by `plan-contract-progress.js` and read by
+`docs/superpowers/plans` is checked by `plan-contract-progress.ts` and read by
 `task-brief.test.js`; it is a contract, not a name you are free to translate.
 
 ### The parsed headings — Spanish, and contract until a coordinated change

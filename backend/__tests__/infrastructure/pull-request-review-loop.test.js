@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ReviewWatch } from '../../src/infrastructure/review-watch.js'
-import { DispatchCheckWorkbench } from '../../src/infrastructure/dispatch-check-workbench.js'
+import { DispatchCheckWorkbench } from '../../src/infrastructure/dispatch-check-workbench.ts'
 import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { GhPullRequests } from '../../src/infrastructure/gh-pull-requests.ts'
