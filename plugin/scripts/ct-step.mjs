@@ -1362,22 +1362,30 @@ function controlsVerb() {
   // nothing broke, not that what was promised was added — measured in the
   // field: a task asked for a function and its test, the function arrived
   // without the test, and the suite stayed green because the previous commit's
-  // one passed.
-  const failures = declaredTests(t)
-  if (failures.length) {
-    lines.push('# tests declared by the task', ...failures.map((f) => `- ${f}`), '')
-    result = OUTCOMES.FAILED
+  // one passed. Both controls share `inIndex`, so both can throw
+  // `NameLookupDidNotRun` when the lookup itself could not run — that is not
+  // a failed control, it is one that could not be measured.
+  try {
+    const failures = declaredTests(t)
+    if (failures.length) {
+      lines.push('# tests declared by the task', ...failures.map((f) => `- ${f}`), '')
+      result = OUTCOMES.FAILED
+    }
+
+    // And last what the plan's BLOCKS promise, which is still free: none of
+    // this runs a command.
+    const blocks = declaredBlocks(t)
+    if (blocks.length) {
+      lines.push('# blocks declared by the task', ...blocks.map((f) => `- ${f}`), '')
+      result = OUTCOMES.FAILED
+    }
+  } catch (e) {
+    if (!(e instanceof NameLookupDidNotRun)) throw e
+    lines.push('# names that could not be looked up', e.message, '')
+    result = OUTCOMES.INDETERMINATE
   }
 
-  // And last what the plan's BLOCKS promise, which is still free: none of
-  // this runs a command.
-  const blocks = declaredBlocks(t)
-  if (blocks.length) {
-    lines.push('# blocks declared by the task', ...blocks.map((f) => `- ${f}`), '')
-    result = OUTCOMES.FAILED
-  }
-
-  for (const command of result === OUTCOMES.FAILED ? [] : t.commands) {
+  for (const command of result === OUTCOMES.DONE ? t.commands : []) {
     const measured = runCheck(command)
     lines.push(`$ ${command}`, measured.output ?? '', `-> exit ${measured.code}`, '')
     if (measured.code === 'unmeasured') { result = OUTCOMES.INDETERMINATE; break }
@@ -1537,6 +1545,13 @@ function amendmentOnlyAdds(t) {
     .map((f) => `task ${t.n} amended the plan by removing '${f.path}' from its **Files:** — an amendment can only ADD paths: removing one switches the scope control off from inside. Put the path back in the PLAN, or write the CODE it promised.`)
 }
 
+// A `git grep --cached` that did not answer 0 (match) or 1 (no match): git
+// refused the query, or the 60 s cap fired. Neither is "the name is not
+// there" — that is what `inIndex` folds a broken query into if this is not
+// told apart from it, so `controls` catches it and closes the task as
+// unmeasured instead of reading the lookup as a miss.
+class NameLookupDidNotRun extends Error {}
+
 // Checks whether `name` appears in the INDEX, bounded to what is staged (not
 // to the repo's whole index). A prescriptive plan QUOTES the code verbatim and
 // lives committed under docs/, so searching the whole index always finds the
@@ -1547,12 +1562,15 @@ function amendmentOnlyAdds(t) {
 // that is a NO. Shared by `testsDeclarados` and `declaredBlocks`: same
 // question, same scope, same mechanism.
 function inIndex(name) {
-  const ambito = workingPathsInTheIndex()
-  if (!ambito.length) return false
+  const scope = workingPathsInTheIndex()
+  if (!scope.length) return false
   try {
-    execFileSync('git', ['grep', '--cached', '--quiet', '-F', '-e', name, '--', ...scope], { cwd: repoRoot, stdio: 'ignore', timeout: 60_000 })
+    execFileSync('git', ['grep', '--cached', '--quiet', '-F', '-e', name, '--', ...scope], { cwd: repoRoot, stdio: ['ignore', 'ignore', 'pipe'], timeout: 60_000 })
     return true
-  } catch { return false }
+  } catch (e) {
+    if (e.status === 1) return false
+    throw new NameLookupDidNotRun(`git grep for '${name}' did not run: exit ${e.status}, ${e.stderr?.toString() ?? ''}`)
+  }
 }
 
 function declaredTests(t) {

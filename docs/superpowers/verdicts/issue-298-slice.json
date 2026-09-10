@@ -1,0 +1,26 @@
+{
+  "issue": 298,
+  "tasks_total": 2,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "estado-final",
+        "result": "Five sentences, each measured against the sum of both commits. (1) «`inIndex()` answers `true` for a name that is present in a path the task staged»: the local is now `const scope = workingPathsInTheIndex()` so the `...scope` pathspec resolves and `execFileSync` really runs, and the added test 'a promised test that IS in a path the task staged is green' asserts `controls: done` with the name inside the staged uno.txt. (2) «answers `false` for a name that is absent from every staged path»: `catch (e) { if (e.status === 1) return false ... }` keeps git's exit 1 as a miss, and §6 declares the pre-existing test 'a PROMISED test that is only in the plan, and not in what the task touched, is red' as its yardstick — it survives untouched in the file. (3) «A lookup that could not RUN ... `controls` closes the task with `OUTCOMES.INDETERMINATE`, which is exit 5, and its log carries the reason»: `throw new NameLookupDidNotRun(...)` for any other status (including the `null` of the 60 s cap), the `try` in `controlsVerb` around `declaredTests`/`declaredBlocks` pushing '# names that could not be looked up' plus the message and setting `OUTCOMES.INDETERMINATE`, and the loop guard rewritten to `result === OUTCOMES.DONE ? t.commands : []` so the unmeasured lookup does not spend the commands; the new test asserts status 5, the heading in the log, and the absence of both 'is not in what is staged' and '$ test -f uno.txt'. (4) «A `**Tests:**` line declaring a removal that did not happen makes `declaredTests` fail»: `for (const n of t.testsRemoved) if (inIndex(n)) failures.push(...)` now really answers, and the added test 'a test the task said it withdrew and is still in a staged path is red' pins the failure message. (5) «The identifier the module carries in that function is English»: `ambito` is gone from both the declaration and the guard, and §8's `test -z \"$(grep -n ambito ...)\"` ran green. Nothing a later commit undid: task 2 only narrowed the `catch` and the `stdio`, which is what its own objective and the plan's Out of scope reserved for it.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "coherencia",
+        "result": "Two commits, read in order. fe0e1dd (task 1) renamed the local and left `stdio: 'ignore'` and the bare `catch { return false }` exactly as the plan's Task 1 text says ('narrowing the `catch` is Task 2's work and this task leaves it untouched'); c6ef6e8 (task 2) then replaced precisely those two things, which its own **Objective:** and the Contract block name. So the later commit does not undo what the earlier established — it consumes it: task 2's `...scope` pathspec only works because task 1 fixed the local, and both tasks solve one problem in one place (`inIndex`), with no duplicated mechanism and no scaffolding left behind for an intermediate state. The two commits' tests are additive in the same `describe`, sharing the same `commitPlan`/`withTestsLine`/`writeReport` helpers, and the test count the plan predicts (14 then 15) matches the accumulated file.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "observabilidad",
+        "result": "The `## Señal` section of the review package declares no signal: it reads «(sin señal declarada — el issue no trae la sección \"## Señal de observabilidad\"...)». The slice was never asked to promise an observable signal, so there is no yardstick to measure the diff against and none is invented here.",
+        "outcome": "sin-vara"
+      }
+    ],
+    "findings": [],
+    "review_token": "e485b542245b39a74cb21db70546c42fb354a81ee12414aa89b7f7b637bf4a40"
+  }
+}
