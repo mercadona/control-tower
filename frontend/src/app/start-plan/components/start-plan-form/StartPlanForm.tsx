@@ -5,6 +5,7 @@ import { RepositoryName } from 'app/start-plan/RepositoryName'
 import { StartPlanOutcome, StartedPlan, StartPlanRequest, StartPlanSubmission } from 'app/start-plan/StartPlan.types'
 import { TicketKey } from 'app/start-plan/TicketKey'
 import { UserComment } from 'app/start-plan/UserComment'
+import { ProjectReadiness } from 'app/project-readiness/components/project-readiness/ProjectReadiness'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
 import { FormField } from 'system-ui/form-field'
@@ -165,6 +166,7 @@ const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocke
           }}
         />
       </FormField>
+      <ProjectReadiness repository={repository} path={path} disabled={isSending || isMutationBlocked} />
       <div className="start-plan-form__actions">
         <Button type="submit" disabled={!canStart} aria-describedby={!canStart ? 'start-plan-help' : undefined}>
           {isSending ? <><Loading aria-label="Enviando la solicitud" /> Enviando solicitud</> : 'Arrancar plan'}

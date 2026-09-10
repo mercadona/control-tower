@@ -41,6 +41,8 @@ import { RequestFixes, RequestFixesParams } from '../application/actions/request
 import { SurveyWorkspaces, SurveyWorkspacesParams } from '../application/queries/survey-workspaces.ts'
 import { ReadPlanStory, ReadPlanStoryParams } from '../application/queries/read-plan-story.ts'
 import { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
+import { InspectProject } from '../application/queries/inspect-project.ts'
+import { GitDockerProjectSetup } from './git-docker-project-setup.ts'
 import { HarvestDelivery, HarvestDeliveryParams } from '../application/actions/harvest-delivery.ts'
 import { ProbedToolSessions } from './probed-tool-sessions.ts'
 import { ToolRunner } from './tool-runner.ts'
@@ -407,6 +409,13 @@ class CtApi {
       sessions,
       activePlans,
       externalTools: new SurveyExternalTools({ toolSessions: CtApi.#toolSessions(environment) }),
+      inspectProject: new InspectProject({ setup: new GitDockerProjectSetup({
+        run: (bin, argv, cwd, budgetMs) => new ToolRunner({
+          bin, budgetMs, maxBufferBytes: 128 * 1024, killSignal: 'SIGKILL', ownProcessGroup: true,
+        }).run(argv, { cwd }),
+        now: Date.now, budgetMs: 30_000, commandBudgetMs: 2_000,
+        maxFiles: 24, maxContainers: 12,
+      }) }),
       implementationStarts,
       recovery,
       stderr: (line) => process.stderr.write(line),

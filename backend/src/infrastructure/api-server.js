@@ -9,6 +9,7 @@ import { PlanEventsRoute } from './plan-events-route.js'
 import { ActivePlansRoute } from './active-plans-route.js'
 import { ImplementProgressRoute } from './implement-progress-route.js'
 import { ExternalToolsRoute } from './external-tools-route.js'
+import { ProjectReadinessRoute } from './project-readiness-route.ts'
 
 export const LOOPBACK = '127.0.0.1'
 class FrontendPages {
@@ -43,7 +44,7 @@ class Failures {
 export class ApiServer {
   constructor({
     port, startPlan, implementPlan, askPlanChanges, implementProgress, reviews, pullRequestReviews, planEvents,
-    sessions, activePlans, externalTools, implementationStarts, recovery = null, stderr, frontendRoot,
+    sessions, activePlans, externalTools, implementationStarts, recovery = null, inspectProject, stderr, frontendRoot,
   }) {
     this.requestedPort = port
     this.startPlan = startPlan
@@ -56,6 +57,7 @@ export class ApiServer {
     this.sessions = sessions
     this.activePlans = activePlans
     this.externalTools = externalTools
+    this.inspectProject = inspectProject
     this.implementationStarts = implementationStarts
     this.recovery = recovery
     this.stderr = stderr
@@ -120,6 +122,14 @@ export class ApiServer {
       ExternalToolsRoute.handledBy(this.externalTools)
     )
     app.all(ExternalToolsRoute.PATH, ExternalToolsRoute.refuseOtherMethods)
+    app.post(
+      ProjectReadinessRoute.PATH,
+      Browsers.turnAwayForeign,
+      JsonBody.demandDeclared,
+      JsonBody.reader(),
+      ProjectReadinessRoute.handledBy(this.inspectProject)
+    )
+    app.all(ProjectReadinessRoute.PATH, ProjectReadinessRoute.refuseOtherMethods)
     app.use(Failures.nothingMatched)
     app.use(Failures.answer)
 

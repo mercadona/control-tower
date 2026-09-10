@@ -1,0 +1,54 @@
+.project-readiness {
+  border: 1px solid var(--foreground-secondary);
+  border-radius: 8px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.project-readiness h3,
+.project-readiness p {
+  margin: 0;
+}
+
+.project-readiness__report {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.project-readiness__report dl {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.project-readiness__report dd {
+  margin: 4px 0 0;
+}
+
+.project-readiness__report dt {
+  color: var(--foreground-secondary);
+}
+
+.project-readiness__findings {
+  list-style: none;
+  display: grid;
+  gap: 16px;
+  padding: 0;
+  margin: 0;
+}
+
+.project-readiness__findings > li {
+  display: grid;
+  gap: 8px;
+}
+
+.project-readiness__status {
+  font-weight: 600;
+}
+
+.project-readiness code {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
