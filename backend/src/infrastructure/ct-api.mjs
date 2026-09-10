@@ -257,13 +257,17 @@ class CtApi {
     })
   }
 
-  static #planEvents(git, log) {
+  static #planProgress(git) {
+    return new PlanContractProgress({
+      node: CtApi.#tool(process.execPath),
+      git,
+      dispatchCheck: PluginTree.dispatchCheck(),
+    })
+  }
+
+  static #planEvents(planProgress, log) {
     const readPlanProgress = new ReadPlanProgress({
-      planProgress: new PlanContractProgress({
-        node: CtApi.#tool(process.execPath),
-        git,
-        dispatchCheck: PluginTree.dispatchCheck(),
-      }),
+      planProgress,
       reviewLog: log,
     })
 
@@ -273,7 +277,7 @@ class CtApi {
     })
   }
 
-  static #planReviews(planIssues, planAgents, log) {
+  static #planReviews(planIssues, planAgents, log, planProgress) {
     const readChangesAsked = new ReadChangesAsked({ planIssues })
     const reviewPlan = new ReviewPlan({ planAgents })
 
@@ -281,6 +285,7 @@ class CtApi {
       asked: (watch) => readChangesAsked.execute(new ReadChangesAskedParams(watch)),
       review: (params) => reviewPlan.execute(new ReviewPlanParams(params)),
       sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_ASKS),
+      committedAt: (watch) => planProgress.committedAt({ located: watch.located }),
       stderr: (line) => process.stderr.write(line),
       label: 'plan review watch',
       log,
@@ -295,6 +300,11 @@ class CtApi {
       asked: (watch) => readFixesAsked.execute(new ReadFixesAskedParams(watch)),
       review: (params) => requestFixes.execute(new RequestFixesParams(params)),
       sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_ASKS),
+      committedAt: (watch) => {
+        throw new Error(
+          `the pull request review watch asked when the plan of ${watch.repository.text}#${watch.issue.number} was last committed, although no fix it reads carries a date`
+        )
+      },
       stderr: (line) => process.stderr.write(line),
       label: 'pull request review watch',
       log: new MemoryReviewLog(),
@@ -350,7 +360,8 @@ class CtApi {
     })
     const sessions = new PlanSessions()
     const planReviewLog = new MemoryReviewLog()
-    const reviews = CtApi.#planReviews(planIssues, planAgents, planReviewLog)
+    const planProgress = CtApi.#planProgress(git)
+    const reviews = CtApi.#planReviews(planIssues, planAgents, planReviewLog, planProgress)
     const activePlans = new ActivePlans({ sessions })
     const implementationStarts = new DiskImplementationStartRegistry({
       read: (path) => readFileSync(path, 'utf8'),
@@ -403,7 +414,7 @@ class CtApi {
         pullRequests,
         planIssues,
       }),
-      planEvents: CtApi.#planEvents(git, planReviewLog),
+      planEvents: CtApi.#planEvents(planProgress, planReviewLog),
       sessions,
       activePlans,
       externalTools: new SurveyExternalTools({ toolSessions: CtApi.#toolSessions(environment) }),

@@ -6,7 +6,9 @@ import { PlanWatch } from '../../src/domain/value-objects/plan-watch.js'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.js'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.js'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.js'
-import { PlanChangesNotRead, PlanAgentNotResumed, SliceNotReopened } from '../../src/domain/exceptions.js'
+import {
+  PlanChangesNotRead, PlanAgentNotResumed, SliceNotReopened, PlanProgressNotRead,
+} from '../../src/domain/exceptions.js'
 
 class WatchDouble {
   static LABEL = 'plan review watch'
@@ -37,12 +39,37 @@ class WatchDouble {
     askedAt: '2026-09-09T10:00:00Z',
   })
 
-  constructor(soundings, { refusingTheDelivery = null, waits = null, stoppingOnDelivery = false, label = WatchDouble.LABEL } = {}) {
+  static A_LATER_CHANGE = new ChangeAsked({
+    id: 'IC_kwDOT9lB5c8AAAABRCF0II',
+    text: 'y contempla la issue sin comentarios',
+    askedAt: WatchDouble.ANOTHER_CHANGE.askedAt,
+  })
+
+  static AN_UNDATED_CHANGE = new ChangeAsked({
+    id: 'IC_kwDOT9lB5c8AAAABRCF0JJ',
+    text: WatchDouble.A_CHANGE.text,
+    askedAt: null,
+  })
+
+  static COMMITTED_AFTER_BOTH = '2026-09-09T11:00:00Z'
+  static COMMITTED_BEFORE_BOTH = '2026-09-09T08:00:00Z'
+  static COMMITTED_BETWEEN_THEM = '2026-09-09T09:30:00Z'
+  static NEVER_COMMITTED = null
+  static MUST_NOT_BE_ASKED = new Error(
+    'the watch asked when the plan was last committed although no change it read carried a date'
+  )
+
+  constructor(soundings, {
+    refusingTheDelivery = null, waits = null, stoppingOnDelivery = false,
+    label = WatchDouble.LABEL, committed = WatchDouble.COMMITTED_AFTER_BOTH,
+  } = {}) {
     this.soundings = soundings
     this.refusingTheDelivery = refusingTheDelivery
     this.stoppingOnDelivery = stoppingOnDelivery
     this.waits = waits ?? soundings.length
     this.label = label
+    this.committed = committed
+    this.committedAsks = []
     this.asked = []
     this.reviewed = []
     this.warnings = []
@@ -57,6 +84,14 @@ class WatchDouble {
 
   static recovering(...soundings) {
     return new WatchDouble(soundings, { waits: soundings.length - 1 })
+  }
+
+  static recoveringWith(committed, ...soundings) {
+    return new WatchDouble(soundings, { waits: soundings.length - 1, committed })
+  }
+
+  static answeringWith(committed, ...soundings) {
+    return new WatchDouble(soundings, { committed })
   }
 
   static stoppedBeforeTheFirstWait() {
@@ -103,6 +138,12 @@ class WatchDouble {
         if (this.slept > this.waits) this.watch.stop(WatchDouble.STOPPING)
 
         return Promise.resolve()
+      },
+      committedAt: (watch) => {
+        this.committedAsks.push(watch)
+        if (this.committed instanceof Error) return Promise.reject(this.committed)
+
+        return Promise.resolve(this.committed)
       },
       stderr: (line) => this.warnings.push(line),
       label: this.label,
@@ -314,6 +355,7 @@ describe('ReviewWatch', () => {
       asked: () => baseline.promise,
       review: () => { reviewed += 1 },
       sleep: () => { slept += 1 },
+      committedAt: () => Promise.resolve(WatchDouble.COMMITTED_AFTER_BOTH),
       stderr: () => {},
       label: WatchDouble.LABEL,
       log: new MemoryReviewLog(),
@@ -506,5 +548,87 @@ describe('the watch notes when changes were asked for, so the plan state can be 
 
     expect(watched.log.lastAskedAt(WatchDouble.STOPPING)).toBeNull()
     expect(watched.warnings).toHaveLength(1)
+  })
+})
+
+describe('a recovered watch stops swallowing a change asked for while the backend was down', () => {
+  it('a_change_asked_for_after_the_plan_was_last_committed_is_delivered_instead_of_baselined_away', async () => {
+    const watched = WatchDouble.recoveringWith(
+      WatchDouble.COMMITTED_BEFORE_BOTH, [WatchDouble.A_CHANGE], [WatchDouble.A_CHANGE]
+    )
+
+    await watched.runRecovered()
+
+    expect(watched.reviewed.map(({ changes }) => changes)).toEqual([WatchDouble.A_CHANGE.text])
+    expect(watched.committedAsks).toEqual([WatchDouble.SUBJECT])
+    expect(watched.warnings).toEqual([])
+  })
+
+  it('a_change_asked_for_before_the_plan_was_last_committed_is_still_baselined_away', async () => {
+    const watched = WatchDouble.recoveringWith(
+      WatchDouble.COMMITTED_AFTER_BOTH, [WatchDouble.A_CHANGE], [WatchDouble.A_CHANGE]
+    )
+
+    await watched.runRecovered()
+
+    expect(watched.reviewed).toEqual([])
+    expect(watched.warnings).toEqual([])
+  })
+
+  it('the_two_are_told_apart_in_the_same_baseline', async () => {
+    const both = [WatchDouble.A_CHANGE, WatchDouble.A_LATER_CHANGE]
+    const watched = WatchDouble.recoveringWith(WatchDouble.COMMITTED_BETWEEN_THEM, both, both, both)
+
+    await watched.runRecovered()
+
+    expect(watched.reviewed.map(({ changes }) => changes)).toEqual([WatchDouble.A_LATER_CHANGE.text])
+  })
+
+  it('a_plan_that_was_never_committed_has_answered_nothing_so_every_change_is_delivered', async () => {
+    const both = [WatchDouble.A_CHANGE, WatchDouble.A_LATER_CHANGE]
+    const watched = WatchDouble.recoveringWith(WatchDouble.NEVER_COMMITTED, both, both, both)
+
+    await watched.runRecovered()
+
+    expect(watched.reviewed.map(({ changes }) => changes)).toEqual([
+      WatchDouble.A_CHANGE.text, WatchDouble.A_LATER_CHANGE.text,
+    ])
+  })
+
+  it('a_change_with_no_date_is_baselined_away_because_pendingness_cannot_be_judged_without_one', async () => {
+    const watched = WatchDouble.recoveringWith(
+      WatchDouble.MUST_NOT_BE_ASKED,
+      [WatchDouble.AN_UNDATED_CHANGE],
+      [WatchDouble.AN_UNDATED_CHANGE]
+    )
+
+    await watched.runRecovered()
+
+    expect(watched.reviewed).toEqual([])
+    expect(watched.committedAsks).toEqual([])
+    expect(watched.warnings).toEqual([])
+  })
+
+  it('a_git_that_refuses_delivers_rather_than_swallowing_because_a_swallowed_change_hangs_the_page', async () => {
+    const watched = WatchDouble.recoveringWith(
+      new PlanProgressNotRead('git log could not say when the plan of /repo/.worktrees/7 was committed'),
+      [WatchDouble.A_CHANGE],
+      [WatchDouble.A_CHANGE]
+    )
+
+    await watched.runRecovered()
+
+    expect(watched.reviewed.map(({ changes }) => changes)).toEqual([WatchDouble.A_CHANGE.text])
+    expect(watched.warnings).toHaveLength(1)
+    expect(watched.warnings[0]).toContain('git log could not say when')
+  })
+
+  it('the_ordinary_sweep_is_unchanged_and_never_asks_when_the_plan_was_committed', async () => {
+    const watched = WatchDouble.answeringWith(WatchDouble.MUST_NOT_BE_ASKED, [WatchDouble.A_CHANGE])
+
+    await watched.run()
+
+    expect(watched.reviewed.map(({ changes }) => changes)).toEqual([WatchDouble.A_CHANGE.text])
+    expect(watched.committedAsks).toEqual([])
   })
 })

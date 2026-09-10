@@ -1,10 +1,11 @@
 import { PlanFailure } from '../domain/exceptions.js'
 
 export class ReviewWatch {
-  constructor({ asked, review, sleep, stderr, label, log }) {
+  constructor({ asked, review, sleep, committedAt, stderr, label, log }) {
     this.asked = asked
     this.review = review
     this.sleep = sleep
+    this.committedAt = committedAt
     this.stderr = stderr
     this.label = label
     this.log = log
@@ -58,9 +59,40 @@ export class ReviewWatch {
   async #baseline(watch, attended) {
     const read = await this.#sound(watch)
     if (read === null) return false
-    for (const change of read.changes) attended.add(change.id)
+    for (const change of await this.#answered(watch, read.changes)) attended.add(change.id)
 
     return true
+  }
+
+  async #answered(watch, changes) {
+    const undated = changes.filter((change) => ReviewWatch.#momentOf(change.askedAt) === null)
+    if (undated.length === changes.length) return undated
+    const committed = await this.#committed(watch)
+    if (committed === null) return undated
+
+    return changes.filter((change) => {
+      const asked = ReviewWatch.#momentOf(change.askedAt)
+
+      return asked === null || asked < committed
+    })
+  }
+
+  async #committed(watch) {
+    try {
+      return ReviewWatch.#momentOf(await this.committedAt(watch))
+    } catch (cause) {
+      if (!(cause instanceof PlanFailure)) throw cause
+      this.#warn(watch, `could not be told when its plan was last committed, so its baseline delivers what it cannot judge answered: ${cause.message}`)
+
+      return null
+    }
+  }
+
+  static #momentOf(dated) {
+    if (typeof dated !== 'string') return null
+    const moment = Date.parse(dated)
+
+    return Number.isNaN(moment) ? null : moment
   }
 
   async #attend(watch, key, attended) {
