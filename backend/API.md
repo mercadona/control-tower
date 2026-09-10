@@ -524,11 +524,24 @@ tool blocks. A tool blocks when it is not installed or its session is `missing`
 | `missing` | the tool was asked and has no usable credential | show `fix` as the command to run |
 | `unknown` | the credential cannot be observed from this process | show `fix` as guidance, never as a verdict |
 
-`installed` is a `PATH` lookup, which never executes anything; probing does execute a binary for every row but `claude`. `fix` is the
-literal repair, and `null` exactly when the session is `ready`. It repairs what
-was asked about — the **credential** for five of the rows, the **query** for
-`cmux` — so it presupposes the binaries are installed, which `installed`
-answers separately.
+`installed` is a `PATH` lookup, which never executes anything; probing does
+execute a binary for every row but `claude` and any row whose probing binary is
+absent. `fix` is the literal repair, and `null` exactly when the session is
+`ready`. It repairs what was asked about — the **credential** for five of the
+rows, the **query** for `cmux`.
+
+Two rows are probed with a binary that is not their own: `git` with `ssh`, `bq`
+with `gcloud`. When that binary is absent from `PATH` the row is never asked and
+reads `unknown` — nothing was observed — carrying a `fix` that starts by
+installing the probe. `installed` still answers for the tool's own binary, so
+such a row reads `installed: true` beside `session: unknown`.
+
+A tool whose **own** binary is absent is the other case, and it is not the same
+one: it stays `missing`, because that blocks, and its `fix` still names the login
+and presupposes an installation `installed` already says you do not have. So a
+`missing` row is either a tool that was asked and has no usable credential, or a
+tool that was never asked because it is not there — `installed` is what tells
+them apart, and the UI reads both before it reads `fix`.
 
 How each one is asked:
 

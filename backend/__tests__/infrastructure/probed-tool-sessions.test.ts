@@ -121,8 +121,8 @@ class LookUpDouble {
     return LookUpDouble.#recording(() => true)
   }
 
-  static missing(bin: string): RecordingLookUp {
-    return LookUpDouble.#recording((candidate) => candidate !== bin)
+  static missing(...bins: string[]): RecordingLookUp {
+    return LookUpDouble.#recording((candidate) => !bins.includes(candidate))
   }
 
   static #recording(isInstalled: (bin: string) => boolean): RecordingLookUp {
@@ -159,12 +159,47 @@ describe('ProbedToolSessions', () => {
     ])
   })
 
-  it('every_rows_bin_is_looked_up_against_PATH_in_table_order', async () => {
+  it('every_rows_bin_and_the_binary_it_probes_with_are_looked_up_against_PATH_in_table_order', async () => {
     const lookUp = LookUpDouble.installedEverywhere()
 
     await ClientsDouble.allHappy().sessions(lookUp).all()
 
-    expect(lookUp.calls).toEqual(['gh', 'acli', 'claude', 'git', 'bq', 'cmux'])
+    expect(lookUp.calls).toEqual(['gh', 'acli', 'claude', 'git', 'ssh', 'bq', 'gcloud', 'cmux'])
+  })
+
+  it('git_is_unknown_when_the_ssh_it_probes_with_is_not_installed', async () => {
+    const sessions = await ClientsDouble.allHappy().sessions(LookUpDouble.missing('ssh')).all()
+
+    const git = Surveyed.of(sessions).about('git')
+    expect(git.installed).toBe(true)
+    expect(git.state).toBe(SessionState.UNKNOWN)
+    expect(git.fix).toBe('install ssh, then add an SSH key to your GitHub account')
+  })
+
+  it('bq_is_unknown_when_the_gcloud_it_probes_with_is_not_installed', async () => {
+    const sessions = await ClientsDouble.allHappy().sessions(LookUpDouble.missing('gcloud')).all()
+
+    const bq = Surveyed.of(sessions).about('bq')
+    expect(bq.installed).toBe(true)
+    expect(bq.state).toBe(SessionState.UNKNOWN)
+    expect(bq.fix).toBe('install gcloud, then gcloud auth login && gcloud auth application-default login')
+  })
+
+  it('a_tool_whose_probing_binary_is_missing_is_never_probed', async () => {
+    const clients = ClientsDouble.allHappy()
+
+    await clients.sessions(LookUpDouble.missing('gcloud')).all()
+
+    expect(clients.calls.map((call) => call.bin)).toEqual(['gh', 'acli', 'ssh'])
+  })
+
+  it('a_tool_that_is_not_installed_is_missing_even_when_the_binary_it_probes_with_is_missing_too', async () => {
+    const sessions = await ClientsDouble.allHappy().sessions(LookUpDouble.missing('git', 'ssh')).all()
+
+    const git = Surveyed.of(sessions).about('git')
+    expect(git.installed).toBe(false)
+    expect(git.state).toBe(SessionState.MISSING)
+    expect(git.fix).toBe('add an SSH key to your GitHub account')
   })
 
   it('git_is_ready_when_ssh_says_it_authenticated_even_though_it_exits_1', async () => {
