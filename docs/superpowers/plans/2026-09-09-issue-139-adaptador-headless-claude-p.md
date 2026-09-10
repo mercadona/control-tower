@@ -453,7 +453,7 @@ export class Invocation {
   static TRANSPORT_VARIABLE = 'CT_PLAN_TRANSPORT'
   static MODEL_VARIABLE = 'CT_PLAN_MODEL'
   static DEFAULT_MODEL = 'opus'
-  static #MODEL = /^[A-Za-z0-9][A-Za-z0-9.-]*$/
+  static #MODEL = /^[^\s-]\S*$/   // no whitespace, no leading dash
 
   get transport()   // CmuxPlanAgents.TRANSPORT or HeadlessPlanAgents.TRANSPORT
   get model()
@@ -464,7 +464,10 @@ export class Invocation {
 reach `Invocation` as data. An unset or empty `CT_PLAN_TRANSPORT` answers `cmux`; an unset or
 empty `CT_PLAN_MODEL` answers `DEFAULT_MODEL`. A value outside the two transports, or a model
 that fails `#MODEL`, refuses with its outcome and a reason quoting what it got — the shape
-`MALFORMED_HARVEST_TABLE` already uses (`invocation.js:118-123`).
+`MALFORMED_HARVEST_TABLE` already uses (`invocation.js:118-123`). `#MODEL` enforces exactly what
+its refusal says, no more: what matters is that the value cannot be read as another argument. A
+tighter pattern refuses `claude-opus-5[1m]` and every Bedrock-style id, and this issue is titled
+*choose whichever model we want*.
 
 **TDD:** red first — `it('an_environment_that_names_no_transport_asks_for_the_one_that_types_into_a_window')`,
 `transport === 'cmux'`. Then the boundary on both sides:
