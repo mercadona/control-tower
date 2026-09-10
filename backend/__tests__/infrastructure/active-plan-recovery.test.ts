@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.js'
+import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.ts'
 import { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.js'
 import { PlanSessions } from '../../src/infrastructure/plan-events-route.js'
@@ -11,6 +11,81 @@ import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
+import { ImplementationProgress } from '../../src/domain/ports/implementation-progress.ts'
+import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
+import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.ts'
+import { ReviewWatch } from '../../src/infrastructure/review-watch.js'
+import { WorktreePlans } from '../../src/infrastructure/worktree-plans.ts'
+import type { Mock } from 'vitest'
+
+type ProgressAnswer = (asked: {
+  root: CheckoutRoot,
+  issue: number,
+  repository?: RepositoryName,
+}) => Promise<ImplementationState>
+
+class ProgressThat extends ImplementationProgress {
+  readonly of: Mock<ProgressAnswer>
+
+  constructor(answer: ProgressAnswer) {
+    super()
+    this.of = vi.fn(answer)
+  }
+}
+
+class RememberingCheckouts extends CheckoutRegistry {
+  readonly remembered: string[] = []
+
+  remember(root: CheckoutRoot): void {
+    this.remembered.push(root.text)
+  }
+}
+
+class MatchingGoRegistry extends DiskGoRegistry {
+  readonly matches: Mock<(watch: PlanWatch) => boolean>
+
+  constructor(answer: boolean) {
+    super({
+      random: () => { throw new Error('a go registry double never mints') },
+      write: () => { throw new Error('a go registry double never writes') },
+      root: '/state',
+    })
+    this.matches = vi.fn(() => answer)
+  }
+}
+
+class RecordingReviews extends ReviewWatch {
+  readonly startRecovered: Mock<(watch: PlanWatch) => Promise<void>>
+
+  constructor(label: string) {
+    super({
+      asked: () => { throw new Error(`${label} never asks`) },
+      review: () => { throw new Error(`${label} never reviews`) },
+      sleep: () => { throw new Error(`${label} never sleeps`) },
+      stderr: () => undefined,
+      label,
+      log: null,
+    })
+    this.startRecovered = vi.fn((): Promise<void> => Promise.resolve())
+  }
+}
+
+class PlansThat extends WorktreePlans {
+  readonly inFlight: Mock<() => Promise<PlansInFlight>>
+
+  constructor(answer: () => Promise<PlansInFlight>) {
+    super({
+      checkouts: new CheckoutRegistry(),
+      survey: () => { throw new Error('a plans double never surveys a checkout') },
+      sessions: () => { throw new Error('a plans double never asks cmux') },
+      story: () => { throw new Error('a plans double never reads a user story') },
+      realpathOf: () => null,
+      stderr: () => undefined,
+    })
+    this.inFlight = vi.fn(answer)
+  }
+}
 
 const IN_FLIGHT = new PlanWatch({
   story: new UserStoryKey('ABC-123'),
@@ -28,17 +103,26 @@ describe('ActivePlanRecovery', () => {
 
   function fixture({
     watches = [IN_FLIGHT], marker = null, go = false, regular = true, readFailure = null,
-    implementationProgress = { of: vi.fn(async () => {
+    implementationProgress = new ProgressThat(async () => {
       throw new ImplementationProgressNotRead('no run file was recorded for this plan')
-    }) },
+    }),
+  }: {
+    watches?: PlanWatch[] | null,
+    marker?: string | null,
+    go?: boolean,
+    regular?: boolean,
+    readFailure?: Error | null,
+    implementationProgress?: ProgressThat,
   } = {}) {
     const sessions = new PlanSessions()
     const activePlans = new ActivePlans({ sessions })
-    const reviews = { startRecovered: vi.fn() }
-    const pullRequestReviews = { startRecovered: vi.fn() }
+    const reviews = new RecordingReviews('plan review watch double')
+    const pullRequestReviews = new RecordingReviews('pull request review watch double')
     const implementationStarts = new DiskImplementationStartRegistry({
-      read: vi.fn(() => {
+      read: vi.fn((): string => {
         if (readFailure !== null) throw readFailure
+        if (marker === null) throw new Error('ENOENT')
+
         return marker
       }),
       stat: vi.fn(() => {
@@ -48,13 +132,13 @@ describe('ActivePlanRecovery', () => {
       write: vi.fn(),
       root: '/state',
     })
-    const checkouts = { remembered: [], remember(root) { this.remembered.push(root.text) } }
-    const plans = { inFlight: vi.fn(async () => (watches === null ? PlansInFlight.refused('cmux said no') : PlansInFlight.listed(watches))) }
+    const checkouts = new RememberingCheckouts()
+    const plans = new PlansThat(async () => (watches === null ? PlansInFlight.refused('cmux said no') : PlansInFlight.listed(watches)))
     const recovery = new ActivePlanRecovery({
       plans,
       checkouts,
       implementationStarts,
-      goRegistry: { matches: vi.fn(() => go) },
+      goRegistry: new MatchingGoRegistry(go),
       implementationProgress,
       sessions,
       reviews,
@@ -89,7 +173,7 @@ describe('ActivePlanRecovery', () => {
     const runState = ImplementationState.of({
       step: ImplementationStep.SLICE_JUDGE, task: 8, totalTasks: 8, name: null, attempt: 1, discards: 0,
     })
-    const implementationProgress = { of: vi.fn(async () => runState) }
+    const implementationProgress = new ProgressThat(async () => runState)
     const recovered = fixture({ go: true, implementationProgress })
 
     expect(await recovered.recovery.recover()).toBeNull()
@@ -101,9 +185,9 @@ describe('ActivePlanRecovery', () => {
   })
 
   it('a_go_whose_run_file_cannot_be_read_stays_uncertain_instead_of_being_assumed_clean', async () => {
-    const implementationProgress = { of: vi.fn(async () => {
+    const implementationProgress = new ProgressThat(async () => {
       throw new ImplementationProgressNotRead('the worktree is not there, so its run cannot be read')
-    }) }
+    })
     const recovered = fixture({ go: true, implementationProgress })
 
     expect(await recovered.recovery.recover()).toBeNull()
@@ -112,7 +196,7 @@ describe('ActivePlanRecovery', () => {
   })
 
   it('a_go_whose_worktree_exists_but_has_no_run_file_yet_stays_uncertain_instead_of_being_assumed_clean', async () => {
-    const implementationProgress = { of: vi.fn(async () => ImplementationState.starting()) }
+    const implementationProgress = new ProgressThat(async () => ImplementationState.starting())
     const recovered = fixture({ go: true, implementationProgress })
 
     expect(await recovered.recovery.recover()).toBeNull()
@@ -124,7 +208,7 @@ describe('ActivePlanRecovery', () => {
     const runState = ImplementationState.of({
       step: ImplementationStep.STARTING, task: null, totalTasks: null, name: null, attempt: null, discards: null,
     })
-    const implementationProgress = { of: vi.fn(async () => runState) }
+    const implementationProgress = new ProgressThat(async () => runState)
     const recovered = fixture({ go: true, implementationProgress })
 
     expect(await recovered.recovery.recover()).toBeNull()
@@ -155,7 +239,7 @@ describe('ActivePlanRecovery', () => {
     const runState = ImplementationState.of({
       step: ImplementationStep.SLICE_JUDGE, task: 8, totalTasks: 8, name: null, attempt: 1, discards: 0,
     })
-    const recovered = fixture({ go: true, implementationProgress: { of: vi.fn(async () => runState) } })
+    const recovered = fixture({ go: true, implementationProgress: new ProgressThat(async () => runState) })
 
     await recovered.recovery.recover()
 

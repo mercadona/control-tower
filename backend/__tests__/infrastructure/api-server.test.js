@@ -20,7 +20,7 @@ import { PlanState } from '../../src/domain/value-objects/plan-state.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.js'
-import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.js'
+import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.ts'
 import { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.ts'
 import { SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.ts'
 
