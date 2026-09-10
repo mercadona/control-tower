@@ -10,7 +10,6 @@
     "erasableSyntaxOnly": true,
     "allowImportingTsExtensions": true,
     "allowJs": true,
-    "checkJs": false,
     "noEmit": true,
     "skipLibCheck": true
   },

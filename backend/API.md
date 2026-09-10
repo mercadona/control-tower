@@ -645,7 +645,7 @@ answering the page's HTML.
 
 | Concern | File |
 |---|---|
-| One endpoint's request, refusals and answer | `backend/src/infrastructure/<endpoint>-route.js` |
+| One endpoint's request, refusals and answer | `backend/src/infrastructure/<endpoint>-route.ts` |
 | Mounting, the origin filter, the body limit, the last net | `backend/src/infrastructure/api-server.ts`, `http.ts` |
 | The `{code, detail}` doctrine | `backend/conventions/this-repository.md` |
 | That two endpoints never share a `code` by accident | `backend/__tests__/infrastructure/refusal-codes.test.ts` |
