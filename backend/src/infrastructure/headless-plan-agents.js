@@ -126,7 +126,62 @@ export class HeadlessPlanAgents extends PlanAgents {
     return agent
   }
 
-  async worktreeOf(agent) {
+  async resume({ agent, issue, repository }) {
+    await this.#continue({
+      agent,
+      issue,
+      repository,
+      step: HarnessStep.IMPLEMENT,
+      errand: this.brief.implementationErrandFor({ issueNumber: issue, repository }),
+    })
+  }
+
+  async review({ agent, issue, repository, changes }) {
+    await this.#continue({
+      agent,
+      issue,
+      repository,
+      step: HarnessStep.REVIEW_PLAN,
+      errand: this.brief.reviewErrandFor({ issueNumber: issue, repository, changes }),
+    })
+  }
+
+  async fix({ agent, issue, repository, changes }) {
+    await this.#continue({
+      agent,
+      issue,
+      repository,
+      step: HarnessStep.FIX_PULL_REQUEST,
+      errand: this.brief.fixErrandFor({ issueNumber: issue, repository, changes }),
+    })
+  }
+
+  async #continue({ agent, issue, repository, step, errand }) {
+    const cwd = await this.#worktreeOf(agent)
+    const argv = HeadlessPlanAgents.argvFor({
+      errand, model: this.model, pluginRoot: this.pluginRoot, agent, resuming: true,
+    })
+    const startedAt = this.clock()
+    const { directory, out, err, call } = HarnessCall.pathsFor({
+      runsIn: this.runsIn, agent, step, startedAt,
+    })
+
+    await this.#ensureDirectory(directory, PlanAgentNotResumed)
+    const started = this.start.start({ argv, cwd, out, err })
+
+    await this.#writeRecord(call, JSON.stringify(new HarnessCall({
+      step,
+      agent,
+      issue,
+      repository: repository.text,
+      model: this.model,
+      argv,
+      pid: started.pid,
+      startedAt,
+    }).json), PlanAgentNotResumed)
+  }
+
+  async #worktreeOf(agent) {
     const path = this.#conversationPathFor(agent)
     const text = await this.#readRecord(path)
     if (text === null) {
@@ -154,19 +209,19 @@ export class HeadlessPlanAgents extends PlanAgents {
     return `${this.runsIn}/${agent}/${HeadlessPlanAgents.CONVERSATION_FILE}`
   }
 
-  async #ensureDirectory(directory) {
+  async #ensureDirectory(directory, Failure = PlanAgentNotLaunched) {
     try {
       await this.makeDirectory(directory)
     } catch (failure) {
-      throw new PlanAgentNotLaunched(`the run directory ${directory} could not be made: ${failure.message}`)
+      throw new Failure(`the run directory ${directory} could not be made: ${failure.message}`)
     }
   }
 
-  async #writeRecord(path, text) {
+  async #writeRecord(path, text, Failure = PlanAgentNotLaunched) {
     try {
       await this.write(path, text)
     } catch (failure) {
-      throw new PlanAgentNotLaunched(`${path} could not be written: ${failure.message}`)
+      throw new Failure(`${path} could not be written: ${failure.message}`)
     }
   }
 
