@@ -253,8 +253,7 @@ cd backend && npx vitest run --exclude '**/*-real-process.test.js'   # exit 0: n
 ### Task 2 — The plan is written by an invocation, and the call leaves its record
 
 **Objective:** `HeadlessPlanAgents.launch` mints the conversation's id, leaves the call's record
-under the state root and invokes `claude -p` in the prepared worktree, answering that id without
-waiting for the model.
+under the state root and invokes `claude -p` in the prepared worktree, answering that id at once.
 
 **Files:**
 - Create: `backend/src/infrastructure/headless-plan-agents.js`
@@ -285,17 +284,17 @@ export class HeadlessPlanAgents extends PlanAgents {
   static PERMISSION = ['--permission-mode', 'bypassPermissions']
 
   static argvFor({ errand, model, pluginRoot, agent, resuming })
-  constructor({ start, write, mint, clock, brief, runsIn, model, pluginRoot })
+  constructor({ start, makeDirectory, write, mint, clock, brief, runsIn, model, pluginRoot })
   async launch(briefing)            // the agent: a UUID
 }
 ```
 
 `argvFor` answers `[PRINT, errand, ...FORMAT, ...PERMISSION, '--model', model, '--plugin-dir',
-pluginRoot]` plus `['--session-id', agent]` when `resuming` is false and `['--resume', agent]`
-when it is true. `launch` mints the agent, composes
-`${runsIn}/${agent}/${HarnessStep.WRITE_PLAN}-${clock()}`, writes `HarnessCall.CALL_FILE` there,
-and starts the call with `out` and `err` at the other two names and `cwd` at
-`briefing.located.path`.
+pluginRoot]`, then `['--session-id', agent]` or, when `resuming`, `['--resume', agent]`. `launch`
+mints the agent, composes `${runsIn}/${agent}/${HarnessStep.WRITE_PLAN}-${clock()}`, **makes that
+directory** — `DetachedRun` opens its paths and fails without it — starts the call with `cwd` at
+`briefing.located.path`, and only then writes `HarnessCall.CALL_FILE`, which carries the pid just
+answered.
 
 **TDD:** red first — `it('the_plan_is_asked_for_with_the_errand_the_brief_composed_and_the_model_it_was_given')`,
 asserting the whole argv literally, `--model` included. Then
@@ -307,11 +306,10 @@ reading `call.json` back for `step === 'write-plan'`;
 `it('the_plan_is_written_in_the_worktree_that_was_prepared_and_not_where_the_api_runs')`. Last the
 failure cause: `it('a_call_that_cannot_be_started_refuses_without_leaving_a_conversation_behind')`.
 
-**Tests:** added: the six above, plus the `HeadlessAgent` test type carrying `.launching()`,
-`.refusing()` and `.captured()`, and the `BriefDouble` answering a fixed errand. Removed: none.
+**Tests:** added: the six above, plus the `HeadlessAgent` test type (`.launching()`, `.refusing()`,
+`.captured()`) and a `BriefDouble`. Removed: none.
 
-**Verification:** the argv is asserted whole, the step reaches disk, and the session is persisted
-so Task 4 can resume it.
+**Verification:** the argv is asserted whole, the step reaches disk, and the session is persisted.
 
 ```bash
 cd backend && npx vitest run __tests__/infrastructure/headless-plan-agents.test.js   # exit 0: the six cases
@@ -485,7 +483,7 @@ cd backend && npx vitest run --exclude '**/*-real-process.test.js'   # exit 0: n
 ### Task 6 — The entrypoint picks the adapter, and the repository says what a harness call is
 
 **Objective:** `ct-api.mjs` assembles one adapter or the other from `Invocation`, and
-`this-repository.md` declares the vocabulary the slice introduces.
+`this-repository.md` declares the slice's vocabulary.
 
 **Files:**
 - Modify: `backend/src/infrastructure/ct-api.mjs`
@@ -504,12 +502,13 @@ const planAgents = asked.transport === HeadlessPlanAgents.TRANSPORT
 ```
 
 `#headlessAgents` builds `new HeadlessPlanAgents({ start: new DetachedRun({ bin:
-HeadlessPlanAgents.BIN, budgetMs: CtApi.#PLAN_CALL_TIMEOUT_MS, env: environment }), write:
-Disk.write, read: Disk.read, mint: randomUUID, clock: Date.now, brief: <the same PlanAgentBrief
+HeadlessPlanAgents.BIN, budgetMs: CtApi.#PLAN_CALL_TIMEOUT_MS, env: environment }),
+makeDirectory: Disk.makeDirectory, write: Disk.atomicWrite, read: Disk.read, mint: randomUUID,
+clock: Date.now, brief: <the same PlanAgentBrief
 `#cmuxAgents` builds today>, runsIn: join(asked.stateRoot, 'harness'), model, pluginRoot:
-PluginTree.root() })`. `#PLAN_CALL_TIMEOUT_MS` is a new constant beside the three at
-`ct-api.mjs:142-144`: 60 minutes. `PluginTree.#root()` is private (`ct-api.mjs:61`) — make it the
-public `root()`, its three readers unchanged.
+PluginTree.root() })`. `#PLAN_CALL_TIMEOUT_MS` is new beside the three at `ct-api.mjs:142-144`: 60 minutes.
+`PluginTree.#root()` is private (`ct-api.mjs:61`) — make it public, its readers unchanged.
+`Disk` gains `makeDirectory`.
 
 Final text (backend/conventions/this-repository.md):
 
@@ -519,8 +518,8 @@ Final text (backend/conventions/this-repository.md):
 | **Step of a call** | Which errand that invocation carried — `write-plan`, `review-plan`, `implement`, `fix-pull-request`. The one datum no reader recovers afterwards, so it is written at the source |
 ```
 
-The `Plan agent` row **replaces** `this-repository.md:31`; the other two are new rows of the same
-table. Nothing else in that document changes.
+The `Plan agent` row **replaces** `this-repository.md:31`; the other two are new. Nothing else in
+that document changes.
 
 **TDD:** red first — `it('the_entrypoint_assembles_the_headless_transport_and_listens')` in
 `ct-api-real-process.test.js`, starting the entrypoint with `CT_PLAN_TRANSPORT=headless` and
