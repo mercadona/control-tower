@@ -63,8 +63,12 @@ kills it as long as the parent lives.
 - No headless call is made without a cap that arrives through its constructor.
 - `resume`, `review` and `fix` continue the same conversation with `--resume`, each one its own
   call directory: the grain of the record is the invocation, not the plan.
-- The four errands of `PlanAgentBrief` are untouched, and no module of `backend/src` other than
-  `cmux-plan-agents.js` names a cmux window.
+- The four errands of `PlanAgentBrief` are untouched, and no module of `backend/src` **that this
+  slice adds or edits** names a cmux window. `worktree-plans.js` still identifies a plan in flight
+  by a window's `ref` and `title`, under both transports — that predates this branch and phase 1
+  owns it. Say it plainly, because `no-window-titles-parsed.test.js` forbids only the literal
+  `'ct-plan-'` and `worktree-plans.js` imports the constant instead, so that guard cannot see the
+  thing it stands for.
 
 ### Out of scope
 
