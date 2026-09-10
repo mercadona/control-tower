@@ -89,8 +89,15 @@ export class GhUserStories extends UserStories {
     if (!GhUserStories.#isFields(comment)) return ''
     const text = typeof comment.body === 'string' ? comment.body.trim() : ''
     if (text.length === 0) return ''
-    const author = comment.author as { login: string }
+    const login = GhUserStories.#loginIn(comment)
 
-    return `> @${author.login}: ${text}`
+    return login.length === 0 ? `> ${text}` : `> @${login}: ${text}`
+  }
+
+  static #loginIn(comment: Record<string, unknown>): string {
+    const author = comment.author
+    if (!GhUserStories.#isFields(author)) return ''
+
+    return typeof author.login === 'string' ? author.login.trim() : ''
   }
 }

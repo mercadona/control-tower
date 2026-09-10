@@ -105,6 +105,50 @@ describe('GhUserStories', () => {
     expect((await gh.detailFor()).description).toBe('the issue body\n\n> @elreplicante: a real comment')
   })
 
+  it('a_comment_with_no_author_folds_in_unattributed_because_its_text_is_what_the_plan_needs', async () => {
+    const gh = GhDouble.answering({
+      title: 'a title',
+      body: 'the issue body',
+      comments: [{ body: 'hay que revisar el alcance' }],
+    })
+
+    expect((await gh.detailFor()).description).toBe('the issue body\n\n> hay que revisar el alcance')
+  })
+
+  it('a_comment_whose_author_carries_no_login_folds_in_unattributed_like_one_with_no_author_at_all', async () => {
+    const gh = GhDouble.answering({
+      title: 'a title',
+      body: 'the issue body',
+      comments: [
+        { author: {}, body: 'an author with no login' },
+        { author: { login: '  ' }, body: 'an author with a blank login' },
+        { author: null, body: 'no author object at all' },
+      ],
+    })
+
+    expect((await gh.detailFor()).description).toBe(
+      'the issue body\n\n> an author with no login\n\n> an author with a blank login\n\n> no author object at all'
+    )
+  })
+
+  it('a_comment_with_no_author_and_a_blank_body_is_still_dropped_instead_of_leaving_a_bare_quote', async () => {
+    const gh = GhDouble.answering({
+      title: 'a title',
+      body: 'the issue body',
+      comments: [{ body: '   ' }, { author: { login: 'alcaptar' }, body: 'a real comment' }],
+    })
+
+    expect((await gh.detailFor()).description).toBe('the issue body\n\n> @alcaptar: a real comment')
+  })
+
+  it('a_comment_with_no_author_does_not_crash_the_read_the_way_an_unguarded_access_would', async () => {
+    const gh = GhDouble.answering({ title: 'a title', body: '', comments: [{ body: 'orphan' }] })
+
+    const refusal = await gh.refusalFor()
+
+    expect(refusal).not.toBeInstanceOf(Error)
+  })
+
   it('an_issue_with_no_body_and_no_comments_gives_an_empty_description_instead_of_the_word_undefined', async () => {
     const gh = GhDouble.answering({ title: 'a title', body: '', comments: [] })
 
