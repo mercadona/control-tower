@@ -5,7 +5,7 @@ import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.js'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.js'
 import { GhPullRequests } from '../../src/infrastructure/gh-pull-requests.js'
 import { GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.js'
-import { Gh } from '../../src/infrastructure/gh.js'
+import { Gh } from '../../src/infrastructure/gh.ts'
 import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.ts'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
@@ -14,7 +14,7 @@ import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-loca
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { ReadFixesAsked, ReadFixesAskedParams } from '../../src/application/queries/read-fixes-asked.ts'
 import { RequestFixes, RequestFixesParams } from '../../src/application/actions/request-fixes.ts'
-import { ProcessOutput } from '../../src/infrastructure/tool-runner.js'
+import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 
 class GhProcessDouble {
   constructor(answers) {

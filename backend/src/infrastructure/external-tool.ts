@@ -1,5 +1,11 @@
+import type { ProcessOutput } from './tool-runner.ts'
+import type { RetryPolicy } from '../domain/policies/retry-policy.ts'
+
+export type ToolLaunch = (argv: string[]) => Promise<ProcessOutput>
+export type ToolSleep = (seconds: number) => Promise<void>
+
 export class ExternalTool {
-  static #NETWORK = [
+  static readonly #NETWORK = [
     'connection reset',
     'connection refused',
     'tls handshake',
@@ -17,15 +23,19 @@ export class ExternalTool {
     'gateway timeout',
   ]
 
-  static #SERVER_STATUS = /http 5\d\d/
+  static readonly #SERVER_STATUS = /http 5\d\d/
 
-  constructor({ launch, policy, sleep }) {
+  readonly launch: ToolLaunch
+  readonly policy: RetryPolicy
+  readonly sleep: ToolSleep
+
+  constructor({ launch, policy, sleep }: { launch: ToolLaunch, policy: RetryPolicy, sleep: ToolSleep }) {
     this.launch = launch
     this.policy = policy
     this.sleep = sleep
   }
 
-  async run(argv, { safeToRepeat }) {
+  async run(argv: string[], { safeToRepeat }: { safeToRepeat: boolean }): Promise<ProcessOutput> {
     let output = await this.launch(argv)
     let attempted = 0
     while (output.failed) {
@@ -44,7 +54,7 @@ export class ExternalTool {
     return output
   }
 
-  isTransient(stderr) {
+  isTransient(stderr: string): boolean {
     const lowered = String(stderr).toLowerCase()
 
     return ExternalTool.#NETWORK.some((marker) => lowered.includes(marker)) ||

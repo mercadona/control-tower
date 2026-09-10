@@ -1,14 +1,14 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { ToolRunner } from '../../src/infrastructure/tool-runner.js'
+import { ToolRunner } from '../../src/infrastructure/tool-runner.ts'
 
 class Node {
   static SLOW_MS = 5_000
   static INHERITED = 'CT_TOOL_RUNNER_INHERITED'
   static GIVEN = 'CT_TOOL_RUNNER_GIVEN'
 
-  static running(budgetMs) {
+  static running(budgetMs: number) {
     return new ToolRunner({ bin: process.execPath, budgetMs })
   }
 
@@ -16,11 +16,11 @@ class Node {
     return ['-e', `setTimeout(() => {}, ${Node.SLOW_MS})`]
   }
 
-  static withEnvironment(env) {
+  static withEnvironment(env: NodeJS.ProcessEnv) {
     return new ToolRunner({ bin: process.execPath, budgetMs: 30_000, env })
   }
 
-  static printing(variable) {
+  static printing(variable: string) {
     return ['-e', `process.stdout.write(String(process.env.${variable}))`]
   }
 

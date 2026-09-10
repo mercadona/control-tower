@@ -133,7 +133,7 @@ infrastructure/
   http.js            generic plumbing: answering, routing hygiene, the origin filter, the body reader
   harvest-clock.js   the sweep: every minute, asks a registry which clones
                       it served a plan for and surveys each in turn
-  invocation.js      moved out of the entrypoint until it is observable
+  invocation.ts      moved out of the entrypoint until it is observable
                       without spawning a process — the reason it exists
 ```
 

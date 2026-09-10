@@ -28,7 +28,7 @@ class Subjects {
     'killed in `afterEach`, not after the assertion',
     'Every family under `PlanFailure` names its two causes',
     'The wire format of a `code` is kebab-case',
-    'invocation.js      moved out of the entrypoint until it is observable',
+    'invocation.ts      moved out of the entrypoint until it is observable',
     'The `backend-best-practices` skill — general guidance; it yields to both.',
     'owner/repo#N',
     'Jira, GitHub, cmux, acli and gh exist only in',

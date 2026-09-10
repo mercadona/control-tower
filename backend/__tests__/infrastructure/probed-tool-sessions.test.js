@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { ProbedToolSessions } from '../../src/infrastructure/probed-tool-sessions.js'
 import { SessionState } from '../../src/domain/value-objects/tool-session.ts'
-import { ProcessOutput } from '../../src/infrastructure/tool-runner.js'
+import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 
 class ClientsDouble {
   static #BINS = ['gh', 'acli', 'ssh', 'gcloud']

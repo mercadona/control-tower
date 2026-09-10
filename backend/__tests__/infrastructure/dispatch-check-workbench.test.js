@@ -4,7 +4,7 @@ import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { DispatchCheckWorkbench } from '../../src/infrastructure/dispatch-check-workbench.js'
 import { Workbench } from '../../src/domain/ports/workbench.ts'
-import { ProcessOutput } from '../../src/infrastructure/tool-runner.js'
+import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SliceNotReopened, ReopenNotUnderstood } from '../../src/domain/exceptions.ts'
 
