@@ -22,7 +22,7 @@ import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { ActivePlans } from '../../src/infrastructure/active-plans-route.js'
 import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.js'
 import { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.ts'
-import { SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.js'
+import { SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.ts'
 
 class StartPlanSpy {
   static AGENT = 'workspace:4'

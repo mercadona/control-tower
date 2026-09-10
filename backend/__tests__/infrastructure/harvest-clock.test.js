@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { HarvestClock, SweepLine } from '../../src/infrastructure/harvest-clock.js'
 import { HarvestDeliveryResult } from '../../src/application/actions/harvest-delivery.ts'
-import { SurveyWorkspacesResult } from '../../src/application/queries/survey-workspaces.js'
+import { SurveyWorkspacesResult } from '../../src/application/queries/survey-workspaces.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { HarvestOutcome } from '../../src/domain/value-objects/harvest-outcome.ts'
 import { PreparedWorkspace } from '../../src/domain/value-objects/prepared-workspace.ts'
