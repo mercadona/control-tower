@@ -23,7 +23,7 @@ class Subjects {
 
   static RULES_NO_OTHER_REPOSITORY_CAN_RECOVER = [
     'no declared debt in `backend/`',
-    "From `backend/`, never the repository root. The fast subset is `npx vitest run --exclude '**/*-real-process.test.js'`",
+    "From `backend/`, never the repository root. The fast subset is `npx vitest run --exclude '**/*-real-process.test.ts'`",
     'never sow a label that is not ours',
     'killed in `afterEach`, not after the assertion',
     'Every family under `PlanFailure` names its two causes',
@@ -34,7 +34,7 @@ class Subjects {
     'Jira, GitHub, cmux, acli and gh exist only in',
     'ToolRunner      launches a binary with its budget',
     'The flag is named `safeToRepeat`.** `gh issue create` never gets `true`.',
-    'A controller under `infrastructure/` is named `<endpoint>-route.js`, one\nfile per endpoint.',
+    'A controller under `infrastructure/` is named `<endpoint>-route.ts`, one\nfile per endpoint.',
   ]
 
   static ownDocument(): string {

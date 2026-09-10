@@ -183,8 +183,9 @@ route.
   only ever reaches a log, a test name or another program, English.
 - **Is this value decided by GitHub, git, the filesystem or a seeded contract?**
   If yes, leave the spelling alone.
-- **Is this a new module or test under `backend/`?** It is born TypeScript, and
-  `backend/conventions/this-repository.md` holds the whole migration policy.
+- **Is this a new module or test under `backend/`?** The backend is TypeScript
+  and every module there is `.ts`; `backend/conventions/this-repository.md`
+  holds the rule and what erasable syntax allows.
 - **Is there already an English word for this in the tree?** Use that one. Check
   `docs/glossary.md` first, then grep `plugin/conventions/`.
 - **Did a hook, a gate or a protection just refuse me?** Stop and report it.
