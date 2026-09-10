@@ -50,7 +50,7 @@ of the backend's start-up, so there is no endpoint that writes it.
 - **It is never shipped with the plugin.** The marketplace's `source` is
   `./plugin` and this directory falls outside every installation; npm
   dependencies are legitimate here.
-- **`backend/` serves it, from the same origin.** `ct-api.mjs` serves `dist/` at
+- **`backend/` serves it, from the same origin.** `ct-api.ts` serves `dist/` at
   `/` when it exists, so page and API share `http://127.0.0.1:<port>`.
   The API rejects with `403` any `Origin` that is not its own, with a loopback
   `Host`: a foreign page cannot call `POST /start-plan`, and ours can, with no

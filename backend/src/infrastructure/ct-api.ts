@@ -153,7 +153,7 @@ class Disk {
 
 class CtApi {
   static readonly #USAGE =
-    `usage: ct-api.mjs (no arguments; set ${Invocation.PORT_VARIABLE} to pick a port, 0 for an ephemeral one; set ${Invocation.HARVEST_TABLE_VARIABLE} to ${Invocation.HARVEST_TABLE_SHAPE} so every harvest loads its row into BigQuery)`
+    `usage: make run-backend (no arguments; set ${Invocation.PORT_VARIABLE} to pick a port, 0 for an ephemeral one; set ${Invocation.HARVEST_TABLE_VARIABLE} to ${Invocation.HARVEST_TABLE_SHAPE} so every harvest loads its row into BigQuery)`
   static readonly #BAD_USAGE = 2
   static readonly #CANNOT_LISTEN = 1
   static readonly #PROCESS_TIMEOUT_MS = 30_000
