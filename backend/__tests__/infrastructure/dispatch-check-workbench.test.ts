@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
-import { DispatchCheckWorkbench } from '../../src/infrastructure/dispatch-check-workbench.js'
+import { DispatchCheckWorkbench } from '../../src/infrastructure/dispatch-check-workbench.ts'
 import { Workbench } from '../../src/domain/ports/workbench.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
@@ -23,11 +23,11 @@ class PluginContract {
     return reopen[1]
   }
 
-  static #ascending(codes) {
+  static #ascending(codes: number[]): number[] {
     return [...new Set(codes)].sort((one, other) => one - other)
   }
 
-  static codesDyingInSource(block) {
+  static codesDyingInSource(block: string): number[] {
     return PluginContract.#ascending([...block.matchAll(PluginContract.#DIED)].map((found) => Number(found[1])))
   }
 
@@ -45,12 +45,15 @@ class NodeDouble {
   static ISSUE_NUMBER = 7
   static REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
 
-  constructor(answer) {
+  readonly answer: ProcessOutput
+  readonly calls: { argv: string[], options: { cwd?: string } | undefined }[]
+
+  constructor(answer: ProcessOutput) {
     this.answer = answer
     this.calls = []
   }
 
-  static exiting(code, { stdout = '', stderr = '' } = {}) {
+  static exiting(code: number, { stdout = '', stderr = '' }: { stdout?: string, stderr?: string } = {}) {
     return new NodeDouble(new ProcessOutput({ code, stdout, stderr }))
   }
 

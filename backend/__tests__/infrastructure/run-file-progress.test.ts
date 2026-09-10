@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { RunFileProgress } from '../../src/infrastructure/run-file-progress.js'
+import { RunFileProgress } from '../../src/infrastructure/run-file-progress.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ImplementationState, ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
 import { ImplementationProgressNotRead } from '../../src/domain/exceptions.ts'
+import type { ImplementationStepValue } from '../../src/domain/value-objects/implementation-state.ts'
 
 const FENCE = '`'.repeat(3)
 const PLAN = [
@@ -59,7 +60,19 @@ class RunFileDouble {
     lastVerdict: { ruling: 'PASS' },
   }
 
-  constructor({ exists = true, texts = [], runFileReadFails = null, planReadFails = null } = {}) {
+  readonly exists: boolean
+  readonly texts: (string | null)[]
+  readonly runFileReadFails: Error | null
+  readonly planReadFails: Error | null
+  readonly existsAsked: string[]
+  readonly readAsked: string[]
+
+  constructor({ exists = true, texts = [], runFileReadFails = null, planReadFails = null }: {
+    exists?: boolean,
+    texts?: (string | null)[],
+    runFileReadFails?: Error | null,
+    planReadFails?: Error | null,
+  } = {}) {
     this.exists = exists
     this.texts = [...texts]
     this.runFileReadFails = runFileReadFails
@@ -68,7 +81,7 @@ class RunFileDouble {
     this.readAsked = []
   }
 
-  static answering(run, planText = null) {
+  static answering(run: unknown, planText: string | null = null) {
     return new RunFileDouble({ texts: [JSON.stringify(run), planText] })
   }
 
@@ -80,7 +93,7 @@ class RunFileDouble {
     return new RunFileDouble({ texts: [null] })
   }
 
-  static withText(text) {
+  static withText(text: string) {
     return new RunFileDouble({ texts: [text] })
   }
 
@@ -88,7 +101,7 @@ class RunFileDouble {
     return new RunFileDouble({ runFileReadFails: cause })
   }
 
-  static withUnreadablePlan(run, cause = new Error('EISDIR: illegal operation on a directory, read')) {
+  static withUnreadablePlan(run: unknown, cause = new Error('EISDIR: illegal operation on a directory, read')) {
     return new RunFileDouble({ texts: [JSON.stringify(run)], planReadFails: cause })
   }
 
@@ -109,7 +122,7 @@ class RunFileDouble {
         if (this.texts.length === 0) {
           throw new Error(`read was asked for ${path} with no scripted answer left`)
         }
-        return this.texts.shift()
+        return this.texts.shift() ?? null
       },
     })
   }
@@ -162,7 +175,7 @@ describe('RunFileProgress', () => {
     }))
   })
 
-  it.each(['reconcile', 'global', 'slice-judge', 'e2e'])(
+  it.each<ImplementationStepValue>(['reconcile', 'global', 'slice-judge', 'e2e'])(
     'a_step_of_the_slice_answers_the_total_but_no_task_and_no_attempt: %s',
     async (step) => {
       const asked = RunFileDouble.answering({

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DispatchCheckHarvest } from '../../src/infrastructure/dispatch-check-harvest.js'
+import { DispatchCheckHarvest } from '../../src/infrastructure/dispatch-check-harvest.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { HarvestOutcome } from '../../src/domain/value-objects/harvest-outcome.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
@@ -46,7 +46,16 @@ class HarvestDouble {
     '',
   ].join('\n')
 
-  constructor({ code, stdout = '', stderr = '', harvestTable = null }) {
+  readonly said: ProcessOutput
+  readonly calls: [string[], { cwd?: string } | undefined][]
+  readonly harvestTable: string | null
+
+  constructor({ code, stdout = '', stderr = '', harvestTable = null }: {
+    code: number,
+    stdout?: string,
+    stderr?: string,
+    harvestTable?: string | null,
+  }) {
     this.said = new ProcessOutput({ code, stdout, stderr })
     this.calls = []
     this.harvestTable = harvestTable
@@ -109,7 +118,7 @@ class HarvestDouble {
     return new HarvestDouble({ code: 1, stderr: HarvestDouble.BLEW_UP_TRACE })
   }
 
-  static exiting(code) {
+  static exiting(code: number) {
     return new HarvestDouble({ code, stdout: HarvestDouble.WAITING_LINE, stderr: HarvestDouble.USAGE_LINE })
   }
 }
@@ -131,18 +140,18 @@ class PluginContract {
     return collect[1]
   }
 
-  static #ascending(codes) {
+  static #ascending(codes: number[]): number[] {
     return [...new Set(codes)].sort((one, other) => one - other)
   }
 
-  static codesProjectedInSource(block) {
+  static codesProjectedInSource(block: string): number[] {
     const table = block.match(PluginContract.#TABLE)
     if (table === null) throw new Error(`the collect block no longer projects its outcomes with a table`)
 
     return PluginContract.#ascending([...table[1].matchAll(PluginContract.#CODE)].map((found) => Number(found[1])))
   }
 
-  static codesDyingInSource(block) {
+  static codesDyingInSource(block: string): number[] {
     return PluginContract.#ascending([...block.matchAll(PluginContract.#DIED)].map((found) => Number(found[1])))
   }
 

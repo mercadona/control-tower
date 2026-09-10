@@ -1,31 +1,52 @@
 import { PlanProgress } from '../domain/ports/plan-progress.ts'
 import { PlanState } from '../domain/value-objects/plan-state.ts'
 import { PlanProgressNotRead } from '../domain/exceptions.ts'
+import type { PlanIssue } from '../domain/value-objects/plan-issue.ts'
+import type { PlanStateValue } from '../domain/value-objects/plan-state.ts'
+import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
+import type { WorkspaceLocation } from '../domain/value-objects/workspace-location.ts'
+import type { ToolRunner } from './tool-runner.ts'
 
 export class PlanContractProgress extends PlanProgress {
-  static PLANS = 'docs/superpowers/plans'
-  static CONTRACT_UNMET = 6
+  static readonly PLANS = 'docs/superpowers/plans'
+  static readonly CONTRACT_UNMET = 6
 
-  constructor({ node, git, dispatchCheck }) {
+  readonly node: ToolRunner['run']
+  readonly git: ToolRunner['run']
+  readonly dispatchCheck: string
+
+  constructor({ node, git, dispatchCheck }: {
+    node: ToolRunner['run'],
+    git: ToolRunner['run'],
+    dispatchCheck: string,
+  }) {
     super()
     this.node = node
     this.git = git
     this.dispatchCheck = dispatchCheck
   }
 
-  static contractArgvFor({ dispatchCheck, issue, repository }) {
+  static contractArgvFor({ dispatchCheck, issue, repository }: {
+    dispatchCheck: string,
+    issue: PlanIssue,
+    repository: RepositoryName,
+  }): string[] {
     return [dispatchCheck, String(issue.number), '--repo', repository.text, '--check-plan']
   }
 
-  static pendingArgvFor(located) {
+  static pendingArgvFor(located: WorkspaceLocation): string[] {
     return ['-C', located.path, 'status', '--porcelain', '--', PlanContractProgress.PLANS]
   }
 
-  static committedAtArgvFor(located) {
+  static committedAtArgvFor(located: WorkspaceLocation): string[] {
     return ['-C', located.path, 'log', '-1', '--format=%cI', '--', PlanContractProgress.PLANS]
   }
 
-  async of({ located, issue, repository }) {
+  async of({ located, issue, repository }: {
+    located: WorkspaceLocation,
+    issue: PlanIssue,
+    repository: RepositoryName,
+  }): Promise<PlanStateValue> {
     const validated = await this.node(
       PlanContractProgress.contractArgvFor({ dispatchCheck: this.dispatchCheck, issue, repository }),
       { cwd: located.path }
@@ -47,7 +68,7 @@ export class PlanContractProgress extends PlanProgress {
     return PlanState.READY
   }
 
-  async committedAt({ located }) {
+  async committedAt({ located }: { located: WorkspaceLocation }): Promise<string | null> {
     const dated = await this.git(PlanContractProgress.committedAtArgvFor(located))
     if (dated.failed) {
       throw new PlanProgressNotRead(

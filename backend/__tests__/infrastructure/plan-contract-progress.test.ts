@@ -1,23 +1,38 @@
 import { describe, it, expect } from 'vitest'
-import { PlanContractProgress } from '../../src/infrastructure/plan-contract-progress.js'
+import { PlanContractProgress } from '../../src/infrastructure/plan-contract-progress.ts'
 import { PlanState } from '../../src/domain/value-objects/plan-state.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanProgressNotRead } from '../../src/domain/exceptions.ts'
+import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 
 class ProgressDouble {
   static WORKTREE = '/repo/.worktrees/42'
   static CHECK = '/plugin/scripts/dispatch-check.mjs'
   static REPOSITORY = new RepositoryName('owner/name')
+  static ISSUE = new PlanIssue({ number: 42, url: 'https://github.com/owner/name/issues/42' })
 
   static CONTRACT_UNMET = 6
   static COULD_NOT_RUN = 1
 
-  static neverAsked() {
+  static neverAsked(): never {
     throw new Error('node should not be called')
   }
 
-  constructor({ validated, dirty, gitFailed = false, contractCode = ProgressDouble.CONTRACT_UNMET }) {
+  readonly validated: boolean
+  readonly dirty: string
+  readonly gitFailed: boolean
+  readonly contractCode: number
+  readonly node: [string[], { cwd?: string } | undefined][]
+  readonly git: string[][]
+
+  constructor({ validated, dirty, gitFailed = false, contractCode = ProgressDouble.CONTRACT_UNMET }: {
+    validated: boolean,
+    dirty: string,
+    gitFailed?: boolean,
+    contractCode?: number,
+  }) {
     this.validated = validated
     this.dirty = dirty
     this.gitFailed = gitFailed
@@ -56,7 +71,7 @@ class ProgressDouble {
   asked() {
     return this.progress().of({
       located: new WorkspaceLocation({ path: ProgressDouble.WORKTREE, branch: 'feat/42' }),
-      issue: { number: 42 },
+      issue: ProgressDouble.ISSUE,
       repository: ProgressDouble.REPOSITORY,
     })
   }
@@ -135,22 +150,22 @@ describe('PlanContractProgress', () => {
 
 describe('when the plan was last committed', () => {
   it('the_date_git_prints_is_the_date_it_answers', async () => {
-    const git = async () => ({ failed: false, stdout: '2026-09-09T08:55:39+02:00\n', stderr: '' })
+    const git = async () => new ProcessOutput({ code: 0, stdout: '2026-09-09T08:55:39+02:00\n', stderr: '' })
     const progress = new PlanContractProgress({ node: ProgressDouble.neverAsked, git, dispatchCheck: ProgressDouble.CHECK })
 
     expect(await progress.committedAt({ located: LOCATED })).toBe('2026-09-09T08:55:39+02:00')
   })
 
   it('a_plan_that_was_never_committed_has_no_date_instead_of_an_empty_one', async () => {
-    const git = async () => ({ failed: false, stdout: '\n', stderr: '' })
+    const git = async () => new ProcessOutput({ code: 0, stdout: '\n', stderr: '' })
     const progress = new PlanContractProgress({ node: ProgressDouble.neverAsked, git, dispatchCheck: ProgressDouble.CHECK })
 
     expect(await progress.committedAt({ located: LOCATED })).toBeNull()
   })
 
   it('it_asks_git_only_for_the_plans_path_so_another_commit_cannot_answer_for_the_plan', async () => {
-    const asked = []
-    const git = async (argv) => { asked.push(argv); return { failed: false, stdout: '\n', stderr: '' } }
+    const asked: string[][] = []
+    const git = async (argv: string[]) => { asked.push(argv); return new ProcessOutput({ code: 0, stdout: '\n', stderr: '' }) }
 
     await new PlanContractProgress({ node: ProgressDouble.neverAsked, git, dispatchCheck: ProgressDouble.CHECK })
       .committedAt({ located: LOCATED })
@@ -161,7 +176,7 @@ describe('when the plan was last committed', () => {
   })
 
   it('a_git_that_refuses_is_a_failure_and_not_a_missing_date', async () => {
-    const git = async () => ({ failed: true, stdout: '', stderr: 'not a git repository\n' })
+    const git = async () => new ProcessOutput({ code: 1, stdout: '', stderr: 'not a git repository\n' })
     const progress = new PlanContractProgress({ node: ProgressDouble.neverAsked, git, dispatchCheck: ProgressDouble.CHECK })
 
     await expect(progress.committedAt({ located: LOCATED })).rejects.toThrow(PlanProgressNotRead)
