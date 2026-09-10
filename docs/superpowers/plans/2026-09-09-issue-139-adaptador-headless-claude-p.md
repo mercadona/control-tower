@@ -325,6 +325,7 @@ continuations no worktree and a headless call cannot do without one.
 
 **Files:**
 - Modify: `backend/src/infrastructure/headless-plan-agents.js`
+- Modify: `backend/src/infrastructure/implement-plan-route.js`
 - Modify: `backend/__tests__/infrastructure/headless-plan-agents.test.js`
 
 Contract (backend/src/infrastructure/headless-plan-agents.js):
@@ -343,7 +344,12 @@ typing into a cmux window needed no worktree, the window was already in it. A he
 a `cwd`, and getting it wrong runs `ct-step`, `git` and every edit where the API runs. `launch` is
 always a conversation's first call and the only method that gets `briefing.located`, so it writes
 `${runsIn}/${agent}/${CONVERSATION_FILE}` holding `{ worktree: briefing.located.path }`.
-`#worktreeOf` reads it back. The port does not change; §9.8 says why.
+`#worktreeOf` reads it back, and it owes the family's **two** causes, not one: a record that
+cannot be read is `PlanAgentNotResumed`, one that cannot be understood — not JSON, or JSON with no
+`worktree` — is `PlanAgentNotNamed`, which `implement-plan-route.js:157` must map because its
+projection raises on a member nobody declared. An unguarded parse would answer `undefined`, and a
+`cwd` of `undefined` runs the call where the API runs, which is what this task exists to stop.
+The port does not change; §9.8 says why.
 
 **TDD:** red first — `it('a_conversation_records_the_worktree_its_calls_have_to_run_in')`: `launch`
 against a named worktree, then read `conversation.json` back and assert its `worktree` is that
@@ -398,9 +404,9 @@ the whole argv with `--resume <agent>` and no `--session-id`, and the errand the
 under the same agent, steps `write-plan` and `implement`. Then
 `it('the_changes_a_person_asked_for_travel_in_the_errand_of_the_review_call')` and
 `it('the_fixes_of_a_pull_request_are_asked_for_with_the_step_that_says_so')`, asserting
-`step === 'fix-pull-request'` on disk. Last, now that `resume` reaches it,
-`it('a_conversation_whose_worktree_was_never_recorded_refuses_instead_of_guessing_one')` —
-`PlanAgentNotResumed`, its message naming the agent.
+`step === 'fix-pull-request'` on disk. Last,
+`it('a_conversation_whose_worktree_was_never_recorded_refuses_instead_of_guessing_one')` already
+exists from Task 3 and is **converted**, never duplicated, to reach the refusal through `resume`.
 
 **Tests:** added: the six above. Removed: none, and `worktreeOf` becomes `#worktreeOf` here.
 
