@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 type Started = { port: number, saidLater: () => string }
+type Refusal = { status: number | null, said: string[] }
 type Failure = { code: string, detail: string }
 type ToolRow = { tool: string, installed: boolean, session: string, fix: string | null }
 
@@ -45,6 +46,25 @@ class Entrypoint {
 
   static killAll(): void {
     for (const child of Entrypoint.#spawned.splice(0)) child.kill('SIGKILL')
+  }
+
+  static refused(environment: NodeJS.ProcessEnv): Promise<Refusal> {
+    const child = spawn(process.execPath, [Entrypoint.#PATH], {
+      env: { ...process.env, ...environment },
+      stdio: ['ignore', 'ignore', 'pipe'],
+    })
+    Entrypoint.#spawned.push(child)
+    let stderr = ''
+    child.stderr.on('data', (chunk) => { stderr += String(chunk) })
+
+    return new Promise<Refusal>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`it never exited, and said ${JSON.stringify(stderr)}`)), Entrypoint.#TIMEOUT_MS)
+      child.once('close', (status) => {
+        clearTimeout(timer)
+        resolve({ status, said: stderr.split('\n') })
+      })
+      child.once('error', reject)
+    })
   }
 
   static async listening(environment: NodeJS.ProcessEnv): Promise<number> {
@@ -273,6 +293,14 @@ describe('ct-api entrypoint', () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })
 
     expect(port).toBeGreaterThan(0)
+  })
+
+  it('a_bad_invocation_is_refused_with_the_reason_and_a_usage_line_that_names_the_command_the_documentation_starts_the_backend_with', async () => {
+    const refusal = await Entrypoint.refused({ CT_API_PORT: 'a fistful of ports' })
+
+    expect(refusal.status).toBe(2)
+    expect(refusal.said[0]).toContain('CT_API_PORT')
+    expect(refusal.said[1]).toMatch(/^usage: make run-backend \(no arguments;/)
   })
 
   it('the_cmux_row_is_ready_only_when_the_cmux_on_the_path_answers_the_query', async () => {
