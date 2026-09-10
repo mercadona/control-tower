@@ -1,7 +1,6 @@
 import { accessSync, constants as fsConstants, statSync } from 'node:fs'
 import { delimiter as pathDelimiter, isAbsolute, join } from 'node:path'
 import { CmuxPlanAgents } from './cmux-plan-agents.js'
-import { HeadlessPlanAgents } from './headless-plan-agents.js'
 
 export const InvocationOutcome = Object.freeze({
   READY: 'ready',
@@ -9,7 +8,6 @@ export const InvocationOutcome = Object.freeze({
   MALFORMED_PORT: 'malformed-port',
   UNKNOWN_STATE_HOME: 'unknown-state-home',
   MALFORMED_HARVEST_TABLE: 'malformed-harvest-table',
-  MALFORMED_TRANSPORT: 'malformed-transport',
   MALFORMED_MODEL: 'malformed-model',
 })
 
@@ -24,21 +22,18 @@ export class Invocation {
   static CHILD_TIMEOUT_VARIABLE = 'CT_CLAIM_CHILD_TIMEOUT_MS'
   static HARVEST_TABLE_VARIABLE = 'CT_HARVEST_BQ_TABLE'
   static HARVEST_TABLE_SHAPE = 'project:dataset.table'
-  static TRANSPORT_VARIABLE = 'CT_PLAN_TRANSPORT'
   static MODEL_VARIABLE = 'CT_PLAN_MODEL'
   static DEFAULT_MODEL = CmuxPlanAgents.MODEL
   static #MAX_PORT = 65535
   static #WHOLE_NUMBER = /^\d+$/
   static #HARVEST_TABLE = /^[A-Za-z0-9][A-Za-z0-9-]*:[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/
   static #MODEL = /^[^\s-]\S*$/
-  static #TRANSPORTS = Object.freeze([CmuxPlanAgents.TRANSPORT, HeadlessPlanAgents.TRANSPORT])
 
-  constructor({ outcome, port, stateRoot, harvestTable, transport, model, reason }) {
+  constructor({ outcome, port, stateRoot, harvestTable, model, reason }) {
     this.outcome = outcome
     this.port = port
     this.stateRoot = stateRoot
     this.harvestTable = harvestTable
-    this.transport = transport
     this.model = model
     this.reason = reason
     Object.freeze(this)
@@ -46,13 +41,13 @@ export class Invocation {
 
   static #refused(outcome, reason) {
     return new Invocation({
-      outcome, port: null, stateRoot: null, harvestTable: null, transport: null, model: null, reason,
+      outcome, port: null, stateRoot: null, harvestTable: null, model: null, reason,
     })
   }
 
-  static #ready({ port, stateRoot, harvestTable, transport, model }) {
+  static #ready({ port, stateRoot, harvestTable, model }) {
     return new Invocation({
-      outcome: InvocationOutcome.READY, port, stateRoot, harvestTable, transport, model, reason: null,
+      outcome: InvocationOutcome.READY, port, stateRoot, harvestTable, model, reason: null,
     })
   }
 
@@ -93,14 +88,6 @@ export class Invocation {
     }
 
     return null
-  }
-
-  static #transport(environment) {
-    const given = environment[Invocation.TRANSPORT_VARIABLE]
-    if (given === undefined || given === '') return CmuxPlanAgents.TRANSPORT
-    if (!Invocation.#TRANSPORTS.includes(given)) return null
-
-    return given
   }
 
   static #model(environment) {
@@ -150,13 +137,6 @@ export class Invocation {
         `${Invocation.HARVEST_TABLE_VARIABLE} must look like ${Invocation.HARVEST_TABLE_SHAPE}, got ${JSON.stringify(harvestTable)}`
       )
     }
-    const transport = Invocation.#transport(environment)
-    if (transport === null) {
-      return Invocation.#refused(
-        InvocationOutcome.MALFORMED_TRANSPORT,
-        `${Invocation.TRANSPORT_VARIABLE} must be ${Invocation.#TRANSPORTS.join(' or ')}, got ${JSON.stringify(environment[Invocation.TRANSPORT_VARIABLE])}`
-      )
-    }
     const model = Invocation.#model(environment)
     if (model === null) {
       return Invocation.#refused(
@@ -165,6 +145,6 @@ export class Invocation {
       )
     }
 
-    return Invocation.#ready({ port, stateRoot, harvestTable, transport, model })
+    return Invocation.#ready({ port, stateRoot, harvestTable, model })
   }
 }

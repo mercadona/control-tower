@@ -5,8 +5,6 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.js'
-import { HeadlessPlanAgents } from '../../src/infrastructure/headless-plan-agents.js'
 
 class HostCheckout {
   static #HERE = dirname(fileURLToPath(import.meta.url))
@@ -48,12 +46,6 @@ class Entrypoint {
     return (await Entrypoint.#started(environment)).port
   }
 
-  static async assembled(environment) {
-    const started = await Entrypoint.#started(environment)
-
-    return { port: started.port, transport: started.transport }
-  }
-
   static async #started(environment) {
     const child = spawn(process.execPath, [Entrypoint.#PATH], {
       env: { ...process.env, ...environment },
@@ -72,7 +64,7 @@ class Entrypoint {
         if (end === -1) return
         clearTimeout(timer)
         const printed = JSON.parse(stdout.slice(0, end))
-        resolve({ port: printed.port, transport: printed.transport, saidLater: () => stderr })
+        resolve({ port: printed.port, saidLater: () => stderr })
       })
       child.once('error', reject)
     })
@@ -297,21 +289,11 @@ describe('ct-api entrypoint', () => {
     }
   })
 
-  it('the_entrypoint_assembles_the_headless_transport_and_listens', async () => {
-    const started = await Entrypoint.assembled({ CT_API_PORT: '0', CT_PLAN_TRANSPORT: 'headless' })
+  it('the_entrypoint_assembles_the_headless_plan_agent_and_listens', async () => {
+    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
 
-    expect(started.port).toBeGreaterThan(0)
-    expect(started.transport).toBe(HeadlessPlanAgents.TRANSPORT)
-    const response = await fetch(`http://127.0.0.1:${started.port}/not-a-route`)
-    expect(response.status).toBe(404)
-  })
-
-  it('the_entrypoint_asked_for_no_transport_still_assembles_the_one_that_types_into_a_window', async () => {
-    const started = await Entrypoint.assembled({ CT_API_PORT: '0' })
-
-    expect(started.port).toBeGreaterThan(0)
-    expect(started.transport).toBe(CmuxPlanAgents.TRANSPORT)
-    const response = await fetch(`http://127.0.0.1:${started.port}/not-a-route`)
+    expect(port).toBeGreaterThan(0)
+    const response = await fetch(`http://127.0.0.1:${port}/not-a-route`)
     expect(response.status).toBe(404)
   })
 

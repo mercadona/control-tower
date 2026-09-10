@@ -48,10 +48,6 @@ class Invoked {
     return Invocation.from([], { [Invocation.HARVEST_TABLE_VARIABLE]: given }, Invoked.HOME)
   }
 
-  static withTransport(given) {
-    return Invocation.from([], { [Invocation.TRANSPORT_VARIABLE]: given }, Invoked.HOME)
-  }
-
   static withModel(given) {
     return Invocation.from([], { [Invocation.MODEL_VARIABLE]: given }, Invoked.HOME)
   }
@@ -331,26 +327,7 @@ describe('Invocation resolving the BigQuery harvest table', () => {
   })
 })
 
-describe('Invocation resolving the plan transport and model', () => {
-  it('an_environment_that_names_no_transport_asks_for_the_one_that_types_into_a_window', () => {
-    expect(Invoked.bare().transport).toBe('cmux')
-  })
-
-  it('a_transport_asked_for_as_empty_falls_back_to_the_one_that_types_into_a_window_too', () => {
-    expect(Invoked.withTransport('').transport).toBe('cmux')
-  })
-
-  it('the_headless_transport_is_asked_for_by_its_name', () => {
-    expect(Invoked.withTransport('headless').transport).toBe('headless')
-  })
-
-  it('a_transport_that_is_neither_of_the_two_refuses_the_invocation_quoting_what_it_got', () => {
-    const refused = Invoked.withTransport('bogus')
-
-    expect(refused.outcome).toBe(InvocationOutcome.MALFORMED_TRANSPORT)
-    expect(refused.reason).toBe('CT_PLAN_TRANSPORT must be cmux or headless, got "bogus"')
-  })
-
+describe('Invocation resolving the plan model', () => {
   it('an_environment_that_names_no_model_asks_for_the_one_the_window_used_to_type', () => {
     expect(Invoked.bare().model).toBe('opus')
   })
@@ -381,10 +358,9 @@ describe('Invocation resolving the plan transport and model', () => {
     )
   })
 
-  it('a_refused_invocation_carries_no_transport_or_model_a_consumer_could_launch_by_mistake', () => {
+  it('a_refused_invocation_carries_no_model_a_consumer_could_launch_by_mistake', () => {
     const refused = Invoked.withPort('abc')
 
-    expect(refused.transport).toBe(null)
     expect(refused.model).toBe(null)
   })
 })

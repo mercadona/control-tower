@@ -2,11 +2,10 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { setTimeout as after } from 'node:timers/promises'
-import { homedir, tmpdir } from 'node:os'
+import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ApiServer, LOOPBACK } from './api-server.js'
-import { CmuxPlanAgents } from './cmux-plan-agents.js'
 import { HeadlessPlanAgents } from './headless-plan-agents.js'
 import { DetachedRun } from './detached-run.js'
 import { AcliUserStories } from './acli-user-stories.js'
@@ -45,7 +44,6 @@ import { ToolRunner } from './tool-runner.js'
 import { Gh } from './gh.js'
 import { ExternalTool } from './external-tool.js'
 import { RetryPolicy, RetryBudget } from '../domain/policies/retry-policy.js'
-import { LaunchPolicy, LaunchBudget } from '../domain/policies/launch-policy.js'
 import { Invocation, InvocationOutcome } from './invocation.js'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
 
@@ -126,10 +124,6 @@ class Disk {
     }
   }
 
-  static async remove(path) {
-    await rm(path, { force: true })
-  }
-
   static async exists(path) {
     try {
       await stat(path)
@@ -142,7 +136,7 @@ class Disk {
 
 class CtApi {
   static #USAGE =
-    `usage: ct-api.mjs (no arguments; set ${Invocation.PORT_VARIABLE} to pick a port, 0 for an ephemeral one; set ${Invocation.HARVEST_TABLE_VARIABLE} to ${Invocation.HARVEST_TABLE_SHAPE} so every harvest loads its row into BigQuery; set ${Invocation.TRANSPORT_VARIABLE} to ${HeadlessPlanAgents.TRANSPORT} to run the plan agent with \`claude -p\` instead of typing into a cmux window, or leave it unset for ${CmuxPlanAgents.TRANSPORT}; set ${Invocation.MODEL_VARIABLE} to name the model a headless call uses, default ${Invocation.DEFAULT_MODEL})`
+    `usage: ct-api.mjs (no arguments; set ${Invocation.PORT_VARIABLE} to pick a port, 0 for an ephemeral one; set ${Invocation.HARVEST_TABLE_VARIABLE} to ${Invocation.HARVEST_TABLE_SHAPE} so every harvest loads its row into BigQuery; set ${Invocation.MODEL_VARIABLE} to name the model a headless call uses, default ${Invocation.DEFAULT_MODEL})`
   static #BAD_USAGE = 2
   static #CANNOT_LISTEN = 1
   static #PROCESS_TIMEOUT_MS = 30_000
@@ -155,12 +149,8 @@ class CtApi {
   static #CLOCK_STOPPED = 1
   static #RETRIES = 3
   static #SECONDS_BETWEEN_RETRIES = 2
-  static #PROBES_PER_SEND = 20
-  static #RESENDS = 1
-  static #SECONDS_BETWEEN_PROBES = 1
   static #SECONDS_BETWEEN_READS = 2
   static #SECONDS_BETWEEN_ASKS = 30
-  static #LAUNCH_DIRECTORY = 'ct-plan'
   static #HARNESS_DIRECTORY = 'harness'
 
   static #refuseUsage(reason) {
@@ -206,22 +196,6 @@ class CtApi {
       dispatchCheck: PluginTree.dispatchCheck(),
       conventions: PluginTree.conventions(),
       ctStep: PluginTree.ctStep(),
-    })
-  }
-
-  static #cmuxAgents() {
-    return new CmuxPlanAgents({
-      run: CtApi.#tool(CmuxPlanAgents.BIN),
-      write: Disk.write,
-      read: Disk.read,
-      remove: Disk.remove,
-      realpathOf: Disk.realpathOf,
-      sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_PROBES),
-      runsIn: join(tmpdir(), CtApi.#LAUNCH_DIRECTORY),
-      policy: new LaunchPolicy({
-        budget: new LaunchBudget({ attempts: CtApi.#PROBES_PER_SEND, resends: CtApi.#RESENDS }),
-      }),
-      brief: CtApi.#brief(),
     })
   }
 
@@ -357,9 +331,7 @@ class CtApi {
       stderr: (line) => process.stderr.write(line),
       root: asked.stateRoot,
     })
-    const { transport, planAgents } = asked.transport === HeadlessPlanAgents.TRANSPORT
-      ? { transport: HeadlessPlanAgents.TRANSPORT, planAgents: CtApi.#headlessAgents(asked.model, environment, asked.stateRoot) }
-      : { transport: CmuxPlanAgents.TRANSPORT, planAgents: CtApi.#cmuxAgents() }
+    const planAgents = CtApi.#headlessAgents(asked.model, environment, asked.stateRoot)
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
     const planIssues = new GhPlanIssues({
       gh,
@@ -438,7 +410,7 @@ class CtApi {
     } catch (error) {
       CtApi.#refuseListen(`could not listen on ${LOOPBACK}: ${error.message}`)
     }
-    process.stdout.write(`${JSON.stringify({ port, transport })}\n`)
+    process.stdout.write(`${JSON.stringify({ port })}\n`)
     await recovery.recover()
     CtApi.#sweepUntilItBreaks(CtApi.#harvestClock({
       workspace, checkouts, environment, harvestTable: asked.harvestTable,
