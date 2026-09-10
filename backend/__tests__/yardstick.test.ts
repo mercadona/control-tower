@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Yardstick } from './yardstick.js'
+import { Yardstick } from './yardstick.ts'
 
 class Subjects {
   static HERE = dirname(fileURLToPath(import.meta.url))
@@ -10,11 +10,11 @@ class Subjects {
   static REPOSITORY = join(Subjects.BACKEND, '..')
   static ROOT_GUARD = join('plugin', '__tests__', 'conforming-modules.test.js')
 
-  static measured() {
+  static measured(): string[] {
     return Yardstick.measuredUnder(Subjects.BACKEND)
   }
 
-  static rootGuardWords() {
+  static rootGuardWords(): string[] {
     const source = readFileSync(join(Subjects.REPOSITORY, Subjects.ROOT_GUARD), 'utf8')
     const declared = source.match(/PALABRAS_CASTELLANAS\s*=\s*\[([\s\S]*?)\]/)
     if (declared === null) throw new Error('the root guard no longer declares PALABRAS_CASTELLANAS')
@@ -29,7 +29,7 @@ describe('every file under backend keeps being born conforming', () => {
     expect(measured).toContain(join('src', 'domain', 'value-objects', 'user-story-key.ts'))
     expect(measured).toContain(join('src', 'application', 'actions', 'start-plan.ts'))
     expect(measured).toContain(join('src', 'infrastructure', 'api-server.ts'))
-    expect(measured).toContain(join('__tests__', 'yardstick.test.js'))
+    expect(measured).toContain(join('__tests__', 'yardstick.test.ts'))
   })
 
   it('a_file_with_an_extension_nobody_classified_fails_instead_of_being_skipped_in_silence', () => {

@@ -7,7 +7,7 @@ import { Yardstick } from './yardstick'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const FRONTEND = join(HERE, '..')
 const REPOSITORY = join(FRONTEND, '..')
-const BACKEND_YARDSTICK = join('backend', '__tests__', 'yardstick.js')
+const BACKEND_YARDSTICK = join('backend', '__tests__', 'yardstick.ts')
 
 const tracked = (): string[] =>
   execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'frontend'], {

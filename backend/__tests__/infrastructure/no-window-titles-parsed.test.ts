@@ -5,7 +5,7 @@ import { join, relative } from 'node:path'
 class SourceTree {
   static ROOT = join(import.meta.dirname, '..', '..', 'src')
 
-  static modules(directory = SourceTree.ROOT) {
+  static modules(directory: string = SourceTree.ROOT): { path: string, text: string }[] {
     return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
       const path = join(directory, entry.name)
       if (entry.isDirectory()) return SourceTree.modules(path)
@@ -14,7 +14,7 @@ class SourceTree {
     })
   }
 
-  static containing(fragment) {
+  static containing(fragment: string): string[] {
     return SourceTree.modules()
       .filter((module) => module.text.includes(fragment))
       .map((module) => module.path)
