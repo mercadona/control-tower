@@ -199,3 +199,38 @@ describe('HeadlessPlanAgents.argvFor', () => {
     expect(argv).not.toContain('--session-id')
   })
 })
+
+describe('HarnessStep', () => {
+  it('names_the_four_literal_steps_a_call_can_be_and_is_frozen_so_none_can_be_added', () => {
+    expect(HarnessStep).toEqual({
+      WRITE_PLAN: 'write-plan',
+      REVIEW_PLAN: 'review-plan',
+      IMPLEMENT: 'implement',
+      FIX_PULL_REQUEST: 'fix-pull-request',
+    })
+    expect(Object.isFrozen(HarnessStep)).toBe(true)
+  })
+})
+
+describe('HarnessCall', () => {
+  it('names_the_three_literal_files_a_call_leaves_on_disk', () => {
+    expect(HarnessCall.CALL_FILE).toBe('call.json')
+    expect(HarnessCall.STREAM_FILE).toBe('stream.ndjson')
+    expect(HarnessCall.ERROR_FILE).toBe('stderr.log')
+  })
+
+  it('is_frozen_so_nothing_downstream_of_launch_can_mutate_the_record_it_wrote', () => {
+    const call = new HarnessCall({
+      step: HarnessStep.WRITE_PLAN,
+      agent: HeadlessAgent.AGENT,
+      issue: HeadlessAgent.ISSUE,
+      repository: HeadlessAgent.REPOSITORY,
+      model: HeadlessAgent.MODEL,
+      argv: [],
+      pid: HeadlessAgent.PID,
+      startedAt: HeadlessAgent.STARTED_AT,
+    })
+
+    expect(Object.isFrozen(call)).toBe(true)
+  })
+})
