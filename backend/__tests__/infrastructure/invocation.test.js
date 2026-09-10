@@ -4,8 +4,6 @@ import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { Invocation, InvocationOutcome } from '../../src/infrastructure/invocation.js'
-import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.js'
-import { HeadlessPlanAgents } from '../../src/infrastructure/headless-plan-agents.js'
 
 class PluginEnvironment {
   static SCRIPT = join(
@@ -343,14 +341,14 @@ describe('Invocation resolving the plan transport and model', () => {
   })
 
   it('the_headless_transport_is_asked_for_by_its_name', () => {
-    expect(Invoked.withTransport(HeadlessPlanAgents.TRANSPORT).transport).toBe(HeadlessPlanAgents.TRANSPORT)
+    expect(Invoked.withTransport('headless').transport).toBe('headless')
   })
 
   it('a_transport_that_is_neither_of_the_two_refuses_the_invocation_quoting_what_it_got', () => {
     const refused = Invoked.withTransport('bogus')
 
     expect(refused.outcome).toBe(InvocationOutcome.MALFORMED_TRANSPORT)
-    expect(refused.reason).toContain('bogus')
+    expect(refused.reason).toBe('CT_PLAN_TRANSPORT must be cmux or headless, got "bogus"')
   })
 
   it('an_environment_that_names_no_model_asks_for_the_one_the_window_used_to_type', () => {
@@ -365,14 +363,22 @@ describe('Invocation resolving the plan transport and model', () => {
     expect(Invoked.withModel('sonnet').model).toBe('sonnet')
   })
 
+  it('a_bracketed_long_context_model_name_is_accepted_because_it_cannot_be_read_as_another_argument', () => {
+    expect(Invoked.withModel('claude-opus-5[1m]').model).toBe('claude-opus-5[1m]')
+  })
+
   it('a_model_whose_name_could_become_another_argument_refuses_the_invocation', () => {
     const withASpace = Invoked.withModel('claude opus')
     const startingWithADash = Invoked.withModel('-dangerous-flag')
 
     expect(withASpace.outcome).toBe(InvocationOutcome.MALFORMED_MODEL)
-    expect(withASpace.reason).toContain('claude opus')
+    expect(withASpace.reason).toBe(
+      'CT_PLAN_MODEL must not contain whitespace or start with \'-\', so it cannot be read as another argument, got "claude opus"'
+    )
     expect(startingWithADash.outcome).toBe(InvocationOutcome.MALFORMED_MODEL)
-    expect(startingWithADash.reason).toContain('-dangerous-flag')
+    expect(startingWithADash.reason).toBe(
+      'CT_PLAN_MODEL must not contain whitespace or start with \'-\', so it cannot be read as another argument, got "-dangerous-flag"'
+    )
   })
 
   it('a_refused_invocation_carries_no_transport_or_model_a_consumer_could_launch_by_mistake', () => {

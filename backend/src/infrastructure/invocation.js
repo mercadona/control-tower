@@ -30,7 +30,8 @@ export class Invocation {
   static #MAX_PORT = 65535
   static #WHOLE_NUMBER = /^\d+$/
   static #HARVEST_TABLE = /^[A-Za-z0-9][A-Za-z0-9-]*:[A-Za-z0-9_]+\.[A-Za-z0-9_]+$/
-  static #MODEL = /^[A-Za-z0-9][A-Za-z0-9.-]*$/
+  static #MODEL = /^[^\s-]\S*$/
+  static #TRANSPORTS = Object.freeze([CmuxPlanAgents.TRANSPORT, HeadlessPlanAgents.TRANSPORT])
 
   constructor({ outcome, port, stateRoot, harvestTable, transport, model, reason }) {
     this.outcome = outcome
@@ -49,7 +50,7 @@ export class Invocation {
     })
   }
 
-  static #ready(port, stateRoot, harvestTable, transport, model) {
+  static #ready({ port, stateRoot, harvestTable, transport, model }) {
     return new Invocation({
       outcome: InvocationOutcome.READY, port, stateRoot, harvestTable, transport, model, reason: null,
     })
@@ -97,7 +98,7 @@ export class Invocation {
   static #transport(environment) {
     const given = environment[Invocation.TRANSPORT_VARIABLE]
     if (given === undefined || given === '') return CmuxPlanAgents.TRANSPORT
-    if (given !== CmuxPlanAgents.TRANSPORT && given !== HeadlessPlanAgents.TRANSPORT) return null
+    if (!Invocation.#TRANSPORTS.includes(given)) return null
 
     return given
   }
@@ -153,7 +154,7 @@ export class Invocation {
     if (transport === null) {
       return Invocation.#refused(
         InvocationOutcome.MALFORMED_TRANSPORT,
-        `${Invocation.TRANSPORT_VARIABLE} must be ${CmuxPlanAgents.TRANSPORT} or ${HeadlessPlanAgents.TRANSPORT}, got ${JSON.stringify(environment[Invocation.TRANSPORT_VARIABLE])}`
+        `${Invocation.TRANSPORT_VARIABLE} must be ${Invocation.#TRANSPORTS.join(' or ')}, got ${JSON.stringify(environment[Invocation.TRANSPORT_VARIABLE])}`
       )
     }
     const model = Invocation.#model(environment)
@@ -164,6 +165,6 @@ export class Invocation {
       )
     }
 
-    return Invocation.#ready(port, stateRoot, harvestTable, transport, model)
+    return Invocation.#ready({ port, stateRoot, harvestTable, transport, model })
   }
 }
