@@ -296,12 +296,37 @@ serialised.
 | `malformed-repo` | 400 | `repo` is not `owner/name` |
 | `no-live-planning-session` | 400 | no active plan matches that issue **or** its agent handle differs |
 | `implementation-phase-uncertain` | 400 | the backend cannot tell whether implementation already began; a person must look before retrying |
+| `plan-under-review` | 400 | changes were asked for on the plan and it has not been reworked yet |
 | `go-not-recorded` | 400 | the GO marker could not be written |
 | `plan-go-not-answered` | 400 | the GO comment on the issue failed |
 | `plan-agent-not-resumed` | 400 | cmux would not take the line |
 
 `no-live-planning-session` is the one to expect after a backend restart: send the
 `agent` from `/active-plans`, not one the page remembered from an older run.
+
+`plan-under-review` answers two different questions and both refuse. A `-REVIEW`
+comment the review watch has not typed into the agent yet is one: the endpoint
+reads the issue's comments itself so that a comment posted seconds ago cannot be
+dropped by the GO stopping the watch. A plan whose newest `-REVIEW` is newer than
+its last commit is the other: the change reached the agent and the rework is not
+committed. The first goes quiet as soon as the watch sweeps; the second covers
+the minutes that follow, and clears itself when the agent recommits — the same
+signal `/plan-events` reports as `reviewing`.
+
+**A plan already implementing is never asked either question**: it answers its
+usual 202 even while a review is in flight, because the watch is long gone.
+
+The two questions are not independent, and it matters when one fails: reading the
+issue's comments is also what records their dates in the review log the second
+question reads. So a `gh` that refuses leaves the second question answering from
+whatever the last 30-second sweep recorded, not from nothing.
+
+**Half a signal is still a signal.** If one question cannot be answered — `gh`
+refused, or `git` did — the other is still asked, and an answer of "under review"
+still refuses. Only when nothing that could be read says a review is in flight is
+the GO **admitted**, and then the backend warns on stderr that it admitted one
+without being able to read the whole signal. It fails towards what we already
+have instead of towards a plan nobody can ever implement.
 
 ```
 curl -s -X POST -H 'Content-Type: application/json' \

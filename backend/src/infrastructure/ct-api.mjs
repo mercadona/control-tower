@@ -257,8 +257,8 @@ class CtApi {
     })
   }
 
-  static #planEvents(git, log) {
-    const readPlanProgress = new ReadPlanProgress({
+  static #readPlanProgress(git, log) {
+    return new ReadPlanProgress({
       planProgress: new PlanContractProgress({
         node: CtApi.#tool(process.execPath),
         git,
@@ -266,7 +266,9 @@ class CtApi {
       }),
       reviewLog: log,
     })
+  }
 
+  static #planEvents(readPlanProgress) {
     return new PlanEvents({
       read: (session) => readPlanProgress.execute(new ReadPlanProgressParams(session)),
       sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_READS),
@@ -350,6 +352,7 @@ class CtApi {
     })
     const sessions = new PlanSessions()
     const planReviewLog = new MemoryReviewLog()
+    const readPlanProgress = CtApi.#readPlanProgress(git, planReviewLog)
     const reviews = CtApi.#planReviews(planIssues, planAgents, planReviewLog)
     const activePlans = new ActivePlans({ sessions })
     const implementationStarts = new DiskImplementationStartRegistry({
@@ -403,7 +406,8 @@ class CtApi {
         pullRequests,
         planIssues,
       }),
-      planEvents: CtApi.#planEvents(git, planReviewLog),
+      planEvents: CtApi.#planEvents(readPlanProgress),
+      readPlanProgress,
       sessions,
       activePlans,
       externalTools: new SurveyExternalTools({ toolSessions: CtApi.#toolSessions(environment) }),

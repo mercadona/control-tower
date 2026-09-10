@@ -83,6 +83,21 @@ describe('ImplementPlanAction', () => {
     expect(onImplementationStarted).not.toHaveBeenCalled()
   })
 
+  it('should say in Spanish that the plan is being reworked, not repeat the backend sentence', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(ImplementPlanMother.planUnderReview().body, { status: 400 })))
+    const onImplementationStarted = vi.fn()
+    const user = userEvent.setup()
+    render(<ImplementPlanAction plan={ImplementPlanMother.plan()} onImplementationStarted={onImplementationStarted} />)
+
+    await user.click(screen.getByRole('button', IMPLEMENT_BUTTON))
+
+    const said = await screen.findByRole('alert')
+    expect(said).toHaveTextContent('El plan se está rehaciendo con los cambios pedidos')
+    expect(said).not.toHaveTextContent('changes were asked for')
+    expect(screen.getByRole('button', IMPLEMENT_BUTTON)).toBeEnabled()
+    expect(onImplementationStarted).not.toHaveBeenCalled()
+  })
+
   it('should not notify its parent when the backend is unreachable', async () => {
     vi.stubGlobal(
       'fetch',
