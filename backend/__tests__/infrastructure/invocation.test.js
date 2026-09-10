@@ -48,10 +48,6 @@ class Invoked {
     return Invocation.from([], { [Invocation.HARVEST_TABLE_VARIABLE]: given }, Invoked.HOME)
   }
 
-  static withModel(given) {
-    return Invocation.from([], { [Invocation.MODEL_VARIABLE]: given }, Invoked.HOME)
-  }
-
   static harvesting(environment) {
     return Invocation.harvestEnvironment(environment, { ghTimeoutMs: Invoked.SECONDS_FOR_GH * 1000 })
   }
@@ -324,43 +320,5 @@ describe('Invocation resolving the BigQuery harvest table', () => {
     expect(Invoked.withHarvestTable('p:d').outcome).toBe(InvocationOutcome.MALFORMED_HARVEST_TABLE)
     expect(Invoked.withHarvestTable('p.d.t').outcome).toBe(InvocationOutcome.MALFORMED_HARVEST_TABLE)
     expect(Invoked.withHarvestTable('p:d.t extra').outcome).toBe(InvocationOutcome.MALFORMED_HARVEST_TABLE)
-  })
-})
-
-describe('Invocation resolving the plan model', () => {
-  it('an_environment_that_names_no_model_asks_for_the_one_the_window_used_to_type', () => {
-    expect(Invoked.bare().model).toBe('opus')
-  })
-
-  it('a_model_asked_for_as_empty_falls_back_to_the_one_the_window_used_to_type_too', () => {
-    expect(Invoked.withModel('').model).toBe('opus')
-  })
-
-  it('the_model_of_every_headless_call_comes_from_the_environment', () => {
-    expect(Invoked.withModel('sonnet').model).toBe('sonnet')
-  })
-
-  it('a_bracketed_long_context_model_name_is_accepted_because_it_cannot_be_read_as_another_argument', () => {
-    expect(Invoked.withModel('claude-opus-5[1m]').model).toBe('claude-opus-5[1m]')
-  })
-
-  it('a_model_whose_name_could_become_another_argument_refuses_the_invocation', () => {
-    const withASpace = Invoked.withModel('claude opus')
-    const startingWithADash = Invoked.withModel('-dangerous-flag')
-
-    expect(withASpace.outcome).toBe(InvocationOutcome.MALFORMED_MODEL)
-    expect(withASpace.reason).toBe(
-      'CT_PLAN_MODEL must not contain whitespace or start with \'-\', so it cannot be read as another argument, got "claude opus"'
-    )
-    expect(startingWithADash.outcome).toBe(InvocationOutcome.MALFORMED_MODEL)
-    expect(startingWithADash.reason).toBe(
-      'CT_PLAN_MODEL must not contain whitespace or start with \'-\', so it cannot be read as another argument, got "-dangerous-flag"'
-    )
-  })
-
-  it('a_refused_invocation_carries_no_model_a_consumer_could_launch_by_mistake', () => {
-    const refused = Invoked.withPort('abc')
-
-    expect(refused.model).toBe(null)
   })
 })

@@ -51,7 +51,10 @@ class HeadlessAgent {
   static WORKTREE = '/repo/.worktrees/42'
   static ISSUE = new PlanIssue({ number: 42, url: 'https://github.com/owner/name/issues/42' })
   static REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
-  static MODEL = 'opus'
+  static WRITE_PLAN_MODEL = 'fable'
+  static REVIEW_PLAN_MODEL = 'fable'
+  static IMPLEMENT_MODEL = 'sonnet'
+  static FIX_PULL_REQUEST_MODEL = 'sonnet'
   static PLUGIN_ROOT = '/plugin'
   static AGENT = '11111111-2222-3333-4444-555555555555'
   static OTHER_AGENT = '66666666-7777-8888-9999-000000000000'
@@ -221,7 +224,6 @@ class HeadlessAgent {
       clock: () => HeadlessAgent.STARTED_AT,
       brief: this.brief,
       runsIn: HeadlessAgent.RUNS_IN,
-      model: HeadlessAgent.MODEL,
       pluginRoot: HeadlessAgent.PLUGIN_ROOT,
     })
   }
@@ -294,7 +296,7 @@ class HeadlessAgent {
 }
 
 describe('HeadlessPlanAgents', () => {
-  it('the_plan_is_asked_for_with_the_errand_the_brief_composed_and_the_model_it_was_given', async () => {
+  it('the_plan_is_asked_for_with_the_errand_the_brief_composed_and_the_model_its_step_declares', async () => {
     const headless = HeadlessAgent.launching()
 
     await headless.launch()
@@ -303,7 +305,8 @@ describe('HeadlessPlanAgents', () => {
       '-p', BriefDouble.ERRAND,
       '--output-format', 'stream-json', '--verbose',
       '--permission-mode', 'bypassPermissions',
-      '--model', HeadlessAgent.MODEL,
+      '--fallback-model', 'opus',
+      '--model', HeadlessAgent.WRITE_PLAN_MODEL,
       '--plugin-dir', HeadlessAgent.PLUGIN_ROOT,
       '--session-id', HeadlessAgent.AGENT,
     ])
@@ -331,7 +334,7 @@ describe('HeadlessPlanAgents', () => {
       'step', 'agent', 'issue', 'repository', 'model', 'argv', 'pid', 'startedAt',
     ])
     expect(call.step).toBe(HarnessStep.WRITE_PLAN)
-    expect(call.model).toBe(HeadlessAgent.MODEL)
+    expect(call.model).toBe(HeadlessAgent.WRITE_PLAN_MODEL)
     expect(call.agent).toBe(HeadlessAgent.AGENT)
     expect(call.issue).toBe(HeadlessAgent.ISSUE.number)
     expect(call.repository).toBe(HeadlessAgent.REPOSITORY.text)
@@ -544,7 +547,8 @@ describe('HeadlessPlanAgents continuing a conversation', () => {
       '-p', BriefDouble.IMPLEMENTATION_ERRAND,
       '--output-format', 'stream-json', '--verbose',
       '--permission-mode', 'bypassPermissions',
-      '--model', HeadlessAgent.MODEL,
+      '--fallback-model', 'opus',
+      '--model', HeadlessAgent.IMPLEMENT_MODEL,
       '--plugin-dir', HeadlessAgent.PLUGIN_ROOT,
       '--resume', HeadlessAgent.AGENT,
     ])
@@ -577,7 +581,7 @@ describe('HeadlessPlanAgents continuing a conversation', () => {
     expect(call.agent).toBe(HeadlessAgent.AGENT)
     expect(call.issue).toBe(HeadlessAgent.ISSUE_NUMBER)
     expect(call.repository).toBe(HeadlessAgent.REPOSITORY.text)
-    expect(call.model).toBe(HeadlessAgent.MODEL)
+    expect(call.model).toBe(HeadlessAgent.IMPLEMENT_MODEL)
     expect(call.pid).toBe(HeadlessAgent.PID)
     expect(call.startedAt).toBe(HeadlessAgent.STARTED_AT)
     expect(call.argv).toEqual(headless.startCalls[0].argv)
@@ -675,11 +679,39 @@ describe('HeadlessPlanAgents continuing a conversation', () => {
 describe('HeadlessPlanAgents.argvFor', () => {
   it('a_conversation_being_resumed_carries_resume_and_not_a_fresh_session_id', () => {
     const argv = HeadlessPlanAgents.argvFor({
-      errand: 'implementa el plan', model: 'opus', pluginRoot: '/plugin', agent: 'abc', resuming: true,
+      errand: 'implementa el plan', step: HarnessStep.IMPLEMENT, pluginRoot: '/plugin', agent: 'abc', resuming: true,
     })
 
     expect(argv.slice(-2)).toEqual(['--resume', 'abc'])
     expect(argv).not.toContain('--session-id')
+  })
+
+  it('every_call_carries_the_fallback_model_the_cli_uses_when_the_default_is_overloaded_or_not_available', () => {
+    const argv = HeadlessPlanAgents.argvFor({
+      errand: 'implementa el plan', step: HarnessStep.IMPLEMENT, pluginRoot: '/plugin', agent: 'abc', resuming: true,
+    })
+
+    expect(argv).toContain('--fallback-model')
+    expect(argv[argv.indexOf('--fallback-model') + 1]).toBe('opus')
+  })
+
+  it('a_step_no_model_was_declared_for_raises_instead_of_asking_for_undefined', () => {
+    expect(() => HeadlessPlanAgents.argvFor({
+      errand: 'x', step: 'invented-step', pluginRoot: '/plugin', agent: 'abc', resuming: false,
+    })).toThrow(/no model declared for invented-step/)
+  })
+})
+
+describe('HeadlessPlanAgents.MODELS', () => {
+  it('every_member_of_HarnessStep_has_a_model_declared_so_a_fifth_step_could_not_quietly_ask_for_undefined', () => {
+    expect(HeadlessPlanAgents.MODELS.members().sort()).toEqual(Object.values(HarnessStep).sort())
+  })
+
+  it('the_plan_and_its_review_are_asked_of_fable_and_the_implementation_and_its_fixes_of_sonnet', () => {
+    expect(HeadlessPlanAgents.MODELS.of(HarnessStep.WRITE_PLAN)).toBe('fable')
+    expect(HeadlessPlanAgents.MODELS.of(HarnessStep.REVIEW_PLAN)).toBe('fable')
+    expect(HeadlessPlanAgents.MODELS.of(HarnessStep.IMPLEMENT)).toBe('sonnet')
+    expect(HeadlessPlanAgents.MODELS.of(HarnessStep.FIX_PULL_REQUEST)).toBe('sonnet')
   })
 })
 
@@ -722,7 +754,7 @@ describe('HarnessCall', () => {
       agent: HeadlessAgent.AGENT,
       issue: HeadlessAgent.ISSUE,
       repository: HeadlessAgent.REPOSITORY,
-      model: HeadlessAgent.MODEL,
+      model: HeadlessAgent.WRITE_PLAN_MODEL,
       argv: [],
       pid: HeadlessAgent.PID,
       startedAt: HeadlessAgent.STARTED_AT,

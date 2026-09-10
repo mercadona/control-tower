@@ -136,7 +136,7 @@ class Disk {
 
 class CtApi {
   static #USAGE =
-    `usage: ct-api.mjs (no arguments; set ${Invocation.PORT_VARIABLE} to pick a port, 0 for an ephemeral one; set ${Invocation.HARVEST_TABLE_VARIABLE} to ${Invocation.HARVEST_TABLE_SHAPE} so every harvest loads its row into BigQuery; set ${Invocation.MODEL_VARIABLE} to name the model a headless call uses, default ${Invocation.DEFAULT_MODEL})`
+    `usage: ct-api.mjs (no arguments; set ${Invocation.PORT_VARIABLE} to pick a port, 0 for an ephemeral one; set ${Invocation.HARVEST_TABLE_VARIABLE} to ${Invocation.HARVEST_TABLE_SHAPE} so every harvest loads its row into BigQuery)`
   static #BAD_USAGE = 2
   static #CANNOT_LISTEN = 1
   static #PROCESS_TIMEOUT_MS = 30_000
@@ -199,7 +199,7 @@ class CtApi {
     })
   }
 
-  static #headlessAgents(model, environment, stateRoot) {
+  static #headlessAgents(environment, stateRoot) {
     return new HeadlessPlanAgents({
       start: new DetachedRun({
         bin: HeadlessPlanAgents.BIN,
@@ -213,7 +213,6 @@ class CtApi {
       clock: Date.now,
       brief: CtApi.#brief(),
       runsIn: join(stateRoot, CtApi.#HARNESS_DIRECTORY),
-      model,
       pluginRoot: PluginTree.root(),
     })
   }
@@ -331,7 +330,7 @@ class CtApi {
       stderr: (line) => process.stderr.write(line),
       root: asked.stateRoot,
     })
-    const planAgents = CtApi.#headlessAgents(asked.model, environment, asked.stateRoot)
+    const planAgents = CtApi.#headlessAgents(environment, asked.stateRoot)
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
     const planIssues = new GhPlanIssues({
       gh,

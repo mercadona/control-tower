@@ -1,5 +1,6 @@
 import { PlanAgents } from '../domain/ports/plan-agents.js'
 import { PlanAgentNotLaunched, PlanAgentNotNamed, PlanAgentNotResumed } from '../domain/exceptions.js'
+import { Projection } from './projection.js'
 
 export const HarnessStep = Object.freeze({
   WRITE_PLAN: 'write-plan',
@@ -66,20 +67,28 @@ export class HeadlessPlanAgents extends PlanAgents {
   static PRINT = '-p'
   static FORMAT = ['--output-format', 'stream-json', '--verbose']
   static PERMISSION = ['--permission-mode', 'bypassPermissions']
+  static FALLBACK = ['--fallback-model', 'opus']
   static CONVERSATION_FILE = 'conversation.json'
+  static MODELS = new Projection('model', [
+    [HarnessStep.WRITE_PLAN, 'fable'],
+    [HarnessStep.REVIEW_PLAN, 'fable'],
+    [HarnessStep.IMPLEMENT, 'sonnet'],
+    [HarnessStep.FIX_PULL_REQUEST, 'sonnet'],
+  ])
 
-  static argvFor({ errand, model, pluginRoot, agent, resuming }) {
+  static argvFor({ errand, step, pluginRoot, agent, resuming }) {
     return [
       HeadlessPlanAgents.PRINT, errand,
       ...HeadlessPlanAgents.FORMAT,
       ...HeadlessPlanAgents.PERMISSION,
-      '--model', model,
+      ...HeadlessPlanAgents.FALLBACK,
+      '--model', HeadlessPlanAgents.MODELS.of(step),
       '--plugin-dir', pluginRoot,
       ...(resuming ? ['--resume', agent] : ['--session-id', agent]),
     ]
   }
 
-  constructor({ start, makeDirectory, write, read, mint, clock, brief, runsIn, model, pluginRoot }) {
+  constructor({ start, makeDirectory, write, read, mint, clock, brief, runsIn, pluginRoot }) {
     super()
     this.start = start
     this.makeDirectory = makeDirectory
@@ -89,18 +98,17 @@ export class HeadlessPlanAgents extends PlanAgents {
     this.clock = clock
     this.brief = brief
     this.runsIn = runsIn
-    this.model = model
     this.pluginRoot = pluginRoot
   }
 
   async launch(briefing) {
     const agent = this.mint()
     const errand = this.brief.errandFor({ issue: briefing.issue, repository: briefing.repository })
+    const step = HarnessStep.WRITE_PLAN
     const argv = HeadlessPlanAgents.argvFor({
-      errand, model: this.model, pluginRoot: this.pluginRoot, agent, resuming: false,
+      errand, step, pluginRoot: this.pluginRoot, agent, resuming: false,
     })
     const startedAt = this.clock()
-    const step = HarnessStep.WRITE_PLAN
     const { directory, out, err, call } = HarnessCall.pathsFor({
       runsIn: this.runsIn, agent, step, startedAt,
     })
@@ -154,7 +162,7 @@ export class HeadlessPlanAgents extends PlanAgents {
   async #continue({ agent, issue, repository, step, errand }) {
     const cwd = await this.#worktreeOf(agent)
     const argv = HeadlessPlanAgents.argvFor({
-      errand, model: this.model, pluginRoot: this.pluginRoot, agent, resuming: true,
+      errand, step, pluginRoot: this.pluginRoot, agent, resuming: true,
     })
     const startedAt = this.clock()
     const { directory, out, err, call } = HarnessCall.pathsFor({
@@ -220,7 +228,7 @@ export class HeadlessPlanAgents extends PlanAgents {
       agent,
       issue,
       repository,
-      model: this.model,
+      model: HeadlessPlanAgents.MODELS.of(step),
       argv,
       pid: started.pid,
       startedAt,
