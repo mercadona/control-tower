@@ -12,7 +12,7 @@ const REWORKING_MESSAGE = 'Rehaciendo el plan con los cambios pedidos…'
 type PlanProgressProps = {
   plan: StartedPlan
   onReady: () => void
-  onReviewing?: () => void
+  onReviewing: () => void
   observe?: boolean
   writeToClipboard?: (text: string) => Promise<void>
 }
@@ -32,7 +32,7 @@ const PlanProgress = ({
   }, [onReady, progress.phase])
 
   useEffect(() => {
-    if (progress.phase === 'reviewing') onReviewing?.()
+    if (progress.phase === 'reviewing') onReviewing()
   }, [onReviewing, progress.phase])
 
   const copyFacts = async () => {
