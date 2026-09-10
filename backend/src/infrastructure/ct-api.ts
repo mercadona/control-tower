@@ -50,37 +50,43 @@ import { RetryPolicy, RetryBudget } from '../domain/policies/retry-policy.ts'
 import { LaunchPolicy, LaunchBudget } from '../domain/policies/launch-policy.ts'
 import { Invocation, InvocationOutcome } from './invocation.ts'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
+import type { ProcessOutput } from './tool-runner.ts'
+import type { ToolLaunch, ToolSleep } from './external-tool.ts'
+
+type LaunchTool = (argv: string[], options?: { cwd?: string }) => Promise<ProcessOutput>
+
+type ToolCollaborators = { launch: ToolLaunch, policy: RetryPolicy, sleep: ToolSleep }
 
 class FrontendBuild {
-  static #HERE = dirname(fileURLToPath(import.meta.url))
+  static readonly #HERE = dirname(fileURLToPath(import.meta.url))
 
-  static root() {
+  static root(): string {
     return join(FrontendBuild.#HERE, '..', '..', '..', 'frontend', 'dist')
   }
 }
 
 class PluginTree {
-  static #HERE = dirname(fileURLToPath(import.meta.url))
+  static readonly #HERE = dirname(fileURLToPath(import.meta.url))
 
-  static #root() {
+  static #root(): string {
     return join(PluginTree.#HERE, '..', '..', '..', 'plugin')
   }
 
-  static dispatchCheck() {
+  static dispatchCheck(): string {
     return join(PluginTree.#root(), 'scripts', 'dispatch-check.mjs')
   }
 
-  static conventions() {
+  static conventions(): string {
     return join(PluginTree.#root(), 'conventions')
   }
 
-  static ctStep() {
+  static ctStep(): string {
     return join(PluginTree.#root(), 'scripts', 'ct-step.mjs')
   }
 }
 
 class Disk {
-  static realpathOf(path) {
+  static realpathOf(path: string): string | null {
     try {
       return realpathSync(path)
     } catch {
@@ -88,12 +94,12 @@ class Disk {
     }
   }
 
-  static async write(path, text) {
+  static async write(path: string, text: string): Promise<void> {
     await mkdir(dirname(path), { recursive: true })
     await writeFile(path, text)
   }
 
-  static async atomicWrite(path, text) {
+  static async atomicWrite(path: string, text: string): Promise<void> {
     await mkdir(dirname(path), { recursive: true })
     const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`
     try {
@@ -104,16 +110,22 @@ class Disk {
     }
   }
 
-  static async read(path) {
+  static async read(path: string): Promise<string | null> {
     try {
       return await readFile(path, 'utf8')
     } catch (failure) {
-      if (failure.code === 'ENOENT') return null
+      if (Disk.#isMissing(failure)) return null
       throw failure
     }
   }
 
-  static atomicWriteSync(path, text) {
+  static #isMissing(failure: unknown): boolean {
+    const errno: NodeJS.ErrnoException | null = failure instanceof Error ? failure : null
+
+    return errno?.code === 'ENOENT'
+  }
+
+  static atomicWriteSync(path: string, text: string): void {
     mkdirSync(dirname(path), { recursive: true })
     const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`
     try {
@@ -124,11 +136,11 @@ class Disk {
     }
   }
 
-  static async remove(path) {
+  static async remove(path: string): Promise<void> {
     await rm(path, { force: true })
   }
 
-  static async exists(path) {
+  static async exists(path: string): Promise<boolean> {
     try {
       await stat(path)
       return true
@@ -139,48 +151,51 @@ class Disk {
 }
 
 class CtApi {
-  static #USAGE =
+  static readonly #USAGE =
     `usage: ct-api.mjs (no arguments; set ${Invocation.PORT_VARIABLE} to pick a port, 0 for an ephemeral one; set ${Invocation.HARVEST_TABLE_VARIABLE} to ${Invocation.HARVEST_TABLE_SHAPE} so every harvest loads its row into BigQuery)`
-  static #BAD_USAGE = 2
-  static #CANNOT_LISTEN = 1
-  static #PROCESS_TIMEOUT_MS = 30_000
-  static #HARVEST_TIMEOUT_MS = 6 * 60 * 1000
-  static #BASELINE_TIMEOUT_MS = 10 * 60 * 1000
-  static #SHELL = 'sh'
-  static #SECONDS_FOR_GH_IN_A_HARVEST = 60
-  static #SECONDS_BETWEEN_SWEEPS = 60
-  static #CLOCK_STOPPED = 1
-  static #RETRIES = 3
-  static #SECONDS_BETWEEN_RETRIES = 2
-  static #PROBES_PER_SEND = 20
-  static #RESENDS = 1
-  static #SECONDS_BETWEEN_PROBES = 1
-  static #SECONDS_BETWEEN_READS = 2
-  static #SECONDS_BETWEEN_ASKS = 30
-  static #LAUNCH_DIRECTORY = 'ct-plan'
+  static readonly #BAD_USAGE = 2
+  static readonly #CANNOT_LISTEN = 1
+  static readonly #PROCESS_TIMEOUT_MS = 30_000
+  static readonly #HARVEST_TIMEOUT_MS = 6 * 60 * 1000
+  static readonly #BASELINE_TIMEOUT_MS = 10 * 60 * 1000
+  static readonly #SHELL = 'sh'
+  static readonly #SECONDS_FOR_GH_IN_A_HARVEST = 60
+  static readonly #SECONDS_BETWEEN_SWEEPS = 60
+  static readonly #CLOCK_STOPPED = 1
+  static readonly #RETRIES = 3
+  static readonly #SECONDS_BETWEEN_RETRIES = 2
+  static readonly #PROBES_PER_SEND = 20
+  static readonly #RESENDS = 1
+  static readonly #SECONDS_BETWEEN_PROBES = 1
+  static readonly #SECONDS_BETWEEN_READS = 2
+  static readonly #SECONDS_BETWEEN_ASKS = 30
+  static readonly #LAUNCH_DIRECTORY = 'ct-plan'
 
-  static #refuseUsage(reason) {
+  static #refuseUsage(reason: string | null): never {
     process.stderr.write(`${reason}\n${CtApi.#USAGE}\n`)
     process.exit(CtApi.#BAD_USAGE)
   }
 
-  static #refuseListen(reason) {
+  static #refuseListen(reason: string): never {
     process.stderr.write(`${reason}\n`)
     process.exit(CtApi.#CANNOT_LISTEN)
   }
 
-  static #tool(bin, { budgetMs = CtApi.#PROCESS_TIMEOUT_MS, env } = {}) {
+  static #tool(
+    bin: string,
+    { budgetMs = CtApi.#PROCESS_TIMEOUT_MS, env }: { budgetMs?: number, env?: NodeJS.ProcessEnv } = {}
+  ): LaunchTool {
     const runner = new ToolRunner({ bin, budgetMs, env })
     return (argv, options) => runner.run(argv, options)
   }
 
-  static #baseline() {
+  static #baseline(): Baseline {
     const shell = CtApi.#tool(CtApi.#SHELL, { budgetMs: CtApi.#BASELINE_TIMEOUT_MS })
 
-    return new Baseline({ run: (command, cwd) => shell(['-c', command], { cwd }) })
+    return new Baseline({ run: (command: string, cwd: string) => shell(['-c', command], { cwd }) })
   }
 
-  static #talkingTo(bin, Tool) {
+  static #talkingTo<T>(bin: string, Tool: new (collaborators: ToolCollaborators) => T): T {
     return new Tool({
       launch: CtApi.#tool(bin),
       policy: new RetryPolicy({
@@ -193,11 +208,17 @@ class CtApi {
     })
   }
 
-  static #waiting(seconds) {
+  static #waiting(seconds: number): Promise<void> {
     return after(seconds * 1000)
   }
 
-  static #startPlan(workspace, planAgents, planIssues, checkouts, gh) {
+  static #startPlan(
+    workspace: GitWorkspace,
+    planAgents: CmuxPlanAgents,
+    planIssues: GhPlanIssues,
+    checkouts: DiskCheckoutRegistry,
+    gh: Gh
+  ): StartPlan {
     return new StartPlan({
       userStories: new ReferredUserStories({
         jira: new AcliUserStories({ acli: CtApi.#talkingTo(AcliUserStories.BIN, ExternalTool) }),
@@ -214,9 +235,11 @@ class CtApi {
     return CmuxWorkspaceQuery.ask({ requireComplete: true })
   }
 
-  static #toolSessions(environment) {
+  static #toolSessions(environment: NodeJS.ProcessEnv): ProbedToolSessions {
     const probes = ProbedToolSessions.PROBES.map((row) => row.probe).filter((probe) => probe !== null)
-    const clients = Object.fromEntries(probes.map((bin) => [bin, CtApi.#talkingTo(bin, ExternalTool)]))
+    const clients = Object.fromEntries(
+      probes.map((bin): [string, ExternalTool] => [bin, CtApi.#talkingTo(bin, ExternalTool)])
+    )
 
     return new ProbedToolSessions({
       clients,
@@ -225,7 +248,12 @@ class CtApi {
     })
   }
 
-  static #harvestClock({ workspace, checkouts, environment, harvestTable }) {
+  static #harvestClock({ workspace, checkouts, environment, harvestTable }: {
+    workspace: GitWorkspace,
+    checkouts: DiskCheckoutRegistry,
+    environment: NodeJS.ProcessEnv,
+    harvestTable: string | null,
+  }): HarvestClock {
     const surveyWorkspaces = new SurveyWorkspaces({ workspace })
     const harvestDelivery = new HarvestDelivery({
       harvest: new DispatchCheckHarvest({
@@ -250,14 +278,14 @@ class CtApi {
     })
   }
 
-  static #sweepUntilItBreaks(clock) {
+  static #sweepUntilItBreaks(clock: HarvestClock): void {
     clock.start().catch((failure) => {
       process.stderr.write(`harvest sweep: the clock stopped sweeping and nothing else will: ${failure.stack}\n`)
       process.exit(CtApi.#CLOCK_STOPPED)
     })
   }
 
-  static #readPlanProgress(git, log) {
+  static #readPlanProgress(git: LaunchTool, log: MemoryReviewLog): ReadPlanProgress {
     return new ReadPlanProgress({
       planProgress: new PlanContractProgress({
         node: CtApi.#tool(process.execPath),
@@ -268,14 +296,14 @@ class CtApi {
     })
   }
 
-  static #planEvents(readPlanProgress) {
+  static #planEvents(readPlanProgress: ReadPlanProgress): PlanEvents {
     return new PlanEvents({
       read: (session) => readPlanProgress.execute(new ReadPlanProgressParams(session)),
       sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_READS),
     })
   }
 
-  static #planReviews(planIssues, planAgents, log) {
+  static #planReviews(planIssues: GhPlanIssues, planAgents: CmuxPlanAgents, log: MemoryReviewLog): ReviewWatch {
     const readChangesAsked = new ReadChangesAsked({ planIssues })
     const reviewPlan = new ReviewPlan({ planAgents })
 
@@ -289,7 +317,12 @@ class CtApi {
     })
   }
 
-  static #pullRequestReviews(pullRequests, planIssues, planAgents, workbench) {
+  static #pullRequestReviews(
+    pullRequests: GhPullRequests,
+    planIssues: GhPlanIssues,
+    planAgents: CmuxPlanAgents,
+    workbench: DispatchCheckWorkbench
+  ): ReviewWatch {
     const readFixesAsked = new ReadFixesAsked({ pullRequests, planIssues })
     const requestFixes = new RequestFixes({ workbench, planAgents })
 
@@ -303,9 +336,13 @@ class CtApi {
     })
   }
 
-  static async run(argv, environment) {
+  static #messageOf(failure: unknown): string {
+    return failure instanceof Error ? failure.message : String(failure)
+  }
+
+  static async run(argv: string[], environment: NodeJS.ProcessEnv): Promise<void> {
     const asked = Invocation.from(argv, environment, homedir())
-    if (asked.outcome !== InvocationOutcome.READY) {
+    if (asked.outcome !== InvocationOutcome.READY || asked.port === null || asked.stateRoot === null) {
       CtApi.#refuseUsage(asked.reason)
     }
     const git = CtApi.#tool(GitWorkspace.BIN)
@@ -416,11 +453,11 @@ class CtApi {
       stderr: (line) => process.stderr.write(line),
       frontendRoot: FrontendBuild.root(),
     })
-    let port
+    let port: number
     try {
       port = await server.start()
     } catch (error) {
-      CtApi.#refuseListen(`could not listen on ${LOOPBACK}: ${error.message}`)
+      CtApi.#refuseListen(`could not listen on ${LOOPBACK}: ${CtApi.#messageOf(error)}`)
     }
     process.stdout.write(`${JSON.stringify({ port })}\n`)
     await recovery.recover()

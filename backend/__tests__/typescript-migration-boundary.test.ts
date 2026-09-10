@@ -80,7 +80,7 @@ describe('no new JavaScript is born in the backend while it migrates to TypeScri
     const present = MigrationBoundary.present()
 
     expect(present).toContain('__tests__/conventions-no-restatement.test.js')
-    expect(present).toContain('src/infrastructure/ct-api.mjs')
+    expect(present).toContain('__tests__/infrastructure/no-window-titles-parsed.test.js')
     expect(present).toContain('__tests__/yardstick.js')
     expect(present).not.toContain('__tests__/typescript-migration-boundary.test.ts')
   })
