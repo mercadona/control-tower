@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { SLICE_REL_PATH } from '../../../plugin/scripts/state-paths.js'
-import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.js'
+import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
+import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PluginYardstick } from '../../../plugin/scripts/plugin-yardstick.js'
 import { PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.js'
 
@@ -10,7 +11,10 @@ describe('PlanAgentBrief', () => {
     dispatchCheck: '/plugin/scripts/dispatch-check.mjs',
     conventions: '/plugin/conventions',
     ctStep: '/plugin/scripts/ct-step.mjs',
-  }).errandFor({ issue: { number: 42 }, repository: new RepositoryName('owner/name') })
+  }).errandFor({
+    issue: new PlanIssue({ number: 42, url: 'https://github.com/owner/name/issues/42' }),
+    repository: new RepositoryName('owner/name'),
+  })
 
   it('it_points_at_the_baseline_already_measured_in_the_state_file_instead_of_ordering_one', () => {
     expect(errand()).toMatch(/baseline/)

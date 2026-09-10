@@ -3,9 +3,11 @@ import {
   buildLauncherScript, buildTypedCommand, LAUNCHER_FILENAME, SENTINEL_FILENAME,
 } from '../../../plugin/scripts/launch-sentinel.js'
 import { shQuote } from '../../../plugin/scripts/shquote.js'
-import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.js'
+import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.ts'
+import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { LaunchPolicy, LaunchBudget, LaunchStep } from '../../src/domain/policies/launch-policy.ts'
+import type { LaunchStepValue } from '../../src/domain/policies/launch-policy.ts'
 import { PlanBriefing } from '../../src/domain/value-objects/plan-briefing.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
@@ -16,15 +18,79 @@ import {
   PlanAgentNotLaunched, PlanAgentNotNamed, PlanAgentNotResumed, PlanAgentFailure,
 } from '../../src/domain/exceptions.ts'
 
-class BriefDouble {
+class BriefPaths {
+  static readonly DISPATCH_CHECK = '/plugin/scripts/dispatch-check.mjs'
+  static readonly CONVENTIONS = '/plugin/conventions'
+  static readonly CT_STEP = '/plugin/scripts/ct-step.mjs'
+
+  static composed() {
+    return {
+      dispatchCheck: BriefPaths.DISPATCH_CHECK,
+      conventions: BriefPaths.CONVENTIONS,
+      ctStep: BriefPaths.CT_STEP,
+    }
+  }
+}
+
+class LaunchErrands {
+  readonly asked: { issue: PlanIssue, repository: RepositoryName }[]
+
   constructor() {
     this.asked = []
   }
 
-  errandFor({ issue, repository }) {
-    this.asked.push({ issue, repository })
+  composing(): PlanAgentBrief {
+    const asked = this.asked
 
-    return `escribe el plan de #${issue.number} en ${repository.text}`
+    class Composing extends PlanAgentBrief {
+      errandFor({ issue, repository }: { issue: PlanIssue, repository: RepositoryName }): string {
+        asked.push({ issue, repository })
+
+        return `escribe el plan de #${issue.number} en ${repository.text}`
+      }
+    }
+
+    return new Composing(BriefPaths.composed())
+  }
+}
+
+class PolicyDouble {
+  static answering(step: LaunchStepValue): LaunchPolicy {
+    class Answering extends LaunchPolicy {
+      afterProbing(): LaunchStepValue {
+        return step
+      }
+    }
+
+    return new Answering({ budget: new LaunchBudget({ attempts: 1, resends: 0 }) })
+  }
+}
+
+class Untouched {
+  static readonly RUNS_IN = '/tmp/ct-plan'
+
+  static write(path: string): Promise<void> {
+    throw new Error(`resuming an agent writes no launcher, it was asked to write ${path}`)
+  }
+
+  static read(path: string): Promise<string | null> {
+    throw new Error(`resuming an agent reads no sentinel, it was asked to read ${path}`)
+  }
+
+  static remove(path: string): Promise<void> {
+    throw new Error(`resuming an agent removes no sentinel, it was asked to remove ${path}`)
+  }
+
+  static sleep(): Promise<void> {
+    throw new Error('resuming an agent waits for no sentinel')
+  }
+
+  static realpathOf(path: string): string | null {
+    throw new Error(`resuming an agent resolves no directory, it was asked for ${path}`)
+  }
+
+  static policy(): LaunchPolicy {
+    return PolicyDouble.answering(LaunchStep.GIVE_UP)
   }
 }
 
@@ -44,6 +110,7 @@ class CmuxDouble {
   static NO_STORY_DIRECTORY = `${CmuxDouble.REPOSITORY_SLUG}-7`
   static PROBES_PER_SEND = 2
   static RESENDS = 1
+  static UNDECLARED_STEP = 'invented' as LaunchStepValue
   static DIRECTORY = `${CmuxDouble.REPOSITORY_SLUG}-42`
   static LAUNCHER = `${CmuxDouble.RUNS_IN}/${CmuxDouble.DIRECTORY}/${LAUNCHER_FILENAME}`
   static SENTINEL = `${CmuxDouble.RUNS_IN}/${CmuxDouble.DIRECTORY}/${SENTINEL_FILENAME}`
@@ -51,12 +118,30 @@ class CmuxDouble {
   static NO_STORY_LAUNCHER = `${CmuxDouble.RUNS_IN}/${CmuxDouble.NO_STORY_DIRECTORY}/${LAUNCHER_FILENAME}`
   static NO_STORY_TYPED = buildTypedCommand(CmuxDouble.NO_STORY_LAUNCHER, shQuote)
 
-  constructor({ printed, sentinels, realpaths = new Map(), step = null }) {
+  readonly printed: ProcessOutput
+  readonly sentinels: (string | null)[]
+  readonly realpaths: Map<string, string>
+  step: LaunchStepValue | null
+  readonly errands: LaunchErrands
+  readonly brief: PlanAgentBrief
+  readonly calls: string[][]
+  readonly written: [string, string][]
+  readonly removed: string[]
+  readonly doings: [string, string][]
+  slept: number
+
+  constructor({ printed, sentinels, realpaths = new Map(), step = null }: {
+    printed: ProcessOutput,
+    sentinels: (string | null)[],
+    realpaths?: Map<string, string>,
+    step?: LaunchStepValue | null,
+  }) {
     this.printed = printed
     this.sentinels = [...sentinels]
     this.realpaths = realpaths
     this.step = step
-    this.brief = new BriefDouble()
+    this.errands = new LaunchErrands()
+    this.brief = this.errands.composing()
     this.calls = []
     this.written = []
     this.removed = []
@@ -84,7 +169,7 @@ class CmuxDouble {
     return new CmuxDouble({ printed: CmuxDouble.named(), sentinels: [CmuxDouble.ran()] })
   }
 
-  onlyEverAnswering(step) {
+  onlyEverAnswering(step: LaunchStepValue) {
     this.step = step
 
     return this
@@ -123,14 +208,14 @@ class CmuxDouble {
     })
   }
 
-  static refusing(said) {
+  static refusing(said: string) {
     return new CmuxDouble({
       printed: new ProcessOutput({ code: 1, stdout: '', stderr: said }),
       sentinels: [],
     })
   }
 
-  static printing(said) {
+  static printing(said: string) {
     return new CmuxDouble({
       printed: new ProcessOutput({ code: 0, stdout: said, stderr: '' }),
       sentinels: [CmuxDouble.ran()],
@@ -176,7 +261,7 @@ class CmuxDouble {
             resends: CmuxDouble.RESENDS,
           }),
         })
-        : { afterProbing: () => this.step },
+        : PolicyDouble.answering(this.step),
       remove: (path) => {
         this.removed.push(path)
         this.doings.push(['remove', path])
@@ -191,7 +276,7 @@ class CmuxDouble {
         if (this.sentinels.length === 0) {
           throw new Error('the sentinel was read more times than this test scripted an answer for')
         }
-        return Promise.resolve(this.sentinels.shift())
+        return Promise.resolve(this.sentinels.shift() ?? null)
       },
       sleep: () => {
         this.slept += 1
@@ -324,7 +409,7 @@ describe('CmuxPlanAgents', () => {
 
     await cmux.launch()
 
-    expect(cmux.brief.asked).toEqual([
+    expect(cmux.errands.asked).toEqual([
       { issue: CmuxDouble.ISSUE, repository: CmuxDouble.REPOSITORY },
     ])
     expect(cmux.written[0][1]).toContain(`claude --model opus ${shQuote(CmuxDouble.ERRAND)}`)
@@ -436,7 +521,7 @@ describe('CmuxPlanAgents', () => {
   })
 
   it('a_launch_step_nobody_declared_a_move_for_raises_instead_of_being_taken_for_keep_probing', async () => {
-    const refusal = await CmuxDouble.silent().onlyEverAnswering('invented').refusal()
+    const refusal = await CmuxDouble.silent().onlyEverAnswering(CmuxDouble.UNDECLARED_STEP).refusal()
 
     expect(refusal.message).toContain(CmuxPlanAgents.NO_MOVE)
   })
@@ -463,6 +548,55 @@ describe('LaunchPolicy', () => {
   })
 })
 
+class ResumeErrands {
+  readonly asked: { issueNumber: number }[]
+  readonly reviewed: { issueNumber: number, repository: RepositoryName, changes: string }[]
+  readonly fixed: { issueNumber: number, repository: RepositoryName, changes: string }[]
+
+  constructor() {
+    this.asked = []
+    this.reviewed = []
+    this.fixed = []
+  }
+
+  composing(): PlanAgentBrief {
+    const { asked, reviewed, fixed } = this
+
+    class Composing extends PlanAgentBrief {
+      implementationErrandFor({ issueNumber }: {
+        issueNumber: number,
+        repository: RepositoryName,
+      }): string {
+        asked.push({ issueNumber })
+
+        return ResumeDouble.ERRAND
+      }
+
+      reviewErrandFor({ issueNumber, repository, changes }: {
+        issueNumber: number,
+        repository: RepositoryName,
+        changes: string,
+      }): string {
+        reviewed.push({ issueNumber, repository, changes })
+
+        return ResumeDouble.REVIEW_ERRAND
+      }
+
+      fixErrandFor({ issueNumber, repository, changes }: {
+        issueNumber: number,
+        repository: RepositoryName,
+        changes: string,
+      }): string {
+        fixed.push({ issueNumber, repository, changes })
+
+        return ResumeDouble.FIX_ERRAND
+      }
+    }
+
+    return new Composing(BriefPaths.composed())
+  }
+}
+
 class ResumeDouble {
   static AGENT = 'workspace:20'
   static ISSUE = 42
@@ -473,29 +607,16 @@ class ResumeDouble {
   static FIX_ERRAND = 'corrige la pull request de #42'
   static FIXES = 'src/foo.js:42: revienta con []'
 
-  constructor(answers) {
+  readonly answers: ProcessOutput[]
+  readonly calls: string[][]
+  readonly errands: ResumeErrands
+  readonly brief: PlanAgentBrief
+
+  constructor(answers: ProcessOutput[]) {
     this.answers = answers
     this.calls = []
-    this.brief = {
-      asked: [],
-      reviewed: [],
-      fixed: [],
-      implementationErrandFor: ({ issueNumber }) => {
-        this.brief.asked.push({ issueNumber })
-
-        return ResumeDouble.ERRAND
-      },
-      reviewErrandFor: ({ issueNumber, repository, changes }) => {
-        this.brief.reviewed.push({ issueNumber, repository, changes })
-
-        return ResumeDouble.REVIEW_ERRAND
-      },
-      fixErrandFor: ({ issueNumber, repository, changes }) => {
-        this.brief.fixed.push({ issueNumber, repository, changes })
-
-        return ResumeDouble.FIX_ERRAND
-      },
-    }
+    this.errands = new ResumeErrands()
+    this.brief = this.errands.composing()
   }
 
   static accepting() {
@@ -505,11 +626,11 @@ class ResumeDouble {
     ])
   }
 
-  static refusing(said) {
+  static refusing(said: string) {
     return new ResumeDouble([new ProcessOutput({ code: 1, stdout: '', stderr: said })])
   }
 
-  static refusingTheEnter(said) {
+  static refusingTheEnter(said: string) {
     return new ResumeDouble([
       new ProcessOutput({ code: 0, stdout: '', stderr: '' }),
       new ProcessOutput({ code: 1, stdout: '', stderr: said }),
@@ -519,6 +640,13 @@ class ResumeDouble {
   agents() {
     return new CmuxPlanAgents({
       brief: this.brief,
+      write: Untouched.write,
+      read: Untouched.read,
+      remove: Untouched.remove,
+      sleep: Untouched.sleep,
+      realpathOf: Untouched.realpathOf,
+      runsIn: Untouched.RUNS_IN,
+      policy: Untouched.policy(),
       run: (argv) => {
         this.calls.push(argv)
         const answer = this.answers[this.calls.length - 1]
@@ -532,7 +660,11 @@ class ResumeDouble {
   }
 
   async resume() {
-    return this.agents().resume({ agent: ResumeDouble.AGENT, issue: ResumeDouble.ISSUE })
+    return this.agents().resume({
+      agent: ResumeDouble.AGENT,
+      issue: ResumeDouble.ISSUE,
+      repository: ResumeDouble.REPOSITORY,
+    })
   }
 
   async refusal() {
@@ -583,7 +715,7 @@ describe('CmuxPlanAgents resuming a parked agent', () => {
 
     await cmux.resume()
 
-    expect(cmux.brief.asked).toEqual([{ issueNumber: ResumeDouble.ISSUE }])
+    expect(cmux.errands.asked).toEqual([{ issueNumber: ResumeDouble.ISSUE }])
   })
 
   it('a_cmux_that_refuses_to_write_arrives_typed_so_the_boundary_can_tell_it_from_a_crash', async () => {
@@ -619,7 +751,7 @@ describe('CmuxPlanAgents asking a parked agent for changes', () => {
 
     await cmux.review()
 
-    expect(cmux.brief.reviewed).toEqual([{
+    expect(cmux.errands.reviewed).toEqual([{
       issueNumber: ResumeDouble.ISSUE,
       repository: ResumeDouble.REPOSITORY,
       changes: ResumeDouble.CHANGES,
@@ -651,7 +783,7 @@ describe('CmuxPlanAgents typing the fixes of a pull request', () => {
 
     await cmux.fix()
 
-    expect(cmux.brief.fixed).toEqual([{
+    expect(cmux.errands.fixed).toEqual([{
       issueNumber: ResumeDouble.ISSUE,
       repository: ResumeDouble.REPOSITORY,
       changes: ResumeDouble.FIXES,

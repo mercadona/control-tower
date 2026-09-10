@@ -1,21 +1,31 @@
 import { SLICE_REL_PATH } from '../../../plugin/scripts/state-paths.js'
 import { PluginYardstick } from '../../../plugin/scripts/plugin-yardstick.js'
 import { PlanIssueBody } from './gh-plan-issues.js'
+import type { PlanIssue } from '../domain/value-objects/plan-issue.ts'
+import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
 export class PlanAgentBrief {
-  static NO_NEW_WORKTREES = 'no crees worktrees nuevos'
-  static WHITESPACE = /\s+/g
-  static EPIC_CONTEXT = 'Contexto del epic'
-  static INHERITED_CONTEXT = 'Contexto heredado'
+  static readonly NO_NEW_WORKTREES = 'no crees worktrees nuevos'
+  static readonly WHITESPACE = /\s+/g
+  static readonly EPIC_CONTEXT = 'Contexto del epic'
+  static readonly INHERITED_CONTEXT = 'Contexto heredado'
 
-  constructor({ dispatchCheck, conventions, ctStep }) {
+  readonly dispatchCheck: string
+  readonly conventions: string
+  readonly ctStep: string
+
+  constructor({ dispatchCheck, conventions, ctStep }: {
+    dispatchCheck: string,
+    conventions: string,
+    ctStep: string,
+  }) {
     this.dispatchCheck = dispatchCheck
     this.conventions = conventions
     this.ctStep = ctStep
     Object.freeze(this)
   }
 
-  errandFor({ issue, repository }) {
+  errandFor({ issue, repository }: { issue: PlanIssue, repository: RepositoryName }): string {
     const dispatchCheck = this.dispatchCheck
     const conventions = this.conventions
     const named = repository.text
@@ -39,7 +49,11 @@ export class PlanAgentBrief {
     ].join('\n')
   }
 
-  reviewErrandFor({ issueNumber, repository, changes }) {
+  reviewErrandFor({ issueNumber, repository, changes }: {
+    issueNumber: number,
+    repository: RepositoryName,
+    changes: string,
+  }): string {
     const dispatchCheck = this.dispatchCheck
     const named = repository.text
 
@@ -55,7 +69,10 @@ export class PlanAgentBrief {
     ].join(' ')
   }
 
-  implementationErrandFor({ issueNumber, repository }) {
+  implementationErrandFor({ issueNumber, repository }: {
+    issueNumber: number,
+    repository: RepositoryName,
+  }): string {
     const ctStep = this.ctStep
     const dispatchCheck = this.dispatchCheck
 
@@ -71,7 +88,11 @@ export class PlanAgentBrief {
     ].join(' ')
   }
 
-  fixErrandFor({ issueNumber, repository, changes }) {
+  fixErrandFor({ issueNumber, repository, changes }: {
+    issueNumber: number,
+    repository: RepositoryName,
+    changes: string,
+  }): string {
     const dispatchCheck = this.dispatchCheck
     const named = repository.text
 
