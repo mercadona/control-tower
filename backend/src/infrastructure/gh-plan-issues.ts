@@ -27,7 +27,7 @@ import {
   PlanChangesNotRead, PlanChangesNotUnderstood, PlanChangesNotAsked, PlanStoryNotRead, PlanStoryNotUnderstood,
 } from '../domain/exceptions.ts'
 import { Gh } from './gh.ts'
-import { Projection } from './projection.js'
+import { Projection } from './projection.ts'
 
 type PlanIssueRow = {
   n: null,

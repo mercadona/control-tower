@@ -1,4 +1,4 @@
-import { Answer } from './http.js'
+import { Answer } from './http.ts'
 
 export class ExternalToolsRoute {
   static PATH = '/external-tools'

@@ -1,5 +1,5 @@
 import { HarvestOutcome } from '../domain/value-objects/harvest-outcome.ts'
-import { Projection } from './projection.js'
+import { Projection } from './projection.ts'
 import { HarvestNotRead, HarvestNotUnderstood, PlanFailure } from '../domain/exceptions.ts'
 
 export class SweepLine {

@@ -1,4 +1,4 @@
-import { Answer } from './http.js'
+import { Answer } from './http.ts'
 
 export const ActivePlanPhase = Object.freeze({
   PLANNING: 'planning',

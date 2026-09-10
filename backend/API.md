@@ -621,7 +621,7 @@ answering the page's HTML.
 | Concern | File |
 |---|---|
 | One endpoint's request, refusals and answer | `backend/src/infrastructure/<endpoint>-route.js` |
-| Mounting, the origin filter, the body limit, the last net | `backend/src/infrastructure/api-server.js`, `http.js` |
+| Mounting, the origin filter, the body limit, the last net | `backend/src/infrastructure/api-server.js`, `http.ts` |
 | The `{code, detail}` doctrine | `backend/conventions/this-repository.md` |
 | That two endpoints never share a `code` by accident | `backend/__tests__/infrastructure/refusal-codes.test.js` |
 | The step and phase vocabularies | `domain/value-objects/implementation-state.ts`, `infrastructure/active-plans-route.js` |

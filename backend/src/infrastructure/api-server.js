@@ -1,7 +1,7 @@
 import express from 'express'
 import { existsSync } from 'node:fs'
 import { createServer } from 'node:http'
-import { Answer, Route, Browsers, JsonBody } from './http.js'
+import { Answer, Route, Browsers, JsonBody } from './http.ts'
 import { StartPlanRoute } from './start-plan-route.js'
 import { ImplementPlanRoute } from './implement-plan-route.js'
 import { ReviewPlanRoute } from './review-plan-route.js'

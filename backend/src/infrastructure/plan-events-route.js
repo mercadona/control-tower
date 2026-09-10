@@ -1,5 +1,5 @@
-import { Answer, Refusal } from './http.js'
-import { Projection } from './projection.js'
+import { Answer, Refusal } from './http.ts'
+import { Projection } from './projection.ts'
 import { PlanFailure } from '../domain/exceptions.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
