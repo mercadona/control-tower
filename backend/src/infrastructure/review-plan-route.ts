@@ -4,6 +4,8 @@ import { Projection } from './projection.ts'
 import { AskPlanChangesParams } from '../application/actions/ask-plan-changes.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { PlanChangesFailure } from '../domain/exceptions.ts'
+import type { Request, Response } from 'express'
+import type { ActivePlans } from './active-plans-route.js'
 
 export const ReviewRequestOutcome = Object.freeze({
   ACCEPTED: 'accepted',
@@ -15,18 +17,40 @@ export const ReviewRequestOutcome = Object.freeze({
   NO_LIVE_SESSION: 'no-live-planning-session',
   ALREADY_IMPLEMENTING: 'plan-already-being-implemented',
   UNCERTAIN_PHASE: 'implementation-phase-uncertain',
-})
+} as const)
+
+export type ReviewRequestOutcome = typeof ReviewRequestOutcome[keyof typeof ReviewRequestOutcome]
+
+export type AskPlanChangesAction = { execute(params: AskPlanChangesParams): Promise<void> }
+
+type AcceptedReviewRequest = ReviewRequest & {
+  readonly issue: number,
+  readonly repository: RepositoryName,
+  readonly changes: string,
+}
 
 class ReviewRequest {
-  static ISSUE_FIELD = 'issue'
-  static REPO_FIELD = 'repo'
-  static CHANGES_FIELD = 'changes'
-  static #FORBIDDEN_CONTROL = /[^\P{Cc}\n\r\t]/u
-  static KNOWN_FIELDS = Object.freeze([
+  static readonly ISSUE_FIELD = 'issue'
+  static readonly REPO_FIELD = 'repo'
+  static readonly CHANGES_FIELD = 'changes'
+  static readonly #FORBIDDEN_CONTROL = /[^\P{Cc}\n\r\t]/u
+  static readonly KNOWN_FIELDS: readonly string[] = Object.freeze([
     ReviewRequest.ISSUE_FIELD, ReviewRequest.REPO_FIELD, ReviewRequest.CHANGES_FIELD,
   ])
 
-  constructor({ outcome, issue, repository, changes, fields }) {
+  readonly outcome: ReviewRequestOutcome
+  readonly issue: number | null
+  readonly repository: RepositoryName | null
+  readonly changes: string | null
+  readonly fields: readonly string[]
+
+  constructor({ outcome, issue, repository, changes, fields }: {
+    outcome: ReviewRequestOutcome,
+    issue: number | null,
+    repository: RepositoryName | null,
+    changes: string | null,
+    fields: readonly string[],
+  }) {
     this.outcome = outcome
     this.issue = issue
     this.repository = repository
@@ -35,43 +59,55 @@ class ReviewRequest {
     Object.freeze(this)
   }
 
-  static accepted({ issue, repository, changes }) {
+  static accepted({ issue, repository, changes }: {
+    issue: number,
+    repository: RepositoryName,
+    changes: string,
+  }): ReviewRequest {
     return new ReviewRequest({
       outcome: ReviewRequestOutcome.ACCEPTED, issue, repository, changes, fields: [],
     })
   }
 
-  static refused(outcome) {
+  static refused(outcome: ReviewRequestOutcome): ReviewRequest {
     return new ReviewRequest({
       outcome, issue: null, repository: null, changes: null, fields: [],
     })
   }
 
-  static withUnknownFields(fields) {
+  static withUnknownFields(fields: readonly string[]): ReviewRequest {
     return new ReviewRequest({
       outcome: ReviewRequestOutcome.UNKNOWN_FIELD,
       issue: null, repository: null, changes: null, fields,
     })
   }
 
-  static #isWellFormedIssue(given) {
-    return Number.isInteger(given) && given >= 1
+  static isAccepted(asked: ReviewRequest): asked is AcceptedReviewRequest {
+    return asked.outcome === ReviewRequestOutcome.ACCEPTED
   }
 
-  static #isWellFormedChanges(given) {
+  static #isFieldMap(given: unknown): given is Record<string, unknown> {
+    return given !== null && typeof given === 'object' && !Array.isArray(given)
+  }
+
+  static #isWellFormedIssue(given: unknown): given is number {
+    return typeof given === 'number' && Number.isInteger(given) && given >= 1
+  }
+
+  static #isWellFormedChanges(given: unknown): given is string {
     return typeof given === 'string' &&
       given.trim().length > 0 &&
       !ReviewRequest.#FORBIDDEN_CONTROL.test(given)
   }
 
-  static from(raw) {
-    let parsed
+  static from(raw: string): ReviewRequest {
+    let parsed: unknown
     try {
       parsed = JSON.parse(raw)
     } catch {
       return ReviewRequest.refused(ReviewRequestOutcome.BODY_NOT_A_JSON_OBJECT)
     }
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    if (!ReviewRequest.#isFieldMap(parsed)) {
       return ReviewRequest.refused(ReviewRequestOutcome.BODY_NOT_A_JSON_OBJECT)
     }
     const unknown = Object.keys(parsed).filter(
@@ -80,26 +116,31 @@ class ReviewRequest {
     if (unknown.length > 0) {
       return ReviewRequest.withUnknownFields(unknown.sort())
     }
-    if (!ReviewRequest.#isWellFormedIssue(parsed[ReviewRequest.ISSUE_FIELD])) {
+    const issue = parsed[ReviewRequest.ISSUE_FIELD]
+    const repository = parsed[ReviewRequest.REPO_FIELD]
+    const changes = parsed[ReviewRequest.CHANGES_FIELD]
+    if (!ReviewRequest.#isWellFormedIssue(issue)) {
       return ReviewRequest.refused(ReviewRequestOutcome.MALFORMED_ISSUE)
     }
-    if (!RepositoryName.isWellFormed(parsed[ReviewRequest.REPO_FIELD])) {
+    if (!RepositoryName.isWellFormed(repository)) {
       return ReviewRequest.refused(ReviewRequestOutcome.MALFORMED_REPO)
     }
-    if (!ReviewRequest.#isWellFormedChanges(parsed[ReviewRequest.CHANGES_FIELD])) {
+    if (!ReviewRequest.#isWellFormedChanges(changes)) {
       return ReviewRequest.refused(ReviewRequestOutcome.MALFORMED_CHANGES)
     }
 
     return ReviewRequest.accepted({
-      issue: parsed[ReviewRequest.ISSUE_FIELD],
-      repository: new RepositoryName(parsed[ReviewRequest.REPO_FIELD]),
-      changes: parsed[ReviewRequest.CHANGES_FIELD].trim(),
+      issue,
+      repository: new RepositoryName(repository),
+      changes: changes.trim(),
     })
   }
 }
 
+type RefusalOf = (asked: ReviewRequest) => Refusal
+
 export class ReviewRefusal {
-  static #BY_OUTCOME = new Projection('refusal', [
+  static readonly #BY_OUTCOME: Projection<RefusalOf> = new Projection<RefusalOf>('refusal', [
     [ReviewRequestOutcome.BODY_NOT_A_JSON_OBJECT, () => new Refusal({
       status: 400,
       code: ReviewRequestOutcome.BODY_NOT_A_JSON_OBJECT,
@@ -142,47 +183,50 @@ export class ReviewRefusal {
     })],
   ])
 
-  static of(asked) {
+  static of(asked: ReviewRequest): Refusal {
     return ReviewRefusal.#BY_OUTCOME.of(asked.outcome)(asked)
   }
 
-  static declaredOutcomes() {
+  static declaredOutcomes(): unknown[] {
     return ReviewRefusal.#BY_OUTCOME.members()
   }
 }
 
 export class ReviewPhases {
-  static #BY_PHASE = new Projection('review outcome', [
-    [ActivePlanPhase.PLANNING, ReviewRequestOutcome.ACCEPTED],
-    [ActivePlanPhase.IMPLEMENTING, ReviewRequestOutcome.ALREADY_IMPLEMENTING],
-    [ActivePlanPhase.UNCERTAIN, ReviewRequestOutcome.UNCERTAIN_PHASE],
-  ])
+  static readonly #BY_PHASE: Projection<ReviewRequestOutcome> =
+    new Projection<ReviewRequestOutcome>('review outcome', [
+      [ActivePlanPhase.PLANNING, ReviewRequestOutcome.ACCEPTED],
+      [ActivePlanPhase.IMPLEMENTING, ReviewRequestOutcome.ALREADY_IMPLEMENTING],
+      [ActivePlanPhase.UNCERTAIN, ReviewRequestOutcome.UNCERTAIN_PHASE],
+    ])
 
-  static outcomeFor(phase) {
+  static outcomeFor(phase: unknown): ReviewRequestOutcome {
     return ReviewPhases.#BY_PHASE.of(phase)
   }
 
-  static declaredPhases() {
+  static declaredPhases(): unknown[] {
     return ReviewPhases.#BY_PHASE.members()
   }
 }
 
 export class ReviewCollapse {
-  static CODE = 'plan-changes-not-asked'
+  static readonly CODE = 'plan-changes-not-asked'
 
-  static of(cause) {
+  static of(cause: Error): Refusal {
     return new Refusal({ status: 400, code: ReviewCollapse.CODE, detail: cause.message })
   }
 }
 
 export class ReviewPlanRoute {
-  static PATH = '/review-plan'
-  static METHOD = 'POST'
+  static readonly PATH = '/review-plan'
+  static readonly METHOD = 'POST'
 
-  static handledBy(askPlanChanges, activePlans) {
+  static handledBy(
+    askPlanChanges: AskPlanChangesAction, activePlans: ActivePlans
+  ): (request: Request, response: Response) => Promise<void> {
     return async (request, response) => {
       const asked = ReviewRequest.from(JsonBody.textOf(request))
-      if (asked.outcome !== ReviewRequestOutcome.ACCEPTED) {
+      if (!ReviewRequest.isAccepted(asked)) {
         Answer.refuseAs(response, ReviewRefusal.of(asked))
         return
       }
@@ -211,7 +255,7 @@ export class ReviewPlanRoute {
     }
   }
 
-  static refuseOtherMethods(request, response) {
+  static refuseOtherMethods(request: Request, response: Response): void {
     response.setHeader('Allow', ReviewPlanRoute.METHOD)
     Answer.refuse(response, 405, 'method-not-allowed', 'method not allowed')
   }

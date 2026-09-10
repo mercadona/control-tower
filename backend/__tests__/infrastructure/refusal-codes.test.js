@@ -4,7 +4,7 @@ import { ImplementRequestOutcome, ImplementCollapse } from '../../src/infrastruc
 import { EventsRequestOutcome, PlanEvents } from '../../src/infrastructure/plan-events-route.js'
 import { ActivePlansOutcome } from '../../src/infrastructure/active-plans-route.js'
 import { ProgressRequestOutcome, ProgressCollapse } from '../../src/infrastructure/implement-progress-route.js'
-import { ReviewRequestOutcome, ReviewCollapse } from '../../src/infrastructure/review-plan-route.js'
+import { ReviewRequestOutcome, ReviewCollapse } from '../../src/infrastructure/review-plan-route.ts'
 
 class RequestVocabularies {
   static #ACCEPTED = 'accepted'
