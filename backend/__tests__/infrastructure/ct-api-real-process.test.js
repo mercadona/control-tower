@@ -136,6 +136,28 @@ class AConversationAttendingOnePlan {
   }
 }
 
+class APathWithNoCmuxAnywhere {
+  static #NEEDED = ['git', 'gh']
+
+  static async cut() {
+    const directory = await mkdtemp(join(tmpdir(), 'ct-api-no-cmux-path-'))
+    for (const bin of APathWithNoCmuxAnywhere.#NEEDED) {
+      const found = APathWithNoCmuxAnywhere.#locate(bin)
+      if (found !== null) execFileSync('ln', ['-s', found, join(directory, bin)], { stdio: 'ignore' })
+    }
+
+    return directory
+  }
+
+  static #locate(bin) {
+    try {
+      return execFileSync('which', [bin], { encoding: 'utf8' }).trim()
+    } catch {
+      return null
+    }
+  }
+}
+
 class RunFileFixture {
   static ISSUE = 7
 
@@ -204,6 +226,30 @@ describe('ct-api entrypoint', () => {
     })
     await RunFileFixture.remove(checkout.base)
     await RunFileFixture.remove(state)
+  })
+
+  it('active_plans_is_served_with_no_cmux_on_the_path_because_no_window_is_asked_about_any_more', async () => {
+    const checkout = await ACheckoutReachableByTwoPaths.cut()
+    const state = await mkdtemp(join(tmpdir(), 'ct-api-no-cmux-state-'))
+    const worktree = join(checkout.physical, '.worktrees', String(ACheckoutReachableByTwoPaths.ISSUE))
+    const agent = await AConversationAttendingOnePlan.recordedAt(state, worktree)
+    const path = await APathWithNoCmuxAnywhere.cut()
+
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state, PATH: path })
+    const response = await fetch(`http://127.0.0.1:${port}/active-plans`)
+
+    expect(response.status).toBe(200)
+    const served = await response.json()
+    expect(served.plans).toHaveLength(1)
+    expect(served.plans[0].plan).toMatchObject({
+      issue: { number: ACheckoutReachableByTwoPaths.ISSUE },
+      agent,
+      repo: ACheckoutReachableByTwoPaths.REPOSITORY,
+      worktree,
+    })
+    await RunFileFixture.remove(checkout.base)
+    await RunFileFixture.remove(state)
+    await RunFileFixture.remove(path)
   })
 
   it('prints_the_port_it_bound_so_whoever_started_it_knows_where_to_knock', async () => {
