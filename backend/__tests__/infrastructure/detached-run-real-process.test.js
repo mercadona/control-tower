@@ -285,6 +285,37 @@ describe('DetachedRun', () => {
     expect(Child.alive(grandchildPid)).toBe(false)
   })
 
+  it('stop_kills_the_whole_group_the_same_way_the_cap_does_so_a_refusal_after_the_call_started_does_not_leave_it_running', async () => {
+    const files = Files.named()
+    const run = Child.running()
+
+    const started = Child.tracked(
+      run.start({ argv: Child.spawningAGrandchild(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+    const grandchildPid = Number(await Child.eventuallyPrinted(files.out))
+
+    run.stop(started)
+
+    await Child.eventually(() => (Child.alive(started.pid) ? null : true), { timeoutMs: 3_000 })
+    await Child.eventually(() => (Child.alive(grandchildPid) ? null : true), { timeoutMs: 3_000 })
+
+    expect(Child.alive(started.pid)).toBe(false)
+    expect(Child.alive(grandchildPid)).toBe(false)
+  })
+
+  it('stop_on_a_group_that_already_exited_on_its_own_is_not_an_error_the_same_way_the_cap_tolerates_it', async () => {
+    const files = Files.named()
+    const run = Child.running()
+
+    const started = Child.tracked(
+      run.start({ argv: Child.exitingCleanly(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+    await Child.eventuallyPrinted(files.out)
+    await Child.eventually(() => (Child.alive(started.pid) ? null : true), { timeoutMs: 3_000 })
+
+    expect(() => run.stop(started)).not.toThrow()
+  })
+
   it('the_cap_sends_sigterm_so_a_tool_trapping_it_gets_the_chance_to_leave_on_its_own_terms', async () => {
     const files = Files.named()
     const run = Child.running(250)

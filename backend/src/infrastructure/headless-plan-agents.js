@@ -122,7 +122,7 @@ export class HeadlessPlanAgents extends PlanAgents {
       argv,
       pid: started.pid,
       startedAt,
-    }).json), PlanAgentNotLaunched)
+    }).json), PlanAgentNotLaunched, started)
 
     return agent
   }
@@ -179,7 +179,7 @@ export class HeadlessPlanAgents extends PlanAgents {
       argv,
       pid: started.pid,
       startedAt,
-    }).json), PlanAgentNotResumed)
+    }).json), PlanAgentNotResumed, started)
   }
 
   async #worktreeOf(agent) {
@@ -226,10 +226,11 @@ export class HeadlessPlanAgents extends PlanAgents {
     }
   }
 
-  async #writeRecord(path, text, Failure) {
+  async #writeRecord(path, text, Failure, started = null) {
     try {
       await this.write(path, text)
     } catch (failure) {
+      if (started !== null) this.start.stop(started)
       throw new Failure(`${path} could not be written: ${failure.message}`)
     }
   }

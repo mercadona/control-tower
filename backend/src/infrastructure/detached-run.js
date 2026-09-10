@@ -53,4 +53,8 @@ export class DetachedRun {
 
     return new StartedRun({ pid })
   }
+
+  stop(started) {
+    DetachedRun.#killGroupUnlessAlreadyGone(started.pid)
+  }
 }

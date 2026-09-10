@@ -100,6 +100,7 @@ class HeadlessAgent {
     this.mintAnswers = [...mintAnswers]
     this.writeCalls = []
     this.makeDirectoryCalls = []
+    this.stopCalls = []
     this.trace = []
   }
 
@@ -184,6 +185,10 @@ class HeadlessAgent {
           if (this.startAnswer instanceof Error) throw this.startAnswer
 
           return this.startAnswer
+        },
+        stop: (started) => {
+          this.trace.push('stop')
+          this.stopCalls.push(started)
         },
       },
       makeDirectory: (path) => {
@@ -408,6 +413,16 @@ describe('HeadlessPlanAgents', () => {
     expect(refusal.message).toContain(HeadlessAgent.CALL_PATH)
   })
 
+  it('a_call_record_that_cannot_be_written_after_the_launch_already_started_signals_the_group_it_would_otherwise_leave_running', async () => {
+    const headless = HeadlessAgent.callUnwritable(new Error('ENOSPC: no space left on device'))
+
+    const refusal = await headless.refusal()
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotLaunched)
+    expect(headless.stopCalls).toHaveLength(1)
+    expect(headless.stopCalls[0].pid).toBe(HeadlessAgent.PID)
+  })
+
   it('a_conversation_record_that_cannot_be_written_refuses_before_anything_starts_so_a_filesystem_that_cannot_take_it_never_launches_a_call', async () => {
     const headless = HeadlessAgent.conversationUnwritable(new Error('ENOSPC: no space left on device'))
 
@@ -617,6 +632,16 @@ describe('HeadlessPlanAgents continuing a conversation', () => {
 
     expect(refusal).toBeInstanceOf(PlanAgentNotResumed)
     expect(refusal.message).toContain(HeadlessAgent.IMPLEMENT_CALL_PATH)
+  })
+
+  it('a_call_record_that_cannot_be_written_after_a_continuation_already_started_signals_the_group_it_would_otherwise_leave_running', async () => {
+    const headless = HeadlessAgent.continuationCallUnwritable(new Error('ENOSPC: no space left on device'))
+
+    const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotResumed)
+    expect(headless.stopCalls).toHaveLength(1)
+    expect(headless.stopCalls[0].pid).toBe(HeadlessAgent.PID)
   })
 
   it('a_call_that_cannot_be_started_for_a_continuation_raises_the_same_family_as_a_refused_resume_and_not_the_launch_cause', async () => {
