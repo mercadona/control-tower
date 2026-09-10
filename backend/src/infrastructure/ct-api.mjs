@@ -7,6 +7,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ApiServer, LOOPBACK } from './api-server.js'
 import { CmuxPlanAgents } from './cmux-plan-agents.js'
+import { HeadlessPlanAgents } from './headless-plan-agents.js'
+import { DetachedRun } from './detached-run.js'
 import { AcliUserStories } from './acli-user-stories.js'
 import { GhPlanIssues } from './gh-plan-issues.js'
 import { GitWorkspace } from './git-workspace.js'
@@ -58,20 +60,20 @@ class FrontendBuild {
 class PluginTree {
   static #HERE = dirname(fileURLToPath(import.meta.url))
 
-  static #root() {
+  static root() {
     return join(PluginTree.#HERE, '..', '..', '..', 'plugin')
   }
 
   static dispatchCheck() {
-    return join(PluginTree.#root(), 'scripts', 'dispatch-check.mjs')
+    return join(PluginTree.root(), 'scripts', 'dispatch-check.mjs')
   }
 
   static conventions() {
-    return join(PluginTree.#root(), 'conventions')
+    return join(PluginTree.root(), 'conventions')
   }
 
   static ctStep() {
-    return join(PluginTree.#root(), 'scripts', 'ct-step.mjs')
+    return join(PluginTree.root(), 'scripts', 'ct-step.mjs')
   }
 }
 
@@ -87,6 +89,10 @@ class Disk {
   static async write(path, text) {
     await mkdir(dirname(path), { recursive: true })
     await writeFile(path, text)
+  }
+
+  static async makeDirectory(path) {
+    await mkdir(path, { recursive: true })
   }
 
   static async atomicWrite(path, text) {
@@ -136,12 +142,13 @@ class Disk {
 
 class CtApi {
   static #USAGE =
-    `usage: ct-api.mjs (no arguments; set ${Invocation.PORT_VARIABLE} to pick a port, 0 for an ephemeral one; set ${Invocation.HARVEST_TABLE_VARIABLE} to ${Invocation.HARVEST_TABLE_SHAPE} so every harvest loads its row into BigQuery)`
+    `usage: ct-api.mjs (no arguments; set ${Invocation.PORT_VARIABLE} to pick a port, 0 for an ephemeral one; set ${Invocation.HARVEST_TABLE_VARIABLE} to ${Invocation.HARVEST_TABLE_SHAPE} so every harvest loads its row into BigQuery; set ${Invocation.TRANSPORT_VARIABLE} to ${HeadlessPlanAgents.TRANSPORT} to run the plan agent with \`claude -p\` instead of typing into a cmux window, or leave it unset for ${CmuxPlanAgents.TRANSPORT}; set ${Invocation.MODEL_VARIABLE} to name the model a headless call uses, default ${Invocation.DEFAULT_MODEL})`
   static #BAD_USAGE = 2
   static #CANNOT_LISTEN = 1
   static #PROCESS_TIMEOUT_MS = 30_000
   static #HARVEST_TIMEOUT_MS = 6 * 60 * 1000
   static #BASELINE_TIMEOUT_MS = 10 * 60 * 1000
+  static #PLAN_CALL_TIMEOUT_MS = 60 * 60 * 1000
   static #SHELL = 'sh'
   static #SECONDS_FOR_GH_IN_A_HARVEST = 60
   static #SECONDS_BETWEEN_SWEEPS = 60
@@ -191,6 +198,49 @@ class CtApi {
 
   static #waiting(seconds) {
     return after(seconds * 1000)
+  }
+
+  static #cmuxAgents() {
+    return new CmuxPlanAgents({
+      run: CtApi.#tool(CmuxPlanAgents.BIN),
+      write: Disk.write,
+      read: Disk.read,
+      remove: Disk.remove,
+      realpathOf: Disk.realpathOf,
+      sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_PROBES),
+      runsIn: join(tmpdir(), CtApi.#LAUNCH_DIRECTORY),
+      policy: new LaunchPolicy({
+        budget: new LaunchBudget({ attempts: CtApi.#PROBES_PER_SEND, resends: CtApi.#RESENDS }),
+      }),
+      brief: new PlanAgentBrief({
+        dispatchCheck: PluginTree.dispatchCheck(),
+        conventions: PluginTree.conventions(),
+        ctStep: PluginTree.ctStep(),
+      }),
+    })
+  }
+
+  static #headlessAgents(model, environment, stateRoot) {
+    return new HeadlessPlanAgents({
+      start: new DetachedRun({
+        bin: HeadlessPlanAgents.BIN,
+        budgetMs: CtApi.#PLAN_CALL_TIMEOUT_MS,
+        env: environment,
+      }),
+      makeDirectory: Disk.makeDirectory,
+      write: Disk.atomicWrite,
+      read: Disk.read,
+      mint: randomUUID,
+      clock: Date.now,
+      brief: new PlanAgentBrief({
+        dispatchCheck: PluginTree.dispatchCheck(),
+        conventions: PluginTree.conventions(),
+        ctStep: PluginTree.ctStep(),
+      }),
+      runsIn: join(stateRoot, 'harness'),
+      model,
+      pluginRoot: PluginTree.root(),
+    })
   }
 
   static #startPlan(workspace, planAgents, planIssues, checkouts) {
@@ -306,23 +356,9 @@ class CtApi {
       stderr: (line) => process.stderr.write(line),
       root: asked.stateRoot,
     })
-    const planAgents = new CmuxPlanAgents({
-      run: CtApi.#tool(CmuxPlanAgents.BIN),
-      write: Disk.write,
-      read: Disk.read,
-      remove: Disk.remove,
-      realpathOf: Disk.realpathOf,
-      sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_PROBES),
-      runsIn: join(tmpdir(), CtApi.#LAUNCH_DIRECTORY),
-      policy: new LaunchPolicy({
-        budget: new LaunchBudget({ attempts: CtApi.#PROBES_PER_SEND, resends: CtApi.#RESENDS }),
-      }),
-      brief: new PlanAgentBrief({
-        dispatchCheck: PluginTree.dispatchCheck(),
-        conventions: PluginTree.conventions(),
-        ctStep: PluginTree.ctStep(),
-      }),
-    })
+    const planAgents = asked.transport === HeadlessPlanAgents.TRANSPORT
+      ? CtApi.#headlessAgents(asked.model, environment, asked.stateRoot)
+      : CtApi.#cmuxAgents()
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
     const planIssues = new GhPlanIssues({
       gh,

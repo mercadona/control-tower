@@ -28,7 +28,9 @@ yardstick — and this repository does not take it.
 |---|---|
 | **User story** | What Jira calls a ticket: the work to plan, identified by its key (`ABC-123`) |
 | **Plan issue** | The GitHub issue that hosts a plan: the plan is posted there, the GO is answered there, the dispatcher reads its labels |
-| **Plan agent** | Whoever writes the plan for a story; today a Claude in a cmux tab |
+| **Plan agent** | Whoever writes the plan for a story; a Claude reached one of two ways — typed at in a cmux tab, or invoked per step with `claude -p` (`CT_PLAN_TRANSPORT`) |
+| **Harness call** | One invocation of the plan agent: its step, its model, its argv and the stream of events it wrote. It lives in its own directory under the state root and outlives the backend that started it |
+| **Step of a call** | Which errand that invocation carried — `write-plan`, `review-plan`, `implement`, `fix-pull-request`. The one datum no reader recovers afterwards, so it is written at the source |
 | **GO** | The human's `-OK <nonce>` on the issue that releases the agent |
 | **Repository name** | `owner/name`; validated because it becomes an argument of `gh` |
 | **Checkout root** | The absolute path of the local git clone where a plan's worktree is cut; validated because it becomes an argument of `git -C` |

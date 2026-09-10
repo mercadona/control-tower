@@ -288,6 +288,22 @@ describe('ct-api entrypoint', () => {
     }
   })
 
+  it('the_entrypoint_assembles_the_headless_transport_and_listens', async () => {
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CT_PLAN_TRANSPORT: 'headless' })
+
+    expect(port).toBeGreaterThan(0)
+    const response = await fetch(`http://127.0.0.1:${port}/not-a-route`)
+    expect(response.status).toBe(404)
+  })
+
+  it('the_entrypoint_asked_for_no_transport_still_assembles_the_one_that_types_into_a_window', async () => {
+    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+
+    expect(port).toBeGreaterThan(0)
+    const response = await fetch(`http://127.0.0.1:${port}/not-a-route`)
+    expect(response.status).toBe(404)
+  })
+
   it('a_slice_whose_second_veto_sent_it_to_the_adviser_is_served_as_that_step', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })
     const root = await RunFileFixture.inATemporaryRoot('advise')
