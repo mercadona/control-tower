@@ -43,7 +43,6 @@ class HeadlessAgent {
   static ERROR_PATH = `${HeadlessAgent.DIRECTORY}/${HarnessCall.ERROR_FILE}`
   static CALL_PATH = `${HeadlessAgent.DIRECTORY}/${HarnessCall.CALL_FILE}`
   static CONVERSATION_PATH = `${HeadlessAgent.RUNS_IN}/${HeadlessAgent.AGENT}/conversation.json`
-  static OTHER_CONVERSATION_PATH = `${HeadlessAgent.RUNS_IN}/${HeadlessAgent.OTHER_AGENT}/conversation.json`
 
   constructor({
     startAnswer = new StartedRun({ pid: HeadlessAgent.PID }),
@@ -296,6 +295,7 @@ describe('HeadlessPlanAgents recording the worktree of a conversation', () => {
 
     await expect(headless.worktreeOf(agent)).resolves.toBe(HeadlessAgent.WORKTREE)
     expect(headless.writeCalls.some(([path]) => path === HeadlessAgent.CONVERSATION_PATH)).toBe(true)
+    expect(headless.readCalls).toContain(HeadlessAgent.CONVERSATION_PATH)
   })
 
   it('two_conversations_do_not_share_the_worktree_they_recorded', async () => {
