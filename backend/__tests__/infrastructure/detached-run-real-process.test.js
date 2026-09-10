@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { execFileSync, spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
-import { closeSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { closeSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -84,8 +84,12 @@ class Child {
     return execFileSync('ps', ['-o', 'pgid=', '-p', String(pid)]).toString().trim()
   }
 
-  static fd0Of(pid) {
-    return execFileSync('lsof', ['-p', String(pid), '-a', '-d', '0']).toString()
+  static reportingTheShapeOfItsStdin() {
+    return ['-e', `
+      const { fstatSync } = require('fs')
+      const stat = fstatSync(0)
+      process.stdout.write(JSON.stringify({ isCharacterDevice: stat.isCharacterDevice(), rdev: stat.rdev }))
+    `]
   }
 
   static alive(pid) {
@@ -543,18 +547,22 @@ describe('DetachedRun', () => {
     const files = Files.named()
     const run = Child.running()
 
-    const started = Child.tracked(
-      run.start({ argv: Child.sleeping(), cwd: process.cwd(), out: files.out, err: files.err })
+    Child.tracked(
+      run.start({
+        argv: Child.reportingTheShapeOfItsStdin(),
+        cwd: process.cwd(),
+        out: files.out,
+        err: files.err,
+      })
     )
 
-    const fd0 = await Child.eventually(() => {
-      try {
-        return Child.fd0Of(started.pid)
-      } catch {
-        return null
-      }
-    })
+    const printed = await Child.eventuallyPrinted(files.out)
+    const shapeTheChildReported = JSON.parse(printed)
+    const nullDevice = statSync('/dev/null')
 
-    expect(fd0).toContain('/dev/null')
+    expect(shapeTheChildReported).toEqual({
+      isCharacterDevice: nullDevice.isCharacterDevice(),
+      rdev: nullDevice.rdev,
+    })
   })
 })
