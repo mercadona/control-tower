@@ -150,8 +150,8 @@ class HeadlessAgent {
     return headless
   }
 
-  static resuming() {
-    const headless = new HeadlessAgent()
+  static resuming(overrides = {}) {
+    const headless = new HeadlessAgent(overrides)
     headless.recordConversation(JSON.stringify({ worktree: HeadlessAgent.WORKTREE }))
 
     return headless
@@ -537,6 +537,8 @@ describe('HeadlessPlanAgents continuing a conversation', () => {
     expect(headless.makeDirectoryCalls).toEqual([HeadlessAgent.DIRECTORY, HeadlessAgent.IMPLEMENT_DIRECTORY])
     expect(headless.capturedAt(HeadlessAgent.CALL_PATH).step).toBe(HarnessStep.WRITE_PLAN)
     expect(headless.capturedAt(HeadlessAgent.IMPLEMENT_CALL_PATH).step).toBe(HarnessStep.IMPLEMENT)
+    expect(headless.startCalls[1].out).toBe(`${HeadlessAgent.IMPLEMENT_DIRECTORY}/${HarnessCall.STREAM_FILE}`)
+    expect(headless.startCalls[1].err).toBe(`${HeadlessAgent.IMPLEMENT_DIRECTORY}/${HarnessCall.ERROR_FILE}`)
   })
 
   it('the_changes_a_person_asked_for_travel_in_the_errand_of_the_review_call', async () => {
@@ -548,6 +550,25 @@ describe('HeadlessPlanAgents continuing a conversation', () => {
     expect(headless.brief.reviewAsked).toEqual([
       { issueNumber: HeadlessAgent.ISSUE_NUMBER, repository: HeadlessAgent.REPOSITORY, changes: HeadlessAgent.CHANGES },
     ])
+    expect(headless.capturedAt(HeadlessAgent.REVIEW_CALL_PATH).step).toBe(HarnessStep.REVIEW_PLAN)
+  })
+
+  it('a_directory_that_cannot_be_made_for_a_continuation_raises_the_same_family_as_a_refused_resume_so_nothing_sees_a_raw_node_error', async () => {
+    const headless = HeadlessAgent.resuming({ makeDirectoryAnswer: new Error('EACCES: permission denied') })
+
+    const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotResumed)
+    expect(refusal.message).toContain(HeadlessAgent.IMPLEMENT_DIRECTORY)
+  })
+
+  it('a_call_record_that_cannot_be_written_for_a_continuation_raises_the_same_family_as_a_refused_resume_so_nothing_sees_a_raw_node_error', async () => {
+    const headless = HeadlessAgent.resuming({ callWriteAnswer: new Error('ENOSPC: no space left on device') })
+
+    const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
+
+    expect(refusal).toBeInstanceOf(PlanAgentNotResumed)
+    expect(refusal.message).toContain(HeadlessAgent.IMPLEMENT_CALL_PATH)
   })
 
   it('the_fixes_of_a_pull_request_are_asked_for_with_the_step_that_says_so', async () => {
