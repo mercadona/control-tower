@@ -42,6 +42,8 @@ const empty = () => ({ status: 200, body: '{"steps":[]}' })
 
 const oneTask = () => ({ status: 200, body: JSON.stringify({ steps: [ISSUE_298_STEPS[0]] }) })
 
+const oneInProgressTask = () => ({ status: 200, body: JSON.stringify({ steps: ISSUE_298_STEPS.slice(0, 6) }) })
+
 const fullRun = () => ({ status: 200, body: JSON.stringify({ steps: ISSUE_298_STEPS }) })
 
 const refusedNotRead = () => ({
@@ -62,6 +64,7 @@ export const ImplementHistoryMother = {
   MALFORMED_REPO_DETAIL,
   empty,
   oneTask,
+  oneInProgressTask,
   fullRun,
   refusedNotRead,
   refusedMalformedRepo,

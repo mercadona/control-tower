@@ -143,3 +143,7 @@
   gap: 8px;
   color: var(--foreground-primary);
 }
+
+.implement-history__closing-duration {
+  color: var(--foreground-secondary);
+}
