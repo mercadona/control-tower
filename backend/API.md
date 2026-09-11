@@ -166,7 +166,7 @@ From a tool refusing, in either mode:
 | `plan-issue-not-created` | `gh issue create` refused |
 | `plan-issue-not-named` | the created issue could not be identified |
 | `plan-issue-not-claimed` | the claim on the issue failed |
-| `plan-agent-not-launched` | cmux refused |
+| `plan-agent-not-launched` | claude -p refused |
 | `plan-agent-not-named` | cmux launched but gave no handle |
 | `workspace-not-prepared` | the worktree could not be cut |
 | `workspace-not-read` | git refused when surveying |
@@ -195,7 +195,8 @@ Server-sent events. It reports whether the plan is written and committed. The
 stream stays open until the client disconnects, and polls in the meantime.
 
 It only serves an issue whose plan **this process** started or recovered. A
-restarted backend has forgotten every session it did not recover from cmux.
+restarted backend has forgotten every session it did not recover from a
+conversation record.
 
 **200** with `Content-Type: text/event-stream`. Two frame kinds:
 
@@ -374,11 +375,13 @@ person would have typed — and `plan` — what starting it produced.
 
 | `code` | Status | Meaning |
 |---|---|---|
-| `active-plans-recovery-inconclusive` | **503** | cmux could not be asked, so the list would be a lie |
+| `active-plans-recovery-inconclusive` | **503** | what is in flight could not be listed, so the list would be a lie |
 
-The 503 is the common failure on a fresh machine: recovery reads the live cmux
-workspaces, and without cmux it answers 503 on **every** call and never settles.
-The page must show *I cannot tell what is running* rather than *nothing is
+Recovery reads the `conversation.json` records left under the state root, not a
+live workspace. A harness root that does not exist is zero plans, conclusively —
+a fresh machine gets a clean **200** with an empty list. The 503 fires only when
+that root exists but cannot be listed, or when the checkout registry cannot be
+read. The page must show *I cannot tell what is running* rather than *nothing is
 running*, and it must not treat this as an empty list.
 
 ```
