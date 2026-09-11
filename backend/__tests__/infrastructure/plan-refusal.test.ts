@@ -53,7 +53,7 @@ describe('PlanCollapse', () => {
   const FAMILIES = [
     'PlanFailure', 'UserStoryFailure', 'PlanIssueFailure', 'PlanAgentFailure', 'WorkspaceFailure',
     'PlanProgressFailure', 'PlanChangesFailure', 'GoFailure', 'HarvestFailure', 'PlanStoryFailure',
-    'ImplementationProgressFailure', 'PullRequestFailure', 'WorkbenchFailure',
+    'ImplementationProgressFailure', 'ImplementationHistoryFailure', 'PullRequestFailure', 'WorkbenchFailure',
   ]
 
   const RESUMING_AN_AGENT = ImplementCollapse.declaredFailures()
@@ -67,6 +67,7 @@ describe('PlanCollapse', () => {
     !(thrown.prototype instanceof exceptions.PlanStoryFailure) &&
     !(thrown.prototype instanceof exceptions.HarvestFailure) &&
     !(thrown.prototype instanceof exceptions.ImplementationProgressFailure) &&
+    !(thrown.prototype instanceof exceptions.ImplementationHistoryFailure) &&
     !(thrown.prototype instanceof exceptions.PullRequestFailure) &&
     !(thrown.prototype instanceof exceptions.WorkbenchFailure)
 
