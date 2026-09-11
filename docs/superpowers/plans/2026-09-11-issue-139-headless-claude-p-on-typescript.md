@@ -813,7 +813,7 @@ for the terms and rules it must keep; the predicates below do the rest.
 cd backend && test "$(grep -c 'Harness call' conventions/this-repository.md)" -eq 1
 cd backend && test "$(grep -c 'Model of a step' conventions/this-repository.md)" -eq 1
 cd backend && test -z "$(grep -n 'a Claude in a cmux tab\|reads the live cmux' conventions/this-repository.md API.md)"
-cd backend && test "$(grep -c 'plan-agent-worktree-not-understood' API.md)" -eq 1
+cd backend && test "$(grep -c 'plan-agent-worktree-not-understood' API.md)" -eq 2
 cd backend && npx vitest run __tests__/conventions-no-restatement.test.ts   # exit 0
 cd backend && npx vitest run   # exit 0
 ```

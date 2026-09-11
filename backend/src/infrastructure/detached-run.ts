@@ -40,7 +40,9 @@ export class DetachedRun {
     closeSync(outFd)
     closeSync(errFd)
     child.on('error', (failure) => {
-      appendFileSync(err, `${failure.message}\n`)
+      try {
+        appendFileSync(err, `${failure.message}\n`)
+      } catch {}
     })
     if (child.pid === undefined) {
       throw new PlanAgentNotLaunched(`spawn assigned no pid to ${JSON.stringify(this.bin)}`)
