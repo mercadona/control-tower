@@ -7,7 +7,8 @@
 `claude -p`») — D-2 reformulada, porque describía al backend como si fuese una sesión de LLM; D-18
 a D-21 añadidas, que es la topología de sesiones que la congelación dejó implícita; D-22, que deja
 las puertas fuera del alcance de la jefa ahora que tiene manos; D-23, que publica el spec y hace
-que el groom espere su merge; slice 3 renombrado a la sesión coordinadora y slice 7 nuevo para la
+que el groom espere su merge; D-24, que le da a la jefa el canal para hablarle a las sesiones que
+no ha lanzado; slice 3 renombrado a la sesión coordinadora y slice 7 nuevo para la
 conducción paso a paso, con lo que la cadena pasa a ser el 8.
 
 ## Hipótesis del experimento
@@ -159,6 +160,16 @@ protocol is not retired here: only its default dies, and A-3 carries the rest.
   cannot be resumed is said out loud; the cabin never opens a different one and
   presents it as the same.
   *(Procedencia: hablada — «La sesión coordinadora siempre tiene q estar en el front para poder hablar con ella, y se tiene q poder recuperar» y «aunque hagamos el gate de implementar, en el front siempre tengo que poder hablar con la sesión orquestadora, de la misma manera que en el plugin original». Que sean dos mecanismos distintos es deducido: el PTY muere con su padre y el descriptor del maestro no se recupera, mientras que la conversación sí, porque el CLI la resume desde su propio almacén.)*
+- **D-24 · The coordinating session can talk to every session it did not
+  launch** — the backend is what spawns and drives them, so the boss is given
+  the other half: it knows which conversations are live and can deliver a
+  message into any of them, and read what came back, asking the backend, which
+  stays the owner of the processes. The plugin already works this way — a
+  coordinator reaches a slice with `cmux send --workspace workspace:97` — and
+  this is the same property without cmux. It is also the mechanism D-20 needs:
+  the change you ask of the boss reaches that slice because the boss can address
+  it by name.
+  *(Procedencia: hablada — «cada sesión será lanzada por la coordinadora, de no ser así, al menos tiene que saber cómo hablar a las otras». Que las lance el backend y no ella es la decisión ya tomada en D-19, con su motivo: una cadena que no dependa de que un modelo siga despierto, y un expediente escrito por el dueño del proceso.)*
 - **D-23 · After the freeze the app publishes the spec, and the groom waits for
   its merge** — pressing gate 1 commits the state line and then does what a
   person would do next: push the epic's branch and open its pull request with
