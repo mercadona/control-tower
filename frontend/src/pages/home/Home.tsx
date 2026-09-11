@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivePlan } from 'app/active-plans/ActivePlan.types'
 import { ActivePlansClient } from 'app/active-plans/client'
 import { ToolsStatus } from 'app/external-tools/components/tools-status'
+import { ImplementHistory } from 'app/implement-history/components/implement-history'
 import { ImplementPlanAction } from 'app/implement-plan/components/implement-plan-action'
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { PlanProgress } from 'app/plan-events/components/plan-progress'
@@ -450,6 +451,14 @@ const Home = () => {
                 {restoredIsConfirmed && (
                   <ImplementProgress
                     key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
+                    issue={workflow.plan.issue.number}
+                    root={workflow.plan.root ?? workflow.request.path}
+                    repo={workflow.plan.repo}
+                  />
+                )}
+                {restoredIsConfirmed && (
+                  <ImplementHistory
+                    key={`${workflow.plan.repo}:${workflow.plan.issue.number}:history`}
                     issue={workflow.plan.issue.number}
                     root={workflow.plan.root ?? workflow.request.path}
                     repo={workflow.plan.repo}
