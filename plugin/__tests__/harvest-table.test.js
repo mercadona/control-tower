@@ -79,6 +79,8 @@ class HarvestRows {
       packageBytes: 9000,
       tool: 'claude-code',
       toolVersion: '2.1.266',
+      toolAccountEmail: 'tool-account@mercadona.es',
+      implementerEmail: 'multi@mercadona.es',
       toolUsageStatus: 'measured',
       toolUsageAttempts: 6,
       toolUsageMeasured: 6,
@@ -142,6 +144,8 @@ class HarvestRows {
         packageBytes: 9,
         tool: 'claude-code',
         toolVersion: '9.9.9',
+        toolAccountEmail: '(mixed)',
+        implementerEmail: '(mixed)',
         toolUsageStatus: 'measured',
         toolUsageAttempts: 9,
         toolUsageMeasured: 9,
@@ -196,10 +200,12 @@ describe('a slice row projects to the wire object under the schema names', () =>
     expect(row).toEqual({
       harvest_id: '11111111-1111-4111-8111-111111111111',
       harvested_at: '2026-09-03T10:00:00.000Z',
+      report_date: '2026-09-03',
       repo: 'o/r',
       milestone: 'E',
       plugin_version: '0.53.0',
       actor: 'jponzvan',
+      implementer_email: 'multi@mercadona.es',
       issue: 7,
       title: 'HarvestTable carries the schema',
       type: 'feature',
@@ -248,6 +254,7 @@ describe('a slice row projects to the wire object under the schema names', () =>
       package_bytes: 9000,
       tool: 'claude-code',
       tool_version: '2.1.266',
+      tool_account_email: 'tool-account@mercadona.es',
       tool_usage_status: 'measured',
       tool_usage_attempts: 6,
       tool_usage_measured: 6,
@@ -401,6 +408,8 @@ describe('a slice row projects to the wire object under the schema names', () =>
     expect(row.package_bytes).toBeNull()
     expect(row.tool).toBeNull()
     expect(row.tool_version).toBeNull()
+    expect(row.tool_account_email).toBeNull()
+    expect(row.implementer_email).toBeNull()
     expect(row.tool_usage_status).toBeNull()
     expect(row.tool_usage_attempts).toBeNull()
     expect(row.tool_usage_measured).toBeNull()
@@ -523,6 +532,48 @@ describe('a slice row projects to the wire object under the schema names', () =>
     ]
     for (const column of strings) expect(declared[column]).toEqual({ name: column, type: 'STRING', mode: 'NULLABLE' })
     for (const column of integers) expect(declared[column]).toEqual({ name: column, type: 'INTEGER', mode: 'NULLABLE' })
+  })
+
+  it('the_report_date_is_the_first_ten_characters_of_harvested_at_and_never_the_full_timestamp', () => {
+    const identity = new HarvestIdentity({ ...Identities.today(), harvestedAt: '2026-01-05T23:59:59.999Z' })
+    const row = HarvestTable.rowFor({ row: HarvestRows.merged(), identity })
+    expect(row.report_date).toBe('2026-01-05')
+  })
+
+  it('the_schema_type_vocabulary_admits_date', () => {
+    expect(() => new HarvestColumn({ name: 'report_date', type: HarvestColumn.DATE, mode: HarvestColumn.NULLABLE, valueOf: () => null }))
+      .not.toThrow()
+    const schema = JSON.parse(HarvestTable.schemaJson())
+    expect(schema.find((column) => column.name === 'report_date').type).toBe('DATE')
+  })
+
+  it('the_schema_json_gains_exactly_three_top_level_fields_for_the_new_columns', () => {
+    const schema = JSON.parse(HarvestTable.schemaJson())
+    for (const name of ['report_date', 'implementer_email', 'tool_account_email']) {
+      expect(schema.map((column) => column.name)).toContain(name)
+    }
+    expect(schema).toHaveLength(68)
+  })
+
+  it('implementer_email_and_tool_account_email_are_nullable_strings_that_stay_null_without_telemetry', () => {
+    const schema = JSON.parse(HarvestTable.schemaJson())
+    const declared = Object.fromEntries(schema.map((column) => [column.name, column]))
+    expect(declared.implementer_email).toEqual({ name: 'implementer_email', type: 'STRING', mode: 'NULLABLE' })
+    expect(declared.tool_account_email).toEqual({ name: 'tool_account_email', type: 'STRING', mode: 'NULLABLE' })
+  })
+
+  it('a_slice_with_two_implementer_emails_lands_mixed_and_a_slice_with_one_lands_it', () => {
+    const mixed = HarvestTable.rowFor({
+      row: HarvestRows.withTelemetry({ implementerEmail: '(mixed)' }),
+      identity: Identities.today(),
+    })
+    expect(mixed.implementer_email).toBe('(mixed)')
+
+    const single = HarvestTable.rowFor({
+      row: HarvestRows.withTelemetry({ implementerEmail: 'multi@mercadona.es' }),
+      identity: Identities.today(),
+    })
+    expect(single.implementer_email).toBe('multi@mercadona.es')
   })
 
   it('a_slice_without_milestone_lands_with_null_and_the_schema_admits_it', () => {
