@@ -112,7 +112,7 @@ When **no** plan started, the answer is a 400 that keeps the same evidence:
 {"code":"no-plan-started",
  "detail":"no plan started: every repository of repo_list failed",
  "failed":[{"repo":"owner/one","code":"plan-issue-not-created","detail":"gh refused"},
-           {"repo":"owner/two","code":"plan-agent-not-launched","detail":"cmux refused"}]}
+           {"repo":"owner/two","code":"plan-agent-not-launched","detail":"claude -p refused"}]}
 ```
 
 This is the one refusal in the API with a third field beside `code` and `detail`.
@@ -167,7 +167,7 @@ From a tool refusing, in either mode:
 | `plan-issue-not-named` | the created issue could not be identified |
 | `plan-issue-not-claimed` | the claim on the issue failed |
 | `plan-agent-not-launched` | claude -p refused |
-| `plan-agent-not-named` | cmux launched but gave no handle |
+| `plan-agent-not-named` | the agent's conversation record could not be understood |
 | `workspace-not-prepared` | the worktree could not be cut |
 | `workspace-not-read` | git refused when surveying |
 | `workspace-not-understood` | git answered something unreadable |
@@ -262,7 +262,7 @@ serialised.
 | `implementation-phase-uncertain` | **409** | the backend cannot tell whether implementation already began; a person must look before retrying |
 | `go-not-recorded` | 400 | the GO marker could not be written |
 | `plan-go-not-answered` | 400 | the GO comment on the issue failed |
-| `plan-agent-not-resumed` | 400 | cmux would not take the line |
+| `plan-agent-not-resumed` | 400 | the conversation could not be continued with `claude -p --resume` |
 | `plan-agent-worktree-not-understood` | 400 | the agent's recorded conversation could not be read back as a worktree |
 
 `no-live-planning-session` is the one to expect after a backend restart: send the
