@@ -79,7 +79,7 @@ keys and **nothing else** — an extra key makes the whole list malformed.
 ```json
 {"status":"started","id":"ABC-123","repo":"owner/name",
  "issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},
- "agent":"workspace:4","branch":"feat/7",
+ "agent":"7c1e4b0a-3d2f-4a91-9c55-8e0b1f6a2d34","branch":"feat/7",
  "worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout",
  "baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}
 ```
@@ -118,7 +118,7 @@ per repository that got a plan, and `failed` names each repository that did not.
 {"status":"started",
  "started":[{"id":"ABC-123","repo":"owner/one",
    "issue":{"number":7,"url":"https://github.com/owner/one/issues/7"},
-   "agent":"workspace:4","branch":"feat/7",
+   "agent":"586d6f21-72ad-4e79-afaa-411657418352","branch":"feat/7",
    "worktree":"/one/.worktrees/7","root":"/one"}],
  "failed":[{"repo":"owner/two","code":"plan-issue-not-created","detail":"gh refused"}]}
 ```
@@ -197,6 +197,15 @@ From a tool refusing, in either mode:
 All ten answer 400 and carry the tool's own message in `detail`. They are one
 failure family split by cause, so the UI can treat them as one class and show
 `detail`. In list mode they arrive inside a `failed` entry instead.
+
+`plan-agent-not-named` is declared here but `/start-plan` cannot answer it
+today: `launch()` only ever raises `plan-agent-not-launched`. The exception
+behind it comes from reading back a recorded conversation, which happens
+only inside `resume`, `review` and `fix` — and of those three, only `resume`
+sits behind a route, `POST /implement-plan`, where the same condition
+answers `plan-agent-worktree-not-understood` instead. The row stays because
+the mapping is part of the declared contract, not because anything live
+produces it yet.
 
 ```
 curl -s -X POST -H 'Content-Type: application/json' \
@@ -279,7 +288,7 @@ Answers the human gate: records the GO and tells the agent to implement.
 **202 Accepted**
 
 ```json
-{"status":"implementing","agent":"workspace:20","issue":33}
+{"status":"implementing","agent":"4263ca7b-5dd4-40df-b4e0-11566ed37d28","issue":33}
 ```
 
 **It is idempotent.** A second call for a plan already implementing answers the
@@ -303,8 +312,10 @@ serialised.
 | `plan-agent-not-resumed` | 400 | the conversation could not be continued with `claude -p --resume` |
 | `plan-agent-worktree-not-understood` | 400 | the agent's recorded conversation could not be read back as a worktree |
 
-`no-live-planning-session` is the one to expect after a backend restart: send the
-`agent` from `/active-plans`, not one the page remembered from an older run.
+`no-live-planning-session` fires when this process never started or recovered a
+plan for that issue, or when the `agent` sent does not match the one it holds:
+send the `agent` from `/active-plans`, not one the page remembered from an
+older run.
 
 `plan-under-review` answers two different questions and both refuse. A `-REVIEW`
 comment the review watch has not typed into the agent yet is one: the endpoint
@@ -333,7 +344,7 @@ have instead of towards a plan nobody can ever implement.
 ```
 curl -s -X POST -H 'Content-Type: application/json' \
   http://127.0.0.1:8787/implement-plan \
-  -d '{"agent":"workspace:20","issue":33,"repo":"owner/name"}'
+  -d '{"agent":"4263ca7b-5dd4-40df-b4e0-11566ed37d28","issue":33,"repo":"owner/name"}'
 ```
 
 ---
@@ -482,7 +493,7 @@ recover a session it lost — a reload, or a backend restart.
   "request":{"id":"ABC-123","repo":"owner/name","path":"/repo/checkout"},
   "plan":{"id":"ABC-123","repo":"owner/name",
     "issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},
-    "agent":"workspace:4","branch":"feat/7",
+    "agent":"7c1e4b0a-3d2f-4a91-9c55-8e0b1f6a2d34","branch":"feat/7",
     "worktree":"/repo/checkout/.worktrees/7"}}]}
 ```
 
@@ -509,8 +520,11 @@ read: the two cases where the list really would be a lie. The page must show
 *I cannot tell what is running* rather than *nothing is running*, and it must
 not treat this refusal as an empty list.
 
-`detail` carries the reason itself, not a fixed sentence — the same rule the ten
-refusals of `POST /start-plan` follow. It is the one place a person sees why
+`detail` carries the reason itself, not a fixed sentence, when the harness root
+cannot be listed — the checkout registry's own arm of this refusal is the fixed
+literal `the checkouts it serves could not be read`, with no path or errno of
+its own. Where it does vary, it follows the same rule the ten refusals of
+`POST /start-plan` follow. It is the one place a person sees why
 without reaching the terminal running the backend, and it was measured to
 matter: during the in-store run the reason lived only in a cmux tab nobody was
 looking at, while the page said *no pudo preguntar a cmux* and nothing else.
@@ -636,7 +650,7 @@ app serves its socket from the process that is **running**, so a cmux updated on
 disk but not restarted keeps answering with the schema of the build it was
 started from, while `cmux --version` already reports the new one. Measured on
 2026-09-09: same binary, byte for byte, on two machines — one answering
-`custom_title`, the other only the older `title`, and the recovery refusing to
+`custom_title`, the other only the older `title`, and the query refusing to
 guess.
 
 **Refusals**
