@@ -46,23 +46,24 @@ stop there: a blocker travels as that field, which is the one thing a guess cann
 
 ## What a code block carries
 
-`## 3. Reference patterns` carries this repo's yardstick in two lists. An analogous file shows the
-shape; a convention document states the rule, and a rule holds even where no analogous file exists.
-Start from `.agent/conventions.md` where the repo declares one: that file is the repo's own
-declaration, and it is what keeps slice 14 citing the same yardstick as slice 3. Then look for
-`AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING`, a `docs/conventions/` directory and the project skills.
-List under `Rules to obey:`, **by
-path**, the entries that bear on this slice — you are selecting, not transporting: the program
-pastes that file into every task brief anyway, so omitting an entry does not hide it from the judge.
-If the repo declares none, say so with `N/A — <reason>`: a path that is not in the repo fails the plan.
+`## 3. Reference patterns` separates `Files to imitate:` (analogous code) from
+`Rules to obey:` (convention paths). A rule binds even without an exemplar. Start
+from `.agent/conventions.md`, then inspect `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING`,
+`docs/conventions/` and project skills. Select the entries relevant to this slice;
+the program carries the repository's declaration to every task regardless of
+what you select. Missing convention paths fail the plan; a repository declaring
+none gets `N/A — <reason>`.
 
-**There is a second yardstick, and it is not in this section: ct's own.** The documents of
-the plugin's `conventions/` directory, whose absolute path the kickoff gives you, and which **take precedence over this
-repo's, rule by rule, not by topic**: where a rule of this repo requires what one of those documents
-forbids, or forbids what they require, ct's wins; where this repo says something none of them
-speaks about, this repo's rule binds in full. Read them before you write the plan — the program
-pastes them into every task brief, so a plan that contradicts them produces tasks the judge blocks.
-What it means for splitting `**Files:**` between `(create)` and `(modify)` is in your kickoff.
+Read every ct convention at the paths supplied by the kickoff before planning.
+These are a separate yardstick, carried to every task by the program. Apply their
+precedence header as written rather than restating it. A plan cannot hide a rule
+by omitting its path. The kickoff also governs `(create)` versus `(modify)`.
+
+Before closing the contracts, put the responsibility trace required by
+`conventions/architecture.md` in `## 3. Reference patterns`. Inspect the operations
+behind the proposed ports, not only their signatures. A cited conflict between
+the proposed plan and a convention is a planning blocker, not an assumption to
+hand to the implementer. Apply the declared precedence before calling it a conflict.
 
 Then every code block you write declares its **role** on
 the line right above it. The validator enforces the labels and their budgets:

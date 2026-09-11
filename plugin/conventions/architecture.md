@@ -26,6 +26,32 @@ knows nobody.
   that knows there is a subprocess, a filesystem or another service on the other
   side. What it owes at that edge is `conventions/boundaries.md`.
 
+## Responsibility ownership
+
+A correct import graph does not prove a correct responsibility split. For each
+capability the change implements, trace its actual symbols: the application owner
+that conducts the feature, the domain owner that decides its rules, and the
+adapters that obtain or persist observations. Name the paths and methods, not
+just their folders. If a role has no work in that capability, explain why rather
+than inventing a type to fill it.
+
+An adapter may sequence the protocol operations needed for its external
+conversation: resolving a repository before reading its revision, for example.
+That does not require a use case per command. Interpreting that protocol and
+validating its representation belongs at the boundary.
+
+Choosing the feature's next operation across sources, combining their facts into
+a business decision, or deciding whether those facts satisfy the feature's
+criteria is not protocol adaptation. The application conducts those operations;
+domain objects or policies own those decisions. A port that returns the finished
+feature result does not make that work infrastructure merely by hiding it behind
+one call.
+
+For example, a query delegating a revision lookup may be complete as one call.
+A readiness adapter that reads Git, decides whether to ask Docker, applies the
+readiness criteria, and assembles the verdict owns a feature flow. Putting a
+one-line use case in front of it does not establish the required split.
+
 The layers and what lives inside them **show in the tree**: one folder per
 layer, and inside each layer one folder per kind of inhabitant — the value
 objects, the ports and the policies apart from each other inside domain; the
@@ -97,6 +123,8 @@ lives in a module of its own, never inside an endpoint's own file.
   what it buys is the seam — whoever conducts stops knowing which port that
   step needs, and the step can grow without the conductor changing — and that
   is worth the same with a body of one line or of twenty.
+  This is not an exemption from **Responsibility ownership**: inspect what the
+  delegated operation actually owns.
 - **A configuration value enters as data, not behind a port.** A port whose only
   method returns a constant is indirection; what the object buys is that values
   which have to agree travel together and their coherence can be checked in one

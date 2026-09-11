@@ -60,6 +60,8 @@ crosses the edge is this document's subject.
   pair reads in the name and two implementations fit without renaming anything.
 - **An adapter does not decide policy** — retries, budgets, what to do with a
   failure and what it costs.
+  For protocol sequencing versus feature orchestration, use **Responsibility
+  ownership** in `conventions/architecture.md`.
 - **Text from another system gets its active syntax quieted** before it enters
   a document of a third one. Measured: a description carrying `#7` autolinked
   our record into a stranger's timeline, and an `@handle` would have notified a

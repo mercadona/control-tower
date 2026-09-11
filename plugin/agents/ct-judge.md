@@ -152,14 +152,15 @@ that list states it.** That block is where the rule is written and the only plac
 read it there and take it from there, because a second wording of it is how it drifts. What this
 item adds to it is calibration, and it is two cases:
 
-**One — a control of the plan can clash with one of these documents too, and the implementer answers
-for neither.** A `**Verification:**` command that pins the exact number of tests in the whole suite
-forbids what `conventions/testing.md` requires — driving each branch red before it ships — because
-there is no room left for the assertion the document asks for. Where a control and one of these
-documents cannot both be satisfied, say so in `result` and **leave it out of the findings**: it is
-the same treatment as a clash with the repo's own linter, and for the same reason. That is the only
-diff the implementer could have written. The defect is in the plan, and the plan is judged
-elsewhere.
+**One — a prescribed plan is not an exemption from an applicable convention.**
+Resolve the declared precedence first, including its treatment of repository-owned
+verification tools. If a plan decision or control still forces a violation, report
+a `plan/convention conflict` under `patrones`: quote the decision or control, the
+rule, and the affected code. State that the correction requires the coordinator
+to obtain a corrected plan, not the implementer to bypass a control or rewrite a
+closed decision. Passing the plan's commands does not settle that conflict. For
+example, a plan pinning the whole suite's test count does not authorize leaving a
+required behavior untested.
 
 **Two — a module that was already there complies by following the style of its host.** `style.md`
 and `architecture.md` both exempt it and both reach every task; each one says the exemption in its
@@ -194,7 +195,16 @@ rather than "this reads badly". This item's business is exactly what you can pin
 document the brief carries, or to an exemplar the plan names — that is the difference between a real
 finding and the defensive veto a verifier asked for defects always produces.
 
-**Boundaries are this item's subject too.** Where a rule of either yardstick prescribes how
+**Responsibility ownership is measured explicitly in this item's `result`.**
+Apply that section of `conventions/architecture.md`: name the actual paths and
+symbols that conduct the capability, decide its rules, and obtain its observations.
+Explain a role with no work rather than inventing a missing class. Compare the
+plan's trace, when present, with the bodies behind the ports; the trace is a claim,
+not evidence. A thin use case and a correct import graph settle neither ownership
+nor compliance. An older plan lacking the trace is still judged by its code, not
+given a missing-heading finding.
+
+**Dependency direction is measured as well.** Where a rule of either yardstick prescribes how
 boundaries are drawn here — what its core may import, how a dependency arrives (injected rather
 than constructed where it is used), which objects are allowed to cross a boundary — the lines of
 the diff that answer those questions are its imports, its constructors and its signatures: read

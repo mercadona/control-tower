@@ -157,6 +157,25 @@ describe('the bench cases on disk', () => {
     }
   })
 
+  it('distinguishes_a_revision_lookup_from_a_readiness_flow_hidden_in_an_adapter', () => {
+    const byName = Object.fromEntries(Cases.all().map((benchCase) => [benchCase.name, benchCase]))
+    expect(byName['repository-revision']?.expected.ruling).toBe('PASS')
+    expect(byName['project-readiness']?.expected.ruling).toBe('FAIL')
+    expect(byName['project-readiness']?.expected.mustFind).toEqual(['patrones'])
+  })
+
+  it('the_responsibility_packages_match_the_source_the_judge_will_read', () => {
+    for (const name of ['repository-revision', 'project-readiness']) {
+      const benchCase = Cases.named(name)
+      for (const file of BenchCase.diffOf(benchCase.reviewPackage).split(/^diff --git /m).slice(1)) {
+        const path = /^\+\+\+ b\/(.+)$/m.exec(file)[1]
+        const hunk = file.slice(file.indexOf('\n@@') + 1).split('\n').slice(1)
+        const added = hunk.filter((line) => line.startsWith('+')).map((line) => line.slice(1)).join('\n') + '\n'
+        expect(readFileSync(join(benchCase.repoDirectory, path), 'utf8')).toBe(added)
+      }
+    }
+  })
+
   it('every case carries the working tree the implementer left, with the files the package names as touched', () => {
     for (const benchCase of Cases.all()) {
       const touched = /## Rutas tocadas\n([\s\S]*?)\n\n## Diff/.exec(benchCase.reviewPackage)[1].split('\n').map((line) => line.replace(/^- /, ''))
@@ -232,7 +251,7 @@ describe('BenchCases', () => {
 
   it('asking for a case that does not exist names the ones that do', () => {
     expect(() => BenchCases.load(FIXTURES, { only: 'nope' })).toThrow(UnknownCase)
-    expect(() => BenchCases.load(FIXTURES, { only: 'nope' })).toThrow(/concurrencia-sin-hallazgo, tarea-correcta, test-inexistente-en-verde/)
+    expect(() => BenchCases.load(FIXTURES, { only: 'nope' })).toThrow(/concurrencia-sin-hallazgo, project-readiness, repository-revision, tarea-correcta, test-inexistente-en-verde/)
   })
 
   it('a package whose token is not the sha256 of its diff is a corrupt case, not a case the judge can be measured on', () => {
@@ -354,11 +373,24 @@ describe('JudgeBench', () => {
     const planned = bench.plan({ cases: Cases.all(), runs: 2 })
     expect(planned.map(({ judgeRun }) => ScriptedJudge.keyOf(judgeRun))).toEqual([
       'concurrencia-sin-hallazgo#1', 'concurrencia-sin-hallazgo#2',
+      'project-readiness#1', 'project-readiness#2',
+      'repository-revision#1', 'repository-revision#2',
       'tarea-correcta#1', 'tarea-correcta#2',
       'test-inexistente-en-verde#1', 'test-inexistente-en-verde#2',
     ])
-    expect(new Set(planned.map(({ judgeRun }) => judgeRun.cwd)).size).toBe(6)
+    expect(new Set(planned.map(({ judgeRun }) => judgeRun.cwd)).size).toBe(10)
     expect(judge.asked).toEqual([])
+  })
+
+  it('does_not_copy_the_expected_verdict_into_the_judges_room', () => {
+    const { bench } = Benches.over({ root, answers: {} })
+    for (const name of ['repository-revision', 'project-readiness']) {
+      const benchCase = Cases.named(name)
+      const [{ judgeRun }] = bench.plan({ cases: [benchCase], runs: 1 })
+      expect(existsSync(join(judgeRun.cwd, 'expected.json'))).toBe(false)
+      expect(readFileSync(judgeRun.briefPath, 'utf8')).not.toContain(benchCase.expected.incident)
+      expect(readFileSync(judgeRun.packagePath, 'utf8')).not.toContain(benchCase.expected.incident)
+    }
   })
 
   it('a FAIL with a finding under the expected rule is a hit, and its cost is what claude declared', () => {

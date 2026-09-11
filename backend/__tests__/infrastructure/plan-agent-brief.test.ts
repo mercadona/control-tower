@@ -18,7 +18,7 @@ describe('PlanAgentBrief', () => {
 
   it('it_points_at_the_baseline_already_measured_in_the_state_file_instead_of_ordering_one', () => {
     expect(errand()).toMatch(/baseline/)
-    expect(errand()).toContain(`campo \`baseline:\` de ${SLICE_REL_PATH}`)
+    expect(errand()).toContain(`\`baseline:\` field of ${SLICE_REL_PATH}`)
   })
 
   it('the_published_plan_ends_with_the_line_that_says_how_to_ask_it_for_changes', () => {
@@ -27,7 +27,7 @@ describe('PlanAgentBrief', () => {
 
   it('it_no_longer_orders_the_ground_checked_because_the_program_cut_and_measured_the_worktree_itself', () => {
     expect(errand()).not.toMatch(/pwd/)
-    expect(errand()).not.toMatch(/baseline en verde ANTES/)
+    expect(errand()).not.toMatch(/green baseline BEFORE/)
   })
 
   it('it_names_the_skill_that_writes_the_plan_instead_of_describing_the_shape_of_one', () => {
@@ -49,8 +49,8 @@ describe('PlanAgentBrief', () => {
   })
 
   it('it_orders_the_session_to_stop_after_committing_instead_of_starting_the_work', () => {
-    expect(errand()).toMatch(/PARA/)
-    expect(errand()).toMatch(/no implementes/i)
+    expect(errand()).toMatch(/STOP/)
+    expect(errand()).toMatch(/do not implement/i)
   })
 
   it('it_carries_the_order_of_precedence_verbatim_from_the_plugin_instead_of_wording_it_again', () => {
@@ -64,19 +64,23 @@ describe('PlanAgentBrief', () => {
   })
 
   it('it_does_not_override_the_scope_the_architecture_document_declares_for_itself', () => {
-    expect(errand()).not.toMatch(/la vara de arquitectura se aplica SIEMPRE/)
-    expect(errand()).not.toMatch(/la única regla de la vara que este encargo cambia/i)
+    expect(errand()).not.toMatch(/the architecture yardstick ALWAYS applies/)
+    expect(errand()).not.toMatch(/the only yardstick rule this errand changes/i)
   })
 
-  it('it_does_not_order_the_five_documents_read_before_planning', () => {
-    expect(errand()).not.toMatch(/Lee la vara de Control Tower/)
-    expect(errand()).not.toContain(PluginYardstick.FILES.join(', '))
+  it('it_gives_the_planner_every_canonical_document_before_asking_for_the_plan', () => {
+    const composed = errand()
+    for (const file of PluginYardstick.FILES) {
+      const path = `/plugin/conventions/${file}`
+      expect(composed).toContain(path)
+      expect(composed.indexOf(path)).toBeLessThan(composed.indexOf('control-tower-loop:writing-plans-prescriptive'))
+    }
   })
 
   it('it_names_the_sections_that_carry_what_the_acceptance_criteria_cannot', () => {
     expect(errand()).toContain('Contexto del epic')
     expect(errand()).toContain('Contexto heredado')
-    expect(errand()).toMatch(/no lo busques fuera del issue/)
+    expect(errand()).toMatch(/do not look outside the issue/)
   })
 
   it('it_does_not_send_the_agent_to_a_section_the_body_never_writes', () => {
@@ -90,11 +94,11 @@ describe('PlanAgentBrief', () => {
 
   it('it_sends_the_agent_to_the_section_where_a_person_wrote_by_hand_what_they_want_planned', () => {
     expect(errand()).toContain('Comentario de quien pide el plan')
-    expect(errand()).toContain('entrada del plan')
+    expect(errand()).toContain('plan input')
   })
 
   it('it_says_the_criteria_are_the_agents_to_propose_when_the_issue_declares_none_instead_of_leaving_it_stuck', () => {
-    expect(errand()).toContain('no hay spec de donde rellenarlos')
+    expect(errand()).toContain('there is no separate spec to supply them')
   })
 })
 
@@ -116,22 +120,22 @@ describe('PlanAgentBrief resuming the agent', () => {
   })
 
   it('it_translates_ct_step_to_node_by_absolute_path_because_ct_step_is_not_a_command', () => {
-    expect(errand()).toContain('donde diga `ct-step`, es `node /plugin/scripts/ct-step.mjs`')
+    expect(errand()).toContain('where it says `ct-step`, use `node /plugin/scripts/ct-step.mjs`')
   })
 
   it('it_orders_rewriting_slice_md_role_task_and_next_action_before_asking_for_the_first_step', () => {
     const composed = errand()
     expect(composed).toContain('.agent/SLICE.md')
-    expect(composed).toContain('role, task y next_action')
-    expect(composed.indexOf('.agent/SLICE.md')).toBeLessThan(composed.indexOf('Pregunta el paso'))
+    expect(composed).toContain('role, task and next_action')
+    expect(composed.indexOf('.agent/SLICE.md')).toBeLessThan(composed.indexOf('Ask for the step'))
   })
 
   it('it_orders_the_release_that_moves_the_issue_to_review_instead_of_forbidding_it', () => {
     expect(errand()).toContain(
       'node /plugin/scripts/dispatch-check.mjs 42 --repo owner/name --release'
     )
-    expect(errand()).not.toMatch(/no ejecutes/i)
-    expect(errand()).not.toContain('saldría por 9')
+    expect(errand()).not.toMatch(/do not execute/i)
+    expect(errand()).not.toContain('would exit 9')
   })
 
   it('the_release_it_orders_waives_the_merge_watcher_because_this_flow_has_no_coordinator_to_notify', () => {
@@ -139,13 +143,13 @@ describe('PlanAgentBrief resuming the agent', () => {
   })
 
   it('it_still_stops_before_the_merge_because_that_is_the_second_human_decision', () => {
-    expect(errand()).toMatch(/no la mergees/i)
-    expect(errand()).toMatch(/PARA/)
+    expect(errand()).toMatch(/do not merge/i)
+    expect(errand()).toMatch(/STOP/)
   })
 })
 
 describe('PlanAgentBrief asking the agent for changes', () => {
-  const CHANGES = 'añade el caso\nde la issue sin\tdescripción'
+  const CHANGES = 'add the case\nfor an issue without\ta description'
   const errand = (changes = CHANGES) => new PlanAgentBrief({
     dispatchCheck: '/plugin/scripts/dispatch-check.mjs',
     conventions: '/plugin/conventions',
@@ -159,18 +163,18 @@ describe('PlanAgentBrief asking the agent for changes', () => {
   it('the_errand_is_one_line_even_when_the_person_wrote_the_change_across_several', () => {
     expect(errand()).not.toContain('\n')
     expect(errand()).not.toContain('\t')
-    expect(errand()).toContain('añade el caso de la issue sin descripción')
+    expect(errand()).toContain('add the case for an issue without a description')
   })
 
   it('the_errand_names_the_issue_the_plan_and_the_command_that_validates_it', () => {
     expect(errand()).toContain('#42')
     expect(errand()).toContain('node /plugin/scripts/dispatch-check.mjs 42 --repo owner/name --check-plan')
-    expect(errand()).toMatch(/no implementes/i)
+    expect(errand()).toMatch(/do not implement/i)
   })
 
   it('the_errand_orders_the_reworked_plan_back_onto_the_issue_so_the_next_change_can_be_asked_for', () => {
-    expect(errand()).toMatch(/publica/i)
-    expect(errand()).toMatch(/comentario/i)
+    expect(errand()).toMatch(/publish/i)
+    expect(errand()).toMatch(/comment/i)
   })
 
   it('it_never_promises_a_permission_nobody_mints', () => {
@@ -180,7 +184,7 @@ describe('PlanAgentBrief asking the agent for changes', () => {
 })
 
 describe('PlanAgentBrief asking the agent to fix its pull request', () => {
-  const CHANGES = 'varias cosas\nsrc/foo.js:42: revienta\tcon []'
+  const CHANGES = 'several changes\nsrc/foo.ts:42: fails\twith []'
   const errand = (changes = CHANGES) => new PlanAgentBrief({
     dispatchCheck: '/plugin/scripts/dispatch-check.mjs',
     conventions: '/plugin/conventions',
@@ -190,12 +194,12 @@ describe('PlanAgentBrief asking the agent to fix its pull request', () => {
   it('the_errand_is_one_line_even_when_the_review_spread_the_anchors_across_several', () => {
     expect(errand()).not.toContain('\n')
     expect(errand()).not.toContain('\t')
-    expect(errand()).toContain('varias cosas src/foo.js:42: revienta con []')
+    expect(errand()).toContain('several changes src/foo.ts:42: fails with []')
   })
 
   it('the_errand_orders_correcting_over_the_branch_and_the_pull_request_that_already_exist', () => {
-    expect(errand()).toContain('sin rehacer el plan')
-    expect(errand()).toContain('sin abrir otra pull request')
+    expect(errand()).toContain('without reworking the plan')
+    expect(errand()).toContain('do not open another pull request')
     expect(errand()).toContain(PlanAgentBrief.NO_NEW_WORKTREES)
   })
 
@@ -207,6 +211,6 @@ describe('PlanAgentBrief asking the agent to fix its pull request', () => {
   })
 
   it('the_errand_forbids_merging_because_that_gate_stays_human', () => {
-    expect(errand()).toMatch(/no la mergees/i)
+    expect(errand()).toMatch(/do not merge/i)
   })
 })

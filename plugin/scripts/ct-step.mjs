@@ -542,6 +542,7 @@ function nextVerb() {
   out('')
   switch (run.step) {
     case STEPS.IMPLEMENT: {
+      out(`If the implementer or judge reports a plan/convention conflict, stop before \`report\`; record blocked: {reason, unblock} in ${SLICE_REL_PATH} and ask for a plan correction. Do not redispatch or rewrite closed decisions.`)
       const brief = writeBrief()
       const reportPath = join(workDir, `task-${run.task}-report.json`)
       // The list comes out of the constant and is not typed again: the hand copy
@@ -557,7 +558,7 @@ function nextVerb() {
         out(run.lastFindings)
       }
       out('')
-      out(`When it comes back:  ct-step report ${reportPath} --plan ${planPath} --issue ${issue}`)
+      out(`On completed work:  ct-step report ${reportPath} --plan ${planPath} --issue ${issue}`)
       out('Do NOT commit yourself, and do not ask the implementer to commit: ct-step commits.')
       break
     }

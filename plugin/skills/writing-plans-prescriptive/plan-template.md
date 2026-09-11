@@ -29,17 +29,18 @@ Protected" section. If nothing: N/A — <reason>.}}
 
 ## 3. Reference patterns
 
-{{The yardstick of this repo for this slice, in two lists. It is the only part of the plan that
-tells the implementer how code is written here and the judge what to block on, so every path you
-name is grepped by `--check-plan`: a path that is not in the repo fails the plan.}}
+{{Repository conventions and exemplars: `--check-plan` rejects paths that do not exist.
+The program carries ct's yardstick separately.}}
 
-Files to imitate: {{real files whose shape the implementer copies — same role, same layer. Or
-N/A — <reason>.}}
+Files to imitate: {{analogous files, same role and layer; or N/A — <reason>.}}
 
-Rules to obey: {{start from `.agent/conventions.md` where the repo declares one; then this repo's
-own convention documents, by path — `AGENTS.md`, `CLAUDE.md`, a file
-under `docs/conventions/`, `CONTRIBUTING` — plus any skill the issue's "Contexto del epic" names
-(a skill is not a path and is not checked on disk). Or N/A — this repo declares none.}}
+Rules to obey: {{start with `.agent/conventions.md`; then applicable `AGENTS.md`,
+`CLAUDE.md`, `CONTRIBUTING`, `docs/conventions/` paths and skills named by the issue
+(skill names are not checked on disk). Or N/A — this repo declares none.}}
+
+Responsibility trace: {{apply "Responsibility ownership" in ct's
+`conventions/architecture.md` to this capability; name paths and symbols, including
+the operation behind each relevant port. Explain any role with no work here.}}
 
 ## 4. Inventory
 

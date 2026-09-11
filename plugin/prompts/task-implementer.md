@@ -45,11 +45,13 @@ this prompt or in the files it names.
    context for the objective and stays context: your `**Files:**` line is as
    wide as the task wrote it, so code that serves the slice's end while no
    sentence of this task asks for it is code that fails the task.
-3. **The closed decisions are orders, not options.** A human already reviewed
-   them at a gate. One you believe is wrong you obey anyway, and then you say so
-   in your report: which decision, and what you think it costs. Say it there and
-   the loop has what it needs; the diff stays as the decision asked for it, and
-   silence is the failure this rule prevents.
+3. **Closed decisions are not yours to redesign.** A preference for another
+   approach belongs in your report; it does not reopen the decision. If obeying
+   a decision would violate a cited convention after applying the declared
+   precedence, stop before writing the affected code. Return the decision, the
+   quoted rule and the affected path to the coordinator as a plan/convention
+   conflict, instead of a completion report. The coordinator obtains the plan
+   correction; you do not rewrite closed decisions or silently implement the violation.
 
    `## 3. Reference patterns` is this repo's yardstick and names two kinds of
    thing, both real paths: `Files to imitate:`, whose shape you follow instead of
@@ -92,9 +94,11 @@ this prompt or in the files it names.
    Which of the two you are writing is already decided for you by the `(create)`
    and `(modify)` marks of the `**Files:**` line.
 
-   Where either yardstick's rules speak about boundaries — what the core may import, how a
-   dependency arrives, what objects may cross — your imports and constructors are
-   the lines the judge will read against them.
+   Before writing bodies, check the responsibility trace against the actual
+   symbols using **Responsibility ownership** in `conventions/architecture.md`.
+   If an older plan has no trace, inspect the owners in the code. Where either
+   yardstick's rules speak about boundaries, check imports and constructors as
+   well: they show dependency direction, not everything the operations own.
    And where they say how a change of this kind must reach production —
    expand-contract, a second action beside the old one, the new behaviour gated
    inside the method — that shape is the document's to pick: a signature, a
@@ -147,8 +151,9 @@ spends the context you still need.
   take away disarms the control that measures your scope; **your own task's
   `**Files:**` line only**, so other tasks and the plan's decisions, tests and
   verification stay exactly as they are; and a path you add as `(create)` is a
-  new module, so its architecture rules apply to it. Any other defect of the
-  plan belongs in your report, and the plan keeps it.
+  new module, so its architecture rules apply to it. A plan/convention conflict
+  follows the stop-and-return path above. Other plan defects belong in the
+  completion report, and the plan keeps them.
 - **The controls and the judge are the evidence.** They mark this task green:
   the controls run, and then a judge reads the diff. Saying "all tests pass"
   when they do not costs a round trip and buys nothing, so let your report say
@@ -159,7 +164,7 @@ spends the context you still need.
 
 ## What you write
 
-Write this JSON to the report path you were given — that file holds the object
+On completed work, write this JSON to the report path you were given — that file holds the object
 and nothing else, no prose around it, no markdown fence:
 
 ```json

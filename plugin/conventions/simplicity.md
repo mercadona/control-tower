@@ -34,6 +34,9 @@ uses it.
 
 The question: **which call breaks without it?** Name it. If none does, it goes.
 
+That establishes necessity, not placement. **Responsibility ownership** in
+`conventions/architecture.md` measures whether that necessary code has the right owner.
+
 ## An unreachable check is not a check
 
 A condition on a state that cannot occur — a key that cannot repeat, a value
