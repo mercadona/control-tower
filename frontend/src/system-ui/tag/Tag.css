@@ -1,0 +1,32 @@
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--shape-button-full);
+  white-space: nowrap;
+}
+
+.tag--success {
+  color: var(--foreground-success);
+  background-color: var(--background-success);
+}
+
+.tag--danger {
+  color: var(--foreground-danger);
+  background-color: var(--background-danger-tonal);
+}
+
+.tag--warning {
+  color: var(--foreground-warning);
+  background-color: var(--background-warning);
+}
+
+.tag--informative {
+  color: var(--foreground-informative);
+  background-color: var(--background-informative);
+}
+
+.tag--neutral {
+  color: var(--foreground-neutral);
+  background-color: var(--background-neutral);
+}

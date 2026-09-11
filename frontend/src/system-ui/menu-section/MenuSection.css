@@ -1,0 +1,33 @@
+.menu-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.menu-section__title {
+  display: flex;
+  align-items: center;
+  height: 16px;
+  color: var(--foreground-secondary);
+}
+
+.menu-section__rule {
+  display: flex;
+  align-items: center;
+  height: 16px;
+}
+
+.menu-section__rule::before {
+  content: '';
+  flex: 1 1 auto;
+  border-top: var(--borderwidth-sm) solid var(--border-primary);
+}
+
+.menu-section__items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
