@@ -291,7 +291,7 @@ const Home = () => {
             type="warning"
             role="alert"
             title={restoredRef.current ? 'No se puede confirmar el plan guardado' : 'No se puede saber qué hay en marcha'}
-            description="El backend contestó, pero no pudo leer sus registros de planes. No puede saber qué planes hay activos. No se harán acciones hasta que se confirme el estado."
+            description="El backend contestó, pero no pudo leer sus registros. No puede saber qué planes hay activos. No se harán acciones hasta que se confirme el estado."
           />
           <div className="home__recovery-actions">
             <Button onClick={retryReconciliation}>Reintentar</Button>

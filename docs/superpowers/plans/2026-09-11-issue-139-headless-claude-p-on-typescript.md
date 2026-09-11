@@ -879,7 +879,7 @@ Call site (frontend/src/pages/home/Home.tsx):
 // line 267, the plan the backend no longer holds:
 description="El backend ya no tiene este plan activo. Descarta el estado para crear una solicitud nueva."
 // line 294, recovery that could not reach a conclusion:
-description="El backend contestó, pero no pudo leer sus registros de planes. No puede saber qué planes hay activos. No se harán acciones hasta que se confirme el estado."
+description="El backend contestó, pero no pudo leer sus registros. No puede saber qué planes hay activos. No se harán acciones hasta que se confirme el estado."
 ```
 
 Nothing else moves: the variants, the conditions that render them and the shape of `/active-plans`

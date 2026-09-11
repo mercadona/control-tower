@@ -479,6 +479,7 @@ describe('Home · restore workflow', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('No se puede saber qué hay en marcha')
+    expect(alert).toHaveTextContent('no pudo leer sus registros')
     expect(alert).not.toHaveTextContent('No se pudo contactar con el backend')
     expect(screen.getByLabelText('Ticket')).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Descartar estado' })).toBeNull()
