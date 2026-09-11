@@ -264,7 +264,7 @@ const Home = () => {
             type="warning"
             role="alert"
             title="El plan guardado ya no está activo"
-            description="El backend o cmux ya no tiene este plan activo. Descarta el estado para crear una solicitud nueva."
+            description="El backend ya no tiene este plan activo. Descarta el estado para crear una solicitud nueva."
           />
           <Button variant="secondary" onClick={discardStaleWorkflow}>Descartar estado</Button>
         </div>
@@ -291,7 +291,7 @@ const Home = () => {
             type="warning"
             role="alert"
             title={restoredRef.current ? 'No se puede confirmar el plan guardado' : 'No se puede saber qué hay en marcha'}
-            description="El backend contestó, pero no pudo preguntar a cmux. No puede saber qué planes hay activos. No se harán acciones hasta que se confirme el estado."
+            description="El backend contestó, pero no pudo leer sus registros de planes. No puede saber qué planes hay activos. No se harán acciones hasta que se confirme el estado."
           />
           <div className="home__recovery-actions">
             <Button onClick={retryReconciliation}>Reintentar</Button>
