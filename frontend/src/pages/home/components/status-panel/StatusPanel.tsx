@@ -58,7 +58,7 @@ const StatusPanel = ({ implementation }: StatusPanelProps) => {
         className="status-panel__section"
         actions={
           tools.phase === 'checking' ? undefined : (
-            <Button type="button" onClick={() => void check()}>
+            <Button type="button" variant="tertiary" onClick={() => void check()}>
               Reintentar comprobación
             </Button>
           )

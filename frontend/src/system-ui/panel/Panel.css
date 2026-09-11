@@ -12,6 +12,7 @@
 .panel__heading-block {
   display: flex;
   flex-shrink: 0;
+  flex-wrap: wrap;
   gap: 16px;
   align-items: center;
   justify-content: space-between;
@@ -20,8 +21,11 @@
 }
 
 .panel__heading {
+  flex-shrink: 0;
   margin: 0;
+  overflow-wrap: normal;
   color: var(--foreground-primary);
+  white-space: nowrap;
 }
 
 .panel__actions {
