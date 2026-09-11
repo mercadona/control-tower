@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { ApiServer } from '../../src/infrastructure/api-server.js'
+import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { InspectProject } from '../../src/application/queries/inspect-project.ts'
 import { ProjectSetup } from '../../src/domain/ports/project-setup.ts'
 import { ProjectReadiness } from '../../src/domain/value-objects/project-readiness.ts'

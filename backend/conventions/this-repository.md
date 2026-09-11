@@ -22,35 +22,28 @@ every diff, old module or new. `plugin/conventions/style.md` and
 module that was already there — the one exemption in the whole travelling
 yardstick — and this repository does not take it.
 
-## The backend is migrating to TypeScript, and the migration is temporary
+## The backend is TypeScript
 
-A new module, test or test helper under `backend/` is born `.ts`. Nothing new
-arrives as JavaScript, and no exemption survives the fact that its neighbours
-still are.
+Every module, test and test helper under `backend/` is `.ts`. There is no
+JavaScript left here and none arrives: the migration that converted the 143
+JavaScript files this backend started with is over, and with it went the
+baseline census and the boundary that held it open.
 
-`__tests__/typescript-migration-boundary.test.ts` holds the boundary open. It
-walks `src/` and `__tests__/` and refuses any `.js` or `.mjs` path that is not
-in `__tests__/fixtures/javascript-migration-baseline.txt`, the census of the
-143 JavaScript files the backend had when the migration started. The baseline
-is a **fixed superset**: a converted file leaves the tree without anyone
-editing the fixture, so the fixture never becomes the place every branch
-conflicts. It is never widened to admit a path born after the census.
-
-The JavaScript that remains is still open to functional change. Converting a
-whole owner to land a feature is the wrong trade when it makes that pull
-request larger than the feature or riskier than it needs to be — the feature
-merges as JavaScript and the migration types it afterwards.
+`__tests__/typescript-only.test.ts` keeps the rule live. It walks `backend/`,
+skipping `node_modules`, and fails on any `.js` or `.mjs` it finds. It needs no
+list of what is allowed, because nothing is: the answer is the empty set, and
+the test proves its own census walks by finding the JavaScript in a tree built
+to contain some.
 
 Node.js executes the backend by stripping types and never checks them, so
 `npm run typecheck` is what says the graph is sound and it runs before the
 suite. Only erasable syntax reaches the tree: no enums, parameter properties,
 runtime namespaces, decorators or path aliases, and `erasableSyntaxOnly`
 refuses them before a reviewer has to. A relative import names the extension
-the file really has — `.ts` for what is converted, `.js` for the JavaScript
-that remains and for everything the backend reads out of `plugin/`.
-
-This whole section, the boundary test and the baseline leave together when the
-last JavaScript module does.
+the file really has — `.ts` inside `backend/`, and `.js` for everything the
+backend reads out of `plugin/`, which is JavaScript and stays JavaScript.
+`allowJs` survives in `tsconfig.json` for exactly that reason: it is what lets
+those imports resolve, and it is no longer a statement about this backend.
 
 ## Ubiquitous language
 
@@ -65,12 +58,13 @@ last JavaScript module does.
 | **Prepared workspace** | A worktree `.worktrees/<n>` on branch `feat/<n>` that a plan agent works in |
 | **Harvest** | Collecting what a delivered slice left behind — its worktree, its branch, its agent — once its pull request merged; the plugin's `dispatch-check --collect` does it, the backend only decides when |
 | **Harvest ledger** | The BigQuery table where every harvested slice leaves its row, shared by every team and told apart by `repo`; the plugin loads it, the backend only says which table (`CT_HARVEST_BQ_TABLE`) |
+| **Metrics delivery** | Whether a merged slice's row reaches the harvest ledger at all: an option of this backend's start-up (`CT_HARVEST_BQ_TABLE`), validated once and read-only from then on. Disabled it costs no plan and no collection — only the row, and with it every comparison of coding tools that row would have fed. Enabled it makes `bq` a tool that blocks, because a slice whose row did not land is kept undeleted and retried |
 | **Pull request** | Where a delivered slice waits for a person: the agent opens it on `feat/<n>` and stops |
 | **Change asked** | One thing a person asked for on that pull request, with its anchors `file:line`; GitHub's native reviews are where it is read from |
 | **Plan issue status** | Which rung of the loop's ladder the issue stands at — `backlog`, `ready`, `in-progress`, `in-review` — or none, which is a status too and not an absence |
 | **Delivery state** | What that status means once a pull request is open: waiting for a person (`in-review`), fixing what was asked (`fixing`), or nobody on it (`unattended`) |
 | **Workbench** | Where a slice goes back to when a person asks for changes; the plugin's `dispatch-check --reopen` puts it there, and the backend only decides when |
-| **External tool** | A binary Control Tower drives that has to be usable before work starts: `gh`, `acli`, `claude`, `git`, `bq` carry a credential of their own, and `cmux` carries the query plans are recovered with. Which six lives in `probed-tool-sessions.ts`, and so does what is asked of the five that carry a credential; the query `cmux` is asked arrives injected from `ct-api.mjs` so that it is the very one plans are recovered with |
+| **External tool** | A binary Control Tower drives that has to be usable before work starts: `gh`, `acli`, `claude`, `git`, `bq` carry a credential of their own, and `cmux` carries the query plans are recovered with. Which six lives in `probed-tool-sessions.ts`, and so does what is asked of the five that carry a credential; the query `cmux` is asked arrives injected from `ct-api.ts` so that it is the very one plans are recovered with |
 | **Tool session** | Whether what is asked of that tool works right now: `ready`, `missing`, or `unknown` — when the login is not observable from this process, or when the binary the row is probed with is absent and nothing was asked at all. `unknown` is not a failure, and the `fix` beside it repairs what was asked about: the credential when the row was asked, the absent probe when it could not be, and the login of a tool whose own binary is absent, which presupposes an installation `installed` says separately you do not have. The `fix` column is product copy that lives in this backend: `ToolsStatus` renders it to the screen untranslated, and the product's decision is to keep it English because it is mostly literal shell commands — which is why `plugin/conventions/style.md` does not reach it |
 
 ## Naming an exception family
@@ -120,7 +114,7 @@ kinds of use case. Every domain exception lives together in the one file
 `exceptions.ts`, the catalogue exemption `plugin/conventions/architecture.md`
 allows for a kind declared together on purpose.
 
-A controller under `infrastructure/` is named `<endpoint>-route.js`, one
+A controller under `infrastructure/` is named `<endpoint>-route.ts`, one
 file per endpoint.
 
 What each file under `infrastructure/` is, concretely, in this backend — the
@@ -128,10 +122,10 @@ repository's own choice of names, not a pattern:
 
 ```
 infrastructure/
-  ct-api.mjs         the entrypoint
-  api-server.js      what every endpoint shares: mounting, the last net, listen, stop
-  http.js            generic plumbing: answering, routing hygiene, the origin filter, the body reader
-  harvest-clock.js   the sweep: every minute, asks a registry which clones
+  ct-api.ts          the entrypoint
+  api-server.ts      what every endpoint shares: mounting, the last net, listen, stop
+  http.ts            generic plumbing: answering, routing hygiene, the origin filter, the body reader
+  harvest-clock.ts   the sweep: every minute, asks a registry which clones
                       it served a plan for and surveys each in turn
   invocation.ts      moved out of the entrypoint until it is observable
                       without spawning a process — the reason it exists
@@ -157,7 +151,7 @@ infrastructure/
 
 ## Where the suite runs
 
-From `backend/`, never the repository root. The fast subset is `npx vitest run --exclude '**/*-real-process.test.js'`. During a working session, run the fast subset per change and the whole suite before handing anything over.
+From `backend/`, never the repository root. The fast subset is `npx vitest run --exclude '**/*-real-process.test.ts'`. During a working session, run the fast subset per change and the whole suite before handing anything over.
 
 ## Testing: a failing test must not leak a process
 

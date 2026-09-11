@@ -1,0 +1,203 @@
+import { describe, it, expect } from 'vitest'
+import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanState, type PlanStateValue } from '../../src/domain/value-objects/plan-state.ts'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
+import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
+import { PlanProgressNotRead } from '../../src/domain/exceptions.ts'
+
+type ScriptedAnswer = PlanStateValue | Error
+
+class EventsDouble {
+  static readonly SUBJECT = new PlanWatch({
+    story: null,
+    issue: new PlanIssue({ number: 42, url: 'https://github.com/owner/name/issues/42' }),
+    located: new WorkspaceLocation({ path: '/repo/.worktrees/42', branch: 'feat/42' }),
+    repository: new RepositoryName('owner/name'),
+    agent: 'workspace:1',
+  })
+
+  readonly answers: ScriptedAnswer[]
+  slept: number
+  planReads: number
+
+  constructor(answers: readonly ScriptedAnswer[]) {
+    this.answers = [...answers]
+    this.slept = 0
+    this.planReads = 0
+  }
+
+  static unable(said: string): EventsDouble {
+    return new EventsDouble([new PlanProgressNotRead(said)])
+  }
+
+  events(): PlanEvents {
+    return new PlanEvents({
+      sleep: () => {
+        this.slept += 1
+        return Promise.resolve()
+      },
+      read: () => {
+        this.planReads += 1
+        const answer = this.answers.shift()
+        if (answer === undefined) {
+          throw new Error('the progress was read more times than this test scripted an answer for')
+        }
+        if (answer instanceof Error) return Promise.reject(answer)
+
+        return Promise.resolve({ state: answer })
+      },
+    })
+  }
+
+  cancellingWhenExhausted(): () => boolean {
+    return () => this.answers.length === 0
+  }
+
+  async collected(cancelled: () => boolean = () => false): Promise<string[]> {
+    const frames: string[] = []
+    for await (const frame of this.events().stream(EventsDouble.SUBJECT, cancelled)) frames.push(frame)
+
+    return frames
+  }
+
+}
+
+class Watched {
+  static sessions(): PlanSessions {
+    const sessions = new PlanSessions()
+    sessions.remember(EventsDouble.SUBJECT)
+
+    return sessions
+  }
+}
+
+describe('PlanSessions', () => {
+  it('what_it_hands_back_is_the_whole_watch_so_the_flow_cannot_lose_the_repository_on_the_way', () => {
+    expect(Watched.sessions().find({ repository: EventsDouble.SUBJECT.repository, issue: 42 })).toBe(EventsDouble.SUBJECT)
+  })
+
+  it('an_issue_nobody_started_a_plan_for_is_answered_with_nothing_instead_of_an_empty_watch', () => {
+    expect(new PlanSessions().find({ repository: EventsDouble.SUBJECT.repository, issue: 404 })).toBe(null)
+  })
+
+  it('two_repositories_planning_the_same_issue_number_are_told_apart_by_the_repository_asked', () => {
+    const sessions = Watched.sessions()
+    const otherRepository = new RepositoryName('other/name')
+    const inOtherRepository = new PlanWatch({
+      story: null,
+      issue: new PlanIssue({ number: 42, url: 'https://github.com/other/name/issues/42' }),
+      located: new WorkspaceLocation({ path: '/other/.worktrees/42', branch: 'feat/42' }),
+      repository: otherRepository,
+      agent: 'workspace:2',
+    })
+
+    sessions.remember(inOtherRepository)
+
+    expect(sessions.find({ repository: EventsDouble.SUBJECT.repository, issue: 42 })).toBe(EventsDouble.SUBJECT)
+    expect(sessions.find({ repository: otherRepository, issue: 42 })).toBe(inOtherRepository)
+  })
+})
+
+describe('PlanEvents', () => {
+  it('a_frame_is_the_server_sent_event_a_browser_can_parse', () => {
+    expect(PlanEvents.frameFor(PlanState.READY)).toBe('data: {"state":"ready"}\n\n')
+    expect(PlanEvents.frameFor(PlanState.REVIEWING)).toBe('data: {"state":"reviewing"}\n\n')
+  })
+
+  it('it_emits_the_first_state_it_reads_so_a_late_subscriber_is_not_left_blank', async () => {
+    const events = new EventsDouble([PlanState.WRITING, PlanState.READY])
+
+    expect((await events.collected(events.cancellingWhenExhausted()))[0])
+      .toBe(PlanEvents.frameFor(PlanState.WRITING))
+  })
+
+  it('the_stream_lives_on_after_ready_so_a_plan_that_is_being_reworked_can_say_so', async () => {
+    const events = new EventsDouble([PlanState.READY, PlanState.WRITING, PlanState.READY])
+
+    const frames = await events.collected(events.cancellingWhenExhausted())
+
+    expect(frames).toEqual([
+      PlanEvents.frameFor(PlanState.READY),
+      PlanEvents.frameFor(PlanState.WRITING),
+      PlanEvents.frameFor(PlanState.READY),
+    ])
+  })
+
+  it('a_state_that_did_not_change_is_not_repeated_down_the_wire', async () => {
+    const events = new EventsDouble([
+      PlanState.WRITING, PlanState.WRITING, PlanState.WRITING, PlanState.READY,
+    ])
+
+    const frames = await events.collected(events.cancellingWhenExhausted())
+
+    expect(frames).toEqual([
+      PlanEvents.frameFor(PlanState.WRITING),
+      PlanEvents.frameFor(PlanState.READY),
+    ])
+  })
+
+  it('it_waits_between_reads_instead_of_spinning', async () => {
+    const events = new EventsDouble([PlanState.WRITING, PlanState.WRITING, PlanState.READY])
+
+    await events.collected(events.cancellingWhenExhausted())
+
+    expect(events.slept).toBe(3)
+  })
+
+  it('a_progress_that_could_not_be_read_reaches_the_page_as_one_error_frame_and_not_as_a_state', async () => {
+    const events = EventsDouble.unable('git status refused')
+
+    const frames = await events.collected(events.cancellingWhenExhausted())
+
+    expect(frames).toEqual(['event: error\ndata: {"code":"plan-progress-not-read","detail":"git status refused"}\n\n'])
+  })
+
+  it('a_progress_that_could_not_be_read_does_not_end_the_stream_so_a_transient_failure_recovers_on_the_next_tick', async () => {
+    const events = new EventsDouble([
+      PlanState.WRITING, new PlanProgressNotRead('git status refused'), PlanState.READY,
+    ])
+
+    const frames = await events.collected(events.cancellingWhenExhausted())
+
+    expect(frames).toEqual([
+      PlanEvents.frameFor(PlanState.WRITING),
+      'event: error\ndata: {"code":"plan-progress-not-read","detail":"git status refused"}\n\n',
+      PlanEvents.frameFor(PlanState.READY),
+    ])
+    expect(events.slept).toBe(3)
+    expect(events.answers).toEqual([])
+  })
+
+  it('a_bug_of_ours_is_not_dressed_up_as_an_error_frame_because_nobody_could_act_on_it', async () => {
+    const events = new EventsDouble([new TypeError('a bug of ours')])
+
+    await expect(events.collected()).rejects.toThrow(/a bug of ours/)
+  })
+
+  it('a_cancel_signal_stops_the_generator_that_would_otherwise_spin_forever_on_an_unchanging_state', async () => {
+    const events = new EventsDouble(Array(50).fill(PlanState.WRITING))
+    let asked = 0
+    const cancelled = () => {
+      asked += 1
+      return asked >= 2
+    }
+
+    const frames = await events.collected(cancelled)
+
+    expect(frames).toEqual([PlanEvents.frameFor(PlanState.WRITING)])
+    expect(events.slept).toBe(2)
+  })
+
+
+
+  it('the_frame_of_a_plan_still_carries_the_state_alone', async () => {
+    const frames = await new EventsDouble([PlanState.WRITING]).collected(() => true)
+
+    expect(frames[0]).toBe('data: {"state":"writing"}\n\n')
+  })
+
+
+
+})

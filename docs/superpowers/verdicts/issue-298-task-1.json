@@ -1,0 +1,57 @@
+{
+  "issue": 298,
+  "task": 1,
+  "task_name": "the lookup looks where it says it looks",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises that inIndex() answers about a name over the paths the task staged instead of answering false to every name. The defect was a name mismatch: the local was declared `const ambito = workingPathsInTheIndex()` while the pathspec spread `...scope`, so every call threw a ReferenceError inside the try and fell into `catch { return false }`. The diff renames the local and the guard (`const scope = workingPathsInTheIndex()` / `if (!scope.length) return false`), so the pathspec now resolves and `git grep --cached` really runs over the staged paths, exit 0 meaning true and exit 1 meaning false. Both halves of the promise are in the diff and nothing else in the function moves.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The **TDD:** line names `it('a promised test that IS in a path the task staged is green')` with the plan committed declaring `añade 'uno pinta uno'`, the name written inside uno.txt and the report declaring uno.txt, and `controls` saying `done`. The test in the diff (plugin/__tests__/ct-step-plan-and-checks.test.js:192-197) does exactly that: commitPlan(withTestsLine(\"añade `'uno pinta uno'`.\")), writeFileSync(join(repo,'uno.txt'), \"it('uno pinta uno')\\n\"), ct('report', writeReport(['uno.txt'])) and expect(ct('controls').stdout).toMatch(/controls: done/). Same input, same assertion, same expected value as the written sentence; its red side is the pre-existing test at line 182.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "No `Contract (path):`, `Call site (path):` or `Final text` block in the brief; the one block is `Current state (plugin/scripts/ct-step.mjs, lines 1549-1556)` plus the paragraph fixing the post-state. Measured against the file: the signature `inIndex(name)` is unchanged, the pathspec of the execFileSync line is still `...scope`, `stdio: 'ignore'` and `timeout: 60_000` are untouched, `catch { return false }` is untouched (narrowing it is declared Task 2's work), and declaredTests' two messages are unchanged. The two names now agree.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Row by row. 'Which of the two names moves': the LOCAL moved — line 1550 is now `const scope = workingPathsInTheIndex()` and the pathspec stays `...scope`. 'Why the local and not the call': the resulting identifier is English, as style.md and AGENTS.md require. 'Where the tests live': both new tests are inside `describe('the checks are measured by the program, not by the implementer')` of plugin/__tests__/ct-step-plan-and-checks.test.js, next to the existing `commitPlan`/`withTestsLine` helpers. The rows about a broken query (NameLookupDidNotRun, the catch in `controls`, exit 5 / EXIT.CONTROLS_UNMEASURED, `stdio: ['ignore','ignore','pipe']`) bear on Task 2 and this diff correctly leaves the `catch` and the stdio as they were — no row is reopened or implemented with a different value.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: the two new tests are the same shape as the file's last two (`commitPlan`, `withTestsLine`, `ct('report', writeReport([...]))`, assertions on stdout and on `runState().lastControlsLog`), and they rely on the documented harness property that writeReport does not overwrite content prepared beforehand. ct-step.mjs's neighbouring style is untouched. Repo rules: AGENTS.md/CLAUDE.md English on every surface — both new test names and the renamed identifier are English; the Spanish `añade`/`retira` inside the fixture plan text is contract data (the **Tests:** vocabulary ct-step parses), which both AGENTS.md and style.md exempt. docs/glossary.md: `scope` is the term already in use in the tree (`scope.js`, `declaredScope`, `workingPathsInTheIndex`), not an improvised translation. conventions/defects.md, rule by rule: (1) closed vocabulary — the diff introduces no classifying string or boolean; inIndex's boolean answer and its catch-all `catch` were already there and the brief's Out of scope reserves narrowing them for Task 2, so nothing here is this diff's; (2) raw map returned by logic — no map is introduced or returned; (3) two fields that have to agree — no new sentinel or duplicated field; the diff in fact removes a disagreement between two names, and no absence is encoded as a sentinel; (4) an error named for where it happens — the diff raises and names no error at all. conventions/style.md: the diff adds no comment or docstring; the loose module-level functions of ct-step.mjs are the host's pre-existing declared debt and both files are `(modify)`, no new concept placed in an old file. conventions/testing.md: the assertions are on observable effects (the step's stdout and the controls log written by the program), the arrange is built with real git and fs and not with the piece under test, and each assertion can fail for the reason its name gives — reverting the rename turns both red. conventions/simplicity.md, decisions.md, domain.md, architecture.md, boundaries.md: nothing added that has a subject under them (no new field, branch, public symbol, layer, port or edge).",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The diff's only `-` lines are the two renamed lines of plugin/scripts/ct-step.mjs (`const ambito = ...` and `if (!ambito.length) return false`), which are production code and touch no assertion. No test file line is removed, relaxed or rewritten: the test hunk is purely additive after the existing test at line 182. No pre-existing test ended up asserting less.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised behaviour comes from production code. The only behavioural line is in plugin/scripts/ct-step.mjs: with `ambito` restored, `...scope` is an undeclared identifier, the execFileSync throws before running, and inIndex returns false for every name — under which the new test at line 192 would see `controls: failed` and the one at line 199 would see `controls: done`. Both new tests therefore fail with the production change reverted; no mock, stub or hard-coded expected value stands in for the fix, and the arrange uses a real git repository.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Inside the two declared files the diff writes only what the task asks for: the rename of the local and its guard (the sentence 'The local of line 1550 is renamed to `scope`') and the two tests named verbatim in **Tests:**. Nothing else in ct-step.mjs moves — the `catch`, the stdio, the 60 s cap, the command-loop guard at line 1380, `declaredScope`, `amendmentOnlyAdds`, `finalTexts` and `workingPathsInTheIndex` are all untouched, which is exactly what ### Out of scope names. No extra helper, no adjacent fix, no refactor.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "Two new tests, measured on the three properties. Deterministic: no clock, date, network, randomness or sleep; the repository is a fresh mkdtempSync temp directory from the harness and every path is inside it. Isolated: `beforeEach` builds a new repo and `afterEach` removes it, the plan is committed inside that repo by commitPlan, and neither test needs state from another or an order in the file — each writes its own uno.txt content and its own report. Verifies real behaviour: both assert on what the program printed (`controls: done` / `controls: failed`) and on the controls log the program wrote, and both go red if the production rename is reverted, so neither is pinned to the test's own scaffolding. Nothing finer to report, so the TDD skill's text was not needed to sustain a finding.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "ca1284193ca66dee8e84728c5ff67761a197675c4999fa6cf0317eda93cbe75e"
+  }
+}

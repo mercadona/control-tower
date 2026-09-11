@@ -2,14 +2,15 @@
 // there are nine files and not one— is in fixtures/ct-step-harness.js.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { writeFileSync, readFileSync } from 'node:fs'
+import { writeFileSync, readFileSync, mkdtempSync, chmodSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { rmSyncBestEffort } from './fixtures/cleanup.js'
 import { makeHelpers, makeRepo, PLAN, F } from './fixtures/ct-step-harness.js'
 
 let repo
-const { ct, writeReport, commits, runState } = makeHelpers(() => repo)
+const { ct, ctIn, writeReport, commits, runState } = makeHelpers(() => repo)
 
 beforeEach(() => { repo = makeRepo() })
 afterEach(() => { rmSyncBestEffort(repo) })
@@ -187,5 +188,51 @@ describe('the checks are measured by the program, not by the implementer', () =>
     ct('report', writeReport(['uno.txt']))
     expect(ct('controls').stdout).toMatch(/controls: failed/)
     expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/said it was adding the test 'uno pinta uno'/)
+  })
+
+  it('a promised test that IS in a path the task staged is green', () => {
+    commitPlan(withTestsLine("añade `'uno pinta uno'`."))
+    writeFileSync(join(repo, 'uno.txt'), "it('uno pinta uno')\n")
+    ct('report', writeReport(['uno.txt']))
+    expect(ct('controls').stdout).toMatch(/controls: done/)
+  })
+
+  it('a test the task said it withdrew and is still in a staged path is red', () => {
+    commitPlan(withTestsLine("retira `'uno pinta uno'`."))
+    writeFileSync(join(repo, 'uno.txt'), "it('uno pinta uno')\n")
+    ct('report', writeReport(['uno.txt']))
+    const r = ct('controls')
+    expect(r.stdout).toMatch(/controls: failed/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/said it was removing the test 'uno pinta uno' and it is still there/)
+  })
+
+  it('a name lookup that could not RUN closes the task as unmeasured, not as a missing test', () => {
+    commitPlan(withTestsLine("añade `'uno pinta uno'`."))
+    ct('report', writeReport(['uno.txt']))
+
+    // A `git` shim first on PATH: it refuses `grep` with the exit status a
+    // real git uses for a query it does not understand, and delegates
+    // everything else to the real one, so the rest of the run is untouched.
+    const realGit = execFileSync('which', ['git'], { encoding: 'utf8' }).trim()
+    const shimDir = mkdtempSync(join(tmpdir(), 'ct-step-git-shim-'))
+    const shimPath = join(shimDir, 'git')
+    writeFileSync(shimPath, [
+      '#!/bin/sh',
+      'if [ "$1" = "grep" ]; then',
+      '  exit 128',
+      'fi',
+      `exec "${realGit}" "$@"`,
+      '',
+    ].join('\n'))
+    chmodSync(shimPath, 0o755)
+
+    const r = ctIn({ PATH: `${shimDir}:${process.env.PATH}` }, 'controls')
+    rmSyncBestEffort(shimDir)
+
+    expect(r.status).toBe(5)
+    const log = readFileSync(runState().lastControlsLog, 'utf8')
+    expect(log).toMatch(/# names that could not be looked up/)
+    expect(log).not.toMatch(/is not in what is staged/)
+    expect(log).not.toMatch(/\$ test -f uno\.txt/)
   })
 })

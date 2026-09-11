@@ -1,0 +1,1369 @@
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { connect } from 'node:net'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { gzipSync } from 'node:zlib'
+import { ApiServer } from '../../src/infrastructure/api-server.ts'
+import type { ApiCollaborators } from '../../src/infrastructure/api-server.ts'
+import { ReviewsSpy } from '../reviews-spy.ts'
+import { StartPlan, StartPlanResult, PlanStarted, PlanNotStarted } from '../../src/application/actions/start-plan.ts'
+import type { StartPlanParams } from '../../src/application/actions/start-plan.ts'
+import { BaselineResult } from '../../../plugin/scripts/baseline.js'
+import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
+import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
+import { PlanEvents, EventsRefusal, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import {
+  PlanAgentNotLaunched, UserStoryNotRead, PlanIssueNotCreated, PlanIssueNotNamed, WorkspaceNotPrepared,
+  PlanProgressNotRead,
+} from '../../src/domain/exceptions.ts'
+import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
+import { PlanState } from '../../src/domain/value-objects/plan-state.ts'
+import type { PlanStateValue } from '../../src/domain/value-objects/plan-state.ts'
+import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
+import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
+import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
+import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.ts'
+import { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.ts'
+import { SurveyExternalTools, SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.ts'
+import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
+import { ImplementationProgress } from '../../src/domain/ports/implementation-progress.ts'
+import { PlanAgents } from '../../src/domain/ports/plan-agents.ts'
+import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
+import { ReviewLog } from '../../src/domain/ports/review-log.ts'
+import { ToolSessions } from '../../src/domain/ports/tool-sessions.ts'
+import { MetricsDelivery } from '../../src/domain/value-objects/metrics-delivery.ts'
+import { UserStories } from '../../src/domain/ports/user-stories.ts'
+import { Workspace } from '../../src/domain/ports/workspace.ts'
+import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.ts'
+import { DiskImplementationStartRegistry } from '../../src/infrastructure/disk-implementation-start-registry.ts'
+import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
+import { WorktreePlans } from '../../src/infrastructure/worktree-plans.ts'
+
+class StartPlanSpy extends StartPlan {
+  static readonly AGENT = 'workspace:4'
+  static readonly BASELINE = new BaselineResult({ outcome: 'verde', command: 'npm test', summary: '42 passed' })
+  static readonly ISSUE = new PlanIssue({ number: 7, url: 'https://github.com/owner/name/issues/7' })
+  static readonly LOCATED = new WorkspaceLocation({ root: '/repo/checkout', path: '/repo/checkout/.worktrees/7', branch: 'feat/7' })
+  static readonly WATCH = new PlanWatch({
+    story: new UserStoryKey('ABC-123'),
+    issue: StartPlanSpy.ISSUE,
+    located: StartPlanSpy.LOCATED,
+    repository: new RepositoryName('owner/name'),
+    agent: StartPlanSpy.AGENT,
+  })
+
+  readonly asked: (string | null)[]
+  readonly repositories: string[]
+  readonly roots: string[]
+  readonly failing: boolean
+
+  constructor({ failing = false }: { failing?: boolean } = {}) {
+    super({
+      userStories: new UserStories(),
+      planIssues: new PlanIssues(),
+      workspace: new Workspace(),
+      planAgents: new PlanAgents(),
+      checkouts: new CheckoutRegistry(),
+    })
+    this.asked = []
+    this.repositories = []
+    this.roots = []
+    this.failing = failing
+  }
+
+  static failingWith(cause: Error): StartPlanSpy {
+    const spy = new StartPlanSpy()
+    spy.execute = async () => {
+      throw cause
+    }
+
+    return spy
+  }
+
+  static buggy(): StartPlanSpy {
+    const spy = new StartPlanSpy()
+    spy.execute = async () => {
+      throw new TypeError('a bug of ours')
+    }
+
+    return spy
+  }
+
+  static failingOne(): StartPlanSpy {
+    const spy = new StartPlanSpy()
+    spy.execute = async (params) => {
+      const [succeeding, failing] = params.targets
+
+      return new StartPlanResult({
+        started: [new PlanStarted({
+          agent: StartPlanSpy.AGENT,
+          baseline: StartPlanSpy.BASELINE,
+          watch: new PlanWatch({
+            story: params.story,
+            issue: StartPlanSpy.ISSUE,
+            located: StartPlanSpy.LOCATED,
+            repository: succeeding.repository,
+            agent: StartPlanSpy.AGENT,
+          }),
+        })],
+        failed: [new PlanNotStarted({
+          repository: failing.repository,
+          cause: new WorkspaceNotPrepared('branch is taken'),
+        })],
+      })
+    }
+
+    return spy
+  }
+
+  static failingAll(): StartPlanSpy {
+    const spy = new StartPlanSpy()
+    spy.execute = async (params) => {
+      const [first, second] = params.targets
+
+      return new StartPlanResult({
+        started: [],
+        failed: [
+          new PlanNotStarted({ repository: first.repository, cause: new WorkspaceNotPrepared('branch is taken') }),
+          new PlanNotStarted({ repository: second.repository, cause: new UserStoryNotRead('acli is not authenticated') }),
+        ],
+      })
+    }
+
+    return spy
+  }
+
+  async execute(params: StartPlanParams): Promise<StartPlanResult> {
+    this.asked.push(params.story === null ? null : params.story.text)
+    const [target] = params.targets
+    this.repositories.push(target.repository.text)
+    this.roots.push(target.root.text)
+    if (this.failing) throw new PlanAgentNotLaunched('cmux is not reachable')
+    return new StartPlanResult({
+      started: [new PlanStarted({
+        agent: StartPlanSpy.AGENT,
+        baseline: StartPlanSpy.BASELINE,
+        watch: new PlanWatch({
+          story: params.story,
+          issue: StartPlanSpy.ISSUE,
+          located: StartPlanSpy.LOCATED,
+          repository: target.repository,
+          agent: StartPlanSpy.AGENT,
+        }),
+      })],
+      failed: [],
+    })
+  }
+}
+
+type AnsweredProgress = { spy: ProgressSpy, planEvents: PlanEvents }
+
+class ProgressSpy {
+  static readonly UNREADABLE = 'git status could not say whether the plan is committed'
+
+  readonly state: PlanStateValue | null
+  readonly cause: Error | null
+  asked: number
+
+  constructor(state: PlanStateValue | null, cause: Error | null) {
+    this.state = state
+    this.cause = cause
+    this.asked = 0
+  }
+
+  static events(state: PlanStateValue, { sleepMs = 0 }: { sleepMs?: number } = {}): AnsweredProgress {
+    return ProgressSpy.answering(new ProgressSpy(state, null), sleepMs)
+  }
+
+  static unable({ sleepMs = 0 }: { sleepMs?: number } = {}): AnsweredProgress {
+    const spy = new ProgressSpy(null, new PlanProgressNotRead(ProgressSpy.UNREADABLE))
+
+    return ProgressSpy.answering(spy, sleepMs)
+  }
+
+  static answering(spy: ProgressSpy, sleepMs: number): AnsweredProgress {
+    return {
+      spy,
+      planEvents: new PlanEvents({
+        read: () => spy.read(),
+        sleep: () => new Promise((resolve) => setTimeout(resolve, sleepMs)),
+      }),
+    }
+  }
+
+  async read(): Promise<{ state: PlanStateValue }> {
+    this.asked += 1
+    if (this.cause !== null) throw this.cause
+    return { state: this.state as PlanStateValue }
+  }
+}
+
+class ExternalToolsSpy extends SurveyExternalTools {
+  constructor() {
+    super({ toolSessions: new ToolSessions(), metricsDelivery: MetricsDelivery.disabled() })
+  }
+
+  async execute(): Promise<SurveyExternalToolsResult> {
+    return new SurveyExternalToolsResult({ sessions: [], metricsDelivery: MetricsDelivery.disabled() })
+  }
+}
+
+class PlansRefusing extends WorktreePlans {
+  constructor(reason: string) {
+    super({
+      checkouts: new CheckoutRegistry(),
+      survey: () => { throw new Error('a plans double never surveys a checkout') },
+      sessions: () => { throw new Error('a plans double never asks cmux') },
+      story: () => { throw new Error('a plans double never reads a user story') },
+      realpathOf: () => null,
+      stderr: () => undefined,
+    })
+    this.inFlight = async () => PlansInFlight.refused(reason)
+  }
+}
+
+class NeverWatching extends ReviewWatch {
+  constructor(label: string) {
+    super({
+      asked: () => { throw new Error(`${label} never asks`) },
+      review: () => { throw new Error(`${label} never reviews`) },
+      sleep: () => { throw new Error(`${label} never sleeps`) },
+      stderr: () => undefined,
+      label,
+      log: new ReviewLog(),
+    })
+  }
+}
+
+class RecoveryFixture {
+  static readonly #STATE_ROOT = '/state'
+
+  static refusingWith(reason: string): ActivePlanRecovery {
+    const sessions = new PlanSessions()
+
+    return new ActivePlanRecovery({
+      plans: new PlansRefusing(reason),
+      checkouts: new CheckoutRegistry(),
+      implementationStarts: new DiskImplementationStartRegistry({
+        read: () => { throw new Error('a recovery double never reads an implementation marker') },
+        stat: () => { throw new Error('a recovery double never stats an implementation marker') },
+        write: () => { throw new Error('a recovery double never writes an implementation marker') },
+        root: RecoveryFixture.#STATE_ROOT,
+      }),
+      goRegistry: new DiskGoRegistry({
+        random: () => { throw new Error('a recovery double never mints a go nonce') },
+        write: () => { throw new Error('a recovery double never writes a go record') },
+        root: RecoveryFixture.#STATE_ROOT,
+      }),
+      implementationProgress: new ImplementationProgress(),
+      sessions,
+      reviews: new NeverWatching('plan review watch double'),
+      pullRequestReviews: new NeverWatching('pull request review watch double'),
+      activePlans: new ActivePlans({ sessions }),
+    })
+  }
+}
+
+class FrontendFixture {
+  static readonly INDEX = '<!doctype html><title>control tower</title>'
+
+  static built(): string {
+    const root = mkdtempSync(join(tmpdir(), 'ct-frontend-'))
+    writeFileSync(join(root, 'index.html'), FrontendFixture.INDEX)
+
+    return root
+  }
+
+  static missing(): string {
+    return join(tmpdir(), 'ct-frontend-never-built')
+  }
+}
+
+class RunningApi {
+  static readonly #started: ApiServer[] = []
+  static readonly STORY = 'ABC-123'
+  static readonly REPO = 'owner/name'
+  static readonly ACCEPTED_BODY = `{"id":"ABC-123","repo":"owner/name","path":"/repo/checkout"}`
+  static readonly REVIEW_BODY = `{"issue":7,"repo":"owner/name","changes":"parte la tarea 2"}`
+  static readonly ANSWER =
+    '{"status":"started","id":"ABC-123","repo":"owner/name",' +
+    '"issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},"agent":"workspace:4",' +
+    '"branch":"feat/7","worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout",' +
+    '"baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}'
+  static spy: StartPlanSpy = new StartPlanSpy()
+  static reviews: ReviewsSpy = new ReviewsSpy()
+
+  static server(options: Partial<ApiCollaborators> = {}): ApiServer {
+    RunningApi.spy = new StartPlanSpy()
+    RunningApi.reviews = new ReviewsSpy()
+    const sessions = options.sessions ?? new PlanSessions()
+    const activePlans = options.activePlans ?? new ActivePlans({ sessions })
+
+    return new ApiServer({
+      port: 0,
+      startPlan: RunningApi.spy,
+      implementPlan: null,
+      reviews: RunningApi.reviews,
+      planEvents: ProgressSpy.events(PlanState.WRITING).planEvents,
+      sessions,
+      activePlans,
+      externalTools: options.externalTools ?? new ExternalToolsSpy(),
+      frontendRoot: FrontendFixture.missing(),
+      ...options,
+    })
+  }
+
+  static async listening(options: Partial<ApiCollaborators> = {}): Promise<number> {
+    const server = RunningApi.server(options)
+    const port = await server.start()
+    RunningApi.#started.push(server)
+    return port
+  }
+
+  static async stopAll(): Promise<void> {
+    const running = RunningApi.#started.splice(0)
+    await Promise.all(running.map((server) => server.stop()))
+  }
+
+  static async post(port: number, path: string, body: string, headers: Record<string, string> = {}): Promise<Response> {
+    return fetch(`http://127.0.0.1:${port}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body,
+    })
+  }
+
+  static async startPlan(port: number, body: string, headers: Record<string, string> = {}): Promise<Response> {
+    return RunningApi.post(port, '/start-plan', body, headers)
+  }
+
+  static async accepted(port: number): Promise<Response> {
+    return RunningApi.startPlan(port, RunningApi.ACCEPTED_BODY)
+  }
+
+  static eventsPath(): string {
+    return `/plan-events/${StartPlanSpy.ISSUE.number}?repo=${encodeURIComponent(RunningApi.REPO)}`
+  }
+
+  static async watching(port: number, headers: Record<string, string> = {}): Promise<Response> {
+    return fetch(`http://127.0.0.1:${port}${RunningApi.eventsPath()}`, {
+      headers: { Origin: `http://127.0.0.1:${port}`, ...headers },
+      signal: AbortSignal.timeout(1000),
+    })
+  }
+
+  static async firstFrame(response: Response): Promise<string> {
+    const reader = response.body!.getReader()
+    const { value } = await reader.read()
+    await reader.cancel()
+
+    return new TextDecoder().decode(value)
+  }
+
+  static ask(port: number, lines: string): Promise<string> {
+    return new Promise((resolve) => {
+      const socket = connect(port, '127.0.0.1', () => socket.write(lines))
+      let said = ''
+      socket.on('data', (chunk) => {
+        said += chunk
+      })
+      socket.on('close', () => resolve(said.split('\r\n')[0]))
+    })
+  }
+
+  static asking(path: string, headers: string[], body?: string, host = '127.0.0.1'): string {
+    const written = [`POST ${path} HTTP/1.1`, `Host: ${host}`, 'Connection: close', ...headers]
+    if (body !== undefined) written.push(`Content-Length: ${Buffer.byteLength(body)}`)
+
+    return `${written.join('\r\n')}\r\n\r\n${body ?? ''}`
+  }
+
+  static cutMidBody(port: number): Promise<void> {
+    return new Promise((resolve) => {
+      const socket = connect(port, '127.0.0.1', () => {
+        socket.write(
+          'POST /start-plan HTTP/1.1\r\nHost: 127.0.0.1\r\n' +
+            'Content-Type: application/json\r\nContent-Length: 5000\r\n\r\n{"id":"'
+        )
+        socket.destroy()
+        resolve()
+      })
+    })
+  }
+}
+
+describe('ApiServer', () => {
+  afterEach(async () => {
+    await RunningApi.stopAll()
+  })
+
+  it('a_request_cut_halfway_through_its_body_does_not_take_the_whole_process_down_with_it', async () => {
+    const port = await RunningApi.listening()
+
+    await RunningApi.cutMidBody(port)
+    const afterwards = await RunningApi.accepted(port)
+
+    expect(afterwards.status).toBe(202)
+  })
+
+  it('a_client_that_hangs_up_is_ordinary_and_does_not_get_reported_as_something_gone_wrong', async () => {
+    const port = await RunningApi.listening()
+    const complaining = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+
+    try {
+      await RunningApi.cutMidBody(port)
+      await RunningApi.accepted(port)
+
+      expect(complaining.mock.calls).toEqual([])
+    } finally {
+      complaining.mockRestore()
+    }
+  })
+
+  it('start_plan_accepts_and_answers_with_the_agent_it_launched_rather_than_waiting_for_it', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.accepted(port)
+
+    expect(response.status).toBe(202)
+    expect(response.headers.get('content-type')).toBe('application/json')
+    expect(await response.text()).toBe(RunningApi.ANSWER)
+  })
+
+  it('a_plan_asked_for_across_two_repositories_answers_what_started_and_what_did_not', async () => {
+    const sessions = new PlanSessions()
+    const server = RunningApi.server({ startPlan: StartPlanSpy.failingOne(), sessions })
+    const port = await server.start()
+
+    try {
+      const response = await RunningApi.post(
+        port,
+        '/start-plan',
+        '{"id":"ABC-123","repo_list":[' +
+          '{"repo":"owner/name","path":"/repo/checkout"},' +
+          '{"repo":"owner/other","path":"/repo/other-checkout"}' +
+          ']}'
+      )
+
+      expect(response.status).toBe(202)
+      expect(await response.text()).toBe(
+        '{"status":"started","started":[{"id":"ABC-123","repo":"owner/name",' +
+          '"issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},"agent":"workspace:4",' +
+          '"branch":"feat/7","worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout",' +
+        '"baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}],' +
+          '"failed":[{"repo":"owner/other","code":"workspace-not-prepared","detail":"branch is taken"}]}'
+      )
+      expect(RunningApi.reviews.started).toEqual([StartPlanSpy.WATCH])
+      expect(sessions.known()).toEqual([StartPlanSpy.WATCH])
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('a_listed_request_whose_every_repository_failed_is_not_a_202', async () => {
+    const server = RunningApi.server({ startPlan: StartPlanSpy.failingAll() })
+    const port = await server.start()
+
+    try {
+      const response = await RunningApi.post(
+        port,
+        '/start-plan',
+        '{"id":"ABC-123","repo_list":[' +
+          '{"repo":"owner/name","path":"/repo/checkout"},' +
+          '{"repo":"owner/other","path":"/repo/other-checkout"}' +
+          ']}'
+      )
+
+      expect(response.status).toBe(400)
+      expect(await response.text()).toBe(
+        '{"code":"no-plan-started","detail":"no plan started: every repository of repo_list failed",' +
+          '"failed":[{"repo":"owner/name","code":"workspace-not-prepared","detail":"branch is taken"},' +
+          '{"repo":"owner/other","code":"user-story-not-read","detail":"acli is not authenticated"}]}'
+      )
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('a_listed_request_where_one_of_the_two_started_is_still_a_202', async () => {
+    const server = RunningApi.server({ startPlan: StartPlanSpy.failingOne() })
+    const port = await server.start()
+
+    try {
+      const response = await RunningApi.post(
+        port,
+        '/start-plan',
+        '{"id":"ABC-123","repo_list":[' +
+          '{"repo":"owner/name","path":"/repo/checkout"},' +
+          '{"repo":"owner/other","path":"/repo/other-checkout"}' +
+          ']}'
+      )
+
+      expect(response.status).toBe(202)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('an_agent_that_cannot_be_launched_is_reported_as_such_instead_of_a_generic_failure', async () => {
+    RunningApi.spy = new StartPlanSpy({ failing: true })
+    const server = RunningApi.server({ startPlan: RunningApi.spy })
+    const port = await server.start()
+
+    try {
+      const response = await RunningApi.accepted(port)
+
+      expect(response.status).toBe(400)
+      expect(await response.text()).toBe(
+        '{"code":"plan-agent-not-launched","detail":"cmux is not reachable"}'
+      )
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('a_story_an_issue_or_a_worktree_the_tool_refuses_are_all_answered_as_a_400_naming_the_specific_code', async () => {
+    const causes = [
+      { cause: new UserStoryNotRead('acli is not authenticated'), code: 'user-story-not-read' },
+      { cause: new PlanIssueNotCreated('label not found'), code: 'plan-issue-not-created' },
+    ]
+
+    for (const { cause, code } of causes) {
+      const server = RunningApi.server({ startPlan: StartPlanSpy.failingWith(cause) })
+      const port = await server.start()
+
+      try {
+        const response = await RunningApi.accepted(port)
+
+        expect(response.status).toBe(400)
+        expect(await response.text()).toBe(`{"code":"${code}","detail":"${cause.message}"}`)
+      } finally {
+        await server.stop()
+      }
+    }
+  })
+
+  it('a_plan_issue_that_could_not_be_created_after_the_preflight_is_answered_by_its_own_code', async () => {
+    const spy = new StartPlanSpy()
+    spy.execute = async () => new StartPlanResult({
+      started: [],
+      failed: [new PlanNotStarted({
+        repository: new RepositoryName(RunningApi.REPO),
+        cause: new PlanIssueNotCreated('label not found'),
+      })],
+    })
+    const server = RunningApi.server({ startPlan: spy })
+    const port = await server.start()
+
+    try {
+      const response = await RunningApi.accepted(port)
+
+      expect(response.status).toBe(400)
+      expect(await response.text()).toBe('{"code":"plan-issue-not-created","detail":"label not found"}')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('a_workspace_that_cannot_be_prepared_after_the_preflight_is_answered_by_its_own_code', async () => {
+    const spy = new StartPlanSpy()
+    spy.execute = async () => new StartPlanResult({
+      started: [],
+      failed: [new PlanNotStarted({
+        repository: new RepositoryName(RunningApi.REPO),
+        cause: new WorkspaceNotPrepared('branch is taken'),
+      })],
+    })
+    const server = RunningApi.server({ startPlan: spy })
+    const port = await server.start()
+
+    try {
+      const response = await RunningApi.accepted(port)
+
+      expect(response.status).toBe(400)
+      expect(await response.text()).toBe('{"code":"workspace-not-prepared","detail":"branch is taken"}')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('a_tool_that_answered_something_unreadable_is_a_400_too_but_with_a_code_of_its_own', async () => {
+    const server = RunningApi.server({
+      startPlan: StartPlanSpy.failingWith(new PlanIssueNotNamed('gh printed "done"')),
+    })
+    const port = await server.start()
+
+    try {
+      const response = await RunningApi.accepted(port)
+
+      expect(response.status).toBe(400)
+      expect(await response.text()).toBe('{"code":"plan-issue-not-named","detail":"gh printed \\"done\\""}')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('a_failure_that_is_not_a_refusal_to_start_is_not_dressed_up_as_one', async () => {
+    const server = RunningApi.server({ startPlan: StartPlanSpy.buggy() })
+    const port = await server.start()
+    const complaining = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+
+    try {
+      const response = await RunningApi.accepted(port)
+
+      expect(response.status).toBe(400)
+      expect(await response.text()).toBe('{"code":"request-failed","detail":"request failed"}')
+    } finally {
+      complaining.mockRestore()
+      await server.stop()
+    }
+  })
+
+  it('a_bug_of_ours_leaves_a_trace_on_the_error_channel_instead_of_vanishing_behind_that_400', async () => {
+    const server = RunningApi.server({ startPlan: StartPlanSpy.buggy() })
+    const port = await server.start()
+    const complaining = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+
+    try {
+      await RunningApi.accepted(port)
+
+      const said = complaining.mock.calls.map(([line]) => line).join('')
+      expect(said).toContain('request to /start-plan failed')
+      expect(said).toContain('a bug of ours')
+    } finally {
+      complaining.mockRestore()
+      await server.stop()
+    }
+  })
+
+  it('the_id_that_reaches_the_agent_is_the_one_the_body_carried_and_not_a_default', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.post(port, '/start-plan', '{"id":"MO_SHOP-42","repo":"owner/name","path":"/repo/checkout"}')
+
+    expect(RunningApi.spy.asked).toEqual(['MO_SHOP-42'])
+    expect(await response.text()).toBe(RunningApi.ANSWER.replace('ABC-123', 'MO_SHOP-42'))
+  })
+
+  it('an_id_that_is_a_github_issue_url_reaches_the_agent_as_that_same_url', async () => {
+    const port = await RunningApi.listening()
+    const url = 'https://github.com/mercadona/control-tower/issues/141'
+
+    const response = await RunningApi.post(
+      port, '/start-plan', `{"id":${JSON.stringify(url)},"repo":"owner/name","path":"/repo/checkout"}`
+    )
+
+    expect(RunningApi.spy.asked).toEqual([url])
+    expect(await response.text()).toBe(RunningApi.ANSWER.replace('ABC-123', url))
+  })
+
+  it('the_root_the_answer_carries_is_the_checkout_and_not_the_worktree', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.accepted(port)
+    const body = JSON.parse(await response.text())
+
+    expect(body.root).not.toBe(body.worktree)
+    expect(body.worktree).toMatch(new RegExp(`^${body.root}`))
+  })
+
+  it('a_refused_request_never_starts_a_process', async () => {
+    const port = await RunningApi.listening()
+
+    await RunningApi.startPlan(port, '{"id":"nope","repo":"owner/name"}')
+
+    expect(RunningApi.spy.asked).toEqual([])
+  })
+
+  it('trailing_slashes_do_not_change_the_route_however_many_of_them_are_written', async () => {
+    const port = await RunningApi.listening()
+
+    const one = await RunningApi.post(port, '/start-plan/', RunningApi.ACCEPTED_BODY)
+    const two = await RunningApi.post(port, '/start-plan//', RunningApi.ACCEPTED_BODY)
+
+    expect([one.status, two.status]).toEqual([202, 202])
+  })
+
+  it('a_query_string_does_not_hide_the_route_because_routing_reads_the_path_and_not_the_raw_url', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.post(port, '/start-plan?from=ui', RunningApi.ACCEPTED_BODY)
+
+    expect(response.status).toBe(202)
+  })
+
+  it('reading_start_plan_is_refused_because_starting_a_plan_claims_the_issue_and_cuts_a_worktree', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await fetch(`http://127.0.0.1:${port}/start-plan`)
+
+    expect(response.status).toBe(405)
+    expect(response.headers.get('allow')).toBe('POST')
+  })
+
+  it('an_unknown_route_is_rejected_instead_of_answering_ok_to_anything', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.post(port, '/whatever', RunningApi.ACCEPTED_BODY)
+
+    expect(response.status).toBe(404)
+    expect(await response.text()).toBe('{"code":"not-found","detail":"not found"}')
+  })
+
+  it('a_request_from_a_foreign_page_is_refused_because_any_site_can_post_to_localhost', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.startPlan(port, RunningApi.ACCEPTED_BODY, {
+      Origin: 'https://evil.example',
+    })
+
+    expect(response.status).toBe(403)
+    expect(await response.text()).toBe('{"code":"foreign-origin","detail":"this api only serves the page it hosts"}')
+    expect(RunningApi.spy.asked).toEqual([])
+  })
+
+  it('a_request_from_the_page_this_server_hosts_is_accepted_because_that_page_is_the_frontend', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.startPlan(port, RunningApi.ACCEPTED_BODY, {
+      Origin: `http://127.0.0.1:${port}`,
+    })
+
+    expect(response.status).toBe(202)
+  })
+
+  it('the_page_opened_as_localhost_is_still_our_own_because_the_host_header_says_so_too', async () => {
+    const port = await RunningApi.listening()
+
+    const said = await RunningApi.ask(
+      port,
+      RunningApi.asking(
+        '/start-plan',
+        [`Origin: http://localhost:${port}`, 'Content-Type: application/json'],
+        RunningApi.ACCEPTED_BODY,
+        `localhost:${port}`
+      )
+    )
+
+    expect(said).toContain('202')
+  })
+
+  it('a_host_that_is_not_loopback_does_not_vouch_for_its_origin_because_dns_can_point_any_name_here', async () => {
+    const port = await RunningApi.listening()
+
+    const said = await RunningApi.ask(
+      port,
+      RunningApi.asking(
+        '/start-plan',
+        [`Origin: http://rebound.example:${port}`, 'Content-Type: application/json'],
+        RunningApi.ACCEPTED_BODY,
+        `rebound.example:${port}`
+      )
+    )
+
+    expect(said).toContain('403')
+    expect(RunningApi.spy.asked).toEqual([])
+  })
+
+  it('an_origin_on_another_port_of_loopback_is_foreign_because_another_local_server_is_another_site', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.startPlan(port, RunningApi.ACCEPTED_BODY, {
+      Origin: `http://127.0.0.1:${port + 1}`,
+    })
+
+    expect(response.status).toBe(403)
+  })
+
+  it('the_frontend_build_is_served_from_the_root_so_page_and_api_share_one_origin', async () => {
+    const root = FrontendFixture.built()
+    const port = await RunningApi.listening({ frontendRoot: root })
+
+    const response = await fetch(`http://127.0.0.1:${port}/`)
+
+    expect(response.status).toBe(200)
+    expect(await response.text()).toBe(FrontendFixture.INDEX)
+  })
+
+  it('a_frontend_root_that_does_not_exist_yet_leaves_the_api_up_instead_of_refusing_to_start', async () => {
+    const port = await RunningApi.listening({ frontendRoot: FrontendFixture.missing() })
+
+    const page = await fetch(`http://127.0.0.1:${port}/`)
+    const api = await RunningApi.accepted(port)
+
+    expect(page.status).toBe(404)
+    expect(api.status).toBe(202)
+  })
+
+  it('serving_pages_does_not_open_start_plan_to_a_get_because_static_files_fall_through_to_the_routes', async () => {
+    const port = await RunningApi.listening({ frontendRoot: FrontendFixture.built() })
+
+    const response = await fetch(`http://127.0.0.1:${port}/start-plan`)
+
+    expect(response.status).toBe(405)
+  })
+
+  it('a_body_not_declared_as_json_is_refused_so_a_page_cannot_reach_this_without_a_preflight', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.startPlan(port, RunningApi.ACCEPTED_BODY, {
+      'Content-Type': 'text/plain',
+    })
+
+    expect(response.status).toBe(415)
+  })
+
+  it('a_charset_on_the_content_type_is_still_json_because_clients_add_one_unasked', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.startPlan(port, RunningApi.ACCEPTED_BODY, {
+      'Content-Type': 'application/json; charset=utf-8',
+    })
+
+    expect(response.status).toBe(202)
+  })
+
+  it('a_body_that_is_not_json_is_refused_instead_of_starting_a_plan_for_nothing', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.startPlan(port, 'ABC-123')
+
+    expect(response.status).toBe(400)
+    expect(await response.text()).toBe('{"code":"body-not-a-json-object","detail":"body must be a JSON object"}')
+  })
+
+  it('valid_json_that_is_not_an_object_is_refused_as_such_and_not_mistaken_for_a_missing_id', async () => {
+    const port = await RunningApi.listening()
+
+    const refused = await Promise.all(
+      ['"ABC-123"', '[{"id":"ABC-123"}]', 'null', '123'].map((body) => RunningApi.startPlan(port, body))
+    )
+
+    expect(await Promise.all(refused.map((response) => response.text()))).toEqual(
+      Array(4).fill('{"code":"body-not-a-json-object","detail":"body must be a JSON object"}')
+    )
+  })
+
+  it('a_body_with_neither_an_id_nor_a_comment_is_refused_because_nothing_says_what_to_plan', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.startPlan(port, '{}')
+
+    expect(response.status).toBe(400)
+    expect(await response.text()).toBe(
+      '{"code":"nothing-to-plan","detail":"either id or user_comment must say what to plan"}'
+    )
+  })
+
+  it('a_body_with_only_a_comment_is_accepted_with_a_null_id_because_there_is_no_user_story', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.startPlan(
+      port,
+      '{"user_comment":"añade el endpoint de salud","repo":"owner/name","path":"/repo/checkout"}'
+    )
+
+    expect(response.status).toBe(202)
+    expect(await response.text()).toBe(RunningApi.ANSWER.replace('"id":"ABC-123"', '"id":null'))
+    expect(RunningApi.spy.asked).toEqual([null])
+  })
+
+  it('an_id_that_is_not_shaped_like_a_story_key_is_refused_before_it_ever_becomes_a_branch_name', async () => {
+    const port = await RunningApi.listening()
+
+    const refused = await Promise.all(
+      [
+        '{"id":"   "}',
+        '{"id":123}',
+        '{"id":"../../etc/passwd"}',
+        '{"id":"-o"}',
+        '{"id":"abc-1"}',
+        '{"id":"ABC"}',
+        '{"id":"ABC-123 rm -rf"}',
+        '{"id":"ABC-123\\n"}',
+      ].map((body) => RunningApi.startPlan(port, body))
+    )
+
+    expect(refused.map((response) => response.status)).toEqual(Array(8).fill(400))
+  })
+
+  it('an_unknown_field_is_refused_because_it_means_the_other_side_changed_shape', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.startPlan(port, `{"id":"${RunningApi.STORY}","repo":"owner/name","priority":"high"}`)
+
+    expect(response.status).toBe(400)
+    expect(await response.text()).toBe('{"code":"unknown-field","detail":"unknown field: priority"}')
+  })
+
+  it('the_repository_the_body_names_is_the_one_the_use_case_is_asked_to_open_the_issue_in', async () => {
+    const port = await RunningApi.listening()
+
+    await RunningApi.post(port, '/start-plan', '{"id":"ABC-123","repo":"josemerca/ct-loop-sandbox","path":"/repo/checkout"}')
+
+    expect(RunningApi.spy.repositories).toEqual(['josemerca/ct-loop-sandbox'])
+  })
+
+  it('the_path_the_body_names_is_the_root_the_use_case_is_asked_to_cut_the_worktree_in', async () => {
+    const port = await RunningApi.listening()
+
+    await RunningApi.post(port, '/start-plan', '{"id":"ABC-123","repo":"owner/name","path":"/Users/someone/repos/name"}')
+
+    expect(RunningApi.spy.roots).toEqual(['/Users/someone/repos/name'])
+  })
+
+  it('a_body_with_no_path_is_refused_because_the_worktree_has_to_be_cut_somewhere', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.startPlan(port, `{"id":"${RunningApi.STORY}","repo":"${RunningApi.REPO}"}`)
+
+    expect(response.status).toBe(400)
+    expect(await response.text()).toBe(
+      '{"code":"malformed-path","detail":"path must be an absolute path"}'
+    )
+  })
+
+  it('a_path_that_is_not_absolute_is_refused_before_it_ever_becomes_an_argument_of_git', async () => {
+    const port = await RunningApi.listening()
+
+    const refused = await Promise.all(
+      [
+        '{"id":"ABC-123","repo":"owner/name","path":"repos/name"}',
+        '{"id":"ABC-123","repo":"owner/name","path":"~/repos/name"}',
+        '{"id":"ABC-123","repo":"owner/name","path":""}',
+        '{"id":"ABC-123","repo":"owner/name","path":123}',
+      ].map((body) => RunningApi.startPlan(port, body))
+    )
+
+    expect(refused.map((response) => response.status)).toEqual([400, 400, 400, 400])
+    expect(RunningApi.spy.asked).toEqual([])
+  })
+
+  it('a_trailing_slash_reaches_the_use_case_because_git_absorbs_it_when_it_canonicalises_the_root', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.startPlan(port, '{"id":"ABC-123","repo":"owner/name","path":"/repos/name/"}')
+
+    expect(response.status).toBe(202)
+    expect(RunningApi.spy.roots).toEqual(['/repos/name/'])
+  })
+
+  it('a_path_with_a_semicolon_in_a_segment_is_still_well_formed_because_nothing_ever_reaches_a_shell', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.startPlan(
+      port,
+      '{"id":"ABC-123","repo":"owner/name","path":"/repos/name; rm -rf ~"}'
+    )
+
+    expect(response.status).toBe(202)
+    expect(RunningApi.spy.roots).toEqual(['/repos/name; rm -rf ~'])
+  })
+
+  it('a_body_with_no_repo_is_refused_because_an_issue_has_to_be_opened_somewhere', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.startPlan(port, `{"id":"${RunningApi.STORY}"}`)
+
+    expect(response.status).toBe(400)
+    expect(await response.text()).toBe('{"code":"malformed-repo","detail":"repo must be a repository such as owner/name"}')
+  })
+
+  it('a_malformed_repo_inside_a_listed_request_is_refused_naming_its_position', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.startPlan(
+      port,
+      '{"id":"ABC-123","repo_list":[' +
+        '{"repo":"owner/name","path":"/repo/checkout"},' +
+        '{"repo":"nope","path":"/repo/other-checkout"}' +
+        ']}'
+    )
+
+    expect(response.status).toBe(400)
+    expect(await response.text()).toBe(
+      '{"code":"malformed-repo","detail":"repo_list[1].repo must be a repository such as owner/name"}'
+    )
+  })
+
+  it('a_repo_that_is_not_shaped_like_one_is_refused_before_it_ever_becomes_an_argument_of_gh', async () => {
+    const port = await RunningApi.listening()
+
+    const refused = await Promise.all(
+      [
+        '{"id":"ABC-123","repo":"name"}',
+        '{"id":"ABC-123","repo":"owner/name/extra"}',
+        '{"id":"ABC-123","repo":"-o/name"}',
+        '{"id":"ABC-123","repo":"owner/../../etc"}',
+        '{"id":"ABC-123","repo":"owner/name rm -rf"}',
+        '{"id":"ABC-123","repo":""}',
+        '{"id":"ABC-123","repo":123}',
+      ].map((body) => RunningApi.startPlan(port, body))
+    )
+
+    expect(refused.map((response) => response.status)).toEqual(Array(7).fill(400))
+    expect(RunningApi.spy.asked).toEqual([])
+  })
+
+  it('a_body_over_the_cap_is_refused_instead_of_being_buffered_whole', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.startPlan(port, `{"id":"${'A'.repeat(9000)}","repo":"owner/name"}`)
+
+    expect(response.status).toBe(413)
+  })
+
+  it('the_route_is_one_exact_name_and_not_the_thousand_aliases_a_case_blind_router_answers_to', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.post(port, '/START-PLAN', `{"id":"${RunningApi.STORY}"}`)
+
+    expect(response.status).toBe(404)
+    expect(RunningApi.spy.asked).toEqual([])
+  })
+
+  it('a_compressed_body_is_not_a_shape_this_api_agreed_to_accept_and_never_reaches_the_domain_inflated', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await fetch(`http://127.0.0.1:${port}/start-plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' },
+      body: gzipSync(Buffer.from(`{"id":"${RunningApi.STORY}"}`)),
+    })
+
+    expect(response.status).toBe(400)
+    expect(RunningApi.spy.asked).toEqual([])
+  })
+
+  it('the_cap_counts_the_bytes_the_client_sent_so_a_refusal_never_names_a_size_nobody_wrote', async () => {
+    const port = await RunningApi.listening()
+    const squeezed = gzipSync(Buffer.from(`{"id":"${'A'.repeat(20000)}"}`))
+
+    const response = await fetch(`http://127.0.0.1:${port}/start-plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' },
+      body: squeezed,
+    })
+
+    expect(squeezed.length).toBeLessThan(8 * 1024)
+    expect(response.status).not.toBe(413)
+  })
+
+  it('a_body_that_arrives_with_no_length_is_judged_by_the_domain_instead_of_blamed_on_its_media_type', async () => {
+    const port = await RunningApi.listening()
+
+    const said = await RunningApi.ask(port, RunningApi.asking('/start-plan', ['Content-Type: application/json']))
+
+    expect(said).toContain('400')
+  })
+
+  it('the_trace_of_a_failure_names_the_url_the_client_asked_for_and_not_the_one_routing_rewrote', async () => {
+    const server = RunningApi.server({ startPlan: StartPlanSpy.buggy() })
+    const port = await server.start()
+    const complaining = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+
+    try {
+      await RunningApi.post(port, '/start-plan//', RunningApi.ACCEPTED_BODY)
+
+      expect(complaining.mock.calls.map(([line]) => line).join('')).toContain('request to /start-plan// failed')
+    } finally {
+      complaining.mockRestore()
+      await server.stop()
+    }
+  })
+
+  it('a_path_that_climbs_out_and_back_in_is_not_the_route_however_a_client_writes_it', async () => {
+    const port = await RunningApi.listening()
+    const body = `{"id":"${RunningApi.STORY}"}`
+
+    const climbed = await RunningApi.ask(
+      port,
+      RunningApi.asking('/foo/../start-plan', ['Content-Type: application/json'], body)
+    )
+
+    expect(climbed).toContain('404')
+    expect(RunningApi.spy.asked).toEqual([])
+  })
+
+  it('the_answer_does_not_advertise_the_stack_that_serves_it', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.accepted(port)
+
+    expect(response.headers.get('x-powered-by')).toBe(null)
+  })
+
+  it('stop_closes_the_socket_so_a_later_request_cannot_reach_a_server_believed_dead', async () => {
+    const server = RunningApi.server({ startPlan: new StartPlanSpy() })
+    const port = await server.start()
+
+    await server.stop()
+
+    await expect(RunningApi.accepted(port)).rejects.toThrow()
+  })
+
+  it('an_error_after_a_successful_listen_is_not_swallowed_by_the_promise_that_already_resolved', async () => {
+    const server = RunningApi.server({ startPlan: new StartPlanSpy() })
+    await server.start()
+
+    try {
+      expect(() => server.server!.emit('error', new Error('boom'))).toThrow('boom')
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('starting_twice_is_refused_instead_of_leaking_the_first_server_out_of_reach', async () => {
+    const server = RunningApi.server({ startPlan: new StartPlanSpy() })
+    await server.start()
+
+    try {
+      await expect(server.start()).rejects.toThrow(/already listening/)
+    } finally {
+      await server.stop()
+    }
+  })
+
+  it('a_verb_the_plan_events_stream_does_not_serve_is_refused_naming_the_one_it_does', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await fetch(
+      `http://127.0.0.1:${port}/plan-events/7?repo=${encodeURIComponent(RunningApi.REPO)}`,
+      { method: 'POST' },
+    )
+
+    expect(response.status).toBe(405)
+    expect(response.headers.get('Allow')).toBe('GET')
+    expect(await response.json()).toEqual({ code: 'method-not-allowed', detail: 'method not allowed' })
+  })
+
+  it('a_plan_events_request_for_an_issue_nobody_started_is_a_400_instead_of_an_open_stream', async () => {
+    const { planEvents } = ProgressSpy.events(PlanState.READY)
+    const port = await RunningApi.listening({ planEvents })
+
+    const response = await fetch(`http://127.0.0.1:${port}/plan-events/404?repo=${encodeURIComponent(RunningApi.REPO)}`)
+
+    expect(response.status).toBe(400)
+    expect(await response.text()).toBe(`{"code":"not-watched","detail":"${EventsRefusal.NOT_WATCHED}"}`)
+  })
+
+  it('an_issue_that_is_not_a_number_is_refused_by_its_own_code_and_not_mistaken_for_a_lookup_of_nan', async () => {
+    const { spy, planEvents } = ProgressSpy.events(PlanState.READY)
+    const port = await RunningApi.listening({ planEvents })
+
+    const response = await fetch(`http://127.0.0.1:${port}/plan-events/abc`)
+
+    expect(response.status).toBe(400)
+    expect(await response.text()).toBe('{"code":"malformed-watched-issue","detail":"the issue to watch is a number such as 42"}')
+    expect(spy.asked).toBe(0)
+  })
+
+  it('a_plan_that_started_is_remembered_so_the_page_can_watch_it_by_the_issue_it_opened', async () => {
+    const { planEvents } = ProgressSpy.events(PlanState.READY, { sleepMs: 5 })
+    const port = await RunningApi.listening({ planEvents })
+
+    await RunningApi.accepted(port)
+    const opened = await RunningApi.watching(port)
+
+    expect(opened.status).toBe(200)
+    expect(await RunningApi.firstFrame(opened)).toBe(PlanEvents.frameFor(PlanState.READY))
+    expect(opened.headers.get('access-control-allow-origin')).toBe(null)
+  })
+
+  it('a_watch_survives_ready_so_the_page_can_come_back_while_the_plan_is_reworked', async () => {
+    const { planEvents } = ProgressSpy.events(PlanState.READY, { sleepMs: 5 })
+    const port = await RunningApi.listening({ planEvents })
+
+    await RunningApi.accepted(port)
+    const opened = await RunningApi.watching(port)
+    await RunningApi.firstFrame(opened)
+    const again = await RunningApi.watching(port)
+
+    expect(again.status).toBe(200)
+    expect(await RunningApi.firstFrame(again)).toBe(PlanEvents.frameFor(PlanState.READY))
+  })
+
+  it('a_subscription_after_a_progress_that_could_not_be_read_still_finds_its_watch_because_a_transient_failure_does_not_forget_the_session', async () => {
+    const { planEvents } = ProgressSpy.unable({ sleepMs: 5 })
+    const port = await RunningApi.listening({ planEvents })
+
+    await RunningApi.accepted(port)
+    const first = await RunningApi.watching(port)
+    await RunningApi.firstFrame(first)
+    const again = await RunningApi.watching(port)
+
+    expect(again.status).toBe(200)
+  })
+
+  it('a_page_that_hangs_up_while_the_plan_is_still_being_written_keeps_its_watch_so_it_can_come_back', async () => {
+    const { planEvents } = ProgressSpy.events(PlanState.WRITING, { sleepMs: 5 })
+    const port = await RunningApi.listening({ planEvents })
+
+    await RunningApi.accepted(port)
+    const controller = new AbortController()
+    const opened = await fetch(`http://127.0.0.1:${port}${RunningApi.eventsPath()}`, {
+      signal: controller.signal,
+    })
+    await opened.body!.getReader().read()
+    controller.abort()
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    const again = await fetch(`http://127.0.0.1:${port}${RunningApi.eventsPath()}`, {
+      signal: AbortSignal.timeout(50),
+    }).catch((cause) => cause)
+
+    expect(again.status ?? 200).toBe(200)
+  })
+
+  it('the_events_route_turns_away_a_foreign_page_exactly_like_the_one_that_starts_a_plan', async () => {
+    const { spy, planEvents } = ProgressSpy.events(PlanState.READY)
+    const port = await RunningApi.listening({ planEvents })
+
+    await RunningApi.accepted(port)
+    const response = await fetch(`http://127.0.0.1:${port}${RunningApi.eventsPath()}`, {
+      headers: { Origin: 'https://evil.example' },
+    })
+
+    expect(response.status).toBe(403)
+    expect(await response.text()).toBe('{"code":"foreign-origin","detail":"this api only serves the page it hosts"}')
+    expect(spy.asked).toBe(0)
+  })
+
+  it('a_progress_nobody_could_read_reaches_the_page_as_an_error_frame_and_the_page_is_the_one_that_disconnects', async () => {
+    const { spy, planEvents } = ProgressSpy.unable({ sleepMs: 5 })
+    const port = await RunningApi.listening({ planEvents })
+
+    await RunningApi.accepted(port)
+    const response = await RunningApi.watching(port)
+    const frame = await RunningApi.firstFrame(response)
+
+    expect(response.status).toBe(200)
+    expect(frame).toBe(`event: error\ndata: {"code":"plan-progress-not-read","detail":"${ProgressSpy.UNREADABLE}"}\n\n`)
+    expect(spy.asked).toBeGreaterThanOrEqual(1)
+  })
+
+  it('closing_the_connection_from_the_client_stops_the_progress_port_from_being_asked_again', async () => {
+    const { spy, planEvents } = ProgressSpy.events(PlanState.WRITING, { sleepMs: 5 })
+    const port = await RunningApi.listening({ planEvents })
+
+    await RunningApi.accepted(port)
+    const controller = new AbortController()
+    const opened = await fetch(`http://127.0.0.1:${port}${RunningApi.eventsPath()}`, {
+      signal: controller.signal,
+    })
+    await opened.body!.getReader().read()
+    controller.abort()
+
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    const askedRightAfterAbort = spy.asked
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    expect(askedRightAfterAbort).toBeGreaterThan(0)
+    expect(spy.asked).toBe(askedRightAfterAbort)
+  })
+
+  it('a_plan_that_started_is_put_under_watch_so_a_change_asked_for_reaches_its_agent', async () => {
+    const port = await RunningApi.listening()
+
+    await RunningApi.accepted(port)
+
+    expect(RunningApi.reviews.started).toEqual([StartPlanSpy.WATCH])
+  })
+
+  it('a_start_that_was_refused_puts_nothing_under_watch', async () => {
+    const port = await RunningApi.listening()
+
+    await RunningApi.startPlan(port, '{"id":"nope","repo":"owner/name"}')
+
+    expect(RunningApi.reviews.started).toEqual([])
+  })
+
+  it('active_plans_returns_the_exact_live_plan_started_by_the_ordinary_route', async () => {
+    const port = await RunningApi.listening()
+
+    await RunningApi.accepted(port)
+    const response = await fetch(`http://127.0.0.1:${port}/active-plans`)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ plans: [{
+      phase: 'planning',
+      request: { id: 'ABC-123', repo: 'owner/name', path: '/repo/checkout' },
+      plan: {
+        id: 'ABC-123',
+        repo: 'owner/name',
+        issue: { number: 7, url: 'https://github.com/owner/name/issues/7' },
+        agent: 'workspace:4',
+        branch: 'feat/7',
+        worktree: '/repo/checkout/.worktrees/7',
+      },
+    }] })
+  })
+
+  it('active_plans_refuses_other_methods_and_declares_get', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.post(port, '/active-plans', '{}')
+
+    expect(response.status).toBe(405)
+    expect(response.headers.get('allow')).toBe('GET')
+    expect(await response.json()).toEqual({ code: 'method-not-allowed', detail: 'method not allowed' })
+  })
+
+  it('active_plans_turns_away_a_foreign_browser_origin', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await fetch(`http://127.0.0.1:${port}/active-plans`, {
+      headers: { Origin: 'https://evil.example' },
+    })
+
+    expect(response.status).toBe(403)
+    expect(await response.json()).toEqual({
+      code: 'foreign-origin', detail: 'this api only serves the page it hosts',
+    })
+  })
+
+  it('review_plan_turns_away_a_foreign_browser_origin', async () => {
+    const askPlanChanges = { execute: vi.fn() }
+    const port = await RunningApi.listening({ askPlanChanges })
+
+    const response = await RunningApi.post(port, '/review-plan', RunningApi.REVIEW_BODY, {
+      Origin: 'https://evil.example',
+    })
+
+    expect(response.status).toBe(403)
+    expect(await response.text()).toBe('{"code":"foreign-origin","detail":"this api only serves the page it hosts"}')
+    expect(askPlanChanges.execute).not.toHaveBeenCalled()
+  })
+
+  it('active_plans_retries_inconclusive_recovery_and_refuses_unknown_state', async () => {
+    const recovery = { recover: vi.fn().mockReturnValueOnce('cmux said no').mockReturnValueOnce(null) }
+    const port = await RunningApi.listening({ recovery })
+
+    const unknown = await fetch(`http://127.0.0.1:${port}/active-plans`)
+    const recovered = await fetch(`http://127.0.0.1:${port}/active-plans`)
+
+    expect(unknown.status).toBe(400)
+    expect(await unknown.json()).toEqual({
+      code: 'active-plans-recovery-inconclusive',
+      detail: 'cmux said no',
+    })
+    expect(recovered.status).toBe(200)
+    expect(await recovered.json()).toEqual({ plans: [] })
+    expect(recovery.recover).toHaveBeenCalledTimes(2)
+  })
+
+  it('the_detail_of_an_inconclusive_recovery_carries_what_cmux_answered_and_not_a_fixed_sentence', async () => {
+    const answered = 'cmux listed workspaces and none of them exposes custom_title: it answered with title'
+    const recovery = RecoveryFixture.refusingWith(answered)
+    const port = await RunningApi.listening({ recovery })
+
+    const response = await fetch(`http://127.0.0.1:${port}/active-plans`)
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: 'active-plans-recovery-inconclusive',
+      detail: answered,
+    })
+  })
+})

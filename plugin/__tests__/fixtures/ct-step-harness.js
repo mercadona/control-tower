@@ -147,10 +147,26 @@ export const sliceRubric = () => SLICE_VERDICT_RULES.map((rule) => ({ rule, resu
 // functions — `ref` is an accessor (`() => repo`) that reads the test file's
 // live binding, never the copy of whatever value it held when imported.
 export function makeHelpers(ref) {
-  const ct = (...args) => spawnSync('node', [SCRIPT, ...args, '--plan', 'plan.md', '--issue', '7'], {
+  // THE RUNTIME THAT MEASURES THE TOKENS IS OFF BY DEFAULT, and it is not a
+  // detail: `ct-step` reads the coding tool's own usage out of the environment
+  // (scripts/claude-code-usage.js), so a suite run FROM a Claude Code session
+  // would measure that session and produce a different row than the same suite
+  // run in CI. The three variables are removed so the row is the same
+  // everywhere, and `ctIn` is what a test that DOES want to measure them uses.
+  const RUNTIME_VARIABLES = ['CLAUDECODE', 'CLAUDE_CODE_SESSION_ID', 'AI_AGENT']
+
+  const environment = (extra) => {
+    const env = { ...process.env, CLAUDE_CONFIG_DIR: join(ref(), '.telemetria') }
+    for (const variable of RUNTIME_VARIABLES) delete env[variable]
+    return { ...env, ...extra }
+  }
+
+  const ctIn = (extra, ...args) => spawnSync('node', [SCRIPT, ...args, '--plan', 'plan.md', '--issue', '7'], {
     cwd: ref(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, CLAUDE_CONFIG_DIR: join(ref(), '.telemetria') },
+    env: environment(extra),
   })
+
+  const ct = (...args) => ctIn({}, ...args)
 
   // What a subagent would write, to a file. `paths` is a list of plain paths:
   // the report does not tell production from test (see step-contracts.js). It
@@ -249,7 +265,7 @@ export function makeHelpers(ref) {
   }
 
   return {
-    ct, writeReport, writeVerdict, writeRaw, writeSliceVerdict, log, commits, runState,
+    ct, ctIn, writeReport, writeVerdict, writeRaw, writeSliceVerdict, log, commits, runState,
     taskPackage, slicePackage, judgeRows, packageToken, seal,
     judgeTask, judgeSlice, taskOk, sliceOk,
   }

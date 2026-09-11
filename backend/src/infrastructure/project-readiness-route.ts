@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import { Answer, JsonBody } from './http.js'
+import { Answer, JsonBody } from './http.ts'
 import { InspectProjectParams } from '../application/queries/inspect-project.ts'
 import type { InspectProject } from '../application/queries/inspect-project.ts'
 import type { ProjectReadiness } from '../domain/value-objects/project-readiness.ts'

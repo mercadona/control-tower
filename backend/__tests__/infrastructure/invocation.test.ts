@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { Invocation, InvocationOutcome } from '../../src/infrastructure/invocation.ts'
+import { MetricsDelivery } from '../../src/domain/value-objects/metrics-delivery.ts'
 
 class PluginEnvironment {
   static SCRIPT = join(
@@ -320,5 +321,38 @@ describe('Invocation resolving the BigQuery harvest table', () => {
     expect(Invoked.withHarvestTable('p:d').outcome).toBe(InvocationOutcome.MALFORMED_HARVEST_TABLE)
     expect(Invoked.withHarvestTable('p.d.t').outcome).toBe(InvocationOutcome.MALFORMED_HARVEST_TABLE)
     expect(Invoked.withHarvestTable('p:d.t extra').outcome).toBe(InvocationOutcome.MALFORMED_HARVEST_TABLE)
+  })
+})
+
+
+describe('the metrics delivery the invocation settles is what the survey is told', () => {
+  it('a_configured_table_becomes_an_enabled_delivery_carrying_the_very_table_that_was_validated', () => {
+    const delivery = MetricsDelivery.to(Invoked.withHarvestTable('p:d.t').harvestTable)
+
+    expect(delivery.enabled).toBe(true)
+    expect(delivery.destination).toBe('p:d.t')
+    expect(delivery.demands(MetricsDelivery.TOOL)).toBe(true)
+  })
+
+  it('an_unset_or_empty_variable_becomes_a_disabled_delivery_and_never_an_empty_destination', () => {
+    for (const invoked of [Invoked.bare(), Invoked.withHarvestTable('')]) {
+      const delivery = MetricsDelivery.to(invoked.harvestTable)
+
+      expect(delivery.enabled).toBe(false)
+      expect(delivery.destination).toBe(null)
+      expect(delivery.demands(MetricsDelivery.TOOL)).toBe(false)
+    }
+  })
+
+  it('the_variable_the_answer_names_is_the_one_the_invocation_reads_so_the_two_cannot_drift', () => {
+    expect(MetricsDelivery.VARIABLE).toBe(Invocation.HARVEST_TABLE_VARIABLE)
+    expect(MetricsDelivery.DESTINATION_SHAPE).toBe(Invocation.HARVEST_TABLE_SHAPE)
+  })
+
+  it('a_malformed_table_never_reaches_a_delivery_because_the_start_is_refused_before_it', () => {
+    const refused = Invoked.withHarvestTable('not-a-table')
+
+    expect(refused.outcome).toBe(InvocationOutcome.MALFORMED_HARVEST_TABLE)
+    expect(MetricsDelivery.to(refused.harvestTable).enabled).toBe(false)
   })
 })

@@ -44,3 +44,14 @@ and `make run-frontend` builds the front end and starts the backend serving it a
 `http://127.0.0.1:8787/`. `CT_HARVEST_BQ_TABLE=project:dataset.table make run-backend`
 additionally makes every collected slice leave its row in that BigQuery table;
 without the variable, the harvest loads nothing. `make help` lists the targets.
+
+**That variable is read once, when the backend starts.** A malformed value
+refuses the start naming what it got; an absent one starts with metrics delivery
+off. Off is not a failure — plans, dispatch and the collection of merged slices
+work the same — but no merged pull request leaves a row in the harvest ledger,
+so those slices never show up when two coding tools are compared. Changing it
+means **restarting the backend**: there is no setting in the interface, and the
+app never rewrites its own environment. The tools **Drawer** — the persistent
+column at the right of the work area, folded to its rail until you open it —
+carries **Entrega de métricas**, which says which of the two you are running,
+and with the delivery on it also says whether `bq` can actually upload.

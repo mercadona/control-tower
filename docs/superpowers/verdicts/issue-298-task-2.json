@@ -1,0 +1,57 @@
+{
+  "issue": 298,
+  "task": 2,
+  "task_name": "a lookup that could not run is unmeasured, not \"not found\"",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises that when `git grep --cached` cannot answer, `controls` closes the task as unmeasured with the reason in its log instead of reading it as 'the test is not there'. All three parts are in the diff: `inIndex` now tells `e.status === 1` (no match, still `false`) apart from any other status, which throws `NameLookupDidNotRun` with the name, the status and git's stderr in the message; `controlsVerb` wraps `declaredTests(t)` and `declaredBlocks(t)` in one `try`, and on that error pushes `'# names that could not be looked up'` plus the message and sets `result = OUTCOMES.INDETERMINATE`, which `exitFor` already maps to `EXIT.CONTROLS_UNMEASURED` (5, ct-step.mjs line 2614); and the command loop's guard becomes `result === OUTCOMES.DONE ? t.commands : []`, so an unmeasured lookup no longer spends the task's commands.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The **TDD:** line names `it('a name lookup that could not RUN closes the task as unmeasured, not as a missing test')` and fixes four assertions: exit 5, the reason in the log, no `is not in what is staged`, and no `$ test -f uno.txt`. The test at plugin/__tests__/ct-step-plan-and-checks.test.js:209 is that test, with a `git` shim first on `PATH` that exits 128 when `$1 = grep` and `exec`s the real git otherwise, driven through `ctIn({ PATH: ... }, 'controls')`; its four expectations are `expect(r.status).toBe(5)`, `toMatch(/# names that could not be looked up/)`, `not.toMatch(/is not in what is staged/)` and `not.toMatch(/\\$ test -f uno\\.txt/)` — the same assertions over the same input, in the same order.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The `Contract` block declares `class NameLookupDidNotRun extends Error {}` and the diff declares exactly that, above `inIndex`. The two `Current state` blocks match what the diff replaced: the `execFileSync` of line 1553 keeps `--quiet`, `-F`, `-e`, the `...scope` pathspec, `cwd: repoRoot` and `timeout: 60_000`, and only its `stdio` moves to `['ignore', 'ignore', 'pipe']` as the brief prescribes so `e.stderr` can travel in the message; the `catch` returns `false` only on `e.status === 1`; and the command loop's guard becomes verbatim `result === OUTCOMES.DONE ? t.commands : []`. The catch in `controls` rethrows anything that is not `NameLookupDidNotRun` (`if (!(e instanceof NameLookupDidNotRun)) throw e`), which is the 'any other exception goes on travelling to the top-level handler' the brief asks for.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Row by row: the local `const scope = workingPathsInTheIndex()` with the pathspec still `...scope` is in the module unchanged by this diff (task 1's row, not reopened); a broken query is any status other than 0 and 1 (`if (e.status === 1) return false` then throw, which covers 128 and the `null` of the 60 s cap); it travels as the typed error `class NameLookupDidNotRun extends Error {}`; the `controls` step catches it around its two name controls, writes the heading `# names that could not be looked up` and sets `OUTCOMES.INDETERMINATE`; the caller sees exit 5 via the pre-existing `EXIT.CONTROLS_UNMEASURED` mapping; `stdio: ['ignore', 'ignore', 'pipe']` is in place and `--quiet` stays; the test lives in `plugin/__tests__/ct-step-plan-and-checks.test.js` inside `describe('the checks are measured by the program, not by the implementer')`, next to the existing `commitPlan`/`withTestsLine` helpers. No row is implemented with a different value.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: the new test takes the exact shape of the two the plan names — `commitPlan(withTestsLine(\"a\\u00f1ade `'uno pinta uno'`.\"))`, `ct('report', writeReport(['uno.txt']))`, then an assertion on `runState().lastControlsLog` — and it uses `ctIn` from `makeHelpers`, which the harness exports precisely to hand a step a different environment. The production change follows the idiom of its neighbours in `ct-step.mjs`. Rules: `AGENTS.md`/`CLAUDE.md` require English on every surface and the diff adds only English identifiers, comments, log heading and error message ('# names that could not be looked up', 'git grep for ... did not run'); no rename, so `docs/glossary.md` has no subject. `conventions/style.md`: the new prose comments and the module-level `class`/functions live in `ct-step.mjs`, a module that was already there and does not conform, and CLAUDE.md keeps the declared-debt exemption for exactly the no-prose and no-free-function rules while refusing it only for language — so neither is a finding here. The class is a new concept in an old file, but the brief's `Contract (plugin/scripts/ct-step.mjs)` block and the closed decision 'How a broken query travels' put it there by name, so it is an obeyed decision, not a finding. `conventions/architecture.md` has no layered tree here to measure (a single CLI entrypoint script). `conventions/boundaries.md`: git's failure is interpreted as data — the exit status is read (`e.status`) and its own diagnostic channel is captured (`stdio` pipe, `e.stderr` quoted in the message) instead of erased; the call keeps its 60 s cap. `conventions/decisions.md`: the 'is this name staged' decision stays in the one place, `inIndex`, shared by `declaredTests` and `declaredBlocks`. `conventions/simplicity.md`: every added branch has a caller today, and the new heading is read by the judge/implementer through the controls log. `conventions/testing.md`: the assertion could fail for the reason its name gives — with the production lines reverted, `inIndex` would fold the 128 into `false`, controls would close FAILED (exit 4) with 'is not in what is staged' in the log and the command line would be spent, so three of the four expectations would break; the whole file already launches real subprocesses and carries no marker, which is its host's pre-existing shape, not this diff's. `conventions/defects.md`, four rules: (1) closed vocabulary — the outcomes stay members of `OUTCOMES` and the new guard dispatches on `OUTCOMES.DONE` with no loose string or catch-all; `inIndex` still answers a boolean while the third state travels as a typed error, and that split is the brief's closed decision 'How a broken query travels | a typed error', so it is obeyed, not reopened; (2) raw map as the return value of logic — no subject: nothing added returns or consumes a map; (3) two fields that have to agree / sentinel for an absence — no subject in a domain type; the only empty default is `e.stderr?.toString() ?? ''` interpolated inside a human-readable diagnostic string, not a field a consumer reads back; (4) an error named for where it happens — `NameLookupDidNotRun` names what happened, not the module that raised it.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The only `-` lines in the test file are the import line (`writeFileSync, readFileSync` gains `mkdtempSync, chmodSync`) and the destructuring of `makeHelpers` (gains `ctIn`). Neither touches an assertion, a case or a test, and no pre-existing test in the file is removed, relaxed or rewritten — the four earlier tests of the describe are untouched context. The `-` lines in `ct-step.mjs` are the re-indentation of the two name controls into the `try` and the guard's rewrite, both asked for by the brief.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised behaviour comes from production code in `plugin/scripts/ct-step.mjs`: the `throw new NameLookupDidNotRun(...)` in `inIndex`, the `catch` in `controlsVerb` that writes the heading and sets `OUTCOMES.INDETERMINATE`, and the `OUTCOMES.DONE` guard. The test's own scaffolding is only the `git` shim that provokes the broken query and the real temporary repo; nothing is stubbed on the side of the code under test, and with the production lines reverted the test fails (exit 4 and 'is not in what is staged' in the log).",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The diff writes only inside the two declared files and only what the task names: `inIndex`'s `catch` and its `stdio`, the new error class, the `try` around the two name controls, the command loop's guard, and one new test. `### Out of scope` names the rest of `ct-step.mjs`, the other controls (`declaredScope`, `amendmentOnlyAdds`, `finalTexts`), and widening `workingPathsInTheIndex()` — none of them is touched: `declaredScope` and `amendmentOnlyAdds` keep their position and bodies, and `workingPathsInTheIndex` is unchanged. No refactor, rename or adjacent fix rides along.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "One new test. Deterministic: no clock, no date, no randomness, no sleep and no network; the shim lives in a `mkdtempSync(join(tmpdir(), 'ct-step-git-shim-'))` directory and the repo is the fixture's own temporary one, and the shim's exit status (128) is a fixed literal. Isolated: it creates the shim directory it uses and removes it with `rmSyncBestEffort(shimDir)`, the altered `PATH` reaches only the child process through `ctIn`'s env and never `process.env`, and it needs no state from the tests above it (`commitPlan` and `writeReport` build its own arrange). Verifies real behaviour: the assertions are on the child's exit status and on the controls log the production code wrote, not on a mock's call count or a constant the test defined — reverting the production lines of this diff makes it fail. No non-blocking remark to report, so the finer half needed no citation.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "703a91782d918ce76f9a6017fb9f46fa0bb033adf148461cab3205291557bf05"
+  }
+}

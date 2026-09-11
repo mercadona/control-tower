@@ -6,7 +6,7 @@
 #   make test-plugin    | test-backend    | test-frontend    | test-all
 #   make build-plugin                                          build plugin/dist (the hook bundles)
 #   make build-frontend                                        build frontend/dist
-#   make run-backend                                           install backend deps, then start the API on CT_API_PORT (8787); serves frontend/dist if built; CT_HARVEST_BQ_TABLE=project:dataset.table loads every harvested slice into BigQuery
+#   make run-backend                                           install backend deps, then start the API on CT_API_PORT (8787); serves frontend/dist if built; CT_HARVEST_BQ_TABLE=project:dataset.table loads every harvested slice into BigQuery, and without it nothing is uploaded (read at start-up, so changing it needs a restart)
 #   make run-frontend                                          build the frontend, then run-backend
 #   make dev-frontend                                          vite dev server (run `make run-backend` in another terminal)
 #   make clean-frontend | clean-all
@@ -42,7 +42,7 @@ build-frontend:
 	npm run build --prefix frontend --if-present
 
 run-backend: install-backend
-	CT_API_PORT=$(CT_API_PORT) CT_HARVEST_BQ_TABLE=$(CT_HARVEST_BQ_TABLE) node backend/src/infrastructure/ct-api.mjs
+	CT_API_PORT=$(CT_API_PORT) CT_HARVEST_BQ_TABLE=$(CT_HARVEST_BQ_TABLE) node backend/src/infrastructure/ct-api.ts
 
 run-frontend: install-frontend build-frontend run-backend
 

@@ -88,9 +88,30 @@
   width: 100%;
 }
 
-.button__label {
+.button__label,
+.button__icon-start {
   display: inline-flex;
   align-items: center;
+}
+
+.button--icon-only .button__state-layer {
+  padding: 0;
+}
+
+.button--icon-only {
+  aspect-ratio: 1;
+}
+
+.button--icon-only.button--desktop {
+  min-width: 40px;
+}
+
+.button--icon-only.button--mobile {
+  min-width: 48px;
+}
+
+.button--icon-only.button--full-width {
+  aspect-ratio: auto;
 }
 
 .button--primary {

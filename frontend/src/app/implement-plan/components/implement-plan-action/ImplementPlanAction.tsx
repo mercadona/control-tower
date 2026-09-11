@@ -7,6 +7,8 @@ import { Button } from 'system-ui/button'
 import './ImplementPlanAction.css'
 
 const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
+const UNDER_REVIEW_TITLE = 'El plan se está rehaciendo con los cambios pedidos'
+const UNDER_REVIEW_DESCRIPTION = 'Espera a que el agente publique el plan rehecho y vuelve a intentarlo.'
 
 type ImplementPlanActionProps = {
   plan: StartedPlan
@@ -65,6 +67,14 @@ const ImplementPlanAction = ({ plan, onImplementationStarted, isImplementationSt
           role="alert"
           title="No se puede saber si la implementación ya empezó"
           description="Una persona tiene que comprobarlo antes de reintentar."
+        />
+      )}
+      {outcome?.kind === 'under-review' && (
+        <Banner
+          type="warning"
+          role="alert"
+          title={UNDER_REVIEW_TITLE}
+          description={UNDER_REVIEW_DESCRIPTION}
         />
       )}
       {outcome?.kind === 'backend-unreachable' && <Banner type="error" role="alert" title={UNREACHABLE_MESSAGE} />}
