@@ -20,16 +20,29 @@ export class WorktreePlans {
   }
 
   #agentOf(known, prepared, repository) {
-    const canonical = this.#canonical(prepared.located.path)
-    const attending = known.filter((conversation) =>
-      conversation.repository === repository.text &&
-      (conversation.worktree === prepared.located.path ||
-        (canonical !== null && this.#canonical(conversation.worktree) === canonical)))
-    if (attending.length === 0) return null
+    let preparedCanonical
+    let preparedCanonicalKnown = false
+    const canonicalOfPrepared = () => {
+      if (!preparedCanonicalKnown) {
+        preparedCanonical = this.#canonical(prepared.located.path)
+        preparedCanonicalKnown = true
+      }
 
-    return attending.reduce((newest, conversation) =>
-      conversation.startedAt > newest.startedAt ? conversation : newest
-    ).agent
+      return preparedCanonical
+    }
+
+    let newest = null
+    for (const conversation of known) {
+      if (conversation.repository !== repository.text) continue
+      const exact = conversation.worktree === prepared.located.path
+      if (!exact) {
+        const canonical = canonicalOfPrepared()
+        if (canonical === null || this.#canonical(conversation.worktree) !== canonical) continue
+      }
+      if (newest === null || conversation.startedAt > newest.startedAt) newest = conversation
+    }
+
+    return newest === null ? null : newest.agent
   }
 
   #canonical(path) {

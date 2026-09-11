@@ -171,7 +171,7 @@ describe('the pull request review loop composed end to end, only gh, node and th
     ]])
   })
 
-  it('types_an_errand_naming_the_real_issue_instead_of_issue_hash_undefined', async () => {
+  it('passes_an_errand_naming_the_real_issue_instead_of_issue_hash_undefined', async () => {
     const loop = new PullRequestReviewLoop()
 
     await loop.run()

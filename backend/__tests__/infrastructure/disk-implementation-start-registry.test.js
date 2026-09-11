@@ -23,7 +23,7 @@ const WATCH_WITHOUT_A_STORY = new PlanWatch({
 })
 
 describe('DiskImplementationStartRegistry', () => {
-  it('writes_all_identity_needed_to_match_a_recovered_cmux_plan', async () => {
+  it('writes_all_identity_needed_to_match_a_recovered_plan', async () => {
     const write = vi.fn()
     const registry = new DiskImplementationStartRegistry({
       read: vi.fn(), stat: vi.fn(), write, root: '/state',

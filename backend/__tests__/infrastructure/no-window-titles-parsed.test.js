@@ -26,5 +26,6 @@ describe('the identity of a plan in flight does not come from the title of a win
   it('no_module_of_the_backend_names_a_cmux_workspace_now_that_nothing_opens_one', () => {
     expect(SourceTree.containing('ct-plan-')).toEqual([])
     expect(SourceTree.containing('plugin/scripts/cmux.js')).toEqual([])
+    expect(SourceTree.containing('cmux')).toEqual([])
   })
 })
