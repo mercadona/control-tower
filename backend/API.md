@@ -468,6 +468,60 @@ curl -s 'http://127.0.0.1:8787/implement-progress/7?root=/repo/checkout&repo=own
 
 ---
 
+## `GET /implement-history/:issue?root=<abs path>&repo=owner/name`
+
+What already happened, one row per finished step. `ct-step commit` appends one
+row per attempt to `docs/superpowers/metrics/issue-<n>.jsonl` inside the
+slice's worktree; this route reads that file. **Both** query parameters are
+required, same as `/implement-progress`.
+
+**200 OK**
+
+```json
+{"steps":[{"step":"implement","task":1,"task_name":"the lookup looks where it says it looks",
+ "tasks_total":2,"attempt":1,"outcome":"done","written_at":"2026-09-10T14:55:59.885Z",
+ "duration_ms":null,"summary":"Renamed ..."}]}
+```
+
+Entries come back in file order. Nine fields always present. A measurement the
+row does not carry answers `null` — `duration_ms` and `summary` on most steps,
+and `task`/`task_name` on a step of the slice rather than of one task
+(`reconcile`, `global`, `slice-judge`).
+
+A worktree with no metrics file yet answers `{"steps":[]}`: nothing ran there,
+not a refusal.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `step` | string | the same step vocabulary `/implement-progress` uses |
+| `task` | number \| null | the task the row measures |
+| `task_name` | string \| null | the task's heading, read from the plan file |
+| `tasks_total` | number \| null | tasks in the plan |
+| `attempt` | number \| null | which attempt of that step |
+| `outcome` | string \| null | how the attempt closed |
+| `written_at` | string \| null | when `ct-step commit` wrote the row |
+| `duration_ms` | number \| null | how long the attempt took, where measured |
+| `summary` | string \| null | what the agent did, on an `implement` row |
+
+**Refusals**
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `malformed-root` | 400 | `root` is missing or not absolute |
+| `malformed-history-repo` | 400 | `repo` is missing or not `owner/name` |
+| `implementation-history-not-read` | 400 | see below |
+
+`implementation-history-not-read` is one code for three different
+situations — the worktree is not there, the metrics file cannot be read, or
+one of its lines is not valid JSON. For the last, `detail` names the line
+number so the malformed row can be found by hand.
+
+```
+curl -s 'http://127.0.0.1:8787/implement-history/298?root=/repo/checkout&repo=owner/name'
+```
+
+---
+
 ## `GET /active-plans`
 
 Every plan this backend knows about. No parameters. The page calls it on load to
@@ -670,6 +724,7 @@ curl -s http://127.0.0.1:8787/external-tools
 | `GET /plan-events` | `frontend/src/app/plan-events/client.ts` | `PlanEvents.types.ts` |
 | `POST /implement-plan` | `frontend/src/app/implement-plan/client.ts` | `ImplementPlan.types.ts` |
 | `GET /implement-progress` | `frontend/src/app/implement-progress/client.ts` | `ImplementProgress.types.ts` |
+| `GET /implement-history` | not consumed yet | not consumed yet |
 | `GET /active-plans` | `frontend/src/app/active-plans/client.ts` | `ActivePlan.types.ts` |
 | `GET /external-tools` | `frontend/src/app/external-tools/client.ts` | `ExternalTools.types.ts` |
 
