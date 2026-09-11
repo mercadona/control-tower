@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { PlanRequestOutcome, PlanCollapse } from '../../src/infrastructure/start-plan-route.ts'
-import { ImplementRequestOutcome, ImplementCollapse } from '../../src/infrastructure/implement-plan-route.ts'
-import { EventsRequestOutcome, PlanEvents } from '../../src/infrastructure/plan-events-route.ts'
-import { ActivePlansOutcome } from '../../src/infrastructure/active-plans-route.ts'
-import { ProgressRequestOutcome, ProgressCollapse } from '../../src/infrastructure/implement-progress-route.ts'
-import { HistoryRequestOutcome, HistoryCollapse } from '../../src/infrastructure/implement-history-route.ts'
-import { ReviewRequestOutcome, ReviewCollapse } from '../../src/infrastructure/review-plan-route.ts'
+import { PlanRequestOutcome, PlanCollapse } from '../../src/infrastructure/api/start-plan-route.ts'
+import { ImplementRequestOutcome, ImplementCollapse } from '../../src/infrastructure/api/implement-plan-route.ts'
+import { EventsRequestOutcome, PlanEvents } from '../../src/infrastructure/api/plan-events-route.ts'
+import { ActivePlansOutcome } from '../../src/infrastructure/api/active-plans-route.ts'
+import { ProgressRequestOutcome, ProgressCollapse } from '../../src/infrastructure/api/implement-progress-route.ts'
+import { HistoryRequestOutcome, HistoryCollapse } from '../../src/infrastructure/api/implement-history-route.ts'
+import { ReviewRequestOutcome, ReviewCollapse } from '../../src/infrastructure/api/review-plan-route.ts'
 
 class RequestVocabularies {
   static readonly #ACCEPTED = 'accepted'

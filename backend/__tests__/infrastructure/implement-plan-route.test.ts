@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { ReviewsSpy } from '../reviews-spy.ts'
-import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanEvents, PlanSessions } from '../../src/infrastructure/api/plan-events-route.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
@@ -12,7 +12,7 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import {
   ImplementRequestOutcome, ImplementRefusal, ImplementCollapse,
-} from '../../src/infrastructure/implement-plan-route.ts'
+} from '../../src/infrastructure/api/implement-plan-route.ts'
 import {
   PlanAgentNotResumed, PlanFailure, PlanGoNotAnswered, GoFailure, GoNotRecorded, PlanProgressNotRead,
 } from '../../src/domain/exceptions.ts'
@@ -21,7 +21,7 @@ import {
   ReviewGatePolicy, ReviewInFlight, type ReviewInFlightValue,
 } from '../../src/domain/policies/review-gate-policy.ts'
 import { ReadPlanProgressParams } from '../../src/application/queries/read-plan-progress.ts'
-import { ActivePlans, ActivePlanPhase } from '../../src/infrastructure/active-plans-route.ts'
+import { ActivePlans, ActivePlanPhase } from '../../src/infrastructure/api/active-plans-route.ts'
 import type { ImplementPlanParams } from '../../src/application/actions/implement-plan.ts'
 
 type AskedImplementation = { agent: string, issue: number, repository: string }

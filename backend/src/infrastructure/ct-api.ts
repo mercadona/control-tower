@@ -19,14 +19,14 @@ import { DispatchCheckHarvest } from './dispatch-check-harvest.ts'
 import { HarvestClock } from './harvest-clock.ts'
 import { PlanAgentBrief } from './plan-agent-brief.ts'
 import { PlanContractProgress } from './plan-contract-progress.ts'
-import { PlanEvents, PlanSessions } from './plan-events-route.ts'
+import { PlanEvents, PlanSessions } from './api/plan-events-route.ts'
 import { ReviewWatch } from './review-watch.ts'
 import { MemoryReviewLog } from './memory-review-log.ts'
 import { GhPullRequests } from './gh-pull-requests.ts'
 import { DispatchCheckWorkbench } from './dispatch-check-workbench.ts'
 import { RunFileProgress } from './run-file-progress.ts'
 import { MetricsFileHistory } from './metrics-file-history.ts'
-import { ActivePlans } from './active-plans-route.ts'
+import { ActivePlans } from './api/active-plans-route.ts'
 import { ActivePlanRecovery } from './active-plan-recovery.ts'
 import { DiskImplementationStartRegistry } from './disk-implementation-start-registry.ts'
 import { CmuxWorkspaceQuery } from '../../../plugin/scripts/cmux.js'
@@ -44,7 +44,10 @@ import { SurveyWorkspaces, SurveyWorkspacesParams } from '../application/queries
 import { ReadPlanStory, ReadPlanStoryParams } from '../application/queries/read-plan-story.ts'
 import { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
 import { InspectProject } from '../application/queries/inspect-project.ts'
-import { GitDockerProjectSetup } from './git-docker-project-setup.ts'
+import { GitProjectRepository } from './git-project-repository.ts'
+import { DockerProjectEnvironment } from './docker-project-environment.ts'
+import { InspectionCommands } from './inspection-commands.ts'
+import { ProjectReadinessAssessment } from '../domain/policies/project-readiness-assessment.ts'
 import { MetricsDelivery } from '../domain/value-objects/metrics-delivery.ts'
 import { HarvestDelivery, HarvestDeliveryParams } from '../application/actions/harvest-delivery.ts'
 import { ProbedToolSessions } from './probed-tool-sessions.ts'
@@ -433,6 +436,12 @@ class CtApi {
       pullRequestReviews,
       activePlans,
     })
+    const inspectionCommands = new InspectionCommands({
+      run: (bin, argv, cwd, budgetMs) => new ToolRunner({
+        bin, budgetMs, ownedProcessGroup: { maxBufferBytes: 128 * 1024 },
+      }).run(argv, { cwd }),
+      now: Date.now,
+    })
     const server = new ApiServer({
       port: asked.port,
       startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, gh),
@@ -458,13 +467,12 @@ class CtApi {
         toolSessions: CtApi.#toolSessions(environment),
         metricsDelivery: MetricsDelivery.to(asked.harvestTable),
       }),
-      inspectProject: new InspectProject({ setup: new GitDockerProjectSetup({
-        run: (bin, argv, cwd, budgetMs) => new ToolRunner({
-          bin, budgetMs, ownedProcessGroup: { maxBufferBytes: 128 * 1024 },
-        }).run(argv, { cwd }),
-        now: Date.now, budgetMs: 30_000, commandBudgetMs: 2_000,
-        maxFiles: 24, maxContainers: 12,
-      }) }),
+      inspectProject: new InspectProject({
+        repository: new GitProjectRepository(inspectionCommands),
+        environment: new DockerProjectEnvironment(inspectionCommands),
+        assessment: new ProjectReadinessAssessment(), now: Date.now,
+        limits: { budgetMs: 30_000, commandBudgetMs: 2_000, maxFiles: 24, maxContainers: 12 },
+      }),
       implementationStarts,
       recovery,
       stderr: (line) => process.stderr.write(line),

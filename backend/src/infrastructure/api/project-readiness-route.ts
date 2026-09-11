@@ -1,11 +1,13 @@
 import type { Request, Response } from 'express'
-import { Answer, JsonBody } from './http.ts'
-import { InspectProjectParams } from '../application/queries/inspect-project.ts'
-import type { InspectProject } from '../application/queries/inspect-project.ts'
-import type { ProjectReadiness } from '../domain/value-objects/project-readiness.ts'
-import { PlanTarget } from '../domain/value-objects/plan-target.ts'
-import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
-import { RepositoryName } from '../domain/value-objects/repository-name.ts'
+import { Answer, JsonBody } from '../http.ts'
+import { InspectProjectParams } from '../../application/queries/inspect-project.ts'
+import type { InspectProject } from '../../application/queries/inspect-project.ts'
+import type { ProjectReadiness } from '../../domain/value-objects/project-readiness.ts'
+import { PlanTarget } from '../../domain/value-objects/plan-target.ts'
+import { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
+import { RepositoryName } from '../../domain/value-objects/repository-name.ts'
+
+export type ProjectInspector = Pick<InspectProject, 'execute'>
 
 class ProjectTargetRequest {
   static from(text: string): PlanTarget | null {
@@ -22,7 +24,7 @@ class ReadinessResponse {
   static from(report: ProjectReadiness) {
     return {
       repo: report.repository, path: report.root, base_revision: report.baseRevision,
-      observed_at: report.observedAt, status: report.status,
+      observed_at: new Date(report.observedAt).toISOString(), status: report.status,
       findings: report.findings.map((finding) => ({
         id: finding.id, status: finding.status, evidence: finding.evidence, action: finding.action,
       })),
@@ -34,7 +36,7 @@ export class ProjectReadinessRoute {
   static readonly PATH = '/project-readiness'
   static readonly METHOD = 'POST'
 
-  static handledBy(inspectProject: InspectProject) {
+  static handledBy(inspectProject: ProjectInspector) {
     return async (request: Request, response: Response): Promise<void> => {
       const target = ProjectTargetRequest.from(JsonBody.textOf(request))
       if (target === null) {

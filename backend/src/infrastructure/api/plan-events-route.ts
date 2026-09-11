@@ -1,10 +1,10 @@
 import type { Request, RequestHandler, Response } from 'express'
-import { Answer, Refusal } from './http.ts'
-import { Projection } from './projection.ts'
-import { PlanFailure } from '../domain/exceptions.ts'
-import { RepositoryName } from '../domain/value-objects/repository-name.ts'
-import type { PlanStateValue } from '../domain/value-objects/plan-state.ts'
-import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
+import { Answer, Refusal } from '../http.ts'
+import { Projection } from '../projection.ts'
+import { PlanFailure } from '../../domain/exceptions.ts'
+import { RepositoryName } from '../../domain/value-objects/repository-name.ts'
+import type { PlanStateValue } from '../../domain/value-objects/plan-state.ts'
+import type { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
 
 type WatchedPlan = { issue: number, repository: RepositoryName }
 

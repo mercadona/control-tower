@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanEvents, PlanSessions } from '../../src/infrastructure/api/plan-events-route.ts'
 import { PlanState, type PlanStateValue } from '../../src/domain/value-objects/plan-state.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'

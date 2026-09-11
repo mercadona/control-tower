@@ -1,11 +1,11 @@
-import { Answer, JsonBody, Refusal } from './http.ts'
+import { Answer, JsonBody, Refusal } from '../http.ts'
 import { ActivePlanPhase } from './active-plans-route.ts'
-import { Projection } from './projection.ts'
-import { AskPlanChangesParams } from '../application/actions/ask-plan-changes.ts'
-import { RepositoryName } from '../domain/value-objects/repository-name.ts'
-import { PlanChangesFailure } from '../domain/exceptions.ts'
+import { Projection } from '../projection.ts'
+import { AskPlanChangesParams } from '../../application/actions/ask-plan-changes.ts'
+import { RepositoryName } from '../../domain/value-objects/repository-name.ts'
+import { PlanChangesFailure } from '../../domain/exceptions.ts'
 import type { Request, Response } from 'express'
-import type { ActivePlans } from './active-plans-route.js'
+import type { ActivePlans } from './active-plans-route.ts'
 
 export const ReviewRequestOutcome = Object.freeze({
   ACCEPTED: 'accepted',

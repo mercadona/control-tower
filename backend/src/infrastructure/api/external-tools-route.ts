@@ -1,7 +1,7 @@
 import type { Request, RequestHandler, Response } from 'express'
-import { Answer } from './http.ts'
-import type { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
-import { MetricsDelivery } from '../domain/value-objects/metrics-delivery.ts'
+import { Answer } from '../http.ts'
+import type { SurveyExternalTools } from '../../application/queries/survey-external-tools.ts'
+import { MetricsDelivery } from '../../domain/value-objects/metrics-delivery.ts'
 
 type DeliveredMetrics = {
   enabled: boolean,

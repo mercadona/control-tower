@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PlanRequest, PlanRequestOutcome } from '../../src/infrastructure/start-plan-route.ts'
+import { PlanRequest, PlanRequestOutcome } from '../../src/infrastructure/api/start-plan-route.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
 import { PlanComment } from '../../src/domain/value-objects/plan-comment.ts'

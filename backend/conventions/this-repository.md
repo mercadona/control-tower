@@ -117,6 +117,8 @@ allows for a kind declared together on purpose.
 A controller under `infrastructure/` is named `<endpoint>-route.ts`, one
 file per endpoint.
 
+The route modules are grouped in `src/infrastructure/api/`.
+
 What each file under `infrastructure/` is, concretely, in this backend — the
 repository's own choice of names, not a pattern:
 

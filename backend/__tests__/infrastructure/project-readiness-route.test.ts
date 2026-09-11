@@ -1,21 +1,20 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { InspectProject } from '../../src/application/queries/inspect-project.ts'
-import { ProjectSetup } from '../../src/domain/ports/project-setup.ts'
+import { InspectProjectResult } from '../../src/application/queries/inspect-project.ts'
+import type { InspectProjectParams } from '../../src/application/queries/inspect-project.ts'
 import { ProjectReadiness } from '../../src/domain/value-objects/project-readiness.ts'
 import { ReadinessFinding } from '../../src/domain/value-objects/readiness-finding.ts'
-import type { PlanTarget } from '../../src/domain/value-objects/plan-target.ts'
 
-class InspectedSetup extends ProjectSetup {
+class InspectionSpy {
   calls = 0
 
-  async inspect(target: PlanTarget): Promise<ProjectReadiness> {
+  async execute({ target }: InspectProjectParams): Promise<InspectProjectResult> {
     this.calls += 1
-    return new ProjectReadiness({
+    return new InspectProjectResult({ report: new ProjectReadiness({
       repository: target.repository.text, root: target.root.text, baseRevision: 'a'.repeat(40),
-      observedAt: '2026-09-10T00:00:00.000Z',
+      observedAt: Date.UTC(2026, 8, 10),
       findings: [new ReadinessFinding({ id: 'test-workers', status: 'changes-required', evidence: ['pytest -n auto'], action: 'limit-workers' })],
-    })
+    }) })
   }
 }
 
@@ -25,12 +24,12 @@ class InspectionApi {
   static async request({ body = { repo: 'owner/project', path: '/repo' }, method = 'POST', origin }: {
     body?: unknown, method?: string, origin?: string,
   } = {}) {
-    const setup = new InspectedSetup()
+    const setup = new InspectionSpy()
     const server = new ApiServer({
       port: 0, startPlan: null, implementPlan: null, askPlanChanges: null, implementProgress: null,
       reviews: null, pullRequestReviews: null, planEvents: null, sessions: null, activePlans: null,
       externalTools: null, implementationStarts: null, recovery: null, stderr: () => {},
-      frontendRoot: '/ct-no-frontend', inspectProject: new InspectProject({ setup }),
+      frontendRoot: '/ct-no-frontend', inspectProject: setup,
     })
     const port = await server.start()
     InspectionApi.running.push(server)

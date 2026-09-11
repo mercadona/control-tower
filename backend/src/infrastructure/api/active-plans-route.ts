@@ -1,8 +1,8 @@
 import type { Request, RequestHandler, Response } from 'express'
-import { Answer } from './http.ts'
+import { Answer } from '../http.ts'
 import type { PlanSessions } from './plan-events-route.ts'
-import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
-import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
+import type { PlanWatch } from '../../domain/value-objects/plan-watch.ts'
+import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
 
 export const ActivePlanPhase = Object.freeze({
   PLANNING: 'planning',

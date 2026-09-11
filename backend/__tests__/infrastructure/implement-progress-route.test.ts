@@ -3,10 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { ReviewsSpy } from '../reviews-spy.ts'
-import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanEvents, PlanSessions } from '../../src/infrastructure/api/plan-events-route.ts'
 import {
   ProgressRequestOutcome, ProgressRefusal, ProgressCollapse,
-} from '../../src/infrastructure/implement-progress-route.ts'
+} from '../../src/infrastructure/api/implement-progress-route.ts'
 import { ImplementationState, ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
 import { ImplementationProgressNotRead } from '../../src/domain/exceptions.ts'
 import * as exceptions from '../../src/domain/exceptions.ts'

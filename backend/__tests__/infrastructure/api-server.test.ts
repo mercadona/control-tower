@@ -12,7 +12,7 @@ import type { StartPlanParams } from '../../src/application/actions/start-plan.t
 import { BaselineResult } from '../../../plugin/scripts/baseline.js'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { PlanEvents, EventsRefusal, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanEvents, EventsRefusal, PlanSessions } from '../../src/infrastructure/api/plan-events-route.ts'
 import {
   PlanAgentNotLaunched, UserStoryNotRead, PlanIssueNotCreated, PlanIssueNotNamed, WorkspaceNotPrepared,
   PlanProgressNotRead,
@@ -22,7 +22,7 @@ import { PlanState } from '../../src/domain/value-objects/plan-state.ts'
 import type { PlanStateValue } from '../../src/domain/value-objects/plan-state.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
-import { ActivePlans } from '../../src/infrastructure/active-plans-route.ts'
+import { ActivePlans } from '../../src/infrastructure/api/active-plans-route.ts'
 import { ActivePlanRecovery } from '../../src/infrastructure/active-plan-recovery.ts'
 import { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.ts'
 import { SurveyExternalTools, SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.ts'

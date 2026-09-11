@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   EventsRequest, EventsRequestOutcome, EventsRefusal, PlanSessions,
-} from '../../src/infrastructure/plan-events-route.ts'
-import { PlanRequest, PlanRequestOutcome, PlanRefusal } from '../../src/infrastructure/start-plan-route.ts'
+} from '../../src/infrastructure/api/plan-events-route.ts'
+import { PlanRequest, PlanRequestOutcome, PlanRefusal } from '../../src/infrastructure/api/start-plan-route.ts'
 import { Refusal } from '../../src/infrastructure/http.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'

@@ -3,10 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { ReviewsSpy } from '../reviews-spy.ts'
-import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
+import { PlanEvents, PlanSessions } from '../../src/infrastructure/api/plan-events-route.ts'
 import {
   HistoryRequestOutcome, HistoryRefusal, HistoryCollapse,
-} from '../../src/infrastructure/implement-history-route.ts'
+} from '../../src/infrastructure/api/implement-history-route.ts'
 import { ImplementationHistoryEntry } from '../../src/domain/value-objects/implementation-history-entry.ts'
 import { ImplementationHistoryNotRead } from '../../src/domain/exceptions.ts'
 import * as exceptions from '../../src/domain/exceptions.ts'
