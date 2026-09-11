@@ -3,6 +3,11 @@
 **Handoff origen:** `docs/superpowers/specs/2026-09-11-the-loop-enters-through-brainstorming-design.md`
 **Fecha de congelación:** 2026-09-11
 **Estado:** CONGELADA
+**Enmiendas:** 2026-09-11, sobre el feedback de un revisor («no debemos deducirlo solamente de
+`claude -p`») — D-2 reformulada, porque describía al backend como si fuese una sesión de LLM; D-18
+a D-21 añadidas, que es la topología de sesiones que la congelación dejó implícita; slice 3
+renombrado a la sesión coordinadora y slice 7 nuevo para la conducción paso a paso, con lo que la
+cadena pasa a ser el 8.
 
 ## Hipótesis del experimento
 
@@ -32,9 +37,13 @@ protocol is not retired here: only its default dies, and A-3 carries the rest.
   streamed to the page, not a structured chat and not a step left outside the
   app.
   *(Procedencia: hablada — «Terminal real en la cabina», y «mover el loop como primer paso al brainstorming».)*
-- **D-2 · The backend is the orchestrating session of the implementation** —
-  `/start-plan` does what `/ct-next` does, inside the backend, with `claude -p`.
-  *(Procedencia: hablada — «start-plan lo que hace es lo mismo que hace el ct-next pero en el backend con claude -p para poder subir las estadisticas de desarrollo (…) el backend es el que controla la sesión y pasa la información y actua como sesion orquestadora para la implementación».)*
+- **D-2 · The backend automates the coordination between issues and controls the
+  agents' sessions** — `/start-plan` does what `/ct-next` does, inside the
+  backend, with `claude -p`. The backend is a **program**, not a session and not
+  a model: it selects the next issue, checks its dependencies, prepares its
+  execution and chains the work. The sessions do not disappear and neither do
+  the agents that do the work inside a slice — the backend owns and drives them.
+  *(Procedencia: hablada — «start-plan lo que hace es lo mismo que hace el ct-next pero en el backend con claude -p para poder subir las estadisticas de desarrollo (…) el backend es el que controla la sesión y pasa la información y actua como sesion orquestadora para la implementación». Enmendada el 2026-09-11: «sesión orquestadora» describía al backend como si fuese una sesión de LLM, y un revisor lo señaló — «la formulación precisa es: el backend automatiza la coordinación entre issues y controla las sesiones de los agentes. No que desaparezcan las sesiones ni necesariamente los agentes que coordinan tareas dentro de un slice».)*
 - **D-3 · There is no human gate between the plan and its implementation** — the
   authorisation is GATE 2 and the earlier gates are respected.
   *(Procedencia: hablada — «continuar con el plan (que ya no necesitara gate humano) y ponerse a implementar, hay que respetar los gates previos».)*
@@ -103,6 +112,46 @@ protocol is not retired here: only its default dies, and A-3 carries the rest.
 - **D-17 · The record is written once and never mutated** — its absence is the
   whole of "not prepared", so there is no lock, no revision and no owner pid.
   *(Procedencia: deducida de D-13.)*
+- **D-18 · There is a coordinating session and it is the boss of all of them** —
+  the entrance conversation does not die at the freeze: it stays as the
+  milestone's coordinator and the human's single interlocutor, the one that
+  orders the start, carries the changes asked on a pull request and unblocks
+  what is stuck, implementations included. What it never does is decide the
+  order or the phase — that is the program's, exactly as in the plugin, where
+  the coordinating session runs `/ct-next` and `ct-next.mjs` is what decides.
+  It commands by invoking the backend's endpoints and the plugin's programs,
+  while the backend owns the processes, makes the call of each step, keeps the
+  record and measures. So there is a session above every other one, and still no
+  model in the critical path of the automatic chain.
+  *(Procedencia: hablada — «tiene q haber una sesión q sea la jefa de todas, incluyendo las implementaciones, como en el plugin» y «El backend las hace; la jefa manda a través de él». Que su identidad sea la sesión de entrada que persiste es deducido de D-1.)*
+- **D-19 · One conversation per slice, and one call per step of the run
+  machine** — the backend asks `ct-step next`, makes the `claude -p --resume`
+  call of the step that is due, and runs the verb that consumes what the call
+  produced. `run-machine.js` stays the only sequencer: no step order is written
+  in the backend, and a verb out of turn is still the machine's exit 9 rather
+  than a backend decision. Three consequences that are part of the decision: the
+  judge becomes its own call, so it reports its own cost — the argv of
+  `judge-dispatch.js` is the reference shape; the attempt row of
+  `docs/superpowers/metrics/issue-<n>.jsonl` can carry cost and turns, which is
+  what the bet promises and what a subagent cannot report (`ct-step.mjs:53`); and
+  the agent is never again told to ask `ct-step`, so a task's call implements
+  that task with TDD and dispatches no subagent of its own. This is phase 4 of
+  issue #139 and it is a slice of its own.
+  *(Procedencia: hablada — «Una conversación por slice, una llamada por paso», sobre la pregunta que el revisor dejó abierta: «cómo se distribuyen las conversaciones entre slices y tareas».)*
+- **D-20 · A change asked on a pull request travels through the coordinating
+  session** — you tell the boss and the boss makes it happen: it asks the backend
+  to resume that slice's conversation with the change. The sweep of the pull
+  request's own comments stays as the second channel, for a reviewer who writes
+  on GitHub instead of talking to the cabin.
+  *(Procedencia: hablada — «Para decir cambios en la pr se quiere hacer desde una sesión coordinadora».)*
+- **D-21 · The coordinating session is always in the front, and it is
+  recoverable** — the cabin always offers a place to talk to it, not only while
+  the epic is being designed, and getting it back is a requirement rather than a
+  convenience. Two different losses, two different answers: a page reload
+  replays what was already said, and a backend restart brings the conversation
+  back by resuming it. A conversation that cannot be resumed is said out loud;
+  the cabin never opens a different one and presents it as the same.
+  *(Procedencia: hablada — «La sesión coordinadora siempre tiene q estar en el front para poder hablar con ella, y se tiene q poder recuperar». Que sean dos mecanismos distintos es deducido: el PTY muere con su padre y el descriptor del maestro no se recupera, mientras que la conversación sí, porque el CLI la resume desde su propio almacén.)*
 
 ## Enfoque técnico
 
@@ -122,6 +171,16 @@ is noisy on purpose. The reason is an ordering one: slice 1 is what removes that
 default, and when this spec is groomed slice 1 has not landed, so without the
 waiver this epic's own issues would be born demanding a go that D-3 says does not
 exist. The waiver stops being necessary for the epics that come after it.
+
+On the topology the amendment adds, the approach is this. The coordinating
+session is one PTY the backend owns and keeps, and the cabin subscribes to it
+rather than creating it, so the page is a window and not the owner. A reload is
+answered from a scrollback the backend keeps per session; a restart is answered
+by relaunching the CLI on the recorded conversation id, which is a different
+mechanism because the PTY's master descriptor does not outlive its owner while
+the conversation does. Driving the run machine step by step is slice 7 and it
+sits between the dispatcher and the chain on purpose: it needs a conversation
+to resume, and the chain needs steps that finish.
 
 The heart is the session port with two adapters. Everything else is a reader of
 evidence: the gates read artefacts and write the two mutations they are gates
@@ -160,11 +219,12 @@ dispatch. Nothing serializes across those three areas except through `Dep`.
 |---|-------|------|---------|-----|--------|-----------|------|------|------|-------|
 | 1 | The intermediate gate retires | backend | The flow loses its intermediate human gate: the review endpoint and its wiring are gone, the `plan` gate stops being implied by every slice, and the pull request's fix loop is untouched | – | `POST /review-plan` is no longer routed, the plan events vocabulary is `writing` and `ready` only, no slice is born with the plan gate unless its own row asks for it, the pull request fixes still reach the agent through the surviving watch, `API.md` no longer documents the retired endpoint | `ReadFixesAsked` and `RequestFixes` and the second `ReviewWatch` wiring; the go protocol's own modules stay as they are | api | plugin | !plan | a groom of any spec creates no `gate:plan` label and the plan stream emits only writing and ready |
 | 2 | The session channel | ui | The page opens a live terminal fed by a backend session, with its stream, its input and the list of the live ones | – | the live sessions are listed by the backend, output reaches the page while the process runs, typed input reaches the process, closing the page does not kill the session | the eight existing endpoints and their contracts | sessions | frontend | !plan | the session list names the live session and its stream carries bytes while the process runs |
-| 3 | The entrance session | backend | The brainstorming and spec conversation runs inside the app on the governed checkout with its status and its live question projected | #2 | the session starts in the governed checkout with no worktree and no branch of its own, the phase prompt travels in an environment variable, the hooks report working and waiting and the live question, a hook left by a previous run is purged before the session starts | the brainstorming skill's own text | sessions | hooks | !plan | the session status moves from working to waiting and the live question is readable in the cabin |
+| 3 | The coordinating session | backend | The conversation that brainstorms and writes the spec runs inside the app on the governed checkout and stays there as the milestone's boss — always reachable and recoverable | #2 | the session starts in the governed checkout with no worktree and no branch of its own, the phase prompt travels in an environment variable, the hooks report working and waiting and the live question, a hook left by a previous run is purged before the session starts, the page always offers a place to talk to it, a reload replays what was already said, a backend restart brings the conversation back by resuming it and says so when it cannot instead of opening a different one in silence | the brainstorming skill's own text | sessions | hooks | !plan | the session status moves from working to waiting and the live question is readable in the cabin |
 | 4 | Gate 1 — the freeze | ui | The freeze becomes an act of the program: the yardstick's failures on screen and a button that writes the state and the date and commits them | #3 | the button refuses while a clarification marker or an empty hypothesis remains, each failure is shown as the imported module reports it, pressing it writes `Estado: CONGELADA` with the date and commits, the conversation's agent never writes that line | `plugin/scripts/groom.js` and `plugin/scripts/slices.js` — imported and not modified | gates | frontend | !plan | the spec commit carries `Estado: CONGELADA` with its date and a refusal names the offending line |
 | 5 | The groom and gate 2 | ui | The groom runs from the cabin: the dry run's plan on screen before anything mutates, then the real groom, then the promotion that authorises work | #4 | the dry run's product is shown as what will be created, the real groom is refused while the spec is not frozen, the promotion adds `status:ready` to the epic's issues and nothing else, a groom failure is shown in the program's own words | `plugin/scripts/ct-groom.mjs` | gates | github | !plan | the dry run product matches the issues the real groom creates and each one ends at `status:ready` |
 | 6 | The headless dispatcher | backend | `/start-plan` selects the next ready issue by the table's order and its merged dependencies and its free tokens and claims it and isolates it and sows it and launches `claude -p` with its record | #5 | no module under `backend/src` names cmux, `POST /implement-plan` is no longer routed and no go is minted, the plan is published as a comment on the issue after the plan step and nothing waits for an answer, the record is written before the launch and its absence is the whole of not prepared, every call records its cost and turns and duration, a restart recovers the plans in flight from the records alone | `ct-next.mjs` and `ct-step.mjs` and the run machine | dispatch | sessions | apply, !plan | every call record holds its cost and turns and duration and the attempt row carries them |
-| 7 | The chain that does not stop | backend | The relay when the pull request opens, the merge noticed by sweeping, the next slice dispatched, and the slice's own tab showing its stream and taking a message | #6 | the next admissible slice is dispatched when a pull request opens, a merge dispatches whatever it unblocked, nobody is ever asked which slice is next, the slice's tab renders the stream and a message reaches the live conversation | `dispatch-check.mjs` | dispatch | frontend | visual, !plan | the next dispatch is recorded within one sweep of the pull request opening with no human input between |
+| 7 | The backend drives the run machine | backend | The backend asks `ct-step next` and makes one `claude -p --resume` call for the step that is due and runs the verb that consumes what the call produced | #6 | no step order lives in the backend and the run machine is the only sequencer, a verb out of turn is still the machine's own exit 9, the judge is its own call and reports its own cost, the attempt row carries the cost and the turns of its call, no errand ever tells an agent to ask `ct-step` | `run-machine.js` and the contract of the verbs and the task brief | dispatch | plugin | !plan | every attempt row carries the cost and turns of its own call and the judge row carries its own |
+| 8 | The chain that does not stop | backend | The relay when the pull request opens, the merge noticed by sweeping, the next slice dispatched, and the slice's own tab showing its stream and taking a message | #7 | the next admissible slice is dispatched when a pull request opens, a merge dispatches whatever it unblocked, nobody is ever asked which slice is next, the slice's tab renders the stream and a message reaches the live conversation, a change asked from the coordinating session reaches that slice's own conversation | `dispatch-check.mjs` | dispatch | frontend | visual, !plan | the next dispatch is recorded within one sweep of the pull request opening with no human input between |
 
 ## Decisiones aparcadas (BLOCKED)
 
