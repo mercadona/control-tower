@@ -42,6 +42,7 @@ class Entrypoint {
   static readonly #PATH = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'infrastructure', 'ct-api.ts')
   static readonly #TIMEOUT_MS = 30_000
   static readonly #spawned: ChildProcess[] = []
+  static readonly #configDirectoriesMade: string[] = []
 
   static startPlan(port: number, body: string = '{"id":"ABC-123"}'): Promise<Response> {
     return fetch(`http://127.0.0.1:${port}/start-plan`, {
@@ -51,8 +52,22 @@ class Entrypoint {
     })
   }
 
+  static async isolatedConfigDir(): Promise<string> {
+    const directory = await mkdtemp(join(tmpdir(), 'ct-api-isolated-config-'))
+    Entrypoint.#configDirectoriesMade.push(directory)
+
+    return directory
+  }
+
   static killAll(): void {
     for (const child of Entrypoint.#spawned.splice(0)) child.kill('SIGKILL')
+  }
+
+  static async tearDown(): Promise<void> {
+    Entrypoint.killAll()
+    for (const directory of Entrypoint.#configDirectoriesMade.splice(0)) {
+      await rm(directory, { recursive: true, force: true })
+    }
   }
 
   static refused(environment: NodeJS.ProcessEnv): Promise<Refusal> {
@@ -275,8 +290,8 @@ class RunFileFixture {
 }
 
 describe('ct-api entrypoint', () => {
-  afterEach(() => {
-    Entrypoint.killAll()
+  afterEach(async () => {
+    await Entrypoint.tearDown()
   })
 
   it('the_plans_in_flight_are_recovered_without_waiting_for_anyone_to_ask_for_them', async () => {
@@ -329,7 +344,7 @@ describe('ct-api entrypoint', () => {
   it('a_plan_whose_conversation_names_one_path_and_git_the_other_is_served_with_its_agent_and_its_clone_remembered', async () => {
     const checkout = await ACheckoutReachableByTwoPaths.cut()
     const state = await mkdtemp(join(tmpdir(), 'ct-api-two-paths-state-'))
-    const agent = 'ct-plan-agent-97'
+    const agent = randomUUID()
     await AHarnessConversationRecord.attending({
       state,
       agent,
@@ -354,13 +369,15 @@ describe('ct-api entrypoint', () => {
   })
 
   it('prints_the_port_it_bound_so_whoever_started_it_knows_where_to_knock', async () => {
-    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+    const state = await Entrypoint.isolatedConfigDir()
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state })
 
     expect(port).toBeGreaterThan(0)
   })
 
   it('the_entrypoint_assembles_the_headless_plan_agent_and_listens', async () => {
-    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+    const state = await Entrypoint.isolatedConfigDir()
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state })
 
     expect(port).toBeGreaterThan(0)
     const response = await fetch(`http://127.0.0.1:${port}/not-a-route`)
@@ -368,7 +385,8 @@ describe('ct-api entrypoint', () => {
   })
 
   it('a_bad_invocation_is_refused_with_the_reason_and_a_usage_line_that_names_the_command_the_documentation_starts_the_backend_with', async () => {
-    const refusal = await Entrypoint.refused({ CT_API_PORT: 'a fistful of ports' })
+    const state = await Entrypoint.isolatedConfigDir()
+    const refusal = await Entrypoint.refused({ CT_API_PORT: 'a fistful of ports', CLAUDE_CONFIG_DIR: state })
 
     expect(refusal.status).toBe(2)
     expect(refusal.said[0]).toContain('CT_API_PORT')
@@ -391,8 +409,9 @@ describe('ct-api entrypoint', () => {
   })
 
   it('a_whole_request_to_external_tools_reaches_every_probe_client_the_entrypoint_wired_up', async () => {
+    const state = await Entrypoint.isolatedConfigDir()
     const port = await Entrypoint.listening({
-      CT_API_PORT: '0', CT_HARVEST_BQ_TABLE: ExternalTools.DESTINATION,
+      CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state, CT_HARVEST_BQ_TABLE: ExternalTools.DESTINATION,
     })
 
     const response = await fetch(`http://127.0.0.1:${port}/external-tools`)
@@ -412,7 +431,8 @@ describe('ct-api entrypoint', () => {
   }, 600_000)
 
   it('without_the_harvest_table_the_entrypoint_answers_a_disabled_delivery_read_from_the_startup_configuration', async () => {
-    const port = await Entrypoint.listening({ CT_API_PORT: '0', CT_HARVEST_BQ_TABLE: '' })
+    const state = await Entrypoint.isolatedConfigDir()
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state, CT_HARVEST_BQ_TABLE: '' })
 
     const response = await fetch(`http://127.0.0.1:${port}/external-tools`)
 
@@ -423,7 +443,8 @@ describe('ct-api entrypoint', () => {
   }, 600_000)
 
   it('a_whole_request_reaches_acli_so_a_typo_in_the_key_that_wires_the_user_stories_would_show_up_here_and_not_only_in_the_first_real_use', async () => {
-    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+    const state = await Entrypoint.isolatedConfigDir()
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state })
 
     const response = await Entrypoint.startPlan(
       port,
@@ -437,7 +458,8 @@ describe('ct-api entrypoint', () => {
   })
 
   it('a_whole_request_reaches_gh_so_a_typo_in_the_url_that_wires_the_user_stories_would_show_up_here_and_not_only_in_the_first_real_use', async () => {
-    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+    const state = await Entrypoint.isolatedConfigDir()
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state })
 
     const response = await Entrypoint.startPlan(
       port,
@@ -452,7 +474,8 @@ describe('ct-api entrypoint', () => {
   })
 
   it('the_progress_of_a_slice_is_served_by_the_running_api', async () => {
-    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+    const state = await Entrypoint.isolatedConfigDir()
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state })
     const root = await RunFileFixture.inATemporaryRoot()
 
     try {
@@ -473,7 +496,8 @@ describe('ct-api entrypoint', () => {
   })
 
   it('a_slice_whose_second_veto_sent_it_to_the_adviser_is_served_as_that_step', async () => {
-    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+    const state = await Entrypoint.isolatedConfigDir()
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state })
     const root = await RunFileFixture.inATemporaryRoot('advise')
 
     try {
@@ -491,7 +515,8 @@ describe('ct-api entrypoint', () => {
   })
 
   it('plan_events_is_mounted_in_the_real_process_and_not_only_in_the_test_server', async () => {
-    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+    const state = await Entrypoint.isolatedConfigDir()
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state })
 
     const response = await fetch(`http://127.0.0.1:${port}/plan-events/54?repo=jjponz%2Frepo-pulse`)
 
@@ -500,7 +525,8 @@ describe('ct-api entrypoint', () => {
   })
 
   it('review_plan_is_mounted_in_the_real_process_and_not_only_in_the_test_server', async () => {
-    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+    const state = await Entrypoint.isolatedConfigDir()
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state })
 
     const response = await fetch(`http://127.0.0.1:${port}/review-plan`, {
       method: 'POST',

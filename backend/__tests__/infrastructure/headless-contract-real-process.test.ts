@@ -5,7 +5,7 @@ import {
 } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { delimiter, dirname, join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { DetachedRun } from '../../src/infrastructure/detached-run.ts'
 import { HarnessCall, HarnessStep, HeadlessPlanAgents } from '../../src/infrastructure/headless-plan-agents.ts'
@@ -16,7 +16,7 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 
 class FakeClaude {
-  static readonly BIN = 'claude'
+  static readonly BIN = HeadlessPlanAgents.BIN
   static readonly #SCRIPT = [
     '#!/bin/sh',
     'dir="$CT_FAKE_CLAUDE_CAPTURE_DIR"',
@@ -25,7 +25,7 @@ class FakeClaude {
     '  printf \'%s\\n\' "$a" >> "$dir/argv.txt"',
     'done',
     'printf \'%s\' "$$" > "$dir/pid.txt"',
-    'if [ -n "$CT_FAKE_CLAUDE_DELAY_S" ]; then sleep "$CT_FAKE_CLAUDE_DELAY_S"; fi',
+    'if [ -n "$CT_FAKE_CLAUDE_DELAY_S" ]; then /bin/sleep "$CT_FAKE_CLAUDE_DELAY_S"; fi',
     "printf '%s\\n' '{\"type\":\"system\",\"subtype\":\"init\"}'",
     "printf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\"}'",
     '',
@@ -40,8 +40,8 @@ class FakeClaude {
     chmodSync(binary, 0o755)
   }
 
-  pathPrefixedWith(existingPath: string | undefined): string {
-    return `${this.directory}${delimiter}${existingPath}`
+  path(): string {
+    return this.directory
   }
 
   reportingTheVariables(given: string, inherited: string, { to }: { to: { given: string, inherited: string } }): void {
@@ -272,7 +272,7 @@ describe('the real DetachedRun composed with the real HeadlessPlanAgents', () =>
     async () => {
       const env = {
         ...process.env,
-        PATH: claude.pathPrefixedWith(process.env.PATH),
+        PATH: claude.path(),
         CT_FAKE_CLAUDE_CAPTURE_DIR: captureDirectory,
       }
       const headless = RealComposition.headless({ runsIn, env })
@@ -319,7 +319,7 @@ describe('the real DetachedRun composed with the real HeadlessPlanAgents', () =>
       process.env[inherited] = 'from the api'
       try {
         const env = {
-          PATH: claude.pathPrefixedWith(process.env.PATH),
+          PATH: claude.path(),
           [given]: 'from the caller',
         }
         const headless = RealComposition.headless({ runsIn, env })
@@ -360,7 +360,7 @@ describe('the real DetachedRun composed with the real HeadlessPlanAgents', () =>
 
     const env = {
       ...process.env,
-      PATH: claude.pathPrefixedWith(process.env.PATH),
+      PATH: claude.path(),
       CT_FAKE_CLAUDE_CAPTURE_DIR: captureDirectory,
       CT_FAKE_CLAUDE_DELAY_S: '1',
     }
