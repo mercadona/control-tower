@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { closeSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { closeSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DetachedRun } from '../../src/infrastructure/detached-run.ts'
@@ -48,6 +48,10 @@ class Child {
 
   static printing(marker: string): string[] {
     return ['-e', `process.stdout.write(${JSON.stringify(marker)})`]
+  }
+
+  static printingToBoth(marker: string): string[] {
+    return ['-e', `process.stdout.write(${JSON.stringify(marker)}); process.stderr.write(${JSON.stringify(marker)})`]
   }
 
   static sleeping(ms: number = Child.SLOW_MS): string[] {
@@ -153,6 +157,17 @@ describe('DetachedRun', () => {
     expect(printed).toBe(Child.MARKER)
   })
 
+  it('the_started_run_handed_back_to_the_caller_is_frozen_so_nothing_downstream_can_mutate_it', () => {
+    const files = Files.named()
+    const run = Child.running()
+
+    const started = Child.tracked(
+      run.start({ argv: Child.sleeping(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+
+    expect(Object.isFrozen(started)).toBe(true)
+  })
+
   it('the_call_gets_a_process_group_of_its_own_so_the_cap_can_reach_what_it_launched', async () => {
     const files = Files.named()
     const run = Child.running()
@@ -221,17 +236,30 @@ describe('DetachedRun', () => {
 
   it('a_reused_pid_whose_group_is_not_ours_answers_eperm_and_that_is_re_raised_not_swallowed', () => {
     const files = Files.named()
-    const run = Child.running()
+    const budgetMs = 10_000
+    const run = Child.running(budgetMs)
 
-    const started = Child.tracked(
-      run.start({ argv: Child.sleeping(), cwd: process.cwd(), out: files.out, err: files.err })
-    )
-    const kill = vi.spyOn(process, 'kill').mockImplementationOnce(() => {
-      throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' })
-    })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const started = Child.tracked(
+        run.start({ argv: Child.sleeping(), cwd: process.cwd(), out: files.out, err: files.err })
+      )
+      const kill = vi.spyOn(process, 'kill').mockImplementationOnce(() => {
+        throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' })
+      })
 
-    expect(() => run.stop(started)).toThrow()
-    expect(kill).toHaveBeenCalledWith(-started.pid, DetachedRun.SIGNAL)
+      let firingTheCap: unknown = null
+      try {
+        vi.advanceTimersByTime(budgetMs)
+      } catch (failure) {
+        firingTheCap = failure
+      }
+
+      expect((firingTheCap as NodeJS.ErrnoException | null)?.code).toBe('EPERM')
+      expect(kill).toHaveBeenCalledWith(-started.pid, DetachedRun.SIGNAL)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('the_cap_sends_sigterm_so_a_tool_trapping_it_gets_the_chance_to_leave_on_its_own_terms', async () => {
@@ -294,6 +322,31 @@ describe('DetachedRun', () => {
     const writtenToErr = await Child.eventuallyPrinted(files.err)
 
     expect(writtenToErr).toBe(`spawn ${Child.MISSING_BINARY} ENOENT\n`)
+  })
+
+  it('what_was_already_in_either_file_survives_because_the_call_opens_both_to_append', async () => {
+    const files = Files.named()
+    writeFileSync(files.out, 'already out\n')
+    writeFileSync(files.err, 'already err\n')
+    const run = Child.running()
+
+    Child.tracked(
+      run.start({ argv: Child.printingToBoth(Child.MARKER), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+
+    const printedOut = await Child.eventually(() => {
+      const text = readFileSync(files.out, 'utf8')
+
+      return text.includes(Child.MARKER) ? text : null
+    })
+    const printedErr = await Child.eventually(() => {
+      const text = readFileSync(files.err, 'utf8')
+
+      return text.includes(Child.MARKER) ? text : null
+    })
+
+    expect(printedOut).toBe(`already out\n${Child.MARKER}`)
+    expect(printedErr).toBe(`already err\n${Child.MARKER}`)
   })
 
   it('the_directory_the_caller_names_is_where_the_child_runs_and_not_where_the_api_happens_to_run', async () => {
