@@ -81,7 +81,7 @@ const formatMillions = (tokens: number): string => `${(tokens / 1_000_000).toFix
 const formatSeconds = (durationMs: number): string => `${(durationMs / 1000).toFixed(1).replace('.', ',')} s`
 
 const formatLocalTime = (writtenAt: string): string =>
-  new Date(writtenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  new Date(writtenAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false })
 
 const iconFor = (outcome: string | null): ComponentType<StatusIconProps> => {
   if (outcome === 'done') return StatusSuccessIcon
@@ -95,11 +95,10 @@ const tagVariantFor = (outcome: string | null): TagVariant => {
   return 'informative'
 }
 
-const closingTagText = (entry: ImplementationHistoryEntry): string => {
+const closingTagText = (entry: ImplementationHistoryEntry): string | null => {
   if (entry.outcome === 'up-to-date') return 'al día'
   if (entry.ruling !== null) return entry.ruling
-  if (entry.durationMs !== null) return formatSeconds(entry.durationMs)
-  return ''
+  return null
 }
 
 const failureNoteOf = (entry: ImplementationHistoryEntry): string => {
@@ -198,11 +197,15 @@ const ClosingSection = ({ entries }: { entries: ImplementationHistoryEntry[] }) 
       <ul className="implement-history__closing-list" role="list">
         {entries.map((entry, index) => {
           const Icon = iconFor(entry.outcome)
+          const tagText = closingTagText(entry)
           return (
             <li className="implement-history__closing-row" role="listitem" key={index}>
               <Icon size={ICON_SIZE} aria-hidden="true" />
               <span className="lg-body-medium">{CLOSING_LABELS[entry.step] ?? entry.step}</span>
-              <Tag variant={tagVariantFor(entry.outcome)}>{closingTagText(entry)}</Tag>
+              {tagText !== null && <Tag variant={tagVariantFor(entry.outcome)}>{tagText}</Tag>}
+              {tagText === null && entry.durationMs !== null && (
+                <span className="implement-history__closing-duration lg-caption1-regular">{formatSeconds(entry.durationMs)}</span>
+              )}
             </li>
           )
         })}
@@ -241,18 +244,23 @@ const TaskJourney = ({ entries }: { entries: ImplementationHistoryEntry[] }) => 
   const groups = groupByTask(entries)
   const closing = closingEntriesOf(entries)
   const [expandedOverrides, setExpandedOverrides] = useState<Record<number, boolean>>({})
+  const allTasksDone = groups.length > 0 && groups.every(isTaskDone)
 
   return (
     <>
       <SummaryTiles entries={entries} groups={groups} />
-      {groups.map((group) => (
-        <TaskAccordion
-          group={group}
-          isExpanded={expandedOverrides[group.task] ?? !isTaskDone(group)}
-          onExpandedChange={(isExpanded) => setExpandedOverrides((previous) => ({ ...previous, [group.task]: isExpanded }))}
-          key={group.task}
-        />
-      ))}
+      {groups.map((group, index) => {
+        const isLastTask = index === groups.length - 1
+        const defaultExpanded = allTasksDone ? isLastTask : !isTaskDone(group)
+        return (
+          <TaskAccordion
+            group={group}
+            isExpanded={expandedOverrides[group.task] ?? defaultExpanded}
+            onExpandedChange={(isExpanded) => setExpandedOverrides((previous) => ({ ...previous, [group.task]: isExpanded }))}
+            key={group.task}
+          />
+        )
+      })}
       <ClosingSection entries={closing} />
     </>
   )

@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { ImplementHistoryMother } from '__scenarios__/ImplementHistoryMother'
 import { ImplementHistory } from './ImplementHistory'
 
+process.env.TZ = 'UTC'
+
 const answerWith = (answer: { status: number; body: string }) => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(answer.body, { status: answer.status })))
 }
@@ -50,6 +52,17 @@ describe('ImplementHistory', () => {
   })
 
   it('should expand the task with no done judge by default and mark it en curso, leaving the completed task collapsed', async () => {
+    answerWith(ImplementHistoryMother.oneInProgressTask())
+
+    renderHistory()
+
+    const taskOne = await screen.findByRole('button', { name: /Tarea 1/ })
+    const taskTwo = screen.getByRole('button', { name: /Tarea 2/ })
+    expect(taskOne).toHaveAttribute('aria-expanded', 'false')
+    expect(taskTwo).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('should expand the last task by default when every task already has a done judge', async () => {
     answerWith(ImplementHistoryMother.fullRun())
 
     renderHistory()
@@ -57,7 +70,7 @@ describe('ImplementHistory', () => {
     const taskOne = await screen.findByRole('button', { name: /Tarea 1/ })
     const taskTwo = screen.getByRole('button', { name: /Tarea 2/ })
     expect(taskOne).toHaveAttribute('aria-expanded', 'false')
-    expect(taskTwo).toHaveAttribute('aria-expanded', 'false')
+    expect(taskTwo).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('should render the attempts stepper with the step label, the duration and the judge ruling tag', async () => {
@@ -81,6 +94,17 @@ describe('ImplementHistory', () => {
     const region = await expandedRegionOf(/Tarea 1/)
     expect(within(region).getByText(/Intento 1 · Controles fallidos a las \d{2}:\d{2}/)).toBeInTheDocument()
     expect(within(region).getByText(/tras 138 ms/)).toBeInTheDocument()
+  })
+
+  it('should render the failed-attempt time as 24-hour es-ES, never 12-hour with AM/PM', async () => {
+    answerWith(ImplementHistoryMother.fullRun())
+
+    renderHistory()
+
+    const region = await expandedRegionOf(/Tarea 1/)
+    const note = within(region).getByText(/Intento 1/)
+    expect(note).toHaveTextContent('Intento 1 · Controles fallidos a las 14:56 tras 138 ms')
+    expect(note.textContent).not.toMatch(/AM|PM/)
   })
 
   it('should render three facts for a task: attempts, judge findings and tokens in millions', async () => {
@@ -134,6 +158,29 @@ describe('ImplementHistory', () => {
     expect(within(closing).getByText('Verificación global')).toBeInTheDocument()
     expect(within(closing).getByText('Juez del slice')).toBeInTheDocument()
     expect(within(closing).getAllByText('PASS').length).toBeGreaterThan(0)
+  })
+
+  it('should render the closing section duration as plain secondary text, never inside a Tag', async () => {
+    answerWith(ImplementHistoryMother.fullRun())
+
+    renderHistory()
+
+    await screen.findByRole('button', { name: /Tarea 1/ })
+    const closing = screen.getByRole('region', { name: 'Cierre del slice' })
+    const duration = within(closing).getByText('164,1 s')
+    expect(duration).toHaveClass('implement-history__closing-duration')
+    expect(duration).not.toHaveClass('tag')
+  })
+
+  it('should render the connector before a failed stepper node with the danger class', async () => {
+    answerWith(ImplementHistoryMother.fullRun())
+
+    renderHistory()
+
+    const region = await expandedRegionOf(/Tarea 1/)
+    const dangerNode = region.querySelector('.implement-history__stepper-node--danger-before')
+    expect(dangerNode).not.toBeNull()
+    expect(dangerNode).toHaveTextContent('Controles')
   })
 
   it('should render an error banner with the backend detail for a refusal other than not-read', async () => {
