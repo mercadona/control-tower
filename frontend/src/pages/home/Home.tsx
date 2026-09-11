@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivePlan } from 'app/active-plans/ActivePlan.types'
 import { ActivePlansClient } from 'app/active-plans/client'
-import { ToolsStatus } from 'app/external-tools/components/tools-status'
-import { ImplementHistory } from 'app/implement-history/components/implement-history'
 import { ImplementPlanAction } from 'app/implement-plan/components/implement-plan-action'
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { PlanProgress } from 'app/plan-events/components/plan-progress'
@@ -11,6 +9,7 @@ import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartedPlan, StartPlanRequest } from 'app/start-plan/StartPlan.types'
 import { WorkflowSnapshot, WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
+import { StatusPanel } from 'pages/home/components/status-panel'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
 import { TopBar } from 'system-ui/top-bar'
@@ -457,14 +456,6 @@ const Home = () => {
                   />
                 )}
                 {restoredIsConfirmed && (
-                  <ImplementHistory
-                    key={`${workflow.plan.repo}:${workflow.plan.issue.number}:history`}
-                    issue={workflow.plan.issue.number}
-                    root={workflow.plan.root ?? workflow.request.path}
-                    repo={workflow.plan.repo}
-                  />
-                )}
-                {restoredIsConfirmed && (
                   <Button className="home__start-another" type="button" variant="secondary" onClick={discardWorkflow}>
                     Arrancar otro plan
                   </Button>
@@ -509,7 +500,17 @@ const Home = () => {
             </section>
           )}
         </main>
-        <ToolsStatus />
+        <StatusPanel
+          implementation={
+            workflow !== null && workflow.phase === 'implementing' && restoredIsConfirmed
+              ? {
+                issue: workflow.plan.issue.number,
+                root: workflow.plan.root ?? workflow.request.path,
+                repo: workflow.plan.repo,
+              }
+              : null
+          }
+        />
       </div>
     </div>
   )

@@ -1,0 +1,33 @@
+.status-panel__dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  margin-inline-end: 8px;
+  vertical-align: baseline;
+  border-radius: var(--radius-full);
+  background: var(--foreground-disabled);
+}
+
+.status-panel__dot--ready {
+  background: var(--foreground-success);
+}
+
+.status-panel__dot--attention,
+.status-panel__dot--unknown {
+  background: var(--foreground-danger);
+}
+
+.status-panel .drawer__content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.status-panel__section {
+  padding: 16px;
+}
+
+.status-panel__section .panel__heading-block {
+  margin-bottom: 12px;
+}

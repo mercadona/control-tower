@@ -11,12 +11,12 @@ describe('Home · layout', () => {
     backendAnswering({ status: 200, body: '{}' })
     openHome()
 
-    await waitFor(() => expect(screen.getByRole('complementary', { name: 'Herramientas' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('complementary', { name: 'Estado' })).toBeInTheDocument())
     const workArea = document.querySelector('.home__work-area')
     expect(workArea).not.toBeNull()
     expect(workArea?.children).toHaveLength(2)
     expect(workArea?.firstElementChild?.tagName).toBe('MAIN')
-    expect(workArea?.lastElementChild).toBe(screen.getByRole('complementary', { name: 'Herramientas' }))
+    expect(workArea?.lastElementChild).toBe(screen.getByRole('complementary', { name: 'Estado' }))
     expect(document.querySelector('.top-bar')?.closest('.home__work-area')).toBeNull()
   })
 
@@ -26,7 +26,7 @@ describe('Home · layout', () => {
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /^Desplegar el panel de herramientas/ })).toBeInTheDocument())
-    expect(screen.getByRole('complementary', { name: 'Herramientas' })).toHaveClass('drawer--collapsed')
+    expect(screen.getByRole('complementary', { name: 'Estado' })).toHaveClass('drawer--collapsed')
     expect(screen.queryByRole('button', { name: 'Ver detalles' })).toBeNull()
   })
 
@@ -40,7 +40,7 @@ describe('Home · layout', () => {
     expect(notice).toBeVisible()
     expect(notice.closest('main')).not.toBeNull()
     expect(notice.closest('.home__work-area')).not.toBeNull()
-    expect(screen.getByRole('complementary', { name: 'Herramientas' }).closest('.home__work-area'))
+    expect(screen.getByRole('complementary', { name: 'Estado' }).closest('.home__work-area'))
       .toBe(notice.closest('.home__work-area'))
   })
 
@@ -52,7 +52,7 @@ describe('Home · layout', () => {
 
     await user.click(screen.getByRole('button', { name: /^Desplegar el panel de herramientas/ }))
 
-    const drawer = screen.getByRole('complementary', { name: 'Herramientas' })
+    const drawer = screen.getByRole('complementary', { name: 'Estado' })
     expect(drawer).not.toHaveClass('drawer--collapsed')
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(drawer.previousElementSibling?.tagName).toBe('MAIN')
