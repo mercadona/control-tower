@@ -1,0 +1,44 @@
+.implement-history {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.implement-history__heading {
+  margin: 0;
+  color: var(--foreground-primary);
+}
+
+.implement-history__state {
+  margin: 0;
+  color: var(--foreground-secondary);
+}
+
+.implement-history__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.implement-history__row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.implement-history__step {
+  color: var(--foreground-primary);
+}
+
+.implement-history__task,
+.implement-history__outcome,
+.implement-history__duration {
+  color: var(--foreground-secondary);
+}
+
+.implement-history__summary {
+  color: var(--foreground-secondary);
+}
