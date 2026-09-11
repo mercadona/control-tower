@@ -3,7 +3,8 @@
 **Handoff origen:** `docs/superpowers/specs/2026-09-11-the-loop-enters-through-brainstorming-design.md`
 **Fecha de congelación:** 2026-09-11
 **Estado:** CONGELADA
-**Enmiendas:** 2026-09-11, sobre el feedback de un revisor («no debemos deducirlo solamente de
+**Enmiendas:** 2026-09-11, **aprobada** el 2026-09-11 en la misma puerta 1 que congeló el
+documento, con la apuesta intacta y ocho slices. Sobre el feedback de un revisor («no debemos deducirlo solamente de
 `claude -p`») — D-2 reformulada, porque describía al backend como si fuese una sesión de LLM; D-18
 a D-21 añadidas, que es la topología de sesiones que la congelación dejó implícita; D-22, que deja
 las puertas fuera del alcance de la jefa ahora que tiene manos; D-23, que publica el spec y hace
