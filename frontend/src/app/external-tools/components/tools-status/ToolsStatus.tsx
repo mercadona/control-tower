@@ -1,26 +1,23 @@
-import { useState } from 'react'
+import { ComponentType } from 'react'
 import {
   METRICS_DELIVERY_TOOL,
   MetricsDelivery,
   SessionState,
   ToolSession,
 } from 'app/external-tools/ExternalTools.types'
-import { ExternalTools, useExternalTools } from 'app/external-tools/useExternalTools'
-import { Button } from 'system-ui/button'
-import { Drawer } from 'system-ui/drawer'
+import { ExternalTools } from 'app/external-tools/useExternalTools'
+import { StatusIconProps, StatusInfoIcon, StatusKoIcon, StatusSuccessIcon, StatusWarningIcon } from 'system-ui/icons/StatusIcons'
 import './ToolsStatus.css'
 
-const TITLE = 'Herramientas'
+const ROW_ICON_SIZE = 20
 
-const summaryFor = (tools: ExternalTools) => {
-  if (tools.phase === 'checking') return 'Comprobando'
-  if (tools.phase === 'ready') return 'Listas'
-  if (tools.phase === 'attention') return 'Necesitan atención'
-  return 'No se pudo comprobar'
+type SessionIcon = { Icon: ComponentType<StatusIconProps>; modifier: string; label: string }
+
+const SESSION_ICON: Record<SessionState, SessionIcon> = {
+  [SessionState.READY]: { Icon: StatusSuccessIcon, modifier: 'ready', label: 'Lista' },
+  [SessionState.MISSING]: { Icon: StatusKoIcon, modifier: 'missing', label: 'Falta' },
+  [SessionState.UNKNOWN]: { Icon: StatusWarningIcon, modifier: 'unknown', label: 'Desconocida' },
 }
-
-const toggleLabelFor = (tools: ExternalTools, isCollapsed: boolean) =>
-  `${isCollapsed ? 'Desplegar' : 'Contraer'} el panel de herramientas: ${summaryFor(tools).toLowerCase()}`
 
 const detailFor = (tool: ToolSession) => {
   if (!tool.installed) return 'no está instalada'
@@ -40,6 +37,24 @@ const isDelivering = (tool: ToolSession | null) =>
 
 const blockedBecause = (tool: ToolSession | null) =>
   tool === null ? 'no se ha podido comprobar' : detailFor(tool)
+
+const ToolRow = ({ tool, metricsDelivery }: { tool: ToolSession; metricsDelivery: MetricsDelivery }) => {
+  const { Icon, modifier, label } = SESSION_ICON[tool.session]
+
+  return (
+    <li className="tools-status__row">
+      <Icon size={ROW_ICON_SIZE} className={`tools-status__icon tools-status__icon--${modifier}`} aria-hidden="true" />
+      <span className="tools-status__visually-hidden">{label}</span>
+      <strong className="tools-status__name">{tool.tool}</strong>
+      <span className="tools-status__detail">
+        {detailFor(tool)}
+        {isOptional(tool, metricsDelivery)
+          ? ' · opcional: solo hace falta si activas la entrega de métricas'
+          : tool.fix !== null && ` · ${tool.fix}`}
+      </span>
+    </li>
+  )
+}
 
 const MetricsDeliveryDetails = ({
   metricsDelivery,
@@ -100,59 +115,39 @@ const MetricsDeliveryDetails = ({
   )
 }
 
-const ToolsStatus = () => {
-  const { tools, check } = useExternalTools()
-  const [isCollapsed, setIsCollapsed] = useState(true)
+const MetricsDeliveryRow = ({ tools }: { tools: ExternalTools }) => (
+  <li className="tools-status__row tools-status__row--metrics">
+    <StatusInfoIcon size={ROW_ICON_SIZE} className="tools-status__icon tools-status__icon--informative" aria-hidden="true" />
+    <span className="tools-status__visually-hidden">Información</span>
+    <strong className="tools-status__name">Entrega de métricas</strong>
+    <div className="tools-status__detail">
+      {tools.phase === 'checking' && <p role="status">Consultando la configuración de entrega de métricas.</p>}
+      {tools.phase === 'unknown' && (
+        <p>
+          No se pudo contactar con el backend, así que no se ha podido leer si la entrega de métricas
+          está configurada.
+        </p>
+      )}
+      {'tools' in tools && <MetricsDeliveryDetails metricsDelivery={tools.metricsDelivery} tools={tools.tools} />}
+    </div>
+  </li>
+)
 
-  return (
-    <Drawer
-      className="tools-status"
-      title={
-        <>
-          <span className={`tools-status__dot tools-status__dot--${tools.phase}`} aria-hidden="true" />
-          {TITLE}
-        </>
-      }
-      subtitle={<span aria-live="polite">{summaryFor(tools)}</span>}
-      collapsed={isCollapsed}
-      onToggle={setIsCollapsed}
-      toggleLabel={toggleLabelFor(tools, isCollapsed)}
-    >
-      {tools.phase === 'checking' && <p role="status">Consultando disponibilidad y sesión de cada herramienta.</p>}
-      {tools.phase === 'unknown' && <p>No se pudo contactar con el backend para comprobar las herramientas.</p>}
-      {'tools' in tools && (
-        <ul>
-          {tools.tools.map((tool) => (
-            <li key={tool.tool}>
-              <strong>{tool.tool}</strong>: {detailFor(tool)}
-              {isOptional(tool, tools.metricsDelivery)
-                ? ' · opcional: solo hace falta si activas la entrega de métricas'
-                : tool.fix !== null && ` · ${tool.fix}`}
-            </li>
-          ))}
-        </ul>
-      )}
-      <section className="tools-status__metrics" aria-label="Entrega de métricas">
-        <strong>Entrega de métricas</strong>
-        {tools.phase === 'checking' && (
-          <p role="status">Consultando la configuración de entrega de métricas.</p>
-        )}
-        {tools.phase === 'unknown' && (
-          <p>
-            No se pudo contactar con el backend, así que no se ha podido leer si la entrega de métricas
-            está configurada.
-          </p>
-        )}
-        {'tools' in tools && (
-          <MetricsDeliveryDetails metricsDelivery={tools.metricsDelivery} tools={tools.tools} />
-        )}
-      </section>
-      {tools.phase !== 'checking' && (
-        <Button type="button" onClick={() => void check()}>
-          Reintentar comprobación
-        </Button>
-      )}
-    </Drawer>
-  )
+type ToolsStatusProps = {
+  tools: ExternalTools
 }
+
+const ToolsStatus = ({ tools }: ToolsStatusProps) => (
+  <div className="tools-status">
+    {tools.phase === 'checking' && <p role="status">Consultando disponibilidad y sesión de cada herramienta.</p>}
+    {tools.phase === 'unknown' && <p>No se pudo contactar con el backend para comprobar las herramientas.</p>}
+    <ul className="tools-status__list">
+      {'tools' in tools &&
+        tools.tools.map((tool) => <ToolRow key={tool.tool} tool={tool} metricsDelivery={tools.metricsDelivery} />)}
+      <MetricsDeliveryRow tools={tools} />
+    </ul>
+  </div>
+)
+
 export { ToolsStatus }
+export type { ToolsStatusProps }
