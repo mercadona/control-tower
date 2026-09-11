@@ -1,10 +1,11 @@
 import { PlanAgents } from '../domain/ports/plan-agents.ts'
-import { PlanAgentNotLaunched } from '../domain/exceptions.ts'
+import { PlanAgentNotLaunched, PlanAgentNotNamed, PlanAgentNotResumed } from '../domain/exceptions.ts'
 import type { PlanAgentFailure } from '../domain/exceptions.ts'
 import { Projection } from './projection.ts'
 import type { PlanAgentBrief } from './plan-agent-brief.ts'
 import type { RunSpec, StartedPid } from './detached-run.ts'
 import type { PlanBriefing } from '../domain/value-objects/plan-briefing.ts'
+import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
 export const HarnessStep = Object.freeze({
   WRITE_PLAN: 'write-plan',
@@ -261,6 +262,109 @@ export class HeadlessPlanAgents extends PlanAgents {
     })
 
     return agent
+  }
+
+  async resume({ agent, issue, repository }: {
+    agent: string,
+    issue: number,
+    repository: RepositoryName,
+  }): Promise<void> {
+    await this.#continue({
+      agent,
+      issue,
+      repository,
+      step: HarnessStep.IMPLEMENT,
+      errand: this.brief.implementationErrandFor({ issueNumber: issue, repository }),
+    })
+  }
+
+  async review({ agent, issue, repository, changes }: {
+    agent: string,
+    issue: number,
+    repository: RepositoryName,
+    changes: string,
+  }): Promise<void> {
+    await this.#continue({
+      agent,
+      issue,
+      repository,
+      step: HarnessStep.REVIEW_PLAN,
+      errand: this.brief.reviewErrandFor({ issueNumber: issue, repository, changes }),
+    })
+  }
+
+  async fix({ agent, issue, repository, changes }: {
+    agent: string,
+    issue: number,
+    repository: RepositoryName,
+    changes: string,
+  }): Promise<void> {
+    await this.#continue({
+      agent,
+      issue,
+      repository,
+      step: HarnessStep.FIX_PULL_REQUEST,
+      errand: this.brief.fixErrandFor({ issueNumber: issue, repository, changes }),
+    })
+  }
+
+  async #continue({ agent, issue, repository, step, errand }: {
+    agent: string,
+    issue: number,
+    repository: RepositoryName,
+    step: HarnessStepValue,
+    errand: string,
+  }): Promise<void> {
+    const cwd = await this.#worktreeOf(agent)
+    const argv = HeadlessPlanAgents.argvFor({
+      errand, step, pluginRoot: this.pluginRoot, agent, resuming: true,
+    })
+    const startedAt = this.clock()
+    const { directory, out, err, call } = HarnessCall.pathsFor({
+      runsIn: this.runsIn, agent, step, startedAt,
+    })
+
+    await this.#ensureDirectory(directory, PlanAgentNotResumed)
+    const started = this.#startRun({ argv, cwd, out, err }, PlanAgentNotResumed)
+
+    await this.#recordCall({
+      call, step, agent, issue, repository: repository.text,
+      argv, started, startedAt, Failure: PlanAgentNotResumed,
+    })
+  }
+
+  async #worktreeOf(agent: string): Promise<string> {
+    const path = this.#conversationPathFor(agent)
+    const text = await this.#readRecord(path)
+    if (text === null) {
+      throw new PlanAgentNotResumed(
+        `${agent} never recorded a worktree at ${path}: launch was never called for it`
+      )
+    }
+
+    let record: unknown
+    try {
+      record = JSON.parse(text)
+    } catch (cause) {
+      throw new PlanAgentNotNamed(
+        `${agent} recorded a conversation at ${path} that is not JSON: ${HeadlessPlanAgents.#messageOf(cause)}`
+      )
+    }
+    if (!HarnessConversation.isWellFormed(record)) {
+      throw new PlanAgentNotNamed(
+        `${agent} recorded a conversation at ${path} that is not a well-formed record`
+      )
+    }
+
+    return record.worktree
+  }
+
+  async #readRecord(path: string): Promise<string | null> {
+    try {
+      return await this.read(path)
+    } catch (failure) {
+      throw new PlanAgentNotResumed(`${path} could not be read: ${HeadlessPlanAgents.#messageOf(failure)}`)
+    }
   }
 
   #conversationPathFor(agent: string): string {
