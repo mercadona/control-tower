@@ -13,7 +13,10 @@ export class HarnessConversations {
     try {
       agents = await this.list(this.runsIn)
     } catch (failure) {
-      return failure.code === 'ENOENT' ? [] : null
+      if (failure.code === 'ENOENT') return []
+      this.stderr(`plans in flight: ${this.runsIn} could not be listed, so what is in flight could not be known: ${failure.message}\n`)
+
+      return null
     }
 
     const conversations = []
@@ -35,6 +38,7 @@ export class HarnessConversations {
     try {
       text = await this.read(path)
     } catch (failure) {
+      if (failure.code === 'ENOTDIR') return null
       this.stderr(`plans in flight: ${path} could not be read: ${failure.message}\n`)
 
       return null

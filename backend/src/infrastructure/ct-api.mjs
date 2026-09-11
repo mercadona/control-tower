@@ -405,7 +405,11 @@ class CtApi {
       CtApi.#refuseListen(`could not listen on ${LOOPBACK}: ${error.message}`)
     }
     process.stdout.write(`${JSON.stringify({ port })}\n`)
-    await recovery.recover()
+    try {
+      await recovery.recover()
+    } catch (failure) {
+      process.stderr.write(`plans in flight: recovery raised a bug instead of a WorkspaceFailure or a PlanStoryFailure, so it stays inconclusive: ${failure.stack ?? failure.message}\n`)
+    }
     CtApi.#sweepUntilItBreaks(CtApi.#harvestClock({
       workspace, checkouts, environment, harvestTable: asked.harvestTable,
     }))

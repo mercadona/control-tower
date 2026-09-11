@@ -27,6 +27,10 @@ class Harness {
     return Object.assign(new Error('permission denied'), { code: 'EACCES' })
   }
 
+  static #enotdir() {
+    return Object.assign(new Error('not a directory'), { code: 'ENOTDIR' })
+  }
+
   static #recordFor({
     worktree = Harness.WORKTREE, issue = Harness.ISSUE, repository = Harness.REPOSITORY, startedAt = Harness.STARTED_AT,
   } = {}) {
@@ -103,6 +107,13 @@ class Harness {
     return new Harness({ agentNames: [Harness.AGENT], noRecordAgents: [Harness.AGENT] })
   }
 
+  static holdingAStrayFileInsteadOfAnAgentDirectory() {
+    return new Harness({
+      agentNames: [Harness.AGENT],
+      readFailures: new Map([[Harness.AGENT, Harness.#enotdir()]]),
+    })
+  }
+
   conversations() {
     return new HarnessConversations({
       list: async (path) => {
@@ -158,15 +169,21 @@ describe('HarnessConversations', () => {
   })
 
   it('a_state_root_with_no_harness_directory_is_zero_plans_and_not_an_answer_that_could_not_be_known', async () => {
-    const known = await Harness.empty().conversations().known()
+    const harness = Harness.empty()
+
+    const known = await harness.conversations().known()
 
     expect(known).toEqual([])
+    expect(harness.stderr).not.toHaveBeenCalled()
   })
 
   it('a_harness_root_that_cannot_be_listed_could_not_be_known_so_recovery_never_declares_zero_plans', async () => {
-    const known = await Harness.unlistable().conversations().known()
+    const harness = Harness.unlistable()
+
+    const known = await harness.conversations().known()
 
     expect(known).toBeNull()
+    expect(harness.stderr).toHaveBeenCalledWith(expect.stringContaining(`${Harness.RUNS_IN} could not be listed`))
   })
 
   it('a_record_that_is_not_json_is_skipped_with_its_path_on_stderr_and_the_other_plans_still_come_back', async () => {
@@ -216,6 +233,15 @@ describe('HarnessConversations', () => {
 
   it('a_directory_with_no_conversation_record_is_not_a_plan_and_says_nothing', async () => {
     const harness = Harness.holdingADirectoryWithNoConversationRecord()
+
+    const known = await harness.conversations().known()
+
+    expect(known).toEqual([])
+    expect(harness.stderr).not.toHaveBeenCalled()
+  })
+
+  it('a_stray_file_sitting_where_an_agent_directory_is_expected_raises_enotdir_and_is_skipped_in_silence', async () => {
+    const harness = Harness.holdingAStrayFileInsteadOfAnAgentDirectory()
 
     const known = await harness.conversations().known()
 

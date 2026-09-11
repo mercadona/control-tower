@@ -631,8 +631,11 @@ node --input-type=module -e "import {readFileSync} from 'node:fs'; import {valid
 7. **The 503 stays reachable** — `list` throwing something that is not ENOENT still means *could
    not be known*. Issue decision: the removal of that outcome is phase 4's, and a disk that cannot
    be read is exactly the case it was written for.
-8. **`Disk.list` returns names and not `Dirent`s**, so a directory entry that is not a directory
-   simply has no `conversation.json` and is skipped. Own call: it keeps every double in the tests a
-   plain function returning strings.
+8. **`Disk.list` returns names and not `Dirent`s**, so a directory entry that is not a directory is
+   not silently absent: reading `<runsIn>/.DS_Store/conversation.json` raises `ENOTDIR`, not
+   `ENOENT`, and `Disk.read` rethrows it. The reader treats `ENOTDIR` the same as a missing record —
+   skipped in silence, not warned about — so a stray file such as macOS's `.DS_Store` costs one
+   extra read and nothing on stderr. Own call: it keeps every double in the tests a plain function
+   returning strings.
 9. **Task 6's judge is asked to accept a deletion with no new assertion behind it.** Own call, and
    the guard's `toEqual([])` is the assertion: it is red while either file exists.
