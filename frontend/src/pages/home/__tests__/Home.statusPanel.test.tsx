@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { backendAnswering, openHome } from './helpers'
 
-const OPEN_TOGGLE = { name: /^Desplegar el panel de herramientas/ }
+const OPEN_TOGGLE = { name: /^Desplegar el panel de estado/ }
 
 const openStatusPanel = async () => {
   await waitFor(() => expect(screen.getByRole('button', OPEN_TOGGLE)).toBeInTheDocument())

@@ -38,7 +38,7 @@ const planImplementing = async (historyAnswer: () => { status: number; body: str
   await streamFrame(PlanEventsMother.ready())
   await user.click(screen.getByRole('button', IMPLEMENT_BUTTON))
   await screen.findByText('Agente asignado')
-  await user.click(await screen.findByRole('button', { name: /^Desplegar el panel de herramientas/ }))
+  await user.click(await screen.findByRole('button', { name: /^Desplegar el panel de estado/ }))
 
   return fetching
 }

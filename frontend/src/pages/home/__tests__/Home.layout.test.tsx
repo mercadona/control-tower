@@ -25,7 +25,7 @@ describe('Home · layout', () => {
     openHome()
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /^Desplegar el panel de herramientas/ })).toBeInTheDocument())
+      expect(screen.getByRole('button', { name: /^Desplegar el panel de estado/ })).toBeInTheDocument())
     expect(screen.getByRole('complementary', { name: 'Estado' })).toHaveClass('drawer--collapsed')
     expect(screen.queryByRole('button', { name: 'Ver detalles' })).toBeNull()
   })
@@ -48,9 +48,9 @@ describe('Home · layout', () => {
     backendAnswering({ status: 200, body: '{}' })
     const { user } = openHome()
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /^Desplegar el panel de herramientas/ })).toBeInTheDocument())
+      expect(screen.getByRole('button', { name: /^Desplegar el panel de estado/ })).toBeInTheDocument())
 
-    await user.click(screen.getByRole('button', { name: /^Desplegar el panel de herramientas/ }))
+    await user.click(screen.getByRole('button', { name: /^Desplegar el panel de estado/ }))
 
     const drawer = screen.getByRole('complementary', { name: 'Estado' })
     expect(drawer).not.toHaveClass('drawer--collapsed')

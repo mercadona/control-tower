@@ -20,7 +20,7 @@ const summaryFor = (tools: ExternalTools) => {
 }
 
 const toggleLabelFor = (tools: ExternalTools, isCollapsed: boolean) =>
-  `${isCollapsed ? 'Desplegar' : 'Contraer'} el panel de herramientas: ${summaryFor(tools).toLowerCase()}`
+  `${isCollapsed ? 'Desplegar' : 'Contraer'} el panel de estado: ${summaryFor(tools).toLowerCase()}`
 
 type Implementation = { issue: number; root: string; repo: string }
 
