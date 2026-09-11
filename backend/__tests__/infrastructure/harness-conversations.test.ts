@@ -197,7 +197,7 @@ describe('HarnessConversations', () => {
     const known = await harness.conversations().known()
 
     expect(harness.stderr).not.toHaveBeenCalled()
-    expect(known.reason).not.toBeNull()
+    expect(known.reason).toContain(Harness.RUNS_IN)
   })
 
   it('a_record_that_is_not_json_is_skipped_with_its_path_on_stderr_and_the_other_plans_still_come_back', async () => {

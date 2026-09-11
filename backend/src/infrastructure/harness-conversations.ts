@@ -52,9 +52,7 @@ export class HarnessConversations {
     } catch (failure) {
       if (HarnessConversations.#isMissingRoot(failure)) return HarnessAnswer.answered([])
 
-      return HarnessAnswer.refused(
-        `${this.runsIn} cannot be listed, so what is in flight could not be known: ${HarnessConversations.#messageOf(failure)}`
-      )
+      return HarnessAnswer.refused(`${this.runsIn} cannot be listed: ${HarnessConversations.#messageOf(failure)}`)
     }
 
     const conversations: HarnessConversation[] = []
@@ -99,15 +97,17 @@ export class HarnessConversations {
   }
 
   static #isMissingRoot(failure: unknown): boolean {
-    const errno: NodeJS.ErrnoException | null = failure instanceof Error ? failure : null
-
-    return errno?.code === 'ENOENT'
+    return HarnessConversations.#codeOf(failure) === 'ENOENT'
   }
 
   static #isStrayFile(failure: unknown): boolean {
+    return HarnessConversations.#codeOf(failure) === 'ENOTDIR'
+  }
+
+  static #codeOf(failure: unknown): string | undefined {
     const errno: NodeJS.ErrnoException | null = failure instanceof Error ? failure : null
 
-    return errno?.code === 'ENOTDIR'
+    return errno?.code
   }
 
   static #messageOf(failure: unknown): string {
