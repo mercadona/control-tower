@@ -25,17 +25,17 @@ const TASK_TWO_SUMMARY =
   '4029 tests, exit 0.'
 
 const ISSUE_298_STEPS = [
-  { step: 'implement', task: 1, task_name: TASK_ONE_NAME, tasks_total: 2, attempt: 1, outcome: 'done', written_at: '2026-09-10T14:55:59.885Z', duration_ms: null, summary: TASK_ONE_SUMMARY },
-  { step: 'controls', task: 1, task_name: TASK_ONE_NAME, tasks_total: 2, attempt: 1, outcome: 'failed', written_at: '2026-09-10T14:56:12.569Z', duration_ms: 138, summary: null },
-  { step: 'implement', task: 1, task_name: TASK_ONE_NAME, tasks_total: 2, attempt: 2, outcome: 'done', written_at: '2026-09-10T15:03:27.804Z', duration_ms: null, summary: TASK_ONE_SUMMARY },
-  { step: 'controls', task: 1, task_name: TASK_ONE_NAME, tasks_total: 2, attempt: 2, outcome: 'done', written_at: '2026-09-10T15:03:46.526Z', duration_ms: 12226, summary: null },
-  { step: 'judge', task: 1, task_name: TASK_ONE_NAME, tasks_total: 2, attempt: 2, outcome: 'done', written_at: '2026-09-10T15:05:41.987Z', duration_ms: null, summary: null },
-  { step: 'implement', task: 2, task_name: TASK_TWO_NAME, tasks_total: 2, attempt: 1, outcome: 'done', written_at: '2026-09-10T15:14:12.924Z', duration_ms: null, summary: TASK_TWO_SUMMARY },
-  { step: 'controls', task: 2, task_name: TASK_TWO_NAME, tasks_total: 2, attempt: 1, outcome: 'done', written_at: '2026-09-10T15:14:33.439Z', duration_ms: 14202, summary: null },
-  { step: 'judge', task: 2, task_name: TASK_TWO_NAME, tasks_total: 2, attempt: 1, outcome: 'done', written_at: '2026-09-10T15:16:49.248Z', duration_ms: null, summary: null },
-  { step: 'reconcile', task: null, task_name: null, tasks_total: 2, attempt: 1, outcome: 'up-to-date', written_at: '2026-09-10T15:17:04.489Z', duration_ms: 2055, summary: null },
-  { step: 'global', task: null, task_name: null, tasks_total: 2, attempt: 1, outcome: 'done', written_at: '2026-09-10T15:20:01.126Z', duration_ms: 164081, summary: null },
-  { step: 'slice-judge', task: null, task_name: null, tasks_total: 2, attempt: 1, outcome: 'done', written_at: '2026-09-10T15:20:58.197Z', duration_ms: null, summary: null },
+  { step: 'implement', task: 1, task_name: TASK_ONE_NAME, tasks_total: 2, attempt: 1, outcome: 'done', written_at: '2026-09-10T14:55:59.885Z', duration_ms: null, summary: TASK_ONE_SUMMARY, ruling: null, findings_total: null, tool_total_tokens: 9718233 },
+  { step: 'controls', task: 1, task_name: TASK_ONE_NAME, tasks_total: 2, attempt: 1, outcome: 'failed', written_at: '2026-09-10T14:56:12.569Z', duration_ms: 138, summary: null, ruling: null, findings_total: null, tool_total_tokens: 395160 },
+  { step: 'implement', task: 1, task_name: TASK_ONE_NAME, tasks_total: 2, attempt: 2, outcome: 'done', written_at: '2026-09-10T15:03:27.804Z', duration_ms: null, summary: TASK_ONE_SUMMARY, ruling: null, findings_total: null, tool_total_tokens: 804298 },
+  { step: 'controls', task: 1, task_name: TASK_ONE_NAME, tasks_total: 2, attempt: 2, outcome: 'done', written_at: '2026-09-10T15:03:46.526Z', duration_ms: 12226, summary: null, ruling: null, findings_total: null, tool_total_tokens: 203423 },
+  { step: 'judge', task: 1, task_name: TASK_ONE_NAME, tasks_total: 2, attempt: 2, outcome: 'done', written_at: '2026-09-10T15:05:41.987Z', duration_ms: null, summary: null, ruling: 'PASS', findings_total: 0, tool_total_tokens: 821607 },
+  { step: 'implement', task: 2, task_name: TASK_TWO_NAME, tasks_total: 2, attempt: 1, outcome: 'done', written_at: '2026-09-10T15:14:12.924Z', duration_ms: null, summary: TASK_TWO_SUMMARY, ruling: null, findings_total: null, tool_total_tokens: 1892550 },
+  { step: 'controls', task: 2, task_name: TASK_TWO_NAME, tasks_total: 2, attempt: 1, outcome: 'done', written_at: '2026-09-10T15:14:33.439Z', duration_ms: 14202, summary: null, ruling: null, findings_total: null, tool_total_tokens: 217621 },
+  { step: 'judge', task: 2, task_name: TASK_TWO_NAME, tasks_total: 2, attempt: 1, outcome: 'done', written_at: '2026-09-10T15:16:49.248Z', duration_ms: null, summary: null, ruling: 'PASS', findings_total: 0, tool_total_tokens: 1321277 },
+  { step: 'reconcile', task: null, task_name: null, tasks_total: 2, attempt: 1, outcome: 'up-to-date', written_at: '2026-09-10T15:17:04.489Z', duration_ms: 2055, summary: null, ruling: null, findings_total: null, tool_total_tokens: 445748 },
+  { step: 'global', task: null, task_name: null, tasks_total: 2, attempt: 1, outcome: 'done', written_at: '2026-09-10T15:20:01.126Z', duration_ms: 164081, summary: null, ruling: null, findings_total: null, tool_total_tokens: 447274 },
+  { step: 'slice-judge', task: null, task_name: null, tasks_total: 2, attempt: 1, outcome: 'done', written_at: '2026-09-10T15:20:58.197Z', duration_ms: null, summary: null, ruling: 'PASS', findings_total: 0, tool_total_tokens: 1359562 },
 ]
 
 const empty = () => ({ status: 200, body: '{"steps":[]}' })

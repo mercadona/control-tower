@@ -24,6 +24,9 @@ type ImplementationHistoryEntryWire = {
   written_at: string | null
   duration_ms: number | null
   summary: string | null
+  ruling: string | null
+  findings_total: number | null
+  tool_total_tokens: number | null
 }
 
 const isEntryWire = (value: unknown): value is ImplementationHistoryEntryWire =>
@@ -37,7 +40,10 @@ const isEntryWire = (value: unknown): value is ImplementationHistoryEntryWire =>
   isStringOrNull(value.outcome) &&
   isStringOrNull(value.written_at) &&
   isNumberOrNull(value.duration_ms) &&
-  isStringOrNull(value.summary)
+  isStringOrNull(value.summary) &&
+  isStringOrNull(value.ruling) &&
+  isNumberOrNull(value.findings_total) &&
+  isNumberOrNull(value.tool_total_tokens)
 
 type ImplementationHistoryWire = { steps: unknown[] }
 
@@ -54,6 +60,9 @@ const toEntry = (wire: ImplementationHistoryEntryWire): ImplementationHistoryEnt
   writtenAt: wire.written_at,
   durationMs: wire.duration_ms,
   summary: wire.summary,
+  ruling: wire.ruling,
+  findingsTotal: wire.findings_total,
+  toolTotalTokens: wire.tool_total_tokens,
 })
 
 const isRefusal = (value: unknown): value is { code: string; detail: string } =>

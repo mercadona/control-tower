@@ -3,12 +3,12 @@ import { ImplementHistoryClient } from 'app/implement-history/client'
 const DOCUMENTED_ANSWER =
   '{"steps":[{"step":"implement","task":1,"task_name":"the lookup looks where it says it looks",' +
   '"tasks_total":2,"attempt":1,"outcome":"done","written_at":"2026-09-10T14:55:59.885Z",' +
-  '"duration_ms":null,"summary":"Renamed ..."}]}'
+  '"duration_ms":null,"summary":"Renamed ...","ruling":null,"findings_total":null,"tool_total_tokens":9718233}]}'
 
 describe('the wire shape backend/API.md documents for GET /implement-history/:issue', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('should read the documented answer as one entry with all nine fields projected to camelCase, because a backend rename to any of them arrives here as a red test', async () => {
+  it('should read the documented answer as one entry with all twelve fields projected to camelCase, because a backend rename to any of them arrives here as a red test', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(DOCUMENTED_ANSWER, { status: 200 })))
 
     const outcome = await ImplementHistoryClient.get({ issue: 7, root: '/repo/checkout', repo: 'owner/name' })
@@ -25,6 +25,9 @@ describe('the wire shape backend/API.md documents for GET /implement-history/:is
         writtenAt: '2026-09-10T14:55:59.885Z',
         durationMs: null,
         summary: 'Renamed ...',
+        ruling: null,
+        findingsTotal: null,
+        toolTotalTokens: 9718233,
       }],
     })
   })
