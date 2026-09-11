@@ -53,5 +53,11 @@ const STEP_LABELS: Record<ImplementationStep, string> = {
   [ImplementationStep.FIXING]: 'Corrigiendo lo pedido en la revisión',
 }
 
-export { ImplementationStep, STEP_LABELS }
+const STEP_SHORT_LABELS: Partial<Record<ImplementationStep, string>> = {
+  [ImplementationStep.IMPLEMENT]: 'Implementar',
+  [ImplementationStep.CONTROLS]: 'Controles',
+  [ImplementationStep.JUDGE]: 'Juez',
+}
+
+export { ImplementationStep, STEP_LABELS, STEP_SHORT_LABELS }
 export type { ImplementationProgressState, ImplementProgressOutcome, PullRequest }
