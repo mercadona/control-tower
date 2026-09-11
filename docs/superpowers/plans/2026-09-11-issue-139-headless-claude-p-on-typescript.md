@@ -347,13 +347,14 @@ the whole argv asserted literally.
 `the_stream_of_the_call_and_its_diagnosis_are_two_different_files`,
 `the_plan_is_written_in_the_worktree_that_was_prepared_and_not_where_the_api_runs`,
 `a_step_no_model_was_declared_for_raises_instead_of_asking_for_undefined` and
-`a_call_that_cannot_be_started_refuses_without_leaving_a_conversation_behind`.
+`a_call_that_cannot_be_started_writes_no_call_json_even_though_its_directory_and_conversation_record_already_landed`.
 
-**Verification:** the argv is whole and the identity imposed.
+**Verification:** the argv is whole.
+
 
 ```bash
-cd backend && npm run typecheck   # exit 0
-cd backend && npx vitest run __tests__/infrastructure/headless-plan-agents.test.ts   # exit 0
+cd backend && npm run typecheck
+cd backend && npx vitest run __tests__/infrastructure/headless-plan-agents.test.ts
 cd backend && test "$(grep -c 'session-id' src/infrastructure/headless-plan-agents.ts)" -eq 1
 cd backend && test -z "$(grep -l 'no-session-persistence' src/infrastructure/headless-plan-agents.ts)"
 cd backend && npx vitest run   # exit 0
