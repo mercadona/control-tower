@@ -56,7 +56,11 @@ describe('PlanCollapse', () => {
     'ImplementationProgressFailure', 'PullRequestFailure', 'WorkbenchFailure',
   ]
 
-  const RESUMING_AN_AGENT = ImplementCollapse.declaredFailures()
+  const SHARED_WITH_RESUMING_AN_AGENT_ON_PURPOSE = ['PlanAgentNotNamed']
+
+  const RESUMING_AN_AGENT = ImplementCollapse.declaredFailures().filter(
+    (name) => !SHARED_WITH_RESUMING_AN_AGENT_ON_PURPOSE.includes(name)
+  )
 
   const startingAPlan = ([name, thrown]: [string, { prototype: object }]) =>
     thrown.prototype instanceof exceptions.PlanFailure &&
@@ -74,6 +78,13 @@ describe('PlanCollapse', () => {
     const ways = Object.entries(exceptions).filter(startingAPlan).map(([name]) => name)
 
     expect(PlanCollapse.declaredFailures().sort()).toEqual(ways.sort())
+  })
+
+  it('the_classes_starting_a_plan_and_resuming_an_agent_can_both_collapse_on_are_exactly_the_ones_declared_shared_on_purpose', () => {
+    const startingAPlanClasses = new Set(PlanCollapse.declaredFailures())
+    const actuallyShared = ImplementCollapse.declaredFailures().filter((name) => startingAPlanClasses.has(name))
+
+    expect(actuallyShared.sort()).toEqual([...SHARED_WITH_RESUMING_AN_AGENT_ON_PURPOSE].sort())
   })
 
   it('every_way_the_plan_can_collapse_has_a_code_distinct_from_every_other_one', () => {

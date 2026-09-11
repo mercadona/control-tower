@@ -8,7 +8,7 @@ import type { PlanStateValue } from '../domain/value-objects/plan-state.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { ActivePlanPhase } from './active-plans-route.ts'
 import {
-  PlanFailure, PlanAgentNotResumed, PlanGoNotAnswered, GoNotRecorded,
+  PlanFailure, PlanAgentNotResumed, PlanAgentNotNamed, PlanGoNotAnswered, GoNotRecorded,
 } from '../domain/exceptions.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 
@@ -232,6 +232,7 @@ export class ImplementCollapse {
     [GoNotRecorded, ImplementCollapse.#collapsed('go-not-recorded')],
     [PlanGoNotAnswered, ImplementCollapse.#collapsed('plan-go-not-answered')],
     [PlanAgentNotResumed, ImplementCollapse.#collapsed('plan-agent-not-resumed')],
+    [PlanAgentNotNamed, ImplementCollapse.#collapsed('plan-agent-worktree-not-understood')],
   ])
 
   static of(cause: Error): Refusal {
