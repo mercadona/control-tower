@@ -1,250 +1,158 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { render, screen, within } from '@testing-library/react'
 import { ToolsStatus } from 'app/external-tools/components/tools-status'
+import { ExternalTools } from 'app/external-tools/useExternalTools'
 
 const DESTINATION = 'fixture-project:fixture_dataset.fixture_table'
-const DELIVERY_DISABLED = { enabled: false, variable: 'CT_HARVEST_BQ_TABLE', destination: null }
-const DELIVERY_ENABLED = { enabled: true, variable: 'CT_HARVEST_BQ_TABLE', destination: DESTINATION }
+const DELIVERY_DISABLED = { enabled: false, variable: 'CT_HARVEST_BQ_TABLE' as const, destination: null }
+const DELIVERY_ENABLED = { enabled: true, variable: 'CT_HARVEST_BQ_TABLE' as const, destination: DESTINATION }
 
-const GH_READY = { tool: 'gh', installed: true, session: 'ready', fix: null }
-const BQ_READY = { tool: 'bq', installed: true, session: 'ready', fix: null }
-const BQ_MISSING = { tool: 'bq', installed: true, session: 'missing', fix: 'gcloud auth login' }
-const BQ_NOT_INSTALLED = { tool: 'bq', installed: false, session: 'missing', fix: 'instala bq' }
+const GH_READY = { tool: 'gh', installed: true, session: 'ready' as const, fix: null }
+const BQ_READY = { tool: 'bq', installed: true, session: 'ready' as const, fix: null }
+const BQ_MISSING = { tool: 'bq', installed: true, session: 'missing' as const, fix: 'gcloud auth login' }
+const BQ_NOT_INSTALLED = { tool: 'bq', installed: false, session: 'missing' as const, fix: 'instala bq' }
+const CLAUDE_UNKNOWN = { tool: 'claude', installed: true, session: 'unknown' as const, fix: null }
 
-const ready = { ready: true, tools: [GH_READY], metricsDelivery: DELIVERY_DISABLED }
-const attention = {
-  ready: false,
+const checking: ExternalTools = { phase: 'checking' }
+const unknown: ExternalTools = { phase: 'unknown' }
+const ready: ExternalTools = { phase: 'ready', tools: [GH_READY], metricsDelivery: DELIVERY_DISABLED }
+const attention: ExternalTools = {
+  phase: 'attention',
   tools: [{ tool: 'gh', installed: true, session: 'missing', fix: 'gh auth login' }, BQ_NOT_INSTALLED],
   metricsDelivery: DELIVERY_DISABLED,
 }
-const deliveryDisabled = { ready: true, tools: [GH_READY, BQ_NOT_INSTALLED], metricsDelivery: DELIVERY_DISABLED }
-const deliveryActive = { ready: true, tools: [GH_READY, BQ_READY], metricsDelivery: DELIVERY_ENABLED }
-const deliveryBlocked = { ready: false, tools: [GH_READY, BQ_MISSING], metricsDelivery: DELIVERY_ENABLED }
-
-const answering = (body: unknown) => vi.fn(async () => new Response(JSON.stringify(body)))
-
-const panel = () => screen.getByRole('complementary', { name: 'Herramientas' })
-
-const toggleNamed = (name: string) => screen.getByRole('button', { name })
-
-const expanded = async (body: unknown) => {
-  vi.stubGlobal('fetch', answering(body))
-  const user = userEvent.setup()
-  render(<ToolsStatus />)
-  await waitFor(() => expect(screen.getByRole('button', { name: /Desplegar/ })).toBeInTheDocument())
-  await user.click(screen.getByRole('button', { name: /Desplegar/ }))
-
-  return { user, metrics: screen.getByRole('region', { name: 'Entrega de métricas' }) }
+const withUnknownSession: ExternalTools = {
+  phase: 'attention',
+  tools: [GH_READY, CLAUDE_UNKNOWN],
+  metricsDelivery: DELIVERY_DISABLED,
+}
+const deliveryDisabled: ExternalTools = {
+  phase: 'ready',
+  tools: [GH_READY, BQ_NOT_INSTALLED],
+  metricsDelivery: DELIVERY_DISABLED,
+}
+const deliveryActive: ExternalTools = {
+  phase: 'ready',
+  tools: [GH_READY, BQ_READY],
+  metricsDelivery: DELIVERY_ENABLED,
+}
+const deliveryBlocked: ExternalTools = {
+  phase: 'attention',
+  tools: [GH_READY, BQ_MISSING],
+  metricsDelivery: DELIVERY_ENABLED,
 }
 
+const list = () => screen.getByRole('list')
+
 describe('ToolsStatus', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  it('renders one row per tool with its status icon, name and detail', () => {
+    render(<ToolsStatus tools={attention} />)
 
-  it('is a persistent complementary column that starts folded to its rail', async () => {
-    vi.stubGlobal('fetch', answering(ready))
-    render(<ToolsStatus />)
-
-    await waitFor(() => expect(toggleNamed('Desplegar el panel de herramientas: listas')).toBeInTheDocument())
-    const drawer = panel()
-    expect(drawer.tagName).toBe('ASIDE')
-    expect(drawer).toHaveClass('drawer--collapsed')
-    expect(drawer).not.toHaveAttribute('aria-modal')
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    const rows = within(list()).getAllByRole('listitem')
+    expect(rows[0]).toHaveTextContent('gh')
+    expect(rows[0]).toHaveTextContent('necesita iniciar sesión')
+    expect(rows[1]).toHaveTextContent('bq')
+    expect(rows[1]).toHaveTextContent('no está instalada')
   })
 
-  it('carries the survey summary in the toggle while folded, so the rail is not mute', async () => {
-    vi.stubGlobal('fetch', answering(attention))
-    render(<ToolsStatus />)
+  it('gives a ready session the success icon with a visually hidden Spanish label', () => {
+    render(<ToolsStatus tools={ready} />)
 
-    await waitFor(() =>
-      expect(toggleNamed('Desplegar el panel de herramientas: necesitan atención')).toBeInTheDocument())
+    const [row] = within(list()).getAllByRole('listitem')
+    expect(row.querySelector('.tools-status__icon--ready')).toBeInTheDocument()
+    expect(within(row).getByText('Lista')).toHaveClass('tools-status__visually-hidden')
   })
 
-  it('unfolds on the toggle and shows the dot, the summary and every tool detail', async () => {
-    vi.stubGlobal('fetch', answering(attention))
-    const user = userEvent.setup()
-    render(<ToolsStatus />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /Desplegar/ })).toBeInTheDocument())
+  it('gives a missing session the ko icon with a visually hidden Spanish label', () => {
+    render(<ToolsStatus tools={attention} />)
 
-    await user.click(screen.getByRole('button', { name: /Desplegar/ }))
-
-    const toggle = toggleNamed('Contraer el panel de herramientas: necesitan atención')
-    expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    expect(toggle).toHaveAttribute('aria-controls')
-    expect(panel()).not.toHaveClass('drawer--collapsed')
-    expect(screen.getByText('Necesitan atención')).toBeVisible()
-    expect(panel().querySelector('.tools-status__dot--attention')).toBeInTheDocument()
-    expect(screen.getByRole('list')).toHaveTextContent('gh: necesita iniciar sesión')
-    expect(screen.getByRole('list')).toHaveTextContent('bq: no está instalada')
+    const [ghRow] = within(list()).getAllByRole('listitem')
+    expect(ghRow.querySelector('.tools-status__icon--missing')).toBeInTheDocument()
+    expect(within(ghRow).getByText('Falta')).toHaveClass('tools-status__visually-hidden')
   })
 
-  it('folds back on the same toggle without unmounting the column', async () => {
-    vi.stubGlobal('fetch', answering(ready))
-    const user = userEvent.setup()
-    render(<ToolsStatus />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /Desplegar/ })).toBeInTheDocument())
+  it('gives an unknown session the warning icon with a visually hidden Spanish label', () => {
+    render(<ToolsStatus tools={withUnknownSession} />)
 
-    await user.click(screen.getByRole('button', { name: /Desplegar/ }))
-    await user.click(screen.getByRole('button', { name: /Contraer/ }))
-
-    expect(panel()).toHaveClass('drawer--collapsed')
-    expect(toggleNamed('Desplegar el panel de herramientas: listas')).toHaveAttribute('aria-expanded', 'false')
+    const rows = within(list()).getAllByRole('listitem')
+    const claudeRow = rows.find((row) => row.textContent?.includes('claude'))
+    expect(claudeRow?.querySelector('.tools-status__icon--unknown')).toBeInTheDocument()
+    expect(within(claudeRow!).getByText('Desconocida')).toHaveClass('tools-status__visually-hidden')
   })
 
-  it('keeps its region name while folded even though the body is hidden', async () => {
-    vi.stubGlobal('fetch', answering(ready))
-    render(<ToolsStatus />)
+  it('does not present an unneeded bq as a general blocking error while delivery is disabled', () => {
+    render(<ToolsStatus tools={deliveryDisabled} />)
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /Desplegar/ })).toBeInTheDocument())
-    const body = document.getElementById(
-      screen.getByRole('button', { name: /Desplegar/ }).getAttribute('aria-controls') ?? '',
-    )
-    expect(panel()).toBeInTheDocument()
-    expect(body).toHaveAttribute('hidden')
-    expect(screen.queryByRole('list')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Reintentar comprobación' })).toBeNull()
+    expect(list()).toHaveTextContent('opcional: solo hace falta si activas la entrega de métricas')
+    expect(list()).not.toHaveTextContent('instala bq')
   })
 
-  it('retries the survey from inside the body', async () => {
-    const fetching = answering(attention)
-    vi.stubGlobal('fetch', fetching)
-    const user = userEvent.setup()
-    render(<ToolsStatus />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /Desplegar/ })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /Desplegar/ }))
+  it('shows the checking message while the survey is in flight', () => {
+    render(<ToolsStatus tools={checking} />)
 
-    await user.click(screen.getByRole('button', { name: 'Reintentar comprobación' }))
-
-    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(2))
+    expect(screen.getByText('Consultando disponibilidad y sesión de cada herramienta.')).toHaveAttribute('role', 'status')
   })
 
-  it('shows unavailable when the initial survey cannot be read', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      throw new TypeError('Failed to fetch')
-    }))
-    render(<ToolsStatus />)
+  it('shows the unavailable message when the backend could not be reached', () => {
+    render(<ToolsStatus tools={unknown} />)
 
-    await waitFor(() =>
-      expect(toggleNamed('Desplegar el panel de herramientas: no se pudo comprobar')).toBeInTheDocument())
-  })
-
-  it('does not update after unmounting a late survey', async () => {
-    let resolve: (value: Response) => void = () => undefined
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((done) => { resolve = done })))
-    const { unmount } = render(<ToolsStatus />)
-    unmount()
-    resolve(new Response(JSON.stringify(ready)))
-    await Promise.resolve()
+    expect(screen.getByText('No se pudo contactar con el backend para comprobar las herramientas.')).toBeInTheDocument()
   })
 })
 
-describe('ToolsStatus — the metrics delivery section', () => {
-  afterEach(() => vi.unstubAllGlobals())
+describe('ToolsStatus — the metrics delivery row', () => {
+  it('renders the metrics delivery as a row of the list, with the informative icon', () => {
+    render(<ToolsStatus tools={ready} />)
 
-  it('says the variable is unset, what is lost and that the backend has to be restarted', async () => {
-    const { metrics } = await expanded(deliveryDisabled)
-
-    expect(metrics).toHaveTextContent('CT_HARVEST_BQ_TABLE')
-    expect(metrics).toHaveTextContent('no está configurada')
-    expect(metrics).toHaveTextContent('Los planes siguen funcionando')
-    expect(metrics).toHaveTextContent('no se enviarán a BigQuery')
-    expect(metrics).toHaveTextContent('no aparecerán en las comparativas de herramientas')
-    expect(metrics).toHaveTextContent('CT_HARVEST_BQ_TABLE=proyecto:dataset.tabla make run-backend')
-    expect(metrics).toHaveTextContent('hay que reiniciar el backend')
+    const rows = within(list()).getAllByRole('listitem')
+    const metricsRow = rows[rows.length - 1]
+    expect(metricsRow).toHaveTextContent('Entrega de métricas')
+    expect(metricsRow.querySelector('.tools-status__icon--informative')).toBeInTheDocument()
   })
 
-  it('does not present an unneeded bq as a general blocking error while delivery is disabled', async () => {
-    await expanded(deliveryDisabled)
+  it('says the variable is unset, what is lost and that the backend has to be restarted', () => {
+    render(<ToolsStatus tools={deliveryDisabled} />)
 
-    expect(toggleNamed('Contraer el panel de herramientas: listas')).toBeInTheDocument()
-    expect(screen.getByRole('list')).toHaveTextContent(
-      'bq: no está instalada · opcional: solo hace falta si activas la entrega de métricas',
-    )
-    expect(screen.getByRole('list')).not.toHaveTextContent('instala bq')
+    expect(list()).toHaveTextContent('CT_HARVEST_BQ_TABLE')
+    expect(list()).toHaveTextContent('no está configurada')
+    expect(list()).toHaveTextContent('Los planes siguen funcionando')
+    expect(list()).toHaveTextContent('no se enviarán a BigQuery')
+    expect(list()).toHaveTextContent('no aparecerán en las comparativas de herramientas')
+    expect(list()).toHaveTextContent('CT_HARVEST_BQ_TABLE=proyecto:dataset.tabla make run-backend')
+    expect(list()).toHaveTextContent('hay que reiniciar el backend')
   })
 
-  it('says delivery is active, names the destination table and says slices upload themselves', async () => {
-    const { metrics } = await expanded(deliveryActive)
+  it('says delivery is active, names the destination table and says slices upload themselves', () => {
+    render(<ToolsStatus tools={deliveryActive} />)
 
-    expect(metrics).toHaveTextContent('Entrega activa')
-    expect(metrics).toHaveTextContent('se suben automáticamente')
-    expect(metrics).toHaveTextContent(DESTINATION)
-    expect(metrics).not.toHaveTextContent('no está configurada')
+    expect(list()).toHaveTextContent('Entrega activa')
+    expect(list()).toHaveTextContent('se suben automáticamente')
+    expect(list()).toHaveTextContent(DESTINATION)
+    expect(list()).not.toHaveTextContent('no está configurada')
   })
 
-  it('says metrics cannot be delivered, reuses the bq fix and explains the retry and the kept worktree', async () => {
-    const { metrics } = await expanded(deliveryBlocked)
+  it('says metrics cannot be delivered, reuses the bq fix and explains the retry and the kept worktree', () => {
+    render(<ToolsStatus tools={deliveryBlocked} />)
 
-    expect(toggleNamed('Contraer el panel de herramientas: necesitan atención')).toBeInTheDocument()
-    expect(metrics).toHaveTextContent('No se pueden entregar las métricas')
-    expect(metrics).toHaveTextContent('necesita iniciar sesión')
-    expect(metrics).toHaveTextContent('gcloud auth login')
-    expect(metrics).toHaveTextContent(DESTINATION)
-    expect(metrics).toHaveTextContent('se reintenta en cada barrido')
-    expect(metrics).toHaveTextContent('el worktree del slice se conserva')
+    expect(list()).toHaveTextContent('No se pueden entregar las métricas')
+    expect(list()).toHaveTextContent('necesita iniciar sesión')
+    expect(list()).toHaveTextContent('gcloud auth login')
+    expect(list()).toHaveTextContent(DESTINATION)
+    expect(list()).toHaveTextContent('se reintenta en cada barrido')
+    expect(list()).toHaveTextContent('el worktree del slice se conserva')
   })
 
-  it('asserts no configuration value while the survey is still in flight', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => undefined)))
-    const user = userEvent.setup()
-    render(<ToolsStatus />)
-    await user.click(screen.getByRole('button', { name: 'Desplegar el panel de herramientas: comprobando' }))
+  it('asserts no configuration value while the survey is still in flight', () => {
+    render(<ToolsStatus tools={checking} />)
 
-    const metrics = screen.getByRole('region', { name: 'Entrega de métricas' })
-
-    expect(metrics).toHaveTextContent('Consultando la configuración de entrega de métricas')
-    expect(metrics).not.toHaveTextContent('no está configurada')
-    expect(metrics).not.toHaveTextContent('Entrega activa')
+    expect(list()).toHaveTextContent('Consultando la configuración de entrega de métricas')
+    expect(list()).not.toHaveTextContent('no está configurada')
+    expect(list()).not.toHaveTextContent('Entrega activa')
   })
 
-  it('says the configuration could not be read when the backend is unavailable, and still retries', async () => {
-    const fetching = vi.fn(async () => {
-      throw new TypeError('Failed to fetch')
-    })
-    vi.stubGlobal('fetch', fetching)
-    const user = userEvent.setup()
-    render(<ToolsStatus />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /no se pudo comprobar/ })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /Desplegar/ }))
+  it('says the configuration could not be read when the backend is unavailable', () => {
+    render(<ToolsStatus tools={unknown} />)
 
-    const metrics = screen.getByRole('region', { name: 'Entrega de métricas' })
-
-    expect(metrics).toHaveTextContent('no se ha podido leer si la entrega de métricas está configurada')
-    expect(metrics).not.toHaveTextContent('no está configurada, así que')
-    await user.click(screen.getByRole('button', { name: 'Reintentar comprobación' }))
-    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(2))
-  })
-
-  it('reads the configuration again on a retry and shows what changed', async () => {
-    const fetching = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify(deliveryDisabled)))
-      .mockResolvedValueOnce(new Response(JSON.stringify(deliveryActive)))
-    vi.stubGlobal('fetch', fetching)
-    const user = userEvent.setup()
-    render(<ToolsStatus />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /Desplegar/ })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /Desplegar/ }))
-    expect(screen.getByRole('region', { name: 'Entrega de métricas' })).toHaveTextContent('no está configurada')
-
-    await user.click(screen.getByRole('button', { name: 'Reintentar comprobación' }))
-
-    await waitFor(() =>
-      expect(screen.getByRole('region', { name: 'Entrega de métricas' })).toHaveTextContent(DESTINATION))
-  })
-
-  it('reads a malformed metrics delivery as unavailable instead of claiming it is disabled', async () => {
-    vi.stubGlobal('fetch', answering({
-      ready: true,
-      tools: [GH_READY],
-      metricsDelivery: { enabled: true, variable: 'CT_HARVEST_BQ_TABLE', destination: null },
-    }))
-    const user = userEvent.setup()
-    render(<ToolsStatus />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /no se pudo comprobar/ })).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /Desplegar/ }))
-
-    const metrics = screen.getByRole('region', { name: 'Entrega de métricas' })
-
-    expect(metrics).toHaveTextContent('no se ha podido leer si la entrega de métricas está configurada')
+    expect(list()).toHaveTextContent('no se ha podido leer si la entrega de métricas está configurada')
+    expect(list()).not.toHaveTextContent('no está configurada, así que')
   })
 })

@@ -1,41 +1,71 @@
-.tools-status__dot {
-  display: inline-block;
+.tools-status__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.tools-status__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: start;
+}
+
+.tools-status__icon {
   flex-shrink: 0;
-  width: 12px;
-  height: 12px;
-  margin-inline-end: 8px;
-  vertical-align: baseline;
-  border-radius: var(--radius-full);
-  background: var(--foreground-disabled);
+  grid-row: 1 / 3;
 }
 
-.tools-status__dot--ready {
-  background: var(--foreground-success);
+.tools-status__icon--ready {
+  color: var(--foreground-success);
 }
 
-.tools-status__dot--attention,
-.tools-status__dot--unknown {
-  background: var(--foreground-danger);
+.tools-status__icon--missing {
+  color: var(--foreground-danger);
 }
 
-.tools-status .drawer__content p,
-.tools-status .drawer__content ul {
-  margin: 0 0 12px;
+.tools-status__icon--unknown {
+  color: var(--foreground-warning);
 }
 
-.tools-status__metrics {
-  display: block;
-  margin-block-start: 16px;
-  padding-block-start: 12px;
-  border-block-start: var(--borderwidth-sm) solid var(--border-secondary);
+.tools-status__icon--informative {
+  color: var(--foreground-informative);
 }
 
-.tools-status__metrics > strong {
-  display: block;
-  margin-block-end: 8px;
+.tools-status__visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.tools-status__name {
   color: var(--foreground-primary);
 }
 
-.tools-status__metrics code {
+.tools-status__detail {
+  color: var(--foreground-secondary);
+  grid-column: 2;
+}
+
+.tools-status__detail p,
+.tools-status__detail code {
   overflow-wrap: anywhere;
+}
+
+.tools-status__detail p:first-child {
+  margin-top: 0;
+}
+
+.tools-status__row--metrics {
+  padding-block-start: 12px;
+  border-block-start: var(--borderwidth-sm) solid var(--border-secondary);
 }
