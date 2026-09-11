@@ -9,7 +9,7 @@ documento, con la apuesta intacta y ocho slices. Sobre el feedback de un revisor
 a D-21 añadidas, que es la topología de sesiones que la congelación dejó implícita; D-22, que deja
 las puertas fuera del alcance de la jefa ahora que tiene manos; D-23, que publica el spec y hace
 que el groom espere su merge; D-24, que le da a la jefa el canal para hablarle a las sesiones que
-no ha lanzado; slice 3 renombrado a la sesión coordinadora y slice 7 nuevo para la
+no ha lanzado; D-25, que obliga a relevar el contexto que compone el plugin en vez de parafrasearlo; slice 3 renombrado a la sesión coordinadora y slice 7 nuevo para la
 conducción paso a paso, con lo que la cadena pasa a ser el 8.
 
 ## Hipótesis del experimento
@@ -171,6 +171,30 @@ protocol is not retired here: only its default dies, and A-3 carries the rest.
   the change you ask of the boss reaches that slice because the boss can address
   it by name.
   *(Procedencia: hablada — «cada sesión será lanzada por la coordinadora, de no ser así, al menos tiene que saber cómo hablar a las otras». Que las lance el backend y no ella es la decisión ya tomada en D-19, con su motivo: una cadena que no dependa de que un modelo siga despierto, y un expediente escrito por el dueño del proceso.)*
+- **D-25 · The context of every call is composed by the plugin and relayed
+  verbatim, never paraphrased by the backend** — `ct-step next` is already the
+  composer and the dispatch order at once: it writes the task's brief with
+  `task-brief --with-plan-context` (the desired end state, the out of scope and
+  the two yardstick sections, whose authority split the script documents), it
+  appends the plugin's yardstick, the repository's yardstick and, on a third
+  attempt, the advisor's advice inside the brief; it writes the review package
+  with `review-package` on the task's **recorded base** rather than `HEAD~1`, so
+  a multi-commit task stays whole; and it prints whom to dispatch, with which
+  model and which tools and which files. The backend hands over **those paths**
+  and pastes none of that text into a prompt, which is the property `task-brief`
+  exists for — "so the task text never has to be pasted through the
+  controller's context". The role material per step is what `role-bytes.js`
+  declares, the tools and models and package sections are what
+  `step-contracts.js` declares, and the judge travels with the plugin's own
+  definition the way judge-bench composes it (`--agents <json> --agent <name>`),
+  so no judge prompt is ever written in the backend. The answer's schema is
+  imposed by the binary with `--json-schema`, which only exists in `--print`
+  mode and which `step-contracts.js:14-16` records as lost when the conductor
+  stopped being headless: D-19 gets it back, so the verdict, the report, the
+  advice and the e2e stop being asked for in prose. If `ct-step next` asks for a
+  dispatch the backend cannot assemble from what it prepared, the backend
+  refuses instead of improvising a prompt.
+  *(Procedencia: hablada — «el contexto de las tasks y juez se tiene q pasar con precisión, mira como lo hace TC en el plugin, ya q no se lo estamos dando tan preciso». El inventario de mecanismos es deducido de leerlos: `ct-step.mjs` (`writeBrief`, `writeReviewPackage`, el bloque DISPATCH de `next`), `task-brief`, `review-package`, `role-bytes.js`, `step-contracts.js` y `judge-dispatch.js`.)*
 - **D-23 · After the freeze the app publishes the spec, and the groom waits for
   its merge** — pressing gate 1 commits the state line and then does what a
   person would do next: push the epic's branch and open its pull request with
@@ -274,7 +298,7 @@ dispatch. Nothing serializes across those three areas except through `Dep`.
 | 4 | Gate 1 — the freeze | ui | The freeze becomes an act of the program: the yardstick's failures on screen and a button that writes the state and the date and commits them and publishes them for review | #3 | the button refuses while a clarification marker or an empty hypothesis remains, each failure is shown as the imported module reports it, pressing it writes `Estado: CONGELADA` with the date and commits, the epic's branch is pushed and its pull request opened with both documents in it, the cabin says that the merge of that pull request is what the groom is waiting for, the conversation's agent never writes that line | `plugin/scripts/groom.js` and `plugin/scripts/slices.js` — imported and not modified | gates | frontend | !plan | the spec commit carries `Estado: CONGELADA` with its date and a refusal names the offending line |
 | 5 | The groom and gate 2 | ui | The groom runs from the cabin: the dry run's plan on screen before anything mutates, then the real groom, then the promotion that authorises work | #4 | the dry run's product is shown as what will be created, the real groom is refused while the spec is not frozen or its committed copy is not readable on the default branch, the promotion adds `status:ready` to the epic's issues and nothing else, a groom failure is shown in the program's own words | `plugin/scripts/ct-groom.mjs` | gates | github | !plan | the dry run product matches the issues the real groom creates and each one ends at `status:ready` |
 | 6 | The headless dispatcher | backend | `/start-plan` selects the next ready issue by the table's order and its merged dependencies and its free tokens and claims it and isolates it and sows it and launches `claude -p` with its record | #5 | no module under `backend/src` names cmux, `POST /implement-plan` is no longer routed and no go is minted, the plan is published as a comment on the issue after the plan step and nothing waits for an answer, the record is written before the launch and its absence is the whole of not prepared, every call records its cost and turns and duration, a restart recovers the plans in flight from the records alone | `ct-next.mjs` and `ct-step.mjs` and the run machine | dispatch | sessions | apply, !plan | every call record holds its cost and turns and duration and the attempt row carries them |
-| 7 | The backend drives the run machine | backend | The backend asks `ct-step next` and makes one `claude -p --resume` call for the step that is due and runs the verb that consumes what the call produced | #6 | no step order lives in the backend and the run machine is the only sequencer, a verb out of turn is still the machine's own exit 9, the judge is its own call and reports its own cost, the attempt row carries the cost and the turns of its call, no errand ever tells an agent to ask `ct-step` | `run-machine.js` and the contract of the verbs and the task brief | dispatch | plugin | !plan | every attempt row carries the cost and turns of its own call and the judge row carries its own |
+| 7 | The backend drives the run machine | backend | The backend asks `ct-step next` and makes one `claude -p --resume` call for the step that is due and runs the verb that consumes what the call produced | #6 | no step order lives in the backend and the run machine is the only sequencer, a verb out of turn is still the machine's own exit 9, the judge is its own call and reports its own cost, the attempt row carries the cost and the turns of its call, no errand ever tells an agent to ask `ct-step`, the call of a step carries exactly the files `ct-step next` prepared and no line of them is paraphrased into a prompt, the answer's schema is imposed with `--json-schema` instead of asked for in prose, the judge travels with the plugin's own definition | `run-machine.js` and the contract of the verbs and the composers of the brief and the package | dispatch | plugin | !plan | every attempt row carries the cost and turns of its own call and the judge row carries its own |
 | 8 | The chain that does not stop | backend | The relay when the pull request opens, the merge noticed by sweeping, the next slice dispatched, and the slice's own tab showing its stream and taking a message | #7 | the next admissible slice is dispatched when a pull request opens, a merge dispatches whatever it unblocked, nobody is ever asked which slice is next, the slice's tab renders the stream and a message reaches the live conversation, a change asked from the coordinating session reaches that slice's own conversation | `dispatch-check.mjs` | dispatch | frontend | visual, !plan | the next dispatch is recorded within one sweep of the pull request opening with no human input between |
 
 ## Decisiones aparcadas (BLOCKED)
