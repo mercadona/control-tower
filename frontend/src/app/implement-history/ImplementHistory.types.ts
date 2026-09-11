@@ -10,6 +10,9 @@ type ImplementationHistoryEntry = {
   writtenAt: string | null
   durationMs: number | null
   summary: string | null
+  ruling: string | null
+  findingsTotal: number | null
+  toolTotalTokens: number | null
 }
 
 type ImplementHistoryOutcome =

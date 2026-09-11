@@ -39,6 +39,9 @@ describe('ImplementHistoryClient', () => {
         writtenAt: '2026-09-10T14:55:59.885Z',
         durationMs: null,
         summary: expect.any(String),
+        ruling: null,
+        findingsTotal: null,
+        toolTotalTokens: 9718233,
       }],
     })
   })
@@ -60,6 +63,9 @@ describe('ImplementHistoryClient', () => {
       writtenAt: '2026-09-10T15:17:04.489Z',
       durationMs: 2055,
       summary: null,
+      ruling: null,
+      findingsTotal: null,
+      toolTotalTokens: 445748,
     })
   })
 
