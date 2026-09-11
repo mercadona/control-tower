@@ -158,6 +158,16 @@ protocol is not retired here: only its default dies, and A-3 carries the rest.
   cannot be resumed is said out loud; the cabin never opens a different one and
   presents it as the same.
   *(Procedencia: hablada — «La sesión coordinadora siempre tiene q estar en el front para poder hablar con ella, y se tiene q poder recuperar» y «aunque hagamos el gate de implementar, en el front siempre tengo que poder hablar con la sesión orquestadora, de la misma manera que en el plugin original». Que sean dos mecanismos distintos es deducido: el PTY muere con su padre y el descriptor del maestro no se recupera, mientras que la conversación sí, porque el CLI la resume desde su propio almacén.)*
+- **D-22 · The gates are the human's and no session can trigger them** — the
+  coordinating session commands the backend, but not here: writing
+  `Estado: CONGELADA`, promoting to `status:ready` and anything around the merge
+  are triggered only from the front, by a person's click. There is no endpoint
+  for them that a session can call, and an attempt is refused with an explicit
+  code rather than obeyed. Everything else does travel through the boss:
+  starting work already authorised, asking for changes, unblocking what is
+  stuck. This is the repository's own doctrine — the go the agent cannot write —
+  applied to the coordinator now that it has hands.
+  *(Procedencia: hablada — «No: las puertas son solo tuyas».)*
 
 ## Enfoque técnico
 
@@ -187,6 +197,16 @@ mechanism because the PTY's master descriptor does not outlive its owner while
 the conversation does. Driving the run machine step by step is slice 7 and it
 sits between the dispatcher and the chain on purpose: it needs a conversation
 to resume, and the chain needs steps that finish.
+
+D-22 needs a mechanism and not just a rule, because the coordinating session
+runs on this machine and can reach a loopback endpoint as easily as the page
+can. The approach is that the permission never exists anywhere the session can
+read: the backend mints a secret per page and hands it only to the page, over
+the response the browser already gets, and the gate acts demand it. It never
+enters a prompt, a file of the repository or the session's environment, so the
+session has nothing to send. This is not an OS sandbox and it is not claimed to
+be one: it is that the one thing needed to open a gate only ever exists in the
+browser and in the backend's memory.
 
 The heart is the session port with two adapters. Everything else is a reader of
 evidence: the gates read artefacts and write the two mutations they are gates
