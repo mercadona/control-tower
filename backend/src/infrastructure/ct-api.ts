@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { setTimeout as after } from 'node:timers/promises'
@@ -15,6 +15,7 @@ import { GhPlanIssues } from './gh-plan-issues.ts'
 import { GitWorkspace } from './git-workspace.ts'
 import { DiskCheckoutRegistry } from './disk-checkout-registry.ts'
 import { WorktreePlans } from './worktree-plans.ts'
+import { HarnessConversations } from './harness-conversations.ts'
 import { DiskGoRegistry } from './disk-go-registry.ts'
 import { DispatchCheckHarvest } from './dispatch-check-harvest.ts'
 import { HarvestClock } from './harvest-clock.ts'
@@ -103,6 +104,10 @@ class Disk {
 
   static async makeDirectory(path: string): Promise<void> {
     await mkdir(path, { recursive: true })
+  }
+
+  static async list(path: string): Promise<string[]> {
+    return readdir(path)
   }
 
   static async atomicWrite(path: string, text: string): Promise<void> {
@@ -408,11 +413,17 @@ class CtApi {
     const runFileProgress = new RunFileProgress({ read: Disk.read, exists: Disk.exists })
     const surveyWorkspaces = new SurveyWorkspaces({ workspace })
     const readPlanStory = new ReadPlanStory({ planIssues })
+    const harness = new HarnessConversations({
+      list: Disk.list,
+      read: Disk.read,
+      stderr: (line) => process.stderr.write(line),
+      runsIn: harnessRoot,
+    })
     const recovery = new ActivePlanRecovery({
       plans: new WorktreePlans({
         checkouts,
         survey: async (root) => (await surveyWorkspaces.execute(new SurveyWorkspacesParams({ root }))).survey,
-        sessions: () => CtApi.#askCmux(),
+        conversations: () => harness.known(),
         realpathOf: Disk.realpathOf,
         story: async (subject) => (await readPlanStory.execute(new ReadPlanStoryParams(subject))).story,
         stderr: (line) => process.stderr.write(line),

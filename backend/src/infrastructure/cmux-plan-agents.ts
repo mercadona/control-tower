@@ -13,6 +13,7 @@ import type { LaunchPolicy } from '../domain/policies/launch-policy.ts'
 import { PlanAgentNotLaunched, PlanAgentNotNamed, PlanAgentNotResumed } from '../domain/exceptions.ts'
 import type { PlanAgentBrief } from './plan-agent-brief.ts'
 import type { ToolLaunch } from './external-tool.ts'
+import type { RealpathOf } from './worktree-plans.ts'
 import type { PlanBriefing } from '../domain/value-objects/plan-briefing.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import type { UserStoryKey } from '../domain/value-objects/user-story-key.ts'
@@ -22,7 +23,6 @@ export type SentinelWrite = (path: string, text: string) => Promise<void>
 export type SentinelRead = (path: string) => Promise<string | null>
 export type SentinelRemove = (path: string) => Promise<void>
 export type LaunchWait = () => Promise<void>
-export type RealpathOf = (path: string) => string | null
 
 type Sentinel = NonNullable<ReturnType<typeof parseSentinel>>
 

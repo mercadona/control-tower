@@ -7,12 +7,12 @@ import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.ts'
 import { PlanStoryNotRead, WorkspaceNotRead } from '../../src/domain/exceptions.ts'
-import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.ts'
-import { CmuxAnswer } from '../../../plugin/scripts/cmux.js'
+import { HarnessAnswer } from '../../src/infrastructure/harness-conversations.ts'
+import { HarnessConversation } from '../../src/infrastructure/headless-plan-agents.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
-import type { RealpathOf } from '../../src/infrastructure/cmux-plan-agents.ts'
+import type { RealpathOf } from '../../src/infrastructure/worktree-plans.ts'
 import type { DiagnosticWriter } from '../../src/infrastructure/git-workspace.ts'
-import type { SessionsAsked, StoryOf } from '../../src/infrastructure/worktree-plans.ts'
+import type { ConversationsAsked, StoryOf } from '../../src/infrastructure/worktree-plans.ts'
 
 class KnownCheckouts extends CheckoutRegistry {
   readonly #roots: CheckoutRoot[] | null
@@ -45,32 +45,28 @@ class SurveyedCheckout {
   }
 }
 
-class SessionsOfCmux {
-  static PLAN_TITLE = CmuxPlanAgents.nameFor({
-    story: new UserStoryKey('ABC-123'),
-    repository: new RepositoryName('owner/repo'),
-    issueNumber: 33,
-  })
+class ConversationsOf {
+  static REPOSITORY = SurveyedCheckout.REPOSITORY.text
+  static REFUSAL = 'the harness root could not be listed: EACCES: permission denied'
 
-  static DISPATCHED_TITLE = 'owner/repo \u00b7 #33 un slice del dispatcher'
-  static REFUSAL = 'cmux could not be asked for its windows: Error: ERROR: Access denied - only processes started inside cmux can connect'
-
-  static attending(worktree: string | null, {
-    ref = 'workspace:20', title = SessionsOfCmux.PLAN_TITLE,
-  }: { ref?: string | null, title?: string } = {}): CmuxAnswer {
-    return SessionsOfCmux.listing([{ cwd: worktree, cwdKnown: true, ref, title }])
+  static async attending(worktree: string, {
+    agent = 'agent-1', repository = ConversationsOf.REPOSITORY, startedAt = 1,
+  }: { agent?: string, repository?: string, startedAt?: number } = {}): Promise<HarnessAnswer> {
+    return ConversationsOf.listing([
+      new HarnessConversation({ agent, worktree, issue: 33, repository, startedAt }),
+    ])
   }
 
-  static listing(entries: unknown[]): CmuxAnswer {
-    return CmuxAnswer.answered(entries)
+  static async listing(conversations: readonly HarnessConversation[]): Promise<HarnessAnswer> {
+    return HarnessAnswer.answered(conversations)
   }
 
-  static none(): CmuxAnswer {
-    return SessionsOfCmux.listing([])
+  static async none(): Promise<HarnessAnswer> {
+    return ConversationsOf.listing([])
   }
 
-  static couldNotBeListed(): CmuxAnswer {
-    return CmuxAnswer.refused(SessionsOfCmux.REFUSAL)
+  static async couldNotBeListed(): Promise<HarnessAnswer> {
+    return HarnessAnswer.refused(ConversationsOf.REFUSAL)
   }
 }
 
@@ -79,12 +75,12 @@ class PlansOf {
 
   static aCheckoutRegistryThatCannotBeRead({ stderr }: { stderr: DiagnosticWriter }): WorktreePlans {
     return PlansOf.aWorktreeAttendedBy(
-      () => SessionsOfCmux.attending(`${PlansOf.ONE_CHECKOUT}/.worktrees/33`),
+      () => ConversationsOf.attending(`${PlansOf.ONE_CHECKOUT}/.worktrees/33`),
       { stderr, checkouts: new KnownCheckouts(null) }
     )
   }
 
-  static aWorktreeAttendedBy(sessions: SessionsAsked, {
+  static aWorktreeAttendedBy(conversations: ConversationsAsked, {
     story = () => new UserStoryKey('ABC-123'), stderr = vi.fn(), realpathOf = (path: string) => path,
     checkouts = new KnownCheckouts([new CheckoutRoot(PlansOf.ONE_CHECKOUT)]),
   }: {
@@ -93,7 +89,7 @@ class PlansOf {
     return new WorktreePlans({
       checkouts,
       survey: () => SurveyedCheckout.of(PlansOf.ONE_CHECKOUT, [33]),
-      sessions,
+      conversations,
       story,
       realpathOf,
       stderr,
@@ -104,7 +100,7 @@ class PlansOf {
 describe('WorktreePlans', () => {
   it('the_identity_of_a_plan_in_flight_comes_from_git_and_the_session_only_names_its_agent', async () => {
     const plans = PlansOf.aWorktreeAttendedBy(
-      () => SessionsOfCmux.attending('/repos/one/.worktrees/33')
+      () => ConversationsOf.attending('/repos/one/.worktrees/33')
     )
 
     const [watch] = (await plans.inFlight()).watches ?? []
@@ -126,62 +122,41 @@ describe('WorktreePlans', () => {
       root: '/repos/one',
       worktree: '/repos/one/.worktrees/33',
       branch: 'feat/33',
-      agent: 'workspace:20',
+      agent: 'agent-1',
     })
   })
 
   it('a_worktree_with_no_live_session_is_left_out_the_same_way_it_is_left_out_today', async () => {
-    expect((await PlansOf.aWorktreeAttendedBy(SessionsOfCmux.none).inFlight()).watches).toEqual([])
-  })
-
-  it('a_session_that_hides_its_directory_does_not_lend_its_agent_while_another_one_shows_its_own', async () => {
-    const plans = PlansOf.aWorktreeAttendedBy(() => SessionsOfCmux.listing([
-      { cwd: '/repos/one/.worktrees/33', cwdKnown: false, ref: 'workspace:20', title: SessionsOfCmux.PLAN_TITLE },
-      ...SessionsOfCmux.attending('/repos/elsewhere/.worktrees/7').entries,
-    ]))
-
-    expect((await plans.inFlight()).watches).toEqual([])
+    expect((await PlansOf.aWorktreeAttendedBy(ConversationsOf.none).inFlight()).watches).toEqual([])
   })
 
   it('a_session_sitting_somewhere_else_does_not_lend_its_agent_to_this_worktree', async () => {
     const plans = PlansOf.aWorktreeAttendedBy(
-      () => SessionsOfCmux.attending('/repos/one/.worktrees/41')
+      () => ConversationsOf.attending('/repos/one/.worktrees/41')
     )
 
     expect((await plans.inFlight()).watches).toEqual([])
   })
 
   it('sessions_that_could_not_be_listed_is_not_the_same_as_no_plans_in_flight', async () => {
-    expect((await PlansOf.aWorktreeAttendedBy(SessionsOfCmux.couldNotBeListed).inFlight()).wereListed).toBe(false)
+    expect((await PlansOf.aWorktreeAttendedBy(ConversationsOf.couldNotBeListed).inFlight()).wereListed).toBe(false)
   })
 
-  it('when_cmux_could_not_be_asked_its_own_words_reach_the_error_channel', async () => {
+  it('when_the_harness_could_not_be_asked_its_own_words_reach_the_error_channel', async () => {
     const stderr = vi.fn()
 
-    await PlansOf.aWorktreeAttendedBy(SessionsOfCmux.couldNotBeListed, { stderr }).inFlight()
+    await PlansOf.aWorktreeAttendedBy(ConversationsOf.couldNotBeListed, { stderr }).inFlight()
 
-    expect(stderr).toHaveBeenCalledWith(expect.stringContaining(SessionsOfCmux.REFUSAL))
+    expect(stderr).toHaveBeenCalledWith(expect.stringContaining(ConversationsOf.REFUSAL))
   })
 
   it('the_reason_written_on_the_error_channel_is_the_same_one_the_caller_is_handed', async () => {
     const stderr = vi.fn()
 
-    const found = await PlansOf.aWorktreeAttendedBy(SessionsOfCmux.couldNotBeListed, { stderr }).inFlight()
+    const found = await PlansOf.aWorktreeAttendedBy(ConversationsOf.couldNotBeListed, { stderr }).inFlight()
 
-    expect(found.reason).toBe(SessionsOfCmux.REFUSAL)
+    expect(found.reason).toBe(ConversationsOf.REFUSAL)
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining(String(found.reason)))
-  })
-
-  it('when_no_session_exposes_its_directory_the_error_channel_says_that_is_why', async () => {
-    const stderr = vi.fn()
-    const plans = PlansOf.aWorktreeAttendedBy(
-      () => SessionsOfCmux.listing([{ cwd: null, cwdKnown: false, ref: 'workspace:20', title: SessionsOfCmux.PLAN_TITLE }]),
-      { stderr }
-    )
-
-    await plans.inFlight()
-
-    expect(stderr).toHaveBeenCalledWith(expect.stringContaining('none of them exposes its directory'))
   })
 
   it('when_the_checkout_registry_cannot_be_read_the_error_channel_says_that_is_why', async () => {
@@ -195,7 +170,7 @@ describe('WorktreePlans', () => {
   it('the_story_it_could_not_read_leaves_the_plan_recovered_without_one', async () => {
     const stderr = vi.fn()
     const plans = PlansOf.aWorktreeAttendedBy(
-      () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
+      () => ConversationsOf.attending('/repos/one/.worktrees/33'),
       { story: () => { throw new PlanStoryNotRead('gh: not authenticated') }, stderr }
     )
 
@@ -215,7 +190,7 @@ describe('WorktreePlans', () => {
 
         return SurveyedCheckout.of('/repos/one', [33])
       },
-      sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
+      conversations: () => ConversationsOf.attending('/repos/one/.worktrees/33'),
       story: () => null,
       realpathOf: (path: string) => path,
       stderr,
@@ -227,39 +202,42 @@ describe('WorktreePlans', () => {
     expect(stderr).toHaveBeenCalledWith(expect.stringContaining('/repos/broken'))
   })
 
-  it('a_worktree_the_dispatcher_opened_is_not_adopted_as_a_plan_of_this_backend', async () => {
-    const plans = PlansOf.aWorktreeAttendedBy(
-      () => SessionsOfCmux.attending('/repos/one/.worktrees/33', { title: SessionsOfCmux.DISPATCHED_TITLE })
-    )
+  it('the_newest_launch_is_the_conversation_that_attends_a_worktree_two_of_them_name', async () => {
+    const older = new HarnessConversation({
+      agent: 'agent-old', worktree: '/repos/one/.worktrees/33', issue: 33,
+      repository: 'owner/repo', startedAt: 1_000,
+    })
+    const newer = new HarnessConversation({
+      agent: 'agent-new', worktree: '/repos/one/.worktrees/33', issue: 33,
+      repository: 'owner/repo', startedAt: 1_001,
+    })
+
+    const oldestFirst = PlansOf.aWorktreeAttendedBy(async () => HarnessAnswer.answered([older, newer]))
+    const newestFirst = PlansOf.aWorktreeAttendedBy(async () => HarnessAnswer.answered([newer, older]))
+
+    const [fromOldestFirst] = (await oldestFirst.inFlight()).watches ?? []
+    const [fromNewestFirst] = (await newestFirst.inFlight()).watches ?? []
+
+    expect(fromOldestFirst.agent).toBe('agent-new')
+    expect(fromNewestFirst.agent).toBe('agent-new')
+  })
+
+  it('a_conversation_of_another_repository_does_not_attend_a_worktree_whose_path_it_matches', async () => {
+    const plans = PlansOf.aWorktreeAttendedBy(async () => HarnessAnswer.answered([
+      new HarnessConversation({
+        agent: 'agent-elsewhere', worktree: '/repos/one/.worktrees/33', issue: 33,
+        repository: 'someone/else', startedAt: 1,
+      }),
+    ]))
 
     expect((await plans.inFlight()).watches).toEqual([])
-  })
-
-  it('a_session_whose_ref_is_not_a_handle_names_no_agent', async () => {
-    const notAHandle = PlansOf.aWorktreeAttendedBy(
-      () => SessionsOfCmux.attending('/repos/one/.worktrees/33', { ref: 'surface:9' })
-    )
-    const noRefAtAll = PlansOf.aWorktreeAttendedBy(
-      () => SessionsOfCmux.attending('/repos/one/.worktrees/33', { ref: null })
-    )
-
-    expect((await notAHandle.inFlight()).watches).toEqual([])
-    expect((await noRefAtAll.inFlight()).watches).toEqual([])
-  })
-
-  it('sessions_that_all_hide_their_directory_is_not_the_same_as_no_plans_in_flight', async () => {
-    const plans = PlansOf.aWorktreeAttendedBy(
-      () => SessionsOfCmux.listing([{ cwd: null, cwdKnown: false, ref: 'workspace:20', title: SessionsOfCmux.PLAN_TITLE }])
-    )
-
-    expect((await plans.inFlight()).wereListed).toBe(false)
   })
 
   it('a_plan_in_flight_is_recovered_even_when_the_registry_has_never_been_written', async () => {
     const plans = new WorktreePlans({
       checkouts: new KnownCheckouts([]),
       survey: () => SurveyedCheckout.of('/repos/one', [33]),
-      sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
+      conversations: () => ConversationsOf.attending('/repos/one/.worktrees/33'),
       story: () => null,
       realpathOf: (path: string) => path,
       stderr: vi.fn(),
@@ -271,32 +249,11 @@ describe('WorktreePlans', () => {
     expect(watch.located.root).toBe('/repos/one')
   })
 
-  it('a_session_the_dispatcher_opened_does_not_put_its_checkout_on_the_list_to_survey', async () => {
-    const surveyed: string[] = []
-    const plans = new WorktreePlans({
-      checkouts: new KnownCheckouts([]),
-      survey: (root: CheckoutRoot) => {
-        surveyed.push(root.text)
-
-        return SurveyedCheckout.of(root.text, [])
-      },
-      sessions: () => SessionsOfCmux.attending(
-        '/repos/dispatched/.worktrees/41', { title: SessionsOfCmux.DISPATCHED_TITLE }
-      ),
-      story: () => null,
-      realpathOf: (path: string) => path,
-      stderr: vi.fn(),
-    })
-
-    expect((await plans.inFlight()).watches).toEqual([])
-    expect(surveyed).toEqual([])
-  })
-
   it('a_checkout_registry_that_could_not_be_read_is_not_the_same_as_no_checkouts', async () => {
     const plans = new WorktreePlans({
       checkouts: new KnownCheckouts(null),
       survey: () => SurveyedCheckout.of('/repos/one', [33]),
-      sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
+      conversations: () => ConversationsOf.attending('/repos/one/.worktrees/33'),
       story: () => null,
       realpathOf: (path: string) => path,
       stderr: vi.fn(),
@@ -307,24 +264,24 @@ describe('WorktreePlans', () => {
 
   it('a_session_sitting_in_the_same_place_through_a_symlink_still_names_its_agent', async () => {
     const plans = PlansOf.aWorktreeAttendedBy(
-      () => SessionsOfCmux.attending('/private/repos/one/.worktrees/33'),
+      () => ConversationsOf.attending('/private/repos/one/.worktrees/33'),
       { realpathOf: (path: string) => path.replace(/^\/(private\/)?repos\/one/, '/private/repos/one') }
     )
 
     const [watch] = (await plans.inFlight()).watches ?? []
 
-    expect(watch.agent).toBe('workspace:20')
+    expect(watch.agent).toBe('agent-1')
   })
 
   it('a_session_that_names_the_logical_path_while_git_names_the_physical_one_still_names_its_agent', async () => {
     const plans = PlansOf.aWorktreeAttendedBy(
-      () => SessionsOfCmux.attending('/logical/one/.worktrees/33'),
+      () => ConversationsOf.attending('/logical/one/.worktrees/33'),
       { realpathOf: (path: string) => path.replace(/^\/(logical|repos)\/one/, '/physical/one') }
     )
 
     const [watch] = (await plans.inFlight()).watches ?? []
 
-    expect(watch.agent).toBe('workspace:20')
+    expect(watch.agent).toBe('agent-1')
   })
 
   it('the_checkout_a_session_names_is_surveyed_by_the_path_git_itself_uses', async () => {
@@ -336,7 +293,7 @@ describe('WorktreePlans', () => {
 
         return SurveyedCheckout.of(root.text, [])
       },
-      sessions: () => SessionsOfCmux.attending('/logical/one/.worktrees/33'),
+      conversations: () => ConversationsOf.attending('/logical/one/.worktrees/33'),
       story: () => null,
       realpathOf: (path: string) => path.replace('/logical/one', '/physical/one'),
       stderr: vi.fn(),
@@ -347,22 +304,11 @@ describe('WorktreePlans', () => {
     expect(surveyed).toEqual(['/physical/one'])
   })
 
-  it('an_entry_that_is_not_an_object_does_not_take_the_whole_recovery_down_with_it', async () => {
-    const plans = PlansOf.aWorktreeAttendedBy(() => SessionsOfCmux.listing([
-      null,
-      ...SessionsOfCmux.attending('/repos/one/.worktrees/33').entries,
-    ]))
-
-    const [watch] = (await plans.inFlight()).watches ?? []
-
-    expect(watch.agent).toBe('workspace:20')
-  })
-
   it('a_failure_of_another_kind_of_domain_is_not_swallowed_as_this_checkout_having_no_plans', async () => {
     const plans = new WorktreePlans({
       checkouts: new KnownCheckouts([new CheckoutRoot('/repos/one')]),
       survey: () => { throw new PlanStoryNotRead('a failure that is not the survey\'s') },
-      sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
+      conversations: () => ConversationsOf.attending('/repos/one/.worktrees/33'),
       story: () => null,
       realpathOf: (path: string) => path,
       stderr: vi.fn(),
@@ -375,13 +321,13 @@ describe('WorktreePlans', () => {
     const surveyBroke = new WorktreePlans({
       checkouts: new KnownCheckouts([new CheckoutRoot('/repos/one')]),
       survey: () => { throw new TypeError('git-workspace has a bug') },
-      sessions: () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
+      conversations: () => ConversationsOf.attending('/repos/one/.worktrees/33'),
       story: () => null,
       realpathOf: (path: string) => path,
       stderr: vi.fn(),
     })
     const storyBroke = PlansOf.aWorktreeAttendedBy(
-      () => SessionsOfCmux.attending('/repos/one/.worktrees/33'),
+      () => ConversationsOf.attending('/repos/one/.worktrees/33'),
       { story: () => { throw new TypeError('gh-plan-issues has a bug') } }
     )
 

@@ -6,6 +6,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { HarnessConversation, HeadlessPlanAgents } from '../../src/infrastructure/headless-plan-agents.ts'
 
 type Started = { port: number, saidLater: () => string }
 type Refusal = { status: number | null, said: string[] }
@@ -128,7 +129,6 @@ class ACmuxWithNoWindows {
 class ACheckoutReachableByTwoPaths {
   static readonly ISSUE = 33
   static readonly REPOSITORY = 'acme/widget'
-  static readonly TITLE = `ct-plan-acme__widget-issue-${ACheckoutReachableByTwoPaths.ISSUE}`
 
   static #git(cwd: string, ...argv: string[]): void {
     execFileSync('git', argv, { cwd, stdio: 'ignore' })
@@ -160,33 +160,18 @@ class ACheckoutReachableByTwoPaths {
   }
 }
 
-class ACmuxAttendingOnePlan {
-  static readonly SCRIPT = [
-    '#!/bin/sh',
-    'if [ "$1" = "list-windows" ]; then echo \'[{"id":"w1"}]\'; exit 0; fi',
-    'if [ "$1" = "workspace" ]; then printf %s "$CMUX_FAKE"; exit 0; fi',
-    'exit 1',
-  ].join('\n')
+class AHarnessConversationRecord {
+  static readonly RUNS_IN_UNDER = 'control-tower/harness'
 
-  static async attending(
-    worktree: string,
-    ref: string = 'workspace:97'
-  ): Promise<{ directory: string, path: string, said: string }> {
-    const directory = await mkdtemp(join(tmpdir(), 'ct-api-cmux-plan-'))
-    await writeFile(join(directory, 'cmux'), `${ACmuxAttendingOnePlan.SCRIPT}\n`, { mode: 0o755 })
-
-    return {
-      directory,
-      path: `${directory}:${process.env.PATH}`,
-      said: JSON.stringify({
-        workspaces: [{
-          custom_title: ACheckoutReachableByTwoPaths.TITLE,
-          current_directory: worktree,
-          has_custom_title: true,
-          ref,
-        }],
-      }),
-    }
+  static async attending({ state, agent, worktree, issue, repository, startedAt = Date.now() }: {
+    state: string, agent: string, worktree: string, issue: number, repository: string, startedAt?: number,
+  }): Promise<void> {
+    const runsIn = join(state, ...AHarnessConversationRecord.RUNS_IN_UNDER.split('/'))
+    await mkdir(join(runsIn, agent), { recursive: true })
+    await writeFile(
+      HeadlessPlanAgents.conversationPathFor({ runsIn, agent }),
+      JSON.stringify(new HarnessConversation({ agent, worktree, issue, repository, startedAt }).json)
+    )
   }
 }
 
@@ -258,41 +243,39 @@ describe('ct-api entrypoint', () => {
       join(state, 'control-tower', 'checkouts.json'),
       `${JSON.stringify({ roots: [orphan] }, null, 2)}\n`
     )
-    const answering = await ACmuxWithNoWindows.onThePath()
 
-    const started = await Entrypoint.recovering({
-      CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state, PATH: answering.path,
-    })
+    const started = await Entrypoint.recovering({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state })
 
     expect(started.saidLater()).toContain(`plans in flight: ${orphan}`)
     await RunFileFixture.remove(state)
     await RunFileFixture.remove(orphan)
-    await RunFileFixture.remove(answering.directory)
   })
 
-  it('a_plan_whose_session_names_one_path_and_git_the_other_is_served_with_its_agent_and_its_clone_remembered', async () => {
+  it('a_plan_whose_conversation_names_one_path_and_git_the_other_is_served_with_its_agent_and_its_clone_remembered', async () => {
     const checkout = await ACheckoutReachableByTwoPaths.cut()
     const state = await mkdtemp(join(tmpdir(), 'ct-api-two-paths-state-'))
-    const cmux = await ACmuxAttendingOnePlan.attending(
-      join(checkout.logical, '.worktrees', String(ACheckoutReachableByTwoPaths.ISSUE))
-    )
-
-    const port = await Entrypoint.listening({
-      CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state, PATH: cmux.path, CMUX_FAKE: cmux.said,
+    const agent = 'ct-plan-agent-97'
+    await AHarnessConversationRecord.attending({
+      state,
+      agent,
+      worktree: join(checkout.logical, '.worktrees', String(ACheckoutReachableByTwoPaths.ISSUE)),
+      issue: ACheckoutReachableByTwoPaths.ISSUE,
+      repository: ACheckoutReachableByTwoPaths.REPOSITORY,
     })
+
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state })
     const served = await (await fetch(`http://127.0.0.1:${port}/active-plans`)).json() as
       { plans: { plan: unknown }[] }
 
     expect(served.plans).toHaveLength(1)
     expect(served.plans[0].plan).toMatchObject({
       issue: { number: ACheckoutReachableByTwoPaths.ISSUE },
-      agent: 'workspace:97',
+      agent,
       repo: ACheckoutReachableByTwoPaths.REPOSITORY,
       worktree: join(checkout.physical, '.worktrees', String(ACheckoutReachableByTwoPaths.ISSUE)),
     })
     await RunFileFixture.remove(checkout.base)
     await RunFileFixture.remove(state)
-    await RunFileFixture.remove(cmux.directory)
   })
 
   it('prints_the_port_it_bound_so_whoever_started_it_knows_where_to_knock', async () => {
