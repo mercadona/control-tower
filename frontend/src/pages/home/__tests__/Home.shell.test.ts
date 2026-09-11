@@ -73,10 +73,10 @@ describe('the application shell gives the drawer a height to fill', () => {
     expect(content).toMatch(/overflow:\s*auto/)
   })
 
-  it('keeps the authoritative drawer column: a full-height 390px surface that folds to a 48px rail', () => {
+  it('keeps the authoritative drawer column: a full-height surface, sized from the layout panel token, that folds to a 48px rail', () => {
     const drawer = Stylesheet.drawer()
 
-    expect(drawer.declarationsFor('.drawer')).toMatch(/width:\s*390px/)
+    expect(drawer.declarationsFor('.drawer')).toMatch(/width:\s*var\(--layout-panel-width\)/)
     expect(drawer.declarationsFor('.drawer')).toMatch(/height:\s*100%/)
     expect(drawer.declarationsFor('.drawer--collapsed')).toMatch(/width:\s*48px/)
     expect(drawer.declarationsFor('.drawer__header')).toMatch(/min-height:\s*72px/)
