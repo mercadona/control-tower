@@ -36,7 +36,7 @@ const saveCollapsed = (collapsed: boolean): void => {
 
 const notifierFor = (tool: ToolSession) => {
   if (tool.session === 'missing') return <Tag variant="danger">falta</Tag>
-  if (tool.session === 'unknown') return <Tag variant="warning">login</Tag>
+  if (tool.session === 'unknown') return <Tag variant="neutral">sin confirmar</Tag>
   return undefined
 }
 

@@ -58,7 +58,7 @@ describe('Home · navigation shell', () => {
     window.localStorage.clear()
   })
 
-  it('groups the tools under Herramientas with the session tag on the two attention states and none for a ready tool', async () => {
+  it('groups the tools under Herramientas with a danger tag on missing, a neutral tag on unknown, and none on a ready tool', async () => {
     stubFetch(MIXED_SESSIONS)
     openHome()
 
@@ -67,10 +67,11 @@ describe('Home · navigation shell', () => {
     expect(within(tools).getByText('bq')).toBeInTheDocument()
     expect(within(tools).getByText('claude')).toBeInTheDocument()
     expect(within(tools).getByText('falta')).toBeInTheDocument()
-    expect(within(tools).getByText('login')).toBeInTheDocument()
+    expect(within(tools).getByText('sin confirmar')).toBeInTheDocument()
+    expect(within(tools).getByText(/claude, then \/login/)).toBeInTheDocument()
     expect(tools.querySelector('.tools-navbar__icon--ready')).toBeInTheDocument()
     expect(tools.querySelector('.tools-navbar__icon--missing')).toBeInTheDocument()
-    expect(tools.querySelector('.tools-navbar__icon--unknown')).toBeInTheDocument()
+    expect(tools.querySelector('.tools-navbar__icon--informative')).toBeInTheDocument()
   })
 
   it('renders the metrics delivery as one MenuItem of a Métricas section with an on/off notifier', async () => {

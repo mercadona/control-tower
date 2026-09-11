@@ -19,10 +19,6 @@
   color: var(--foreground-danger);
 }
 
-.tools-navbar__icon--unknown {
-  color: var(--foreground-warning);
-}
-
 .tools-navbar__icon--informative {
   color: var(--foreground-informative);
 }
