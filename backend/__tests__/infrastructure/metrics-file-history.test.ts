@@ -14,7 +14,7 @@ class Fixture {
   )
 
   static ISSUE_296 = readFileSync(
-    join(Fixture.REPOSITORY, 'docs', 'superpowers', 'metrics', 'issue-296.jsonl'), 'utf8'
+    join(Fixture.HERE, '..', 'fixtures', 'metrics-issue-296.jsonl'), 'utf8'
   )
 }
 
