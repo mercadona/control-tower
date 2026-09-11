@@ -1,0 +1,28 @@
+.tools-navbar__logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--foreground-ondark);
+  background-color: var(--background-brand-primary);
+  border-radius: var(--shape-container-xs);
+}
+
+.tools-navbar__icon--ready {
+  color: var(--foreground-success);
+}
+
+.tools-navbar__icon--missing {
+  color: var(--foreground-danger);
+}
+
+.tools-navbar__icon--unknown {
+  color: var(--foreground-warning);
+}
+
+.tools-navbar__icon--informative {
+  color: var(--foreground-informative);
+}
