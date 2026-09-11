@@ -347,7 +347,6 @@ const Home = () => {
         navbar={<ToolsNavbar />}
         topBar={
           <TopBar
-            logo={<span className="home__logo">CT</span>}
             productName={workflow === null ? 'Control Tower' : undefined}
             breadcrumbs={workflow !== null ? <Breadcrumbs items={breadcrumbItems} /> : undefined}
             actions={showStartAnother ? (

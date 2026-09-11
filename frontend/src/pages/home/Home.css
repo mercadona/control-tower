@@ -7,19 +7,6 @@
   overflow: hidden;
 }
 
-.home__logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--foreground-ondark);
-  background-color: var(--background-brand-primary);
-  border-radius: var(--shape-container-xs);
-}
-
 /* The columns of the Navigation content: the work area, always scrollable on
    its own, and a fixed 400px column beside it (`--layout-panel-width`), also
    scrollable on its own. Neither is a layer over the other. */

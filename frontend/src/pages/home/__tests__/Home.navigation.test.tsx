@@ -111,6 +111,16 @@ describe('Home · navigation shell', () => {
     expect(window.localStorage.getItem('control-tower.navbar-collapsed')).toBe('true')
   })
 
+  it('leaves the logo to the navbar and shows no second one in the top bar', async () => {
+    stubFetch(READY_ONLY)
+    openHome()
+
+    await screen.findByRole('list', { name: 'Herramientas' })
+    const topBar = document.querySelector('.top-bar') as HTMLElement
+    expect(within(topBar).queryByText('CT')).not.toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Navegación principal' })).toHaveTextContent('CT')
+  })
+
   it('shows the product name before a workflow starts and the repo, issue and stage trail once one is running', async () => {
     stubFetch(READY_ONLY)
     const { user } = openHome()
