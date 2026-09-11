@@ -44,6 +44,18 @@ class FakeClaude {
     return `${this.directory}${delimiter}${existingPath}`
   }
 
+  reportingTheVariables(given: string, inherited: string, { to }: { to: { given: string, inherited: string } }): void {
+    const binary = join(this.directory, FakeClaude.BIN)
+    writeFileSync(binary, [
+      '#!/bin/sh',
+      `printf '[%s]' "$${given}" > ${JSON.stringify(to.given)}`,
+      `printf '[%s]' "$${inherited}" > ${JSON.stringify(to.inherited)}`,
+      "printf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\"}'",
+      '',
+    ].join('\n'))
+    chmodSync(binary, 0o755)
+  }
+
   stop(): void {
     rmSync(this.directory, { recursive: true, force: true })
   }
@@ -190,7 +202,6 @@ class Wrapper {
     worktree: string,
     branch: string,
     repository: string,
-    env: Record<string, string>,
   }): void {
     writeFileSync(path, [
       `import { DetachedRun } from ${JSON.stringify(Wrapper.#moduleUrl('infrastructure', 'detached-run.ts'))}`,
@@ -303,15 +314,7 @@ describe('the real DetachedRun composed with the real HeadlessPlanAgents', () =>
       const given = 'CT_HEADLESS_CONTRACT_GIVEN'
       const givenPath = join(captureDirectory, 'given.txt')
       const inheritedPath = join(captureDirectory, 'inherited.txt')
-      const binary = join(claude.directory, FakeClaude.BIN)
-      writeFileSync(binary, [
-        '#!/bin/sh',
-        `printf '%s' "$${given}" > ${JSON.stringify(givenPath)}`,
-        `printf '%s' "$${inherited}" > ${JSON.stringify(inheritedPath)}`,
-        "printf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\"}'",
-        '',
-      ].join('\n'))
-      chmodSync(binary, 0o755)
+      claude.reportingTheVariables(given, inherited, { to: { given: givenPath, inherited: inheritedPath } })
 
       process.env[inherited] = 'from the api'
       try {
@@ -324,17 +327,13 @@ describe('the real DetachedRun composed with the real HeadlessPlanAgents', () =>
         await headless.launch(RealComposition.briefing(worktree))
         const paths = RealComposition.expectedPaths(runsIn)
 
-        const givenText = await Capture.eventually(
-          () => (existsSync(givenPath) ? readFileSync(givenPath, 'utf8') : null)
-        )
-        const inheritedText = await Capture.eventually(
-          () => (existsSync(inheritedPath) ? readFileSync(inheritedPath, 'utf8') : null)
-        )
+        const givenText = await Capture.eventuallyEquals(givenPath, '[from the caller]')
+        const inheritedText = await Capture.eventuallyEquals(inheritedPath, '[]')
         const call = JSON.parse(readFileSync(paths.call, 'utf8'))
         GroupTracking.track(call.pid)
 
-        expect(givenText).toBe('from the caller')
-        expect(inheritedText).toBe('')
+        expect(givenText).toBe('[from the caller]')
+        expect(inheritedText).toBe('[]')
       } finally {
         delete process.env[inherited]
       }
@@ -357,7 +356,6 @@ describe('the real DetachedRun composed with the real HeadlessPlanAgents', () =>
       worktree,
       branch: RealComposition.BRANCH,
       repository: RealComposition.REPOSITORY.text,
-      env: {},
     })
 
     const env = {

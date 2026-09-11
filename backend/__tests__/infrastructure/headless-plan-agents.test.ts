@@ -250,6 +250,18 @@ class HeadlessAgent {
     return headless
   }
 
+  static conversationWithStartedAtAtZero(): HeadlessAgent {
+    const headless = new HeadlessAgent()
+    headless.recordConversation(JSON.stringify({
+      worktree: HeadlessAgent.WORKTREE,
+      issue: HeadlessAgent.ISSUE_NUMBER,
+      repository: HeadlessAgent.REPOSITORY.text,
+      startedAt: 0,
+    }))
+
+    return headless
+  }
+
   static conversationWithIssueAsANonIntegerNumber(): HeadlessAgent {
     const headless = new HeadlessAgent()
     headless.recordConversation(JSON.stringify({
@@ -287,6 +299,17 @@ class HeadlessAgent {
       worktree: HeadlessAgent.WORKTREE,
       issue: HeadlessAgent.ISSUE_NUMBER,
       repository: '',
+      startedAt: HeadlessAgent.STARTED_AT,
+    }))
+
+    return headless
+  }
+
+  static conversationRecordedWithoutARepository(): HeadlessAgent {
+    const headless = new HeadlessAgent()
+    headless.recordConversation(JSON.stringify({
+      worktree: HeadlessAgent.WORKTREE,
+      issue: HeadlessAgent.ISSUE_NUMBER,
       startedAt: HeadlessAgent.STARTED_AT,
     }))
 
@@ -758,6 +781,20 @@ describe('HeadlessPlanAgents recording which plan a conversation attends and ref
     )
   })
 
+  it(
+    'a_conversation_recorded_without_a_repository_refuses_instead_of_answering_undefined_as_a_repository',
+    async () => {
+      const headless = HeadlessAgent.conversationRecordedWithoutARepository()
+
+      const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
+
+      expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
+      expect(refusal.message).toBe(
+        `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} that is not a well-formed record`
+      )
+    }
+  )
+
   it('a_conversation_whose_worktree_is_the_empty_string_refuses_instead_of_naming_no_worktree', async () => {
     const headless = HeadlessAgent.conversationWithEmptyWorktree()
 
@@ -779,6 +816,20 @@ describe('HeadlessPlanAgents recording which plan a conversation attends and ref
       `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} that is not a well-formed record`
     )
   })
+
+  it(
+    'a_conversation_whose_startedat_is_zero_refuses_instead_of_naming_an_instant_that_never_happened',
+    async () => {
+      const headless = HeadlessAgent.conversationWithStartedAtAtZero()
+
+      const refusal = await headless.resumeRefusal(HeadlessAgent.AGENT)
+
+      expect(refusal).toBeInstanceOf(PlanAgentNotNamed)
+      expect(refusal.message).toBe(
+        `${HeadlessAgent.AGENT} recorded a conversation at ${HeadlessAgent.CONVERSATION_PATH} that is not a well-formed record`
+      )
+    }
+  )
 
   it('a_conversation_whose_issue_is_a_non_integer_number_refuses_instead_of_truncating_it_silently', async () => {
     const headless = HeadlessAgent.conversationWithIssueAsANonIntegerNumber()
