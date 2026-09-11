@@ -295,16 +295,20 @@ describe('HeadlessPlanAgents', () => {
     expect(headless.startCalls[0].cwd).not.toBe(process.cwd())
   })
 
-  it('a_call_that_cannot_be_started_refuses_without_leaving_a_conversation_behind', async () => {
-    const headless = HeadlessAgent.refusing(new PlanAgentNotLaunched('spawn assigned no pid to "claude"'))
+  it(
+    'a_call_that_cannot_be_started_writes_no_call_json_even_though_its_directory_and_' +
+    'conversation_record_already_landed',
+    async () => {
+      const headless = HeadlessAgent.refusing(new PlanAgentNotLaunched('spawn assigned no pid to "claude"'))
 
-    const refusal = await headless.refusal()
+      const refusal = await headless.refusal()
 
-    expect(refusal).toBeInstanceOf(PlanAgentNotLaunched)
-    expect(headless.writeCalls.some(([path]) => path === HeadlessAgent.CALL_PATH)).toBe(false)
-    expect(headless.writeCalls.some(([path]) => path === HeadlessAgent.CONVERSATION_PATH)).toBe(true)
-    expect(headless.makeDirectoryCalls).toEqual([HeadlessAgent.DIRECTORY])
-  })
+      expect(refusal).toBeInstanceOf(PlanAgentNotLaunched)
+      expect(headless.writeCalls.some(([path]) => path === HeadlessAgent.CALL_PATH)).toBe(false)
+      expect(headless.writeCalls.some(([path]) => path === HeadlessAgent.CONVERSATION_PATH)).toBe(true)
+      expect(headless.makeDirectoryCalls).toEqual([HeadlessAgent.DIRECTORY])
+    }
+  )
 
   it('a_raw_error_that_escapes_the_start_of_a_launch_becomes_the_launch_cause_with_its_message_kept', async () => {
     const headless = HeadlessAgent.refusing(new Error('ENOENT: no such file or directory, open \'stream.ndjson\''))
