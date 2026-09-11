@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { useExternalTools } from 'app/external-tools/useExternalTools'
 
 const HookProbe = () => {
@@ -58,13 +59,18 @@ describe('useExternalTools', () => {
   })
 
   it('trusts the ready the backend answered instead of deriving it from the sessions', async () => {
+    const { body } = ExternalToolsMother.unknownSession()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body)))
+
+    render(<HookProbe />)
+
+    expect(await screen.findByText('ready')).toBeInTheDocument()
+  })
+
+  it('reads an installed tool with an unknown session as ready on its own, never as attention', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       ready: true,
-      tools: [
-        { tool: 'gh', installed: true, session: 'ready', fix: null },
-        { tool: 'bq', installed: false, session: 'missing', fix: 'install bq' },
-        { tool: 'claude', installed: true, session: 'unknown', fix: 'claude, then /login' },
-      ],
+      tools: [{ tool: 'claude', installed: true, session: 'unknown', fix: 'claude, then /login' }],
       metricsDelivery: DISABLED,
     }))))
 

@@ -12,7 +12,7 @@ export class Yardstick {
   ]
 
   static MEASURED_EXTENSIONS = ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.mts', '.cts', '.tsx']
-  static UNMEASURED_EXTENSIONS = ['.md', '.json', '.txt', '.snap']
+  static UNMEASURED_EXTENSIONS = ['.md', '.json', '.jsonl', '.txt', '.snap']
   static SKIPPED_DIRECTORIES = ['node_modules', 'dist', 'build', 'coverage', '.git']
 
   static #STRINGS = /'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`/g

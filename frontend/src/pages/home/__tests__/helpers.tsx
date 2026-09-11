@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { act, render, screen } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
+import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { Home } from 'pages/home/Home'
 import { FakeEventSource } from './FakeEventSource'
@@ -10,22 +11,20 @@ type User = ReturnType<typeof userEvent.setup>
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 const NO_ACTIVE_PLANS = { status: 200, body: '{"plans":[]}' }
-const EXTERNAL_TOOLS_READY = {
-  status: 200,
-  body: JSON.stringify({
-    ready: true,
-    tools: [{ tool: 'gh', installed: true, session: 'ready', fix: null }],
-    metricsDelivery: { enabled: false, variable: 'CT_HARVEST_BQ_TABLE', destination: null },
-  }),
-}
+const EXTERNAL_TOOLS_READY = ExternalToolsMother.allReady()
 const NO_IMPLEMENTATION_RUN_YET = {
   status: 400,
   body: '{"code":"implementation-progress-not-read","detail":"the worktree is not there yet"}',
+}
+const NO_IMPLEMENTATION_HISTORY_YET = {
+  status: 400,
+  body: '{"code":"implementation-history-not-read","detail":"the worktree is not there yet"}',
 }
 
 const responseFor = (answer: Answer) => new Response(answer.body, { status: answer.status, headers: JSON_HEADERS })
 
 const isImplementProgressPath = (input: string | URL | Request) => String(input).startsWith('/implement-progress/')
+const isImplementHistoryPath = (input: string | URL | Request) => String(input).startsWith('/implement-history/')
 
 const backendAnswering = (answer: Answer) => {
   const fetching = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => responseFor(answer))
@@ -35,6 +34,7 @@ const backendAnswering = (answer: Answer) => {
       if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
       if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
       if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
+      if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
       return fetching(input, init)
     }),
   )
@@ -46,6 +46,7 @@ const backendRecovering = (answer: Answer) => {
   const fetching = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => responseFor(answer))
   vi.stubGlobal('fetch', (input: string | URL | Request, init?: RequestInit) => {
     if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
+    if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
     return init === undefined ? fetching(input) : fetching(input, init)
   })
 
@@ -61,6 +62,7 @@ const backendPending = () => {
       if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
       if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
       if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
+      if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
       return pending
     })
   vi.stubGlobal('fetch', fetching)

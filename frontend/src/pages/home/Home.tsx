@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivePlan } from 'app/active-plans/ActivePlan.types'
 import { ActivePlansClient } from 'app/active-plans/client'
-import { ToolsStatus } from 'app/external-tools/components/tools-status'
+import { ToolsNavbar } from 'app/external-tools/components/tools-navbar'
+import { ImplementHistory } from 'app/implement-history/components/implement-history'
 import { ImplementPlanAction } from 'app/implement-plan/components/implement-plan-action'
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { PlanProgress } from 'app/plan-events/components/plan-progress'
@@ -11,13 +12,23 @@ import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartedPlan, StartPlanRequest } from 'app/start-plan/StartPlan.types'
 import { WorkflowSnapshot, WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import { Banner } from 'system-ui/banner'
+import { Breadcrumbs } from 'system-ui/breadcrumbs'
 import { Button } from 'system-ui/button'
+import { Navigation } from 'system-ui/navigation'
 import { TopBar } from 'system-ui/top-bar'
 import { WorkflowStep, WorkflowStepStatus } from 'system-ui/workflow-step'
 import './Home.css'
 
 type WorkflowStageName = 'request' | 'review' | 'implementation'
 type Reconciliation = 'not-required' | 'checking' | 'confirmed' | 'stale' | 'unavailable' | 'inconclusive' | 'uncertain' | 'uncertain-start'
+
+const NO_IMPLEMENTATION_MESSAGE = 'No hay ninguna implementación en curso'
+
+const STAGE_LABEL: Record<WorkflowStageName, string> = {
+  request: 'Solicitud',
+  review: 'Revisar plan',
+  implementation: 'Implementación',
+}
 
 const isSameWorkflow = (workflow: WorkflowSnapshot, active: ActivePlan) =>
   workflow.request.id === active.request.id &&
@@ -320,13 +331,31 @@ const Home = () => {
     </>
   )
 
+  const breadcrumbItems = workflow === null
+    ? []
+    : [
+        { label: workflow.plan.repo },
+        { label: `#${workflow.plan.issue.number}` },
+        { label: STAGE_LABEL[currentStage] },
+      ]
+  const showStartAnother = workflow?.phase === 'implementing' && restoredIsConfirmed
+  const showHistory = workflow !== null && workflow.phase === 'implementing' && restoredIsConfirmed
+
   return (
     <div className="home">
-      <TopBar
-        productName="Control Tower"
-        logo={<span className="home__logo">CT</span>}
-      />
-      <div className="home__work-area">
+      <Navigation
+        navbar={<ToolsNavbar />}
+        topBar={
+          <TopBar
+            productName={workflow === null ? 'Control Tower' : undefined}
+            breadcrumbs={workflow !== null ? <Breadcrumbs items={breadcrumbItems} /> : undefined}
+            actions={showStartAnother ? (
+              <Button variant="secondary" onClick={discardWorkflow}>Arrancar otro plan</Button>
+            ) : undefined}
+          />
+        }
+      >
+        <div className="home__columns">
         <main className="home__content">
           <nav className="home__flow" aria-label="Flujo del plan">
             <ol>
@@ -455,11 +484,6 @@ const Home = () => {
                     repo={workflow.plan.repo}
                   />
                 )}
-                {restoredIsConfirmed && (
-                  <Button className="home__start-another" type="button" variant="secondary" onClick={discardWorkflow}>
-                    Arrancar otro plan
-                  </Button>
-                )}
               </>
             )}
           </section>
@@ -500,8 +524,20 @@ const Home = () => {
             </section>
           )}
         </main>
-        <ToolsStatus />
+        <aside className="home__side" aria-label="Progreso de la implementación">
+          {showHistory && workflow !== null ? (
+            <ImplementHistory
+              key={`${workflow.plan.repo}:${workflow.plan.issue.number}:history`}
+              issue={workflow.plan.issue.number}
+              root={workflow.plan.root ?? workflow.request.path}
+              repo={workflow.plan.repo}
+            />
+          ) : (
+            <p>{NO_IMPLEMENTATION_MESSAGE}</p>
+          )}
+        </aside>
       </div>
+      </Navigation>
     </div>
   )
 }

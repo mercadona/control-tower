@@ -11,12 +11,14 @@ import { ReviewPlanRoute } from './review-plan-route.ts'
 import { PlanEventsRoute } from './plan-events-route.ts'
 import { ActivePlansRoute } from './active-plans-route.ts'
 import { ImplementProgressRoute } from './implement-progress-route.ts'
+import { ImplementHistoryRoute } from './implement-history-route.ts'
 import { ExternalToolsRoute } from './external-tools-route.ts'
 import { ProjectReadinessRoute } from './project-readiness-route.ts'
 import type { InspectProject } from '../application/queries/inspect-project.ts'
 import type { StartPlan } from '../application/actions/start-plan.ts'
 import type { ImplementPlanParams } from '../application/actions/implement-plan.ts'
 import type { ReadImplementationProgressParams } from '../application/queries/read-implementation-progress.ts'
+import type { ReadImplementationHistoryParams } from '../application/queries/read-implementation-history.ts'
 import type { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
 import type { AskPlanChangesAction } from './review-plan-route.ts'
 import type { PlanEvents, PlanSessions } from './plan-events-route.ts'
@@ -25,6 +27,7 @@ import type { PlanStateValue } from '../domain/value-objects/plan-state.ts'
 import type { ReviewInFlightValue } from '../domain/policies/review-gate-policy.ts'
 import type { ActivePlans, ActivePlanRecovering } from './active-plans-route.ts'
 import type { ImplementationState } from '../domain/value-objects/implementation-state.ts'
+import type { ImplementationHistoryEntry } from '../domain/value-objects/implementation-history-entry.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
@@ -52,6 +55,10 @@ type ImplementationProgressReader = {
   execute(params: ReadImplementationProgressParams): Promise<{ readonly state: ImplementationState }>,
 }
 
+type ImplementationHistoryReader = {
+  execute(params: ReadImplementationHistoryParams): Promise<{ readonly entries: ImplementationHistoryEntry[] }>,
+}
+
 type Stderr = (line: string) => void
 
 type RequestFailure = {
@@ -67,6 +74,7 @@ export type ApiCollaborators = {
   implementPlan?: PlanImplementer | null,
   askPlanChanges?: AskPlanChangesAction | null,
   implementProgress?: ImplementationProgressReader | null,
+  implementHistory?: ImplementationHistoryReader | null,
   reviews?: PlanReviews | null,
   pullRequestReviews?: PullRequestReviews | null,
   planEvents?: PlanEvents | null,
@@ -116,6 +124,7 @@ export class ApiServer {
   readonly implementPlan: PlanImplementer | null | undefined
   readonly askPlanChanges: AskPlanChangesAction | null | undefined
   readonly implementProgress: ImplementationProgressReader | null | undefined
+  readonly implementHistory: ImplementationHistoryReader | null | undefined
   readonly reviews: PlanReviews | null | undefined
   readonly pullRequestReviews: PullRequestReviews | null | undefined
   readonly planEvents: PlanEvents | null | undefined
@@ -131,8 +140,8 @@ export class ApiServer {
   server: Server | null
 
   constructor({
-    port, startPlan, implementPlan, askPlanChanges, implementProgress, reviews, pullRequestReviews, planEvents,
-    readPlanProgress, sessions, activePlans, externalTools, implementationStarts, recovery = null, stderr,
+    port, startPlan, implementPlan, askPlanChanges, implementProgress, implementHistory, reviews, pullRequestReviews,
+    planEvents, readPlanProgress, sessions, activePlans, externalTools, implementationStarts, recovery = null, stderr,
     frontendRoot, inspectProject,
   }: ApiCollaborators) {
     this.requestedPort = port
@@ -140,6 +149,7 @@ export class ApiServer {
     this.implementPlan = implementPlan
     this.askPlanChanges = askPlanChanges
     this.implementProgress = implementProgress
+    this.implementHistory = implementHistory
     this.reviews = reviews
     this.pullRequestReviews = pullRequestReviews
     this.planEvents = planEvents
@@ -206,6 +216,12 @@ export class ApiServer {
       ImplementProgressRoute.handledBy(this.implementProgress!)
     )
     app.all(ImplementProgressRoute.PATH, ImplementProgressRoute.refuseOtherMethods)
+    app.get(
+      ImplementHistoryRoute.PATH,
+      Browsers.turnAwayForeign,
+      ImplementHistoryRoute.handledBy(this.implementHistory!)
+    )
+    app.all(ImplementHistoryRoute.PATH, ImplementHistoryRoute.refuseOtherMethods)
     app.get(
       ExternalToolsRoute.PATH,
       Browsers.turnAwayForeign,

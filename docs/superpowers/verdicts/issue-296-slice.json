@@ -1,0 +1,26 @@
+{
+  "issue": 296,
+  "tasks_total": 2,
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "estado-final",
+        "result": "Five sentences, each measured against the sum of both commits. (1) \"PlanEvents.declaredCodes(): readonly string[] exists in backend/src/infrastructure/plan-events-route.ts and returns exactly the codes the stream can put in an error frame — today ['plan-progress-not-read']\": the diff adds 'static readonly #ERROR_CODES: readonly string[] = Object.freeze([PlanEvents.PROGRESS_NOT_READ])' and 'static declaredCodes(): readonly string[]' returning it, and the file as it now stands carries them at lines 140-144, inside the class whose stream() yields failureFrameFor(cause, PlanEvents.PROGRESS_NOT_READ) at line 162 — the declared list and the emitted code are the same constant, so 'exactly' holds by construction rather than by copy. (2) \"plan-events-route.test.ts pins that the declared list is exactly what a client sees on the wire, so a retired code cannot stay declared and an emitted one cannot go undeclared\": the new it() collects the frames EventsDouble.unable('git status refused') produces, filters the 'event: error' frames, parses the code out of each data line and asserts expect(PlanEvents.declaredCodes()).toEqual(seen) — an equality, so it is longer than seen for a retired code left declared and shorter for an emitted code left undeclared, which is both directions the sentence names. (3) \"refusal-codes.test.ts reads PlanEvents.declaredCodes() instead of its own EventStreamCodes class, which is deleted\": the class and its spread are the diff's '-' lines and the assembly now reads '...PlanEvents.declaredCodes(),'; the file as it stands has no EventStreamCodes in it. (4) \"The guard refuses an entry that is not a kebab-case code\": EveryCodeTheApiEmits carries KEBAB_CASE and shapeless(), and the third it() asserts the offender list is empty, so an entry that goes phantom is collected instead of collapsing into one undefined the distinctness Set swallows. (5) \"delivery-progress-not-read is not reintroduced anywhere\": the accumulated diff adds the string nowhere, and the Global verification log records 'test -z \"$(grep -rl ...)\"' over backend/src and backend/__tests__ at exit 0 — a fact I inherit rather than re-ran, since this judge does not run commands. No promise of the section is carried by one task and undone by a later one, and none is left absent by both.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "coherencia",
+        "result": "Two commits, so the item has a subject. f0fa48b (task 1) establishes two things: the #ERROR_CODES list with declaredCodes() in production, and the guard's assembly repointed from EventStreamCodes.VALUES to PlanEvents.declaredCodes(). 15619f4 (task 2) leaves both standing: the production lines are untouched by its diff, and the assembly it lifts out of the distinctness it() into EveryCodeTheApiEmits.values() carries '...PlanEvents.declaredCodes()' as its seventh source, in the position task 1 put it. That reshaping is exactly what task 2's objective asked for — 'every code the guard collects has to be a kebab-case string' needs one assembly both it()s read — and closed decision 8 of the plan predicted the sequence in those terms: 'Task 1 first: Task 2 reshapes the assembly Task 1 has already repointed'. No reversal to account for: nothing task 1 established is undone, no scaffolding for an intermediate state survives (task 1 built none — it substituted one spread for another), and the two tasks do not solve the same problem twice. The one place both touch, refusal-codes.test.ts, they touch in sequence rather than in competition: task 1 changed where the event-stream codes come from, task 2 changed where the assembly lives, and the two pre-existing it()s keep their names and their assertions across both.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "observabilidad",
+        "result": "The ## Senal section of the review package states that no signal was declared: it opens '(sin senal declarada — el issue no trae la seccion \"## Senal de observabilidad\"...)'. That is the sin-vara state this item names: the slice was never asked to promise a signal, so the three checks have nothing to measure and the measurement waits for an issue that declares one. I read the yardstick the ## Vara section names, plugin/conventions/simplicity.md, in full — its 'Observability answers to a reader who exists' section is the half this item would have cited — but with no declared signal there is no promise to hold against it, and its question 'who reads this, and where?' has no subject in this diff either: the accumulated diff adds no metric, no log line and no event. This is not the reasoned-exemption case (the section does not read 'N/A — <razon>'), so the outcome is sin-vara rather than no-aplica.",
+        "outcome": "sin-vara"
+      }
+    ],
+    "findings": [],
+    "review_token": "143438fce9fdab3c82aeb34f309b565c79ee43dfcfd184b998a5808595a396ed"
+  }
+}

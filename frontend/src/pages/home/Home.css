@@ -1,46 +1,26 @@
-/* THE APPLICATION SHELL, and its height is DEFINITE on purpose. The drawer is a
-   column of this layout and declares `height: 100%`, which only resolves
-   against a containing block that has a height to give. With `min-height: 100vh`
-   alone it did not: the drawer fell back to its content height, and its body
-   —`flex: 1 1 0` with `min-height: 0`— contributed nothing, so the panel ended
-   at its header plus its own 32 px of padding and clipped the rest. Measured in
-   Chrome at 1512x813 before this: work area 893 px, drawer 116 px, body
-   clientHeight 32 against scrollHeight 619. */
+/* THE APPLICATION SHELL, and its height is DEFINITE on purpose. `Navigation`
+   is a column of this layout and declares `height: 100%`, which only resolves
+   against a containing block that has a height to give. */
 .home {
-  display: flex;
-  flex-direction: column;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
 }
 
-/* The row below the top bar, and the only thing that grows. `min-height: 0`
-   is what lets the two scrollers inside it be shorter than their content
-   instead of pushing the shell taller. */
-.home__work-area {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: stretch;
+/* The columns of the Navigation content: the work area, always scrollable on
+   its own, and a fixed 400px column beside it (`--layout-panel-width`), also
+   scrollable on its own. Neither is a layer over the other. */
+.home__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--layout-panel-width);
+  height: 100%;
   min-height: 0;
-}
-
-.home__logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--foreground-ondark);
-  background-color: var(--background-brand-primary);
-  border-radius: var(--shape-container-xs);
 }
 
 .home__content {
   box-sizing: border-box;
-  flex: 1 1 0;
   min-width: 0;
+  min-height: 0;
   padding: 32px;
   overflow: auto;
   display: flex;
@@ -53,6 +33,15 @@
   width: 100%;
   max-width: var(--layout-container-md);
   margin-inline: auto;
+}
+
+.home__side {
+  box-sizing: border-box;
+  min-height: 0;
+  padding: 24px;
+  overflow: auto;
+  background-color: var(--background-elevated);
+  border-left: var(--borderwidth-sm) solid var(--border-secondary);
 }
 
 .home__flow ol {
@@ -159,10 +148,6 @@
   gap: 12px;
 }
 
-.home__start-another {
-  align-self: flex-start;
-}
-
 .home__recovery {
   display: flex;
   flex-direction: column;
@@ -205,41 +190,30 @@
   border-radius: var(--shape-container-xs);
 }
 
-/* Under 768px the work area stacks: the drawer keeps being a column of the
-   layout, not a layer over it, so it goes below the content instead of eating
-   the width. It never becomes a modal — no overlay, no focus trap — because
-   that is the Side sheet's job and not this one's.
-   Here the SHELL gives up its definite height and the page scrolls as a whole:
-   two independent scrollers stacked in one viewport would each be half a screen
-   tall. And giving the drawer `height: auto` is only safe together with the line
-   below it: its body has to stop being `flex-basis: 0`, or it collapses to its
-   padding again and clips exactly what this media query was meant to reveal. */
-@media (width < 768px) {
-  .home {
-    height: auto;
-    min-height: 100dvh;
-    overflow: visible;
-  }
-
-  .home__work-area {
+/* Under 1180px the right column stacks below the content: it stays a column
+   of the layout, not a layer over it, so it never becomes an overlay. */
+@media (width < 1180px) {
+  .home__columns {
+    display: flex;
     flex-direction: column;
+    height: auto;
+    overflow: auto;
   }
 
   .home__content {
-    padding: 16px;
     overflow: visible;
   }
 
-  .home .drawer {
-    width: 100%;
-    height: auto;
+  .home__side {
+    overflow: visible;
     border-left: none;
     border-top: var(--borderwidth-sm) solid var(--border-secondary);
   }
+}
 
-  .home .drawer__content {
-    flex: 0 0 auto;
-    overflow: visible;
+@media (width < 768px) {
+  .home__content {
+    padding: 16px;
   }
 
   .home__active-plan {

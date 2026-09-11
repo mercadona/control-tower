@@ -198,6 +198,15 @@ describe('PlanEvents', () => {
     expect(frames[0]).toBe('data: {"state":"writing"}\n\n')
   })
 
+  it('the_error_codes_the_stream_declares_are_exactly_the_ones_a_client_can_see_on_the_wire', async () => {
+    const events = EventsDouble.unable('git status refused')
 
+    const frames = await events.collected(events.cancellingWhenExhausted())
+    const seen = frames
+      .filter((frame) => frame.startsWith(`event: ${PlanEvents.ERROR_EVENT}\n`))
+      .map((frame) => JSON.parse(frame.split('\n')[1].slice('data: '.length)).code)
+
+    expect(PlanEvents.declaredCodes()).toEqual(seen)
+  })
 
 })

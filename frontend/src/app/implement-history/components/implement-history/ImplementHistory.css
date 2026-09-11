@@ -1,0 +1,155 @@
+.implement-history {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.implement-history__heading {
+  margin: 0;
+  color: var(--foreground-primary);
+}
+
+.implement-history__state {
+  margin: 0;
+  color: var(--foreground-secondary);
+}
+
+.implement-history__tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.implement-history__tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 12px;
+  background-color: var(--background-elevated);
+  border: var(--borderwidth-sm) solid var(--border-secondary);
+  border-radius: var(--shape-container-sm);
+}
+
+@media (width < 360px) {
+  .implement-history__tiles {
+    grid-template-columns: 1fr;
+  }
+}
+
+.implement-history__tile-label,
+.implement-history__tile-note {
+  color: var(--foreground-secondary);
+}
+
+.implement-history__tile-value {
+  color: var(--foreground-primary);
+}
+
+.implement-history__tile-note {
+  color: var(--foreground-warning);
+}
+
+.implement-history__stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.implement-history__stepper-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  color: var(--foreground-primary);
+  background-color: var(--background-primary);
+  border-radius: var(--shape-button-full);
+}
+
+.implement-history__stepper-node + .implement-history__stepper-node {
+  position: relative;
+}
+
+.implement-history__stepper-node + .implement-history__stepper-node::before {
+  width: 16px;
+  height: var(--borderwidth-sm);
+  margin-inline-end: 6px;
+  content: '';
+  background-color: var(--border-secondary);
+}
+
+.implement-history__stepper-node--danger-before::before {
+  background-color: var(--border-danger);
+}
+
+.implement-history__stepper-duration {
+  color: var(--foreground-secondary);
+}
+
+.implement-history__failure-note {
+  padding: 8px 12px;
+  color: var(--foreground-danger);
+  background-color: var(--background-danger-tonal);
+  border-radius: var(--shape-container-sm);
+}
+
+.implement-history__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 0;
+}
+
+.implement-history__fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.implement-history__fact dt {
+  color: var(--foreground-secondary);
+}
+
+.implement-history__fact dd {
+  margin: 0;
+  color: var(--foreground-primary);
+}
+
+.implement-history__agent-summary {
+  color: var(--foreground-secondary);
+}
+
+.implement-history__closing {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.implement-history__closing-heading {
+  margin: 0;
+  color: var(--foreground-primary);
+}
+
+.implement-history__closing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.implement-history__closing-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--foreground-primary);
+}
+
+.implement-history__closing-duration {
+  color: var(--foreground-secondary);
+}

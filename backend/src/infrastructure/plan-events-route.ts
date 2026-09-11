@@ -137,6 +137,11 @@ export class PlanEvents {
 
   static readonly ERROR_EVENT = 'error'
   static readonly PROGRESS_NOT_READ = 'plan-progress-not-read'
+  static readonly #ERROR_CODES: readonly string[] = Object.freeze([PlanEvents.PROGRESS_NOT_READ])
+
+  static declaredCodes(): readonly string[] {
+    return PlanEvents.#ERROR_CODES
+  }
 
   static frameFor(state: PlanStateValue): string {
     return `data: ${JSON.stringify({ state })}\n\n`

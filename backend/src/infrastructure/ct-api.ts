@@ -25,6 +25,7 @@ import { MemoryReviewLog } from './memory-review-log.ts'
 import { GhPullRequests } from './gh-pull-requests.ts'
 import { DispatchCheckWorkbench } from './dispatch-check-workbench.ts'
 import { RunFileProgress } from './run-file-progress.ts'
+import { MetricsFileHistory } from './metrics-file-history.ts'
 import { ActivePlans } from './active-plans-route.ts'
 import { ActivePlanRecovery } from './active-plan-recovery.ts'
 import { DiskImplementationStartRegistry } from './disk-implementation-start-registry.ts'
@@ -34,6 +35,7 @@ import { ImplementPlan } from '../application/actions/implement-plan.ts'
 import { AskPlanChanges } from '../application/actions/ask-plan-changes.ts'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
 import { ReadImplementationProgress } from '../application/queries/read-implementation-progress.ts'
+import { ReadImplementationHistory } from '../application/queries/read-implementation-history.ts'
 import { ReadChangesAsked, ReadChangesAskedParams } from '../application/queries/read-changes-asked.ts'
 import { ReadFixesAsked, ReadFixesAskedParams } from '../application/queries/read-fixes-asked.ts'
 import { ReviewPlan, ReviewPlanParams } from '../application/actions/review-plan.ts'
@@ -410,6 +412,7 @@ class CtApi {
     })
     const pullRequestReviews = CtApi.#pullRequestReviews(pullRequests, planIssues, planAgents, workbench)
     const runFileProgress = new RunFileProgress({ read: Disk.read, exists: Disk.exists })
+    const metricsFileHistory = new MetricsFileHistory({ read: Disk.read, exists: Disk.exists })
     const surveyWorkspaces = new SurveyWorkspaces({ workspace })
     const readPlanStory = new ReadPlanStory({ planIssues })
     const recovery = new ActivePlanRecovery({
@@ -446,6 +449,7 @@ class CtApi {
         pullRequests,
         planIssues,
       }),
+      implementHistory: new ReadImplementationHistory({ implementationHistory: metricsFileHistory }),
       planEvents: CtApi.#planEvents(readPlanProgress),
       readPlanProgress,
       sessions,
