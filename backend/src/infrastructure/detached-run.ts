@@ -30,8 +30,7 @@ export class DetachedRun {
   }
 
   start({ argv, cwd, out, err }: RunSpec): StartedRun {
-    const outFd = openSync(out, DetachedRun.APPEND)
-    const errFd = openSync(err, DetachedRun.APPEND)
+    const { outFd, errFd } = DetachedRun.#openPair(out, err)
     const child = spawn(this.bin, argv, {
       cwd,
       env: this.env,
@@ -65,6 +64,16 @@ export class DetachedRun {
     } catch (failure) {
       const errno: NodeJS.ErrnoException | null = failure instanceof Error ? failure : null
       if (errno?.code !== DetachedRun.#GROUP_ALREADY_GONE) throw failure
+    }
+  }
+
+  static #openPair(out: string, err: string): { outFd: number, errFd: number } {
+    const outFd = openSync(out, DetachedRun.APPEND)
+    try {
+      return { outFd, errFd: openSync(err, DetachedRun.APPEND) }
+    } catch (failure) {
+      closeSync(outFd)
+      throw failure
     }
   }
 }

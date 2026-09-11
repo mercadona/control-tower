@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { closeSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DetachedRun } from '../../src/infrastructure/detached-run.ts'
@@ -11,6 +11,7 @@ type Poll<T> = () => T | null
 type WaitOptions = { timeoutMs?: number, everyMs?: number }
 
 class Files {
+  static PROBE_FLAG = 'a'
   static #directoriesCreated: string[] = []
 
   static named(): { out: string, err: string } {
@@ -24,6 +25,13 @@ class Files {
     for (const directory of Files.#directoriesCreated.splice(0)) {
       rmSync(directory, { recursive: true, force: true })
     }
+  }
+
+  static lowestFreeDescriptorProbedAgainst(path: string): number {
+    const fd = openSync(path, Files.PROBE_FLAG)
+    closeSync(fd)
+
+    return fd
   }
 }
 
@@ -48,6 +56,24 @@ class Child {
 
   static exitingCleanly(): string[] {
     return ['-e', "process.on('exit', (code) => { require('fs').writeSync(1, String(code)) })"]
+  }
+
+  static trappingSigterm(): string[] {
+    return ['-e', `
+      process.on('SIGTERM', () => {
+        require('fs').writeSync(1, 'trapped-sigterm')
+        process.exit(0)
+      })
+      setTimeout(() => {}, ${Child.SLOW_MS})
+    `]
+  }
+
+  static reportingTheShapeOfItsStdin(): string[] {
+    return ['-e', `
+      const { fstatSync } = require('fs')
+      const stat = fstatSync(0)
+      process.stdout.write(JSON.stringify({ isCharacterDevice: stat.isCharacterDevice(), rdev: stat.rdev }))
+    `]
   }
 
   static spawningAGrandchild(): string[] {
@@ -162,6 +188,65 @@ describe('DetachedRun', () => {
     expect(Child.alive(grandchildPid)).toBe(false)
   })
 
+  it('stop_kills_the_whole_group_the_same_way_the_cap_does_so_a_refusal_after_the_call_started_does_not_leave_it_running', async () => {
+    const files = Files.named()
+    const run = Child.running()
+
+    const started = Child.tracked(
+      run.start({ argv: Child.spawningAGrandchild(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+    const grandchildPid = Number(await Child.eventuallyPrinted(files.out))
+
+    run.stop(started)
+
+    await Child.eventually(() => (Child.alive(started.pid) ? null : true), { timeoutMs: 3_000 })
+    await Child.eventually(() => (Child.alive(grandchildPid) ? null : true), { timeoutMs: 3_000 })
+
+    expect(Child.alive(started.pid)).toBe(false)
+    expect(Child.alive(grandchildPid)).toBe(false)
+  })
+
+  it('stop_on_a_group_that_already_exited_on_its_own_is_not_an_error_the_same_way_the_cap_tolerates_it', async () => {
+    const files = Files.named()
+    const run = Child.running()
+
+    const started = Child.tracked(
+      run.start({ argv: Child.exitingCleanly(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+    await Child.eventuallyPrinted(files.out)
+    await Child.eventually(() => (Child.alive(started.pid) ? null : true), { timeoutMs: 3_000 })
+
+    expect(() => run.stop(started)).not.toThrow()
+  })
+
+  it('a_reused_pid_whose_group_is_not_ours_answers_eperm_and_that_is_re_raised_not_swallowed', () => {
+    const files = Files.named()
+    const run = Child.running()
+
+    const started = Child.tracked(
+      run.start({ argv: Child.sleeping(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+    const kill = vi.spyOn(process, 'kill').mockImplementationOnce(() => {
+      throw Object.assign(new Error('kill EPERM'), { code: 'EPERM' })
+    })
+
+    expect(() => run.stop(started)).toThrow()
+    expect(kill).toHaveBeenCalledWith(-started.pid, DetachedRun.SIGNAL)
+  })
+
+  it('the_cap_sends_sigterm_so_a_tool_trapping_it_gets_the_chance_to_leave_on_its_own_terms', async () => {
+    const files = Files.named()
+    const run = Child.running(250)
+
+    Child.tracked(
+      run.start({ argv: Child.trappingSigterm(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+
+    const printed = await Child.eventuallyPrinted(files.out, { timeoutMs: 3_000 })
+
+    expect(printed).toBe('trapped-sigterm')
+  })
+
   it('a_call_that_finishes_inside_its_cap_leaves_its_own_exit_code_in_out', async () => {
     const files = Files.named()
     const run = Child.running(5_000)
@@ -202,12 +287,88 @@ describe('DetachedRun', () => {
       thrown = error
     }
 
+    expect(thrown).toBeInstanceOf(PlanAgentNotLaunched)
     if (!(thrown instanceof PlanAgentNotLaunched)) throw new Error('expected a PlanAgentNotLaunched')
     expect(thrown.message).toContain(Child.MISSING_BINARY)
 
     const writtenToErr = await Child.eventuallyPrinted(files.err)
 
-    expect(writtenToErr).toContain(Child.MISSING_BINARY)
-    expect(writtenToErr).toContain('ENOENT')
+    expect(writtenToErr).toBe(`spawn ${Child.MISSING_BINARY} ENOENT\n`)
+  })
+
+  it('the_directory_the_caller_names_is_where_the_child_runs_and_not_where_the_api_happens_to_run', async () => {
+    const files = Files.named()
+    const elsewhere = realpathSync(tmpdir())
+    const run = Child.running()
+
+    Child.tracked(
+      run.start({
+        argv: ['-e', 'process.stdout.write(process.cwd())'],
+        cwd: elsewhere,
+        out: files.out,
+        err: files.err,
+      })
+    )
+
+    const printed = await Child.eventuallyPrinted(files.out)
+
+    expect(printed).toBe(elsewhere)
+    expect(printed).not.toBe(process.cwd())
+  })
+
+  it('the_descriptors_this_process_opened_for_the_files_are_closed_once_the_child_has_its_own_copy', () => {
+    const files = Files.named()
+    const run = Child.running()
+
+    const beforeStart = Files.lowestFreeDescriptorProbedAgainst(files.out)
+
+    Child.tracked(
+      run.start({ argv: Child.sleeping(), cwd: process.cwd(), out: files.out, err: files.err })
+    )
+
+    const afterStart = Files.lowestFreeDescriptorProbedAgainst(files.out)
+
+    expect(afterStart).toBe(beforeStart)
+  })
+
+  it('out_is_closed_instead_of_leaked_when_opening_err_afterwards_fails', () => {
+    const files = Files.named()
+    const run = Child.running()
+    const beforeStart = Files.lowestFreeDescriptorProbedAgainst(files.out)
+
+    let thrown: NodeJS.ErrnoException | null = null
+    try {
+      run.start({ argv: [], cwd: process.cwd(), out: files.out, err: join(files.out, 'nested', 'err.log') })
+    } catch (failure) {
+      thrown = failure instanceof Error ? failure : null
+    }
+
+    const afterStart = Files.lowestFreeDescriptorProbedAgainst(files.out)
+
+    expect(thrown?.code).toBe('ENOTDIR')
+    expect(afterStart).toBe(beforeStart)
+  })
+
+  it('the_call_gets_no_stdin_of_its_own_so_it_cannot_read_whatever_the_api_is_reading_on_its_own', async () => {
+    const files = Files.named()
+    const run = Child.running()
+
+    Child.tracked(
+      run.start({
+        argv: Child.reportingTheShapeOfItsStdin(),
+        cwd: process.cwd(),
+        out: files.out,
+        err: files.err,
+      })
+    )
+
+    const printed = await Child.eventuallyPrinted(files.out)
+    const shapeTheChildReported: { isCharacterDevice: boolean, rdev: number } = JSON.parse(printed)
+    const nullDevice = statSync('/dev/null')
+
+    expect(shapeTheChildReported).toEqual({
+      isCharacterDevice: nullDevice.isCharacterDevice(),
+      rdev: nullDevice.rdev,
+    })
   })
 })
