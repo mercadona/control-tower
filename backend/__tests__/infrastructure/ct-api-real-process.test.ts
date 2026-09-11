@@ -396,9 +396,10 @@ describe('ct-api entrypoint', () => {
   it('the_cmux_row_is_ready_only_when_the_cmux_on_the_path_answers_the_query', async () => {
     const answering = await ACmuxWithNoWindows.onThePath()
     const refusing = await ACmuxThatRefusesTheConnection.onThePath()
+    const state = await mkdtemp(join(tmpdir(), 'ct-api-external-tools-'))
 
-    const answered = await Entrypoint.listening({ CT_API_PORT: '0', PATH: answering.path })
-    const refused = await Entrypoint.listening({ CT_API_PORT: '0', PATH: refusing.path })
+    const answered = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state, PATH: answering.path })
+    const refused = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state, PATH: refusing.path })
 
     expect(await ExternalTools.cmuxRowOf(answered)).toEqual({ installed: true, session: 'ready', fix: null })
     expect(await ExternalTools.cmuxRowOf(refused)).toEqual({
