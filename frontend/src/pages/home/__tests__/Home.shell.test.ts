@@ -72,10 +72,16 @@ describe('the application shell gives the Navigation shell a height to fill', ()
     expect(content).toMatch(/min-height:\s*0/)
   })
 
-  it('splits the content into the work area and a fixed panel the width token controls', () => {
+  it('gives the work area the full width alone, with a single fluid column', () => {
     const columns = Stylesheet.home().declarationsFor('.home__columns')
 
     expect(columns).toMatch(/display:\s*grid/)
+    expect(columns).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s*;/)
+  })
+
+  it('splits the content into the work area and a fixed panel the width token controls', () => {
+    const columns = Stylesheet.home().declarationsFor('.home__columns--with-panel')
+
     expect(columns).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s*var\(--layout-panel-width\)/)
   })
 
