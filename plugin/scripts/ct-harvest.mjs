@@ -58,6 +58,7 @@ import { formatDuration } from './harvest.js'
 import { parseRepoSlug } from './dispatch.js'
 import { METRICS_REPO_DIR } from './run-metrics.js'
 import { BigQueryTable, LoadOutcome } from './bigquery-load.js'
+import { HarvestTable } from './harvest-table.js'
 import { HarvestLedger, LedgerIdentity } from './harvest-ledger.js'
 import { IndexOutcome, SliceHarvest, SliceRead, TelemetryIndex } from './slice-harvest.js'
 
@@ -71,7 +72,16 @@ const arg = (f, d) => {
   return (typeof v === 'string' && !v.startsWith('--')) ? v : true
 }
 
-const usage = 'usage: ct-harvest.mjs --repo <owner/repo> --milestone <title> [--json] [--bq <project:dataset.table>]'
+const usage = 'usage: ct-harvest.mjs --repo <owner/repo> --milestone <title> [--json] [--bq <project:dataset.table>] | ct-harvest.mjs --schema'
+
+// --schema answers "what does the table look like", not "what did the
+// milestone cost": it is compile-time data the schema module already owns,
+// so it exits before --repo/--milestone are even asked for and before a
+// single `gh` or `bq` process is spawned.
+if (process.argv.includes('--schema')) {
+  console.log(HarvestTable.schemaJson())
+  process.exit(0)
+}
 
 const repo = arg('--repo')
 if (repo === true) { console.error(`invalid --repo: "(no value)" — ${usage}`); process.exit(2) }
