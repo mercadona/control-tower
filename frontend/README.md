@@ -14,13 +14,19 @@ key and the repository, a button that calls `POST /start-plan`, the plan's
 progress arriving over `GET /plan-events/:issue` (Server-Sent Events) and, once
 the plan is ready, a button that calls `POST /implement-plan`.
 
-`ToolsStatus` surveys `GET /external-tools` and renders it as the design
-system's **Drawer**: a persistent column at the right of the work area, 390 px
-open and a 48 px rail folded, that starts folded. It is not a modal — it neither
+`StatusPanel` renders the design system's **Drawer**: a persistent column at
+the right of the work area, its open width taken from `--layout-panel-width`
+and a 48 px rail folded, that starts folded. It is not a modal — it neither
 dims the page nor traps the focus — and it is a column of the layout rather than
 a layer over it, so opening it compresses the main content instead of covering
 it. The status dot and its summary live in the drawer header, and the summary
 also travels in the toggle's accessible name so the folded rail is not mute.
+
+Inside, two **Panel** sections: «Progreso», hosting `ImplementHistory` for the
+active implementation (or a line saying there is none), and «Herramientas»,
+hosting `ToolsStatus` — one row per tool with its `StatusIcons` glyph, plus the
+metrics delivery as one more row and the «Reintentar comprobación» button as
+the section's action.
 
 **The page owes it a height.** The drawer declares `height: 100%`, so `Home` is
 an application shell exactly one viewport tall (`height: 100dvh`,
@@ -38,10 +44,10 @@ body switches to `flex: 0 0 auto` so it sizes the column instead of collapsing
 into it. It stays a column of the layout there too — no `position: fixed`, no
 `z-index`, no overlay.
 
-Its body holds the tool rows and **Entrega de métricas**, read-only: whether the
-backend was started with `CT_HARVEST_BQ_TABLE`, which table it uploads a merged
-slice to, and — when the variable is unset — that no merged pull request will
-reach the harvest ledger nor any comparison of coding tools until the backend is
+**Entrega de métricas** is read-only, in its own row: whether the backend was
+started with `CT_HARVEST_BQ_TABLE`, which table it uploads a merged slice to,
+and — when the variable is unset — that no merged pull request will reach the
+harvest ledger nor any comparison of coding tools until the backend is
 restarted with it. The drawer never offers to change it: the value is an option
 of the backend's start-up, so there is no endpoint that writes it.
 
