@@ -2,11 +2,13 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { execFileSync, spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import { realpathSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { HarnessConversation, HeadlessPlanAgents } from '../../src/infrastructure/headless-plan-agents.ts'
+import { Invocation } from '../../src/infrastructure/invocation.ts'
 
 type Started = { port: number, saidLater: () => string }
 type Refusal = { status: number | null, said: string[] }
@@ -161,17 +163,59 @@ class ACheckoutReachableByTwoPaths {
 }
 
 class AHarnessConversationRecord {
-  static readonly RUNS_IN_UNDER = 'control-tower/harness'
+  static readonly #HARNESS_DIRECTORY = 'harness'
 
   static async attending({ state, agent, worktree, issue, repository, startedAt = Date.now() }: {
     state: string, agent: string, worktree: string, issue: number, repository: string, startedAt?: number,
   }): Promise<void> {
-    const runsIn = join(state, ...AHarnessConversationRecord.RUNS_IN_UNDER.split('/'))
+    const runsIn = join(state, Invocation.STATE_DIRECTORY, AHarnessConversationRecord.#HARNESS_DIRECTORY)
     await mkdir(join(runsIn, agent), { recursive: true })
     await writeFile(
       HeadlessPlanAgents.conversationPathFor({ runsIn, agent }),
       JSON.stringify(new HarnessConversation({ agent, worktree, issue, repository, startedAt }).json)
     )
+  }
+}
+
+class ARealCheckoutWithAPreparedWorktree {
+  static readonly ISSUE = 77
+  static readonly REPOSITORY = 'acme/no-cmux'
+
+  static #git(cwd: string, ...argv: string[]): void {
+    execFileSync('git', argv, { cwd, stdio: 'ignore' })
+  }
+
+  static async cut(): Promise<{ root: string, worktree: string }> {
+    const root = await mkdtemp(join(tmpdir(), 'ct-api-no-cmux-checkout-'))
+    ARealCheckoutWithAPreparedWorktree.#git(root, 'init', '-q')
+    ARealCheckoutWithAPreparedWorktree.#git(root, 'config', 'user.email', 'smoke@test')
+    ARealCheckoutWithAPreparedWorktree.#git(root, 'config', 'user.name', 'smoke')
+    ARealCheckoutWithAPreparedWorktree.#git(
+      root, 'remote', 'add', 'origin', `git@github.com:${ARealCheckoutWithAPreparedWorktree.REPOSITORY}.git`
+    )
+    ARealCheckoutWithAPreparedWorktree.#git(root, 'commit', '-q', '--allow-empty', '-m', 'base')
+    ARealCheckoutWithAPreparedWorktree.#git(root, 'branch', '-M', 'main')
+    ARealCheckoutWithAPreparedWorktree.#git(
+      root, 'worktree', 'add', '-q', '-b', `feat/${ARealCheckoutWithAPreparedWorktree.ISSUE}`,
+      join('.worktrees', String(ARealCheckoutWithAPreparedWorktree.ISSUE)), 'main'
+    )
+
+    return { root, worktree: join(root, '.worktrees', String(ARealCheckoutWithAPreparedWorktree.ISSUE)) }
+  }
+}
+
+class APathWithNoCmux {
+  static readonly #NEEDED = ['git', 'gh']
+
+  static async made(): Promise<string> {
+    const directory = await mkdtemp(join(tmpdir(), 'ct-api-no-cmux-path-'))
+    for (const bin of APathWithNoCmux.#NEEDED) {
+      const real = Invocation.lookUp(bin, process.env)
+      if (real === null) throw new Error(`${bin} is not on this machine's PATH, and the pin needs a real one`)
+      await symlink(real, join(directory, bin))
+    }
+
+    return directory
   }
 }
 
@@ -247,8 +291,39 @@ describe('ct-api entrypoint', () => {
     const started = await Entrypoint.recovering({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state })
 
     expect(started.saidLater()).toContain(`plans in flight: ${orphan}`)
+    const response = await fetch(`http://127.0.0.1:${started.port}/active-plans`)
+    expect(response.status).toBe(200)
     await RunFileFixture.remove(state)
     await RunFileFixture.remove(orphan)
+  })
+
+  it('active_plans_is_served_with_no_cmux_on_the_path_because_no_window_is_asked_about_any_more', async () => {
+    const checkout = await ARealCheckoutWithAPreparedWorktree.cut()
+    const state = await mkdtemp(join(tmpdir(), 'ct-api-no-cmux-state-'))
+    const path = await APathWithNoCmux.made()
+    const agent = randomUUID()
+    await AHarnessConversationRecord.attending({
+      state,
+      agent,
+      worktree: checkout.worktree,
+      issue: ARealCheckoutWithAPreparedWorktree.ISSUE,
+      repository: ARealCheckoutWithAPreparedWorktree.REPOSITORY,
+    })
+
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state, PATH: path })
+    const response = await fetch(`http://127.0.0.1:${port}/active-plans`)
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as { plans: { plan: { agent: string, issue: { number: number } } }[] }
+    expect(body.plans).toHaveLength(1)
+    expect(body.plans[0].plan).toMatchObject({
+      agent,
+      issue: { number: ARealCheckoutWithAPreparedWorktree.ISSUE },
+    })
+
+    await RunFileFixture.remove(checkout.root)
+    await RunFileFixture.remove(state)
+    await RunFileFixture.remove(path)
   })
 
   it('a_plan_whose_conversation_names_one_path_and_git_the_other_is_served_with_its_agent_and_its_clone_remembered', async () => {

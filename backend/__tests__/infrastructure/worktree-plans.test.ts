@@ -48,12 +48,22 @@ class SurveyedCheckout {
 class ConversationsOf {
   static REPOSITORY = SurveyedCheckout.REPOSITORY.text
   static REFUSAL = 'the harness root could not be listed: EACCES: permission denied'
+  static #ISSUE_AT_THE_END_OF_A_WORKTREE = /\.worktrees\/([1-9]\d*)$/
+
+  static #issueOf(worktree: string): number {
+    const found = worktree.match(ConversationsOf.#ISSUE_AT_THE_END_OF_A_WORKTREE)
+    if (found === null) {
+      throw new Error(`${worktree} does not end in .worktrees/<issue>, so no issue can be read out of it`)
+    }
+
+    return Number(found[1])
+  }
 
   static async attending(worktree: string, {
     agent = 'agent-1', repository = ConversationsOf.REPOSITORY, startedAt = 1,
   }: { agent?: string, repository?: string, startedAt?: number } = {}): Promise<HarnessAnswer> {
     return ConversationsOf.listing([
-      new HarnessConversation({ agent, worktree, issue: 33, repository, startedAt }),
+      new HarnessConversation({ agent, worktree, issue: ConversationsOf.#issueOf(worktree), repository, startedAt }),
     ])
   }
 

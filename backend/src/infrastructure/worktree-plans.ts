@@ -88,11 +88,12 @@ export class WorktreePlans {
   async inFlight(): Promise<PlansInFlight> {
     const known = await this.conversations()
     if (known.reason !== null) return this.#refuse(known.reason)
-    const roots = this.#toSurvey(known.conversations ?? [])
+    const conversations = known.conversations ?? []
+    const roots = this.#toSurvey(conversations)
     if (roots === null) return this.#refuse('the checkouts it serves could not be read')
     const watches = []
     for (const root of roots) {
-      for (const watch of await this.#of(root, known.conversations ?? [])) watches.push(watch)
+      for (const watch of await this.#of(root, conversations)) watches.push(watch)
     }
 
     return PlansInFlight.listed(watches)
