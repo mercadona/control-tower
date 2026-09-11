@@ -412,7 +412,7 @@ and `the_envelope_a_launch_composes_keeps_landing_after_the_process_that_launche
 
 ```bash
 cd backend && npm run typecheck   # exit 0
-cd backend && npx vitest run __tests__/infrastructure/headless-plan-agents.test.ts   # exit 0: 15 cases
+cd backend && npx vitest run __tests__/infrastructure/headless-plan-agents.test.ts
 cd backend && npx vitest run __tests__/infrastructure/headless-contract-real-process.test.ts   # exit 0
 cd backend && test "$(grep -c 'not_where_the_api_runs' __tests__/infrastructure/headless-plan-agents.test.ts)" -eq 2
 cd backend && test -z "$(grep -rn 'JSON.stringify({ worktree' src __tests__)"
