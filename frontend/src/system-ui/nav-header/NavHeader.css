@@ -39,7 +39,13 @@
   justify-content: center;
 }
 
-.nav-header--collapsed .nav-header__toggle { position: absolute; top: 50%; left: 4px; transform: translateY(-50%); opacity: 0; }
+.nav-header--collapsed .nav-header__toggle {
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  transform: translateY(-50%);
+  opacity: 0;
+}
 
 .nav-header--collapsed:has(.nav-header__toggle):hover .nav-header__toggle,
 .nav-header--collapsed .nav-header__toggle:focus-visible {

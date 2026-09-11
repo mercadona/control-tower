@@ -64,7 +64,7 @@ describe('NavHeader', () => {
   it('should keep the collapsed layout rules in NavHeader.css', () => {
     expect(NAV_HEADER_CSS).toMatch(/\.nav-header\s*{[^}]*position:\s*relative;/)
     expect(NAV_HEADER_CSS).toContain(
-      '.nav-header--collapsed .nav-header__toggle { position: absolute; top: 50%; left: 4px; transform: translateY(-50%); opacity: 0; }',
+      '.nav-header--collapsed .nav-header__toggle {\n  position: absolute;\n  top: 50%;\n  left: 4px;\n  transform: translateY(-50%);\n  opacity: 0;\n}',
     )
     expect(NAV_HEADER_CSS).toContain(
       '.nav-header--collapsed:has(.nav-header__toggle):hover .nav-header__toggle,\n.nav-header--collapsed .nav-header__toggle:focus-visible {\n  opacity: 1;\n}',
