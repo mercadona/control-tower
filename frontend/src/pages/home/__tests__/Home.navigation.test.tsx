@@ -139,12 +139,11 @@ describe('Home · navigation shell', () => {
     expect(within(topBar()).queryByText('Control Tower')).not.toBeInTheDocument()
   })
 
-  it('shows a status line in the right column before an implementation runs, and Arrancar otro plan only once it does', async () => {
+  it('shows no right column before an implementation runs, and the panel plus Arrancar otro plan only once it does', async () => {
     stubFetch(READY_ONLY)
     const { user } = openHome()
 
-    const side = await screen.findByRole('complementary', { name: 'Progreso de la implementación' })
-    expect(within(side).getByText('No hay ninguna implementación en curso')).toBeInTheDocument()
+    expect(screen.queryByRole('complementary', { name: 'Progreso de la implementación' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Arrancar otro plan' })).not.toBeInTheDocument()
 
     await startPlan(user)
@@ -153,9 +152,10 @@ describe('Home · navigation shell', () => {
     await user.click(screen.getByRole('button', IMPLEMENT_BUTTON))
     await screen.findByText('Agente asignado')
 
+    const side = await screen.findByRole('complementary', { name: 'Progreso de la implementación' })
+    expect(side).toBeInTheDocument()
     const topBar = document.querySelector('.top-bar')
     expect(topBar).not.toBeNull()
     expect(within(topBar as HTMLElement).getByRole('button', { name: 'Arrancar otro plan' })).toBeInTheDocument()
-    expect(within(side).queryByText('No hay ninguna implementación en curso')).not.toBeInTheDocument()
   })
 })

@@ -7,14 +7,19 @@
   overflow: hidden;
 }
 
-/* The columns of the Navigation content: the work area, always scrollable on
-   its own, and a fixed 400px column beside it (`--layout-panel-width`), also
-   scrollable on its own. Neither is a layer over the other. */
+/* The columns of the Navigation content: the work area alone by default.
+   Once an implementation is running, `.home__columns--with-panel` adds a
+   fixed column beside it (`--layout-panel-width`), scrollable on its own.
+   Neither is a layer over the other. */
 .home__columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--layout-panel-width);
+  grid-template-columns: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
+}
+
+.home__columns--with-panel {
+  grid-template-columns: minmax(0, 1fr) var(--layout-panel-width);
 }
 
 .home__content {

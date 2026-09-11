@@ -22,8 +22,6 @@ import './Home.css'
 type WorkflowStageName = 'request' | 'review' | 'implementation'
 type Reconciliation = 'not-required' | 'checking' | 'confirmed' | 'stale' | 'unavailable' | 'inconclusive' | 'uncertain' | 'uncertain-start'
 
-const NO_IMPLEMENTATION_MESSAGE = 'No hay ninguna implementación en curso'
-
 const STAGE_LABEL: Record<WorkflowStageName, string> = {
   request: 'Solicitud',
   review: 'Revisar plan',
@@ -355,7 +353,7 @@ const Home = () => {
           />
         }
       >
-        <div className="home__columns">
+        <div className={showHistory ? 'home__columns home__columns--with-panel' : 'home__columns'}>
         <main className="home__content">
           <nav className="home__flow" aria-label="Flujo del plan">
             <ol>
@@ -524,18 +522,16 @@ const Home = () => {
             </section>
           )}
         </main>
-        <aside className="home__side" aria-label="Progreso de la implementación">
-          {showHistory && workflow !== null ? (
+        {showHistory && workflow !== null && (
+          <aside className="home__side" aria-label="Progreso de la implementación">
             <ImplementHistory
               key={`${workflow.plan.repo}:${workflow.plan.issue.number}:history`}
               issue={workflow.plan.issue.number}
               root={workflow.plan.root ?? workflow.request.path}
               repo={workflow.plan.repo}
             />
-          ) : (
-            <p>{NO_IMPLEMENTATION_MESSAGE}</p>
-          )}
-        </aside>
+          </aside>
+        )}
       </div>
       </Navigation>
     </div>
