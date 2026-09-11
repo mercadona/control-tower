@@ -485,3 +485,48 @@ describe('renderKickoff — the baseline is in the seed, not in an order to the 
     expect(kickoff()).toMatch(/`baseline:`.*\.agent\/SLICE\.md/)
   })
 })
+
+// The kickoff names only the gates the slice has (2026-09-11 plan) — line 276
+// used to be an UNCONDITIONAL element of the array: a slice whose resolved
+// gates left `plan` out still received "…con OK humano", a promise nothing
+// mechanical ever enforced (run-machine.js has no go step, and
+// dispatch-check --release only demands the go when the issue carries the
+// `plan` label). The three tests below pin the boundary the branch now cuts
+// at (`gates.includes('plan')`) and that the run-machine sequence itself
+// reaches the agent identically in both branches, out of one piece of text.
+describe('renderKickoff — the run-machine line names the human OK only when the slice carries the `plan` gate', () => {
+  const OPTS = { repo: 'o/r', dispatchCheckPath: '/x/dispatch-check.mjs', ctStepPath: '/x/ct-step.mjs', conventionsDir: '/plugin/conventions' }
+
+  it('a slice whose gates leave out `plan` is not told to wait for a human OK', () => {
+    const k = renderKickoff({ ...SLICE, gates: [], gatesDeclared: true }, OPTS)
+    // The WHOLE sentence the plan closed, not a substring of it: asserting
+    // from "la secuencia" onwards left `Con el plan commiteado,` uncovered,
+    // and an edit to those four words would have gone through green.
+    expect(k).toContain('Con el plan commiteado, la secuencia de la implementación la dicta la máquina y arranca ahí mismo.')
+    expect(k).not.toMatch(/OK humano/)
+  })
+
+  it('a slice that keeps the `plan` gate is still told the human OK opens the machine', () => {
+    // The `visual` gate alone (declared, no `plan`) is the negative control
+    // that test 1's empty array does not cover: an implementation that
+    // branched on `gates.length` instead of `gates.includes('plan')` would
+    // pass test 1 and fail here.
+    const withoutPlan = renderKickoff({ ...SLICE, gates: ['visual'], gatesDeclared: true }, OPTS)
+    expect(withoutPlan).not.toMatch(/OK humano/)
+    // Plain SLICE declares no gates, so it falls back to the Tipo
+    // (`backend`), whose gates keep `plan` by default (gates.js#gatesForType).
+    const withPlan = renderKickoff(SLICE, OPTS)
+    expect(withPlan).toContain("Con el plan commiteado y el gate 'plan' con OK humano")
+  })
+
+  it('both openings hand over to the same run-machine sequence, word for word', () => {
+    const withPlan = renderKickoff(SLICE, OPTS)
+    const withoutPlan = renderKickoff({ ...SLICE, gates: [], gatesDeclared: true }, OPTS)
+    const runMachineLineOf = (k) => k.split('\n').find((line) => line.includes('la dicta la máquina'))
+    const tailOf = (line) => line.slice(line.indexOf('Pregunta el paso con'))
+    const tailWithPlan = tailOf(runMachineLineOf(withPlan))
+    const tailWithoutPlan = tailOf(runMachineLineOf(withoutPlan))
+    expect(tailWithPlan).toBe(tailWithoutPlan)
+    expect(tailWithPlan).toContain('ct-step slice-verdict')
+  })
+})
