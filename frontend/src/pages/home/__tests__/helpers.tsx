@@ -22,10 +22,15 @@ const NO_IMPLEMENTATION_RUN_YET = {
   status: 400,
   body: '{"code":"implementation-progress-not-read","detail":"the worktree is not there yet"}',
 }
+const NO_IMPLEMENTATION_HISTORY_YET = {
+  status: 400,
+  body: '{"code":"implementation-history-not-read","detail":"the worktree is not there yet"}',
+}
 
 const responseFor = (answer: Answer) => new Response(answer.body, { status: answer.status, headers: JSON_HEADERS })
 
 const isImplementProgressPath = (input: string | URL | Request) => String(input).startsWith('/implement-progress/')
+const isImplementHistoryPath = (input: string | URL | Request) => String(input).startsWith('/implement-history/')
 
 const backendAnswering = (answer: Answer) => {
   const fetching = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => responseFor(answer))
@@ -35,6 +40,7 @@ const backendAnswering = (answer: Answer) => {
       if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
       if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
       if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
+      if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
       return fetching(input, init)
     }),
   )
@@ -46,6 +52,7 @@ const backendRecovering = (answer: Answer) => {
   const fetching = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => responseFor(answer))
   vi.stubGlobal('fetch', (input: string | URL | Request, init?: RequestInit) => {
     if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
+    if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
     return init === undefined ? fetching(input) : fetching(input, init)
   })
 
@@ -61,6 +68,7 @@ const backendPending = () => {
       if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
       if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
       if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
+      if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
       return pending
     })
   vi.stubGlobal('fetch', fetching)
