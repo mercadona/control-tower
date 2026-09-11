@@ -51,7 +51,10 @@ those imports resolve, and it is no longer a statement about this backend.
 |---|---|
 | **User story** | The work to plan, named either the way Jira calls a ticket, by its key (`ABC-123`), or by the url of the GitHub issue that describes it |
 | **Plan issue** | The GitHub issue that hosts a plan: the plan is posted there, the GO is answered there, the dispatcher reads its labels |
-| **Plan agent** | Whoever writes the plan for a story; today a Claude in a cmux tab |
+| **Plan agent** | Whoever writes the plan for a story; a Claude invoked per step with `claude -p`, never a session typed into |
+| **Harness call** | One invocation of the plan agent: its step, its model, its argv and the stream it wrote. It lives in its own directory under the state root and outlives the backend that started it |
+| **Step of a call** | Which errand the invocation carried — `write-plan`, `review-plan`, `implement`, `fix-pull-request`. The one datum no reader recovers afterwards, so it is written at the source |
+| **Model of a step** | Which model a step asks for: `fable` writes and reviews a plan and judges, `sonnet` implements and fixes. A judge declares it in its own agent frontmatter, never inheriting the dispatching session; every headless call carries `--fallback-model opus` |
 | **GO** | The human's `-OK <nonce>` on the issue that releases the agent |
 | **Repository name** | `owner/name`; validated because it becomes an argument of `gh` |
 | **Checkout root** | The absolute path of the local git clone where a plan's worktree is cut; validated because it becomes an argument of `git -C` |

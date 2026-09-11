@@ -134,7 +134,7 @@ When **no** plan started, the answer is a 400 that keeps the same evidence:
 {"code":"no-plan-started",
  "detail":"no plan started: every repository of repo_list failed",
  "failed":[{"repo":"owner/one","code":"plan-issue-not-created","detail":"gh refused"},
-           {"repo":"owner/two","code":"plan-agent-not-launched","detail":"cmux refused"}]}
+           {"repo":"owner/two","code":"plan-agent-not-launched","detail":"claude -p refused"}]}
 ```
 
 This is the one refusal in the API with a third field beside `code` and `detail`.
@@ -188,8 +188,8 @@ From a tool refusing, in either mode:
 | `plan-issue-not-created` | `gh issue create` refused |
 | `plan-issue-not-named` | the created issue could not be identified |
 | `plan-issue-not-claimed` | the claim on the issue failed |
-| `plan-agent-not-launched` | cmux refused |
-| `plan-agent-not-named` | cmux launched but gave no handle |
+| `plan-agent-not-launched` | claude -p refused |
+| `plan-agent-not-named` | the agent's conversation record could not be understood |
 | `workspace-not-prepared` | the worktree could not be cut |
 | `workspace-not-read` | git refused when surveying |
 | `workspace-not-understood` | git answered something unreadable |
@@ -222,7 +222,8 @@ reworked. The stream stays open until the client disconnects, and polls in the
 meantime.
 
 It only serves an issue whose plan **this process** started or recovered. A
-restarted backend has forgotten every session it did not recover from cmux.
+restarted backend has forgotten every session it did not recover from a
+conversation record.
 
 **200** with `Content-Type: text/event-stream`. Three frame kinds:
 
@@ -299,7 +300,8 @@ serialised.
 | `plan-under-review` | 400 | changes were asked for on the plan and it has not been reworked yet |
 | `go-not-recorded` | 400 | the GO marker could not be written |
 | `plan-go-not-answered` | 400 | the GO comment on the issue failed |
-| `plan-agent-not-resumed` | 400 | cmux would not take the line |
+| `plan-agent-not-resumed` | 400 | the conversation could not be continued with `claude -p --resume` |
+| `plan-agent-worktree-not-understood` | 400 | the agent's recorded conversation could not be read back as a worktree |
 
 `no-live-planning-session` is the one to expect after a backend restart: send the
 `agent` from `/active-plans`, not one the page remembered from an older run.
@@ -497,12 +499,15 @@ person would have typed — and `plan` — what starting it produced.
 
 | `code` | Status | Meaning |
 |---|---|---|
-| `active-plans-recovery-inconclusive` | **400** | cmux could not be asked, so the list would be a lie; `detail` carries what cmux answered |
+| `active-plans-recovery-inconclusive` | **400** | what is in flight could not be listed, so the list would be a lie; `detail` carries it |
 
-It is the common failure on a fresh machine: recovery reads the live cmux
-workspaces, and without cmux it refuses **every** call and never settles. The
-page must show *I cannot tell what is running* rather than *nothing is
-running*, and it must not treat this as an empty list.
+Recovery reads the `conversation.json` records under the state root, not a
+live workspace. A missing harness root is zero plans **conclusively** — a
+fresh machine gets a clean 200 with an empty list. The 400 fires only when
+that root exists but cannot be listed, or the checkout registry cannot be
+read: the two cases where the list really would be a lie. The page must show
+*I cannot tell what is running* rather than *nothing is running*, and it must
+not treat this refusal as an empty list.
 
 `detail` carries the reason itself, not a fixed sentence — the same rule the ten
 refusals of `POST /start-plan` follow. It is the one place a person sees why
@@ -510,14 +515,8 @@ without reaching the terminal running the backend, and it was measured to
 matter: during the in-store run the reason lived only in a cmux tab nobody was
 looking at, while the page said *no pudo preguntar a cmux* and nothing else.
 
-When cmux answers with a schema this backend does not read, the reason names
-the fields that **did** arrive. That one line is what tells a stale cmux apart
-from a broken one: the machine this was measured on answered with `title` and no
-`custom_title`, which is the shape of an older build still serving the socket.
-
 The same reason also goes to the backend's error channel, prefixed
-`plans in flight:`, and `GET /external-tools` answers the same question ahead of
-time in its `cmux` row.
+`plans in flight:`.
 
 ```
 curl -s http://127.0.0.1:8787/active-plans
@@ -533,10 +532,9 @@ to be asked **before** starting work: until now each of these failed at the
 moment it was used, mid-flow, in the tool's own words.
 
 Five of them are asked about a credential. `cmux` is asked about something else
-— whether it answers the query this backend recovers plans with — because that
-is what fails first on a machine whose cmux is too old or that is running this
-backend from outside cmux, and it fails as `GET /active-plans` refusing
-forever.
+— whether its own workspace query answers conclusively — because that is what
+fails first on a machine whose cmux is too old or that is running this backend
+from outside cmux.
 
 **200 OK**
 
@@ -631,7 +629,7 @@ How each one is asked:
 | `claude` | nothing | never: its login is not observable from another process |
 | `git` | `ssh -T git@github.com` | its stderr says `successfully authenticated`, **whatever the exit code** — it exits 1 on success |
 | `bq` | `gcloud auth list --filter=status:ACTIVE` | it exited 0 and named an account |
-| `cmux` | the workspace query `GET /active-plans` recovers with | it answered it conclusively |
+| `cmux` | its own workspace query (`list-windows`, then `workspace list` per window) | it answered conclusively |
 
 The `cmux` row is the one that catches a failure no version number reveals: the
 app serves its socket from the process that is **running**, so a cmux updated on
