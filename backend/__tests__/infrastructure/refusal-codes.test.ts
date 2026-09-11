@@ -46,10 +46,6 @@ class CodesRememberedByHandFromHttpAndApiServer {
   ])
 }
 
-class EventStreamCodes {
-  static readonly VALUES: readonly string[] = Object.freeze([PlanEvents.PROGRESS_NOT_READ])
-}
-
 describe('the codes the api can emit', () => {
   it('a_code_repeated_across_request_vocabularies_is_a_finding_unless_it_is_declared_shared_on_purpose', () => {
     const repeated = Repeats.within(RequestVocabularies.codes())
@@ -65,7 +61,7 @@ describe('the codes the api can emit', () => {
       ...ProgressCollapse.declaredCodes(),
       ReviewCollapse.CODE,
       ...CodesRememberedByHandFromHttpAndApiServer.VALUES,
-      ...EventStreamCodes.VALUES,
+      ...PlanEvents.declaredCodes(),
     ]
 
     expect(new Set(codes).size).toBe(codes.length)
