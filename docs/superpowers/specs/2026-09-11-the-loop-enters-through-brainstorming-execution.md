@@ -1,8 +1,8 @@
 # The loop enters through brainstorming — Execution spec
 
 **Handoff origen:** `docs/superpowers/specs/2026-09-11-the-loop-enters-through-brainstorming-design.md`
-**Fecha de congelación:** —
-**Estado:** DRAFT
+**Fecha de congelación:** 2026-09-11
+**Estado:** CONGELADA
 
 ## Hipótesis del experimento
 
