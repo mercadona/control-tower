@@ -114,6 +114,8 @@ expected for an implemented plan and is not a defect of this document.
 | `Projection` | `static readonly MODELS: Projection<string, HarnessStepValue>`, mirroring `implement-plan-route.ts:172,231` |
 | `catch (failure)` | `failure` is `unknown` under `strict`. Use the house narrowing of `ct-api.ts:123-127` — a local `NodeJS.ErrnoException \| null` via `instanceof Error`, then `errno?.code`. Never `as any` |
 | Test files | `.ts`, importing `'../../src/….ts'`. `typescript-only.test.ts` fails on any `.js`/`.mjs` added under `backend/` |
+| **The tests a task names** | **a floor, not a ceiling.** A task that ports a module re-lands the JavaScript original's cases for it, minus the ones §7 hands to a later task and minus the ones the port makes unreachable — a required field, a type that now forbids the mutation a case existed to catch. The plan names what one page holds; the port keeps what was already reviewed. Anything dropped is named in the task's report with which of those two reasons |
+| **A production line with no test in the task** | stays. A narrowed test list is not a licence to delete reviewed code: port the line, then restore the case that pinned it |
 | The model per step | `write-plan` and `review-plan` to fable; `implement` and `fix-pull-request` to sonnet; `--fallback-model opus` on every call. The two judges declare fable in their own frontmatter |
 | The entrypoint | `HeadlessPlanAgents` and its `DetachedRun` are assembled **inline in `run()`**; no private factory hides a node of the graph |
 | API.md | the backup's wording, main's statuses: `implementation-phase-uncertain` 400, `active-plans-recovery-inconclusive` 400, `plan-under-review` exists |
