@@ -12,6 +12,10 @@ class Fixture {
   static ISSUE_298 = readFileSync(
     join(Fixture.REPOSITORY, 'docs', 'superpowers', 'metrics', 'issue-298.jsonl'), 'utf8'
   )
+
+  static ISSUE_296 = readFileSync(
+    join(Fixture.REPOSITORY, 'docs', 'superpowers', 'metrics', 'issue-296.jsonl'), 'utf8'
+  )
 }
 
 class MetricsFileDouble {
@@ -115,6 +119,21 @@ describe('MetricsFileHistory', () => {
     expect(entries.at(-1)).toMatchObject({
       step: 'slice-judge', task: null, taskName: null, tasksTotal: 2, attempt: 1, outcome: 'done', durationMs: null,
     })
+  })
+
+  it('a_judge_row_carries_its_ruling_and_findings_total_and_every_row_carries_its_tool_total_tokens', async () => {
+    const history = new MetricsFileHistory({
+      exists: async () => true,
+      read: async () => Fixture.ISSUE_296,
+    })
+
+    const entries = await history.of({ root: new CheckoutRoot('/checkout'), issue: 296 })
+
+    expect(entries).toHaveLength(11)
+    const judgeEntry = entries.find((entry) => entry.step === 'judge')
+    expect(judgeEntry).toMatchObject({ ruling: 'PASS', findingsTotal: 0, toolTotalTokens: 1172301 })
+    const implementEntry = entries[0]
+    expect(implementEntry).toMatchObject({ ruling: null, findingsTotal: null, toolTotalTokens: 4275995 })
   })
 
   it('a_line_that_is_not_json_collapses_naming_the_line_number', async () => {

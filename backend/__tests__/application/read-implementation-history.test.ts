@@ -42,6 +42,7 @@ class Flow {
     ImplementationHistoryEntry.of({
       step: 'implement', task: 1, taskName: 'the lookup looks where it says it looks', tasksTotal: 2,
       attempt: 1, outcome: 'done', writtenAt: '2026-09-10T14:55:59.885Z', durationMs: null, summary: 'Renamed ...',
+      ruling: null, findingsTotal: null, toolTotalTokens: null,
     }),
   ]
 

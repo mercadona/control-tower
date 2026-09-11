@@ -65,7 +65,7 @@ class RunningApi {
     ImplementationHistoryEntry.of({
       step: 'implement', task: 1, taskName: 'the lookup looks where it says it looks', tasksTotal: 2,
       attempt: 1, outcome: 'done', writtenAt: '2026-09-10T14:55:59.885Z', durationMs: null,
-      summary: 'Renamed ...',
+      summary: 'Renamed ...', ruling: null, findingsTotal: null, toolTotalTokens: null,
     }),
   ]
 
@@ -122,7 +122,7 @@ afterEach(async () => {
 })
 
 describe('ImplementHistoryRoute', () => {
-  it('a_run_with_one_finished_step_answers_the_nine_wire_fields', async () => {
+  it('a_run_with_one_finished_step_answers_the_twelve_wire_fields', async () => {
     const { response } = await RunningApi.asking(`${RunningApi.PATH}?root=%2Fcheckout&repo=owner%2Fname`)
 
     expect(response.status).toBe(200)
@@ -130,7 +130,28 @@ describe('ImplementHistoryRoute', () => {
       steps: [{
         step: 'implement', task: 1, task_name: 'the lookup looks where it says it looks', tasks_total: 2,
         attempt: 1, outcome: 'done', written_at: '2026-09-10T14:55:59.885Z', duration_ms: null,
-        summary: 'Renamed ...',
+        summary: 'Renamed ...', ruling: null, findings_total: null, tool_total_tokens: null,
+      }],
+    })
+  })
+
+  it('a_judge_step_answers_its_ruling_findings_total_and_tool_total_tokens', async () => {
+    const spy = ReadImplementationHistorySpy.answering([
+      ImplementationHistoryEntry.of({
+        step: 'judge', task: 1, taskName: null, tasksTotal: 2, attempt: 2, outcome: 'done',
+        writtenAt: '2026-09-11T06:57:22.561Z', durationMs: null, summary: null,
+        ruling: 'PASS', findingsTotal: 0, toolTotalTokens: 1172301,
+      }),
+    ])
+
+    const { response } = await RunningApi.asking(`${RunningApi.PATH}?root=%2Fcheckout&repo=owner%2Fname`, spy)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      steps: [{
+        step: 'judge', task: 1, task_name: null, tasks_total: 2, attempt: 2, outcome: 'done',
+        written_at: '2026-09-11T06:57:22.561Z', duration_ms: null, summary: null,
+        ruling: 'PASS', findings_total: 0, tool_total_tokens: 1172301,
       }],
     })
   })

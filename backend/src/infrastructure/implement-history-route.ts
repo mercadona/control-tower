@@ -140,6 +140,9 @@ class HistoryEntryOnTheWire {
       written_at: entry.writtenAt,
       duration_ms: entry.durationMs,
       summary: entry.summary,
+      ruling: entry.ruling,
+      findings_total: entry.findingsTotal,
+      tool_total_tokens: entry.toolTotalTokens,
     }
   }
 }

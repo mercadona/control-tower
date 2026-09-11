@@ -16,6 +16,9 @@ type MetricsRow = {
   written_at?: string | null,
   duration_ms?: number | null,
   summary?: string | null,
+  ruling?: string | null,
+  findings_total?: number | null,
+  tool_total_tokens?: number | null,
 }
 
 export class MetricsFileHistory extends ImplementationHistory {
@@ -90,6 +93,9 @@ export class MetricsFileHistory extends ImplementationHistory {
       writtenAt: row.written_at ?? null,
       durationMs: row.duration_ms ?? null,
       summary: row.summary ?? null,
+      ruling: row.ruling ?? null,
+      findingsTotal: row.findings_total ?? null,
+      toolTotalTokens: row.tool_total_tokens ?? null,
     })
   }
 

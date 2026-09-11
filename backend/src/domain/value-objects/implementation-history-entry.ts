@@ -8,6 +8,9 @@ type ImplementationHistoryEntryFields = {
   writtenAt: string | null,
   durationMs: number | null,
   summary: string | null,
+  ruling: string | null,
+  findingsTotal: number | null,
+  toolTotalTokens: number | null,
 }
 
 export class ImplementationHistoryEntry {
@@ -20,8 +23,14 @@ export class ImplementationHistoryEntry {
   readonly writtenAt: string | null
   readonly durationMs: number | null
   readonly summary: string | null
+  readonly ruling: string | null
+  readonly findingsTotal: number | null
+  readonly toolTotalTokens: number | null
 
-  constructor({ step, task, taskName, tasksTotal, attempt, outcome, writtenAt, durationMs, summary }: ImplementationHistoryEntryFields) {
+  constructor({
+    step, task, taskName, tasksTotal, attempt, outcome, writtenAt, durationMs, summary,
+    ruling, findingsTotal, toolTotalTokens,
+  }: ImplementationHistoryEntryFields) {
     this.step = step
     this.task = task
     this.taskName = taskName
@@ -31,6 +40,9 @@ export class ImplementationHistoryEntry {
     this.writtenAt = writtenAt
     this.durationMs = durationMs
     this.summary = summary
+    this.ruling = ruling
+    this.findingsTotal = findingsTotal
+    this.toolTotalTokens = toolTotalTokens
     Object.freeze(this)
   }
 

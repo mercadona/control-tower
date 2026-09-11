@@ -480,13 +480,15 @@ required, same as `/implement-progress`.
 ```json
 {"steps":[{"step":"implement","task":1,"task_name":"the lookup looks where it says it looks",
  "tasks_total":2,"attempt":1,"outcome":"done","written_at":"2026-09-10T14:55:59.885Z",
- "duration_ms":null,"summary":"Renamed ..."}]}
+ "duration_ms":null,"summary":"Renamed ...","ruling":null,"findings_total":null,
+ "tool_total_tokens":4275995}]}
 ```
 
-Entries come back in file order. Nine fields always present. A measurement the
-row does not carry answers `null` — `duration_ms` and `summary` on most steps,
-and `task`/`task_name` on a step of the slice rather than of one task
-(`reconcile`, `global`, `slice-judge`).
+Entries come back in file order. Twelve fields always present. A measurement
+the row does not carry answers `null` — `duration_ms` and `summary` on most
+steps, `task`/`task_name` on a step of the slice rather than of one task
+(`reconcile`, `global`, `slice-judge`), and `ruling`/`findings_total` on every
+step but the judge's.
 
 A worktree with no metrics file yet answers `{"steps":[]}`: nothing ran there,
 not a refusal.
@@ -502,6 +504,9 @@ not a refusal.
 | `written_at` | string \| null | when `ct-step commit` wrote the row |
 | `duration_ms` | number \| null | how long the attempt took, where measured |
 | `summary` | string \| null | what the agent did, on an `implement` row |
+| `ruling` | string \| null | the judge's verdict, such as `PASS`, on a `judge` row |
+| `findings_total` | number \| null | how many findings the judge raised, on a `judge` row |
+| `tool_total_tokens` | number \| null | the coding tool's total tokens for the attempt |
 
 **Refusals**
 
