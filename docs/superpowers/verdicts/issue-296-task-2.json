@@ -1,0 +1,66 @@
+{
+  "issue": 296,
+  "task": 2,
+  "task_name": "a phantom entry falls with its own name instead of passing as a lone undefined",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises that every code the guard collects has to be a kebab-case string, so an entry that no longer exists fails the guard instead of surviving as one undefined. Both halves are in the diff: `EveryCodeTheApiEmits.KEBAB_CASE` is the shape, `shapeless()` filters `values()` by it with `?? ''` so an absent entry is measured rather than crashing `RegExp.test`, and the new `it` asserts the offender list is empty. A phantom entry now collapses to a value the regex refuses and is collected, instead of being swallowed by the `new Set(...)` of the distinctness `it`.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The **TDD:** line names `it('a_code_the_guard_remembers_by_hand_that_no_longer_exists_falls_here_instead_of_passing_as_a_lone_undefined')` asserting `expect(EveryCodeTheApiEmits.shapeless()).toEqual([])`. The diff carries that name and that assertion literally, same subject and same expected value. The boundary the line fixes also holds by reading: `/^[a-z0-9]+(?:-[a-z0-9]+)*$/` accepts the single segment `'not-found'` and refuses the empty string an absent entry collapses to.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The brief prescribes one added class `EveryCodeTheApiEmits` with three members. All three match name for name: `static readonly KEBAB_CASE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/` copied exactly, `static values(): string[]` carrying the assembly the distinctness `it` built inline with its seven sources unchanged and in the same order, `static shapeless(): string[]` returning the entries `KEBAB_CASE` refuses with `?? ''` applied. The `Current state` block it quotes, `CodesRememberedByHandFromHttpAndApiServer`, is untouched. The two pre-existing `it`s keep their names and their assertions verbatim; the only change inside one is the prescribed read of `EveryCodeTheApiEmits.values()`.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Four of the eight rows bear on this diff and each is implemented with its stated value: the shape a code must have is the exact regex of the row; the guard collects the offenders and asserts the list is empty (`toEqual([])`) rather than asserting a boolean; task order is honoured, since `values()` reads `PlanEvents.declaredCodes()` that Task 1 already repointed; `ERROR_EVENT` is not treated as a code — `plan-events-route.ts` keeps `#ERROR_CODES` as `[PROGRESS_NOT_READ]` only and this diff adds nothing to it. The rows about the accessor's name, the private list's name and where the vocabulary lives were Task 1's and this diff leaves them alone.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: the added class follows the one-class-per-fact idiom the file already uses (`RequestVocabularies`, `Repeats`, `CodesRememberedByHandFromHttpAndApiServer`) — a never-instantiated namespace with `static readonly` state and static methods, which `conventions/architecture.md` tolerates precisely because `conventions/style.md` bans loose functions. `start-plan-route.ts` was read for the `declaredCodes()` idiom the assembly consumes. style.md: no prose, English identifiers, no free function at module level — all three hold. testing.md: the test name is a sentence saying what is guaranteed, not a method name; no mother is owed here because the test builds no objects; the assertion is on the observable effect, the codes six production route modules really declare. Read by reading, the assertion can fail for the reason its name gives: appending a phantom makes `values()` carry an entry the regex refuses and the list stops being empty. decisions.md: I looked for a second copy of the kebab shape and found none — `http.ts`'s `Refusal` only refuses an empty or whitespace `code`, and no production module measures the wire format — so this regex is the single place that decides it. architecture.md's closed hole does not bite: the host file conforms, so no debt exemption is being inherited by placing the class there. boundaries.md and domain.md have no subject: the diff adds no adapter, port, value object or projection outwards. defects.md, rule by rule. Closed vocabulary: no finding — the production vocabularies stay closed frozen `as const` objects, and the guard deliberately flattens them to strings because measuring their shape is its whole job; there is no dispatch and no catch-all branch. Raw map as the return value of logic: no subject — both new methods return `string[]`. Two fields that have to agree, sentinel included: the one candidate is `code ?? ''`, reported as a low below; it never leaves the predicate (`shapeless()` returns the original element, not the coalesced one) and no consumer reads the `''`, so it is not the defect's blocking shape. An error named for where it happens: no subject — the diff adds no error. No clash between a **Verification:** control and any of these documents: the `grep -c` controls count this module's own `it`s and the single declaration plus single application of `KEBAB_CASE`, neither of which forbids anything testing.md requires.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The `-` lines are the two pre-existing `it`s and the inline array, all of which reappear in the `+` lines. Both assertions survive character for character: `expect(repeated.sort()).toEqual([...SharedOnPurposeAcrossRequestVocabularies.CODES].sort())` and `expect(new Set(codes).size).toBe(codes.length)`. The only change inside a pre-existing test is `const codes = EveryCodeTheApiEmits.values()` replacing the same seven-source array literal, which the brief asks for by name (\"moved into this class unchanged and read by both `it`s\"). Nothing was removed, relaxed or narrowed; the rest is the `describe` block moving below the new class.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "Does not apply: **Files:** declares one path and it is a test module, so the diff contains no production code for the promised behaviour to hide behind. The behaviour the objective promises is the guard itself — a test that measures production declarations — and the declarations it measures (`PlanCollapse.declaredCodes()`, `ImplementCollapse.declaredCodes()`, `ProgressCollapse.declaredCodes()`, `ReviewCollapse.CODE`, `PlanEvents.declaredCodes()`, the route outcome objects) all live in `backend/src/infrastructure/` and were read there, unchanged by this diff. There is no hard-coded expected value standing in for a production line: the expectation is the empty list, and every code compared against the regex is read from production at run time.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The diff writes inside the single declared file and nothing else; there is no plan hunk in it, so there is no amendment to rule on. Everything added traces to a sentence of the task: the class and its three members to the paragraph that prescribes them, the new `it` to **TDD:** and **Tests:**, the one-line change in the distinctness `it` to the instruction that both `it`s read the moved assembly. Nothing that `### Out of scope` names by name is touched: `DELIVERY_NOT_READ` and `delivery-progress-not-read` are absent, `CodesRememberedByHandFromHttpAndApiServer` still remembers its six strings by hand and was not derived from `http.ts`, and neither `backend/API.md` nor `backend/conventions/this-repository.md` appears in the diff. No refactor, rename or adjacent fix rode along.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "One new test. Deterministic: the assertion is a pure computation over module-level constants and frozen objects — no clock, no network, no filesystem, no randomness, no sleep. Isolated: `EveryCodeTheApiEmits` holds no mutable state, `values()` rebuilds its array on every call, and nothing is shared with or left behind for the other two `it`s, so the file passes in any order. Verifies real behaviour: the codes it measures are read from six production route modules rather than declared in the test, and a route shipping a non-kebab code would turn it red; the only literal is the empty list it expects. For the finer half I read the plugin's shipped copy of `plugin/skills/test-driven-development/SKILL.md` from disk rather than loading the skill, which is not registered in this environment; its requirements — one behaviour, a clear name, real code instead of mocks — are all met, and nothing in it or in its `testing-anti-patterns.md` reference is contradicted, so there is nothing to report beyond the three.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "patrones",
+        "severity": "low",
+        "what": "`shapeless()` coalesces each entry with `?? ''` to guard an absence the types say cannot occur, so the check protects a state no caller can produce. `values()` is typed `string[]`, and every one of its seven sources is type-checked: a hand-remembered entry reading a property no route declares — the exact phantom this task exists for — is a compile error in `ActivePlansOutcome`, which is a frozen `as const` object, and `npm run typecheck` runs before the suite. The codes coming from `PlanCollapse.declaredCodes()` have already passed `Refusal`'s own non-empty guard in `http.ts`. The coalesce also makes the declared return type a small lie: an absent entry is collected as `undefined`, not as the `''` it was measured by, so the failure names `[undefined]` rather than the culprit that the closed-decision row hoped for. Not blocking, and not the implementer's call: the brief prescribes this line in the same breath as the regex it says to copy exactly, so the burden of proof is the plan's to discharge. The rest of the guard stands on its own — the regex still measures shapes the type checker cannot see, such as a route declaring `plan_progress_not_read`.",
+        "path": "backend/__tests__/infrastructure/refusal-codes.test.ts",
+        "line": 65,
+        "evidence": "`return EveryCodeTheApiEmits.values().filter((code) => !EveryCodeTheApiEmits.KEBAB_CASE.test(code ?? ''))` — `conventions/simplicity.md`: \"A condition on a state that cannot occur — a key that cannot repeat, a value that cannot be missing at that point, a case the branch beside it already handles — protects nothing and reads as if it did.\""
+      }
+    ],
+    "review_token": "cfd2b61a6de557d19f0863c8932932a51d0e5f57c0eafbcdb6649deb78b359b7"
+  }
+}

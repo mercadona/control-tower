@@ -46,15 +46,11 @@ class CodesRememberedByHandFromHttpAndApiServer {
   ])
 }
 
-describe('the codes the api can emit', () => {
-  it('a_code_repeated_across_request_vocabularies_is_a_finding_unless_it_is_declared_shared_on_purpose', () => {
-    const repeated = Repeats.within(RequestVocabularies.codes())
+class EveryCodeTheApiEmits {
+  static readonly KEBAB_CASE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
-    expect(repeated.sort()).toEqual([...SharedOnPurposeAcrossRequestVocabularies.CODES].sort())
-  })
-
-  it('every_code_the_api_emits_is_distinct_though_some_are_remembered_by_hand_and_not_watched_for_a_rename', () => {
-    const codes = [
+  static values(): string[] {
+    return [
       ...new Set(RequestVocabularies.codes()),
       ...PlanCollapse.declaredCodes(),
       ...ImplementCollapse.declaredCodes(),
@@ -63,7 +59,27 @@ describe('the codes the api can emit', () => {
       ...CodesRememberedByHandFromHttpAndApiServer.VALUES,
       ...PlanEvents.declaredCodes(),
     ]
+  }
+
+  static shapeless(): string[] {
+    return EveryCodeTheApiEmits.values().filter((code) => !EveryCodeTheApiEmits.KEBAB_CASE.test(code ?? ''))
+  }
+}
+
+describe('the codes the api can emit', () => {
+  it('a_code_repeated_across_request_vocabularies_is_a_finding_unless_it_is_declared_shared_on_purpose', () => {
+    const repeated = Repeats.within(RequestVocabularies.codes())
+
+    expect(repeated.sort()).toEqual([...SharedOnPurposeAcrossRequestVocabularies.CODES].sort())
+  })
+
+  it('every_code_the_api_emits_is_distinct_though_some_are_remembered_by_hand_and_not_watched_for_a_rename', () => {
+    const codes = EveryCodeTheApiEmits.values()
 
     expect(new Set(codes).size).toBe(codes.length)
+  })
+
+  it('a_code_the_guard_remembers_by_hand_that_no_longer_exists_falls_here_instead_of_passing_as_a_lone_undefined', () => {
+    expect(EveryCodeTheApiEmits.shapeless()).toEqual([])
   })
 })
