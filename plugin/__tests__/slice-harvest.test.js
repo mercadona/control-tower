@@ -3,7 +3,7 @@ import { harvestSlice } from '../scripts/harvest.js'
 import { TelemetryStatus } from '../scripts/harvest-table.js'
 import { JudgeReturns } from '../scripts/judge-returns.js'
 import { ToolUsageTotal } from '../scripts/tool-usage.js'
-import { METRICS_REPO_DIR, aggregateBriefMeasures, aggregateRoleBytesMeasures, aggregateVerdictMeasures, metricsRepoRelPath } from '../scripts/run-metrics.js'
+import { METRICS_REPO_DIR, aggregateBriefMeasures, aggregateIdentityMeasures, aggregateRoleBytesMeasures, aggregateVerdictMeasures, metricsRepoRelPath } from '../scripts/run-metrics.js'
 import {
   IndexOutcome,
   SliceHarvest,
@@ -240,6 +240,7 @@ describe('SliceHarvest reproduces, by an injected gh, the reads ct-harvest.mjs d
       ...aggregateRoleBytesMeasures(GitHubAnswers.telemetryText()),
       ...ToolUsageTotal.of(GitHubAnswers.telemetryText()).measures(),
       ...JudgeReturns.of(GitHubAnswers.telemetryText()).measures(),
+      ...aggregateIdentityMeasures(GitHubAnswers.telemetryText()),
     }
 
     expect(report.outcome).toBe(SliceHarvestOutcome.COMPLETE)
@@ -249,6 +250,28 @@ describe('SliceHarvest reproduces, by an injected gh, the reads ct-harvest.mjs d
       `gh ${GitHubAnswers.pullRequestArgv(GitHubAnswers.FIRST_PR)}`,
       `gh ${GitHubAnswers.TELEMETRY_FILE_ARGV}`,
     ])
+  })
+
+  it('a_telemetry_file_with_one_actor_and_one_tool_account_email_carries_both_into_the_telemetry_object', () => {
+    const text = `${JSON.stringify({
+      ruling: 'pass', rubric_sin_vara: 0, rubric_vara_ct_docs: 2, findings_vara_ct: 0, findings_by_rule: {},
+      actor: 'multi@mercadona.es', tool_account_email: 'tool-account@mercadona.es',
+    })}\n`
+    const runner = new ScriptedRunner({
+      program: 'gh',
+      answers: {
+        [GitHubAnswers.TIMELINE_ARGV]: RunnerAnswer.ok(JSON.stringify([GitHubAnswers.events()])),
+        [GitHubAnswers.pullRequestArgv(GitHubAnswers.FIRST_PR)]: RunnerAnswer.ok(JSON.stringify(GitHubAnswers.pullRequestPayload(GitHubAnswers.FIRST_PR))),
+        [GitHubAnswers.TELEMETRY_FILE_ARGV]: RunnerAnswer.ok(text),
+      },
+      spoken: [],
+    })
+    const harvester = new SliceHarvest({ gh: runner.forArgv })
+
+    const report = harvester.harvest({ repo: GitHubAnswers.REPO, issue: GitHubAnswers.issue([GitHubAnswers.FIRST_PR]), index: GitHubAnswers.indexWithFile() })
+
+    expect(report.row.telemetry.implementerEmail).toBe('multi@mercadona.es')
+    expect(report.row.telemetry.toolAccountEmail).toBe('tool-account@mercadona.es')
   })
 
   it('a_timeline_that_cannot_be_read_is_not_read_and_carries_no_row', () => {
