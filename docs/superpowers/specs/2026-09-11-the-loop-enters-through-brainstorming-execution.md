@@ -50,9 +50,13 @@ protocol is not retired here: only its default dies, and A-3 carries the rest.
   freeze and the promotion are buttons the program answers for, never lines the
   conversation's agent writes.
   *(Procedencia: hablada — «La app, con validación propia».)*
-- **D-7 · GATE 3 stays on GitHub** — the human merges there and the app notices
-  by sweeping. The app never writes to a pull request.
-  *(Procedencia: hablada — «Mergeas en GitHub, la app lo nota».)*
+- **D-7 · GATE 3 is entirely human and stays on GitHub** — the merge is the only
+  act with a permanent external effect and no program performs it: a person
+  merges on GitHub, and all the app does is notice, by sweeping, so that it can
+  dispatch whatever the merge unblocked. The app never writes to a pull request,
+  there is no merge button anywhere in the cabin, and no automation may acquire
+  one without reopening this decision.
+  *(Procedencia: hablada — «Mergeas en GitHub, la app lo nota», y «el merge si es humano (…) el merge tiene que ser totalmente humano».)*
 - **D-8 · The plan review retires and the review is the pull request** — the
   slice's plan is written by its agent and judged by `ct-judge` against its
   issue; a person reads it in the diff.
