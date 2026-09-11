@@ -7,30 +7,20 @@ describe('Home · layout', () => {
     vi.unstubAllGlobals()
   })
 
-  it('keeps the top bar across the top and shares the row below it with the tools drawer', async () => {
+  it('keeps the navbar, the top bar and the right column as the three pieces of the shell', async () => {
     backendAnswering({ status: 200, body: '{}' })
     openHome()
 
-    await waitFor(() => expect(screen.getByRole('complementary', { name: 'Herramientas' })).toBeInTheDocument())
-    const workArea = document.querySelector('.home__work-area')
-    expect(workArea).not.toBeNull()
-    expect(workArea?.children).toHaveLength(2)
-    expect(workArea?.firstElementChild?.tagName).toBe('MAIN')
-    expect(workArea?.lastElementChild).toBe(screen.getByRole('complementary', { name: 'Herramientas' }))
-    expect(document.querySelector('.top-bar')?.closest('.home__work-area')).toBeNull()
+    await waitFor(() => expect(screen.getByRole('navigation', { name: 'Navegación principal' })).toBeInTheDocument())
+    const columns = document.querySelector('.home__columns')
+    expect(columns).not.toBeNull()
+    expect(columns?.children).toHaveLength(2)
+    expect(columns?.firstElementChild?.tagName).toBe('MAIN')
+    expect(columns?.lastElementChild).toBe(screen.getByRole('complementary', { name: 'Progreso de la implementación' }))
+    expect(document.querySelector('.top-bar')?.closest('.home__columns')).toBeNull()
   })
 
-  it('starts with the drawer folded to its rail so it takes no width on first load', async () => {
-    backendAnswering({ status: 200, body: '{}' })
-    openHome()
-
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /^Desplegar el panel de herramientas/ })).toBeInTheDocument())
-    expect(screen.getByRole('complementary', { name: 'Herramientas' })).toHaveClass('drawer--collapsed')
-    expect(screen.queryByRole('button', { name: 'Ver detalles' })).toBeNull()
-  })
-
-  it('keeps the baseline notice of a started plan inside the work area beside the drawer', async () => {
+  it('keeps the baseline notice of a started plan inside the work area beside the right column', async () => {
     backendAnswering(StartPlanMother.startedOnARedRepository())
     const { user } = openHome()
 
@@ -39,23 +29,18 @@ describe('Home · layout', () => {
     const notice = await screen.findByText('El repositorio ya estaba en rojo antes de empezar')
     expect(notice).toBeVisible()
     expect(notice.closest('main')).not.toBeNull()
-    expect(notice.closest('.home__work-area')).not.toBeNull()
-    expect(screen.getByRole('complementary', { name: 'Herramientas' }).closest('.home__work-area'))
-      .toBe(notice.closest('.home__work-area'))
+    expect(notice.closest('.home__columns')).not.toBeNull()
+    expect(screen.getByRole('complementary', { name: 'Progreso de la implementación' }).closest('.home__columns'))
+      .toBe(notice.closest('.home__columns'))
   })
 
-  it('compresses the work area instead of covering it: the drawer is a sibling of main, never a dialog', async () => {
+  it('never turns the right column into a dialog: it is a sibling of main from the first paint', async () => {
     backendAnswering({ status: 200, body: '{}' })
-    const { user } = openHome()
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /^Desplegar el panel de herramientas/ })).toBeInTheDocument())
+    openHome()
 
-    await user.click(screen.getByRole('button', { name: /^Desplegar el panel de herramientas/ }))
-
-    const drawer = screen.getByRole('complementary', { name: 'Herramientas' })
-    expect(drawer).not.toHaveClass('drawer--collapsed')
+    const side = await screen.findByRole('complementary', { name: 'Progreso de la implementación' })
     expect(screen.queryByRole('dialog')).toBeNull()
-    expect(drawer.previousElementSibling?.tagName).toBe('MAIN')
+    expect(side.previousElementSibling?.tagName).toBe('MAIN')
     expect(screen.getByRole('heading', { name: 'Solicitud' })).toBeVisible()
   })
 })

@@ -225,16 +225,16 @@ const SummaryTiles = ({ entries, groups }: { entries: ImplementationHistoryEntry
     <div className="implement-history__tiles">
       <div className="implement-history__tile">
         <span className="implement-history__tile-label lg-caption1-regular">Tareas</span>
-        <span className="implement-history__tile-value lg-title4-semibold">{`${tasksDone} de ${tasksTotal}`}</span>
+        <span className="implement-history__tile-value lg-headline-medium">{`${tasksDone} de ${tasksTotal}`}</span>
       </div>
       <div className="implement-history__tile">
         <span className="implement-history__tile-label lg-caption1-regular">Intentos</span>
-        <span className="implement-history__tile-value lg-title4-semibold">{attemptsCount}</span>
+        <span className="implement-history__tile-value lg-headline-medium">{attemptsCount}</span>
         {failedCount > 0 && <span className="implement-history__tile-note lg-caption1-regular">{`${failedCount} fallido(s)`}</span>}
       </div>
       <div className="implement-history__tile">
         <span className="implement-history__tile-label lg-caption1-regular">Tokens</span>
-        <span className="implement-history__tile-value lg-title4-semibold">{formatMillions(tokensTotal)}</span>
+        <span className="implement-history__tile-value lg-headline-medium">{formatMillions(tokensTotal)}</span>
       </div>
     </div>
   )

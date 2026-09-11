@@ -15,20 +15,26 @@
 }
 
 .implement-history__tiles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .implement-history__tile {
   display: flex;
-  flex: 1 1 160px;
   flex-direction: column;
   gap: 4px;
-  padding: 12px 16px;
+  min-width: 0;
+  padding: 8px 12px;
   background-color: var(--background-elevated);
   border: var(--borderwidth-sm) solid var(--border-secondary);
   border-radius: var(--shape-container-sm);
+}
+
+@media (width < 360px) {
+  .implement-history__tiles {
+    grid-template-columns: 1fr;
+  }
 }
 
 .implement-history__tile-label,
