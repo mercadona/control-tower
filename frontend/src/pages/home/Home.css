@@ -38,6 +38,7 @@
   width: 100%;
   max-width: var(--layout-container-md);
   margin-inline: auto;
+  flex: none;
 }
 
 .home__side {

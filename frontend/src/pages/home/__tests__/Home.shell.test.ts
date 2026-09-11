@@ -92,6 +92,12 @@ describe('the application shell gives the Navigation shell a height to fill', ()
     expect(content).toMatch(/overflow:\s*auto/)
     expect(side).toMatch(/overflow:\s*auto/)
   })
+
+  it('keeps a stage card at its own height instead of shrinking it below its content, so a card taller than the viewport lets the work area scroll to it', () => {
+    const child = Stylesheet.home().declarationsFor('.home__content > *')
+
+    expect(child).toMatch(/flex:\s*none/)
+  })
 })
 
 describe('the right column stacks under the content below 1180px without becoming a layer', () => {
