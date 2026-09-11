@@ -301,6 +301,14 @@ describe('ct-api entrypoint', () => {
     expect(port).toBeGreaterThan(0)
   })
 
+  it('the_entrypoint_assembles_the_headless_plan_agent_and_listens', async () => {
+    const port = await Entrypoint.listening({ CT_API_PORT: '0' })
+
+    expect(port).toBeGreaterThan(0)
+    const response = await fetch(`http://127.0.0.1:${port}/not-a-route`)
+    expect(response.status).toBe(404)
+  })
+
   it('a_bad_invocation_is_refused_with_the_reason_and_a_usage_line_that_names_the_command_the_documentation_starts_the_backend_with', async () => {
     const refusal = await Entrypoint.refused({ CT_API_PORT: 'a fistful of ports' })
 
