@@ -1,7 +1,7 @@
 .implement-history {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .implement-history__heading {
@@ -14,31 +14,132 @@
   color: var(--foreground-secondary);
 }
 
-.implement-history__list {
+.implement-history__tiles {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 12px;
+}
+
+.implement-history__tile {
+  display: flex;
+  flex: 1 1 160px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px;
+  background-color: var(--background-elevated);
+  border: var(--borderwidth-sm) solid var(--border-secondary);
+  border-radius: var(--shape-container-sm);
+}
+
+.implement-history__tile-label,
+.implement-history__tile-note {
+  color: var(--foreground-secondary);
+}
+
+.implement-history__tile-value {
+  color: var(--foreground-primary);
+}
+
+.implement-history__tile-note {
+  color: var(--foreground-warning);
+}
+
+.implement-history__stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.implement-history__row {
+.implement-history__stepper-node {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  color: var(--foreground-primary);
+  background-color: var(--background-primary);
+  border-radius: var(--shape-button-full);
 }
 
-.implement-history__step {
+.implement-history__stepper-node + .implement-history__stepper-node {
+  position: relative;
+}
+
+.implement-history__stepper-node + .implement-history__stepper-node::before {
+  width: 16px;
+  height: var(--borderwidth-sm);
+  margin-inline-end: 6px;
+  content: '';
+  background-color: var(--border-secondary);
+}
+
+.implement-history__stepper-node--danger-before::before {
+  background-color: var(--border-danger);
+}
+
+.implement-history__stepper-duration {
+  color: var(--foreground-secondary);
+}
+
+.implement-history__failure-note {
+  padding: 8px 12px;
+  color: var(--foreground-danger);
+  background-color: var(--background-danger-tonal);
+  border-radius: var(--shape-container-sm);
+}
+
+.implement-history__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 0;
+}
+
+.implement-history__fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.implement-history__fact dt {
+  color: var(--foreground-secondary);
+}
+
+.implement-history__fact dd {
+  margin: 0;
   color: var(--foreground-primary);
 }
 
-.implement-history__task,
-.implement-history__outcome,
-.implement-history__duration {
+.implement-history__agent-summary {
   color: var(--foreground-secondary);
 }
 
-.implement-history__summary {
-  color: var(--foreground-secondary);
+.implement-history__closing {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.implement-history__closing-heading {
+  margin: 0;
+  color: var(--foreground-primary);
+}
+
+.implement-history__closing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.implement-history__closing-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--foreground-primary);
 }

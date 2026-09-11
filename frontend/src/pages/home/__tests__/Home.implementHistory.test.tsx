@@ -61,31 +61,34 @@ describe('Home · implement history', () => {
     expect(await screen.findByText('Todavía no ha terminado ningún paso')).toHaveAttribute('role', 'status')
   })
 
-  it('should render one row per finished step, in file order', async () => {
+  it('should render three summary tiles for tasks, attempts and tokens', async () => {
     await planImplementing(ImplementHistoryMother.fullRun)
 
-    const list = await screen.findByRole('list', { name: 'Pasos completados' })
-    await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(11))
-    const rows = within(list).getAllByRole('listitem')
-    expect(rows[0]).toHaveTextContent('Implementando')
-    expect(rows[10]).toHaveTextContent('Evaluando el slice')
+    expect(await screen.findByText('2 de 2')).toBeInTheDocument()
+    expect(screen.getByText('17,6 M')).toBeInTheDocument()
   })
 
-  it('should show the step label, the task number, the outcome label and the duration of a row', async () => {
-    await planImplementing(ImplementHistoryMother.oneTask)
+  it('should group rows by task into one accordion per task, with null-task rows in a closing section', async () => {
+    await planImplementing(ImplementHistoryMother.fullRun)
 
-    const list = await screen.findByRole('list', { name: 'Pasos completados' })
-    const [row] = within(list).getAllByRole('listitem')
-    expect(row).toHaveTextContent('Implementando')
-    expect(row).toHaveTextContent('Tarea 1')
-    expect(row).toHaveTextContent('Hecho')
+    expect(await screen.findByRole('button', { name: /Tarea 1/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Tarea 2/ })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Cierre del slice' })).toBeInTheDocument()
   })
 
-  it('should show a row summary collapsed behind a disclosure', async () => {
+  it('should show the step label and the judge ruling once its task is expanded', async () => {
     await planImplementing(ImplementHistoryMother.oneTask)
 
-    const list = await screen.findByRole('list', { name: 'Pasos completados' })
-    const disclosure = within(list).getByText('Resumen')
+    const button = await screen.findByRole('button', { name: /Tarea 1/ })
+    const region = screen.getByRole('region', { name: /Tarea 1/ })
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+    expect(within(region).getByText('Implementar')).toBeInTheDocument()
+  })
+
+  it('should show a row summary collapsed behind a Qué hizo el agente disclosure', async () => {
+    await planImplementing(ImplementHistoryMother.oneTask)
+
+    const disclosure = await screen.findByText('Qué hizo el agente')
     expect(disclosure.closest('details')).not.toBeNull()
   })
 
