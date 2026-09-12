@@ -1,0 +1,82 @@
+{
+  "issue": 327,
+  "task": 4,
+  "task_name": "The stream that reaches the page while the process runs",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises three things and I located each. (1) \"opens with what the session already printed\": session-stream-route.ts:43 writes one frame with `watched.printed` after subscribing, and the frame is built by `frameFor`, which is the literal `data: ${JSON.stringify({ bytes })}\\n\\n`. (2) \"then carries every byte it prints\": the `onBytes` handed to the use case at line 37 writes a frame per byte string onto a response that is never ended, and the route is mounted with its `app.all` pair in api-server.ts:246-251. (3) \"closing it kills nothing\": the `close` handler at 39-42 calls `watched.stop()` and `response.end()` and nothing else — no method of `LiveSessions` other than `find` is reached anywhere in the diff, so no kill exists to be called. Declared, not a finding: nothing wires `liveSessions`/`watchLiveSession` into `ct-api.ts`, so on the running backend `this.liveSessions!` is `undefined` and a real request to this path would fail. That is the plan's gap, not this task's — the plan's own §4 inventory gives `ct-api.ts` to T3 alone, T3's Call site passes only `listLiveSessions`, and `ct-api.ts` is outside this task's `**Files:**`, so wiring it here would have been the `alcance` finding instead. The implementer's declaration #2 is the right call for this task.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The `**TDD:**` line asks for `it('the stream opens with what the session already printed')` — \"a session whose `printed` is `hola` answers a first frame `data: {\"bytes\":\"hola\"}`\". session-stream-route.test.ts:309-320 is that test: the input is `WatchLiveSessionSpy.printing('hola')` over a session the double holds, and the assertion is `expect(await frames.next()).toBe('data: {\"bytes\":\"hola\"}\\n\\n')` — the same assertion, over the same input, against the same expected value, with the frame terminator the Contract's own `frameFor` definition includes. The first frame is read off a real socket through a real listening server, so it is the first frame on the wire and not a returned string.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "Both Contract blocks compared symbol by symbol. watch-live-session.ts: `WatchLiveSessionParams{session, onBytes}`, `WatchLiveSessionResult{printed, stop}`, `WatchLiveSession` with `constructor({ liveSessions })` and `execute(params): WatchLiveSessionResult` — all present, same names, same types, both value objects frozen. session-stream-route.ts: `SessionStreamOutcome` frozen with `NOT_LIVE: 'session-not-live'` verbatim; `PATH='/sessions/:id/stream'`, `METHOD='GET'`, `ID_PARAMETER='id'`, `frameFor`, `notLive()` (400, that code, detail 'no live session answers to that id'), `handledBy(liveSessions, watchLiveSession)`, `refuseOtherMethods` — all as written. The prose is honoured too: the three headers are the same object `PlanEventsRoute` sends; the order is headers (34) then subscription (35-38) then the `printed` frame (43); `close` calls `stop()` and `end()` only. On the implementer's declaration #1: adding a `liveSessions` collaborator beside `watchLiveSession` is the right call and not a contract deviation — the Contract's own `handledBy(liveSessions: LiveSessions, watchLiveSession: WatchLiveSession)` requires a `LiveSessions` to reach the mount, and the alternative `this.listLiveSessions!.liveSessions` would have a controller reach through one use case to borrow another's port, against `architecture.md`'s \"Dependencies enter through the constructor, by name\". Both fields follow the optional/nullable/lazy shape every other collaborator in that file has.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Five rows bear on this diff and each is implemented with the value it states. P-1 (the port is synchronous): `execute` and the handler are synchronous, `watch` returns without a promise and the headers are written between `find` and the first byte. P-2 (a frame carries bytes and nothing else): `frameFor` emits `{bytes}` only, no `kind`. P-3 (the page never opens or kills a session): the route has no open, no delete and no command from the browser. P-9 (an unknown or dead id is refused `session-not-live`): the refusal is that code, held in the frozen `SessionStreamOutcome`, and it is pinned on the wire by the fourth test. D-10 (everything new under `backend/` is TypeScript): both new modules and both new tests are `.ts` with erasable syntax. No row is reopened. The declaration of `SessionStreamOutcome` in `refusal-codes.test.ts` is the plan's Task 5, not this one.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Measured against the exemplars the plan names and against ct's eight documents, all of which I opened. Exemplars: the route matches `sessions-route.ts` for its 405 pair and `plan-events-route.ts` for its SSE headers and its `close` watcher; the query matches `survey-external-tools.ts` for its parameters/result objects and its port by name; the test's server-and-fetch shape matches the eight `RunningApi` route suites already in this backend (so that helper's per-file existence is the host idiom, not a finding). architecture.md: three layers, direction respected — the query imports only the port and the value object, the route imports the query, the domain imports nobody; a result object is declared even carrying two fields; one controller per endpoint, the route and its outcome vocabulary and its refusal in one module. boundaries.md: the refusal's code is declared explicitly beside its detail; one code per decision of the receiver; the one cast is a finding below. decisions.md: no rule is written twice — the frame format lives once in `frameFor`. domain.md: no tool noun anywhere (`LiveSession`, `LiveSessions`, `watch`), no new port for a new step. simplicity.md: the two added collaborator fields both have a caller in `#route()`, no guard downstream of the door, no observability with no reader. style.md: English throughout, no prose in the code, every function hangs off a type (`WithinBudget` and `SseFrames` included). testing.md: the controller's use case is doubled by construction and the assertions are on the status and the literal body through a real listening server and a real client; both refusal tests also assert `watchLiveSession.asked` is empty, which is that document's \"A refusal never reaches a double\"; and the `WithinBudget` helper of declaration #4 earns its place exactly because that document says \"A mutation that hangs the suite instead of failing it is its own finding\" — turning a 120s hang into a 2s failure that names what did not happen is that finding's repair, and the whole suite runs in 52ms, so the budget is ~40x headroom rather than a race. defects.md, rule by rule: closed vocabulary — the refusal code is a member of the frozen `SessionStreamOutcome`, never a loose string, and there is no dispatch with a catch-all; raw map as the return value of logic — none, the port's stream becomes `WatchLiveSessionResult` and the only map is `#HEADERS`, config handed straight to `writeHead`; two fields that have to agree — none, `printed` and `stop` are independent and no sentinel stands for an absence (an empty scrollback is genuinely empty text, and the plan prescribes a first frame regardless); errors named for what happens — no new error type, and `session-not-live` names what happened rather than where. Three low notes below: the `as string` cast, the mother copied into two new files, and the response error guard the named SSE exemplar has and this route does not.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Does not apply: the diff touches no pre-existing test. Both test files are new (`new file mode 100644`), and the only `-` lines in the whole diff are in `api-server.ts:511-512`, where the constructor's destructuring list is reflowed to admit the two new collaborators — no assertion, case or test is removed, relaxed or rewritten anywhere.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised behaviour is produced by production code. The framing (`frameFor`), the order (headers, then subscription, then the `printed` frame), the response left open so later bytes reach the client, the `close` handler that stops the watch, and the refusal of an unknown id all live in `session-stream-route.ts` and are reached through a real `ApiServer` listening on port 0 and a real `fetch`. The doubles supply inputs only — the session the port holds, the text it printed, the bytes injected through the very `onBytes` production passed into `execute` — which is what `conventions/testing.md` prescribes for a controller. Reverting the production lines of this diff leaves the path unmounted and all five tests fail on the 404. The second criterion is genuinely pinned: test 2 reads a frame, injects a byte and reads the next frame off the same socket, which fails if the response were ended or if the `onBytes` wiring were dropped.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Every line traces to a sentence of the task. The five touched paths are the five `**Files:**` paths, the two `(create)` files are new and `api-server.ts` is a modify. Inside them: the route and the query are the two Contract blocks; the mount and its `app.all` are \"mounts its pair beside Task 1's\"; the extra `liveSessions` collaborator is the Contract's `handledBy(liveSessions, watchLiveSession)`; the test scaffolding (`RunningApi`, `SseFrames`, `WithinBudget`, the doubles) exists to drive the five tests the `**Tests:**` line names, and nothing more. Nothing in `### Out of scope` is touched: the eight existing endpoints keep their paths and bodies, no `kind` field is declared, no endpoint opens or kills a session, no resize. No plan file appears in the diff, so there is no amendment to rule on — the plan, its `**Tests:**` names, its `**TDD:**` line and its four verification commands are exactly as committed, and all four commands ran green.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "Six new tests, measured on the three properties; I loaded `control-tower-loop:test-driven-development` and its `testing-anti-patterns.md` before looking at anything finer. Deterministic: every server binds port 0 on loopback, no clock, date, network, randomness or sleep-as-synchronisation appears in any assertion; `WithinBudget` is a failure budget around a real awaited event, not a wait, and it is cleared in `finally` so it leaks no timer. Isolated: each test builds its own doubles and its own server, the only shared state is `RunningApi.#started`, which `afterEach` drains and stops, and no test depends on the order of the file. Verifies real behaviour: each assertion is on what crossed the wire — the literal frame, the 400 and its `{code, detail}`, the 405 and its `Allow` — or, for the close case, on the `stop` production received from the use case and invoked, which is the only observable effect that layer has; `conventions/testing.md` itself sanctions asserting that a double was or was not asked in a controller test. The redundant `expect(liveSessions.find(claude.id)).toBe(claude)` reads the double's own map and could not fail on its own, but the test around it cannot pass with this diff's production lines reverted, so it is belt-and-braces rather than a defect. Nothing here contradicts a sentence of the TDD skill or of `testing-anti-patterns.md`: no assertion on a mock's existence, no test-only method added to a production class, no partial mock of an external shape.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "patrones",
+        "severity": "low",
+        "what": "A forced cast at the door. `request.params[ID_PARAMETER]` is `string | string[]` under `@types/express` v5 (`ParamsDictionary` declares `[key: string]: string | string[]`), and the diff silences it with `as string` instead of entering by the contract's name. The three other routes with a path parameter do not cast: `plan-events-route.ts:198`, `implement-progress-route.ts:139` and `implement-history-route.ts:157` all hand `request.params.issue` to a request model whose parameter is `unknown`, and the model decides. I am ruling declaration #3 a low rather than a block because the tension is real and the implementer named it: the id's content IS judged on entry — `find` answers `null` and the route refuses `session-not-live`, pinned by a test — so the cast stands in for no missing validation, a `typeof` guard here would be the unreachable check `conventions/simplicity.md` forbids since only this file's own `PATH` can produce the segment, and the backend already carries the same idiom at `start-plan-route.ts:204` and `git-workspace.ts:293`.",
+        "path": "backend/src/infrastructure/session-stream-route.ts",
+        "line": 29,
+        "evidence": "`conventions/boundaries.md`: \"**What comes from outside is validated on entry, with no exceptions and no forced cast**: a cast checks nothing, it only silences the type checker\", and its antipattern \"A cast at the boundary.\" The line: `const session = liveSessions.find(request.params[SessionStreamRoute.ID_PARAMETER] as string)`"
+      },
+      {
+        "rule": "patrones",
+        "severity": "low",
+        "what": "`LiveSessionMother` is written a third and a fourth time. The identical class is copied into both new test files, and `backend/__tests__/application/list-live-sessions.test.ts:11` already declares one whose `claude()` answers `new LiveSession({ id: 'session-2', name: 'claude' })` — the same named scenario, a different id. Two of the three copies now disagree about what `LiveSessionMother.claude()` means inside one suite, which is the drift the mother rule exists to prevent. `backend/__tests__/` already holds shared test types for exactly this (`reviews-spy.ts`, `sleep-double.ts`), and three consumers is past the point where extracting leaves the place better. Not the same case as `RunningApi`, which is genuinely different per suite and is this backend's committed idiom across eight route tests.",
+        "path": "backend/__tests__/infrastructure/session-stream-route.test.ts",
+        "line": 14,
+        "evidence": "`conventions/testing.md`, antipattern: \"A test helper at module level, or repeated in two files.\" And its mother rule: \"Without them the same object gets copied into two files with different values and neither says why.\""
+      },
+      {
+        "rule": "patrones",
+        "severity": "low",
+        "what": "The exemplar's disconnection guard is missing. `plan-events-route.ts` — the file `## 3. Reference patterns` names as the SSE route to imitate — registers `response.on('error', PlanEventsRoute.#ignore)` before `writeHead` so a write onto a socket the client already dropped cannot surface as an unhandled `'error'` on the response. This route registers none. The case: a byte arrives from the pty in the window between the socket dying and `request`'s `close` handler running, `response.write` is called on a destroyed response and the emitted `'error'` has no listener. Low rather than medium because the exposure is not the exemplar's: `PlanEventsRoute` necessarily writes after disconnect (its loop only observes `cancelled()` at the end of an iteration), whereas here `stop()` unsubscribes synchronously in the `close` handler, so the window is a narrow race rather than the normal path — and the Contract block spells this handler's body out without it.",
+        "path": "backend/src/infrastructure/session-stream-route.ts",
+        "line": 34,
+        "evidence": "`plan-events-route.ts:204-205`: `response.on('error', PlanEventsRoute.#ignore)` immediately before `response.writeHead(200, PlanEventsRoute.#HEADERS)`; the new route writes `response.writeHead(200, SessionStreamRoute.#HEADERS)` with no error listener anywhere in the file."
+      }
+    ],
+    "review_token": "0fb86f97811ada9f98eaef6dcc6c9c3b6c38204dc63ae7876650e228782c34bb"
+  }
+}

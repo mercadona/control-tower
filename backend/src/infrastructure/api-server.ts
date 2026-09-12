@@ -14,12 +14,14 @@ import { ImplementProgressRoute } from './implement-progress-route.ts'
 import { ImplementHistoryRoute } from './implement-history-route.ts'
 import { ExternalToolsRoute } from './external-tools-route.ts'
 import { SessionsRoute } from './sessions-route.ts'
+import { SessionStreamRoute } from './session-stream-route.ts'
 import type { StartPlan } from '../application/actions/start-plan.ts'
 import type { ImplementPlanParams } from '../application/actions/implement-plan.ts'
 import type { ReadImplementationProgressParams } from '../application/queries/read-implementation-progress.ts'
 import type { ReadImplementationHistoryParams } from '../application/queries/read-implementation-history.ts'
 import type { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
 import type { ListLiveSessions } from '../application/queries/list-live-sessions.ts'
+import type { WatchLiveSession } from '../application/queries/watch-live-session.ts'
 import type { AskPlanChangesAction } from './review-plan-route.ts'
 import type { PlanEvents, PlanSessions } from './plan-events-route.ts'
 import type { ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
@@ -30,6 +32,7 @@ import type { ImplementationState } from '../domain/value-objects/implementation
 import type { ImplementationHistoryEntry } from '../domain/value-objects/implementation-history-entry.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
+import type { LiveSessions } from '../domain/ports/live-sessions.ts'
 
 export const LOOPBACK = '127.0.0.1'
 
@@ -83,6 +86,8 @@ export type ApiCollaborators = {
   activePlans?: ActivePlans | null,
   externalTools?: SurveyExternalTools | null,
   listLiveSessions?: ListLiveSessions | null,
+  liveSessions?: LiveSessions | null,
+  watchLiveSession?: WatchLiveSession | null,
   implementationStarts?: ImplementationStarts | null,
   recovery?: ActivePlanRecovering | null,
   stderr?: Stderr | null,
@@ -133,6 +138,8 @@ export class ApiServer {
   readonly activePlans: ActivePlans | null | undefined
   readonly externalTools: SurveyExternalTools | null | undefined
   readonly listLiveSessions: ListLiveSessions | null | undefined
+  readonly liveSessions: LiveSessions | null | undefined
+  readonly watchLiveSession: WatchLiveSession | null | undefined
   readonly implementationStarts: ImplementationStarts | null | undefined
   readonly recovery: ActivePlanRecovering | null
   readonly stderr: Stderr | null | undefined
@@ -141,8 +148,8 @@ export class ApiServer {
 
   constructor({
     port, startPlan, implementPlan, askPlanChanges, implementProgress, implementHistory, reviews, pullRequestReviews,
-    planEvents, readPlanProgress, sessions, activePlans, externalTools, listLiveSessions, implementationStarts,
-    recovery = null, stderr, frontendRoot,
+    planEvents, readPlanProgress, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
+    watchLiveSession, implementationStarts, recovery = null, stderr, frontendRoot,
   }: ApiCollaborators) {
     this.requestedPort = port
     this.startPlan = startPlan
@@ -158,6 +165,8 @@ export class ApiServer {
     this.activePlans = activePlans
     this.externalTools = externalTools
     this.listLiveSessions = listLiveSessions
+    this.liveSessions = liveSessions
+    this.watchLiveSession = watchLiveSession
     this.implementationStarts = implementationStarts
     this.recovery = recovery
     this.stderr = stderr
@@ -234,6 +243,12 @@ export class ApiServer {
       SessionsRoute.handledBy(this.listLiveSessions!)
     )
     app.all(SessionsRoute.PATH, SessionsRoute.refuseOtherMethods)
+    app.get(
+      SessionStreamRoute.PATH,
+      Browsers.turnAwayForeign,
+      SessionStreamRoute.handledBy(this.liveSessions!, this.watchLiveSession!)
+    )
+    app.all(SessionStreamRoute.PATH, SessionStreamRoute.refuseOtherMethods)
     app.use(Failures.nothingMatched)
     app.use(Failures.answer)
 
