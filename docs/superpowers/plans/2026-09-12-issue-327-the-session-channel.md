@@ -382,7 +382,8 @@ watcher.
 
 **Files:** `backend/src/infrastructure/ct-api.ts` (modify), `backend/package.json` (modify),
 `backend/package-lock.json` (modify),
-`backend/__tests__/infrastructure/pty-live-sessions-real-process.test.ts` (create)
+`backend/__tests__/infrastructure/pty-live-sessions-real-process.test.ts` (create),
+`backend/__tests__/infrastructure/ct-api-real-process.test.ts` (modify)
 
 Call site (backend/src/infrastructure/ct-api.ts):
 
