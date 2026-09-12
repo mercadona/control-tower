@@ -52,7 +52,6 @@ describe('ReadPlanProgress', () => {
 
   it('a_port_that_nobody_implemented_says_so_instead_of_answering_undefined', async () => {
     await expect(new PlanProgress().of({ located, issue, repository })).rejects.toThrow(/must implement of/)
-    await expect(new PlanProgress().committedAt({ located })).rejects.toThrow(/must implement committedAt/)
     expect(() => new ReviewLog().noted({ issue: issue.number, repository, at: '2026-09-09T10:00:00Z' }))
       .toThrow(/must implement noted/)
     expect(() => new ReviewLog().lastAskedAt({ issue: issue.number, repository })).toThrow(/must implement lastAskedAt/)

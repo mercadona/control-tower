@@ -67,7 +67,12 @@ wiring, `ReadFixesAsked` and `RequestFixes` — exactly where it is.
   `go-response.js` and `dispatch-check.mjs`'s exit-9 ladder. Debt A-3 of the spec retires them in
   later work; here only the **default** dies.
 - `GATES.plan` itself stays in the vocabulary with both its texts: a row that writes `Gate: plan`
-  still gets the gate. What changes is only that no row gets it without asking.
+  still gets the gate. What changes is only that no row gets it without asking. **Known residue,
+  left on purpose:** `GATES.plan.kickoff` opens with «implicado por defecto en TODO slice, salvo
+  renuncia `!plan`», which this slice makes false. D-14 binds the epic to touching the distributed
+  plugin beyond that single line for nothing, so the sentence stays and is retired with the rest of
+  the go protocol in debt A-3. The gate's operative instruction — publish the plan and wait — is
+  still correct for a row that asks for it; only the parenthetical about how it got there is not.
 - `POST /implement-plan` stays routed and keeps minting the go. Slice #6 retires it.
 - `cmux-plan-agents.ts` stays; only its `review()` method leaves, with the port method it implements.
   Slice #6 takes cmux out of the backend.
@@ -615,11 +620,19 @@ node --input-type=module -e "const g = await import('./plugin/scripts/gates.js')
 npm --prefix plugin test
 ```
 
-### Task 8 — `API.md` no longer documents the retired endpoint
+### Task 8 — `API.md` and the last leftover of the review both go
 
-**Objective:** the API's own documentation describes the two endpoints as they now answer, and names the review nowhere.
+**Objective:** the API's own documentation describes the two endpoints as they now answer and names the review nowhere, and the one symbol the retirement left with no reader goes with it.
 
-**Files:** `backend/API.md` (modify)
+**Files:** `backend/API.md` (modify), `backend/src/domain/ports/plan-progress.ts` (modify), `backend/src/infrastructure/plan-contract-progress.ts` (modify), `backend/__tests__/infrastructure/plan-contract-progress.test.ts` (modify), `backend/__tests__/application/read-plan-progress.test.ts` (modify)
+
+**Amendment (task 8, own commit):** `read-plan-progress.test.ts` was left off the line above, and its
+`a_port_that_nobody_implemented_says_so_instead_of_answering_undefined` case still called
+`new PlanProgress().committedAt(...)`, the very method this task deletes from the port. Deleting the
+method without touching this file would fail `npm --prefix backend run typecheck` and the task's own
+`test -z "$(grep -rl committedAt backend/src backend/__tests__)"` predicate. The single assertion on
+`committedAt` is removed from that test; the rest of the file, including its `of` and `ReviewLog`
+assertions, stays untouched.
 
 Final text (backend/API.md):
 
@@ -644,6 +657,11 @@ Final text (backend/API.md):
 frame does not close the stream; the next poll may succeed.
 ```
 
+`PlanProgress.committedAt`, `PlanContractProgress.committedAt` and `committedAtArgvFor` go with the
+documentation: `ReadPlanProgress.#underReview` was their only production reader and task 6 removed it.
+The plan declared that consequence for `ReviewLog.lastAskedAt` in its `### Out of scope` and
+overlooked it here; the judge of task 6 found it and it is closed rather than carried.
+
 The `data: {"state":"reviewing"}` frame goes from the example block, and so does the whole paragraph
 that begins `` `reviewing` means changes were asked for on the plan ``. In the `POST /implement-plan`
 section the `plan-under-review` row leaves the refusals table, and with it the four paragraphs that
@@ -651,17 +669,22 @@ explain it — from `` `plan-under-review` answers two different questions `` to
 `instead of towards a plan nobody can ever implement.` The whole `## POST /review-plan` section and
 its `---` separator go. Nothing is added: the retired endpoint gets no farewell note.
 
-**TDD:** No TDD — `API.md` is documentation and this repository pins no assertion over its prose; the predicates below are what measure it.
+**TDD:** No TDD — the documentation half pins no assertion over its prose, and the code half only deletes a symbol with no caller; the predicates below are what measure both.
 
-**Tests:** N/A — no test is added or removed.
+**Tests:** removed on purpose: the four `committedAt` cases of `plan-contract-progress.test.ts` (`reads the date of the plan's last commit`, and the null / not-a-repo / refused ones), which pin a method this task deletes. Nothing is added.
 
-**Verification:** the file names neither the path, nor the retired frame, nor the refusal code, and it still documents the seven endpoints that remain.
+**Verification:** the file names neither the path, nor the retired frame, nor the refusal code, it still documents the seven endpoints that remain — two `POST` and five `GET`, so the "Reaching it" table's breakdown cannot go stale unseen — the dead symbol is gone from the whole backend, and the suite stays green.
 
 ```bash
 test "$(grep -c /review-plan backend/API.md)" -eq 0
 test "$(grep -c reviewing backend/API.md)" -eq 0
 test "$(grep -c plan-under-review backend/API.md)" -eq 0
 test "$(grep -c '^## `' backend/API.md)" -eq 7
+test "$(grep -c '^## `POST' backend/API.md)" -eq 2
+test "$(grep -c '^## `GET' backend/API.md)" -eq 5
+test -z "$(grep -rl committedAt backend/src backend/__tests__)"
+npm --prefix backend run typecheck
+npm --prefix backend test
 ```
 
 ## 8. Global verification
