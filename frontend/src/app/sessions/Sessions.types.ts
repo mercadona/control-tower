@@ -9,6 +9,7 @@ export type SessionFailure = { code: string; detail: string }
 export type SessionStreamListener = {
   onBytes: (bytes: string) => void
   onFailure: (failure: SessionFailure) => void
+  onRefused: () => void
   onUnreachable: () => void
 }
 

@@ -37,11 +37,29 @@ describe('SessionsClient', () => {
     SessionsClient.watch('a1', {
       onBytes: (bytes) => received.push(bytes),
       onFailure: () => undefined,
+      onRefused: () => undefined,
       onUnreachable: () => undefined,
     })
     FakeEventSource.last().receive('{"bytes":"hello"}')
 
     expect(received).toEqual(['hello'])
+  })
+
+  it('a connection the browser closed for good is a refusal', () => {
+    FakeEventSource.install()
+    let refusals = 0
+    let unreachables = 0
+
+    SessionsClient.watch('a1', {
+      onBytes: () => undefined,
+      onFailure: () => undefined,
+      onRefused: () => (refusals += 1),
+      onUnreachable: () => (unreachables += 1),
+    })
+    FakeEventSource.last().refuseBeforeOpen()
+
+    expect(refusals).toBe(1)
+    expect(unreachables).toBe(0)
   })
 
   it('typing posts the text as json to that session input', async () => {

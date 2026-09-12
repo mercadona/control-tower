@@ -622,10 +622,10 @@ export type LiveSessionsState =
 export const useLiveSessions: () => LiveSessionsState
 ```
 
-Current state (frontend/vite.config.ts, line 8):
+Current state (frontend/vite.config.ts):
 
 ```ts
-const API_PATHS = ['/start-plan', '/plan-events', '/implement-plan', '/review-plan', '/implement-progress', '/implement-history', '/active-plans', '/external-tools']
+const BACKEND = 'http://127.0.0.1:8787'
 ```
 
 `API_PATHS` gains `'/sessions'` — one entry: vite proxies by prefix and the stream and the input
@@ -660,57 +660,58 @@ npm --prefix frontend run build   # expected: exit 0 — the page type-checks an
 
 ### Task 7 — The live terminal on the page
 
-**Objective:** one session renders as a real terminal that shows what it prints and sends what
-is typed into it.
+**Objective:** one session renders as a real terminal that shows what it prints, takes what is
+typed, and names what went wrong.
 
 **Files:** `frontend/src/app/sessions/components/session-terminal/SessionTerminal.tsx` (create),
 `frontend/src/app/sessions/components/session-terminal/SessionTerminal.css` (create),
 `frontend/src/app/sessions/components/session-terminal/index.ts` (create),
+`frontend/src/app/sessions/components/session-terminal/SessionTerminal.test.tsx` (create),
 `frontend/package.json` (modify), `frontend/package-lock.json` (modify),
-`frontend/src/app/sessions/components/session-terminal/SessionTerminal.test.tsx` (create)
+`frontend/src/app/sessions/Sessions.types.ts` (modify),
+`frontend/src/app/sessions/client.ts` (modify),
+`frontend/src/app/sessions/client.test.ts` (modify)
 
 Contract (frontend/src/app/sessions/components/session-terminal/SessionTerminal.tsx):
 
 ```tsx
-export const TERMINAL_COLUMNS = 80
-export const TERMINAL_ROWS = 24
-
 export type SessionTerminalProps = { session: LiveSession }
-
 export const SessionTerminal: ({ session }: SessionTerminalProps) => ReactElement
 ```
 
-One `useEffect`, keyed on `session.id`: it builds a `Terminal` from `@xterm/xterm` with those
-columns and rows, opens it on a ref'd `<div className="session-terminal__screen">`, subscribes
+One `useEffect`, keyed on `session.id`: it builds a `Terminal` from `@xterm/xterm` at 80 columns
+and 24 rows — the size the backend opened the pty at — opens it on a ref'd `<div className="session-terminal__screen">`, subscribes
 with `SessionsClient.watch` writing every `bytes` into it, and wires
-`terminal.onData((text) => void SessionsClient.type(session.id, text))`. Its cleanup closes the
-subscription and disposes the terminal — that, and only that, is what leaving the page does.
-`onUnreachable` and `onFailure` render a `Banner` beside the screen instead of leaving it mute;
-its copy is Spanish, `No se puede leer esta sesión`, and the terminal's own `aria-label` is
-`Terminal de la sesión`. The `.css` is BEM under `.session-terminal`, and every colour is read
-through `var(--background-inverse)`, `var(--foreground-inverse)` and `var(--border-subtle)` from
-`src/system-ui/theme/tokens/semantic-color.css` — no literal colour, and no brand token edited.
+`terminal.onData((text) => void SessionsClient.type(session.id, text))`. Cleanup closes the
+subscription and disposes the terminal, nothing else.
+**`SessionStreamListener` gains `onRefused`**, which Task 6 lacked: a 400 before the SSE headers
+leaves the `EventSource` `CLOSED` for good while an unreachable backend leaves it `CONNECTING`,
+and `plan-events/client.ts` already tells them apart by `readyState === CLOSED`. Without it the
+page cannot say "this session is gone" apart from "the backend will come back". Each of the
+three renders a `Banner`, in Spanish: `Esta sesión ya no existe` for the refusal and
+`No se puede leer esta sesión` for the rest. The `aria-label` is `Terminal de la sesión`. The `.css` is BEM under `.session-terminal`, its colours read from
+`semantic-color.css` (`--background-inverse`, `--foreground-inverse`, `--border-subtle`): no
+literal colour, no brand token edited.
 
-Configuration: `frontend/package.json` adds `"@xterm/xterm": "^6.0.0"` to `dependencies`, the
-lockfile is regenerated with `npm --prefix frontend install`, and the component imports
-`@xterm/xterm/css/xterm.css` beside its own stylesheet.
+Configuration: `"@xterm/xterm": "^6.0.0"` joins `frontend/package.json`'s `dependencies`
+(lockfile via `npm --prefix frontend install`), and the component imports its `css/xterm.css`.
 
 **TDD:** red first with `it('the bytes the stream delivers are written to the terminal')` — with
-`@xterm/xterm` doubled through `vi.mock`, a frame of `hola` leaves `hola` in what the fake
-terminal was written.
+`@xterm/xterm` doubled, a frame of `hola` leaves `hola` in the fake terminal.
 
 **Tests:** added — in `SessionTerminal.test.tsx`:
 `it('the bytes the stream delivers are written to the terminal')`,
 `it('what the person types is sent to that session')`,
 `it('unmounting closes the subscription and disposes the terminal')`,
-`it('a stream that cannot be reached says so instead of staying mute')`,
-`it('a refused stream shows the code the backend answered')`.
+`it('an unreachable stream says so instead of staying mute')`,
+`it('a session the backend no longer holds is said to be gone')`;
+in `client.test.ts`: `it('a connection the browser closed for good is a refusal')`.
 
 **Verification:**
 
 ```bash
 npm --prefix frontend test -- src/app/sessions/components/session-terminal/SessionTerminal.test.tsx   # expected: exit 0 — the terminal suite is green
-test "$(grep -c 'xterm' frontend/package.json)" -eq 1   # expected: exit 0 — the dependency is declared exactly once
+npm --prefix frontend test -- src/app/sessions/client.test.ts   # expected: exit 0 — the refusal branch is pinned
 npm --prefix frontend test   # expected: exit 0 — the yardstick and every other suite pass
 npm --prefix frontend run build   # expected: exit 0 — the page type-checks and builds
 ```

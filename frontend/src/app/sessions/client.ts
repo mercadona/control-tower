@@ -52,7 +52,12 @@ const watch = (id: string, listener: SessionStreamListener): SessionStreamSubscr
       listener.onFailure(failure)
       return
     }
+    const refused = source.readyState === EventSource.CLOSED
     settle()
+    if (refused) {
+      listener.onRefused()
+      return
+    }
     listener.onUnreachable()
   })
 
