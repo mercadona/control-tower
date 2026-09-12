@@ -15,6 +15,7 @@ import { ImplementHistoryRoute } from './implement-history-route.ts'
 import { ExternalToolsRoute } from './external-tools-route.ts'
 import { SessionsRoute } from './sessions-route.ts'
 import { SessionStreamRoute } from './session-stream-route.ts'
+import { SessionInputRoute } from './session-input-route.ts'
 import type { StartPlan } from '../application/actions/start-plan.ts'
 import type { ImplementPlanParams } from '../application/actions/implement-plan.ts'
 import type { ReadImplementationProgressParams } from '../application/queries/read-implementation-progress.ts'
@@ -22,6 +23,7 @@ import type { ReadImplementationHistoryParams } from '../application/queries/rea
 import type { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
 import type { ListLiveSessions } from '../application/queries/list-live-sessions.ts'
 import type { WatchLiveSession } from '../application/queries/watch-live-session.ts'
+import type { TypeIntoSession } from '../application/actions/type-into-session.ts'
 import type { AskPlanChangesAction } from './review-plan-route.ts'
 import type { PlanEvents, PlanSessions } from './plan-events-route.ts'
 import type { ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
@@ -88,6 +90,7 @@ export type ApiCollaborators = {
   listLiveSessions?: ListLiveSessions | null,
   liveSessions?: LiveSessions | null,
   watchLiveSession?: WatchLiveSession | null,
+  typeIntoSession?: TypeIntoSession | null,
   implementationStarts?: ImplementationStarts | null,
   recovery?: ActivePlanRecovering | null,
   stderr?: Stderr | null,
@@ -140,6 +143,7 @@ export class ApiServer {
   readonly listLiveSessions: ListLiveSessions | null | undefined
   readonly liveSessions: LiveSessions | null | undefined
   readonly watchLiveSession: WatchLiveSession | null | undefined
+  readonly typeIntoSession: TypeIntoSession | null | undefined
   readonly implementationStarts: ImplementationStarts | null | undefined
   readonly recovery: ActivePlanRecovering | null
   readonly stderr: Stderr | null | undefined
@@ -149,7 +153,7 @@ export class ApiServer {
   constructor({
     port, startPlan, implementPlan, askPlanChanges, implementProgress, implementHistory, reviews, pullRequestReviews,
     planEvents, readPlanProgress, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
-    watchLiveSession, implementationStarts, recovery = null, stderr, frontendRoot,
+    watchLiveSession, typeIntoSession, implementationStarts, recovery = null, stderr, frontendRoot,
   }: ApiCollaborators) {
     this.requestedPort = port
     this.startPlan = startPlan
@@ -167,6 +171,7 @@ export class ApiServer {
     this.listLiveSessions = listLiveSessions
     this.liveSessions = liveSessions
     this.watchLiveSession = watchLiveSession
+    this.typeIntoSession = typeIntoSession
     this.implementationStarts = implementationStarts
     this.recovery = recovery
     this.stderr = stderr
@@ -249,6 +254,14 @@ export class ApiServer {
       SessionStreamRoute.handledBy(this.liveSessions!, this.watchLiveSession!)
     )
     app.all(SessionStreamRoute.PATH, SessionStreamRoute.refuseOtherMethods)
+    app.post(
+      SessionInputRoute.PATH,
+      Browsers.turnAwayForeign,
+      JsonBody.demandDeclared,
+      JsonBody.reader(),
+      SessionInputRoute.handledBy(this.liveSessions!, this.typeIntoSession!)
+    )
+    app.all(SessionInputRoute.PATH, SessionInputRoute.refuseOtherMethods)
     app.use(Failures.nothingMatched)
     app.use(Failures.answer)
 

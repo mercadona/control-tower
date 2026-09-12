@@ -135,7 +135,7 @@ Rules to obey:
 | `backend/__tests__/application/list-live-sessions.test.ts` | create | the suite | none (body by TDD) (T1) |
 | `backend/src/infrastructure/pty-live-sessions.ts` | create | `ct-api.ts` | Contract (T2) |
 | `backend/__tests__/infrastructure/pty-live-sessions.test.ts` | create | the suite | none (body by TDD) (T2) |
-| `backend/src/infrastructure/ct-api.ts` | modify | `make run-backend` | Call site (T3) |
+| `backend/src/infrastructure/ct-api.ts` | modify | `make run-backend` | Call site (T3, T10) |
 | `backend/package.json` | modify | the install | prose (config) (T3) |
 | `backend/package-lock.json` | modify | the install | prose (config) (T3) |
 | `backend/__tests__/infrastructure/pty-live-sessions-real-process.test.ts` | create | the suite | none (body by TDD) (T3) |
@@ -149,6 +149,7 @@ Rules to obey:
 | `backend/__tests__/infrastructure/session-input-route.test.ts` | create | the suite | none (body by TDD) (T5) |
 | `backend/__tests__/application/type-into-session.test.ts` | create | the suite | none (body by TDD) (T5) |
 | `backend/__tests__/infrastructure/session-channel-real-process.test.ts` | create | `ct-step global` | none (body by TDD) (T10) |
+| `docs/superpowers/plans/2026-09-12-issue-327-the-session-channel.md` | modify | the pull request | prose (T10) |
 | `frontend/src/app/sessions/Sessions.types.ts` | create | the client, the hook, both components | Contract (T6) |
 | `frontend/src/app/sessions/client.ts` | create | `useLiveSessions`, `SessionTerminal` | Contract (T6) |
 | `frontend/src/app/sessions/useLiveSessions.ts` | create | `SessionsPanel` | Contract (T6) |
@@ -525,10 +526,8 @@ Contract (backend/src/infrastructure/session-input-route.ts):
 
 ```ts
 export const SessionInputOutcome = Object.freeze({
-  ACCEPTED: 'accepted',
-  BODY_NOT_A_JSON_OBJECT: 'body-not-a-json-object',
-  UNKNOWN_FIELD: 'unknown-field',
-  MALFORMED_TEXT: 'malformed-text',
+  ACCEPTED: 'accepted', BODY_NOT_A_JSON_OBJECT: 'body-not-a-json-object',
+  UNKNOWN_FIELD: 'unknown-field', MALFORMED_TEXT: 'malformed-text',
   NOT_LIVE: 'session-not-live',
 } as const)
 
@@ -541,23 +540,15 @@ export class SessionInputRoute {
 }
 ```
 
-Current state (backend/__tests__/infrastructure/refusal-codes.test.ts, lines 20-22):
-
-```ts
-      ...Object.values(ReviewRequestOutcome),
-    ].filter((outcome) => outcome !== RequestVocabularies.#ACCEPTED)
-  }
-```
-
 `SessionInputRequest` parses the body and `SessionInputRefusal` projects each outcome, in the
 shape `review-plan-route.ts` uses. The one known field is `text`: a non-empty string, no control
-character forbidden — a carriage return, an arrow key and a `Ctrl-C` are what a terminal is
-typed. The `:id` goes through `liveSessions.find`; `null` refuses
-`session-not-live`. The answer is `202` `{"status":"typed","id":"…"}`. `ApiServer` mounts it
-with `JsonBody.demandDeclared` and `JsonBody.reader()`, as the other `POST`s. The guard adds
-both new vocabularies to `RequestVocabularies.codes()` and declares
-`SessionInputOutcome.BODY_NOT_A_JSON_OBJECT`, `.UNKNOWN_FIELD` and `.NOT_LIVE` in
-`SharedOnPurposeAcrossRequestVocabularies.CODES`.
+character forbidden — an arrow key and a `Ctrl-C` are what a terminal is typed. The `:id` goes
+through `liveSessions.find`; `null` refuses `session-not-live`. The answer
+is `202` `{"status":"typed","id":"…"}`. `ApiServer` mounts it with `JsonBody.demandDeclared` and
+`JsonBody.reader()`, as the other `POST`s. In `refusal-codes.test.ts`,
+`RequestVocabularies.codes()` gains both new vocabularies and
+`SharedOnPurposeAcrossRequestVocabularies.CODES` gains
+`SessionInputOutcome.BODY_NOT_A_JSON_OBJECT`, `.UNKNOWN_FIELD` and `.NOT_LIVE`.
 
 **TDD:** red first with `it('the text typed on the page reaches the session')` — a body of
 `{"text":"ls\r"}` writes exactly `ls\r` into that session.
@@ -576,7 +567,7 @@ in `type-into-session.test.ts`: `it('the action hands the port the session and t
 ```bash
 npm --prefix backend run typecheck   # expected: exit 0
 npm --prefix backend test -- __tests__/infrastructure/session-input-route.test.ts   # expected: exit 0 — the input suite is green
-npm --prefix backend test -- __tests__/infrastructure/refusal-codes.test.ts   # expected: exit 0 — no code is shared by accident
+npm --prefix backend test -- __tests__/infrastructure/refusal-codes.test.ts   # expected: exit 0 — no code shared by accident
 npm --prefix backend test   # expected: exit 0
 ```
 
@@ -849,14 +840,27 @@ test "$(grep -c 'Live session' backend/conventions/this-repository.md)" -eq 1   
 npm --prefix backend test -- __tests__/conventions-no-restatement.test.ts   # expected: exit 0 — the convention document still restates nothing
 ```
 
-### Task 10 — The channel, end to end over one real process
+### Task 10 — The channel, wired, end to end over one real process
 
-**Objective:** one test drives the four acceptance criteria through the real routes over a real
-PTY, so the slice's end-to-end is committed rather than retyped.
+**Objective:** the running backend reaches all three endpoints, and one test drives the four
+acceptance criteria through the real routes over a real PTY.
 
-**Files:** `backend/__tests__/infrastructure/session-channel-real-process.test.ts` (create)
+**Files:** `backend/src/infrastructure/ct-api.ts` (modify),
+`backend/__tests__/infrastructure/session-channel-real-process.test.ts` (create),
+`docs/superpowers/plans/2026-09-12-issue-327-the-session-channel.md` (modify)
 
-No code — this task adds one test file; every module it exercises was built in Tasks 1 to 5.
+Call site (backend/src/infrastructure/ct-api.ts):
+
+```ts
+      liveSessions,
+      watchLiveSession: new WatchLiveSession({ liveSessions }),
+      typeIntoSession: new TypeIntoSession({ liveSessions }),
+```
+
+Those three join `listLiveSessions` in the `ApiServer` call `ct-api.ts` already makes. Tasks 4
+and 5 mount their routes on `ApiServer` but nothing hands them their collaborators, so until
+this task the running backend answers `GET /sessions` and nothing else of the channel — which is
+also why the `visual` gate cannot be met before it.
 
 The test builds an `ApiServer` on port `0` over a `PtyLiveSessions` whose spawn is the real
 `node-pty`, opens one session, and then, against the listening server: asks `GET /sessions` and

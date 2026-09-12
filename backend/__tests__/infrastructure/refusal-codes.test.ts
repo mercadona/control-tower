@@ -6,6 +6,8 @@ import { ActivePlansOutcome } from '../../src/infrastructure/active-plans-route.
 import { ProgressRequestOutcome, ProgressCollapse } from '../../src/infrastructure/implement-progress-route.ts'
 import { HistoryRequestOutcome, HistoryCollapse } from '../../src/infrastructure/implement-history-route.ts'
 import { ReviewRequestOutcome, ReviewCollapse } from '../../src/infrastructure/review-plan-route.ts'
+import { SessionStreamOutcome } from '../../src/infrastructure/session-stream-route.ts'
+import { SessionInputOutcome } from '../../src/infrastructure/session-input-route.ts'
 
 class RequestVocabularies {
   static readonly #ACCEPTED = 'accepted'
@@ -18,6 +20,8 @@ class RequestVocabularies {
       ...Object.values(ProgressRequestOutcome),
       ...Object.values(HistoryRequestOutcome),
       ...Object.values(ReviewRequestOutcome),
+      ...Object.values(SessionStreamOutcome),
+      ...Object.values(SessionInputOutcome),
     ].filter((outcome) => outcome !== RequestVocabularies.#ACCEPTED)
   }
 }
@@ -31,6 +35,7 @@ class SharedOnPurposeAcrossRequestVocabularies {
     ImplementRequestOutcome.NO_LIVE_SESSION,
     ImplementRequestOutcome.UNCERTAIN_PHASE,
     ProgressRequestOutcome.MALFORMED_ROOT,
+    SessionInputOutcome.NOT_LIVE,
   ])
 }
 
