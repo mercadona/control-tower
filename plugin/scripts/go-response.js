@@ -69,9 +69,12 @@
 // THE DEFECT IT CLOSES. This very mechanism, as it came out of #32, gave
 // mechanical consequence to a GitHub comment… and the agent has `gh`. Its own
 // limit said so in commands/ct-next.md: «it does not stop the agent itself
-// writing `-OK` on its own issue — it has `gh`, so it can». With the `plan`
-// gate implied by default on EVERY slice (gates.js#gatesForType), that is not a
-// pending hole: it is today's hole. And it is worse than having no gate at all,
+// writing `-OK` on its own issue — it has `gh`, so it can». When this was
+// built the `plan` gate was implied by default on EVERY slice, so that was not
+// a pending hole: it was the hole of the day. (D-14 retired that default —
+// `gatesForType` no longer adds it — so the gate now reaches only the slices
+// whose row asks for it; where it reaches, this is still its defect.) And it
+// is worse than having no gate at all,
 // because it leaves the RECORD that there was human review where there was
 // none.
 //
