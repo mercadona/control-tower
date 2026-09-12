@@ -12,11 +12,13 @@ export type TerminalSpawn = (file: string, argv: string[], options: {
   name: string, cols: number, rows: number, cwd: string, env: Record<string, string>,
 }) => Terminal
 
+type Watcher = { onBytes: (bytes: string) => void, onEnded?: () => void }
+
 type OpenTerminal = {
   session: LiveSession,
   terminal: Terminal,
   scrollback: string,
-  watchers: Set<(bytes: string) => void>,
+  watchers: Set<Watcher>,
 }
 
 export class PtyLiveSessions extends LiveSessions {
@@ -63,7 +65,7 @@ export class PtyLiveSessions extends LiveSessions {
     const opened: OpenTerminal = { session, terminal, scrollback: '', watchers: new Set() }
     this.#open.set(session.id, opened)
     terminal.onData((bytes) => this.#received(opened, bytes))
-    terminal.onExit(() => this.#exited(session, program))
+    terminal.onExit(() => this.#exited(opened, program))
     this.stderr(`live session ${session.id} (${program}) opened\n`)
 
     return session
@@ -77,13 +79,16 @@ export class PtyLiveSessions extends LiveSessions {
     return this.#open.get(id)?.session ?? null
   }
 
-  watch({ session, onBytes }: { session: LiveSession, onBytes: (bytes: string) => void }): LiveSessionStream {
+  watch({ session, onBytes, onEnded }: {
+    session: LiveSession, onBytes: (bytes: string) => void, onEnded?: () => void,
+  }): LiveSessionStream {
     const opened = this.#terminalFor(session)
-    opened.watchers.add(onBytes)
+    const watcher: Watcher = { onBytes, onEnded }
+    opened.watchers.add(watcher)
 
     return {
       printed: opened.scrollback,
-      stop: () => { opened.watchers.delete(onBytes) },
+      stop: () => { opened.watchers.delete(watcher) },
     }
   }
 
@@ -102,12 +107,14 @@ export class PtyLiveSessions extends LiveSessions {
 
   #received(opened: OpenTerminal, bytes: string): void {
     opened.scrollback = PtyLiveSessions.#trimmed(opened.scrollback + bytes)
-    for (const onBytes of opened.watchers) onBytes(bytes)
+    for (const watcher of opened.watchers) watcher.onBytes(bytes)
   }
 
-  #exited(session: LiveSession, program: string): void {
-    this.#open.delete(session.id)
-    this.stderr(`live session ${session.id} (${program}) exited\n`)
+  #exited(opened: OpenTerminal, program: string): void {
+    this.#open.delete(opened.session.id)
+    for (const watcher of opened.watchers) watcher.onEnded?.()
+    opened.watchers.clear()
+    this.stderr(`live session ${opened.session.id} (${program}) exited\n`)
   }
 
   static #basenameOf(file: string): string {

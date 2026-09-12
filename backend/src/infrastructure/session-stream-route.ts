@@ -35,6 +35,7 @@ export class SessionStreamRoute {
       const watched = watchLiveSession.execute(new WatchLiveSessionParams({
         session,
         onBytes: (bytes) => { response.write(SessionStreamRoute.frameFor(bytes)) },
+        onEnded: () => { response.end() },
       }))
       request.on('close', () => {
         watched.stop()

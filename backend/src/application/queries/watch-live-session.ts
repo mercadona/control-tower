@@ -4,10 +4,14 @@ import type { LiveSession } from '../../domain/value-objects/live-session.ts'
 export class WatchLiveSessionParams {
   readonly session: LiveSession
   readonly onBytes: (bytes: string) => void
+  readonly onEnded?: () => void
 
-  constructor({ session, onBytes }: { session: LiveSession, onBytes: (bytes: string) => void }) {
+  constructor({ session, onBytes, onEnded }: {
+    session: LiveSession, onBytes: (bytes: string) => void, onEnded?: () => void,
+  }) {
     this.session = session
     this.onBytes = onBytes
+    this.onEnded = onEnded
     Object.freeze(this)
   }
 }
@@ -31,7 +35,7 @@ export class WatchLiveSession {
   }
 
   execute(params: WatchLiveSessionParams): WatchLiveSessionResult {
-    const watched = this.liveSessions.watch({ session: params.session, onBytes: params.onBytes })
+    const watched = this.liveSessions.watch({ session: params.session, onBytes: params.onBytes, onEnded: params.onEnded })
 
     return new WatchLiveSessionResult({ printed: watched.printed, stop: watched.stop })
   }

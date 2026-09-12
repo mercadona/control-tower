@@ -232,4 +232,25 @@ describe('PtyLiveSessions', () => {
       `live session ${opened.session.id} (fish) exited\n`,
     ])
   })
+
+  it('a watcher of a session that exits is told it ended', () => {
+    const opened = OpenedTerminal.with()
+    let ended = 0
+    opened.sessions.watch({ session: opened.session, onBytes: () => {}, onEnded: () => { ended += 1 } })
+
+    opened.terminal.exits()
+
+    expect(ended).toBe(1)
+  })
+
+  it('a watcher that stopped is not told when the session exits', () => {
+    const opened = OpenedTerminal.with()
+    let ended = 0
+    const watch = opened.sessions.watch({ session: opened.session, onBytes: () => {}, onEnded: () => { ended += 1 } })
+
+    watch.stop()
+    opened.terminal.exits()
+
+    expect(ended).toBe(0)
+  })
 })

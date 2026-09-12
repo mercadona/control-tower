@@ -11,7 +11,9 @@ export class LiveSessions {
     throw new Error(`${this.constructor.name} must implement find()`)
   }
 
-  watch({ session, onBytes }: { session: LiveSession, onBytes: (bytes: string) => void }): LiveSessionStream {
+  watch({ session, onBytes, onEnded }: {
+    session: LiveSession, onBytes: (bytes: string) => void, onEnded?: () => void,
+  }): LiveSessionStream {
     throw new Error(`${this.constructor.name} must implement watch()`)
   }
 

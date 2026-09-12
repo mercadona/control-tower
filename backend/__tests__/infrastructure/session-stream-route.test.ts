@@ -67,6 +67,13 @@ class WatchLiveSessionSpy extends WatchLiveSession {
     return this.asked[this.asked.length - 1].onBytes
   }
 
+  latestOnEnded(): () => void {
+    const onEnded = this.asked[this.asked.length - 1].onEnded
+    if (onEnded === undefined) throw new Error('WatchLiveSessionSpy: no onEnded was asked for')
+
+    return onEnded
+  }
+
   stoppedOnce(): Promise<void> {
     return new Promise((resolve) => { this.#onStop = resolve })
   }
@@ -222,6 +229,24 @@ describe('SessionStreamRoute', () => {
 
     expect(watchLiveSession.stopped).toBe(1)
     expect(liveSessions.find(claude.id)).toBe(claude)
+  })
+
+  it('the stream ends when the session it follows exits', async () => {
+    const claude = LiveSessionMother.claude()
+    const liveSessions = LiveSessionsDouble.holding(claude)
+    const watchLiveSession = WatchLiveSessionSpy.printing('hola')
+
+    const response = await RunningApi.streaming(liveSessions, watchLiveSession, claude.id)
+    const frames = SseFrames.of(response)
+    await frames.next()
+
+    watchLiveSession.latestOnEnded()()
+
+    const { done } = await WithinBudget.awaited(frames.reader.read(), 'the stream ending')
+
+    expect(done).toBe(true)
+
+    await frames.close()
   })
 
   it('an unknown id is refused with session-not-live', async () => {
