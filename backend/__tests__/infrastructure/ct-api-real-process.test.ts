@@ -101,7 +101,7 @@ class Entrypoint {
   static async recovering(environment: NodeJS.ProcessEnv): Promise<Started> {
     const started = await Entrypoint.#started(environment)
     for (let waited = 0; waited < 60; waited += 1) {
-      if (started.saidLater().length > 0) break
+      if (started.saidLater().includes('plans in flight:')) break
       await new Promise((wake) => setTimeout(wake, 100))
     }
 

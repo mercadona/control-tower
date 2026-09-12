@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { ImplementPlanMother } from '__scenarios__/ImplementPlanMother'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
@@ -38,10 +38,12 @@ const activePlansAnswer = (...plans: ReturnType<typeof activePlan>[]) => ({
 })
 
 const EXTERNAL_TOOLS_READY = '{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}'
+const NO_SESSIONS = '{"sessions":[]}'
 
 const withReadyTools = <T extends (input: string | URL | Request, init?: RequestInit) => Promise<Response>>(fetching: T) => {
   vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
     if (input === '/external-tools') return Promise.resolve(new Response(EXTERNAL_TOOLS_READY))
+    if (input === '/sessions') return Promise.resolve(new Response(NO_SESSIONS))
     return init === undefined ? fetching(input) : fetching(input, init)
   }))
 
@@ -145,8 +147,9 @@ describe('Home · restore workflow', () => {
 
     openHome()
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Plan arrancado')
-    expect(screen.getByLabelText('Progreso del plan')).toHaveTextContent(StartPlanMother.REPO)
+    const progress = await screen.findByLabelText('Progreso del plan')
+    expect(within(progress).getByRole('status')).toHaveTextContent('Plan arrancado')
+    expect(progress).toHaveTextContent(StartPlanMother.REPO)
     expect(fetching).toHaveBeenCalledTimes(1)
     expect(fetching).toHaveBeenCalledWith('/active-plans')
   })
