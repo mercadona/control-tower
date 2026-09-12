@@ -45,6 +45,23 @@ reach the harvest ledger nor any comparison of coding tools until the backend is
 restarted with it. The drawer never offers to change it: the value is an option
 of the backend's start-up, so there is no endpoint that writes it.
 
+`app/sessions` (`SessionsPanel`, rendered by `Home`) consumes the three session
+endpoints: `GET /sessions` lists what the backend owns, `GET /sessions/:id/stream`
+streams the chosen one's bytes over Server-Sent Events, and `POST
+/sessions/:id/input` carries every keystroke back. `SessionTerminal`
+renders that stream with `@xterm/xterm`, a real terminal emulator, rather than
+a scrolling log. **The backend owns the session, not the page**: it is opened
+once at the backend's start-up, so the page is a window onto it and never its
+owner — closing the tab ends only the subscription and disposes the on-screen
+terminal, while the process, its scrollback and its row in `GET /sessions`
+survive; reopening it replays the scrollback the backend kept, as if nothing
+had been watching in between. That process does not outlive whatever ends
+the shell itself, though: an `exit` or a `Ctrl-D` typed into it — the same
+keystrokes `POST /sessions/:id/input` carries there — closes it for good, and
+nothing reopens one, so `GET /sessions` answers empty for the rest of the
+backend's run and the other two endpoints refuse that id with
+`session-not-live`.
+
 ## What is already decided
 
 - **It is never shipped with the plugin.** The marketplace's `source` is

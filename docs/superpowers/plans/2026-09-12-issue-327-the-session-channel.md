@@ -135,7 +135,7 @@ Rules to obey:
 | `backend/__tests__/application/list-live-sessions.test.ts` | create | the suite | none (body by TDD) (T1) |
 | `backend/src/infrastructure/pty-live-sessions.ts` | create | `ct-api.ts` | Contract (T2) |
 | `backend/__tests__/infrastructure/pty-live-sessions.test.ts` | create | the suite | none (body by TDD) (T2) |
-| `backend/src/infrastructure/ct-api.ts` | modify | `make run-backend` | Call site (T3, T10) |
+| `backend/src/infrastructure/ct-api.ts` | modify | `make run-backend` | Call site (T3, T9) |
 | `backend/package.json` | modify | the install | prose (config) (T3) |
 | `backend/package-lock.json` | modify | the install | prose (config) (T3) |
 | `backend/__tests__/infrastructure/pty-live-sessions-real-process.test.ts` | create | the suite | none (body by TDD) (T3) |
@@ -779,18 +779,18 @@ npm --prefix frontend test   # exit 0: both new suites, the reopened open call, 
 npm --prefix frontend run build   # exit 0: the page type-checks and builds
 ```
 
-### Task 9 — The channel, documented where this API is documented
+### Task 9 — The channel, wired and documented where this API is documented
 
-**Objective:** the three endpoints are in the contract the frontend codes against, and the
-repository's vocabulary names what a live session is.
+**Objective:** the running backend reaches all three endpoints, and they are in the contract the
+frontend codes against.
 
-**Files:** `backend/API.md` (modify), `backend/conventions/this-repository.md` (modify),
-`frontend/README.md` (modify)
+**Files:** `backend/src/infrastructure/ct-api.ts` (modify), `backend/API.md` (modify),
+`backend/conventions/this-repository.md` (modify), `frontend/README.md` (modify)
 
-Current state (backend/API.md, line 17):
+Current state (backend/API.md):
 
 ```md
-| Endpoints | 7 (`POST` 3, `GET` 4) |
+| Port | `CT_API_PORT`, default `8787` |
 ```
 
 Final text (backend/API.md):
@@ -804,6 +804,13 @@ Final text (backend/conventions/this-repository.md):
 ```md
 | **Live session** | A process the backend owns and keeps: the cabin lists it, reads what it prints and writes into it, and closing the page ends the subscription and nothing else |
 ```
+
+`ct-api.ts` passes `liveSessions`, `new WatchLiveSession({ liveSessions })` and
+`new TypeIntoSession({ liveSessions })` to the `ApiServer` it already builds, beside the
+`listLiveSessions` Task 3 wired. Tasks 4 and 5 mount their routes but nothing hands them their
+collaborators, so until this the running backend answers `GET /sessions` and nothing else of the
+channel — and `API.md`'s opening line, "Every shape below was read from a running server", could
+not be honoured for the other two.
 
 The count was already one short — eight endpoints were routed while the table said seven — and
 the three this slice adds make eleven; the plan writes the true number rather than eight plus
@@ -831,30 +838,20 @@ test "$(grep -c '^## `GET /sessions/:id/stream`$' backend/API.md)" -eq 1   # exp
 test "$(grep -c '^## `POST /sessions/:id/input`$' backend/API.md)" -eq 1   # expected: exit 0 — the input endpoint has its own section
 test "$(grep -c 'Endpoints | 11 ' backend/API.md)" -eq 1   # expected: exit 0 — the count is the true one
 test "$(grep -c 'Live session' backend/conventions/this-repository.md)" -eq 1   # expected: exit 0 — the term is defined once
-npm --prefix backend test -- __tests__/conventions-no-restatement.test.ts   # expected: exit 0 — the convention document still restates nothing
+npm --prefix backend test -- __tests__/conventions-no-restatement.test.ts   # expected: exit 0 — the document restates nothing
+npm --prefix backend run typecheck   # expected: exit 0 — the wired entrypoint type-checks
+npm --prefix backend test   # expected: exit 0 — the wiring broke no suite
 ```
 
-### Task 10 — The channel, wired, end to end over one real process
+### Task 10 — The channel, end to end over one real process
 
-**Objective:** the running backend reaches all three endpoints, and one test drives the four
-acceptance criteria through the real routes over a real PTY.
+**Objective:** one test drives the four acceptance criteria through the real routes over a real
+PTY, so the slice's end-to-end is committed rather than retyped.
 
-**Files:** `backend/src/infrastructure/ct-api.ts` (modify),
-`backend/__tests__/infrastructure/session-channel-real-process.test.ts` (create),
+**Files:** `backend/__tests__/infrastructure/session-channel-real-process.test.ts` (create),
 `docs/superpowers/plans/2026-09-12-issue-327-the-session-channel.md` (modify)
 
-Call site (backend/src/infrastructure/ct-api.ts):
-
-```ts
-      liveSessions,
-      watchLiveSession: new WatchLiveSession({ liveSessions }),
-      typeIntoSession: new TypeIntoSession({ liveSessions }),
-```
-
-Those three join `listLiveSessions` in the `ApiServer` call `ct-api.ts` already makes. Tasks 4
-and 5 mount their routes on `ApiServer` but nothing hands them their collaborators, so until
-this task the running backend answers `GET /sessions` and nothing else of the channel — which is
-also why the `visual` gate cannot be met before it.
+No code — this task adds one test file; every module it exercises was built in Tasks 1 to 9.
 
 The test builds an `ApiServer` on port `0` over a `PtyLiveSessions` whose spawn is the real
 `node-pty`, opens one session, and then, against the listening server: asks `GET /sessions` and

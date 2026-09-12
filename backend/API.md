@@ -14,7 +14,7 @@ Every shape below was read from a running server, not from the source alone. The
 | Port | `CT_API_PORT`, default `8787` |
 | Interface | loopback only (`127.0.0.1`) |
 | Start | `make run-backend` |
-| Endpoints | 7 (`POST` 3, `GET` 4) |
+| Endpoints | 11 (`POST` 4, `GET` 7) |
 
 In development the vite dev server proxies these paths to the backend and strips
 the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
@@ -721,6 +721,111 @@ curl -s http://127.0.0.1:8787/external-tools
 
 ---
 
+## `GET /sessions`
+
+Every live session this backend owns right now. No parameters.
+
+**200 OK**
+
+```json
+{"sessions":[{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"zsh"}]}
+```
+
+`sessions` is always present, and it goes empty once the one session
+`ct-api.ts` opens at start-up has exited. Nothing reopens it: `POST
+/sessions/:id/input` types every keystroke into `$SHELL -il`, so an `exit` or
+a `Ctrl-D` typed into it ends the shell, and from that moment this answers
+`{"sessions":[]}` for the rest of the process's life. `id` names the session
+`GET /sessions/:id/stream` and `POST /sessions/:id/input` address, and `name`
+is the basename of the program the session runs — `$SHELL`, or its fallback
+`/bin/sh` — read once, at the moment the session opened.
+
+**Refusals**
+
+None of its own. Only the shared refusals apply — 405 for a method other than
+`GET`, 403 for a foreign `Origin`.
+
+```
+curl -s http://127.0.0.1:8787/sessions
+```
+
+---
+
+## `GET /sessions/:id/stream`
+
+Server-sent events. The first frame carries the session's scrollback so far;
+every later frame carries the bytes the process prints from then on. The
+stream never ends on its own — it stays open until the client disconnects —
+so a `curl` against it needs its own `--max-time` or it hangs.
+
+**200** with `Content-Type: text/event-stream`. One frame kind:
+
+```
+data: {"bytes":"\u001b[1m\u001b[7m%\u001b[27m\u001b[1m\u001b[0m   …"}
+```
+
+`bytes` is the literal text the terminal printed, escape sequences included,
+and nothing else — no `kind` field is sent, because nothing reads a second
+kind yet. The first frame's `bytes` is the scrollback kept so far, up to
+262144 characters with the oldest dropped first; every frame after it carries
+only what the terminal printed since the previous one.
+
+**Closing the page ends the subscription and nothing else.** The stream stops
+the moment the client disconnects, but the session, its process and its
+scrollback all survive: a second `GET` on the same `:id` opens a new
+subscription and replays the same scrollback from the top, as if nothing had
+been watching.
+
+**Refusals** (before the stream opens, as JSON)
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `session-not-live` | 400 | no live session answers to that id |
+
+`session-not-live` is shared on purpose with `POST /sessions/:id/input`'s own
+vocabulary: an id can go stale between the two calls, and both refuse it the
+same way.
+
+```
+curl -N --max-time 5 http://127.0.0.1:8787/sessions/<id>/stream
+```
+
+---
+
+## `POST /sessions/:id/input`
+
+Writes text into the session's terminal, exactly as if it had been typed at
+the keyboard.
+
+**Request**
+
+| Field | Type | Shape |
+|---|---|---|
+| `text` | string | not empty — a whitespace-only string still passes |
+
+**202 Accepted**
+
+```json
+{"status":"typed","id":"f8479639-6123-4d2d-8495-7c093a8bbd68"}
+```
+
+**Refusals**
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `body-not-a-json-object` | 400 | the body did not parse, or is not an object |
+| `unknown-field` | 400 | `detail` names the fields, sorted |
+| `malformed-text` | 400 | `text` is empty or not a string |
+| `session-not-live` | 400 | no live session answers to that id |
+
+```
+curl -s -X POST -H 'Content-Type: application/json' \
+  http://127.0.0.1:8787/sessions/<id>/input \
+  -d '{"text":"echo hello\n"}'
+```
+
+---
+
 ## Where the frontend consumes each one
 
 | Endpoint | Client | Types |
@@ -732,6 +837,9 @@ curl -s http://127.0.0.1:8787/external-tools
 | `GET /implement-history` | `frontend/src/app/implement-history/client.ts` | `ImplementHistory.types.ts` |
 | `GET /active-plans` | `frontend/src/app/active-plans/client.ts` | `ActivePlan.types.ts` |
 | `GET /external-tools` | `frontend/src/app/external-tools/client.ts` | `ExternalTools.types.ts` |
+| `GET /sessions` | `frontend/src/app/sessions/client.ts` | `Sessions.types.ts` |
+| `GET /sessions/:id/stream` | `frontend/src/app/sessions/client.ts` | `Sessions.types.ts` |
+| `POST /sessions/:id/input` | `frontend/src/app/sessions/client.ts` | `Sessions.types.ts` |
 
 A client validates the wire shape before it reaches a component, and projects
 snake_case to camelCase. Add a field to the validator, or the component never
@@ -742,6 +850,11 @@ sees it.
 top bar, which asks it once when it mounts and again when a person presses its
 retry button — never on a timer, for the two costs named above. Its path is in
 `API_PATHS` (`frontend/vite.config.ts`), so the dev server proxies it instead of
+answering the page's HTML.
+
+The three session endpoints are all in `API_PATHS` under the single `/sessions`
+entry, which the dev server matches as a prefix, so `/sessions`,
+`/sessions/:id/stream` and `/sessions/:id/input` are all proxied instead of
 answering the page's HTML.
 
 ## Where the contract is decided
