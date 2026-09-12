@@ -150,17 +150,6 @@ export class CmuxPlanAgents extends PlanAgents {
     await this.#type(CmuxPlanAgents.enterArgvFor(agent))
   }
 
-  async review({ agent, issue, repository, changes }: {
-    agent: string,
-    issue: number,
-    repository: RepositoryName,
-    changes: string,
-  }): Promise<void> {
-    const errand = this.brief.reviewErrandFor({ issueNumber: issue, repository, changes })
-    await this.#type(CmuxPlanAgents.sendArgvFor(agent, errand))
-    await this.#type(CmuxPlanAgents.enterArgvFor(agent))
-  }
-
   async fix({ agent, issue, repository, changes }: {
     agent: string,
     issue: number,

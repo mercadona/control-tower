@@ -4,7 +4,6 @@ import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { PluginYardstick } from '../../../plugin/scripts/plugin-yardstick.js'
-import { PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.ts'
 
 describe('PlanAgentBrief', () => {
   const errand = () => new PlanAgentBrief({
@@ -19,10 +18,6 @@ describe('PlanAgentBrief', () => {
   it('it_points_at_the_baseline_already_measured_in_the_state_file_instead_of_ordering_one', () => {
     expect(errand()).toMatch(/baseline/)
     expect(errand()).toContain(`campo \`baseline:\` de ${SLICE_REL_PATH}`)
-  })
-
-  it('the_published_plan_ends_with_the_line_that_says_how_to_ask_it_for_changes', () => {
-    expect(errand()).toContain(PlanIssueBody.CHANGES_LINE)
   })
 
   it('it_no_longer_orders_the_ground_checked_because_the_program_cut_and_measured_the_worktree_itself', () => {
@@ -141,41 +136,6 @@ describe('PlanAgentBrief resuming the agent', () => {
   it('it_still_stops_before_the_merge_because_that_is_the_second_human_decision', () => {
     expect(errand()).toMatch(/no la mergees/i)
     expect(errand()).toMatch(/PARA/)
-  })
-})
-
-describe('PlanAgentBrief asking the agent for changes', () => {
-  const CHANGES = 'añade el caso\nde la issue sin\tdescripción'
-  const errand = (changes = CHANGES) => new PlanAgentBrief({
-    dispatchCheck: '/plugin/scripts/dispatch-check.mjs',
-    conventions: '/plugin/conventions',
-    ctStep: '/plugin/scripts/ct-step.mjs',
-  }).reviewErrandFor({ issueNumber: 42, repository: new RepositoryName('owner/name'), changes })
-
-  it('the_reworked_plan_ends_with_that_line_too_because_it_can_be_reviewed_again', () => {
-    expect(errand()).toContain(PlanIssueBody.CHANGES_LINE)
-  })
-
-  it('the_errand_is_one_line_even_when_the_person_wrote_the_change_across_several', () => {
-    expect(errand()).not.toContain('\n')
-    expect(errand()).not.toContain('\t')
-    expect(errand()).toContain('añade el caso de la issue sin descripción')
-  })
-
-  it('the_errand_names_the_issue_the_plan_and_the_command_that_validates_it', () => {
-    expect(errand()).toContain('#42')
-    expect(errand()).toContain('node /plugin/scripts/dispatch-check.mjs 42 --repo owner/name --check-plan')
-    expect(errand()).toMatch(/no implementes/i)
-  })
-
-  it('the_errand_orders_the_reworked_plan_back_onto_the_issue_so_the_next_change_can_be_asked_for', () => {
-    expect(errand()).toMatch(/publica/i)
-    expect(errand()).toMatch(/comentario/i)
-  })
-
-  it('it_never_promises_a_permission_nobody_mints', () => {
-    expect(errand()).not.toContain('-OK')
-    expect(errand()).not.toContain('nonce')
   })
 })
 

@@ -1,0 +1,66 @@
+{
+  "issue": 326,
+  "task": 2,
+  "task_name": "the page stops calling the retired endpoint",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises two things and the diff produces both. \"The cabin offers no way to ask for changes on a plan\": `Home.tsx` loses the `AskPlanChanges` import and the `<AskPlanChanges plan={workflow.plan} />` element inside `home__review-action`, and the whole `ask-plan-changes` component (tsx, css, index.ts, test) is deleted. \"The client of the retired endpoint is gone with its mother\": `app/review-plan/client.ts`, `client.test.ts`, `ReviewPlan.types.ts` and `__scenarios__/ReviewPlanMother.ts` are deleted, and `'/review-plan'` leaves `API_PATHS` in `vite.config.ts` so the dev server stops proxying a path task 1 stopped routing. A grep over `frontend/src` finds no surviving reference to `AskPlanChanges`, `ReviewPlanMother` or `review-plan`.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The **TDD:** line asks for `it('should offer only the issue link and the go on a ready plan')` in `Home.implementPlan.test.tsx`, with the plan ready, holding the link `Abrir el plan en GitHub` and the button `Implementar plan`, and `queryByRole('button', { name: 'Pedir cambios' })` null. The test the diff adds (Home.implementPlan.test.tsx:67-74) is that test, assertion by assertion: same input (`planStarted()` then `streamFrame(PlanEventsMother.ready())`), same three expectations, with `IMPLEMENT_BUTTON = { name: 'Implementar plan' }` declared at line 19. Nothing asserted more, nothing less.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The brief carries no `Contract` or `Final text` block; it carries one `Call site (frontend/src/pages/home/Home.tsx)` block whose \"after\" shape is `<ImplementPlanAction plan={workflow.plan} onImplementationStarted={implementationStarted} />` alone, with the `AskPlanChanges` import going with the element. The diff leaves exactly that, with `ImplementPlanAction`'s props untouched. The prose beside it (\"`frontend/vite.config.ts`'s `API_PATHS` array drops the `'/review-plan'` entry\") is honoured literally: the array keeps its other seven entries in order.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Rows the diff bears on: \"What the frontend loses\" — `frontend/src/app/review-plan/` and `'/review-plan'` in `frontend/vite.config.ts` both leave, with the value that row states; \"Which modules are deleted, not deprecated\" — the whole `frontend/src/app/review-plan/` directory is deleted rather than deprecated; \"Where the two halves of a contract move together\" — the client and the `ReviewPlanMother` that fed its tests leave in task 2, the commit right after the endpoint's, as the row prescribes. The rows reserved for other tasks are left alone and that is also compliance: `PlanEventsMother.reviewing`, `usePlanProgress`'s `reviewing` phase, `PlanProgress`'s `onReviewing` and `Home`'s `planReviewing` all survive untouched (task 6), and nothing of `plan-under-review` is touched (task 3). No row is reopened with a different value.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "`conventions/defects.md`, rule by rule: **closed vocabulary** — the diff deletes a closed vocabulary (`ReviewPlanOutcome`) and the exhaustive dispatch over it; it adds no value that classifies anything, no loose string and no boolean, so the rule has no subject in the added lines. **Raw map as the return value of logic** — the only added lines are a test that asserts on rendered DOM; no function, return value or map is added, so no subject. **Two fields that have to agree** — nothing added; `API_PATHS` loses a member and no flag, sentinel or duplicated field appears, so no subject. **Errors named for where they happen** — no error is added, renamed or re-raised (`ReviewPlanRefusal` is deleted whole), so no subject. `conventions/style.md`: no prose is added, no free module-level function is added, and the only Spanish in the diff is the query string `'Pedir cambios'`, which is the product copy that document exempts (\"Product copy, labels, and any message surfaced in a user-facing interface are not this document's business\") and that `CLAUDE.md` keeps in Spanish; the new test's name is English. `conventions/simplicity.md` is discharged in the strong direction: 536 deleted lines against 10 added, and the `'/review-plan'` proxy entry goes with the path it served, which is \"what exists only to produce it leaves with it\". `conventions/architecture.md` and `conventions/boundaries.md`: no module is created, no import direction changes, no boundary is drawn or crossed — the change is a removal inside the frontend's existing layout. On delivery: no document of either yardstick prescribes a shape for retiring a frontend call site, and the plan's own row (\"Where the two halves of a contract move together ... in one commit\") is the shape used. Of the §3 exemplars, only `ImplementProgress.tsx` is a frontend one and its role (rendering a vocabulary with no retired member) has no counterpart here, since this diff deletes rather than renders; the `Home.tsx` edit keeps that file's existing idiom exactly.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Three test files are deleted whole — `client.test.ts`, `AskPlanChanges.test.tsx` and `Home.reviewPlan.test.tsx` — and every one of them is named by the task's own text, in `**Files:**` as `(delete)` and in `**Tests:** Removed: the files client.test.ts, AskPlanChanges.test.tsx and Home.reviewPlan.test.tsx`. No surviving test is relaxed or rewritten: `Home.implementPlan.test.tsx` only gains a case, and no `-` line touches an assertion there. So the removals are the plan working, not this item's subject. One nit recorded as `low`: the brief's justification for the third file (\"whose four cases all pin the button this task removes\") does not hold for two of its four cases, which pinned the `reviewing`-gated go — behaviour the plan's own rows keep alive until task 6 — and after this diff no frontend test streams `PlanEventsMother.reviewing()` into `Home` any more. The instruction was explicit and path-checked, so the gap belongs to the plan, not to this implementation.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised behaviour is produced by production code, not by scaffolding. What makes 'Pedir cambios' unreachable is the removal of the element and its import from `frontend/src/pages/home/Home.tsx` and the deletion of the component's own modules; what makes the endpoint uncallable from the dev server is the `API_PATHS` edit in `frontend/vite.config.ts`, which is production configuration. The new test carries no hard-coded expected value standing in for behaviour: it queries the DOM `Home` actually rendered, and restoring the deleted `<AskPlanChanges plan={workflow.plan} />` line would turn line 73 red.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The twelve touched paths are the twelve of `**Files:**`, and what is written inside them is only what the task asks for: `Home.tsx` loses exactly one import line and one element line and keeps everything else (`planReviewing`, the `onReviewing` prop, the `home__review-action` div and the `ImplementPlanAction` beside it), `vite.config.ts` loses exactly one array member, and `Home.implementPlan.test.tsx` gains exactly the test the `**TDD:**` line names. No refactor, no rename, no adjacent fix, no helper. `### Out of scope` names the go protocol's modules, the pull-request watch, `GATES.plan`, `POST /implement-plan`, `cmux-plan-agents.ts` and \"no new frontend screen, no change to the workflow stages the page already renders\": none is touched, and the 'Revisar plan' stage still renders with its link and its go. The diff carries no hunk of the plan file, so there is no amendment to rule on.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "One new test: `Home.implementPlan.test.tsx:67-74`. **Deterministic** — no clock, no date, no network, no randomness, no sleep: `backendAnswering` stubs `fetch` and `openHome` installs `FakeEventSource`, and the frame arrives through `streamFrame` inside `act`. **Isolated** — it builds its own state with `planStarted()`, the describe's `afterEach` runs `vi.unstubAllGlobals()`, `setupTests.ts` clears `localStorage` after every test, and it needs no order from the rest of the file (it reads identically run alone). **Verifies real behaviour** — the three assertions are on what `Home` renders, not on a mock's call count or a constant the test defined; with the production line of this diff reverted it would fail on `queryByRole('button', { name: 'Pedir cambios' })`. I loaded `control-tower-loop:test-driven-development` to measure the finer half and found nothing to pin to it: the test names one behaviour, asserts on real rendered code and doubles only the transport. Two of its three assertions repeat the neighbouring case at lines 56-65 and its name carries an \"and\", but both are the plan's own `**TDD:**` wording rather than this implementation's choice, so neither is reported.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "manipulacion-tests",
+        "severity": "low",
+        "what": "Deleting `Home.reviewPlan.test.tsx` whole also takes down the only coverage of `Home.planReviewing` — the case 'should stop offering the go while the plan is being reworked' and the case quoted below, which pin that the `Implementar plan` button disappears on a `reviewing` frame and comes back on the next `ready` one. That behaviour survives this task: the plan's rows put `reviewing` (`PlanEventsMother.reviewing`, `usePlanProgress`'s phase, `PlanProgress`'s `onReviewing`) in task 6, and `Home.tsx:197-204` still carries `planReviewing`. After this diff no frontend test streams `PlanEventsMother.reviewing()` into `Home`; `PlanProgress.test.tsx` only asserts that the callback fires, not what the page does with it. Not blocking and not fixable here: `**Files:**` marks the file `(delete)` and `**Tests:**` names it, so the gap is the plan's — the brief's reason for the deletion (\"whose four cases all pin the button this task removes\") is untrue of these two cases. Worth knowing before task 6.",
+        "path": "frontend/src/pages/home/__tests__/Home.reviewPlan.test.tsx",
+        "line": 58,
+        "evidence": "-  it('should offer the go again once the reworked plan is committed', async () => {\n-    await planStarted()\n-    await streamFrame(PlanEventsMother.ready())\n-    await streamFrame(PlanEventsMother.reviewing())\n-\n-    await streamFrame(PlanEventsMother.ready())\n-\n-    expect(screen.getByRole('button', { name: 'Implementar plan' })).toBeInTheDocument()"
+      }
+    ],
+    "review_token": "e601f150cd385f1e3c00f67e6ee8cd3cf45bcf904c039c526d8ec544b356dc76"
+  }
+}

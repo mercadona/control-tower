@@ -19,7 +19,6 @@ export class ActivePlanRecovery {
   readonly goRegistry: DiskGoRegistry
   readonly implementationProgress: ImplementationProgress
   readonly sessions: PlanSessions
-  readonly reviews: ReviewWatch
   readonly pullRequestReviews: ReviewWatch
   readonly activePlans: ActivePlans
   conclusive: boolean
@@ -27,7 +26,7 @@ export class ActivePlanRecovery {
 
   constructor({
     plans, checkouts, implementationStarts, goRegistry, implementationProgress,
-    sessions, reviews, pullRequestReviews, activePlans,
+    sessions, pullRequestReviews, activePlans,
   }: {
     plans: WorktreePlans,
     checkouts: CheckoutRegistry,
@@ -35,7 +34,6 @@ export class ActivePlanRecovery {
     goRegistry: DiskGoRegistry,
     implementationProgress: ImplementationProgress,
     sessions: PlanSessions,
-    reviews: ReviewWatch,
     pullRequestReviews: ReviewWatch,
     activePlans: ActivePlans,
   }) {
@@ -45,7 +43,6 @@ export class ActivePlanRecovery {
     this.goRegistry = goRegistry
     this.implementationProgress = implementationProgress
     this.sessions = sessions
-    this.reviews = reviews
     this.pullRequestReviews = pullRequestReviews
     this.activePlans = activePlans
     this.conclusive = false
@@ -100,7 +97,6 @@ export class ActivePlanRecovery {
         continue
       }
       this.sessions.remember(watch)
-      this.reviews.startRecovered(watch)
     }
     this.conclusive = true
 

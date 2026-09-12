@@ -614,7 +614,7 @@ describe('ct-init.sh', () => {
     // exercises neither of the two paths, this finds out.
     expect(plan.issues[1].labels).toContain('gate:visual') // declared, against its Tipo
     expect(plan.issues[2].labels).toContain('gate:visual') // implicit, from Tipo: ui
-    expect(plan.issues[0].labels).toContain('gate:plan') // F-jjponz-2: the universal default, in the example too
+    expect(plan.issues[0].labels).toContain('gate:none') // D-14: no Tipo implies `plan` any more, and row 1 declares no gate
     // Slice 10: the example DEMONSTRATES the Señal column in its three forms —
     // row 2 declares its signal (a section in the body, verbatim), row 3 exempts
     // itself with a reason (N/A — <razón>, also into the body), and row 1

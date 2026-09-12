@@ -550,17 +550,15 @@ describe('LaunchPolicy', () => {
 
 class ResumeErrands {
   readonly asked: { issueNumber: number }[]
-  readonly reviewed: { issueNumber: number, repository: RepositoryName, changes: string }[]
   readonly fixed: { issueNumber: number, repository: RepositoryName, changes: string }[]
 
   constructor() {
     this.asked = []
-    this.reviewed = []
     this.fixed = []
   }
 
   composing(): PlanAgentBrief {
-    const { asked, reviewed, fixed } = this
+    const { asked, fixed } = this
 
     class Composing extends PlanAgentBrief {
       implementationErrandFor({ issueNumber }: {
@@ -570,16 +568,6 @@ class ResumeErrands {
         asked.push({ issueNumber })
 
         return ResumeDouble.ERRAND
-      }
-
-      reviewErrandFor({ issueNumber, repository, changes }: {
-        issueNumber: number,
-        repository: RepositoryName,
-        changes: string,
-      }): string {
-        reviewed.push({ issueNumber, repository, changes })
-
-        return ResumeDouble.REVIEW_ERRAND
       }
 
       fixErrandFor({ issueNumber, repository, changes }: {
@@ -603,7 +591,6 @@ class ResumeDouble {
   static ERRAND = 'implementa el plan de #42'
   static REPOSITORY = new RepositoryName('owner/name')
   static CHANGES = 'parte la tarea 3 en dos'
-  static REVIEW_ERRAND = 'rehaz el plan de #42'
   static FIX_ERRAND = 'corrige la pull request de #42'
   static FIXES = 'src/foo.js:42: revienta con []'
 
@@ -671,19 +658,6 @@ class ResumeDouble {
     return this.resume().catch((cause) => cause)
   }
 
-  async review() {
-    return this.agents().review({
-      agent: ResumeDouble.AGENT,
-      issue: ResumeDouble.ISSUE,
-      repository: ResumeDouble.REPOSITORY,
-      changes: ResumeDouble.CHANGES,
-    })
-  }
-
-  async reviewRefusal() {
-    return this.review().catch((cause) => cause)
-  }
-
   async fix() {
     return this.agents().fix({
       agent: ResumeDouble.AGENT,
@@ -728,38 +702,6 @@ describe('CmuxPlanAgents resuming a parked agent', () => {
 
   it('an_enter_that_never_lands_is_reported_because_the_line_is_sitting_there_unrun', async () => {
     const refusal = await ResumeDouble.refusingTheEnter('no such workspace').refusal()
-
-    expect(refusal).toBeInstanceOf(PlanAgentNotResumed)
-    expect(refusal.message).toContain('no such workspace')
-  })
-})
-
-describe('CmuxPlanAgents asking a parked agent for changes', () => {
-  it('a_review_is_typed_into_the_session_with_send_and_then_enter', async () => {
-    const cmux = ResumeDouble.accepting()
-
-    await cmux.review()
-
-    expect(cmux.calls).toEqual([
-      ['send', '--workspace', ResumeDouble.AGENT, ResumeDouble.REVIEW_ERRAND],
-      ['send-key', '--workspace', ResumeDouble.AGENT, 'Enter'],
-    ])
-  })
-
-  it('the_errand_it_types_is_the_one_the_brief_composed_for_those_changes', async () => {
-    const cmux = ResumeDouble.accepting()
-
-    await cmux.review()
-
-    expect(cmux.errands.reviewed).toEqual([{
-      issueNumber: ResumeDouble.ISSUE,
-      repository: ResumeDouble.REPOSITORY,
-      changes: ResumeDouble.CHANGES,
-    }])
-  })
-
-  it('a_session_that_did_not_take_the_line_travels_out_as_the_agent_not_resumed', async () => {
-    const refusal = await ResumeDouble.refusing('no such workspace').reviewRefusal()
 
     expect(refusal).toBeInstanceOf(PlanAgentNotResumed)
     expect(refusal.message).toContain('no such workspace')

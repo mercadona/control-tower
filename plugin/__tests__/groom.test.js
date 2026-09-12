@@ -25,12 +25,13 @@ describe('pure groom', () => {
   it('title carries order + name (the "Slice" column), not "Entrega"', () => {
     expect(buildIssueTitle(SLICE)).toBe('#2 refresh token')
   })
-  // F21: the `gate:` label joins buildLabels' output. `gate:none` is the one
-  // that corresponds to a `backend` slice with no `Gate` cell — see
+  // F21/D-14: the `gate:` label joins buildLabels' output. `gate:none` is the
+  // one that corresponds to a `backend` slice with no `Gate` cell — see
   // gates.js#GATE_LABEL_NONE for why "no gate at all" is ASSERTED with a label
-  // instead of being left in silence.
-  it('labels: type + gate + status:backlog', () => {
-    expect(buildLabels(SLICE)).toEqual(['type:backend', 'gate:plan', 'status:backlog'])
+  // instead of being left in silence. No `Tipo` implies `plan` any more, so a
+  // slice with no declared gate carries exactly that: `gate:none`.
+  it('labels: type + gate:none + status:backlog', () => {
+    expect(buildLabels(SLICE)).toEqual(['type:backend', 'gate:none', 'status:backlog'])
   })
   it('body: spec link, AC, deps as merge-after, protected', () => {
     const b = buildIssueBody(SLICE, SPEC_REF)
@@ -125,9 +126,9 @@ describe('pure groom', () => {
     expect(b).toContain('(fill in from the spec)')
     expect(b).not.toContain('merge-after')
   })
-  it('buildLabels with an empty type: only status:backlog', () => {
+  it('buildLabels with an empty type: gate:none + status:backlog', () => {
     const empty = { n: 1, type: '', entrega: 'x', deps: [], ac: [], protected: '–' }
-    expect(buildLabels(empty)).toEqual(['gate:plan', 'status:backlog'])
+    expect(buildLabels(empty)).toEqual(['gate:none', 'status:backlog'])
   })
   // F3's review, finding 1 (a bug that predated F3, closed now): `Tipo` with a
   // "no value" marker ("–", "-", "—", etc. — the same criterion Dep/Acepta/
@@ -140,18 +141,18 @@ describe('pure groom', () => {
   // produce the SAME output.
   it.each(['-', '–', '—', '―', '−', '--'])('buildLabels with type = a "no value" marker ("%s"): no "type:" label, the same as an empty type', (marker) => {
     const s = { n: 1, type: marker, entrega: 'x', deps: [], ac: [], protected: '–' }
-    expect(buildLabels(s)).toEqual(['gate:plan', 'status:backlog'])
+    expect(buildLabels(s)).toEqual(['gate:none', 'status:backlog'])
   })
   it('buildLabels emits area:/touches: for each token, in the order type→area→touches→status', () => {
     const s = { ...SLICE, area: ['api'], touches: ['db', 'migration'] }
-    expect(buildLabels(s)).toEqual(['type:backend', 'area:api', 'touches:db', 'touches:migration', 'gate:plan', 'status:backlog'])
+    expect(buildLabels(s)).toEqual(['type:backend', 'area:api', 'touches:db', 'touches:migration', 'gate:none', 'status:backlog'])
   })
   it("buildLabels without area/touches (undefined, an old spec) produces exactly today's output", () => {
-    expect(buildLabels(SLICE)).toEqual(['type:backend', 'gate:plan', 'status:backlog'])
+    expect(buildLabels(SLICE)).toEqual(['type:backend', 'gate:none', 'status:backlog'])
   })
   it("buildLabels with empty area/touches ([]) produces exactly today's output", () => {
     const s = { ...SLICE, area: [], touches: [] }
-    expect(buildLabels(s)).toEqual(['type:backend', 'gate:plan', 'status:backlog'])
+    expect(buildLabels(s)).toEqual(['type:backend', 'gate:none', 'status:backlog'])
   })
   it('groomPlan refuses duplicate slice orders, naming the duplicate ones', () => {
     const dup1 = { ...SLICE, n: 1 }

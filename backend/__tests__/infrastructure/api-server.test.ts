@@ -6,7 +6,6 @@ import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import type { ApiCollaborators } from '../../src/infrastructure/api-server.ts'
-import { ReviewsSpy } from '../reviews-spy.ts'
 import { StartPlan, StartPlanResult, PlanStarted, PlanNotStarted } from '../../src/application/actions/start-plan.ts'
 import type { StartPlanParams } from '../../src/application/actions/start-plan.ts'
 import { BaselineResult } from '../../../plugin/scripts/baseline.js'
@@ -258,7 +257,6 @@ class RecoveryFixture {
       }),
       implementationProgress: new ImplementationProgress(),
       sessions,
-      reviews: new NeverWatching('plan review watch double'),
       pullRequestReviews: new NeverWatching('pull request review watch double'),
       activePlans: new ActivePlans({ sessions }),
     })
@@ -292,11 +290,9 @@ class RunningApi {
     '"branch":"feat/7","worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout",' +
     '"baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}'
   static spy: StartPlanSpy = new StartPlanSpy()
-  static reviews: ReviewsSpy = new ReviewsSpy()
 
   static server(options: Partial<ApiCollaborators> = {}): ApiServer {
     RunningApi.spy = new StartPlanSpy()
-    RunningApi.reviews = new ReviewsSpy()
     const sessions = options.sessions ?? new PlanSessions()
     const activePlans = options.activePlans ?? new ActivePlans({ sessions })
 
@@ -304,7 +300,6 @@ class RunningApi {
       port: 0,
       startPlan: RunningApi.spy,
       implementPlan: null,
-      reviews: RunningApi.reviews,
       planEvents: ProgressSpy.events(PlanState.WRITING).planEvents,
       sessions,
       activePlans,
@@ -454,7 +449,6 @@ describe('ApiServer', () => {
         '"baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}],' +
           '"failed":[{"repo":"owner/other","code":"workspace-not-prepared","detail":"branch is taken"}]}'
       )
-      expect(RunningApi.reviews.started).toEqual([StartPlanSpy.WATCH])
       expect(sessions.known()).toEqual([StartPlanSpy.WATCH])
     } finally {
       await server.stop()
@@ -1263,20 +1257,14 @@ describe('ApiServer', () => {
     expect(spy.asked).toBe(askedRightAfterAbort)
   })
 
-  it('a_plan_that_started_is_put_under_watch_so_a_change_asked_for_reaches_its_agent', async () => {
-    const port = await RunningApi.listening()
+  it('a_started_plan_leaves_no_watch_over_its_issue', async () => {
+    const sessions = new PlanSessions()
+    const port = await RunningApi.listening({ sessions })
 
-    await RunningApi.accepted(port)
+    const response = await RunningApi.accepted(port)
 
-    expect(RunningApi.reviews.started).toEqual([StartPlanSpy.WATCH])
-  })
-
-  it('a_start_that_was_refused_puts_nothing_under_watch', async () => {
-    const port = await RunningApi.listening()
-
-    await RunningApi.startPlan(port, '{"id":"nope","repo":"owner/name"}')
-
-    expect(RunningApi.reviews.started).toEqual([])
+    expect(response.status).toBe(202)
+    expect(sessions.known()).toEqual([StartPlanSpy.WATCH])
   })
 
   it('active_plans_returns_the_exact_live_plan_started_by_the_ordinary_route', async () => {
@@ -1323,17 +1311,13 @@ describe('ApiServer', () => {
     })
   })
 
-  it('review_plan_turns_away_a_foreign_browser_origin', async () => {
-    const askPlanChanges = { execute: vi.fn() }
-    const port = await RunningApi.listening({ askPlanChanges })
+  it('review_plan_is_no_longer_routed_and_falls_to_the_last_net', async () => {
+    const port = await RunningApi.listening()
 
-    const response = await RunningApi.post(port, '/review-plan', RunningApi.REVIEW_BODY, {
-      Origin: 'https://evil.example',
-    })
+    const response = await RunningApi.post(port, '/review-plan', RunningApi.REVIEW_BODY)
 
-    expect(response.status).toBe(403)
-    expect(await response.text()).toBe('{"code":"foreign-origin","detail":"this api only serves the page it hosts"}')
-    expect(askPlanChanges.execute).not.toHaveBeenCalled()
+    expect(response.status).toBe(404)
+    expect(await response.text()).toBe('{"code":"not-found","detail":"not found"}')
   })
 
   it('active_plans_retries_inconclusive_recovery_and_refuses_unknown_state', async () => {

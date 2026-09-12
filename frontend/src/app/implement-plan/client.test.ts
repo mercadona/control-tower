@@ -30,14 +30,6 @@ describe('ImplementPlanClient', () => {
     expect(outcome).toEqual({ kind: 'uncertain', detail: 'cannot tell whether implementation already began' })
   })
 
-  it('should name a plan under review by code, so the page can say it in its own words', async () => {
-    answerWith(ImplementPlanMother.planUnderReview())
-
-    const outcome = await ImplementPlanClient.implement(request())
-
-    expect(outcome).toEqual({ kind: 'under-review' })
-  })
-
   it('should keep other refusals generic, carrying only their detail', async () => {
     answerWith(ImplementPlanMother.agentNotResumed())
 

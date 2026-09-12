@@ -7,7 +7,6 @@ import type { AddressInfo } from 'node:net'
 import { Answer, Route, Browsers, JsonBody } from './http.ts'
 import { StartPlanRoute } from './start-plan-route.ts'
 import { ImplementPlanRoute } from './implement-plan-route.ts'
-import { ReviewPlanRoute } from './review-plan-route.ts'
 import { PlanEventsRoute } from './plan-events-route.ts'
 import { ActivePlansRoute } from './active-plans-route.ts'
 import { ImplementProgressRoute } from './implement-progress-route.ts'
@@ -24,33 +23,16 @@ import type { SurveyExternalTools } from '../application/queries/survey-external
 import type { ListLiveSessions } from '../application/queries/list-live-sessions.ts'
 import type { WatchLiveSession } from '../application/queries/watch-live-session.ts'
 import type { TypeIntoSession } from '../application/actions/type-into-session.ts'
-import type { AskPlanChangesAction } from './review-plan-route.ts'
 import type { PlanEvents, PlanSessions } from './plan-events-route.ts'
-import type { ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
-import type { PlanStateValue } from '../domain/value-objects/plan-state.ts'
-import type { ReviewInFlightValue } from '../domain/policies/review-gate-policy.ts'
 import type { ActivePlans, ActivePlanRecovering } from './active-plans-route.ts'
 import type { ImplementationState } from '../domain/value-objects/implementation-state.ts'
 import type { ImplementationHistoryEntry } from '../domain/value-objects/implementation-history-entry.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
-import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import type { LiveSessions } from '../domain/ports/live-sessions.ts'
 
 export const LOOPBACK = '127.0.0.1'
 
-type WatchedIssue = { issue: number, repository: RepositoryName }
-
 type PlanImplementer = { execute(params: ImplementPlanParams): Promise<void> }
-
-type PlanReviews = {
-  start(watch: PlanWatch): void,
-  stop(watched: WatchedIssue): void,
-  refresh(watch: PlanWatch): Promise<ReviewInFlightValue>,
-}
-
-type PlanProgressReader = {
-  execute(params: ReadPlanProgressParams): Promise<{ readonly state: PlanStateValue }>,
-}
 
 type PullRequestReviews = { start(watch: PlanWatch): void }
 
@@ -77,13 +59,10 @@ export type ApiCollaborators = {
   port: number,
   startPlan?: StartPlan | null,
   implementPlan?: PlanImplementer | null,
-  askPlanChanges?: AskPlanChangesAction | null,
   implementProgress?: ImplementationProgressReader | null,
   implementHistory?: ImplementationHistoryReader | null,
-  reviews?: PlanReviews | null,
   pullRequestReviews?: PullRequestReviews | null,
   planEvents?: PlanEvents | null,
-  readPlanProgress?: PlanProgressReader | null,
   sessions?: PlanSessions | null,
   activePlans?: ActivePlans | null,
   externalTools?: SurveyExternalTools | null,
@@ -130,13 +109,10 @@ export class ApiServer {
   readonly requestedPort: number
   readonly startPlan: StartPlan | null | undefined
   readonly implementPlan: PlanImplementer | null | undefined
-  readonly askPlanChanges: AskPlanChangesAction | null | undefined
   readonly implementProgress: ImplementationProgressReader | null | undefined
   readonly implementHistory: ImplementationHistoryReader | null | undefined
-  readonly reviews: PlanReviews | null | undefined
   readonly pullRequestReviews: PullRequestReviews | null | undefined
   readonly planEvents: PlanEvents | null | undefined
-  readonly readPlanProgress: PlanProgressReader | null | undefined
   readonly sessions: PlanSessions | null | undefined
   readonly activePlans: ActivePlans | null | undefined
   readonly externalTools: SurveyExternalTools | null | undefined
@@ -151,20 +127,17 @@ export class ApiServer {
   server: Server | null
 
   constructor({
-    port, startPlan, implementPlan, askPlanChanges, implementProgress, implementHistory, reviews, pullRequestReviews,
-    planEvents, readPlanProgress, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
+    port, startPlan, implementPlan, implementProgress, implementHistory, pullRequestReviews,
+    planEvents, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
     watchLiveSession, typeIntoSession, implementationStarts, recovery = null, stderr, frontendRoot,
   }: ApiCollaborators) {
     this.requestedPort = port
     this.startPlan = startPlan
     this.implementPlan = implementPlan
-    this.askPlanChanges = askPlanChanges
     this.implementProgress = implementProgress
     this.implementHistory = implementHistory
-    this.reviews = reviews
     this.pullRequestReviews = pullRequestReviews
     this.planEvents = planEvents
-    this.readPlanProgress = readPlanProgress
     this.sessions = sessions
     this.activePlans = activePlans
     this.externalTools = externalTools
@@ -190,7 +163,7 @@ export class ApiServer {
       Browsers.turnAwayForeign,
       JsonBody.demandDeclared,
       JsonBody.reader(),
-      StartPlanRoute.handledBy(this.startPlan!, this.sessions!, this.reviews!)
+      StartPlanRoute.handledBy(this.startPlan!, this.sessions!)
     )
     app.all(StartPlanRoute.PATH, StartPlanRoute.refuseOtherMethods)
     app.post(
@@ -199,19 +172,11 @@ export class ApiServer {
       JsonBody.demandDeclared,
       JsonBody.reader(),
       ImplementPlanRoute.handledBy(
-        this.implementPlan!, this.reviews!, this.pullRequestReviews!,
-        this.activePlans!, this.implementationStarts!, this.readPlanProgress!, this.stderr!
+        this.implementPlan!, this.pullRequestReviews!,
+        this.activePlans!, this.implementationStarts!, this.stderr!
       )
     )
     app.all(ImplementPlanRoute.PATH, ImplementPlanRoute.refuseOtherMethods)
-    app.post(
-      ReviewPlanRoute.PATH,
-      Browsers.turnAwayForeign,
-      JsonBody.demandDeclared,
-      JsonBody.reader(),
-      ReviewPlanRoute.handledBy(this.askPlanChanges!, this.activePlans!)
-    )
-    app.all(ReviewPlanRoute.PATH, ReviewPlanRoute.refuseOtherMethods)
     app.get(
       PlanEventsRoute.PATH,
       Browsers.turnAwayForeign,

@@ -513,14 +513,15 @@ describe('renderKickoff — the run-machine line names the human OK only when th
     // pass test 1 and fail here.
     const withoutPlan = renderKickoff({ ...SLICE, gates: ['visual'], gatesDeclared: true }, OPTS)
     expect(withoutPlan).not.toMatch(/OK humano/)
-    // Plain SLICE declares no gates, so it falls back to the Tipo
-    // (`backend`), whose gates keep `plan` by default (gates.js#gatesForType).
-    const withPlan = renderKickoff(SLICE, OPTS)
+    // D-14 retires the `Tipo`'s universal default: plain SLICE (backend, no
+    // declared gates) no longer falls back to `plan` on its own, so the row
+    // that wants it declares it explicitly.
+    const withPlan = renderKickoff({ ...SLICE, gates: ['plan'], gatesDeclared: true }, OPTS)
     expect(withPlan).toContain("Con el plan commiteado y el gate 'plan' con OK humano")
   })
 
   it('both openings hand over to the same run-machine sequence, word for word', () => {
-    const withPlan = renderKickoff(SLICE, OPTS)
+    const withPlan = renderKickoff({ ...SLICE, gates: ['plan'], gatesDeclared: true }, OPTS)
     const withoutPlan = renderKickoff({ ...SLICE, gates: [], gatesDeclared: true }, OPTS)
     const runMachineLineOf = (k) => k.split('\n').find((line) => line.includes('la dicta la máquina'))
     const tailOf = (line) => line.slice(line.indexOf('Pregunta el paso con'))

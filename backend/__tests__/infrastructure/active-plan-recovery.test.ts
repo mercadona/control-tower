@@ -117,7 +117,6 @@ describe('ActivePlanRecovery', () => {
   } = {}) {
     const sessions = new PlanSessions()
     const activePlans = new ActivePlans({ sessions })
-    const reviews = new RecordingReviews('plan review watch double')
     const pullRequestReviews = new RecordingReviews('pull request review watch double')
     const implementationStarts = new DiskImplementationStartRegistry({
       read: vi.fn((): string => {
@@ -142,12 +141,11 @@ describe('ActivePlanRecovery', () => {
       goRegistry: new MatchingGoRegistry(go),
       implementationProgress,
       sessions,
-      reviews,
       pullRequestReviews,
       activePlans,
     })
 
-    return { recovery, sessions, activePlans, reviews, pullRequestReviews, checkouts, plans }
+    return { recovery, sessions, activePlans, pullRequestReviews, checkouts, plans }
   }
 
   it('a_plan_with_no_go_and_no_implementation_marker_recovers_as_planning', async () => {
@@ -156,8 +154,15 @@ describe('ActivePlanRecovery', () => {
     await recovered.recovery.recover()
 
     expect(recovered.sessions.known()).toHaveLength(1)
-    expect(recovered.reviews.startRecovered).toHaveBeenCalledWith(recovered.sessions.known()[0])
     expect(recovered.activePlans.known()[0].phase).toBe('planning')
+  })
+
+  it('a_recovered_plan_being_written_is_remembered_as_a_session_and_nothing_watches_its_issue', async () => {
+    const recovered = fixture()
+
+    await recovered.recovery.recover()
+
+    expect(recovered.sessions.known()).toEqual([IN_FLIGHT])
   })
 
   it('a_valid_go_without_an_implementation_marker_recovers_as_uncertain', async () => {
@@ -166,7 +171,6 @@ describe('ActivePlanRecovery', () => {
     expect(await recovered.recovery.recover()).toBeNull()
 
     expect(recovered.sessions.known()).toEqual([])
-    expect(recovered.reviews.startRecovered).not.toHaveBeenCalled()
     expect(recovered.activePlans.known()[0].phase).toBe('uncertain')
   })
 
@@ -181,7 +185,6 @@ describe('ActivePlanRecovery', () => {
 
     expect(implementationProgress.of).toHaveBeenCalledWith({ root: expect.objectContaining({ text: '/repo' }), issue: 45 })
     expect(recovered.sessions.known()).toEqual([])
-    expect(recovered.reviews.startRecovered).not.toHaveBeenCalled()
     expect(recovered.activePlans.known()[0].phase).toBe('implementing')
   })
 
@@ -217,13 +220,12 @@ describe('ActivePlanRecovery', () => {
     expect(recovered.activePlans.known()[0].phase).toBe('uncertain')
   })
 
-  it('a_plan_with_a_matching_marker_recovers_as_implementing_and_its_plan_watch_stays_off', async () => {
+  it('a_plan_with_a_matching_marker_recovers_as_implementing_and_starts_no_new_session', async () => {
     const recovered = fixture({ marker: VALID_MARKER })
 
     await recovered.recovery.recover()
 
     expect(recovered.sessions.known()).toEqual([])
-    expect(recovered.reviews.startRecovered).not.toHaveBeenCalled()
     expect(recovered.activePlans.known()[0].phase).toBe('implementing')
   })
 
@@ -274,7 +276,6 @@ describe('ActivePlanRecovery', () => {
     await recovered.recovery.recover()
 
     expect(recovered.activePlans.known()[0].phase).toBe('planning')
-    expect(recovered.reviews.startRecovered).toHaveBeenCalledOnce()
   })
 
   it('a_marker_whose_story_differs_is_still_this_plan_because_the_title_of_an_issue_can_be_renamed', async () => {
@@ -308,23 +309,21 @@ describe('ActivePlanRecovery', () => {
     expect(recovered.checkouts.remembered).toEqual(['/repo'])
   })
 
-  it('two_recoveries_at_once_run_the_recovery_once_so_nobody_gets_two_watches', async () => {
+  it('two_recoveries_at_once_run_the_recovery_only_once', async () => {
     const recovered = fixture()
 
     await Promise.all([recovered.recovery.recover(), recovered.recovery.recover()])
 
     expect(recovered.plans.inFlight).toHaveBeenCalledOnce()
-    expect(recovered.reviews.startRecovered).toHaveBeenCalledOnce()
   })
 
-  it('does_not_start_a_second_review_when_recovery_is_repeated', async () => {
+  it('a_second_sequential_recovery_remembers_no_extra_session', async () => {
     const recovered = fixture()
 
     expect(await recovered.recovery.recover()).toBeNull()
     expect(await recovered.recovery.recover()).toBeNull()
 
     expect(recovered.sessions.known()).toHaveLength(1)
-    expect(recovered.reviews.startRecovered).toHaveBeenCalledOnce()
   })
 
   it('recovers_nothing_and_hands_over_the_reason_when_the_plans_in_flight_could_not_be_listed', async () => {
@@ -332,6 +331,5 @@ describe('ActivePlanRecovery', () => {
 
     expect(await recovered.recovery.recover()).toBe('cmux said no')
     expect(recovered.activePlans.known()).toEqual([])
-    expect(recovered.reviews.startRecovered).not.toHaveBeenCalled()
   })
 })

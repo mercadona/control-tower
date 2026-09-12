@@ -141,7 +141,7 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
       title: '#1 login',
       state: 'open',
       milestone: { title: 'Epic' },
-      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:plan' }, { name: 'status:in-progress' }],
+      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:none' }, { name: 'status:in-progress' }],
       body: matchingBody(),
     }
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {
@@ -167,7 +167,7 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
       title: '#1 login',
       state: 'open',
       milestone: { title: 'Epic' },
-      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:plan' }, { name: 'status:in-progress' }],
+      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:none' }, { name: 'status:in-progress' }],
       body: matchingBody(),
     }
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {
@@ -192,7 +192,7 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
       title: '#1 login',
       state: 'open',
       milestone: { title: 'Epic' },
-      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:plan' }, { name: 'status:in-progress' }],
+      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:none' }, { name: 'status:in-progress' }],
       body: matchingBody(), // with no "## Decisiones congeladas"
     }
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {
@@ -213,7 +213,7 @@ describe('ct-groom (real run) — it detects divergence by default, it does not 
       title: '#1 login',
       state: 'closed',
       milestone: { title: 'Epic' },
-      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:plan' }],
+      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:none' }],
       body: matchingBody(),
     }
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {
@@ -273,7 +273,7 @@ describe('ct-groom (real run) --reconcile — it applies what was detected throu
       title: '#1 login',
       state: 'open',
       milestone: { title: 'Epic' },
-      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:plan' }],
+      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:none' }],
       body: matchingBody(),
     }
     const argvLog = join(dir, 'argv.log')
@@ -355,7 +355,7 @@ describe('ct-groom (real run) — divergent AC/Dependencias: they are detected a
       title: '#1 login',
       state: 'open',
       milestone: { title: 'Epic' },
-      labels: [{ name: 'type:backend' }, { name: 'gate:plan' }], // F21: the plan always produces a gate label (here, "none")
+      labels: [{ name: 'type:backend' }, { name: 'gate:none' }], // F21: the plan always produces a gate label (here, "none")
       // AC-1.2 is missing, and there is no "## Dependencias" section at all.
       body: buildIssueBody({ n: 1, name: 'login', type: 'backend', entrega: 'modelo', deps: [], ac: ['AC-1.1'], protected: 'schema' }, SPEC_REF_OK),
     }
@@ -366,7 +366,7 @@ describe('ct-groom (real run) — divergent AC/Dependencias: they are detected a
       title: '#2 signup',
       state: 'open',
       milestone: { title: 'Epic' },
-      labels: [{ name: 'type:backend' }, { name: 'gate:plan' }],
+      labels: [{ name: 'type:backend' }, { name: 'gate:none' }],
       body: buildIssueBody({ n: 2, name: 'signup', type: 'backend', entrega: 'registro', deps: [], ac: ['AC-2.1'], protected: '–' }, SPEC_REF_OK),
     }
   }
@@ -498,7 +498,7 @@ describe('ct-groom (real run) — labels: the spec is only the authority over a 
       title: '#1 login',
       state: 'open',
       milestone: { title: 'Epic' },
-      labels: [{ name: 'type:backend' }, { name: 'area:ops' }, { name: 'gate:plan' }], // area:ops put on by hand, the spec never spoke of an area
+      labels: [{ name: 'type:backend' }, { name: 'area:ops' }, { name: 'gate:none' }], // area:ops put on by hand, the spec never spoke of an area
       body: matchingBody(),
     }
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {
@@ -527,7 +527,7 @@ describe('ct-groom (real run) — a divergence of prose ONLY (Descripción/Prote
       // area:api/touches:db included — this file's ONE_SLICE_SPEC DOES bring
       // those columns, so they are needed for labels/AC/deps NOT to diverge and
       // for the only real divergence to be the Descripción.
-      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:plan' }],
+      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:none' }],
       // A different Descripción ("otro texto" instead of "modelo") —
       // everything else (AC, deps, Protegido, the link to the spec) matches the
       // spec.
@@ -570,7 +570,7 @@ describe('ct-groom (real run) — orphan issues: a slice deleted from the §9 ta
       title: '#1 login',
       state: 'open',
       milestone: { title: 'Epic' },
-      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:plan' }],
+      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:none' }],
       body: matchingBody(),
     }
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {
@@ -591,7 +591,7 @@ describe('ct-groom (real run) — orphan issues: a slice deleted from the §9 ta
       title: '#1 login',
       state: 'open',
       milestone: { title: 'Epic' },
-      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:plan' }],
+      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:none' }],
       body: matchingBody(),
     }
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {
@@ -685,7 +685,7 @@ describe('ct-groom (real run) — the link to the spec is the SAME however it is
       title: '#1 login',
       state: 'open',
       milestone: { title: 'Epic' },
-      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:plan' }],
+      labels: [{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:none' }],
       body: matchingBody(),
     }
     const envBase = {
@@ -718,7 +718,7 @@ describe('ct-groom (real run) — a duplicated "## Dependencias"/"## Acceptance 
       title: '#1 login',
       state: 'open',
       milestone: { title: 'Epic' },
-      labels: [{ name: 'type:backend' }, { name: 'gate:plan' }], // F21: the plan always produces a gate label (here, "none")
+      labels: [{ name: 'type:backend' }, { name: 'gate:none' }], // F21: the plan always produces a gate label (here, "none")
       body: [
         SPEC_LINK_LINE(1), '',
         '## Descripción', 'modelo', '',
@@ -734,7 +734,7 @@ describe('ct-groom (real run) — a duplicated "## Dependencias"/"## Acceptance 
       title: '#2 signup',
       state: 'open',
       milestone: { title: 'Epic' },
-      labels: [{ name: 'type:backend' }, { name: 'gate:plan' }],
+      labels: [{ name: 'type:backend' }, { name: 'gate:none' }],
       body: buildIssueBody({ n: 2, name: 'signup', type: 'backend', entrega: 'registro', deps: [], ac: ['AC-2.1'], protected: '–' }, SPEC_REF_OK),
     }
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {
@@ -762,7 +762,7 @@ describe('ct-groom (real run) — a duplicated "## Dependencias"/"## Acceptance 
       title: '#1 login',
       state: 'open',
       milestone: { title: 'Epic' },
-      labels: [{ name: 'type:backend' }, { name: 'gate:plan' }], // F21: the plan always produces a gate label (here, "none")
+      labels: [{ name: 'type:backend' }, { name: 'gate:none' }], // F21: the plan always produces a gate label (here, "none")
       body: [
         SPEC_LINK_LINE(1), '',
         '## Descripción', 'modelo', '',
@@ -778,7 +778,7 @@ describe('ct-groom (real run) — a duplicated "## Dependencias"/"## Acceptance 
       title: '#2 signup',
       state: 'open',
       milestone: { title: 'Epic' },
-      labels: [{ name: 'type:backend' }, { name: 'gate:plan' }],
+      labels: [{ name: 'type:backend' }, { name: 'gate:none' }],
       body: buildIssueBody({ n: 2, name: 'signup', type: 'backend', entrega: 'registro', deps: [], ac: ['AC-2.1'], protected: '–' }, SPEC_REF_OK),
     }
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic', '--reconcile'], {

@@ -6,7 +6,6 @@ import { ImplementHistory } from 'app/implement-history/components/implement-his
 import { ImplementPlanAction } from 'app/implement-plan/components/implement-plan-action'
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { PlanProgress } from 'app/plan-events/components/plan-progress'
-import { AskPlanChanges } from 'app/review-plan/components/ask-plan-changes'
 import { SessionsPanel } from 'app/sessions/components/sessions-panel'
 import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
@@ -194,15 +193,6 @@ const Home = () => {
     workflowRef.current = ready
     setWorkflow(ready)
     WorkflowSnapshotStorage.save(ready)
-  }, [])
-
-  const planReviewing = useCallback(() => {
-    const current = workflowRef.current
-    if (current === null || current.phase === 'implementing') return
-    const reviewing: WorkflowSnapshot = { ...current, phase: 'planning' }
-    workflowRef.current = reviewing
-    setWorkflow(reviewing)
-    WorkflowSnapshotStorage.save(reviewing)
   }, [])
 
   const implementationStarted = useCallback(() => {
@@ -434,7 +424,6 @@ const Home = () => {
                   key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
                   plan={workflow.plan}
                   onReady={planReady}
-                  onReviewing={planReviewing}
                   observe={restoredIsConfirmed}
                 />
                 {workflow.phase === 'ready' && restoredIsConfirmed && (
@@ -442,7 +431,6 @@ const Home = () => {
                     <a href={workflow.plan.issue.url} target="_blank" rel="noreferrer" className="home__issue-link lg-body-medium">
                       Abrir el plan en GitHub
                     </a>
-                    <AskPlanChanges plan={workflow.plan} />
                     <ImplementPlanAction
                       plan={workflow.plan}
                       onImplementationStarted={implementationStarted}
@@ -519,7 +507,6 @@ const Home = () => {
                   <PlanProgress
                     plan={workflow.plan}
                     onReady={planReady}
-                    onReviewing={planReviewing}
                     observe={false}
                   />
                 </WorkflowStep>

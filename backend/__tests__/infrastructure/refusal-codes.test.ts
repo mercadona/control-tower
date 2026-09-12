@@ -5,7 +5,6 @@ import { EventsRequestOutcome, PlanEvents } from '../../src/infrastructure/plan-
 import { ActivePlansOutcome } from '../../src/infrastructure/active-plans-route.ts'
 import { ProgressRequestOutcome, ProgressCollapse } from '../../src/infrastructure/implement-progress-route.ts'
 import { HistoryRequestOutcome, HistoryCollapse } from '../../src/infrastructure/implement-history-route.ts'
-import { ReviewRequestOutcome, ReviewCollapse } from '../../src/infrastructure/review-plan-route.ts'
 import { SessionStreamOutcome } from '../../src/infrastructure/session-stream-route.ts'
 import { SessionInputOutcome } from '../../src/infrastructure/session-input-route.ts'
 
@@ -19,7 +18,6 @@ class RequestVocabularies {
       ...Object.values(EventsRequestOutcome),
       ...Object.values(ProgressRequestOutcome),
       ...Object.values(HistoryRequestOutcome),
-      ...Object.values(ReviewRequestOutcome),
       ...Object.values(SessionStreamOutcome),
       ...Object.values(SessionInputOutcome),
     ].filter((outcome) => outcome !== RequestVocabularies.#ACCEPTED)
@@ -31,9 +29,6 @@ class SharedOnPurposeAcrossRequestVocabularies {
     PlanRequestOutcome.BODY_NOT_A_JSON_OBJECT,
     PlanRequestOutcome.UNKNOWN_FIELD,
     PlanRequestOutcome.MALFORMED_REPO,
-    ImplementRequestOutcome.MALFORMED_ISSUE,
-    ImplementRequestOutcome.NO_LIVE_SESSION,
-    ImplementRequestOutcome.UNCERTAIN_PHASE,
     ProgressRequestOutcome.MALFORMED_ROOT,
     SessionInputOutcome.NOT_LIVE,
   ])
@@ -64,7 +59,6 @@ class EveryCodeTheApiEmits {
       ...ImplementCollapse.declaredCodes(),
       ...ProgressCollapse.declaredCodes(),
       ...HistoryCollapse.declaredCodes(),
-      ReviewCollapse.CODE,
       ...CodesRememberedByHandFromHttpAndApiServer.VALUES,
       ...PlanEvents.declaredCodes(),
     ]

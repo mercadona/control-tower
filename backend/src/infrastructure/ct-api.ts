@@ -34,13 +34,10 @@ import { DiskImplementationStartRegistry } from './disk-implementation-start-reg
 import { CmuxWorkspaceQuery } from '../../../plugin/scripts/cmux.js'
 import { StartPlan } from '../application/actions/start-plan.ts'
 import { ImplementPlan } from '../application/actions/implement-plan.ts'
-import { AskPlanChanges } from '../application/actions/ask-plan-changes.ts'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
 import { ReadImplementationProgress } from '../application/queries/read-implementation-progress.ts'
 import { ReadImplementationHistory } from '../application/queries/read-implementation-history.ts'
-import { ReadChangesAsked, ReadChangesAskedParams } from '../application/queries/read-changes-asked.ts'
 import { ReadFixesAsked, ReadFixesAskedParams } from '../application/queries/read-fixes-asked.ts'
-import { ReviewPlan, ReviewPlanParams } from '../application/actions/review-plan.ts'
 import { RequestFixes, RequestFixesParams } from '../application/actions/request-fixes.ts'
 import { SurveyWorkspaces, SurveyWorkspacesParams } from '../application/queries/survey-workspaces.ts'
 import { ReadPlanStory, ReadPlanStoryParams } from '../application/queries/read-plan-story.ts'
@@ -293,14 +290,13 @@ class CtApi {
     })
   }
 
-  static #readPlanProgress(git: LaunchTool, log: MemoryReviewLog): ReadPlanProgress {
+  static #readPlanProgress(git: LaunchTool): ReadPlanProgress {
     return new ReadPlanProgress({
       planProgress: new PlanContractProgress({
         node: CtApi.#tool(process.execPath),
         git,
         dispatchCheck: PluginTree.dispatchCheck(),
       }),
-      reviewLog: log,
     })
   }
 
@@ -308,20 +304,6 @@ class CtApi {
     return new PlanEvents({
       read: (session) => readPlanProgress.execute(new ReadPlanProgressParams(session)),
       sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_READS),
-    })
-  }
-
-  static #planReviews(planIssues: GhPlanIssues, planAgents: CmuxPlanAgents, log: MemoryReviewLog): ReviewWatch {
-    const readChangesAsked = new ReadChangesAsked({ planIssues })
-    const reviewPlan = new ReviewPlan({ planAgents })
-
-    return new ReviewWatch({
-      asked: (watch) => readChangesAsked.execute(new ReadChangesAskedParams(watch)),
-      review: (params) => reviewPlan.execute(new ReviewPlanParams(params)),
-      sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_ASKS),
-      stderr: (line) => process.stderr.write(line),
-      label: 'plan review watch',
-      log,
     })
   }
 
@@ -396,9 +378,7 @@ class CtApi {
       dispatchCheck: PluginTree.dispatchCheck(),
     })
     const sessions = new PlanSessions()
-    const planReviewLog = new MemoryReviewLog()
-    const readPlanProgress = CtApi.#readPlanProgress(git, planReviewLog)
-    const reviews = CtApi.#planReviews(planIssues, planAgents, planReviewLog)
+    const readPlanProgress = CtApi.#readPlanProgress(git)
     const activePlans = new ActivePlans({ sessions })
     const implementationStarts = new DiskImplementationStartRegistry({
       read: (path) => readFileSync(path, 'utf8'),
@@ -432,7 +412,6 @@ class CtApi {
       goRegistry,
       implementationProgress: runFileProgress,
       sessions,
-      reviews,
       pullRequestReviews,
       activePlans,
     })
@@ -444,14 +423,12 @@ class CtApi {
     const server = new ApiServer({
       port: asked.port,
       startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, gh),
-      reviews,
       pullRequestReviews,
       implementPlan: new ImplementPlan({
         goRegistry,
         planIssues,
         planAgents,
       }),
-      askPlanChanges: new AskPlanChanges({ planIssues }),
       implementProgress: new ReadImplementationProgress({
         implementationProgress: runFileProgress,
         pullRequests,
@@ -459,7 +436,6 @@ class CtApi {
       }),
       implementHistory: new ReadImplementationHistory({ implementationHistory: metricsFileHistory }),
       planEvents: CtApi.#planEvents(readPlanProgress),
-      readPlanProgress,
       sessions,
       activePlans,
       externalTools: new SurveyExternalTools({
