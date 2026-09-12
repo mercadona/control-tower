@@ -68,10 +68,7 @@ class WatchLiveSessionSpy extends WatchLiveSession {
   }
 
   latestOnEnded(): () => void {
-    const onEnded = this.asked[this.asked.length - 1].onEnded
-    if (onEnded === undefined) throw new Error('WatchLiveSessionSpy: no onEnded was asked for')
-
-    return onEnded
+    return this.asked[this.asked.length - 1].onEnded
   }
 
   stoppedOnce(): Promise<void> {

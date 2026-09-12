@@ -4,10 +4,10 @@ import type { LiveSession } from '../../domain/value-objects/live-session.ts'
 export class WatchLiveSessionParams {
   readonly session: LiveSession
   readonly onBytes: (bytes: string) => void
-  readonly onEnded?: () => void
+  readonly onEnded: () => void
 
   constructor({ session, onBytes, onEnded }: {
-    session: LiveSession, onBytes: (bytes: string) => void, onEnded?: () => void,
+    session: LiveSession, onBytes: (bytes: string) => void, onEnded: () => void,
   }) {
     this.session = session
     this.onBytes = onBytes

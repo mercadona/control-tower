@@ -12,7 +12,7 @@ export type TerminalSpawn = (file: string, argv: string[], options: {
   name: string, cols: number, rows: number, cwd: string, env: Record<string, string>,
 }) => Terminal
 
-type Watcher = { onBytes: (bytes: string) => void, onEnded?: () => void }
+type Watcher = { onBytes: (bytes: string) => void, onEnded: () => void }
 
 type OpenTerminal = {
   session: LiveSession,
@@ -80,7 +80,7 @@ export class PtyLiveSessions extends LiveSessions {
   }
 
   watch({ session, onBytes, onEnded }: {
-    session: LiveSession, onBytes: (bytes: string) => void, onEnded?: () => void,
+    session: LiveSession, onBytes: (bytes: string) => void, onEnded: () => void,
   }): LiveSessionStream {
     const opened = this.#terminalFor(session)
     const watcher: Watcher = { onBytes, onEnded }
@@ -112,7 +112,7 @@ export class PtyLiveSessions extends LiveSessions {
 
   #exited(opened: OpenTerminal, program: string): void {
     this.#open.delete(opened.session.id)
-    for (const watcher of opened.watchers) watcher.onEnded?.()
+    for (const watcher of opened.watchers) watcher.onEnded()
     opened.watchers.clear()
     this.stderr(`live session ${opened.session.id} (${program}) exited\n`)
   }

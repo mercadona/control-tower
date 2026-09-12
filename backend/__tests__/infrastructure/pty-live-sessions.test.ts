@@ -124,7 +124,7 @@ describe('PtyLiveSessions', () => {
 
     opened.terminal.prints('hello ')
     opened.terminal.prints('world')
-    const watch = opened.sessions.watch({ session: opened.session, onBytes: () => {} })
+    const watch = opened.sessions.watch({ session: opened.session, onBytes: () => {}, onEnded: () => {} })
 
     expect(watch.printed).toBe('hello world')
   })
@@ -133,8 +133,8 @@ describe('PtyLiveSessions', () => {
     const opened = OpenedTerminal.with()
     const first: string[] = []
     const second: string[] = []
-    opened.sessions.watch({ session: opened.session, onBytes: (bytes) => first.push(bytes) })
-    opened.sessions.watch({ session: opened.session, onBytes: (bytes) => second.push(bytes) })
+    opened.sessions.watch({ session: opened.session, onBytes: (bytes) => first.push(bytes), onEnded: () => {} })
+    opened.sessions.watch({ session: opened.session, onBytes: (bytes) => second.push(bytes), onEnded: () => {} })
 
     opened.terminal.prints('shared bytes')
 
@@ -145,7 +145,7 @@ describe('PtyLiveSessions', () => {
   it('a stopped watcher receives nothing more and the session stays live', () => {
     const opened = OpenedTerminal.with()
     const received: string[] = []
-    const watch = opened.sessions.watch({ session: opened.session, onBytes: (bytes) => received.push(bytes) })
+    const watch = opened.sessions.watch({ session: opened.session, onBytes: (bytes) => received.push(bytes), onEnded: () => {} })
 
     watch.stop()
     opened.terminal.prints('after the stop')
@@ -159,11 +159,11 @@ describe('PtyLiveSessions', () => {
     const atLimit = 'a'.repeat(PtyLiveSessions.SCROLLBACK_CHARACTERS)
 
     opened.terminal.prints(atLimit)
-    const withinLimit = opened.sessions.watch({ session: opened.session, onBytes: () => {} })
+    const withinLimit = opened.sessions.watch({ session: opened.session, onBytes: () => {}, onEnded: () => {} })
     expect(withinLimit.printed).toBe(atLimit)
 
     opened.terminal.prints('b')
-    const overLimit = opened.sessions.watch({ session: opened.session, onBytes: () => {} })
+    const overLimit = opened.sessions.watch({ session: opened.session, onBytes: () => {}, onEnded: () => {} })
     expect(overLimit.printed.length).toBe(PtyLiveSessions.SCROLLBACK_CHARACTERS)
     expect(overLimit.printed).toBe(`${atLimit.slice(1)}b`)
   })

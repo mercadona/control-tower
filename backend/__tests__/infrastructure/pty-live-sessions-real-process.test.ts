@@ -51,6 +51,7 @@ class Echoed {
             resolve()
           }
         },
+        onEnded: () => {},
       })
       seen = watch.printed
       if (seen.includes(token)) {
@@ -85,7 +86,7 @@ describe('PtyLiveSessions with a real process', () => {
     sessions.write({ session, text: `echo ${token}\n` })
     await echoed
 
-    const watch = sessions.watch({ session, onBytes: () => {} })
+    const watch = sessions.watch({ session, onBytes: () => {}, onEnded: () => {} })
     watch.stop()
     expect(watch.printed).toContain(token)
   })
@@ -93,7 +94,7 @@ describe('PtyLiveSessions with a real process', () => {
   it('the real process stays alive after every watcher has stopped', async () => {
     const sessions = RealCabin.opening(realTerminals)
     const session = sessions.open()
-    const abandoned = sessions.watch({ session, onBytes: () => {} })
+    const abandoned = sessions.watch({ session, onBytes: () => {}, onEnded: () => {} })
     abandoned.stop()
 
     const token = Echoed.token()

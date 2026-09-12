@@ -12,7 +12,7 @@ export class LiveSessions {
   }
 
   watch({ session, onBytes, onEnded }: {
-    session: LiveSession, onBytes: (bytes: string) => void, onEnded?: () => void,
+    session: LiveSession, onBytes: (bytes: string) => void, onEnded: () => void,
   }): LiveSessionStream {
     throw new Error(`${this.constructor.name} must implement watch()`)
   }

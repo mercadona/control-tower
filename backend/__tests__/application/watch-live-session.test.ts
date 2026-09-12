@@ -4,7 +4,7 @@ import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 
-type WatchAsked = { session: LiveSession, onBytes: (bytes: string) => void }
+type WatchAsked = { session: LiveSession, onBytes: (bytes: string) => void, onEnded: () => void }
 
 class LiveSessionMother {
   static claude(): LiveSession {
@@ -38,15 +38,17 @@ describe('WatchLiveSession', () => {
     const claude = LiveSessionMother.claude()
     const stop = (): void => {}
     const onBytes = (bytes: string): void => {}
+    const onEnded = (): void => {}
     const liveSessions = LiveSessionsSpy.answering('hola', stop)
 
     const result = new WatchLiveSession({ liveSessions }).execute(
-      new WatchLiveSessionParams({ session: claude, onBytes })
+      new WatchLiveSessionParams({ session: claude, onBytes, onEnded })
     )
 
     expect(result).toBeInstanceOf(WatchLiveSessionResult)
     expect(result.printed).toBe('hola')
     expect(result.stop).toBe(stop)
-    expect(liveSessions.asked).toEqual([{ session: claude, onBytes }])
+    expect(liveSessions.asked).toEqual([{ session: claude, onBytes, onEnded }])
+    expect(liveSessions.asked[0].onEnded).toBe(onEnded)
   })
 })
