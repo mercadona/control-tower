@@ -48,7 +48,7 @@ vi.mock('@xterm/xterm', () => {
   return { Terminal: MockTerminal }
 })
 
-const refusedWrite = () => new Response(JSON.stringify({ code: 'session-not-live', detail: 'the shell exited' }), { status: 409 })
+const refusedWrite = () => new Response(JSON.stringify({ code: 'session-not-live', detail: 'no live session answers to that id' }), { status: 400 })
 
 const typedWrite = () => new Response(JSON.stringify({ status: 'typed', id: SESSION.id }), { status: 202 })
 
@@ -152,6 +152,24 @@ describe('SessionTerminal', () => {
     lastTerminal().onDataHandler?.('ls -la')
 
     await waitFor(() => expect(screen.queryByText('No se ha podido enviar lo que has escrito')).not.toBeInTheDocument())
+  })
+
+  it('a write outcome for a session no longer shown does not paint under the session now shown', async () => {
+    const OTHER_SESSION = { id: 'b2', name: 'bash' }
+    let resolvePost: (response: Response) => void = () => undefined
+    const posting = vi.fn(() => new Promise<Response>((resolve) => { resolvePost = resolve }))
+    vi.stubGlobal('fetch', posting)
+
+    const { rerender } = render(<SessionTerminal session={SESSION} />)
+    lastTerminal().onDataHandler?.('ls -la')
+    await waitFor(() => expect(posting).toHaveBeenCalled())
+
+    rerender(<SessionTerminal session={OTHER_SESSION} />)
+    resolvePost(refusedWrite())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(screen.queryByText('No se ha podido enviar lo que has escrito')).not.toBeInTheDocument()
   })
 
   it('a reconnected stream repaints instead of appending its history', () => {

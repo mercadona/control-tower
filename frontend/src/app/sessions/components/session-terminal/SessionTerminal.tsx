@@ -19,9 +19,11 @@ type SessionStreamState = 'streaming' | 'gone' | 'unreadable'
 export type SessionTerminalProps = { session: LiveSession; onGone?: () => void }
 
 const writeMessageFor = (outcome: TypeOutcome): string | null => {
-  if (outcome.kind === 'refused') return REFUSED_WRITE_MESSAGE
-  if (outcome.kind === 'unreachable') return UNREACHABLE_WRITE_MESSAGE
-  return null
+  switch (outcome.kind) {
+    case 'refused': return REFUSED_WRITE_MESSAGE
+    case 'unreachable': return UNREACHABLE_WRITE_MESSAGE
+    case 'typed': return null
+  }
 }
 
 export const SessionTerminal = ({ session, onGone = () => undefined }: SessionTerminalProps): ReactElement => {
@@ -37,10 +39,14 @@ export const SessionTerminal = ({ session, onGone = () => undefined }: SessionTe
     const screen = screenRef.current
     if (screen === null) return
 
+    let cancelled = false
     const terminal = new Terminal({ cols: COLUMNS, rows: ROWS })
     terminal.open(screen)
     terminal.onData((text) => {
-      void SessionsClient.type(session.id, text).then((outcome) => setWriteMessage(writeMessageFor(outcome)))
+      void SessionsClient.type(session.id, text).then((outcome) => {
+        if (cancelled) return
+        setWriteMessage(writeMessageFor(outcome))
+      })
     })
 
     const subscription = SessionsClient.watch(session.id, {
@@ -55,6 +61,7 @@ export const SessionTerminal = ({ session, onGone = () => undefined }: SessionTe
     })
 
     return () => {
+      cancelled = true
       subscription.close()
       terminal.dispose()
     }
