@@ -150,6 +150,8 @@ Rules to obey:
 | `backend/__tests__/application/type-into-session.test.ts` | create | the suite | none (body by TDD) (T5) |
 | `backend/__tests__/infrastructure/session-channel-real-process.test.ts` | create | `ct-step global` | none (body by TDD) (T10) |
 | `docs/superpowers/plans/2026-09-12-issue-327-the-session-channel.md` | modify | the pull request | prose (T10) |
+| `plugin/scripts/ct-step.mjs` | modify | `ct-step controls` | Contract (T10) |
+| `plugin/__tests__/ct-step-plan-and-checks.test.js` | modify | the plugin suite | none (body by TDD) (T10) |
 | `frontend/src/app/sessions/Sessions.types.ts` | create | the client, the hook, both components | Contract (T6) |
 | `frontend/src/app/sessions/client.ts` | create | `useLiveSessions`, `SessionTerminal` | Contract (T6) |
 | `frontend/src/app/sessions/useLiveSessions.ts` | create | `SessionsPanel` | Contract (T6) |
@@ -849,9 +851,21 @@ npm --prefix backend test   # expected: exit 0 — the wiring broke no suite
 PTY, so the slice's end-to-end is committed rather than retyped.
 
 **Files:** `backend/__tests__/infrastructure/session-channel-real-process.test.ts` (create),
-`docs/superpowers/plans/2026-09-12-issue-327-the-session-channel.md` (modify)
+`docs/superpowers/plans/2026-09-12-issue-327-the-session-channel.md` (modify),
+`plugin/scripts/ct-step.mjs` (modify),
+`plugin/__tests__/ct-step-plan-and-checks.test.js` (modify)
 
-No code — this task adds one test file; every module it exercises was built in Tasks 1 to 9.
+Contract (plugin/scripts/ct-step.mjs):
+
+```js
+  const declared = t.files.filter((f) => f.path !== planRelPath())
+```
+
+`declaredScope` dropped the plan's own file from the touched side (`workPathsInTheIndex`) and
+not from the declared side, so a `**Files:**` naming it could never be satisfied: the path never
+reaches what was touched, and the amendment control refuses to let it be removed. This run sat
+in `blocked-controls` on exactly that, and a human decided to repair the control rather than
+route around either half. The plan file stays declared above — with the fix it is ignored.
 
 The test builds an `ApiServer` on port `0` over a `PtyLiveSessions` whose spawn is the real
 `node-pty`, opens one session, and then, against the listening server: asks `GET /sessions` and
@@ -864,7 +878,9 @@ too, and the server is stopped there as well.
 **TDD:** No TDD — an end-to-end is written after the behaviours it binds, and it is still red
 before this slice starts, because `GET /sessions` does not exist on `main`.
 
-**Tests:** added — in `session-channel-real-process.test.ts`:
+**Tests:** added — in `ct-step-plan-and-checks.test.js`:
+`it('the plan\'s own file declared in a **Files:** is ignored, not demanded')`;
+in `session-channel-real-process.test.ts`:
 `it('the live session is listed, its stream carries what it prints and what is typed reaches it')`,
 `it('closing the stream leaves the session listed and its process alive')`.
 
@@ -873,6 +889,7 @@ before this slice starts, because `GET /sessions` does not exist on `main`.
 ```bash
 npm --prefix backend test -- __tests__/infrastructure/session-channel-real-process.test.ts   # expected: exit 0 — the four criteria hold over one real process
 npm --prefix backend test   # expected: exit 0 — the whole backend suite, real processes included
+npm test --prefix plugin -- __tests__/ct-step-plan-and-checks.test.js   # expected: exit 0 — the scope control no longer asks for the impossible
 ```
 
 ## 8. Global verification
@@ -937,3 +954,10 @@ npm --prefix backend test -- __tests__/infrastructure/session-channel-real-proce
     backend owns a handful of sessions at most. *(Own call.)*
 12. **Nothing is inherited.** The issue's "## Contexto heredado" carries only the empty template
     line, and its row in the slices table has `Dep: –`. *(Issue.)*
+13. **The cabin's session is not reopened once its shell exits.** `#exited` deletes it and
+    nothing opens another, so an `exit` or a `Ctrl-D` typed through the input endpoint leaves
+    `GET /sessions` answering `{"sessions":[]}` until the backend restarts. No criterion asks for
+    a session to be reopened, the page already renders both the empty list and the dead session,
+    and `API.md` says so — but it is the first thing a person using the cabin will meet.
+    *(Own call, found while the slice was implemented and recorded here rather than widened
+    into scope.)*

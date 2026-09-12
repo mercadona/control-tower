@@ -32,6 +32,19 @@ describe("the task's scope is decided by the plan", () => {
     expect(readFileSync(runState().lastControlsLog, 'utf8')).toMatch(/uno\.txt.*is not among what was touched/)
   })
 
+  it('the plan\'s own file declared in a **Files:** is ignored, not demanded', () => {
+    // The plan file belongs to the program, which stages it itself, so it is
+    // dropped from BOTH sides of the crossing. Declared on one side and
+    // unreachable on the other, it asked for what no task could deliver: the
+    // path never reaches what was touched, and the amendment control refuses to
+    // let anyone remove it.
+    writeFileSync(join(repo, 'plan.md'), PLAN.replace('`uno.txt` (create).', '`uno.txt` (create), `plan.md` (modify).'))
+    ct('report', writeReport(['uno.txt']))
+    const r = ct('controls')
+    expect(r.stdout).toMatch(/controls: done/)
+    expect(readFileSync(runState().lastControlsLog, 'utf8')).not.toMatch(/plan\.md/)
+  })
+
   it('(create) over a file that already existed is red', () => {
     writeFileSync(join(repo, 'existente.txt'), 'ya estaba\n')
     execFileSync('git', ['add', 'existente.txt'], { cwd: repo, stdio: 'ignore' })
