@@ -68,8 +68,8 @@ What gets compared, and in this order:
 3. **The severity distribution over the correct case.** The `medium`s of a correct task are
    defensive vetoes: each one sends the implementer to a paid round with no defect to fix. Their
    going down is an improvement even if the hit rate does not move.
-4. **The cost.** The judge runs with opus once per task and per retry; a longer preamble is paid
-   on every one of them.
+4. **The cost.** The judge runs with fable once per task and per retry; a longer preamble is paid
+   on every one of them. The recorded baselines predate that and are opus-priced.
 
 Save both outputs next to the agent's change. A rate without the run that produced it is an
 opinion.

@@ -86,7 +86,7 @@ describe('ActivePlansClient', () => {
     expect(await ActivePlansClient.get()).toEqual({ kind: 'unavailable' })
   })
 
-  it('should report recovery as inconclusive when the backend says cmux could not be asked', async () => {
+  it('should report recovery as inconclusive when the backend says its records could not be read', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(

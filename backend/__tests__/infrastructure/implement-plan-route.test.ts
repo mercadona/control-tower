@@ -14,7 +14,8 @@ import {
   ImplementRequestOutcome, ImplementRefusal, ImplementCollapse,
 } from '../../src/infrastructure/implement-plan-route.ts'
 import {
-  PlanAgentNotResumed, PlanFailure, PlanGoNotAnswered, GoFailure, GoNotRecorded, PlanProgressNotRead,
+  PlanAgentNotResumed, PlanAgentNotNamed, PlanFailure, PlanGoNotAnswered, GoFailure, GoNotRecorded,
+  PlanProgressNotRead,
 } from '../../src/domain/exceptions.ts'
 import { PlanState, type PlanStateValue } from '../../src/domain/value-objects/plan-state.ts'
 import {
@@ -222,7 +223,7 @@ describe('ImplementPlanRoute', () => {
     expect(RunningApi.spy.asked).toEqual([])
   })
 
-  it('an_agent_handle_with_whitespace_is_refused_before_it_can_become_an_argument_of_cmux', async () => {
+  it('an_agent_handle_with_whitespace_is_refused_before_it_can_become_an_argument_of_claude', async () => {
     const response = await RunningApi.asking('{"agent":"ct-plan XOP-4909","issue":33,"repo":"jjponz/repo-pulse"}')
 
     expect(response.status).toBe(400)
@@ -293,6 +294,19 @@ describe('ImplementPlanRoute', () => {
     expect(body.detail).toBe('cmux send failed: no such workspace')
   })
 
+  it('a_conversation_record_that_cannot_be_understood_refuses_the_go_with_its_own_code', async () => {
+    const port = await RunningApi.listening(
+      ImplementPlanSpy.failingWith(new PlanAgentNotNamed('the conversation record could not be understood'))
+    )
+
+    const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
+
+    expect(response.status).toBe(400)
+    const body = await response.json() as { code: string, detail: string }
+    expect(body.code).toBe('plan-agent-worktree-not-understood')
+    expect(body.detail).toBe('the conversation record could not be understood')
+  })
+
   it('a_bug_of_ours_is_not_dressed_up_as_the_tool_refusing', async () => {
     const port = await RunningApi.listening(ImplementPlanSpy.buggy())
 
@@ -337,7 +351,7 @@ describe('ImplementRefusal', () => {
 })
 
 describe('ImplementCollapse', () => {
-  const RESUMING_AN_AGENT = ['GoNotRecorded', 'PlanGoNotAnswered', 'PlanAgentNotResumed']
+  const RESUMING_AN_AGENT = ['GoNotRecorded', 'PlanGoNotAnswered', 'PlanAgentNotResumed', 'PlanAgentNotNamed']
 
   it('every_way_resuming_an_agent_can_collapse_has_a_refusal_declared_so_adding_one_cannot_reach_the_client_as_a_crash', () => {
     expect(ImplementCollapse.declaredFailures().sort()).toEqual(RESUMING_AN_AGENT.sort())
@@ -354,9 +368,17 @@ describe('ImplementCollapse', () => {
       new GoNotRecorded('the directory is not writable'),
       new PlanGoNotAnswered('gh issue comment failed: nope'),
       new PlanAgentNotResumed('cmux send failed: no such workspace'),
+      new PlanAgentNotNamed('the conversation record could not be understood'),
     ]
 
     expect(causes.map((cause) => ImplementCollapse.of(cause).status)).toEqual(Array(causes.length).fill(400))
+  })
+
+  it('a_conversation_record_nobody_could_understand_names_the_specific_way_it_failed_and_keeps_why', () => {
+    const collapse = ImplementCollapse.of(new PlanAgentNotNamed('the conversation record could not be understood'))
+
+    expect(collapse.code).toBe('plan-agent-worktree-not-understood')
+    expect(collapse.detail).toBe('the conversation record could not be understood')
   })
 
   it('a_go_nobody_could_record_names_the_specific_way_it_failed_and_keeps_why', () => {

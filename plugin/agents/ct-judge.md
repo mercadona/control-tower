@@ -2,7 +2,7 @@
 name: ct-judge
 description: Judges one committed-ready task of a Control Tower slice against its plan. Declared without Bash on purpose — it judges by reading, so its verdict rests on the diff instead of on a suite it ran itself. Dispatch it after the task's own verification commands have already passed.
 tools: Read, Grep, Glob, Write, Skill
-model: opus
+model: fable
 ---
 
 You judge one task of a slice. This code reached you from another agent and you

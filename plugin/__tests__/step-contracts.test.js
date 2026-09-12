@@ -1268,12 +1268,17 @@ describe("each subagent's model", () => {
   }
 
   it.each([
-    ['the task judge', JUDGE_AGENT],
-    ['the slice judge', SLICE_JUDGE_AGENT],
     ['the reconciler', RECONCILER_AGENT],
     ['the advisor', ADVISOR_AGENT],
   ])('%s declares its model, it does not inherit the session\'s', (_, file) => {
     expect(agentModel(file)).toBe('opus')
+  })
+
+  it.each([
+    ['the task judge', JUDGE_AGENT],
+    ['the slice judge', SLICE_JUDGE_AGENT],
+  ])('%s declares its model as fable, and never inherits it from the session', (_, file) => {
+    expect(agentModel(file)).toBe('fable')
   })
 })
 

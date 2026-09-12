@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
 import { DispatchCheckWorkbench } from '../../src/infrastructure/dispatch-check-workbench.ts'
-import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.ts'
+import { HeadlessPlanAgents } from '../../src/infrastructure/headless-plan-agents.ts'
+import type { RunSpec, StartedPid } from '../../src/infrastructure/detached-run.ts'
 import { PlanAgentBrief } from '../../src/infrastructure/plan-agent-brief.ts'
 import { GhPullRequests } from '../../src/infrastructure/gh-pull-requests.ts'
 import { GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.ts'
 import { Gh } from '../../src/infrastructure/gh.ts'
 import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.ts'
-import { LaunchPolicy, LaunchBudget } from '../../src/domain/policies/launch-policy.ts'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -52,46 +52,20 @@ class NodeDouble {
   }
 }
 
-class CmuxDouble {
+class DetachedRunDouble {
   readonly calls: string[][]
 
   constructor() {
     this.calls = []
   }
 
-  async run(argv: string[]): Promise<ProcessOutput> {
-    this.calls.push(argv)
+  start(spec: RunSpec): StartedPid {
+    this.calls.push(spec.argv)
 
-    return new ProcessOutput({ code: 0, stdout: '', stderr: '' })
-  }
-}
-
-class Untouched {
-  static readonly RUNS_IN = '/tmp/ct-plan'
-
-  static write(path: string): Promise<void> {
-    throw new Error(`asking an agent for fixes writes no launcher, it was asked to write ${path}`)
+    return { pid: 4242 }
   }
 
-  static read(path: string): Promise<string | null> {
-    throw new Error(`asking an agent for fixes reads no sentinel, it was asked to read ${path}`)
-  }
-
-  static remove(path: string): Promise<void> {
-    throw new Error(`asking an agent for fixes removes no sentinel, it was asked to remove ${path}`)
-  }
-
-  static sleep(): Promise<void> {
-    throw new Error('asking an agent for fixes waits for no sentinel')
-  }
-
-  static realpathOf(path: string): string | null {
-    throw new Error(`asking an agent for fixes resolves no directory, it was asked for ${path}`)
-  }
-
-  static policy(): LaunchPolicy {
-    return new LaunchPolicy({ budget: new LaunchBudget({ attempts: 1, resends: 0 }) })
-  }
+  stop(): void {}
 }
 
 class Sweep {
@@ -117,7 +91,7 @@ class PullRequestReviewLoop {
   static ISSUE = new PlanIssue({
     number: 7, url: 'https://github.com/josemerca/ct-loop-sandbox/issues/7',
   })
-  static AGENT = 'workspace:9'
+  static AGENT = '6f1a2b3c-0000-4000-8000-000000000001'
   static CHANGE = new ChangeAsked({ id: '101', text: 'arregla el guard de []', askedAt: null })
   static PULL_REQUEST_LISTED = JSON.stringify([
     { number: 42, url: 'https://github.com/josemerca/ct-loop-sandbox/pull/42' },
@@ -136,7 +110,7 @@ class PullRequestReviewLoop {
   })
 
   readonly node: NodeDouble
-  readonly cmux: CmuxDouble
+  readonly detached: DetachedRunDouble
   readonly ghProcess: GhProcessDouble
   readonly pullRequests: GhPullRequests
   readonly planIssues: GhPlanIssues
@@ -144,7 +118,7 @@ class PullRequestReviewLoop {
 
   constructor() {
     this.node = new NodeDouble()
-    this.cmux = new CmuxDouble()
+    this.detached = new DetachedRunDouble()
     this.ghProcess = new GhProcessDouble([
       new ProcessOutput({ code: 0, stdout: PullRequestReviewLoop.PULL_REQUEST_LISTED, stderr: '' }),
       new ProcessOutput({ code: 0, stdout: PullRequestReviewLoop.IN_REVIEW_LABELS, stderr: '' }),
@@ -171,16 +145,21 @@ class PullRequestReviewLoop {
       node: (argv) => this.node.run(argv),
       dispatchCheck: PullRequestReviewLoop.DISPATCH_CHECK,
     })
-    const planAgents = new CmuxPlanAgents({
+    const planAgents = new HeadlessPlanAgents({
+      start: this.detached,
+      makeDirectory: async () => {},
+      write: async () => {},
+      read: async () => JSON.stringify({
+        worktree: '/repo/.worktrees/7',
+        issue: 7,
+        repository: 'josemerca/ct-loop-sandbox',
+        startedAt: 1,
+      }),
+      mint: () => PullRequestReviewLoop.AGENT,
+      clock: () => 1,
       brief: this.brief,
-      run: (argv) => this.cmux.run(argv),
-      write: Untouched.write,
-      read: Untouched.read,
-      remove: Untouched.remove,
-      sleep: Untouched.sleep,
-      realpathOf: Untouched.realpathOf,
-      runsIn: Untouched.RUNS_IN,
-      policy: Untouched.policy(),
+      runsIn: '/state/harness',
+      pluginRoot: '/plugin',
     })
     const requestFixes = new RequestFixes({ workbench, planAgents })
     const sweep = new Sweep(null)
@@ -202,7 +181,7 @@ class PullRequestReviewLoop {
   }
 }
 
-describe('the pull request review loop composed end to end, only gh, node and cmux doubled', () => {
+describe('the pull request review loop composed end to end, only gh, node and the detached run doubled', () => {
   it('reopens_the_exact_issue_the_review_named_instead_of_sending_undefined_to_dispatch_check', async () => {
     const loop = new PullRequestReviewLoop()
 
@@ -213,7 +192,7 @@ describe('the pull request review loop composed end to end, only gh, node and cm
     ]])
   })
 
-  it('types_an_errand_naming_the_real_issue_instead_of_issue_hash_undefined', async () => {
+  it('passes_an_errand_naming_the_real_issue_instead_of_issue_hash_undefined', async () => {
     const loop = new PullRequestReviewLoop()
 
     await loop.run()
@@ -223,10 +202,11 @@ describe('the pull request review loop composed end to end, only gh, node and cm
       repository: PullRequestReviewLoop.REPOSITORY,
       changes: PullRequestReviewLoop.CHANGE.text,
     })
-    expect(loop.cmux.calls).toEqual([
-      ['send', '--workspace', PullRequestReviewLoop.AGENT, expectedErrand],
-      ['send-key', '--workspace', PullRequestReviewLoop.AGENT, 'Enter'],
-    ])
+    expect(loop.detached.calls).toEqual([[
+      '-p', expectedErrand, '--output-format', 'stream-json',
+      '--verbose', '--permission-mode', 'bypassPermissions', '--fallback-model', 'opus', '--model',
+      'sonnet', '--plugin-dir', '/plugin', '--resume', PullRequestReviewLoop.AGENT,
+    ]])
     expect(expectedErrand).toContain('#7')
     expect(expectedErrand).not.toContain('undefined')
   })

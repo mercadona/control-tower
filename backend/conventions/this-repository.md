@@ -51,7 +51,10 @@ those imports resolve, and it is no longer a statement about this backend.
 |---|---|
 | **User story** | The work to plan, named either the way Jira calls a ticket, by its key (`ABC-123`), or by the url of the GitHub issue that describes it |
 | **Plan issue** | The GitHub issue that hosts a plan: the plan is posted there, the GO is answered there, the dispatcher reads its labels |
-| **Plan agent** | Whoever writes the plan for a story; today a Claude in a cmux tab |
+| **Plan agent** | Whoever writes the plan for a story; a Claude invoked per step with `claude -p`, never a session typed into |
+| **Harness call** | One invocation of the plan agent: its step, its model, its argv and the stream it wrote. It lives in its own directory under the state root and outlives the backend that started it |
+| **Step of a call** | Which errand the invocation carried — `write-plan`, `review-plan`, `implement`, `fix-pull-request`. The one datum no reader recovers afterwards, so it is written at the source |
+| **Model of a step** | Which model a step asks for: `fable` writes and reviews a plan and judges, `sonnet` implements and fixes. A judge declares it in its own agent frontmatter, never inheriting the dispatching session; every headless call carries `--fallback-model opus` |
 | **GO** | The human's `-OK <nonce>` on the issue that releases the agent |
 | **Repository name** | `owner/name`; validated because it becomes an argument of `gh` |
 | **Checkout root** | The absolute path of the local git clone where a plan's worktree is cut; validated because it becomes an argument of `git -C` |
@@ -64,7 +67,7 @@ those imports resolve, and it is no longer a statement about this backend.
 | **Plan issue status** | Which rung of the loop's ladder the issue stands at — `backlog`, `ready`, `in-progress`, `in-review` — or none, which is a status too and not an absence |
 | **Delivery state** | What that status means once a pull request is open: waiting for a person (`in-review`), fixing what was asked (`fixing`), or nobody on it (`unattended`) |
 | **Workbench** | Where a slice goes back to when a person asks for changes; the plugin's `dispatch-check --reopen` puts it there, and the backend only decides when |
-| **External tool** | A binary Control Tower drives that has to be usable before work starts: `gh`, `acli`, `claude`, `git`, `bq` carry a credential of their own, and `cmux` carries the query plans are recovered with. Which six lives in `probed-tool-sessions.ts`, and so does what is asked of the five that carry a credential; the query `cmux` is asked arrives injected from `ct-api.ts` so that it is the very one plans are recovered with |
+| **External tool** | A binary Control Tower drives that has to be usable before work starts: `gh`, `acli`, `claude`, `git`, `bq` carry a credential of their own, and `cmux` carries a query that answers whether its daemon is up. Which six lives in `probed-tool-sessions.ts`, and so does what is asked of the five that carry a credential; the query `cmux` is asked arrives injected from `ct-api.ts` |
 | **Tool session** | Whether what is asked of that tool works right now: `ready`, `missing`, or `unknown` — when the login is not observable from this process, or when the binary the row is probed with is absent and nothing was asked at all. `unknown` is not a failure, and the `fix` beside it repairs what was asked about: the credential when the row was asked, the absent probe when it could not be, and the login of a tool whose own binary is absent, which presupposes an installation `installed` says separately you do not have. The `fix` column is product copy that lives in this backend: `ToolsStatus` renders it to the screen untranslated, and the product's decision is to keep it English because it is mostly literal shell commands — which is why `plugin/conventions/style.md` does not reach it |
 
 ## Naming an exception family

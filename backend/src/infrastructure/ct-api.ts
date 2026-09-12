@@ -1,12 +1,13 @@
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { setTimeout as after } from 'node:timers/promises'
-import { homedir, tmpdir } from 'node:os'
+import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ApiServer, LOOPBACK } from './api-server.ts'
-import { CmuxPlanAgents } from './cmux-plan-agents.ts'
+import { HeadlessPlanAgents } from './headless-plan-agents.ts'
+import { DetachedRun } from './detached-run.ts'
 import { AcliUserStories } from './acli-user-stories.ts'
 import { GhUserStories } from './gh-user-stories.ts'
 import { ReferredUserStories } from './referred-user-stories.ts'
@@ -14,6 +15,7 @@ import { GhPlanIssues } from './gh-plan-issues.ts'
 import { GitWorkspace } from './git-workspace.ts'
 import { DiskCheckoutRegistry } from './disk-checkout-registry.ts'
 import { WorktreePlans } from './worktree-plans.ts'
+import { HarnessConversations } from './harness-conversations.ts'
 import { DiskGoRegistry } from './disk-go-registry.ts'
 import { DispatchCheckHarvest } from './dispatch-check-harvest.ts'
 import { HarvestClock } from './harvest-clock.ts'
@@ -50,11 +52,11 @@ import { ToolRunner } from './tool-runner.ts'
 import { Gh } from './gh.ts'
 import { ExternalTool } from './external-tool.ts'
 import { RetryPolicy, RetryBudget } from '../domain/policies/retry-policy.ts'
-import { LaunchPolicy, LaunchBudget } from '../domain/policies/launch-policy.ts'
 import { Invocation, InvocationOutcome } from './invocation.ts'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
 import type { ProcessOutput } from './tool-runner.ts'
 import type { ToolLaunch, ToolSleep } from './external-tool.ts'
+import type { PlanAgents } from '../domain/ports/plan-agents.ts'
 
 type LaunchTool = (argv: string[], options?: { cwd?: string }) => Promise<ProcessOutput>
 
@@ -71,20 +73,20 @@ class FrontendBuild {
 class PluginTree {
   static readonly #HERE = dirname(fileURLToPath(import.meta.url))
 
-  static #root(): string {
+  static root(): string {
     return join(PluginTree.#HERE, '..', '..', '..', 'plugin')
   }
 
   static dispatchCheck(): string {
-    return join(PluginTree.#root(), 'scripts', 'dispatch-check.mjs')
+    return join(PluginTree.root(), 'scripts', 'dispatch-check.mjs')
   }
 
   static conventions(): string {
-    return join(PluginTree.#root(), 'conventions')
+    return join(PluginTree.root(), 'conventions')
   }
 
   static ctStep(): string {
-    return join(PluginTree.#root(), 'scripts', 'ct-step.mjs')
+    return join(PluginTree.root(), 'scripts', 'ct-step.mjs')
   }
 }
 
@@ -100,6 +102,14 @@ class Disk {
   static async write(path: string, text: string): Promise<void> {
     await mkdir(dirname(path), { recursive: true })
     await writeFile(path, text)
+  }
+
+  static async makeDirectory(path: string): Promise<void> {
+    await mkdir(path, { recursive: true })
+  }
+
+  static async list(path: string): Promise<string[]> {
+    return readdir(path)
   }
 
   static async atomicWrite(path: string, text: string): Promise<void> {
@@ -139,10 +149,6 @@ class Disk {
     }
   }
 
-  static async remove(path: string): Promise<void> {
-    await rm(path, { force: true })
-  }
-
   static async exists(path: string): Promise<boolean> {
     try {
       await stat(path)
@@ -161,18 +167,16 @@ class CtApi {
   static readonly #PROCESS_TIMEOUT_MS = 30_000
   static readonly #HARVEST_TIMEOUT_MS = 6 * 60 * 1000
   static readonly #BASELINE_TIMEOUT_MS = 10 * 60 * 1000
+  static readonly #PLAN_CALL_TIMEOUT_MS = 60 * 60 * 1000
   static readonly #SHELL = 'sh'
   static readonly #SECONDS_FOR_GH_IN_A_HARVEST = 60
   static readonly #SECONDS_BETWEEN_SWEEPS = 60
   static readonly #CLOCK_STOPPED = 1
   static readonly #RETRIES = 3
   static readonly #SECONDS_BETWEEN_RETRIES = 2
-  static readonly #PROBES_PER_SEND = 20
-  static readonly #RESENDS = 1
-  static readonly #SECONDS_BETWEEN_PROBES = 1
   static readonly #SECONDS_BETWEEN_READS = 2
   static readonly #SECONDS_BETWEEN_ASKS = 30
-  static readonly #LAUNCH_DIRECTORY = 'ct-plan'
+  static readonly #HARNESS_DIRECTORY = 'harness'
 
   static #refuseUsage(reason: string | null): never {
     process.stderr.write(`${reason}\n${CtApi.#USAGE}\n`)
@@ -217,7 +221,7 @@ class CtApi {
 
   static #startPlan(
     workspace: GitWorkspace,
-    planAgents: CmuxPlanAgents,
+    planAgents: PlanAgents,
     planIssues: GhPlanIssues,
     checkouts: DiskCheckoutRegistry,
     gh: Gh
@@ -306,7 +310,7 @@ class CtApi {
     })
   }
 
-  static #planReviews(planIssues: GhPlanIssues, planAgents: CmuxPlanAgents, log: MemoryReviewLog): ReviewWatch {
+  static #planReviews(planIssues: GhPlanIssues, planAgents: PlanAgents, log: MemoryReviewLog): ReviewWatch {
     const readChangesAsked = new ReadChangesAsked({ planIssues })
     const reviewPlan = new ReviewPlan({ planAgents })
 
@@ -323,7 +327,7 @@ class CtApi {
   static #pullRequestReviews(
     pullRequests: GhPullRequests,
     planIssues: GhPlanIssues,
-    planAgents: CmuxPlanAgents,
+    planAgents: PlanAgents,
     workbench: DispatchCheckWorkbench
   ): ReviewWatch {
     const readFixesAsked = new ReadFixesAsked({ pullRequests, planIssues })
@@ -363,22 +367,21 @@ class CtApi {
       stderr: (line) => process.stderr.write(line),
       root: asked.stateRoot,
     })
-    const planAgents = new CmuxPlanAgents({
-      run: CtApi.#tool(CmuxPlanAgents.BIN),
-      write: Disk.write,
+    const harnessRoot = join(asked.stateRoot, CtApi.#HARNESS_DIRECTORY)
+    const planAgents = new HeadlessPlanAgents({
+      start: new DetachedRun({ bin: HeadlessPlanAgents.BIN, budgetMs: CtApi.#PLAN_CALL_TIMEOUT_MS, env: environment }),
+      makeDirectory: Disk.makeDirectory,
+      write: Disk.atomicWrite,
       read: Disk.read,
-      remove: Disk.remove,
-      realpathOf: Disk.realpathOf,
-      sleep: () => CtApi.#waiting(CtApi.#SECONDS_BETWEEN_PROBES),
-      runsIn: join(tmpdir(), CtApi.#LAUNCH_DIRECTORY),
-      policy: new LaunchPolicy({
-        budget: new LaunchBudget({ attempts: CtApi.#PROBES_PER_SEND, resends: CtApi.#RESENDS }),
-      }),
+      mint: randomUUID,
+      clock: Date.now,
       brief: new PlanAgentBrief({
         dispatchCheck: PluginTree.dispatchCheck(),
         conventions: PluginTree.conventions(),
         ctStep: PluginTree.ctStep(),
       }),
+      runsIn: harnessRoot,
+      pluginRoot: PluginTree.root(),
     })
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
     const planIssues = new GhPlanIssues({
@@ -413,11 +416,17 @@ class CtApi {
     const metricsFileHistory = new MetricsFileHistory({ read: Disk.read, exists: Disk.exists })
     const surveyWorkspaces = new SurveyWorkspaces({ workspace })
     const readPlanStory = new ReadPlanStory({ planIssues })
+    const harness = new HarnessConversations({
+      list: Disk.list,
+      read: Disk.read,
+      stderr: (line) => process.stderr.write(line),
+      runsIn: harnessRoot,
+    })
     const recovery = new ActivePlanRecovery({
       plans: new WorktreePlans({
         checkouts,
         survey: async (root) => (await surveyWorkspaces.execute(new SurveyWorkspacesParams({ root }))).survey,
-        sessions: () => CtApi.#askCmux(),
+        conversations: () => harness.known(),
         realpathOf: Disk.realpathOf,
         story: async (subject) => (await readPlanStory.execute(new ReadPlanStoryParams(subject))).story,
         stderr: (line) => process.stderr.write(line),
@@ -468,7 +477,14 @@ class CtApi {
       CtApi.#refuseListen(`could not listen on ${LOOPBACK}: ${CtApi.#messageOf(error)}`)
     }
     process.stdout.write(`${JSON.stringify({ port })}\n`)
-    await recovery.recover()
+    try {
+      await recovery.recover()
+    } catch (failure) {
+      const reported = failure instanceof Error ? (failure.stack ?? failure.message) : String(failure)
+      process.stderr.write(
+        `plans in flight: recovery raised a bug instead of a WorkspaceFailure or a PlanStoryFailure, so it stays inconclusive: ${reported}\n`
+      )
+    }
     CtApi.#sweepUntilItBreaks(CtApi.#harvestClock({
       workspace, checkouts, environment, harvestTable: asked.harvestTable,
     }))

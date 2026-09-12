@@ -214,7 +214,7 @@ class PlansRefusing extends WorktreePlans {
     super({
       checkouts: new CheckoutRegistry(),
       survey: () => { throw new Error('a plans double never surveys a checkout') },
-      sessions: () => { throw new Error('a plans double never asks cmux') },
+      conversations: () => { throw new Error('a plans double never asks cmux') },
       story: () => { throw new Error('a plans double never reads a user story') },
       realpathOf: () => null,
       stderr: () => undefined,

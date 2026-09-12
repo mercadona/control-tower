@@ -167,7 +167,7 @@ describe('Home · restore workflow', () => {
 
     openHome()
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('backend o cmux ya no tiene este plan activo')
+    expect(await screen.findByRole('alert')).toHaveTextContent('El backend ya no tiene este plan activo')
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     expect(FakeEventSource.opened).toHaveLength(0)
     expect(fetching).toHaveBeenCalledTimes(1)
@@ -479,6 +479,7 @@ describe('Home · restore workflow', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('No se puede saber qué hay en marcha')
+    expect(alert).toHaveTextContent('no pudo leer sus registros')
     expect(alert).not.toHaveTextContent('No se pudo contactar con el backend')
     expect(screen.getByLabelText('Ticket')).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Descartar estado' })).toBeNull()
