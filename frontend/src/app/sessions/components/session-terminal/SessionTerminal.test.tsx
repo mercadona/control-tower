@@ -5,6 +5,8 @@ import { SessionTerminal } from 'app/sessions/components/session-terminal/Sessio
 
 const SESSION = { id: 'a1', name: 'zsh' }
 
+const NOOP_ON_GONE = () => undefined
+
 type FakeTerminal = {
   written: string[]
   disposed: boolean
@@ -64,7 +66,7 @@ describe('SessionTerminal', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it('the bytes the stream delivers are written to the terminal', () => {
-    render(<SessionTerminal session={SESSION} />)
+    render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
 
     FakeEventSource.last().receive('{"bytes":"hola"}')
 
@@ -75,7 +77,7 @@ describe('SessionTerminal', () => {
     const posting = vi.fn(async () => new Response(JSON.stringify({ status: 'typed', id: SESSION.id }), { status: 202 }))
     vi.stubGlobal('fetch', posting)
 
-    render(<SessionTerminal session={SESSION} />)
+    render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
     lastTerminal().onDataHandler?.('ls -la')
     await new Promise((resolve) => setTimeout(resolve, 0))
 
@@ -83,11 +85,12 @@ describe('SessionTerminal', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: 'ls -la' }),
+      signal: expect.any(AbortSignal),
     })
   })
 
   it('unmounting closes the subscription and disposes the terminal', () => {
-    const { unmount } = render(<SessionTerminal session={SESSION} />)
+    const { unmount } = render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
     const terminal = lastTerminal()
 
     unmount()
@@ -97,13 +100,13 @@ describe('SessionTerminal', () => {
   })
 
   it('the terminal is opened on the screen it renders', () => {
-    const { container } = render(<SessionTerminal session={SESSION} />)
+    const { container } = render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
 
     expect(lastTerminal().opened).toBe(container.querySelector('.session-terminal__screen'))
   })
 
   it('an unreachable stream says so instead of staying mute', async () => {
-    render(<SessionTerminal session={SESSION} />)
+    render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
 
     FakeEventSource.last().dropConnection()
 
@@ -111,7 +114,7 @@ describe('SessionTerminal', () => {
   })
 
   it('a session the backend no longer holds is said to be gone', async () => {
-    render(<SessionTerminal session={SESSION} />)
+    render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
 
     FakeEventSource.last().refuseBeforeOpen()
 
@@ -121,7 +124,7 @@ describe('SessionTerminal', () => {
   it('a refused keystroke is said on screen without clearing the terminal', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => refusedWrite()))
 
-    render(<SessionTerminal session={SESSION} />)
+    render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
     FakeEventSource.last().receive('{"bytes":"hola"}')
     lastTerminal().onDataHandler?.('ls -la')
 
@@ -134,7 +137,7 @@ describe('SessionTerminal', () => {
       throw new TypeError('Failed to fetch')
     }))
 
-    render(<SessionTerminal session={SESSION} />)
+    render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
     lastTerminal().onDataHandler?.('ls -la')
 
     expect(await screen.findByText('Sin conexión con el backend')).toBeInTheDocument()
@@ -144,7 +147,7 @@ describe('SessionTerminal', () => {
     const posting = vi.fn(async () => refusedWrite())
     vi.stubGlobal('fetch', posting)
 
-    render(<SessionTerminal session={SESSION} />)
+    render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
     lastTerminal().onDataHandler?.('ls -la')
     await screen.findByText('No se ha podido enviar lo que has escrito')
 
@@ -160,11 +163,11 @@ describe('SessionTerminal', () => {
     const posting = vi.fn(() => new Promise<Response>((resolve) => { resolvePost = resolve }))
     vi.stubGlobal('fetch', posting)
 
-    const { rerender } = render(<SessionTerminal session={SESSION} />)
+    const { rerender } = render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
     lastTerminal().onDataHandler?.('ls -la')
     await waitFor(() => expect(posting).toHaveBeenCalled())
 
-    rerender(<SessionTerminal session={OTHER_SESSION} />)
+    rerender(<SessionTerminal session={OTHER_SESSION} onGone={NOOP_ON_GONE} />)
     resolvePost(refusedWrite())
     await new Promise((resolve) => setTimeout(resolve, 0))
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -172,13 +175,17 @@ describe('SessionTerminal', () => {
     expect(screen.queryByText('No se ha podido enviar lo que has escrito')).not.toBeInTheDocument()
   })
 
-  it('a reconnected stream repaints instead of appending its history', () => {
-    render(<SessionTerminal session={SESSION} />)
+  it('a stream that recovers after a blip repaints and clears the error banner', async () => {
+    render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
 
     FakeEventSource.last().receive('{"bytes":"scrollback"}')
+    FakeEventSource.last().dropConnection()
+    await screen.findByText('No se puede leer esta sesión')
+
     FakeEventSource.last().open()
     FakeEventSource.last().receive('{"bytes":"fresh"}')
 
+    await waitFor(() => expect(screen.queryByText('No se puede leer esta sesión')).not.toBeInTheDocument())
     expect(lastTerminal().written).toEqual(['fresh'])
   })
 })

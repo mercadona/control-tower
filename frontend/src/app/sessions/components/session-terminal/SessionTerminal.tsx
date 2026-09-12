@@ -16,7 +16,7 @@ const UNREACHABLE_WRITE_MESSAGE = 'Sin conexión con el backend'
 
 type SessionStreamState = 'streaming' | 'gone' | 'unreadable'
 
-export type SessionTerminalProps = { session: LiveSession; onGone?: () => void }
+export type SessionTerminalProps = { session: LiveSession; onGone: () => void }
 
 const writeMessageFor = (outcome: TypeOutcome): string | null => {
   switch (outcome.kind) {
@@ -26,7 +26,7 @@ const writeMessageFor = (outcome: TypeOutcome): string | null => {
   }
 }
 
-export const SessionTerminal = ({ session, onGone = () => undefined }: SessionTerminalProps): ReactElement => {
+export const SessionTerminal = ({ session, onGone }: SessionTerminalProps): ReactElement => {
   const screenRef = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<SessionStreamState>('streaming')
   const [writeMessage, setWriteMessage] = useState<string | null>(null)
@@ -50,7 +50,7 @@ export const SessionTerminal = ({ session, onGone = () => undefined }: SessionTe
     })
 
     const subscription = SessionsClient.watch(session.id, {
-      onOpened: () => terminal.reset(),
+      onOpened: () => { terminal.reset(); setState('streaming') },
       onBytes: (bytes) => terminal.write(bytes),
       onFailure: () => setState('unreadable'),
       onRefused: () => {

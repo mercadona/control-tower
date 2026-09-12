@@ -11,6 +11,7 @@ const PATH = '/sessions'
 const OPENED_EVENT = 'open'
 const BYTES_EVENT = 'message'
 const FAILURE_EVENT = 'error'
+const WRITE_TIMEOUT_MS = 2_000
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -76,6 +77,7 @@ const send = async (id: string, text: string): Promise<TypeOutcome> => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
+      signal: AbortSignal.timeout(WRITE_TIMEOUT_MS),
     })
     if (response.ok) return { kind: 'typed' }
     const body: unknown = await response.json()
@@ -92,6 +94,9 @@ const type = (id: string, text: string): Promise<TypeOutcome> => {
   const previous = writeChains.get(id) ?? Promise.resolve()
   const outcome = previous.then(() => send(id, text))
   writeChains.set(id, outcome)
+  void outcome.finally(() => {
+    if (writeChains.get(id) === outcome) writeChains.delete(id)
+  })
   return outcome
 }
 

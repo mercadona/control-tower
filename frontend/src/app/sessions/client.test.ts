@@ -15,7 +15,11 @@ const idleListener = () => ({
 })
 
 describe('SessionsClient', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
 
   it('the live sessions the backend lists reach the page', async () => {
     vi.stubGlobal('fetch', answering(SessionsMother.oneSession().body))
@@ -108,6 +112,7 @@ describe('SessionsClient', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: 'ls -la' }),
+      signal: expect.any(AbortSignal),
     })
   })
 
@@ -190,6 +195,7 @@ describe('SessionsClient', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: 's' }),
+      signal: expect.any(AbortSignal),
     })
     expect(firstSettled).toBe(false)
 
@@ -197,5 +203,33 @@ describe('SessionsClient', () => {
 
     await expect(second).resolves.toEqual({ kind: 'typed' })
     await first
+  })
+
+  it('a write that never answers times out instead of stalling the next keystroke of that session', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms: number) => {
+      const controller = new AbortController()
+      setTimeout(() => controller.abort(), ms)
+      return controller.signal
+    })
+
+    const hanging = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(new DOMException('the write timed out', 'AbortError')))
+    }))
+    vi.stubGlobal('fetch', hanging)
+
+    const first = SessionsClient.type('timeout-1', 'l')
+    const second = SessionsClient.type('timeout-1', 's')
+
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(hanging).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(2000)
+    await expect(first).resolves.toEqual({ kind: 'unreachable' })
+    expect(hanging).toHaveBeenCalledTimes(2)
+
+    await vi.advanceTimersByTimeAsync(2000)
+    await expect(second).resolves.toEqual({ kind: 'unreachable' })
   })
 })

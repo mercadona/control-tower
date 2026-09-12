@@ -225,11 +225,12 @@ describe('the session channel over one real process', () => {
       sessions: [{ id: session.id, name: session.name }],
     })
 
-    const typed = await RunningApi.typed(port, session.id, 'echo ct\r')
+    const token = AssembledToken.unique()
+    const typed = await RunningApi.typed(port, session.id, AssembledToken.typedInHalvesForTheShellToJoin(token))
     expect(typed.status).toBe(202)
 
     const secondSubscription = await SseFrames.openedOn(port, session.id)
-    await Echo.reachesTheStream(secondSubscription, 'ct')
+    await Echo.reachesTheStream(secondSubscription, token)
     await secondSubscription.closedByAbort()
   })
 })
