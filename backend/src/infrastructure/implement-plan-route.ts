@@ -35,8 +35,6 @@ type PlanImplementer = { execute(params: ImplementPlanParams): Promise<void> }
 
 type WatchedIssue = { issue: number, repository: RepositoryName }
 
-type PlanReviews = { stop(watched: WatchedIssue): void }
-
 type PullRequestReviews = { start(watch: PlanWatch): void }
 
 type ActivePlan = { readonly phase: string, readonly watch: PlanWatch }
@@ -241,7 +239,6 @@ export class ImplementPlanRoute {
 
   static handledBy(
     implementPlan: PlanImplementer,
-    reviews: PlanReviews,
     pullRequestReviews: PullRequestReviews,
     activePlans: ActivePlanRegistry,
     implementationStarts: ImplementationStarts,
@@ -258,7 +255,7 @@ export class ImplementPlanRoute {
       const pending = transitions.get(key)
       if (pending !== undefined) await pending
       const transition = ImplementPlanRoute.#accept(
-        implementPlan, reviews, pullRequestReviews, activePlans,
+        implementPlan, pullRequestReviews, activePlans,
         implementationStarts, stderr, response, asked
       )
       transitions.set(key, transition)
@@ -272,7 +269,6 @@ export class ImplementPlanRoute {
 
   static async #accept(
     implementPlan: PlanImplementer,
-    reviews: PlanReviews,
     pullRequestReviews: PullRequestReviews,
     activePlans: ActivePlanRegistry,
     implementationStarts: ImplementationStarts,
@@ -309,7 +305,6 @@ export class ImplementPlanRoute {
     } catch (failure) {
       stderr(`could not persist implementation start for ${asked.repository.text}#${asked.issue}: ${(failure as Error).message}\n`)
     }
-    reviews.stop({ issue: asked.issue, repository: asked.repository })
     pullRequestReviews.start(watch)
     ImplementPlanRoute.#answerAccepted(response, asked)
   }

@@ -18,17 +18,6 @@ export class PlanAgents {
     )
   }
 
-  async review({ agent, issue, repository, changes }: {
-    agent: string,
-    issue: number,
-    repository: RepositoryName,
-    changes: string,
-  }): Promise<void> {
-    throw new Error(
-      `${this.constructor.name} must implement review({ agent, issue, repository, changes }), asked for ${agent} on ${issue} in ${repository}`
-    )
-  }
-
   async fix({ agent, issue, repository, changes }: {
     agent: string,
     issue: number,

@@ -22,18 +22,10 @@ import type { ActivePlans, ActivePlanRecovering } from './active-plans-route.ts'
 import type { ImplementationState } from '../domain/value-objects/implementation-state.ts'
 import type { ImplementationHistoryEntry } from '../domain/value-objects/implementation-history-entry.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
-import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
 export const LOOPBACK = '127.0.0.1'
 
-type WatchedIssue = { issue: number, repository: RepositoryName }
-
 type PlanImplementer = { execute(params: ImplementPlanParams): Promise<void> }
-
-type PlanReviews = {
-  start(watch: PlanWatch): void,
-  stop(watched: WatchedIssue): void,
-}
 
 type PullRequestReviews = { start(watch: PlanWatch): void }
 
@@ -62,7 +54,6 @@ export type ApiCollaborators = {
   implementPlan?: PlanImplementer | null,
   implementProgress?: ImplementationProgressReader | null,
   implementHistory?: ImplementationHistoryReader | null,
-  reviews?: PlanReviews | null,
   pullRequestReviews?: PullRequestReviews | null,
   planEvents?: PlanEvents | null,
   sessions?: PlanSessions | null,
@@ -109,7 +100,6 @@ export class ApiServer {
   readonly implementPlan: PlanImplementer | null | undefined
   readonly implementProgress: ImplementationProgressReader | null | undefined
   readonly implementHistory: ImplementationHistoryReader | null | undefined
-  readonly reviews: PlanReviews | null | undefined
   readonly pullRequestReviews: PullRequestReviews | null | undefined
   readonly planEvents: PlanEvents | null | undefined
   readonly sessions: PlanSessions | null | undefined
@@ -122,7 +112,7 @@ export class ApiServer {
   server: Server | null
 
   constructor({
-    port, startPlan, implementPlan, implementProgress, implementHistory, reviews, pullRequestReviews,
+    port, startPlan, implementPlan, implementProgress, implementHistory, pullRequestReviews,
     planEvents, sessions, activePlans, externalTools, implementationStarts, recovery = null, stderr,
     frontendRoot,
   }: ApiCollaborators) {
@@ -131,7 +121,6 @@ export class ApiServer {
     this.implementPlan = implementPlan
     this.implementProgress = implementProgress
     this.implementHistory = implementHistory
-    this.reviews = reviews
     this.pullRequestReviews = pullRequestReviews
     this.planEvents = planEvents
     this.sessions = sessions
@@ -155,7 +144,7 @@ export class ApiServer {
       Browsers.turnAwayForeign,
       JsonBody.demandDeclared,
       JsonBody.reader(),
-      StartPlanRoute.handledBy(this.startPlan!, this.sessions!, this.reviews!)
+      StartPlanRoute.handledBy(this.startPlan!, this.sessions!)
     )
     app.all(StartPlanRoute.PATH, StartPlanRoute.refuseOtherMethods)
     app.post(
@@ -164,7 +153,7 @@ export class ApiServer {
       JsonBody.demandDeclared,
       JsonBody.reader(),
       ImplementPlanRoute.handledBy(
-        this.implementPlan!, this.reviews!, this.pullRequestReviews!,
+        this.implementPlan!, this.pullRequestReviews!,
         this.activePlans!, this.implementationStarts!, this.stderr!
       )
     )

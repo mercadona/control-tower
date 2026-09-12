@@ -3,7 +3,6 @@ import type { Mock } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { ReviewsSpy } from '../reviews-spy.ts'
 import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
@@ -27,7 +26,18 @@ type ListeningOptions = {
   watched?: boolean,
   implementationStarts?: ImplementationStartsDouble,
   stderr?: Mock,
-  reviews?: ReviewsSpy,
+}
+
+class PullRequestWatchSpy {
+  readonly started: PlanWatch[]
+
+  constructor() {
+    this.started = []
+  }
+
+  start(watch: PlanWatch): void {
+    this.started.push(watch)
+  }
 }
 
 class ImplementPlanSpy {
@@ -70,8 +80,7 @@ class RunningApi {
   static ACCEPTED_BODY = '{"agent":"workspace:20","issue":33,"repo":"jjponz/repo-pulse"}'
   static ANSWER = '{"status":"implementing","agent":"workspace:20","issue":33}'
   static spy: ImplementPlanSpy = null!
-  static reviews: ReviewsSpy = null!
-  static pullRequestReviews: ReviewsSpy = null!
+  static pullRequestReviews: PullRequestWatchSpy = null!
   static sessions: PlanSessions = null!
   static activePlans: ActivePlans = null!
   static implementationStarts: ImplementationStartsDouble = null!
@@ -95,8 +104,7 @@ class RunningApi {
 
   static async listening(spy = new ImplementPlanSpy(), options: ListeningOptions = {}): Promise<number> {
     RunningApi.spy = spy
-    RunningApi.reviews = options.reviews ?? new ReviewsSpy()
-    RunningApi.pullRequestReviews = new ReviewsSpy()
+    RunningApi.pullRequestReviews = new PullRequestWatchSpy()
     RunningApi.sessions = new PlanSessions()
     if (options.watched ?? true) RunningApi.sessions.remember(RunningApi.WATCHED)
     RunningApi.activePlans = new ActivePlans({ sessions: RunningApi.sessions })
@@ -108,7 +116,6 @@ class RunningApi {
       implementPlan: spy,
       implementProgress: null,
       externalTools: null,
-      reviews: RunningApi.reviews,
       pullRequestReviews: RunningApi.pullRequestReviews,
       sessions: RunningApi.sessions,
       activePlans: RunningApi.activePlans,
@@ -354,14 +361,6 @@ describe('ImplementCollapse', () => {
 describe('implementing the plan lifts the watch on its issue', () => {
   afterEach(RunningApi.stopAll)
 
-  it('accepting_the_implementation_stops_watching_the_plan_because_that_gate_is_closed', async () => {
-    await RunningApi.post(await RunningApi.listening(), RunningApi.ACCEPTED_BODY)
-
-    expect(RunningApi.reviews.stopped).toEqual([
-      { issue: 33, repository: RunningApi.WATCHED.repository },
-    ])
-  })
-
   it('accepting_the_implementation_starts_watching_the_pull_request_that_does_not_exist_yet', async () => {
     await RunningApi.post(await RunningApi.listening(), RunningApi.ACCEPTED_BODY)
 
@@ -464,14 +463,7 @@ describe('implementing the plan lifts the watch on its issue', () => {
     expect(RunningApi.sessions.find({ repository: RunningApi.WATCHED.repository, issue: 33 })).toBe(RunningApi.WATCHED)
   })
 
-  it('a_refused_request_to_implement_lifts_no_watch', async () => {
-    const response = await RunningApi.asking('{"agent":"workspace:20","issue":0,"repo":"a/b"}')
-
-    expect(response.status).toBe(400)
-    expect(RunningApi.reviews.stopped).toEqual([])
-  })
-
-  it('a_plan_the_agent_would_not_take_keeps_its_watch_so_the_changes_can_still_be_asked_for', async () => {
+  it('a_plan_the_agent_would_not_take_starts_no_pull_request_watch_or_implementation_start', async () => {
     const spy = ImplementPlanSpy.failingWith(new PlanAgentNotResumed('no such workspace'))
     const implementationStarts = { remember: vi.fn() }
 
@@ -480,7 +472,6 @@ describe('implementing the plan lifts the watch on its issue', () => {
     )
 
     expect(response.status).toBe(400)
-    expect(RunningApi.reviews.stopped).toEqual([])
     expect(implementationStarts.remember).not.toHaveBeenCalled()
     expect(RunningApi.pullRequestReviews.started).toEqual([])
   })

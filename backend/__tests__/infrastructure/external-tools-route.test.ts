@@ -2,7 +2,6 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { ReviewsSpy } from '../reviews-spy.ts'
 import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import { SurveyExternalTools, SurveyExternalToolsResult } from '../../src/application/queries/survey-external-tools.ts'
 import { ToolSessions } from '../../src/domain/ports/tool-sessions.ts'
@@ -88,7 +87,6 @@ class RunningApi {
       implementPlan: null,
       implementProgress: undefined,
       externalTools: spy,
-      reviews: new ReviewsSpy(),
       pullRequestReviews: undefined,
       sessions: new PlanSessions(),
       activePlans: undefined,

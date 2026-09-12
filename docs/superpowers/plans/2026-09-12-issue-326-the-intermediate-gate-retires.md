@@ -314,24 +314,17 @@ Current state (backend/src/infrastructure/implement-plan-route.ts, lines 346-353
 Contract (backend/src/infrastructure/implement-plan-route.ts):
 
 ```ts
-export const ImplementRequestOutcome = Object.freeze({
-  ACCEPTED: 'accepted',
-  BODY_NOT_A_JSON_OBJECT: 'body-not-a-json-object',
-  UNKNOWN_FIELD: 'unknown-field',
-  MALFORMED_AGENT: 'malformed-agent',
-  MALFORMED_ISSUE: 'malformed-issue',
-  MALFORMED_REPO: 'malformed-repo',
-  NO_LIVE_SESSION: 'no-live-planning-session',
-  UNCERTAIN_PHASE: 'implementation-phase-uncertain',
-} as const)
+// ImplementRequestOutcome keeps every member but PLAN_UNDER_REVIEW:
+// accepted, body-not-a-json-object, unknown-field, malformed-agent,
+// malformed-issue, malformed-repo, no-live-planning-session,
+// implementation-phase-uncertain
 type PlanReviews = { stop(watched: WatchedIssue): void }
 ```
 
-§2, row «What goes in Task 3, file by file», says what each loses.
 
-**TDD:** `it('a_plan_whose_progress_nobody_asks_about_still_admits_the_go')` in `implement-plan-route.test.ts` — with no progress reader wired the route answers 202 and `RunningApi.spy.asked` holds the request; red today, where `handledBy` takes one.
+**TDD:** `it('a_plan_whose_progress_nobody_asks_about_still_admits_the_go')` in `implement-plan-route.test.ts` — with no progress reader wired the route answers 202 and `RunningApi.spy.asked` holds the request; red today.
 
-**Tests:** added: `a_plan_whose_progress_nobody_asks_about_still_admits_the_go`. Removed on purpose: `the_watch_is_asked_about_the_plan_it_is_watching_and_not_about_the_request`, `a_plan_being_reworked_refuses_the_go_even_though_every_change_was_delivered`, `the_state_is_read_for_the_workspace_the_watch_carries`, `half_a_signal_is_still_a_signal_and_a_plan_read_as_being_reworked_refuses_the_go`, `a_signal_nobody_declared_is_refused_instead_of_read_as_nothing_in_flight`, `every_plan_state_says_whether_it_is_a_review_in_flight`, `a_plan_state_nobody_declared_is_refused_instead_of_admitting_the_go`, the `refresh` cases of `review-watch.test.ts`, the `under-review` cases of `client.test.ts` and `ImplementPlanAction.test.tsx`.
+**Tests:** added: `a_plan_whose_progress_nobody_asks_about_still_admits_the_go`. Removed on purpose: `the_watch_is_asked_about_the_plan_it_is_watching_and_not_about_the_request`, `a_plan_being_reworked_refuses_the_go_even_though_every_change_was_delivered`, `the_state_is_read_for_the_workspace_the_watch_carries`, `half_a_signal_is_still_a_signal_and_a_plan_read_as_being_reworked_refuses_the_go`, `a_signal_nobody_declared_is_refused_instead_of_read_as_nothing_in_flight`, `every_plan_state_says_whether_it_is_a_review_in_flight`, `a_plan_state_nobody_declared_is_refused_instead_of_admitting_the_go`, the `refresh` cases of `review-watch.test.ts` and the `under-review` ones of `client.test.ts` and `ImplementPlanAction.test.tsx`.
 
 **Verification:** the policy is untracked, nothing names it, the suites are green.
 
@@ -348,7 +341,7 @@ npm --prefix frontend test
 
 **Objective:** nothing starts a watch over the plan's issue any more, and the surviving watch is the pull request's.
 
-**Files:** `backend/src/infrastructure/ct-api.ts` (modify), `backend/src/infrastructure/api-server.ts` (modify), `backend/src/infrastructure/start-plan-route.ts` (modify), `backend/src/infrastructure/active-plan-recovery.ts` (modify), `backend/src/infrastructure/implement-plan-route.ts` (modify), `backend/src/domain/ports/plan-agents.ts` (modify), `backend/src/infrastructure/cmux-plan-agents.ts` (modify), `backend/src/application/queries/read-changes-asked.ts` (delete), `backend/src/application/actions/review-plan.ts` (delete), `backend/__tests__/reviews-spy.ts` (delete), `backend/__tests__/application/read-changes-asked.test.ts` (delete), `backend/__tests__/application/review-plan.test.ts` (delete), `backend/__tests__/infrastructure/api-server.test.ts` (modify), `backend/__tests__/infrastructure/active-plan-recovery.test.ts` (modify), `backend/__tests__/infrastructure/implement-plan-route.test.ts` (modify), `backend/__tests__/infrastructure/cmux-plan-agents.test.ts` (modify)
+**Files:** `backend/src/infrastructure/ct-api.ts` (modify), `backend/src/infrastructure/api-server.ts` (modify), `backend/src/infrastructure/start-plan-route.ts` (modify), `backend/src/infrastructure/active-plan-recovery.ts` (modify), `backend/src/infrastructure/implement-plan-route.ts` (modify), `backend/src/domain/ports/plan-agents.ts` (modify), `backend/src/infrastructure/cmux-plan-agents.ts` (modify), `backend/src/application/queries/read-changes-asked.ts` (delete), `backend/src/application/actions/review-plan.ts` (delete), `backend/__tests__/reviews-spy.ts` (delete), `backend/__tests__/application/read-changes-asked.test.ts` (delete), `backend/__tests__/application/review-plan.test.ts` (delete), `backend/__tests__/infrastructure/api-server.test.ts` (modify), `backend/__tests__/infrastructure/active-plan-recovery.test.ts` (modify), `backend/__tests__/infrastructure/implement-plan-route.test.ts` (modify), `backend/__tests__/infrastructure/cmux-plan-agents.test.ts` (modify), `backend/__tests__/infrastructure/external-tools-route.test.ts` (modify), `backend/__tests__/infrastructure/implement-history-route.test.ts` (modify), `backend/__tests__/infrastructure/implement-progress-route.test.ts` (modify)
 
 Current state (backend/src/infrastructure/ct-api.ts, lines 309-315):
 
