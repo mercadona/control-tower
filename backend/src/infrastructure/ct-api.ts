@@ -32,7 +32,6 @@ import { DiskImplementationStartRegistry } from './disk-implementation-start-reg
 import { CmuxWorkspaceQuery } from '../../../plugin/scripts/cmux.js'
 import { StartPlan } from '../application/actions/start-plan.ts'
 import { ImplementPlan } from '../application/actions/implement-plan.ts'
-import { AskPlanChanges } from '../application/actions/ask-plan-changes.ts'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
 import { ReadImplementationProgress } from '../application/queries/read-implementation-progress.ts'
 import { ReadImplementationHistory } from '../application/queries/read-implementation-history.ts'
@@ -441,7 +440,6 @@ class CtApi {
         planIssues,
         planAgents,
       }),
-      askPlanChanges: new AskPlanChanges({ planIssues }),
       implementProgress: new ReadImplementationProgress({
         implementationProgress: runFileProgress,
         pullRequests,

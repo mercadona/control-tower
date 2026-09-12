@@ -86,7 +86,6 @@ class RunningApi {
       port: 0,
       startPlan: null,
       implementPlan: null,
-      askPlanChanges: undefined,
       implementProgress: undefined,
       externalTools: spy,
       reviews: new ReviewsSpy(),

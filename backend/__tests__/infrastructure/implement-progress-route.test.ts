@@ -83,7 +83,6 @@ class RunningApi {
       port: 0,
       startPlan: null,
       implementPlan: null,
-      askPlanChanges: null,
       implementProgress: spy,
       reviews: new ReviewsSpy(),
       pullRequestReviews: null,

@@ -143,7 +143,6 @@ class RunningApi {
       port: 0,
       startPlan: null,
       implementPlan: spy,
-      askPlanChanges: null,
       implementProgress: null,
       externalTools: null,
       reviews: RunningApi.reviews,

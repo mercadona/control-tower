@@ -1323,17 +1323,13 @@ describe('ApiServer', () => {
     })
   })
 
-  it('review_plan_turns_away_a_foreign_browser_origin', async () => {
-    const askPlanChanges = { execute: vi.fn() }
-    const port = await RunningApi.listening({ askPlanChanges })
+  it('review_plan_is_no_longer_routed_and_falls_to_the_last_net', async () => {
+    const port = await RunningApi.listening()
 
-    const response = await RunningApi.post(port, '/review-plan', RunningApi.REVIEW_BODY, {
-      Origin: 'https://evil.example',
-    })
+    const response = await RunningApi.post(port, '/review-plan', RunningApi.REVIEW_BODY)
 
-    expect(response.status).toBe(403)
-    expect(await response.text()).toBe('{"code":"foreign-origin","detail":"this api only serves the page it hosts"}')
-    expect(askPlanChanges.execute).not.toHaveBeenCalled()
+    expect(response.status).toBe(404)
+    expect(await response.text()).toBe('{"code":"not-found","detail":"not found"}')
   })
 
   it('active_plans_retries_inconclusive_recovery_and_refuses_unknown_state', async () => {

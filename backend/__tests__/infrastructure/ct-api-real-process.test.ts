@@ -433,7 +433,7 @@ describe('ct-api entrypoint', () => {
     expect((await response.json() as Failure).code).toBe('not-watched')
   })
 
-  it('review_plan_is_mounted_in_the_real_process_and_not_only_in_the_test_server', async () => {
+  it('review_plan_is_no_longer_mounted_in_the_real_process', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })
 
     const response = await fetch(`http://127.0.0.1:${port}/review-plan`, {
@@ -442,7 +442,7 @@ describe('ct-api entrypoint', () => {
       body: JSON.stringify({ issue: 33, repo: 'jjponz/repo-pulse', changes: 'parte la tarea 2' }),
     })
 
-    expect(response.status).toBe(400)
-    expect((await response.json() as Failure).code).toBe('no-live-planning-session')
+    expect(response.status).toBe(404)
+    expect((await response.json() as Failure).code).toBe('not-found')
   })
 })
