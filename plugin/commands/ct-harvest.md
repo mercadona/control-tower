@@ -3,7 +3,13 @@ description: Harvest of the epic — the real cost of every slice, taken from Gi
 ---
 ```
 node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-harvest.mjs --repo "<owner/repo>" --milestone "<epic title>" [--json] [--bq <project:dataset.table>]
+node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-harvest.mjs --schema
 ```
+
+`--schema` prints the table's schema JSON to stdout and exits 0. It needs no
+`--repo`/`--milestone` and touches neither GitHub nor BigQuery: it is the
+input `bq mk --table --schema=...` takes for the one-time table creation (see
+"To BigQuery" in `docs/loop/ct-harvest.md`).
 
 One row per slice (`ready→claim`, `claim→release`, `release→merge`, reopens, requeues, `blocked`, PR size) plus the judge's telemetry per slice and, for every role the loop dispatches to a subagent, how much fixed material it read (`agent_bytes`, `skill_bytes`, `package_bytes`, summarised in the `bytes per role` column). Beside them, what the coding tool spent and how many rounds it cost: the tool and its version, the exact tokens it reported (fresh input, cached input counted once, output and their total) and the judge's `returns` — its vetoes plus the corrections it ordered. Everything comes out of the timeline GitHub writes on its own and of the telemetry the slice left committed; it asks for no field by hand, and a tool that reports no usage lands a status and a `NULL`, never an estimate. **It mutates nothing.** A phase that did not happen prints `—`, never `0`; the summary goes by family (`Tipo`) and every family shows its N. The table or the JSON go to stdout; the reasons and everything about BigQuery, to stderr.
 
