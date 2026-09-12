@@ -109,11 +109,11 @@ The first twenty-five rows are the epic's frozen decisions, copied from the issu
 | Which modules are deleted, not deprecated | `backend/src/infrastructure/review-plan-route.ts`, `backend/src/application/actions/ask-plan-changes.ts`, `backend/src/application/actions/review-plan.ts`, `backend/src/application/queries/read-changes-asked.ts`, `backend/src/domain/policies/review-gate-policy.ts`, `backend/__tests__/reviews-spy.ts` and the whole `frontend/src/app/review-plan/` directory |
 | What `PlanState` becomes | `export type PlanStateValue = 'writing' \| 'ready'` and a `PlanState` class with exactly `WRITING` and `READY`; the frontend's `PlanState` in `frontend/src/app/plan-events/PlanEvents.types.ts` becomes the same two members |
 | What `ReadPlanProgress` becomes | `new ReadPlanProgress({ planProgress })` — no `reviewLog` collaborator, no `#underReview`, no `#momentOf`; `#stateOf` is `this.planProgress.of({ located, issue, repository })` and nothing else |
-| What `ImplementPlanRoute` loses | the `PLAN_UNDER_REVIEW` outcome, `#reviewInFlight`, `#reworking`, and the `reviews`/`readPlanProgress` arguments of `handledBy`; `reviews.stop(...)` goes with Task 3, not with Task 2 |
+| What `ImplementPlanRoute` loses | the `PLAN_UNDER_REVIEW` outcome, `#reviewInFlight`, `#reworking`, and the `reviews`/`readPlanProgress` arguments of `handledBy`; `reviews.stop(...)` goes with Task 4, not with Task 3 |
 | What goes with the route in Task 1 | `api-server.ts`: the `ReviewPlanRoute` and `AskPlanChangesAction` imports, the `askPlanChanges` field, its `ApiCollaborators` entry and its constructor parameter. `ct-api.ts`: the `AskPlanChanges` import and its `askPlanChanges:` argument. `refusal-codes.test.ts`: the `review-plan-route.ts` import, the `ReviewRequestOutcome` spread and `ReviewCollapse.CODE` |
 | What `SharedOnPurposeAcrossRequestVocabularies.CODES` becomes in Task 1 | exactly `PlanRequestOutcome.BODY_NOT_A_JSON_OBJECT`, `PlanRequestOutcome.UNKNOWN_FIELD`, `PlanRequestOutcome.MALFORMED_REPO` and `ProgressRequestOutcome.MALFORMED_ROOT` — the three `ImplementRequestOutcome` entries it lists today were shared only with the review vocabulary, so they stop repeating |
-| What goes in Task 2, file by file | `implement-plan-route.ts`: `#reviewInFlight`, `#reworking`, the `readPlanProgress` parameter of `handledBy` and `#accept`. `api-server.ts`: the `readPlanProgress` collaborator, its field and the `PlanProgressReader` type. `ct-api.ts`: `readPlanProgress` from the `ApiServer` arguments, keeping the local that feeds `#planEvents`. `review-watch.ts`: `refresh()` and its `ReviewInFlight` import. `reviews-spy.ts`: `inFlight`, `refresh`, `withAnUndeliveredChange`, `unreadable`. `ImplementPlan.types.ts`: the `\| { kind: 'under-review' }` member. `client.ts`: `PLAN_UNDER_REVIEW` and the branch that maps it. `ImplementPlanAction.tsx`: `UNDER_REVIEW_TITLE`, `UNDER_REVIEW_DESCRIPTION` and the banner. `ImplementPlanMother.ts`: `planUnderReview` |
-| What goes in Task 3, file by file | `ct-api.ts`: `#planReviews` and the `planReviewLog` local. `api-server.ts`: the `reviews` collaborator, its field and the `PlanReviews` type. `start-plan-route.ts`: the `reviews` argument, the `PlanReviewStarts` type and both `reviews.start(...)` calls. `active-plan-recovery.ts`: the `reviews` field and `this.reviews.startRecovered(watch)`. `implement-plan-route.ts`: the `reviews` argument and `reviews.stop(...)`. `plan-agents.ts` and `cmux-plan-agents.ts`: `review()` |
+| What goes in Task 3, file by file | `implement-plan-route.ts`: `#reviewInFlight`, `#reworking`, the `readPlanProgress` parameter of `handledBy` and `#accept`. `api-server.ts`: the `readPlanProgress` collaborator, its field and the `PlanProgressReader` type. `ct-api.ts`: `readPlanProgress` from the `ApiServer` arguments, keeping the local that feeds `#planEvents`. `review-watch.ts`: `refresh()` and its `ReviewInFlight` import. `reviews-spy.ts`: `inFlight`, `refresh`, `withAnUndeliveredChange`, `unreadable`. `ImplementPlan.types.ts`: the `\| { kind: 'under-review' }` member. `client.ts`: `PLAN_UNDER_REVIEW` and the branch that maps it. `ImplementPlanAction.tsx`: `UNDER_REVIEW_TITLE`, `UNDER_REVIEW_DESCRIPTION` and the banner. `ImplementPlanMother.ts`: `planUnderReview` |
+| What goes in Task 4, file by file | `ct-api.ts`: `#planReviews` and the `planReviewLog` local. `api-server.ts`: the `reviews` collaborator, its field and the `PlanReviews` type. `start-plan-route.ts`: the `reviews` argument, the `PlanReviewStarts` type and both `reviews.start(...)` calls. `active-plan-recovery.ts`: the `reviews` field and `this.reviews.startRecovered(watch)`. `implement-plan-route.ts`: the `reviews` argument and `reviews.stop(...)`. `plan-agents.ts` and `cmux-plan-agents.ts`: `review()` |
 | What `ImplementPlanRoute.handledBy` ends as | `handledBy(implementPlan, pullRequestReviews, activePlans, implementationStarts, stderr)`, in that order |
 | What `ReviewWatch` loses | only `refresh()` and its `ReviewInFlight` import. `start`, `startRecovered`, `stop`, `log`, `#note` and the constructor's six named arguments stay exactly as they are, because the second wiring is protected |
 | What `gatesForType` becomes | `return typed` — the `Tipo`'s gates and nothing more; `TYPE_GATES` is untouched (`ui: ['visual']`, `infra: ['apply']`) |
@@ -121,7 +121,7 @@ The first twenty-five rows are the epic's frozen decisions, copied from the issu
 | Which `gh` calls disappear | `GhPlanIssues.changesArgvFor` (`issue view --json comments`) and `changesCommentArgvFor` (`issue comment --body -REVIEW …`), with `CHANGES_TOKEN`, `#changesIn`, `#commentsIn`, `#demandRead`, `changesAsked`, `askChanges` and `PlanIssueBody.CHANGES_LINE` |
 | Which exceptions disappear | `PlanChangesFailure`, `PlanChangesNotRead`, `PlanChangesNotUnderstood` and `PlanChangesNotAsked` in `backend/src/domain/exceptions.ts`. `ChangeAsked` stays: `GhPullRequests.fixesAsked` is its other producer |
 | What the frontend loses | `frontend/src/app/review-plan/`, the `reviewing` phase of `usePlanProgress`, `PlanProgress`'s `onReviewing` prop and `REWORKING_MESSAGE`, `PlanEventsMother.reviewing`, `Home`'s `planReviewing` callback, `ImplementPlanOutcome`'s `{ kind: 'under-review' }` with its banner and `ImplementPlanMother.planUnderReview`, and `'/review-plan'` in `frontend/vite.config.ts` |
-| Where the two halves of a contract move together | in one commit. `plan-under-review` leaves the backend and the frontend in Task 2; `reviewing` leaves both in Task 5; the endpoint and its client leave both in Task 1 (`conventions/decisions.md`: a contract that crosses a process boundary is changed on both sides at once) |
+| Where the two halves of a contract move together | in one commit. `plan-under-review` leaves the backend and the frontend in Task 3; `reviewing` leaves both in Task 6; the endpoint leaves in Task 1 and its client, with the `ReviewPlanMother` that fed that client's tests, in Task 2 — two consecutive commits of one slice, so no delivery ever carries half of it (`conventions/decisions.md`: a contract that crosses a process boundary is changed on both sides at once) |
 | The test commands | `npm --prefix backend run typecheck`, `npm --prefix backend test`, `npm --prefix frontend test`, `npm --prefix plugin test`. Measured on this worktree at `7f35b98` before any task: all four exit 0 |
 | Which suite covers the surviving watch | `backend/__tests__/infrastructure/pull-request-review-loop.test.ts`. No task may modify it: if a task needs to, the change is wrong |
 
@@ -152,37 +152,38 @@ and are not repeated here.
 |---|---|---|---|
 | `backend/src/infrastructure/review-plan-route.ts` | delete | nothing, after Task 1 | none |
 | `backend/src/application/actions/ask-plan-changes.ts` | delete | nothing, after Task 1 | none |
-| `backend/src/infrastructure/api-server.ts` | modify | `ct-api.ts` | Current state (Task 1), Contract (Task 3) |
-| `backend/src/infrastructure/ct-api.ts` | modify | the real process | Current state (Task 3) |
-| `frontend/src/app/review-plan/` | delete | `Home.tsx`, until Task 1 | none |
-| `frontend/src/pages/home/Home.tsx` | modify | the page | Call site (Tasks 1 and 5) |
-| `frontend/vite.config.ts` | modify | the dev server | prose (config, Task 1) |
-| `backend/src/infrastructure/implement-plan-route.ts` | modify | `api-server.ts` | Current state + Contract (Task 2) |
-| `backend/src/domain/policies/review-gate-policy.ts` | delete | nothing, after Task 2 | none |
+| `backend/src/infrastructure/api-server.ts` | modify | `ct-api.ts` | Current state (Task 1), Contract (Task 4) |
+| `backend/src/infrastructure/ct-api.ts` | modify | the real process | Current state (Task 4) |
+| `frontend/src/app/review-plan/client.ts`, `client.test.ts`, `ReviewPlan.types.ts` and the four files of `components/ask-plan-changes/` | delete | `Home.tsx`, until Task 2 | none |
+| `frontend/src/__scenarios__/ReviewPlanMother.ts` | delete | the deleted review-plan tests | none |
+| `frontend/src/pages/home/Home.tsx` | modify | the page | Call site (Tasks 2 and 6) |
+| `frontend/vite.config.ts` | modify | the dev server | prose (config, Task 2) |
+| `backend/src/infrastructure/implement-plan-route.ts` | modify | `api-server.ts` | Current state + Contract (Task 3) |
+| `backend/src/domain/policies/review-gate-policy.ts` | delete | nothing, after Task 3 | none |
 | `backend/src/infrastructure/review-watch.ts` | modify | `ct-api.ts` | none (body by TDD) |
-| `frontend/src/app/implement-plan/ImplementPlan.types.ts` | modify | `client.ts`, `ImplementPlanAction.tsx` | Current state (Task 2) |
+| `frontend/src/app/implement-plan/ImplementPlan.types.ts` | modify | `client.ts`, `ImplementPlanAction.tsx` | Current state (Task 3) |
 | `frontend/src/app/implement-plan/client.ts` | modify | `ImplementPlanAction.tsx` | none (body by TDD) |
 | `frontend/src/app/implement-plan/components/implement-plan-action/ImplementPlanAction.tsx` | modify | `Home.tsx` | none (body by TDD) |
 | `frontend/src/__scenarios__/ImplementPlanMother.ts` | modify | the frontend suite | none (body by TDD) |
-| `backend/src/application/queries/read-changes-asked.ts` | delete | nothing, after Task 3 | none |
-| `backend/src/application/actions/review-plan.ts` | delete | nothing, after Task 3 | none |
+| `backend/src/application/queries/read-changes-asked.ts` | delete | nothing, after Task 4 | none |
+| `backend/src/application/actions/review-plan.ts` | delete | nothing, after Task 4 | none |
 | `backend/src/infrastructure/start-plan-route.ts` | modify | `api-server.ts` | none (body by TDD) |
 | `backend/src/infrastructure/active-plan-recovery.ts` | modify | `ct-api.ts` | none (body by TDD) |
-| `backend/src/domain/ports/plan-agents.ts` | modify | `cmux-plan-agents.ts` | Contract (Task 3) |
+| `backend/src/domain/ports/plan-agents.ts` | modify | `cmux-plan-agents.ts` | Contract (Task 4) |
 | `backend/src/infrastructure/cmux-plan-agents.ts` | modify | `ct-api.ts` | none (body by TDD) |
-| `backend/__tests__/reviews-spy.ts` | delete | nothing, after Task 3 | none |
-| `backend/src/infrastructure/gh-plan-issues.ts` | modify | `ct-api.ts`, `plan-agent-brief.ts` | Current state (Task 4) |
-| `backend/src/domain/ports/plan-issues.ts` | modify | `gh-plan-issues.ts` | Contract (Task 4) |
+| `backend/__tests__/reviews-spy.ts` | delete | nothing, after Task 4 | none |
+| `backend/src/infrastructure/gh-plan-issues.ts` | modify | `ct-api.ts`, `plan-agent-brief.ts` | Current state (Task 5) |
+| `backend/src/domain/ports/plan-issues.ts` | modify | `gh-plan-issues.ts` | Contract (Task 5) |
 | `backend/src/domain/exceptions.ts` | modify | the adapters | none (body by TDD) |
 | `backend/src/infrastructure/plan-agent-brief.ts` | modify | `start-plan.ts` | none (body by TDD) |
-| `backend/src/domain/value-objects/plan-state.ts` | modify | the plan stream | Current state (Task 5) |
-| `backend/src/application/queries/read-plan-progress.ts` | modify | `plan-events-route.ts` | Contract (Task 5) |
+| `backend/src/domain/value-objects/plan-state.ts` | modify | the plan stream | Current state (Task 6) |
+| `backend/src/application/queries/read-plan-progress.ts` | modify | `plan-events-route.ts` | Contract (Task 6) |
 | `frontend/src/app/plan-events/PlanEvents.types.ts` | modify | `client.ts`, `usePlanProgress.ts` | none (body by TDD) |
-| `frontend/src/app/plan-events/usePlanProgress.ts` | modify | `PlanProgress.tsx` | Current state (Task 5) |
+| `frontend/src/app/plan-events/usePlanProgress.ts` | modify | `PlanProgress.tsx` | Current state (Task 6) |
 | `frontend/src/app/plan-events/components/plan-progress/PlanProgress.tsx` | modify | `Home.tsx` | none (body by TDD) |
 | `frontend/src/__scenarios__/PlanEventsMother.ts` | modify | the frontend suite | none (body by TDD) |
-| `plugin/scripts/gates.js` | modify | `groom.js`, `kickoff.js`, `ct-next.mjs` | Current state + Contract (Task 6) |
-| `backend/API.md` | modify | whoever calls the API | Final text (Task 7) |
+| `plugin/scripts/gates.js` | modify | `groom.js`, `kickoff.js`, `ct-next.mjs` | Current state + Contract (Task 7) |
+| `backend/API.md` | modify | whoever calls the API | Final text (Task 8) |
 
 ## 5. Interfaces
 
@@ -213,17 +214,17 @@ Tests that only exist to pin the retiring behaviour are named for removal in eac
 
 No task adds a test that requires cmux to be installed or running, and no test spawns a real process,
 so no file gains the `-real-process` suffix. `refusal-codes.test.ts` is the guard that two endpoints
-never share a `code` by accident: it is edited in Tasks 1 and 2 as members leave the vocabularies,
-never relaxed. `pull-request-review-loop.test.ts` is the guard of the surviving watch and is not
+never share a `code` by accident: it is edited in Task 1 as the review vocabulary leaves, never
+relaxed. `pull-request-review-loop.test.ts` is the guard of the surviving watch and is not
 edited by any task.
 
 ## 7. Tasks
 
-### Task 1 — `POST /review-plan` retires, endpoint and caller together
+### Task 1 — the API stops routing `POST /review-plan`
 
-**Objective:** the API stops routing `POST /review-plan` and the page stops offering to ask for plan changes.
+**Objective:** `POST /review-plan` falls to the 404 net, and the route and the action behind it are gone from the backend.
 
-**Files:** `backend/src/infrastructure/review-plan-route.ts` (delete), `backend/src/application/actions/ask-plan-changes.ts` (delete), `backend/src/infrastructure/api-server.ts` (modify), `backend/src/infrastructure/ct-api.ts` (modify), `backend/__tests__/infrastructure/review-plan-route.test.ts` (delete), `backend/__tests__/application/ask-plan-changes.test.ts` (delete), `backend/__tests__/infrastructure/api-server.test.ts` (modify), `backend/__tests__/infrastructure/ct-api-real-process.test.ts` (modify), `backend/__tests__/infrastructure/refusal-codes.test.ts` (modify), `frontend/src/app/review-plan/` (delete, the whole directory), `frontend/src/pages/home/Home.tsx` (modify), `frontend/src/pages/home/__tests__/Home.reviewPlan.test.tsx` (delete), `frontend/vite.config.ts` (modify)
+**Files:** `backend/src/infrastructure/review-plan-route.ts` (delete), `backend/src/application/actions/ask-plan-changes.ts` (delete), `backend/src/infrastructure/api-server.ts` (modify), `backend/src/infrastructure/ct-api.ts` (modify), `backend/__tests__/infrastructure/review-plan-route.test.ts` (delete), `backend/__tests__/application/ask-plan-changes.test.ts` (delete), `backend/__tests__/infrastructure/api-server.test.ts` (modify), `backend/__tests__/infrastructure/ct-api-real-process.test.ts` (modify), `backend/__tests__/infrastructure/refusal-codes.test.ts` (modify), `backend/__tests__/infrastructure/external-tools-route.test.ts` (modify), `backend/__tests__/infrastructure/implement-history-route.test.ts` (modify), `backend/__tests__/infrastructure/implement-plan-route.test.ts` (modify), `backend/__tests__/infrastructure/implement-progress-route.test.ts` (modify)
 
 Current state (backend/src/infrastructure/api-server.ts, lines 188-195):
 
@@ -238,6 +239,31 @@ Current state (backend/src/infrastructure/api-server.ts, lines 188-195):
     app.all(ReviewPlanRoute.PATH, ReviewPlanRoute.refuseOtherMethods)
 ```
 
+§2 says what `api-server.ts`, `ct-api.ts` and `refusal-codes.test.ts` lose with the route, and what
+`SharedOnPurposeAcrossRequestVocabularies.CODES` becomes. The four other route tests are there
+because each builds a whole `ApiServer` object literal naming `askPlanChanges`, which stops being a
+field of `ApiCollaborators`: each loses that one line and nothing else.
+
+**TDD:** `it('review_plan_is_no_longer_routed_and_falls_to_the_last_net')` in `api-server.test.ts` — a `POST /review-plan` with a well-formed body answers 404 and `{ code: 'not-found', detail: 'not found' }`; red today, where the mounted route answers 400.
+
+**Tests:** added: `review_plan_is_no_longer_routed_and_falls_to_the_last_net`, `review_plan_is_no_longer_mounted_in_the_real_process`. Removed: `review_plan_turns_away_a_foreign_browser_origin`, `review_plan_is_mounted_in_the_real_process_and_not_only_in_the_test_server`, and the files `review-plan-route.test.ts` and `ask-plan-changes.test.ts`.
+
+**Verification:** the two modules are untracked, the backend names neither of them, and it stays green.
+
+```bash
+test -z "$(git ls-files backend/src/infrastructure/review-plan-route.ts backend/src/application/actions/ask-plan-changes.ts)"
+test -z "$(grep -rl ReviewPlanRoute backend/src backend/__tests__)"
+test -z "$(grep -rl AskPlanChanges backend/src backend/__tests__)"
+npm --prefix backend run typecheck
+npm --prefix backend test
+```
+
+### Task 2 — the page stops calling the retired endpoint
+
+**Objective:** the cabin offers no way to ask for changes on a plan, and the client of the retired endpoint is gone with its mother.
+
+**Files:** `frontend/src/app/review-plan/client.ts` (delete), `frontend/src/app/review-plan/client.test.ts` (delete), `frontend/src/app/review-plan/ReviewPlan.types.ts` (delete), `frontend/src/app/review-plan/components/ask-plan-changes/AskPlanChanges.tsx` (delete), `frontend/src/app/review-plan/components/ask-plan-changes/AskPlanChanges.test.tsx` (delete), `frontend/src/app/review-plan/components/ask-plan-changes/AskPlanChanges.css` (delete), `frontend/src/app/review-plan/components/ask-plan-changes/index.ts` (delete), `frontend/src/__scenarios__/ReviewPlanMother.ts` (delete), `frontend/src/pages/home/Home.tsx` (modify), `frontend/src/pages/home/__tests__/Home.reviewPlan.test.tsx` (delete), `frontend/src/pages/home/__tests__/Home.implementPlan.test.tsx` (modify), `frontend/vite.config.ts` (modify)
+
 Call site (frontend/src/pages/home/Home.tsx):
 
 ```tsx
@@ -248,26 +274,25 @@ Call site (frontend/src/pages/home/Home.tsx):
 <ImplementPlanAction plan={workflow.plan} onImplementationStarted={implementationStarted} />
 ```
 
-See §2 for what `api-server.ts`, `ct-api.ts` and `refusal-codes.test.ts` lose with the route.
-Configuration: `frontend/vite.config.ts`'s `API_PATHS` array drops the `'/review-plan'` entry.
+`ReviewPlanMother.ts` goes with them: its only two callers are the tests deleted here.
+Configuration: `frontend/vite.config.ts`'s `API_PATHS` array drops the `'/review-plan'` entry, so the
+dev server stops proxying a path the API no longer routes.
 
-**TDD:** `it('review_plan_is_no_longer_routed_and_falls_to_the_last_net')` in `api-server.test.ts` — a `POST /review-plan` with the well-formed `RunningApi.REVIEW_BODY` answers 404 and `{ code: 'not-found', detail: 'not found' }`; red today, where the mounted route answers 400 `no-live-planning-session`.
+**TDD:** `it('should offer only the issue link and the go on a ready plan')` in `Home.implementPlan.test.tsx` — with the plan ready, the review area holds the link `Abrir el plan en GitHub` and the button `Implementar plan`, and `queryByRole('button', { name: 'Pedir cambios' })` is null; red today, where that button is rendered.
 
-**Tests:** added: `review_plan_is_no_longer_routed_and_falls_to_the_last_net`, `review_plan_is_no_longer_mounted_in_the_real_process`. Removed on purpose: `review_plan_turns_away_a_foreign_browser_origin`, `review_plan_is_mounted_in_the_real_process_and_not_only_in_the_test_server`, and the whole files `review-plan-route.test.ts`, `ask-plan-changes.test.ts`, `client.test.ts`, `AskPlanChanges.test.tsx`, `Home.reviewPlan.test.tsx`.
+**Tests:** added: `should offer only the issue link and the go on a ready plan`. Removed: the files `client.test.ts`, `AskPlanChanges.test.tsx` and `Home.reviewPlan.test.tsx`, whose four cases all pin the button this task removes.
 
-**Verification:** the modules are untracked, nothing names them, the dev proxy drops the path, the suites stay green.
+**Verification:** nothing on the page names the component or the path, and the suite stays green.
 
 ```bash
-test -z "$(git ls-files backend/src/infrastructure/review-plan-route.ts backend/src/application/actions/ask-plan-changes.ts)"
-test -z "$(grep -rl ReviewPlanRoute backend/src backend/__tests__)"
-test -z "$(grep -rl AskPlanChanges backend/src frontend/src backend/__tests__)"
+test -z "$(git ls-files frontend/src/app/review-plan)"
+test -z "$(grep -rl AskPlanChanges frontend/src)"
+test -z "$(grep -rl ReviewPlanMother frontend/src)"
 test "$(grep -c /review-plan frontend/vite.config.ts)" -eq 0
-npm --prefix backend run typecheck
-npm --prefix backend test
 npm --prefix frontend test
 ```
 
-### Task 2 — the go stops asking whether the plan is under review
+### Task 3 — the go stops asking whether the plan is under review
 
 **Objective:** the go is admitted with no plan review consulted, and `plan-under-review` retires on both halves of the wire.
 
@@ -302,7 +327,7 @@ export const ImplementRequestOutcome = Object.freeze({
 type PlanReviews = { stop(watched: WatchedIssue): void }
 ```
 
-§2, row «What goes in Task 2, file by file», says what each loses.
+§2, row «What goes in Task 3, file by file», says what each loses.
 
 **TDD:** `it('a_plan_whose_progress_nobody_asks_about_still_admits_the_go')` in `implement-plan-route.test.ts` — with no progress reader wired the route answers 202 and `RunningApi.spy.asked` holds the request; red today, where `handledBy` takes one.
 
@@ -319,7 +344,7 @@ npm --prefix backend test
 npm --prefix frontend test
 ```
 
-### Task 3 — the plan's review watch is no longer wired, started or recovered
+### Task 4 — the plan's review watch is no longer wired, started or recovered
 
 **Objective:** nothing starts a watch over the plan's issue any more, and the surviving watch is the pull request's.
 
@@ -347,7 +372,7 @@ export class PlanAgents {
 }
 ```
 
-§2, row «What goes in Task 3, file by file», says what each file loses.
+§2, row «What goes in Task 4, file by file», says what each file loses.
 `CtApi.#pullRequestReviews` is not touched, and `ActivePlanRecovery.#recover` ends that branch with
 `this.sessions.remember(watch)` alone.
 
@@ -365,7 +390,7 @@ npm --prefix backend run typecheck
 npm --prefix backend test
 ```
 
-### Task 4 — nothing asks GitHub for `-REVIEW` any more
+### Task 5 — nothing asks GitHub for `-REVIEW` any more
 
 **Objective:** the `-REVIEW` token, the two `gh` calls behind it and the exception family they threw leave the backend.
 
@@ -417,7 +442,7 @@ npm --prefix backend run typecheck
 npm --prefix backend test
 ```
 
-### Task 5 — the plan events vocabulary is `writing` and `ready` only
+### Task 6 — the plan events vocabulary is `writing` and `ready` only
 
 **Objective:** `reviewing` leaves the plan state on both sides of the wire, so the stream can emit nothing but the two surviving frames.
 
@@ -477,7 +502,7 @@ npm --prefix backend test
 npm --prefix frontend test
 ```
 
-### Task 6 — no slice is born with the plan gate unless its own row asks for it
+### Task 7 — no slice is born with the plan gate unless its own row asks for it
 
 **Objective:** `gatesForType` stops appending `plan`: a groom creates no `gate:plan`.
 
@@ -523,7 +548,7 @@ node --input-type=module -e "const g = await import('./plugin/scripts/gates.js')
 npm --prefix plugin test
 ```
 
-### Task 7 — `API.md` no longer documents the retired endpoint
+### Task 8 — `API.md` no longer documents the retired endpoint
 
 **Objective:** the API's own documentation describes the two endpoints as they now answer, and names the review nowhere.
 
@@ -604,7 +629,7 @@ npm --prefix plugin test
    plan review there is no state in which `POST /implement-plan` could emit it;
    `conventions/simplicity.md` gives a branch no caller. Provenance: own call.
 3. **`GhPlanIssues.changesAsked` / `askChanges` and their exception family retire too.** The design
-   names `read-changes-asked.ts`; these are the adapter half it reads through, and after Task 3 they
+   names `read-changes-asked.ts`; these are the adapter half it reads through, and after Task 4 they
    have no caller. `ChangeAsked` stays because `fixesAsked` produces it. Provenance: own call.
 4. **`MemoryReviewLog` and `ReviewLog` survive with no reader.** Removing them would change
    `CtApi.#pullRequestReviews`, which the issue protects. Declared as debt in §1's out of scope,
