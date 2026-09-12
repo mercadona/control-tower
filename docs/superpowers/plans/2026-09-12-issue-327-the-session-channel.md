@@ -131,31 +131,44 @@ Rules to obey:
 | `backend/src/application/queries/list-live-sessions.ts` | create | `SessionsRoute` | Contract (T1) |
 | `backend/src/infrastructure/sessions-route.ts` | create | `api-server.ts` | Contract (T1) |
 | `backend/src/infrastructure/api-server.ts` | modify | `ct-api.ts` | Current state + Call site (T1, T4, T5) |
+| `backend/__tests__/infrastructure/sessions-route.test.ts` | create | the suite | none (body by TDD) (T1) |
+| `backend/__tests__/application/list-live-sessions.test.ts` | create | the suite | none (body by TDD) (T1) |
 | `backend/src/infrastructure/pty-live-sessions.ts` | create | `ct-api.ts` | Contract (T2) |
+| `backend/__tests__/infrastructure/pty-live-sessions.test.ts` | create | the suite | none (body by TDD) (T2) |
 | `backend/src/infrastructure/ct-api.ts` | modify | `make run-backend` | Call site (T3) |
 | `backend/package.json` | modify | the install | prose (config) (T3) |
 | `backend/package-lock.json` | modify | the install | prose (config) (T3) |
+| `backend/__tests__/infrastructure/pty-live-sessions-real-process.test.ts` | create | the suite | none (body by TDD) (T3) |
 | `backend/src/application/queries/watch-live-session.ts` | create | `SessionStreamRoute` | Contract (T4) |
 | `backend/src/infrastructure/session-stream-route.ts` | create | `api-server.ts` | Contract (T4) |
+| `backend/__tests__/infrastructure/session-stream-route.test.ts` | create | the suite | none (body by TDD) (T4) |
+| `backend/__tests__/application/watch-live-session.test.ts` | create | the suite | none (body by TDD) (T4) |
 | `backend/src/application/actions/type-into-session.ts` | create | `SessionInputRoute` | Contract (T5) |
 | `backend/src/infrastructure/session-input-route.ts` | create | `api-server.ts` | Contract (T5) |
 | `backend/__tests__/infrastructure/refusal-codes.test.ts` | modify | the codes guard | Current state (T5) |
+| `backend/__tests__/infrastructure/session-input-route.test.ts` | create | the suite | none (body by TDD) (T5) |
+| `backend/__tests__/application/type-into-session.test.ts` | create | the suite | none (body by TDD) (T5) |
 | `backend/__tests__/infrastructure/session-channel-real-process.test.ts` | create | `ct-step global` | none (body by TDD) (T10) |
 | `frontend/src/app/sessions/Sessions.types.ts` | create | the client, the hook, both components | Contract (T6) |
 | `frontend/src/app/sessions/client.ts` | create | `useLiveSessions`, `SessionTerminal` | Contract (T6) |
 | `frontend/src/app/sessions/useLiveSessions.ts` | create | `SessionsPanel` | Contract (T6) |
 | `frontend/src/__scenarios__/SessionsMother.ts` | create | the page's suites | none (body by TDD) (T6) |
 | `frontend/vite.config.ts` | modify | the dev server | Current state (T6) |
+| `frontend/src/app/sessions/client.test.ts` | create | the suite | none (body by TDD) (T6) |
+| `frontend/src/app/sessions/useLiveSessions.test.ts` | create | the suite | none (body by TDD) (T6) |
 | `frontend/src/app/sessions/components/session-terminal/SessionTerminal.tsx` | create | `SessionsPanel` | Contract (T7) |
 | `frontend/src/app/sessions/components/session-terminal/SessionTerminal.css` | create | the component | none (body by TDD) (T7) |
 | `frontend/src/app/sessions/components/session-terminal/index.ts` | create | `SessionsPanel` | none (body by TDD) (T7) |
 | `frontend/package.json` | modify | the install | prose (config) (T7) |
 | `frontend/package-lock.json` | modify | the install | prose (config) (T7) |
+| `frontend/src/app/sessions/components/session-terminal/SessionTerminal.test.tsx` | create | the suite | none (body by TDD) (T7) |
 | `frontend/src/app/sessions/components/sessions-panel/SessionsPanel.tsx` | create | `Home` | Contract (T8) |
 | `frontend/src/app/sessions/components/sessions-panel/SessionsPanel.css` | create | the component | none (body by TDD) (T8) |
 | `frontend/src/app/sessions/components/sessions-panel/index.ts` | create | `Home` | none (body by TDD) (T8) |
 | `frontend/src/pages/home/Home.tsx` | modify | the page | Current state + Call site (T8) |
 | `frontend/src/pages/home/Home.css` | modify | the page | none (body by TDD) (T8) |
+| `frontend/src/app/sessions/components/sessions-panel/SessionsPanel.test.tsx` | create | the suite | none (body by TDD) (T8) |
+| `frontend/src/pages/home/__tests__/Home.sessions.test.tsx` | create | the suite | none (body by TDD) (T8) |
 | `backend/API.md` | modify | whoever codes against this API | Final text (T9) |
 | `backend/conventions/this-repository.md` | modify | every agent working here | Final text (T9) |
 | `frontend/README.md` | modify | whoever works on the page | prose (T9) |
@@ -212,7 +225,9 @@ Commands, the three the epic's context declares: `npm --prefix backend run typec
 `backend/src/domain/ports/live-sessions.ts` (create),
 `backend/src/application/queries/list-live-sessions.ts` (create),
 `backend/src/infrastructure/sessions-route.ts` (create),
-`backend/src/infrastructure/api-server.ts` (modify)
+`backend/src/infrastructure/api-server.ts` (modify),
+`backend/__tests__/infrastructure/sessions-route.test.ts` (create),
+`backend/__tests__/application/list-live-sessions.test.ts` (create)
 
 Contract (backend/src/domain/value-objects/live-session.ts):
 
@@ -260,31 +275,28 @@ export class SessionsRoute {
 }
 ```
 
-Current state (backend/src/infrastructure/api-server.ts, lines 224-226):
+Current state (backend/src/infrastructure/api-server.ts):
 
 ```ts
-    )
     app.all(ExternalToolsRoute.PATH, ExternalToolsRoute.refuseOtherMethods)
-    app.use(Failures.nothingMatched)
 ```
 
 The port's methods refuse with `${this.constructor.name} must implement …`, as
 `tool-sessions.ts` does; `LiveSession` freezes itself. `ApiServer` gains a `listLiveSessions`
-collaborator and mounts the `app.get` + `app.all` pair for `SessionsRoute`, in the shape of the
-cited lines, just before `app.use(Failures.nothingMatched)`. The answer is `200` with
+collaborator and mounts `SessionsRoute`'s `app.get` + `app.all` pair, in the shape of the cited
+lines, just before `app.use(Failures.nothingMatched)`. The answer is `200`
 `{"sessions":[{"id":"…","name":"…"}]}`, in the port's order.
 
 **TDD:** red first with
 `it('the live sessions the backend owns are listed with their names')` — a port holding two
 sessions answers both, in its own order, each as `{id, name}` and nothing else.
 
-**Tests:** added — `backend/__tests__/infrastructure/sessions-route.test.ts`:
+**Tests:** added — in `sessions-route.test.ts`:
 `it('the live sessions the backend owns are listed with their names')`,
 `it('no live session is an empty list and not a refusal')`,
 `it('a method other than GET is refused naming GET as the allowed one')`;
-`backend/__tests__/application/list-live-sessions.test.ts`:
-`it('the query answers what the port holds')`, `it('a live session refuses a blank id')`,
-`it('a live session refuses a blank name')`.
+in `list-live-sessions.test.ts`: `it('the query answers what the port holds')`,
+`it('a live session refuses a blank id')`, `it('a live session refuses a blank name')`.
 
 **Verification:**
 
@@ -300,7 +312,8 @@ npm --prefix backend test   # expected: exit 0 — no existing endpoint broke
 **Objective:** an adapter owns terminals, keeps each one's scrollback and fans its bytes out to
 whoever is watching.
 
-**Files:** `backend/src/infrastructure/pty-live-sessions.ts` (create)
+**Files:** `backend/src/infrastructure/pty-live-sessions.ts` (create),
+`backend/__tests__/infrastructure/pty-live-sessions.test.ts` (create)
 
 Contract (backend/src/infrastructure/pty-live-sessions.ts):
 
@@ -341,7 +354,7 @@ one.
 `it('a watcher receives what the terminal printed before it arrived')` — a doubled spawn emits
 two chunks, then a watcher arrives and its `printed` is both chunks joined, in order.
 
-**Tests:** added — `backend/__tests__/infrastructure/pty-live-sessions.test.ts`:
+**Tests:** added — in `pty-live-sessions.test.ts`:
 `it('opening names the session after the program it runs')`,
 `it('a watcher receives what the terminal printed before it arrived')`,
 `it('two watchers of one session both receive the next bytes')`,
@@ -368,7 +381,8 @@ npm --prefix backend test   # expected: exit 0
 watcher.
 
 **Files:** `backend/src/infrastructure/ct-api.ts` (modify), `backend/package.json` (modify),
-`backend/package-lock.json` (modify)
+`backend/package-lock.json` (modify),
+`backend/__tests__/infrastructure/pty-live-sessions-real-process.test.ts` (create)
 
 Call site (backend/src/infrastructure/ct-api.ts):
 
@@ -391,8 +405,7 @@ version, no caret, for the reason in P-4 — and the lockfile is regenerated wit
 `node-pty` is injected as the spawn, `echo` is written into it and the scrollback ends up
 carrying what it echoed.
 
-**Tests:** added —
-`backend/__tests__/infrastructure/pty-live-sessions-real-process.test.ts`:
+**Tests:** added — in `pty-live-sessions-real-process.test.ts`:
 `it('a real terminal prints into the scrollback and answers what is written to it')`,
 `it('the real process stays alive after every watcher has stopped')` — the suite keeps every pty
 it spawned and kills each one in `afterEach`, so a failed assertion leaks nothing.
@@ -409,11 +422,13 @@ npm --prefix backend test   # expected: exit 0
 ### Task 4 — The stream that reaches the page while the process runs
 
 **Objective:** `GET /sessions/:id/stream` opens with what the session already printed and then
-carries every byte it prints, and closing it kills nothing.
+carries every byte it prints; closing it kills nothing.
 
 **Files:** `backend/src/application/queries/watch-live-session.ts` (create),
 `backend/src/infrastructure/session-stream-route.ts` (create),
-`backend/src/infrastructure/api-server.ts` (modify)
+`backend/src/infrastructure/api-server.ts` (modify),
+`backend/__tests__/infrastructure/session-stream-route.test.ts` (create),
+`backend/__tests__/application/watch-live-session.test.ts` (create)
 
 Contract (backend/src/application/queries/watch-live-session.ts):
 
@@ -456,20 +471,20 @@ to that id. Otherwise: the headers, **then** the subscription through `WatchLive
 before printing is what makes a gap impossible, and `printed` was captured at subscription, so
 nothing repeats. `request.on('close', …)` calls `stop()` and ends the response, and nothing
 else: the port is never told to kill anything, which is the whole of "closing the page does not
-kill the session". `ApiServer` gains a `watchLiveSession` collaborator and mounts the `app.get`
-+ `app.all` pair beside Task 1's.
+kill the session". `ApiServer` gains a `watchLiveSession` collaborator and mounts its pair
+beside Task 1's.
 
 **TDD:** red first with
 `it('the stream opens with what the session already printed')` — a session whose `printed` is
 `hola` answers a first frame `data: {"bytes":"hola"}`.
 
-**Tests:** added — `backend/__tests__/infrastructure/session-stream-route.test.ts`:
+**Tests:** added — in `session-stream-route.test.ts`:
 `it('the stream opens with what the session already printed')`,
 `it('bytes printed while the stream is open reach it as they are printed')`,
 `it('closing the stream stops only that watch and leaves the session live')`,
-`it('an id no live session answers to is refused with session-not-live')`,
-`it('a method other than GET is refused naming GET as the allowed one')`;
-`backend/__tests__/application/watch-live-session.test.ts`:
+`it('an unknown id is refused with session-not-live')`,
+`it('a method other than GET is refused naming GET as allowed')`;
+in `watch-live-session.test.ts`:
 `it('watching hands the port the session and answers what it printed')`.
 
 **Verification:**
@@ -488,7 +503,9 @@ npm --prefix backend test   # expected: exit 0
 **Files:** `backend/src/application/actions/type-into-session.ts` (create),
 `backend/src/infrastructure/session-input-route.ts` (create),
 `backend/src/infrastructure/api-server.ts` (modify),
-`backend/__tests__/infrastructure/refusal-codes.test.ts` (modify)
+`backend/__tests__/infrastructure/refusal-codes.test.ts` (modify),
+`backend/__tests__/infrastructure/session-input-route.test.ts` (create),
+`backend/__tests__/application/type-into-session.test.ts` (create)
 
 Contract (backend/src/application/actions/type-into-session.ts):
 
@@ -532,9 +549,9 @@ Current state (backend/__tests__/infrastructure/refusal-codes.test.ts, lines 20-
 ```
 
 `SessionInputRequest` parses the body and `SessionInputRefusal` projects each outcome, in the
-shape `review-plan-route.ts` uses. The one known field is `text`: a string of at least one
-character, with no control character forbidden — a carriage return, an arrow key and a `Ctrl-C`
-are what a terminal is typed. The `:id` goes through `liveSessions.find`; `null` refuses
+shape `review-plan-route.ts` uses. The one known field is `text`: a non-empty string, no control
+character forbidden — a carriage return, an arrow key and a `Ctrl-C` are what a terminal is
+typed. The `:id` goes through `liveSessions.find`; `null` refuses
 `session-not-live`. The answer is `202` `{"status":"typed","id":"…"}`. `ApiServer` mounts it
 with `JsonBody.demandDeclared` and `JsonBody.reader()`, as the other `POST`s. The guard adds
 both new vocabularies to `RequestVocabularies.codes()` and declares
@@ -544,15 +561,14 @@ both new vocabularies to `RequestVocabularies.codes()` and declares
 **TDD:** red first with `it('the text typed on the page reaches the session')` — a body of
 `{"text":"ls\r"}` writes exactly `ls\r` into that session.
 
-**Tests:** added — `backend/__tests__/infrastructure/session-input-route.test.ts`:
+**Tests:** added — in `session-input-route.test.ts`:
 `it('the text typed on the page reaches the session')`,
 `it('a lone carriage return is text and reaches the session')` and
 `it('an empty text is refused with malformed-text')` — the boundary's two sides;
-`it('an id no live session answers to is refused as session-not-live')`,
+`it('an unknown id is refused as session-not-live')`,
 `it('an unknown field is refused naming it')`,
 `it('a method other than POST is refused naming POST as allowed')`;
-`backend/__tests__/application/type-into-session.test.ts`:
-`it('the action hands the port the session and the text')`.
+in `type-into-session.test.ts`: `it('the action hands the port the session and the text')`.
 
 **Verification:**
 
@@ -565,12 +581,14 @@ npm --prefix backend test   # expected: exit 0
 
 ### Task 6 — The page's half of the channel
 
-**Objective:** the page can ask for the live sessions, subscribe to one and send text into it.
+**Objective:** the page lists the live sessions, subscribes to one and sends text into it.
 
 **Files:** `frontend/src/app/sessions/Sessions.types.ts` (create),
 `frontend/src/app/sessions/client.ts` (create),
 `frontend/src/app/sessions/useLiveSessions.ts` (create),
-`frontend/src/__scenarios__/SessionsMother.ts` (create), `frontend/vite.config.ts` (modify)
+`frontend/src/__scenarios__/SessionsMother.ts` (create), `frontend/vite.config.ts` (modify),
+`frontend/src/app/sessions/client.test.ts` (create),
+`frontend/src/app/sessions/useLiveSessions.test.ts` (create)
 
 Contract (frontend/src/app/sessions/Sessions.types.ts):
 
@@ -621,24 +639,23 @@ const API_PATHS = ['/start-plan', '/plan-events', '/implement-plan', '/review-pl
 `API_PATHS` gains `'/sessions'` — one entry: vite proxies by prefix and the stream and the input
 hang off it. `list()` is `fetch('/sessions')` and validates the wire shape before a component
 sees it, as `external-tools/client.ts` does: anything but an array of `{id, name}` strings is
-`{ kind: 'unavailable' }`. `watch()` opens
+unavailable. `watch()` opens
 `new EventSource(\`/sessions/${encodeURIComponent(id)}/stream\`)`, reads `bytes` out of each
 `data`, and tells failure from a dead connection the way `plan-events/client.ts` does. `type()`
-posts `{"text": text}` as json. `SessionsMother` answers the bodies the tests need: one session,
-none, a malformed row.
+posts `{"text": text}` as json. `SessionsMother` answers three bodies: one session, none, a malformed row.
 
 **TDD:** red first with `it('the live sessions the backend lists reach the page')` — a body of
 `{"sessions":[{"id":"a1","name":"zsh"}]}` answers `{ kind: 'loaded' }` with that row.
 
-**Tests:** added — `frontend/src/app/sessions/client.test.ts`:
+**Tests:** added — in `client.test.ts`:
 `it('the live sessions the backend lists reach the page')`,
 `it('a malformed session row makes the whole answer unavailable')`,
-`it('a backend that cannot be reached is unavailable and never throws')`,
+`it('an unreachable backend is unavailable and never throws')`,
 `it('the bytes of a frame reach the listener')`,
 `it('typing posts the text as json to that session input')`;
-`frontend/src/app/sessions/useLiveSessions.test.ts`:
+in `useLiveSessions.test.ts`:
 `it('the hook starts loading and ends with what the backend listed')`,
-`it('an unreachable backend leaves the hook unavailable')`.
+`it('an unreachable backend leaves it unavailable')`.
 
 **Verification:**
 
@@ -657,7 +674,8 @@ is typed into it.
 **Files:** `frontend/src/app/sessions/components/session-terminal/SessionTerminal.tsx` (create),
 `frontend/src/app/sessions/components/session-terminal/SessionTerminal.css` (create),
 `frontend/src/app/sessions/components/session-terminal/index.ts` (create),
-`frontend/package.json` (modify), `frontend/package-lock.json` (modify)
+`frontend/package.json` (modify), `frontend/package-lock.json` (modify),
+`frontend/src/app/sessions/components/session-terminal/SessionTerminal.test.tsx` (create)
 
 Contract (frontend/src/app/sessions/components/session-terminal/SessionTerminal.tsx):
 
@@ -689,8 +707,7 @@ lockfile is regenerated with `npm --prefix frontend install`, and the component 
 `@xterm/xterm` doubled through `vi.mock`, a frame of `hola` leaves `hola` in what the fake
 terminal was written.
 
-**Tests:** added —
-`frontend/src/app/sessions/components/session-terminal/SessionTerminal.test.tsx`:
+**Tests:** added — in `SessionTerminal.test.tsx`:
 `it('the bytes the stream delivers are written to the terminal')`,
 `it('what the person types is sent to that session')`,
 `it('unmounting closes the subscription and disposes the terminal')`,
@@ -714,7 +731,9 @@ workflow.
 **Files:** `frontend/src/app/sessions/components/sessions-panel/SessionsPanel.tsx` (create),
 `frontend/src/app/sessions/components/sessions-panel/SessionsPanel.css` (create),
 `frontend/src/app/sessions/components/sessions-panel/index.ts` (create),
-`frontend/src/pages/home/Home.tsx` (modify), `frontend/src/pages/home/Home.css` (modify)
+`frontend/src/pages/home/Home.tsx` (modify), `frontend/src/pages/home/Home.css` (modify),
+`frontend/src/app/sessions/components/sessions-panel/SessionsPanel.test.tsx` (create),
+`frontend/src/pages/home/__tests__/Home.sessions.test.tsx` (create)
 
 Contract (frontend/src/app/sessions/components/sessions-panel/SessionsPanel.tsx):
 
@@ -754,14 +773,13 @@ touches none of the shell declarations `Home.shell.test.ts` pins.
 **TDD:** red first with `it('the live sessions are listed by their names')` — a hook loaded with
 two sessions renders both names, and the first one's terminal.
 
-**Tests:** added —
-`frontend/src/app/sessions/components/sessions-panel/SessionsPanel.test.tsx`:
+**Tests:** added — in `SessionsPanel.test.tsx`:
 `it('the live sessions are listed by their names')`,
 `it('the first session is the one shown')`,
 `it('choosing another session shows that one')`,
 `it('no live session is said out loud instead of an empty box')`,
 `it('an unreachable backend is said out loud')`;
-`frontend/src/pages/home/__tests__/Home.sessions.test.tsx`:
+in `Home.sessions.test.tsx`:
 `it('the sessions panel is on the page before a plan is requested')`,
 `it('the sessions panel is still on the page while an implementation runs')`.
 
@@ -850,8 +868,7 @@ too, and the server is stopped there as well.
 **TDD:** No TDD — an end-to-end is written after the behaviours it binds, and it is still red
 before this slice starts, because `GET /sessions` does not exist on `main`.
 
-**Tests:** added —
-`backend/__tests__/infrastructure/session-channel-real-process.test.ts`:
+**Tests:** added — in `session-channel-real-process.test.ts`:
 `it('the live session is listed, its stream carries what it prints and what is typed reaches it')`,
 `it('closing the stream leaves the session listed and its process alive')`.
 
