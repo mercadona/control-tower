@@ -14,13 +14,8 @@ import {
   ImplementRequestOutcome, ImplementRefusal, ImplementCollapse,
 } from '../../src/infrastructure/implement-plan-route.ts'
 import {
-  PlanAgentNotResumed, PlanFailure, PlanGoNotAnswered, GoFailure, GoNotRecorded, PlanProgressNotRead,
+  PlanAgentNotResumed, PlanFailure, PlanGoNotAnswered, GoFailure, GoNotRecorded,
 } from '../../src/domain/exceptions.ts'
-import { PlanState, type PlanStateValue } from '../../src/domain/value-objects/plan-state.ts'
-import {
-  ReviewGatePolicy, ReviewInFlight, type ReviewInFlightValue,
-} from '../../src/domain/policies/review-gate-policy.ts'
-import { ReadPlanProgressParams } from '../../src/application/queries/read-plan-progress.ts'
 import { ActivePlans, ActivePlanPhase } from '../../src/infrastructure/active-plans-route.ts'
 import type { ImplementPlanParams } from '../../src/application/actions/implement-plan.ts'
 
@@ -33,36 +28,6 @@ type ListeningOptions = {
   implementationStarts?: ImplementationStartsDouble,
   stderr?: Mock,
   reviews?: ReviewsSpy,
-  progress?: ReadPlanProgressSpy,
-}
-
-class ReadPlanProgressSpy {
-  readonly state: PlanStateValue | null
-  readonly asked: ReadPlanProgressParams[]
-
-  constructor(state: PlanStateValue | null) {
-    this.state = state
-    this.asked = []
-  }
-
-  static reading(state: PlanStateValue): ReadPlanProgressSpy {
-    return new ReadPlanProgressSpy(state)
-  }
-
-  static failingWith(cause: Error): ReadPlanProgressSpy {
-    const spy = new ReadPlanProgressSpy(null)
-    spy.execute = async () => {
-      throw cause
-    }
-
-    return spy
-  }
-
-  async execute(params: ReadPlanProgressParams): Promise<{ state: PlanStateValue }> {
-    this.asked.push(params)
-
-    return { state: this.state as PlanStateValue }
-  }
 }
 
 class ImplementPlanSpy {
@@ -111,7 +76,6 @@ class RunningApi {
   static activePlans: ActivePlans = null!
   static implementationStarts: ImplementationStartsDouble = null!
   static stderr: Mock = null!
-  static readPlanProgress: ReadPlanProgressSpy = null!
   static WATCHED = new PlanWatch({
     story: new UserStoryKey('ABC-123'),
     issue: new PlanIssue({ number: 33, url: 'https://github.com/jjponz/repo-pulse/issues/33' }),
@@ -132,7 +96,6 @@ class RunningApi {
   static async listening(spy = new ImplementPlanSpy(), options: ListeningOptions = {}): Promise<number> {
     RunningApi.spy = spy
     RunningApi.reviews = options.reviews ?? new ReviewsSpy()
-    RunningApi.readPlanProgress = options.progress ?? ReadPlanProgressSpy.reading(PlanState.READY)
     RunningApi.pullRequestReviews = new ReviewsSpy()
     RunningApi.sessions = new PlanSessions()
     if (options.watched ?? true) RunningApi.sessions.remember(RunningApi.WATCHED)
@@ -152,7 +115,6 @@ class RunningApi {
       implementationStarts: RunningApi.implementationStarts,
       stderr: RunningApi.stderr,
       planEvents: RunningApi.NO_EVENTS,
-      readPlanProgress: RunningApi.readPlanProgress,
       frontendRoot: RunningApi.NO_FRONTEND,
     })
     const port = await server.start()
@@ -200,6 +162,17 @@ describe('ImplementPlanRoute', () => {
     expect(await duplicate.text()).toBe(RunningApi.ANSWER)
     expect(RunningApi.spy.asked).toHaveLength(1)
     expect(RunningApi.implementationStarts.remember).toHaveBeenCalledOnce()
+  })
+
+  it('a_plan_whose_progress_nobody_asks_about_still_admits_the_go', async () => {
+    const port = await RunningApi.listening()
+
+    const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
+
+    expect(response.status).toBe(202)
+    expect(RunningApi.spy.asked).toEqual([
+      { agent: 'workspace:20', issue: 33, repository: 'jjponz/repo-pulse' },
+    ])
   })
 
   it('the_three_fields_reach_the_use_case_as_domain_values_and_not_as_the_raw_json', async () => {
@@ -510,237 +483,5 @@ describe('implementing the plan lifts the watch on its issue', () => {
     expect(RunningApi.reviews.stopped).toEqual([])
     expect(implementationStarts.remember).not.toHaveBeenCalled()
     expect(RunningApi.pullRequestReviews.started).toEqual([])
-  })
-})
-describe('the go is refused while the plan is under review', () => {
-  afterEach(RunningApi.stopAll)
-
-  const UNDER_REVIEW = {
-    code: 'plan-under-review',
-    detail: 'changes were asked for on this plan and it has not been reworked yet',
-  }
-
-  it('a_change_the_watch_has_not_delivered_yet_refuses_the_go', async () => {
-    const port = await RunningApi.listening(
-      new ImplementPlanSpy(), { reviews: ReviewsSpy.withAnUndeliveredChange() }
-    )
-
-    const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
-
-    expect(response.status).toBe(400)
-    expect(await response.json()).toEqual(UNDER_REVIEW)
-  })
-
-  it('an_undelivered_change_neither_records_the_go_nor_resumes_the_agent_nor_lifts_the_watch', async () => {
-    const implementationStarts = { remember: vi.fn() }
-    const port = await RunningApi.listening(
-      new ImplementPlanSpy(), { reviews: ReviewsSpy.withAnUndeliveredChange(), implementationStarts }
-    )
-
-    await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
-
-    expect(RunningApi.spy.asked).toEqual([])
-    expect(implementationStarts.remember).not.toHaveBeenCalled()
-    expect(RunningApi.reviews.stopped).toEqual([])
-    expect(RunningApi.pullRequestReviews.started).toEqual([])
-    expect(RunningApi.activePlans.known()[0].phase).toBe(ActivePlanPhase.PLANNING)
-  })
-
-  it('the_watch_is_asked_about_the_plan_it_is_watching_and_not_about_the_request', async () => {
-    const port = await RunningApi.listening(
-      new ImplementPlanSpy(), { reviews: ReviewsSpy.withAnUndeliveredChange() }
-    )
-
-    await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
-
-    expect(RunningApi.reviews.asked).toEqual([RunningApi.WATCHED])
-  })
-
-  it('a_plan_being_reworked_refuses_the_go_even_though_every_change_was_delivered', async () => {
-    const port = await RunningApi.listening(
-      new ImplementPlanSpy(), { progress: ReadPlanProgressSpy.reading(PlanState.REVIEWING) }
-    )
-
-    const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
-
-    expect(response.status).toBe(400)
-    expect(await response.json()).toEqual(UNDER_REVIEW)
-    expect(RunningApi.spy.asked).toEqual([])
-    expect(RunningApi.reviews.stopped).toEqual([])
-  })
-
-  it('the_state_is_read_for_the_workspace_the_watch_carries', async () => {
-    const port = await RunningApi.listening(
-      new ImplementPlanSpy(), { progress: ReadPlanProgressSpy.reading(PlanState.REVIEWING) }
-    )
-
-    await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
-
-    expect(RunningApi.readPlanProgress.asked).toEqual([{
-      located: RunningApi.WATCHED.located,
-      issue: RunningApi.WATCHED.issue,
-      repository: RunningApi.WATCHED.repository,
-    }])
-  })
-
-  it('a_plan_still_being_written_is_not_under_review_and_the_go_is_admitted', async () => {
-    const port = await RunningApi.listening(
-      new ImplementPlanSpy(), { progress: ReadPlanProgressSpy.reading(PlanState.WRITING) }
-    )
-
-    const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
-
-    expect(response.status).toBe(202)
-    expect(RunningApi.reviews.stopped).toEqual([
-      { issue: 33, repository: RunningApi.WATCHED.repository },
-    ])
-  })
-
-  it('a_plan_already_implementing_answers_the_same_202_even_while_a_review_is_in_flight', async () => {
-    const port = await RunningApi.listening(new ImplementPlanSpy(), {
-      reviews: ReviewsSpy.withAnUndeliveredChange(),
-      progress: ReadPlanProgressSpy.reading(PlanState.REVIEWING),
-    })
-    RunningApi.activePlans.rememberImplementing(RunningApi.WATCHED)
-
-    const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
-
-    expect(response.status).toBe(202)
-    expect(await response.text()).toBe(RunningApi.ANSWER)
-    expect(RunningApi.reviews.asked).toEqual([])
-    expect(RunningApi.readPlanProgress.asked).toEqual([])
-  })
-
-  it('half_a_signal_is_still_a_signal_and_a_plan_read_as_being_reworked_refuses_the_go', async () => {
-    const stderr = vi.fn()
-    const port = await RunningApi.listening(new ImplementPlanSpy(), {
-      reviews: ReviewsSpy.unreadable(),
-      progress: ReadPlanProgressSpy.reading(PlanState.REVIEWING),
-      stderr,
-    })
-
-    const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
-
-    expect(response.status).toBe(400)
-    expect(await response.json()).toEqual(UNDER_REVIEW)
-    expect(RunningApi.spy.asked).toEqual([])
-    expect(stderr).not.toHaveBeenCalled()
-  })
-
-  it('a_watch_that_could_not_be_asked_admits_the_go_and_warns_instead_of_hanging', async () => {
-    const stderr = vi.fn()
-    const port = await RunningApi.listening(
-      new ImplementPlanSpy(), { reviews: ReviewsSpy.unreadable(), stderr }
-    )
-
-    const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
-
-    expect(response.status).toBe(202)
-    expect(RunningApi.readPlanProgress.asked).toHaveLength(1)
-    expect(stderr).toHaveBeenCalledWith(
-      expect.stringContaining('jjponz/repo-pulse#33 without being able to read')
-    )
-  })
-
-  it('a_state_that_could_not_be_read_admits_the_go_and_warns_instead_of_hanging', async () => {
-    const stderr = vi.fn()
-    const port = await RunningApi.listening(new ImplementPlanSpy(), {
-      progress: ReadPlanProgressSpy.failingWith(new PlanProgressNotRead('git status refused')),
-      stderr,
-    })
-
-    const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
-
-    expect(response.status).toBe(202)
-    expect(stderr).toHaveBeenCalledWith(
-      expect.stringContaining('jjponz/repo-pulse#33 without being able to read')
-    )
-  })
-
-  it('a_readable_signal_that_says_nothing_is_in_flight_warns_about_nothing', async () => {
-    const stderr = vi.fn()
-    const port = await RunningApi.listening(new ImplementPlanSpy(), { stderr })
-
-    const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
-
-    expect(response.status).toBe(202)
-    expect(stderr).not.toHaveBeenCalled()
-  })
-
-  it('a_bug_reading_the_state_is_not_swallowed_as_an_unreadable_signal', async () => {
-    const port = await RunningApi.listening(new ImplementPlanSpy(), {
-      progress: ReadPlanProgressSpy.failingWith(new TypeError('a bug of ours')),
-    })
-
-    const response = await RunningApi.post(port, RunningApi.ACCEPTED_BODY)
-
-    expect(await response.json()).toEqual({ code: 'request-failed', detail: 'request failed' })
-    expect(RunningApi.spy.asked).toEqual([])
-  })
-
-  it('the_watch_is_lifted_only_after_the_gate_found_nothing_waiting', async () => {
-    const waiting = await RunningApi.listening(
-      new ImplementPlanSpy(), { reviews: ReviewsSpy.withAnUndeliveredChange() }
-    )
-    await RunningApi.post(waiting, RunningApi.ACCEPTED_BODY)
-    const liftedWhileWaiting = [...RunningApi.reviews.stopped]
-
-    const clear = await RunningApi.listening(new ImplementPlanSpy())
-    await RunningApi.post(clear, RunningApi.ACCEPTED_BODY)
-
-    expect(liftedWhileWaiting).toEqual([])
-    expect(RunningApi.reviews.stopped).toEqual([
-      { issue: 33, repository: RunningApi.WATCHED.repository },
-    ])
-  })
-})
-
-describe('what counts as a review in flight is a rule of its own', () => {
-  it('either_signal_saying_a_review_is_in_flight_is_enough_to_say_so', () => {
-    const clear = ReviewInFlight.CLEAR
-
-    expect(ReviewGatePolicy.of({ watched: ReviewInFlight.IN_FLIGHT, reworking: clear }))
-      .toBe(ReviewInFlight.IN_FLIGHT)
-    expect(ReviewGatePolicy.of({ watched: clear, reworking: ReviewInFlight.IN_FLIGHT }))
-      .toBe(ReviewInFlight.IN_FLIGHT)
-  })
-
-  it('a_signal_in_flight_outranks_a_signal_that_could_not_be_read', () => {
-    expect(ReviewGatePolicy.of({
-      watched: ReviewInFlight.UNREADABLE, reworking: ReviewInFlight.IN_FLIGHT,
-    })).toBe(ReviewInFlight.IN_FLIGHT)
-  })
-
-  it('either_signal_that_could_not_be_read_leaves_the_answer_unreadable', () => {
-    const clear = ReviewInFlight.CLEAR
-
-    expect(ReviewGatePolicy.of({ watched: ReviewInFlight.UNREADABLE, reworking: clear }))
-      .toBe(ReviewInFlight.UNREADABLE)
-    expect(ReviewGatePolicy.of({ watched: clear, reworking: ReviewInFlight.UNREADABLE }))
-      .toBe(ReviewInFlight.UNREADABLE)
-  })
-
-  it('two_signals_that_say_nothing_is_in_flight_say_nothing_is_in_flight', () => {
-    expect(ReviewGatePolicy.of({
-      watched: ReviewInFlight.CLEAR, reworking: ReviewInFlight.CLEAR,
-    })).toBe(ReviewInFlight.CLEAR)
-  })
-
-  it('a_signal_nobody_declared_is_refused_instead_of_read_as_nothing_in_flight', () => {
-    const undeclared = 'maybe' as unknown as ReviewInFlightValue
-
-    expect(() => ReviewGatePolicy.of({ watched: undeclared, reworking: ReviewInFlight.CLEAR }))
-      .toThrow(/a review signal is one of in-flight, clear, unreadable, got \["maybe"\]/)
-  })
-
-  it('every_plan_state_says_whether_it_is_a_review_in_flight', () => {
-    expect(ReviewGatePolicy.readingThePlan(PlanState.REVIEWING)).toBe(ReviewInFlight.IN_FLIGHT)
-    expect(ReviewGatePolicy.readingThePlan(PlanState.READY)).toBe(ReviewInFlight.CLEAR)
-    expect(ReviewGatePolicy.readingThePlan(PlanState.WRITING)).toBe(ReviewInFlight.CLEAR)
-  })
-
-  it('a_plan_state_nobody_declared_is_refused_instead_of_admitting_the_go', () => {
-    expect(() => ReviewGatePolicy.readingThePlan('half-written' as unknown as PlanStateValue))
-      .toThrow(/no review signal declared for the plan state "half-written"/)
   })
 })

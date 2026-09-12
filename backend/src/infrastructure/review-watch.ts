@@ -1,5 +1,4 @@
 import { PlanFailure } from '../domain/exceptions.ts'
-import { ReviewInFlight, type ReviewInFlightValue } from '../domain/policies/review-gate-policy.ts'
 import type { ChangeAsked } from '../domain/value-objects/change-asked.ts'
 import type { PlanWatch } from '../domain/value-objects/plan-watch.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
@@ -73,16 +72,6 @@ export class ReviewWatch {
 
   stop({ issue, repository }: WatchedIssue): void {
     this.live.delete(ReviewWatch.#keyFor(repository, issue))
-  }
-
-  async refresh(watch: PlanWatch): Promise<ReviewInFlightValue> {
-    const attended = this.live.get(ReviewWatch.#keyFor(watch.repository, watch.issue.number))
-    if (attended === undefined) return ReviewInFlight.CLEAR
-    const read = await this.#sound(watch)
-    if (read === null) return ReviewInFlight.UNREADABLE
-    const waiting = read.changes.some((change) => !attended.has(change.id))
-
-    return waiting ? ReviewInFlight.IN_FLIGHT : ReviewInFlight.CLEAR
   }
 
   async #follow(watch: PlanWatch, key: string, attended: Set<string>, recovering: boolean): Promise<void> {

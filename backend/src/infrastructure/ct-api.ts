@@ -447,7 +447,6 @@ class CtApi {
       }),
       implementHistory: new ReadImplementationHistory({ implementationHistory: metricsFileHistory }),
       planEvents: CtApi.#planEvents(readPlanProgress),
-      readPlanProgress,
       sessions,
       activePlans,
       externalTools: new SurveyExternalTools({

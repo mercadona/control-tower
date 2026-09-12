@@ -18,9 +18,6 @@ import type { ReadImplementationProgressParams } from '../application/queries/re
 import type { ReadImplementationHistoryParams } from '../application/queries/read-implementation-history.ts'
 import type { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
 import type { PlanEvents, PlanSessions } from './plan-events-route.ts'
-import type { ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
-import type { PlanStateValue } from '../domain/value-objects/plan-state.ts'
-import type { ReviewInFlightValue } from '../domain/policies/review-gate-policy.ts'
 import type { ActivePlans, ActivePlanRecovering } from './active-plans-route.ts'
 import type { ImplementationState } from '../domain/value-objects/implementation-state.ts'
 import type { ImplementationHistoryEntry } from '../domain/value-objects/implementation-history-entry.ts'
@@ -36,11 +33,6 @@ type PlanImplementer = { execute(params: ImplementPlanParams): Promise<void> }
 type PlanReviews = {
   start(watch: PlanWatch): void,
   stop(watched: WatchedIssue): void,
-  refresh(watch: PlanWatch): Promise<ReviewInFlightValue>,
-}
-
-type PlanProgressReader = {
-  execute(params: ReadPlanProgressParams): Promise<{ readonly state: PlanStateValue }>,
 }
 
 type PullRequestReviews = { start(watch: PlanWatch): void }
@@ -73,7 +65,6 @@ export type ApiCollaborators = {
   reviews?: PlanReviews | null,
   pullRequestReviews?: PullRequestReviews | null,
   planEvents?: PlanEvents | null,
-  readPlanProgress?: PlanProgressReader | null,
   sessions?: PlanSessions | null,
   activePlans?: ActivePlans | null,
   externalTools?: SurveyExternalTools | null,
@@ -121,7 +112,6 @@ export class ApiServer {
   readonly reviews: PlanReviews | null | undefined
   readonly pullRequestReviews: PullRequestReviews | null | undefined
   readonly planEvents: PlanEvents | null | undefined
-  readonly readPlanProgress: PlanProgressReader | null | undefined
   readonly sessions: PlanSessions | null | undefined
   readonly activePlans: ActivePlans | null | undefined
   readonly externalTools: SurveyExternalTools | null | undefined
@@ -133,7 +123,7 @@ export class ApiServer {
 
   constructor({
     port, startPlan, implementPlan, implementProgress, implementHistory, reviews, pullRequestReviews,
-    planEvents, readPlanProgress, sessions, activePlans, externalTools, implementationStarts, recovery = null, stderr,
+    planEvents, sessions, activePlans, externalTools, implementationStarts, recovery = null, stderr,
     frontendRoot,
   }: ApiCollaborators) {
     this.requestedPort = port
@@ -144,7 +134,6 @@ export class ApiServer {
     this.reviews = reviews
     this.pullRequestReviews = pullRequestReviews
     this.planEvents = planEvents
-    this.readPlanProgress = readPlanProgress
     this.sessions = sessions
     this.activePlans = activePlans
     this.externalTools = externalTools
@@ -176,7 +165,7 @@ export class ApiServer {
       JsonBody.reader(),
       ImplementPlanRoute.handledBy(
         this.implementPlan!, this.reviews!, this.pullRequestReviews!,
-        this.activePlans!, this.implementationStarts!, this.readPlanProgress!, this.stderr!
+        this.activePlans!, this.implementationStarts!, this.stderr!
       )
     )
     app.all(ImplementPlanRoute.PATH, ImplementPlanRoute.refuseOtherMethods)

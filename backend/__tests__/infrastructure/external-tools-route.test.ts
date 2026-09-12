@@ -95,7 +95,6 @@ class RunningApi {
       implementationStarts: undefined,
       planEvents: RunningApi.NO_EVENTS,
       stderr: undefined,
-      readPlanProgress: null,
       frontendRoot: RunningApi.NO_FRONTEND,
     })
     const port = await server.start()

@@ -20,5 +20,4 @@ export type ImplementPlanOutcome =
   | { kind: 'refused'; detail: string }
   | { kind: 'stale-agent'; detail: string }
   | { kind: 'uncertain'; detail: string }
-  | { kind: 'under-review' }
   | { kind: 'backend-unreachable' }

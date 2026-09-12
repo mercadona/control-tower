@@ -35,11 +35,6 @@ const implementationUncertain = () => ({
   body: '{"code":"implementation-phase-uncertain","detail":"cannot tell whether implementation already began"}',
 })
 
-const planUnderReview = () => ({
-  status: 400,
-  body: '{"code":"plan-under-review","detail":"changes were asked for on this plan and it has not been reworked yet"}',
-})
-
 const plan = (): StartedPlan => ({
   id: 'ABC-123',
   repo: REPO,
@@ -60,6 +55,5 @@ export const ImplementPlanMother = {
   agentNotResumed,
   noLiveSession,
   implementationUncertain,
-  planUnderReview,
   plan,
 }

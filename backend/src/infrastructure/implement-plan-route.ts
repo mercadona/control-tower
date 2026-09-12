@@ -2,9 +2,6 @@ import type { Request, RequestHandler, Response } from 'express'
 import { Answer, JsonBody, Refusal } from './http.ts'
 import { Projection } from './projection.ts'
 import { ImplementPlanParams } from '../application/actions/implement-plan.ts'
-import { ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
-import { ReviewGatePolicy, ReviewInFlight, type ReviewInFlightValue } from '../domain/policies/review-gate-policy.ts'
-import type { PlanStateValue } from '../domain/value-objects/plan-state.ts'
 import { RepositoryName } from '../domain/value-objects/repository-name.ts'
 import { ActivePlanPhase } from './active-plans-route.ts'
 import {
@@ -21,7 +18,6 @@ export const ImplementRequestOutcome = Object.freeze({
   MALFORMED_REPO: 'malformed-repo',
   NO_LIVE_SESSION: 'no-live-planning-session',
   UNCERTAIN_PHASE: 'implementation-phase-uncertain',
-  PLAN_UNDER_REVIEW: 'plan-under-review',
 } as const)
 
 export type ImplementRequestOutcomeValue =
@@ -39,14 +35,7 @@ type PlanImplementer = { execute(params: ImplementPlanParams): Promise<void> }
 
 type WatchedIssue = { issue: number, repository: RepositoryName }
 
-type PlanReviews = {
-  stop(watched: WatchedIssue): void,
-  refresh(watch: PlanWatch): Promise<ReviewInFlightValue>,
-}
-
-type PlanProgressReader = {
-  execute(params: ReadPlanProgressParams): Promise<{ readonly state: PlanStateValue }>,
-}
+type PlanReviews = { stop(watched: WatchedIssue): void }
 
 type PullRequestReviews = { start(watch: PlanWatch): void }
 
@@ -205,11 +194,6 @@ export class ImplementRefusal {
       code: ImplementRequestOutcome.UNCERTAIN_PHASE,
       detail: 'implementation may have started; inspect the plan before retrying',
     })],
-    [ImplementRequestOutcome.PLAN_UNDER_REVIEW, () => new Refusal({
-      status: 400,
-      code: ImplementRequestOutcome.PLAN_UNDER_REVIEW,
-      detail: 'changes were asked for on this plan and it has not been reworked yet',
-    })],
   ])
 
   static of(asked: ImplementAsked): Refusal {
@@ -261,7 +245,6 @@ export class ImplementPlanRoute {
     pullRequestReviews: PullRequestReviews,
     activePlans: ActivePlanRegistry,
     implementationStarts: ImplementationStarts,
-    readPlanProgress: PlanProgressReader,
     stderr: Stderr
   ): RequestHandler {
     const transitions = new Map<string, Promise<void>>()
@@ -276,7 +259,7 @@ export class ImplementPlanRoute {
       if (pending !== undefined) await pending
       const transition = ImplementPlanRoute.#accept(
         implementPlan, reviews, pullRequestReviews, activePlans,
-        implementationStarts, readPlanProgress, stderr, response, asked
+        implementationStarts, stderr, response, asked
       )
       transitions.set(key, transition)
       try {
@@ -293,7 +276,6 @@ export class ImplementPlanRoute {
     pullRequestReviews: PullRequestReviews,
     activePlans: ActivePlanRegistry,
     implementationStarts: ImplementationStarts,
-    readPlanProgress: PlanProgressReader,
     stderr: Stderr,
     response: Response,
     asked: AcceptedImplementRequest
@@ -310,17 +292,6 @@ export class ImplementPlanRoute {
     if (active.phase === ActivePlanPhase.IMPLEMENTING) {
       ImplementPlanRoute.#answerAccepted(response, asked)
       return
-    }
-    const inFlight = await ImplementPlanRoute.#reviewInFlight(reviews, readPlanProgress, active.watch)
-    if (inFlight === ReviewInFlight.IN_FLIGHT) {
-      Answer.refuseAs(response, ImplementRefusal.of({ outcome: ImplementRequestOutcome.PLAN_UNDER_REVIEW }))
-      return
-    }
-    if (inFlight === ReviewInFlight.UNREADABLE) {
-      stderr(
-        `admitted the go for ${asked.repository.text}#${asked.issue} without being able to read ` +
-        'whether changes were asked for on its plan\n'
-      )
     }
     try {
       await implementPlan.execute(new ImplementPlanParams({
@@ -341,31 +312,6 @@ export class ImplementPlanRoute {
     reviews.stop({ issue: asked.issue, repository: asked.repository })
     pullRequestReviews.start(watch)
     ImplementPlanRoute.#answerAccepted(response, asked)
-  }
-
-  static async #reviewInFlight(
-    reviews: PlanReviews, readPlanProgress: PlanProgressReader, watch: PlanWatch
-  ): Promise<ReviewInFlightValue> {
-    return ReviewGatePolicy.of({
-      watched: await reviews.refresh(watch),
-      reworking: await ImplementPlanRoute.#reworking(readPlanProgress, watch),
-    })
-  }
-
-  static async #reworking(
-    readPlanProgress: PlanProgressReader, watch: PlanWatch
-  ): Promise<ReviewInFlightValue> {
-    try {
-      const read = await readPlanProgress.execute(new ReadPlanProgressParams({
-        located: watch.located, issue: watch.issue, repository: watch.repository,
-      }))
-
-      return ReviewGatePolicy.readingThePlan(read.state)
-    } catch (cause) {
-      if (!(cause instanceof PlanFailure)) throw cause
-
-      return ReviewInFlight.UNREADABLE
-    }
   }
 
   static #answerAccepted(response: Response, asked: AcceptedImplementRequest): void {
