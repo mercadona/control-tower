@@ -10,27 +10,27 @@ const UNAVAILABLE_MESSAGE = 'No se pudo contactar con las sesiones en marcha'
 const NO_SESSIONS_MESSAGE = 'No hay ninguna sesión en marcha'
 
 export const SessionsPanel = (): ReactElement => {
-  const sessions = useLiveSessions()
+  const { state, refresh } = useLiveSessions()
   const [chosenId, setChosenId] = useState<string | null>(null)
 
-  if (sessions.status === 'loading') {
+  if (state.status === 'loading') {
     return <Loading />
   }
 
-  if (sessions.status === 'unavailable') {
+  if (state.status === 'unavailable') {
     return <Banner type="error" role="alert" title={UNAVAILABLE_MESSAGE} />
   }
 
-  if (sessions.sessions.length === 0) {
+  if (state.sessions.length === 0) {
     return <p className="sessions-panel__empty">{NO_SESSIONS_MESSAGE}</p>
   }
 
-  const chosen = sessions.sessions.find((session) => session.id === chosenId) ?? sessions.sessions[0]
+  const chosen = state.sessions.find((session) => session.id === chosenId) ?? state.sessions[0]
 
   return (
     <div className="sessions-panel">
       <ul className="sessions-panel__list">
-        {sessions.sessions.map((session) => (
+        {state.sessions.map((session) => (
           <li key={session.id} className="sessions-panel__item">
             <Button
               variant={session.id === chosen.id ? 'primary' : 'secondary'}
@@ -42,7 +42,7 @@ export const SessionsPanel = (): ReactElement => {
           </li>
         ))}
       </ul>
-      <SessionTerminal session={chosen} />
+      <SessionTerminal session={chosen} onGone={refresh} />
     </div>
   )
 }

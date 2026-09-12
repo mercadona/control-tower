@@ -1,16 +1,18 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { FakeEventSource } from 'pages/home/__tests__/FakeEventSource'
 import { SessionsPanel } from './SessionsPanel'
 
 const TWO_SESSIONS = '{"sessions":[{"id":"a1","name":"zsh"},{"id":"b2","name":"bash"}]}'
+const ONE_SESSION = '{"sessions":[{"id":"b2","name":"bash"}]}'
 const NO_SESSIONS = SessionsMother.noSessions().body
 
 vi.mock('@xterm/xterm', () => {
   class MockTerminal {
     open() {}
     write() {}
+    reset() {}
     onData() {}
     dispose() {}
   }
@@ -19,6 +21,15 @@ vi.mock('@xterm/xterm', () => {
 })
 
 const answering = (body: string) => vi.fn(async () => new Response(body))
+
+const answeringInTurn = (bodies: string[]) => {
+  let call = 0
+  return vi.fn(async () => {
+    const body = bodies[call] ?? bodies[bodies.length - 1]
+    call += 1
+    return new Response(body)
+  })
+}
 
 describe('SessionsPanel', () => {
   beforeEach(() => FakeEventSource.install())
@@ -80,5 +91,28 @@ describe('SessionsPanel', () => {
     render(<SessionsPanel />)
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo contactar con las sesiones en marcha')
+  })
+
+  it('a session that reports itself gone is dropped from the list', async () => {
+    vi.stubGlobal('fetch', answeringInTurn([TWO_SESSIONS, ONE_SESSION]))
+
+    render(<SessionsPanel />)
+
+    await screen.findByRole('button', { name: 'zsh' })
+    FakeEventSource.last().refuseBeforeOpen()
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'zsh' })).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'bash' })).toBeInTheDocument()
+  })
+
+  it('another live session is chosen when the chosen one is gone', async () => {
+    vi.stubGlobal('fetch', answeringInTurn([TWO_SESSIONS, ONE_SESSION]))
+
+    render(<SessionsPanel />)
+
+    await screen.findByRole('button', { name: 'zsh' })
+    FakeEventSource.last().refuseBeforeOpen()
+
+    await waitFor(() => expect(FakeEventSource.last().url).toBe('/sessions/b2/stream'))
   })
 })

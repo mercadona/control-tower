@@ -11,8 +11,8 @@ describe('useLiveSessions', () => {
 
     const { result } = renderHook(() => useLiveSessions())
 
-    expect(result.current).toEqual({ status: 'loading' })
-    await waitFor(() => expect(result.current).toEqual({
+    expect(result.current.state).toEqual({ status: 'loading' })
+    await waitFor(() => expect(result.current.state).toEqual({
       status: 'loaded',
       sessions: [{ id: 'a1', name: 'zsh' }],
     }))
@@ -25,6 +25,18 @@ describe('useLiveSessions', () => {
 
     const { result } = renderHook(() => useLiveSessions())
 
-    await waitFor(() => expect(result.current).toEqual({ status: 'unavailable' }))
+    await waitFor(() => expect(result.current.state).toEqual({ status: 'unavailable' }))
+  })
+
+  it('refresh asks the backend again', async () => {
+    const listing = vi.fn(async () => new Response(SessionsMother.oneSession().body))
+    vi.stubGlobal('fetch', listing)
+
+    const { result } = renderHook(() => useLiveSessions())
+    await waitFor(() => expect(result.current.state.status).toBe('loaded'))
+
+    result.current.refresh()
+
+    await waitFor(() => expect(listing).toHaveBeenCalledTimes(2))
   })
 })

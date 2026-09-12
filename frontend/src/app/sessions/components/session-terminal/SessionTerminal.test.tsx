@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { Terminal } from '@xterm/xterm'
 import { FakeEventSource } from 'pages/home/__tests__/FakeEventSource'
 import { SessionTerminal } from 'app/sessions/components/session-terminal/SessionTerminal'
@@ -32,6 +32,10 @@ vi.mock('@xterm/xterm', () => {
       this.written.push(data)
     }
 
+    reset() {
+      this.written = []
+    }
+
     onData(handler: (text: string) => void) {
       this.onDataHandler = handler
     }
@@ -43,6 +47,10 @@ vi.mock('@xterm/xterm', () => {
 
   return { Terminal: MockTerminal }
 })
+
+const refusedWrite = () => new Response(JSON.stringify({ code: 'session-not-live', detail: 'the shell exited' }), { status: 409 })
+
+const typedWrite = () => new Response(JSON.stringify({ status: 'typed', id: SESSION.id }), { status: 202 })
 
 const lastTerminal = (): FakeTerminal => {
   const instances = (Terminal as unknown as { instances: FakeTerminal[] }).instances
@@ -108,5 +116,51 @@ describe('SessionTerminal', () => {
     FakeEventSource.last().refuseBeforeOpen()
 
     expect(await screen.findByText('Esta sesión ya no existe')).toBeInTheDocument()
+  })
+
+  it('a refused keystroke is said on screen without clearing the terminal', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => refusedWrite()))
+
+    render(<SessionTerminal session={SESSION} />)
+    FakeEventSource.last().receive('{"bytes":"hola"}')
+    lastTerminal().onDataHandler?.('ls -la')
+
+    expect(await screen.findByText('No se ha podido enviar lo que has escrito')).toBeInTheDocument()
+    expect(lastTerminal().written).toEqual(['hola'])
+  })
+
+  it('a keystroke that cannot reach the backend is said on screen', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    }))
+
+    render(<SessionTerminal session={SESSION} />)
+    lastTerminal().onDataHandler?.('ls -la')
+
+    expect(await screen.findByText('Sin conexión con el backend')).toBeInTheDocument()
+  })
+
+  it('a write that succeeds after a failed one clears the message', async () => {
+    const posting = vi.fn(async () => refusedWrite())
+    vi.stubGlobal('fetch', posting)
+
+    render(<SessionTerminal session={SESSION} />)
+    lastTerminal().onDataHandler?.('ls -la')
+    await screen.findByText('No se ha podido enviar lo que has escrito')
+
+    posting.mockImplementation(async () => typedWrite())
+    lastTerminal().onDataHandler?.('ls -la')
+
+    await waitFor(() => expect(screen.queryByText('No se ha podido enviar lo que has escrito')).not.toBeInTheDocument())
+  })
+
+  it('a reconnected stream repaints instead of appending its history', () => {
+    render(<SessionTerminal session={SESSION} />)
+
+    FakeEventSource.last().receive('{"bytes":"scrollback"}')
+    FakeEventSource.last().open()
+    FakeEventSource.last().receive('{"bytes":"fresh"}')
+
+    expect(lastTerminal().written).toEqual(['fresh'])
   })
 })
