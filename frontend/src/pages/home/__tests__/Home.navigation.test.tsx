@@ -8,6 +8,7 @@ type Answer = { status: number; body: string }
 
 const IMPLEMENT_BUTTON = { name: 'Implementar plan' }
 const NO_ACTIVE_PLANS = { status: 200, body: '{"plans":[]}' }
+const NO_SESSIONS = { status: 200, body: '{"sessions":[]}' }
 const IMPLEMENTING = { status: 202, body: '{"status":"implementing","agent":"workspace:4","issue":7}' }
 const NO_IMPLEMENTATION_HISTORY_YET = { status: 400, body: '{"code":"implementation-history-not-read","detail":"not read yet"}' }
 
@@ -18,6 +19,7 @@ const stubFetch = (externalTools: Answer) => {
     const url = String(input)
     if (url === '/external-tools') return responseFor(externalTools)
     if (url === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
+    if (url === '/sessions') return responseFor(NO_SESSIONS)
     if (url === '/start-plan') return responseFor(StartPlanMother.started())
     if (url === '/implement-plan') return responseFor(IMPLEMENTING)
     if (url.startsWith('/implement-progress/')) return responseFor(ImplementProgressMother.notRead())

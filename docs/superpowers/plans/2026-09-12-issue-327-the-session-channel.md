@@ -170,6 +170,7 @@ Rules to obey:
 | `frontend/src/pages/home/Home.css` | modify | the page | none (body by TDD) (T8) |
 | `frontend/src/app/sessions/components/sessions-panel/SessionsPanel.test.tsx` | create | the suite | none (body by TDD) (T8) |
 | `frontend/src/pages/home/__tests__/Home.sessions.test.tsx` | create | the suite | none (body by TDD) (T8) |
+| `frontend/src/app/sessions/components/session-terminal/SessionTerminal.test.tsx` | modify | the suite | none (body by TDD) (T8) |
 | `backend/API.md` | modify | whoever codes against this API | Final text (T9) |
 | `backend/conventions/this-repository.md` | modify | every agent working here | Final text (T9) |
 | `frontend/README.md` | modify | whoever works on the page | prose (T9) |
@@ -718,72 +719,64 @@ npm --prefix frontend run build   # expected: exit 0 — the page type-checks an
 
 ### Task 8 — The list and the terminal on the page
 
-**Objective:** the page names the live sessions and shows the one chosen, in every stage of the
-workflow.
+**Objective:** the page lists the live sessions and shows the chosen one, in every stage.
 
 **Files:** `frontend/src/app/sessions/components/sessions-panel/SessionsPanel.tsx` (create),
 `frontend/src/app/sessions/components/sessions-panel/SessionsPanel.css` (create),
 `frontend/src/app/sessions/components/sessions-panel/index.ts` (create),
 `frontend/src/pages/home/Home.tsx` (modify), `frontend/src/pages/home/Home.css` (modify),
 `frontend/src/app/sessions/components/sessions-panel/SessionsPanel.test.tsx` (create),
-`frontend/src/pages/home/__tests__/Home.sessions.test.tsx` (create)
-
-Contract (frontend/src/app/sessions/components/sessions-panel/SessionsPanel.tsx):
-
-```tsx
-export const SessionsPanel: () => ReactElement
-```
-
-Current state (frontend/src/pages/home/Home.tsx, lines 485-490):
-
-```tsx
-              </>
-            )}
-          </section>
-
-          {workflow !== null && (
-            <section className="home__completed" aria-label="Etapas completadas">
-```
+`frontend/src/pages/home/__tests__/Home.sessions.test.tsx` (create),
+`frontend/src/app/sessions/components/session-terminal/SessionTerminal.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/helpers.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.implementHistory.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.implementProgress.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.layout.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.navigation.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.restoreWorkflow.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.startPlan.test.tsx` (modify)
 
 Call site (frontend/src/pages/home/Home.tsx):
 
 ```tsx
-          </section>
-
           <section className="home__sessions" aria-label="Sesiones en marcha">
             <SessionsPanel />
           </section>
 ```
 
-`SessionsPanel` reads `useLiveSessions`: `loading` renders `Loading`, `unavailable` a `Banner`
-whose copy is Spanish, `loaded` with nothing a Spanish line rather than an empty box, and
-`loaded` the names as a list of `Button`s plus the chosen session's `SessionTerminal`. The first
-session is chosen until a name is clicked. The section sits inside `main`, between the workspace
-and the completed stages, and is rendered in **every** stage — nothing about a workflow gates it,
-which is the place D-21 asks the cabin to keep. `Home.css` adds a `.home__sessions` block and
-touches none of the shell declarations `Home.shell.test.ts` pins.
+`export const SessionsPanel: () => ReactElement` reads `useLiveSessions`: `Loading`, a `Banner`,
+a Spanish line when none is live, or the names as `Button`s beside the chosen session's
+`SessionTerminal` — the first until a name is clicked, and which one is chosen said in the
+accessibility tree, not only in a `Button` variant. It sits in `main`, in **every** stage, gated
+by nothing about the workflow: the place D-21 asks the cabin to keep. `.home__sessions` moves no
+declaration `Home.shell.test.ts` pins.
 
-**TDD:** red first with `it('the live sessions are listed by their names')` — a hook loaded with
-two sessions renders both names, and the first one's terminal.
+Unconditional means **every** `Home` test fetches `/sessions`: hence the seven files under
+`__tests__/`. Each gains a `/sessions` route and no assertion weakens; one the second
+live region made ambiguous is scoped to its container. `SessionsMother.oneSession()` and `.noSessions()`
+replace every hand-built copy of those two bodies; the two-session one stays inline, the mother
+not being this task's to change. Task 7 left `terminal.open(screen)` unwatched — delete it and
+that suite stays green — so the double records what it opened on and a test pins that.
+
+**TDD:** red first with `it('the live sessions are listed by their names')` — two sessions
+render both names and the first one's terminal.
 
 **Tests:** added — in `SessionsPanel.test.tsx`:
 `it('the live sessions are listed by their names')`,
 `it('the first session is the one shown')`,
 `it('choosing another session shows that one')`,
 `it('no live session is said out loud instead of an empty box')`,
-`it('an unreachable backend is said out loud')`;
-in `Home.sessions.test.tsx`:
-`it('the sessions panel is on the page before a plan is requested')`,
-`it('the sessions panel is still on the page while an implementation runs')`.
+`it('an unreachable backend is said out loud')`,
+`it('the chosen session is named as chosen for a screen reader')`;
+in `SessionTerminal.test.tsx`: `it('the terminal is opened on the screen it renders')`;
+in `Home.sessions.test.tsx`: `it('the sessions panel is on the page before a plan is requested')`
+and `it('the sessions panel is still on the page while an implementation runs')`.
 
 **Verification:**
 
 ```bash
-npm --prefix frontend test -- src/app/sessions/components/sessions-panel/SessionsPanel.test.tsx   # expected: exit 0 — the panel suite is green
-npm --prefix frontend test -- src/pages/home/__tests__/Home.sessions.test.tsx   # expected: exit 0 — the panel is on the page in every stage
-npm --prefix frontend test -- src/pages/home/__tests__/Home.shell.test.ts   # expected: exit 0 — the shell declarations are untouched
-npm --prefix frontend test   # expected: exit 0
-npm --prefix frontend run build   # expected: exit 0
+npm --prefix frontend test   # exit 0: both new suites, the reopened open call, the shell, the seven Home suites
+npm --prefix frontend run build   # exit 0: the page type-checks and builds
 ```
 
 ### Task 9 — The channel, documented where this API is documented

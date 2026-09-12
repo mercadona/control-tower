@@ -1,0 +1,19 @@
+.sessions-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sessions-panel__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.sessions-panel__empty {
+  margin: 0;
+  color: var(--foreground-secondary);
+}

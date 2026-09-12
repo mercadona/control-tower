@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { WorkflowSnapshot, WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import {
@@ -96,7 +96,12 @@ describe('Home · start plan', () => {
 
     await startPlan(user)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
+    const recovery = await waitFor(() => {
+      const found = document.querySelector('.home__recovery')
+      if (found === null) throw new Error('the recovery banner has not appeared yet')
+      return found as HTMLElement
+    })
+    expect(within(recovery).getByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
   })
 
   it('should restore a matching plan on retry without another start request', async () => {
@@ -117,7 +122,11 @@ describe('Home · start plan', () => {
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ plans: [active] }), { status: 200 }))
-    vi.stubGlobal('fetch', (input: string | URL | Request) => input === '/external-tools' ? new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}') : fetching(input))
+    vi.stubGlobal('fetch', (input: string | URL | Request) => {
+      if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
+      if (input === '/sessions') return new Response('{"sessions":[]}')
+      return fetching(input)
+    })
     const { user } = openHome()
     await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
 
@@ -135,7 +144,11 @@ describe('Home · start plan', () => {
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(new Response('', { status: 503 }))
-    vi.stubGlobal('fetch', (input: string | URL | Request) => input === '/external-tools' ? new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}') : fetching(input))
+    vi.stubGlobal('fetch', (input: string | URL | Request) => {
+      if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
+      if (input === '/sessions') return new Response('{"sessions":[]}')
+      return fetching(input)
+    })
     const { user } = openHome()
     await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
 
@@ -151,7 +164,11 @@ describe('Home · start plan', () => {
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-    vi.stubGlobal('fetch', (input: string | URL | Request) => input === '/external-tools' ? new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}') : fetching(input))
+    vi.stubGlobal('fetch', (input: string | URL | Request) => {
+      if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
+      if (input === '/sessions') return new Response('{"sessions":[]}')
+      return fetching(input)
+    })
     const { user } = openHome()
     await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
 
@@ -169,7 +186,11 @@ describe('Home · start plan', () => {
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-    vi.stubGlobal('fetch', (input: string | URL | Request) => input === '/external-tools' ? new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}') : fetching(input))
+    vi.stubGlobal('fetch', (input: string | URL | Request) => {
+      if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
+      if (input === '/sessions') return new Response('{"sessions":[]}')
+      return fetching(input)
+    })
     const { user } = openHome()
     await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
 
@@ -188,7 +209,11 @@ describe('Home · start plan', () => {
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-    vi.stubGlobal('fetch', (input: string | URL | Request) => input === '/external-tools' ? new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}') : fetching(input))
+    vi.stubGlobal('fetch', (input: string | URL | Request) => {
+      if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
+      if (input === '/sessions') return new Response('{"sessions":[]}')
+      return fetching(input)
+    })
     const { user } = openHome()
     await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
 

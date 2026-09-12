@@ -9,6 +9,7 @@ type FakeTerminal = {
   written: string[]
   disposed: boolean
   onDataHandler: ((text: string) => void) | null
+  opened: Element | null
 }
 
 vi.mock('@xterm/xterm', () => {
@@ -17,12 +18,15 @@ vi.mock('@xterm/xterm', () => {
     written: string[] = []
     disposed = false
     onDataHandler: ((text: string) => void) | null = null
+    opened: Element | null = null
 
     constructor() {
       MockTerminal.instances.push(this)
     }
 
-    open() {}
+    open(screen: Element) {
+      this.opened = screen
+    }
 
     write(data: string) {
       this.written.push(data)
@@ -81,6 +85,12 @@ describe('SessionTerminal', () => {
 
     expect(FakeEventSource.last().closes).toBe(1)
     expect(terminal.disposed).toBe(true)
+  })
+
+  it('the terminal is opened on the screen it renders', () => {
+    const { container } = render(<SessionTerminal session={SESSION} />)
+
+    expect(lastTerminal().opened).toBe(container.querySelector('.session-terminal__screen'))
   })
 
   it('an unreachable stream says so instead of staying mute', async () => {

@@ -7,6 +7,7 @@ import { ImplementPlanAction } from 'app/implement-plan/components/implement-pla
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { PlanProgress } from 'app/plan-events/components/plan-progress'
 import { AskPlanChanges } from 'app/review-plan/components/ask-plan-changes'
+import { SessionsPanel } from 'app/sessions/components/sessions-panel'
 import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartedPlan, StartPlanRequest } from 'app/start-plan/StartPlan.types'
@@ -484,6 +485,10 @@ const Home = () => {
                 )}
               </>
             )}
+          </section>
+
+          <section className="home__sessions" aria-label="Sesiones en marcha">
+            <SessionsPanel />
           </section>
 
           {workflow !== null && (
