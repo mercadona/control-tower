@@ -4,7 +4,7 @@ import { SessionsMother } from '__scenarios__/SessionsMother'
 import { FakeEventSource } from 'pages/home/__tests__/FakeEventSource'
 import { SessionsPanel } from './SessionsPanel'
 
-const TWO_SESSIONS = '{"sessions":[{"id":"a1","name":"zsh"},{"id":"b2","name":"bash"}]}'
+const TWO_SESSIONS = SessionsMother.twoSessions().body
 const ONE_SESSION = '{"sessions":[{"id":"b2","name":"bash"}]}'
 const NO_SESSIONS = SessionsMother.noSessions().body
 

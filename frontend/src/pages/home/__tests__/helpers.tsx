@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { act, render, screen } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
+import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { Home } from 'pages/home/Home'
 import { FakeEventSource } from './FakeEventSource'
@@ -11,7 +12,7 @@ type User = ReturnType<typeof userEvent.setup>
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 const NO_ACTIVE_PLANS = { status: 200, body: '{"plans":[]}' }
-const NO_SESSIONS = { status: 200, body: '{"sessions":[]}' }
+const NO_SESSIONS = SessionsMother.noSessions()
 const EXTERNAL_TOOLS_READY = ExternalToolsMother.allReady()
 const NO_IMPLEMENTATION_RUN_YET = {
   status: 400,

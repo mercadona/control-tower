@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react'
+import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { WorkflowSnapshot, WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import {
@@ -124,7 +125,7 @@ describe('Home · start plan', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ plans: [active] }), { status: 200 }))
     vi.stubGlobal('fetch', (input: string | URL | Request) => {
       if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
-      if (input === '/sessions') return new Response('{"sessions":[]}')
+      if (input === '/sessions') return new Response(SessionsMother.noSessions().body)
       return fetching(input)
     })
     const { user } = openHome()
@@ -146,7 +147,7 @@ describe('Home · start plan', () => {
       .mockResolvedValueOnce(new Response('', { status: 503 }))
     vi.stubGlobal('fetch', (input: string | URL | Request) => {
       if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
-      if (input === '/sessions') return new Response('{"sessions":[]}')
+      if (input === '/sessions') return new Response(SessionsMother.noSessions().body)
       return fetching(input)
     })
     const { user } = openHome()
@@ -166,7 +167,7 @@ describe('Home · start plan', () => {
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
     vi.stubGlobal('fetch', (input: string | URL | Request) => {
       if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
-      if (input === '/sessions') return new Response('{"sessions":[]}')
+      if (input === '/sessions') return new Response(SessionsMother.noSessions().body)
       return fetching(input)
     })
     const { user } = openHome()
@@ -188,7 +189,7 @@ describe('Home · start plan', () => {
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
     vi.stubGlobal('fetch', (input: string | URL | Request) => {
       if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
-      if (input === '/sessions') return new Response('{"sessions":[]}')
+      if (input === '/sessions') return new Response(SessionsMother.noSessions().body)
       return fetching(input)
     })
     const { user } = openHome()
@@ -211,7 +212,7 @@ describe('Home · start plan', () => {
       .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
     vi.stubGlobal('fetch', (input: string | URL | Request) => {
       if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
-      if (input === '/sessions') return new Response('{"sessions":[]}')
+      if (input === '/sessions') return new Response(SessionsMother.noSessions().body)
       return fetching(input)
     })
     const { user } = openHome()

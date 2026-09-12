@@ -165,6 +165,19 @@ class Echo {
   }
 }
 
+class AssembledToken {
+  static unique(): string {
+    return `ct-${randomUUID()}`
+  }
+
+  static typedInHalvesForTheShellToJoin(token: string): string {
+    const first = token.slice(0, 1)
+    const rest = token.slice(1)
+
+    return `A=${first}; B=${rest}; echo "$A$B"\r`
+  }
+}
+
 describe('the session channel over one real process', () => {
   let realTerminals: RealTerminals
 
@@ -189,11 +202,12 @@ describe('the session channel over one real process', () => {
     const frames = await SseFrames.openedOn(port, session.id)
     await frames.next()
 
-    const typed = await RunningApi.typed(port, session.id, 'echo ct\r')
+    const token = AssembledToken.unique()
+    const typed = await RunningApi.typed(port, session.id, AssembledToken.typedInHalvesForTheShellToJoin(token))
     expect(typed.status).toBe(202)
     expect(await typed.json() as TypedBody).toEqual({ status: 'typed', id: session.id })
 
-    await Echo.reachesTheStream(frames, 'ct')
+    await Echo.reachesTheStream(frames, token)
 
     await frames.closedByAbort()
   })

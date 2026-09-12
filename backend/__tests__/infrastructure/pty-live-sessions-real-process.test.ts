@@ -64,6 +64,13 @@ class Echoed {
   static token(): string {
     return `ct-real-pty-${randomUUID()}`
   }
+
+  static typedInHalvesForTheShellToJoin(token: string): string {
+    const first = token.slice(0, 1)
+    const rest = token.slice(1)
+
+    return `A=${first}; B=${rest}; echo "$A$B"\n`
+  }
 }
 
 describe('PtyLiveSessions with a real process', () => {
@@ -83,7 +90,7 @@ describe('PtyLiveSessions with a real process', () => {
     const token = Echoed.token()
 
     const echoed = Echoed.waits({ sessions, session, token })
-    sessions.write({ session, text: `echo ${token}\n` })
+    sessions.write({ session, text: Echoed.typedInHalvesForTheShellToJoin(token) })
     await echoed
 
     const watch = sessions.watch({ session, onBytes: () => {}, onEnded: () => {} })
@@ -99,7 +106,7 @@ describe('PtyLiveSessions with a real process', () => {
 
     const token = Echoed.token()
     const echoed = Echoed.waits({ sessions, session, token })
-    sessions.write({ session, text: `echo ${token}\n` })
+    sessions.write({ session, text: Echoed.typedInHalvesForTheShellToJoin(token) })
     await echoed
 
     expect(sessions.find(session.id)).not.toBeNull()

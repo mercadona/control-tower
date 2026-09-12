@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { ImplementPlanMother } from '__scenarios__/ImplementPlanMother'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
+import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { WorkflowSnapshot, WORKFLOW_SNAPSHOT_KEY, WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import {
@@ -38,7 +39,7 @@ const activePlansAnswer = (...plans: ReturnType<typeof activePlan>[]) => ({
 })
 
 const EXTERNAL_TOOLS_READY = '{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}'
-const NO_SESSIONS = '{"sessions":[]}'
+const NO_SESSIONS = SessionsMother.noSessions().body
 
 const withReadyTools = <T extends (input: string | URL | Request, init?: RequestInit) => Promise<Response>>(fetching: T) => {
   vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {

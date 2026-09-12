@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
+import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { openHome, startPlan, streamFrame } from './helpers'
 
@@ -8,7 +9,7 @@ type Answer = { status: number; body: string }
 
 const IMPLEMENT_BUTTON = { name: 'Implementar plan' }
 const NO_ACTIVE_PLANS = { status: 200, body: '{"plans":[]}' }
-const NO_SESSIONS = { status: 200, body: '{"sessions":[]}' }
+const NO_SESSIONS = SessionsMother.noSessions()
 const IMPLEMENTING = { status: 202, body: '{"status":"implementing","agent":"workspace:4","issue":7}' }
 const NO_IMPLEMENTATION_HISTORY_YET = { status: 400, body: '{"code":"implementation-history-not-read","detail":"not read yet"}' }
 

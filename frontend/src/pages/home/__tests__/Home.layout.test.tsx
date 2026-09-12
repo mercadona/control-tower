@@ -1,5 +1,6 @@
 import { screen } from '@testing-library/react'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
+import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { openHome, startPlan, streamFrame } from './helpers'
 
@@ -24,7 +25,7 @@ const NO_IMPLEMENTATION_HISTORY_YET: Answer = {
   status: 400,
   body: '{"code":"implementation-history-not-read","detail":"not read yet"}',
 }
-const NO_SESSIONS: Answer = { status: 200, body: '{"sessions":[]}' }
+const NO_SESSIONS: Answer = SessionsMother.noSessions()
 
 const responseFor = (answer: Answer) => new Response(answer.body, { status: answer.status })
 
