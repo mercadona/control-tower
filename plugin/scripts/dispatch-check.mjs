@@ -992,8 +992,9 @@ if (release) {
   // session: it gave mechanical consequence to a GitHub comment. And the
   // agent has `gh`. Its own limit said so (commands/ct-next.md): "it does not
   // stop the agent itself from writing `-OK` on its own issue". With the
-  // `plan` gate implied by default on EVERY slice (gates.js#gatesForType),
-  // the result was a gate the gated party could open, leaving on top of that
+  // `plan` gate implied by default on EVERY slice — as it was until D-14
+  // retired that default from `gatesForType` — the result was a gate the
+  // gated party could open, leaving on top of that
   // the RECORD of a human review that never happened. Both halves are closed
   // here: the go carries a nonce the agent cannot guess (go-response.js), and
   // it IS A REQUIREMENT to release — before it was not a requirement for
