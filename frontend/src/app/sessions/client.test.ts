@@ -166,15 +166,36 @@ describe('SessionsClient', () => {
   })
 
   it('the writes of two different sessions do not wait for each other', async () => {
+    let resolveFirst: (response: Response) => void = () => undefined
+    let firstSettled = false
     const posting = vi.fn(async (url: string) => {
-      if (url === '/sessions/a1/input') return new Promise<Response>(() => undefined)
+      if (url === '/sessions/a1/input') {
+        return new Promise<Response>((resolve) => {
+          resolveFirst = resolve
+        })
+      }
       return new Response(JSON.stringify({ status: 'typed', id: 'b2' }), { status: 202 })
     })
     vi.stubGlobal('fetch', posting)
 
-    void SessionsClient.type('a1', 'l')
+    const first = SessionsClient.type('a1', 'l').then((outcome) => {
+      firstSettled = true
+      return outcome
+    })
     const second = SessionsClient.type('b2', 's')
 
+    await flushMicrotasks()
+
+    expect(posting).toHaveBeenCalledWith('/sessions/b2/input', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 's' }),
+    })
+    expect(firstSettled).toBe(false)
+
+    resolveFirst(new Response(JSON.stringify({ status: 'typed', id: 'a1' }), { status: 202 }))
+
     await expect(second).resolves.toEqual({ kind: 'typed' })
+    await first
   })
 })
