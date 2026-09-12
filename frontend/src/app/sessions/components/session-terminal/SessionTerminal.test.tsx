@@ -63,12 +63,13 @@ describe('SessionTerminal', () => {
     expect(lastTerminal().written).toEqual(['hola'])
   })
 
-  it('what the person types is sent to that session', () => {
+  it('what the person types is sent to that session', async () => {
     const posting = vi.fn(async () => new Response(JSON.stringify({ status: 'typed', id: SESSION.id }), { status: 202 }))
     vi.stubGlobal('fetch', posting)
 
     render(<SessionTerminal session={SESSION} />)
     lastTerminal().onDataHandler?.('ls -la')
+    await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(posting).toHaveBeenCalledWith(`/sessions/${SESSION.id}/input`, {
       method: 'POST',

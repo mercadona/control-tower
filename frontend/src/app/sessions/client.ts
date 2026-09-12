@@ -4,9 +4,11 @@ import {
   SessionsOutcome,
   SessionStreamListener,
   SessionStreamSubscription,
+  TypeOutcome,
 } from 'app/sessions/Sessions.types'
 
 const PATH = '/sessions'
+const OPENED_EVENT = 'open'
 const BYTES_EVENT = 'message'
 const FAILURE_EVENT = 'error'
 
@@ -15,6 +17,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const isLiveSession = (value: unknown): value is LiveSession =>
   isRecord(value) && typeof value.id === 'string' && typeof value.name === 'string'
+
+const isSessionFailure = (value: unknown): value is SessionFailure =>
+  isRecord(value) && typeof value.code === 'string' && typeof value.detail === 'string'
 
 const carriesData = (event: Event): event is MessageEvent<string> => 'data' in event
 
@@ -40,6 +45,8 @@ const watch = (id: string, listener: SessionStreamListener): SessionStreamSubscr
     source.close()
   }
 
+  source.addEventListener(OPENED_EVENT, () => listener.onOpened())
+
   source.addEventListener(BYTES_EVENT, (event: MessageEvent<string>) => {
     const { bytes } = JSON.parse(event.data) as { bytes: string }
     listener.onBytes(bytes)
@@ -52,24 +59,40 @@ const watch = (id: string, listener: SessionStreamListener): SessionStreamSubscr
       listener.onFailure(failure)
       return
     }
-    const refused = source.readyState === EventSource.CLOSED
-    settle()
-    if (refused) {
-      listener.onRefused()
+    if (source.readyState !== EventSource.CLOSED) {
+      listener.onUnreachable()
       return
     }
-    listener.onUnreachable()
+    settle()
+    listener.onRefused()
   })
 
   return { close: settle }
 }
 
-const type = async (id: string, text: string): Promise<void> => {
-  await fetch(`${PATH}/${encodeURIComponent(id)}/input`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
-  })
+const send = async (id: string, text: string): Promise<TypeOutcome> => {
+  try {
+    const response = await fetch(`${PATH}/${encodeURIComponent(id)}/input`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+    if (response.ok) return { kind: 'typed' }
+    const body: unknown = await response.json()
+    if (!isSessionFailure(body)) return { kind: 'unreachable' }
+    return { kind: 'refused', code: body.code, detail: body.detail }
+  } catch {
+    return { kind: 'unreachable' }
+  }
+}
+
+const writeChains = new Map<string, Promise<unknown>>()
+
+const type = (id: string, text: string): Promise<TypeOutcome> => {
+  const previous = writeChains.get(id) ?? Promise.resolve()
+  const outcome = previous.then(() => send(id, text))
+  writeChains.set(id, outcome)
+  return outcome
 }
 
 export const SessionsClient = {

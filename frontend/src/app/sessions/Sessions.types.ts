@@ -6,7 +6,13 @@ export type SessionsOutcome =
 
 export type SessionFailure = { code: string; detail: string }
 
+export type TypeOutcome =
+  | { kind: 'typed' }
+  | { kind: 'refused'; code: string; detail: string }
+  | { kind: 'unreachable' }
+
 export type SessionStreamListener = {
+  onOpened: () => void
   onBytes: (bytes: string) => void
   onFailure: (failure: SessionFailure) => void
   onRefused: () => void

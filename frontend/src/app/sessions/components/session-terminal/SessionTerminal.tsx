@@ -30,6 +30,7 @@ export const SessionTerminal = ({ session }: SessionTerminalProps): ReactElement
     terminal.onData((text) => void SessionsClient.type(session.id, text))
 
     const subscription = SessionsClient.watch(session.id, {
+      onOpened: () => undefined,
       onBytes: (bytes) => terminal.write(bytes),
       onFailure: () => setState('unreadable'),
       onRefused: () => setState('gone'),

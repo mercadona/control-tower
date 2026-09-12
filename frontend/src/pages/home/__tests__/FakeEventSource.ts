@@ -19,6 +19,12 @@ class FakeEventSource extends EventTarget {
     this.readyState = FakeEventSource.CLOSED
   }
 
+  open() {
+    if (this.readyState === FakeEventSource.CLOSED) return
+    this.readyState = FakeEventSource.OPEN
+    this.dispatchEvent(new Event('open'))
+  }
+
   receive(data: string) {
     if (this.readyState === FakeEventSource.CLOSED) return
     this.readyState = FakeEventSource.OPEN
