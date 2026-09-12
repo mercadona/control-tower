@@ -13,11 +13,13 @@ import { ActivePlansRoute } from './active-plans-route.ts'
 import { ImplementProgressRoute } from './implement-progress-route.ts'
 import { ImplementHistoryRoute } from './implement-history-route.ts'
 import { ExternalToolsRoute } from './external-tools-route.ts'
+import { SessionsRoute } from './sessions-route.ts'
 import type { StartPlan } from '../application/actions/start-plan.ts'
 import type { ImplementPlanParams } from '../application/actions/implement-plan.ts'
 import type { ReadImplementationProgressParams } from '../application/queries/read-implementation-progress.ts'
 import type { ReadImplementationHistoryParams } from '../application/queries/read-implementation-history.ts'
 import type { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
+import type { ListLiveSessions } from '../application/queries/list-live-sessions.ts'
 import type { AskPlanChangesAction } from './review-plan-route.ts'
 import type { PlanEvents, PlanSessions } from './plan-events-route.ts'
 import type { ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
@@ -80,6 +82,7 @@ export type ApiCollaborators = {
   sessions?: PlanSessions | null,
   activePlans?: ActivePlans | null,
   externalTools?: SurveyExternalTools | null,
+  listLiveSessions?: ListLiveSessions | null,
   implementationStarts?: ImplementationStarts | null,
   recovery?: ActivePlanRecovering | null,
   stderr?: Stderr | null,
@@ -129,6 +132,7 @@ export class ApiServer {
   readonly sessions: PlanSessions | null | undefined
   readonly activePlans: ActivePlans | null | undefined
   readonly externalTools: SurveyExternalTools | null | undefined
+  readonly listLiveSessions: ListLiveSessions | null | undefined
   readonly implementationStarts: ImplementationStarts | null | undefined
   readonly recovery: ActivePlanRecovering | null
   readonly stderr: Stderr | null | undefined
@@ -137,8 +141,8 @@ export class ApiServer {
 
   constructor({
     port, startPlan, implementPlan, askPlanChanges, implementProgress, implementHistory, reviews, pullRequestReviews,
-    planEvents, readPlanProgress, sessions, activePlans, externalTools, implementationStarts, recovery = null, stderr,
-    frontendRoot,
+    planEvents, readPlanProgress, sessions, activePlans, externalTools, listLiveSessions, implementationStarts,
+    recovery = null, stderr, frontendRoot,
   }: ApiCollaborators) {
     this.requestedPort = port
     this.startPlan = startPlan
@@ -153,6 +157,7 @@ export class ApiServer {
     this.sessions = sessions
     this.activePlans = activePlans
     this.externalTools = externalTools
+    this.listLiveSessions = listLiveSessions
     this.implementationStarts = implementationStarts
     this.recovery = recovery
     this.stderr = stderr
@@ -223,6 +228,12 @@ export class ApiServer {
       ExternalToolsRoute.handledBy(this.externalTools!)
     )
     app.all(ExternalToolsRoute.PATH, ExternalToolsRoute.refuseOtherMethods)
+    app.get(
+      SessionsRoute.PATH,
+      Browsers.turnAwayForeign,
+      SessionsRoute.handledBy(this.listLiveSessions!)
+    )
+    app.all(SessionsRoute.PATH, SessionsRoute.refuseOtherMethods)
     app.use(Failures.nothingMatched)
     app.use(Failures.answer)
 
