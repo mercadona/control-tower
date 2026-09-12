@@ -6,7 +6,6 @@ import { TextDecoder } from 'node:util'
 import { spawn } from 'node-pty'
 import type { IPty } from 'node-pty'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { ReviewsSpy } from '../reviews-spy.ts'
 import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import { PtyLiveSessions } from '../../src/infrastructure/pty-live-sessions.ts'
 import type { TerminalSpawn } from '../../src/infrastructure/pty-live-sessions.ts'
@@ -60,7 +59,6 @@ class RunningApi {
       port: 0,
       startPlan: null,
       implementPlan: null,
-      askPlanChanges: undefined,
       implementProgress: undefined,
       implementHistory: undefined,
       externalTools: undefined,
@@ -68,13 +66,11 @@ class RunningApi {
       liveSessions,
       watchLiveSession: new WatchLiveSession({ liveSessions }),
       typeIntoSession: new TypeIntoSession({ liveSessions }),
-      reviews: new ReviewsSpy(),
       pullRequestReviews: undefined,
       sessions: new PlanSessions(),
       activePlans: undefined,
       implementationStarts: undefined,
       planEvents: RunningApi.#NO_EVENTS,
-      readPlanProgress: null,
       stderr: undefined,
       frontendRoot: RunningApi.#NO_FRONTEND,
     })

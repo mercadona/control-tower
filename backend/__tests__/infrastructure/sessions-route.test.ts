@@ -2,7 +2,6 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { ReviewsSpy } from '../reviews-spy.ts'
 import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import { ListLiveSessions, ListLiveSessionsResult } from '../../src/application/queries/list-live-sessions.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
@@ -52,18 +51,15 @@ class RunningApi {
       port: 0,
       startPlan: null,
       implementPlan: null,
-      askPlanChanges: undefined,
       implementProgress: undefined,
       externalTools: undefined,
       listLiveSessions: spy,
-      reviews: new ReviewsSpy(),
       pullRequestReviews: undefined,
       sessions: new PlanSessions(),
       activePlans: undefined,
       implementationStarts: undefined,
       planEvents: RunningApi.NO_EVENTS,
       stderr: undefined,
-      readPlanProgress: null,
       frontendRoot: RunningApi.NO_FRONTEND,
     })
     const port = await server.start()
