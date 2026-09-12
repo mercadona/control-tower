@@ -948,8 +948,13 @@ npm --prefix backend test -- __tests__/infrastructure/session-channel-real-proce
    who will need one is the coordinating session's recovery, which is slice #3. *(Own call.)*
 9. **The scrollback is bounded at 262144 characters.** A session lives as long as the backend,
    so an unbounded buffer is a leak; no criterion names a size. *(Own call.)*
-10. **Nothing kills a session.** It ends when its shell exits or when the backend does; an
-    endpoint that killed one is outside this slice. *(Own call, from "Out of scope".)*
+10. **Nothing kills a session, and that includes the backend's own exit.** An endpoint that
+    killed one is outside this slice, but the second half of this assumption was written wrong
+    and is corrected here after measuring it: `ct-api.ts` installs no signal handler and
+    `PtyLiveSessions` never calls `kill`, so stopping the backend leaves `$SHELL -il` orphaned
+    to `launchd`, alive. Twelve of them had accumulated on this machine by the end of the run.
+    It ends only when its own shell exits. *(Own call; the correction is measured, not
+    assumed.)*
 11. **`GET /sessions` is neither paginated nor filtered.** It has one caller, the page, and the
     backend owns a handful of sessions at most. *(Own call.)*
 12. **Nothing is inherited.** The issue's "## Contexto heredado" carries only the empty template
