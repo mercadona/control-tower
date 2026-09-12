@@ -1,5 +1,61 @@
 # Changelog
 
+## [0.58.0](https://github.com/mercadona/control-tower/compare/plugin-v0.57.0...plugin-v0.58.0) (2026-09-12)
+
+
+### Funcionalidades
+
+* **conventions:** el borde sale de architecture.md y rige en todo diff ([8374143](https://github.com/mercadona/control-tower/commit/83741434b558ac749f21bee91ed3c5c6f4ec719d))
+* **conventions:** la vara de ct mide el nombre, el port y el value object ([c54ef0e](https://github.com/mercadona/control-tower/commit/c54ef0e53e13aa51278f656e1740158dc5a02cab))
+* **conventions:** la vara de ct mide lo que un diff no añade ([ac07988](https://github.com/mercadona/control-tower/commit/ac0798848fce307f52b03ba1dc4944a8e027af59))
+* **conventions:** la vara de ct se hace agnóstica y hereda lo que el backend pagó ([1ec89b9](https://github.com/mercadona/control-tower/commit/1ec89b98a00e7109ef9b8752db5fcd779a7d577c))
+* **conventions:** la vara mide cada capa y exige la barrida de mutación ([ac621bf](https://github.com/mercadona/control-tower/commit/ac621bfb750ee4589cd9600b541f983b29215450))
+* **conventions:** las capas se ven en el árbol y un tipo nuevo se justifica ([13b6a1e](https://github.com/mercadona/control-tower/commit/13b6a1e3691dd62c69dd04438c7399dc1dbf0d76))
+* el plan de una tarea se enmienda dentro de su propio commit, y lo juzga su juez ([#162](https://github.com/mercadona/control-tower/issues/162)) ([aff2556](https://github.com/mercadona/control-tower/commit/aff25568043ca4bef5401e44507f6be0e3d7a908))
+* el segundo veto escala a un consejero en vez de repetir el intento a ciegas ([3252e3a](https://github.com/mercadona/control-tower/commit/3252e3a8c69a815388b943b72481f4f413088de5))
+* **kickoff:** el plan abre simplicity y decisions antes de prescribir ([d5999fa](https://github.com/mercadona/control-tower/commit/d5999fa6013fc38fc0dff509b6cf64485f5c3eda))
+* **plugin:** el paso advise, declarado en los dos lados del contrato ([0b8ce48](https://github.com/mercadona/control-tower/commit/0b8ce4874c4b461419fafaf2308326b7f7316c38))
+* **plugin:** el segundo veto escala a un consejero en vez de repetir el intento ([66bf437](https://github.com/mercadona/control-tower/commit/66bf437d190e97549c4474194530faed14881e40))
+* **plugin:** el tercer intento arranca con el árbol limpio y con el consejo ([008ff69](https://github.com/mercadona/control-tower/commit/008ff6984dea3d755a8d40ca3fb81027eccf5d4d))
+* **slice-judge:** la señal se juzga con la regla que nombra a su lector ([4f73279](https://github.com/mercadona/control-tower/commit/4f732791751700ede63a55c019c06a18f5ee00b3))
+* type the cmux plan agents and the briefing ([#269](https://github.com/mercadona/control-tower/issues/269)) ([c67c35e](https://github.com/mercadona/control-tower/commit/c67c35e8a96bac0cef04911a242485ebc9960c20))
+
+
+### Correcciones
+
+* **convenciones:** el comando de la suite rapida vuelve a estar escrito, y la captura se declara ([8af7a75](https://github.com/mercadona/control-tower/commit/8af7a75275155000a022a05fbbd58f9f53088973))
+* **conventions:** ata ALCANCES a FILES y cierra los tamaños y el alcance de --check-plan que quedaron sueltos ([e7475c0](https://github.com/mercadona/control-tower/commit/e7475c0d9912215e053272a1aade255c6c943424))
+* **conventions:** domain.md nombra el servicio junto al ejecutable, y tres nombres de test dejan de mentir ([ce6f4c2](https://github.com/mercadona/control-tower/commit/ce6f4c29a6a5156a3236275529b279c2b915d78e))
+* **conventions:** la proyeccion se valida estricta, y el borde se cita por su nombre ([1a4e5be](https://github.com/mercadona/control-tower/commit/1a4e5bee06e8bb6a6bf312016ddce8d2655580a4))
+* **conventions:** la regla del nombre del contrato viaja al borde en vez de perderse ([52cebea](https://github.com/mercadona/control-tower/commit/52cebea46a5aeb0819be4ab28b1ba23e1764a408))
+* **conventions:** la vara no presupone la forma del programa ni son cinco ([d7f4bc7](https://github.com/mercadona/control-tower/commit/d7f4bc711a06144c47f1c64c66b6cfeef1558d9d))
+* **conventions:** plugin-yardstick.test.js enumera los siete documentos, no los cinco antiguos ([27a75dc](https://github.com/mercadona/control-tower/commit/27a75dcfe9b6e0a9c7e59bd81a96a397fe0122f7))
+* **conventions:** quita el duplicado, usa boundary model y arregla dos nombres mas ([c758adc](https://github.com/mercadona/control-tower/commit/c758adc37620c4604fb0e4145ac0c27e4080cb71))
+* **conventions:** repone el layout propio, da regla a la forma servicio y corrige las cifras ([5f9080b](https://github.com/mercadona/control-tower/commit/5f9080be3ed9fe605c73441132aba84e2809401a))
+* **conventions:** restaura la guarda /skip/i y cambia la frase en simplicity.md ([0c22d05](https://github.com/mercadona/control-tower/commit/0c22d0554436e8b22ee463823e7f0af41ed9b582))
+* **conventions:** testing.md deja de contradecirse y hace juzgable la barrida ([54b5ac8](https://github.com/mercadona/control-tower/commit/54b5ac86c12ed495206c77c9dfa27675c2e321f1))
+* **conventions:** tres nombres de test en castellano sin acento ni palabra bloqueada ([6434d65](https://github.com/mercadona/control-tower/commit/6434d65c5530a08fee4328e73d9322033907e7f0))
+* **conventions:** usa el vocabulario de arquitectura y testing en simplicity.md ([193348d](https://github.com/mercadona/control-tower/commit/193348de096fb6d2acbec5f1618643b2f5c992eb))
+* **plugin:** ct-step name lookup finds what is staged, and says so when it cannot look ([#301](https://github.com/mercadona/control-tower/issues/301)) ([ea54477](https://github.com/mercadona/control-tower/commit/ea544775dd30a4cb8831839d1b103b5dc978d07f))
+* **plugin:** el banco no le pide al juez el token que escribe el programa ([c5b3659](https://github.com/mercadona/control-tower/commit/c5b3659ae32f08f5aefffb2a9f89a52c6036d411))
+* **plugin:** el banco reventaba con un veredicto correcto, y ahora hay línea base ([e2d844e](https://github.com/mercadona/control-tower/commit/e2d844e8f4ef8db1b9a228d2a5794c8500576782))
+* **plugin:** los dos tests que fallaban por una carrera y por 1.900 procesos de git ([#118](https://github.com/mercadona/control-tower/issues/118)) ([4ffc0fe](https://github.com/mercadona/control-tower/commit/4ffc0fecea4d0e4dab27ecbdbfdce4ffd1f0689f))
+* por qué no se pudo preguntar a cmux deja de perderse, y /external-tools lo pregunta antes ([#170](https://github.com/mercadona/control-tower/issues/170)) ([a114de4](https://github.com/mercadona/control-tower/commit/a114de4164877e9519051c398e83597467c10ed1))
+* **skills:** la distinción de --check-plan cabe en el tope de la skill ([16b606f](https://github.com/mercadona/control-tower/commit/16b606fe349a41769f72a6ae443e7d23c954eb4f))
+* **tests:** las cuatro correcciones del round de revision de tareas 7 y 8 ([3b67341](https://github.com/mercadona/control-tower/commit/3b67341effaa2081108ef2d0f35734cdd7a3ded0))
+* una workspace sin título es una respuesta de cmux, no un cambio de esquema ([#165](https://github.com/mercadona/control-tower/issues/165)) ([cf3be1a](https://github.com/mercadona/control-tower/commit/cf3be1a9b3cfbe016dcf6ddd532a74a3cadd5420))
+* **vara:** quita la contradicción de la barrida, la regla duplicada y la negativa sin ruta ([e4f8682](https://github.com/mercadona/control-tower/commit/e4f8682a57792608b596350370098cc07b990c2b))
+
+
+### Refactorizaciones
+
+* **plugin:** las reglas del juez dicen cuándo la tarea cumple, no qué buscar que falte ([#125](https://github.com/mercadona/control-tower/issues/125)) ([2162c45](https://github.com/mercadona/control-tower/commit/2162c45368fb6a4702b2ddcd531939a5d56d59da))
+
+
+### Documentación
+
+* **vara:** la forma del adaptador se declara en el test y nace de una captura real ([f6c5372](https://github.com/mercadona/control-tower/commit/f6c5372f81b4dabe0949353a79329db0d180d06c))
+
 ## [0.57.0](https://github.com/josemerca/control-tower-plugin/compare/plugin-v0.56.0...plugin-v0.57.0) (2026-09-07)
 
 
