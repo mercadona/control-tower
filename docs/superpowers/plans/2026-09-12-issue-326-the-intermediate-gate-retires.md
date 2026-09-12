@@ -363,20 +363,16 @@ Current state (backend/src/infrastructure/ct-api.ts, lines 309-315):
 Contract (backend/src/domain/ports/plan-agents.ts):
 
 ```ts
-export class PlanAgents {
-  async launch(briefing: PlanBriefing): Promise<string>
-  async resume({ agent, issue, repository }): Promise<void>
-  async fix({ agent, issue, repository, changes }): Promise<void>   // review() is gone; the four named arguments keep their types
-}
+// PlanAgents keeps launch, resume and fix with their signatures
+// unchanged. review() is gone, and so is CmuxPlanAgents' implementation.
 ```
 
-§2, row «What goes in Task 4, file by file», says what each file loses.
-`CtApi.#pullRequestReviews` is not touched, and `ActivePlanRecovery.#recover` ends that branch with
-`this.sessions.remember(watch)` alone.
+§2's row «What goes in Task 4, file by file» says what each loses. `CtApi.#pullRequestReviews` is not
+touched, and `ActivePlanRecovery.#recover` ends that branch with `this.sessions.remember(watch)`.
 
 **TDD:** `it('a_started_plan_leaves_no_watch_over_its_issue')` in `api-server.test.ts` — after a `POST /start-plan` the session is remembered and no collaborator was asked to watch the issue; red today, where `StartPlanRoute` calls `reviews.start`.
 
-**Tests:** added: `a_started_plan_leaves_no_watch_over_its_issue`, `a_recovered_plan_being_written_is_remembered_as_a_session_and_nothing_watches_its_issue`. Removed on purpose: the `RunningApi.reviews.started` assertions, the plan-watch recovery assertions, the `reviews.stopped` assertions, the `review()` cases of `cmux-plan-agents.test.ts`, and the files `read-changes-asked.test.ts` and `review-plan.test.ts`.
+**Tests:** added: `a_started_plan_leaves_no_watch_over_its_issue`, `a_recovered_plan_being_written_is_remembered_as_a_session_and_nothing_watches_its_issue`. Removed: the `reviews.started`, plan-watch recovery and `reviews.stopped` assertions, the `review()` cases of `cmux-plan-agents.test.ts`, and the files `read-changes-asked.test.ts` and `review-plan.test.ts`.
 
 **Verification:** the three modules are untracked, nothing builds a plan review, the protected loop is untouched.
 
@@ -390,43 +386,22 @@ npm --prefix backend test
 
 ### Task 5 — nothing asks GitHub for `-REVIEW` any more
 
-**Objective:** the `-REVIEW` token, the two `gh` calls behind it and the exception family they threw leave the backend.
+**Objective:** the `-REVIEW` token, its two `gh` calls and their exception family leave the backend.
 
 **Files:** `backend/src/infrastructure/gh-plan-issues.ts` (modify), `backend/src/domain/ports/plan-issues.ts` (modify), `backend/src/domain/exceptions.ts` (modify), `backend/src/infrastructure/plan-agent-brief.ts` (modify), `backend/__tests__/infrastructure/gh-plan-issues.test.ts` (modify), `backend/__tests__/infrastructure/plan-issue-body.test.ts` (modify), `backend/__tests__/infrastructure/plan-refusal.test.ts` (modify), `backend/__tests__/infrastructure/plan-agent-brief.test.ts` (modify), `backend/src/infrastructure/git-workspace.ts` (modify), `backend/__tests__/infrastructure/git-workspace.test.ts` (modify), `backend/__tests__/infrastructure/review-watch.test.ts` (modify)
 
-Amendment (task 5's own implementer): `git-workspace.ts`'s `SliceSeed.GATES` built its text with
-`` `${GhPlanIssues.CHANGES_TOKEN}` `` — a path the plan left undeclared, and undeclared only because
-nothing in §7 named it. Removing `CHANGES_TOKEN` (this task's own objective) leaves that file
-referencing a member that no longer exists, and its own verification command
-(`grep -rl CHANGES_TOKEN backend/src backend/__tests__`) would still catch it, since it greps the
-whole tree and not only the files this task lists — so the task cannot go green without touching it.
-The invitation sentence built from it ("Y hasta entonces puede pedirte cambios comentando `-REVIEW`
-en el issue") is also false once the review retires, so it is dropped rather than inlined as a
-literal `-REVIEW` string; `git-workspace.test.ts` is amended alongside it, TDD-first, to pin the
-removal instead of the invitation. Separately, `review-watch.test.ts` (a suite for the generic
-`ReviewWatch` mechanism, distinct from the protected `pull-request-review-loop.test.ts`) imported
-`PlanChangesNotRead` purely as a stand-in `PlanFailure` subclass for its doubles; with that class
-gone it is swapped for `PullRequestNotRead`, which fits this mechanism's one surviving wiring after
-this slice. Both additions are `modify`, not `create`, and add no new path outside what removing this
-task's own targets already required.
+Amendment (task 5's implementer): `git-workspace.ts` and its test — `SliceSeed.GATES` seeded its text
+from `${GhPlanIssues.CHANGES_TOKEN}`, and the sentence is dropped rather than inlined, since the
+review is retired. And `review-watch.test.ts`, whose doubles used `PlanChangesNotRead` only as a
+stand-in `PlanFailure`; swapped for `PullRequestNotRead`.
 
-A third gap the plan's prose did not name: `statusOf` (kept in the port's contract) threw
-`PlanChangesNotRead` / `PlanChangesNotUnderstood` on failure, reusing the review family for a call
-that reads label status, not `-REVIEW` comments — already a `conventions/defects.md` naming defect
-("errors are named for what happens, not for where"), inherited rather than introduced here. Deleting
-that family forced a replacement; a new `PlanStatusFailure` (with `PlanStatusNotRead` /
-`PlanStatusNotUnderstood`), mirroring the existing `PlanStoryFailure` pattern, is named for what
-`statusOf` actually does. `plan-refusal.test.ts`'s generic collapse sweep required the matching
-exclusion (a `PlanStatusFailure` entry replacing `PlanChangesFailure`'s), already inside this task's
-own declared files.
+`statusOf` survives and was throwing that deleted family for a labels-read failure —
+`conventions/defects.md`'s "an error named for where it happens", inherited, not introduced. It gets
+`PlanStatusFailure`, shaped like `PlanStoryFailure`; `plan-refusal.test.ts` swaps its exclusion.
 
-Current state (backend/src/infrastructure/gh-plan-issues.ts, lines 190-196):
+Current state (backend/src/infrastructure/gh-plan-issues.ts, lines 194-196):
 
 ```ts
-  async changesAsked({ issue, repository }: {
-    issue: PlanIssue,
-    repository: RepositoryName,
-  }): Promise<ChangeAsked[]> {
     const outcome = await this.gh.run(
       GhPlanIssues.changesArgvFor({ issue, repository }), { safeToRepeat: true }
     )
@@ -435,30 +410,24 @@ Current state (backend/src/infrastructure/gh-plan-issues.ts, lines 190-196):
 Contract (backend/src/domain/ports/plan-issues.ts):
 
 ```ts
-export class PlanIssues {
-  async open({ story, comment, repository }): Promise<PlanIssue>
-  async claim({ issue, repository }): Promise<void>
-  async requeue({ issue, repository }): Promise<void>
-  async answerGo({ issueNumber, repository, nonce }): Promise<void>
-  async storyOf({ issueNumber, repository }): Promise<UserStoryKey | UserStoryUrl | null>
-  async statusOf({ issueNumber, repository }): Promise<PlanIssueStatusValue>
-}
+// PlanIssues keeps open, claim, requeue, answerGo, storyOf and statusOf,
+// with their signatures unchanged; changesAsked and askChanges go.
+// New family, mirroring PlanStoryFailure:
+//   PlanStatusFailure <- PlanStatusNotRead, PlanStatusNotUnderstood
 ```
 
-`GhPlanIssues` loses `CHANGES_TOKEN`, `changesCommentArgvFor`, `changesArgvFor`, `changesAsked`,
-`#changesIn`, `#commentsIn` and `#demandRead`, and `askChanges`; `PlanIssueBody` loses
-`CHANGES_LINE` and the line it contributes to the issue body; `plan-agent-brief.ts` drops the two
-sentences that end with `${PlanIssueBody.CHANGES_LINE}`, and with them
-`PlanAgentBrief.reviewErrandFor`, whose only consumer was the `CmuxPlanAgents.review()` that task 4
-removed. `exceptions.ts` loses `PlanChangesFailure`,
-`PlanChangesNotRead`, `PlanChangesNotUnderstood` and `PlanChangesNotAsked`. `ChangeAsked` stays:
-`GhPullRequests.fixesAsked` is its other producer and the surviving watch reads it.
+`GhPlanIssues` loses `CHANGES_TOKEN`, `changesArgvFor`, `changesCommentArgvFor`, `changesAsked`,
+`#changesIn`, `#commentsIn`, `#demandRead` and `askChanges`; `PlanIssueBody` loses `CHANGES_LINE` and
+the line it contributes; `plan-agent-brief.ts` drops the two sentences built from it and
+`reviewErrandFor`, whose only consumer was the `CmuxPlanAgents.review()` task 4 removed;
+`exceptions.ts` loses the whole `PlanChangesFailure` family. `ChangeAsked` STAYS —
+`GhPullRequests.fixesAsked` produces it for the surviving watch.
 
-**TDD:** `it('the_body_of_a_plan_issue_no_longer_invites_anyone_to_ask_for_changes_on_it')` in `plan-issue-body.test.ts` — the rendered body carries neither `-REVIEW` nor the invitation sentence; red today, where `CHANGES_LINE` is one of its lines.
+**TDD:** `it('the_body_of_a_plan_issue_no_longer_invites_anyone_to_ask_for_changes_on_it')` in `plan-issue-body.test.ts` — the rendered body carries neither `-REVIEW` nor the invitation sentence; red today.
 
-**Tests:** added: `the_body_of_a_plan_issue_no_longer_invites_anyone_to_ask_for_changes_on_it` (plan-issue-body.test.ts). Removed on purpose: the `changesAsked`/`askChanges` describe blocks of `gh-plan-issues.test.ts` with their `changesAskedFor` and `askChangesRefusalFor` helpers, the four `CHANGES_LINE` assertions and the asking-line case of `plan-issue-body.test.ts`, the `PlanChangesFailure` entries of `plan-refusal.test.ts`, and the `CHANGES_LINE` assertions of `plan-agent-brief.test.ts`.
+**Tests:** added: `the_body_of_a_plan_issue_no_longer_invites_anyone_to_ask_for_changes_on_it`. Removed: `gh-plan-issues.test.ts`'s `changesAsked`/`askChanges` describes with their two helpers; `plan-issue-body.test.ts`'s four `CHANGES_LINE` assertions and its asking-line case; `plan-refusal.test.ts`'s `PlanChangesFailure` entries; `plan-agent-brief.test.ts`'s.
 
-**Verification:** the token and the exception family are gone from the backend, and the suite stays green.
+**Verification:** the token and the family are gone from the backend; the suite is green.
 
 ```bash
 test -z "$(grep -rl CHANGES_TOKEN backend/src backend/__tests__)"
@@ -530,67 +499,17 @@ npm --prefix frontend test
 
 ### Task 7 — no slice is born with the plan gate unless its own row asks for it
 
-**Objective:** `gatesForType` stops appending `plan`: a groom creates no `gate:plan`.
+**Objective:** `gatesForType` stops appending `plan`, so a groom creates no `gate:plan`.
 
 **Files:** `plugin/scripts/gates.js` (modify), `plugin/__tests__/gate-plan.test.js` (modify), `plugin/__tests__/f21-gate-and-type.test.js` (modify), `plugin/__tests__/kickoff.test.js` (modify), `plugin/__tests__/ct-next-watch-go.test.js` (modify), `plugin/__tests__/f38-the-plan-gate-go.test.js` (modify), `plugin/__tests__/e2e-resolution.test.js` (modify), `plugin/__tests__/groom.test.js` (modify), `plugin/__tests__/f26-inherited-context.test.js` (modify), `plugin/__tests__/ct-groom-reconcile.test.js` (modify), `plugin/__tests__/ct-groom-dryrun.test.js` (modify), `plugin/__tests__/ct-groom-labels-gate.test.js` (modify), `plugin/__tests__/ct-init.test.js` (modify), `backend/__tests__/infrastructure/gh-plan-issues.test.ts` (modify), `backend/__tests__/infrastructure/plan-issue-body.test.ts` (modify)
 
-Amendment (task 7, added on implementation): the plan's own §5 Interfaces section already warned that
-`gatesForType` "with no universal default" is read by other slices, but it undercounted its OWN blast
-radius inside this repo. Every path below was missing from this line and is added here because
-`npm --prefix plugin test` / `npm --prefix backend test` cannot stay green without correcting it
-alongside `gates.js` itself — none of them changes behaviour beyond the labels a `backend`-typed slice
-with no declared `Gate` cell now carries (`gate:none` instead of `gate:plan`), which is exactly D-14's
-objective reaching its callers:
-- `plugin/__tests__/e2e-resolution.test.js`, `plugin/__tests__/groom.test.js`,
-  `plugin/__tests__/f26-inherited-context.test.js`, `plugin/__tests__/ct-groom-reconcile.test.js`,
-  `plugin/__tests__/ct-groom-dryrun.test.js`, `plugin/__tests__/ct-groom-labels-gate.test.js` and
-  `plugin/__tests__/ct-init.test.js`: each has one or more fixtures/assertions built on
-  `resolveGates(...)`/`buildLabels(...)`/a spec's Gate-less row expecting `'plan'` by the retired
-  universal default. Corrected to expect `gate:none` (or `[]`) where nothing is declared, and left
-  untouched wherever a `Gate` cell explicitly asks for `plan`, `visual` or `apply`.
-- `backend/__tests__/infrastructure/gh-plan-issues.test.ts` and
-  `backend/__tests__/infrastructure/plan-issue-body.test.ts`: `GhPlanIssues`/`PlanIssueBody` import
-  `gatesOf`/`gateLabels` straight from the plugin (D-11's own doctrine), and `PlanIssueBody.rowFor()`
-  builds a row with no `gate` cell at all — it never asks for `plan`, it only received it because
-  `gatesForType('')` used to hand it out for free. A first pass here added `gate: 'plan'` to that row to
-  keep the old label; that was wrong and was reverted (see below), so these two test files are the ones
-  actually touched — swapping the literal `gate:plan` label these tests exercised (the retry-on-missing-
-  label mechanism does not care which label it is) for `gate:none`, and correcting the one
-  `plan-issue-body.test.ts` assertion that read the created issue's gates and the one that checked the
-  body's gates section for the "-OK <nonce>" instructions, neither of which is true any more.
+Amendment: the nine files after `f38-…` above expected `'plan'` from a Gate-less row by the retired
+default; corrected to `gate:none` or `[]`. Reverted: `gh-plan-issues.ts` carries NO diff —
+hard-coding `gate: 'plan'` into `rowFor()` is that same default one layer down.
 
-Reverted, not kept: `backend/src/infrastructure/gh-plan-issues.ts` is NOT in the list above and carries no
-diff. A first attempt at this task added `gate: string` to `PlanIssueRow` and `gate: 'plan'` to
-`PlanIssueBody.rowFor()`, reasoning that this class's own go protocol (`PlanGoNotAnswered`) still needed
-the label. The run's conductor challenged that: nothing in `ImplementPlan.execute()`
-(`backend/src/application/actions/implement-plan.ts`) reads the issue's gate labels before minting,
-answering and resuming — it does all three unconditionally, and `mapGhIssue`/`.gates` is read by no
-backend production code at all, only by this task's own test via the plugin's `gh-issue-map.js`. So the
-label was cosmetic, the `-OK <nonce>` text in the body was never actually waited on by anything, and
-hard-coding `gate: 'plan'` in a row with no way to say otherwise was exactly "the same implied default
-moved one layer down" the task exists to remove, not a row asking for it. The conductor's reading is
-right, and it is obeyed here: this file is reverted to its committed state and the two test files above
-carry the correction instead.
-
-Transient, not a finding: a bare `npx vitest run` (skipping the build step) once showed
-`plugin/__tests__/distribution-boundary.test.js`'s "the vendored bundle is the one esbuild produces from
-the declared version, byte for byte" red, comparing the committed `scripts/vendor/yaml.js` against a
-fresh in-memory `esbuild` of `node_modules/yaml`. It is unrelated to `gates.js`/D-14 in every respect and
-was not touched; the full `npm --prefix plugin test` (build then vitest) run at the end of this task
-passed all 149 files / 4033 tests, this one included, with no diff to `scripts/vendor/yaml.js` — so
-whatever produced the earlier mismatch did not reproduce and nothing was left to fix.
-
-Current state (plugin/scripts/gates.js, lines 139-150):
+Current state (plugin/scripts/gates.js, lines 147-150):
 
 ```js
-export function gatesForType(type) {
-  const typed = TYPE_GATES[typeof type === 'string' ? type.trim() : ''] ?? []
-  // F-jjponz-2 — `plan` is implied in EVERY slice, whatever the Tipo may be:
-  // the slice's plan always passes through human review before implementing,
-  // barring an EXPLICIT per-row waiver (`!plan` in the Gate column, with the
-  // same noise as any waiver). It lives here and not in TYPE_GATES on
-  // purpose: TYPE_GATES maps the TECHNICAL axis (ui→visual, infra→apply) and
-  // this default cuts across every type — putting it in each entry of the map
   // would make it depend on the Tipo existing in the map, and a `Tipo:
   // backend` (with no entry) would lose it.
   return [...typed, 'plan']
@@ -603,16 +522,15 @@ Contract (plugin/scripts/gates.js):
 export function gatesForType(type)   // -> TYPE_GATES[trimmed type] ?? [] — the Tipo's gates and no universal default
 ```
 
-The comment above the `return` is replaced by one recording D-14: no `Tipo` implies `plan`, a row
-that wants it writes `plan` in its `Gate` column, and the go protocol behind it is retired in later
-work (debt A-3). `GATES.plan`, `TYPE_GATES`, `resolveGates` and `resolveGatesForAgent` are not
-touched: a `!plan` in a row becomes an inert waiver, which `ct-groom` already reports out loud.
+That comment is replaced by one recording D-14. `GATES.plan`, `TYPE_GATES`, `resolveGates` and
+`resolveGatesForAgent` are not touched: a `!plan` becomes an inert waiver, which `ct-groom` already
+reports out loud.
 
-**TDD:** `it('it is implied in NO slice: a row that wants it writes it in its Gate column')` in `gate-plan.test.js` — `gatesForType('backend')`, `gatesForType('')` and `gatesForType(undefined)` each equal `[]`, `gatesForType('ui')` equals `['visual']`, and `resolveGates('backend', 'plan').gates` still contains `plan`.
+**TDD:** `it('it is implied in NO slice: a row that wants it writes it in its Gate column')` in `gate-plan.test.js` — `gatesForType('backend' | '' | undefined)` each equal `[]`, `gatesForType('ui')` equals `['visual']`, and `resolveGates('backend', 'plan').gates` still contains `plan`.
 
-**Tests:** added to `gate-plan.test.js`: `it('it is implied in NO slice: a row that wants it writes it in its Gate column')` and `it('`!plan` on a row is now an inert waiver, and it is said out loud')`. Removed from it on purpose: `it('it is implied in EVERY slice, whatever the Type may be — without touching TYPE_GATES')` and `it('`!plan` is a real per-row waiver: it removes the gate and makes noise like every waiver')`. Kept, with their names, and their fixtures corrected: the `gatesForType` expectations of `f21-gate-and-type.test.js`; `a slice that keeps the `plan` gate is still told the human OK opens the machine` in `kickoff.test.js`, whose slice now declares `gates: ['plan'], gatesDeclared: true`; and the dispatched issue of `ct-next-watch-go.test.js`, which now carries a `gate:plan` label.
+**Tests:** added to `gate-plan.test.js`: `it('it is implied in NO slice: a row that wants it writes it in its Gate column')`, `it('`!plan` on a row is now an inert waiver, and it is said out loud')`. Removed from it: `it('it is implied in EVERY slice, whatever the Type may be — without touching TYPE_GATES')`, `it('`!plan` is a real per-row waiver: it removes the gate and makes noise like every waiver')`. Kept with their names, fixtures corrected: `f21-gate-and-type.test.js`'s `gatesForType` expectations; `a slice that keeps the `plan` gate is still told the human OK opens the machine` (`kickoff.test.js`), whose slice now declares `gates: ['plan'], gatesDeclared: true`; and `ct-next-watch-go.test.js`'s dispatched issue, now carrying a `gate:plan` label.
 
-**Verification:** no `Tipo` yields the label, a row that declares it still does, the suite stays green.
+**Verification:** no `Tipo` yields the label, a row that declares it does, the suite is green.
 
 ```bash
 node --input-type=module -e "const g = await import('./plugin/scripts/gates.js'); const t = ['', 'backend', 'ui', 'infra', undefined]; process.exit(t.some((x) => g.gateLabels(g.resolveGates(x, '').gates).includes('gate:plan')) ? 1 : 0)"
@@ -626,13 +544,9 @@ npm --prefix plugin test
 
 **Files:** `backend/API.md` (modify), `backend/src/domain/ports/plan-progress.ts` (modify), `backend/src/infrastructure/plan-contract-progress.ts` (modify), `backend/__tests__/infrastructure/plan-contract-progress.test.ts` (modify), `backend/__tests__/application/read-plan-progress.test.ts` (modify)
 
-**Amendment (task 8, own commit):** `read-plan-progress.test.ts` was left off the line above, and its
+**Amendment (task 8, own commit):** `read-plan-progress.test.ts`, whose
 `a_port_that_nobody_implemented_says_so_instead_of_answering_undefined` case still called
-`new PlanProgress().committedAt(...)`, the very method this task deletes from the port. Deleting the
-method without touching this file would fail `npm --prefix backend run typecheck` and the task's own
-`test -z "$(grep -rl committedAt backend/src backend/__tests__)"` predicate. The single assertion on
-`committedAt` is removed from that test; the rest of the file, including its `of` and `ReviewLog`
-assertions, stays untouched.
+`new PlanProgress().committedAt(...)`. Only that assertion goes; the `of` and `ReviewLog` ones stand.
 
 Final text (backend/API.md):
 
@@ -662,24 +576,22 @@ documentation: `ReadPlanProgress.#underReview` was their only production reader 
 The plan declared that consequence for `ReviewLog.lastAskedAt` in its `### Out of scope` and
 overlooked it here; the judge of task 6 found it and it is closed rather than carried.
 
-The `data: {"state":"reviewing"}` frame goes from the example block, and so does the whole paragraph
-that begins `` `reviewing` means changes were asked for on the plan ``. In the `POST /implement-plan`
-section the `plan-under-review` row leaves the refusals table, and with it the four paragraphs that
-explain it — from `` `plan-under-review` answers two different questions `` to the one that ends
-`instead of towards a plan nobody can ever implement.` The whole `## POST /review-plan` section and
-its `---` separator go. Nothing is added: the retired endpoint gets no farewell note.
+Deletions: the `data: {"state":"reviewing"}` frame and the paragraph beginning `` `reviewing` means
+changes were asked for on the plan ``; the `plan-under-review` row of `/implement-plan`'s refusals and
+the four paragraphs explaining it, from `` `plan-under-review` answers two different questions `` to
+the one ending `instead of towards a plan nobody can ever implement.`; and the whole
+`## POST /review-plan` section with its `---`. Nothing is added: no farewell note.
 
 **TDD:** No TDD — the documentation half pins no assertion over its prose, and the code half only deletes a symbol with no caller; the predicates below are what measure both.
 
 **Tests:** removed on purpose: the four `committedAt` cases of `plan-contract-progress.test.ts` (`reads the date of the plan's last commit`, and the null / not-a-repo / refused ones), which pin a method this task deletes. Nothing is added.
 
-**Verification:** the file names neither the path, nor the retired frame, nor the refusal code, it still documents the seven endpoints that remain — two `POST` and five `GET`, so the "Reaching it" table's breakdown cannot go stale unseen — the dead symbol is gone from the whole backend, and the suite stays green.
+**Verification:** the file names neither the path, nor the retired frame, nor the refusal code; it documents two `POST` sections and five `GET` ones — the breakdown a total-only count cannot see —, the dead symbol is gone, and the suite is green.
 
 ```bash
 test "$(grep -c /review-plan backend/API.md)" -eq 0
 test "$(grep -c reviewing backend/API.md)" -eq 0
 test "$(grep -c plan-under-review backend/API.md)" -eq 0
-test "$(grep -c '^## `' backend/API.md)" -eq 7
 test "$(grep -c '^## `POST' backend/API.md)" -eq 2
 test "$(grep -c '^## `GET' backend/API.md)" -eq 5
 test -z "$(grep -rl committedAt backend/src backend/__tests__)"
