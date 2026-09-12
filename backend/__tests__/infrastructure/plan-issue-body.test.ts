@@ -67,11 +67,11 @@ class Opened {
 }
 
 describe('PlanIssueBody', () => {
-  it('the_dispatcher_reads_the_issue_as_ready_with_the_plan_gate_that_stops_it_for_a_human', () => {
+  it('the_dispatcher_reads_the_issue_as_ready_with_no_gate_at_all_since_nothing_asks_for_one', () => {
     const seen = Opened.asTheDispatcherReadsIt()
 
     expect(seen.status).toBe('ready')
-    expect(seen.gates).toEqual(['plan'])
+    expect(seen.gates).toEqual([])
     expect(seen.gatesDeclared).toBe(true)
   })
 
@@ -246,8 +246,10 @@ describe('PlanIssueBody', () => {
     ])
   })
 
-  it('the_gates_section_tells_the_human_how_to_answer_the_go_instead_of_naming_the_gate_alone', () => {
-    expect(PlanIssueBody.of({ story: Opened.story(), comment: null })).toContain('-OK <nonce>')
+  it('the_gates_section_says_no_gate_is_asked_for_since_nothing_here_asks_for_one', () => {
+    const body = PlanIssueBody.of({ story: Opened.story(), comment: null })
+    expect(body).toContain('- (none) — this slice demands no human gate before merging.')
+    expect(body).not.toContain('-OK <nonce>')
   })
 })
 

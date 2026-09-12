@@ -94,10 +94,12 @@ export const GATES = {
     // The only gate that cuts in BEFORE implementing, not before merging: its
     // value is in stopping while throwing the work away still costs nothing.
     // That is why the text asks for the plan to be published as a COMMENT on
-    // the issue — the PR may not exist yet. F-jjponz-2: it is implied BY
-    // DEFAULT in every slice (see gatesForType, below) — it does not live in
-    // TYPE_GATES because it is not a technical axis; the per-row waiver is
-    // `!plan`, noisy like all of them.
+    // the issue — the PR may not exist yet. F-jjponz-2 used to imply it BY
+    // DEFAULT in every slice; D-14 retires that default (see gatesForType,
+    // below) and leaves this entry in the vocabulary exactly as it was — a
+    // row asks for it the same way it asks for `visual` or `apply`, by
+    // writing `plan` in its `Gate` column, and the per-row waiver (`!plan`)
+    // is now inert, with the same noise as every waiver.
     kickoff: 'GATE HUMANO `plan` (implicado por defecto en TODO slice, salvo renuncia `!plan` en el spec): con el plan del slice escrito, validado con --check-plan y commiteado, publícalo como comentario del issue y PARA — no implementes nada hasta que un humano conteste el go en un comentario de ese issue. El go es `-OK <nonce>`, y el nonce lo sorteó la coordinadora al despacharte: vive fuera de este kickoff, del issue y de tu worktree, y por eso es un permiso que sólo un humano puede darte: no puedes fabricarlo, y `dispatch-check --release` se niega (exit 9) sin un go válido, así que saltarte este gate no te deja entregar, sólo te deja rehacer el trabajo. Un vigilante que lanzó la coordinadora está mirando el issue y te teclea la línea cuando el go llegue, así que PARAR de verdad es lo correcto: no sondees tú el issue ni te des el gate por cumplido. En el comentario que publicas, di que el go es `-OK` seguido del nonce que `/ct-next` imprimió al despachar, y que si se perdió lo reemite quien despachó: escrito así, quien lo lea sabe de dónde sacar el nonce — con el literal `<nonce>` como formato entero acabaría probando el `-OK` pelado, que no arranca nada. No lo cierras tú: lo cierra quien revisa el plan.',
     issue: '**`plan`** — before implementing, a human has to review the slice\'s PLAN: the agent publishes it as a comment on this issue and stops. To give it the go, answer with a comment that is exactly `-OK <nonce>`, with the nonce /ct-next printed when it dispatched this slice (and nothing else: anything else starts nothing, on purpose). That nonce is not written in this issue because the agent reads the issue: it is the part of the permission it cannot manufacture, and without it `--release` refuses. If it has been lost, whoever dispatched reissues it with `scripts/ct-go.mjs`. What watches the issue is a process the coordinator launched on dispatching and that waits a few hours: if you answer much later it may have expired, and then the session has to be pushed by hand. The agent cannot give it as met.',
   },
@@ -137,16 +139,14 @@ export const TYPE_GATES = {
 }
 
 export function gatesForType(type) {
-  const typed = TYPE_GATES[typeof type === 'string' ? type.trim() : ''] ?? []
-  // F-jjponz-2 — `plan` is implied in EVERY slice, whatever the Tipo may be:
-  // the slice's plan always passes through human review before implementing,
-  // barring an EXPLICIT per-row waiver (`!plan` in the Gate column, with the
-  // same noise as any waiver). It lives here and not in TYPE_GATES on
-  // purpose: TYPE_GATES maps the TECHNICAL axis (ui→visual, infra→apply) and
-  // this default cuts across every type — putting it in each entry of the map
-  // would make it depend on the Tipo existing in the map, and a `Tipo:
-  // backend` (with no entry) would lose it.
-  return [...typed, 'plan']
+  // D-14 — no `Tipo` implies `plan` any more: the go protocol behind it
+  // (`plugin/scripts/ct-go.mjs`, `ct-watch-go.mjs`, `go-channel.js`,
+  // `go-registry.js`, `go-response.js`, `dispatch-check.mjs`'s exit-9 ladder)
+  // is debt A-3, retired in later work, but the universal default that fed it
+  // is retired here. A row that wants the gate still gets it by writing
+  // `plan` in its `Gate` column, exactly like any gate `TYPE_GATES` does not
+  // imply — `resolveGates` already has that path.
+  return TYPE_GATES[typeof type === 'string' ? type.trim() : ''] ?? []
 }
 
 // cleanGateToken: the same criterion of tolerance to inline markup as the rest

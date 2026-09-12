@@ -3,10 +3,13 @@
 //
 // The hole this round closes was already written down by the repo itself back
 // in #32 (commands/ct-next.md): «no impide que el propio agente escriba `-OK`
-// en su propio issue — tiene `gh`, así que puede». And the `plan` gate is
-// implied by default in EVERY slice (gates.js#gatesForType), so it was not a
-// pending hole: it was today's, with the aggravation of leaving the RECORD of
-// a human review that never happened.
+// en su propio issue — tiene `gh`, así que puede». At the time this was built
+// the `plan` gate was implied by default in EVERY slice (gates.js#gatesForType);
+// D-14 later retired that default, but the gate itself and this door stand
+// exactly as they were for whatever row still declares `Gate: plan` — the
+// fixtures below declare it explicitly for that reason. It was not a pending
+// hole: it was today's, with the aggravation of leaving the RECORD of a human
+// review that never happened.
 //
 // Two halves, and both are tested here: the go carries a nonce per dispatch
 // that the agent cannot guess (the pure module is covered by

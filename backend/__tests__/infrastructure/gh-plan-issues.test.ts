@@ -169,7 +169,7 @@ describe('GhPlanIssues', () => {
       '--repo', 'josemerca/ct-loop-sandbox',
       '--title', 'MO_SHOP-42 El buscador acepta acentos',
       '--body', PlanIssueBody.of({ story, comment: null }),
-      '--label', 'gate:plan',
+      '--label', 'gate:none',
       '--label', 'status:ready',
     ]])
   })
@@ -200,23 +200,23 @@ describe('GhPlanIssues', () => {
 
   it('a_label_the_repository_does_not_have_yet_is_created_and_the_issue_opened_on_the_retry', async () => {
     const gh = new GhDouble([
-      new ProcessOutput({ code: 1, stdout: '', stderr: "could not add label: 'gate:plan' not found" }),
+      new ProcessOutput({ code: 1, stdout: '', stderr: "could not add label: 'gate:none' not found" }),
       new ProcessOutput({ code: 0, stdout: '', stderr: '' }),
       new ProcessOutput({ code: 0, stdout: GhDouble.CREATED, stderr: '' }),
     ])
 
     const issue = await gh.openFor()
 
-    expect(gh.commands).toEqual(['issue create --repo', 'label create gate:plan', 'issue create --repo'])
+    expect(gh.commands).toEqual(['issue create --repo', 'label create gate:none', 'issue create --repo'])
     expect(gh.calls[1]).toEqual([
-      'label', 'create', 'gate:plan', '--repo', 'josemerca/ct-loop-sandbox', '--force',
+      'label', 'create', 'gate:none', '--repo', 'josemerca/ct-loop-sandbox', '--force',
     ])
     expect(issue.number).toBe(7)
   })
 
   it('two_labels_missing_are_both_sown_instead_of_giving_up_after_the_first', async () => {
     const gh = new GhDouble([
-      new ProcessOutput({ code: 1, stdout: '', stderr: "could not add label: 'gate:plan' not found" }),
+      new ProcessOutput({ code: 1, stdout: '', stderr: "could not add label: 'gate:none' not found" }),
       new ProcessOutput({ code: 0, stdout: '', stderr: '' }),
       new ProcessOutput({ code: 1, stdout: '', stderr: "could not add label: 'status:ready' not found" }),
       new ProcessOutput({ code: 0, stdout: '', stderr: '' }),
@@ -226,7 +226,7 @@ describe('GhPlanIssues', () => {
     await gh.openFor()
 
     expect(gh.commands).toEqual([
-      'issue create --repo', 'label create gate:plan',
+      'issue create --repo', 'label create gate:none',
       'issue create --repo', 'label create status:ready',
       'issue create --repo',
     ])
@@ -242,11 +242,11 @@ describe('GhPlanIssues', () => {
   })
 
   it('the_same_label_reported_missing_twice_stops_instead_of_sowing_it_forever', async () => {
-    const gh = GhDouble.refusing("could not add label: 'gate:plan' not found", 9)
+    const gh = GhDouble.refusing("could not add label: 'gate:none' not found", 9)
 
     const refusal = await gh.refusalFor()
 
-    expect(gh.commands).toEqual(['issue create --repo', 'label create gate:plan', 'issue create --repo'])
+    expect(gh.commands).toEqual(['issue create --repo', 'label create gate:none', 'issue create --repo'])
     expect(refusal).toBeInstanceOf(PlanIssueNotCreated)
   })
 
@@ -265,7 +265,7 @@ describe('GhPlanIssues', () => {
 
   it('a_blip_while_sowing_a_label_is_retried_because_writing_it_twice_leaves_the_same_label', async () => {
     const gh = new GhDouble([
-      new ProcessOutput({ code: 1, stdout: '', stderr: "could not add label: 'gate:plan' not found" }),
+      new ProcessOutput({ code: 1, stdout: '', stderr: "could not add label: 'gate:none' not found" }),
       new ProcessOutput({ code: 1, stdout: '', stderr: 'error connecting to api.github.com' }),
       new ProcessOutput({ code: 0, stdout: '', stderr: '' }),
       new ProcessOutput({ code: 0, stdout: GhDouble.CREATED, stderr: '' }),
@@ -274,7 +274,7 @@ describe('GhPlanIssues', () => {
     const issue = await gh.openFor()
 
     expect(gh.commands).toEqual([
-      'issue create --repo', 'label create gate:plan', 'label create gate:plan', 'issue create --repo',
+      'issue create --repo', 'label create gate:none', 'label create gate:none', 'issue create --repo',
     ])
     expect(gh.sleeping.slept).toEqual([2])
     expect(issue.number).toBe(7)
@@ -282,7 +282,7 @@ describe('GhPlanIssues', () => {
 
   it('a_five_hundred_is_a_blip_even_when_gh_words_it_as_a_status_and_not_as_a_sentence', async () => {
     const gh = new GhDouble([
-      new ProcessOutput({ code: 1, stdout: '', stderr: "could not add label: 'gate:plan' not found" }),
+      new ProcessOutput({ code: 1, stdout: '', stderr: "could not add label: 'gate:none' not found" }),
       new ProcessOutput({ code: 1, stdout: '', stderr: 'HTTP 503 (https://api.github.com/repos/o/n/labels)' }),
       new ProcessOutput({ code: 0, stdout: '', stderr: '' }),
       new ProcessOutput({ code: 0, stdout: GhDouble.CREATED, stderr: '' }),
@@ -304,7 +304,7 @@ describe('GhPlanIssues', () => {
 
   it('a_blip_that_never_clears_stops_at_the_budget_instead_of_calling_forever', async () => {
     const blip = new ProcessOutput({ code: 1, stdout: '', stderr: '502 Bad Gateway' })
-    const missing = new ProcessOutput({ code: 1, stdout: '', stderr: "could not add label: 'gate:plan' not found" })
+    const missing = new ProcessOutput({ code: 1, stdout: '', stderr: "could not add label: 'gate:none' not found" })
     const gh = new GhDouble([missing, blip, blip, blip, blip, missing])
 
     await gh.refusalFor()
@@ -314,7 +314,7 @@ describe('GhPlanIssues', () => {
   })
 
   it('a_rate_limit_is_not_a_blip_because_asking_again_two_seconds_later_makes_it_worse', async () => {
-    const missing = new ProcessOutput({ code: 1, stdout: '', stderr: "could not add label: 'gate:plan' not found" })
+    const missing = new ProcessOutput({ code: 1, stdout: '', stderr: "could not add label: 'gate:none' not found" })
     const gh = new GhDouble([
       missing,
       new ProcessOutput({ code: 1, stdout: '', stderr: 'You have exceeded a secondary rate limit' }),
@@ -328,7 +328,7 @@ describe('GhPlanIssues', () => {
 
   it('the_double_of_this_conversation_refuses_to_answer_a_call_nobody_wrote_an_answer_for', async () => {
     const gh = new GhDouble([
-      new ProcessOutput({ code: 1, stdout: '', stderr: "could not add label: 'gate:plan' not found" }),
+      new ProcessOutput({ code: 1, stdout: '', stderr: "could not add label: 'gate:none' not found" }),
     ])
 
     await expect(gh.openFor()).rejects.toThrow(/nobody wrote an answer for call 2/)

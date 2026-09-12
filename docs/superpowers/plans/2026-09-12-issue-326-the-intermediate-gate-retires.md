@@ -527,7 +527,53 @@ npm --prefix frontend test
 
 **Objective:** `gatesForType` stops appending `plan`: a groom creates no `gate:plan`.
 
-**Files:** `plugin/scripts/gates.js` (modify), `plugin/__tests__/gate-plan.test.js` (modify), `plugin/__tests__/f21-gate-and-type.test.js` (modify), `plugin/__tests__/kickoff.test.js` (modify), `plugin/__tests__/ct-next-watch-go.test.js` (modify), `plugin/__tests__/f38-the-plan-gate-go.test.js` (modify)
+**Files:** `plugin/scripts/gates.js` (modify), `plugin/__tests__/gate-plan.test.js` (modify), `plugin/__tests__/f21-gate-and-type.test.js` (modify), `plugin/__tests__/kickoff.test.js` (modify), `plugin/__tests__/ct-next-watch-go.test.js` (modify), `plugin/__tests__/f38-the-plan-gate-go.test.js` (modify), `plugin/__tests__/e2e-resolution.test.js` (modify), `plugin/__tests__/groom.test.js` (modify), `plugin/__tests__/f26-inherited-context.test.js` (modify), `plugin/__tests__/ct-groom-reconcile.test.js` (modify), `plugin/__tests__/ct-groom-dryrun.test.js` (modify), `plugin/__tests__/ct-groom-labels-gate.test.js` (modify), `plugin/__tests__/ct-init.test.js` (modify), `backend/__tests__/infrastructure/gh-plan-issues.test.ts` (modify), `backend/__tests__/infrastructure/plan-issue-body.test.ts` (modify)
+
+Amendment (task 7, added on implementation): the plan's own §5 Interfaces section already warned that
+`gatesForType` "with no universal default" is read by other slices, but it undercounted its OWN blast
+radius inside this repo. Every path below was missing from this line and is added here because
+`npm --prefix plugin test` / `npm --prefix backend test` cannot stay green without correcting it
+alongside `gates.js` itself — none of them changes behaviour beyond the labels a `backend`-typed slice
+with no declared `Gate` cell now carries (`gate:none` instead of `gate:plan`), which is exactly D-14's
+objective reaching its callers:
+- `plugin/__tests__/e2e-resolution.test.js`, `plugin/__tests__/groom.test.js`,
+  `plugin/__tests__/f26-inherited-context.test.js`, `plugin/__tests__/ct-groom-reconcile.test.js`,
+  `plugin/__tests__/ct-groom-dryrun.test.js`, `plugin/__tests__/ct-groom-labels-gate.test.js` and
+  `plugin/__tests__/ct-init.test.js`: each has one or more fixtures/assertions built on
+  `resolveGates(...)`/`buildLabels(...)`/a spec's Gate-less row expecting `'plan'` by the retired
+  universal default. Corrected to expect `gate:none` (or `[]`) where nothing is declared, and left
+  untouched wherever a `Gate` cell explicitly asks for `plan`, `visual` or `apply`.
+- `backend/__tests__/infrastructure/gh-plan-issues.test.ts` and
+  `backend/__tests__/infrastructure/plan-issue-body.test.ts`: `GhPlanIssues`/`PlanIssueBody` import
+  `gatesOf`/`gateLabels` straight from the plugin (D-11's own doctrine), and `PlanIssueBody.rowFor()`
+  builds a row with no `gate` cell at all — it never asks for `plan`, it only received it because
+  `gatesForType('')` used to hand it out for free. A first pass here added `gate: 'plan'` to that row to
+  keep the old label; that was wrong and was reverted (see below), so these two test files are the ones
+  actually touched — swapping the literal `gate:plan` label these tests exercised (the retry-on-missing-
+  label mechanism does not care which label it is) for `gate:none`, and correcting the one
+  `plan-issue-body.test.ts` assertion that read the created issue's gates and the one that checked the
+  body's gates section for the "-OK <nonce>" instructions, neither of which is true any more.
+
+Reverted, not kept: `backend/src/infrastructure/gh-plan-issues.ts` is NOT in the list above and carries no
+diff. A first attempt at this task added `gate: string` to `PlanIssueRow` and `gate: 'plan'` to
+`PlanIssueBody.rowFor()`, reasoning that this class's own go protocol (`PlanGoNotAnswered`) still needed
+the label. The run's conductor challenged that: nothing in `ImplementPlan.execute()`
+(`backend/src/application/actions/implement-plan.ts`) reads the issue's gate labels before minting,
+answering and resuming — it does all three unconditionally, and `mapGhIssue`/`.gates` is read by no
+backend production code at all, only by this task's own test via the plugin's `gh-issue-map.js`. So the
+label was cosmetic, the `-OK <nonce>` text in the body was never actually waited on by anything, and
+hard-coding `gate: 'plan'` in a row with no way to say otherwise was exactly "the same implied default
+moved one layer down" the task exists to remove, not a row asking for it. The conductor's reading is
+right, and it is obeyed here: this file is reverted to its committed state and the two test files above
+carry the correction instead.
+
+Transient, not a finding: a bare `npx vitest run` (skipping the build step) once showed
+`plugin/__tests__/distribution-boundary.test.js`'s "the vendored bundle is the one esbuild produces from
+the declared version, byte for byte" red, comparing the committed `scripts/vendor/yaml.js` against a
+fresh in-memory `esbuild` of `node_modules/yaml`. It is unrelated to `gates.js`/D-14 in every respect and
+was not touched; the full `npm --prefix plugin test` (build then vitest) run at the end of this task
+passed all 149 files / 4033 tests, this one included, with no diff to `scripts/vendor/yaml.js` — so
+whatever produced the earlier mismatch did not reproduce and nothing was left to fix.
 
 Current state (plugin/scripts/gates.js, lines 139-150):
 
