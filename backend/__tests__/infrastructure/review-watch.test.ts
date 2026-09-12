@@ -6,7 +6,7 @@ import { PlanWatch } from '../../src/domain/value-objects/plan-watch.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { PlanChangesNotRead, PlanAgentNotResumed, SliceNotReopened } from '../../src/domain/exceptions.ts'
+import { PullRequestNotRead, PlanAgentNotResumed, SliceNotReopened } from '../../src/domain/exceptions.ts'
 import type { ChangesAsked, Delivered } from '../../src/infrastructure/review-watch.ts'
 
 type Sounding = ChangeAsked[] | Error
@@ -110,7 +110,7 @@ class WatchDouble {
   }
 
   static labelled(label: string): WatchDouble {
-    return new WatchDouble([new PlanChangesNotRead('HTTP 502')], { label })
+    return new WatchDouble([new PullRequestNotRead('HTTP 502')], { label })
   }
 
   static watchingNothing(): WatchDouble {
@@ -213,7 +213,7 @@ describe('ReviewWatch', () => {
 
   it('a_sounding_that_failed_is_written_to_stderr_and_the_watch_lives_on', async () => {
     const watched = WatchDouble.answering(
-      new PlanChangesNotRead('gh issue view failed: gh: not authenticated'),
+      new PullRequestNotRead('gh pr view failed: gh: not authenticated'),
       [WatchDouble.A_CHANGE]
     )
 
@@ -321,7 +321,7 @@ describe('ReviewWatch', () => {
   })
 
   it('the_watch_of_the_plan_keeps_saying_which_one_it_is', async () => {
-    const watched = WatchDouble.answering(new PlanChangesNotRead('HTTP 502'))
+    const watched = WatchDouble.answering(new PullRequestNotRead('HTTP 502'))
 
     await watched.run()
 
@@ -349,7 +349,7 @@ describe('ReviewWatch', () => {
 
   it('a_recovered_watch_retries_a_failed_baseline_without_delivering_historical_changes', async () => {
     const watched = WatchDouble.recovering(
-      new PlanChangesNotRead('gh issue view failed: gh: not authenticated'),
+      new PullRequestNotRead('gh pr view failed: gh: not authenticated'),
       [WatchDouble.A_CHANGE],
       [WatchDouble.A_CHANGE, WatchDouble.ANOTHER_CHANGE]
     )
@@ -567,7 +567,7 @@ describe('the watch notes when changes were asked for, so the plan state can be 
   })
 
   it('a_sweep_that_could_not_be_read_notes_nothing_instead_of_noting_a_gap', async () => {
-    const watched = WatchDouble.answering(new PlanChangesNotRead('HTTP 502'))
+    const watched = WatchDouble.answering(new PullRequestNotRead('HTTP 502'))
 
     await watched.run()
 

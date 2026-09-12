@@ -387,7 +387,33 @@ npm --prefix backend test
 
 **Objective:** the `-REVIEW` token, the two `gh` calls behind it and the exception family they threw leave the backend.
 
-**Files:** `backend/src/infrastructure/gh-plan-issues.ts` (modify), `backend/src/domain/ports/plan-issues.ts` (modify), `backend/src/domain/exceptions.ts` (modify), `backend/src/infrastructure/plan-agent-brief.ts` (modify), `backend/__tests__/infrastructure/gh-plan-issues.test.ts` (modify), `backend/__tests__/infrastructure/plan-issue-body.test.ts` (modify), `backend/__tests__/infrastructure/plan-refusal.test.ts` (modify), `backend/__tests__/infrastructure/plan-agent-brief.test.ts` (modify)
+**Files:** `backend/src/infrastructure/gh-plan-issues.ts` (modify), `backend/src/domain/ports/plan-issues.ts` (modify), `backend/src/domain/exceptions.ts` (modify), `backend/src/infrastructure/plan-agent-brief.ts` (modify), `backend/__tests__/infrastructure/gh-plan-issues.test.ts` (modify), `backend/__tests__/infrastructure/plan-issue-body.test.ts` (modify), `backend/__tests__/infrastructure/plan-refusal.test.ts` (modify), `backend/__tests__/infrastructure/plan-agent-brief.test.ts` (modify), `backend/src/infrastructure/git-workspace.ts` (modify), `backend/__tests__/infrastructure/git-workspace.test.ts` (modify), `backend/__tests__/infrastructure/review-watch.test.ts` (modify)
+
+Amendment (task 5's own implementer): `git-workspace.ts`'s `SliceSeed.GATES` built its text with
+`` `${GhPlanIssues.CHANGES_TOKEN}` `` — a path the plan left undeclared, and undeclared only because
+nothing in §7 named it. Removing `CHANGES_TOKEN` (this task's own objective) leaves that file
+referencing a member that no longer exists, and its own verification command
+(`grep -rl CHANGES_TOKEN backend/src backend/__tests__`) would still catch it, since it greps the
+whole tree and not only the files this task lists — so the task cannot go green without touching it.
+The invitation sentence built from it ("Y hasta entonces puede pedirte cambios comentando `-REVIEW`
+en el issue") is also false once the review retires, so it is dropped rather than inlined as a
+literal `-REVIEW` string; `git-workspace.test.ts` is amended alongside it, TDD-first, to pin the
+removal instead of the invitation. Separately, `review-watch.test.ts` (a suite for the generic
+`ReviewWatch` mechanism, distinct from the protected `pull-request-review-loop.test.ts`) imported
+`PlanChangesNotRead` purely as a stand-in `PlanFailure` subclass for its doubles; with that class
+gone it is swapped for `PullRequestNotRead`, which fits this mechanism's one surviving wiring after
+this slice. Both additions are `modify`, not `create`, and add no new path outside what removing this
+task's own targets already required.
+
+A third gap the plan's prose did not name: `statusOf` (kept in the port's contract) threw
+`PlanChangesNotRead` / `PlanChangesNotUnderstood` on failure, reusing the review family for a call
+that reads label status, not `-REVIEW` comments — already a `conventions/defects.md` naming defect
+("errors are named for what happens, not for where"), inherited rather than introduced here. Deleting
+that family forced a replacement; a new `PlanStatusFailure` (with `PlanStatusNotRead` /
+`PlanStatusNotUnderstood`), mirroring the existing `PlanStoryFailure` pattern, is named for what
+`statusOf` actually does. `plan-refusal.test.ts`'s generic collapse sweep required the matching
+exclusion (a `PlanStatusFailure` entry replacing `PlanChangesFailure`'s), already inside this task's
+own declared files.
 
 Current state (backend/src/infrastructure/gh-plan-issues.ts, lines 190-196):
 
@@ -417,7 +443,9 @@ export class PlanIssues {
 `GhPlanIssues` loses `CHANGES_TOKEN`, `changesCommentArgvFor`, `changesArgvFor`, `changesAsked`,
 `#changesIn`, `#commentsIn` and `#demandRead`, and `askChanges`; `PlanIssueBody` loses
 `CHANGES_LINE` and the line it contributes to the issue body; `plan-agent-brief.ts` drops the two
-sentences that end with `${PlanIssueBody.CHANGES_LINE}`. `exceptions.ts` loses `PlanChangesFailure`,
+sentences that end with `${PlanIssueBody.CHANGES_LINE}`, and with them
+`PlanAgentBrief.reviewErrandFor`, whose only consumer was the `CmuxPlanAgents.review()` that task 4
+removed. `exceptions.ts` loses `PlanChangesFailure`,
 `PlanChangesNotRead`, `PlanChangesNotUnderstood` and `PlanChangesNotAsked`. `ChangeAsked` stays:
 `GhPullRequests.fixesAsked` is its other producer and the surviving watch reads it.
 

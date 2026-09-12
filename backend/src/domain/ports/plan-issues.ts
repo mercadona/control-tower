@@ -1,4 +1,3 @@
-import type { ChangeAsked } from '../value-objects/change-asked.ts'
 import type { PlanComment } from '../value-objects/plan-comment.ts'
 import type { PlanIssue } from '../value-objects/plan-issue.ts'
 import type { PlanIssueStatusValue } from '../value-objects/plan-issue-status.ts'
@@ -30,15 +29,6 @@ export class PlanIssues {
     )
   }
 
-  async changesAsked({ issue, repository }: {
-    issue: PlanIssue,
-    repository: RepositoryName,
-  }): Promise<ChangeAsked[]> {
-    throw new Error(
-      `${this.constructor.name} must implement changesAsked({ issue, repository }), asked for ${issue?.number} in ${repository}`
-    )
-  }
-
   async answerGo({ issueNumber, repository, nonce }: {
     issueNumber: number,
     repository: RepositoryName,
@@ -46,16 +36,6 @@ export class PlanIssues {
   }): Promise<void> {
     throw new Error(
       `${this.constructor.name} must implement answerGo({ issueNumber, repository, nonce }), asked for ${issueNumber} in ${repository}`
-    )
-  }
-
-  async askChanges({ issue, repository, changes }: {
-    issue: PlanIssue,
-    repository: RepositoryName,
-    changes: string,
-  }): Promise<void> {
-    throw new Error(
-      `${this.constructor.name} must implement askChanges({ issue, repository, changes }), asked for ${issue?.number} in ${repository}`
     )
   }
 

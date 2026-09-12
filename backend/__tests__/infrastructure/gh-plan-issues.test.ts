@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.ts'
-import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { Gh } from '../../src/infrastructure/gh.ts'
 import { PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.ts'
@@ -13,27 +12,8 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import {
   PlanIssueNotCreated, PlanIssueNotNamed, PlanIssueNotClaimed, PlanGoNotAnswered, PlanIssueFailure,
-  PlanChangesNotRead, PlanChangesNotUnderstood, PlanChangesNotAsked, PlanStoryNotRead, PlanStoryNotUnderstood,
+  PlanStatusNotRead, PlanStatusNotUnderstood, PlanStoryNotRead, PlanStoryNotUnderstood,
 } from '../../src/domain/exceptions.ts'
-
-class GhRecording extends Gh {
-  readonly asked: { argv: string[], options: { safeToRepeat: boolean } }[]
-
-  constructor(answer: ProcessOutput) {
-    super({
-      launch: () => Promise.resolve(answer),
-      policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 0, waitSeconds: 0 }) }),
-      sleep: () => Promise.resolve(),
-    })
-    this.asked = []
-  }
-
-  async run(argv: string[], options: { safeToRepeat: boolean }): Promise<ProcessOutput> {
-    this.asked.push({ argv, options })
-
-    return this.launch(argv)
-  }
-}
 
 class GhDouble {
   static REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
@@ -143,24 +123,6 @@ class GhDouble {
   static THE_PLAN = { id: 'IC_kwDOT9lB5c8AAAABRB_tVQ', body: '## Plan del slice — gate `plan`\n\nCommiteado en...' }
   static BARE_GO = { id: 'IC_kwDOT9lB5c8AAAABRCA25w', body: '-OK' }
   static THE_GO = { id: 'IC_kwDOT9lB5c8AAAABRCF0FA', body: '-OK 3f9a1c2b' }
-  static A_CHANGE = {
-    id: 'IC_kwDOT9lB5c8AAAABRCF0GG',
-    body: '-REVIEW añade el caso de la issue sin descripción',
-  }
-
-  async changesAskedFor(issue = GhDouble.OPENED) {
-    return this.issues().changesAsked({ issue, repository: GhDouble.REPOSITORY })
-  }
-
-  async changesRefusalFor(issue = GhDouble.OPENED) {
-    return this.changesAskedFor(issue).catch((cause) => cause)
-  }
-
-  async askChangesRefusalFor(changes = 'parte la tarea 2 en dos') {
-    return this.issues().askChanges({
-      issue: GhDouble.OPENED, repository: GhDouble.REPOSITORY, changes,
-    }).catch((cause) => cause)
-  }
 
   async openFor({ story = GhDouble.story(), comment = null } = {}) {
     return this.issues().open({ story, comment, repository: GhDouble.REPOSITORY })
@@ -556,129 +518,7 @@ describe('GhPlanIssues answering the go on the issue', () => {
   })
 })
 
-describe('GhPlanIssues reading the changes asked for on the issue', () => {
-  it('the_changes_asked_for_are_read_with_the_argv_gh_understands', async () => {
-    const gh = GhDouble.commented(GhDouble.A_CHANGE)
-
-    await gh.changesAskedFor()
-
-    expect(gh.calls).toEqual([[
-      'issue', 'view', '7', '--repo', 'josemerca/ct-loop-sandbox', '--json', 'comments',
-    ]])
-  })
-
-  it('only_the_comments_that_open_with_the_token_count_as_a_change_asked_for', async () => {
-    const gh = GhDouble.commented(
-      GhDouble.THE_PLAN, GhDouble.BARE_GO, GhDouble.THE_GO, GhDouble.A_CHANGE
-    )
-
-    const asked = await gh.changesAskedFor()
-
-    expect(asked).toEqual([
-      new ChangeAsked({
-        id: GhDouble.A_CHANGE.id, text: 'añade el caso de la issue sin descripción',
-        askedAt: GhDouble.CREATED_AT,
-      }),
-    ])
-  })
-
-  it('the_token_alone_is_a_change_asked_for_with_nothing_behind_it_and_not_a_comment_skipped', async () => {
-    const gh = GhDouble.commented({ id: GhDouble.A_CHANGE.id, body: '-REVIEW' })
-
-    const asked = await gh.changesAskedFor()
-
-    expect(asked).toEqual([
-      new ChangeAsked({ id: GhDouble.A_CHANGE.id, text: '', askedAt: GhDouble.CREATED_AT }),
-    ])
-  })
-
-  it('a_change_asked_for_carries_the_date_the_comment_was_created', async () => {
-    const printed = JSON.stringify({ comments: [
-      { id: 'IC_1', body: '-REVIEW parte la tarea 2', createdAt: '2026-09-09T09:54:05Z' },
-    ] })
-    const gh = new GhRecording(new ProcessOutput({ code: 0, stdout: printed, stderr: '' }))
-    const issues = new GhPlanIssues({ gh, stderr: () => {} })
-
-    const [change] = await issues.changesAsked({ issue: GhDouble.OPENED, repository: GhDouble.REPOSITORY })
-
-    expect(change.askedAt).toBe('2026-09-09T09:54:05Z')
-  })
-
-  it('a_comment_that_arrives_without_its_date_is_refused_because_the_review_state_is_read_from_it', async () => {
-    const printed = JSON.stringify({ comments: [{ id: 'IC_1', body: '-REVIEW parte la tarea 2' }] })
-    const gh = new GhRecording(new ProcessOutput({ code: 0, stdout: printed, stderr: '' }))
-    const issues = new GhPlanIssues({ gh, stderr: () => {} })
-
-    await expect(issues.changesAsked({ issue: GhDouble.OPENED, repository: GhDouble.REPOSITORY }))
-      .rejects.toThrow(PlanChangesNotUnderstood)
-  })
-
-  it('a_token_in_the_middle_of_a_comment_asks_for_nothing_because_only_the_opening_counts', async () => {
-    const gh = GhDouble.commented({
-      id: GhDouble.A_CHANGE.id, body: 'esto lo pediría con -REVIEW si me dejaran',
-    })
-
-    expect(await gh.changesAskedFor()).toEqual([])
-  })
-
-  it('what_it_hands_back_carries_the_id_the_text_and_the_date_and_nothing_else_of_the_eleven_fields', async () => {
-    const gh = GhDouble.commented(GhDouble.A_CHANGE)
-
-    const [change] = await gh.changesAskedFor()
-
-    expect(Object.keys(change)).toEqual(['id', 'text', 'askedAt'])
-    expect(Object.isFrozen(change)).toBe(true)
-  })
-
-  it('a_gh_that_refused_is_told_apart_from_a_gh_that_answered_something_unreadable', async () => {
-    const refused = await GhDouble.refusing('gh: not authenticated', 3).changesRefusalFor()
-    const unreadable = await GhDouble.printing('<!DOCTYPE html>').changesRefusalFor()
-
-    expect(refused).toBeInstanceOf(PlanChangesNotRead)
-    expect(refused).not.toBeInstanceOf(PlanChangesNotUnderstood)
-    expect(refused.message).toMatch(/gh issue view failed: gh: not authenticated/)
-    expect(unreadable).toBeInstanceOf(PlanChangesNotUnderstood)
-    expect(unreadable).not.toBeInstanceOf(PlanChangesNotRead)
-    expect(unreadable.message).toMatch(/<!DOCTYPE html>/)
-  })
-
-  it('an_answer_without_the_comments_of_the_issue_is_not_read_as_nothing_asked_for', async () => {
-    const nothing = await GhDouble.printing('{"comments":null}').changesRefusalFor()
-
-    expect(nothing).toBeInstanceOf(PlanChangesNotUnderstood)
-  })
-
-  it('a_comment_without_the_id_and_the_body_this_reads_is_not_understood_whatever_it_says', async () => {
-    const nameless = await GhDouble.printing(
-      JSON.stringify({ comments: [{ body: '-REVIEW parte la tarea 3' }] })
-    ).changesRefusalFor()
-    const bodyless = await GhDouble.printing(
-      JSON.stringify({ comments: [{ id: 'IC_kwDOT9lB5c8AAAABRCF0GG' }] })
-    ).changesRefusalFor()
-    const nothing = await GhDouble.printing(
-      JSON.stringify({ comments: [null] })
-    ).changesRefusalFor()
-
-    expect(nameless).toBeInstanceOf(PlanChangesNotUnderstood)
-    expect(bodyless).toBeInstanceOf(PlanChangesNotUnderstood)
-    expect(nothing).toBeInstanceOf(PlanChangesNotUnderstood)
-  })
-
-  it('a_blip_while_reading_them_is_retried_because_asking_twice_reads_the_same_issue', async () => {
-    const blip = new ProcessOutput({ code: 1, stdout: '', stderr: 'error connecting to api.github.com' })
-    const gh = new GhDouble([blip, ...GhDouble.commented(GhDouble.A_CHANGE).answers])
-
-    const asked = await gh.changesAskedFor()
-
-    expect(gh.calls).toHaveLength(2)
-    expect(gh.sleeping.slept).toEqual([2])
-    expect(asked).toHaveLength(1)
-  })
-
-  it('an_issue_nobody_has_written_on_asks_for_nothing_instead_of_refusing', async () => {
-    expect(await GhDouble.printing('{"comments":[]}').changesAskedFor()).toEqual([])
-  })
-
+describe('GhPlanIssues reading the status of an issue', () => {
   it('asking_where_an_issue_stands_reads_its_labels_and_nothing_else', async () => {
     const gh = GhDouble.labelled('status:in-review')
 
@@ -706,92 +546,30 @@ describe('GhPlanIssues reading the changes asked for on the issue', () => {
     const refusal = await GhDouble.labelled('status:in-review', 'status:in-progress')
       .statusFor().catch((cause) => cause)
 
-    expect(refusal).toBeInstanceOf(PlanChangesNotUnderstood)
+    expect(refusal).toBeInstanceOf(PlanStatusNotUnderstood)
     expect(refusal.message).toMatch(/wears more than one status label/)
   })
 
   it('a_status_label_the_loop_never_declared_travels_out_as_not_understood_instead_of_passing_for_none', async () => {
     const refusal = await GhDouble.labelled('status:blocked').statusFor().catch((cause) => cause)
 
-    expect(refusal).toBeInstanceOf(PlanChangesNotUnderstood)
+    expect(refusal).toBeInstanceOf(PlanStatusNotUnderstood)
     expect(refusal.message).toMatch(/status:blocked/)
   })
 
   it('gh_refusing_to_read_the_labels_travels_out_typed_instead_of_answering_a_status', async () => {
     const refusal = await GhDouble.refusing('HTTP 404').statusFor().catch((cause) => cause)
 
-    expect(refusal).toBeInstanceOf(PlanChangesNotRead)
-    expect(refusal).not.toBeInstanceOf(PlanChangesNotUnderstood)
+    expect(refusal).toBeInstanceOf(PlanStatusNotRead)
+    expect(refusal).not.toBeInstanceOf(PlanStatusNotUnderstood)
     expect(refusal.message).toMatch(/gh issue view --json labels failed: HTTP 404/)
   })
 
   it('labels_gh_sent_in_a_shape_this_cannot_read_travel_out_as_not_understood', async () => {
     const refusal = await GhDouble.created('{"labels":"ninguna"}').statusFor().catch((cause) => cause)
 
-    expect(refusal).toBeInstanceOf(PlanChangesNotUnderstood)
-    expect(refusal).not.toBeInstanceOf(PlanChangesNotRead)
-  })
-})
-
-describe('asking for changes to the plan publishes them as a comment', () => {
-  it('the_comment_starts_with_the_changes_token_and_carries_what_was_asked_for', () => {
-    expect(GhPlanIssues.changesCommentArgvFor({
-      issueNumber: 33,
-      repository: new RepositoryName('jjponz/repo-pulse'),
-      changes: 'parte la tarea 2 en dos',
-    })).toEqual([
-      'issue', 'comment', '33',
-      '--repo', 'jjponz/repo-pulse',
-      '--body', '-REVIEW parte la tarea 2 en dos',
-    ])
-  })
-
-  it('what_is_published_is_quieted_so_publishing_on_your_behalf_pings_nobody', () => {
-    const argv = GhPlanIssues.changesCommentArgvFor({
-      issueNumber: 33,
-      repository: new RepositoryName('jjponz/repo-pulse'),
-      changes: 'lo que pidió @alcaptar en #162',
-    })
-
-    expect(argv[argv.length - 1]).toBe('-REVIEW lo que pidió `@alcaptar` en `#162`')
-  })
-
-  it('a_gh_that_refuses_is_told_apart_from_one_that_answered', async () => {
-    const gh = new GhRecording(new ProcessOutput({ code: 1, stdout: '', stderr: 'gh: not found\n' }))
-    const issues = new GhPlanIssues({ gh, stderr: () => {} })
-
-    await expect(issues.askChanges({
-      issue: new PlanIssue({ number: 33, url: 'https://github.com/jjponz/repo-pulse/issues/33' }),
-      repository: new RepositoryName('jjponz/repo-pulse'),
-      changes: 'parte la tarea 2',
-    })).rejects.toThrow(PlanChangesNotAsked)
-  })
-
-  it('a_comment_is_never_repeated_because_a_repeated_comment_is_a_second_change_asked_for', async () => {
-    const gh = new GhRecording(new ProcessOutput({ code: 0, stdout: '', stderr: '' }))
-    const issues = new GhPlanIssues({ gh, stderr: () => {} })
-
-    await issues.askChanges({
-      issue: new PlanIssue({ number: 33, url: 'https://github.com/jjponz/repo-pulse/issues/33' }),
-      repository: new RepositoryName('jjponz/repo-pulse'),
-      changes: 'parte la tarea 2',
-    })
-
-    expect(gh.asked).toHaveLength(1)
-    expect(gh.asked[0].options).toEqual({ safeToRepeat: false })
-  })
-
-  it('a_blip_while_asking_for_changes_is_not_retried_because_the_comment_may_have_been_the_one_lost', async () => {
-    const gh = new GhDouble([
-      new ProcessOutput({ code: 1, stdout: '', stderr: 'error connecting to api.github.com' }),
-      new ProcessOutput({ code: 0, stdout: '', stderr: '' }),
-    ])
-
-    const refusal = await gh.askChangesRefusalFor()
-
-    expect(gh.calls).toHaveLength(1)
-    expect(gh.sleeping.slept).toEqual([])
-    expect(refusal).toBeInstanceOf(PlanChangesNotAsked)
+    expect(refusal).toBeInstanceOf(PlanStatusNotUnderstood)
+    expect(refusal).not.toBeInstanceOf(PlanStatusNotRead)
   })
 })
 
