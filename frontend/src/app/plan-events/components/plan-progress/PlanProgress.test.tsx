@@ -17,11 +17,10 @@ const plan: StartedPlan = {
 
 const renderProgress = async (writeToClipboard?: (text: string) => Promise<void>) => {
   const onReady = vi.fn()
-  const onReviewing = vi.fn()
-  render(<PlanProgress plan={plan} onReady={onReady} onReviewing={onReviewing} writeToClipboard={writeToClipboard} />)
+  render(<PlanProgress plan={plan} onReady={onReady} writeToClipboard={writeToClipboard} />)
   await screen.findByRole('status')
 
-  return { onReady, onReviewing }
+  return { onReady }
 }
 
 describe('PlanProgress', () => {
@@ -69,31 +68,6 @@ describe('PlanProgress', () => {
     act(() => FakeEventSource.last().receive(PlanEventsMother.ready()))
 
     expect(onReady).toHaveBeenCalledTimes(1)
-  })
-
-  it('should say the plan is being reworked while a review is in flight', async () => {
-    await renderProgress()
-
-    act(() => FakeEventSource.last().receive(PlanEventsMother.reviewing()))
-
-    expect(await screen.findByRole('status')).toHaveTextContent(/Rehaciendo el plan/)
-  })
-
-  it('should tell its parent when a review starts, so the page can stop offering the go', async () => {
-    const { onReviewing } = await renderProgress()
-
-    act(() => FakeEventSource.last().receive(PlanEventsMother.reviewing()))
-
-    expect(onReviewing).toHaveBeenCalledTimes(1)
-  })
-
-  it('should not tell its parent a review started when the plan is merely ready', async () => {
-    const { onReady, onReviewing } = await renderProgress()
-
-    act(() => FakeEventSource.last().receive(PlanEventsMother.ready()))
-
-    expect(onReady).toHaveBeenCalled()
-    expect(onReviewing).not.toHaveBeenCalled()
   })
 
   it('keeps a readable plan summary and reports whether copying details worked', async () => {

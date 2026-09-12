@@ -7,12 +7,10 @@ import './PlanProgress.css'
 
 const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
 const REFUSED_MESSAGE = 'El backend no reconoce esta sesión de plan, puede haberse reiniciado'
-const REWORKING_MESSAGE = 'Rehaciendo el plan con los cambios pedidos…'
 
 type PlanProgressProps = {
   plan: StartedPlan
   onReady: () => void
-  onReviewing: () => void
   observe?: boolean
   writeToClipboard?: (text: string) => Promise<void>
 }
@@ -20,7 +18,6 @@ type PlanProgressProps = {
 const PlanProgress = ({
   plan,
   onReady,
-  onReviewing,
   observe = true,
   writeToClipboard = (text) => navigator.clipboard.writeText(text),
 }: PlanProgressProps) => {
@@ -30,10 +27,6 @@ const PlanProgress = ({
   useEffect(() => {
     if (progress.phase === 'ready') onReady()
   }, [onReady, progress.phase])
-
-  useEffect(() => {
-    if (progress.phase === 'reviewing') onReviewing()
-  }, [onReviewing, progress.phase])
 
   const copyFacts = async () => {
     try {
@@ -49,7 +42,6 @@ const PlanProgress = ({
       {observe && progress.phase === 'connecting' && <p className="plan-progress__state" role="status">Plan arrancado</p>}
       {observe && progress.phase === 'writing' && <p className="plan-progress__state" role="status">Escribiendo el plan…</p>}
       {observe && progress.phase === 'ready' && <p className="plan-progress__state" role="status" aria-live="polite">Plan listo</p>}
-      {observe && progress.phase === 'reviewing' && <p className="plan-progress__state" role="status">{REWORKING_MESSAGE}</p>}
       {observe && progress.phase === 'failed' && <Banner type="error" role="alert" title={progress.detail} />}
       {observe && progress.phase === 'refused' && <Banner type="error" role="alert" title={REFUSED_MESSAGE} />}
       {observe && progress.phase === 'unreachable' && <Banner type="error" role="alert" title={UNREACHABLE_MESSAGE} />}

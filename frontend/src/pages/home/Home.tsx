@@ -194,15 +194,6 @@ const Home = () => {
     WorkflowSnapshotStorage.save(ready)
   }, [])
 
-  const planReviewing = useCallback(() => {
-    const current = workflowRef.current
-    if (current === null || current.phase === 'implementing') return
-    const reviewing: WorkflowSnapshot = { ...current, phase: 'planning' }
-    workflowRef.current = reviewing
-    setWorkflow(reviewing)
-    WorkflowSnapshotStorage.save(reviewing)
-  }, [])
-
   const implementationStarted = useCallback(() => {
     const current = workflowRef.current
     if (current === null) return
@@ -432,7 +423,6 @@ const Home = () => {
                   key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
                   plan={workflow.plan}
                   onReady={planReady}
-                  onReviewing={planReviewing}
                   observe={restoredIsConfirmed}
                 />
                 {workflow.phase === 'ready' && restoredIsConfirmed && (
@@ -512,7 +502,6 @@ const Home = () => {
                   <PlanProgress
                     plan={workflow.plan}
                     onReady={planReady}
-                    onReviewing={planReviewing}
                     observe={false}
                   />
                 </WorkflowStep>

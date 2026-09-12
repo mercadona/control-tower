@@ -285,14 +285,13 @@ class CtApi {
     })
   }
 
-  static #readPlanProgress(git: LaunchTool, log: MemoryReviewLog): ReadPlanProgress {
+  static #readPlanProgress(git: LaunchTool): ReadPlanProgress {
     return new ReadPlanProgress({
       planProgress: new PlanContractProgress({
         node: CtApi.#tool(process.execPath),
         git,
         dispatchCheck: PluginTree.dispatchCheck(),
       }),
-      reviewLog: log,
     })
   }
 
@@ -374,7 +373,7 @@ class CtApi {
       dispatchCheck: PluginTree.dispatchCheck(),
     })
     const sessions = new PlanSessions()
-    const readPlanProgress = CtApi.#readPlanProgress(git, new MemoryReviewLog())
+    const readPlanProgress = CtApi.#readPlanProgress(git)
     const activePlans = new ActivePlans({ sessions })
     const implementationStarts = new DiskImplementationStartRegistry({
       read: (path) => readFileSync(path, 'utf8'),
