@@ -108,11 +108,11 @@ const issueWith = (labels) => ({ number: 90, title: '#90 el cliente tipado', lab
 describe('the coordinator launches the -OK watcher', () => {
   it('launches it when dispatching, with the issue, the repo and the exact title of the session', async () => {
     const repoRoot = newRepoRoot()
-    // With no `gate:` label at all, resolveGatesForAgent falls back to the Tipo
-    // — and the `plan` gate is implied in EVERY slice (gates.js#gatesForType).
-    // Which means the default case DOES stop to wait, and therefore DOES bring a
-    // watcher into play.
-    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]))
+    // D-14 retired the `plan` gate's universal default: with no `gate:` label
+    // at all, resolveGatesForAgent falls back to the Tipo, and a `Tipo` with no
+    // entry in TYPE_GATES implies nothing (gates.js#gatesForType). The issue
+    // now has to DECLARE `gate:plan` for the watcher to have anything to watch.
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }, { name: 'gate:plan' }]))
     expect(r.code).toBe(0)
     expect(r.out).toContain(`${GO_TOKEN} watcher of #90 launched`)
 
@@ -141,7 +141,7 @@ describe('the coordinator launches the -OK watcher', () => {
 
   it('says where the log is, because a process that runs when you are not looking and leaves no trace is undebuggable', () => {
     const repoRoot = newRepoRoot()
-    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]))
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }, { name: 'gate:plan' }]))
     expect(r.out).toMatch(/Log: .*watch-go-90\.log/)
   })
 
@@ -174,7 +174,7 @@ describe('the watcher cannot bring the dispatch down', () => {
   // -------------------------------------------------------------------------
   it('a watcher program that does not exist is warned about, and is NOT announced as launched', async () => {
     const repoRoot = newRepoRoot()
-    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]), {
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }, { name: 'gate:plan' }]), {
       CT_WATCH_GO_BIN: join(repoRoot, 'no-existe', 'ni-de-broma.mjs'),
     })
     expect(r.code).toBe(0)
@@ -201,7 +201,7 @@ describe('the watcher cannot bring the dispatch down', () => {
     // something else — which is exactly what happened while building this
     // round.
     const repoRoot = newRepoRoot()
-    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]), {
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }, { name: 'gate:plan' }]), {
       CLAUDE_CONFIG_DIR: '',
       HOME: '',
     })
@@ -251,7 +251,7 @@ describe('the go nonce: where it shows up and where it does not', () => {
 
   it('it is dictated on the screen, and only its sha256 reaches the watcher', async () => {
     const repoRoot = newRepoRoot()
-    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]))
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }, { name: 'gate:plan' }]))
     expect(r.code).toBe(0)
 
     const nonce = nonceOf(r.out)
@@ -270,7 +270,7 @@ describe('the go nonce: where it shows up and where it does not', () => {
   it('the commitment is registered outside the repo, and without the nonce inside', () => {
     const repoRoot = newRepoRoot()
     const configDir = join(repoRoot, 'claude-config')
-    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]))
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }, { name: 'gate:plan' }]))
     const nonce = nonceOf(r.out)
 
     const path = goPath({ repo: 'o/r', issue: 90, configDir })
@@ -286,7 +286,7 @@ describe('the go nonce: where it shows up and where it does not', () => {
   it('with CT_GO_CHANNEL=notify the nonce does not pass through stdout: it enters NO agent context', () => {
     const repoRoot = newRepoRoot()
     const log = join(repoRoot, 'osascript.log')
-    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]), {
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }, { name: 'gate:plan' }]), {
       CT_GO_CHANNEL: 'notify',
       FAKE_OSASCRIPT_LOG: log,
     })
@@ -302,7 +302,7 @@ describe('the go nonce: where it shows up and where it does not', () => {
 
   it('if the notification fails, it falls back to the screen SAYING SO — staying quiet would leave the gate with no go', () => {
     const repoRoot = newRepoRoot()
-    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }]), {
+    const r = dispatch(repoRoot, issueWith([{ name: 'status:ready' }, { name: 'gate:plan' }]), {
       CT_GO_CHANNEL: 'notify',
       FAKE_OSASCRIPT_FAIL: '1',
     })

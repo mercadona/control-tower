@@ -5,7 +5,6 @@ import { EventsRequestOutcome, PlanEvents } from '../../src/infrastructure/plan-
 import { ActivePlansOutcome } from '../../src/infrastructure/active-plans-route.ts'
 import { ProgressRequestOutcome, ProgressCollapse } from '../../src/infrastructure/implement-progress-route.ts'
 import { HistoryRequestOutcome, HistoryCollapse } from '../../src/infrastructure/implement-history-route.ts'
-import { ReviewRequestOutcome, ReviewCollapse } from '../../src/infrastructure/review-plan-route.ts'
 
 class RequestVocabularies {
   static readonly #ACCEPTED = 'accepted'
@@ -17,7 +16,6 @@ class RequestVocabularies {
       ...Object.values(EventsRequestOutcome),
       ...Object.values(ProgressRequestOutcome),
       ...Object.values(HistoryRequestOutcome),
-      ...Object.values(ReviewRequestOutcome),
     ].filter((outcome) => outcome !== RequestVocabularies.#ACCEPTED)
   }
 }
@@ -27,9 +25,6 @@ class SharedOnPurposeAcrossRequestVocabularies {
     PlanRequestOutcome.BODY_NOT_A_JSON_OBJECT,
     PlanRequestOutcome.UNKNOWN_FIELD,
     PlanRequestOutcome.MALFORMED_REPO,
-    ImplementRequestOutcome.MALFORMED_ISSUE,
-    ImplementRequestOutcome.NO_LIVE_SESSION,
-    ImplementRequestOutcome.UNCERTAIN_PHASE,
     ProgressRequestOutcome.MALFORMED_ROOT,
   ])
 }
@@ -59,7 +54,6 @@ class EveryCodeTheApiEmits {
       ...ImplementCollapse.declaredCodes(),
       ...ProgressCollapse.declaredCodes(),
       ...HistoryCollapse.declaredCodes(),
-      ReviewCollapse.CODE,
       ...CodesRememberedByHandFromHttpAndApiServer.VALUES,
       ...PlanEvents.declaredCodes(),
     ]

@@ -57,13 +57,11 @@ export class ImplementationHistoryFailure extends PlanFailure {}
 
 export class ImplementationHistoryNotRead extends ImplementationHistoryFailure {}
 
-export class PlanChangesFailure extends PlanFailure {}
+export class PlanStatusFailure extends PlanFailure {}
 
-export class PlanChangesNotRead extends PlanChangesFailure {}
+export class PlanStatusNotRead extends PlanStatusFailure {}
 
-export class PlanChangesNotUnderstood extends PlanChangesFailure {}
-
-export class PlanChangesNotAsked extends PlanChangesFailure {}
+export class PlanStatusNotUnderstood extends PlanStatusFailure {}
 
 export class GoFailure extends PlanFailure {}
 

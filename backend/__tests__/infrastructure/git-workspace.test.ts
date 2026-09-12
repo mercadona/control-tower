@@ -578,7 +578,15 @@ describe('GitWorkspace', () => {
     const gates = parseStateSafe(git.written[1][1]).meta.gates
     expect(gates).toContain('plan — GATE HUMANO pendiente')
     expect(gates).toContain('lo cierra una persona desde la app')
-    expect(gates).toContain('`-REVIEW`')
+  })
+
+  it('the_state_it_seeds_no_longer_invites_anyone_to_ask_for_changes_by_commenting_on_the_issue', async () => {
+    const git = new GitDouble()
+
+    await git.prepared()
+
+    const gates = parseStateSafe(git.written[1][1]).meta.gates
+    expect(gates).not.toContain('-REVIEW')
   })
 
   it('the_gate_it_seeds_says_the_gates_section_of_the_issue_describes_another_flow', async () => {

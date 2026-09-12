@@ -110,14 +110,13 @@ describe('ct-groom — labels: it tells the ones that already existed apart from
     const res = run([spec, '--repo', 'o/r', '--milestone', 'Epic'], {
       ...MILESTONE_ENV,
       FAKE_GH_LIST_SEQUENCE: JSON.stringify([[]]),
-      // F21: the plan also produces `gate:none` (one gate label per issue,
-      // always) — without it in the repo, this run WOULD have a new label to
-      // create and the test would stop testing the case "there is nothing to
-      // say". Same criterion as the note of F21 about `gate:none`: the whole
-      // `status:` vocabulary (groom.js#LOOP_STATUS_LABELS) is part of what the
-      // repo has to HAVE, so without it here this run WOULD have new labels to
-      // create and the test would stop testing the case "there is nothing to say".
-      FAKE_GH_LABELS_LIST: JSON.stringify([[{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:plan' }, ...LOOP_STATUS_LABELS.map((name) => ({ name }))]]),
+      // F21/D-14: the plan also produces `gate:none` (one gate label per
+      // issue, always — SPEC's row 1 declares no Tipo gate and no `Gate`
+      // column implies `plan` any more) — without it in the repo, this run
+      // WOULD have a new label to create and the test would stop testing the
+      // case "there is nothing to say". Same criterion for the whole
+      // `status:` vocabulary (groom.js#LOOP_STATUS_LABELS).
+      FAKE_GH_LABELS_LIST: JSON.stringify([[{ name: 'type:backend' }, { name: 'area:api' }, { name: 'touches:db' }, { name: 'gate:none' }, ...LOOP_STATUS_LABELS.map((name) => ({ name }))]]),
       FAKE_GH_ARGV_LOG_FILE: argvLog,
     })
     expect(res.status).toBe(0)

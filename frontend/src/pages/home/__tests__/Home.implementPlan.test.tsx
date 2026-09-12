@@ -64,6 +64,15 @@ describe('Home · implement plan', () => {
     expect(screen.queryByRole('heading', { name: 'Implementación' })).toBeNull()
   })
 
+  it('should offer only the issue link and the go on a ready plan', async () => {
+    await planStarted()
+    await streamFrame(PlanEventsMother.ready())
+
+    expect(screen.getByRole('link', { name: 'Abrir el plan en GitHub' })).toBeInTheDocument()
+    expect(screen.getByRole('button', IMPLEMENT_BUTTON)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Pedir cambios' })).toBeNull()
+  })
+
   it('keeps implementation current when reopening the completed review summary with the keyboard', async () => {
     const { user } = await planReady()
     backendAnswering(ImplementPlanMother.implementing())

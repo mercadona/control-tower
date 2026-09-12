@@ -62,16 +62,16 @@ describe('resolveE2e — the three states', () => {
 
 describe('the derived e2e gate', () => {
   it('with runs, resolveGates adds e2e', () => {
-    expect(resolveGates('backend', '–', 'curl -i :9115/metrics').gates).toEqual(['plan', 'e2e'])
+    expect(resolveGates('backend', '–', 'curl -i :9115/metrics').gates).toEqual(['e2e'])
   })
 
   it('with the `no` token, it does not add it', () => {
-    expect(resolveGates('backend', '–', 'no').gates).toEqual(['plan'])
+    expect(resolveGates('backend', '–', 'no').gates).toEqual([])
   })
 
   it('with no E2E cell (third argument absent), the behaviour is the one of today', () => {
-    expect(resolveGates('ui', '–').gates).toEqual(['visual', 'plan'])
-    expect(resolveGates('backend', '–').gates).toEqual(['plan'])
+    expect(resolveGates('ui', '–').gates).toEqual(['visual'])
+    expect(resolveGates('backend', '–').gates).toEqual([])
   })
 
   it('no Tipo implies e2e on its own', () => {
@@ -81,7 +81,7 @@ describe('the derived e2e gate', () => {
   })
 
   it('e2e goes LAST in the canonical order', () => {
-    expect(resolveGates('ui', 'apply', 'un recorrido').gates).toEqual(['visual', 'apply', 'plan', 'e2e'])
+    expect(resolveGates('ui', 'apply, plan', 'un recorrido').gates).toEqual(['visual', 'apply', 'plan', 'e2e'])
   })
 
   it('the vocabulary includes e2e with its two texts', () => {
@@ -97,7 +97,7 @@ describe('the derived e2e gate', () => {
   it('the label survives the round trip', () => {
     const gates = resolveGates('ui', '–', 'un recorrido').gates
     const labels = gateLabels(gates)
-    expect(labels).toEqual(['gate:visual', 'gate:plan', 'gate:e2e'])
+    expect(labels).toEqual(['gate:visual', 'gate:e2e'])
     const back = gatesFromLabels(labels)
     expect(back.gates).toEqual(gates)
     expect(back.declared).toBe(true)

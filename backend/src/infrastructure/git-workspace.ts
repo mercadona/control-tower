@@ -5,7 +5,6 @@ import { renderState } from '../../../plugin/scripts/state.js'
 import { BaselineOutcome, BaselineResult } from '../../../plugin/scripts/baseline.js'
 import type { Baseline } from '../../../plugin/scripts/baseline.js'
 import { SownWorkspace } from '../domain/value-objects/sown-workspace.ts'
-import { GhPlanIssues } from './gh-plan-issues.ts'
 import { Workspace } from '../domain/ports/workspace.ts'
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import { PreparedWorkspace } from '../domain/value-objects/prepared-workspace.ts'
@@ -29,8 +28,7 @@ export class SliceSeed {
   static readonly PLAN_GATE = 'plan'
   static readonly GATES =
     `${SliceSeed.PLAN_GATE} — GATE HUMANO pendiente: lo cierra una persona desde la app cuando pide ` +
-    'implementar el plan, NO tú. Y hasta entonces puede pedirte cambios comentando ' +
-    `\`${GhPlanIssues.CHANGES_TOKEN}\` en el issue. ` +
+    'implementar el plan, NO tú. ' +
     'Ojo: la sección "## Gates" del issue describe el carril de /ct-next y aquí no aplica.'
   static readonly EXCLUDE_PATH = 'info/exclude'
   static readonly EXCLUDE_RULE = SliceSeed.RELATIVE_PATH

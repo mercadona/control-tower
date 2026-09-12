@@ -2,7 +2,6 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
-import { ReviewsSpy } from '../reviews-spy.ts'
 import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import {
   ProgressRequestOutcome, ProgressRefusal, ProgressCollapse,
@@ -83,9 +82,7 @@ class RunningApi {
       port: 0,
       startPlan: null,
       implementPlan: null,
-      askPlanChanges: null,
       implementProgress: spy,
-      reviews: new ReviewsSpy(),
       pullRequestReviews: null,
       sessions: new PlanSessions(),
       activePlans: null,
@@ -93,7 +90,6 @@ class RunningApi {
       implementationStarts: null,
       stderr: null,
       planEvents: RunningApi.NO_EVENTS,
-      readPlanProgress: null,
       frontendRoot: RunningApi.NO_FRONTEND,
     })
     const port = await server.start()

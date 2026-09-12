@@ -46,8 +46,6 @@ export type RefusedPlanRequest = {
 
 export type PlanSessionRegistry = { remember(watch: PlanWatch): void }
 
-export type PlanReviewStarts = { start(watch: PlanWatch): void }
-
 export class PlanRequest {
   static readonly ID_FIELD = 'id'
   static readonly COMMENT_FIELD = 'user_comment'
@@ -339,8 +337,7 @@ export class StartPlanRoute {
 
   static handledBy(
     startPlan: StartPlan,
-    sessions: PlanSessionRegistry,
-    reviews: PlanReviewStarts
+    sessions: PlanSessionRegistry
   ): (request: Request, response: Response) => Promise<void> {
     return async (request, response) => {
       const asked = PlanRequest.from(JsonBody.textOf(request))
@@ -348,14 +345,13 @@ export class StartPlanRoute {
         Answer.refuseAs(response, PlanRefusal.of(asked))
         return
       }
-      await StartPlanRoute.#accept(startPlan, sessions, reviews, response, asked)
+      await StartPlanRoute.#accept(startPlan, sessions, response, asked)
     }
   }
 
   static async #accept(
     startPlan: StartPlan,
     sessions: PlanSessionRegistry,
-    reviews: PlanReviewStarts,
     response: Response,
     asked: PlanRequest
   ): Promise<void> {
@@ -370,7 +366,7 @@ export class StartPlanRoute {
       return
     }
     if (asked.listed) {
-      StartPlanRoute.#sendListed(sessions, reviews, response, result)
+      StartPlanRoute.#sendListed(sessions, response, result)
       return
     }
     if (result.failed.length > 0) {
@@ -379,20 +375,17 @@ export class StartPlanRoute {
     }
     const [started] = result.started
     sessions.remember(started.watch)
-    reviews.start(started.watch)
     Answer.send(response, 202, { status: 'started', ...StartPlanRoute.#startedAnswer(started) })
   }
 
   static #sendListed(
     sessions: PlanSessionRegistry,
-    reviews: PlanReviewStarts,
     response: Response,
     result: StartPlanResult
   ): void {
     const started = []
     for (const one of result.started) {
       sessions.remember(one.watch)
-      reviews.start(one.watch)
       started.push(StartPlanRoute.#startedAnswer(one))
     }
     const failed = result.failed.map((notStarted) => {

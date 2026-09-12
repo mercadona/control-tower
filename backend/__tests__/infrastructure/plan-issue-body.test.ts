@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PlanIssueBody, GhPlanIssues } from '../../src/infrastructure/gh-plan-issues.ts'
+import { PlanIssueBody } from '../../src/infrastructure/gh-plan-issues.ts'
 import { UserStory } from '../../src/domain/value-objects/user-story.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { UserStoryUrl } from '../../src/domain/value-objects/user-story-url.ts'
@@ -67,11 +67,11 @@ class Opened {
 }
 
 describe('PlanIssueBody', () => {
-  it('the_dispatcher_reads_the_issue_as_ready_with_the_plan_gate_that_stops_it_for_a_human', () => {
+  it('the_dispatcher_reads_the_issue_as_ready_with_no_gate_at_all_since_nothing_asks_for_one', () => {
     const seen = Opened.asTheDispatcherReadsIt()
 
     expect(seen.status).toBe('ready')
-    expect(seen.gates).toEqual(['plan'])
+    expect(seen.gates).toEqual([])
     expect(seen.gatesDeclared).toBe(true)
   })
 
@@ -246,8 +246,10 @@ describe('PlanIssueBody', () => {
     ])
   })
 
-  it('the_gates_section_tells_the_human_how_to_answer_the_go_instead_of_naming_the_gate_alone', () => {
-    expect(PlanIssueBody.of({ story: Opened.story(), comment: null })).toContain('-OK <nonce>')
+  it('the_gates_section_says_no_gate_is_asked_for_since_nothing_here_asks_for_one', () => {
+    const body = PlanIssueBody.of({ story: Opened.story(), comment: null })
+    expect(body).toContain('- (none) — this slice demands no human gate before merging.')
+    expect(body).not.toContain('-OK <nonce>')
   })
 })
 
@@ -286,29 +288,20 @@ describe('an issue with no user story is born from the comment alone', () => {
   })
 })
 
-describe('the issue body says how changes are asked for', () => {
-  it('the_issue_body_tells_the_human_to_comment_the_token_instead_of_just_naming_it', () => {
-    const body = PlanIssueBody.of({ story: Opened.story(), comment: null })
-
-    expect(body.split(GhPlanIssues.CHANGES_TOKEN)).toHaveLength(2)
-    expect(PlanIssueBody.CHANGES_LINE).toMatch(/comment on this issue/)
-    expect(PlanIssueBody.CHANGES_LINE).toMatch(/changes to the plan/)
-    expect(PlanIssueBody.CHANGES_LINE).toMatch(/whatever you write after it/)
-    expect(PlanIssueBody.CHANGES_LINE).toMatch(/redone plan/)
-    expect(PlanIssueBody.CHANGES_LINE).toContain(`\`${GhPlanIssues.CHANGES_TOKEN}\``)
-  })
-
-  it('what_it_says_is_the_second_line_of_the_issue_because_that_is_where_it_gets_read', () => {
-    const [story, asking] = PlanIssueBody.of({ story: Opened.story(), comment: null }).split('\n')
-
-    expect(story).toBe(`> Historia de usuario: ${Opened.story().key.text}`)
-    expect(asking).toBe(PlanIssueBody.CHANGES_LINE)
-  })
-
+describe('the first line of a plan issue names where it came from', () => {
   it('the_first_line_of_a_plan_from_a_github_issue_names_it_by_url_backticked_so_it_posts_no_cross_reference', () => {
     const [story] = PlanIssueBody.of({ story: Opened.githubStory(), comment: null }).split('\n')
 
     expect(story).toBe(`> Issue de GitHub: \`${Opened.ISSUE_URL}\``)
+  })
+})
+
+describe('the plan issue no longer invites anyone to ask for changes on it', () => {
+  it('the_body_of_a_plan_issue_no_longer_invites_anyone_to_ask_for_changes_on_it', () => {
+    const body = PlanIssueBody.of({ story: Opened.story(), comment: null })
+
+    expect(body).not.toContain('-REVIEW')
+    expect(body).not.toContain('comment on this issue starting with')
   })
 })
 

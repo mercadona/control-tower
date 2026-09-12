@@ -90,12 +90,13 @@ describe('F21 — the vocabulary of gates', () => {
     expect(Object.keys(GATES).sort()).toEqual(['apply', 'e2e', 'plan', 'visual'])
     expect(TYPE_GATES.ui).toEqual(['visual'])
     expect(TYPE_GATES.infra).toEqual(['apply'])
-    // F-jjponz-2: `plan` is implied in EVERY slice (gatesForType always adds
-    // it); the per-row waiver is `!plan`. The Tipos with no technical gate carry
-    // exactly that default and nothing more.
-    expect(gatesForType('backend')).toEqual(['plan'])
-    expect(gatesForType('')).toEqual(['plan'])
-    expect(gatesForType(undefined)).toEqual(['plan'])
+    // D-14 retires F-jjponz-2's universal default: no `Tipo` implies `plan`
+    // any more (gatesForType always returned it; now it returns exactly the
+    // Tipo's own gates). A row still gets it by writing `plan` in its `Gate`
+    // column, same as any gate no Tipo implies.
+    expect(gatesForType('backend')).toEqual([])
+    expect(gatesForType('')).toEqual([])
+    expect(gatesForType(undefined)).toEqual([])
   })
 
   it('the addenda stop carrying a gate inside: what is left are TECHNICAL reminders and nothing more', () => {
@@ -115,11 +116,11 @@ describe('F21 — the vocabulary of gates', () => {
 // 2. resolveGates: the two axes, separated at last.
 // ============================================================================
 describe('F21 — resolveGates(type, Gate cell)', () => {
-  it('with no cell: the gates come out of the Tipo plus the universal default `plan` (F-jjponz-2)', () => {
-    expect(resolveGates('ui', '').gates).toEqual(['visual', 'plan'])
-    expect(resolveGates('ui', undefined).gates).toEqual(['visual', 'plan'])
-    expect(resolveGates('infra', '').gates).toEqual(['apply', 'plan'])
-    expect(resolveGates('backend', '').gates).toEqual(['plan'])
+  it('with no cell: the gates come out of the Tipo, with no universal default any more (D-14)', () => {
+    expect(resolveGates('ui', '').gates).toEqual(['visual'])
+    expect(resolveGates('ui', undefined).gates).toEqual(['visual'])
+    expect(resolveGates('infra', '').gates).toEqual(['apply'])
+    expect(resolveGates('backend', '').gates).toEqual([])
   })
 
   it('a "no value" marker in Gate means "I have declared nothing", NOT "I waive everything"', () => {
@@ -128,33 +129,33 @@ describe('F21 — resolveGates(type, Gate cell)', () => {
     // not waiving the gate of their Tipo — reading it that way would be removing
     // a gate in silence, precisely the opposite of what this round asks for.
     for (const marker of ['-', '–', '—', '―', '−', '--']) {
-      expect(resolveGates('ui', marker).gates, marker).toEqual(['visual', 'plan'])
+      expect(resolveGates('ui', marker).gates, marker).toEqual(['visual'])
       expect(resolveGates('ui', marker).waived, marker).toEqual([])
     }
   })
 
   it('the case that motivates the round: a gate the Tipo does NOT imply is declared, and is marked as such', () => {
     const r = resolveGates('backend', 'visual')
-    expect(r.gates).toEqual(['visual', 'plan'])
+    expect(r.gates).toEqual(['visual'])
     expect(r.added).toEqual(['visual']) // what has to be said out loud
-    expect(r.implied).toEqual(['plan'])
+    expect(r.implied).toEqual([])
   })
 
   it('waiving a gate implied by the Tipo is explicit (`!visual`) and is recorded', () => {
     const r = resolveGates('ui', '!visual')
-    expect(r.gates).toEqual(['plan'])
+    expect(r.gates).toEqual([])
     expect(r.waived).toEqual(['visual'])
   })
 
   it('waiving a gate the Tipo does not imply does nothing, and that is reported (not kept quiet)', () => {
     const r = resolveGates('backend', '!visual')
-    expect(r.gates).toEqual(['plan'])
+    expect(r.gates).toEqual([])
     expect(r.inertWaivers).toEqual(['visual'])
   })
 
   it('declaring a gate the Tipo already implies is redundant, not an error, and is reported', () => {
     const r = resolveGates('ui', 'visual')
-    expect(r.gates).toEqual(['visual', 'plan'])
+    expect(r.gates).toEqual(['visual'])
     expect(r.redundant).toEqual(['visual'])
     expect(r.added).toEqual([])
   })
@@ -166,20 +167,20 @@ describe('F21 — resolveGates(type, Gate cell)', () => {
 
   it('a token that is not in the vocabulary produces NO gate and is reported (a gate nobody knows how to check is never invented)', () => {
     const r = resolveGates('backend', 'seguridad')
-    expect(r.gates).toEqual(['plan'])
+    expect(r.gates).toEqual([])
     expect(r.unknown).toEqual(['seguridad'])
     expect(resolveGates('ui', '!seguridad').unknown).toEqual(['seguridad'])
   })
 
   it('"none" is not a valid token: waiving is per gate, by name, never wholesale', () => {
     expect(resolveGates('ui', 'none').unknown).toEqual(['none'])
-    expect(resolveGates('ui', 'none').gates).toEqual(['visual', 'plan']) // the gate of the Tipo still stands
+    expect(resolveGates('ui', 'none').gates).toEqual(['visual']) // the gate of the Tipo still stands
   })
 
   it('it tolerates capitals and inline markup, just like the rest of the columns of the §9 table', () => {
-    expect(resolveGates('backend', '`Visual`').gates).toEqual(['visual', 'plan'])
-    expect(resolveGates('ui', '**!visual**').gates).toEqual(['plan'])
-    expect(resolveGates('ui', '! visual').gates).toEqual(['plan'])
+    expect(resolveGates('backend', '`Visual`').gates).toEqual(['visual'])
+    expect(resolveGates('ui', '**!visual**').gates).toEqual([])
+    expect(resolveGates('ui', '! visual').gates).toEqual([])
   })
 
   it('the order of the resolved gates is deterministic, however the cell arrives', () => {
@@ -193,8 +194,8 @@ describe('F21 — resolveGates(type, Gate cell)', () => {
     // The same mistake, and the same remedy, as slices.js#stripColumnPrefix for
     // "area:x" inside the Área column. Without this, writing what you see in
     // GitHub fell into the abort of "gate desconocido".
-    expect(resolveGates('backend', 'gate:visual').gates).toEqual(['visual', 'plan'])
-    expect(resolveGates('ui', '!gate:visual').gates).toEqual(['plan'])
+    expect(resolveGates('backend', 'gate:visual').gates).toEqual(['visual'])
+    expect(resolveGates('ui', '!gate:visual').gates).toEqual([])
   })
 
   it('a "!" with no gate behind it is reported, not discarded in silence', () => {
@@ -204,12 +205,12 @@ describe('F21 — resolveGates(type, Gate cell)', () => {
   })
 
   it('a token with spaces in it ("visual visual", with no comma) does not slip through as a gate', () => {
-    expect(resolveGates('backend', 'visual visual').gates).toEqual(['plan'])
+    expect(resolveGates('backend', 'visual visual').gates).toEqual([])
     expect(resolveGates('backend', 'visual visual').unknown).toEqual(['visual visual'])
   })
 
   it('declaring the same gate twice does not duplicate it in the output', () => {
-    expect(resolveGates('backend', 'visual, visual').gates).toEqual(['visual', 'plan'])
+    expect(resolveGates('backend', 'visual, visual').gates).toEqual(['visual'])
     expect(resolveGates('backend', 'visual, visual').added).toEqual(['visual'])
   })
 
@@ -217,10 +218,10 @@ describe('F21 — resolveGates(type, Gate cell)', () => {
     // It is documented as behaviour, not "fixed" by making it
     // case-insensitive: ADDENDA compares just as exactly, and two different
     // criteria for the same column would be worse than one strict criterion
-    // with a voice. The universal default `plan` (F-jjponz-2) does not depend on
-    // the Tipo, so it survives even a typo.
-    expect(gatesForType('UI')).toEqual(['plan'])
-    expect(gatesForType('iu')).toEqual(['plan'])
+    // with a voice. With D-14, nothing implicit survives a typo any more: a
+    // mismatched Tipo now implies exactly no gate at all.
+    expect(gatesForType('UI')).toEqual([])
+    expect(gatesForType('iu')).toEqual([])
   })
 })
 
@@ -267,15 +268,14 @@ describe('F21 — the gate reaches GitHub, not just the kickoff', () => {
     expect(buildLabels(backendWithGate)).toContain('gate:visual')
   })
 
-  it('a slice with no technical gates carries the default `gate:plan`; `gate:none` is left for the total waiver', () => {
-    // Without the `gate:none` label, "the issue has no gate: label at all"
-    // would mean at once "this slice has no gates" and "this issue predates the
-    // gates" (see the redispatch block, further down). With the universal
-    // default of F-jjponz-2, the only way to end up with no gates is to waive
-    // them all explicitly — `!plan` on a Tipo with no technical gate.
-    expect(buildLabels(bareBackend)).toContain('gate:plan')
-    expect(buildLabels(bareBackend)).not.toContain(GATE_LABEL_NONE)
-    expect(buildLabels({ ...bareBackend, gate: '!plan' })).toContain(GATE_LABEL_NONE)
+  it('a slice with no technical gates and no declared `plan` carries `gate:none`; a row that writes `plan` still gets `gate:plan`', () => {
+    // D-14 retires the universal default: `bareBackend` (a `Tipo` with no
+    // technical gate, and an empty `Gate` cell) now resolves to no gates at
+    // all, exactly like the old `gate:none` case. `plan` has not left the
+    // vocabulary — a row that writes it in its `Gate` column still gets it.
+    expect(buildLabels(bareBackend)).toContain(GATE_LABEL_NONE)
+    expect(buildLabels(bareBackend)).not.toContain('gate:plan')
+    expect(buildLabels({ ...bareBackend, gate: 'plan' })).toContain('gate:plan')
     expect(buildLabels(uiSlice)).not.toContain(GATE_LABEL_NONE)
   })
 
@@ -292,9 +292,10 @@ describe('F21 — the gate reaches GitHub, not just the kickoff', () => {
     // The declared absence, spelled out. It used to be asserted as a loose
     // /ninguno/ over the WHOLE body, which the "Out of scope / Protected"
     // line's own "(ninguno declarado)" satisfied on its own — so the assertion
-    // passed without the gates section saying anything, and it went on passing
-    // after F-jjponz-2 made `plan` universal and left this slice with a gate.
-    // The absence only happens with a waiver, and that is what is measured now.
+    // passed without the gates section saying anything. With D-14, a `Tipo`
+    // with no technical gate and nothing declared is already the (none) case;
+    // the `!plan` here is now an inert waiver over an already-empty set, and
+    // the section still has to say "(none)" out loud rather than fall silent.
     expect(body).toContain('- (none) — this slice demands no human gate before merging.')
   })
 
@@ -307,7 +308,7 @@ describe('F21 — the gate reaches GitHub, not just the kickoff', () => {
 
   it('groomPlan exposes the resolved gates as structured data', () => {
     const plan = groomPlan([backendWithGate], { milestone: 'Epic', specRef: {} })
-    expect(plan.issues[0].gates).toEqual(['visual', 'plan'])
+    expect(plan.issues[0].gates).toEqual(['visual'])
   })
 })
 
@@ -410,7 +411,9 @@ describe('F21 — /ct-groom talks about the gates', () => {
     expect(res.stderr.toLowerCase()).toMatch(/waives/)
     expect(res.stderr).toContain('visual')
     const plan = JSON.parse(res.stdout)
-    expect(plan.issues[0].labels).toContain('gate:plan') // the universal default still stands
+    // D-14: nothing is implied any more once `visual` is waived, so the row
+    // ends up with no gates at all — `gate:none`, not `gate:plan`.
+    expect(plan.issues[0].labels).toContain(GATE_LABEL_NONE)
     expect(plan.issues[0].labels).not.toContain('gate:visual')
   })
 
@@ -449,9 +452,10 @@ describe('F21 — /ct-groom talks about the gates', () => {
     expect(res.stderr).toContain('ui→visual')
     expect(res.stderr).toContain('"Gate" column') // the remedy, in the warning itself
     const plan = JSON.parse(res.stdout)
-    // it loses the TECHNICAL gate of its Tipo (visual), but the universal
-    // default `plan` does not depend on the Tipo and survives the typo.
-    expect(plan.issues[0].labels).toContain('gate:plan')
+    // it loses the TECHNICAL gate of its Tipo (visual), and with D-14 there is
+    // no universal default left to survive the typo either: the row ends up
+    // with `gate:none`.
+    expect(plan.issues[0].labels).toContain(GATE_LABEL_NONE)
     expect(plan.issues[0].labels).not.toContain('gate:visual')
   })
 

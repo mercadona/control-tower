@@ -52,7 +52,7 @@ describe('PlanRefusal', () => {
 describe('PlanCollapse', () => {
   const FAMILIES = [
     'PlanFailure', 'UserStoryFailure', 'PlanIssueFailure', 'PlanAgentFailure', 'WorkspaceFailure',
-    'PlanProgressFailure', 'PlanChangesFailure', 'GoFailure', 'HarvestFailure', 'PlanStoryFailure',
+    'PlanProgressFailure', 'PlanStatusFailure', 'GoFailure', 'HarvestFailure', 'PlanStoryFailure',
     'ImplementationProgressFailure', 'ImplementationHistoryFailure', 'PullRequestFailure', 'WorkbenchFailure',
   ]
 
@@ -63,7 +63,7 @@ describe('PlanCollapse', () => {
     !FAMILIES.includes(name) &&
     !RESUMING_AN_AGENT.includes(name) &&
     !(thrown.prototype instanceof exceptions.PlanProgressFailure) &&
-    !(thrown.prototype instanceof exceptions.PlanChangesFailure) &&
+    !(thrown.prototype instanceof exceptions.PlanStatusFailure) &&
     !(thrown.prototype instanceof exceptions.PlanStoryFailure) &&
     !(thrown.prototype instanceof exceptions.HarvestFailure) &&
     !(thrown.prototype instanceof exceptions.ImplementationProgressFailure) &&
@@ -83,10 +83,10 @@ describe('PlanCollapse', () => {
     expect(new Set(codes).size).toBe(codes.length)
   })
 
-  it('a_failure_of_reading_the_changes_asked_for_has_no_refusal_declared_here_because_it_only_reaches_stderr', () => {
-    expect(PlanCollapse.declaredFailures()).not.toContain('PlanChangesNotRead')
-    expect(PlanCollapse.declaredFailures()).not.toContain('PlanChangesNotUnderstood')
-    expect(() => PlanCollapse.of(new exceptions.PlanChangesNotRead('gh: not authenticated')))
+  it('a_failure_of_reading_the_status_of_an_issue_has_no_refusal_declared_here_because_it_only_reaches_stderr', () => {
+    expect(PlanCollapse.declaredFailures()).not.toContain('PlanStatusNotRead')
+    expect(PlanCollapse.declaredFailures()).not.toContain('PlanStatusNotUnderstood')
+    expect(() => PlanCollapse.of(new exceptions.PlanStatusNotRead('gh: not authenticated')))
       .toThrow(/no refusal declared/)
   })
 

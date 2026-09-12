@@ -14,7 +14,7 @@ Every shape below was read from a running server, not from the source alone. The
 | Port | `CT_API_PORT`, default `8787` |
 | Interface | loopback only (`127.0.0.1`) |
 | Start | `make run-backend` |
-| Endpoints | 7 (`POST` 3, `GET` 4) |
+| Endpoints | 7 (`POST` 2, `GET` 5) |
 
 In development the vite dev server proxies these paths to the backend and strips
 the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
@@ -217,37 +217,27 @@ curl -s -X POST -H 'Content-Type: application/json' \
 
 ## `GET /plan-events/:issue?repo=owner/name`
 
-Server-sent events. It reports whether the plan is written, committed or being
-reworked. The stream stays open until the client disconnects, and polls in the
+Server-sent events. It reports whether the plan is being written or is
+committed. The stream stays open until the client disconnects, and polls in the
 meantime.
 
 It only serves an issue whose plan **this process** started or recovered. A
 restarted backend has forgotten every session it did not recover from cmux.
 
-**200** with `Content-Type: text/event-stream`. Three frame kinds:
+**200** with `Content-Type: text/event-stream`. Two frame kinds:
 
 ```
 data: {"state":"writing"}
 
 data: {"state":"ready"}
 
-data: {"state":"reviewing"}
-
 event: error
 data: {"code":"plan-progress-not-read","detail":"git status refused"}
 ```
 
-`state` is `writing`, `ready` or `reviewing`. A frame is only sent when the
-state **changes**, so expect nothing on the wire while the agent works. An
-`error` frame does not close the stream; the next poll may succeed.
-
-`reviewing` means changes were asked for on the plan and the agent has not
-recommitted the reworked plan yet. It comes from comparing the newest
-`-REVIEW` comment's date against the plan file's last commit, and the
-endpoint asks GitHub nothing of its own: the date is recorded by the review
-watch on its own 30-second sweep, so a `-REVIEW` just commented can take up
-to that sweep to show as `reviewing`. It returns to `ready` by itself when
-the agent recommits.
+`state` is `writing` or `ready`. A frame is only sent when the state
+**changes**, so expect nothing on the wire while the agent works. An `error`
+frame does not close the stream; the next poll may succeed.
 
 **Refusals** (before the stream opens, as JSON)
 
@@ -296,7 +286,6 @@ serialised.
 | `malformed-repo` | 400 | `repo` is not `owner/name` |
 | `no-live-planning-session` | 400 | no active plan matches that issue **or** its agent handle differs |
 | `implementation-phase-uncertain` | 400 | the backend cannot tell whether implementation already began; a person must look before retrying |
-| `plan-under-review` | 400 | changes were asked for on the plan and it has not been reworked yet |
 | `go-not-recorded` | 400 | the GO marker could not be written |
 | `plan-go-not-answered` | 400 | the GO comment on the issue failed |
 | `plan-agent-not-resumed` | 400 | cmux would not take the line |
@@ -304,96 +293,10 @@ serialised.
 `no-live-planning-session` is the one to expect after a backend restart: send the
 `agent` from `/active-plans`, not one the page remembered from an older run.
 
-`plan-under-review` answers two different questions and both refuse. A `-REVIEW`
-comment the review watch has not typed into the agent yet is one: the endpoint
-reads the issue's comments itself so that a comment posted seconds ago cannot be
-dropped by the GO stopping the watch. A plan whose newest `-REVIEW` is newer than
-its last commit is the other: the change reached the agent and the rework is not
-committed. The first goes quiet as soon as the watch sweeps; the second covers
-the minutes that follow, and clears itself when the agent recommits — the same
-signal `/plan-events` reports as `reviewing`.
-
-**A plan already implementing is never asked either question**: it answers its
-usual 202 even while a review is in flight, because the watch is long gone.
-
-The two questions are not independent, and it matters when one fails: reading the
-issue's comments is also what records their dates in the review log the second
-question reads. So a `gh` that refuses leaves the second question answering from
-whatever the last 30-second sweep recorded, not from nothing.
-
-**Half a signal is still a signal.** If one question cannot be answered — `gh`
-refused, or `git` did — the other is still asked, and an answer of "under review"
-still refuses. Only when nothing that could be read says a review is in flight is
-the GO **admitted**, and then the backend warns on stderr that it admitted one
-without being able to read the whole signal. It fails towards what we already
-have instead of towards a plan nobody can ever implement.
-
 ```
 curl -s -X POST -H 'Content-Type: application/json' \
   http://127.0.0.1:8787/implement-plan \
   -d '{"agent":"workspace:20","issue":33,"repo":"owner/name"}'
-```
-
----
-
-## `POST /review-plan`
-
-Asks the plan-writing agent for changes, from the web page instead of typing
-the `-REVIEW` token into GitHub by hand.
-
-**The call does not talk to the agent.** Its only effect is a comment on the
-plan's GitHub issue, of the shape `-REVIEW <changes>`. The agent reads it on
-the review watch's next sweep, up to 30 seconds after this call answers — not
-when it answers. A 202 means the comment was posted, not that the agent has
-seen it yet.
-
-**Request**
-
-| Field | Type | Shape |
-|---|---|---|
-| `issue` | number | whole, from 1 |
-| `repo` | string | `owner/name` |
-| `changes` | string | what to change, not blank, no control characters other than newline, carriage return or tab |
-
-The text is published quieted — mentions, `#123` and `owner/name#123`
-references and GitHub URLs are wrapped in backticks, so the text notifies
-nobody it would not already have notified by being a comment. Posting a comment
-at all still reaches the issue's author, its assignee, its subscribers and
-anyone watching the repository; quieting is about the text, not about the
-comment. Two forms still get through: a mention preceded by a dot
-(`.@someone`) and the `GH-123` form, which GitHub autolinks into a
-cross-reference that notifies that issue's subscribers.
-
-**202 Accepted**
-
-```json
-{"status":"changes-asked","issue":33}
-```
-
-**Refusals**
-
-| `code` | Status | Meaning |
-|---|---|---|
-| `body-not-a-json-object` | 400 | `body must be a JSON object` |
-| `unknown-field` | 400 | `detail` names the fields, sorted |
-| `malformed-issue` | 400 | `issue must be a whole number from one` |
-| `malformed-repo` | 400 | `repo must be a repository such as owner/name` |
-| `malformed-changes` | 400 | `changes must say what to change` |
-| `no-live-planning-session` | 400 | `no matching live planning session exists, so nobody would read the changes` |
-| `plan-already-being-implemented` | 400 | `the plan is already being implemented, so its review watch is gone` |
-| `implementation-phase-uncertain` | 400 | `implementation may have started; inspect the plan before retrying` |
-| `plan-changes-not-asked` | 400 | `gh` refused to post the comment; `detail` carries its own message |
-
-Those three are three different states, and only `code` separates them:
-nothing is watching this issue, the plan moved on to being implemented, or this
-process cannot tell which. The last one is the same code `POST /implement-plan`
-emits, with the same meaning — a person has to look at the plan before
-retrying.
-
-```
-curl -s -X POST -H 'Content-Type: application/json' \
-  http://127.0.0.1:8787/review-plan \
-  -d '{"issue":33,"repo":"owner/name","changes":"parte la tarea 2"}'
 ```
 
 ---
