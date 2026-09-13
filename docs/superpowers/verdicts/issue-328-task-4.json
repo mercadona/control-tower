@@ -1,0 +1,66 @@
+{
+  "issue": 328,
+  "task": 4,
+  "task_name": "`ClaudeConversations`: the CLI, its argv and its environment",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises four things and each one has a production line behind it. 'Spawns claude through the login shell': #open builds a SessionProgram with file = this.shell ?? PtyLiveSessions.FALLBACK_SHELL and argv [PtyLiveSessions.LOGIN_INTERACTIVE, '-c', command] (claude-conversations.ts:76-79). 'In the governed checkout': cwd: conversation.root.text (line 80). 'The prompt's path in the environment': start() passes extra: { CT_PHASE_PROMPT: promptPath } and #open spreads it into env (lines 58-62, 81-85); resume() passes {} so the variable is absent there. 'The conversation's id imposed': #startCommand emits --session-id ${id} with the id minted by mint() (lines 43-45, 67-70). 'Answers whether a recorded conversation can still be resumed': isResumable builds ClaudeCodeTranscript with claudeDirectory and cwd: conversation.root.text and returns read(conversation.id.text) !== null (lines 47-56). Nothing the objective names is missing.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The **TDD:** line names it('imposes the minted conversation id and leaves the prompt path in the environment') with the assertion 'on the literal argv and on env.CT_PHASE_PROMPT, proving the path is in neither the command nor the argument'. The test at claude-conversations.test.ts:95-110 is that test: it mints through the adapter (const id = conversations.mint()), calls start with Governed.PROMPT_PATH, and asserts toEqual over the whole recorded argv array including --session-id ${id.text}, then env[PROMPT_VARIABLE] === the prompt path, then that argv.join(' ') does not contain the path. Same assertion, same input, same expected value. Nuance declared and not a finding here: the expected argv string is composed from ClaudeConversations' own constants rather than spelled out (see patrones); the plan's phrase 'the literal argv' is honoured in the sense that matters, an equality over the whole array rather than a substring match, and the literal values of those constants are pinned by the Contract block, which item 3 checks.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "Symbol by symbol against the Contract block. Class exported and extends Conversations. The six constants carry the literal values the brief states: BIN='claude', NAME='brainstorming', PROMPT_VARIABLE='CT_PHASE_PROMPT', HOOKS_URL_VARIABLE='CT_SESSION_HOOKS_URL', PERMISSION_MODE='acceptEdits', OPENING='Read the file at \"$CT_PHASE_PROMPT\" and do exactly what it says.' — all verbatim. The constructor takes the eight named parameters with the declared types, in the declared order. The two commands match the prose: `exec claude --session-id <id> --permission-mode acceptEdits \"<OPENING>\"` and `exec claude --resume <id> --permission-mode acceptEdits`, handed to the shell as ['-il','-c',command] (PtyLiveSessions.LOGIN_INTERACTIVE is '-il'). The environment adds CT_PHASE_PROMPT on start only and CT_SESSION_HOOKS_URL always, on top of the inherited env; cwd is conversation.root.text. isResumable asks the plugin's ClaudeCodeTranscript (imported from plugin/scripts/claude-code-usage.js) for conversation.id.text under claudeDirectory with cwd: conversation.root.text and answers whether it read anything. A spawn that throws is caught and rethrown as ConversationNotStarted, the leaf declared in domain/exceptions.ts. Observation about the plan's own text, not a defect of the diff: OPENING already carries double quotes around $CT_PHASE_PROMPT and the command wraps OPENING in double quotes again, so the expansion ends up unquoted inside the concatenation and a prompt path containing a space would word-split under a POSIX login shell. The implementer transcribed the contract exactly, so this belongs to whoever judges the plan.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Rows the diff bears on: D-10 (everything new under backend/ is TypeScript) — both new files are .ts, and the plugin import names the .js extension the plugin really has. D-11 (a yardstick imported from the plugin, never reimplemented) — isResumable builds the plugin's ClaudeCodeTranscript instead of reimplementing the projects/<mangled-cwd>/<id>.jsonl layout, and the test derives its path with the plugin's own ClaudeCodeTranscript.folderFor. D-16 (cmux leaves the backend) — no occurrence of cmux in either file. D-25 (context relayed as paths, never pasted into a prompt) — the phase prompt travels as CT_PHASE_PROMPT in the environment and the opening argument only tells the session to read that file; no prompt text is composed here. D-1 (a real terminal) — the adapter opens through PtyLiveSessions rather than a structured chat. D-21 (recoverable) — resume() and isResumable() are what the restart path will use. D-13, D-18, D-22, D-26 and the button literal have no subject in this diff and are left alone. No row is implemented with a different value.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: the adapter follows pty-live-sessions.ts (static constants, dependencies by name through the constructor, private statics for command composition) and its test follows pty-live-sessions.test.ts (local TerminalDouble/SpawnDouble classes recording the spawn, a mother class per subject). defects.md, rule by rule: (1) closed vocabulary — the one loose-looking value is isResumable's boolean; the subject exists, but the boolean is the signature of the Conversations port fixed in Task 2 and restated in this brief's Contract as `extends Conversations`, and the none/live/unresumable vocabulary is assembled at the boundary in Task 9, so this task had no room and it is not a finding; PERMISSION_MODE and BIN are values fixed by the claude CLI, not classifications. (2) raw map as the return value of logic — none: the only map is the process environment handed to SessionProgram, a value object that carries it to the spawn, which is the serialization boundary itself; #definedEntriesOf is private and its result crosses nothing. (3) two fields that have to agree — none, and no sentinel: `shell: string | undefined` carries the absence in the type and the prompt variable is simply absent from the environment on resume rather than set to ''. (4) an error named for where it happens — ConversationNotStarted is named for what happens and inherits ConversationFailure, not the root PlanFailure. style.md: no comments, English throughout, every function hangs off a type in both files. architecture.md/boundaries.md: an adapter in infrastructure/ named after its implementation, dependencies injected by name, the failure of the external system interpreted at the one place it can throw; `(cause as Error).message` is this backend's own idiom for a caught cause (git-workspace.ts:201), not a cast of an external payload. decisions.md: #definedEntriesOf repeats PtyLiveSessions' private copy, but filtering undefined out of a ProcessEnv is the idiom of a boundary and no business change forces touching both — the rule of three applies and this is the second. Two clashes declared rather than reported: the **Verification:** command `grep -c 'CT_PHASE_PROMPT' … -eq 3` forces the environment key to be the literal 'CT_PHASE_PROMPT' (using [ClaudeConversations.PROMPT_VARIABLE] would drop the count to 2), which is why PROMPT_VARIABLE ends up with no production caller, against simplicity.md's 'a public symbol with no caller'; and the **Tests:** list fixes six tests, none of which asserts the CT_SESSION_HOOKS_URL entry, so that line goes unwatched. Both are the plan's, and the diff is the only one the implementer could write. One low remark is filed below, on the expected argv being built from the constants under test.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Does not apply: the diff has no `-` lines at all. Both files are new (new file mode 100644), so no pre-existing assertion, case or test was removed, relaxed or rewritten.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised behaviour lives in backend/src/infrastructure/claude-conversations.ts: the command composition, the environment, the cwd and the transcript lookup are production lines, and the test's scaffolding is only the cut right before the external system — a TerminalSpawn double that records what was handed to node-pty, and injected listNames/readText/newId/hooksUrl. Reverting the production file would leave every one of the six tests with nothing to import. The one hard-coded expected value that could have hidden behaviour, the transcript path in 'answers that a recorded transcript can be resumed', is not scaffolding standing in for logic: readText throws for any other path, so the test only goes green because the adapter passed the real claudeDirectory and the conversation's root through to the plugin's reader.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The diff writes exactly two files, both declared `(create)` in **Files:**, and nothing else — no plan hunk, so no amendment to rule on. Inside them, every line traces to a sentence of the task: the six constants and the constructor to the Contract block, #startCommand/#resumeCommand to its command prose, the CT_SESSION_HOOKS_URL entry to 'the environment adds … CT_SESSION_HOOKS_URL', mint() and resume() to the port the Contract says it extends and to the **Tests:** list, isResumable to the last sentence of the contract, and the catch to 'A spawn that throws becomes ConversationNotStarted'. The six tests are the six the **Tests:** line names, no more and no fewer. Nothing `### Out of scope` names by name — the brainstorming skill, POST /start-plan, the gates and Home's stages — is touched.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "Six new tests, all in one new file. Deterministic: no clock, no date, no network, no filesystem and no randomness — the shell, env, claudeDirectory, listNames, readText, newId and hooksUrl are all injected, and the terminal is a double, so the same code makes them pass tomorrow. Isolated: each test builds its own adapter and its own recording spawn through Adapter.readyToOpen/unableToSpawn; the only shared state is frozen value objects and string constants on Governed, nothing mutable, no fixed port, path or directory, and no test depends on the order of the file. Verifies real behaviour: every assertion is on what the production code handed to the boundary (the literal argv, the env entry, the cwd) or on what the adapter returned (isResumable true/false, the ConversationNotStarted it raises); none of them would survive reverting the production lines of this diff. control-tower-loop:test-driven-development loaded, with its testing-anti-patterns.md reference: nothing in either text is contradicted — the assertions are on the spawn's recorded arguments rather than on the double's own existence (Anti-Pattern 1), no test-only method was added to the production class (Anti-Pattern 2), and the double's setup is shorter than the tests it serves. The one remark I could pin to a document is a testing.md one and is filed under patrones, so it is not repeated here.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "patrones",
+        "severity": "low",
+        "what": "The expected argv of the two spawn tests is composed from the very constants under test, so the structure of the command is pinned but the literal values are not: changing PERMISSION_MODE from 'acceptEdits' to 'bypassPermissions', or rewriting OPENING, changes production and expectation together and the suite stays green. conventions/testing.md asks for the literal payload at a boundary precisely so the check is not approved by construction. Spelling the command out once, as pty-live-sessions.test.ts does with argv ['-il'] and file '/bin/sh', would close it. Low and not blocking: the literal values are stated in the brief's Contract block and the production file matches them verbatim, so the values are pinned by review here; and env[PROMPT_VARIABLE] is genuinely cross-checked, because the production code writes that key as a literal.",
+        "path": "backend/__tests__/infrastructure/claude-conversations.test.ts",
+        "line": 106,
+        "evidence": "`--permission-mode ${ClaudeConversations.PERMISSION_MODE} \"${ClaudeConversations.OPENING}\"`, — against conventions/testing.md: \"At a boundary, the literal payload sent or received, not a model of it reimplemented in the test. Comparing against your own model of the format is rewriting the mapping and approving it by construction.\""
+      }
+    ],
+    "review_token": "61e1b69ca4043cd1d47374df10f7777026791dd862e91dac193762417cff1f28"
+  }
+}
