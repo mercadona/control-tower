@@ -67,12 +67,15 @@ wiring, `ReadFixesAsked` and `RequestFixes` — exactly where it is.
   `go-response.js` and `dispatch-check.mjs`'s exit-9 ladder. Debt A-3 of the spec retires them in
   later work; here only the **default** dies.
 - `GATES.plan` itself stays in the vocabulary with both its texts: a row that writes `Gate: plan`
-  still gets the gate. What changes is only that no row gets it without asking. **Known residue,
-  left on purpose:** `GATES.plan.kickoff` opens with «implicado por defecto en TODO slice, salvo
-  renuncia `!plan`», which this slice makes false. D-14 binds the epic to touching the distributed
-  plugin beyond that single line for nothing, so the sentence stays and is retired with the rest of
-  the go protocol in debt A-3. The gate's operative instruction — publish the plan and wait — is
-  still correct for a row that asks for it; only the parenthetical about how it got there is not.
+  still gets the gate. What changes is only that no row gets it without asking. **Residue found by
+  the slice judge and fixed after review:** three sentences said the gate was implied by default,
+  which this slice makes false — `GATES.plan.kickoff` (shipped text a dispatched agent reads) plus
+  comments in `dispatch-check.mjs` and `go-response.js`. They were first left alone on D-14's
+  «sin tocar el plugin distribuido más allá de esa única línea» and then fixed, because a person
+  amended D-14 for exactly this. They land in this slice rather than a later one so the text and
+  `gatesForType` fall in the same delivery: fixed anywhere else, the correction would be the false
+  sentence for as long as this pull request stayed unmerged. `ct-init.sh`'s changelog line for v18
+  of the slices contract says the same thing and is NOT touched: it records what that version did.
 - `POST /implement-plan` stays routed and keeps minting the go. Slice #6 retires it.
 - `cmux-plan-agents.ts` stays; only its `review()` method leaves, with the port method it implements.
   Slice #6 takes cmux out of the backend.
