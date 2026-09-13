@@ -772,20 +772,20 @@ export type OpenOutcome =
 `StartPlanClient.start` posts. `useCoordinatingSession()` reads on mount and every 2000 ms, and
 stops on unmount. Product copy, in Spanish: `Trabajando`, `Esperando`, `Te está preguntando`, and
 the banner `No se ha podido recuperar la conversación coordinadora` with
-`Claude Code ya no guarda esta conversación. No se ha abierto otra en su lugar.` No stylesheet of
-its own: a strip of text and a `Banner` in the design system's classes. `frontend/vite.config.ts`
-adds `'/coordinating-session'` and `'/session-hooks'` to `API_PATHS`, or the dev server answers
-the page's HTML instead of the API.
+`Claude Code ya no guarda esta conversación. No se ha abierto otra en su lugar.` — the backend's
+English `detail` is diagnostic and never renders. No stylesheet of its own.
+`frontend/vite.config.ts` adds `'/coordinating-session'` and `'/session-hooks'` to `API_PATHS`.
 
-**TDD:** `it('muestra la pregunta en curso cuando la sesión está esperando')` — the client
-stubbed with a `waiting` answer, asserting the question's text on screen.
+**TDD:** `it('shows the live question while the session is waiting')` — the client stubbed with a
+`waiting` answer, asserting the question's text on screen. Test names are English here; only what
+renders is Spanish.
 
-**Tests:** in `useCoordinatingSession.test.ts`: `lee el estado al montarse`,
-`vuelve a leer cada dos segundos`, `deja de leer al desmontarse`. In `client.test.ts`:
-`lee el estado de la sesión coordinadora`, `envía la idea al abrir el brainstorming`,
-`devuelve la negativa del backend con su código`. In `CoordinatingSessionStatus.test.tsx`:
-`muestra que la sesión está trabajando`, `muestra la pregunta en curso cuando la sesión está esperando`,
-`avisa de que la conversación no se ha podido recuperar`.
+**Tests:** in `useCoordinatingSession.test.ts`: `reads the state on mount`,
+`reads again every two seconds`, `stops reading on unmount`. In `client.test.ts`:
+`reads the coordinating session state`, `sends the idea when it opens the brainstorming`,
+`returns the backend's refusal with its code`. In `CoordinatingSessionStatus.test.tsx`:
+`shows that the session is working`, `shows the live question while the session is waiting`,
+`warns that the conversation could not be recovered`.
 
 **Verification:** the three suites are green and the dev proxy knows the path.
 
@@ -819,17 +819,17 @@ the very same `StartPlanSubmission` it builds today; `onStarted` becomes
 locked summary, the field validation, the refusal banner and the `start-plan-help` text are
 untouched, and so is `frontend/src/app/start-plan/client.ts`, whose endpoint D-26 keeps.
 
-**TDD:** `it('abre el brainstorming con el ticket y el comentario')` — the client stubbed, the
-assertion on the literal submission it received, `{id, userComment, repo, path}`. Then
-`it('no abre nada mientras falte el repositorio o la ruta')`.
+**TDD:** `it('opens the brainstorming with the ticket and the comment')` — the client stubbed,
+the assertion on the literal submission it received, `{id, userComment, repo, path}`. Then
+`it('opens nothing while the repository or the path is missing')`.
 
 **Tests:** `StartPlanForm.test.tsx` keeps its field, validation and locked-summary tests and
 replaces the ones naming the plan with
-`abre el brainstorming con el ticket y el comentario`,
-`abre el brainstorming solo con una descripción libre`,
-`no abre nada mientras falte el repositorio o la ruta`,
-`muestra la negativa del backend sin perder lo escrito`,
-`avisa cuando el backend no contesta`.
+`opens the brainstorming with the ticket and the comment`,
+`opens the brainstorming with free text alone`,
+`opens nothing while the repository or the path is missing`,
+`shows the backend refusal without losing what was typed`,
+`warns when the backend does not answer`.
 
 **Verification:** the form's suite is green and the plan endpoint is no longer called from it.
 
@@ -875,14 +875,14 @@ that used to press the button now reaches a later stage. `Home.startPlan.test.ts
 on purpose: a rename would delete a file the scope control expects to still be there, and its
 `describe` is what says it is about the brainstorming now.
 
-**TDD:** `it('deja hablar con la sesión coordinadora mientras se implementa un slice')` — `Home`
+**TDD:** `it('keeps the coordinating session reachable while a slice is implemented')` — `Home`
 opened restored in the implementation stage, asserting the terminal's region is on screen **and**
 that its input is not disabled.
 
 **Tests:** added to `Home.sessions.test.tsx`:
-`deja hablar con la sesión coordinadora mientras se implementa un slice`,
-`vuelve a pintar lo ya dicho al recargar la página`,
-`muestra la pregunta en curso de la sesión coordinadora`. `Home.startPlan.test.tsx` points at
+`keeps the coordinating session reachable while a slice is implemented`,
+`replays what was already said when the page reloads`,
+`shows the coordinating session's live question`. `Home.startPlan.test.tsx` points at
 `/coordinating-session`; its `uncertain-start` tests go with the branch they measured.
 
 **Verification:** the whole frontend suite is green.
@@ -1012,7 +1012,12 @@ test -z "$(grep -l 'cmux' backend/src/infrastructure/claude-conversations.ts)"  
     collaborators, and Task 6 adds no `*NotUnderstood`: a malformed record raises
     `ConversationNotRecorded` too. Recorded rather than fixed, because the alternative splits one
     family in two for a cause no caller tells apart. Provenance: own call, after a judge raised it.
-14. **Thirteen tasks.** The slice was cut with a human in the room and carries eight acceptance
+14. **Test names are English, in every package.** `CLAUDE.md` puts `describe`/`it`/`test` names
+    in the English bucket with no product-copy exemption, and `frontend/__tests__/yardstick.test.ts`
+    enforces it with a denylist of Spanish words. An earlier draft of this plan named the frontend
+    tests in Spanish, confusing "what renders is Spanish" with "the test that watches it is". Only
+    what renders is. Provenance: `CLAUDE.md`, via a control that refused Task 10.
+15. **Thirteen tasks.** The slice was cut with a human in the room and carries eight acceptance
     criteria across three packages; splitting the slice is not in this session's hands, so the
     work is split into commits instead. Every `**Files:**` line spells each path in full, because
     `splitFiles` (`plugin/scripts/plan-tasks.js`) reads every backticked token in that paragraph

@@ -1,0 +1,74 @@
+{
+  "issue": 328,
+  "task": 10,
+  "task_name": "The cabin reads the coordinating session",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises four things: the page polls GET /coordinating-session, and renders the status, the live question and the unresumable notice beside the terminal. Polling: useCoordinatingSession.ts fires a first read through window.setTimeout(poll, 0) on mount, re-arms at POLL_INTERVAL_MS = 2000 after each read and clears the timer plus a `cancelled` flag on unmount. Status: CoordinatingSessionStatus.tsx renders 'Trabajando' and 'Esperando'. Live question: the 'Te está preguntando: <question>' span, guarded by attention.question !== null. Unresumable notice: the error Banner with the two Spanish sentences. The only unproduced part is the placement 'beside the terminal', and no line of this diff owes it: Home.tsx is not in this task's **Files:**, and the plan's Task 12 is the one that mounts `<CoordinatingSessionStatus />` inside the `home__sessions` section next to `<SessionsPanel />` (plan line 864). Measured and holds.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The **TDD:** line asks for `it('shows the live question while the session is waiting')` with the client stubbed with a `waiting` answer, asserting the question's text on screen. CoordinatingSessionStatus.test.tsx carries that test verbatim: it stubs fetch with CoordinatingSessionMother.waiting() — a 200 whose body is status 'live' with attention {status:'waiting', question: QUESTION} — renders the component and asserts `await screen.findByText(CoordinatingSessionMother.QUESTION, { exact: false })`. Same assertion, same input, same expected value; the loose match is only because the rendered string prefixes the question with 'Te está preguntando: ', and the question text itself is the distinctive part being matched.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "Compared name by name with the Contract block. The five types in CoordinatingSession.types.ts are literal: Attention with status 'working'|'waiting' and question string|null; LiveSessionRef {id, name}; CoordinatingSessionOutcome with the four members none/live/unresumable/unavailable and exactly the declared fields per member; OpenedCoordinatingSession {conversation, session}; OpenOutcome with opened/refused({code,error})/backend-unreachable. CoordinatingSessionClient.read(): Promise<CoordinatingSessionOutcome> and .open(submission: StartPlanSubmission): Promise<OpenOutcome> match, and .open posts the body StartPlanClient.start posts — the client.test.ts assertion is on the literal `StartPlanMother.REQUEST_BODY`, the same constant Home.startPlan.test.tsx:60 pins /start-plan against. useCoordinatingSession() reads on mount, re-reads at 2000 ms and stops on unmount. The four product-copy literals are exactly the ones the contract spells, the backend's English `detail` is read into the outcome and never rendered, no stylesheet was created, and vite.config.ts's API_PATHS gains '/coordinating-session' and '/session-hooks'.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Row by row: D-21 ('a conversation that cannot be resumed is said out loud; the cabin never opens a different one and presents it as the same') is the row this diff implements, and it implements the value stated — the unresumable outcome renders a role='alert' Banner saying so, and nothing in the diff opens another conversation. D-26 ('the idea enters through the form the cabin already has', the endpoint of the short path stays as it is) is honoured: .open posts the same {id,user_comment,repo,path} body to /coordinating-session and frontend/src/app/start-plan/client.ts is untouched. D-1, D-13, D-18, D-25, D-10, D-11, D-16, D-22 and the button-literal row have no subject in this diff and are left alone (the hook's `phase: 'connecting'|'read'` is a read state of one component, not the workflow phase D-13 forbids storing). No row is reopened.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: frontend/src/app/sessions/useLiveSessions.ts (a state union with a pre-read member, a cancellation flag, named export at the foot), SessionsPanel.tsx (early returns, system-ui Banner with role='alert', BEM class on a bare <p>), SessionsMother.ts and StartPlanMother.ts (scenario methods plus exported constants), start-plan/client.ts and sessions/client.ts (a `PATH` constant, isRecord/isX type guards, an exported namespace object) — the diff plays the same roles with the same idiom, and improves on start-plan/client.ts by validating instead of casting, which boundaries.md asks for ('a cast checks nothing'). conventions/defects.md, rule by rule: (1) closed vocabulary — outcomes are discriminated unions, the absent state is a member ('none', 'connecting') rather than an optional, and no boolean stands in for a state; the one blemish is the attention dispatch, which falls through to 'Trabajando' for anything that is not 'waiting', reported as a low; (2) raw map as the return value of logic — none: read/open return declared unions, and bodyFor's Record<string,string> is the literal request body one step before JSON.stringify, which the document calls the serialization boundary; (3) two fields that have to agree — none: attention.question is string|null rather than an empty-string sentinel, and phase/kind form one union where every 'read' value carries a kind and 'connecting' carries none; (4) an error named for where it happens — no error type is added, and the refusal carries the backend's own code verbatim. conventions/decisions.md and the duplicated bodyFor: extracting it would mean touching frontend/src/app/start-plan/client.ts, which is outside **Files:** and which D-26 and Task 11 both keep untouched, so the copy is the only diff the implementer could write; it is the case the document blesses ('there the copy is declared and measured with a test that compares the two'), since client.test.ts asserts the posted body against StartPlanMother.REQUEST_BODY and Home.startPlan.test.tsx asserts /start-plan's against the same constant — touching one mapping fails, rewriting both passes. Left out of findings. conventions/testing.md: the mother's payloads are a real capture, not imagination — I compared them against backend/src/infrastructure/coordinating-session-route.ts and they are byte-faithful, including the unresumable detail literal and the one-repository-only detail built from PlanRequest.REPO_FIELD/PATH_FIELD/REPO_LIST_FIELD. CLAUDE.md's two buckets are drawn right: only what renders is Spanish, while identifiers, test names, mother constants and the diagnostic detail are English. frontend-engineering:frontend-best-practices loaded: no else, named exports, absolute imports (same-folder './' only), PascalCase.types.ts / camelCase hook / client.ts / PascalCaseMother.ts / index.ts barrel, BEM classes, mothers from __scenarios__, no vi/describe import — all obeyed. Its one rule this diff does not follow is `it('should <action>')`: the plan wrote the nine test names literally and ct-step controls greps the staged files for them, so obeying the skill would leave the task red. That is a control-versus-rule clash and stays out of the findings. Boundaries and delivery: no document of either yardstick prescribes a delivery shape for a new frontend module, and the module is new, so nothing was left on an old path.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "No pre-existing test was touched: the ten source files are all creations, and the only `-` lines in the whole package are in docs/superpowers/plans/2026-09-13-issue-328-the-coordinating-session.md, where they are plan prose (the Spanish test names of tasks 10-12 rewritten in English, and the contract sentence discussed under alcance). No assertion, case or test of an existing suite was removed, relaxed or rewritten, so this item has no subject.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised behaviour lives in production code: client.ts parses the backend's answers into the outcome vocabulary, useCoordinatingSession.ts owns the mount read, the 2000 ms re-arm and the unmount cancellation, and CoordinatingSessionStatus.tsx owns every rendered string. The tests' only scaffolding is the mother's payloads and a stubbed global fetch — the process boundary, not the behaviour — and the component test drives the real client and the real hook through it. Revert any of the three production files and all nine tests fail: the mother alone renders nothing and counts no calls.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The ten source paths are exactly **Files:** (already checked mechanically), and what is written inside them traces to a sentence of the task: the types, client, hook, component, barrel and mother to the Contract block, and the two API_PATHS entries to its last sentence. No refactor, rename or adjacent fix rode along; nothing under ### Out of scope was touched, and frontend/src/app/start-plan/client.ts is untouched as D-26 requires. The eleventh path is the plan, i.e. an amendment: three hunks rewrite the Spanish test names of tasks 10, 11 and 12 into the English ones, and a fourth adds closed decision 14 recording why, with its provenance ('CLAUDE.md, via a control that refused Task 10'). That correction is justified — frontend/__tests__/yardstick.test.ts refuses Spanish test names, so the original names could not ship — and no **Files:** line lost a route. What the task's text does not justify is the same hunk rewriting the task's own Contract paragraph, reported as a low.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "Nine new tests across three files, measured on the three properties. Deterministic: no real clock, network, randomness or sleep — fetch is stubbed in all nine, the two cadence tests use vi.useFakeTimers() with advanceTimersByTimeAsync(2000), and the only expected values are the mother's constants. Isolated: each test installs its own stub, every file has an afterEach that calls vi.unstubAllGlobals() (plus vi.useRealTimers() in the hook file), no shared mutable state, no fixed file, port or directory, and no test depends on another's order. Verifies real behaviour: client.test.ts asserts the literal request sent and the outcome returned, CoordinatingSessionStatus.test.tsx asserts on rendered text and the alert's content through the real client and hook, and the hook's toHaveBeenCalledTimes assertions are on what the boundary received, which conventions/testing.md names as the observable effect for exactly this kind of behaviour ('what the port received'). control-tower-loop:test-driven-development and its testing-anti-patterns.md reference both loaded, and I found nothing in them to pin a further finding to: the mother mirrors the backend's real payload completely (anti-pattern 4), nothing asserts on a mock's existence, no test-only method reaches production, and the mock setup is far shorter than the tests.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "patrones",
+        "severity": "low",
+        "what": "The dispatch over Attention.status is not exhaustive: 'waiting' is tested and everything else falls through to the 'Trabajando' return at the foot of the component. A third member added to the vocabulary the backend already owns (SessionAttention) would render as 'working' instead of failing visibly — the type checker sees nothing, and no test covers the fall-through as a dispatch. The sibling dispatch over `kind` is safe by contrast, because a new member would break at read.attention. The repo's own exemplar (useLiveSessions.ts's `outcome.kind === 'loaded' ? ... : ...`) does the same, which is why this is a nit and not a block.",
+        "path": "frontend/src/app/coordinating-session/components/coordinating-session-status/CoordinatingSessionStatus.tsx",
+        "line": 31,
+        "evidence": "`return <p className=\"coordinating-session-status\" role=\"status\">{WORKING_LABEL}</p>` — conventions/defects.md: \"Dispatch over it exhaustively, with no catch-all branch, so that adding a member fails visibly\"."
+      },
+      {
+        "rule": "alcance",
+        "severity": "low",
+        "what": "The plan amendment reaches past the control that caused it. Its stated subject — recorded as closed decision 14 — is that the test names had to become English, and that part is justified. But the same hunk also rewrites this task's Contract paragraph, dropping the clause that prescribed how the status renders ('a strip of text and a `Banner` in the design system's classes') and adding one about the backend's `detail`. No sentence of the task asks for that edit, and it is the clause the diff half-misses: the component does use system-ui's Banner, but its <p> carries only the BEM classes `coordinating-session-status` and `coordinating-session-status__question`, which no stylesheet and no design-system token class ever styles, unlike SessionsPanel.tsx's `sessions-panel__empty` or Banner's own `lg-body-medium`. The substance survives, so this is a nit; it is worth reading because an amendment that removes a rendering prescription from its own contract is not something any control checks.",
+        "path": "docs/superpowers/plans/2026-09-13-issue-328-the-coordinating-session.md",
+        "line": 776,
+        "evidence": "removed line: \"`Claude Code ya no guarda esta conversación. No se ha abierto otra en su lugar.` No stylesheet of its own: a strip of text and a `Banner` in the design system's classes.\""
+      }
+    ],
+    "review_token": "618b1de9e5d721dfed6220e7c4166946a206b19b62586a23d62d0b932e916de0"
+  }
+}
