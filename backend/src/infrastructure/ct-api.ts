@@ -416,10 +416,9 @@ class CtApi {
       activePlans,
     })
     const liveSessions = new PtyLiveSessions({
-      spawn, shell: environment.SHELL, cwd: process.cwd(), env: environment,
-      newId: randomUUID, stderr: (line) => process.stderr.write(line),
+      spawn, newId: randomUUID, stderr: (line) => process.stderr.write(line),
     })
-    liveSessions.open()
+    liveSessions.open(PtyLiveSessions.loginShell(environment.SHELL, process.cwd(), environment))
     const server = new ApiServer({
       port: asked.port,
       startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, gh),

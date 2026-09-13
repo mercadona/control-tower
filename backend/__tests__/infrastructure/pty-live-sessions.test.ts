@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { PtyLiveSessions } from '../../src/infrastructure/pty-live-sessions.ts'
 import type { Terminal, TerminalSpawn } from '../../src/infrastructure/pty-live-sessions.ts'
+import { SessionProgram } from '../../src/domain/value-objects/session-program.ts'
 import type { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 
 type RecordedSpawn = {
@@ -72,17 +73,19 @@ class Cabin {
   static readonly CWD = '/repo/cabin'
 
   static opening(overrides: Partial<{
-    spawn: TerminalSpawn, shell: string | undefined, cwd: string, env: NodeJS.ProcessEnv,
-    newId: () => string, stderr: (line: string) => void,
+    spawn: TerminalSpawn, newId: () => string, stderr: (line: string) => void,
   }> = {}): PtyLiveSessions {
     return new PtyLiveSessions({
       spawn: overrides.spawn ?? SpawnDouble.recording(),
-      shell: 'shell' in overrides ? overrides.shell : '/bin/zsh',
-      cwd: overrides.cwd ?? Cabin.CWD,
-      env: overrides.env ?? { PATH: '/usr/bin' },
       newId: overrides.newId ?? Ids.sequential(),
       stderr: overrides.stderr ?? ((): void => {}),
     })
+  }
+}
+
+class LoginProgram {
+  static default(): SessionProgram {
+    return PtyLiveSessions.loginShell('/bin/zsh', Cabin.CWD, { PATH: '/usr/bin' })
   }
 }
 
@@ -92,29 +95,33 @@ class OpenedTerminal {
   readonly session: LiveSession
   readonly terminal: TerminalDouble
 
-  constructor({ sessions, spawn }: { sessions: PtyLiveSessions, spawn: RecordingSpawn }) {
+  constructor({ sessions, spawn, program }: {
+    sessions: PtyLiveSessions, spawn: RecordingSpawn, program: SessionProgram,
+  }) {
     this.sessions = sessions
     this.spawn = spawn
-    this.session = sessions.open()
+    this.session = sessions.open(program)
     const terminal = spawn.terminals.at(-1)
     if (terminal === undefined) throw new Error('OpenedTerminal: opening did not spawn a terminal')
     this.terminal = terminal
   }
 
   static with(overrides: Partial<{
-    shell: string | undefined, cwd: string, env: NodeJS.ProcessEnv,
-    newId: () => string, stderr: (line: string) => void,
+    newId: () => string, stderr: (line: string) => void, program: SessionProgram,
   }> = {}): OpenedTerminal {
     const spawn = SpawnDouble.recording()
-    const sessions = Cabin.opening({ ...overrides, spawn })
+    const sessions = Cabin.opening({ newId: overrides.newId, stderr: overrides.stderr, spawn })
+    const program = overrides.program ?? LoginProgram.default()
 
-    return new OpenedTerminal({ sessions, spawn })
+    return new OpenedTerminal({ sessions, spawn, program })
   }
 }
 
 describe('PtyLiveSessions', () => {
   it('opening names the session after the program it runs', () => {
-    const opened = OpenedTerminal.with({ shell: '/usr/local/bin/zsh' })
+    const opened = OpenedTerminal.with({
+      program: PtyLiveSessions.loginShell('/usr/local/bin/zsh', Cabin.CWD, { PATH: '/usr/bin' }),
+    })
 
     expect(opened.session.name).toBe('zsh')
   })
@@ -186,7 +193,9 @@ describe('PtyLiveSessions', () => {
   })
 
   it('the shell is the login interactive one, and /bin/sh when SHELL is unset', () => {
-    const withShell = OpenedTerminal.with({ shell: '/usr/local/bin/fish' })
+    const withShell = OpenedTerminal.with({
+      program: PtyLiveSessions.loginShell('/usr/local/bin/fish', Cabin.CWD, { PATH: '/usr/bin' }),
+    })
 
     expect(withShell.spawn.calls).toStrictEqual([{
       file: '/usr/local/bin/fish',
@@ -200,13 +209,19 @@ describe('PtyLiveSessions', () => {
       },
     }])
 
-    const withoutShell = OpenedTerminal.with({ shell: undefined })
+    const withoutShell = OpenedTerminal.with({
+      program: PtyLiveSessions.loginShell(undefined, Cabin.CWD, { PATH: '/usr/bin' }),
+    })
 
     expect(withoutShell.spawn.calls[0].file).toBe('/bin/sh')
   })
 
   it('the environment carries TERM and no undefined entry', () => {
-    const opened = OpenedTerminal.with({ env: { PATH: '/usr/bin', GHOST: undefined, LANG: 'en_US.UTF-8' } })
+    const opened = OpenedTerminal.with({
+      program: PtyLiveSessions.loginShell('/bin/zsh', Cabin.CWD, {
+        PATH: '/usr/bin', GHOST: undefined, LANG: 'en_US.UTF-8',
+      }),
+    })
 
     expect(opened.spawn.calls[0].options.env).toStrictEqual({
       PATH: '/usr/bin', LANG: 'en_US.UTF-8', TERM: PtyLiveSessions.TERM,
@@ -216,14 +231,20 @@ describe('PtyLiveSessions', () => {
 
   it('opening a terminal is announced on stderr, naming the session id and the program', () => {
     const written: string[] = []
-    const opened = OpenedTerminal.with({ shell: '/usr/local/bin/fish', stderr: (line) => written.push(line) })
+    const opened = OpenedTerminal.with({
+      program: PtyLiveSessions.loginShell('/usr/local/bin/fish', Cabin.CWD, { PATH: '/usr/bin' }),
+      stderr: (line) => written.push(line),
+    })
 
     expect(written).toEqual([`live session ${opened.session.id} (fish) opened\n`])
   })
 
   it('the terminal exiting is announced on stderr after the announcement that it opened', () => {
     const written: string[] = []
-    const opened = OpenedTerminal.with({ shell: '/usr/local/bin/fish', stderr: (line) => written.push(line) })
+    const opened = OpenedTerminal.with({
+      program: PtyLiveSessions.loginShell('/usr/local/bin/fish', Cabin.CWD, { PATH: '/usr/bin' }),
+      stderr: (line) => written.push(line),
+    })
 
     opened.terminal.exits()
 
@@ -252,5 +273,39 @@ describe('PtyLiveSessions', () => {
     opened.terminal.exits()
 
     expect(ended).toBe(0)
+  })
+
+  it('spawns the program it is given, with its own argv and working directory', () => {
+    const program = new SessionProgram({
+      name: 'coordinator',
+      file: '/usr/local/bin/claude',
+      argv: ['--resume', 'abc123'],
+      cwd: '/repo/governed-checkout',
+      env: { PATH: '/usr/bin' },
+    })
+    const opened = OpenedTerminal.with({ program })
+
+    expect(opened.spawn.calls[0].file).toBe('/usr/local/bin/claude')
+    expect(opened.spawn.calls[0].argv).toEqual(['--resume', 'abc123'])
+    expect(opened.spawn.calls[0].options.cwd).toBe('/repo/governed-checkout')
+  })
+
+  it('forces its own TERM over the program environment', () => {
+    const program = new SessionProgram({
+      name: 'coordinator',
+      file: '/usr/local/bin/claude',
+      argv: [],
+      cwd: Cabin.CWD,
+      env: { PATH: '/usr/bin', TERM: 'dumb' },
+    })
+    const opened = OpenedTerminal.with({ program })
+
+    expect(opened.spawn.calls[0].options.env).toStrictEqual({ PATH: '/usr/bin', TERM: PtyLiveSessions.TERM })
+  })
+
+  it('names the login shell by its basename', () => {
+    const program = PtyLiveSessions.loginShell('/usr/local/bin/fish', Cabin.CWD, { PATH: '/usr/bin' })
+
+    expect(program.name).toBe('fish')
   })
 })

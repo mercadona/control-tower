@@ -1,5 +1,6 @@
 import { LiveSessions } from '../domain/ports/live-sessions.ts'
 import { LiveSession } from '../domain/value-objects/live-session.ts'
+import { SessionProgram } from '../domain/value-objects/session-program.ts'
 import type { LiveSessionStream } from '../domain/ports/live-sessions.ts'
 
 export type Terminal = {
@@ -30,43 +31,46 @@ export class PtyLiveSessions extends LiveSessions {
   static readonly SCROLLBACK_CHARACTERS = 262_144
 
   readonly spawn: TerminalSpawn
-  readonly shell: string | undefined
-  readonly cwd: string
-  readonly env: NodeJS.ProcessEnv
   readonly newId: () => string
   readonly stderr: (line: string) => void
   readonly #open: Map<string, OpenTerminal>
 
-  constructor({ spawn, shell, cwd, env, newId, stderr }: {
-    spawn: TerminalSpawn, shell: string | undefined, cwd: string, env: NodeJS.ProcessEnv,
-    newId: () => string, stderr: (line: string) => void,
+  constructor({ spawn, newId, stderr }: {
+    spawn: TerminalSpawn, newId: () => string, stderr: (line: string) => void,
   }) {
     super()
     this.spawn = spawn
-    this.shell = shell
-    this.cwd = cwd
-    this.env = env
     this.newId = newId
     this.stderr = stderr
     this.#open = new Map()
   }
 
-  open(): LiveSession {
-    const file = this.shell ?? PtyLiveSessions.FALLBACK_SHELL
-    const program = PtyLiveSessions.#basenameOf(file)
-    const session = new LiveSession({ id: this.newId(), name: program })
-    const terminal = this.spawn(file, [PtyLiveSessions.LOGIN_INTERACTIVE], {
+  static loginShell(shell: string | undefined, cwd: string, env: NodeJS.ProcessEnv): SessionProgram {
+    const file = shell ?? PtyLiveSessions.FALLBACK_SHELL
+
+    return new SessionProgram({
+      name: PtyLiveSessions.#basenameOf(file),
+      file,
+      argv: [PtyLiveSessions.LOGIN_INTERACTIVE],
+      cwd,
+      env: PtyLiveSessions.#definedEntriesOf(env),
+    })
+  }
+
+  open(program: SessionProgram): LiveSession {
+    const session = new LiveSession({ id: this.newId(), name: program.name })
+    const terminal = this.spawn(program.file, [...program.argv], {
       name: PtyLiveSessions.TERM,
       cols: PtyLiveSessions.COLUMNS,
       rows: PtyLiveSessions.ROWS,
-      cwd: this.cwd,
-      env: PtyLiveSessions.#environmentOf(this.env),
+      cwd: program.cwd,
+      env: PtyLiveSessions.#withForcedTerm(program.env),
     })
     const opened: OpenTerminal = { session, terminal, scrollback: '', watchers: new Set() }
     this.#open.set(session.id, opened)
     terminal.onData((bytes) => this.#received(opened, bytes))
-    terminal.onExit(() => this.#exited(opened, program))
-    this.stderr(`live session ${session.id} (${program}) opened\n`)
+    terminal.onExit(() => this.#exited(opened, program.name))
+    this.stderr(`live session ${session.id} (${program.name}) opened\n`)
 
     return session
   }
@@ -129,12 +133,15 @@ export class PtyLiveSessions extends LiveSessions {
       : scrollback
   }
 
-  static #environmentOf(env: NodeJS.ProcessEnv): Record<string, string> {
+  static #withForcedTerm(env: Readonly<Record<string, string>>): Record<string, string> {
+    return { ...env, TERM: PtyLiveSessions.TERM }
+  }
+
+  static #definedEntriesOf(env: NodeJS.ProcessEnv): Record<string, string> {
     const filtered: Record<string, string> = {}
     for (const [key, value] of Object.entries(env)) {
       if (value !== undefined) filtered[key] = value
     }
-    filtered.TERM = PtyLiveSessions.TERM
 
     return filtered
   }
