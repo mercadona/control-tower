@@ -52,7 +52,10 @@ its live question through hooks, reachable from every phase of the page, and bro
 
 - 🚫 `plugin/skills/brainstorming/SKILL.md` and everything under `plugin/skills/brainstorming/`:
   the phase prompt invokes that skill and never rewrites it.
-- `POST /start-plan` and its use case, adapters and refusals stay exactly as they are (D-26).
+- `POST /start-plan` keeps its behaviour, its use case and its adapters exactly as they are
+  (D-26). The one thing it does gain is four rows in `PlanCollapse`, for the four new
+  failures: `plan-refusal.test.ts` requires every `PlanFailure` leaf to declare a refusal, so
+  a leaf and its row cannot be added by different commits.
 - The gates, the groom, the dispatcher and the headless calls: slices 4 to 8.
 - `Home`'s review and implementation stages keep working through the restore path they already
   have; this slice does not delete them.
@@ -80,7 +83,9 @@ checkout, resolves the story through `UserStories` and drives its ports in order
 `backend/src/infrastructure/start-plan-route.ts` (request parsing, `PlanRefusal`, `PlanCollapse`),
 `backend/src/infrastructure/pty-live-sessions.ts` (the PTY adapter),
 `backend/src/infrastructure/disk-implementation-start-registry.ts` (a record under the state root),
-`backend/src/infrastructure/plan-agent-brief.ts` (composed errand text),
+`backend/src/infrastructure/plan-agent-brief.ts` (**the shape of a composed errand, not its
+language**: that module is Spanish debt, and `CLAUDE.md` puts every agent prompt in English and
+grants no declared-debt exemption for language, so a prompt born in this slice is English),
 `backend/src/infrastructure/plan-events-route.ts` (an in-memory registry beside its route),
 `backend/__tests__/application/start-plan.test.ts` (use case with every port doubled),
 `backend/__tests__/infrastructure/sessions-route.test.ts` (controller through a real server),
@@ -126,12 +131,12 @@ families, how this API answers, `{code, detail}` in kebab-case, where the suite 
 | `frontend/src/app/coordinating-session/components/coordinating-session-status/*` | create | `Home` | none (body by TDD) |
 | `frontend/src/__scenarios__/CoordinatingSessionMother.ts` | create | the frontend suites | none (body by TDD) |
 | `frontend/src/app/start-plan/components/start-plan-form/StartPlanForm.tsx` | modify | `Home` | Current state (T11) |
-| `frontend/src/pages/home/Home.tsx` | modify | the page | Call site (T11) |
-| `frontend/src/pages/home/__tests__/helpers.tsx` | modify | the Home suites | none (body by TDD) |
-| `frontend/vite.config.ts` | modify | the dev server | prose (config, T7) |
-| `backend/API.md` | modify | whoever codes against the API | Final text (T12) |
-| `frontend/README.md` | modify | the frontend | Final text (T12) |
-| `backend/conventions/this-repository.md` | modify | every diff here | Final text (T12) |
+| `frontend/src/pages/home/Home.tsx` | modify | the page | Call site (T12) |
+| `frontend/src/pages/home/__tests__/helpers.tsx` | modify | the Home suites | none (body by TDD) — T12 |
+| `frontend/vite.config.ts` | modify | the dev server | listed by T10 |
+| `backend/API.md` | modify | whoever codes against the API | Final text (T13) |
+| `frontend/README.md` | modify | the frontend | Final text (T13) |
+| `backend/conventions/this-repository.md` | modify | every diff here | Final text (T13) |
 
 ## 5. Interfaces
 
@@ -241,9 +246,8 @@ test "$(grep -c 'loginShell' backend/src/infrastructure/ct-api.ts)" -eq 1   # ex
 
 ### Task 2 — The conversation's values, its ports and its failures
 
-**Objective:** the vocabulary the rest of the slice is written against exists: what a
-conversation is, what the session is told, what its attention is, and the three doors the use
-cases talk through.
+**Objective:** the vocabulary the rest of the slice is written against exists — the conversation,
+the phase prompt, the attention, the three ports, and each failure with the refusal it owes.
 
 **Files:** `backend/src/domain/value-objects/conversation-id.ts` (create),
 `backend/src/domain/value-objects/coordinating-conversation.ts` (create),
@@ -252,18 +256,18 @@ cases talk through.
 `backend/src/domain/ports/conversations.ts` (create),
 `backend/src/domain/ports/session-hooks.ts` (create),
 `backend/src/domain/ports/conversation-records.ts` (create),
-`backend/src/domain/exceptions.ts` (modify)
+`backend/src/domain/exceptions.ts` (modify),
+`backend/src/infrastructure/start-plan-route.ts` (modify),
+`backend/__tests__/infrastructure/plan-refusal.test.ts` (modify)
 
 Contract (backend/src/domain/ports/conversations.ts):
 
 ```ts
 export class Conversations {
   mint(): ConversationId
-  isResumable(conversation: CoordinatingConversation): boolean
-  start({ conversation, promptPath }: {
-    conversation: CoordinatingConversation, promptPath: string,
-  }): LiveSession
-  resume(conversation: CoordinatingConversation): LiveSession
+  isResumable(c: CoordinatingConversation): boolean
+  start(o: { conversation: CoordinatingConversation, promptPath: string }): LiveSession
+  resume(c: CoordinatingConversation): LiveSession
 }
 ```
 
@@ -271,9 +275,8 @@ Contract (backend/src/domain/value-objects/session-attention.ts):
 
 ```ts
 export const AttentionStatus = Object.freeze({ WORKING: 'working', WAITING: 'waiting' } as const)
-export type AttentionStatusValue = (typeof AttentionStatus)[keyof typeof AttentionStatus]
 export class SessionAttention {
-  readonly status: AttentionStatusValue
+  readonly status: string
   readonly question: string | null
   static working(): SessionAttention
   static waiting(question: string | null): SessionAttention
@@ -282,29 +285,32 @@ export class SessionAttention {
 
 `working()` always carries `question === null`: an answered question stops being a question.
 `SessionHooks.install(root: CheckoutRoot): Promise<void>`.
-`ConversationRecords.prepare({conversation: CoordinatingConversation, prompt: PhasePrompt}): Promise<string>`
-answers the prompt file's absolute path; `recall(): Promise<CoordinatingConversation | null>`.
-`ConversationId` validates the `randomUUID` shape and carries `.text`;
-`CoordinatingConversation {id: ConversationId, repository: RepositoryName, root: CheckoutRoot}`.
-`PhasePrompt.brainstorming({story, comment, repository, root}): PhasePrompt` with `.text`.
-`exceptions.ts` gains, each family naming its two causes: `ConversationFailure` with
-`ConversationNotStarted` and `ConversationNotRecorded`, and `SessionHooksFailure` with
-`SessionHooksNotWritten` and `SessionHooksNotUnderstood`.
+`ConversationRecords.prepare({conversation, prompt: PhasePrompt}): Promise<string>` answers the
+prompt file's absolute path; `recall(): Promise<CoordinatingConversation | null>`.
+`ConversationId` guards the `randomUUID` shape and carries `.text`;
+`CoordinatingConversation {id, repository: RepositoryName, root: CheckoutRoot}`;
+`PhasePrompt.brainstorming({story, comment, repository, root})` with `.text`.
+`exceptions.ts` gains `ConversationFailure` (`ConversationNotStarted`, `ConversationNotRecorded`)
+and `SessionHooksFailure` (`SessionHooksNotWritten`, `SessionHooksNotUnderstood`). In the same
+commit `PlanCollapse` gains one row per leaf — `conversation-not-started`,
+`conversation-not-recorded`, `session-hooks-not-written`, `session-hooks-not-understood` — and
+nothing else of that module moves: a leaf without its row is what the guard below forbids. That
+guard's `FAMILIES` list registers the two new roots, the way every family before them was added.
 
-**TDD:** No TDD — declarations only. `plugin/conventions/testing.md` gives the domain no tests of
-its own and a port body is the error that says it must be implemented; every one of these values
-is driven red through `OpenCoordinatingSession` in Task 3.
+**TDD:** the red is already written and belongs to this repo —
+`every_way_the_plan_can_collapse_has_a_refusal_declared_so_adding_one_cannot_reach_the_client_as_a_crash`
+turns red the moment the four leaves exist; the `PlanCollapse` rows turn it green. No new test:
+the domain gets none of its own.
 
-**Tests:** N/A — the behaviour arrives in Task 3, which is where these are first exercised.
+**Tests:** none added or removed — that guard is what drives this task.
 
-**Verification:** the graph is sound and the two new exception families hang off `PlanFailure`
-like every other one.
+**Verification:** the graph is sound, each family carries its two leaves, and the suite is green.
 
 ```bash
 npm --prefix backend run typecheck   # expected: exit 0
-test "$(grep -c 'extends ConversationFailure' backend/src/domain/exceptions.ts)" -eq 2   # expected: exit 0 — the command failed, and it answered something we cannot read
+test "$(grep -c 'extends ConversationFailure' backend/src/domain/exceptions.ts)" -eq 2   # expected: exit 0 — its two causes
 test "$(grep -c 'extends SessionHooksFailure' backend/src/domain/exceptions.ts)" -eq 2   # expected: exit 0
-npm --prefix backend test   # expected: exit 0 — nothing that was green turned red
+npm --prefix backend test   # expected: exit 0
 ```
 
 ### Task 3 — Opening the coordinating session, with every port doubled
@@ -540,10 +546,12 @@ npm --prefix backend test -- __tests__/infrastructure/disk-conversation-records.
 **Objective:** the entrance endpoint parses the body the form sends, refuses a repository list,
 opens the conversation and holds it, and the entrypoint wires every adapter.
 
-**Files:** under `backend/src/infrastructure/`, `coordinating-sessions.ts` and
-`coordinating-session-route.ts` (create), `start-plan-route.ts`, `api-server.ts` and `ct-api.ts`
-(modify); under `backend/__tests__/infrastructure/`, `coordinating-session-route.test.ts`
-(create) and `refusal-codes.test.ts` (modify)
+**Files:** `backend/src/infrastructure/coordinating-sessions.ts` (create),
+`backend/src/infrastructure/coordinating-session-route.ts` (create),
+`backend/src/infrastructure/api-server.ts` (modify),
+`backend/src/infrastructure/ct-api.ts` (modify),
+`backend/__tests__/infrastructure/coordinating-session-route.test.ts` (create),
+`backend/__tests__/infrastructure/refusal-codes.test.ts` (modify)
 
 Contract (backend/src/infrastructure/coordinating-sessions.ts):
 
@@ -577,9 +585,8 @@ export class CoordinatingSessionRoute {
 
 `PlanRequest.from` parses the body — it already decides what a well-formed entrance is, so `id`,
 `user_comment`, `repo` and `path` keep their codes through `PlanRefusal` — and a request whose
-`listed` is true is refused `one-repository-only`. `PlanCollapse` gains the four new failures as
-`conversation-not-started`, `conversation-not-recorded`, `session-hooks-not-written` and
-`session-hooks-not-understood`. Success answers 202 with `status` `brainstorming`, the
+`listed` is true is refused `one-repository-only`. A `PlanFailure` collapses through the
+`PlanCollapse` rows Task 2 already declared. Success answers 202 with `status` `brainstorming`, the
 conversation, the repo, the root and the session, and holds it `live` and working. `attend`
 answers `false` for an id that is not the held conversation's and writes
 `coordinating session <id> <status>` to stderr on every transition. `refusal-codes.test.ts` adds
@@ -727,29 +734,32 @@ test "$(grep -c 'RecoverCoordinatingSession' backend/src/infrastructure/ct-api.t
 
 ### Task 10 — The cabin reads the coordinating session
 
-**Objective:** the page polls `GET /coordinating-session` and renders, beside the terminal, the
-status, the live question and the notice that a conversation could not be resumed.
+**Objective:** the page polls `GET /coordinating-session` and renders the status, the live
+question and the unresumable notice beside the terminal.
 
-**Files:** under `frontend/src/app/coordinating-session/` (create):
-`CoordinatingSession.types.ts`, `client.ts`, `useCoordinatingSession.ts` and
-`components/coordinating-session-status/` with its `.tsx`, its `.css` and its `index.ts`; plus
+**Files:** `frontend/src/app/coordinating-session/CoordinatingSession.types.ts` (create),
+`frontend/src/app/coordinating-session/client.ts` (create),
+`frontend/src/app/coordinating-session/client.test.ts` (create),
+`frontend/src/app/coordinating-session/useCoordinatingSession.ts` (create),
+`frontend/src/app/coordinating-session/useCoordinatingSession.test.ts` (create),
+`frontend/src/app/coordinating-session/components/coordinating-session-status/CoordinatingSessionStatus.tsx` (create),
+`frontend/src/app/coordinating-session/components/coordinating-session-status/CoordinatingSessionStatus.test.tsx` (create),
+`frontend/src/app/coordinating-session/components/coordinating-session-status/index.ts` (create),
 `frontend/src/__scenarios__/CoordinatingSessionMother.ts` (create),
-`frontend/vite.config.ts` (modify) and the three test files
+`frontend/vite.config.ts` (modify)
 
 Contract (frontend/src/app/coordinating-session/CoordinatingSession.types.ts):
 
 ```ts
-export type AttentionStatus = 'working' | 'waiting'
-export type Attention = { status: AttentionStatus; question: string | null }
+export type Attention = { status: 'working' | 'waiting'; question: string | null }
+export type LiveSessionRef = { id: string; name: string }
 export type CoordinatingSessionOutcome =
   | { kind: 'none' }
   | { kind: 'live'; conversation: string; repo: string; root: string
-      session: { id: string; name: string }; attention: Attention }
+      session: LiveSessionRef; attention: Attention }
   | { kind: 'unresumable'; conversation: string; detail: string }
   | { kind: 'unavailable' }
-export type OpenedCoordinatingSession = {
-  conversation: string; session: { id: string; name: string }
-}
+export type OpenedCoordinatingSession = { conversation: string; session: LiveSessionRef }
 export type OpenOutcome =
   | { kind: 'opened'; opened: OpenedCoordinatingSession }
   | { kind: 'refused'; code: string; error: string }
@@ -757,46 +767,39 @@ export type OpenOutcome =
 ```
 
 `CoordinatingSessionClient.read(): Promise<CoordinatingSessionOutcome>` and
-`CoordinatingSessionClient.open(submission: StartPlanSubmission): Promise<OpenOutcome>`, the
-second posting the same body `StartPlanClient.start` posts. `useCoordinatingSession()` reads once
-on mount and every 2000 ms while mounted, and stops on unmount. Product copy, in Spanish:
-`Trabajando`, `Esperando`, `Te está preguntando`, and the banner
-`No se ha podido recuperar la conversación coordinadora` with
-`Claude Code ya no guarda esta conversación. No se ha abierto otra en su lugar.`
-Configuration: `frontend/vite.config.ts` adds `'/coordinating-session'` and `'/session-hooks'` to
-`API_PATHS`, or the dev server answers the page's HTML instead of the API.
+`.open(submission: StartPlanSubmission): Promise<OpenOutcome>`, the second posting the body
+`StartPlanClient.start` posts. `useCoordinatingSession()` reads on mount and every 2000 ms, and
+stops on unmount. Product copy, in Spanish: `Trabajando`, `Esperando`, `Te está preguntando`, and
+the banner `No se ha podido recuperar la conversación coordinadora` with
+`Claude Code ya no guarda esta conversación. No se ha abierto otra en su lugar.` No stylesheet of
+its own: a strip of text and a `Banner` in the design system's classes. `frontend/vite.config.ts`
+adds `'/coordinating-session'` and `'/session-hooks'` to `API_PATHS`, or the dev server answers
+the page's HTML instead of the API.
 
-**TDD:** `it('muestra la pregunta en curso cuando la sesión está esperando')` — the client stubbed
-with a `waiting` answer, the assertion on the question's text on screen. Then
-`it('avisa de que la conversación no se ha podido recuperar')`, asserting the banner and that no
-session is presented as live.
+**TDD:** `it('muestra la pregunta en curso cuando la sesión está esperando')` — the client
+stubbed with a `waiting` answer, asserting the question's text on screen.
 
-**Tests:** added: in `useCoordinatingSession.test.ts`, `lee el estado al montarse`,
-`vuelve a leer cada dos segundos`, `deja de leer al desmontarse`; in `client.test.ts`,
+**Tests:** in `useCoordinatingSession.test.ts`: `lee el estado al montarse`,
+`vuelve a leer cada dos segundos`, `deja de leer al desmontarse`. In `client.test.ts`:
 `lee el estado de la sesión coordinadora`, `envía la idea al abrir el brainstorming`,
-`devuelve la negativa del backend con su código`; in `CoordinatingSessionStatus.test.tsx`,
-`muestra que la sesión está trabajando`,
-`muestra la pregunta en curso cuando la sesión está esperando`,
+`devuelve la negativa del backend con su código`. In `CoordinatingSessionStatus.test.tsx`:
+`muestra que la sesión está trabajando`, `muestra la pregunta en curso cuando la sesión está esperando`,
 `avisa de que la conversación no se ha podido recuperar`.
 
-**Verification:** the three suites are green.
+**Verification:** the three suites are green and the dev proxy knows the path.
 
 ```bash
 npm --prefix frontend test -- src/app/coordinating-session   # expected: exit 0
-test "$(grep -c 'coordinating-session' frontend/vite.config.ts)" -eq 1   # expected: exit 0 — the dev proxy forwards it
+test "$(grep -c 'coordinating-session' frontend/vite.config.ts)" -eq 1   # expected: exit 0
 ```
 
 ### Task 11 — The entrance's one button opens the brainstorming
 
-**Objective:** the form keeps its fields and its validation, its one button opens the
-brainstorming, and the page keeps the terminal on screen and writable in every phase.
+**Objective:** the form the cabin already had keeps its fields and its validation, and its single
+button opens the brainstorming instead of starting a plan.
 
-**Files:** `frontend/src/app/start-plan/components/start-plan-form/StartPlanForm.tsx` and its
-`.test.tsx` (modify), `frontend/src/pages/home/Home.tsx` (modify), and under
-`frontend/src/pages/home/__tests__/`, `helpers.tsx` plus every suite that reaches a later stage
-through the button — `Home.startPlan`, `Home.sessions`, `Home.implementPlan`,
-`Home.implementProgress`, `Home.implementHistory`, `Home.planEvents`, `Home.baseline`,
-`Home.layout`, `Home.navigation` (modify)
+**Files:** `frontend/src/app/start-plan/components/start-plan-form/StartPlanForm.tsx` (modify),
+`frontend/src/app/start-plan/components/start-plan-form/StartPlanForm.test.tsx` (modify)
 
 Current state (frontend/src/app/start-plan/components/start-plan-form/StartPlanForm.tsx, lines 168-172):
 
@@ -808,6 +811,50 @@ Current state (frontend/src/app/start-plan/components/start-plan-form/StartPlanF
       </div>
 ```
 
+The button reads `Arrancar brainstorming` — the literal §2 closed — and the sending label becomes
+`Abriendo el brainstorming`. The submit calls `CoordinatingSessionClient.open(submission)` with
+the very same `StartPlanSubmission` it builds today; `onStarted` becomes
+`onOpened(opened, request)` and `onBackendUnreachable` becomes `onUnreachable(request)`. The
+locked summary, the field validation, the refusal banner and the `start-plan-help` text are
+untouched, and so is `frontend/src/app/start-plan/client.ts`, whose endpoint D-26 keeps.
+
+**TDD:** `it('abre el brainstorming con el ticket y el comentario')` — the client stubbed, the
+assertion on the literal submission it received, `{id, userComment, repo, path}`. Then
+`it('no abre nada mientras falte el repositorio o la ruta')`.
+
+**Tests:** `StartPlanForm.test.tsx` keeps its field, validation and locked-summary tests and
+replaces the ones naming the plan with
+`abre el brainstorming con el ticket y el comentario`,
+`abre el brainstorming solo con una descripción libre`,
+`no abre nada mientras falte el repositorio o la ruta`,
+`muestra la negativa del backend sin perder lo escrito`,
+`avisa cuando el backend no contesta`.
+
+**Verification:** the form's suite is green and the plan endpoint is no longer called from it.
+
+```bash
+npm --prefix frontend test -- src/app/start-plan   # expected: exit 0
+test "$(grep -c 'StartPlanClient' frontend/src/app/start-plan/components/start-plan-form/StartPlanForm.tsx)" -eq 0   # expected: exit 0
+```
+
+### Task 12 — `Home` follows the entrance and keeps the session in every phase
+
+**Objective:** the page wires the new form and the coordinating session's state, keeps the
+terminal on screen and writable in every phase, and reaches the later stages through the restore
+path it already has.
+
+**Files:** `frontend/src/pages/home/Home.tsx` (modify),
+`frontend/src/pages/home/__tests__/helpers.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.startPlan.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.sessions.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.implementPlan.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.implementProgress.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.implementHistory.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.planEvents.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.baseline.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.layout.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.navigation.test.tsx` (modify)
+
 Call site (frontend/src/pages/home/Home.tsx):
 
 ```tsx
@@ -817,31 +864,25 @@ Call site (frontend/src/pages/home/Home.tsx):
           </section>
 ```
 
-The button reads `Arrancar brainstorming`, the sending label `Abriendo el brainstorming`, and the
-submit calls `CoordinatingSessionClient.open(submission)` with the very same
-`StartPlanSubmission` it builds today; `onStarted` becomes `onOpened(opened, request)` and
-`onBackendUnreachable` becomes `onUnreachable(request)`. The locked summary, the validation and
-the refusal banner are untouched, and so is `app/start-plan/client.ts`, whose endpoint D-26 keeps.
-In `Home`, `planStarted`, `planStartUncertain` and the `uncertain-start` branch leave with the
-plan the form no longer starts; `home__sessions` stays outside every `currentStage` branch, which
-is D-21. `helpers.tsx` renames `startPlan` to `openBrainstorming` against the new label and
-endpoint, and grows `openRestored(plan)`, which seeds `WorkflowSnapshotStorage` and
-`/active-plans` so a suite opens `Home` already in a later stage — the shape
-`Home.restoreWorkflow.test.tsx` already uses.
+`planStarted`, `planStartUncertain` and the `uncertain-start` reconciliation branch leave with the
+plan the form no longer starts. The `home__sessions` section stays outside every `currentStage`
+branch, which is D-21. `helpers.tsx` renames `startPlan` to `openBrainstorming` against the new
+label and `/coordinating-session`, and grows `openRestored(plan)`, which seeds
+`WorkflowSnapshotStorage` and `/active-plans` so a suite opens `Home` already in the review or
+implementation stage — the shape `Home.restoreWorkflow.test.tsx` already uses, and how every suite
+that used to press the button now reaches a later stage. `Home.startPlan.test.tsx` keeps its path
+on purpose: a rename would delete a file the scope control expects to still be there, and its
+`describe` is what says it is about the brainstorming now.
 
 **TDD:** `it('deja hablar con la sesión coordinadora mientras se implementa un slice')` — `Home`
 opened restored in the implementation stage, asserting the terminal's region is on screen **and**
 that its input is not disabled.
 
-**Tests:** in `Home.sessions.test.tsx`:
+**Tests:** added to `Home.sessions.test.tsx`:
 `deja hablar con la sesión coordinadora mientras se implementa un slice`,
 `vuelve a pintar lo ya dicho al recargar la página`,
-`muestra la pregunta en curso de la sesión coordinadora`. In `StartPlanForm.test.tsx`:
-`abre el brainstorming con el ticket y el comentario`,
-`abre el brainstorming solo con una descripción libre`,
-`no abre nada mientras falte el repositorio o la ruta`, `avisa cuando el backend no contesta`.
-`Home.startPlan.test.tsx` becomes `Home.brainstorming.test.tsx` against the new endpoint; its
-`uncertain-start` tests go with the branch they measured.
+`muestra la pregunta en curso de la sesión coordinadora`. `Home.startPlan.test.tsx` points at
+`/coordinating-session`; its `uncertain-start` tests go with the branch they measured.
 
 **Verification:** the whole frontend suite is green.
 
@@ -850,7 +891,7 @@ npm --prefix frontend test   # expected: exit 0
 test "$(grep -c 'home__sessions' frontend/src/pages/home/Home.tsx)" -eq 1   # expected: exit 0 — one section, outside every stage branch
 ```
 
-### Task 12 — The three endpoints, the page and the vocabulary, written down
+### Task 13 — The three endpoints, the page and the vocabulary, written down
 
 **Objective:** `API.md` documents the three new endpoints with the shapes a running server
 answers, and the repository's vocabulary gains the terms this slice introduced.
@@ -879,7 +920,7 @@ session**, **Phase prompt**, **Conversation** and **Session attention**.
 **TDD:** No TDD — documentation, and every claim in it is verified against the repository by the
 commands below.
 
-**Tests:** N/A — no behaviour changes; the suites of Tasks 1 to 11 cover what is described.
+**Tests:** N/A — no behaviour changes; the suites of Tasks 1 to 12 cover what is described.
 
 **Verification:** every documented path is routed and the vocabulary is where it belongs.
 
@@ -960,6 +1001,19 @@ test -z "$(grep -l 'cmux' backend/src/infrastructure/claude-conversations.ts)"  
 11. **The baseline was measured, not inherited.** `.agent/SLICE.md` says `no-verificado` because
     this worktree had no `node_modules`; after `npm ci` in `backend/` and `frontend/` the tree is
     green — typecheck exit 0, 1453 backend tests, 946 frontend tests. Provenance: own call.
-12. **Twelve tasks.** The slice was cut with a human in the room and carries eight acceptance
+12. **The phase prompt is written in English**, in the task that creates it. `CLAUDE.md` puts
+    agent prompts in English and refuses the declared-debt exemption for language, so the Spanish
+    of `plan-agent-brief.ts` is debt rather than the pattern to copy — which is why §3 names that
+    file for its shape and says so. Provenance: `CLAUDE.md`, via a judge veto of Task 2.
+13. **`ConversationFailure` names two causes that are both "the command failed".** The repository
+    asks each family to name the command failing and the command answering something unreadable.
+    `ConversationNotStarted` and `ConversationNotRecorded` are two failures to act across two
+    collaborators, and Task 6 adds no `*NotUnderstood`: a malformed record raises
+    `ConversationNotRecorded` too. Recorded rather than fixed, because the alternative splits one
+    family in two for a cause no caller tells apart. Provenance: own call, after a judge raised it.
+14. **Thirteen tasks.** The slice was cut with a human in the room and carries eight acceptance
     criteria across three packages; splitting the slice is not in this session's hands, so the
-    work is split into commits instead. Provenance: the prescriptive planning skill.
+    work is split into commits instead. Every `**Files:**` line spells each path in full, because
+    `splitFiles` (`plugin/scripts/plan-tasks.js`) reads every backticked token in that paragraph
+    as a path: an abbreviated list would hand the scope control bare basenames. Provenance: the
+    prescriptive planning skill and that parser.

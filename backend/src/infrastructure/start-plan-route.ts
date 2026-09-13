@@ -14,6 +14,7 @@ import {
   PlanIssueNotClaimed,
   PlanAgentNotLaunched, PlanAgentNotNamed, WorkspaceNotPrepared, WorkspaceNotRead,
   WorkspaceNotUnderstood, CheckoutNotConfirmed,
+  ConversationNotStarted, ConversationNotRecorded, SessionHooksNotWritten, SessionHooksNotUnderstood,
 } from '../domain/exceptions.ts'
 import type { Request, Response } from 'express'
 import type { PlanStarted, StartPlan, StartPlanResult } from '../application/actions/start-plan.ts'
@@ -316,6 +317,10 @@ export class PlanCollapse {
     [PlanIssueNotNamed, PlanCollapse.#collapsed('plan-issue-not-named')],
     [PlanAgentNotNamed, PlanCollapse.#collapsed('plan-agent-not-named')],
     [WorkspaceNotUnderstood, PlanCollapse.#collapsed('workspace-not-understood')],
+    [ConversationNotStarted, PlanCollapse.#collapsed('conversation-not-started')],
+    [ConversationNotRecorded, PlanCollapse.#collapsed('conversation-not-recorded')],
+    [SessionHooksNotWritten, PlanCollapse.#collapsed('session-hooks-not-written')],
+    [SessionHooksNotUnderstood, PlanCollapse.#collapsed('session-hooks-not-understood')],
   ])
 
   static of(cause: PlanFailure): Refusal {
