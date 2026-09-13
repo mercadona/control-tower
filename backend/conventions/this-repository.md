@@ -58,6 +58,7 @@ those imports resolve, and it is no longer a statement about this backend.
 | **Prepared workspace** | A worktree `.worktrees/<n>` on branch `feat/<n>` that a plan agent works in |
 | **Harvest** | Collecting what a delivered slice left behind — its worktree, its branch, its agent — once its pull request merged; the plugin's `dispatch-check --collect` does it, the backend only decides when |
 | **Harvest ledger** | The BigQuery table where every harvested slice leaves its row, shared by every team and told apart by `repo`; the plugin loads it, the backend only says which table (`CT_HARVEST_BQ_TABLE`) |
+| **Live session** | A process the backend owns and keeps: the cabin lists it, reads what it prints and writes into it, and closing the page ends the subscription and nothing else |
 | **Metrics delivery** | Whether a merged slice's row reaches the harvest ledger at all: an option of this backend's start-up (`CT_HARVEST_BQ_TABLE`), validated once and read-only from then on. Disabled it costs no plan and no collection — only the row, and with it every comparison of coding tools that row would have fed. Enabled it makes `bq` a tool that blocks, because a slice whose row did not land is kept undeleted and retried |
 | **Pull request** | Where a delivered slice waits for a person: the agent opens it on `feat/<n>` and stops |
 | **Change asked** | One thing a person asked for on that pull request, with its anchors `file:line`; GitHub's native reviews are where it is read from |

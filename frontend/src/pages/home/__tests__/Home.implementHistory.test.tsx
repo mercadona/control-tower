@@ -2,12 +2,14 @@ import { screen, waitFor, within } from '@testing-library/react'
 import { ImplementHistoryMother } from '__scenarios__/ImplementHistoryMother'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
+import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { openHome, startPlan, streamFrame } from './helpers'
 
 const IMPLEMENT_BUTTON = { name: 'Implementar plan' }
 const NO_ACTIVE_PLANS = { status: 200, body: '{"plans":[]}' }
 const EXTERNAL_TOOLS_READY = { status: 200, body: '{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}' }
+const NO_SESSIONS = SessionsMother.noSessions()
 const IMPLEMENTING = { status: 202, body: '{"status":"implementing","agent":"workspace:4","issue":7}' }
 
 const responseFor = (answer: { status: number; body: string }) => new Response(answer.body, { status: answer.status })
@@ -15,6 +17,7 @@ const responseFor = (answer: { status: number; body: string }) => new Response(a
 const stubFetchByPath = (byPath: (url: string) => { status: number; body: string }) => {
   const fetching = vi.fn(async (input: string | URL | Request) => {
     if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
+    if (input === '/sessions') return responseFor(NO_SESSIONS)
     return responseFor(byPath(String(input)))
   })
   vi.stubGlobal('fetch', fetching)

@@ -5,6 +5,8 @@ import { EventsRequestOutcome, PlanEvents } from '../../src/infrastructure/plan-
 import { ActivePlansOutcome } from '../../src/infrastructure/active-plans-route.ts'
 import { ProgressRequestOutcome, ProgressCollapse } from '../../src/infrastructure/implement-progress-route.ts'
 import { HistoryRequestOutcome, HistoryCollapse } from '../../src/infrastructure/implement-history-route.ts'
+import { SessionStreamOutcome } from '../../src/infrastructure/session-stream-route.ts'
+import { SessionInputOutcome } from '../../src/infrastructure/session-input-route.ts'
 
 class RequestVocabularies {
   static readonly #ACCEPTED = 'accepted'
@@ -16,6 +18,8 @@ class RequestVocabularies {
       ...Object.values(EventsRequestOutcome),
       ...Object.values(ProgressRequestOutcome),
       ...Object.values(HistoryRequestOutcome),
+      ...Object.values(SessionStreamOutcome),
+      ...Object.values(SessionInputOutcome),
     ].filter((outcome) => outcome !== RequestVocabularies.#ACCEPTED)
   }
 }
@@ -26,6 +30,7 @@ class SharedOnPurposeAcrossRequestVocabularies {
     PlanRequestOutcome.UNKNOWN_FIELD,
     PlanRequestOutcome.MALFORMED_REPO,
     ProgressRequestOutcome.MALFORMED_ROOT,
+    SessionInputOutcome.NOT_LIVE,
   ])
 }
 

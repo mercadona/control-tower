@@ -148,6 +148,16 @@
   color: var(--foreground-brand-primary);
 }
 
+.home__sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  background-color: var(--background-elevated);
+  border: var(--borderwidth-sm) solid var(--border-secondary);
+  border-radius: var(--shape-container-sm);
+}
+
 .home__completed {
   display: flex;
   flex-direction: column;

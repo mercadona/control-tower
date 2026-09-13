@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { act, render, screen } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
+import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { Home } from 'pages/home/Home'
 import { FakeEventSource } from './FakeEventSource'
@@ -11,6 +12,7 @@ type User = ReturnType<typeof userEvent.setup>
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 const NO_ACTIVE_PLANS = { status: 200, body: '{"plans":[]}' }
+const NO_SESSIONS = SessionsMother.noSessions()
 const EXTERNAL_TOOLS_READY = ExternalToolsMother.allReady()
 const NO_IMPLEMENTATION_RUN_YET = {
   status: 400,
@@ -33,6 +35,7 @@ const backendAnswering = (answer: Answer) => {
     vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
       if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
+      if (input === '/sessions') return responseFor(NO_SESSIONS)
       if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
       if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
       return fetching(input, init)
@@ -46,6 +49,7 @@ const backendRecovering = (answer: Answer) => {
   const fetching = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => responseFor(answer))
   vi.stubGlobal('fetch', (input: string | URL | Request, init?: RequestInit) => {
     if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
+    if (input === '/sessions') return responseFor(NO_SESSIONS)
     if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
     return init === undefined ? fetching(input) : fetching(input, init)
   })
@@ -61,6 +65,7 @@ const backendPending = () => {
   const fetching = vi.fn((input: string | URL | Request) => {
       if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
       if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
+      if (input === '/sessions') return responseFor(NO_SESSIONS)
       if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
       if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
       return pending

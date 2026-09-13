@@ -5,7 +5,9 @@ import { setTimeout as after } from 'node:timers/promises'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { spawn } from 'node-pty'
 import { ApiServer, LOOPBACK } from './api-server.ts'
+import { PtyLiveSessions } from './pty-live-sessions.ts'
 import { CmuxPlanAgents } from './cmux-plan-agents.ts'
 import { AcliUserStories } from './acli-user-stories.ts'
 import { GhUserStories } from './gh-user-stories.ts'
@@ -40,6 +42,9 @@ import { RequestFixes, RequestFixesParams } from '../application/actions/request
 import { SurveyWorkspaces, SurveyWorkspacesParams } from '../application/queries/survey-workspaces.ts'
 import { ReadPlanStory, ReadPlanStoryParams } from '../application/queries/read-plan-story.ts'
 import { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
+import { ListLiveSessions } from '../application/queries/list-live-sessions.ts'
+import { WatchLiveSession } from '../application/queries/watch-live-session.ts'
+import { TypeIntoSession } from '../application/actions/type-into-session.ts'
 import { MetricsDelivery } from '../domain/value-objects/metrics-delivery.ts'
 import { HarvestDelivery, HarvestDeliveryParams } from '../application/actions/harvest-delivery.ts'
 import { ProbedToolSessions } from './probed-tool-sessions.ts'
@@ -410,6 +415,11 @@ class CtApi {
       pullRequestReviews,
       activePlans,
     })
+    const liveSessions = new PtyLiveSessions({
+      spawn, shell: environment.SHELL, cwd: process.cwd(), env: environment,
+      newId: randomUUID, stderr: (line) => process.stderr.write(line),
+    })
+    liveSessions.open()
     const server = new ApiServer({
       port: asked.port,
       startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, gh),
@@ -434,6 +444,10 @@ class CtApi {
       }),
       implementationStarts,
       recovery,
+      listLiveSessions: new ListLiveSessions({ liveSessions }),
+      liveSessions,
+      watchLiveSession: new WatchLiveSession({ liveSessions }),
+      typeIntoSession: new TypeIntoSession({ liveSessions }),
       stderr: (line) => process.stderr.write(line),
       frontendRoot: FrontendBuild.root(),
     })

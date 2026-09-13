@@ -1,0 +1,13 @@
+.session-terminal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.session-terminal__screen {
+  background-color: var(--background-inverse);
+  color: var(--foreground-inverse);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--shape-container-sm);
+  padding: 8px;
+}

@@ -1468,7 +1468,14 @@ const foreignInIndex = (ours) => {
 function declaredScope(t) {
   const failures = []
   const touched = workPathsInTheIndex()
-  const declared = t.files
+  // The plan's own file is excluded from BOTH sides of the crossing, not just
+  // from the index. `workPathsInTheIndex` already drops it because this program
+  // stages it itself; leaving it in `declared` made a plan that names it in a
+  // **Files:** unsatisfiable — the path could never appear among what was
+  // touched, and the amendment control refuses to remove it, so the run could
+  // only sit in `blocked-controls`. The plan file belongs to the program, and
+  // no task declares it.
+  const declared = t.files.filter((f) => f.path !== planRelPath())
 
   for (const path of touched) {
     if (!declared.some((f) => f.path === path)) {

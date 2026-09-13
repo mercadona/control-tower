@@ -1,5 +1,6 @@
 import { screen } from '@testing-library/react'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
+import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { openHome, startPlan, streamFrame } from './helpers'
 
@@ -24,6 +25,7 @@ const NO_IMPLEMENTATION_HISTORY_YET: Answer = {
   status: 400,
   body: '{"code":"implementation-history-not-read","detail":"not read yet"}',
 }
+const NO_SESSIONS: Answer = SessionsMother.noSessions()
 
 const responseFor = (answer: Answer) => new Response(answer.body, { status: answer.status })
 
@@ -34,6 +36,7 @@ const stubBackend = (startPlanAnswer: Answer) => {
       const url = String(input)
       if (url === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
       if (url === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
+      if (url === '/sessions') return responseFor(NO_SESSIONS)
       if (url === '/start-plan') return responseFor(startPlanAnswer)
       if (url === '/implement-plan') return responseFor(IMPLEMENTING)
       if (url.startsWith('/implement-progress/')) return responseFor(NO_IMPLEMENTATION_PROGRESS_YET)

@@ -49,7 +49,37 @@ class Entrypoint {
   }
 
   static killAll(): void {
-    for (const child of Entrypoint.#spawned.splice(0)) child.kill('SIGKILL')
+    for (const child of Entrypoint.#spawned.splice(0)) {
+      for (const descendant of Entrypoint.#descendantsOf(child.pid)) Entrypoint.#killed(descendant)
+      child.kill('SIGKILL')
+    }
+  }
+
+  static #descendantsOf(pid: number | undefined): number[] {
+    if (pid === undefined) return []
+    const direct = Entrypoint.#directChildrenOf(pid)
+
+    return direct.flatMap((child) => [child, ...Entrypoint.#descendantsOf(child)])
+  }
+
+  static #directChildrenOf(pid: number): number[] {
+    try {
+      return execFileSync('pgrep', ['-P', String(pid)], { encoding: 'utf8' })
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line !== '')
+        .map(Number)
+    } catch {
+      return []
+    }
+  }
+
+  static #killed(pid: number): void {
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      return
+    }
   }
 
   static refused(environment: NodeJS.ProcessEnv): Promise<Refusal> {
@@ -101,7 +131,7 @@ class Entrypoint {
   static async recovering(environment: NodeJS.ProcessEnv): Promise<Started> {
     const started = await Entrypoint.#started(environment)
     for (let waited = 0; waited < 60; waited += 1) {
-      if (started.saidLater().length > 0) break
+      if (started.saidLater().includes('plans in flight:')) break
       await new Promise((wake) => setTimeout(wake, 100))
     }
 
