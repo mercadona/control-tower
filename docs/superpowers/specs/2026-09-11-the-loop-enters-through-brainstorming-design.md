@@ -96,9 +96,10 @@ Behind it, two adapters, and the split has a reason rather than a taste:
 brainstorming and spec conversation is a dialogue with a hard gate in it, whose
 skill asks one question at a time and whose answers are picked from an
 interactive list. That needs a terminal, not a transcript. It runs in the
-governed checkout, with no worktree and no branch, with the phase prompt in an
-environment variable and the hooks projecting `working` / `waiting` / the live
-question.
+governed checkout, with no worktree and no branch, with the phase prompt in a
+file whose path travels in an environment variable — never the text itself, so
+no argument or string limit ever truncates it — and the hooks projecting
+`working` / `waiting` / the live question.
 
 **The implementation is headless, because nobody is.** The backend mints the
 conversation's id with `randomUUID` and imposes it with `--session-id`, so
