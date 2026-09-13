@@ -37,6 +37,7 @@ import { ClaudeConversations } from './claude-conversations.ts'
 import { LocalSettingsSessionHooks } from './local-settings-session-hooks.ts'
 import { DiskConversationRecords } from './disk-conversation-records.ts'
 import { CoordinatingSessions } from './coordinating-sessions.ts'
+import { SessionHooksRoute } from './session-hooks-route.ts'
 import { CmuxWorkspaceQuery } from '../../../plugin/scripts/cmux.js'
 import { StartPlan } from '../application/actions/start-plan.ts'
 import { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
@@ -441,7 +442,7 @@ class CtApi {
       listNames: (path) => readdirSync(path),
       readText: (path) => readFileSync(path, 'utf8'),
       newId: randomUUID,
-      hooksUrl: () => `http://${LOOPBACK}:${listeningPort}/session-hooks`,
+      hooksUrl: () => `http://${LOOPBACK}:${listeningPort}${SessionHooksRoute.PATH}`,
     })
     const sessionHooks = new LocalSettingsSessionHooks({ read: Disk.read, write: Disk.write })
     const conversationRecords = new DiskConversationRecords({

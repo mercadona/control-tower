@@ -16,6 +16,7 @@ import { SessionsRoute } from './sessions-route.ts'
 import { SessionStreamRoute } from './session-stream-route.ts'
 import { SessionInputRoute } from './session-input-route.ts'
 import { CoordinatingSessionRoute } from './coordinating-session-route.ts'
+import { SessionHooksRoute } from './session-hooks-route.ts'
 import type { StartPlan } from '../application/actions/start-plan.ts'
 import type { ImplementPlanParams } from '../application/actions/implement-plan.ts'
 import type { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
@@ -245,6 +246,14 @@ export class ApiServer {
       CoordinatingSessionRoute.opening(this.openCoordinatingSession!, this.coordinatingSessions!)
     )
     app.all(CoordinatingSessionRoute.PATH, CoordinatingSessionRoute.refuseOtherMethods)
+    app.post(
+      SessionHooksRoute.PATH,
+      Browsers.turnAwayForeign,
+      JsonBody.demandDeclared,
+      JsonBody.reader(),
+      SessionHooksRoute.handledBy(this.coordinatingSessions!)
+    )
+    app.all(SessionHooksRoute.PATH, SessionHooksRoute.refuseOtherMethods)
     app.use(Failures.nothingMatched)
     app.use(Failures.answer)
 
