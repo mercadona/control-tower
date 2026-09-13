@@ -11,6 +11,13 @@ las puertas fuera del alcance de la jefa ahora que tiene manos; D-23, que public
 que el groom espere su merge; D-24, que le da a la jefa el canal para hablarle a las sesiones que
 no ha lanzado; D-25, que obliga a relevar el contexto que compone el plugin en vez de parafrasearlo; slice 3 renombrado a la sesión coordinadora y slice 7 nuevo para la
 conducción paso a paso, con lo que la cadena pasa a ser el 8.
+2026-09-13, **approved** on 2026-09-13 at the same gate 1, with the bet intact and eight slices, before
+slice 3 was dispatched: the phase prompt is a file whose path travels in the environment variable,
+not the text itself — D-25 already decided the principle, and `MAX_ARG_STRLEN` (128 KiB per string
+on Linux) closes the alternative for a prompt that already carries a 31 KB spec; and D-26 added, so
+that the idea enters through the form the cabin already has — a Jira ticket, free text or both —
+and hydrates the brainstorming instead of replacing it. Slice 3 takes the new criterion and now
+touches the frontend as well.
 
 ## Hipótesis del experimento
 
@@ -217,6 +224,21 @@ protocol is not retired here: only its default dies, and A-3 carries the rest.
   stuck. This is the repository's own doctrine — the go the agent cannot write —
   applied to the coordinator now that it has hands.
   *(Procedencia: hablada — «No: las puertas son solo tuyas».)*
+- **D-26 · The idea enters as a Jira user story or as free text, through the
+  form the cabin already has** — the entrance keeps its shape: a ticket key such
+  as `ABC-123`, a free description, or both, plus the repository and its local
+  path, because an epic governs one checkout and the coordinating session has to
+  start in it. Its one button opens the brainstorming. A user story does not
+  replace the conversation: it **hydrates** it — the coordinating session starts
+  already knowing the ticket's summary and description, read through the
+  `UserStories` adapter that `/start-plan` already uses, and goes on to explore,
+  decide and write the spec exactly as it would from a blank page; free text
+  hydrates it the same way. What the session is told travels as the phase prompt
+  of slice 3 — a file whose path is in the environment, never text pasted into
+  an argument — which is D-25 applied to the entrance. The endpoint of the short
+  path of a loose issue stays as it is; what changes is that the cabin's button
+  now opens an epic, and A-2 keeps deciding the rest of that path later.
+  *(Procedencia: hablada — «quiero (…) que la introducción de la idea sea un ticket de jira o un texto libre, como la interfaz que ya tenía en el inicio»; «el usuario igual que ahora puede escribir el ticket, ticket + comentario o comentario solo, la página principal no debe de cambiar, solo el botón de start plan por start brainstorming». Que hidrata y no sustituye es deducido de D-1 y confirmado al enseñárselo.)*
 
 ## Enfoque técnico
 
@@ -294,7 +316,7 @@ dispatch. Nothing serializes across those three areas except through `Dep`.
 |---|-------|------|---------|-----|--------|-----------|------|------|------|-------|
 | 1 | The intermediate gate retires | backend | The flow loses its intermediate human gate: the review endpoint and its wiring are gone, the `plan` gate stops being implied by every slice, and the pull request's fix loop is untouched | – | `POST /review-plan` is no longer routed, the plan events vocabulary is `writing` and `ready` only, no slice is born with the plan gate unless its own row asks for it, the pull request fixes still reach the agent through the surviving watch, `API.md` no longer documents the retired endpoint | `ReadFixesAsked` and `RequestFixes` and the second `ReviewWatch` wiring; the go protocol's own modules stay as they are | api | plugin | !plan | a groom of any spec creates no `gate:plan` label and the plan stream emits only writing and ready |
 | 2 | The session channel | ui | The page opens a live terminal fed by a backend session, with its stream, its input and the list of the live ones | – | the live sessions are listed by the backend, output reaches the page while the process runs, typed input reaches the process, closing the page does not kill the session | the eight existing endpoints and their contracts | sessions | frontend | !plan | the session list names the live session and its stream carries bytes while the process runs |
-| 3 | The coordinating session | backend | The conversation that brainstorms and writes the spec runs inside the app on the governed checkout and stays there as the milestone's boss — always reachable and recoverable | #2 | the session starts in the governed checkout with no worktree and no branch of its own, the phase prompt travels in an environment variable, the hooks report working and waiting and the live question, a hook left by a previous run is purged before the session starts, the page offers a place to talk to it in every phase and none hides or disables it while a slice is being implemented, a reload replays what was already said, a backend restart brings the conversation back by resuming it and says so when it cannot instead of opening a different one in silence | the brainstorming skill's own text | sessions | hooks | !plan | the session status moves from working to waiting and the live question is readable in the cabin |
+| 3 | The coordinating session | backend | The conversation that brainstorms and writes the spec runs inside the app on the governed checkout and stays there as the milestone's boss — always reachable and recoverable | #2 | the session starts in the governed checkout with no worktree and no branch of its own, the phase prompt is a file whose path travels in an environment variable, the conversation starts hydrated with the idea given at the entrance — a Jira key resolved through the existing adapter or free text or both — and the entrance is the form the cabin already had with its one button opening the brainstorming, the hooks report working and waiting and the live question, a hook left by a previous run is purged before the session starts, the page offers a place to talk to it in every phase and none hides or disables it while a slice is being implemented, a reload replays what was already said, a backend restart brings the conversation back by resuming it and says so when it cannot instead of opening a different one in silence | the brainstorming skill's own text | sessions | hooks, frontend | !plan | the session status moves from working to waiting and the live question is readable in the cabin |
 | 4 | Gate 1 — the freeze | ui | The freeze becomes an act of the program: the yardstick's failures on screen and a button that writes the state and the date and commits them and publishes them for review | #3 | the button refuses while a clarification marker or an empty hypothesis remains, each failure is shown as the imported module reports it, pressing it writes `Estado: CONGELADA` with the date and commits, the epic's branch is pushed and its pull request opened with both documents in it, the cabin says that the merge of that pull request is what the groom is waiting for, the conversation's agent never writes that line | `plugin/scripts/groom.js` and `plugin/scripts/slices.js` — imported and not modified | gates | frontend | !plan | the spec commit carries `Estado: CONGELADA` with its date and a refusal names the offending line |
 | 5 | The groom and gate 2 | ui | The groom runs from the cabin: the dry run's plan on screen before anything mutates, then the real groom, then the promotion that authorises work | #4 | the dry run's product is shown as what will be created, the real groom is refused while the spec is not frozen or its committed copy is not readable on the default branch, the promotion adds `status:ready` to the epic's issues and nothing else, a groom failure is shown in the program's own words | `plugin/scripts/ct-groom.mjs` | gates | github | !plan | the dry run product matches the issues the real groom creates and each one ends at `status:ready` |
 | 6 | The headless dispatcher | backend | `/start-plan` selects the next ready issue by the table's order and its merged dependencies and its free tokens and claims it and isolates it and sows it and launches `claude -p` with its record | #5 | no module under `backend/src` names cmux, `POST /implement-plan` is no longer routed and no go is minted, the plan is published as a comment on the issue after the plan step and nothing waits for an answer, the record is written before the launch and its absence is the whole of not prepared, every call records its cost and turns and duration, a restart recovers the plans in flight from the records alone | `ct-next.mjs` and `ct-step.mjs` and the run machine | dispatch | sessions | apply, !plan | every call record holds its cost and turns and duration and the attempt row carries them |
