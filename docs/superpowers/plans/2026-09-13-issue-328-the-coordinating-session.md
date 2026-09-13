@@ -349,10 +349,10 @@ Order inside `execute`: confirm the checkout with `workspace.confirm`, read the 
 `userStories.detail` only when one was given, mint the conversation, compose the prompt, write it
 with `records.prepare`, install the hooks, start the conversation with the path `prepare`
 answered. `workspace.prepare` is never called: the coordinating session lives in the governed
-checkout itself. `PhasePrompt.brainstorming` names the skill `control-tower-loop:brainstorming`,
-says the session is this epic's coordinator in that checkout and must cut no worktree and change
-no branch, and then carries the idea: the story's key, summary and description when there is one,
-the free text when there is one, both when there are both.
+checkout itself. `PhasePrompt.brainstorming` was written in Task 2 and this task closes one hole
+in it: `#idea` appends `story.description` unconditionally, so a ticket with none ends the
+sentence with a dangling separator — `UserStory.hasDescription()` is this repository's own
+answer, and `gh-plan-issues.ts` already asks it.
 
 **TDD:** `it('starts the conversation in the confirmed checkout and prepares no worktree')` — the
 workspace double answers a canonical root from `confirm`, and the assertion is that
@@ -367,7 +367,8 @@ asserting on the literal text `records.prepare` received.
 `hydrates the phase prompt from free text alone without asking the user stories adapter`,
 `installs the hooks before the conversation starts`,
 `starts the conversation with the path the records answered`,
-`records the conversation before answering`.
+`records the conversation before answering`,
+`leaves the description out of the phase prompt when the ticket has none`.
 
 **Verification:** the use case is green with every port doubled.
 

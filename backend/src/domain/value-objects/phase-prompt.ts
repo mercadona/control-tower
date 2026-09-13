@@ -29,7 +29,9 @@ export class PhasePrompt {
   static #idea({ story, comment }: { story: UserStory | null, comment: PlanComment | null }): string[] {
     const idea: string[] = []
     if (story !== null) {
-      idea.push(`The ticket ${story.key.text} says: "${story.summary}". ${story.description}`)
+      idea.push(story.hasDescription()
+        ? `The ticket ${story.key.text} says: "${story.summary}". ${story.description}`
+        : `The ticket ${story.key.text} says: "${story.summary}".`)
     }
     if (comment !== null) {
       idea.push(comment.text)
