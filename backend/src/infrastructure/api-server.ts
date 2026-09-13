@@ -245,6 +245,11 @@ export class ApiServer {
       JsonBody.reader(),
       CoordinatingSessionRoute.opening(this.openCoordinatingSession!, this.coordinatingSessions!)
     )
+    app.get(
+      CoordinatingSessionRoute.PATH,
+      Browsers.turnAwayForeign,
+      CoordinatingSessionRoute.reading(this.coordinatingSessions!)
+    )
     app.all(CoordinatingSessionRoute.PATH, CoordinatingSessionRoute.refuseOtherMethods)
     app.post(
       SessionHooksRoute.PATH,

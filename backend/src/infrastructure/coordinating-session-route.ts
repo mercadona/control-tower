@@ -37,6 +37,47 @@ export class CoordinatingSessionRefusal {
 export class CoordinatingSessionRoute {
   static readonly PATH = '/coordinating-session'
   static readonly METHODS = 'GET, POST'
+  static readonly #UNRESUMABLE_DETAIL =
+    'claude code no longer holds this conversation: the coordinating session was not resumed'
+
+  static reading(held: CoordinatingSessions): RequestHandler {
+    return (request: Request, response: Response): void => {
+      const holding = held.held()
+      if (holding === null) {
+        Answer.send(response, 200, { status: 'none' })
+        return
+      }
+      CoordinatingSessionRoute.#answerHolding(response, holding)
+    }
+  }
+
+  static #answerHolding(response: Response, holding: HeldCoordinatingSession): void {
+    switch (holding.state) {
+      case CoordinatingSessionState.LIVE:
+        Answer.send(response, 200, {
+          status: CoordinatingSessionState.LIVE,
+          conversation: holding.conversation.id.text,
+          repo: holding.conversation.repository.text,
+          root: holding.conversation.root.text,
+          session: { id: holding.session!.id, name: holding.session!.name },
+          attention: { status: holding.attention!.status, question: holding.attention!.question },
+        })
+        return
+      case CoordinatingSessionState.UNRESUMABLE:
+        Answer.send(response, 200, {
+          status: CoordinatingSessionState.UNRESUMABLE,
+          conversation: holding.conversation.id.text,
+          repo: holding.conversation.repository.text,
+          root: holding.conversation.root.text,
+          detail: CoordinatingSessionRoute.#UNRESUMABLE_DETAIL,
+        })
+        return
+      default: {
+        const exhaustive: never = holding.state
+        throw new Error(`no coordinating session answer declared for ${exhaustive}`)
+      }
+    }
+  }
 
   static opening(open: OpenCoordinatingSession, held: CoordinatingSessions): RequestHandler {
     return async (request: Request, response: Response): Promise<void> => {

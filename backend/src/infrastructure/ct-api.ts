@@ -36,11 +36,13 @@ import { DiskImplementationStartRegistry } from './disk-implementation-start-reg
 import { ClaudeConversations } from './claude-conversations.ts'
 import { LocalSettingsSessionHooks } from './local-settings-session-hooks.ts'
 import { DiskConversationRecords } from './disk-conversation-records.ts'
-import { CoordinatingSessions } from './coordinating-sessions.ts'
+import { CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState } from './coordinating-sessions.ts'
 import { SessionHooksRoute } from './session-hooks-route.ts'
 import { CmuxWorkspaceQuery } from '../../../plugin/scripts/cmux.js'
 import { StartPlan } from '../application/actions/start-plan.ts'
 import { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
+import { RecoverCoordinatingSession, RecoveredConversation } from '../application/actions/recover-coordinating-session.ts'
+import { SessionAttention } from '../domain/value-objects/session-attention.ts'
 import { ImplementPlan } from '../application/actions/implement-plan.ts'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
 import { ReadImplementationProgress } from '../application/queries/read-implementation-progress.ts'
@@ -66,6 +68,7 @@ import { Baseline } from '../../../plugin/scripts/baseline.js'
 import type { ProcessOutput } from './tool-runner.ts'
 import type { ToolLaunch, ToolSleep } from './external-tool.ts'
 import type { UserStories } from '../domain/ports/user-stories.ts'
+import type { CoordinatingSessionRecovered } from '../application/actions/recover-coordinating-session.ts'
 
 type LaunchTool = (argv: string[], options?: { cwd?: string }) => Promise<ProcessOutput>
 
@@ -343,6 +346,40 @@ class CtApi {
     return failure instanceof Error ? failure.message : String(failure)
   }
 
+  static #rememberCoordinatingSession(
+    recovered: CoordinatingSessionRecovered,
+    coordinatingSessions: CoordinatingSessions,
+    stderr: (line: string) => void
+  ): void {
+    switch (recovered.outcome) {
+      case RecoveredConversation.NONE:
+        stderr('coordinating session: nothing recorded to recover\n')
+        return
+      case RecoveredConversation.UNRESUMABLE:
+        coordinatingSessions.remember(new HeldCoordinatingSession({
+          state: CoordinatingSessionState.UNRESUMABLE,
+          conversation: recovered.conversation!,
+          session: null,
+          attention: null,
+        }))
+        stderr(`coordinating session ${recovered.conversation!.id.text}: claude code no longer holds it, nothing was resumed\n`)
+        return
+      case RecoveredConversation.LIVE:
+        coordinatingSessions.remember(new HeldCoordinatingSession({
+          state: CoordinatingSessionState.LIVE,
+          conversation: recovered.conversation!,
+          session: recovered.session!,
+          attention: SessionAttention.working(),
+        }))
+        stderr(`coordinating session ${recovered.conversation!.id.text}: resumed\n`)
+        return
+      default: {
+        const exhaustive: never = recovered.outcome
+        throw new Error(`no coordinating session recovery declared for ${exhaustive}`)
+      }
+    }
+  }
+
   static async run(argv: string[], environment: NodeJS.ProcessEnv): Promise<void> {
     const asked = Invocation.from(argv, environment, homedir())
     if (asked.outcome !== InvocationOutcome.READY || asked.port === null || asked.stateRoot === null) {
@@ -458,6 +495,11 @@ class CtApi {
       sessionHooks,
       records: conversationRecords,
     })
+    const recoverCoordinatingSession = new RecoverCoordinatingSession({
+      conversations: claudeConversations,
+      sessionHooks,
+      records: conversationRecords,
+    })
     const server = new ApiServer({
       port: asked.port,
       startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, userStories),
@@ -499,6 +541,9 @@ class CtApi {
     }
     listeningPort = port
     process.stdout.write(`${JSON.stringify({ port })}\n`)
+    CtApi.#rememberCoordinatingSession(
+      await recoverCoordinatingSession.execute(), coordinatingSessions, (line) => process.stderr.write(line)
+    )
     await recovery.recover()
     CtApi.#sweepUntilItBreaks(CtApi.#harvestClock({
       workspace, checkouts, environment, harvestTable: asked.harvestTable,

@@ -5,7 +5,9 @@ import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import {
   OpenCoordinatingSession, OpenCoordinatingSessionParams, CoordinatingSessionOpened,
 } from '../../src/application/actions/open-coordinating-session.ts'
-import { CoordinatingSessions } from '../../src/infrastructure/coordinating-sessions.ts'
+import {
+  CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
+} from '../../src/infrastructure/coordinating-sessions.ts'
 import { Conversations } from '../../src/domain/ports/conversations.ts'
 import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
 import { SessionHooks } from '../../src/domain/ports/session-hooks.ts'
@@ -64,6 +66,30 @@ class Mother {
   static opened(): CoordinatingSessionOpened {
     return new CoordinatingSessionOpened({ conversation: Mother.CONVERSATION, session: Mother.SESSION })
   }
+
+  static live(attention: SessionAttention): CoordinatingSessions {
+    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    held.remember(new HeldCoordinatingSession({
+      state: CoordinatingSessionState.LIVE,
+      conversation: Mother.CONVERSATION,
+      session: Mother.SESSION,
+      attention,
+    }))
+
+    return held
+  }
+
+  static unresumable(): CoordinatingSessions {
+    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    held.remember(new HeldCoordinatingSession({
+      state: CoordinatingSessionState.UNRESUMABLE,
+      conversation: Mother.CONVERSATION,
+      session: null,
+      attention: null,
+    }))
+
+    return held
+  }
 }
 
 class RunningApi {
@@ -107,6 +133,12 @@ class RunningApi {
     const port = await RunningApi.listening(open, held)
 
     return fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`, { method: 'DELETE' })
+  }
+
+  static async get(held: CoordinatingSessions): Promise<Response> {
+    const port = await RunningApi.listening(OpenCoordinatingSessionSpy.opening(), held)
+
+    return fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`)
   }
 }
 
@@ -207,5 +239,45 @@ describe('CoordinatingSessionRoute', () => {
     expect(response.headers.get('allow')).toBe('GET, POST')
     expect(await response.json()).toEqual({ code: 'method-not-allowed', detail: 'method not allowed' })
     expect(open.asked).toEqual([])
+  })
+
+  it('answers none while no conversation has been opened', async () => {
+    const held = new CoordinatingSessions({ stderr: (): void => {} })
+
+    const response = await RunningApi.get(held)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ status: 'none' })
+  })
+
+  it('answers the live conversation with its attention and its question', async () => {
+    const held = Mother.live(SessionAttention.waiting('should the button read Arrancar brainstorming?'))
+
+    const response = await RunningApi.get(held)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      status: 'live',
+      conversation: Mother.CONVERSATION.id.text,
+      repo: Mother.REPOSITORY.text,
+      root: Mother.ROOT.text,
+      session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
+      attention: { status: 'waiting', question: 'should the button read Arrancar brainstorming?' },
+    })
+  })
+
+  it('answers unresumable for a conversation Claude Code no longer holds', async () => {
+    const held = Mother.unresumable()
+
+    const response = await RunningApi.get(held)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      status: 'unresumable',
+      conversation: Mother.CONVERSATION.id.text,
+      repo: Mother.REPOSITORY.text,
+      root: Mother.ROOT.text,
+      detail: 'claude code no longer holds this conversation: the coordinating session was not resumed',
+    })
   })
 })
