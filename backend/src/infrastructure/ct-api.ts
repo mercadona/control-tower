@@ -1,5 +1,7 @@
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
+} from 'node:fs'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { setTimeout as after } from 'node:timers/promises'
 import { homedir, tmpdir } from 'node:os'
@@ -31,8 +33,13 @@ import { MetricsFileHistory } from './metrics-file-history.ts'
 import { ActivePlans } from './active-plans-route.ts'
 import { ActivePlanRecovery } from './active-plan-recovery.ts'
 import { DiskImplementationStartRegistry } from './disk-implementation-start-registry.ts'
+import { ClaudeConversations } from './claude-conversations.ts'
+import { LocalSettingsSessionHooks } from './local-settings-session-hooks.ts'
+import { DiskConversationRecords } from './disk-conversation-records.ts'
+import { CoordinatingSessions } from './coordinating-sessions.ts'
 import { CmuxWorkspaceQuery } from '../../../plugin/scripts/cmux.js'
 import { StartPlan } from '../application/actions/start-plan.ts'
+import { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
 import { ImplementPlan } from '../application/actions/implement-plan.ts'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
 import { ReadImplementationProgress } from '../application/queries/read-implementation-progress.ts'
@@ -57,6 +64,7 @@ import { Invocation, InvocationOutcome } from './invocation.ts'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
 import type { ProcessOutput } from './tool-runner.ts'
 import type { ToolLaunch, ToolSleep } from './external-tool.ts'
+import type { UserStories } from '../domain/ports/user-stories.ts'
 
 type LaunchTool = (argv: string[], options?: { cwd?: string }) => Promise<ProcessOutput>
 
@@ -217,18 +225,22 @@ class CtApi {
     return after(seconds * 1000)
   }
 
+  static #userStories(gh: Gh): UserStories {
+    return new ReferredUserStories({
+      jira: new AcliUserStories({ acli: CtApi.#talkingTo(AcliUserStories.BIN, ExternalTool) }),
+      github: new GhUserStories({ gh }),
+    })
+  }
+
   static #startPlan(
     workspace: GitWorkspace,
     planAgents: CmuxPlanAgents,
     planIssues: GhPlanIssues,
     checkouts: DiskCheckoutRegistry,
-    gh: Gh
+    userStories: UserStories
   ): StartPlan {
     return new StartPlan({
-      userStories: new ReferredUserStories({
-        jira: new AcliUserStories({ acli: CtApi.#talkingTo(AcliUserStories.BIN, ExternalTool) }),
-        github: new GhUserStories({ gh }),
-      }),
+      userStories,
       planIssues,
       workspace,
       planAgents,
@@ -368,6 +380,7 @@ class CtApi {
       }),
     })
     const gh = CtApi.#talkingTo(Gh.BIN, Gh)
+    const userStories = CtApi.#userStories(gh)
     const planIssues = new GhPlanIssues({
       gh,
       stderr: (line) => process.stderr.write(line),
@@ -419,9 +432,34 @@ class CtApi {
       spawn, newId: randomUUID, stderr: (line) => process.stderr.write(line),
     })
     liveSessions.open(PtyLiveSessions.loginShell(environment.SHELL, process.cwd(), environment))
+    let listeningPort: number | null = null
+    const claudeConversations = new ClaudeConversations({
+      liveSessions,
+      shell: environment.SHELL,
+      env: environment,
+      claudeDirectory: join(homedir(), '.claude'),
+      listNames: (path) => readdirSync(path),
+      readText: (path) => readFileSync(path, 'utf8'),
+      newId: randomUUID,
+      hooksUrl: () => `http://${LOOPBACK}:${listeningPort}/session-hooks`,
+    })
+    const sessionHooks = new LocalSettingsSessionHooks({ read: Disk.read, write: Disk.write })
+    const conversationRecords = new DiskConversationRecords({
+      read: Disk.read,
+      write: Disk.write,
+      root: asked.stateRoot,
+    })
+    const coordinatingSessions = new CoordinatingSessions({ stderr: (line) => process.stderr.write(line) })
+    const openCoordinatingSession = new OpenCoordinatingSession({
+      userStories,
+      workspace,
+      conversations: claudeConversations,
+      sessionHooks,
+      records: conversationRecords,
+    })
     const server = new ApiServer({
       port: asked.port,
-      startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, gh),
+      startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, userStories),
       pullRequestReviews,
       implementPlan: new ImplementPlan({
         goRegistry,
@@ -447,6 +485,8 @@ class CtApi {
       liveSessions,
       watchLiveSession: new WatchLiveSession({ liveSessions }),
       typeIntoSession: new TypeIntoSession({ liveSessions }),
+      openCoordinatingSession,
+      coordinatingSessions,
       stderr: (line) => process.stderr.write(line),
       frontendRoot: FrontendBuild.root(),
     })
@@ -456,6 +496,7 @@ class CtApi {
     } catch (error) {
       CtApi.#refuseListen(`could not listen on ${LOOPBACK}: ${CtApi.#messageOf(error)}`)
     }
+    listeningPort = port
     process.stdout.write(`${JSON.stringify({ port })}\n`)
     await recovery.recover()
     CtApi.#sweepUntilItBreaks(CtApi.#harvestClock({
