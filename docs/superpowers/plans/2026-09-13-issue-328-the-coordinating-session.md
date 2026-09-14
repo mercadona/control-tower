@@ -854,7 +854,17 @@ path it already has.
 `frontend/src/pages/home/__tests__/Home.planEvents.test.tsx` (modify),
 `frontend/src/pages/home/__tests__/Home.baseline.test.tsx` (modify),
 `frontend/src/pages/home/__tests__/Home.layout.test.tsx` (modify),
-`frontend/src/pages/home/__tests__/Home.navigation.test.tsx` (modify)
+`frontend/src/pages/home/__tests__/Home.navigation.test.tsx` (modify),
+`frontend/src/pages/home/__tests__/Home.restoreWorkflow.test.tsx` (modify)
+
+Amendment (task 12, added mid-task): `Home.restoreWorkflow.test.tsx` was not in this task's
+original `**Files:**` line, but this task's own **Verification** demands the whole frontend suite
+green, and that file shares `helpers.tsx` with the nine declared suites — renaming `startPlan` to
+`openBrainstorming` and the button's literal to `Arrancar brainstorming` leaves its six tests that
+pressed the old button unable to compile or pass. The file is amended in, not rewritten: its
+restore-specific tests (the large majority) are untouched, and only the handful that pressed the
+entrance button to reach a later stage are adapted to `openRestored`/`/coordinating-session`, the
+same repair every other suite in this task received.
 
 Call site (frontend/src/pages/home/Home.tsx):
 

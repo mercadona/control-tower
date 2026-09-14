@@ -1,21 +1,40 @@
 import { screen, waitFor, within } from '@testing-library/react'
+import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
+import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
-import { WorkflowSnapshot, WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import {
   backendAnswering,
   backendPending,
-  backendUnreachable,
+  openBrainstorming,
   openHome,
+  openRestored,
   pressStart,
-  startPlan,
   typePath,
   typeRepository,
   typeTicket,
   typeUserComment,
 } from './helpers'
 
-describe('Home · start plan', () => {
+const openFailsToReachBackend = () => {
+  const fetching = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => {
+    throw new TypeError('Failed to fetch')
+  })
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (input === '/active-plans') return new Response('{"plans":[]}', { status: 200 })
+      if (input === '/external-tools') return new Response(ExternalToolsMother.allReady().body, { status: 200 })
+      if (input === '/sessions') return new Response(SessionsMother.noSessions().body, { status: 200 })
+      if (input === '/coordinating-session' && init === undefined) return new Response(CoordinatingSessionMother.none().body, { status: 200 })
+      return fetching(input, init)
+    }),
+  )
+
+  return fetching
+}
+
+describe('Home · opens the brainstorming', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
@@ -30,72 +49,56 @@ describe('Home · start plan', () => {
     expect(current).toHaveTextContent('En curso')
   })
 
-  it('should show the plan the backend started with a link to its issue', async () => {
-    backendAnswering(StartPlanMother.started())
-    const { user } = openHome()
-
-    await startPlan(user)
-
-    const status = await screen.findByRole('status')
-    expect(status).toHaveTextContent('Plan arrancado')
-    expect(screen.getByLabelText('Progreso del plan')).toHaveTextContent(StartPlanMother.AGENT)
-    expect(screen.getByRole('link', { name: `#${StartPlanMother.ISSUE.number}` })).toHaveAttribute(
-      'href',
-      StartPlanMother.ISSUE.url,
-    )
-  })
-
   it('should send exactly the payload the backend contract declares', async () => {
-    const fetching = backendAnswering(StartPlanMother.started())
+    const fetching = backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
 
-    await startPlan(user)
+    await openBrainstorming(user)
 
-    await screen.findByRole('status')
-    expect(fetching).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
     const [url, init] = fetching.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toBe('/start-plan')
+    expect(url).toBe('/coordinating-session')
     expect(init.method).toBe('POST')
     expect(init.headers).toEqual({ 'Content-Type': 'application/json' })
     expect(init.body).toBe(StartPlanMother.REQUEST_BODY)
   })
 
   it('should show the backend refusal text as it came', async () => {
-    backendAnswering(StartPlanMother.planNotStarted())
+    backendAnswering(CoordinatingSessionMother.oneRepositoryOnly())
     const { user } = openHome()
 
-    await startPlan(user)
+    await openBrainstorming(user)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('cmux is not reachable')
+    expect(await screen.findByRole('alert')).toHaveTextContent(CoordinatingSessionMother.ONE_REPOSITORY_ONLY_DETAIL)
   })
 
   it('should keep the form unlocked after a backend refusal', async () => {
-    backendAnswering(StartPlanMother.planNotStarted())
+    backendAnswering(CoordinatingSessionMother.oneRepositoryOnly())
     const { user } = openHome()
 
-    await startPlan(user)
+    await openBrainstorming(user)
 
     await screen.findByRole('alert')
     expect(screen.getByLabelText('Ticket')).toBeEnabled()
     expect(screen.getByLabelText(/Repositorio/)).toBeEnabled()
     expect(screen.getByLabelText(/Ruta local/)).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeEnabled()
   })
 
-  it('should show the malformed path refusal text as it came', async () => {
-    backendAnswering(StartPlanMother.malformedPath())
+  it('should show the refusal text as it came when the path is not a checkout of the repository', async () => {
+    backendAnswering(StartPlanMother.notACheckout())
     const { user } = openHome()
 
-    await startPlan(user)
+    await openBrainstorming(user)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('path must be an absolute path')
+    expect(await screen.findByRole('alert')).toHaveTextContent('owner/name: /repo holds someone/else')
   })
 
   it('should say the backend is unreachable when the network fails', async () => {
-    backendUnreachable()
+    openFailsToReachBackend()
     const { user } = openHome()
 
-    await startPlan(user)
+    await openBrainstorming(user)
 
     const recovery = await waitFor(() => {
       const found = document.querySelector('.home__recovery')
@@ -105,161 +108,46 @@ describe('Home · start plan', () => {
     expect(within(recovery).getByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
   })
 
-  it('should restore a matching plan on retry without another start request', async () => {
-    const active = {
-      phase: 'planning',
-      request: { id: StartPlanMother.TICKET, repo: StartPlanMother.REPO, path: StartPlanMother.PATH },
-      plan: {
-        id: StartPlanMother.TICKET,
-        repo: StartPlanMother.REPO,
-        issue: StartPlanMother.ISSUE,
-        agent: StartPlanMother.AGENT,
-        branch: StartPlanMother.BRANCH,
-        worktree: StartPlanMother.WORKTREE,
-      },
-    }
-    const fetching = vi.fn()
-      .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-      .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ plans: [active] }), { status: 200 }))
-    vi.stubGlobal('fetch', (input: string | URL | Request) => {
-      if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
-      if (input === '/sessions') return new Response(SessionsMother.noSessions().body)
-      return fetching(input)
-    })
+  it('should clear the unreachable banner once the form is edited again', async () => {
+    openFailsToReachBackend()
     const { user } = openHome()
-    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
 
-    await startPlan(user)
-    expect(await screen.findByRole('alert')).toHaveTextContent('No se puede confirmar si el plan arrancó')
-    await user.click(screen.getByRole('button', { name: 'Reintentar recuperación' }))
+    await openBrainstorming(user)
+    await waitFor(() => expect(document.querySelector('.home__recovery')).not.toBeNull())
 
-    expect(await screen.findByText('Plan arrancado')).toBeInTheDocument()
-    expect(fetching.mock.calls.filter(([input]) => input === '/start-plan')).toHaveLength(1)
-    expect(fetching.mock.calls.filter(([input]) => input === '/active-plans')).toHaveLength(3)
-  })
+    await typeTicket(user, '2')
 
-  it('should block a duplicate start while lost-response recovery is unavailable', async () => {
-    const fetching = vi.fn()
-      .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-      .mockResolvedValueOnce(new Response('', { status: 503 }))
-    vi.stubGlobal('fetch', (input: string | URL | Request) => {
-      if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
-      if (input === '/sessions') return new Response(SessionsMother.noSessions().body)
-      return fetching(input)
-    })
-    const { user } = openHome()
-    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
-
-    await startPlan(user)
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo comprobar el estado del plan')
-    expect(screen.queryByRole('button', { name: 'Arrancar plan' })).toBeNull()
-    expect(fetching.mock.calls.filter(([input]) => input === '/start-plan')).toHaveLength(1)
-  })
-
-  it('should keep the form blocked when lost-response recovery finds no matching plan', async () => {
-    const fetching = vi.fn()
-      .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-      .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-    vi.stubGlobal('fetch', (input: string | URL | Request) => {
-      if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
-      if (input === '/sessions') return new Response(SessionsMother.noSessions().body)
-      return fetching(input)
-    })
-    const { user } = openHome()
-    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
-
-    await startPlan(user)
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('La solicitud puede completarse más tarde')
-    expect(screen.queryByRole('button', { name: 'Arrancar plan' })).toBeNull()
-    expect(screen.getByText('Ruta local').parentElement).toHaveTextContent(StartPlanMother.PATH)
-    expect(fetching.mock.calls.filter(([input]) => input === '/start-plan')).toHaveLength(1)
-  })
-
-  it('should remain blocked when repeated recovery finds no matching plan', async () => {
-    const fetching = vi.fn()
-      .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-      .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-      .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-    vi.stubGlobal('fetch', (input: string | URL | Request) => {
-      if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
-      if (input === '/sessions') return new Response(SessionsMother.noSessions().body)
-      return fetching(input)
-    })
-    const { user } = openHome()
-    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
-
-    await startPlan(user)
-    await screen.findByRole('alert')
-    await user.click(screen.getByRole('button', { name: 'Reintentar recuperación' }))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('No se puede confirmar si el plan arrancó')
-    expect(screen.queryByRole('button', { name: 'Arrancar plan' })).toBeNull()
-    expect(fetching.mock.calls.filter(([input]) => input === '/start-plan')).toHaveLength(1)
-    expect(fetching.mock.calls.filter(([input]) => input === '/active-plans')).toHaveLength(3)
-  })
-
-  it('should discard an uncertain start and clear its pending request', async () => {
-    const fetching = vi.fn()
-      .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-      .mockResolvedValueOnce(new Response('{"plans":[]}', { status: 200 }))
-    vi.stubGlobal('fetch', (input: string | URL | Request) => {
-      if (input === '/external-tools') return new Response('{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}')
-      if (input === '/sessions') return new Response(SessionsMother.noSessions().body)
-      return fetching(input)
-    })
-    const { user } = openHome()
-    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
-
-    await startPlan(user)
-    await screen.findByRole('alert')
-    await user.click(screen.getByRole('button', { name: 'Descartar estado' }))
-
-    expect(screen.queryByRole('alert')).toBeNull()
-    expect(screen.getByLabelText('Ticket')).toBeEnabled()
-    expect(screen.getByLabelText('Ticket')).toHaveValue('')
-    expect(screen.getByLabelText(/Repositorio/)).toHaveValue('')
-    expect(screen.getByLabelText(/Ruta local/)).toHaveValue('')
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
-    expect(fetching.mock.calls.filter(([input]) => input === '/start-plan')).toHaveLength(1)
-    expect(fetching.mock.calls.filter(([input]) => input === '/active-plans')).toHaveLength(2)
+    expect(document.querySelector('.home__recovery')).toBeNull()
   })
 
   it('should keep the start button disabled until the ticket key is well formed', async () => {
-    backendAnswering(StartPlanMother.started())
+    backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
     await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
 
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
     await typeTicket(user, 'abc-1')
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
     await user.clear(screen.getByLabelText('Ticket'))
     await typeTicket(user, 'MO_SHOP-42')
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeEnabled()
     await user.clear(screen.getByLabelText('Ticket'))
     await typeTicket(user, 'https://github.com/owner/name/issues/1x')
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
     await user.clear(screen.getByLabelText('Ticket'))
     await typeTicket(user, 'https://github.com/owner/name/issues/0')
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
     await user.clear(screen.getByLabelText('Ticket'))
     await typeTicket(user, 'https://github.com/owner/../issues/1')
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
     await user.clear(screen.getByLabelText('Ticket'))
     await typeTicket(user, StartPlanMother.ISSUE_URL)
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeEnabled()
   })
 
-  it('should send a github issue url verbatim and show it as the ticket once started', async () => {
-    const fetching = backendAnswering(StartPlanMother.startedFromIssueUrl())
+  it('should send a github issue url verbatim as the ticket', async () => {
+    const fetching = backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
 
     await typeTicket(user, StartPlanMother.ISSUE_URL)
@@ -267,42 +155,41 @@ describe('Home · start plan', () => {
     await typePath(user, StartPlanMother.PATH)
     await pressStart(user)
 
-    await screen.findByRole('status')
+    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
     const [, init] = fetching.mock.calls[0] as unknown as [string, RequestInit]
     expect(init.body).toBe(StartPlanMother.REQUEST_BODY_ISSUE_URL)
-    expect(screen.getByText(StartPlanMother.ISSUE_URL)).toBeInTheDocument()
   })
 
   it('should keep the start button disabled until the repository is well formed', async () => {
-    backendAnswering(StartPlanMother.started())
+    backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
     await typeTicket(user, StartPlanMother.TICKET)
     await typePath(user, StartPlanMother.PATH)
 
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
     await typeRepository(user, 'name')
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
     await user.clear(screen.getByLabelText(/Repositorio/))
     await typeRepository(user, 'owner/name')
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeEnabled()
   })
 
   it('should keep the start button disabled until the local path is well formed', async () => {
-    backendAnswering(StartPlanMother.started())
+    backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
     await typeTicket(user, StartPlanMother.TICKET)
     await typeRepository(user, StartPlanMother.REPO)
 
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
     await typePath(user, '   ')
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
     await user.clear(screen.getByLabelText(/Ruta local/))
     await typePath(user, StartPlanMother.PATH)
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeEnabled()
   })
 
   it('should send the local path without the spaces the user left around it', async () => {
-    const fetching = backendAnswering(StartPlanMother.started())
+    const fetching = backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
     await typeTicket(user, StartPlanMother.TICKET)
     await typeRepository(user, StartPlanMother.REPO)
@@ -310,19 +197,13 @@ describe('Home · start plan', () => {
 
     await pressStart(user)
 
-    await screen.findByRole('status')
+    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
     const [, init] = fetching.mock.calls[0] as unknown as [string, RequestInit]
     expect(init.body).toBe(StartPlanMother.REQUEST_BODY)
-    expect(WorkflowSnapshotStorage.load()?.request).toEqual({
-      id: StartPlanMother.TICKET,
-      userComment: null,
-      repo: StartPlanMother.REPO,
-      path: StartPlanMother.PATH,
-    })
   })
 
   it('should send the local path without the trailing slash the shell adds', async () => {
-    const fetching = backendAnswering(StartPlanMother.started())
+    const fetching = backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
     await typeTicket(user, StartPlanMother.TICKET)
     await typeRepository(user, StartPlanMother.REPO)
@@ -330,36 +211,24 @@ describe('Home · start plan', () => {
 
     await pressStart(user)
 
-    await screen.findByRole('status')
+    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
     const [, init] = fetching.mock.calls[0] as unknown as [string, RequestInit]
     expect(init.body).toBe(StartPlanMother.REQUEST_BODY)
   })
 
   it('should keep the start button disabled when the path holds an empty segment', async () => {
-    backendAnswering(StartPlanMother.started())
+    backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
     await typeTicket(user, StartPlanMother.TICKET)
     await typeRepository(user, StartPlanMother.REPO)
 
     await typePath(user, '/Users/pedro//code')
 
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
   })
 
-  it('should show the refusal text as it came when the path is not a checkout of the repository', async () => {
-    backendAnswering(StartPlanMother.notACheckout())
-    const { user } = openHome()
-
-    await startPlan(user)
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('owner/name: /repo holds someone/else')
-  })
-
-  it('should show the branch and the worktree the backend started', async () => {
-    backendAnswering(StartPlanMother.started())
-    const { user } = openHome()
-
-    await startPlan(user)
+  it('should show the branch and the worktree of the plan being reviewed', async () => {
+    openRestored({ phase: 'planning' })
 
     await screen.findByRole('status')
     expect(screen.getByLabelText('Progreso del plan')).toHaveTextContent(StartPlanMother.BRANCH)
@@ -367,10 +236,7 @@ describe('Home · start plan', () => {
   })
 
   it('should show a compact read-only request summary when the completed request reopens', async () => {
-    backendAnswering(StartPlanMother.started())
-    const { user } = openHome()
-
-    await startPlan(user)
+    const { user } = openRestored({ phase: 'planning' })
 
     await screen.findByRole('status')
     await user.click(screen.getByRole('button', { name: /Solicitud Completado/ }))
@@ -379,53 +245,50 @@ describe('Home · start plan', () => {
     expect(screen.getByText('Ruta local').parentElement).toHaveTextContent(StartPlanMother.PATH)
   })
 
-  it('should prevent duplicate plan starts after a plan starts', async () => {
-    backendAnswering(StartPlanMother.started())
-    const { user } = openHome()
-
-    await startPlan(user)
+  it('should prevent duplicate plan starts once a workflow exists', async () => {
+    openRestored({ phase: 'planning' })
 
     await screen.findByRole('status')
-    expect(screen.queryByRole('button', { name: 'Arrancar plan' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Arrancar brainstorming' })).toBeNull()
     expect(screen.getByRole('button', { name: /Solicitud Completado/ })).toBeEnabled()
   })
 
-  it('should prevent duplicate plan starts while a request is in flight', async () => {
+  it('should prevent a duplicate open while a request is in flight', async () => {
     const backend = backendPending()
     const { user } = openHome()
     await typeTicket(user, StartPlanMother.TICKET)
     await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
 
-    await user.dblClick(screen.getByRole('button', { name: 'Arrancar plan' }))
+    await user.dblClick(screen.getByRole('button', { name: 'Arrancar brainstorming' }))
 
-    expect(backend.fetching.mock.calls.filter(([input]) => input === '/start-plan')).toHaveLength(1)
-    expect(screen.getByRole('button', { name: /Enviando solicitud/ })).toBeDisabled()
-    await backend.answerWith(StartPlanMother.started())
+    expect(backend.fetching.mock.calls.filter(([input, init]) => input === '/coordinating-session' && (init as RequestInit | undefined)?.method === 'POST')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: /Abriendo el brainstorming/ })).toBeDisabled()
+    await backend.answerWith(CoordinatingSessionMother.opened())
   })
 
   it('should keep the start button disabled when neither a ticket nor a comment is given', async () => {
-    backendAnswering(StartPlanMother.started())
+    backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
     await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
 
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
   })
 
   it('should enable the start button with only a well formed comment and no ticket', async () => {
-    backendAnswering(StartPlanMother.started())
+    backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
     await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
 
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
     await typeUserComment(user, StartPlanMother.COMMENT)
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeEnabled()
   })
 
   it('should send a plan asked for with only a comment', async () => {
-    const fetching = backendAnswering(StartPlanMother.started())
+    const fetching = backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
     await typeUserComment(user, StartPlanMother.COMMENT)
     await typeRepository(user, StartPlanMother.REPO)
@@ -433,13 +296,13 @@ describe('Home · start plan', () => {
 
     await pressStart(user)
 
-    await screen.findByRole('status')
+    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
     const [, init] = fetching.mock.calls[0] as unknown as [string, RequestInit]
     expect(init.body).toBe(StartPlanMother.REQUEST_BODY_COMMENT_ONLY)
   })
 
   it('should send a plan asked for with both a ticket and a comment', async () => {
-    const fetching = backendAnswering(StartPlanMother.started())
+    const fetching = backendAnswering(CoordinatingSessionMother.opened())
     const { user } = openHome()
     await typeTicket(user, StartPlanMother.TICKET)
     await typeUserComment(user, StartPlanMother.COMMENT)
@@ -448,31 +311,21 @@ describe('Home · start plan', () => {
 
     await pressStart(user)
 
-    await screen.findByRole('status')
+    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
     const [, init] = fetching.mock.calls[0] as unknown as [string, RequestInit]
     expect(init.body).toBe(StartPlanMother.REQUEST_BODY_WITH_COMMENT)
   })
 
-  it('should show a plan with no user story, keeping its null id through the summary and a reload', async () => {
-    backendAnswering(StartPlanMother.startedWithoutStory())
-    const { user } = openHome()
-    await typeUserComment(user, StartPlanMother.COMMENT)
-    await typeRepository(user, StartPlanMother.REPO)
-    await typePath(user, StartPlanMother.PATH)
-
-    await pressStart(user)
+  it('should show a plan with no user story, keeping its null id through the summary', async () => {
+    const { user } = openRestored({
+      phase: 'planning',
+      request: { id: null, userComment: StartPlanMother.COMMENT, repo: StartPlanMother.REPO, path: StartPlanMother.PATH },
+      plan: { id: null },
+    })
 
     await screen.findByRole('status')
     await user.click(screen.getByRole('button', { name: /Solicitud Completado/ }))
     expect(screen.queryByText('Ticket')).toBeNull()
     expect(screen.getByText('Qué quieres planificar').parentElement).toHaveTextContent(StartPlanMother.COMMENT)
-
-    const stored = WorkflowSnapshotStorage.load() as WorkflowSnapshot
-    expect(stored.request.id).toBeNull()
-    expect(stored.plan.id).toBeNull()
-
-    const reloaded = WorkflowSnapshotStorage.load()
-    expect(reloaded).not.toBeNull()
-    expect(reloaded?.plan.id).toBeNull()
   })
 })

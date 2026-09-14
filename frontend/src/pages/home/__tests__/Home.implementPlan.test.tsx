@@ -1,4 +1,5 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { ImplementPlanMother } from '__scenarios__/ImplementPlanMother'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
@@ -6,9 +7,8 @@ import {
   backendAnswering,
   backendPending,
   backendUnreachable,
-  openHome,
+  openRestored,
   pressStart,
-  startPlan,
   streamFrame,
   typePath,
   typeRepository,
@@ -23,18 +23,9 @@ describe('Home · implement plan', () => {
     vi.unstubAllGlobals()
   })
 
-  const planStarted = async () => {
-    backendAnswering(StartPlanMother.started())
-    const opened = openHome()
-    await startPlan(opened.user)
-    await screen.findByRole('status')
-
-    return opened
-  }
-
   const planReady = async () => {
-    const opened = await planStarted()
-    await streamFrame(PlanEventsMother.ready())
+    const opened = openRestored({ phase: 'ready' })
+    await screen.findByRole('button', IMPLEMENT_BUTTON)
 
     return opened
   }
@@ -44,7 +35,8 @@ describe('Home · implement plan', () => {
   }
 
   it('should offer to implement the plan only once it is ready', async () => {
-    await planStarted()
+    openRestored({ phase: 'planning' })
+    await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
 
     await streamFrame(PlanEventsMother.writing())
     expect(screen.queryByRole('button', IMPLEMENT_BUTTON)).toBeNull()
@@ -54,8 +46,7 @@ describe('Home · implement plan', () => {
   })
 
   it('keeps a ready plan in review with its issue link until implementation succeeds', async () => {
-    await planStarted()
-    await streamFrame(PlanEventsMother.ready())
+    await planReady()
 
     const current = screen.getByRole('navigation', { name: 'Flujo del plan' }).querySelector('[aria-current="step"]')
     expect(current).toHaveTextContent('Revisar plan')
@@ -65,8 +56,7 @@ describe('Home · implement plan', () => {
   })
 
   it('should offer only the issue link and the go on a ready plan', async () => {
-    await planStarted()
-    await streamFrame(PlanEventsMother.ready())
+    await planReady()
 
     expect(screen.getByRole('link', { name: 'Abrir el plan en GitHub' })).toBeInTheDocument()
     expect(screen.getByRole('button', IMPLEMENT_BUTTON)).toBeInTheDocument()
@@ -165,22 +155,24 @@ describe('Home · implement plan', () => {
     await screen.findByRole('button', { name: 'Arrancar otro plan' })
     const oldStream = FakeEventSource.last()
 
-    const fetching = backendAnswering(StartPlanMother.startedInAnotherRepo())
     await user.click(screen.getByRole('button', { name: 'Arrancar otro plan' }))
     expect(oldStream.closes).toBe(1)
     expect(localStorage).toHaveLength(0)
     expect(screen.getByLabelText('Ticket')).toHaveValue('')
     expect(screen.getByLabelText(/Repositorio/)).toHaveValue('')
     expect(screen.getByLabelText(/Ruta local/)).toHaveValue('')
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
-    expect(fetching).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
 
+    const fetching = backendAnswering(CoordinatingSessionMother.opened())
     await typeTicket(user, StartPlanMother.TICKET)
     await typeRepository(user, StartPlanMother.ANOTHER_REPO)
     await typePath(user, StartPlanMother.PATH)
     await pressStart(user)
-    await screen.findByRole('status')
-    expect(FakeEventSource.last().url).toContain(encodeURIComponent(StartPlanMother.ANOTHER_REPO))
+
+    await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
+    const [url, init] = fetching.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('/coordinating-session')
+    expect(init.body).toContain(StartPlanMother.ANOTHER_REPO)
   })
 
   it('should not readopt the plan it just left when starting another one, even if the backend still reports it', async () => {

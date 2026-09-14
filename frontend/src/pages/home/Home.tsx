@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivePlan } from 'app/active-plans/ActivePlan.types'
 import { ActivePlansClient } from 'app/active-plans/client'
+import { CoordinatingSessionStatus } from 'app/coordinating-session/components/coordinating-session-status'
 import { ToolsNavbar } from 'app/external-tools/components/tools-navbar'
 import { ImplementHistory } from 'app/implement-history/components/implement-history'
 import { ImplementPlanAction } from 'app/implement-plan/components/implement-plan-action'
@@ -9,7 +10,7 @@ import { PlanProgress } from 'app/plan-events/components/plan-progress'
 import { SessionsPanel } from 'app/sessions/components/sessions-panel'
 import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
-import { StartedPlan, StartPlanRequest } from 'app/start-plan/StartPlan.types'
+import { StartPlanRequest } from 'app/start-plan/StartPlan.types'
 import { WorkflowSnapshot, WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import { Banner } from 'system-ui/banner'
 import { Breadcrumbs } from 'system-ui/breadcrumbs'
@@ -20,7 +21,7 @@ import { WorkflowStep, WorkflowStepStatus } from 'system-ui/workflow-step'
 import './Home.css'
 
 type WorkflowStageName = 'request' | 'review' | 'implementation'
-type Reconciliation = 'not-required' | 'checking' | 'confirmed' | 'stale' | 'unavailable' | 'inconclusive' | 'uncertain' | 'uncertain-start'
+type Reconciliation = 'not-required' | 'checking' | 'confirmed' | 'stale' | 'unavailable' | 'inconclusive' | 'uncertain'
 
 const STAGE_LABEL: Record<WorkflowStageName, string> = {
   request: 'Solicitud',
@@ -36,9 +37,6 @@ const isSameWorkflow = (workflow: WorkflowSnapshot, active: ActivePlan) =>
   workflow.plan.issue.number === active.plan.issue.number &&
   workflow.plan.agent === active.plan.agent
 
-const isSameRequest = (request: StartPlanRequest, active: ActivePlan) =>
-  request.id === active.request.id && request.repo === active.request.repo && request.path === active.request.path
-
 const Home = () => {
   const [workflow, setWorkflow] = useState<WorkflowSnapshot | null>(() => WorkflowSnapshotStorage.load())
   const workflowRef = useRef(workflow)
@@ -46,6 +44,7 @@ const Home = () => {
   const [reconciliation, setReconciliation] = useState<Reconciliation>(workflow === null ? 'not-required' : 'checking')
   const [candidates, setCandidates] = useState<ActivePlan[]>([])
   const [uncertainRequest, setUncertainRequest] = useState<StartPlanRequest | null>(null)
+  const [brainstormingUnreachable, setBrainstormingUnreachable] = useState(false)
   const [expandedSummary, setExpandedSummary] = useState<WorkflowStageName | null>(null)
   const [requestFormVersion, setRequestFormVersion] = useState(0)
   const recoveryStartedRef = useRef(false)
@@ -78,7 +77,7 @@ const Home = () => {
     selectWorkflow({ phase: active.phase, request: active.request, plan: active.plan })
   }, [selectWorkflow])
 
-  const reconcile = useCallback(async (submittedRequest?: StartPlanRequest) => {
+  const reconcile = useCallback(async () => {
     const token = Symbol('recovery')
     recoveryTokenRef.current = token
     const outcome = await ActivePlansClient.get()
@@ -119,23 +118,6 @@ const Home = () => {
     }
 
     if (current !== null) return
-    if (submittedRequest !== undefined) {
-      if (outcome.kind === 'unavailable') {
-        setReconciliation('unavailable')
-        return
-      }
-      if (outcome.kind === 'inconclusive') {
-        setReconciliation('inconclusive')
-        return
-      }
-      const active = outcome.plans.find((candidate) => isSameRequest(submittedRequest, candidate))
-      if (active === undefined) {
-        setReconciliation('uncertain-start')
-        return
-      }
-      selectActivePlan(active)
-      return
-    }
     if (outcome.kind !== 'loaded') {
       setReconciliation(outcome.kind)
       return
@@ -164,27 +146,20 @@ const Home = () => {
   const formInteracted = useCallback(() => {
     recoveryTokenRef.current = null
     setCandidates([])
+    setBrainstormingUnreachable(false)
   }, [])
 
   const expandSummary = (stage: WorkflowStageName) => (isExpanded: boolean) => {
     setExpandedSummary(isExpanded ? stage : null)
   }
 
-  const planStarted = useCallback(
-    (plan: StartedPlan, request: StartPlanRequest) => {
-      if (workflowRef.current !== null) return
-      selectWorkflow({ phase: 'planning', request, plan }, false)
-    },
-    [selectWorkflow],
-  )
+  const sessionOpened = useCallback(() => {
+    setBrainstormingUnreachable(false)
+  }, [])
 
-  const planStartUncertain = useCallback((request: StartPlanRequest) => {
-    if (workflowRef.current !== null) return
-    setUncertainRequest(request)
-    setCandidates([])
-    setReconciliation('checking')
-    void reconcile(request)
-  }, [reconcile])
+  const sessionUnreachable = useCallback(() => {
+    setBrainstormingUnreachable(true)
+  }, [])
 
   const planReady = useCallback(() => {
     const current = workflowRef.current
@@ -225,7 +200,7 @@ const Home = () => {
   const retryReconciliation = () => {
     retryingRef.current = true
     setReconciliation('checking')
-    void reconcile(uncertainRequest ?? undefined)
+    void reconcile()
   }
 
   const hasDiscardableState = restoredRef.current || uncertainRequest !== null
@@ -301,15 +276,13 @@ const Home = () => {
           </div>
         </div>
       )}
-      {(reconciliation === 'uncertain' || reconciliation === 'uncertain-start') && (
+      {reconciliation === 'uncertain' && (
         <div className="home__recovery">
           <Banner
             type="warning"
             role="alert"
-            title={reconciliation === 'uncertain-start' ? 'No se puede confirmar si el plan arrancó' : 'No se puede confirmar el estado de implementación'}
-            description={reconciliation === 'uncertain-start'
-              ? 'La solicitud puede completarse más tarde. Reintenta la recuperación o descarta el estado para crear otra solicitud.'
-              : 'No se abrirán eventos ni se podrá implementar hasta que el backend confirme el estado.'}
+            title="No se puede confirmar el estado de implementación"
+            description="No se abrirán eventos ni se podrá implementar hasta que el backend confirme el estado."
           />
           <div className="home__recovery-actions">
             <Button onClick={retryReconciliation}>Reintentar recuperación</Button>
@@ -318,6 +291,12 @@ const Home = () => {
         </div>
       )}
     </>
+  )
+
+  const brainstormingRecovery = brainstormingUnreachable && (
+    <div className="home__recovery">
+      <Banner type="warning" role="alert" title="No se pudo contactar con el backend" description="No se pudo abrir el brainstorming. Inténtalo de nuevo." />
+    </div>
   )
 
   const breadcrumbItems = workflow === null
@@ -379,6 +358,7 @@ const Home = () => {
                   </div>
                 </header>
                 {recovery}
+                {brainstormingRecovery}
                 {candidates.length > 1 && (
                   <ul className="home__active-plans" aria-label="Planes activos">
                     {candidates.map((candidate) => (
@@ -399,8 +379,8 @@ const Home = () => {
                 )}
                 <StartPlanForm
                   key={requestFormVersion}
-                  onStarted={planStarted}
-                  onBackendUnreachable={planStartUncertain}
+                  onOpened={sessionOpened}
+                  onUnreachable={sessionUnreachable}
                   onInteraction={formInteracted}
                   isLocked={uncertainRequest !== null}
                   isMutationBlocked={reconciliation === 'unavailable' || reconciliation === 'inconclusive' || (reconciliation === 'checking' && retryingRef.current)}
@@ -477,6 +457,7 @@ const Home = () => {
 
           <section className="home__sessions" aria-label="Sesiones en marcha">
             <SessionsPanel />
+            <CoordinatingSessionStatus />
           </section>
 
           {workflow !== null && (
@@ -489,8 +470,8 @@ const Home = () => {
               >
                 <StartPlanForm
                   key={requestFormVersion}
-                  onStarted={planStarted}
-                  onBackendUnreachable={planStartUncertain}
+                  onOpened={sessionOpened}
+                  onUnreachable={sessionUnreachable}
                   onInteraction={formInteracted}
                   isLocked
                   request={workflow.request}

@@ -1,10 +1,14 @@
 import { StrictMode } from 'react'
 import { act, render, screen } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
+import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
+import { ActivePlan } from 'app/active-plans/ActivePlan.types'
 import { Home } from 'pages/home/Home'
+import { StartedPlan, StartPlanRequest } from 'app/start-plan/StartPlan.types'
+import { WorkflowSnapshot, WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
 import { FakeEventSource } from './FakeEventSource'
 
 type Answer = { status: number; body: string }
@@ -14,6 +18,7 @@ const JSON_HEADERS = { 'Content-Type': 'application/json' }
 const NO_ACTIVE_PLANS = { status: 200, body: '{"plans":[]}' }
 const NO_SESSIONS = SessionsMother.noSessions()
 const EXTERNAL_TOOLS_READY = ExternalToolsMother.allReady()
+const NO_COORDINATING_SESSION = CoordinatingSessionMother.none()
 const NO_IMPLEMENTATION_RUN_YET = {
   status: 400,
   body: '{"code":"implementation-progress-not-read","detail":"the worktree is not there yet"}',
@@ -27,6 +32,8 @@ const responseFor = (answer: Answer) => new Response(answer.body, { status: answ
 
 const isImplementProgressPath = (input: string | URL | Request) => String(input).startsWith('/implement-progress/')
 const isImplementHistoryPath = (input: string | URL | Request) => String(input).startsWith('/implement-history/')
+const isCoordinatingSessionRead = (input: string | URL | Request, init?: RequestInit) =>
+  input === '/coordinating-session' && init === undefined
 
 const backendAnswering = (answer: Answer) => {
   const fetching = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => responseFor(answer))
@@ -36,6 +43,7 @@ const backendAnswering = (answer: Answer) => {
       if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
       if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
       if (input === '/sessions') return responseFor(NO_SESSIONS)
+      if (isCoordinatingSessionRead(input, init)) return responseFor(NO_COORDINATING_SESSION)
       if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
       if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
       return fetching(input, init)
@@ -50,6 +58,7 @@ const backendRecovering = (answer: Answer) => {
   vi.stubGlobal('fetch', (input: string | URL | Request, init?: RequestInit) => {
     if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
     if (input === '/sessions') return responseFor(NO_SESSIONS)
+    if (isCoordinatingSessionRead(input, init)) return responseFor(NO_COORDINATING_SESSION)
     if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
     return init === undefined ? fetching(input) : fetching(input, init)
   })
@@ -62,10 +71,11 @@ const backendPending = () => {
   const pending = new Promise<Response>((resolve) => {
     answerWith = (answer) => resolve(responseFor(answer))
   })
-  const fetching = vi.fn((input: string | URL | Request) => {
+  const fetching = vi.fn((input: string | URL | Request, init?: RequestInit) => {
       if (input === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
       if (input === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
       if (input === '/sessions') return responseFor(NO_SESSIONS)
+      if (isCoordinatingSessionRead(input, init)) return responseFor(NO_COORDINATING_SESSION)
       if (isImplementProgressPath(input)) return responseFor(NO_IMPLEMENTATION_RUN_YET)
       if (isImplementHistoryPath(input)) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
       return pending
@@ -114,14 +124,50 @@ const typePath = async (user: User, path: string) => {
 }
 
 const pressStart = async (user: User) => {
-  await user.click(screen.getByRole('button', { name: 'Arrancar plan' }))
+  await user.click(screen.getByRole('button', { name: 'Arrancar brainstorming' }))
 }
 
-const startPlan = async (user: User) => {
+const openBrainstorming = async (user: User) => {
   await typeTicket(user, StartPlanMother.TICKET)
   await typeRepository(user, StartPlanMother.REPO)
   await typePath(user, StartPlanMother.PATH)
   await pressStart(user)
+}
+
+const DEFAULT_RESTORED_REQUEST: StartPlanRequest = {
+  id: StartPlanMother.TICKET,
+  repo: StartPlanMother.REPO,
+  path: StartPlanMother.PATH,
+}
+
+const DEFAULT_RESTORED_PLAN: StartedPlan = {
+  id: StartPlanMother.TICKET,
+  repo: StartPlanMother.REPO,
+  issue: StartPlanMother.ISSUE,
+  agent: StartPlanMother.AGENT,
+  branch: StartPlanMother.BRANCH,
+  worktree: StartPlanMother.WORKTREE,
+}
+
+type RestoredWorkflow = {
+  phase: WorkflowSnapshot['phase']
+  request?: StartPlanRequest
+  plan?: Partial<StartedPlan>
+}
+
+const activePlanFor = (workflow: WorkflowSnapshot): ActivePlan => ({
+  phase: workflow.phase === 'implementing' ? 'implementing' : 'planning',
+  request: workflow.request,
+  plan: workflow.plan,
+})
+
+const openRestored = ({ phase, request = DEFAULT_RESTORED_REQUEST, plan = {} }: RestoredWorkflow) => {
+  const workflow: WorkflowSnapshot = { phase, request, plan: { ...DEFAULT_RESTORED_PLAN, ...plan } }
+  WorkflowSnapshotStorage.save(workflow)
+  const fetching = backendRecovering({ status: 200, body: JSON.stringify({ plans: [activePlanFor(workflow)] }) })
+  const opened = openHome()
+
+  return { ...opened, fetching, workflow }
 }
 
 const streamFrame = async (data: string) => {
@@ -147,7 +193,8 @@ export {
   typeRepository,
   typePath,
   pressStart,
-  startPlan,
+  openBrainstorming,
+  openRestored,
   streamFrame,
   streamFailure,
   dropStream,

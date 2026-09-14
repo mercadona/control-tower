@@ -1,17 +1,12 @@
 import { screen, waitFor, within } from '@testing-library/react'
-import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
-import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
-import { openHome, startPlan, streamFrame } from './helpers'
+import { openHome, openRestored } from './helpers'
 
 type Answer = { status: number; body: string }
 
-const IMPLEMENT_BUTTON = { name: 'Implementar plan' }
 const NO_ACTIVE_PLANS = { status: 200, body: '{"plans":[]}' }
 const NO_SESSIONS = SessionsMother.noSessions()
-const IMPLEMENTING = { status: 202, body: '{"status":"implementing","agent":"workspace:4","issue":7}' }
-const NO_IMPLEMENTATION_HISTORY_YET = { status: 400, body: '{"code":"implementation-history-not-read","detail":"not read yet"}' }
 
 const responseFor = (answer: Answer) => new Response(answer.body, { status: answer.status })
 
@@ -21,10 +16,6 @@ const stubFetch = (externalTools: Answer) => {
     if (url === '/external-tools') return responseFor(externalTools)
     if (url === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
     if (url === '/sessions') return responseFor(NO_SESSIONS)
-    if (url === '/start-plan') return responseFor(StartPlanMother.started())
-    if (url === '/implement-plan') return responseFor(IMPLEMENTING)
-    if (url.startsWith('/implement-progress/')) return responseFor(ImplementProgressMother.notRead())
-    if (url.startsWith('/implement-history/')) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
     throw new Error(`unexpected fetch to ${url}`)
   })
   vi.stubGlobal('fetch', fetching)
@@ -127,13 +118,14 @@ describe('Home · navigation shell', () => {
 
   it('shows the product name before a workflow starts and the repo, issue and stage trail once one is running', async () => {
     stubFetch(READY_ONLY)
-    const { user } = openHome()
+    const { unmount } = openHome()
     await screen.findByRole('list', { name: 'Herramientas' })
     const topBar = () => document.querySelector('.top-bar') as HTMLElement
     expect(within(topBar()).getByText('Control Tower')).toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: 'Ruta de navegación' })).not.toBeInTheDocument()
+    unmount()
 
-    await startPlan(user)
+    openRestored({ phase: 'ready' })
 
     const trail = await screen.findByRole('navigation', { name: 'Ruta de navegación' })
     expect(within(trail).getByText(StartPlanMother.REPO)).toBeInTheDocument()
@@ -144,15 +136,13 @@ describe('Home · navigation shell', () => {
 
   it('shows no right column before an implementation runs, and the panel plus Arrancar otro plan only once it does', async () => {
     stubFetch(READY_ONLY)
-    const { user } = openHome()
+    const { unmount } = openHome()
 
     expect(screen.queryByRole('complementary', { name: 'Progreso de la implementación' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Arrancar otro plan' })).not.toBeInTheDocument()
+    unmount()
 
-    await startPlan(user)
-    await screen.findByRole('status')
-    await streamFrame(PlanEventsMother.ready())
-    await user.click(screen.getByRole('button', IMPLEMENT_BUTTON))
+    openRestored({ phase: 'implementing' })
     await screen.findByText('Agente asignado')
 
     const side = await screen.findByRole('complementary', { name: 'Progreso de la implementación' })
