@@ -19,6 +19,7 @@ import {
   EpicSpecNotRead, EpicSpecNotUnderstood, EpicSpecNotWritten,
   EpicBranchNotPublished, EpicBranchNotUnderstood, EpicPullRequestNotOpened,
   PullRequestNotRead, PullRequestNotUnderstood,
+  EpicNotGroomed, GroomPlanNotUnderstood,
 } from '../domain/exceptions.ts'
 import type { Request, Response } from 'express'
 import type { PlanStarted, StartPlan, StartPlanResult } from '../application/actions/start-plan.ts'
@@ -334,6 +335,8 @@ export class PlanCollapse {
     [EpicPullRequestNotOpened, PlanCollapse.#collapsed('epic-pull-request-not-opened')],
     [PullRequestNotRead, PlanCollapse.#collapsed('pull-request-not-read')],
     [PullRequestNotUnderstood, PlanCollapse.#collapsed('pull-request-not-understood')],
+    [EpicNotGroomed, PlanCollapse.#collapsed('epic-not-groomed')],
+    [GroomPlanNotUnderstood, PlanCollapse.#collapsed('groom-plan-not-understood')],
   ])
 
   static of(cause: PlanFailure): Refusal {

@@ -112,3 +112,9 @@ export class EpicBranchNotPublished extends SpecFreezeFailure {}
 export class EpicBranchNotUnderstood extends SpecFreezeFailure {}
 
 export class EpicPullRequestNotOpened extends SpecFreezeFailure {}
+
+export class EpicGroomFailure extends PlanFailure {}
+
+export class EpicNotGroomed extends EpicGroomFailure {}
+
+export class GroomPlanNotUnderstood extends EpicGroomFailure {}
