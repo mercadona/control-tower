@@ -1,0 +1,57 @@
+{
+  "issue": 330,
+  "task": 9,
+  "task_name": "Wiring gate 2 into the server it runs in",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises three things and the diff produces all three. Mounted: api-server.ts adds `app.get`/`app.post`/`app.all` for EpicGroomRoute.PATH and `app.post`/`app.all` for EpicPromotionRoute.PATH, both with Browsers.turnAwayForeign and no body middleware, right after the SpecFreezeRoute block. Built by the entrypoint: ct-api.ts constructs GhPublishedSpecs, GhEpicIssues, CtGroomEpic, ReadEpicGroom, GroomEpic and PromoteEpic and hands the last three to ApiServer; the argument names match each constructor I opened (ReadEpicGroom takes {specs, published, issues, groom}, GroomEpic {read, groom}, PromoteEpic {read, issues}, CtGroomEpic {node, ctGroom}), and PluginTree.ctGroom() resolves to plugin/scripts/ct-groom.mjs, which exists. Proxied: API_PATHS in frontend/vite.config.ts gains '/epic-groom' and '/epic-promotion', and that array is what server.proxy is built from (lines 27-37), so the dev server forwards them instead of serving index.html.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "Both tests the TDD line names are in the diff with the assertions it wrote. api-server.test.ts:1445 `it('the two paths of gate 2 refuse a method they do not serve naming the ones they do')` sends DELETE /epic-groom and GET /epic-promotion and asserts 405 with `allow` 'GET, POST' and 405 with `allow` 'POST' respectively — same inputs, same expected values as the plan. ct-api-real-process.test.ts:608 `it('a started backend answers gate 2 with no session held')` fetches GET /epic-groom against a really spawned entrypoint and asserts status 200 and body {status:'none'} — the boundary pair exactly as written.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The Contract block declares `static readonly #GROOM_TIMEOUT_MS = 6 * 60 * 1000` and `static ctGroom(): string`; the diff adds both verbatim (ct-api.ts:352 and the PluginTree method returning join(root,'scripts','ct-groom.mjs')). The Call site block is reproduced line for line, `!` assertions included, and the handler factories accept what is passed: EpicGroomRoute.reading(held, read, key), EpicGroomRoute.grooming(held, groom, key, stderr), EpicPromotionRoute.promoting(held, promote, key, stderr). ApiCollaborators gains readEpicGroom, groomEpic and promoteEpic as `?: T | null`, optional like their neighbours, with the matching readonly fields and constructor destructuring. The Current state block for api-server.ts lines 280-284 matches what the diff appends to.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Four rows bear on this diff and each is implemented with the value the table states. D-10: both production files touched under backend/ are .ts and no JavaScript is added. D-22: both presses are mounted with this.gateKey!, so the key check inside grooming()/promoting() is live in the assembled server — there is no keyless door. D-11: the groom is reached by running the plugin's own plugin/scripts/ct-groom.mjs through PluginTree, not by a second opinion in the backend. D-7: nothing in the diff writes to a pull request or mounts a merge. No row is contradicted and none is reopened.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: the mount block copies spec-freeze-route's idiom (GET/POST with Browsers.turnAwayForeign, then app.all for refuseOtherMethods) and the entrypoint copies the DispatchCheckHarvest/PlanContractProgress idiom (CtApi.#tool(process.execPath, {budgetMs}) + a PluginTree path). ct's yardstick: style.md — no comment or docstring added, every identifier English, everything hangs off a class (PluginTree, CtApi, the route classes). architecture.md — the entrypoint remains the only place assembling the graph, one controller per endpoint with one wiring line each, and no new concept smuggled into an old file. boundaries.md ('no external system is called without a cap, and the adapter does not choose the cap: it arrives through the constructor'): CtGroomEpic receives an already-budgeted runner from the composition root, so the adapter does not pick its own cap. decisions.md: #GROOM_TIMEOUT_MS repeats the literal of #HARVEST_TIMEOUT_MS but is a different decision — no business change forces touching both — so it is idiom, not a spread rule. this-repository.md's 'every spawned child is killed in afterEach, not after the assertion' holds: Entrypoint.listening pushes the child into #spawned and the describe's afterEach (line 360) calls Entrypoint.killAll(), which kills descendants and the child whatever the assertions did. defects.md, rule by rule: (1) closed vocabulary — the diff introduces no classifier; the states it wires up are the frozen EpicGroomState built earlier, and no string is compared by hand here; (2) raw map as the return value of logic — no logic in this diff returns a map; ApiCollaborators is the constructor's named-argument object, the host's established shape, not a return value; (3) two fields that have to agree — no sentinel and no flag is added; the three new collaborators are injected dependencies, not an absence encoded in a value; (4) an error named for where it happens — this diff declares no error. Two clashes declared rather than reported: the plan's TDD line fixes the two new test names as quoted sentences with spaces while both files are otherwise uniformly snake_case, and ct-step's control greps the literal string, so no diff could satisfy both; and the single #GROOM_TIMEOUT_MS the Contract block pins also caps the dry run that GET /epic-groom triggers, which the plan chose when it declared one constant. The skills named in §3 loaded; backend-engineering:backend-best-practices is Python/Django guidance that this-repository.md places third in precedence and nothing in it bears on this TypeScript wiring.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The diff has exactly one `-` line, `const API_PATHS = [...]` in frontend/vite.config.ts, replaced by the same list plus the two new paths — configuration, not an assertion, case or test. Neither test file loses a line: both hunks are pure additions at the end of their describe blocks. No pre-existing test ended up asserting less, so this item has no subject.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised behaviour comes from production code. The 405s asserted in api-server.test.ts are produced by the real app.all mounts and EpicGroomRoute/EpicPromotionRoute.refuseOtherMethods through a really listening server; revert the api-server.ts hunk and both fetches answer 404 'not-found' from Failures.nothingMatched, so the test falls. The real-process test spawns the actual ct-api.ts entrypoint, so the six constructions in the entrypoint hunk are executed for real before it can bind a port and the route has to be mounted for the 200 to come back. No hard-coded expected value stands in for a production line, and the test's own scaffolding (Entrypoint, RunningApi) only spawns, listens and cleans up.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Every line serves a sentence of the task: the mount block and the three optional collaborators are the task's Call site and its 'ApiCollaborators gains...' sentence, the six construction lines and PluginTree.ctGroom are 'ct-api.ts builds ... and PluginTree learns where ct-groom.mjs lives', and the vite line is the last sentence. Nothing else is written inside the five files — no rename, no refactor of the neighbouring wiring, no helper. Out of scope is respected: ct-groom.mjs, groom.js, slices.js and gh-issue-map.js are untouched and only invoked; no --reconcile or --project flag is built (CtGroomEpic.argvFor passes only --repo, --milestone and --dry-run); no merge or pull-request write; nothing about claiming or dispatching a slice. The diff contains no hunk on the plan file, so there is no amendment to justify.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "Two new tests, and each has the three properties. Deterministic: no clock, no date, no randomness, no sleep; the real-process one binds CT_API_PORT '0' and points CLAUDE_CONFIG_DIR at a fresh mkdtemp, and the path it answers short-circuits on 'no session held' before any gh or node subprocess is reached. Isolated: the unit test's server is stopped by RunningApi.stopAll() in afterEach, the spawned backend and its descendants are killed by Entrypoint.killAll() in afterEach even when an assertion throws, each test builds its own state and neither depends on the order of the file. Verifies real behaviour: both assert the status and literal body/headers of a real HTTP answer from a real server, not a double's call count — there is no double in either. The subprocess marker testing.md asks for is the file's own name, the `*-real-process.test.ts` suffix the fast subset excludes. control-tower-loop:test-driven-development loaded: its 'one thing' guidance is the only sentence that brushes these tests — the api-server one covers two paths in one case — and since the plan dictated that exact test with both assertions and its control greps the literal name, it is left out of the findings rather than reported; nothing else in the skill or in testing-anti-patterns.md is contradicted.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "bfe3766464729c57218386eaa32f231fdbde8f194edac42265cf8eb03f6320c6"
+  }
+}
