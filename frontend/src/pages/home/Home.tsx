@@ -9,6 +9,7 @@ import { ImplementPlanAction } from 'app/implement-plan/components/implement-pla
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { PlanProgress } from 'app/plan-events/components/plan-progress'
 import { SessionsPanel } from 'app/sessions/components/sessions-panel'
+import { SpecFreezePanel } from 'app/spec-freeze/components/spec-freeze-panel'
 import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartPlanRequest } from 'app/start-plan/StartPlan.types'
@@ -463,6 +464,8 @@ const Home = () => {
             <SessionsPanel />
             <CoordinatingSessionStatus read={coordinatingSession} />
           </section>
+
+          <SpecFreezePanel />
 
           {workflow !== null && (
             <section className="home__completed" aria-label="Etapas completadas">

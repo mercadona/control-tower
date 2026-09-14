@@ -974,7 +974,14 @@ test "$(grep -c 'merge de este pull request' frontend/src/app/spec-freeze/compon
 **Files:** `frontend/src/pages/home/Home.tsx` (modify),
 `frontend/src/pages/home/__tests__/helpers.tsx` (modify),
 `frontend/src/pages/home/__tests__/Home.specFreeze.test.tsx` (create),
-`frontend/README.md` (modify)
+`frontend/README.md` (modify),
+`frontend/src/pages/home/__tests__/Home.restoreWorkflow.test.tsx` (modify)
+
+That last path was added during implementation. It carries a second, private fetch double
+(`withReadyTools`) that is not derived from `helpers.tsx`'s shared one and does not answer
+`/spec-freeze` either; five of its tests thread a rejected-then-resolved sequence meant for
+`/active-plans` alone, and the panel's unconditional read on mount eats the first answer,
+shifting every later call by one. It takes the same one-line stub as the three shared ones.
 
 `Home` gains one import and one element, right after the `home__sessions` section and outside
 every `currentStage` branch — `SpecFreezePanel` renders a `Panel`, which is already a `section`
