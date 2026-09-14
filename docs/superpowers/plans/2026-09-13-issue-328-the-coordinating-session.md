@@ -841,8 +841,7 @@ test "$(grep -c 'StartPlanClient' frontend/src/app/start-plan/components/start-p
 ### Task 12 — `Home` follows the entrance and keeps the session in every phase
 
 **Objective:** the page wires the new form and the coordinating session's state, keeps the
-terminal on screen and writable in every phase, and reaches the later stages through the restore
-path it already has.
+terminal on screen and writable in every phase, and reaches the later stages by restore.
 
 **Files:** `frontend/src/pages/home/Home.tsx` (modify),
 `frontend/src/pages/home/__tests__/helpers.tsx` (modify),
@@ -857,14 +856,11 @@ path it already has.
 `frontend/src/pages/home/__tests__/Home.navigation.test.tsx` (modify),
 `frontend/src/pages/home/__tests__/Home.restoreWorkflow.test.tsx` (modify)
 
-Amendment (task 12, added mid-task): `Home.restoreWorkflow.test.tsx` was not in this task's
-original `**Files:**` line, but this task's own **Verification** demands the whole frontend suite
-green, and that file shares `helpers.tsx` with the nine declared suites — renaming `startPlan` to
-`openBrainstorming` and the button's literal to `Arrancar brainstorming` leaves its six tests that
-pressed the old button unable to compile or pass. The file is amended in, not rewritten: its
-restore-specific tests (the large majority) are untouched, and only the handful that pressed the
-entrance button to reach a later stage are adapted to `openRestored`/`/coordinating-session`, the
-same repair every other suite in this task received.
+Amendment (task 12, added mid-task): `Home.restoreWorkflow.test.tsx` was not in the original
+`**Files:**` line. It shares `helpers.tsx` with the nine declared suites, so renaming `startPlan`
+and the button's literal leaves its six button-pressing tests unable to pass, while this task's
+**Verification** demands the whole suite green. Only those six are adapted; its restore tests,
+the large majority, are untouched.
 
 Call site (frontend/src/pages/home/Home.tsx):
 
@@ -913,17 +909,6 @@ failed write.
 `backend/src/infrastructure/disk-conversation-records.ts` (modify),
 `backend/__tests__/infrastructure/disk-conversation-records.test.ts` (modify),
 `backend/src/infrastructure/start-plan-route.ts` (modify)
-
-Current state (backend/src/infrastructure/disk-conversation-records.ts, lines 82-87):
-
-```ts
-    try {
-      return DiskConversationRecords.#conversationFrom(text)
-    } catch (cause) {
-      throw new ConversationNotRecorded(`the record at ${path} cannot be read as a conversation: ${String(cause)}`)
-    }
-  }
-```
 
 Contract (backend/src/domain/exceptions.ts):
 
@@ -1096,7 +1081,14 @@ test -z "$(grep -l 'cmux' backend/src/infrastructure/claude-conversations.ts)"  
     awaits the start-up recovery unguarded, so an unreadable record kills the backend instead of
     being reported — the judge's `low` on Task 9. Renaming the exception does not change that.
     Provenance: the coordinating session, asked for these two and no more.
-16. **Fourteen tasks.** The slice was cut with a human in the room and carries eight acceptance
+16. **A task that changes a file this same slice created carries no `Current state` block.**
+    `--check-plan` reads the working tree, but `--release` reads the **base of the branch**, so a
+    citation of a file born inside the slice can never be validated: `--release` refused this
+    plan for exactly that, on Task 13's citation of `disk-conversation-records.ts`, which Task 6
+    creates. The label means "the span that changes, as the branch's base has it"; mid-slice
+    state is not that, and belongs in the task's `Contract` block, which is where it now lives.
+    Provenance: `--release`, after the run was delivered.
+17. **Fourteen tasks.** The slice was cut with a human in the room and carries eight acceptance
     criteria across three packages; splitting the slice is not in this session's hands, so the
     work is split into commits instead. Every `**Files:**` line spells each path in full, because
     `splitFiles` (`plugin/scripts/plan-tasks.js`) reads every backticked token in that paragraph
