@@ -98,3 +98,11 @@ export class SessionHooksFailure extends PlanFailure {}
 export class SessionHooksNotWritten extends SessionHooksFailure {}
 
 export class SessionHooksNotUnderstood extends SessionHooksFailure {}
+
+export class SpecFreezeFailure extends PlanFailure {}
+
+export class EpicSpecNotRead extends SpecFreezeFailure {}
+
+export class EpicSpecNotUnderstood extends SpecFreezeFailure {}
+
+export class EpicSpecNotWritten extends SpecFreezeFailure {}

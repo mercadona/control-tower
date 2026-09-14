@@ -16,6 +16,7 @@ import {
   WorkspaceNotUnderstood, CheckoutNotConfirmed,
   ConversationNotStarted, ConversationNotRecorded, ConversationNotUnderstood,
   SessionHooksNotWritten, SessionHooksNotUnderstood,
+  EpicSpecNotRead, EpicSpecNotUnderstood, EpicSpecNotWritten,
 } from '../domain/exceptions.ts'
 import type { Request, Response } from 'express'
 import type { PlanStarted, StartPlan, StartPlanResult } from '../application/actions/start-plan.ts'
@@ -323,6 +324,9 @@ export class PlanCollapse {
     [ConversationNotUnderstood, PlanCollapse.#collapsed('conversation-not-understood')],
     [SessionHooksNotWritten, PlanCollapse.#collapsed('session-hooks-not-written')],
     [SessionHooksNotUnderstood, PlanCollapse.#collapsed('session-hooks-not-understood')],
+    [EpicSpecNotRead, PlanCollapse.#collapsed('epic-spec-not-read')],
+    [EpicSpecNotUnderstood, PlanCollapse.#collapsed('epic-spec-not-understood')],
+    [EpicSpecNotWritten, PlanCollapse.#collapsed('epic-spec-not-written')],
   ])
 
   static of(cause: PlanFailure): Refusal {
