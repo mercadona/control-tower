@@ -475,7 +475,7 @@ class CtApi {
       liveSessions,
       shell: environment.SHELL,
       env: environment,
-      claudeDirectory: join(homedir(), '.claude'),
+      claudeDirectory: Invocation.configuredIn(environment, homedir()),
       listNames: (path) => readdirSync(path),
       readText: (path) => readFileSync(path, 'utf8'),
       newId: randomUUID,
