@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
+  CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState, OpeningReservation,
 } from '../../src/infrastructure/coordinating-sessions.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
@@ -161,6 +161,62 @@ describe('CoordinatingSessions', () => {
 
     expect(liveSessions.isFollowing(Mother.FIRST_SESSION)).toBe(false)
     expect(held.held()?.state).toBe('unresumable')
+  })
+
+  it('reserves the opening while nothing is held', () => {
+    const { held } = Registry.of(LiveSessionsDouble.holding())
+
+    expect(held.reserve().outcome).toBe(OpeningReservation.RESERVED)
+  })
+
+  it('refuses to reserve a second opening while the first has not been closed', () => {
+    const { held } = Registry.of(LiveSessionsDouble.holding())
+    held.reserve()
+
+    expect(held.reserve().outcome).toBe(OpeningReservation.OPENING_IN_PROGRESS)
+  })
+
+  it('refuses to reserve an opening once a live session is remembered, and says which', () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
+    const { held } = Registry.of(liveSessions)
+    held.reserve()
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+
+    const reserved = held.reserve()
+
+    expect(reserved.outcome).toBe(OpeningReservation.LIVE_HELD)
+    expect(reserved.live?.conversation).toBe(Mother.FIRST)
+    expect(reserved.live?.session).toBe(Mother.FIRST_SESSION)
+  })
+
+  it('reserves the opening again once a reservation is released', () => {
+    const { held } = Registry.of(LiveSessionsDouble.holding())
+    held.reserve()
+
+    held.release()
+
+    expect(held.reserve().outcome).toBe(OpeningReservation.RESERVED)
+  })
+
+  it('reserves the opening over a conversation whose terminal exited', () => {
+    const liveSessions = LiveSessionsDouble.holding(Mother.FIRST_SESSION)
+    const { held } = Registry.of(liveSessions)
+    held.remember(Mother.live(Mother.FIRST, Mother.FIRST_SESSION))
+    liveSessions.exits(Mother.FIRST_SESSION)
+
+    expect(held.reserve().outcome).toBe(OpeningReservation.RESERVED)
+  })
+
+  it('reserves the opening over a conversation Claude Code no longer holds', () => {
+    const { held } = Registry.of(LiveSessionsDouble.holding())
+    held.remember(new HeldCoordinatingSession({
+      state: CoordinatingSessionState.UNRESUMABLE,
+      conversation: Mother.FIRST,
+      session: null,
+      attention: null,
+    }))
+
+    expect(held.reserve().outcome).toBe(OpeningReservation.RESERVED)
   })
 
   it('moves the attention of the live conversation it holds', () => {

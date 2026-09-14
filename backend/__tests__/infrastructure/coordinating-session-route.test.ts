@@ -75,6 +75,9 @@ class Mother {
 
   static readonly SESSION = new LiveSession({ id: 'session-1', name: 'brainstorming' })
 
+  static readonly OPENING_REQUEST =
+    '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+
   static opened(): CoordinatingSessionOpened {
     return new CoordinatingSessionOpened({ conversation: Mother.CONVERSATION, session: Mother.SESSION })
   }
@@ -120,6 +123,23 @@ class Mother {
   }
 }
 
+class AnOpeningYouFinishByHand {
+  static inFlight(): { open: OpenCoordinatingSessionSpy, started: Promise<void>, finish: () => void } {
+    let announce: () => void = (): void => {}
+    const started = new Promise<void>((resolve) => { announce = resolve })
+    let finish: () => void = (): void => {}
+    const gate = new Promise<void>((resolve) => { finish = resolve })
+    const open = new OpenCoordinatingSessionSpy(async () => {
+      announce()
+      await gate
+
+      return Mother.opened()
+    })
+
+    return { open, started, finish: () => finish() }
+  }
+}
+
 class RunningApi {
   static readonly #started: ApiServer[] = []
   static readonly PATH = '/coordinating-session'
@@ -148,8 +168,10 @@ class RunningApi {
   static async post(
     open: OpenCoordinatingSession, held: CoordinatingSessions, body: string
   ): Promise<Response> {
-    const port = await RunningApi.listening(open, held)
+    return RunningApi.posting(await RunningApi.listening(open, held), body)
+  }
 
+  static posting(port: number, body: string): Promise<Response> {
     return fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`, {
       method: 'POST',
       body,
@@ -180,7 +202,7 @@ describe('CoordinatingSessionRoute', () => {
     const held = Mother.registry()
 
     const response = await RunningApi.post(
-      open, held, '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+      open, held, Mother.OPENING_REQUEST
     )
 
     expect(response.status).toBe(202)
@@ -198,7 +220,7 @@ describe('CoordinatingSessionRoute', () => {
     const held = Mother.registry()
 
     await RunningApi.post(
-      open, held, '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+      open, held, Mother.OPENING_REQUEST
     )
 
     const holding = held.held()
@@ -213,7 +235,7 @@ describe('CoordinatingSessionRoute', () => {
     const held = Mother.live(SessionAttention.working())
 
     const response = await RunningApi.post(
-      open, held, '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+      open, held, Mother.OPENING_REQUEST
     )
 
     expect(response.status).toBe(409)
@@ -226,12 +248,69 @@ describe('CoordinatingSessionRoute', () => {
     expect(open.asked).toEqual([])
   })
 
+  it('two openings fired at once open a single conversation', async () => {
+    const controlled = AnOpeningYouFinishByHand.inFlight()
+    const held = Mother.registry()
+    const port = await RunningApi.listening(controlled.open, held)
+
+    const first = RunningApi.posting(port, Mother.OPENING_REQUEST)
+    await controlled.started
+    const second = await RunningApi.posting(port, Mother.OPENING_REQUEST)
+
+    expect(second.status).toBe(409)
+    expect(await second.json()).toEqual({
+      code: 'coordinating-session-opening',
+      detail: 'a coordinating conversation is being opened: wait for it to be live and try again',
+    })
+    expect(controlled.open.asked).toHaveLength(1)
+
+    controlled.finish()
+    expect((await first).status).toBe(202)
+    expect(held.held()?.state).toBe('live')
+
+    const third = await RunningApi.posting(port, Mother.OPENING_REQUEST)
+    expect(third.status).toBe(409)
+    expect(await third.json()).toMatchObject({ code: 'coordinating-session-already-live' })
+    expect(controlled.open.asked).toHaveLength(1)
+  }, 10_000)
+
+  it('a failed opening frees the next one', async () => {
+    const open = OpenCoordinatingSessionSpy.refusing(
+      new ConversationNotStarted('claude could not be spawned in /repo: command not found')
+    )
+    const held = Mother.registry()
+    const port = await RunningApi.listening(open, held)
+
+    const refused = await RunningApi.posting(port, Mother.OPENING_REQUEST)
+    const next = await RunningApi.posting(port, Mother.OPENING_REQUEST)
+
+    expect(await refused.json()).toEqual({
+      code: 'conversation-not-started',
+      detail: 'claude could not be spawned in /repo: command not found',
+    })
+    expect(next.status).toBe(400)
+    expect(open.asked).toHaveLength(2)
+  })
+
+  it('an opening that broke frees the next one', async () => {
+    const open = OpenCoordinatingSessionSpy.refusing(new TypeError('a bug of ours'))
+    const held = Mother.registry()
+    const port = await RunningApi.listening(open, held)
+
+    const broke = await RunningApi.posting(port, Mother.OPENING_REQUEST)
+    const next = await RunningApi.posting(port, Mother.OPENING_REQUEST)
+
+    expect(await broke.json()).toEqual({ code: 'request-failed', detail: 'request failed' })
+    expect(next.status).toBe(400)
+    expect(open.asked).toHaveLength(2)
+  })
+
   it('opens again over a conversation that is no longer live', async () => {
     const open = OpenCoordinatingSessionSpy.opening()
     const held = Mother.unresumable()
 
     const response = await RunningApi.post(
-      open, held, '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+      open, held, Mother.OPENING_REQUEST
     )
 
     expect(response.status).toBe(202)
@@ -277,7 +356,7 @@ describe('CoordinatingSessionRoute', () => {
     const held = Mother.registry()
 
     const response = await RunningApi.post(
-      open, held, '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+      open, held, Mother.OPENING_REQUEST
     )
 
     expect(response.status).toBe(400)
@@ -345,7 +424,7 @@ describe('CoordinatingSessionRoute', () => {
     const held = Mother.ended()
 
     const response = await RunningApi.post(
-      open, held, '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+      open, held, Mother.OPENING_REQUEST
     )
 
     expect(response.status).toBe(202)

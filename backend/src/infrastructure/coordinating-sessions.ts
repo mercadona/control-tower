@@ -40,20 +40,67 @@ export class HeldCoordinatingSession {
   }
 }
 
+export const OpeningReservation = Object.freeze({
+  RESERVED: 'reserved',
+  LIVE_HELD: 'live-held',
+  OPENING_IN_PROGRESS: 'opening-in-progress',
+} as const)
+
+export type OpeningReservationValue = (typeof OpeningReservation)[keyof typeof OpeningReservation]
+
+export class ReservedOpening {
+  readonly outcome: OpeningReservationValue
+  readonly live: HeldCoordinatingSession | null
+
+  private constructor(outcome: OpeningReservationValue, live: HeldCoordinatingSession | null) {
+    this.outcome = outcome
+    this.live = live
+    Object.freeze(this)
+  }
+
+  static reserved(): ReservedOpening {
+    return new ReservedOpening(OpeningReservation.RESERVED, null)
+  }
+
+  static liveHeld(live: HeldCoordinatingSession): ReservedOpening {
+    return new ReservedOpening(OpeningReservation.LIVE_HELD, live)
+  }
+
+  static openingInProgress(): ReservedOpening {
+    return new ReservedOpening(OpeningReservation.OPENING_IN_PROGRESS, null)
+  }
+}
+
 export class CoordinatingSessions {
   readonly liveSessions: LiveSessions
   readonly stderr: (line: string) => void
   #held: HeldCoordinatingSession | null
   #stopFollowing: (() => void) | null
+  #opening: boolean
 
   constructor({ liveSessions, stderr }: { liveSessions: LiveSessions, stderr: (line: string) => void }) {
     this.liveSessions = liveSessions
     this.stderr = stderr
     this.#held = null
     this.#stopFollowing = null
+    this.#opening = false
+  }
+
+  reserve(): ReservedOpening {
+    const live = this.#live()
+    if (live !== null) return ReservedOpening.liveHeld(live)
+    if (this.#opening) return ReservedOpening.openingInProgress()
+    this.#opening = true
+
+    return ReservedOpening.reserved()
+  }
+
+  release(): void {
+    this.#opening = false
   }
 
   remember(held: HeldCoordinatingSession): void {
+    this.#opening = false
     this.#stopFollowingTheHeldSession()
     this.#held = held
     if (held.state !== CoordinatingSessionState.LIVE) return
@@ -65,9 +112,8 @@ export class CoordinatingSessions {
   }
 
   attend({ conversation, attention }: { conversation: string, attention: SessionAttention }): boolean {
-    const current = this.#held
-    if (current === null || current.state !== CoordinatingSessionState.LIVE) return false
-    if (current.conversation.id.text !== conversation) return false
+    const current = this.#live()
+    if (current === null || current.conversation.id.text !== conversation) return false
 
     this.#held = new HeldCoordinatingSession({
       state: current.state,
@@ -78,6 +124,10 @@ export class CoordinatingSessions {
     this.stderr(`coordinating session ${conversation} ${attention.status}\n`)
 
     return true
+  }
+
+  #live(): HeldCoordinatingSession | null {
+    return this.#held !== null && this.#held.state === CoordinatingSessionState.LIVE ? this.#held : null
   }
 
   #follow(held: HeldCoordinatingSession): void {

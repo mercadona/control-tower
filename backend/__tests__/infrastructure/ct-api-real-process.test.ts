@@ -333,6 +333,29 @@ class TheCoordinatingSession {
   }
 }
 
+class TheCoordinatingSessionEndpoint {
+  static readonly COMMENT = 'explore the checkout screen'
+
+  static open(port: number, repository: string, checkout: string): Promise<Response> {
+    return fetch(`http://127.0.0.1:${port}/coordinating-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_comment: TheCoordinatingSessionEndpoint.COMMENT,
+        repo: repository,
+        path: checkout,
+      }),
+    })
+  }
+
+  static async brainstormingsOf(port: number): Promise<number> {
+    const listed = await (await fetch(`http://127.0.0.1:${port}/sessions`)).json() as
+      { sessions: { name: string }[] }
+
+    return listed.sessions.filter((session) => session.name === 'brainstorming').length
+  }
+}
+
 describe('ct-api entrypoint', () => {
   afterEach(() => {
     Entrypoint.killAll()
@@ -410,6 +433,26 @@ describe('ct-api entrypoint', () => {
     expect((await TheCoordinatingSession.recoveredBy(port)).status).toBe('unresumable')
     await RunFileFixture.remove(config)
     await RunFileFixture.remove(recorded.checkout)
+    await RunFileFixture.remove(claude.directory)
+  }, 60_000)
+
+  it('two_openings_fired_at_once_open_a_single_conversation', async () => {
+    const checkout = await ACheckoutReachableByTwoPaths.cut()
+    const config = await mkdtemp(join(tmpdir(), 'ct-api-coordinating-race-'))
+    const claude = await AClaudeThatStaysOpen.onThePath()
+    const port = await Entrypoint.listening({
+      CT_API_PORT: '0', CLAUDE_CONFIG_DIR: config, SHELL: '/bin/sh', PATH: claude.path,
+    })
+
+    const answered = await Promise.all([
+      TheCoordinatingSessionEndpoint.open(port, ACheckoutReachableByTwoPaths.REPOSITORY, checkout.physical),
+      TheCoordinatingSessionEndpoint.open(port, ACheckoutReachableByTwoPaths.REPOSITORY, checkout.physical),
+    ])
+
+    expect(answered.map((response) => response.status).sort()).toEqual([202, 409])
+    expect(await TheCoordinatingSessionEndpoint.brainstormingsOf(port)).toBe(1)
+    await RunFileFixture.remove(checkout.base)
+    await RunFileFixture.remove(config)
     await RunFileFixture.remove(claude.directory)
   }, 60_000)
 
