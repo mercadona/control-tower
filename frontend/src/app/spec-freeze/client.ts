@@ -42,7 +42,7 @@ const toOutcome = (body: unknown): SpecFreezeOutcome => {
   if (
     body.status === 'frozen' &&
     typeof body.spec === 'string' &&
-    typeof body.on === 'string' &&
+    (body.on === null || typeof body.on === 'string') &&
     isNullablePullRequestRef(body.pullRequest)
   ) {
     return { kind: 'frozen', spec: body.spec, on: body.on, pullRequest: body.pullRequest }

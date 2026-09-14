@@ -103,4 +103,14 @@ describe('SpecFreezePanel', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(SpecFreezeMother.REFUSED_DETAIL)
   })
+
+  it('a spec frozen by hand with no date still says so instead of blanking the cabin', async () => {
+    const undated = SpecFreezeMother.frozenUndated()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(undated.body, { status: undated.status })))
+
+    render(<SpecFreezePanel />)
+
+    expect(await screen.findByText(/Spec congelado, sin fecha/)).toBeInTheDocument()
+    expect(screen.getByText(/El groom espera al merge/)).toBeInTheDocument()
+  })
 })

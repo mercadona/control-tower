@@ -6,7 +6,7 @@ export type SpecFreezeOutcome =
   | { kind: 'none' }
   | { kind: 'no-spec' }
   | { kind: 'draft'; spec: string; findings: FreezeFinding[]; key: string | null }
-  | { kind: 'frozen'; spec: string; on: string; pullRequest: PullRequestRef | null }
+  | { kind: 'frozen'; spec: string; on: string | null; pullRequest: PullRequestRef | null }
   | { kind: 'refused'; code: string; error: string }
   | { kind: 'unavailable' }
 

@@ -17,6 +17,7 @@ const FINDING: Record<string, string> = {
 const FREEZE = 'Congelar el spec'
 const ONLY_FROM_THE_PAGE = 'Esta puerta solo se abre desde la página que sirve el backend.'
 const FROZEN = 'Spec congelado el'
+const FROZEN_UNDATED = 'Spec congelado, sin fecha en la línea de congelación.'
 const PULL_REQUEST = 'Pull request'
 const WAITING = 'El groom espera al merge de este pull request.'
 const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
@@ -33,7 +34,7 @@ const SpecFreezePanel = () => {
   if (frozen !== null) {
     return (
       <Panel heading={HEADING}>
-        <p className="spec-freeze-panel__frozen">{`${FROZEN} ${frozen.on}.`}</p>
+        <p className="spec-freeze-panel__frozen">{frozen.on === null ? FROZEN_UNDATED : `${FROZEN} ${frozen.on}.`}</p>
         {frozen.pullRequest !== null && (
           <a className="spec-freeze-panel__pull-request" href={frozen.pullRequest.url}>
             {`${PULL_REQUEST} #${frozen.pullRequest.number}`}

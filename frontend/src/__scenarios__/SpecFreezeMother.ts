@@ -52,7 +52,13 @@ const refusedRead = () => ({
   body: `{"code":"epic-spec-not-understood","detail":"${REFUSED_DETAIL}"}`,
 })
 
+const frozenUndated = () => ({
+  status: 200,
+  body: `{"status":"frozen","spec":"${SPEC}","on":null,"pullRequest":null}`,
+})
+
 export const SpecFreezeMother = {
+  frozenUndated,
   REFUSED_DETAIL,
   refusedRead,
   SPEC,
