@@ -1,5 +1,6 @@
-import { ReactElement, useState } from 'react'
+import { ReactElement, useEffect, useState } from 'react'
 import { SessionTerminal } from 'app/sessions/components/session-terminal'
+import { LiveSession } from 'app/sessions/Sessions.types'
 import { useLiveSessions } from 'app/sessions/useLiveSessions'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
@@ -9,9 +10,17 @@ import './SessionsPanel.css'
 const UNAVAILABLE_MESSAGE = 'No se pudo contactar con las sesiones en marcha'
 const NO_SESSIONS_MESSAGE = 'No hay ninguna sesión en marcha'
 
-export const SessionsPanel = (): ReactElement => {
+type SessionsPanelProps = { opened?: LiveSession | null }
+
+export const SessionsPanel = ({ opened = null }: SessionsPanelProps): ReactElement => {
   const { state, refresh } = useLiveSessions()
   const [chosenId, setChosenId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (opened === null) return
+    setChosenId(opened.id)
+    refresh()
+  }, [opened, refresh])
 
   if (state.status === 'loading') {
     return <Loading />
