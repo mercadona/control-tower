@@ -271,14 +271,14 @@ afterEach(async () => {
 })
 
 describe('SpecFreezeRoute', () => {
-  it('the read hands the gate key only to a request carrying the page own origin', async () => {
+  it('the read hands the gate key to the browser on this origin, which sends no Origin on a GET, and not to a bare curl', async () => {
     const held = Mother.live()
     const read = ReadSpecFreezeSpy.answering(Mother.draftRead())
     const freeze = FreezeSpecSpy.neverAsked()
     const key = Keys.minted()
     const port = await RunningApi.listening(held, read, freeze, key)
 
-    const fromThePage = await RunningApi.fetching(port, { Origin: RunningApi.ownOrigin(port) })
+    const fromThePage = await RunningApi.fetching(port, { 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors' })
     const fromElsewhere = await RunningApi.fetching(port)
 
     expect(fromThePage.status).toBe(200)

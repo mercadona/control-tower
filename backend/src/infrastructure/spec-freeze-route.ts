@@ -79,7 +79,11 @@ export class SpecFreezeRoute {
         root: holding.conversation.root,
         repository: holding.conversation.repository,
       }))
-      const minted = key.forThePage({ origin: request.get('Origin'), host: request.get('Host') })
+      const minted = key.forThePage({
+        origin: request.get('Origin'),
+        host: request.get('Host'),
+        site: request.get(GateKey.SITE_HEADER),
+      })
       SpecFreezeRoute.#answerRead(response, outcome, minted)
     }
   }

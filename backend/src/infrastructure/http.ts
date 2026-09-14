@@ -62,8 +62,12 @@ export class Browsers {
     return host.startsWith('[') ? host.slice(0, host.indexOf(']') + 1) : host.split(':')[0]
   }
 
+  static isOurOwnHost(host: unknown): boolean {
+    return typeof host === 'string' && Browsers.LOOPBACK_NAMES.includes(Browsers.#hostnameOf(host))
+  }
+
   static isOurOwnPage(origin: unknown, host: unknown): boolean {
-    if (typeof host !== 'string' || !Browsers.LOOPBACK_NAMES.includes(Browsers.#hostnameOf(host))) return false
+    if (!Browsers.isOurOwnHost(host)) return false
 
     return origin === `http://${host}`
   }
