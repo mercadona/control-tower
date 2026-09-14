@@ -13,6 +13,26 @@ export class PullRequests {
     )
   }
 
+  async openOfBranch({ branch, repository }: {
+    branch: string,
+    repository: RepositoryName,
+  }): Promise<ReviewedPullRequest | null> {
+    throw new Error(
+      `${this.constructor.name} must implement openOfBranch({ branch, repository }), asked for ${branch} in ${repository}`
+    )
+  }
+
+  async open({ repository, branch, title, body }: {
+    repository: RepositoryName,
+    branch: string,
+    title: string,
+    body: string,
+  }): Promise<ReviewedPullRequest> {
+    throw new Error(
+      `${this.constructor.name} must implement open({ repository, branch, title, body }), asked for ${branch} in ${repository}`
+    )
+  }
+
   async fixesAsked({ pullRequest, repository }: {
     pullRequest: ReviewedPullRequest,
     repository: RepositoryName,

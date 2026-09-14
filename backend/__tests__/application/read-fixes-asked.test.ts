@@ -16,7 +16,7 @@ type PullRequestAsked = { issueNumber: number, repository: RepositoryName }
 type FixesAskedFor = { pullRequest: ReviewedPullRequest, repository: RepositoryName }
 
 class PullRequestsDouble extends PullRequests {
-  open: ReviewedPullRequest | null
+  openAnswer: ReviewedPullRequest | null
   answer: ChangeAsked[]
   failing: Error | null
   located: PullRequestAsked[]
@@ -28,7 +28,7 @@ class PullRequestsDouble extends PullRequests {
     failing?: Error | null,
   } = {}) {
     super()
-    this.open = open
+    this.openAnswer = open
     this.answer = asked
     this.failing = failing
     this.located = []
@@ -39,7 +39,7 @@ class PullRequestsDouble extends PullRequests {
     this.located.push(subject)
     if (this.failing !== null) throw this.failing
 
-    return this.open
+    return this.openAnswer
   }
 
   async fixesAsked(subject: FixesAskedFor): Promise<ChangeAsked[]> {

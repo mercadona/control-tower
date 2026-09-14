@@ -8,7 +8,7 @@ import { SleepDouble } from '../sleep-double.ts'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
-import { PullRequestNotRead, PullRequestNotUnderstood } from '../../src/domain/exceptions.ts'
+import { PullRequestNotRead, PullRequestNotUnderstood, EpicPullRequestNotOpened } from '../../src/domain/exceptions.ts'
 
 const DECLARED = JSON.parse(
   readFileSync(new URL('../fixtures/declared-gh-pull-request-reviews.json', import.meta.url), 'utf8')
@@ -68,6 +68,14 @@ class GhDouble {
     return this.pullRequests().openOf({ issueNumber: GhDouble.ISSUE.number, repository: GhDouble.REPOSITORY })
   }
 
+  async openOfBranch(branch: string) {
+    return this.pullRequests().openOfBranch({ branch, repository: GhDouble.REPOSITORY })
+  }
+
+  async open({ branch = 'feat/7', title = 'the epic pull request', body = 'the epic pull request body' } = {}) {
+    return this.pullRequests().open({ repository: GhDouble.REPOSITORY, branch, title, body })
+  }
+
   async fixesAsked() {
     return this.pullRequests()
       .fixesAsked({ pullRequest: GhDouble.PULL_REQUEST, repository: GhDouble.REPOSITORY })
@@ -110,6 +118,53 @@ describe('GhPullRequests', () => {
 
     expect(refusal).toBeInstanceOf(PullRequestNotUnderstood)
     expect(refusal).not.toBeInstanceOf(PullRequestNotRead)
+  })
+
+  it('open_of_branch_answers_the_open_pull_request_whose_head_is_that_branch', async () => {
+    const gh = GhDouble.answering(GhDouble.LISTED)
+
+    const found = await gh.openOfBranch('feat/7')
+
+    expect(gh.calls).toEqual([[
+      'pr', 'list', '--repo', 'josemerca/ct-loop-sandbox',
+      '--head', 'feat/7', '--state', 'open', '--json', 'number,url', '--limit', '1',
+    ]])
+    expect(found).toEqual(GhDouble.PULL_REQUEST)
+  })
+
+  it('opens_the_pull_request_on_the_epic_branch_and_never_lets_a_creation_be_repeated', async () => {
+    const gh = GhDouble.answering(`${GhDouble.PULL_REQUEST.url}\n`)
+
+    const opened = await gh.open()
+
+    expect(gh.calls).toEqual([[
+      'pr', 'create', '--repo', 'josemerca/ct-loop-sandbox',
+      '--head', 'feat/7', '--title', 'the epic pull request', '--body', 'the epic pull request body',
+    ]])
+    expect(opened).toEqual(GhDouble.PULL_REQUEST)
+
+    const blipped = new GhDouble([
+      new ProcessOutput({ code: 1, stdout: '', stderr: 'error connecting to api.github.com' }),
+      new ProcessOutput({ code: 0, stdout: `${GhDouble.PULL_REQUEST.url}\n`, stderr: '' }),
+    ])
+
+    const refusal = await blipped.open().catch((cause) => cause)
+
+    expect(blipped.calls).toHaveLength(1)
+    expect(blipped.sleeping.slept).toEqual([])
+    expect(refusal).toBeInstanceOf(EpicPullRequestNotOpened)
+  })
+
+  it('a_gh_that_refused_to_create_is_told_apart_from_a_gh_that_printed_no_pull_request_url', async () => {
+    const refusal = await GhDouble.refusing('HTTP 502').open().catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(EpicPullRequestNotOpened)
+    expect(refusal).not.toBeInstanceOf(PullRequestNotUnderstood)
+
+    const unmatched = await GhDouble.answering('no pull request here\n').open().catch((cause) => cause)
+
+    expect(unmatched).toBeInstanceOf(PullRequestNotUnderstood)
+    expect(unmatched).not.toBeInstanceOf(EpicPullRequestNotOpened)
   })
 
   it('it_reads_the_reviews_and_the_line_comments_of_that_pull_request_one_full_page_at_a_time', async () => {

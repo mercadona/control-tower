@@ -430,35 +430,31 @@ npm --prefix backend test -- __tests__/infrastructure/git-epic-branch.test.ts __
 npm --prefix backend test -- __tests__/infrastructure/plan-refusal.test.ts   # expected: exit 0 — both leaves refuse
 ```
 
-### Task 4 — The epic's pull request: found by head, and opened
+### Task 4 — The epic's pull request: found and opened
 
-**Objective:** the backend finds the open pull request whose head is a branch, and opens one on
-that branch with a title and a body.
+**Objective:** the backend finds the open pull request whose head is a branch, and opens one there
+with a title and a body.
 
 **Files:** `backend/src/domain/ports/pull-requests.ts` (modify),
 `backend/src/infrastructure/gh-pull-requests.ts` (modify),
 `backend/src/domain/exceptions.ts` (modify), `backend/src/infrastructure/start-plan-route.ts`
 (modify), `backend/__tests__/infrastructure/gh-pull-requests.test.ts` (modify),
-`backend/__tests__/infrastructure/plan-refusal.test.ts` (modify)
+`backend/__tests__/infrastructure/plan-refusal.test.ts` (modify),
+`backend/__tests__/application/read-fixes-asked.test.ts` (modify),
+`backend/__tests__/application/read-implementation-progress.test.ts` (modify)
 
 "Which open pull request has this head" becomes ONE decision: `openOfBranch` owns the `gh pr list`
-lookup and `openOf` below delegates to it with `${LOOP_BRANCH_PREFIX}${issueNumber}`.
-`createArgvFor` is
+lookup and `openOf` delegates to it with `${LOOP_BRANCH_PREFIX}${issueNumber}`. `createArgvFor` is
 `['pr', 'create', '--repo', repository.text, '--head', branch, '--title', title, '--body', body]`
-with `safeToRepeat: false` — the rule `backend/conventions/this-repository.md` states for
-`gh issue create` binds any creation. `gh pr create` prints one line, the new pull request's url,
-so `open` trims stdout, matches `CREATED` and answers both; no match is
-`PullRequestNotUnderstood`, a refusing `gh` is `EpicPullRequestNotOpened`. `exceptions.ts` gains
-`EpicPullRequestNotOpened` under `SpecFreezeFailure`, and `PlanCollapse` gains it plus
-`PullRequestNotRead` and `PullRequestNotUnderstood`: `plan-refusal.test.ts` drops
-`PullRequestFailure` from the families it excuses and the test that they have no refusal, because
-a request — not only the stream already open — reads a pull request now.
+with `safeToRepeat: false`: what `this-repository.md` says of `gh issue create` binds any
+creation. `gh pr create` prints the url, so `open` trims stdout, matches `CREATED` and answers
+both; no match is `PullRequestNotUnderstood`, a refusing `gh` is
+`EpicPullRequestNotOpened`. `exceptions.ts` gains that leaf under `SpecFreezeFailure`, and
+`PlanCollapse` gains it plus `PullRequestNotRead` and `PullRequestNotUnderstood`:
+`plan-refusal.test.ts` drops `PullRequestFailure` from the families it excuses and the test that
+they have no refusal, because a request reads one now. The last two test files hold a double whose
+`open` field collides with the new method.
 
-Current state (backend/src/domain/ports/pull-requests.ts, line 7):
-
-```ts
-  async openOf({ issueNumber, repository }: {
-```
 
 Contract (backend/src/domain/ports/pull-requests.ts):
 
@@ -479,23 +475,24 @@ Contract (backend/src/infrastructure/gh-pull-requests.ts):
 ```
 
 **TDD:** red first with
-`it('opens the pull request on the epic branch and never lets a creation be repeated')` — the
-launched argv is `createArgvFor`'s literal, `safeToRepeat` is `false`, and the answer is number
-`42` and url `https://github.com/josemerca/ct-loop-sandbox/pull/42`, the url shape
-`gh-pull-requests.test.ts` already captures in `LISTED`. Its boundary pair is a stdout with no
-`/pull/<n>`, which must raise instead of answering a made-up number.
+`it('opens_the_pull_request_on_the_epic_branch_and_never_lets_a_creation_be_repeated')` — the argv
+is written out literally, never built by calling `createArgvFor`, and the half of the name after
+the `and` is pinned the way `gh-plan-issues.test.ts` pins the same flag: script a **transient**
+failure and assert `gh` was launched once. The number is `42`, out of the url shape `LISTED`
+captures. Its boundary pair is a stdout with no `/pull/<n>`, which must raise rather than
+invent one. Snake_case names, like that file's rest.
 
 **Tests:** in `gh-pull-requests.test.ts`: the one above,
-`a gh that refused to create is told apart from a gh that printed no pull request url`,
-`openOfBranch answers the open pull request whose head is that branch`. The existing `openOf`
-tests stay untouched and green, which is what proves the delegation kept its behaviour.
+`a_gh_that_refused_to_create_is_told_apart_from_a_gh_that_printed_no_pull_request_url`,
+`open_of_branch_answers_the_open_pull_request_whose_head_is_that_branch`. The existing `openOf`
+tests stay green, proving the delegation kept its behaviour.
 
 **Verification:**
 
 ```bash
 npm --prefix backend run typecheck   # expected: exit 0 — it type-checks
 npm --prefix backend test -- __tests__/infrastructure/gh-pull-requests.test.ts __tests__/infrastructure/plan-refusal.test.ts   # expected: exit 0
-test "$(grep -c "'pr', 'list'" backend/src/infrastructure/gh-pull-requests.ts)" -eq 1   # expected: exit 0 — one lookup by head
+test "$(grep -c "'pr', 'list'" backend/src/infrastructure/gh-pull-requests.ts)" -eq 1   # expected: exit 0 — one lookup
 ```
 
 ### Task 5 — Reading gate 1's state, derived and never stored

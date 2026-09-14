@@ -52,7 +52,7 @@ class ImplementationProgressDouble extends ImplementationProgress {
 }
 
 class PullRequestsDouble extends PullRequests {
-  open: ReviewedPullRequest | null
+  openAnswer: ReviewedPullRequest | null
   failing: Error | null
   asked: PullRequestAsked[]
 
@@ -61,7 +61,7 @@ class PullRequestsDouble extends PullRequests {
     failing?: Error | null,
   } = {}) {
     super()
-    this.open = open
+    this.openAnswer = open
     this.failing = failing
     this.asked = []
   }
@@ -70,7 +70,7 @@ class PullRequestsDouble extends PullRequests {
     this.asked.push(subject)
     if (this.failing !== null) throw this.failing
 
-    return this.open
+    return this.openAnswer
   }
 }
 

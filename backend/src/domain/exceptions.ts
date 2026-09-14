@@ -110,3 +110,5 @@ export class EpicSpecNotWritten extends SpecFreezeFailure {}
 export class EpicBranchNotPublished extends SpecFreezeFailure {}
 
 export class EpicBranchNotUnderstood extends SpecFreezeFailure {}
+
+export class EpicPullRequestNotOpened extends SpecFreezeFailure {}
