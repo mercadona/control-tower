@@ -11,7 +11,7 @@ import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import type { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
-import type { PhasePrompt } from '../../src/domain/value-objects/phase-prompt.ts'
+import { PhasePrompt } from '../../src/domain/value-objects/phase-prompt.ts'
 import { PlanComment } from '../../src/domain/value-objects/plan-comment.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { UserStory } from '../../src/domain/value-objects/user-story.ts'
@@ -185,6 +185,7 @@ describe('OpenCoordinatingSession', () => {
     expect(recorded.prompt.text).toBe([
       'Invoke the skill control-tower-loop:brainstorming.',
       `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.CANONICAL_ROOT.text}: you cut no worktree and you switch no branch.`,
+      PhasePrompt.FREEZE_IS_NOT_YOURS,
       `The ticket ${Flow.STORY.text} says: "rename the button". as a user I want a dark mode`,
       Flow.COMMENT.text,
     ].join('\n'))
@@ -200,6 +201,7 @@ describe('OpenCoordinatingSession', () => {
     expect(recorded.prompt.text).toBe([
       'Invoke the skill control-tower-loop:brainstorming.',
       `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.CANONICAL_ROOT.text}: you cut no worktree and you switch no branch.`,
+      PhasePrompt.FREEZE_IS_NOT_YOURS,
       Flow.COMMENT.text,
     ].join('\n'))
   })
@@ -230,6 +232,20 @@ describe('OpenCoordinatingSession', () => {
     expect(flow.steps.indexOf('prepare')).toBeLessThan(flow.steps.indexOf('start'))
   })
 
+  it('tells the coordinating session that the freeze is the cabin button and not a line it writes', async () => {
+    const flow = new Flow()
+
+    await flow.run(Flow.STORY, Flow.COMMENT)
+
+    const [recorded] = flow.records.prepared
+    const lines = recorded.prompt.text.split('\n')
+    const checkoutLine = `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.CANONICAL_ROOT.text}: you cut no worktree and you switch no branch.`
+    const ideaLine = `The ticket ${Flow.STORY.text} says: "the summary of the story". as a user I want`
+
+    expect(lines.indexOf(PhasePrompt.FREEZE_IS_NOT_YOURS)).toBe(lines.indexOf(checkoutLine) + 1)
+    expect(lines.indexOf(ideaLine)).toBe(lines.indexOf(PhasePrompt.FREEZE_IS_NOT_YOURS) + 1)
+  })
+
   it('leaves the description out of the phase prompt when the ticket has none', async () => {
     const flow = new Flow({
       userStories: UserStoriesDouble.reading('rename the button', ''),
@@ -241,6 +257,7 @@ describe('OpenCoordinatingSession', () => {
     expect(recorded.prompt.text).toBe([
       'Invoke the skill control-tower-loop:brainstorming.',
       `You are the coordinating session of the epic for ${Flow.REPOSITORY.text}, in the checkout ${Flow.CANONICAL_ROOT.text}: you cut no worktree and you switch no branch.`,
+      PhasePrompt.FREEZE_IS_NOT_YOURS,
       `The ticket ${Flow.STORY.text} says: "rename the button".`,
     ].join('\n'))
   })

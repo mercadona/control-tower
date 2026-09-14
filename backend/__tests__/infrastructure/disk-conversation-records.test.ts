@@ -17,6 +17,7 @@ const PROMPT = PhasePrompt.brainstorming({ story: null, comment: null, repositor
 const PROMPT_TEXT = [
   'Invoke the skill control-tower-loop:brainstorming.',
   `You are the coordinating session of the epic for ${REPOSITORY.text}, in the checkout ${CHECKOUT_ROOT.text}: you cut no worktree and you switch no branch.`,
+  PhasePrompt.FREEZE_IS_NOT_YOURS,
 ].join('\n')
 
 const PROMPT_PATH = '/state/coordinating-session/2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f/phase-prompt.md'
