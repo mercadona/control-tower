@@ -82,14 +82,11 @@ export class FreezeSpec {
       )
     }
 
+    await this.branch.publishable(params.root)
     const on = EpicSpec.dateOf(this.now())
     await this.specs.rewrite({ root: params.root, spec, text: spec.frozenAt(on) })
     const title = spec.title()
-    const branch = await this.branch.publish({
-      root: params.root,
-      paths: [design, spec.path],
-      message: `Freeze the execution spec of ${title} (${on})`,
-    })
+    const branch = await this.#published({ params, spec, design, title, on })
     const pullRequest = await this.pullRequests.open({
       repository: params.repository,
       branch,
@@ -105,5 +102,20 @@ export class FreezeSpec {
     })
 
     return new SpecFrozen({ outcome: FreezeOutcome.FROZEN, findings: [], on, pullRequest })
+  }
+
+  async #published({ params, spec, design, title, on }: {
+    params: FreezeSpecParams, spec: EpicSpec, design: string, title: string | null, on: string,
+  }): Promise<string> {
+    try {
+      return await this.branch.publish({
+        root: params.root,
+        paths: [design, spec.path],
+        message: `Freeze the execution spec of ${title} (${on})`,
+      })
+    } catch (cause) {
+      await this.specs.rewrite({ root: params.root, spec, text: spec.text })
+      throw cause
+    }
   }
 }

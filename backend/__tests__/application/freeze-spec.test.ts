@@ -7,7 +7,7 @@ import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { FreezeFinding, FreezeFindingCode } from '../../src/domain/value-objects/freeze-finding.ts'
-import { EpicSpecNotUnderstood } from '../../src/domain/exceptions.ts'
+import { EpicSpecNotUnderstood, EpicBranchNotPublished } from '../../src/domain/exceptions.ts'
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
@@ -41,12 +41,36 @@ class EpicSpecsDouble extends EpicSpecs {
 
 class EpicBranchDouble extends EpicBranch {
   answer: string
+  publishableAsked: CheckoutRoot[]
   publishAsked: PublishAsked[]
+  readonly #refusal: Error | null
 
-  constructor(answer: string) {
+  constructor(answer: string, refusal: Error | null = null) {
     super()
     this.answer = answer
+    this.publishableAsked = []
     this.publishAsked = []
+    this.#refusal = refusal
+  }
+
+  static refusingTheDefaultBranch(): EpicBranchDouble {
+    return new EpicBranchDouble('main', new EpicBranchNotPublished('/repo sits on main'))
+  }
+
+  static refusingToPush(): EpicBranchDouble {
+    const refusing = new EpicBranchDouble(Mother.BRANCH)
+    refusing.publish = async (subject: PublishAsked): Promise<string> => {
+      refusing.publishAsked.push(subject)
+      throw new EpicBranchNotPublished('git push refused: no upstream')
+    }
+
+    return refusing
+  }
+
+  async publishable(root: CheckoutRoot): Promise<string> {
+    this.publishableAsked.push(root)
+    if (this.#refusal !== null) throw this.#refusal
+    return this.answer
   }
 
   async publish(subject: PublishAsked): Promise<string> {
@@ -288,6 +312,32 @@ describe('FreezeSpec', () => {
     expect(frozen.pullRequest).toBeNull()
     expect(flow.specs.rewriteAsked).toEqual([])
     expect(flow.branch.publishAsked).toEqual([])
+    expect(flow.pullRequests.openAsked).toEqual([])
+  })
+
+  it('the branch is vouched for before the state line is written, so a refused publish leaves the spec untouched', async () => {
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(Mother.draftFreezable()),
+      branch: EpicBranchDouble.refusingTheDefaultBranch(),
+    })
+
+    const refusal = await flow.run().catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(EpicBranchNotPublished)
+    expect(flow.branch.publishableAsked).toEqual([Mother.ROOT])
+    expect(flow.specs.rewriteAsked).toEqual([])
+    expect(flow.branch.publishAsked).toEqual([])
+    expect(flow.pullRequests.openAsked).toEqual([])
+  })
+
+  it('a publish that fails after the state line is written puts the spec back as it was', async () => {
+    const spec = Mother.draftFreezable()
+    const flow = new Flow({ specs: new EpicSpecsDouble(spec), branch: EpicBranchDouble.refusingToPush() })
+
+    const refusal = await flow.run().catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(EpicBranchNotPublished)
+    expect(flow.specs.rewriteAsked.at(-1)!.text).toBe(spec.text)
     expect(flow.pullRequests.openAsked).toEqual([])
   })
 

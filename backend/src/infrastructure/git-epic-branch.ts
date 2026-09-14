@@ -47,7 +47,7 @@ export class GitEpicBranch extends EpicBranch {
     return branch
   }
 
-  async publish({ root, paths, message }: { root: CheckoutRoot, paths: string[], message: string }): Promise<string> {
+  async publishable(root: CheckoutRoot): Promise<string> {
     const branch = await this.current(root)
     const declaredDefault = await this.#defaultBranchOf(root)
     if (branch === declaredDefault) {
@@ -55,6 +55,12 @@ export class GitEpicBranch extends EpicBranch {
         `${root.text} sits on ${branch}, the branch the remote calls default, so the epic's documents are not published on it`
       )
     }
+
+    return branch
+  }
+
+  async publish({ root, paths, message }: { root: CheckoutRoot, paths: string[], message: string }): Promise<string> {
+    const branch = await this.publishable(root)
     await this.#add(root, paths)
     await this.#commit(root, message, paths)
     await this.#push(root, branch)
