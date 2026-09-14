@@ -544,8 +544,8 @@ carries a bet answers `draft` with exactly one finding, `clarification-marker`, 
 same spec with that line deleted: `draft`, zero findings.
 
 **Tests:** in `read-spec-freeze.test.ts`: the one above,
-`a spec whose Hipótesis section holds only the template comment answers the hypothesis-empty finding`,
-`a spec with no Hipótesis heading answers the hypothesis-absent finding`,
+`a spec whose Hypothesis section holds only the template comment answers the hypothesis-empty finding`,
+`a spec with no Hypothesis heading answers the hypothesis-absent finding`,
 `a frozen spec answers its date and the pull request open on the checkout branch`,
 `a checkout with no execution spec answers no-spec and asks nothing else`.
 
