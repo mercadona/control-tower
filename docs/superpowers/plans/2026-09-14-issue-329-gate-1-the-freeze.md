@@ -570,8 +570,8 @@ is `NO_SPEC`; `spec.isFrozen()` is `ALREADY_FROZEN`; `!spec.isFreezable()` is `N
 carries `spec.findings()`; `spec.design()` `null` raises `EpicSpecNotUnderstood`. Only then:
 `on` is `EpicSpec.dateOf(now())`, `specs.rewrite` with `spec.frozenAt(on)`, `branch.publish` with
 `paths` `[design, spec.path]`, and `pullRequests.open` on the branch `publish` answered. Whether a
-spec can be frozen is asked of `EpicSpec#isFreezable()`, the same method Task 5's query asks, so
-the yardstick is not decided twice. The three composed texts, English because a program wrote
+spec can be frozen is asked of `EpicSpec#isFreezable()`, which wraps the same `findings()` Task 5's
+query reads, so the yardstick is not decided twice. The three composed texts, English because a program wrote
 them: the commit message `Freeze the execution spec of <title> (<on>)`; the pull request's title
 `<title> — design and execution spec`; its body, the line
 `The epic's two documents, with the execution spec frozen on <on>.`, a blank line, one `- <path>`
