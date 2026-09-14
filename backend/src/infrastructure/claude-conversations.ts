@@ -13,7 +13,7 @@ export class ClaudeConversations extends Conversations {
   static readonly PROMPT_VARIABLE = 'CT_PHASE_PROMPT'
   static readonly HOOKS_URL_VARIABLE = 'CT_SESSION_HOOKS_URL'
   static readonly PERMISSION_MODE = 'acceptEdits'
-  static readonly OPENING = 'Read the file at "$CT_PHASE_PROMPT" and do exactly what it says.'
+  static readonly OPENING = `Read the file at $${ClaudeConversations.PROMPT_VARIABLE} and do exactly what it says.`
 
   readonly liveSessions: PtyLiveSessions
   readonly shell: string | undefined
@@ -61,7 +61,7 @@ export class ClaudeConversations extends Conversations {
     return this.#open({
       conversation,
       command: ClaudeConversations.#startCommand(conversation.id.text),
-      extra: { CT_PHASE_PROMPT: promptPath },
+      extra: { [ClaudeConversations.PROMPT_VARIABLE]: promptPath },
     })
   }
 

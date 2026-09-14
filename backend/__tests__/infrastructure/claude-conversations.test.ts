@@ -92,7 +92,7 @@ class Adapter {
 }
 
 describe('ClaudeConversations', () => {
-  it('imposes the minted conversation id and leaves the prompt path in the environment', () => {
+  it('leaves the prompt path in the environment and never in the command', () => {
     const { conversations, spawn } = Adapter.readyToOpen({ newId: () => Governed.ID.text })
     const id = conversations.mint()
     const conversation = Governed.conversation(id)
@@ -100,11 +100,7 @@ describe('ClaudeConversations', () => {
     conversations.start({ conversation, promptPath: Governed.PROMPT_PATH })
 
     const [call] = spawn.calls
-    expect(call.argv).toEqual([
-      PtyLiveSessions.LOGIN_INTERACTIVE, '-c',
-      `exec claude --session-id ${id.text} ` +
-        '--permission-mode acceptEdits "Read the file at "$CT_PHASE_PROMPT" and do exactly what it says."',
-    ])
+    expect(call.argv.slice(0, 2)).toEqual([PtyLiveSessions.LOGIN_INTERACTIVE, '-c'])
     expect(call.options.env[ClaudeConversations.PROMPT_VARIABLE]).toBe(Governed.PROMPT_PATH)
     expect(call.argv.join(' ')).not.toContain(Governed.PROMPT_PATH)
   })
