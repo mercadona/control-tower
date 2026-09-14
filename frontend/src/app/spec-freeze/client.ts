@@ -50,11 +50,16 @@ const toOutcome = (body: unknown): SpecFreezeOutcome => {
   return { kind: 'unavailable' }
 }
 
+const asRefusal = (body: unknown): SpecFreezeOutcome =>
+  isRecord(body) && typeof body.code === 'string' && typeof body.detail === 'string'
+    ? { kind: 'refused', code: body.code, error: body.detail }
+    : { kind: 'unavailable' }
+
 const read = async (): Promise<SpecFreezeOutcome> => {
   try {
     const response = await fetch(PATH)
-    if (!response.ok) return { kind: 'unavailable' }
-    return toOutcome(await response.json())
+    const body: unknown = await response.json()
+    return response.ok ? toOutcome(body) : asRefusal(body)
   } catch {
     return { kind: 'unavailable' }
   }

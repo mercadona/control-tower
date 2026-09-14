@@ -45,7 +45,16 @@ const notFromThePage = () => ({
   body: `{"code":"gate-not-from-the-page","detail":${JSON.stringify(NOT_FROM_THE_PAGE_DETAIL)}}`,
 })
 
+const REFUSED_DETAIL = 'the spec carries no title'
+
+const refusedRead = () => ({
+  status: 400,
+  body: `{"code":"epic-spec-not-understood","detail":"${REFUSED_DETAIL}"}`,
+})
+
 export const SpecFreezeMother = {
+  REFUSED_DETAIL,
+  refusedRead,
   SPEC,
   KEY,
   ON,

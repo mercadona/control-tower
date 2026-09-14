@@ -94,4 +94,13 @@ describe('SpecFreezePanel', () => {
     await waitFor(() => expect(reading).toHaveBeenCalled())
     expect(container).toBeEmptyDOMElement()
   })
+
+  it('a read the backend refused says why instead of showing nothing', async () => {
+    const refused = SpecFreezeMother.refusedRead()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(refused.body, { status: refused.status })))
+
+    render(<SpecFreezePanel />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(SpecFreezeMother.REFUSED_DETAIL)
+  })
 })

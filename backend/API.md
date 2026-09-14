@@ -28,7 +28,9 @@ the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
 2. **An application refusal answers 400.** The status stopped being the signal.
    405 keeps its own status because it is the protocol answering, not the
    application: it is decided before any request reaches a use case.
-3. **A `POST` must declare `Content-Type: application/json`.** Otherwise 415.
+3. **A `POST` that carries a body must declare `Content-Type: application/json`.** Otherwise 415.
+   The one exception is `POST /spec-freeze`, which takes no body at all and therefore mounts
+   neither body middleware: it never answers 415, whatever it is sent.
 4. **A body over 8 KiB is refused** with 413 `body-too-large`.
 5. **An unknown field in a `POST` body is refused**, not ignored. The one
    exception is `POST /session-hooks`: Claude Code's own hook payload carries
@@ -988,8 +990,14 @@ since have merged or closed.
 
 **Refusals**
 
-None of its own. Only the shared refusals apply — 405 for a method other than
-`GET` or `POST`, 403 for a foreign `Origin`.
+The shared ones — 405 for a method other than `GET` or `POST`, 403 for a
+foreign `Origin` — and, with a 400 and its own `{code, detail}`, every tool
+refusal this read can meet. Reading the spec runs on disk, so a specs directory
+it cannot list is `epic-spec-not-read` and a file carrying no title is
+`epic-spec-not-understood`; and on the frozen branch alone it also runs
+`git rev-parse` and `gh pr list`, so a logged-out `gh` or a checkout git cannot
+read surface here rather than as a generic failure. The cabin polls this route,
+so a refusal it swallowed would be a panel that silently shows nothing.
 
 ```
 curl -s http://127.0.0.1:8787/spec-freeze
@@ -1078,6 +1086,8 @@ curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/spec-freeze
 | `POST /sessions/:id/input` | `frontend/src/app/sessions/client.ts` | `Sessions.types.ts` |
 | `POST /coordinating-session` | `frontend/src/app/coordinating-session/client.ts` | `CoordinatingSession.types.ts` |
 | `GET /coordinating-session` | `frontend/src/app/coordinating-session/client.ts` | `CoordinatingSession.types.ts` |
+| `GET /spec-freeze` | `frontend/src/app/spec-freeze/client.ts` | `SpecFreeze.types.ts` |
+| `POST /spec-freeze` | `frontend/src/app/spec-freeze/client.ts` | `SpecFreeze.types.ts` |
 
 A client validates the wire shape before it reaches a component, and projects
 snake_case to camelCase. Add a field to the validator, or the component never
@@ -1100,11 +1110,9 @@ Code calls it on its own, from inside the checkout `POST /coordinating-session`
 started. It is still in `API_PATHS` (`frontend/vite.config.ts`), because the
 hook runs from the same machine the dev server listens on.
 
-`GET /spec-freeze` and `POST /spec-freeze` have no row above either, for the
-opposite reason: both paths are already in `API_PATHS`
-(`frontend/vite.config.ts`) so the dev server proxies them, but no frontend
-client reads or presses gate 1 yet — this backend-only slice of the epic wires
-the two endpoints and leaves the cabin's panel to a following task.
+`GET /spec-freeze` and `POST /spec-freeze` do have their rows above: the
+cabin's `app/spec-freeze` reads the first every two seconds and presses the
+second, and `SpecFreezePanel` is what renders both answers.
 
 ## Where the contract is decided
 

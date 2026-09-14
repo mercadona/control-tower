@@ -75,10 +75,17 @@ export class SpecFreezeRoute {
         Answer.send(response, 200, { status: 'none' })
         return
       }
-      const outcome = await read.execute(new ReadSpecFreezeParams({
-        root: holding.conversation.root,
-        repository: holding.conversation.repository,
-      }))
+      let outcome: SpecFreezeRead
+      try {
+        outcome = await read.execute(new ReadSpecFreezeParams({
+          root: holding.conversation.root,
+          repository: holding.conversation.repository,
+        }))
+      } catch (cause) {
+        if (!(cause instanceof PlanFailure)) throw cause
+        Answer.refuseAs(response, PlanCollapse.of(cause))
+        return
+      }
       const minted = key.forThePage({
         origin: request.get('Origin'),
         host: request.get('Host'),

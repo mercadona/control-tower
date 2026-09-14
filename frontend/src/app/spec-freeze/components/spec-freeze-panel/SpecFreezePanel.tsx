@@ -45,6 +45,13 @@ const SpecFreezePanel = () => {
   }
 
   if (read.phase === 'connecting') return null
+  if (read.kind === 'refused') {
+    return (
+      <Panel heading={HEADING}>
+        <Banner type="error" role="alert" title={read.error} />
+      </Panel>
+    )
+  }
   if (read.kind !== 'draft') return null
 
   const { findings, key: gateKey } = read

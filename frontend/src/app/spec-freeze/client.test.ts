@@ -76,4 +76,16 @@ describe('SpecFreezeClient', () => {
     expect(read).toEqual({ kind: 'unavailable' })
     expect(pressed).toEqual({ kind: 'backend-unreachable' })
   })
+
+  it('a read the backend refused is read as its code and detail, not as unavailable', async () => {
+    answerWith(SpecFreezeMother.refusedRead())
+
+    const outcome = await SpecFreezeClient.read()
+
+    expect(outcome).toEqual({
+      kind: 'refused',
+      code: 'epic-spec-not-understood',
+      error: SpecFreezeMother.REFUSED_DETAIL,
+    })
+  })
 })

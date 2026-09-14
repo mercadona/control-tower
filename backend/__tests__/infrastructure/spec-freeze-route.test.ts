@@ -6,6 +6,7 @@ import express from 'express'
 import { Browsers } from '../../src/infrastructure/http.ts'
 import { SpecFreezeRoute } from '../../src/infrastructure/spec-freeze-route.ts'
 import { GateKey } from '../../src/infrastructure/gate-key.ts'
+import { EpicSpecNotUnderstood } from '../../src/domain/exceptions.ts'
 import {
   ReadSpecFreeze, ReadSpecFreezeParams, SpecFreezeRead, SpecFreezeState,
 } from '../../src/application/queries/read-spec-freeze.ts'
@@ -28,6 +29,11 @@ import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { FreezeFinding, FreezeFindingCode } from '../../src/domain/value-objects/freeze-finding.ts'
 
 class ReadSpecFreezeSpy extends ReadSpecFreeze {
+  static refusing(cause: Error): ReadSpecFreezeSpy {
+    const refusing = new ReadSpecFreezeSpy(async () => { throw cause })
+    return refusing
+  }
+
   readonly asked: ReadSpecFreezeParams[]
   readonly answer: (params: ReadSpecFreezeParams) => Promise<SpecFreezeRead>
 
@@ -298,6 +304,21 @@ describe('SpecFreezeRoute', () => {
       findings: [
         { code: 'clarification-marker', line: 9, detail: '- [NEEDS CLARIFICATION: who signs the freeze?]' },
       ],
+    })
+  })
+
+  it('a tool that refuses under the read answers its own code instead of a generic failure', async () => {
+    const held = Mother.live()
+    const read = ReadSpecFreezeSpy.refusing(new EpicSpecNotUnderstood('the spec carries no title'))
+    const freeze = FreezeSpecSpy.neverAsked()
+    const port = await RunningApi.listening(held, read, freeze, Keys.minted())
+
+    const answered = await RunningApi.fetching(port)
+
+    expect(answered.status).toBe(400)
+    expect(await answered.json()).toEqual({
+      code: 'epic-spec-not-understood',
+      detail: 'the spec carries no title',
     })
   })
 
