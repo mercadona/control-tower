@@ -1,11 +1,14 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
+import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { FakeEventSource } from 'pages/home/__tests__/FakeEventSource'
 import { SessionsPanel } from './SessionsPanel'
 
 const TWO_SESSIONS = SessionsMother.twoSessions().body
 const ONE_SESSION = '{"sessions":[{"id":"b2","name":"bash"}]}'
+const ZSH_ALONE = SessionsMother.oneSession().body
+const WITH_COORDINATING_SESSION = SessionsMother.withCoordinatingSession().body
 const NO_SESSIONS = SessionsMother.noSessions().body
 
 vi.mock('@xterm/xterm', () => {
@@ -108,6 +111,20 @@ describe('SessionsPanel', () => {
 
     await waitFor(() => expect(screen.queryByRole('button', { name: 'zsh' })).not.toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'bash' })).toBeInTheDocument()
+  })
+
+  it('the session the page just opened is fetched again and shown as chosen', async () => {
+    const fetching = answeringInTurn([ZSH_ALONE, WITH_COORDINATING_SESSION])
+    vi.stubGlobal('fetch', fetching)
+
+    const { rerender } = render(<SessionsPanel />)
+
+    await screen.findByRole('button', { name: 'zsh' })
+    expect(fetching).toHaveBeenCalledTimes(1)
+    rerender(<SessionsPanel opened={CoordinatingSessionMother.SESSION} />)
+
+    expect(await screen.findByRole('button', { name: CoordinatingSessionMother.SESSION.name })).toHaveAttribute('aria-current', 'true')
+    expect(fetching).toHaveBeenCalledTimes(2)
   })
 
   it('another live session is chosen when the chosen one is gone', async () => {

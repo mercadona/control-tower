@@ -4,10 +4,11 @@ import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMoth
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { FakeEventSource } from './FakeEventSource'
-import { openHome } from './helpers'
+import { openBrainstorming, openHome } from './helpers'
 
 type Answer = { status: number; body: string }
 type FakeTerminal = { onDataHandler: ((text: string) => void) | null; written: string[] }
+type ScrollableElement = { scrollIntoView?: (options?: ScrollIntoViewOptions) => void }
 
 const NO_ACTIVE_PLANS: Answer = { status: 200, body: '{"plans":[]}' }
 const SESSION_ID = 'a1'
@@ -33,6 +34,7 @@ const EXTERNAL_TOOLS_READY: Answer = {
   body: '{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}],"metricsDelivery":{"enabled":false,"variable":"CT_HARVEST_BQ_TABLE","destination":null}}',
 }
 const SESSIONS: Answer = SessionsMother.oneSession()
+const SESSIONS_WITH_THE_OPENED_ONE: Answer = SessionsMother.withCoordinatingSession()
 const TYPED: Answer = { status: 202, body: `{"status":"typed","id":"${SESSION_ID}"}` }
 const NO_COORDINATING_SESSION: Answer = CoordinatingSessionMother.none()
 const NO_IMPLEMENTATION_RUN_YET: Answer = {
@@ -90,8 +92,35 @@ const stubFetch = (activePlans: Answer, coordinatingSession: Answer = NO_COORDIN
   return fetching
 }
 
+const stubFetchOpeningTheBrainstorming = () => {
+  let sessions = SESSIONS
+  const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input)
+    if (url === '/active-plans') return responseFor(NO_ACTIVE_PLANS)
+    if (url === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
+    if (url === '/sessions') return responseFor(sessions)
+    if (url === '/coordinating-session' && init === undefined) return responseFor(NO_COORDINATING_SESSION)
+    if (url === '/coordinating-session') {
+      sessions = SESSIONS_WITH_THE_OPENED_ONE
+      return responseFor(CoordinatingSessionMother.opened())
+    }
+    throw new Error(`unexpected fetch to ${url}`)
+  })
+  vi.stubGlobal('fetch', fetching)
+  return fetching
+}
+
+const stubScrollIntoView = () => {
+  const scrolling = vi.fn()
+  ;(Element.prototype as ScrollableElement).scrollIntoView = scrolling
+  return scrolling
+}
+
 describe('Home · sessions panel', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    delete (Element.prototype as ScrollableElement).scrollIntoView
+  })
 
   it('the sessions panel is on the page before a plan is requested', () => {
     stubFetch(NO_ACTIVE_PLANS)
@@ -131,6 +160,17 @@ describe('Home · sessions panel', () => {
     const secondStream = await waitFor(() => FakeEventSource.last())
     secondStream.receive('{"bytes":"scrollback"}')
     await waitFor(() => expect(lastTerminal().written).toEqual(['scrollback']))
+  })
+
+  it('the brainstorming terminal appears as soon as the entrance opens it', async () => {
+    const scrolling = stubScrollIntoView()
+    stubFetchOpeningTheBrainstorming()
+    const { user } = openHome()
+
+    await openBrainstorming(user)
+
+    expect(await screen.findByRole('button', { name: CoordinatingSessionMother.SESSION.name })).toHaveAttribute('aria-current', 'true')
+    expect(scrolling).toHaveBeenCalled()
   })
 
   it("shows the coordinating session's live question", async () => {

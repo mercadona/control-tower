@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivePlan } from 'app/active-plans/ActivePlan.types'
 import { ActivePlansClient } from 'app/active-plans/client'
 import { CoordinatingSessionStatus } from 'app/coordinating-session/components/coordinating-session-status'
+import { OpenedCoordinatingSession } from 'app/coordinating-session/CoordinatingSession.types'
 import { useCoordinatingSession } from 'app/coordinating-session/useCoordinatingSession'
 import { ToolsNavbar } from 'app/external-tools/components/tools-navbar'
 import { ImplementHistory } from 'app/implement-history/components/implement-history'
@@ -9,6 +10,7 @@ import { ImplementPlanAction } from 'app/implement-plan/components/implement-pla
 import { ImplementProgress } from 'app/implement-progress/components/implement-progress'
 import { PlanProgress } from 'app/plan-events/components/plan-progress'
 import { SessionsPanel } from 'app/sessions/components/sessions-panel'
+import { LiveSession } from 'app/sessions/Sessions.types'
 import { SpecFreezePanel } from 'app/spec-freeze/components/spec-freeze-panel'
 import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
@@ -47,6 +49,8 @@ const Home = () => {
   const [candidates, setCandidates] = useState<ActivePlan[]>([])
   const [uncertainRequest, setUncertainRequest] = useState<StartPlanRequest | null>(null)
   const [brainstormingUnreachable, setBrainstormingUnreachable] = useState(false)
+  const [openedSession, setOpenedSession] = useState<LiveSession | null>(null)
+  const sessionsRef = useRef<HTMLElement | null>(null)
   const [expandedSummary, setExpandedSummary] = useState<WorkflowStageName | null>(null)
   const [requestFormVersion, setRequestFormVersion] = useState(0)
   const recoveryStartedRef = useRef(false)
@@ -157,8 +161,10 @@ const Home = () => {
     setExpandedSummary(isExpanded ? stage : null)
   }
 
-  const sessionOpened = useCallback(() => {
+  const sessionOpened = useCallback((opened: OpenedCoordinatingSession) => {
     setBrainstormingUnreachable(false)
+    setOpenedSession(opened.session)
+    sessionsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
   }, [])
 
   const sessionUnreachable = useCallback(() => {
@@ -460,8 +466,8 @@ const Home = () => {
             )}
           </section>
 
-          <section className="home__sessions" aria-label="Sesiones en marcha">
-            <SessionsPanel />
+          <section className="home__sessions" aria-label="Sesiones en marcha" ref={sessionsRef}>
+            <SessionsPanel opened={openedSession} />
             <CoordinatingSessionStatus read={coordinatingSession} />
           </section>
 
