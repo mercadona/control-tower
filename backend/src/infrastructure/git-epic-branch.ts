@@ -26,6 +26,18 @@ export class GitEpicBranch extends EpicBranch {
     return ['-C', root, 'commit', '-m', message, '--', ...paths]
   }
 
+  static dirtyArgvFor(root: string, paths: string[]): string[] {
+    return ['-C', root, 'status', '--porcelain', '--', ...paths]
+  }
+
+  static remoteRefArgvFor(root: string, branch: string): string[] {
+    return ['-C', root, 'rev-parse', '--verify', '--quiet', `refs/remotes/${GitEpicBranch.REMOTE}/${branch}`]
+  }
+
+  static aheadArgvFor(root: string, branch: string): string[] {
+    return ['-C', root, 'rev-list', '--count', `${GitEpicBranch.REMOTE}/${branch}..${branch}`]
+  }
+
   static pushArgvFor(root: string, branch: string): string[] {
     return ['-C', root, 'push', '--set-upstream', GitEpicBranch.REMOTE, branch]
   }
@@ -59,13 +71,39 @@ export class GitEpicBranch extends EpicBranch {
     return branch
   }
 
-  async publish({ root, paths, message }: { root: CheckoutRoot, paths: string[], message: string }): Promise<string> {
-    const branch = await this.publishable(root)
+  async committed({ root, paths }: { root: CheckoutRoot, paths: string[] }): Promise<boolean> {
+    const asked = await this.run(GitEpicBranch.dirtyArgvFor(root.text, paths))
+    if (asked.failed) {
+      throw new EpicBranchNotPublished(
+        `git status could not say whether ${paths.join(', ')} are committed in ${root.text}: ${asked.stderr.trim()}`
+      )
+    }
+
+    return asked.stdout.trim().length === 0
+  }
+
+  async commit({ root, paths, message }: {
+    root: CheckoutRoot, paths: string[], message: string,
+  }): Promise<void> {
     await this.#add(root, paths)
     await this.#commit(root, message, paths)
-    await this.#push(root, branch)
+  }
 
-    return branch
+  async pushed({ root, branch }: { root: CheckoutRoot, branch: string }): Promise<boolean> {
+    const known = await this.run(GitEpicBranch.remoteRefArgvFor(root.text, branch))
+    if (known.failed) return false
+    const ahead = await this.run(GitEpicBranch.aheadArgvFor(root.text, branch))
+    if (ahead.failed) {
+      throw new EpicBranchNotPublished(
+        `git rev-list could not say whether ${branch} of ${root.text} is on the remote: ${ahead.stderr.trim()}`
+      )
+    }
+
+    return ahead.stdout.trim() === '0'
+  }
+
+  async push({ root, branch }: { root: CheckoutRoot, branch: string }): Promise<void> {
+    await this.#push(root, branch)
   }
 
   async #defaultBranchOf(root: CheckoutRoot): Promise<string> {

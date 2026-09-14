@@ -56,8 +56,13 @@ class GitEpicBranchDouble {
     throw new Error(`nobody wrote an answer for git ${argv.join(' ')}`)
   }
 
-  published(paths: string[] = GitEpicBranchDouble.PATHS): Promise<string> {
-    return this.branch().publish({ root: GitEpicBranchDouble.CHECKOUT, paths, message: GitEpicBranchDouble.MESSAGE })
+  async published(paths: string[] = GitEpicBranchDouble.PATHS): Promise<string> {
+    const epic = this.branch()
+    const branch = await epic.publishable(GitEpicBranchDouble.CHECKOUT)
+    await epic.commit({ root: GitEpicBranchDouble.CHECKOUT, paths, message: GitEpicBranchDouble.MESSAGE })
+    await epic.push({ root: GitEpicBranchDouble.CHECKOUT, branch })
+
+    return branch
   }
 
   static printing(stdout: string): ProcessOutput {

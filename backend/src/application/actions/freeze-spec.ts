@@ -69,10 +69,7 @@ export class FreezeSpec {
     if (spec === null) {
       return new SpecFrozen({ outcome: FreezeOutcome.NO_SPEC, findings: [], on: null, pullRequest: null })
     }
-    if (spec.isFrozen()) {
-      return new SpecFrozen({ outcome: FreezeOutcome.ALREADY_FROZEN, findings: [], on: null, pullRequest: null })
-    }
-    if (!spec.isFreezable()) {
+    if (!spec.isFrozen() && !spec.isFreezable()) {
       return new SpecFrozen({ outcome: FreezeOutcome.NOT_FREEZABLE, findings: spec.findings(), on: null, pullRequest: null })
     }
     const design = spec.design()
@@ -82,15 +79,64 @@ export class FreezeSpec {
       )
     }
 
-    await this.branch.publishable(params.root)
+    const branch = await this.branch.publishable(params.root)
+    const paths = [design, spec.path]
+    if (await this.#delivered({ params, spec, branch })) {
+      return new SpecFrozen({ outcome: FreezeOutcome.ALREADY_FROZEN, findings: [], on: null, pullRequest: null })
+    }
+    const on = spec.isFrozen() ? spec.frozenOn()! : await this.#writtenAndCommitted({ params, spec, paths })
+    if (!(await this.branch.pushed({ root: params.root, branch }))) {
+      await this.branch.push({ root: params.root, branch })
+    }
+
+    return new SpecFrozen({
+      outcome: FreezeOutcome.FROZEN,
+      findings: [],
+      on,
+      pullRequest: await this.#pullRequest({ params, spec, design, branch, on }),
+    })
+  }
+
+  async #delivered({ params, spec, branch }: {
+    params: FreezeSpecParams, spec: EpicSpec, branch: string,
+  }): Promise<boolean> {
+    if (!spec.isFrozen()) return false
+    if (!(await this.branch.pushed({ root: params.root, branch }))) return false
+
+    return await this.pullRequests.openOfBranch({ branch, repository: params.repository }) !== null
+  }
+
+  async #writtenAndCommitted({ params, spec, paths }: {
+    params: FreezeSpecParams, spec: EpicSpec, paths: string[],
+  }): Promise<string> {
     const on = EpicSpec.dateOf(this.now())
     await this.specs.rewrite({ root: params.root, spec, text: spec.frozenAt(on) })
-    const title = spec.title()
-    const branch = await this.#published({ params, spec, design, title, on })
-    const pullRequest = await this.pullRequests.open({
+    try {
+      await this.branch.commit({
+        root: params.root,
+        paths,
+        message: `Freeze the execution spec of ${spec.title()} (${on})`,
+      })
+    } catch (cause) {
+      if (!(await this.branch.committed({ root: params.root, paths }))) {
+        await this.specs.rewrite({ root: params.root, spec, text: spec.text })
+      }
+      throw cause
+    }
+
+    return on
+  }
+
+  async #pullRequest({ params, spec, design, branch, on }: {
+    params: FreezeSpecParams, spec: EpicSpec, design: string, branch: string, on: string,
+  }): Promise<ReviewedPullRequest> {
+    const standing = await this.pullRequests.openOfBranch({ branch, repository: params.repository })
+    if (standing !== null) return standing
+
+    return await this.pullRequests.open({
       repository: params.repository,
       branch,
-      title: `${title} — design and execution spec`,
+      title: `${spec.title()} — design and execution spec`,
       body: [
         `The epic's two documents, with the execution spec frozen on ${on}.`,
         '',
@@ -100,22 +146,5 @@ export class FreezeSpec {
         "Control Tower's gate 1 wrote the state line and committed both. The groom stays refused until this pull request merges.",
       ].join('\n'),
     })
-
-    return new SpecFrozen({ outcome: FreezeOutcome.FROZEN, findings: [], on, pullRequest })
-  }
-
-  async #published({ params, spec, design, title, on }: {
-    params: FreezeSpecParams, spec: EpicSpec, design: string, title: string | null, on: string,
-  }): Promise<string> {
-    try {
-      return await this.branch.publish({
-        root: params.root,
-        paths: [design, spec.path],
-        message: `Freeze the execution spec of ${title} (${on})`,
-      })
-    } catch (cause) {
-      await this.specs.rewrite({ root: params.root, spec, text: spec.text })
-      throw cause
-    }
   }
 }

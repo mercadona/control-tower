@@ -13,7 +13,7 @@ type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
 type RewriteAsked = { root: CheckoutRoot, spec: EpicSpec, text: string }
 
-type PublishAsked = { root: CheckoutRoot, paths: string[], message: string }
+type CommitAsked = { root: CheckoutRoot, paths: string[], message: string }
 
 type OpenAsked = { repository: RepositoryName, branch: string, title: string, body: string }
 
@@ -42,14 +42,26 @@ class EpicSpecsDouble extends EpicSpecs {
 class EpicBranchDouble extends EpicBranch {
   answer: string
   publishableAsked: CheckoutRoot[]
-  publishAsked: PublishAsked[]
+  commitAsked: CommitAsked[]
+  pushAsked: string[]
+  isCommitted: boolean
+  isPushed: boolean
+  commitRefusal: Error | null
+  commitLands: boolean
+  pushRefusal: Error | null
   readonly #refusal: Error | null
 
   constructor(answer: string, refusal: Error | null = null) {
     super()
     this.answer = answer
     this.publishableAsked = []
-    this.publishAsked = []
+    this.commitAsked = []
+    this.pushAsked = []
+    this.isCommitted = false
+    this.isPushed = false
+    this.commitRefusal = null
+    this.commitLands = false
+    this.pushRefusal = null
     this.#refusal = refusal
   }
 
@@ -59,12 +71,39 @@ class EpicBranchDouble extends EpicBranch {
 
   static refusingToPush(): EpicBranchDouble {
     const refusing = new EpicBranchDouble(Mother.BRANCH)
-    refusing.publish = async (subject: PublishAsked): Promise<string> => {
-      refusing.publishAsked.push(subject)
-      throw new EpicBranchNotPublished('git push refused: no upstream')
-    }
+    refusing.pushRefusal = new EpicBranchNotPublished('git push refused: no upstream')
 
     return refusing
+  }
+
+  static refusingToCommit(): EpicBranchDouble {
+    const refusing = new EpicBranchDouble(Mother.BRANCH)
+    refusing.commitRefusal = new EpicBranchNotPublished('git commit refused: a hook said no')
+
+    return refusing
+  }
+
+  static committingAndThenFailing(): EpicBranchDouble {
+    const landed = new EpicBranchDouble(Mother.BRANCH)
+    landed.commitRefusal = new EpicBranchNotPublished('the commit landed and git still reported a failure')
+    landed.commitLands = true
+
+    return landed
+  }
+
+  static withTheFreezeCommittedAndNotPushed(): EpicBranchDouble {
+    const resuming = new EpicBranchDouble(Mother.BRANCH)
+    resuming.isCommitted = true
+
+    return resuming
+  }
+
+  static withTheFreezeDelivered(): EpicBranchDouble {
+    const done = new EpicBranchDouble(Mother.BRANCH)
+    done.isCommitted = true
+    done.isPushed = true
+
+    return done
   }
 
   async publishable(root: CheckoutRoot): Promise<string> {
@@ -73,20 +112,46 @@ class EpicBranchDouble extends EpicBranch {
     return this.answer
   }
 
-  async publish(subject: PublishAsked): Promise<string> {
-    this.publishAsked.push(subject)
-    return this.answer
+  async committed(): Promise<boolean> {
+    return this.isCommitted
+  }
+
+  async commit(subject: CommitAsked): Promise<void> {
+    this.commitAsked.push(subject)
+    if (this.commitLands) this.isCommitted = true
+    if (this.commitRefusal !== null) throw this.commitRefusal
+    this.isCommitted = true
+  }
+
+  async pushed(): Promise<boolean> {
+    return this.isPushed
+  }
+
+  async push({ branch }: { root: CheckoutRoot, branch: string }): Promise<void> {
+    this.pushAsked.push(branch)
+    if (this.pushRefusal !== null) throw this.pushRefusal
+    this.isPushed = true
   }
 }
 
 class PullRequestsDouble extends PullRequests {
   answer: ReviewedPullRequest
   openAsked: OpenAsked[]
+  standing: ReviewedPullRequest | null
 
-  constructor(answer: ReviewedPullRequest) {
+  constructor(answer: ReviewedPullRequest, standing: ReviewedPullRequest | null = null) {
     super()
     this.answer = answer
     this.openAsked = []
+    this.standing = standing
+  }
+
+  static alreadyOpen(): PullRequestsDouble {
+    return new PullRequestsDouble(Mother.PULL_REQUEST, Mother.PULL_REQUEST)
+  }
+
+  async openOfBranch(): Promise<ReviewedPullRequest | null> {
+    return this.standing
   }
 
   async open(subject: OpenAsked): Promise<ReviewedPullRequest> {
@@ -100,6 +165,7 @@ class Mother {
   static readonly REPOSITORY = new RepositoryName('owner/name')
   static readonly BRANCH = 'epic/329-freeze'
   static readonly TODAY = () => new Date(2026, 8, 14)
+  static readonly ON = '2026-09-14'
   static readonly PULL_REQUEST: ReviewedPullRequest = Object.freeze({
     number: 12, url: 'https://github.com/owner/name/pull/12',
   })
@@ -252,7 +318,7 @@ describe('FreezeSpec', () => {
     expect(frozen.on).toBeNull()
     expect(frozen.pullRequest).toBeNull()
     expect(flow.specs.rewriteAsked).toEqual([])
-    expect(flow.branch.publishAsked).toEqual([])
+    expect(flow.branch.commitAsked).toEqual([])
     expect(flow.pullRequests.openAsked).toEqual([])
   })
 
@@ -270,7 +336,7 @@ describe('FreezeSpec', () => {
     expect(flow.specs.rewriteAsked).toEqual([
       { root: Mother.ROOT, spec, text: Mother.frozenText('2026-09-14') },
     ])
-    expect(flow.branch.publishAsked).toEqual([
+    expect(flow.branch.commitAsked).toEqual([
       {
         root: Mother.ROOT,
         paths: [Mother.DESIGN_PATH, Mother.PATH],
@@ -297,21 +363,7 @@ describe('FreezeSpec', () => {
     expect(frozen.on).toBeNull()
     expect(frozen.pullRequest).toBeNull()
     expect(flow.specs.rewriteAsked).toEqual([])
-    expect(flow.branch.publishAsked).toEqual([])
-    expect(flow.pullRequests.openAsked).toEqual([])
-  })
-
-  it('a spec already frozen is refused instead of being frozen twice', async () => {
-    const flow = Flow.freezing(Mother.frozen())
-
-    const frozen = await flow.run()
-
-    expect(frozen.outcome).toBe(FreezeOutcome.ALREADY_FROZEN)
-    expect(frozen.findings).toEqual([])
-    expect(frozen.on).toBeNull()
-    expect(frozen.pullRequest).toBeNull()
-    expect(flow.specs.rewriteAsked).toEqual([])
-    expect(flow.branch.publishAsked).toEqual([])
+    expect(flow.branch.commitAsked).toEqual([])
     expect(flow.pullRequests.openAsked).toEqual([])
   })
 
@@ -326,13 +378,13 @@ describe('FreezeSpec', () => {
     expect(refusal).toBeInstanceOf(EpicBranchNotPublished)
     expect(flow.branch.publishableAsked).toEqual([Mother.ROOT])
     expect(flow.specs.rewriteAsked).toEqual([])
-    expect(flow.branch.publishAsked).toEqual([])
+    expect(flow.branch.commitAsked).toEqual([])
     expect(flow.pullRequests.openAsked).toEqual([])
   })
 
-  it('a publish that fails after the state line is written puts the spec back as it was', async () => {
+  it('a commit that fails after the state line is written puts the spec back as it was', async () => {
     const spec = Mother.draftFreezable()
-    const flow = new Flow({ specs: new EpicSpecsDouble(spec), branch: EpicBranchDouble.refusingToPush() })
+    const flow = new Flow({ specs: new EpicSpecsDouble(spec), branch: EpicBranchDouble.refusingToCommit() })
 
     const refusal = await flow.run().catch((cause) => cause)
 
@@ -341,12 +393,68 @@ describe('FreezeSpec', () => {
     expect(flow.pullRequests.openAsked).toEqual([])
   })
 
+  it('a push that fails leaves the file agreeing with the commit instead of putting it back', async () => {
+    const spec = Mother.draftFreezable()
+    const flow = new Flow({ specs: new EpicSpecsDouble(spec), branch: EpicBranchDouble.refusingToPush() })
+
+    const refusal = await flow.run().catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(EpicBranchNotPublished)
+    expect(flow.specs.rewriteAsked.at(-1)!.text).toBe(spec.frozenAt(Mother.ON))
+    expect(flow.pullRequests.openAsked).toEqual([])
+  })
+
+  it('a commit that landed and still reported a failure leaves the file frozen, because the commit says frozen', async () => {
+    const spec = Mother.draftFreezable()
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(spec),
+      branch: EpicBranchDouble.committingAndThenFailing(),
+    })
+
+    const refusal = await flow.run().catch((cause) => cause)
+
+    expect(refusal).toBeInstanceOf(EpicBranchNotPublished)
+    expect(flow.specs.rewriteAsked.at(-1)!.text).toBe(spec.frozenAt(Mother.ON))
+    expect(flow.pullRequests.openAsked).toEqual([])
+  })
+
+  it('a freeze whose push failed resumes at the push when it is pressed again', async () => {
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(Mother.frozen()),
+      branch: EpicBranchDouble.withTheFreezeCommittedAndNotPushed(),
+    })
+
+    const frozen = await flow.run()
+
+    expect(frozen.outcome).toBe(FreezeOutcome.FROZEN)
+    expect(flow.specs.rewriteAsked).toEqual([])
+    expect(flow.branch.commitAsked).toEqual([])
+    expect(flow.branch.pushAsked).toEqual([Mother.BRANCH])
+    expect(frozen.pullRequest).toEqual(Mother.PULL_REQUEST)
+  })
+
+  it('a freeze pressed again after it fully succeeded says it is already frozen', async () => {
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(Mother.frozen()),
+      branch: EpicBranchDouble.withTheFreezeDelivered(),
+      pullRequests: PullRequestsDouble.alreadyOpen(),
+    })
+
+    const frozen = await flow.run()
+
+    expect(frozen.outcome).toBe(FreezeOutcome.ALREADY_FROZEN)
+    expect(flow.specs.rewriteAsked).toEqual([])
+    expect(flow.branch.commitAsked).toEqual([])
+    expect(flow.branch.pushAsked).toEqual([])
+    expect(flow.pullRequests.openAsked).toEqual([])
+  })
+
   it('a spec that names no design document raises instead of publishing half the epic', async () => {
     const flow = Flow.freezing(Mother.draftWithNoDesign())
 
     await expect(flow.run()).rejects.toThrow(EpicSpecNotUnderstood)
     expect(flow.specs.rewriteAsked).toEqual([])
-    expect(flow.branch.publishAsked).toEqual([])
+    expect(flow.branch.commitAsked).toEqual([])
     expect(flow.pullRequests.openAsked).toEqual([])
   })
 })
