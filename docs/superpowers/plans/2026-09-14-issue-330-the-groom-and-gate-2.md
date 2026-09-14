@@ -349,8 +349,8 @@ test "$(grep -c 'ref=' backend/src/infrastructure/gh-published-specs.ts)" -eq 0 
 
 ### Task 3 — The epic's issues on GitHub, read and promoted
 
-**Objective:** the backend lists a milestone's issues with their rung, and moves one from
-`status:backlog` to `status:ready` touching nothing else.
+**Objective:** the backend lists a milestone's issues with their rung, and moves one to
+`status:ready` touching nothing else.
 
 **Files:** `backend/src/domain/value-objects/epic-issue.ts` (create),
 `backend/src/domain/ports/epic-issues.ts` (create),
@@ -358,15 +358,15 @@ test "$(grep -c 'ref=' backend/src/infrastructure/gh-published-specs.ts)" -eq 0 
 `backend/src/infrastructure/gh-plan-issues.ts` (modify),
 `backend/src/domain/exceptions.ts` (modify),
 `backend/src/infrastructure/start-plan-route.ts` (modify),
-`backend/__tests__/infrastructure/gh-epic-issues.test.ts` (create)
+`backend/__tests__/infrastructure/gh-epic-issues.test.ts` (create),
+`backend/__tests__/infrastructure/plan-refusal.test.ts` (modify)
 
-The rung is read with the plugin's own `resolveStatus`, the loop's declared criterion, which
-already treats an issue with no `status:` label as `backlog`: this backend grows no second
-opinion (D-11). Both labels come from `GhPlanIssues`, where the ladder is already mapped —
+The rung is read with the plugin's own `resolveStatus`, which already treats an issue with no
+`status:` label as `backlog`: this backend grows no second opinion (D-11). Both labels come from `GhPlanIssues`, where the ladder is already mapped:
 `BACKLOG_LABEL` joins the three below, so the vocabulary stays declared once. Issues come back
-sorted by number ascending, the order the groom created them in; `--state all` is asked because a
-closed issue is still the milestone's and `isPromotable` keeps it from being dragged back. Three leaves join `PlanCollapse` as `epic-issues-not-read`,
-`epic-issues-not-understood` and `epic-issue-not-promoted`.
+sorted by number ascending, the order the groom created them in; `--state all` because a closed
+issue is still the milestone's and `isPromotable` keeps it out. Three leaves join `PlanCollapse` as `epic-issues-not-read`,
+`epic-issues-not-understood` and `epic-issue-not-promoted`; `plan-refusal.test.ts` learns them.
 
 Current state (backend/src/infrastructure/gh-plan-issues.ts, lines 49-51):
 
@@ -406,7 +406,7 @@ export class GhEpicIssues extends EpicIssues {
 `EpicIssue`s (no `status:` label, `status:backlog`, `status:in-progress`, a closed
 `status:backlog`) and only the first two answer `true`. Its
 boundary pair is `it('promoting adds status:ready and removes status:backlog and nothing else')`
-— `promoteArgvFor` carries exactly those two flags and no other.
+— `promoteArgvFor` carries exactly those two flags.
 
 **Tests:** in `gh-epic-issues.test.ts`: the two above,
 `the milestone is listed with every state and its issues come back sorted by number`,
@@ -418,7 +418,7 @@ boundary pair is `it('promoting adds status:ready and removes status:backlog and
 ```bash
 npm --prefix backend run typecheck   # expected: exit 0 — it type-checks
 npm --prefix backend test -- __tests__/infrastructure/gh-epic-issues.test.ts __tests__/infrastructure/gh-plan-issues.test.ts   # expected: exit 0
-test "$(grep -c "status:ready" backend/src/infrastructure/gh-epic-issues.ts)" -eq 0   # expected: exit 0 — the label is never spelled here
+test "$(grep -c "status:ready" backend/src/infrastructure/gh-epic-issues.ts)" -eq 0   # expected: exit 0 — never spelled here
 ```
 
 ### Task 4 — Gate 2's state, derived from evidence

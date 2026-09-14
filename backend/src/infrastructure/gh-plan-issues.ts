@@ -46,6 +46,7 @@ export class GhPlanIssues extends PlanIssues {
     new Map(GhPlanIssues.#RUNGS.map((named, at) => [named, LOOP_STATUS_LABELS[at]] as const))
   static #STATUS_BY_LABEL: ReadonlyMap<string, PlanIssueStatusValue> =
     new Map(GhPlanIssues.#RUNGS.map((named, at) => [LOOP_STATUS_LABELS[at], named] as const))
+  static BACKLOG_LABEL: string = GhPlanIssues.#LABEL_BY_STATUS.get(PlanIssueStatus.BACKLOG)!
   static IN_PROGRESS_LABEL: string = GhPlanIssues.#LABEL_BY_STATUS.get(PlanIssueStatus.IN_PROGRESS)!
   static IN_REVIEW_LABEL: string = GhPlanIssues.#LABEL_BY_STATUS.get(PlanIssueStatus.IN_REVIEW)!
   static READY_LABEL: string = GhPlanIssues.#LABEL_BY_STATUS.get(PlanIssueStatus.READY)!

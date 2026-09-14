@@ -55,6 +55,7 @@ describe('PlanCollapse', () => {
     'PlanProgressFailure', 'PlanStatusFailure', 'GoFailure', 'HarvestFailure', 'PlanStoryFailure',
     'ImplementationProgressFailure', 'ImplementationHistoryFailure', 'PullRequestFailure', 'WorkbenchFailure',
     'ConversationFailure', 'SessionHooksFailure', 'SpecFreezeFailure', 'EpicGroomFailure',
+    'EpicIssuesFailure',
   ]
 
   const RESUMING_AN_AGENT = ImplementCollapse.declaredFailures()

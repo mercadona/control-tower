@@ -120,3 +120,11 @@ export class EpicGroomFailure extends PlanFailure {}
 export class EpicNotGroomed extends EpicGroomFailure {}
 
 export class GroomPlanNotUnderstood extends EpicGroomFailure {}
+
+export class EpicIssuesFailure extends PlanFailure {}
+
+export class EpicIssuesNotRead extends EpicIssuesFailure {}
+
+export class EpicIssuesNotUnderstood extends EpicIssuesFailure {}
+
+export class EpicIssueNotPromoted extends EpicIssuesFailure {}
