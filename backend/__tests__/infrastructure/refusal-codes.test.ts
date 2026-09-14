@@ -9,6 +9,7 @@ import { SessionStreamOutcome } from '../../src/infrastructure/session-stream-ro
 import { SessionInputOutcome } from '../../src/infrastructure/session-input-route.ts'
 import { CoordinatingSessionOutcome } from '../../src/infrastructure/coordinating-session-route.ts'
 import { SessionHookOutcome } from '../../src/infrastructure/session-hooks-route.ts'
+import { SpecFreezeOutcome } from '../../src/infrastructure/spec-freeze-route.ts'
 
 class RequestVocabularies {
   static readonly #ACCEPTED = 'accepted'
@@ -24,6 +25,7 @@ class RequestVocabularies {
       ...Object.values(SessionInputOutcome),
       ...Object.values(CoordinatingSessionOutcome),
       ...Object.values(SessionHookOutcome),
+      ...Object.values(SpecFreezeOutcome),
     ].filter((outcome) => outcome !== RequestVocabularies.#ACCEPTED)
   }
 }
