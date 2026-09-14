@@ -509,8 +509,9 @@ Every answer is computed on the call and nothing is written down, which is D-13.
 branch to publish and no pull request to find. `frozen` when `spec.isFrozen()`: `frozenOn` is
 `spec.frozenOn()`, and only there does it ask `branch.current(root)` and then
 `pullRequests.openOfBranch({ branch, repository })`, whose `null` — merged already, or never
-opened — is a state and not a failure. This task also brings `EpicSpec#findings()` and
-`#isFreezable()` under test, which is where `conventions/testing.md` puts the domain's coverage.
+opened — is a state and not a failure. This task brings `EpicSpec#findings()` under test, which is
+where `conventions/testing.md` puts the domain's coverage; `#isFreezable()` has no caller here and
+Task 6 is what covers it.
 
 Contract (backend/src/application/queries/read-spec-freeze.ts):
 
