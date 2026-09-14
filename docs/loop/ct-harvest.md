@@ -6,6 +6,7 @@ The invocation:
 
 ```
 node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-harvest.mjs --repo "<owner/repo>" --milestone "<epic title>" [--json] [--bq <project:dataset.table>]
+node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-harvest.mjs --schema
 ```
 
 
@@ -85,11 +86,34 @@ Two more columns, and they exist for one question: **comparing two coding tools 
 
 ## To BigQuery, with the `bq` CLI
 
-`--bq <project:dataset.table>` loads the harvest into that table when it finishes, with the `bq` you already have authenticated (like `gh`): a `bq load` of an NDJSON, one row per slice and harvest, with `harvest_id` and `harvested_at`. Every run is **appended** as a snapshot; nothing is overwritten. The schema travels in the plugin, the table is created on the first load if it does not exist and a new column from a later version is added on its own (`ALLOW_FIELD_ADDITION`). The dataset and its permissions belong to whoever owns the project, not to the command.
+`--bq <project:dataset.table>` loads the harvest into that table when it finishes, with the `bq` you already have authenticated (like `gh`): a `bq load` of an NDJSON, one row per slice and harvest, with `harvest_id` and `harvested_at`. Every run is **appended** as a snapshot; nothing is overwritten. The schema travels in the plugin, and a new column from a later version is added on its own (`ALLOW_FIELD_ADDITION`).
+
+**The ledger lands at `<project>:<dataset>.<table>`.** That is the destination `CT_HARVEST_BQ_TABLE` names for the automatic harvest, and the one to pass to `--bq` by hand. It follows the company's `<domain>_incoming` raw convention, and it is its own dataset because writing into a consuming tool's own datasets is not safe: those are managed by dbt and by a streaming subscription, so a raw landing dataset of our own is the safe choice. See `docs/superpowers/specs/2026-09-11-harvest-ledger-landing-in-bigquery-design.md` for the full design.
+
+**The dataset and the table are created ONCE, by hand, before the first load.** A `bq load` into a table that does not exist would create it unpartitioned — the table's whole point is being partitioned by `harvested_at` and clustered by `repo, milestone`, and neither of those survives an auto-create. Run once, after merge:
+
+```sh
+bq --project_id=<project> mk --dataset --location=EU \
+  --description="Control Tower raw landing. One row per merged slice per harvest." \
+  --label=source:control-tower \
+  <project>:<dataset>
+
+node plugin/scripts/ct-harvest.mjs --schema > /tmp/slices.schema.json
+bq --project_id=<project> mk --table \
+  --time_partitioning_type=DAY --time_partitioning_field=harvested_at \
+  --clustering_fields=repo,milestone \
+  --description="Harvest ledger. Append-only. Take the latest harvest_id per (repo, issue). NULL means not measured." \
+  --schema=/tmp/slices.schema.json \
+  <project>:<dataset>.<table>
+```
+
+The dataset and its permissions belong to whoever owns the project, not to the command.
+
+**Reading it.** Filter by `harvested_at` (when the harvest ran) or `report_date` (the day it covers, `DATE`, derived from `harvested_at`). The table is append-only: a slice re-harvested twice leaves two rows, so take the **latest `harvest_id` per `(repo, issue)`** — `QUALIFY ROW_NUMBER() OVER (PARTITION BY repo, issue ORDER BY harvested_at DESC) = 1`. And `NULL` is not `0`: every gap this document names above (a phase that never happened, telemetry older than a column, a role nobody dispatched) lands `NULL` in BigQuery too, never an invented zero.
 
 **Only a complete harvest is loaded.** With unfinished reads `bq` is not invoked: the harvest is redone from GitHub, so nothing is lost. **No `—` of the report arrives as a `0`: the rule belongs to the COLUMN, not to the cell**, and a combined cell hands out one `NULL` per column that composes it — the map is below. If `bq` fails, the reason carries the code, the diagnosis, the directory with the files and the exact command to retry by hand. Everything about BigQuery goes to stderr: stdout is still the table or the JSON. Without the flag, nothing changes.
 
-**From the cell to the column.** One to one: every `—` of a phase is a `NULL` in its `*_seconds`, and a slice with no PR leaves `pr`, `additions`, `deletions`, `changed_files`, `reviews` and `review_comments` at `NULL`; the `*` of `release→merge` is not a column, it is `merge_source = 'issue-closed'`. Combined, in the telemetry: `Verdicts` is `verdicts`, `verdicts_fail` and `rubric_sin_vara_legacy`; `sin-vara` is `rubric_sin_vara`; `high/medium/low` are `findings_high`, `findings_medium`, `findings_low` and `findings_severity_legacy`; `Findings by rule` is `findings_by_rule` (a repeated record of `{rule, findings}`, which goes `[]` and not `NULL` when there are no verdicts or there is no file); `vara ct` are `rubric_vara_ct_docs`, `findings_vara_ct`, `rubric_vara_ct_docs_legacy` and `findings_vara_ct_legacy`; `brief` are `brief_vara_ct_docs`, `brief_bytes`, `brief_legacy` and `brief_attempts`; `bytes per role` are `agent_bytes`, `skill_bytes`, `package_bytes`, `role_bytes_legacy` and `role_bytes_attempts`; `returns` are `judge_vetoes`, `judge_corrections_ordered`, `judge_returns` and `judge_attempts`; `tool` are `tool` and `tool_version`; `tokens` are `tool_input_tokens`, `tool_cached_input_tokens`, `tool_output_tokens`, `tool_total_tokens`, `tool_usage_status`, `tool_usage_attempts`, `tool_usage_measured` and `tool_usage_gaps`, with `tool_duration_status` and `tool_active_duration_ms` beside them. With a `telemetry_status` other than `ok`, every count goes `NULL`.
+**From the cell to the column.** One to one: every `—` of a phase is a `NULL` in its `*_seconds`, and a slice with no PR leaves `pr`, `additions`, `deletions`, `changed_files`, `reviews` and `review_comments` at `NULL`; the `*` of `release→merge` is not a column, it is `merge_source = 'issue-closed'`. `report_date` is not a cell of the report: it is `DATE(harvested_at)`, added at the row's projection so a BigQuery reader can filter by day without parsing the timestamp. `implementer_email` collapses the `actor` of every step row of the slice the same way `tool` does (one value, `(mixed)` for two or more, `NULL` for none), and `tool_account_email` collapses the Claude Code OAuth account of every step the same way. Combined, in the telemetry: `Verdicts` is `verdicts`, `verdicts_fail` and `rubric_sin_vara_legacy`; `sin-vara` is `rubric_sin_vara`; `high/medium/low` are `findings_high`, `findings_medium`, `findings_low` and `findings_severity_legacy`; `Findings by rule` is `findings_by_rule` (a repeated record of `{rule, findings}`, which goes `[]` and not `NULL` when there are no verdicts or there is no file); `vara ct` are `rubric_vara_ct_docs`, `findings_vara_ct`, `rubric_vara_ct_docs_legacy` and `findings_vara_ct_legacy`; `brief` are `brief_vara_ct_docs`, `brief_bytes`, `brief_legacy` and `brief_attempts`; `bytes per role` are `agent_bytes`, `skill_bytes`, `package_bytes`, `role_bytes_legacy` and `role_bytes_attempts`; `returns` are `judge_vetoes`, `judge_corrections_ordered`, `judge_returns` and `judge_attempts`; `tool` are `tool`, `tool_version` and `tool_account_email`; `tokens` are `tool_input_tokens`, `tool_cached_input_tokens`, `tool_output_tokens`, `tool_total_tokens`, `tool_usage_status`, `tool_usage_attempts`, `tool_usage_measured` and `tool_usage_gaps`, with `tool_duration_status` and `tool_active_duration_ms` beside them. With a `telemetry_status` other than `ok`, every count goes `NULL`.
 
 **Every one of those columns is additive and `NULLABLE`, on purpose.** Telemetry written before this measure stays valid: it lands `NULL` with `tool_usage_status = 'absent'`, which is not the same row as one whose tool measured a real zero — that one lands `0`.
 

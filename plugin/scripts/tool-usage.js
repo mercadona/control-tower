@@ -9,8 +9,19 @@ export const UsageStatus = Object.freeze({
   ABSENT: 'absent',
 })
 
-export class ToolIdentity {
+export class IdentityCollapse {
   static MIXED = '(mixed)'
+
+  static of(values, { blank } = {}) {
+    const relevant = blank === undefined ? values : values.filter((value) => value !== blank)
+    if (relevant.length === 0) return null
+    const unique = [...new Set(relevant)]
+    return unique.length === 1 ? unique[0] : IdentityCollapse.MIXED
+  }
+}
+
+export class ToolIdentity {
+  static MIXED = IdentityCollapse.MIXED
   static UNKNOWN = null
 
   constructor({ tool, version }) {
@@ -279,9 +290,7 @@ export class ToolUsageTotal {
   }
 
   static #agreedOn(values) {
-    const unique = [...new Set(values)]
-    if (unique.length === 1) return unique[0]
-    return ToolIdentity.MIXED
+    return IdentityCollapse.of(values)
   }
 
   static #collapse({ attempts, measured, statuses }) {

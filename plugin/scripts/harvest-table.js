@@ -23,6 +23,7 @@ export class HarvestColumn {
 
   static STRING = 'STRING'
   static TIMESTAMP = 'TIMESTAMP'
+  static DATE = 'DATE'
   static INTEGER = 'INTEGER'
   static RECORD = 'RECORD'
 
@@ -47,7 +48,7 @@ export class HarvestColumn {
     return projection
   }
 
-  static #TYPES = Object.freeze([HarvestColumn.STRING, HarvestColumn.TIMESTAMP, HarvestColumn.INTEGER, HarvestColumn.RECORD])
+  static #TYPES = Object.freeze([HarvestColumn.STRING, HarvestColumn.TIMESTAMP, HarvestColumn.DATE, HarvestColumn.INTEGER, HarvestColumn.RECORD])
   static #MODES = Object.freeze([HarvestColumn.REQUIRED, HarvestColumn.NULLABLE, HarvestColumn.REPEATED])
 }
 
@@ -128,6 +129,10 @@ export class HarvestTable {
     new HarvestColumn({ name: 'findings', type: HarvestColumn.INTEGER, mode: HarvestColumn.REQUIRED, valueOf: HarvestTable.#ruleCountEntryField(1) }),
   ]
 
+  static #reportDate(row, identity) {
+    return HarvestTable.#valueAt(identity, 'harvestedAt').slice(0, 10)
+  }
+
   static #findingsByRuleRows(row) {
     const telemetry = HarvestTable.#valueAt(row, 'telemetry')
     if (telemetry.status !== TelemetryStatus.OK) return []
@@ -139,10 +144,12 @@ export class HarvestTable {
   static SCHEMA = [
     new HarvestColumn({ name: 'harvest_id', type: HarvestColumn.STRING, mode: HarvestColumn.REQUIRED, valueOf: HarvestTable.#fromIdentity('harvestId') }),
     new HarvestColumn({ name: 'harvested_at', type: HarvestColumn.TIMESTAMP, mode: HarvestColumn.REQUIRED, valueOf: HarvestTable.#fromIdentity('harvestedAt') }),
+    new HarvestColumn({ name: 'report_date', type: HarvestColumn.DATE, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#reportDate }),
     new HarvestColumn({ name: 'repo', type: HarvestColumn.STRING, mode: HarvestColumn.REQUIRED, valueOf: HarvestTable.#fromIdentity('repo') }),
     new HarvestColumn({ name: 'milestone', type: HarvestColumn.STRING, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#fromIdentity('milestone') }),
     new HarvestColumn({ name: 'plugin_version', type: HarvestColumn.STRING, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#fromIdentity('pluginVersion') }),
     new HarvestColumn({ name: 'actor', type: HarvestColumn.STRING, mode: HarvestColumn.REQUIRED, valueOf: HarvestTable.#fromIdentity('actor') }),
+    new HarvestColumn({ name: 'implementer_email', type: HarvestColumn.STRING, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('implementerEmail') }),
     new HarvestColumn({ name: 'issue', type: HarvestColumn.INTEGER, mode: HarvestColumn.REQUIRED, valueOf: HarvestTable.#fromRow('issue') }),
     new HarvestColumn({ name: 'title', type: HarvestColumn.STRING, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#fromRow('title') }),
     new HarvestColumn({ name: 'type', type: HarvestColumn.STRING, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#fromRow('type') }),
@@ -188,6 +195,7 @@ export class HarvestTable {
     new HarvestColumn({ name: 'package_bytes', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryMeasured('roleMeasured', 'packageBytes') }),
     new HarvestColumn({ name: 'tool', type: HarvestColumn.STRING, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('tool') }),
     new HarvestColumn({ name: 'tool_version', type: HarvestColumn.STRING, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('toolVersion') }),
+    new HarvestColumn({ name: 'tool_account_email', type: HarvestColumn.STRING, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('toolAccountEmail') }),
     new HarvestColumn({ name: 'tool_usage_status', type: HarvestColumn.STRING, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('toolUsageStatus') }),
     new HarvestColumn({ name: 'tool_usage_attempts', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('toolUsageAttempts') }),
     new HarvestColumn({ name: 'tool_usage_measured', type: HarvestColumn.INTEGER, mode: HarvestColumn.NULLABLE, valueOf: HarvestTable.#whenTelemetryIsOk('toolUsageMeasured') }),

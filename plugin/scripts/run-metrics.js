@@ -75,6 +75,7 @@ import { createHash } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { NO_MILESTONE_KEY } from './gh-issue-map.js'
+import { IdentityCollapse } from './tool-usage.js'
 import { YardstickCitation } from './yardstick-citation.js'
 
 // The identity fields of §10.1 of the spec, in order: where and against what
@@ -512,5 +513,39 @@ export function aggregateRoleBytesMeasures(text) {
     agentBytes: roleMeasured ? agentBytes : null,
     skillBytes: roleMeasured ? skillBytes : null,
     packageBytes: roleMeasured ? packageBytes : null,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// FOURTH SIBLING of the three aggregators above: who implemented the slice,
+// and whose Claude Code account ran it. Every row already carries `actor`
+// (§ IDENTITY_FIELDS, normalized to NO_ACTOR_KEY when absent); a row of
+// `ct-step` may additionally carry `tool_account_email`, written only when
+// the tool is Claude Code (see claude-code-account.js).
+//
+// BOTH COLLAPSE WITH THE SAME RULE `ToolUsageTotal` already applies to
+// `tool`/`tool_version` (IdentityCollapse): one distinct value across the
+// file, `(mixed)` for two or more, null for none. The sentinel counts as
+// "no signal" for `actor`, exactly like `null` does for `tool_account_email`
+// — a slice nobody wrote (or that only Claude Code did not run) is silence,
+// not a third identity.
+export function aggregateIdentityMeasures(text) {
+  const actors = []
+  const toolAccountEmails = []
+  for (const line of String(text ?? '').split('\n')) {
+    if (line.trim() === '') continue
+    let row
+    try {
+      row = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) continue
+    if (Object.hasOwn(row, 'actor')) actors.push(row.actor)
+    if (Object.hasOwn(row, 'tool_account_email')) toolAccountEmails.push(row.tool_account_email)
+  }
+  return {
+    implementerEmail: IdentityCollapse.of(actors, { blank: NO_ACTOR_KEY }),
+    toolAccountEmail: IdentityCollapse.of(toolAccountEmails, { blank: null }),
   }
 }
