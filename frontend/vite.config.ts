@@ -5,7 +5,7 @@ import { defineConfig, type HttpProxy } from 'vite'
 
 const BACKEND = 'http://127.0.0.1:8787'
 const ORIGIN_HEADER = 'origin'
-const API_PATHS = ['/start-plan', '/plan-events', '/implement-plan', '/implement-progress', '/implement-history', '/active-plans', '/external-tools', '/sessions', '/coordinating-session', '/session-hooks']
+const API_PATHS = ['/start-plan', '/plan-events', '/implement-plan', '/implement-progress', '/implement-history', '/active-plans', '/external-tools', '/sessions', '/coordinating-session', '/session-hooks', '/spec-freeze']
 
 const sourceRoot = (folder: string) => fileURLToPath(new URL(`./src/${folder}`, import.meta.url))
 

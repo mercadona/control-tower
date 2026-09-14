@@ -764,8 +764,9 @@ Call site (backend/src/infrastructure/api-server.ts):
 `api-server.test.ts` — a `GET` reaches the doubled query and a `DELETE` answers `405` with `Allow:
 GET, POST`. Then, in `ct-api-real-process.test.ts`,
 `it('a_whole_request_to_spec_freeze_reaches_the_wiring_the_entrypoint_built')` — the entrypoint
-started for real answers `200 {"status":"none"}`, which a mistyped collaborator could not do
-because constructing it is what boots the server.
+started with `CLAUDE_CONFIG_DIR` on a `mkdtemp` directory, the way the two tests above it already
+isolate their state root, answers `200 {"status":"none"}`. Without that isolation it recovers
+whatever coordinating session this machine holds, reads that checkout's spec and reaches GitHub.
 
 **Tests:** the two named above. No test pins the vite proxy: it is development configuration that
 `make dev-frontend` exercises and no suite loads.

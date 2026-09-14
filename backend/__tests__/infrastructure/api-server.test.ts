@@ -38,6 +38,19 @@ import { DiskGoRegistry } from '../../src/infrastructure/disk-go-registry.ts'
 import { DiskImplementationStartRegistry } from '../../src/infrastructure/disk-implementation-start-registry.ts'
 import { ReviewWatch } from '../../src/infrastructure/review-watch.ts'
 import { WorktreePlans } from '../../src/infrastructure/worktree-plans.ts'
+import { GateKey } from '../../src/infrastructure/gate-key.ts'
+import {
+  CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
+} from '../../src/infrastructure/coordinating-sessions.ts'
+import { ReadSpecFreeze, ReadSpecFreezeParams, SpecFreezeRead, SpecFreezeState } from '../../src/application/queries/read-spec-freeze.ts'
+import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
+import { EpicBranch } from '../../src/domain/ports/epic-branch.ts'
+import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
+import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
+import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
+import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
+import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
+import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
 
 class StartPlanSpy extends StartPlan {
   static readonly AGENT = 'workspace:4'
@@ -385,6 +398,45 @@ class RunningApi {
         resolve()
       })
     })
+  }
+}
+
+class ReadSpecFreezeSpy extends ReadSpecFreeze {
+  readonly asked: ReadSpecFreezeParams[]
+  readonly answer: SpecFreezeRead
+
+  constructor(answer: SpecFreezeRead) {
+    super({ specs: new EpicSpecs(), branch: new EpicBranch(), pullRequests: new PullRequests() })
+    this.asked = []
+    this.answer = answer
+  }
+
+  async execute(params: ReadSpecFreezeParams): Promise<SpecFreezeRead> {
+    this.asked.push(params)
+
+    return this.answer
+  }
+}
+
+class CoordinatingSessionFixture {
+  static readonly CONVERSATION = new CoordinatingConversation({
+    id: new ConversationId('2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'),
+    repository: new RepositoryName('owner/name'),
+    root: new CheckoutRoot('/repo/checkout'),
+  })
+
+  static readonly SESSION = new LiveSession({ id: 'session-1', name: 'brainstorming' })
+
+  static live(): CoordinatingSessions {
+    const held = new CoordinatingSessions({ stderr: () => undefined })
+    held.remember(new HeldCoordinatingSession({
+      state: CoordinatingSessionState.LIVE,
+      conversation: CoordinatingSessionFixture.CONVERSATION,
+      session: CoordinatingSessionFixture.SESSION,
+      attention: SessionAttention.working(),
+    }))
+
+    return held
   }
 }
 
@@ -1349,5 +1401,23 @@ describe('ApiServer', () => {
       code: 'active-plans-recovery-inconclusive',
       detail: answered,
     })
+  })
+
+  it('the_spec_freeze_read_is_served_and_another_method_on_its_path_is_refused', async () => {
+    const coordinatingSessions = CoordinatingSessionFixture.live()
+    const readSpecFreeze = new ReadSpecFreezeSpy(
+      new SpecFreezeRead({ state: SpecFreezeState.NO_SPEC, spec: null, findings: [], frozenOn: null, pullRequest: null })
+    )
+    const gateKey = new GateKey({ random: (size) => Buffer.alloc(size, 1) })
+    const port = await RunningApi.listening({ coordinatingSessions, readSpecFreeze, gateKey })
+
+    const response = await fetch(`http://127.0.0.1:${port}/spec-freeze`)
+    const refused = await fetch(`http://127.0.0.1:${port}/spec-freeze`, { method: 'DELETE' })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ status: 'no-spec' })
+    expect(readSpecFreeze.asked).toHaveLength(1)
+    expect(refused.status).toBe(405)
+    expect(refused.headers.get('allow')).toBe('GET, POST')
   })
 })

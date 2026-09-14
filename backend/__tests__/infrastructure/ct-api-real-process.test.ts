@@ -463,6 +463,17 @@ describe('ct-api entrypoint', () => {
     expect((await response.json() as Failure).code).toBe('not-watched')
   })
 
+  it('a_whole_request_to_spec_freeze_reaches_the_wiring_the_entrypoint_built', async () => {
+    const state = await mkdtemp(join(tmpdir(), 'ct-api-spec-freeze-'))
+    const port = await Entrypoint.listening({ CT_API_PORT: '0', CLAUDE_CONFIG_DIR: state })
+
+    const response = await fetch(`http://127.0.0.1:${port}/spec-freeze`)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ status: 'none' })
+    await RunFileFixture.remove(state)
+  })
+
   it('review_plan_is_no_longer_mounted_in_the_real_process', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })
 

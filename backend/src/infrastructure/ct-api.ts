@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import {
   mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs'
@@ -38,6 +38,9 @@ import { LocalSettingsSessionHooks } from './local-settings-session-hooks.ts'
 import { DiskConversationRecords } from './disk-conversation-records.ts'
 import { CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState } from './coordinating-sessions.ts'
 import { SessionHooksRoute } from './session-hooks-route.ts'
+import { DiskEpicSpecs } from './disk-epic-specs.ts'
+import { GitEpicBranch } from './git-epic-branch.ts'
+import { GateKey } from './gate-key.ts'
 import { CmuxWorkspaceQuery } from '../../../plugin/scripts/cmux.js'
 import { StartPlan } from '../application/actions/start-plan.ts'
 import { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
@@ -47,6 +50,8 @@ import { ImplementPlan } from '../application/actions/implement-plan.ts'
 import { ReadPlanProgress, ReadPlanProgressParams } from '../application/queries/read-plan-progress.ts'
 import { ReadImplementationProgress } from '../application/queries/read-implementation-progress.ts'
 import { ReadImplementationHistory } from '../application/queries/read-implementation-history.ts'
+import { ReadSpecFreeze } from '../application/queries/read-spec-freeze.ts'
+import { FreezeSpec } from '../application/actions/freeze-spec.ts'
 import { ReadFixesAsked, ReadFixesAskedParams } from '../application/queries/read-fixes-asked.ts'
 import { RequestFixes, RequestFixesParams } from '../application/actions/request-fixes.ts'
 import { SurveyWorkspaces, SurveyWorkspacesParams } from '../application/queries/survey-workspaces.ts'
@@ -163,6 +168,15 @@ class Disk {
       return true
     } catch {
       return false
+    }
+  }
+
+  static async list(path: string): Promise<string[] | null> {
+    try {
+      return await readdir(path)
+    } catch (failure) {
+      if (Disk.#isMissing(failure)) return null
+      throw failure
     }
   }
 }
@@ -500,6 +514,13 @@ class CtApi {
       sessionHooks,
       records: conversationRecords,
     })
+    const epicSpecs = new DiskEpicSpecs({ list: Disk.list, read: Disk.read, write: Disk.write })
+    const epicBranch = new GitEpicBranch({ run: git })
+    const gateKey = new GateKey({ random: randomBytes })
+    const readSpecFreeze = new ReadSpecFreeze({ specs: epicSpecs, branch: epicBranch, pullRequests })
+    const freezeSpec = new FreezeSpec({
+      specs: epicSpecs, branch: epicBranch, pullRequests, now: () => new Date(),
+    })
     const server = new ApiServer({
       port: asked.port,
       startPlan: CtApi.#startPlan(workspace, planAgents, planIssues, checkouts, userStories),
@@ -530,6 +551,9 @@ class CtApi {
       typeIntoSession: new TypeIntoSession({ liveSessions }),
       openCoordinatingSession,
       coordinatingSessions,
+      readSpecFreeze,
+      freezeSpec,
+      gateKey,
       stderr: (line) => process.stderr.write(line),
       frontendRoot: FrontendBuild.root(),
     })
