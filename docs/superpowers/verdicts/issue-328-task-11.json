@@ -1,0 +1,57 @@
+{
+  "issue": 328,
+  "task": 11,
+  "task_name": "The entrance's one button opens the brainstorming",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises three things and the diff produces all three. (a) 'keeps its fields and its validation': every FormField, the touched/blur logic and the whole canStart expression are context lines in the diff, unchanged. (b) 'its single button opens the brainstorming': the button's literal is now 'Arrancar brainstorming' and the sending label 'Abriendo el brainstorming', the submit handler is renamed openBrainstorming and calls `const outcome = await CoordinatingSessionClient.open(submission)` with the very same StartPlanSubmission it built before. (c) 'instead of starting a plan': the StartPlanClient import is gone and frontend/src/app/start-plan/client.ts is untouched, as the brief requires. The callbacks are renamed to onOpened(outcome.opened, submitted) and onUnreachable(submitted). Home.tsx still passes onStarted/onBackendUnreachable and therefore no longer typechecks, but that call site is Task 12's by the plan's own split (Task 12 lists frontend/src/pages/home/Home.tsx and its suites), so it is not a gap this task owed.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The TDD line names two tests and both are in the diff with the assertion it states. `it('opens the brainstorming with the ticket and the comment')` stubs the client (vi.mock of app/coordinating-session/client) and asserts the literal submission it received: `expect(CoordinatingSessionClient.open).toHaveBeenCalledWith({ id: StartPlanMother.TICKET, userComment: StartPlanMother.COMMENT, repo: StartPlanMother.REPO, path: StartPlanMother.PATH })` — the same four keys {id, userComment, repo, path} the plan wrote, over the values typed into the four fields. `it('opens nothing while the repository or the path is missing')` types only the ticket and asserts `expect(CoordinatingSessionClient.open).not.toHaveBeenCalled()` plus neither callback fired. Same assertion, same input, same expected value as the written phrase.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "Symbol by symbol against the brief's Current state block and its prose. Button literal: 'Arrancar brainstorming' exactly as §2 closed it; sending label: 'Abriendo el brainstorming' exactly. Props: `onOpened: (opened: OpenedCoordinatingSession, request: StartPlanRequest) => void` and `onUnreachable: (request: StartPlanRequest) => void`, i.e. onOpened(opened, request) and onUnreachable(request) as written. Call: CoordinatingSessionClient.open(submission) with the unchanged StartPlanSubmission. The refusal type narrows the new union the same way the old one did (`type OpenRefusal = Exclude<OpenOutcome, { kind: 'opened' }>`), and OpenOutcome/OpenedCoordinatingSession are consumed with the shapes app/coordinating-session/CoordinatingSession.types.ts declares. Untouched as the brief demands: the locked summary, the field validation, the refusal Banner, the start-plan-help text and frontend/src/app/start-plan/client.ts.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Row by row. 'The entrance button's literal — decided by the coordinating session': the diff writes 'Arrancar brainstorming' verbatim, Spanish product copy, not reworded. D-26 (the idea enters through the form the cabin already has, its one button opens the brainstorming, the short-path endpoint stays as it is): the four fields and their validation are untouched, the button opens the coordinating session, and start-plan/client.ts is not in the diff. D-1, D-18 and D-21 bear on the page and the terminal, which this diff does not touch. D-13, D-25, D-10, D-11, D-16 and D-22 have no subject in a frontend form change; nothing in the diff reopens any of them.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Yardsticks read: ct's eight documents, CLAUDE.md, frontend/README.md, .agent/conventions-ack.md; skills loaded with Skill: frontend-engineering:frontend-best-practices (and its references/testing-patterns.md) and control-tower-loop:test-driven-development. conventions/defects.md, rule by rule: (1) closed vocabulary — the diff dispatches over the discriminated union OpenOutcome by `kind` with an early return for 'opened' and no catch-all default; the loose `code: string` inside the refused variant was declared in Task 10's types file, is not touched here and is never compared by hand in this diff. (2) raw map as the return value of logic — no subject: what crosses is the typed StartPlanSubmission/StartPlanRequest and the typed OpenOutcome, never a bare map. (3) two fields that have to agree / sentinel — no subject introduced: absence travels as `null` in the type (`id: hasWellFormedTicket ? ticketKey : null`), not as an empty string; the pre-existing duplication of submission into `submitted` is a context line this diff neither adds nor widens. (4) an error named for where it happens — no subject: the diff introduces no error type. conventions/style.md: no comment or docstring added, every identifier English (openBrainstorming, OpenRefusal, onOpened, onUnreachable, typeTicket, submitButton), Spanish only in what renders, which CLAUDE.md's one exemption covers; both files are (modify) and the module-level arrow consts follow the host's idiom, and no new concept is smuggled into them. conventions/testing.md: the assertion is on the observable effect — what the collaborator received and what the callbacks got — and the mother's constants are now imported from CoordinatingSessionMother/StartPlanMother instead of re-typed, which is what the antipattern 'the mother's constants duplicated in the test' asks for. conventions/architecture.md, domain.md, boundaries.md and decisions.md: no layer, port, adapter or business rule is added or moved; no decision is written twice. Two clashes declared and deliberately left out of the findings, per this item's first calibration case: (i) the frontend skill's `it('should <action>')` default versus the exact test names the plan pins in **Tests:** — the implementer could not satisfy both, and the host file's own pre-existing tests already read without 'should'; (ii) the same skill's 'keep helpers in the feature's __tests__/helpers.ts' versus this task's **Files:**, which allows exactly two files. Likewise the module-level double of the client rather than the repo's usual fetch stub is what the **TDD:** line orders ('the client stubbed', assertion on the camelCase submission, which never reaches the wire).",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The only `-` lines in StartPlanForm.test.tsx are the old import line and the body of the `renderForm` helper, which changed `onStarted={vi.fn()} onBackendUnreachable={vi.fn()}` into `onOpened`/`onUnreachable` spies it now returns. No assertion, case or test was removed, relaxed or rewritten: the two pre-existing tests ('shows specific field errors only after a field has been blurred' and 'marks a cleared required field invalid after blur without changing its label semantics') keep every assertion verbatim, and the helper rename is exactly the prop rename the **Objective:** and the brief's contract prose ask for.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised behaviour lives in production code: StartPlanForm.tsx is what imports CoordinatingSessionClient, what calls open(submission), what renders 'Arrancar brainstorming' and 'Abriendo el brainstorming', and what invokes onOpened/onUnreachable. The test's scaffolding (the vi.mock of the client, the OPENED/REFUSED/UNREACHABLE outcome values, the typing helpers) only feeds and observes it; revert the production hunk and the assertions on `CoordinatingSessionClient.open` and on the button's accessible name both fall.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Inside the two declared files every line traces to a sentence of the task: the client swap, the two literals, the two renamed callbacks, the five test names the **Tests:** line spells and the typing helpers those tests need. Nothing named in ### Out of scope is touched — no brainstorming skill, no /start-plan use case or adapter, no Home stage. The third path is the plan file, so I read that hunk line by line: it inserts a new '### Task 13 — The argv assertion pins its constants, and the record's two causes are told apart' with its own Files/TDD/Tests/Verification, renumbers the documentation task to 'Task 14' and its 'Tasks 1 to 12' to 'Tasks 1 to 13', and adds decision 15 ('A fourteenth task closes two findings this run raised', with provenance) renumbering the old 15 to 16 ('Fourteen tasks'). It removes no path from any **Files:** line, does not touch Task 11's own **Tests:**, **TDD:** or **Verification:** commands, weakens no control anywhere in the plan and adds work rather than dropping it; the numbering is left coherent across the file. An honest amendment, and the context given attributes it to the driving session.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "Five new tests, measured on the three properties. Deterministic: no clock, no date, no network, no filesystem, no randomness and no sleep — only userEvent, a resolved value on the doubled client and waitFor. Isolated: the double is reset in `beforeEach(() => vi.mocked(CoordinatingSessionClient.open).mockReset())`, each test sets its own resolved outcome, each renders its own form and returns its own spies, and no test depends on the order of the others. Verifies real behaviour: the assertions are on what the real component handed the collaborator (`toHaveBeenCalledWith({id, userComment, repo, path})`), on what it handed the callbacks, on the alert's text and on the field values still on screen; with the production hunk reverted the component would call StartPlanClient.start and render 'Arrancar plan', so `submitButton()` and every open() assertion would fail. Loaded control-tower-loop:test-driven-development and its testing-anti-patterns.md reference for the finer half: the doubled outcomes are complete for their union variants (anti-pattern 4), the assertions are on the component's effects rather than on the mock's existence (anti-pattern 1), no test-only method reaches production, and the mock setup is three short constants. Nothing to report beyond the three.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "87cbcbd16d00533fdd952d715a66805e8a228a04d84de8b8a8fe7df636316e8b"
+  }
+}

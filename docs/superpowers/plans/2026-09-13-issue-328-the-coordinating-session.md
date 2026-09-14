@@ -892,7 +892,68 @@ npm --prefix frontend test   # expected: exit 0
 test "$(grep -c 'home__sessions' frontend/src/pages/home/Home.tsx)" -eq 1   # expected: exit 0 — one section, outside every stage branch
 ```
 
-### Task 13 — The three endpoints, the page and the vocabulary, written down
+### Task 13 — The argv assertion pins its constants, and the record's two causes are told apart
+
+**Objective:** two findings this slice's own judges raised are closed: the argv assertion stops
+being built from the constants it measures, and an unreadable record stops being reported as a
+failed write.
+
+**Files:** `backend/__tests__/infrastructure/claude-conversations.test.ts` (modify),
+`backend/src/domain/exceptions.ts` (modify),
+`backend/src/infrastructure/disk-conversation-records.ts` (modify),
+`backend/__tests__/infrastructure/disk-conversation-records.test.ts` (modify),
+`backend/src/infrastructure/start-plan-route.ts` (modify)
+
+Current state (backend/src/infrastructure/disk-conversation-records.ts, lines 82-87):
+
+```ts
+    try {
+      return DiskConversationRecords.#conversationFrom(text)
+    } catch (cause) {
+      throw new ConversationNotRecorded(`the record at ${path} cannot be read as a conversation: ${String(cause)}`)
+    }
+  }
+```
+
+Contract (backend/src/domain/exceptions.ts):
+
+```ts
+export class ConversationNotUnderstood extends ConversationFailure {}
+```
+
+`recall()` raises `ConversationNotUnderstood` for a record that is there and cannot be read as a
+conversation; `ConversationNotRecorded` stays for the write that failed, which is what the family
+rule asks — the command failed, and the command answered something we cannot read. `PlanCollapse`
+gains its row as `conversation-not-understood`, because `plan-refusal.test.ts` demands a refusal
+for every leaf. In `claude-conversations.test.ts` the expected argv is spelled out literally
+instead of interpolating `ClaudeConversations.PERMISSION_MODE` and `ClaudeConversations.OPENING`,
+so that mutating either constant turns the test red — `OPENING` is the sentence that makes the
+shell expand `$CT_PHASE_PROMPT`, which is this slice's second acceptance criterion and today no
+test watches it.
+
+**TDD:** `it('raises conversation-not-understood when the record cannot be read as a conversation')`
+— the read double answers text that is not a conversation, and the assertion is on the type
+raised, distinct from the write failure's. Then the argv assertion is rewritten to the literal
+string and proven by mutating `OPENING` by hand and watching it fall.
+
+**Tests:** added to `disk-conversation-records.test.ts`:
+`raises conversation-not-understood when the record cannot be read as a conversation`.
+Removed on purpose, replaced by it:
+`raises conversation-not-recorded instead of reading a malformed record as no conversation`.
+No test is added in `claude-conversations.test.ts`: its existing
+`imposes the minted conversation id and leaves the prompt path in the environment` keeps its name
+and gains the assertion it was missing.
+
+**Verification:** the three suites are green and the assertion no longer names the constants it
+measures.
+
+```bash
+npm --prefix backend run typecheck   # expected: exit 0
+npm --prefix backend test -- __tests__/infrastructure/claude-conversations.test.ts __tests__/infrastructure/disk-conversation-records.test.ts __tests__/infrastructure/plan-refusal.test.ts   # expected: exit 0
+test "$(grep -c 'ClaudeConversations.OPENING' backend/__tests__/infrastructure/claude-conversations.test.ts)" -eq 0   # expected: exit 0 — the argv is spelled, not composed
+```
+
+### Task 14 — The three endpoints, the page and the vocabulary, written down
 
 **Objective:** `API.md` documents the three new endpoints with the shapes a running server
 answers, and the repository's vocabulary gains the terms this slice introduced.
@@ -921,7 +982,7 @@ session**, **Phase prompt**, **Conversation** and **Session attention**.
 **TDD:** No TDD — documentation, and every claim in it is verified against the repository by the
 commands below.
 
-**Tests:** N/A — no behaviour changes; the suites of Tasks 1 to 12 cover what is described.
+**Tests:** N/A — no behaviour changes; the suites of Tasks 1 to 13 cover what is described.
 
 **Verification:** every documented path is routed and the vocabulary is where it belongs.
 
@@ -1017,7 +1078,15 @@ test -z "$(grep -l 'cmux' backend/src/infrastructure/claude-conversations.ts)"  
     enforces it with a denylist of Spanish words. An earlier draft of this plan named the frontend
     tests in Spanish, confusing "what renders is Spanish" with "the test that watches it is". Only
     what renders is. Provenance: `CLAUDE.md`, via a control that refused Task 10.
-15. **Thirteen tasks.** The slice was cut with a human in the room and carries eight acceptance
+15. **A fourteenth task closes two findings this run raised.** The argv assertion built from its
+    own constants (Task 4, judge `low`) and the two failure causes collapsed into one exception
+    (Task 6, declared by its implementer and recorded as decision 13) are repaired in Task 13,
+    before the documentation task, so `API.md` is written against the final set of codes. What
+    that task deliberately does NOT touch, and what therefore remains open: `ct-api.ts` still
+    awaits the start-up recovery unguarded, so an unreadable record kills the backend instead of
+    being reported — the judge's `low` on Task 9. Renaming the exception does not change that.
+    Provenance: the coordinating session, asked for these two and no more.
+16. **Fourteen tasks.** The slice was cut with a human in the room and carries eight acceptance
     criteria across three packages; splitting the slice is not in this session's hands, so the
     work is split into commits instead. Every `**Files:**` line spells each path in full, because
     `splitFiles` (`plugin/scripts/plan-tasks.js`) reads every backticked token in that paragraph
