@@ -1,12 +1,25 @@
 # control-tower — the single repo
 
-Three pieces, one repo, and only one of them ships:
+Three pieces, one repo, shipped through two different channels:
 
 | Directory | What it is | Does it ship? |
 |---|---|---|
 | [`plugin/`](plugin/) | The **control-tower-loop** plugin for Claude Code: the whole loop (hydration, gates, dispatch, judges) and its suite | **Yes** — it is the marketplace's `source` |
-| [`backend/`](backend/) | The local HTTP API the interface consumes — six endpoints, documented in [`backend/API.md`](backend/API.md); it also sweeps every minute the clones it has served and harvests with `dispatch-check --collect` whatever each slice whose PR already merged left behind | No |
-| [`frontend/`](frontend/) | The front end that consumes that API | No |
+| [`backend/`](backend/) | The local HTTP API the interface consumes — six endpoints, documented in [`backend/API.md`](backend/API.md); it also sweeps every minute the clones it has served and harvests with `dispatch-check --collect` whatever each slice whose PR already merged left behind | **Yes** — inside the application release artifact, see [`INSTALL.md`](INSTALL.md) |
+| [`frontend/`](frontend/) | The front end that consumes that API | **Yes** — inside the same artifact, see [`INSTALL.md`](INSTALL.md) |
+
+No `app-v*` tag exists yet, so no application release artifact has shipped
+this way so far. `INSTALL.md` says what to do meanwhile: the same install
+steps work from a clone of the repository.
+
+`plugin/` travels through both channels, and that is deliberate. The backend
+does not only import from it, it runs it: `ct-api.ts` spawns
+`plugin/scripts/dispatch-check.mjs`, and the errand it hands a plan agent
+names `plugin/scripts/ct-step.mjs` and `plugin/conventions/`. So the
+application artifact carries the same directory as its runtime payload,
+unchanged. The alternative was forking the loop, and
+`backend/__tests__/infrastructure/plugin-contract.test.ts` exists to stop
+exactly that.
 
 A plugin's unit of distribution is the `source` directory of
 `.claude-plugin/marketplace.json`, whole and with no exclusion mechanism. That is
