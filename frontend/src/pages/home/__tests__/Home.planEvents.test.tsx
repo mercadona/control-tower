@@ -1,12 +1,9 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
-import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { FakeEventSource } from './FakeEventSource'
 import {
-  backendAnswering,
   dropStream,
-  openHome,
-  startPlan,
+  openRestored,
   streamFrame,
 } from './helpers'
 
@@ -16,10 +13,8 @@ describe('Home · plan events', () => {
   })
 
   const planStarted = async () => {
-    backendAnswering(StartPlanMother.started())
-    const opened = openHome()
-    await startPlan(opened.user)
-    await screen.findByRole('status')
+    const opened = openRestored({ phase: 'planning' })
+    await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
 
     return opened
   }

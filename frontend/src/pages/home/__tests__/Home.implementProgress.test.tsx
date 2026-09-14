@@ -1,19 +1,15 @@
 import { screen, waitFor } from '@testing-library/react'
 import { ImplementProgressMother } from '__scenarios__/ImplementProgressMother'
-import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
-import { openHome, startPlan, streamFrame } from './helpers'
+import { openHome } from './helpers'
 
-const IMPLEMENT_BUTTON = { name: 'Implementar plan' }
-const NO_ACTIVE_PLANS = { status: 200, body: '{"plans":[]}' }
 const EXTERNAL_TOOLS_READY = { status: 200, body: '{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}' }
 const NO_SESSIONS = SessionsMother.noSessions()
-const IMPLEMENTING = { status: 202, body: '{"status":"implementing","agent":"workspace:4","issue":7}' }
 
 const responseFor = (answer: { status: number; body: string }) => new Response(answer.body, { status: answer.status })
 
-const activePlanImplementing = (root?: string) => ({
+const activePlanImplementing = (root?: string, worktree: string = StartPlanMother.WORKTREE) => ({
   phase: 'implementing' as const,
   request: { id: StartPlanMother.TICKET, repo: StartPlanMother.REPO, path: StartPlanMother.PATH },
   plan: {
@@ -22,7 +18,7 @@ const activePlanImplementing = (root?: string) => ({
     issue: StartPlanMother.ISSUE,
     agent: StartPlanMother.AGENT,
     branch: StartPlanMother.BRANCH,
-    worktree: StartPlanMother.WORKTREE,
+    worktree,
     ...(root !== undefined ? { root } : {}),
   },
 })
@@ -43,20 +39,17 @@ describe('Home · implement progress', () => {
 
   it('should ask for progress with the non-canonical root the plan started with, not the path the user typed', async () => {
     const fetching = stubFetchByPath((url) => {
-      if (url === '/active-plans') return NO_ACTIVE_PLANS
-      if (url === '/start-plan') return StartPlanMother.startedFromNonCanonicalPath()
-      if (url === '/implement-plan') return IMPLEMENTING
+      if (url === '/active-plans') {
+        const plan = activePlanImplementing(StartPlanMother.NON_CANONICAL_ROOT, StartPlanMother.NON_CANONICAL_WORKTREE)
+        return { status: 200, body: JSON.stringify({ plans: [plan] }) }
+      }
       if (url.startsWith('/implement-progress/')) return ImplementProgressMother.notRead()
       throw new Error(`unexpected fetch to ${url}`)
     })
 
-    const { user } = openHome()
-    await startPlan(user)
-    await screen.findByRole('status')
-    await streamFrame(PlanEventsMother.ready())
-    await user.click(screen.getByRole('button', IMPLEMENT_BUTTON))
-    await screen.findByText('Agente asignado')
+    openHome()
 
+    await screen.findByText('Agente asignado')
     await waitFor(() =>
       expect(fetching).toHaveBeenCalledWith(
         `/implement-progress/${StartPlanMother.ISSUE.number}?root=${encodeURIComponent(StartPlanMother.NON_CANONICAL_ROOT)}&repo=${encodeURIComponent(StartPlanMother.REPO)}`,

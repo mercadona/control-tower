@@ -1,0 +1,57 @@
+{
+  "issue": 328,
+  "task": 13,
+  "task_name": "The argv assertion pins its constants, and the record's two causes are told apart",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises two things. (1) 'the argv assertion stops being built from the constants it measures': claude-conversations.test.ts:103-107 now expects `exec claude --session-id ${id.text} ` + '--permission-mode acceptEdits \"Read the file at \"$CT_PHASE_PROMPT\" and do exactly what it says.\"' — I compared it character by character with claude-conversations.ts:16 (OPENING) and :77-78 (#startCommand, which wraps OPENING in double quotes). They agree, and the expectation no longer reads BIN, PERMISSION_MODE or OPENING, so mutating any of the three turns this test red. The only interpolations left are `id.text` (the test's own input, not a measured constant) and PtyLiveSessions.LOGIN_INTERACTIVE (a constant of another class, outside the two the brief names; PERMISSION_MODE and BIN are still interpolated in the sibling 'resumes a recorded conversation' assertion, but a mutation of either is now caught by the literal assertion, so no hole remains). (2) 'an unreadable record stops being reported as a failed write': disk-conversation-records.ts:86 now throws ConversationNotUnderstood from recall()'s catch, while prepare()'s catch at :73 keeps ConversationNotRecorded — two sibling leaves of ConversationFailure, so neither is an instance of the other. Both promises are in the diff.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The TDD line names it('raises conversation-not-understood when the record cannot be read as a conversation') and fixes the assertion as 'the read double answers text that is not a conversation, and the assertion is on the type raised, distinct from the write failure's'. disk-conversation-records.test.ts:77-83 is that test verbatim: the read double answers '{not json' (text that is not a conversation) and the assertion is `await expect(records.recall()).rejects.toBeInstanceOf(ConversationNotUnderstood)` — the type raised, and distinct from the write failure's ConversationNotRecorded asserted at :90. Same assertion, same input, same expected value.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The Contract block declares `export class ConversationNotUnderstood extends ConversationFailure {}`; exceptions.ts:94 states exactly that, placed inside the ConversationFailure family beside its two siblings. The Current state block quotes recall()'s catch throwing ConversationNotRecorded with the message `the record at ${path} cannot be read as a conversation: ${String(cause)}`; the diff changes only the class, keeping the message literal (disk-conversation-records.ts:86), which is what the brief asks. The prose of the block also fixes the refusal code: 'PlanCollapse gains its row as conversation-not-understood' — start-plan-route.ts:323 declares `[ConversationNotUnderstood, PlanCollapse.#collapsed('conversation-not-understood')]`, the literal kebab-case string, not derived from the class name. Every name, order and literal matches.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Row by row, the diff bears on one: D-10 ('Everything new under backend/ is TypeScript') — all five touched files are .ts and the new leaf is declared in TypeScript. D-1, D-13, D-18, D-21, D-25, D-26, D-11, D-16, D-22 and the entrance button's literal are untouched by these five files (no frontend copy, no cmux name, no new port, no phase decision stored, no prompt composed). No row is reopened with a different value.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: start-plan-route.ts is both an exemplar and a file the diff modifies; the new row follows the existing Projection idiom exactly (one pair per leaf, an explicit kebab-case code through #collapsed), and the import reflow is the same two-line shape the list already uses. disk-conversation-records.ts follows disk-implementation-start-registry.ts's record-under-the-state-root shape, unchanged. Rules read: backend/conventions/this-repository.md, 'Naming an exception family' — 'Every family under PlanFailure names its two causes: the command failed (*NotRead, *NotCreated, *NotLaunched) and it answered something we cannot read (*NotUnderstood, *NotNamed). The boundary projects each cause to its own code.' The diff does exactly this for ConversationFailure and gives the second cause its own code. conventions/domain.md, 'Exceptions: families of two causes' ('the call itself failed ... and it answered something we cannot read') and conventions/boundaries.md ('The two causes a failure family separates reach two codes, because they are repaired in different places' and 'The code of an answer is declared explicitly, beside its detail, and never derived from an exception's class name') are all satisfied by the same two lines. conventions/testing.md, 'Both failure causes of every adapter are told apart in its tests — the test proves one is not an instance of the other': the two tests at disk-conversation-records.test.ts:77 and :85 assert sibling classes, which are mutually exclusive, so the discrimination is real rather than nominal; before this diff both asserted the same class and could not tell them apart. CLAUDE.md's language rule holds: the new leaf, the test name and the code are English. Delivery shape: no document of either yardstick prescribes a shape for renaming an internal exception leaf, and the new leaf and its PlanCollapse row ship in the same commit, which is what the brief's Out-of-scope sentence about plan-refusal.test.ts requires. Boundaries: the domain gains an error, infrastructure maps it; no direction of dependency is crossed. conventions/defects.md, rule by rule: (1) closed vocabulary — the diff adds a member to the closed projection of failures in PlanCollapse, which raises 'no refusal declared' for anything unmapped and has no catch-all; no loose classifying string or boolean is introduced. (2) raw map as the return value of logic — no subject: recall() returns a CoordinatingConversation and the collapse returns a Refusal value object. (3) two fields that have to agree / sentinel — no subject: no flag and no sentinel is added; the distinction now lives in the type, which is the opposite defect being closed. (4) an error named for where it happens — this is the rule the diff serves: ConversationNotUnderstood is named for what happened (the record could not be read), not for the module, and it inherits from ConversationFailure rather than from the root.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Two test files carry '-' lines. In disk-conversation-records.test.ts the '-' lines remove the test name 'raises conversation-not-recorded instead of reading a malformed record as no conversation' and the assertion `rejects.toBeInstanceOf(ConversationNotRecorded)`; the brief's Tests line asks for precisely that — 'Removed on purpose, replaced by it' — and the replacement asserts a strictly more specific type. In claude-conversations.test.ts the '-' lines remove the interpolated expectation built from BIN, PERMISSION_MODE and OPENING; the replacement is the same assertion spelled literally, which is stricter, not weaker (the removed form was satisfied by construction for any value of those constants). No pre-existing test ends up asserting less.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised behaviour lives in production code: exceptions.ts:94 declares the leaf, disk-conversation-records.ts:86 raises it, start-plan-route.ts:323 projects it to its code. Reverting any of those three lines turns the diff's tests red — the new test would receive a ConversationNotRecorded, and plan-refusal.test.ts's 'every_way_the_plan_can_collapse_has_a_refusal_declared' would fail on the unmapped leaf. The argv half is production's too: the expected string is now the literal command #startCommand builds, so nothing is produced by the test's own scaffolding.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The five touched paths are the five the Files line declares, all (modify), and what is written inside them traces back to a sentence: the exception leaf and the throw to the Contract block, the PlanCollapse row to 'PlanCollapse gains its row as conversation-not-understood' (and to the Out-of-scope sentence allowing /start-plan rows for new leaves), the two test edits to the TDD and Tests lines. The import reflow in start-plan-route.ts is the mechanical consequence of adding the name. No refactor, rename or adjacent fix rode along; the plan file is not in the diff, so there is no amendment to rule on. ct-api.ts's unguarded start-up recovery is untouched, which the plan's §9 item 15 records as deliberately left open.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "One test is added: 'raises conversation-not-understood when the record cannot be read as a conversation'. Deterministic — no clock, no network, no randomness, no sleep; the input is the fixed string '{not json' and the adapter's read/write arrive as injected functions. Isolated — it builds its own DiskConversationRecords with fresh doubles and a constant root, touches no shared state and depends on no ordering. Verifies real behaviour — the assertion is on the exception the production catch raises, and it would fail with disk-conversation-records.ts:86 reverted to ConversationNotRecorded, since the two classes are siblings. The finer half was measured with control-tower-loop:test-driven-development, which loaded: its anti-pattern 'Testing mock behavior instead of real behavior' does not bite here, because the doubles stand for the filesystem and the assertion is on the adapter's own output, which is what conventions/testing.md prescribes for an adapter. The rewritten argv expectation lives in a test that already existed and is measured under manipulacion-tests. Nothing to report at any severity.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [],
+    "review_token": "1339b60bc079363855abe0e01d5c8e25295c13aafb9ddc60d6c66020c080de2b"
+  }
+}

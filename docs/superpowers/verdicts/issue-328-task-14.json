@@ -1,0 +1,66 @@
+{
+  "issue": 328,
+  "task": 14,
+  "task_name": "The three endpoints, the page and the vocabulary, written down",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises two things: that API.md documents the three new endpoints with the shapes a running server answers, and that the repository's vocabulary gains the terms this slice introduced. Both are in the diff, and I checked each claim against the code rather than against the brief. Endpoint count: api-server.ts mounts POST start-plan, implement-plan, sessions/:id/input, coordinating-session, session-hooks (5) and GET plan-events, active-plans, implement-progress, implement-history, external-tools, sessions, sessions/:id/stream, coordinating-session (8) — the row '| Endpoints | 13 (`POST` 5, `GET` 8) |' is exact. The 202 body of POST /coordinating-session matches Answer.send in coordinating-session-route.ts line 113 field for field, including session.name 'brainstorming' (ClaudeConversations.NAME). The three GET shapes match #answerHolding, and the unresumable `detail` is quoted verbatim from CoordinatingSessionRoute.#UNRESUMABLE_DETAIL. The session-hooks payload table matches SessionHookRequest.from (session_id non-empty, hook_event_name one of the three in LocalSettingsSessionHooks.EVENTS, message read only by the Notification transform), and the 202 {status:'reported',attention:...} matches line 153. The refusal lists are right about reachability: workspace.confirm can only raise CheckoutNotConfirmed and WorkspaceNotUnderstood, so `workspace-not-read` is correctly absent; the seven tool codes are exactly the ones the use case's ports can raise. The claim that POST /session-hooks is the one endpoint ignoring unknown fields holds — start-plan, implement-plan, session-input and coordinating-session all carry a KNOWN_FIELDS check and coordinating-session parses through PlanRequest. The four glossary rows are present and true (DiskConversationRecords writes under asked.stateRoot, its record carries conversation/repo/root, SessionAttention is working|waiting with a nullable question). One departure from the brief's prose is correct: `conversation-not-understood` is declared in PlanCollapse but raised only by DiskConversationRecords.recall(), whose only caller is RecoverCoordinatingSession, awaited unguarded at ct-api.ts:545 — no endpoint can answer it, and documenting the gap instead of listing it was the only truthful option. The one thing left false is not a claim the diff makes but one it now contradicts: frontend/README.md's intro still says the form's button calls POST /start-plan.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The TDD line reads 'No TDD — documentation, and every claim in it is verified against the repository by the commands below.' There is no test the plan named and no behaviour to drive red, so this item has no subject.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "contrato",
+        "result": "The brief carries one block, 'Final text (backend/API.md)', with the row '| Endpoints | 13 (`POST` 5, `GET` 8) |'; the diff states it character for character and the number is true of api-server.ts. The rest of the task's contract is stated as prose and I compared it name by name: the request fields {id?, user_comment?, repo, path}, the 202 answer, the endpoint's own code `one-repository-only` (CoordinatingSessionOutcome.ONE_REPOSITORY_ONLY) beside the codes start-plan already documents, the three GET shapes `none`/`live`/`unresumable` (CoordinatingSessionState plus the null case), Claude Code's own payload, the exception to rule 5 written where rule 5 is stated, the codes `hook-not-understood` and `conversation-not-live` (SessionHookOutcome), a curl line under each of the three sections, the frontend paragraph's three required facts, and the four vocabulary terms. Every one is present and each literal matches the source. No symbol, code or constant is stated differently from the code.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Row by row, on the rows the diff bears on. D-1 and D-26: the documentation describes the entrance as an interactive `claude` the backend spawns in the governed checkout with no worktree and no branch, opened by the form's one button — what StartPlanForm and OpenCoordinatingSession actually do. D-21: the README paragraph asserts the panel and the coordinating session's state are on the page in every phase, never hidden and never disabled, and Home.tsx puts both inside `home__sessions` at line 458, a sibling of the `home__workspace` section that holds every currentStage branch — the claim is implemented, not merely written. D-25: the Phase prompt row says the path travels in CT_PHASE_PROMPT and never the text, which is ClaudeConversations.PROMPT_VARIABLE plus the OPENING argument. D-13, D-10, D-11, D-16 and D-22 have nothing in a documentation diff that bears on them. On D-18, which the implementer says it deliberately trimmed: the row defines the coordinating session as what this backend holds today and does not assert the pull-request and unblocking duties D-18 gives it. That does not reopen the decision — it declines to document behaviour that slices 4 to 8 will build and that the brief's own '### Out of scope' assigns to them; a glossary of this backend claiming those duties today would have been the false claim. No row is implemented with a value other than the one it states.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: §3's 'Files to imitate' are all source modules and there is no code in this diff to compare with them, so the comparison that applies is with the documents' own established idiom — API.md's per-endpoint shape (prose, request table, answer sample, refusal tables, curl) and this-repository.md's ubiquitous-language rows. The three new sections reproduce that shape exactly, including the 'All N answer 400 and carry the tool's own message in detail' sentence the start-plan section already uses. Rules: CLAUDE.md's language rule is met — the added prose is English and the only Spanish is quoted product copy (Trabajando, Esperando, Te está preguntando), which is the exemption CLAUDE.md and conventions/style.md both name for what renders. backend/conventions/this-repository.md's own '{code, detail} in kebab-case' doctrine is respected by every documented code. .agent/conventions-ack.md cites lines 59 and 66 of this-repository.md; the diff appends rows at 70-73 and shifts neither. The two named skills, frontend-engineering:frontend-best-practices and backend-engineering:backend-best-practices, both loaded and are routers for React/TypeScript and Python code patterns; this diff contains no code, so neither has a rule that bears on it. conventions/defects.md, rule by rule: closed vocabulary — no subject, the diff declares no value and no dispatch; it only describes closed vocabularies the code already holds (attention.status bounded to working/waiting, the three GET shapes) and names no catch-all. Raw map as the return value of logic — no subject, there is no logic here; the JSON samples are wire payloads, which the document itself calls the serialization boundary. Two fields that have to agree / sentinel — no subject in the diff, and where it documents an absence it documents it as `null` ('attention.question ... is null otherwise'), not as an empty string. Error named for where it happens — no error is introduced; every code documented (hook-not-understood, conversation-not-live, conversation-not-started, session-hooks-not-written, one-repository-only) names what happened, none names a module. On conventions/decisions.md I considered whether pinning POLL_INTERVAL_MS's value in the README spreads a decision: it is documentation of code, which is the second place by nature, and the README names the constant beside the number so a reader lands on the single source — and the task asked for exactly this. Not a finding.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The diff touches three markdown documents and no test file. Its only `-` lines are the old endpoint-count row in backend/API.md and the old one-line wording of rule 5, both replaced by the task's own text; neither is an assertion, a case or a test. Nothing pre-existing stopped asserting.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The task's **Files:** declares backend/API.md, frontend/README.md and backend/conventions/this-repository.md — three documents and no production code. There is no behaviour in this diff that could be produced by a test's scaffolding, and the behaviour the documents describe I traced to production code in item 1 (api-server.ts, coordinating-session-route.ts, session-hooks-route.ts, useCoordinatingSession.ts, Home.tsx).",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "alcance",
+        "result": "The three touched paths are exactly the three **Files:** declares, and no plan file appears in the diff, so there is no amendment to rule on. Inside the files, each addition traces to a sentence of the task: the three API.md sections with their curl lines, the exception to rule 5 written where rule 5 is stated, the README paragraph with its cadence and its 'in every phase' claim, and the four vocabulary rows. Two additions go slightly past the literal list and I checked each: the two rows in 'Where the frontend consumes each one' plus the note that POST /session-hooks has no row there, which the section would otherwise misreport as an omission (both new paths are in API_PATHS in frontend/vite.config.ts, as the note says); and the paragraph recording that conversation-not-understood is answerable by no endpoint, which the task's own section on the endpoint's codes forces a decision about and which the plan already records as an open gap in assumption 15. Nothing '### Out of scope' names by name is touched: the brainstorming skill, POST /start-plan's behaviour, the gates and dispatcher of slices 4-8, and Home's review and implementation stages are all left alone.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "The diff adds no test — its three files are markdown documents and it contains no `+` line in any test file. This item's subject is the new test as an instrument, and there is none.",
+        "outcome": "no-aplica"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "objetivo",
+        "severity": "low",
+        "what": "frontend/README.md now contradicts itself. Its opening paragraph still says the form's button calls POST /start-plan, while the paragraph this diff adds 58 lines below says StartPlanForm's one button opens the coordinating session with POST /coordinating-session. The code agrees with the new paragraph: StartPlanForm.tsx line 67 calls CoordinatingSessionClient.open, and StartPlanClient (frontend/src/app/start-plan/client.ts, PATH '/start-plan') now has no caller outside its own test. The staleness was created by task 11, not by this diff, and no sentence of task 14 asks for the intro to be fixed — but the file is in this task's **Files:** and the task's whole purpose is documentation a reader can trust, so a reader lands on the false sentence before the true one. Low, not blocking: nothing the task promised is missing.",
+        "path": "frontend/README.md",
+        "line": 13,
+        "evidence": "Today one screen over three endpoints: the ticket key and the repository, a button that calls `POST /start-plan`, the plan's progress arriving over `GET /plan-events/:issue`"
+      }
+    ],
+    "review_token": "049a277fb2366b4a94bd5af749409ce31297573b1dd913183c8b35cf63893cc1"
+  }
+}

@@ -1,0 +1,83 @@
+import { CoordinatingConversation } from '../../domain/value-objects/coordinating-conversation.ts'
+import { PhasePrompt } from '../../domain/value-objects/phase-prompt.ts'
+import type { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
+import type { ConversationRecords } from '../../domain/ports/conversation-records.ts'
+import type { Conversations } from '../../domain/ports/conversations.ts'
+import type { LiveSession } from '../../domain/value-objects/live-session.ts'
+import type { PlanComment } from '../../domain/value-objects/plan-comment.ts'
+import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
+import type { SessionHooks } from '../../domain/ports/session-hooks.ts'
+import type { UserStories } from '../../domain/ports/user-stories.ts'
+import type { UserStoryKey } from '../../domain/value-objects/user-story-key.ts'
+import type { UserStoryUrl } from '../../domain/value-objects/user-story-url.ts'
+import type { Workspace } from '../../domain/ports/workspace.ts'
+
+export class OpenCoordinatingSessionParams {
+  readonly story: UserStoryKey | UserStoryUrl | null
+  readonly comment: PlanComment | null
+  readonly repository: RepositoryName
+  readonly root: CheckoutRoot
+
+  constructor({ story, comment, repository, root }: {
+    story: UserStoryKey | UserStoryUrl | null,
+    comment: PlanComment | null,
+    repository: RepositoryName,
+    root: CheckoutRoot,
+  }) {
+    this.story = story
+    this.comment = comment
+    this.repository = repository
+    this.root = root
+    Object.freeze(this)
+  }
+}
+
+export class CoordinatingSessionOpened {
+  readonly conversation: CoordinatingConversation
+  readonly session: LiveSession
+
+  constructor({ conversation, session }: { conversation: CoordinatingConversation, session: LiveSession }) {
+    this.conversation = conversation
+    this.session = session
+    Object.freeze(this)
+  }
+}
+
+export class OpenCoordinatingSession {
+  readonly userStories: UserStories
+  readonly workspace: Workspace
+  readonly conversations: Conversations
+  readonly sessionHooks: SessionHooks
+  readonly records: ConversationRecords
+
+  constructor({ userStories, workspace, conversations, sessionHooks, records }: {
+    userStories: UserStories,
+    workspace: Workspace,
+    conversations: Conversations,
+    sessionHooks: SessionHooks,
+    records: ConversationRecords,
+  }) {
+    this.userStories = userStories
+    this.workspace = workspace
+    this.conversations = conversations
+    this.sessionHooks = sessionHooks
+    this.records = records
+  }
+
+  async execute(params: OpenCoordinatingSessionParams): Promise<CoordinatingSessionOpened> {
+    const root = await this.workspace.confirm({ root: params.root, repository: params.repository })
+    const story = params.story === null ? null : await this.userStories.detail(params.story)
+
+    const conversation = new CoordinatingConversation({
+      id: this.conversations.mint(),
+      repository: params.repository,
+      root,
+    })
+    const prompt = PhasePrompt.brainstorming({ story, comment: params.comment, repository: params.repository, root })
+    const promptPath = await this.records.prepare({ conversation, prompt })
+    await this.sessionHooks.install(root)
+    const session = this.conversations.start({ conversation, promptPath })
+
+    return new CoordinatingSessionOpened({ conversation, session })
+  }
+}

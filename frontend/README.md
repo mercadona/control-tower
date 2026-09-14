@@ -62,6 +62,18 @@ nothing reopens one, so `GET /sessions` answers empty for the rest of the
 backend's run and the other two endpoints refuse that id with
 `session-not-live`.
 
+`app/coordinating-session` (`CoordinatingSessionStatus`, rendered by `Home`
+beside `SessionsPanel`) polls `GET /coordinating-session` every two seconds
+(`useCoordinatingSession.ts`, `POLL_INTERVAL_MS`) to show the entrance
+conversation's attention: **Trabajando** while it works, **Esperando** with
+its question under **Te está preguntando** once the brainstorming asks
+something, or a banner saying the conversation could not be recovered.
+`StartPlanForm`'s one button opens it with `POST /coordinating-session`. Both
+`SessionsPanel` and `CoordinatingSessionStatus` sit in `Home`'s
+`home__sessions` section, outside every `currentStage` branch of the
+workspace: the terminal and the coordinating session's state are on the page
+in every phase, never hidden and never disabled by which stage is showing.
+
 ## What is already decided
 
 - **It is never shipped with the plugin.** The marketplace's `source` is

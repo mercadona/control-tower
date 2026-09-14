@@ -27,9 +27,6 @@ class RealCabin {
   static opening(realTerminals: RealTerminals): PtyLiveSessions {
     return new PtyLiveSessions({
       spawn: realTerminals.spawn(),
-      shell: process.env.SHELL,
-      cwd: process.cwd(),
-      env: process.env,
       newId: () => randomUUID(),
       stderr: () => {},
     })
@@ -86,7 +83,7 @@ describe('PtyLiveSessions with a real process', () => {
 
   it('a real terminal prints into the scrollback and answers what is written to it', async () => {
     const sessions = RealCabin.opening(realTerminals)
-    const session = sessions.open()
+    const session = sessions.open(PtyLiveSessions.loginShell(process.env.SHELL, process.cwd(), process.env))
     const token = Echoed.token()
 
     const echoed = Echoed.waits({ sessions, session, token })
@@ -100,7 +97,7 @@ describe('PtyLiveSessions with a real process', () => {
 
   it('the real process stays alive after every watcher has stopped', async () => {
     const sessions = RealCabin.opening(realTerminals)
-    const session = sessions.open()
+    const session = sessions.open(PtyLiveSessions.loginShell(process.env.SHELL, process.cwd(), process.env))
     const abandoned = sessions.watch({ session, onBytes: () => {}, onEnded: () => {} })
     abandoned.stop()
 

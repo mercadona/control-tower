@@ -1,5 +1,6 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
+import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { ImplementPlanMother } from '__scenarios__/ImplementPlanMother'
 import { PlanEventsMother } from '__scenarios__/PlanEventsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
@@ -9,8 +10,8 @@ import {
   backendAnswering,
   backendRecovering,
   openHome,
+  openRestored,
   pressStart,
-  startPlan,
   streamFrame,
   typePath,
   typeRepository,
@@ -41,10 +42,13 @@ const activePlansAnswer = (...plans: ReturnType<typeof activePlan>[]) => ({
 const EXTERNAL_TOOLS_READY = '{"ready":true,"tools":[{"tool":"gh","installed":true,"session":"ready","fix":null}]}'
 const NO_SESSIONS = SessionsMother.noSessions().body
 
+const NO_COORDINATING_SESSION = CoordinatingSessionMother.none().body
+
 const withReadyTools = <T extends (input: string | URL | Request, init?: RequestInit) => Promise<Response>>(fetching: T) => {
   vi.stubGlobal('fetch', vi.fn((input: string | URL | Request, init?: RequestInit) => {
     if (input === '/external-tools') return Promise.resolve(new Response(EXTERNAL_TOOLS_READY))
     if (input === '/sessions') return Promise.resolve(new Response(NO_SESSIONS))
+    if (input === '/coordinating-session' && init === undefined) return Promise.resolve(new Response(NO_COORDINATING_SESSION))
     return init === undefined ? fetching(input) : fetching(input, init)
   }))
 
@@ -57,13 +61,11 @@ const storeWorkflow = (phase: WorkflowSnapshot['phase']) => {
 }
 
 const startPlanning = async () => {
-  const fetching = backendAnswering(StartPlanMother.started())
-  const opened = openHome()
-  await startPlan(opened.user)
+  const opened = openRestored({ phase: 'planning' })
   await screen.findByRole('status')
   await waitFor(() => expect(FakeEventSource.opened).toHaveLength(1))
 
-  return { ...opened, fetching }
+  return opened
 }
 
 describe('Home · restore workflow', () => {
@@ -268,7 +270,7 @@ describe('Home · restore workflow', () => {
     const { user } = openHome()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No se puede confirmar el estado de implementación')
-    expect(screen.queryByRole('button', { name: 'Arrancar plan' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Arrancar brainstorming' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Implementar plan' })).toBeNull()
     expect(FakeEventSource.opened).toHaveLength(0)
     await user.click(screen.getByRole('button', { name: 'Reintentar recuperación' }))
@@ -286,7 +288,7 @@ describe('Home · restore workflow', () => {
     await user.click(screen.getByRole('button', { name: 'Descartar estado' }))
 
     expect(screen.getByLabelText('Ticket')).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
     expect(fetching).toHaveBeenCalledTimes(1)
   })
 
@@ -395,14 +397,10 @@ describe('Home · restore workflow', () => {
 
   it('should discard recovered candidates when a new plan starts', async () => {
     const second = activePlan('implementing', StartPlanMother.ANOTHER_REPO, 9)
-    let answerStart: (response: Response) => void = () => undefined
-    const starting = new Promise<Response>((resolve) => { answerStart = resolve })
     const fetching = vi.fn((input: string | URL | Request) =>
       input === '/active-plans'
         ? Promise.resolve(new Response(JSON.stringify({ plans: [activePlan(), second] }), { status: 200 }))
-        : String(input).startsWith('/implement-progress/')
-          ? Promise.resolve(new Response('{"code":"implementation-progress-not-read","detail":"not read"}', { status: 400 }))
-        : starting,
+        : Promise.resolve(new Response(CoordinatingSessionMother.opened().body, { status: 202 })),
     )
     withReadyTools(fetching)
     const { user } = openHome()
@@ -414,12 +412,8 @@ describe('Home · restore workflow', () => {
     await typePath(user, StartPlanMother.PATH)
     await pressStart(user)
 
-    await act(async () => answerStart(new Response(StartPlanMother.started().body, { status: 202 })))
-
-    expect(await screen.findByText('Plan arrancado')).toBeInTheDocument()
-    expect(screen.getByLabelText('Progreso del plan')).toHaveTextContent(StartPlanMother.REPO)
+    await waitFor(() => expect(fetching.mock.calls.filter(([input]) => input === '/coordinating-session')).toHaveLength(1))
     expect(screen.queryByRole('button', { name: /Continuar plan/ })).toBeNull()
-    expect(fetching.mock.calls.filter(([input]) => input === '/start-plan')).toHaveLength(1)
   })
 
   it('should show it cannot tell what is running, and offer a retry, when the backend cannot be reached', async () => {
@@ -460,14 +454,14 @@ describe('Home · restore workflow', () => {
     await user.click(screen.getByRole('button', { name: 'Reintentar' }))
 
     expect(screen.getByLabelText('Ticket')).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeDisabled()
 
     await act(async () => answerRetry(new Response(activePlansAnswer().body, { status: 200 })))
     await typeTicket(user, StartPlanMother.TICKET)
     await typeRepository(user, StartPlanMother.REPO)
     await typePath(user, StartPlanMother.PATH)
 
-    expect(screen.getByRole('button', { name: 'Arrancar plan' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Arrancar brainstorming' })).toBeEnabled()
   })
 
   it('should show it cannot tell what is running, and offer a retry, on a fresh inconclusive recovery', async () => {

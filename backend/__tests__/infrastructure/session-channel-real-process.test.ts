@@ -48,13 +48,10 @@ class RunningApi {
   static async openedOn(realTerminals: RealTerminals): Promise<{ port: number, session: LiveSession }> {
     const liveSessions = new PtyLiveSessions({
       spawn: realTerminals.spawn(),
-      shell: process.env.SHELL,
-      cwd: process.cwd(),
-      env: process.env,
       newId: () => randomUUID(),
       stderr: () => {},
     })
-    const session = liveSessions.open()
+    const session = liveSessions.open(PtyLiveSessions.loginShell(process.env.SHELL, process.cwd(), process.env))
     const server = new ApiServer({
       port: 0,
       startPlan: null,

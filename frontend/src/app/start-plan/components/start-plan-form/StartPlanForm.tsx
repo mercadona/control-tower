@@ -1,8 +1,9 @@
 import { FormEvent, useRef, useState } from 'react'
-import { StartPlanClient } from 'app/start-plan/client'
+import { CoordinatingSessionClient } from 'app/coordinating-session/client'
+import { OpenedCoordinatingSession, OpenOutcome } from 'app/coordinating-session/CoordinatingSession.types'
 import { LocalPath } from 'app/start-plan/LocalPath'
 import { RepositoryName } from 'app/start-plan/RepositoryName'
-import { StartPlanOutcome, StartedPlan, StartPlanRequest, StartPlanSubmission } from 'app/start-plan/StartPlan.types'
+import { StartPlanRequest, StartPlanSubmission } from 'app/start-plan/StartPlan.types'
 import { TicketKey } from 'app/start-plan/TicketKey'
 import { UserComment } from 'app/start-plan/UserComment'
 import { Banner } from 'system-ui/banner'
@@ -13,25 +14,25 @@ import { Loading } from 'system-ui/loading'
 import { TextArea } from 'system-ui/text-area'
 import './StartPlanForm.css'
 
-type StartPlanRefusal = Exclude<StartPlanOutcome, { kind: 'started' }>
+type OpenRefusal = Exclude<OpenOutcome, { kind: 'opened' }>
 
 type StartPlanFormProps = {
-  onStarted: (plan: StartedPlan, request: StartPlanRequest) => void
-  onBackendUnreachable: (request: StartPlanRequest) => void
+  onOpened: (opened: OpenedCoordinatingSession, request: StartPlanRequest) => void
+  onUnreachable: (request: StartPlanRequest) => void
   onInteraction: () => void
   isLocked: boolean
   isMutationBlocked?: boolean
   request?: StartPlanRequest
 }
 
-const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocked, isMutationBlocked = false, request }: StartPlanFormProps) => {
+const StartPlanForm = ({ onOpened, onUnreachable, onInteraction, isLocked, isMutationBlocked = false, request }: StartPlanFormProps) => {
   const [ticketKey, setTicketKey] = useState('')
   const [userComment, setUserComment] = useState('')
   const [repository, setRepository] = useState('')
   const [path, setPath] = useState('')
   const [isSending, setIsSending] = useState(false)
   const isSendingRef = useRef(false)
-  const [refusal, setRefusal] = useState<StartPlanRefusal | null>(null)
+  const [refusal, setRefusal] = useState<OpenRefusal | null>(null)
   const [touched, setTouched] = useState({ ticket: false, repository: false, path: false })
 
   const hasWellFormedTicket = TicketKey.isWellFormed(ticketKey)
@@ -49,7 +50,7 @@ const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocke
     !isSending &&
     !isLocked && !isMutationBlocked
 
-  const startPlan = async (event: FormEvent<HTMLFormElement>) => {
+  const openBrainstorming = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (isSendingRef.current || isLocked || isMutationBlocked) return
     onInteraction()
@@ -63,14 +64,14 @@ const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocke
       path: LocalPath.normalize(path),
     }
     const submitted: StartPlanRequest = { id: submission.id, userComment: submission.userComment, repo: submission.repo, path: submission.path }
-    const outcome = await StartPlanClient.start(submission)
+    const outcome = await CoordinatingSessionClient.open(submission)
     isSendingRef.current = false
     setIsSending(false)
-    if (outcome.kind === 'started') {
-      onStarted(outcome.plan, submitted)
+    if (outcome.kind === 'opened') {
+      onOpened(outcome.opened, submitted)
       return
     }
-    if (outcome.kind === 'backend-unreachable') onBackendUnreachable(submitted)
+    if (outcome.kind === 'backend-unreachable') onUnreachable(submitted)
     setRefusal(outcome)
   }
 
@@ -105,7 +106,7 @@ const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocke
   }
 
   return (
-    <form className="start-plan-form" onSubmit={startPlan}>
+    <form className="start-plan-form" onSubmit={openBrainstorming}>
       <FormField
         label="Ticket"
         message={
@@ -167,7 +168,7 @@ const StartPlanForm = ({ onStarted, onBackendUnreachable, onInteraction, isLocke
       </FormField>
       <div className="start-plan-form__actions">
         <Button type="submit" disabled={!canStart} aria-describedby={!canStart ? 'start-plan-help' : undefined}>
-          {isSending ? <><Loading aria-label="Enviando la solicitud" /> Enviando solicitud</> : 'Arrancar plan'}
+          {isSending ? <><Loading aria-label="Enviando la solicitud" /> Abriendo el brainstorming</> : 'Arrancar brainstorming'}
         </Button>
       </div>
       {!canStart && !isSending && <p id="start-plan-help" className="start-plan-form__help">{isMutationBlocked ? 'No puedes arrancar otro plan hasta confirmar el estado del backend.' : 'Da un ticket o una descripción válida, además del repositorio y su ruta local.'}</p>}

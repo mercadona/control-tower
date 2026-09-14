@@ -15,8 +15,12 @@ import { ExternalToolsRoute } from './external-tools-route.ts'
 import { SessionsRoute } from './sessions-route.ts'
 import { SessionStreamRoute } from './session-stream-route.ts'
 import { SessionInputRoute } from './session-input-route.ts'
+import { CoordinatingSessionRoute } from './coordinating-session-route.ts'
+import { SessionHooksRoute } from './session-hooks-route.ts'
 import type { StartPlan } from '../application/actions/start-plan.ts'
 import type { ImplementPlanParams } from '../application/actions/implement-plan.ts'
+import type { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
+import type { CoordinatingSessions } from './coordinating-sessions.ts'
 import type { ReadImplementationProgressParams } from '../application/queries/read-implementation-progress.ts'
 import type { ReadImplementationHistoryParams } from '../application/queries/read-implementation-history.ts'
 import type { SurveyExternalTools } from '../application/queries/survey-external-tools.ts'
@@ -72,6 +76,8 @@ export type ApiCollaborators = {
   typeIntoSession?: TypeIntoSession | null,
   implementationStarts?: ImplementationStarts | null,
   recovery?: ActivePlanRecovering | null,
+  openCoordinatingSession?: OpenCoordinatingSession | null,
+  coordinatingSessions?: CoordinatingSessions | null,
   stderr?: Stderr | null,
   frontendRoot: string,
 }
@@ -122,6 +128,8 @@ export class ApiServer {
   readonly typeIntoSession: TypeIntoSession | null | undefined
   readonly implementationStarts: ImplementationStarts | null | undefined
   readonly recovery: ActivePlanRecovering | null
+  readonly openCoordinatingSession: OpenCoordinatingSession | null | undefined
+  readonly coordinatingSessions: CoordinatingSessions | null | undefined
   readonly stderr: Stderr | null | undefined
   readonly frontendRoot: string
   server: Server | null
@@ -129,7 +137,8 @@ export class ApiServer {
   constructor({
     port, startPlan, implementPlan, implementProgress, implementHistory, pullRequestReviews,
     planEvents, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
-    watchLiveSession, typeIntoSession, implementationStarts, recovery = null, stderr, frontendRoot,
+    watchLiveSession, typeIntoSession, implementationStarts, recovery = null,
+    openCoordinatingSession, coordinatingSessions, stderr, frontendRoot,
   }: ApiCollaborators) {
     this.requestedPort = port
     this.startPlan = startPlan
@@ -147,6 +156,8 @@ export class ApiServer {
     this.typeIntoSession = typeIntoSession
     this.implementationStarts = implementationStarts
     this.recovery = recovery
+    this.openCoordinatingSession = openCoordinatingSession
+    this.coordinatingSessions = coordinatingSessions
     this.stderr = stderr
     this.frontendRoot = frontendRoot
     this.server = null
@@ -227,6 +238,27 @@ export class ApiServer {
       SessionInputRoute.handledBy(this.liveSessions!, this.typeIntoSession!)
     )
     app.all(SessionInputRoute.PATH, SessionInputRoute.refuseOtherMethods)
+    app.post(
+      CoordinatingSessionRoute.PATH,
+      Browsers.turnAwayForeign,
+      JsonBody.demandDeclared,
+      JsonBody.reader(),
+      CoordinatingSessionRoute.opening(this.openCoordinatingSession!, this.coordinatingSessions!)
+    )
+    app.get(
+      CoordinatingSessionRoute.PATH,
+      Browsers.turnAwayForeign,
+      CoordinatingSessionRoute.reading(this.coordinatingSessions!)
+    )
+    app.all(CoordinatingSessionRoute.PATH, CoordinatingSessionRoute.refuseOtherMethods)
+    app.post(
+      SessionHooksRoute.PATH,
+      Browsers.turnAwayForeign,
+      JsonBody.demandDeclared,
+      JsonBody.reader(),
+      SessionHooksRoute.handledBy(this.coordinatingSessions!)
+    )
+    app.all(SessionHooksRoute.PATH, SessionHooksRoute.refuseOtherMethods)
     app.use(Failures.nothingMatched)
     app.use(Failures.answer)
 

@@ -84,3 +84,17 @@ export class WorkbenchFailure extends PlanFailure {}
 export class SliceNotReopened extends WorkbenchFailure {}
 
 export class ReopenNotUnderstood extends WorkbenchFailure {}
+
+export class ConversationFailure extends PlanFailure {}
+
+export class ConversationNotStarted extends ConversationFailure {}
+
+export class ConversationNotRecorded extends ConversationFailure {}
+
+export class ConversationNotUnderstood extends ConversationFailure {}
+
+export class SessionHooksFailure extends PlanFailure {}
+
+export class SessionHooksNotWritten extends SessionHooksFailure {}
+
+export class SessionHooksNotUnderstood extends SessionHooksFailure {}
