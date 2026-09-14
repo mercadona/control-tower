@@ -3,6 +3,7 @@ import { Answer, Refusal } from './http.ts'
 import { Projection } from './projection.ts'
 import { SpecFreezeState, ReadSpecFreezeParams } from '../application/queries/read-spec-freeze.ts'
 import { GateKey } from './gate-key.ts'
+import { FreezesInFlight, FreezeReservation } from './freezes-in-flight.ts'
 import { FreezeSpec, FreezeSpecParams, FreezeOutcome } from '../application/actions/freeze-spec.ts'
 import { PlanFailure } from '../domain/exceptions.ts'
 import { PlanCollapse } from './start-plan-route.ts'
@@ -20,6 +21,7 @@ export const SpecFreezeOutcome = Object.freeze({
   NO_EPIC_SPEC: 'no-epic-spec',
   SPEC_ALREADY_FROZEN: 'spec-already-frozen',
   SPEC_NOT_FREEZABLE: 'spec-not-freezable',
+  FREEZE_IN_PROGRESS: 'freeze-in-progress',
 } as const)
 
 export type SpecFreezeOutcomeValue = (typeof SpecFreezeOutcome)[keyof typeof SpecFreezeOutcome]
@@ -66,6 +68,8 @@ export class SpecFreezeRoute {
   static readonly PATH = '/spec-freeze'
   static readonly METHODS = 'GET, POST'
   static readonly #NOT_FROM_THE_PAGE_DETAIL = 'gate 1 answers only a request carrying the key the page was given'
+  static readonly #FREEZE_IN_PROGRESS_DETAIL =
+    'a freeze of this checkout is under way: wait for it to answer before pressing again'
   static readonly #NO_COORDINATING_SESSION_DETAIL = 'no coordinating session is held: there is nothing to freeze'
 
   static reading(held: CoordinatingSessions, read: ReadSpecFreeze, key: GateKey): RequestHandler {
@@ -95,7 +99,9 @@ export class SpecFreezeRoute {
     }
   }
 
-  static freezing(held: CoordinatingSessions, freeze: FreezeSpec, key: GateKey): RequestHandler {
+  static freezing(
+    held: CoordinatingSessions, freeze: FreezeSpec, key: GateKey, inFlight: FreezesInFlight
+  ): RequestHandler {
     return async (request: Request, response: Response): Promise<void> => {
       if (!key.holds(request.get(GateKey.HEADER))) {
         Answer.refuse(response, 403, SpecFreezeOutcome.NOT_FROM_THE_PAGE, SpecFreezeRoute.#NOT_FROM_THE_PAGE_DETAIL)
@@ -104,6 +110,10 @@ export class SpecFreezeRoute {
       const holding = held.held()
       if (holding === null) {
         Answer.refuse(response, 400, SpecFreezeOutcome.NO_COORDINATING_SESSION, SpecFreezeRoute.#NO_COORDINATING_SESSION_DETAIL)
+        return
+      }
+      if (inFlight.reserve(holding.conversation.root) !== FreezeReservation.RESERVED) {
+        Answer.refuse(response, 409, SpecFreezeOutcome.FREEZE_IN_PROGRESS, SpecFreezeRoute.#FREEZE_IN_PROGRESS_DETAIL)
         return
       }
       let frozen: SpecFrozen
@@ -116,6 +126,8 @@ export class SpecFreezeRoute {
         if (!(cause instanceof PlanFailure)) throw cause
         Answer.refuseAs(response, PlanCollapse.of(cause))
         return
+      } finally {
+        inFlight.release(holding.conversation.root)
       }
       if (frozen.outcome !== FreezeOutcome.FROZEN) {
         Answer.refuseAs(response, SpecFreezeRefusal.of(frozen))

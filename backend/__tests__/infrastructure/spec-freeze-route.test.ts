@@ -6,6 +6,7 @@ import express from 'express'
 import { Browsers } from '../../src/infrastructure/http.ts'
 import { SpecFreezeRoute } from '../../src/infrastructure/spec-freeze-route.ts'
 import { GateKey } from '../../src/infrastructure/gate-key.ts'
+import { FreezesInFlight } from '../../src/infrastructure/freezes-in-flight.ts'
 import { EpicSpecNotUnderstood } from '../../src/domain/exceptions.ts'
 import {
   ReadSpecFreeze, ReadSpecFreezeParams, SpecFreezeRead, SpecFreezeState,
@@ -77,6 +78,21 @@ class FreezeSpecSpy extends FreezeSpec {
   static neverAsked(): FreezeSpecSpy {
     return new FreezeSpecSpy(async () => { throw new Error('the freeze must not be asked') })
   }
+
+  static refusing(cause: Error): FreezeSpecSpy {
+    return new FreezeSpecSpy(async () => { throw cause })
+  }
+
+  static hanging(): FreezeSpecSpy {
+    let answer: (frozen: SpecFrozen) => void = () => undefined
+    const pending = new Promise<SpecFrozen>((resolve) => { answer = resolve })
+    const hanging = new FreezeSpecSpy(async () => await pending)
+    hanging.answerTheHangingOne = (): void => answer(Mother.frozenOutcome())
+
+    return hanging
+  }
+
+  answerTheHangingOne: () => void = () => undefined
 
   async execute(params: FreezeSpecParams): Promise<SpecFrozen> {
     this.asked.push(params)
@@ -225,7 +241,7 @@ class RunningApi {
   static async listening(held: CoordinatingSessions, read: ReadSpecFreeze, freeze: FreezeSpec, key: GateKey): Promise<number> {
     const app = express()
     app.get(RunningApi.PATH, Browsers.turnAwayForeign, SpecFreezeRoute.reading(held, read, key))
-    app.post(RunningApi.PATH, SpecFreezeRoute.freezing(held, freeze, key))
+    app.post(RunningApi.PATH, SpecFreezeRoute.freezing(held, freeze, key, new FreezesInFlight()))
     app.all(RunningApi.PATH, SpecFreezeRoute.refuseOtherMethods)
     const server = createServer(app)
     await new Promise<void>((resolve, reject) => {
@@ -305,6 +321,40 @@ describe('SpecFreezeRoute', () => {
         { code: 'clarification-marker', line: 9, detail: '- [NEEDS CLARIFICATION: who signs the freeze?]' },
       ],
     })
+  })
+
+  it('a second press while the first is in flight is refused and the freeze runs once', async () => {
+    const held = Mother.live()
+    const freeze = FreezeSpecSpy.hanging()
+    const key = Keys.minted()
+    const port = await RunningApi.listening(held, ReadSpecFreezeSpy.answering(Mother.draftRead()), freeze, key)
+
+    const first = RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+    const second = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(second.status).toBe(409)
+    expect(await second.json()).toEqual({
+      code: 'freeze-in-progress',
+      detail: 'a freeze of this checkout is under way: wait for it to answer before pressing again',
+    })
+    expect(freeze.asked).toHaveLength(1)
+    freeze.answerTheHangingOne()
+    await first
+    expect(freeze.asked).toHaveLength(1)
+  })
+
+  it('a freeze that failed frees the next press instead of locking the checkout for ever', async () => {
+    const held = Mother.live()
+    const freeze = FreezeSpecSpy.refusing(new EpicSpecNotUnderstood('the spec carries no title'))
+    const port = await RunningApi.listening(held, ReadSpecFreezeSpy.answering(Mother.draftRead()), freeze, Keys.minted())
+
+    const refused = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+    const again = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(refused.status).toBe(400)
+    expect(again.status).toBe(400)
+    expect(await again.json()).toEqual({ code: 'epic-spec-not-understood', detail: 'the spec carries no title' })
+    expect(freeze.asked).toHaveLength(2)
   })
 
   it('a tool that refuses under the read answers its own code instead of a generic failure', async () => {

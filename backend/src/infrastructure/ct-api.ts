@@ -41,6 +41,7 @@ import { SessionHooksRoute } from './session-hooks-route.ts'
 import { DiskEpicSpecs } from './disk-epic-specs.ts'
 import { GitEpicBranch } from './git-epic-branch.ts'
 import { GateKey } from './gate-key.ts'
+import { FreezesInFlight } from './freezes-in-flight.ts'
 import { CmuxWorkspaceQuery } from '../../../plugin/scripts/cmux.js'
 import { StartPlan } from '../application/actions/start-plan.ts'
 import { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
@@ -557,6 +558,7 @@ class CtApi {
       readSpecFreeze,
       freezeSpec,
       gateKey,
+      freezesInFlight: new FreezesInFlight(),
       stderr: (line) => process.stderr.write(line),
       frontendRoot: FrontendBuild.root(),
     })

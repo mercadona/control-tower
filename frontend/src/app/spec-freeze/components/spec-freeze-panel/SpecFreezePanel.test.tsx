@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { SpecFreezeMother } from '__scenarios__/SpecFreezeMother'
 import { SpecFreezePanel } from './SpecFreezePanel'
@@ -112,5 +112,39 @@ describe('SpecFreezePanel', () => {
 
     expect(await screen.findByText(/Spec congelado, sin fecha/)).toBeInTheDocument()
     expect(screen.getByText(/El groom espera al merge/)).toBeInTheDocument()
+  })
+
+  it('the button is disabled while the press is in flight and says it is freezing', async () => {
+    let answer: (response: Response) => void = () => undefined
+    const pending = new Promise<Response>((resolve) => { answer = resolve })
+    const ready = SpecFreezeMother.draftReady()
+    vi.stubGlobal('fetch', vi.fn(async (_input: string | URL | Request, init?: RequestInit) =>
+      init?.method === 'POST' ? await pending : new Response(ready.body, { status: 200 })))
+
+    render(<SpecFreezePanel />)
+    const button = await screen.findByRole('button', { name: 'Congelar el spec' })
+    await userEvent.click(button)
+
+    const freezing = await screen.findByRole('button', { name: 'Congelando el spec' })
+    expect(freezing).toBeDisabled()
+    answer(new Response(SpecFreezeMother.frozen().body, { status: 200 }))
+  })
+
+  it('a double click sends one press and not two', async () => {
+    const ready = SpecFreezeMother.draftReady()
+    const fetching = vi.fn(async (_input: string | URL | Request, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? new Response(SpecFreezeMother.frozen().body, { status: 200 })
+        : new Response(ready.body, { status: 200 }))
+    vi.stubGlobal('fetch', fetching)
+
+    render(<SpecFreezePanel />)
+    const button = await screen.findByRole('button', { name: 'Congelar el spec' })
+    fireEvent.click(button)
+    fireEvent.click(button)
+
+    await waitFor(() => expect(screen.getByText(/El groom espera al merge/)).toBeInTheDocument())
+    const presses = fetching.mock.calls.filter(([, init]) => init?.method === 'POST')
+    expect(presses).toHaveLength(1)
   })
 })

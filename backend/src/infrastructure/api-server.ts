@@ -23,6 +23,7 @@ import type { ImplementPlanParams } from '../application/actions/implement-plan.
 import type { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
 import type { CoordinatingSessions } from './coordinating-sessions.ts'
 import type { GateKey } from './gate-key.ts'
+import type { FreezesInFlight } from './freezes-in-flight.ts'
 import type { ReadSpecFreeze } from '../application/queries/read-spec-freeze.ts'
 import type { FreezeSpec } from '../application/actions/freeze-spec.ts'
 import type { ReadImplementationProgressParams } from '../application/queries/read-implementation-progress.ts'
@@ -85,6 +86,7 @@ export type ApiCollaborators = {
   readSpecFreeze?: ReadSpecFreeze | null,
   freezeSpec?: FreezeSpec | null,
   gateKey?: GateKey | null,
+  freezesInFlight?: FreezesInFlight | null,
   stderr?: Stderr | null,
   frontendRoot: string,
 }
@@ -140,6 +142,7 @@ export class ApiServer {
   readonly readSpecFreeze: ReadSpecFreeze | null | undefined
   readonly freezeSpec: FreezeSpec | null | undefined
   readonly gateKey: GateKey | null | undefined
+  readonly freezesInFlight: FreezesInFlight | null | undefined
   readonly stderr: Stderr | null | undefined
   readonly frontendRoot: string
   server: Server | null
@@ -148,7 +151,8 @@ export class ApiServer {
     port, startPlan, implementPlan, implementProgress, implementHistory, pullRequestReviews,
     planEvents, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
     watchLiveSession, typeIntoSession, implementationStarts, recovery = null,
-    openCoordinatingSession, coordinatingSessions, readSpecFreeze, freezeSpec, gateKey, stderr, frontendRoot,
+    openCoordinatingSession, coordinatingSessions, readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
+    stderr, frontendRoot,
   }: ApiCollaborators) {
     this.requestedPort = port
     this.startPlan = startPlan
@@ -171,6 +175,7 @@ export class ApiServer {
     this.readSpecFreeze = readSpecFreeze
     this.freezeSpec = freezeSpec
     this.gateKey = gateKey
+    this.freezesInFlight = freezesInFlight
     this.stderr = stderr
     this.frontendRoot = frontendRoot
     this.server = null
@@ -275,7 +280,7 @@ export class ApiServer {
     app.get(SpecFreezeRoute.PATH, Browsers.turnAwayForeign,
       SpecFreezeRoute.reading(this.coordinatingSessions!, this.readSpecFreeze!, this.gateKey!))
     app.post(SpecFreezeRoute.PATH, Browsers.turnAwayForeign,
-      SpecFreezeRoute.freezing(this.coordinatingSessions!, this.freezeSpec!, this.gateKey!))
+      SpecFreezeRoute.freezing(this.coordinatingSessions!, this.freezeSpec!, this.gateKey!, this.freezesInFlight!))
     app.all(SpecFreezeRoute.PATH, SpecFreezeRoute.refuseOtherMethods)
     app.use(Failures.nothingMatched)
     app.use(Failures.answer)

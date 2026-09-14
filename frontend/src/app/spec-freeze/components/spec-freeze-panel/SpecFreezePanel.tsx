@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { SpecFreezeClient } from 'app/spec-freeze/client'
 import { FreezeAskOutcome, FreezeFinding } from 'app/spec-freeze/SpecFreeze.types'
 import { useSpecFreeze } from 'app/spec-freeze/useSpecFreeze'
@@ -15,6 +15,7 @@ const FINDING: Record<string, string> = {
   'hypothesis-empty': 'La sección «## Hipótesis» está vacía',
 }
 const FREEZE = 'Congelar el spec'
+const FREEZING = 'Congelando el spec'
 const ONLY_FROM_THE_PAGE = 'Esta puerta solo se abre desde la página que sirve el backend.'
 const FROZEN = 'Spec congelado el'
 const FROZEN_UNDATED = 'Spec congelado, sin fecha en la línea de congelación.'
@@ -28,6 +29,8 @@ const findingLabel = (finding: FreezeFinding): string =>
 const SpecFreezePanel = () => {
   const read = useSpecFreeze()
   const [asked, setAsked] = useState<FreezeAskOutcome | null>(null)
+  const [isFreezing, setIsFreezing] = useState(false)
+  const isFreezingRef = useRef(false)
 
   const frozen = asked?.kind === 'frozen' ? asked : read.phase === 'read' && read.kind === 'frozen' ? read : null
 
@@ -57,11 +60,16 @@ const SpecFreezePanel = () => {
 
   const { findings, key: gateKey } = read
   const isBlocked = findings.length > 0
-  const isDisabled = isBlocked || gateKey === null
+  const isDisabled = isBlocked || gateKey === null || isFreezing
 
   const freezeSpec = async () => {
-    if (gateKey === null) return
-    setAsked(await SpecFreezeClient.freeze(gateKey))
+    if (gateKey === null || isFreezingRef.current) return
+    isFreezingRef.current = true
+    setIsFreezing(true)
+    const answered = await SpecFreezeClient.freeze(gateKey)
+    isFreezingRef.current = false
+    setIsFreezing(false)
+    setAsked(answered)
   }
 
   return (
@@ -79,7 +87,7 @@ const SpecFreezePanel = () => {
         </>
       )}
       <Button onClick={() => void freezeSpec()} disabled={isDisabled}>
-        {FREEZE}
+        {isFreezing ? FREEZING : FREEZE}
       </Button>
       {gateKey === null && <p className="spec-freeze-panel__only-from-the-page">{ONLY_FROM_THE_PAGE}</p>}
       {asked?.kind === 'refused' && <Banner type="error" role="alert" title={asked.error} />}
