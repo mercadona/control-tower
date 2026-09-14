@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { cleanup, screen } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
@@ -27,7 +27,10 @@ const readsOfTheCoordinatingSession = (fetching: ReturnType<typeof backendHoldin
   fetching.mock.calls.filter(([input]) => input === '/coordinating-session')
 
 describe('Home and the coordinating session', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
 
   it('refuses to open a second brainstorming while one is live', async () => {
     backendHolding(CoordinatingSessionMother.working())
