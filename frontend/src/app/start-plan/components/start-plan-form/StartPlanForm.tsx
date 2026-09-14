@@ -16,16 +16,21 @@ import './StartPlanForm.css'
 
 type OpenRefusal = Exclude<OpenOutcome, { kind: 'opened' }>
 
+const MUTATION_BLOCKED_HELP = 'No puedes arrancar otro plan hasta confirmar el estado del backend.'
+const ALREADY_LIVE_HELP = 'Ya hay una conversación coordinadora en marcha. Termínala antes de abrir otra.'
+const INCOMPLETE_HELP = 'Da un ticket o una descripción válida, además del repositorio y su ruta local.'
+
 type StartPlanFormProps = {
   onOpened: (opened: OpenedCoordinatingSession, request: StartPlanRequest) => void
   onUnreachable: (request: StartPlanRequest) => void
   onInteraction: () => void
   isLocked: boolean
   isMutationBlocked?: boolean
+  isCoordinatingSessionLive?: boolean
   request?: StartPlanRequest
 }
 
-const StartPlanForm = ({ onOpened, onUnreachable, onInteraction, isLocked, isMutationBlocked = false, request }: StartPlanFormProps) => {
+const StartPlanForm = ({ onOpened, onUnreachable, onInteraction, isLocked, isMutationBlocked = false, isCoordinatingSessionLive = false, request }: StartPlanFormProps) => {
   const [ticketKey, setTicketKey] = useState('')
   const [userComment, setUserComment] = useState('')
   const [repository, setRepository] = useState('')
@@ -48,11 +53,17 @@ const StartPlanForm = ({ onOpened, onUnreachable, onInteraction, isLocked, isMut
     RepositoryName.isWellFormed(repository) &&
     LocalPath.isWellFormed(path) &&
     !isSending &&
-    !isLocked && !isMutationBlocked
+    !isLocked && !isMutationBlocked && !isCoordinatingSessionLive
+
+  const helpText = isCoordinatingSessionLive
+    ? ALREADY_LIVE_HELP
+    : isMutationBlocked
+      ? MUTATION_BLOCKED_HELP
+      : INCOMPLETE_HELP
 
   const openBrainstorming = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (isSendingRef.current || isLocked || isMutationBlocked) return
+    if (isSendingRef.current || isLocked || isMutationBlocked || isCoordinatingSessionLive) return
     onInteraction()
     isSendingRef.current = true
     setIsSending(true)
@@ -171,7 +182,7 @@ const StartPlanForm = ({ onOpened, onUnreachable, onInteraction, isLocked, isMut
           {isSending ? <><Loading aria-label="Enviando la solicitud" /> Abriendo el brainstorming</> : 'Arrancar brainstorming'}
         </Button>
       </div>
-      {!canStart && !isSending && <p id="start-plan-help" className="start-plan-form__help">{isMutationBlocked ? 'No puedes arrancar otro plan hasta confirmar el estado del backend.' : 'Da un ticket o una descripción válida, además del repositorio y su ruta local.'}</p>}
+      {!canStart && !isSending && <p id="start-plan-help" className="start-plan-form__help">{helpText}</p>}
       {isSending && <p className="start-plan-form__pending" role="status">Preparar el plan puede tardar varios minutos mientras se ejecutan las comprobaciones del repositorio. No cierres esta página ni vuelvas a enviarlo.</p>}
       {refusal?.kind === 'refused' && <Banner type="error" role="alert" title={refusal.error} />}
     </form>

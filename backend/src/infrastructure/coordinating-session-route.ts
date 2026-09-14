@@ -12,6 +12,7 @@ import type { CoordinatingSessionOpened, OpenCoordinatingSession } from '../appl
 export const CoordinatingSessionOutcome = Object.freeze({
   ACCEPTED: 'accepted',
   ONE_REPOSITORY_ONLY: 'one-repository-only',
+  ALREADY_LIVE: 'coordinating-session-already-live',
 } as const)
 
 export type CoordinatingSessionOutcomeValue = (typeof CoordinatingSessionOutcome)[keyof typeof CoordinatingSessionOutcome]
@@ -26,6 +27,11 @@ export class CoordinatingSessionRefusal {
         code: CoordinatingSessionOutcome.ONE_REPOSITORY_ONLY,
         detail: `an epic governs one checkout: send ${PlanRequest.REPO_FIELD} and ${PlanRequest.PATH_FIELD} `
           + `instead of ${PlanRequest.REPO_LIST_FIELD}`,
+      })],
+      [CoordinatingSessionOutcome.ALREADY_LIVE, () => new Refusal({
+        status: 409,
+        code: CoordinatingSessionOutcome.ALREADY_LIVE,
+        detail: 'a coordinating conversation is already live: it has to end before another one opens',
       })],
     ])
 
@@ -90,6 +96,11 @@ export class CoordinatingSessionRoute {
         Answer.refuseAs(response, CoordinatingSessionRefusal.of(CoordinatingSessionOutcome.ONE_REPOSITORY_ONLY))
         return
       }
+      const live = CoordinatingSessionRoute.#liveHeldBy(held)
+      if (live !== null) {
+        CoordinatingSessionRoute.#refuseSecondOpening(response, live)
+        return
+      }
       const [target] = asked.targets!
       let opened: CoordinatingSessionOpened
       try {
@@ -118,6 +129,22 @@ export class CoordinatingSessionRoute {
         session: { id: opened.session.id, name: opened.session.name },
       })
     }
+  }
+
+  static #liveHeldBy(held: CoordinatingSessions): HeldCoordinatingSession | null {
+    const holding = held.held()
+
+    return holding !== null && holding.state === CoordinatingSessionState.LIVE ? holding : null
+  }
+
+  static #refuseSecondOpening(response: Response, live: HeldCoordinatingSession): void {
+    const refusal = CoordinatingSessionRefusal.of(CoordinatingSessionOutcome.ALREADY_LIVE)
+    Answer.send(response, refusal.status, {
+      code: refusal.code,
+      detail: refusal.detail,
+      conversation: live.conversation.id.text,
+      session: { id: live.session!.id, name: live.session!.name },
+    })
   }
 
   static refuseOtherMethods(request: Request, response: Response): void {

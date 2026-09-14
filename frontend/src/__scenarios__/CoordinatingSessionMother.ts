@@ -1,3 +1,5 @@
+import { CoordinatingSessionRead } from 'app/coordinating-session/useCoordinatingSession'
+
 const CONVERSATION = '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'
 const REPO = 'owner/name'
 const ROOT = '/Users/pedro/code/name'
@@ -7,6 +9,35 @@ const UNRESUMABLE_DETAIL = 'claude code no longer holds this conversation: the c
 const ONE_REPOSITORY_ONLY_DETAIL = 'an epic governs one checkout: send repo and path instead of repo_list'
 
 const none = () => ({ status: 200, body: '{"status":"none"}' })
+
+const nothingRead = (): CoordinatingSessionRead => ({ phase: 'read', kind: 'none' })
+
+const workingRead = (): CoordinatingSessionRead => ({
+  phase: 'read',
+  kind: 'live',
+  conversation: CONVERSATION,
+  repo: REPO,
+  root: ROOT,
+  session: SESSION,
+  attention: { status: 'working', question: null },
+})
+
+const waitingRead = (): CoordinatingSessionRead => ({
+  phase: 'read',
+  kind: 'live',
+  conversation: CONVERSATION,
+  repo: REPO,
+  root: ROOT,
+  session: SESSION,
+  attention: { status: 'waiting', question: QUESTION },
+})
+
+const unresumableRead = (): CoordinatingSessionRead => ({
+  phase: 'read',
+  kind: 'unresumable',
+  conversation: CONVERSATION,
+  detail: UNRESUMABLE_DETAIL,
+})
 
 const working = () => ({
   status: 200,
@@ -51,6 +82,10 @@ export const CoordinatingSessionMother = {
   UNRESUMABLE_DETAIL,
   ONE_REPOSITORY_ONLY_DETAIL,
   none,
+  nothingRead,
+  workingRead,
+  waitingRead,
+  unresumableRead,
   working,
   waiting,
   unresumable,

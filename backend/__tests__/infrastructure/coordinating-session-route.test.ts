@@ -180,6 +180,37 @@ describe('CoordinatingSessionRoute', () => {
     expect(holding?.attention).toEqual(SessionAttention.working())
   })
 
+  it('refuses the second opening with 409 while the first conversation is live', async () => {
+    const open = OpenCoordinatingSessionSpy.opening()
+    const held = Mother.live(SessionAttention.working())
+
+    const response = await RunningApi.post(
+      open, held, '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+    )
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      code: 'coordinating-session-already-live',
+      detail: 'a coordinating conversation is already live: it has to end before another one opens',
+      conversation: Mother.CONVERSATION.id.text,
+      session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
+    })
+    expect(open.asked).toEqual([])
+  })
+
+  it('opens again over a conversation that is no longer live', async () => {
+    const open = OpenCoordinatingSessionSpy.opening()
+    const held = Mother.unresumable()
+
+    const response = await RunningApi.post(
+      open, held, '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+    )
+
+    expect(response.status).toBe(202)
+    expect(open.asked).toHaveLength(1)
+    expect(held.held()?.state).toBe('live')
+  })
+
   it('refuses a repository list because an epic governs one checkout', async () => {
     const open = OpenCoordinatingSessionSpy.opening()
     const held = new CoordinatingSessions({ stderr: (): void => {} })
