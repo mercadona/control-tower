@@ -14,7 +14,7 @@ Every shape below was read from a running server, not from the source alone. The
 | Port | `CT_API_PORT`, default `8787` |
 | Interface | loopback only (`127.0.0.1`) |
 | Start | `make run-backend` |
-| Endpoints | 10 (`POST` 3, `GET` 7) |
+| Endpoints | 13 (`POST` 5, `GET` 8) |
 
 In development the vite dev server proxies these paths to the backend and strips
 the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
@@ -30,7 +30,10 @@ the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
    application: it is decided before any request reaches a use case.
 3. **A `POST` must declare `Content-Type: application/json`.** Otherwise 415.
 4. **A body over 8 KiB is refused** with 413 `body-too-large`.
-5. **An unknown field in a `POST` body is refused**, not ignored.
+5. **An unknown field in a `POST` body is refused**, not ignored. The one
+   exception is `POST /session-hooks`: Claude Code's own hook payload carries
+   fields this backend does not read, and it ignores every one of them instead
+   of refusing the call.
 6. **Trailing slashes are collapsed**, so `/active-plans/` is `/active-plans`.
 7. **A foreign `Origin` is refused** with 403 `foreign-origin`. No `Origin` at
    all is admitted, which is why `curl` works.
@@ -729,6 +732,199 @@ curl -s -X POST -H 'Content-Type: application/json' \
 
 ---
 
+## `POST /coordinating-session`
+
+Confirms the checkout, resolves the idea, writes the phase prompt to a file,
+installs the session hooks and spawns `claude` in the governed checkout. **No
+worktree is cut and no branch is created** — this is the entrance conversation,
+not a plan.
+
+**Request** — the same shape `POST /start-plan` reads for a single repository,
+minus `repo_list`: an epic governs one checkout, so a list is refused rather
+than accepted and narrowed.
+
+| Field | Type | Required | Shape |
+|---|---|---|---|
+| `id` | string | one of `id` / `user_comment` | a user story key, `ABC-123`, or a GitHub issue url |
+| `user_comment` | string | one of `id` / `user_comment` | free text, not blank |
+| `repo` | string | yes | `owner/name` |
+| `path` | string | yes | absolute path of the local clone |
+
+`id` and `user_comment` may both be sent, the same as `POST /start-plan`. A
+user story hydrates the conversation — the coordinating session starts already
+knowing its summary and description — it does not replace it.
+
+**202 Accepted**
+
+```json
+{"status":"brainstorming","conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
+ "repo":"owner/name","root":"/repo/checkout",
+ "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"}}
+```
+
+`conversation` is the id `GET /coordinating-session` and `POST /session-hooks`
+both key on. `session` is the same shape `GET /sessions` answers, and the same
+`GET /sessions/:id/stream` streams — the coordinating session is a live session
+like any other.
+
+**Refusals**
+
+Shared with `POST /start-plan`'s single mode, because both read the body
+through the same `PlanRequest`:
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `body-not-a-json-object` | 400 | the body did not parse, or is not an object |
+| `unknown-field` | 400 | `detail` names the fields, sorted |
+| `malformed-id` | 400 | `id` is not a story key nor a GitHub issue url |
+| `malformed-user-comment` | 400 | `user_comment` is blank or not text |
+| `nothing-to-plan` | 400 | neither `id` nor `user_comment` was sent |
+| `malformed-repo` | 400 | `repo` is not `owner/name` |
+| `malformed-path` | 400 | `path` is not absolute |
+| `checkout-not-confirmed` | 400 | `path` is not a checkout of `repo` |
+| `target-said-twice` | 400 | `repo_list` came with `repo` or `path` beside it |
+| `malformed-repo-list` | 400 | `repo_list` is not a list, is empty, or an entry is not exactly `{repo, path}` |
+| `repo-listed-twice` | 400 | the same repo appears twice inside `repo_list` |
+
+Its own, for a `repo_list` that parsed but names more than a checkout:
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `one-repository-only` | 400 | the body sent `repo_list`; an epic governs one checkout, so send `repo` and `path` instead |
+
+From opening the conversation, once the body is well-formed:
+
+| `code` | Meaning |
+|---|---|
+| `user-story-not-read` | the tracker holding the story refused |
+| `user-story-not-understood` | the tracker holding the story answered something unreadable |
+| `workspace-not-understood` | git answered something unreadable while resolving the checkout's canonical root |
+| `conversation-not-started` | `claude` could not be spawned in the checkout |
+| `conversation-not-recorded` | the phase prompt or the conversation record could not be written to disk |
+| `session-hooks-not-written` | the checkout's `.claude/settings.local.json` could not be written |
+| `session-hooks-not-understood` | that settings file exists but is not the JSON object the hooks are merged into |
+
+All seven answer 400 and carry the tool's own message in `detail`, the same
+convention `POST /start-plan`'s ten tool refusals follow.
+
+`PlanCollapse` (`backend/src/infrastructure/start-plan-route.ts`) also declares
+`conversation-not-understood`, the code for a conversation record that is on
+disk but cannot be parsed. No endpoint answers it today: that record is only
+read by `records.recall()` at the backend's start-up, before this route or any
+other ever runs, and `ct-api.ts` awaits that recovery with nothing catching it
+— an unreadable record currently crashes the backend at start-up instead of
+being reported. That gap is open, not this task's to close.
+
+```
+curl -s -X POST -H 'Content-Type: application/json' \
+  http://127.0.0.1:8787/coordinating-session \
+  -d '{"id":"ABC-1","repo":"owner/name","path":"/repo/checkout"}'
+```
+
+---
+
+## `GET /coordinating-session`
+
+Whatever coordinating session this backend holds right now, in-memory. No
+parameters. The page polls it to show the entrance conversation's state and to
+recover it after a reload.
+
+**200 OK** — three shapes, told apart by `status`.
+
+Nothing has been opened yet:
+
+```json
+{"status":"none"}
+```
+
+A conversation is live:
+
+```json
+{"status":"live","conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
+ "repo":"owner/name","root":"/repo/checkout",
+ "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"},
+ "attention":{"status":"waiting","question":"should the button read Arrancar brainstorming?"}}
+```
+
+`attention.status` is `working` or `waiting`, moved by `POST /session-hooks`.
+`attention.question` carries the live question while `waiting`, and is `null`
+otherwise — it is dropped the moment the session works again.
+
+Claude Code no longer holds a conversation this backend tried to resume at
+start-up:
+
+```json
+{"status":"unresumable","conversation":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f",
+ "repo":"owner/name","root":"/repo/checkout",
+ "detail":"claude code no longer holds this conversation: the coordinating session was not resumed"}
+```
+
+The cabin never opens a different conversation and presents it as this one: an
+`unresumable` conversation stays `unresumable` until a person opens a new one
+with `POST /coordinating-session`.
+
+**Refusals**
+
+None of its own. Only the shared refusals apply — 405 for a method other than
+`GET` or `POST`, 403 for a foreign `Origin`.
+
+```
+curl -s http://127.0.0.1:8787/coordinating-session
+```
+
+---
+
+## `POST /session-hooks`
+
+Where Claude Code's own `UserPromptSubmit`, `Notification` and `Stop` hooks
+report in. It is not meant to be called by the page: `POST
+/coordinating-session` installs it into the governed checkout's
+`.claude/settings.local.json`, guarded by `$CT_SESSION_HOOKS_URL`, and Claude
+Code invokes it on its own as the coordinating session works.
+
+**Request** — Claude Code's own hook payload, read for three fields and
+nothing else:
+
+| Field | Type | Shape |
+|---|---|---|
+| `session_id` | string | not empty; matched against the held conversation's id |
+| `hook_event_name` | string | one of `UserPromptSubmit`, `Notification`, `Stop` |
+| `message` | string | optional; only read on `Notification`, as the live question |
+
+**This is the one endpoint that ignores an unknown field instead of refusing
+it** (the exception rule 5 above names): Claude Code's hooks send fields this
+backend never reads, such as `transcript_path` and `cwd`, and every one of
+them is dropped rather than turned into a refusal.
+
+Each event projects to an attention:
+
+| `hook_event_name` | Attention | `message` read |
+|---|---|---|
+| `UserPromptSubmit` | `working` | no |
+| `Notification` | `waiting` | yes, as the live question |
+| `Stop` | `waiting`, no question | no |
+
+**202 Accepted**
+
+```json
+{"status":"reported","attention":"waiting"}
+```
+
+**Refusals**
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `hook-not-understood` | 400 | the body is not JSON, not an object, or misses a known `hook_event_name` or a well-formed `session_id` |
+| `conversation-not-live` | 400 | no held conversation answers to that `session_id` |
+
+```
+curl -s -X POST -H 'Content-Type: application/json' \
+  http://127.0.0.1:8787/session-hooks \
+  -d '{"session_id":"2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f","hook_event_name":"Notification","message":"which repo?"}'
+```
+
+---
+
 ## Where the frontend consumes each one
 
 | Endpoint | Client | Types |
@@ -743,6 +939,8 @@ curl -s -X POST -H 'Content-Type: application/json' \
 | `GET /sessions` | `frontend/src/app/sessions/client.ts` | `Sessions.types.ts` |
 | `GET /sessions/:id/stream` | `frontend/src/app/sessions/client.ts` | `Sessions.types.ts` |
 | `POST /sessions/:id/input` | `frontend/src/app/sessions/client.ts` | `Sessions.types.ts` |
+| `POST /coordinating-session` | `frontend/src/app/coordinating-session/client.ts` | `CoordinatingSession.types.ts` |
+| `GET /coordinating-session` | `frontend/src/app/coordinating-session/client.ts` | `CoordinatingSession.types.ts` |
 
 A client validates the wire shape before it reaches a component, and projects
 snake_case to camelCase. Add a field to the validator, or the component never
@@ -759,6 +957,11 @@ The three session endpoints are all in `API_PATHS` under the single `/sessions`
 entry, which the dev server matches as a prefix, so `/sessions`,
 `/sessions/:id/stream` and `/sessions/:id/input` are all proxied instead of
 answering the page's HTML.
+
+`POST /session-hooks` has no row above because the page never calls it: Claude
+Code calls it on its own, from inside the checkout `POST /coordinating-session`
+started. It is still in `API_PATHS` (`frontend/vite.config.ts`), because the
+hook runs from the same machine the dev server listens on.
 
 ## Where the contract is decided
 
