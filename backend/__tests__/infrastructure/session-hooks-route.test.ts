@@ -3,12 +3,25 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState } from '../../src/infrastructure/coordinating-sessions.ts'
+import { SessionHooksRoute } from '../../src/infrastructure/session-hooks-route.ts'
+import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
+import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
+
+class LiveSessionsDouble extends LiveSessions {
+  find(id: string): LiveSession | null {
+    return id === Mother.SESSION.id ? Mother.SESSION : null
+  }
+
+  watch(): LiveSessionStream {
+    return { printed: '', stop: (): void => {} }
+  }
+}
 
 class Mother {
   static readonly CONVERSATION_ID = '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'
@@ -21,7 +34,7 @@ class Mother {
   static readonly SESSION = new LiveSession({ id: 'session-1', name: 'brainstorming' })
 
   static held(attention: SessionAttention): CoordinatingSessions {
-    const sessions = new CoordinatingSessions({ stderr: (): void => {} })
+    const sessions = new CoordinatingSessions({ liveSessions: new LiveSessionsDouble(), stderr: (): void => {} })
     sessions.remember(new HeldCoordinatingSession({
       state: CoordinatingSessionState.LIVE,
       conversation: Mother.CONVERSATION,
@@ -33,9 +46,46 @@ class Mother {
   }
 }
 
+class Hook {
+  static readonly CWD = '/repo'
+  static readonly TRANSCRIPT = '/home/someone/.claude/projects/-repo/2b1a6c2e.jsonl'
+  static readonly IDLE_PROMPT = 'idle_prompt'
+  static readonly AUTH_SUCCESS = 'auth_success'
+
+  static #of(event: string, own: Readonly<Record<string, unknown>>, conversation = Mother.CONVERSATION_ID): string {
+    return JSON.stringify({
+      session_id: conversation,
+      transcript_path: Hook.TRANSCRIPT,
+      cwd: Hook.CWD,
+      hook_event_name: event,
+      ...own,
+    })
+  }
+
+  static userPromptSubmit(input: string): string {
+    return Hook.#of('UserPromptSubmit', { user_input: input })
+  }
+
+  static stop(own: Readonly<Record<string, unknown>> = {}): string {
+    return Hook.#of('Stop', own)
+  }
+
+  static stopOf(conversation: string): string {
+    return Hook.#of('Stop', {}, conversation)
+  }
+
+  static notification(type: string, message: string): string {
+    return Hook.#of('Notification', { notification_type: type, message })
+  }
+
+  static unknownEvent(): string {
+    return Hook.#of('PreToolUse', {})
+  }
+}
+
 class RunningApi {
   static readonly #started: ApiServer[] = []
-  static readonly PATH = '/session-hooks'
+  static readonly PATH = SessionHooksRoute.PATH
   static readonly NO_FRONTEND = join(tmpdir(), 'ct-frontend-never-built')
 
   static async listening(held: CoordinatingSessions): Promise<number> {
@@ -73,13 +123,11 @@ afterEach(async () => {
 })
 
 describe('SessionHooksRoute', () => {
-  it('moves the held session from working to waiting with the question it was asked', async () => {
+  it('reads a Stop as the question Claude ended its turn with', async () => {
     const held = Mother.held(SessionAttention.working())
 
     const response = await RunningApi.post(
-      held,
-      `{"session_id":"${Mother.CONVERSATION_ID}","hook_event_name":"Notification",` +
-        '"message":"should the button read Arrancar brainstorming?"}'
+      held, Hook.stop({ last_assistant_message: '  should the button read Arrancar brainstorming?  ' })
     )
 
     expect(response.status).toBe(202)
@@ -87,37 +135,63 @@ describe('SessionHooksRoute', () => {
     expect(held.held()?.attention).toEqual(SessionAttention.waiting('should the button read Arrancar brainstorming?'))
   })
 
-  it('drops the question when the session works again', async () => {
-    const held = Mother.held(SessionAttention.waiting('should the button read Arrancar brainstorming?'))
-
-    const response = await RunningApi.post(
-      held, `{"session_id":"${Mother.CONVERSATION_ID}","hook_event_name":"UserPromptSubmit"}`
-    )
-
-    expect(response.status).toBe(202)
-    expect(await response.json()).toEqual({ status: 'reported', attention: 'working' })
-    expect(held.held()?.attention).toEqual(SessionAttention.working())
-  })
-
-  it('reads Stop as waiting with no question', async () => {
+  it('leaves the question empty when the Stop carries no final message', async () => {
     const held = Mother.held(SessionAttention.working())
 
-    const response = await RunningApi.post(
-      held, `{"session_id":"${Mother.CONVERSATION_ID}","hook_event_name":"Stop"}`
-    )
+    const response = await RunningApi.post(held, Hook.stop())
 
     expect(response.status).toBe(202)
     expect(await response.json()).toEqual({ status: 'reported', attention: 'waiting' })
     expect(held.held()?.attention).toEqual(SessionAttention.waiting(null))
   })
 
+  it('shows a permission prompt as what the session is waiting for', async () => {
+    const held = Mother.held(SessionAttention.working())
+
+    const response = await RunningApi.post(
+      held, Hook.notification('permission_prompt', 'Claude needs your permission to use Bash')
+    )
+
+    expect(response.status).toBe(202)
+    expect(await response.json()).toEqual({ status: 'reported', attention: 'waiting' })
+    expect(held.held()?.attention).toEqual(SessionAttention.waiting('Claude needs your permission to use Bash'))
+  })
+
+  it('does not show an authentication notification as a question', async () => {
+    const held = Mother.held(SessionAttention.working())
+
+    const response = await RunningApi.post(held, Hook.notification(Hook.AUTH_SUCCESS, 'Authentication successful'))
+
+    expect(response.status).toBe(202)
+    expect(await response.json()).toEqual({ status: 'ignored' })
+    expect(held.held()?.attention).toEqual(SessionAttention.working())
+  })
+
+  it('does not erase with an idle notification the question of the previous Stop', async () => {
+    const held = Mother.held(SessionAttention.working())
+    await RunningApi.post(held, Hook.stop({ last_assistant_message: 'which of the two screens do you mean?' }))
+
+    const response = await RunningApi.post(held, Hook.notification(Hook.IDLE_PROMPT, 'Claude is waiting for your input'))
+
+    expect(response.status).toBe(202)
+    expect(held.held()?.attention).toEqual(SessionAttention.waiting('which of the two screens do you mean?'))
+  })
+
+  it('drops the question when the session works again', async () => {
+    const held = Mother.held(SessionAttention.waiting('should the button read Arrancar brainstorming?'))
+
+    const response = await RunningApi.post(held, Hook.userPromptSubmit('the second one'))
+
+    expect(response.status).toBe(202)
+    expect(await response.json()).toEqual({ status: 'reported', attention: 'working' })
+    expect(held.held()?.attention).toEqual(SessionAttention.working())
+  })
+
   it('ignores the fields of the payload it does not know', async () => {
     const held = Mother.held(SessionAttention.working())
 
     const response = await RunningApi.post(
-      held,
-      `{"session_id":"${Mother.CONVERSATION_ID}","hook_event_name":"Stop",` +
-        '"transcript_path":"/tmp/transcript.jsonl","cwd":"/repo"}'
+      held, Hook.stop({ stop_hook_active: false, permission_mode: 'acceptEdits' })
     )
 
     expect(response.status).toBe(202)
@@ -127,9 +201,7 @@ describe('SessionHooksRoute', () => {
   it('refuses an event it does not know with hook-not-understood', async () => {
     const held = Mother.held(SessionAttention.working())
 
-    const response = await RunningApi.post(
-      held, `{"session_id":"${Mother.CONVERSATION_ID}","hook_event_name":"PreToolUse"}`
-    )
+    const response = await RunningApi.post(held, Hook.unknownEvent())
 
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
@@ -142,9 +214,7 @@ describe('SessionHooksRoute', () => {
   it('refuses an id that is not the held conversation with conversation-not-live', async () => {
     const held = Mother.held(SessionAttention.working())
 
-    const response = await RunningApi.post(
-      held, '{"session_id":"not-the-held-conversation","hook_event_name":"Stop"}'
-    )
+    const response = await RunningApi.post(held, Hook.stopOf('not-the-held-conversation'))
 
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({

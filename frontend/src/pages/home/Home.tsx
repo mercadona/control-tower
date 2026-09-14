@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivePlan } from 'app/active-plans/ActivePlan.types'
 import { ActivePlansClient } from 'app/active-plans/client'
 import { CoordinatingSessionStatus } from 'app/coordinating-session/components/coordinating-session-status'
+import { useCoordinatingSession } from 'app/coordinating-session/useCoordinatingSession'
 import { ToolsNavbar } from 'app/external-tools/components/tools-navbar'
 import { ImplementHistory } from 'app/implement-history/components/implement-history'
 import { ImplementPlanAction } from 'app/implement-plan/components/implement-plan-action'
@@ -51,6 +52,8 @@ const Home = () => {
   const retryingRef = useRef(false)
   const recoveryTokenRef = useRef<symbol | null>(null)
   const mountedRef = useRef(false)
+  const coordinatingSession = useCoordinatingSession()
+  const isCoordinatingSessionLive = coordinatingSession.phase === 'read' && coordinatingSession.kind === 'live'
 
   const selectWorkflow = useCallback((selected: WorkflowSnapshot, restored = true) => {
     workflowRef.current = selected
@@ -384,6 +387,7 @@ const Home = () => {
                   onInteraction={formInteracted}
                   isLocked={uncertainRequest !== null}
                   isMutationBlocked={reconciliation === 'unavailable' || reconciliation === 'inconclusive' || (reconciliation === 'checking' && retryingRef.current)}
+                  isCoordinatingSessionLive={isCoordinatingSessionLive}
                   request={uncertainRequest ?? undefined}
                 />
               </>
@@ -457,7 +461,7 @@ const Home = () => {
 
           <section className="home__sessions" aria-label="Sesiones en marcha">
             <SessionsPanel />
-            <CoordinatingSessionStatus />
+            <CoordinatingSessionStatus read={coordinatingSession} />
           </section>
 
           {workflow !== null && (

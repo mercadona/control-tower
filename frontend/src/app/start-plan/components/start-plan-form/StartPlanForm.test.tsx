@@ -20,10 +20,18 @@ const UNREACHABLE = { kind: 'backend-unreachable' as const }
 
 const submitButton = () => screen.getByRole('button', { name: 'Arrancar brainstorming' })
 
-const renderForm = () => {
+const renderForm = ({ isCoordinatingSessionLive = false } = {}) => {
   const onOpened = vi.fn()
   const onUnreachable = vi.fn()
-  render(<StartPlanForm isLocked={false} onInteraction={vi.fn()} onOpened={onOpened} onUnreachable={onUnreachable} />)
+  render(
+    <StartPlanForm
+      isLocked={false}
+      isCoordinatingSessionLive={isCoordinatingSessionLive}
+      onInteraction={vi.fn()}
+      onOpened={onOpened}
+      onUnreachable={onUnreachable}
+    />,
+  )
   return { onOpened, onUnreachable }
 }
 
@@ -35,6 +43,21 @@ const typePath = (user: ReturnType<typeof userEvent.setup>, value: string) => us
 
 describe('StartPlanForm', () => {
   beforeEach(() => vi.mocked(CoordinatingSessionClient.open).mockReset())
+
+  it('does not let a second brainstorming be opened while a coordinating conversation is live', async () => {
+    const user = userEvent.setup()
+    renderForm({ isCoordinatingSessionLive: true })
+
+    await typeTicket(user, StartPlanMother.TICKET)
+    await typeRepository(user, StartPlanMother.REPO)
+    await typePath(user, StartPlanMother.PATH)
+
+    expect(submitButton()).toBeDisabled()
+    expect(screen.getByText(
+      'Ya hay una conversación coordinadora en marcha. Termínala antes de abrir otra.',
+    )).toBeInTheDocument()
+    expect(CoordinatingSessionClient.open).not.toHaveBeenCalled()
+  })
 
   it('shows specific field errors only after a field has been blurred', async () => {
     const user = userEvent.setup()

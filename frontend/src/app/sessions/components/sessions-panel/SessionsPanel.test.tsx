@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { FakeEventSource } from 'pages/home/__tests__/FakeEventSource'
@@ -33,7 +33,10 @@ const answeringInTurn = (bodies: string[]) => {
 
 describe('SessionsPanel', () => {
   beforeEach(() => FakeEventSource.install())
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
 
   it('the live sessions are listed by their names', async () => {
     vi.stubGlobal('fetch', answering(TWO_SESSIONS))
@@ -51,7 +54,8 @@ describe('SessionsPanel', () => {
     render(<SessionsPanel />)
 
     await screen.findByRole('button', { name: 'zsh' })
-    expect(FakeEventSource.last().url).toBe('/sessions/a1/stream')
+
+    await waitFor(() => expect(FakeEventSource.last().url).toBe('/sessions/a1/stream'))
   })
 
   it('choosing another session shows that one', async () => {
@@ -63,7 +67,7 @@ describe('SessionsPanel', () => {
     await screen.findByRole('button', { name: 'zsh' })
     await user.click(screen.getByRole('button', { name: 'bash' }))
 
-    expect(FakeEventSource.last().url).toBe('/sessions/b2/stream')
+    await waitFor(() => expect(FakeEventSource.last().url).toBe('/sessions/b2/stream'))
   })
 
   it('the chosen session is named as chosen for a screen reader', async () => {
@@ -99,7 +103,8 @@ describe('SessionsPanel', () => {
     render(<SessionsPanel />)
 
     await screen.findByRole('button', { name: 'zsh' })
-    FakeEventSource.last().refuseBeforeOpen()
+    const stream = await waitFor(() => FakeEventSource.last())
+    stream.refuseBeforeOpen()
 
     await waitFor(() => expect(screen.queryByRole('button', { name: 'zsh' })).not.toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'bash' })).toBeInTheDocument()
@@ -111,7 +116,8 @@ describe('SessionsPanel', () => {
     render(<SessionsPanel />)
 
     await screen.findByRole('button', { name: 'zsh' })
-    FakeEventSource.last().refuseBeforeOpen()
+    const stream = await waitFor(() => FakeEventSource.last())
+    stream.refuseBeforeOpen()
 
     await waitFor(() => expect(FakeEventSource.last().url).toBe('/sessions/b2/stream'))
   })
