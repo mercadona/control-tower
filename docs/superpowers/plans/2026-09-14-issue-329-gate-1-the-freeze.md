@@ -913,20 +913,22 @@ test "$(grep -c "'/spec-freeze'" frontend/src/app/spec-freeze/client.ts)" -eq 1 
 and — once frozen — the date, the pull request and that the groom waits for its merge.
 
 **Files:** `frontend/src/app/spec-freeze/components/spec-freeze-panel/SpecFreezePanel.tsx`
-(create), `.../SpecFreezePanel.css` (create), `.../index.ts` (create),
-`.../SpecFreezePanel.test.tsx` (create)
+(create), `frontend/src/app/spec-freeze/components/spec-freeze-panel/SpecFreezePanel.css`
+(create), `frontend/src/app/spec-freeze/components/spec-freeze-panel/index.ts` (create),
+`frontend/src/app/spec-freeze/components/spec-freeze-panel/SpecFreezePanel.test.tsx` (create)
 
 It takes no props and reads `useSpecFreeze`. `connecting`, `none`, `no-spec` and `unavailable`
-render `null` — while the brainstorming is still writing, the gate has nothing to say. `draft`
-renders a `Panel` with `heading={HEADING}`: the findings as a list, each one its label from
-`FINDING` followed by `, línea <line>: <detail>` when it carries a line, and the button, disabled
-while `findings.length > 0` or `key === null`; with no key it also renders `ONLY_FROM_THE_PAGE`.
-Pressing calls `SpecFreezeClient.freeze(key)`; `refused` and `backend-unreachable` render a
-`Banner` `type="error"` `role="alert"` with the detail; `frozen` is kept and rendered at once, and
-the poll agrees on its next round. `frozen` renders `${FROZEN} ${on}.`, an anchor to the pull
-request labelled `${PULL_REQUEST} #${number}` when there is one, and `WAITING`. The labels are
-Spanish because `CLAUDE.md` keeps what a person reads in the product Spanish; the classes are BEM
-under `spec-freeze-panel__`.
+render `null`: while the brainstorming writes, the gate has nothing to say. `draft` renders a
+`Panel` `heading={HEADING}` with the findings as a list, each its `FINDING` label followed by
+`, línea <line>: <detail>` when it carries a line, and the button, disabled while
+`findings.length > 0` or `key === null`; with no key it also renders `ONLY_FROM_THE_PAGE`.
+Pressing calls `SpecFreezeClient.freeze(key)`; a refusal renders a `Banner` `type="error"`
+`role="alert"` with its detail **untranslated**, the way `ToolsStatus` renders `fix`: those carry
+git's and gh's own stderr, and translating them destroys the only useful thing in them. `frozen`
+is kept and rendered at once, the poll agreeing next round: `${FROZEN} ${on}.`, an anchor
+labelled `${PULL_REQUEST} #${number}` when there is one, and `WAITING`. The labels are Spanish
+because `CLAUDE.md` keeps what a person reads in the product Spanish; classes are BEM under
+`spec-freeze-panel__`.
 
 Contract (frontend/src/app/spec-freeze/components/spec-freeze-panel/SpecFreezePanel.tsx):
 
