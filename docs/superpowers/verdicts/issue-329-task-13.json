@@ -1,0 +1,66 @@
+{
+  "issue": 329,
+  "task": 13,
+  "task_name": "The panel on the page, in every phase",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises three things and the diff produces all three. (1) \"gate 1's panel is rendered by Home outside every stage branch\": Home.tsx gains the import (line 11) and `<SpecFreezePanel />` at line 468, after the `home__sessions` section (463-466) and outside the `home__workspace` section that closes at 461 — the section that holds every `currentStage === ...` branch (355, 397, 434). (2) \"every existing Home suite stays green\": the three shared stubs of helpers.tsx and the private `withReadyTools` of Home.restoreWorkflow.test.tsx each gain the `/spec-freeze` route, and the control log shows 57 files / 1058 tests passing. (3) \"the front end's README says what app/spec-freeze consumes\": frontend/README.md gains the paragraph at lines 77-86, beside the `app/coordinating-session` one. Nothing the objective names is missing.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The **TDD:** line names `it('shows gate 1 in the request stage and still shows it while a slice is being implemented')` in Home.specFreeze.test.tsx, with `/spec-freeze` answering `SpecFreezeMother.draftReady()`, the heading on screen with no workflow restored and again with one restored at `implementing`. The test at line 58 carries that exact name; `stubBackend` answers `/spec-freeze` with `responseFor(SpecFreezeMother.draftReady())` (line 41); the first half asserts the heading with `/active-plans` empty, the second unmounts, re-stubs `/active-plans` with an `implementing` plan and asserts both the `Implementación` heading and gate 1's. I checked that the second assertion can fail for the reason its name gives: `Implementación` as a heading role exists only in the `<h1 id=\"workspace-implementation\">` inside `currentStage === 'implementation' && workflow !== null` (Home.tsx 434-439) — the nav step of the same text is a `<span>` (line 345), so the pair really is the boundary of \"outside every stage branch\". Same assertion, same input, same expected value.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "Judged against the file as it stands, as instructed: the `Current state`/`Call site` blocks for Home.tsx are stale on purpose. The edit lands exactly where the `Call site` block puts it — `<SpecFreezePanel />` immediately after the `home__sessions` section — and the merged change survives untouched: Home.tsx line 465 still reads `<CoordinatingSessionStatus read={coordinatingSession} />`, which the diff neither reverts nor reflows (it appears only as context). The panel is rendered with no props, which is right here: Home lifts `coordinatingSession` because it needs `isCoordinatingSessionLive` for `StartPlanForm` (line 391), and it needs nothing from the freeze, so `SpecFreezePanel` keeps its own `useSpecFreeze()`. The brief's inline prescription for the shared stubs, `if (input === '/spec-freeze') return responseFor(SpecFreezeMother.none())`, is honoured with the answer hoisted into `NO_SPEC_FREEZE` beside `NO_SESSIONS` and `NO_COORDINATING_SESSION` — the file's own idiom, not a `Final text` block, and the same value.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Rows the diff bears on: D-6 and D-22 (the gates are acts of the app, pressed from the front) — the diff puts gate 1's panel on the page and adds no endpoint or session-reachable trigger; the README paragraph states the key travels in `x-gate-key` and that under `make dev-frontend` no key is minted, which is D-22's mechanism as assumption 3 fixes it. D-7 (no merge button anywhere) — nothing in the diff adds one; the README only says the button freezes and the panel says the groom waits for the merge. D-21 (the coordinating session is in the front in every phase) — the `home__sessions` section is left exactly as it was and the new panel is added below it, hiding nothing and disabling nothing; the control `grep -c 'home__sessions' … -eq 1` is green. D-13 (no phase stored) — the panel derives its state from `GET /spec-freeze` on every mount. No row is implemented with a value other than the one stated, and no row is reopened.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: the plan names `CoordinatingSessionStatus` and its placement in `home__sessions`; the diff imitates it — absolute import from `app/…`, barrel index, named export, rendered by Home outside every stage branch — and frontend/README.md's new paragraph is written beside and in the shape of the `app/coordinating-session` one. The new test file matches the slice's own exemplar SpecFreezePanel.test.tsx (sentence-shaped `it` names, mothers from `__scenarios__`) and helpers.tsx's stub idiom. Rules read: `frontend/README.md` §Conventions (English names, zero prose, no `export default`, no `../` import — all held; the Spanish literals in the new test quote the panel's product copy, which CLAUDE.md and style.md both exempt), CLAUDE.md/AGENTS.md (everything new is English except that copy), and the skill `frontend-engineering:frontend-best-practices`, which loaded. ct's `conventions/defects.md`, rule by rule: closed vocabulary — no subject; the only string comparisons added are route dispatch inside test doubles and JSX, no classifier is held as a loose string or boolean and no catch-all dispatch is added. Raw map as the return value of logic — no subject; the objects the new test builds are stubbed HTTP bodies at a double's boundary, not a return value crossing two of the program's functions. Two fields that have to agree — no subject; the diff adds no field and no sentinel. Error named for where it happens — no subject in production; the one `throw new Error(\\`unexpected fetch to ${path}\\`)` is the double raising when nobody wrote an answer, which `conventions/testing.md` requires. `style.md`: no comment or docstring is added; the module-level arrow functions in the new test file are this whole directory's idiom (helpers.tsx, Home.restoreWorkflow.test.tsx) and React's own, and no new concept is smuggled into an old file. Boundaries and delivery: no document of either yardstick prescribes a shape of delivery for a page composition of this kind, and the diff draws no new boundary — it wires an existing component in. One finding, low: `conventions/testing.md`'s antipattern \"A test helper at module level, or repeated in two files\" — the new file re-declares `responseFor`, `NO_ACTIVE_PLANS` and the two implementation-not-read bodies that helpers.tsx already holds, and hand-builds an active plan that helpers.tsx (`DEFAULT_RESTORED_PLAN`/`activePlanFor`) and Home.restoreWorkflow.test.tsx (`activePlan`) already build. Declared clash, left out of the findings per the item's first calibration: the **TDD:** line fixes a test name carrying \"and\", which the `test-driven-development` skill's \"One thing. 'and' in name? Split it.\" forbids — item 2 requires that literal name, so no diff satisfies both, and the defect is the plan's.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Does not apply: the diff carries exactly one `-` line and it is in the plan document (the `**Files:**` line replaced by the amended one), none in a test file. helpers.tsx, Home.restoreWorkflow.test.tsx and Home.specFreeze.test.tsx are additions only. The added `/spec-freeze` route does not relax anything either — it strengthens `expect(fetching).toHaveBeenCalledTimes(1)` in Home.restoreWorkflow.test.tsx by keeping the panel's read out of the count that test owns, which is the assertion's original meaning.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The promised behaviour comes from production code: the single line `<SpecFreezePanel />` in Home.tsx at line 468, outside the `home__workspace` section, plus the component and hook shipped by tasks 10-12. Revert that one production line and both assertions of the new test fail — `findByRole('heading', { name: 'Puerta 1 · Congelación del spec' })` has nothing to find. The heading string asserted is the panel's own `HEADING` constant (SpecFreezePanel.tsx line 10), not a value the test invented, and the `Implementación` heading it pairs with is rendered by Home's implementation branch.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "Inside the five code paths every line traces to a sentence: one import and one element in Home.tsx (the brief's own words, and the two greps are green at 1 and 2), one route line in each of the three shared stubs, one paragraph in the README covering exactly the three things asked, and the one prescribed test. Nothing in `### Out of scope` is touched — no plugin script, no skill, no backend module, no merge affordance. On the plan hunk, which no program checked: it is 8 added lines and 1 removed, all inside task 13's own section. It ADDS `frontend/src/pages/home/__tests__/Home.restoreWorkflow.test.tsx (modify)` to `**Files:**` and moves its justification into prose below the line; it removes no route, and it leaves `**TDD:**`, `**Tests:**`, `**Verification:**` and the objective untouched, so no control was disarmed by it. The added path is justified by the task's own objective — \"every existing `Home` suite stays green\": that suite carries the private double `withReadyTools` (lines 49-59) which helpers.tsx's three stubs do not reach, and without the route the panel's read on mount is served by the fallthrough `fetching`, shifting the rejected-then-resolved sequences those tests thread for `/active-plans`. The edit there is three lines and nothing else.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "One new test, Home.specFreeze.test.tsx line 58. Deterministic: no clock, no date, no randomness, no network and no sleep — `SpecFreezeMother`'s values are fixed literals, the awaits are `findByRole`, and the panel's 2 s poll is cancelled on unmount. Isolated: it stubs `fetch` per render and `afterEach(() => vi.unstubAllGlobals())`, setupTests.ts clears `localStorage` after every test, it unmounts the first page before opening the second, and it needs no order from the rest of the file. Verifies real behaviour: the assertions are on headings rendered by Home and SpecFreezePanel, never on the double — the stub's call count is not asserted at all, and reverting the `<SpecFreezePanel />` line makes it red. The skill `control-tower-loop:test-driven-development` and its `testing-anti-patterns.md` loaded; the two things they name here are the \"and\" in the prescribed test name and mock setup longer than the test body, both `low` by this item's own scale: the first is the plan's wording, which item 2 forces (declared, not reported), and the second is the same duplication already reported once under `patrones`, so it is not counted twice.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "patrones",
+        "severity": "low",
+        "what": "The new test file re-declares scaffolding that frontend/src/pages/home/__tests__/helpers.tsx already holds: `responseFor`, `NO_ACTIVE_PLANS`, and the two implementation-not-read bodies (there as `NO_IMPLEMENTATION_RUN_YET` and `NO_IMPLEMENTATION_HISTORY_YET`), plus `implementingPlan()`, which is a third copy of the active plan helpers.tsx builds as `DEFAULT_RESTORED_PLAN`/`activePlanFor` and Home.restoreWorkflow.test.tsx as `activePlan()`. A private stub was unavoidable — the plan fixed the three shared ones to answer `SpecFreezeMother.none()` and this test needs `draftReady()` — but the constants and the plan object could have been imported instead of retyped, and the copy is why the stub setup (lines 9-53) runs longer than the test it serves (55-71), which the test-driven-development skill lists as a warning sign. No behaviour is at risk: the values are identical today.",
+        "path": "frontend/src/pages/home/__tests__/Home.specFreeze.test.tsx",
+        "line": 14,
+        "evidence": "`const IMPLEMENTATION_PROGRESS_NOT_READ: Answer = { status: 400, body: '{\"code\":\"implementation-progress-not-read\",\"detail\":\"the worktree is not there yet\"}' }` — the same literal already lives in `helpers.tsx` as `NO_IMPLEMENTATION_RUN_YET`; `conventions/testing.md` antipattern: «A test helper at module level, or repeated in two files.»"
+      }
+    ],
+    "review_token": "cc70b5b744672b99337af4de38b226a366649c9bce9bbd98e324d9bacbc9f0ad"
+  }
+}

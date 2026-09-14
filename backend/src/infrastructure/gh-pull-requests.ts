@@ -1,7 +1,7 @@
 import { LOOP_BRANCH_PREFIX } from '../../../plugin/scripts/conventions.js'
 import { PullRequests } from '../domain/ports/pull-requests.ts'
 import { ChangeAsked } from '../domain/value-objects/change-asked.ts'
-import { PullRequestNotRead, PullRequestNotUnderstood } from '../domain/exceptions.ts'
+import { PullRequestNotRead, PullRequestNotUnderstood, EpicPullRequestNotOpened } from '../domain/exceptions.ts'
 import { Gh } from './gh.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 
@@ -30,6 +30,7 @@ export class OpenPullRequest {
 export class GhPullRequests extends PullRequests {
   static readonly #ASKS = Object.freeze(['CHANGES_REQUESTED', 'COMMENTED'])
   static readonly #PAGE_SIZE = 'per_page=100'
+  static readonly CREATED = /\/pull\/(\d+)$/
 
   readonly gh: Gh
 
@@ -42,15 +43,24 @@ export class GhPullRequests extends PullRequests {
     return `${LOOP_BRANCH_PREFIX}${issueNumber}`
   }
 
-  static #listArgvFor({ issueNumber, repository }: {
-    issueNumber: number,
+  static #listArgvFor({ branch, repository }: {
+    branch: string,
     repository: RepositoryName,
   }): string[] {
     return [
       'pr', 'list', '--repo', repository.text,
-      '--head', GhPullRequests.#branchOf(issueNumber),
+      '--head', branch,
       '--state', 'open', '--json', 'number,url', '--limit', '1',
     ]
+  }
+
+  static createArgvFor({ repository, branch, title, body }: {
+    repository: RepositoryName,
+    branch: string,
+    title: string,
+    body: string,
+  }): string[] {
+    return ['pr', 'create', '--repo', repository.text, '--head', branch, '--title', title, '--body', body]
   }
 
   static #reviewsArgvFor({ pullRequest, repository }: {
@@ -77,8 +87,15 @@ export class GhPullRequests extends PullRequests {
     issueNumber: number,
     repository: RepositoryName,
   }): Promise<ReviewedPullRequest | null> {
-    const printed = await this.#read(GhPullRequests.#listArgvFor({ issueNumber, repository }))
-    const listed = GhPullRequests.#arrayIn(printed, `the pull requests of ${GhPullRequests.#branchOf(issueNumber)}`)
+    return this.openOfBranch({ branch: GhPullRequests.#branchOf(issueNumber), repository })
+  }
+
+  async openOfBranch({ branch, repository }: {
+    branch: string,
+    repository: RepositoryName,
+  }): Promise<ReviewedPullRequest | null> {
+    const printed = await this.#read(GhPullRequests.#listArgvFor({ branch, repository }))
+    const listed = GhPullRequests.#arrayIn(printed, `the pull requests of ${branch}`)
     if (listed.length === 0) return null
 
     const found = listed[0]
@@ -89,6 +106,29 @@ export class GhPullRequests extends PullRequests {
     }
 
     return new OpenPullRequest({ number: found.number, url: found.url })
+  }
+
+  async open({ repository, branch, title, body }: {
+    repository: RepositoryName,
+    branch: string,
+    title: string,
+    body: string,
+  }): Promise<ReviewedPullRequest> {
+    const outcome = await this.gh.run(
+      GhPullRequests.createArgvFor({ repository, branch, title, body }), { safeToRepeat: false }
+    )
+    if (outcome.failed) {
+      throw new EpicPullRequestNotOpened(`${Gh.BIN} pr create failed: ${outcome.stderr.trim()}`)
+    }
+    const printed = outcome.stdout.trim()
+    const found = printed.match(GhPullRequests.CREATED)
+    if (found === null) {
+      throw new PullRequestNotUnderstood(
+        `${Gh.BIN} pr create did not print the url of the pull request it opened, it printed ${JSON.stringify(outcome.stdout)}`
+      )
+    }
+
+    return new OpenPullRequest({ number: Number(found[1]), url: printed })
   }
 
   async fixesAsked({ pullRequest, repository }: {

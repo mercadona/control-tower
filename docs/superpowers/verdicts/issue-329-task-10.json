@@ -1,0 +1,82 @@
+{
+  "issue": 329,
+  "task": 10,
+  "task_name": "The session is told the line is not its, and gate 1 is documented",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "Two promises. (a) 'the coordinating session's phase prompt says the freeze is the cabin's button': PhasePrompt.FREEZE_IS_NOT_YOURS is added and spliced into brainstorming() between the checkout line and #idea(), so every prompt this backend writes carries it. (b) 'the two endpoints and the vocabulary they add are written down where this backend documents them': API.md gains a section per verb and this-repository.md gains the two vocabulary rows. I checked every claim of the new API.md against the code rather than the brief: endpoint count 15 (POST 6 / GET 9) matches api-server.ts; the four GET shapes match SpecFreezeRoute.#answerRead; the finding codes, their line/detail nullity and the 'analyzeSpecFreeze projects it' claim match epic-spec.ts and freeze-finding.ts; 'minted once when the backend starts' matches ct-api.ts:519; the Host/Origin sentence matches Browsers.isOurOwnPage exactly; the POST 200 body, the 403 checked first, the four 400 refusals and the 'None of these five touches the spec, a commit or the remote' all match spec-freeze-route.ts and freeze-spec.ts (every one of the five returns before specs.rewrite); the seven PlanCollapse codes and their 400/tool-message detail match start-plan-route.ts:329-336; 'gate 1 is the only caller of EpicSpecs, EpicBranch and PullRequests.open' is true by grep; the spec path is relative, as DiskEpicSpecs builds it; /spec-freeze really is in frontend/vite.config.ts API_PATHS. DEVIATION 1 (note instead of two rows) RULED JUSTIFIED: no frontend client exists, a Client/Types row would have been false, and the file's own idiom for that case is the 'POST /session-hooks has no row above because...' paragraph the note mirrors. DEVIATION 2 (epic-branch-not-published without 'without touching anything') RULED CORRECT AND TRUE: GitEpicBranch.publish throws before #add for the default-branch case, and FreezeSpec.execute does call specs.rewrite first, which is exactly what the row now discloses. Three low findings on the accuracy of what the new documentation says.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The plan asked for it('tells the coordinating session that the freeze is the cabin button and not a line it writes') asserting that the recorded prompt's text contains PhasePrompt.FREEZE_IS_NOT_YOURS and that it sits between the checkout line and the idea. The test in the diff carries that exact name and asserts lines.indexOf(FREEZE_IS_NOT_YOURS) === lines.indexOf(checkoutLine) + 1 and lines.indexOf(ideaLine) === lines.indexOf(FREEZE_IS_NOT_YOURS) + 1 over a default Flow run with STORY and COMMENT. Same input, same expected value, and the containment the sentence asks for is implied by the positional equality (an absent line would index -1 and fail). ideaLine matches the default UserStoriesDouble.reading('the summary of the story', 'as a user I want') of Flow.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "The Contract block for phase-prompt.ts is reproduced character for character, including the mixed quoting ('...gate 1 of the ' + \"cabin, on a person's click...\"), as a static readonly on PhasePrompt. The Current state block's placement is honoured: the new element sits after the checkout line and before ...PhasePrompt.#idea(...). The Final text block for backend/conventions/this-repository.md appears verbatim as the two new vocabulary rows, at the end of the same table and in its column shape. No signature, error or status is redefined by this task.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Rows the diff bears on: D-6 and D-22 (the gates are the app's, never a line the conversation's agent writes) are exactly what the new prompt sentence and the documented x-gate-key/gate-not-from-the-page refusal implement; D-10 (everything new under backend/ is TypeScript) holds — the only code file is .ts; D-23 is described as the plan closed it (push the branch, open the pull request, the groom waits for the merge); D-25 (the backend hands over paths and pastes no plugin text) is untouched — the new line is the backend's own prompt, not relayed plugin text, and the brief's own sentence leaves plugin/skills/brainstorming/SKILL.md alone, which the diff does. No row is reopened or implemented with a different value.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "Exemplars: the two new API.md sections copy the shape of `GET /coordinating-session` and `POST /coordinating-session` (status shapes told apart by `status`, a refusals table, the PlanCollapse tool-refusal table closed by 'All seven answer 400 and carry the tool's own message in detail', a curl line), and the frontend note copies the `POST /session-hooks` 'no row above because...' paragraph. conventions/style.md: no comment or docstring added to any .ts file, every identifier and the prompt sentence are English, and the new constant hangs off PhasePrompt rather than sitting loose (the Spanish literals `**Estado:** CONGELADA` and `## Hipótesis` quoted in API.md are contract data that CLAUDE.md pins as such). conventions/architecture.md: the prompt's own text belongs to the value object that owns the prompt, so no new module is owed and nothing new was smuggled into an old file. conventions/testing.md: the new test's name is a sentence, the ports are doubled by construction at the application layer, and the assertion is on what the records port received. conventions/defects.md, rule by rule — closed vocabulary: no subject, the diff adds a prompt string constant and documentation, and it classifies nothing (the vocabularies it documents, SpecFreezeOutcome and FreezeFindingCode, are frozen objects dispatched exhaustively in code this task does not touch); raw map as the return value of logic: no subject, the diff adds no function that returns or consumes a map; two fields that have to agree: no subject, the constant is one value and the two documentation rows add no state; an error named for where it happens: no subject, the diff declares no error, and the codes it documents (epic-spec-not-read, epic-branch-not-published, ...) are named for what happened. One observation left out of the findings because the plan wrote it: 'nothing that is not the browser page this backend serves is ever handed what presses gate 1' is the desired end state's own wording for D-22, and it overstates a check that a local process could satisfy by sending Origin itself — the sentence immediately before it states the real mechanism exactly, and the mechanism is earlier tasks' code, not this one's.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "The whole diff carries two `-` lines. One is `| Endpoints | 13 (POST 5, GET 8) |` in API.md; the other is `-import type { PhasePrompt }` in open-coordinating-session.test.ts, turned into a value import because the test now reads the constant. No assertion, case or test is removed or relaxed. The three pre-existing whole-prompt comparisons and PROMPT_TEXT in disk-conversation-records.test.ts each gain the new line, which makes them stricter and is exactly what the brief's **Tests:** sentence asks for ('are updated, not removed').",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The behaviour the objective promises is produced by production code: backend/src/domain/value-objects/phase-prompt.ts declares FREEZE_IS_NOT_YOURS and puts it into the array brainstorming() joins, so reverting those four lines turns the new test and the three updated comparisons red. Nothing is hard-coded in the test's own scaffolding — the test reads the constant from the production module and asserts on the prompt the use case handed the records port. The documentation half of the task delivers text, which has no production counterpart to fake.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The five touched paths are the five the brief declares, all (modify). Inside them: phase-prompt.ts gains only the constant and its use; this-repository.md gains only the two Final text rows; the two test files gain only the new test and the four updated prompt texts; API.md gains only the endpoint count, the two sections and the frontend note. The out-of-scope list is respected — plugin/skills/brainstorming/SKILL.md, groom.js and slices.js are untouched, and nothing about the groom, gate 2 or a merge is added. The PlanCollapse table in the POST section goes beyond the brief's enumeration ('the five refusal codes with their status') but serves the same sentence's 'in the shape the other endpoints have', which is how POST /coordinating-session documents its own tool refusals. No hunk touches the plan file, so there is no amendment to rule on.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "One new test. Deterministic: no clock, no network, no filesystem and no randomness — every port is a double built in the test file and the expected strings are composed from Flow's own frozen value objects. Isolated: a fresh Flow per test, no shared mutable state and no dependence on the order of the file. Verifies real behaviour: the assertion is on recorded.prompt.text, the text the use case handed ConversationRecordsDouble.prepare, and it fails if the production line in phase-prompt.ts is removed. I loaded control-tower-loop:test-driven-development and found nothing beyond the three to report: the 'and' in the test name is the plan's own literal wording and reads as one behaviour stated contrastively, not two. The test is largely redundant with the three whole-text comparisons that already pin the line's exact position (conventions/testing.md, 'Before adding a test, check whether the behaviour is already covered'), but the plan named it in its **TDD:** line, so that clash is the plan's and is declared here rather than charged to the diff.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "objetivo",
+        "severity": "low",
+        "what": "The new POST section leaves the document contradicting itself. api-server.ts mounts POST /spec-freeze with Browsers.turnAwayForeign alone — no JsonBody.demandDeclared and no JsonBody.reader() — so it is the first of the six POSTs that answers normally with no Content-Type and never answers 415 or 413. The section's own curl example sends no Content-Type, which is correct behaviour and the opposite of what rule 3 promises. The file's idiom is to write the exception into the global rule, as rule 5 does for POST /session-hooks; here rule 3 was left unqualified while the POST count was raised from 5 to 6.",
+        "path": "backend/API.md",
+        "line": 1004,
+        "evidence": "rule 3: \"**A `POST` must declare `Content-Type: application/json`.** Otherwise 415.\" against the new example \"curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/spec-freeze\""
+      },
+      {
+        "rule": "objetivo",
+        "severity": "low",
+        "what": "GET /spec-freeze's refusals paragraph is copied word for word from GET /coordinating-session, which talks to no external tool. This read does: on the frozen branch ReadSpecFreeze.execute calls EpicBranch.current (git rev-parse) and PullRequests.openOfBranch (gh pr list), and SpecFreezeRoute.reading catches no PlanFailure, so a logged-out gh or an unreadable checkout reaches the last net and the endpoint answers 400 request-failed with the reason only on stderr. Rule 10 covers that code generically, so no line is false, but the reader of this section is told less than the endpoint does — and POST's own section shows the file's idiom of naming such a gap (see its 'That gap is open, not this task's to close' precedent under POST /coordinating-session).",
+        "path": "backend/API.md",
+        "line": 991,
+        "evidence": "\"None of its own. Only the shared refusals apply — 405 for a method other than `GET` or `POST`, 403 for a foreign `Origin`.\""
+      },
+      {
+        "rule": "objetivo",
+        "severity": "low",
+        "what": "The note that replaces the two table rows calls this a 'backend-only slice', and it is not: tasks 11 to 13 of the same plan create frontend/src/app/spec-freeze/client.ts, SpecFreeze.types.ts and the cabin's panel, and the slice's desired end state is 'The cabin shows the panel of gate 1 in every phase'. The second half of the sentence says it correctly ('leaves the cabin's panel to a following task'). This also dates the note: no later task in the plan declares backend/API.md in its **Files:**, so once task 11 lands, 'no frontend client reads or presses gate 1 yet' is false and nothing is scheduled to correct it — which is the cost of the deviation from 'a row each', and the reason I record it even though I rule the deviation itself justified.",
+        "path": "backend/API.md",
+        "line": 1106,
+        "evidence": "\"but no frontend client reads or presses gate 1 yet — this backend-only slice of the epic wires the two endpoints and leaves the cabin's panel to a following task.\""
+      }
+    ],
+    "review_token": "ea4f436d74b6dd25ca3ef2b3e0de695d880ccfcf964f2566fd2501cfeb1eb38b"
+  }
+}

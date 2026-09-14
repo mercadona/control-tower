@@ -173,6 +173,11 @@ export class GitWorkspace extends Workspace {
     return ['-C', root, 'symbolic-ref', GitWorkspace.REMOTE_HEAD]
   }
 
+  static declaredBranchIn(printed: string): string | null {
+    const declared = printed.trim().match(GitWorkspace.#DECLARED)
+    return declared === null ? null : declared[1]
+  }
+
   static cutArgvFor(path: string): string[] {
     return ['-C', path, 'rev-parse', 'HEAD']
   }
@@ -277,14 +282,14 @@ export class GitWorkspace extends Workspace {
         `the remote of ${root} does not declare a default branch, so there is no base to cut from: ${asked.stderr.trim()}`
       )
     }
-    const declared = asked.stdout.trim().match(GitWorkspace.#DECLARED)
+    const declared = GitWorkspace.declaredBranchIn(asked.stdout)
     if (declared === null) {
       throw new WorkspaceNotUnderstood(
         `the remote does not declare a default branch under ${GitWorkspace.REMOTE_HEAD}, git printed ${JSON.stringify(asked.stdout)}`
       )
     }
 
-    return declared[1]
+    return declared
   }
 
   async undo(located: WorkspaceLocation): Promise<void> {

@@ -54,7 +54,7 @@ describe('PlanCollapse', () => {
     'PlanFailure', 'UserStoryFailure', 'PlanIssueFailure', 'PlanAgentFailure', 'WorkspaceFailure',
     'PlanProgressFailure', 'PlanStatusFailure', 'GoFailure', 'HarvestFailure', 'PlanStoryFailure',
     'ImplementationProgressFailure', 'ImplementationHistoryFailure', 'PullRequestFailure', 'WorkbenchFailure',
-    'ConversationFailure', 'SessionHooksFailure',
+    'ConversationFailure', 'SessionHooksFailure', 'SpecFreezeFailure',
   ]
 
   const RESUMING_AN_AGENT = ImplementCollapse.declaredFailures()
@@ -69,7 +69,6 @@ describe('PlanCollapse', () => {
     !(thrown.prototype instanceof exceptions.HarvestFailure) &&
     !(thrown.prototype instanceof exceptions.ImplementationProgressFailure) &&
     !(thrown.prototype instanceof exceptions.ImplementationHistoryFailure) &&
-    !(thrown.prototype instanceof exceptions.PullRequestFailure) &&
     !(thrown.prototype instanceof exceptions.WorkbenchFailure)
 
   it('every_way_the_plan_can_collapse_has_a_refusal_declared_so_adding_one_cannot_reach_the_client_as_a_crash', () => {
@@ -101,13 +100,6 @@ describe('PlanCollapse', () => {
   it('a_failure_of_watching_a_plan_has_no_refusal_declared_here_because_it_travels_down_the_stream_that_is_already_open', () => {
     expect(PlanCollapse.declaredFailures()).not.toContain('PlanProgressNotRead')
     expect(() => PlanCollapse.of(new exceptions.PlanProgressNotRead('git refused')))
-      .toThrow(/no refusal declared/)
-  })
-
-  it('a_failure_of_reading_a_pull_request_has_no_refusal_declared_here_because_it_also_travels_down_the_stream_that_is_already_open', () => {
-    expect(PlanCollapse.declaredFailures()).not.toContain('PullRequestNotRead')
-    expect(PlanCollapse.declaredFailures()).not.toContain('PullRequestNotUnderstood')
-    expect(() => PlanCollapse.of(new exceptions.PullRequestNotRead('HTTP 502')))
       .toThrow(/no refusal declared/)
   })
 

@@ -71,6 +71,8 @@ those imports resolve, and it is no longer a statement about this backend.
 | **Phase prompt** | What the coordinating session is told to do, written once to a file under the state root and read by the session itself; its path travels in `CT_PHASE_PROMPT`, never its text, so the backend hands over a path and pastes nothing into a prompt |
 | **Conversation** | The identity of a coordinating session across a restart: an id minted once, a repository and a checkout root, recorded on disk so `records.recall()` can find it again; a conversation Claude Code no longer holds answers `unresumable` instead of being silently reopened as a different one |
 | **Session attention** | Whether the coordinating session is `working` or `waiting`, with the live question while it waits; moved by `POST /session-hooks` from Claude Code's own `UserPromptSubmit`, `Notification` and `Stop` hooks, and dropped the moment the session works again |
+| **Execution spec** | The epic's central document in the governed checkout, `docs/superpowers/specs/*-execution.md`; gate 1 reads its state line to know whether the epic is frozen, and is what writes it |
+| **Gate 1** | The freeze as an act of this program: `analyzeSpecFreeze`'s findings on screen and a button that writes the state line and the date, commits both documents, pushes the epic's branch and opens its pull request. Only the page this backend serves can press it |
 
 ## Naming an exception family
 

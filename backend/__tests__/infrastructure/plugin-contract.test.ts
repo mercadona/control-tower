@@ -25,6 +25,7 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { ImplementationStep } from '../../src/domain/value-objects/implementation-state.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
+import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import type { ImplementationProgress } from '../../src/domain/ports/implementation-progress.ts'
 
 type GoCommitment = { missing?: unknown, error?: unknown, commitment?: string }
@@ -340,5 +341,44 @@ describe('the run machine and the run file this backend reads back', () => {
 
       expect(state.name).toBe(task.name)
     }
+  })
+})
+
+class ExecutionSpecTemplate {
+  static readonly PATH = join(
+    dirname(fileURLToPath(import.meta.url)), '..', '..', '..',
+    'plugin', 'templates', '_TEMPLATE-execution-spec.md'
+  )
+
+  static async read(): Promise<EpicSpec> {
+    return new EpicSpec({ path: ExecutionSpecTemplate.PATH, text: await readFile(ExecutionSpecTemplate.PATH, 'utf8') })
+  }
+}
+
+describe('the execution spec the plugin seeds, as this backend reads and freezes it', () => {
+  it('the execution spec template the plugin seeds reads here as a draft that names its design document', async () => {
+    const spec = await ExecutionSpecTemplate.read()
+
+    expect(spec.isFrozen()).toBe(false)
+    expect(spec.frozenOn()).toBe(null)
+    expect(spec.title()).toBe('<Epic name>')
+    expect(spec.design()).toBe('docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md')
+  })
+
+  it('freezing that template rewrites the two header lines the plugin left blank and nothing else', async () => {
+    const spec = await ExecutionSpecTemplate.read()
+
+    const before = spec.text.split('\n')
+    const after = spec.frozenAt('2026-09-14').split('\n')
+
+    expect(after).toContain('**Estado:** CONGELADA')
+    expect(after).toContain('**Fecha de congelación:** 2026-09-14')
+    expect(after).not.toContain('**Estado:** DRAFT')
+    expect(after).not.toContain('**Fecha de congelación:** —')
+    expect(after.length).toBe(before.length)
+    before.forEach((line, at) => {
+      if (line.startsWith(EpicSpec.STATE_LINE) || line.startsWith(EpicSpec.DATE_LINE)) return
+      expect(after[at]).toBe(line)
+    })
   })
 })

@@ -14,7 +14,7 @@ Every shape below was read from a running server, not from the source alone. The
 | Port | `CT_API_PORT`, default `8787` |
 | Interface | loopback only (`127.0.0.1`) |
 | Start | `make run-backend` |
-| Endpoints | 13 (`POST` 5, `GET` 8) |
+| Endpoints | 15 (`POST` 6, `GET` 9) |
 
 In development the vite dev server proxies these paths to the backend and strips
 the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
@@ -28,7 +28,9 @@ the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
 2. **An application refusal answers 400.** The status stopped being the signal.
    405 keeps its own status because it is the protocol answering, not the
    application: it is decided before any request reaches a use case.
-3. **A `POST` must declare `Content-Type: application/json`.** Otherwise 415.
+3. **A `POST` that carries a body must declare `Content-Type: application/json`.** Otherwise 415.
+   The one exception is `POST /spec-freeze`, which takes no body at all and therefore mounts
+   neither body middleware: it never answers 415, whatever it is sent.
 4. **A body over 8 KiB is refused** with 413 `body-too-large`.
 5. **An unknown field in a `POST` body is refused**, not ignored. The one
    exception is `POST /session-hooks`: Claude Code's own hook payload carries
@@ -925,6 +927,149 @@ curl -s -X POST -H 'Content-Type: application/json' \
 
 ---
 
+## `GET /spec-freeze`
+
+Gate 1's own state for the checkout the held coordinating session sits in,
+derived from the execution spec on disk and nothing stored. No parameters.
+The cabin polls it to draw gate 1's panel.
+
+**200 OK** — four shapes, told apart by `status`.
+
+No coordinating session is held, so there is nothing to freeze:
+
+```json
+{"status":"none"}
+```
+
+A session is held, but the checkout carries no execution spec under
+`docs/superpowers/specs/`:
+
+```json
+{"status":"no-spec"}
+```
+
+A spec exists and is not frozen yet:
+
+```json
+{"status":"draft",
+ "spec":"docs/superpowers/specs/2026-09-11-the-loop-enters-through-brainstorming-execution.md",
+ "findings":[
+   {"code":"clarification-marker","line":42,"detail":"[NEEDS CLARIFICATION: which button?]"},
+   {"code":"hypothesis-absent","line":null,"detail":null}
+ ],
+ "key":"3f9c1a…"}
+```
+
+Every finding is `analyzeSpecFreeze`'s own (`backend/src/domain/value-objects/epic-spec.ts`
+projects it): `clarification-marker` carries the `line` of a `[NEEDS
+CLARIFICATION` marker and `detail` is that marker's raw line; `hypothesis-absent`
+and `hypothesis-empty` both carry `line: null` and `detail: null` — the whole
+`## Hipótesis` section is missing or blank, not one line inside it.
+
+`key` is the value `POST /spec-freeze` demands in its `x-gate-key` header,
+minted once when the backend starts (`backend/src/infrastructure/gate-key.ts`).
+It is attached to the `draft` body **only** when the request is the page's own:
+`Host` must be one of the loopback names and `Origin` must equal
+`http://<Host>` exactly (`Browsers.isOurOwnPage`,
+`backend/src/infrastructure/http.ts`). A plain `curl` call carries no `Origin`,
+so it sees the same `draft` body with no `key` at all — nothing that is not
+the browser page this backend serves is ever handed what presses gate 1.
+
+The spec is frozen:
+
+```json
+{"status":"frozen",
+ "spec":"docs/superpowers/specs/2026-09-11-the-loop-enters-through-brainstorming-execution.md",
+ "on":"2026-09-14",
+ "pullRequest":{"number":341,"url":"https://github.com/owner/name/pull/341"}}
+```
+
+`pullRequest` is `null` when the branch that carries the frozen spec has no
+open pull request `gh` can find today — the one `POST /spec-freeze` opened may
+since have merged or closed.
+
+**Refusals**
+
+The shared ones — 405 for a method other than `GET` or `POST`, 403 for a
+foreign `Origin` — and, with a 400 and its own `{code, detail}`, every tool
+refusal this read can meet. Reading the spec runs on disk, so a specs directory
+it cannot list is `epic-spec-not-read` and a file carrying no title is
+`epic-spec-not-understood`; and on the frozen branch alone it also runs
+`git rev-parse` and `gh pr list`, so a logged-out `gh` or a checkout git cannot
+read surface here rather than as a generic failure. The cabin polls this route,
+so a refusal it swallowed would be a panel that silently shows nothing.
+
+```
+curl -s http://127.0.0.1:8787/spec-freeze
+```
+
+---
+
+## `POST /spec-freeze`
+
+Gate 1's press. Writes `**Estado:** CONGELADA` and the freeze date into the
+execution spec, commits it with its design document, pushes the checkout's own
+branch and opens the pull request that publishes both. No request body — the
+whole checkout is read from the held coordinating session, the same way `GET
+/spec-freeze` does.
+
+**Request header**
+
+| Header | Required | Shape |
+|---|---|---|
+| `x-gate-key` | yes | the exact value `GET /spec-freeze` minted for the page |
+
+**200 OK**
+
+```json
+{"status":"frozen","on":"2026-09-14","pullRequest":{"number":341,"url":"https://github.com/owner/name/pull/341"}}
+```
+
+**Refusals**
+
+Checked before anything else, ahead even of whether a session is held:
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `gate-not-from-the-page` | 403 | `x-gate-key` is missing or does not match the key `GET /spec-freeze` minted for the page |
+
+Then, once the key holds:
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `no-coordinating-session` | 400 | no coordinating session is held: there is nothing to freeze |
+| `no-epic-spec` | 400 | no execution spec exists in this checkout to freeze |
+| `spec-already-frozen` | 400 | the spec is already frozen: it cannot be frozen twice |
+| `spec-not-freezable` | 400 | a clarification marker or an absent/empty `## Hipótesis` remains; `detail` names how many findings remain and the first one, by line when it has one |
+
+None of these five touches the spec, a commit or the remote.
+
+From writing the spec, publishing the branch and opening the pull request,
+once the five above did not apply — the same `PlanCollapse` doctrine `POST
+/coordinating-session` documents for its own tool refusals
+(`backend/src/infrastructure/start-plan-route.ts`), reached here for the first
+time because gate 1 is the only caller of `EpicSpecs`, `EpicBranch` and
+`PullRequests.open`:
+
+| `code` | Meaning |
+|---|---|
+| `epic-spec-not-read` | the execution spec could not be listed or read back from disk |
+| `epic-spec-not-understood` | the spec carries no title, or names no design document under `**Handoff origen:**` |
+| `epic-spec-not-written` | the state line and its date could not be written back to disk |
+| `epic-branch-not-published` | `git` failed to resolve, add, commit or push the checkout's branch, or the checkout sits on the branch the remote declares as its default — refused before anything is added, committed or pushed, though the spec's rewritten text can already sit on disk as an uncommitted change |
+| `epic-branch-not-understood` | `git` printed something this backend cannot read while resolving the branch or the remote's default |
+| `epic-pull-request-not-opened` | `gh pr create` failed |
+| `pull-request-not-understood` | `gh` answered something this backend cannot read while opening the pull request |
+
+All seven answer 400 and carry the tool's own message in `detail`, the same
+convention every other tool refusal in this file follows.
+
+```
+curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/spec-freeze
+```
+
+---
+
 ## Where the frontend consumes each one
 
 | Endpoint | Client | Types |
@@ -941,6 +1086,8 @@ curl -s -X POST -H 'Content-Type: application/json' \
 | `POST /sessions/:id/input` | `frontend/src/app/sessions/client.ts` | `Sessions.types.ts` |
 | `POST /coordinating-session` | `frontend/src/app/coordinating-session/client.ts` | `CoordinatingSession.types.ts` |
 | `GET /coordinating-session` | `frontend/src/app/coordinating-session/client.ts` | `CoordinatingSession.types.ts` |
+| `GET /spec-freeze` | `frontend/src/app/spec-freeze/client.ts` | `SpecFreeze.types.ts` |
+| `POST /spec-freeze` | `frontend/src/app/spec-freeze/client.ts` | `SpecFreeze.types.ts` |
 
 A client validates the wire shape before it reaches a component, and projects
 snake_case to camelCase. Add a field to the validator, or the component never
@@ -962,6 +1109,10 @@ answering the page's HTML.
 Code calls it on its own, from inside the checkout `POST /coordinating-session`
 started. It is still in `API_PATHS` (`frontend/vite.config.ts`), because the
 hook runs from the same machine the dev server listens on.
+
+`GET /spec-freeze` and `POST /spec-freeze` do have their rows above: the
+cabin's `app/spec-freeze` reads the first every two seconds and presses the
+second, and `SpecFreezePanel` is what renders both answers.
 
 ## Where the contract is decided
 

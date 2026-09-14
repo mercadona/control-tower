@@ -1,0 +1,66 @@
+{
+  "issue": 329,
+  "task": 1,
+  "task_name": "The execution spec, as a value this backend can read and freeze",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "result": "The objective promises four things and the diff produces all four in backend/src/domain/value-objects/epic-spec.ts: 'say whether an execution spec is a draft or frozen' is isFrozen() (the value of '**Estado:**' compared with FROZEN) plus frozenOn(), which turns the template's own '—' placeholder into null; 'name its design document' is design(), which reads the value of '**Handoff origen:**' and extracts the backticked path; 'its title' is title(), the first '# ' heading with TITLE_SUFFIX removed; 'produce the same text with the freeze written into it' is frozenAt(on), which rewrites the two header lines and joins the rest untouched. Read against the real template (plugin/templates/_TEMPLATE-execution-spec.md lines 1-5), every one of them lands on a line that exists there.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "asercion-tdd",
+        "result": "The **TDD:** line names two tests and both are in the diff with the assertions the plan wrote. First: 'the execution spec template the plugin seeds reads here as a draft that names its design document' asserts isFrozen() false, frozenOn() null, title() '<Epic name>', design() 'docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md' — the same four, same input (the real template read off disk via ExecutionSpecTemplate.read()), same expected values. Second: 'freezing that template rewrites the two header lines the plugin left blank and nothing else' asserts frozenAt('2026-09-14') contains '**Estado:** CONGELADA' and '**Fecha de congelación:** 2026-09-14', contains neither '**Estado:** DRAFT' nor '**Fecha de congelación:** —', and every line that is not the state or the date line is byte-identical at the same index, with the line count pinned. That is the plan's sentence, clause by clause.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "contrato",
+        "result": "Both Contract blocks were compared symbol by symbol. epic-spec.ts declares TITLE_SUFFIX ' — Execution spec', HANDOFF_LINE '**Handoff origen:**', DATE_LINE '**Fecha de congelación:**', STATE_LINE '**Estado:**', DRAFT 'DRAFT', FROZEN 'CONGELADA' — the six literals verbatim, and each matches plugin/templates/_TEMPLATE-execution-spec.md; the readonly fields path and text, the constructor taking { path, text }, and dateOf(now: Date): string, title(), design(), isFrozen(), frozenOn(), findings(), isFreezable(), frozenAt(on) with the return types written. dateOf builds the string from getFullYear/getMonth/getDate, never toISOString, as the brief demands. freeze-finding.ts declares FreezeFindingCode frozen with the three kebab-case values as written and FreezeFinding with code/line/detail and the same constructor argument. The only spelling difference is that the field's type is written through the exported alias FreezeFindingCodeValue rather than inline; the type it resolves to is identical. findings() maps one CLARIFICATION_MARKER per element of analyzeSpecFreeze's clarifications carrying that element's line and raw, and one for HYPOTHESIS_REASONS.ABSENT and one for .EMPTY, with a throwing default so an unmapped reason raises instead of vanishing — the exhaustive projection the brief asks for, checked against plugin/scripts/groom.js lines 145-164.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "result": "Three rows bear on this diff and all three are implemented at their stated value. D-10 (everything new under backend/ is TypeScript): both new modules are .ts and the plugin import names the .js extension the file really has. D-11 (a yardstick is imported from the plugin, never reimplemented): findings() calls analyzeSpecFreeze and only projects its output — it re-decides neither the clarification markers nor the hypothesis, and it reuses the plugin's own HYPOTHESIS_REASONS members instead of transcribing 'ok'/'ausente'/'vacia'. I checked that no second opinion sneaks in through isFrozen(): grep over plugin/ finds 'CONGELADA' only in the template and in prose, never in a script that decides it, so the state literal is a declared copy and not a duplicated decision. D-13 (no phase is stored): the value object derives everything from the text it was handed and stores nothing. The remaining rows (D-1, D-6, D-7, D-16, D-18, D-21, D-22, D-23, D-25) speak about endpoints, sessions, gates and pull requests that this task does not touch, so the diff leaves them alone.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "patrones",
+        "result": "conventions/defects.md, rule by rule. (1) Closed vocabulary: FreezeFindingCode is a frozen object with a derived union type and the constructor rejects a code outside it, quoting what it got; the dispatch in findings() over the plugin's hypothesis reason has a default branch, but it raises ('no freeze finding is declared for the hypothesis reason ...') rather than absorbing the member, which is what architecture.md's 'total or explicit' asks for where the source vocabulary comes from untyped JavaScript and the type checker cannot force the case. No loose-string classification found. (2) Raw map as the return value of logic: findings() returns FreezeFinding[], value objects, not maps; the only map read by key is analyzeSpecFreeze's own return, converted into value objects at the single point that receives it. (3) Two fields that have to agree: none introduced — frozenOn() returns null instead of carrying the template's '—' outward, which is a sentinel being converted into a typed absence, the opposite of the defect; path and text do not have to agree. FreezeFinding's line/detail co-vary with code by the plan's own Contract block, and the contract is what item 3 measures, so it is not charged here. (4) Errors named for what happens: the two throws are plain Errors describing the condition, matching the house idiom of backend/src/domain/value-objects/repository-name.ts ('a repository looks like ..., got ...'); no error is named for the module that raised it. Exemplars: coordinating-conversation.ts is matched — readonly fields assigned in a destructuring constructor followed by Object.freeze(this); the test helper ExecutionSpecTemplate is the same module-level helper class the host file already uses (Both, RunDouble, PluginGoRegistry) and its read() is a named scenario, so testing.md's mother rule holds. style.md: no comment or docstring in either new module, every function hangs off a class, and the identifiers are English; the Spanish literals ('**Estado:**', 'CONGELADA', '**Fecha de congelación:**', '**Handoff origen:**') are values fixed by the template's contract, which style.md and CLAUDE.md both exempt. architecture.md: two new concepts, two new modules, in domain/value-objects, the folder this repository's layout fixes; nothing was hidden inside an old file to inherit an exemption. The domain module importing plugin/scripts/groom.js is D-11 plus the Contract block, and backend/conventions/this-repository.md sanctions it ('backend/ imports the plugin's pure renderers and readers ... instead of transcribing their headings'), with backend/src/domain/value-objects/sown-workspace.ts as the standing precedent for a domain value object doing exactly that. decisions.md: the declared copy of the six header literals is the case it allows, and the two new tests are the test that compares the two halves — they read the plugin's real template, so a rename on the plugin's side turns them red. Two clashes between the plan and simplicity.md, declared here and deliberately left out of the findings because the implementer could not have written any other diff without failing item 3: EpicSpec.DRAFT is a public constant the Contract block requires and no caller in the tree or in the remaining twelve tasks of the plan uses, and several other contract symbols (path, dateOf, findings, isFreezable) have their first caller only in Tasks 4-6. Delivery: the change is purely additive, no signature or public contract of existing code moves, and no document of either yardstick prescribes a shape of delivery for a new value object.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "manipulacion-tests",
+        "result": "Does not apply: the diff has no '-' lines at all. Both hunks are pure insertions (the package's own stat line reads '3 files changed, 163 insertions(+)', with no deletions), so no pre-existing assertion, case or test was removed, relaxed or rewritten. The 23 tests the control log reports for plugin-contract.test.ts are the 21 that were there plus the two this task adds.",
+        "outcome": "no-aplica"
+      },
+      {
+        "rule": "fixture-theater",
+        "result": "The behaviour the objective promises is produced by production code: epic-spec.ts holds every parse and the rewrite, and freeze-finding.ts holds the vocabulary and its guard. The test's own scaffolding is one helper, ExecutionSpecTemplate, and it contributes nothing but a path and a readFile — it hard-codes no expected state, no title and no design path. The expected values in the assertions are read back out of the real seeded template (plugin/templates/_TEMPLATE-execution-spec.md), not out of a fixture the test wrote, so with the two new production modules reverted both tests fail at the import.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "alcance",
+        "result": "The three paths written are the three the **Files:** line declares, and what is inside them serves the task's own sentences: the two value objects are the two Contract blocks, and the test file gains one import and one describe with the two tests **Tests:** names and nothing else. Nothing under ### Out of scope is touched — plugin/scripts/groom.js and slices.js are imported and not modified, the brainstorming skill, the groom, the plan endpoints and their adapters are untouched, and no pull-request or merge behaviour appears. The diff carries no hunk of the plan file, so there is no amendment to rule on; the plan was committed in ffb88c1 before the run started.",
+        "outcome": "conforme"
+      },
+      {
+        "rule": "test-desiderata",
+        "result": "Two new tests, measured on the three properties. Deterministic: the freeze date is the literal '2026-09-14' passed into frozenAt, never the clock; there is no randomness, no sleep and no network, and the one file read is a template committed in this repository, which is the very artifact the declared-copy contract test exists to compare against — the same read the pre-existing test at line 325 already does with plan-real-issue-5.md. Isolated: both build their own EpicSpec, write nothing, mutate no shared state and depend on no order. Verifies real behaviour: every assertion is on what EpicSpec returns, and with this diff's production lines reverted both fail. I loaded control-tower-loop:test-driven-development to measure the finer half; against its 'Good Tests' table both names describe the behaviour rather than the method called, neither hides an 'and' joining two behaviours ('and nothing else' qualifies the single rewrite the second test is about), and both use real code with no mocks, so there is nothing to pin to that text. The names read as prose with spaces where the rest of the file uses snake_case, but they are the literal names the plan's **TDD:** line prescribed and conventions/testing.md asks only that the name be the sentence, which they are.",
+        "outcome": "conforme"
+      }
+    ],
+    "findings": [
+      {
+        "rule": "patrones",
+        "severity": "low",
+        "what": "FreezeFindingCodeValue is exported but no module outside its own file imports it, and no later task of the plan names it: the plan's Contract block writes the field's type inline as (typeof FreezeFindingCode)[keyof typeof FreezeFindingCode], so the alias is the diff's own addition and the export widens it beyond the two uses inside freeze-finding.ts. conventions/simplicity.md asks which call breaks without it; none does today. Keeping the alias module-private would answer the same two uses.",
+        "path": "backend/src/domain/value-objects/freeze-finding.ts",
+        "line": 7,
+        "evidence": "`export type FreezeFindingCodeValue = (typeof FreezeFindingCode)[keyof typeof FreezeFindingCode]` — `conventions/simplicity.md`: \"A public symbol, a parameter or a default with no caller.\""
+      }
+    ],
+    "review_token": "de95326ae0e362f3950bb4314ab119d022d2ac85fc894eabff58d32fd7e8ae5b"
+  }
+}

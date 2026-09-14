@@ -74,6 +74,17 @@ something, or a banner saying the conversation could not be recovered.
 workspace: the terminal and the coordinating session's state are on the page
 in every phase, never hidden and never disabled by which stage is showing.
 
+`app/spec-freeze` (`SpecFreezePanel`, rendered by `Home` right after
+`home__sessions`, outside every `currentStage` branch too) is gate 1's panel.
+`GET /spec-freeze` polls the checkout's execution spec (`useSpecFreeze.ts`) and
+answers `none`, `no-spec`, `draft` — with the yardstick's findings and the
+one-time gate key — or `frozen`, with the freeze date and the pull request.
+The **Congelar el spec** button stays disabled while any finding remains, and
+`POST /spec-freeze` carries the gate key in `x-gate-key` to freeze it. Under
+`make dev-frontend` the vite proxy strips `Origin` before the request reaches
+the backend, so no gate key is ever minted for it: the button can only be
+pressed from the page the backend itself serves.
+
 ## What is already decided
 
 - **It is never shipped with the plugin.** The marketplace's `source` is

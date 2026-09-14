@@ -1,0 +1,1 @@
+export { SpecFreezePanel } from './SpecFreezePanel'
