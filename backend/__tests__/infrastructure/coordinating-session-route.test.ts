@@ -9,6 +9,8 @@ import {
   CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
 } from '../../src/infrastructure/coordinating-sessions.ts'
 import { Conversations } from '../../src/domain/ports/conversations.ts'
+import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
+import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
 import { SessionHooks } from '../../src/domain/ports/session-hooks.ts'
 import { UserStories } from '../../src/domain/ports/user-stories.ts'
@@ -52,6 +54,16 @@ class OpenCoordinatingSessionSpy extends OpenCoordinatingSession {
   }
 }
 
+class LiveSessionsDouble extends LiveSessions {
+  find(id: string): LiveSession | null {
+    return id === Mother.SESSION.id ? Mother.SESSION : null
+  }
+
+  watch(): LiveSessionStream {
+    return { printed: '', stop: (): void => {} }
+  }
+}
+
 class Mother {
   static readonly REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static readonly ROOT = new CheckoutRoot('/repo')
@@ -67,8 +79,12 @@ class Mother {
     return new CoordinatingSessionOpened({ conversation: Mother.CONVERSATION, session: Mother.SESSION })
   }
 
+  static registry(): CoordinatingSessions {
+    return new CoordinatingSessions({ liveSessions: new LiveSessionsDouble(), stderr: (): void => {} })
+  }
+
   static live(attention: SessionAttention): CoordinatingSessions {
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
     held.remember(new HeldCoordinatingSession({
       state: CoordinatingSessionState.LIVE,
       conversation: Mother.CONVERSATION,
@@ -79,8 +95,20 @@ class Mother {
     return held
   }
 
+  static ended(): CoordinatingSessions {
+    const held = Mother.registry()
+    held.remember(new HeldCoordinatingSession({
+      state: CoordinatingSessionState.ENDED,
+      conversation: Mother.CONVERSATION,
+      session: null,
+      attention: null,
+    }))
+
+    return held
+  }
+
   static unresumable(): CoordinatingSessions {
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
     held.remember(new HeldCoordinatingSession({
       state: CoordinatingSessionState.UNRESUMABLE,
       conversation: Mother.CONVERSATION,
@@ -149,7 +177,7 @@ afterEach(async () => {
 describe('CoordinatingSessionRoute', () => {
   it('answers 202 with the conversation and the session it opened', async () => {
     const open = OpenCoordinatingSessionSpy.opening()
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
 
     const response = await RunningApi.post(
       open, held, '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
@@ -167,7 +195,7 @@ describe('CoordinatingSessionRoute', () => {
 
   it('holds the opened session as live and working', async () => {
     const open = OpenCoordinatingSessionSpy.opening()
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
 
     await RunningApi.post(
       open, held, '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
@@ -213,7 +241,7 @@ describe('CoordinatingSessionRoute', () => {
 
   it('refuses a repository list because an epic governs one checkout', async () => {
     const open = OpenCoordinatingSessionSpy.opening()
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
 
     const response = await RunningApi.post(
       open, held,
@@ -230,7 +258,7 @@ describe('CoordinatingSessionRoute', () => {
 
   it('refuses a body with nothing to plan without asking the use case', async () => {
     const open = OpenCoordinatingSessionSpy.opening()
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
 
     const response = await RunningApi.post(open, held, '{}')
 
@@ -246,7 +274,7 @@ describe('CoordinatingSessionRoute', () => {
     const open = OpenCoordinatingSessionSpy.refusing(
       new ConversationNotStarted('claude could not be spawned in /repo: command not found')
     )
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
 
     const response = await RunningApi.post(
       open, held, '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
@@ -262,7 +290,7 @@ describe('CoordinatingSessionRoute', () => {
 
   it('answers 405 to a method that is neither GET nor POST', async () => {
     const open = OpenCoordinatingSessionSpy.opening()
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
 
     const response = await RunningApi.deleting(open, held)
 
@@ -273,7 +301,7 @@ describe('CoordinatingSessionRoute', () => {
   })
 
   it('answers none while no conversation has been opened', async () => {
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
 
     const response = await RunningApi.get(held)
 
@@ -295,6 +323,33 @@ describe('CoordinatingSessionRoute', () => {
       session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
       attention: { status: 'waiting', question: 'should the button read Arrancar brainstorming?' },
     })
+  })
+
+  it('answers ended for a conversation whose terminal exited', async () => {
+    const held = Mother.ended()
+
+    const response = await RunningApi.get(held)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      status: 'ended',
+      conversation: Mother.CONVERSATION.id.text,
+      repo: Mother.REPOSITORY.text,
+      root: Mother.ROOT.text,
+      detail: 'the terminal of this coordinating session exited and no other one was opened',
+    })
+  })
+
+  it('opens again over a conversation whose terminal exited', async () => {
+    const open = OpenCoordinatingSessionSpy.opening()
+    const held = Mother.ended()
+
+    const response = await RunningApi.post(
+      open, held, '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+    )
+
+    expect(response.status).toBe(202)
+    expect(held.held()?.state).toBe('live')
   })
 
   it('answers unresumable for a conversation Claude Code no longer holds', async () => {

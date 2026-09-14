@@ -45,6 +45,8 @@ export class CoordinatingSessionRoute {
   static readonly METHODS = 'GET, POST'
   static readonly #UNRESUMABLE_DETAIL =
     'claude code no longer holds this conversation: the coordinating session was not resumed'
+  static readonly #ENDED_DETAIL =
+    'the terminal of this coordinating session exited and no other one was opened'
 
   static reading(held: CoordinatingSessions): RequestHandler {
     return (request: Request, response: Response): void => {
@@ -76,6 +78,15 @@ export class CoordinatingSessionRoute {
           repo: holding.conversation.repository.text,
           root: holding.conversation.root.text,
           detail: CoordinatingSessionRoute.#UNRESUMABLE_DETAIL,
+        })
+        return
+      case CoordinatingSessionState.ENDED:
+        Answer.send(response, 200, {
+          status: CoordinatingSessionState.ENDED,
+          conversation: holding.conversation.id.text,
+          repo: holding.conversation.repository.text,
+          root: holding.conversation.root.text,
+          detail: CoordinatingSessionRoute.#ENDED_DETAIL,
         })
         return
       default: {

@@ -16,6 +16,7 @@ export type CoordinatingSessionOutcome =
       attention: Attention
     }
   | { kind: 'unresumable'; conversation: string; detail: string }
+  | { kind: 'ended'; conversation: string; detail: string }
   | { kind: 'unavailable' }
 
 export type OpenedCoordinatingSession = { conversation: string; session: LiveSessionRef }

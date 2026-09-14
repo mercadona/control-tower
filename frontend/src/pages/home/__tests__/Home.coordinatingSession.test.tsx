@@ -47,6 +47,15 @@ describe('Home and the coordinating session', () => {
     expect(screen.queryByText(ALREADY_LIVE_HELP)).not.toBeInTheDocument()
   })
 
+  it('lets the brainstorming be opened once the conversation has ended', async () => {
+    backendHolding(CoordinatingSessionMother.ended())
+
+    openHome()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('La conversación coordinadora ha terminado')
+    expect(screen.queryByText(ALREADY_LIVE_HELP)).not.toBeInTheDocument()
+  })
+
   it('reads the coordinating session through a single poller', async () => {
     const fetching = backendHolding(CoordinatingSessionMother.working())
 

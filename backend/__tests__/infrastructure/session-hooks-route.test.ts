@@ -4,12 +4,24 @@ import { join } from 'node:path'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState } from '../../src/infrastructure/coordinating-sessions.ts'
 import { SessionHooksRoute } from '../../src/infrastructure/session-hooks-route.ts'
+import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
+import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
+
+class LiveSessionsDouble extends LiveSessions {
+  find(id: string): LiveSession | null {
+    return id === Mother.SESSION.id ? Mother.SESSION : null
+  }
+
+  watch(): LiveSessionStream {
+    return { printed: '', stop: (): void => {} }
+  }
+}
 
 class Mother {
   static readonly CONVERSATION_ID = '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'
@@ -22,7 +34,7 @@ class Mother {
   static readonly SESSION = new LiveSession({ id: 'session-1', name: 'brainstorming' })
 
   static held(attention: SessionAttention): CoordinatingSessions {
-    const sessions = new CoordinatingSessions({ stderr: (): void => {} })
+    const sessions = new CoordinatingSessions({ liveSessions: new LiveSessionsDouble(), stderr: (): void => {} })
     sessions.remember(new HeldCoordinatingSession({
       state: CoordinatingSessionState.LIVE,
       conversation: Mother.CONVERSATION,

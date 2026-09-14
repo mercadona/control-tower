@@ -487,7 +487,10 @@ class CtApi {
       write: Disk.write,
       root: asked.stateRoot,
     })
-    const coordinatingSessions = new CoordinatingSessions({ stderr: (line) => process.stderr.write(line) })
+    const coordinatingSessions = new CoordinatingSessions({
+      liveSessions,
+      stderr: (line) => process.stderr.write(line),
+    })
     const openCoordinatingSession = new OpenCoordinatingSession({
       userStories,
       workspace,
