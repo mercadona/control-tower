@@ -108,7 +108,8 @@ describe('Home · sessions panel', () => {
     await screen.findByText('Agente asignado')
     expect(screen.getByRole('region', { name: 'Terminal de la sesión' })).toBeInTheDocument()
 
-    lastTerminal().onDataHandler?.('ls -la')
+    const terminal = await waitFor(() => lastTerminal())
+    terminal.onDataHandler?.('ls -la')
 
     await waitFor(() =>
       expect(fetching).toHaveBeenCalledWith(`/sessions/${SESSION_ID}/input`, expect.objectContaining({ method: 'POST' })),
@@ -119,15 +120,17 @@ describe('Home · sessions panel', () => {
     stubFetch(NO_ACTIVE_PLANS)
     const { unmount } = openHome()
     await screen.findByRole('region', { name: 'Terminal de la sesión' })
-    FakeEventSource.last().receive('{"bytes":"scrollback"}')
-    expect(lastTerminal().written).toEqual(['scrollback'])
+    const firstStream = await waitFor(() => FakeEventSource.last())
+    firstStream.receive('{"bytes":"scrollback"}')
+    await waitFor(() => expect(lastTerminal().written).toEqual(['scrollback']))
     unmount()
 
     stubFetch(NO_ACTIVE_PLANS)
     openHome()
     await screen.findByRole('region', { name: 'Terminal de la sesión' })
-    FakeEventSource.last().receive('{"bytes":"scrollback"}')
-    expect(lastTerminal().written).toEqual(['scrollback'])
+    const secondStream = await waitFor(() => FakeEventSource.last())
+    secondStream.receive('{"bytes":"scrollback"}')
+    await waitFor(() => expect(lastTerminal().written).toEqual(['scrollback']))
   })
 
   it("shows the coordinating session's live question", async () => {

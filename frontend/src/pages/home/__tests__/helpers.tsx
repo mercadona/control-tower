@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
@@ -170,16 +170,21 @@ const openRestored = ({ phase, request = DEFAULT_RESTORED_REQUEST, plan = {} }: 
   return { ...opened, fetching, workflow }
 }
 
+const openedStream = () => waitFor(() => FakeEventSource.last())
+
 const streamFrame = async (data: string) => {
-  await act(async () => FakeEventSource.last().receive(data))
+  const stream = await openedStream()
+  await act(async () => stream.receive(data))
 }
 
 const streamFailure = async (data: string) => {
-  await act(async () => FakeEventSource.last().failWith(data))
+  const stream = await openedStream()
+  await act(async () => stream.failWith(data))
 }
 
 const dropStream = async () => {
-  await act(async () => FakeEventSource.last().dropConnection())
+  const stream = await openedStream()
+  await act(async () => stream.dropConnection())
 }
 
 export {
