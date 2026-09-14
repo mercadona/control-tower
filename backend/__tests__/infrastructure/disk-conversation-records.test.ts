@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { DiskConversationRecords } from '../../src/infrastructure/disk-conversation-records.ts'
-import { ConversationNotRecorded } from '../../src/domain/exceptions.ts'
+import { ConversationNotRecorded, ConversationNotUnderstood } from '../../src/domain/exceptions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
@@ -74,12 +74,12 @@ describe('DiskConversationRecords', () => {
     expect(await records.recall()).toBeNull()
   })
 
-  it('raises conversation-not-recorded instead of reading a malformed record as no conversation', async () => {
+  it('raises conversation-not-understood when the record cannot be read as a conversation', async () => {
     const read = vi.fn(async () => '{not json')
     const write = vi.fn(async () => {})
     const records = new DiskConversationRecords({ read, write, root: STATE_ROOT })
 
-    await expect(records.recall()).rejects.toBeInstanceOf(ConversationNotRecorded)
+    await expect(records.recall()).rejects.toBeInstanceOf(ConversationNotUnderstood)
   })
 
   it('raises conversation-not-recorded when the prompt cannot be written', async () => {

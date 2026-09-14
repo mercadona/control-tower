@@ -102,8 +102,8 @@ describe('ClaudeConversations', () => {
     const [call] = spawn.calls
     expect(call.argv).toEqual([
       PtyLiveSessions.LOGIN_INTERACTIVE, '-c',
-      `exec ${ClaudeConversations.BIN} --session-id ${id.text} ` +
-        `--permission-mode ${ClaudeConversations.PERMISSION_MODE} "${ClaudeConversations.OPENING}"`,
+      `exec claude --session-id ${id.text} ` +
+        '--permission-mode acceptEdits "Read the file at "$CT_PHASE_PROMPT" and do exactly what it says."',
     ])
     expect(call.options.env[ClaudeConversations.PROMPT_VARIABLE]).toBe(Governed.PROMPT_PATH)
     expect(call.argv.join(' ')).not.toContain(Governed.PROMPT_PATH)

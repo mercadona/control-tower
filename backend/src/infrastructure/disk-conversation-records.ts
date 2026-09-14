@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { ConversationRecords } from '../domain/ports/conversation-records.ts'
-import { ConversationNotRecorded } from '../domain/exceptions.ts'
+import { ConversationNotRecorded, ConversationNotUnderstood } from '../domain/exceptions.ts'
 import { CheckoutRoot } from '../domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../domain/value-objects/conversation-id.ts'
 import { CoordinatingConversation } from '../domain/value-objects/coordinating-conversation.ts'
@@ -83,7 +83,7 @@ export class DiskConversationRecords extends ConversationRecords {
     try {
       return DiskConversationRecords.#conversationFrom(text)
     } catch (cause) {
-      throw new ConversationNotRecorded(`the record at ${path} cannot be read as a conversation: ${String(cause)}`)
+      throw new ConversationNotUnderstood(`the record at ${path} cannot be read as a conversation: ${String(cause)}`)
     }
   }
 }

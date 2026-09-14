@@ -91,6 +91,8 @@ export class ConversationNotStarted extends ConversationFailure {}
 
 export class ConversationNotRecorded extends ConversationFailure {}
 
+export class ConversationNotUnderstood extends ConversationFailure {}
+
 export class SessionHooksFailure extends PlanFailure {}
 
 export class SessionHooksNotWritten extends SessionHooksFailure {}
