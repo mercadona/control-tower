@@ -1,7 +1,7 @@
 import { closingPrNumbers, harvestSlice } from './harvest.js'
 import { TelemetryStatus } from './harvest-table.js'
 import { JudgeReturns } from './judge-returns.js'
-import { aggregateBriefMeasures, aggregateRoleBytesMeasures, aggregateVerdictMeasures, METRICS_REPO_DIR, metricsRepoRelPath } from './run-metrics.js'
+import { aggregateBriefMeasures, aggregateIdentityMeasures, aggregateRoleBytesMeasures, aggregateVerdictMeasures, METRICS_REPO_DIR, metricsRepoRelPath } from './run-metrics.js'
 import { ToolUsageTotal } from './tool-usage.js'
 
 export const SliceRead = Object.freeze({
@@ -135,6 +135,7 @@ export class SliceHarvest {
     roleAttempts: null, roleMeasured: null, roleLegacy: null, agentBytes: null, skillBytes: null, packageBytes: null,
     ...ToolUsageTotal.NO_COUNTS,
     ...JudgeReturns.NO_COUNTS,
+    implementerEmail: null, toolAccountEmail: null,
   })
 
   constructor({ gh }) {
@@ -206,6 +207,7 @@ export class SliceHarvest {
             ...aggregateRoleBytesMeasures(telemetryAnswer.stdout),
             ...ToolUsageTotal.of(telemetryAnswer.stdout).measures(),
             ...JudgeReturns.of(telemetryAnswer.stdout).measures(),
+            ...aggregateIdentityMeasures(telemetryAnswer.stdout),
           }
         }
       }

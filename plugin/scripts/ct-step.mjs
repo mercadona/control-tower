@@ -82,6 +82,7 @@ import {
 import { metricRow, metricLine, metricsPath, planSha256, verdictMeasures, metricsRepoRelPath, briefCtYardstickMeasures } from './run-metrics.js'
 import { RoleBytes } from './role-bytes.js'
 import { ClaudeCodeTranscript, ClaudeCodeUsage } from './claude-code-usage.js'
+import { ClaudeCodeAccount } from './claude-code-account.js'
 import { ToolIdentity, ToolUsage } from './tool-usage.js'
 // Slice 10: parseStateSafe reads the `senal:` field of the SLICE.md (see
 // sliceSignal, below, for why the `epic:` regex will not do), and
@@ -449,6 +450,11 @@ const METRICS_REL = metricsRepoRelPath(issue)
 // —which Claude Code does— add up once and only once.
 const CLAUDE_DIRECTORY = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
 
+// `.claude.json` (the OAuth account) is NOT under `.claude/`: it sits next to
+// it, at the root CLAUDE_CONFIG_DIR replaces when it is set — the same rule
+// `claude-code-usage.js` documents for locating the Claude Code home.
+const CLAUDE_CODE_HOME = process.env.CLAUDE_CONFIG_DIR || homedir()
+
 const USAGE_ADAPTERS = [{
   detects: (env) => ClaudeCodeUsage.detects(env),
   usageFor: (claimed) => new ClaudeCodeUsage({
@@ -481,6 +487,13 @@ function toolUsageMeasures() {
   }
 }
 
+// Only Claude Code exposes an OAuth account: any other tool lands null,
+// exactly like a tool this loop cannot measure usage for.
+function toolAccountEmail() {
+  if (!ClaudeCodeUsage.detects(process.env)) return null
+  return ClaudeCodeAccount.emailFrom({ home: CLAUDE_CODE_HOME, read: (path) => readFileSync(path, 'utf8') })
+}
+
 function measure(step, measures) {
   // `global`, `slice-judge` and `e2e` belong to no task: a `task: 3` on that row
   // would be a gap read as an assertion (the same doctrine that already forbids
@@ -492,7 +505,7 @@ function measure(step, measures) {
     repo: repoSlug, epic: sliceEpic, issue, plan: planPath, plan_sha256: PLAN_SHA,
     task: isSliceStep ? null : run.task, task_name: isSliceStep ? null : (currentTask()?.name ?? null), tasks_total: run.tasksTotal,
     step, attempt: currentAttempt(), plugin_version: PLUGIN_VERSION, actor: ACTOR,
-  }, { ...measures, ...toolUsageMeasures() }, { now: new Date().toISOString() }))
+  }, { ...measures, ...toolUsageMeasures(), tool_account_email: toolAccountEmail() }, { now: new Date().toISOString() }))
   // The two destinations are attempted separately: the account's disk being
   // full cannot cost the repo the row that travels, nor the other way round.
   for (const destination of [metricsPath('ct-step', { configDir: process.env.CLAUDE_CONFIG_DIR }), join(repoRoot, METRICS_REL)]) {

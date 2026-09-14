@@ -1,5 +1,35 @@
 import { describe, it, expect } from 'vitest'
-import { ToolIdentity, ToolUsage, ToolUsageFields, ToolUsageTotal, UsageStatus } from '../scripts/tool-usage.js'
+import { IdentityCollapse, ToolIdentity, ToolUsage, ToolUsageFields, ToolUsageTotal, UsageStatus } from '../scripts/tool-usage.js'
+
+describe('IdentityCollapse — the rule ToolUsageTotal and the harvest identity aggregates share', () => {
+  it('one_distinct_value_across_every_entry_is_declared_as_itself', () => {
+    expect(IdentityCollapse.of(['a@x.com', 'a@x.com'])).toBe('a@x.com')
+  })
+
+  it('two_distinct_values_collapse_to_mixed', () => {
+    expect(IdentityCollapse.of(['a@x.com', 'b@x.com'])).toBe(IdentityCollapse.MIXED)
+  })
+
+  it('without_a_blank_option_a_null_counts_as_a_value_of_its_own_like_the_tool_identity_rule_needs', () => {
+    expect(IdentityCollapse.of(['a@x.com', null])).toBe(IdentityCollapse.MIXED)
+  })
+
+  it('with_a_blank_option_the_blank_entries_are_dropped_before_collapsing', () => {
+    expect(IdentityCollapse.of(['a@x.com', null, null], { blank: null })).toBe('a@x.com')
+  })
+
+  it('with_a_blank_option_a_sentinel_string_is_dropped_too', () => {
+    expect(IdentityCollapse.of(['a@x.com', '(sin actor)', '(sin actor)'], { blank: '(sin actor)' })).toBe('a@x.com')
+  })
+
+  it('once_the_blanks_are_dropped_two_or_more_remaining_distinct_values_still_collapse_to_mixed', () => {
+    expect(IdentityCollapse.of(['a@x.com', 'b@x.com', '(sin actor)'], { blank: '(sin actor)' })).toBe(IdentityCollapse.MIXED)
+  })
+
+  it('once_the_blanks_are_dropped_nothing_left_collapses_to_null_and_not_to_the_blank', () => {
+    expect(IdentityCollapse.of(['(sin actor)', '(sin actor)'], { blank: '(sin actor)' })).toBeNull()
+  })
+})
 
 class Identities {
   static claudeCode() {

@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 import {
   metricRow, metricLine, metricsPath, planSha256, verdictMeasures, IDENTITY_FIELDS, aggregateVerdictMeasures,
   metricsRepoRelPath, METRICS_REPO_DIR, briefCtYardstickMeasures, aggregateBriefMeasures,
-  aggregateRoleBytesMeasures,
+  aggregateRoleBytesMeasures, aggregateIdentityMeasures, NO_ACTOR_KEY,
 } from '../scripts/run-metrics.js'
 import { PluginYardstick } from '../scripts/plugin-yardstick.js'
 import { SEVERITIES } from '../scripts/step-contracts.js'
@@ -787,6 +787,73 @@ describe('aggregateRoleBytesMeasures — how much fixed material each role of th
 })
 
 // ---------------------------------------------------------------------------
+// implementer_email and tool_account_email — the slice's identity aggregates.
+// Both reuse IdentityCollapse (one value, `(mixed)`, or none), the same rule
+// ToolUsageTotal already applies to `tool`/`tool_version`. `actor` never
+// carries `null` — metricRow normalizes an absent actor to NO_ACTOR_KEY — so
+// that sentinel is the blank the collapse drops, exactly like `null` is the
+// blank for `tool_account_email`.
+// ---------------------------------------------------------------------------
+describe('aggregateIdentityMeasures — who implemented the slice, and whose tool account ran it', () => {
+  const attemptRow = (measures) => metricLine(metricRow({ ...IDENT, ...measures }, {}, { now: NOW }))
+  const withToolAccountEmail = (actor, toolAccountEmail) => metricLine({
+    ...metricRow({ ...IDENT, actor }, {}, { now: NOW }), tool_account_email: toolAccountEmail,
+  })
+
+  it('one_distinct_actor_across_every_row_lands_as_the_implementer_email', () => {
+    const text = [attemptRow({ actor: 'a@mercadona.es' }), attemptRow({ actor: 'a@mercadona.es' })].join('')
+    expect(aggregateIdentityMeasures(text).implementerEmail).toBe('a@mercadona.es')
+  })
+
+  it('two_distinct_actors_collapse_to_mixed', () => {
+    const text = [attemptRow({ actor: 'a@mercadona.es' }), attemptRow({ actor: 'b@mercadona.es' })].join('')
+    expect(aggregateIdentityMeasures(text).implementerEmail).toBe('(mixed)')
+  })
+
+  it('the_sin_actor_sentinel_counts_as_no_signal_and_never_as_a_third_actor', () => {
+    const text = [attemptRow({ actor: 'a@mercadona.es' }), attemptRow({ actor: NO_ACTOR_KEY })].join('')
+    expect(aggregateIdentityMeasures(text).implementerEmail).toBe('a@mercadona.es')
+  })
+
+  it('no_row_carrying_a_real_actor_lands_null_and_not_the_sentinel', () => {
+    const text = [attemptRow({ actor: NO_ACTOR_KEY }), attemptRow({ actor: NO_ACTOR_KEY })].join('')
+    expect(aggregateIdentityMeasures(text).implementerEmail).toBeNull()
+  })
+
+  it('one_distinct_tool_account_email_across_every_row_lands_as_the_tool_account_email', () => {
+    const text = [withToolAccountEmail('a@mercadona.es', 't@mercadona.es'), withToolAccountEmail('a@mercadona.es', 't@mercadona.es')].join('')
+    expect(aggregateIdentityMeasures(text).toolAccountEmail).toBe('t@mercadona.es')
+  })
+
+  it('two_distinct_tool_account_emails_collapse_to_mixed', () => {
+    const text = [withToolAccountEmail('a@mercadona.es', 't1@mercadona.es'), withToolAccountEmail('a@mercadona.es', 't2@mercadona.es')].join('')
+    expect(aggregateIdentityMeasures(text).toolAccountEmail).toBe('(mixed)')
+  })
+
+  it('a_null_tool_account_email_is_no_signal_and_never_a_third_value', () => {
+    const text = [withToolAccountEmail('a@mercadona.es', 't@mercadona.es'), withToolAccountEmail('a@mercadona.es', null)].join('')
+    expect(aggregateIdentityMeasures(text).toolAccountEmail).toBe('t@mercadona.es')
+  })
+
+  it('no_row_carrying_a_tool_account_email_lands_null', () => {
+    const text = [withToolAccountEmail('a@mercadona.es', null), attemptRow({ actor: 'a@mercadona.es' })].join('')
+    expect(aggregateIdentityMeasures(text).toolAccountEmail).toBeNull()
+  })
+
+  it('an_unreadable_line_does_not_blow_up_the_aggregator', () => {
+    const text = [attemptRow({ actor: 'a@mercadona.es' }), '{no es json\n'].join('')
+    expect(() => aggregateIdentityMeasures(text)).not.toThrow()
+    expect(aggregateIdentityMeasures(text).implementerEmail).toBe('a@mercadona.es')
+  })
+
+  it('an_empty_file_does_not_blow_up_and_asserts_nothing', () => {
+    for (const empty of ['', undefined]) {
+      expect(aggregateIdentityMeasures(empty)).toEqual({ implementerEmail: null, toolAccountEmail: null })
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
 // And against the real oracle: that the rows do come out, and —what really has
 // to be pinned— that NOT coming out does not change what the step does. A
 // program that dies because it could not write its own metric has turned the
@@ -839,10 +906,10 @@ describe('the telemetry of a real step', () => {
     rmSync(homeDir, { recursive: true, force: true })
   })
 
-  const ct = (configDir, ...args) => spawnSync('node', [SCRIPT, ...args, '--plan', 'plan.md', '--issue', '7'], {
-    cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir },
+  const spawnCtStep = (env, ...args) => spawnSync('node', [SCRIPT, ...args, '--plan', 'plan.md', '--issue', '7'], {
+    cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env,
   })
+  const ct = (configDir, ...args) => spawnCtStep({ ...process.env, CLAUDE_CONFIG_DIR: configDir }, ...args)
 
   it('the row carries the complete identity, with the seeded epic and the hash of the plan', () => {
     const r = ct(homeDir, 'report', 'report.json')
@@ -906,5 +973,38 @@ describe('the telemetry of a real step', () => {
     const f = rows[0]
     expect(f.brief_vara_ct_docs).toBeNull()
     expect(f.brief_bytes).toBeNull()
+  })
+
+  // tool_account_email — read from <CLAUDE_CONFIG_DIR>/.claude.json, never
+  // from the ~/.claude/ directory the transcript lives under: the two are
+  // separate roots and only CLAUDE_CONFIG_DIR (the same variable `ct()`
+  // already sets for every other test in this file) decides both.
+  it('the row carries tool_account_email read from oauthAccount.emailAddress in <CLAUDE_CONFIG_DIR>/.claude.json', () => {
+    writeFileSync(join(homeDir, '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: 'dev@mercadona.es' } }))
+    const r = spawnCtStep({ ...process.env, CLAUDE_CONFIG_DIR: homeDir, CLAUDECODE: '1' }, 'report', 'report.json')
+    expect(r.status).toBe(0)
+    const rows = readFileSync(join(homeDir, 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
+      .trim().split('\n').map((l) => JSON.parse(l))
+    expect(rows[0].tool_account_email).toBe('dev@mercadona.es')
+  })
+
+  it('outside Claude Code the field lands null even with a readable oauthAccount.emailAddress', () => {
+    writeFileSync(join(homeDir, '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: 'dev@mercadona.es' } }))
+    const env = { ...process.env, CLAUDE_CONFIG_DIR: homeDir }
+    delete env.CLAUDECODE
+    delete env.CLAUDE_CODE_SESSION_ID
+    const r = spawnCtStep(env, 'report', 'report.json')
+    expect(r.status).toBe(0)
+    const rows = readFileSync(join(homeDir, 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
+      .trim().split('\n').map((l) => JSON.parse(l))
+    expect(rows[0].tool_account_email).toBeNull()
+  })
+
+  it('with no .claude.json the field lands null and the step still succeeds', () => {
+    const r = ct(homeDir, 'report', 'report.json')
+    expect(r.status).toBe(0)
+    const rows = readFileSync(join(homeDir, 'control-tower', 'log', 'ct-step.jsonl'), 'utf8')
+      .trim().split('\n').map((l) => JSON.parse(l))
+    expect(rows[0].tool_account_email).toBeNull()
   })
 })
