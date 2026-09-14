@@ -10,6 +10,8 @@ export class Gh extends ExternalTool {
 
   static readonly #MISSING_LABEL = /'(.+?)' not found/
 
+  static readonly #NOT_FOUND = /\(HTTP 404\)/
+
   isTransient(stderr: string): boolean {
     const lowered = String(stderr).toLowerCase()
 
@@ -21,5 +23,9 @@ export class Gh extends ExternalTool {
     const found = String(stderr).match(Gh.#MISSING_LABEL)
 
     return found === null ? null : found[1]
+  }
+
+  static isNotFound(stderr: string): boolean {
+    return Gh.#NOT_FOUND.test(String(stderr))
   }
 }
