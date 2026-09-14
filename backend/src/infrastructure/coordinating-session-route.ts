@@ -2,16 +2,18 @@ import type { Request, RequestHandler, Response } from 'express'
 import { Answer, JsonBody, Refusal } from './http.ts'
 import { Projection } from './projection.ts'
 import { PlanRequest, PlanRequestOutcome, PlanRefusal, PlanCollapse } from './start-plan-route.ts'
-import { HeldCoordinatingSession, CoordinatingSessionState } from './coordinating-sessions.ts'
+import { HeldCoordinatingSession, CoordinatingSessionState, OpeningReservation } from './coordinating-sessions.ts'
 import { OpenCoordinatingSessionParams } from '../application/actions/open-coordinating-session.ts'
 import { SessionAttention } from '../domain/value-objects/session-attention.ts'
 import { PlanFailure } from '../domain/exceptions.ts'
-import type { CoordinatingSessions } from './coordinating-sessions.ts'
+import type { CoordinatingSessions, OpeningReservationValue, ReservedOpening } from './coordinating-sessions.ts'
 import type { CoordinatingSessionOpened, OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
 
 export const CoordinatingSessionOutcome = Object.freeze({
   ACCEPTED: 'accepted',
   ONE_REPOSITORY_ONLY: 'one-repository-only',
+  ALREADY_LIVE: 'coordinating-session-already-live',
+  OPENING: 'coordinating-session-opening',
 } as const)
 
 export type CoordinatingSessionOutcomeValue = (typeof CoordinatingSessionOutcome)[keyof typeof CoordinatingSessionOutcome]
@@ -27,6 +29,16 @@ export class CoordinatingSessionRefusal {
         detail: `an epic governs one checkout: send ${PlanRequest.REPO_FIELD} and ${PlanRequest.PATH_FIELD} `
           + `instead of ${PlanRequest.REPO_LIST_FIELD}`,
       })],
+      [CoordinatingSessionOutcome.ALREADY_LIVE, () => new Refusal({
+        status: 409,
+        code: CoordinatingSessionOutcome.ALREADY_LIVE,
+        detail: 'a coordinating conversation is already live: it has to end before another one opens',
+      })],
+      [CoordinatingSessionOutcome.OPENING, () => new Refusal({
+        status: 409,
+        code: CoordinatingSessionOutcome.OPENING,
+        detail: 'a coordinating conversation is being opened: wait for it to be live and try again',
+      })],
     ])
 
   static of(outcome: CoordinatingSessionOutcomeValue): Refusal {
@@ -39,6 +51,8 @@ export class CoordinatingSessionRoute {
   static readonly METHODS = 'GET, POST'
   static readonly #UNRESUMABLE_DETAIL =
     'claude code no longer holds this conversation: the coordinating session was not resumed'
+  static readonly #ENDED_DETAIL =
+    'the terminal of this coordinating session exited and no other one was opened'
 
   static reading(held: CoordinatingSessions): RequestHandler {
     return (request: Request, response: Response): void => {
@@ -72,6 +86,15 @@ export class CoordinatingSessionRoute {
           detail: CoordinatingSessionRoute.#UNRESUMABLE_DETAIL,
         })
         return
+      case CoordinatingSessionState.ENDED:
+        Answer.send(response, 200, {
+          status: CoordinatingSessionState.ENDED,
+          conversation: holding.conversation.id.text,
+          repo: holding.conversation.repository.text,
+          root: holding.conversation.root.text,
+          detail: CoordinatingSessionRoute.#ENDED_DETAIL,
+        })
+        return
       default: {
         const exhaustive: never = holding.state
         throw new Error(`no coordinating session answer declared for ${exhaustive}`)
@@ -90,6 +113,11 @@ export class CoordinatingSessionRoute {
         Answer.refuseAs(response, CoordinatingSessionRefusal.of(CoordinatingSessionOutcome.ONE_REPOSITORY_ONLY))
         return
       }
+      const reserved = held.reserve()
+      if (reserved.outcome !== OpeningReservation.RESERVED) {
+        CoordinatingSessionRoute.#refuseOpening(response, reserved)
+        return
+      }
       const [target] = asked.targets!
       let opened: CoordinatingSessionOpened
       try {
@@ -100,6 +128,7 @@ export class CoordinatingSessionRoute {
           root: target.root,
         }))
       } catch (cause) {
+        held.release()
         if (!(cause instanceof PlanFailure)) throw cause
         Answer.refuseAs(response, PlanCollapse.of(cause))
         return
@@ -117,6 +146,32 @@ export class CoordinatingSessionRoute {
         root: opened.conversation.root.text,
         session: { id: opened.session.id, name: opened.session.name },
       })
+    }
+  }
+
+  static readonly #OUTCOME_BY_RESERVATION: Projection<CoordinatingSessionOutcomeValue, OpeningReservationValue> =
+    new Projection<CoordinatingSessionOutcomeValue, OpeningReservationValue>('opening refusal', [
+      [OpeningReservation.LIVE_HELD, CoordinatingSessionOutcome.ALREADY_LIVE],
+      [OpeningReservation.OPENING_IN_PROGRESS, CoordinatingSessionOutcome.OPENING],
+    ])
+
+  static #refuseOpening(response: Response, reserved: ReservedOpening): void {
+    const refusal = CoordinatingSessionRefusal.of(
+      CoordinatingSessionRoute.#OUTCOME_BY_RESERVATION.of(reserved.outcome)
+    )
+    Answer.send(response, refusal.status, {
+      code: refusal.code,
+      detail: refusal.detail,
+      ...CoordinatingSessionRoute.#whatIsLive(reserved.live),
+    })
+  }
+
+  static #whatIsLive(live: HeldCoordinatingSession | null): Record<string, unknown> {
+    if (live === null) return {}
+
+    return {
+      conversation: live.conversation.id.text,
+      session: { id: live.session!.id, name: live.session!.name },
     }
   }
 

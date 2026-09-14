@@ -13,19 +13,34 @@ export const SessionHookOutcome = Object.freeze({
 
 export type SessionHookOutcomeValue = (typeof SessionHookOutcome)[keyof typeof SessionHookOutcome]
 
-type AttentionOf = (message: string | null) => SessionAttention
+type HookPayload = Readonly<Record<string, unknown>>
+type AttentionOf = (payload: HookPayload) => SessionAttention | null
 
 class SessionHookEvents {
   static readonly #TRANSFORM_BY_EVENT: Readonly<Record<string, AttentionOf>> = {
     UserPromptSubmit: () => SessionAttention.working(),
-    Notification: (message) => SessionAttention.waiting(message),
-    Stop: () => SessionAttention.waiting(null),
+    Notification: (payload) => SessionHookEvents.#notified(payload),
+    Stop: (payload) => SessionAttention.waiting(SessionHookEvents.#textOf(payload, SessionHooksRoute.FINAL_MESSAGE_FIELD)),
   }
 
   static readonly #BY_NAME: Projection<AttentionOf> = new Projection<AttentionOf>(
     'hook event',
     LocalSettingsSessionHooks.EVENTS.map((event) => [event, SessionHookEvents.#transformFor(event)] as const)
   )
+
+  static #notified(payload: HookPayload): SessionAttention | null {
+    if (payload[SessionHooksRoute.NOTIFICATION_TYPE_FIELD] !== SessionHooksRoute.PERMISSION_PROMPT) return null
+
+    return SessionAttention.waiting(SessionHookEvents.#textOf(payload, SessionHooksRoute.MESSAGE_FIELD))
+  }
+
+  static #textOf(payload: HookPayload, field: string): string | null {
+    const said = payload[field]
+    if (typeof said !== 'string') return null
+    const text = said.trim()
+
+    return text === '' ? null : text
+  }
 
   static #transformFor(event: string): AttentionOf {
     const transform = SessionHookEvents.#TRANSFORM_BY_EVENT[event]
@@ -40,12 +55,12 @@ class SessionHookEvents {
     return typeof name === 'string' && SessionHookEvents.#BY_NAME.members().includes(name)
   }
 
-  static attentionFor(name: string, message: string | null): SessionAttention {
-    return SessionHookEvents.#BY_NAME.of(name)(message)
+  static attentionFor(name: string, payload: HookPayload): SessionAttention | null {
+    return SessionHookEvents.#BY_NAME.of(name)(payload)
   }
 }
 
-type AcceptedSessionHookRequest = SessionHookRequest & { readonly conversation: string, readonly attention: SessionAttention }
+type AcceptedSessionHookRequest = SessionHookRequest & { readonly conversation: string }
 
 class SessionHookRequest {
   readonly outcome: SessionHookOutcomeValue
@@ -61,7 +76,7 @@ class SessionHookRequest {
     Object.freeze(this)
   }
 
-  static accepted(conversation: string, attention: SessionAttention): SessionHookRequest {
+  static accepted(conversation: string, attention: SessionAttention | null): SessionHookRequest {
     return new SessionHookRequest({ outcome: SessionHookOutcome.ACCEPTED, conversation, attention })
   }
 
@@ -79,12 +94,6 @@ class SessionHookRequest {
 
   static #isWellFormedId(value: unknown): value is string {
     return typeof value === 'string' && value.length > 0
-  }
-
-  static #messageOf(parsed: Record<string, unknown>): string | null {
-    const message = parsed[SessionHooksRoute.MESSAGE_FIELD]
-
-    return typeof message === 'string' ? message : null
   }
 
   static from(raw: string): SessionHookRequest {
@@ -106,7 +115,7 @@ class SessionHookRequest {
       return SessionHookRequest.refused(SessionHookOutcome.HOOK_NOT_UNDERSTOOD)
     }
 
-    return SessionHookRequest.accepted(conversation, SessionHookEvents.attentionFor(event, SessionHookRequest.#messageOf(parsed)))
+    return SessionHookRequest.accepted(conversation, SessionHookEvents.attentionFor(event, parsed))
   }
 }
 
@@ -137,12 +146,19 @@ export class SessionHooksRoute {
   static readonly SESSION_FIELD = 'session_id'
   static readonly EVENT_FIELD = 'hook_event_name'
   static readonly MESSAGE_FIELD = 'message'
+  static readonly NOTIFICATION_TYPE_FIELD = 'notification_type'
+  static readonly FINAL_MESSAGE_FIELD = 'last_assistant_message'
+  static readonly PERMISSION_PROMPT = 'permission_prompt'
 
   static handledBy(held: CoordinatingSessions): RequestHandler {
     return (request: Request, response: Response): void => {
       const asked = SessionHookRequest.from(JsonBody.textOf(request))
       if (!SessionHookRequest.isAccepted(asked)) {
         Answer.refuseAs(response, SessionHookRefusal.of(asked.outcome))
+        return
+      }
+      if (asked.attention === null) {
+        Answer.send(response, 202, { status: 'ignored' })
         return
       }
       const attended = held.attend({ conversation: asked.conversation, attention: asked.attention })

@@ -6,6 +6,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { ClaudeCodeTranscript } from '../../../plugin/scripts/claude-code-usage.js'
 
 type Started = { port: number, saidLater: () => string }
 type Refusal = { status: number | null, said: string[] }
@@ -275,6 +276,86 @@ class RunFileFixture {
   }
 }
 
+class AClaudeThatStaysOpen {
+  static readonly SCRIPT = ['#!/bin/sh', 'exec sleep 120'].join('\n')
+
+  static async onThePath(): Promise<{ directory: string, path: string }> {
+    const directory = await mkdtemp(join(tmpdir(), 'ct-api-claude-'))
+    await writeFile(join(directory, 'claude'), `${AClaudeThatStaysOpen.SCRIPT}\n`, { mode: 0o755 })
+
+    return { directory, path: `${directory}:${process.env.PATH}` }
+  }
+}
+
+class ARecordedConversation {
+  static readonly ID = '2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'
+  static readonly REPOSITORY = 'acme/widget'
+
+  static async withATranscriptUnder(config: string): Promise<{ config: string, checkout: string }> {
+    const checkout = await ARecordedConversation.#recordedUnder(config)
+    const folder = ClaudeCodeTranscript.folderFor(checkout)
+    const transcript = join(config, ClaudeCodeTranscript.FOLDER, folder)
+    await mkdir(transcript, { recursive: true })
+    await writeFile(join(transcript, `${ARecordedConversation.ID}${ClaudeCodeTranscript.EXTENSION}`), '{"type":"user"}\n')
+
+    return { config, checkout }
+  }
+
+  static async withNoTranscriptAnywhere(config: string): Promise<{ config: string, checkout: string }> {
+    return { config, checkout: await ARecordedConversation.#recordedUnder(config) }
+  }
+
+  static async #recordedUnder(config: string): Promise<string> {
+    const checkout = await mkdtemp(join(tmpdir(), 'ct-api-coordinating-checkout-'))
+    const recorded = join(config, 'control-tower', 'coordinating-session')
+    await mkdir(recorded, { recursive: true })
+    await writeFile(join(recorded, 'conversation.json'), `${JSON.stringify({
+      conversation: ARecordedConversation.ID,
+      repo: ARecordedConversation.REPOSITORY,
+      root: checkout,
+    }, null, 2)}\n`)
+
+    return checkout
+  }
+}
+
+class TheCoordinatingSession {
+  static readonly #TRIES = 100
+  static readonly #WAIT_MS = 100
+
+  static async recoveredBy(port: number): Promise<{ status: string }> {
+    for (let tried = 0; tried < TheCoordinatingSession.#TRIES; tried += 1) {
+      const answered = await (await fetch(`http://127.0.0.1:${port}/coordinating-session`)).json() as { status: string }
+      if (answered.status !== 'none') return answered
+      await new Promise((wake) => setTimeout(wake, TheCoordinatingSession.#WAIT_MS))
+    }
+    throw new Error('the recorded conversation was never recovered')
+  }
+}
+
+class TheCoordinatingSessionEndpoint {
+  static readonly COMMENT = 'explore the checkout screen'
+
+  static open(port: number, repository: string, checkout: string): Promise<Response> {
+    return fetch(`http://127.0.0.1:${port}/coordinating-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_comment: TheCoordinatingSessionEndpoint.COMMENT,
+        repo: repository,
+        path: checkout,
+      }),
+    })
+  }
+
+  static async brainstormingsOf(port: number): Promise<number> {
+    const listed = await (await fetch(`http://127.0.0.1:${port}/sessions`)).json() as
+      { sessions: { name: string }[] }
+
+    return listed.sessions.filter((session) => session.name === 'brainstorming').length
+  }
+}
+
 describe('ct-api entrypoint', () => {
   afterEach(() => {
     Entrypoint.killAll()
@@ -324,6 +405,56 @@ describe('ct-api entrypoint', () => {
     await RunFileFixture.remove(state)
     await RunFileFixture.remove(cmux.directory)
   })
+
+  it('the_recovery_reads_the_transcript_under_the_configured_claude_directory', async () => {
+    const config = await mkdtemp(join(tmpdir(), 'ct-api-coordinating-config-'))
+    const recorded = await ARecordedConversation.withATranscriptUnder(config)
+    const claude = await AClaudeThatStaysOpen.onThePath()
+
+    const port = await Entrypoint.listening({
+      CT_API_PORT: '0', CLAUDE_CONFIG_DIR: config, SHELL: '/bin/sh', PATH: claude.path,
+    })
+
+    expect((await TheCoordinatingSession.recoveredBy(port)).status).not.toBe('unresumable')
+    await RunFileFixture.remove(config)
+    await RunFileFixture.remove(recorded.checkout)
+    await RunFileFixture.remove(claude.directory)
+  }, 60_000)
+
+  it('a_recorded_conversation_with_no_transcript_at_all_is_not_resumed', async () => {
+    const config = await mkdtemp(join(tmpdir(), 'ct-api-coordinating-config-'))
+    const recorded = await ARecordedConversation.withNoTranscriptAnywhere(config)
+    const claude = await AClaudeThatStaysOpen.onThePath()
+
+    const port = await Entrypoint.listening({
+      CT_API_PORT: '0', CLAUDE_CONFIG_DIR: config, SHELL: '/bin/sh', PATH: claude.path,
+    })
+
+    expect((await TheCoordinatingSession.recoveredBy(port)).status).toBe('unresumable')
+    await RunFileFixture.remove(config)
+    await RunFileFixture.remove(recorded.checkout)
+    await RunFileFixture.remove(claude.directory)
+  }, 60_000)
+
+  it('two_openings_fired_at_once_open_a_single_conversation', async () => {
+    const checkout = await ACheckoutReachableByTwoPaths.cut()
+    const config = await mkdtemp(join(tmpdir(), 'ct-api-coordinating-race-'))
+    const claude = await AClaudeThatStaysOpen.onThePath()
+    const port = await Entrypoint.listening({
+      CT_API_PORT: '0', CLAUDE_CONFIG_DIR: config, SHELL: '/bin/sh', PATH: claude.path,
+    })
+
+    const answered = await Promise.all([
+      TheCoordinatingSessionEndpoint.open(port, ACheckoutReachableByTwoPaths.REPOSITORY, checkout.physical),
+      TheCoordinatingSessionEndpoint.open(port, ACheckoutReachableByTwoPaths.REPOSITORY, checkout.physical),
+    ])
+
+    expect(answered.map((response) => response.status).sort()).toEqual([202, 409])
+    expect(await TheCoordinatingSessionEndpoint.brainstormingsOf(port)).toBe(1)
+    await RunFileFixture.remove(checkout.base)
+    await RunFileFixture.remove(config)
+    await RunFileFixture.remove(claude.directory)
+  }, 60_000)
 
   it('prints_the_port_it_bound_so_whoever_started_it_knows_where_to_knock', async () => {
     const port = await Entrypoint.listening({ CT_API_PORT: '0' })

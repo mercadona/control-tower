@@ -30,6 +30,18 @@ describe('CoordinatingSessionClient', () => {
     })
   })
 
+  it('reads a conversation whose terminal exited as ended', async () => {
+    answerWith(CoordinatingSessionMother.ended())
+
+    const outcome = await CoordinatingSessionClient.read()
+
+    expect(outcome).toEqual({
+      kind: 'ended',
+      conversation: CoordinatingSessionMother.CONVERSATION,
+      detail: CoordinatingSessionMother.ENDED_DETAIL,
+    })
+  })
+
   it('sends the idea when it opens the brainstorming', async () => {
     const posting = vi.fn(async () => new Response(CoordinatingSessionMother.opened().body, { status: 202 }))
     vi.stubGlobal('fetch', posting)

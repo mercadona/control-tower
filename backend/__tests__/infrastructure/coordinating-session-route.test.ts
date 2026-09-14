@@ -9,6 +9,8 @@ import {
   CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
 } from '../../src/infrastructure/coordinating-sessions.ts'
 import { Conversations } from '../../src/domain/ports/conversations.ts'
+import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
+import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
 import { SessionHooks } from '../../src/domain/ports/session-hooks.ts'
 import { UserStories } from '../../src/domain/ports/user-stories.ts'
@@ -52,6 +54,16 @@ class OpenCoordinatingSessionSpy extends OpenCoordinatingSession {
   }
 }
 
+class LiveSessionsDouble extends LiveSessions {
+  find(id: string): LiveSession | null {
+    return id === Mother.SESSION.id ? Mother.SESSION : null
+  }
+
+  watch(): LiveSessionStream {
+    return { printed: '', stop: (): void => {} }
+  }
+}
+
 class Mother {
   static readonly REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static readonly ROOT = new CheckoutRoot('/repo')
@@ -63,12 +75,19 @@ class Mother {
 
   static readonly SESSION = new LiveSession({ id: 'session-1', name: 'brainstorming' })
 
+  static readonly OPENING_REQUEST =
+    '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+
   static opened(): CoordinatingSessionOpened {
     return new CoordinatingSessionOpened({ conversation: Mother.CONVERSATION, session: Mother.SESSION })
   }
 
+  static registry(): CoordinatingSessions {
+    return new CoordinatingSessions({ liveSessions: new LiveSessionsDouble(), stderr: (): void => {} })
+  }
+
   static live(attention: SessionAttention): CoordinatingSessions {
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
     held.remember(new HeldCoordinatingSession({
       state: CoordinatingSessionState.LIVE,
       conversation: Mother.CONVERSATION,
@@ -79,8 +98,20 @@ class Mother {
     return held
   }
 
+  static ended(): CoordinatingSessions {
+    const held = Mother.registry()
+    held.remember(new HeldCoordinatingSession({
+      state: CoordinatingSessionState.ENDED,
+      conversation: Mother.CONVERSATION,
+      session: null,
+      attention: null,
+    }))
+
+    return held
+  }
+
   static unresumable(): CoordinatingSessions {
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
     held.remember(new HeldCoordinatingSession({
       state: CoordinatingSessionState.UNRESUMABLE,
       conversation: Mother.CONVERSATION,
@@ -89,6 +120,23 @@ class Mother {
     }))
 
     return held
+  }
+}
+
+class AnOpeningYouFinishByHand {
+  static inFlight(): { open: OpenCoordinatingSessionSpy, started: Promise<void>, finish: () => void } {
+    let announce: () => void = (): void => {}
+    const started = new Promise<void>((resolve) => { announce = resolve })
+    let finish: () => void = (): void => {}
+    const gate = new Promise<void>((resolve) => { finish = resolve })
+    const open = new OpenCoordinatingSessionSpy(async () => {
+      announce()
+      await gate
+
+      return Mother.opened()
+    })
+
+    return { open, started, finish: () => finish() }
   }
 }
 
@@ -120,8 +168,10 @@ class RunningApi {
   static async post(
     open: OpenCoordinatingSession, held: CoordinatingSessions, body: string
   ): Promise<Response> {
-    const port = await RunningApi.listening(open, held)
+    return RunningApi.posting(await RunningApi.listening(open, held), body)
+  }
 
+  static posting(port: number, body: string): Promise<Response> {
     return fetch(`http://127.0.0.1:${port}${RunningApi.PATH}`, {
       method: 'POST',
       body,
@@ -149,10 +199,10 @@ afterEach(async () => {
 describe('CoordinatingSessionRoute', () => {
   it('answers 202 with the conversation and the session it opened', async () => {
     const open = OpenCoordinatingSessionSpy.opening()
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
 
     const response = await RunningApi.post(
-      open, held, '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+      open, held, Mother.OPENING_REQUEST
     )
 
     expect(response.status).toBe(202)
@@ -167,10 +217,10 @@ describe('CoordinatingSessionRoute', () => {
 
   it('holds the opened session as live and working', async () => {
     const open = OpenCoordinatingSessionSpy.opening()
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
 
     await RunningApi.post(
-      open, held, '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+      open, held, Mother.OPENING_REQUEST
     )
 
     const holding = held.held()
@@ -180,9 +230,97 @@ describe('CoordinatingSessionRoute', () => {
     expect(holding?.attention).toEqual(SessionAttention.working())
   })
 
+  it('refuses the second opening with 409 while the first conversation is live', async () => {
+    const open = OpenCoordinatingSessionSpy.opening()
+    const held = Mother.live(SessionAttention.working())
+
+    const response = await RunningApi.post(
+      open, held, Mother.OPENING_REQUEST
+    )
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      code: 'coordinating-session-already-live',
+      detail: 'a coordinating conversation is already live: it has to end before another one opens',
+      conversation: Mother.CONVERSATION.id.text,
+      session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
+    })
+    expect(open.asked).toEqual([])
+  })
+
+  it('two openings fired at once open a single conversation', async () => {
+    const controlled = AnOpeningYouFinishByHand.inFlight()
+    const held = Mother.registry()
+    const port = await RunningApi.listening(controlled.open, held)
+
+    const first = RunningApi.posting(port, Mother.OPENING_REQUEST)
+    await controlled.started
+    const second = await RunningApi.posting(port, Mother.OPENING_REQUEST)
+
+    expect(second.status).toBe(409)
+    expect(await second.json()).toEqual({
+      code: 'coordinating-session-opening',
+      detail: 'a coordinating conversation is being opened: wait for it to be live and try again',
+    })
+    expect(controlled.open.asked).toHaveLength(1)
+
+    controlled.finish()
+    expect((await first).status).toBe(202)
+    expect(held.held()?.state).toBe('live')
+
+    const third = await RunningApi.posting(port, Mother.OPENING_REQUEST)
+    expect(third.status).toBe(409)
+    expect(await third.json()).toMatchObject({ code: 'coordinating-session-already-live' })
+    expect(controlled.open.asked).toHaveLength(1)
+  }, 10_000)
+
+  it('a failed opening frees the next one', async () => {
+    const open = OpenCoordinatingSessionSpy.refusing(
+      new ConversationNotStarted('claude could not be spawned in /repo: command not found')
+    )
+    const held = Mother.registry()
+    const port = await RunningApi.listening(open, held)
+
+    const refused = await RunningApi.posting(port, Mother.OPENING_REQUEST)
+    const next = await RunningApi.posting(port, Mother.OPENING_REQUEST)
+
+    expect(await refused.json()).toEqual({
+      code: 'conversation-not-started',
+      detail: 'claude could not be spawned in /repo: command not found',
+    })
+    expect(next.status).toBe(400)
+    expect(open.asked).toHaveLength(2)
+  })
+
+  it('an opening that broke frees the next one', async () => {
+    const open = OpenCoordinatingSessionSpy.refusing(new TypeError('a bug of ours'))
+    const held = Mother.registry()
+    const port = await RunningApi.listening(open, held)
+
+    const broke = await RunningApi.posting(port, Mother.OPENING_REQUEST)
+    const next = await RunningApi.posting(port, Mother.OPENING_REQUEST)
+
+    expect(await broke.json()).toEqual({ code: 'request-failed', detail: 'request failed' })
+    expect(next.status).toBe(400)
+    expect(open.asked).toHaveLength(2)
+  })
+
+  it('opens again over a conversation that is no longer live', async () => {
+    const open = OpenCoordinatingSessionSpy.opening()
+    const held = Mother.unresumable()
+
+    const response = await RunningApi.post(
+      open, held, Mother.OPENING_REQUEST
+    )
+
+    expect(response.status).toBe(202)
+    expect(open.asked).toHaveLength(1)
+    expect(held.held()?.state).toBe('live')
+  })
+
   it('refuses a repository list because an epic governs one checkout', async () => {
     const open = OpenCoordinatingSessionSpy.opening()
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
 
     const response = await RunningApi.post(
       open, held,
@@ -199,7 +337,7 @@ describe('CoordinatingSessionRoute', () => {
 
   it('refuses a body with nothing to plan without asking the use case', async () => {
     const open = OpenCoordinatingSessionSpy.opening()
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
 
     const response = await RunningApi.post(open, held, '{}')
 
@@ -215,10 +353,10 @@ describe('CoordinatingSessionRoute', () => {
     const open = OpenCoordinatingSessionSpy.refusing(
       new ConversationNotStarted('claude could not be spawned in /repo: command not found')
     )
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
 
     const response = await RunningApi.post(
-      open, held, '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
+      open, held, Mother.OPENING_REQUEST
     )
 
     expect(response.status).toBe(400)
@@ -231,7 +369,7 @@ describe('CoordinatingSessionRoute', () => {
 
   it('answers 405 to a method that is neither GET nor POST', async () => {
     const open = OpenCoordinatingSessionSpy.opening()
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
 
     const response = await RunningApi.deleting(open, held)
 
@@ -242,7 +380,7 @@ describe('CoordinatingSessionRoute', () => {
   })
 
   it('answers none while no conversation has been opened', async () => {
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = Mother.registry()
 
     const response = await RunningApi.get(held)
 
@@ -264,6 +402,33 @@ describe('CoordinatingSessionRoute', () => {
       session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
       attention: { status: 'waiting', question: 'should the button read Arrancar brainstorming?' },
     })
+  })
+
+  it('answers ended for a conversation whose terminal exited', async () => {
+    const held = Mother.ended()
+
+    const response = await RunningApi.get(held)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      status: 'ended',
+      conversation: Mother.CONVERSATION.id.text,
+      repo: Mother.REPOSITORY.text,
+      root: Mother.ROOT.text,
+      detail: 'the terminal of this coordinating session exited and no other one was opened',
+    })
+  })
+
+  it('opens again over a conversation whose terminal exited', async () => {
+    const open = OpenCoordinatingSessionSpy.opening()
+    const held = Mother.ended()
+
+    const response = await RunningApi.post(
+      open, held, Mother.OPENING_REQUEST
+    )
+
+    expect(response.status).toBe(202)
+    expect(held.held()?.state).toBe('live')
   })
 
   it('answers unresumable for a conversation Claude Code no longer holds', async () => {

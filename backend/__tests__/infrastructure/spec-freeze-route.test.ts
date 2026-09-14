@@ -13,6 +13,8 @@ import { FreezeSpec, FreezeSpecParams, FreezeOutcome, SpecFrozen } from '../../s
 import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
 import { EpicBranch } from '../../src/domain/ports/epic-branch.ts'
 import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
+import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
+import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import {
   CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState,
 } from '../../src/infrastructure/coordinating-sessions.ts'
@@ -87,6 +89,23 @@ class Keys {
   }
 }
 
+class LiveSessionsDouble extends LiveSessions {
+  readonly #open: LiveSession
+
+  constructor(open: LiveSession) {
+    super()
+    this.#open = open
+  }
+
+  find(id: string): LiveSession | null {
+    return this.#open.id === id ? this.#open : null
+  }
+
+  watch(): LiveSessionStream {
+    return { printed: '', stop: (): void => {} }
+  }
+}
+
 class Mother {
   static readonly REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
   static readonly ROOT = new CheckoutRoot('/repo')
@@ -101,7 +120,9 @@ class Mother {
   static readonly PULL_REQUEST = { number: 12, url: 'https://github.com/josemerca/ct-loop-sandbox/pull/12' }
 
   static live(): CoordinatingSessions {
-    const held = new CoordinatingSessions({ stderr: (): void => {} })
+    const held = new CoordinatingSessions({
+      liveSessions: new LiveSessionsDouble(Mother.SESSION), stderr: (): void => {},
+    })
     held.remember(new HeldCoordinatingSession({
       state: CoordinatingSessionState.LIVE,
       conversation: Mother.CONVERSATION,
@@ -113,7 +134,9 @@ class Mother {
   }
 
   static none(): CoordinatingSessions {
-    return new CoordinatingSessions({ stderr: (): void => {} })
+    return new CoordinatingSessions({
+      liveSessions: new LiveSessionsDouble(Mother.SESSION), stderr: (): void => {},
+    })
   }
 
   static spec(): EpicSpec {

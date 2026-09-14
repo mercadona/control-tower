@@ -489,7 +489,7 @@ class CtApi {
       liveSessions,
       shell: environment.SHELL,
       env: environment,
-      claudeDirectory: join(homedir(), '.claude'),
+      claudeDirectory: Invocation.configuredIn(environment, homedir()),
       listNames: (path) => readdirSync(path),
       readText: (path) => readFileSync(path, 'utf8'),
       newId: randomUUID,
@@ -501,7 +501,10 @@ class CtApi {
       write: Disk.write,
       root: asked.stateRoot,
     })
-    const coordinatingSessions = new CoordinatingSessions({ stderr: (line) => process.stderr.write(line) })
+    const coordinatingSessions = new CoordinatingSessions({
+      liveSessions,
+      stderr: (line) => process.stderr.write(line),
+    })
     const openCoordinatingSession = new OpenCoordinatingSession({
       userStories,
       workspace,

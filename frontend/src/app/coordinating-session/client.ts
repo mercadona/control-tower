@@ -47,6 +47,9 @@ const toOutcome = (body: unknown): CoordinatingSessionOutcome => {
   if (body.status === 'unresumable' && typeof body.conversation === 'string' && typeof body.detail === 'string') {
     return { kind: 'unresumable', conversation: body.conversation, detail: body.detail }
   }
+  if (body.status === 'ended' && typeof body.conversation === 'string' && typeof body.detail === 'string') {
+    return { kind: 'ended', conversation: body.conversation, detail: body.detail }
+  }
   return { kind: 'unavailable' }
 }
 

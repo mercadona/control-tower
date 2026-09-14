@@ -153,7 +153,7 @@ describe('Home · implement plan', () => {
 
     await pressImplement(user)
     await screen.findByRole('button', { name: 'Arrancar otro plan' })
-    const oldStream = FakeEventSource.last()
+    const oldStream = await waitFor(() => FakeEventSource.last())
 
     await user.click(screen.getByRole('button', { name: 'Arrancar otro plan' }))
     expect(oldStream.closes).toBe(1)

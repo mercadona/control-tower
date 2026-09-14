@@ -2,35 +2,38 @@ import { render, screen } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { CoordinatingSessionStatus } from './CoordinatingSessionStatus'
 
-const answerWith = (answer: { status: number; body: string }) =>
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(answer.body, { status: answer.status })))
-
 describe('CoordinatingSessionStatus', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  it('shows that the session is working', () => {
+    render(<CoordinatingSessionStatus read={CoordinatingSessionMother.workingRead()} />)
 
-  it('shows that the session is working', async () => {
-    answerWith(CoordinatingSessionMother.working())
-
-    render(<CoordinatingSessionStatus />)
-
-    expect(await screen.findByText('Trabajando')).toBeInTheDocument()
+    expect(screen.getByText('Trabajando')).toBeInTheDocument()
   })
 
-  it('shows the live question while the session is waiting', async () => {
-    answerWith(CoordinatingSessionMother.waiting())
+  it('shows the live question while the session is waiting', () => {
+    render(<CoordinatingSessionStatus read={CoordinatingSessionMother.waitingRead()} />)
 
-    render(<CoordinatingSessionStatus />)
-
-    expect(await screen.findByText(CoordinatingSessionMother.QUESTION, { exact: false })).toBeInTheDocument()
+    expect(screen.getByText(CoordinatingSessionMother.QUESTION, { exact: false })).toBeInTheDocument()
   })
 
-  it('warns that the conversation could not be recovered', async () => {
-    answerWith(CoordinatingSessionMother.unresumable())
+  it('warns that the conversation could not be recovered', () => {
+    render(<CoordinatingSessionStatus read={CoordinatingSessionMother.unresumableRead()} />)
 
-    render(<CoordinatingSessionStatus />)
-
-    const said = await screen.findByRole('alert')
+    const said = screen.getByRole('alert')
     expect(said).toHaveTextContent('No se ha podido recuperar la conversación coordinadora')
     expect(said).toHaveTextContent('Claude Code ya no guarda esta conversación. No se ha abierto otra en su lugar.')
+  })
+
+  it('warns that the conversation has ended', () => {
+    render(<CoordinatingSessionStatus read={CoordinatingSessionMother.endedRead()} />)
+
+    const said = screen.getByRole('alert')
+    expect(said).toHaveTextContent('La conversación coordinadora ha terminado')
+    expect(said).toHaveTextContent('Su terminal se ha cerrado. No se ha abierto otra en su lugar.')
+  })
+
+  it('says nothing while no conversation is held', () => {
+    const { container } = render(<CoordinatingSessionStatus read={CoordinatingSessionMother.nothingRead()} />)
+
+    expect(container).toBeEmptyDOMElement()
   })
 })

@@ -50,6 +50,8 @@ import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { ConversationId } from '../../src/domain/value-objects/conversation-id.ts'
 import { CoordinatingConversation } from '../../src/domain/value-objects/coordinating-conversation.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
+import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
+import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
 
 class StartPlanSpy extends StartPlan {
@@ -418,6 +420,23 @@ class ReadSpecFreezeSpy extends ReadSpecFreeze {
   }
 }
 
+class LiveSessionsDouble extends LiveSessions {
+  readonly #open: LiveSession
+
+  constructor(open: LiveSession) {
+    super()
+    this.#open = open
+  }
+
+  find(id: string): LiveSession | null {
+    return this.#open.id === id ? this.#open : null
+  }
+
+  watch(): LiveSessionStream {
+    return { printed: '', stop: (): void => {} }
+  }
+}
+
 class CoordinatingSessionFixture {
   static readonly CONVERSATION = new CoordinatingConversation({
     id: new ConversationId('2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'),
@@ -428,7 +447,9 @@ class CoordinatingSessionFixture {
   static readonly SESSION = new LiveSession({ id: 'session-1', name: 'brainstorming' })
 
   static live(): CoordinatingSessions {
-    const held = new CoordinatingSessions({ stderr: () => undefined })
+    const held = new CoordinatingSessions({
+      liveSessions: new LiveSessionsDouble(CoordinatingSessionFixture.SESSION), stderr: () => undefined,
+    })
     held.remember(new HeldCoordinatingSession({
       state: CoordinatingSessionState.LIVE,
       conversation: CoordinatingSessionFixture.CONVERSATION,
