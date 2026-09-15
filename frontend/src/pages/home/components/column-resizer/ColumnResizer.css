@@ -1,0 +1,21 @@
+.column-resizer {
+  width: 8px;
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.column-resizer::before {
+  content: '';
+  width: 1px;
+  background-color: var(--border-secondary);
+}
+
+.column-resizer:hover::before,
+.column-resizer:focus-visible::before,
+.column-resizer--dragging::before {
+  background-color: var(--border-brand-primary);
+}
