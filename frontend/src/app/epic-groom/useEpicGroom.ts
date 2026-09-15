@@ -8,7 +8,9 @@ type EpicGroomRead =
 
 const CONNECTING: EpicGroomRead = { phase: 'connecting' }
 const POLL_INTERVAL_MS = 10000
-const RESTING_KINDS: readonly EpicGroomOutcome['kind'][] = ['groomable', 'groomed', 'authorised']
+const RESTING_KINDS: readonly EpicGroomOutcome['kind'][] = [
+  'groomable', 'partially-groomed', 'groomed', 'authorised',
+]
 
 const restsAt = (outcome: EpicGroomOutcome): boolean => RESTING_KINDS.includes(outcome.kind)
 

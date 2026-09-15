@@ -18,11 +18,12 @@ export const EpicPromotionOutcome = Object.freeze({
   NOT_FROM_THE_PAGE: 'gate-not-from-the-page',
   NO_COORDINATING_SESSION: 'no-coordinating-session',
   NO_EPIC_ISSUES: 'no-epic-issues',
+  EPIC_PARTIALLY_GROOMED: 'epic-partially-groomed',
 } as const)
 
 export type EpicPromotionOutcomeValue = (typeof EpicPromotionOutcome)[keyof typeof EpicPromotionOutcome]
 
-type EpicPromotionRefusalOf = () => Refusal
+type EpicPromotionRefusalOf = (promoted: EpicPromoted) => Refusal
 
 export class EpicPromotionRefusal {
   static readonly #STATUS = 400
@@ -30,19 +31,33 @@ export class EpicPromotionRefusal {
 
   static readonly #BY_STATE: Projection<EpicPromotionRefusalOf, EpicGroomStateValue> =
     new Projection<EpicPromotionRefusalOf, EpicGroomStateValue>('refusal', [
-      EpicGroomState.NO_SPEC, EpicGroomState.DRAFT, EpicGroomState.AWAITING_PUBLICATION, EpicGroomState.GROOMABLE,
-    ].map((state) => [state, () => new Refusal({
-      status: EpicPromotionRefusal.#STATUS,
-      code: EpicPromotionOutcome.NO_EPIC_ISSUES,
-      detail: EpicPromotionRefusal.#NO_EPIC_ISSUES_DETAIL,
-    })] as const))
+      ...[
+        EpicGroomState.NO_SPEC, EpicGroomState.DRAFT, EpicGroomState.AWAITING_PUBLICATION, EpicGroomState.GROOMABLE,
+      ].map((state) => [state, () => new Refusal({
+        status: EpicPromotionRefusal.#STATUS,
+        code: EpicPromotionOutcome.NO_EPIC_ISSUES,
+        detail: EpicPromotionRefusal.#NO_EPIC_ISSUES_DETAIL,
+      })] as const),
+      [EpicGroomState.PARTIALLY_GROOMED, (promoted: EpicPromoted) => new Refusal({
+        status: EpicPromotionRefusal.#STATUS,
+        code: EpicPromotionOutcome.EPIC_PARTIALLY_GROOMED,
+        detail: EpicPromotionRefusal.#partiallyGroomedDetail(promoted),
+      })] as const,
+    ])
 
   static appliesTo(state: EpicGroomStateValue): boolean {
     return EpicPromotionRefusal.#BY_STATE.members().includes(state)
   }
 
   static of(promoted: EpicPromoted): Refusal {
-    return EpicPromotionRefusal.#BY_STATE.of(promoted.state)()
+    return EpicPromotionRefusal.#BY_STATE.of(promoted.state)(promoted)
+  }
+
+  static #partiallyGroomedDetail(promoted: EpicPromoted): string {
+    const exists = promoted.issues.length
+    const planned = promoted.plan?.issues.length ?? exists
+
+    return `the milestone holds ${exists} of ${planned} issue(s): finish the groom before authorising`
   }
 }
 

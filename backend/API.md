@@ -1077,7 +1077,7 @@ Gate 2's own state for the checkout the held coordinating session sits in, deriv
 execution spec, the epic's milestone and its issues on GitHub — nothing stored. No parameters.
 The cabin polls it to draw gate 2's panel.
 
-**200 OK** — seven shapes, told apart by `status`.
+**200 OK** — eight shapes, told apart by `status`.
 
 No coordinating session is held, so there is nothing to groom:
 
@@ -1119,6 +1119,25 @@ spec's slices table, the order, the title and the labels the real run would give
  "key":"3f9c1a…"}
 ```
 
+The milestone holds at least one issue, but the plan still promises an order none of them carries —
+`ct-groom` created some of the epic's issues and then died, or is still running: `plan` is the same
+`ct-groom --dry-run` product as `groomable`'s, and `issues` are the ones the milestone already
+holds, identified by their `<!-- ct-order:N -->` marker rather than by title, so a renamed issue is
+never read as missing:
+
+```json
+{"status":"partially-groomed",
+ "milestone":"The loop enters through brainstorming",
+ "plan":{"issues":[
+   {"order":1,"title":"The intermediate gate retires","labels":["type:backend","area:api","status:backlog"]},
+   {"order":2,"title":"The session channel","labels":["type:ui","area:sessions","status:backlog"]}
+ ]},
+ "issues":[
+   {"number":348,"url":"https://github.com/owner/name/issues/348","title":"The intermediate gate retires","status":"backlog"}
+ ],
+ "key":"3f9c1a…"}
+```
+
 The milestone holds issues and at least one open one still stands at `status:backlog` — the groom
 already ran, gate 2's promotion has not:
 
@@ -1147,15 +1166,15 @@ promote:
 `key` is the same value `POST /epic-groom` and `POST /epic-promotion` demand in their
 `x-gate-key` header, minted once when the backend starts
 (`backend/src/infrastructure/gate-key.ts`) — the mechanism `GET /spec-freeze` documents above. It
-is attached only to the `groomable` and `groomed` bodies, and only for the page's own request;
-`no-spec`, `draft`, `awaiting-publication` and `authorised` never carry it, whatever request asks
-— `authorised` has nothing left for a key to open.
+is attached only to the `groomable`, `partially-groomed` and `groomed` bodies, and only for the
+page's own request; `no-spec`, `draft`, `awaiting-publication` and `authorised` never carry it,
+whatever request asks — `authorised` has nothing left for a key to open.
 
 **Refusals**
 
 The shared ones — 405 for a method other than `GET` or `POST`, 403 for a foreign `Origin` — and,
 with a 400 and its own `{code, detail}`, every tool refusal this read can meet: deriving these
-seven states can run `ct-groom --dry-run`, `gh api repos/<repo>/contents/<spec>` and `gh issue
+eight states can run `ct-groom --dry-run`, `gh api repos/<repo>/contents/<spec>` and `gh issue
 list`, so their failures surface here too — the same `PlanCollapse` codes `POST /epic-groom`
 documents below, except `epic-issue-not-promoted`, which only `POST /epic-promotion` can meet.
 
@@ -1170,6 +1189,12 @@ curl -s http://127.0.0.1:8787/epic-groom
 Gate 2's groom. Runs `ct-groom` for real over the spec and milestone `GET /epic-groom` already
 read, and answers the issues the milestone holds afterwards. No request body — the whole checkout
 is read from the held coordinating session, the same way `GET /epic-groom` does.
+
+A `partially-groomed` read is not refused here: `ct-groom` is idempotent through the
+`<!-- ct-order:N -->` marker it writes into every issue, so running it again over a milestone that
+already holds some of the plan's issues creates only the ones still missing and touches none of the
+existing ones. Finishing the groom is the way `POST /epic-promotion` sends a partially groomed
+epic back to.
 
 **Request header**
 
@@ -1273,9 +1298,10 @@ Then, once the key holds:
 |---|---|---|
 | `no-coordinating-session` | 400 | no coordinating session is held: there is nothing to promote |
 | `no-epic-issues` | 400 | the milestone holds no issue yet: the groom has to run first |
+| `epic-partially-groomed` | 400 | the milestone holds some but not every planned issue: `detail` names how many of how many exist and that the groom has to be finished first — this route's own code, met by no other endpoint |
 
-None of these three touches a label. From reading the milestone's issues and moving them, once
-the three above did not apply, this meets the same `PlanCollapse` codes `POST /epic-groom`
+None of these four touches a label. From reading the milestone's issues and moving them, once
+the four above did not apply, this meets the same `PlanCollapse` codes `POST /epic-groom`
 documents above, and it is the only route that can meet `epic-issue-not-promoted`.
 
 ```

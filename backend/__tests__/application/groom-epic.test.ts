@@ -79,6 +79,7 @@ class Mother {
       title: 'first slice, groomed',
       status: PlanIssueStatus.BACKLOG,
       isOpen: true,
+      order: 1,
     })
   }
 
@@ -111,6 +112,16 @@ class Mother {
   static groomedRead(issues: EpicIssue[]): EpicGroomRead {
     return new EpicGroomRead({
       state: EpicGroomState.GROOMED, spec: Mother.frozenSpec(), milestone: Mother.MILESTONE, plan: null, issues,
+    })
+  }
+
+  static partiallyGroomedRead(issues: EpicIssue[]): EpicGroomRead {
+    return new EpicGroomRead({
+      state: EpicGroomState.PARTIALLY_GROOMED,
+      spec: Mother.frozenSpec(),
+      milestone: Mother.MILESTONE,
+      plan: Mother.PLAN,
+      issues,
     })
   }
 }
@@ -174,6 +185,21 @@ describe('GroomEpic', () => {
     }])
     expect(groomed.state).toBe(EpicGroomState.GROOMED)
     expect(groomed.issues).toEqual(issuesAfter)
+  })
+
+  it('a partially groomed epic is not refused: finishing the groom is the way out this action offers', async () => {
+    const before = [Mother.promotedIssue()]
+    const after = [Mother.promotedIssue()]
+    const flow = new Flow({
+      read: new ReadEpicGroomDouble([Mother.partiallyGroomedRead(before), Mother.groomedRead(after)]),
+    })
+
+    const groomed = await flow.run()
+
+    expect(flow.groom.runAsked).toEqual([{
+      root: Mother.ROOT, spec: Mother.frozenSpec(), repository: Mother.REPOSITORY, milestone: Mother.MILESTONE,
+    }])
+    expect(groomed.state).toBe(EpicGroomState.GROOMED)
   })
 
   it('an epic already groomed runs again because the plugin is idempotent by existence', async () => {

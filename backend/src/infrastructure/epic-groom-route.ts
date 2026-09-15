@@ -158,6 +158,15 @@ export class EpicGroomRoute {
           ...(minted === null ? {} : { key: minted }),
         })
         return
+      case EpicGroomState.PARTIALLY_GROOMED:
+        Answer.send(response, 200, {
+          status: EpicGroomState.PARTIALLY_GROOMED,
+          milestone: outcome.milestone,
+          plan: { issues: outcome.plan!.issues.map(EpicGroomRoute.#wirePlanIssueOf) },
+          issues: outcome.issues.map(EpicGroomRoute.#wireIssueOf),
+          ...(minted === null ? {} : { key: minted }),
+        })
+        return
       case EpicGroomState.GROOMED:
         Answer.send(response, 200, {
           status: EpicGroomState.GROOMED,

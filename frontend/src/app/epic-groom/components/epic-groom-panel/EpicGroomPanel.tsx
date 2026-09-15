@@ -15,6 +15,7 @@ const CREATED = 'Issues del epic'
 const PROMOTE = 'Autorizar el trabajo'
 const PROMOTING = 'Autorizando el trabajo'
 const AUTHORISED = 'Trabajo autorizado: el loop ya puede despachar el primer slice.'
+const FINISH_GROOM_FIRST = 'Termina el groom antes de autorizar el trabajo.'
 const ONLY_FROM_THE_PAGE = 'Esta puerta solo se abre desde la página que sirve el backend.'
 const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
 
@@ -30,11 +31,13 @@ type EpicGroomActed = Extract<EpicGroomAskOutcome, { kind: 'acted' }>
 type EpicGroomAskRefusal = Exclude<EpicGroomAskOutcome, { kind: 'acted' }>
 
 const planCount = (count: number): string => `${count} issues`
+const partialCount = (existing: number, planned: number): string => `${existing} de ${planned} issues creadas`
 const planItem = (issue: GroomPlanIssue): string => `#${issue.order} · ${issue.title}`
 const issueItem = (issue: EpicIssue): string => `#${issue.number} · ${issue.title}`
 
 const EpicGroomPanelLabels = {
   planCount,
+  partialCount,
   planItem,
   issueItem,
 }
@@ -56,7 +59,8 @@ const EpicGroomPanel = () => {
     )
   }
 
-  const gateKey = read.kind === 'groomable' || read.kind === 'groomed' ? read.key : null
+  const gateKey =
+    read.kind === 'groomable' || read.kind === 'partially-groomed' || read.kind === 'groomed' ? read.key : null
 
   const press = async (action: (key: string) => Promise<EpicGroomAskOutcome>) => {
     if (gateKey === null || isPressingRef.current) return
@@ -98,6 +102,30 @@ const EpicGroomPanel = () => {
             </li>
           ))}
         </ul>
+        <Button onClick={() => void press(EpicGroomClient.groom)} disabled={gateKey === null || isPressing}>
+          {isPressing ? GROOMING : GROOM}
+        </Button>
+        {gateNotice}
+        {askBanner}
+      </Panel>
+    )
+  }
+
+  if (acted === null && read.kind === 'partially-groomed') {
+    const { milestone, plan, issues } = read
+    return (
+      <Panel heading={HEADING}>
+        <p className="epic-groom-panel__milestone">{milestone}</p>
+        <p className="epic-groom-panel__partial-count">{EpicGroomPanelLabels.partialCount(issues.length, plan.length)}</p>
+        <ul className="epic-groom-panel__issues">
+          {issues.map((issue) => (
+            <li key={issue.number} className="epic-groom-panel__issue">
+              <span className="epic-groom-panel__issue-title">{EpicGroomPanelLabels.issueItem(issue)}</span>
+              <span className="epic-groom-panel__issue-status">{issue.status}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="epic-groom-panel__partial-notice">{FINISH_GROOM_FIRST}</p>
         <Button onClick={() => void press(EpicGroomClient.groom)} disabled={gateKey === null || isPressing}>
           {isPressing ? GROOMING : GROOM}
         </Button>

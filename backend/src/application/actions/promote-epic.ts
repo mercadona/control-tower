@@ -1,9 +1,10 @@
-import { ReadEpicGroom, ReadEpicGroomParams } from '../queries/read-epic-groom.ts'
+import { ReadEpicGroom, ReadEpicGroomParams, EpicGroomState } from '../queries/read-epic-groom.ts'
 import type { EpicGroomStateValue } from '../queries/read-epic-groom.ts'
 import type { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
 import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
 import type { EpicIssues } from '../../domain/ports/epic-issues.ts'
 import type { EpicIssue } from '../../domain/value-objects/epic-issue.ts'
+import type { GroomPlan } from '../../domain/value-objects/groom-plan.ts'
 
 export class PromoteEpicParams {
   readonly root: CheckoutRoot
@@ -19,17 +20,20 @@ export class PromoteEpicParams {
 export class EpicPromoted {
   readonly state: EpicGroomStateValue
   readonly milestone: string | null
+  readonly plan: GroomPlan | null
   readonly issues: readonly EpicIssue[]
   readonly promoted: readonly number[]
 
-  constructor({ state, milestone, issues, promoted }: {
+  constructor({ state, milestone, plan, issues, promoted }: {
     state: EpicGroomStateValue,
     milestone: string | null,
+    plan: GroomPlan | null,
     issues: readonly EpicIssue[],
     promoted: readonly number[],
   }) {
     this.state = state
     this.milestone = milestone
+    this.plan = plan
     this.issues = issues
     this.promoted = promoted
     Object.freeze(this)
@@ -47,9 +51,12 @@ export class PromoteEpic {
 
   async execute(params: PromoteEpicParams): Promise<EpicPromoted> {
     const before = await this.read.execute(new ReadEpicGroomParams({ root: params.root, repository: params.repository }))
+    const nothingSafeToAuthorise = before.issues.length === 0 || before.state === EpicGroomState.PARTIALLY_GROOMED
 
-    if (before.issues.length === 0) {
-      return new EpicPromoted({ state: before.state, milestone: before.milestone, issues: before.issues, promoted: [] })
+    if (nothingSafeToAuthorise) {
+      return new EpicPromoted({
+        state: before.state, milestone: before.milestone, plan: before.plan, issues: before.issues, promoted: [],
+      })
     }
 
     const waiting = before.issues.filter((issue) => issue.isPromotable())
@@ -62,6 +69,7 @@ export class PromoteEpic {
     return new EpicPromoted({
       state: after.state,
       milestone: after.milestone,
+      plan: after.plan,
       issues: after.issues,
       promoted: waiting.map((issue) => issue.number),
     })

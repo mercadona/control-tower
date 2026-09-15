@@ -58,6 +58,18 @@ const toOutcome = (body: unknown): EpicGroomOutcome => {
   ) {
     return { kind: 'groomable', milestone: body.milestone, plan: body.plan.issues, key: keyOf(body) }
   }
+  if (
+    body.status === 'partially-groomed' &&
+    typeof body.milestone === 'string' &&
+    isRecord(body.plan) &&
+    isGroomPlanIssues(body.plan.issues) &&
+    isEpicIssues(body.issues)
+  ) {
+    return {
+      kind: 'partially-groomed', milestone: body.milestone, plan: body.plan.issues, issues: body.issues,
+      key: keyOf(body),
+    }
+  }
   if (body.status === 'groomed' && typeof body.milestone === 'string' && isEpicIssues(body.issues)) {
     return { kind: 'groomed', milestone: body.milestone, issues: body.issues, key: keyOf(body) }
   }

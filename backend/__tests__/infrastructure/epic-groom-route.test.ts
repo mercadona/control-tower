@@ -151,6 +151,7 @@ class Mother {
       title: 'wears status:backlog and stays open',
       status: PlanIssueStatus.BACKLOG,
       isOpen: true,
+      order: 1,
     })
   }
 
@@ -161,6 +162,7 @@ class Mother {
       title: 'already promoted to status:ready',
       status: PlanIssueStatus.READY,
       isOpen: true,
+      order: 2,
     })
   }
 
@@ -179,6 +181,12 @@ class Mother {
   static authorisedRead(issues: EpicIssue[]): EpicGroomRead {
     return new EpicGroomRead({
       state: EpicGroomState.AUTHORISED, spec: null, milestone: Mother.MILESTONE, plan: null, issues,
+    })
+  }
+
+  static partiallyGroomedRead(issues: EpicIssue[]): EpicGroomRead {
+    return new EpicGroomRead({
+      state: EpicGroomState.PARTIALLY_GROOMED, spec: null, milestone: Mother.MILESTONE, plan: Mother.PLAN, issues,
     })
   }
 
@@ -367,6 +375,29 @@ describe('EpicGroomRoute', () => {
           status: 'ready',
         },
       ],
+      key: Keys.MINTED,
+    })
+  })
+
+  it('a partially groomed read answers the milestone, the plan and the issues that already exist, with a key to press', async () => {
+    const held = Mother.live()
+    const read = ReadEpicGroomSpy.answering(Mother.partiallyGroomedRead([Mother.backlogIssue()]))
+    const groom = GroomEpicSpy.neverAsked()
+    const key = Keys.minted()
+
+    const response = await RunningApi.get(held, read, groom, key)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      status: 'partially-groomed',
+      milestone: Mother.MILESTONE,
+      plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      issues: [{
+        number: 1,
+        url: `https://github.com/${Mother.REPOSITORY.text}/issues/1`,
+        title: 'wears status:backlog and stays open',
+        status: 'backlog',
+      }],
       key: Keys.MINTED,
     })
   })

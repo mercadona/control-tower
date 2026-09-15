@@ -14,9 +14,10 @@ class Mother {
   static MILESTONE = 'start-in-correct-loop'
 
   static CAPTURE = 'gh issue list --repo mercadona/control-tower --milestone "start-in-correct-loop" --state all ' +
-    '--limit 200 --json number,url,title,labels,state, captured on 2026-09-15: this fixture keeps issues #329 and ' +
-    '#330 of that real listing\'s stdout verbatim, labels and all, so the parse is proved against what gh actually ' +
-    'prints back and not a shape imagined for it'
+    '--limit 200 --json number,url,title,labels,state,body, captured on 2026-09-15: this fixture keeps issues ' +
+    '#329 and #330 of that real listing\'s stdout, labels and all; body is trimmed to its final lines around the ' +
+    '`ct-order` marker (the only part this backend reads from it) so the parse is proved against what gh ' +
+    'actually prints back and not a shape imagined for it'
 
   static REAL_LISTING = JSON.stringify([
     {
@@ -31,6 +32,7 @@ class Mother {
       state: 'OPEN',
       title: '#5 The groom and gate 2',
       url: 'https://github.com/mercadona/control-tower/issues/330',
+      body: '(the rest of the real body, trimmed to keep this fixture short)\n\n<!-- ct-order:5 -->\n',
     },
     {
       labels: [
@@ -44,6 +46,7 @@ class Mother {
       state: 'CLOSED',
       title: '#4 Gate 1 — the freeze',
       url: 'https://github.com/mercadona/control-tower/issues/329',
+      body: '(the rest of the real body, trimmed to keep this fixture short)\n\n<!-- ct-order:4 -->\n',
     },
   ])
 
@@ -54,6 +57,7 @@ class Mother {
       title: 'wears no status label at all',
       status: PlanIssueStatus.BACKLOG,
       isOpen: true,
+      order: null,
     })
   }
 
@@ -64,6 +68,7 @@ class Mother {
       title: 'wears status:backlog',
       status: PlanIssueStatus.BACKLOG,
       isOpen: true,
+      order: null,
     })
   }
 
@@ -74,6 +79,7 @@ class Mother {
       title: 'wears status:in-progress',
       status: PlanIssueStatus.IN_PROGRESS,
       isOpen: true,
+      order: null,
     })
   }
 
@@ -84,6 +90,7 @@ class Mother {
       title: 'closed while still wearing status:backlog',
       status: PlanIssueStatus.BACKLOG,
       isOpen: false,
+      order: null,
     })
   }
 }
@@ -175,15 +182,17 @@ describe('GhEpicIssues', () => {
         '--milestone', 'start-in-correct-loop',
         '--state', 'all',
         '--limit', '200',
-        '--json', 'number,url,title,labels,state',
+        '--json', 'number,url,title,labels,state,body',
       ]])
       expect(issues.map((issue) => issue.number)).toEqual([329, 330])
       expect(issues[0]).toBeInstanceOf(EpicIssue)
       expect(issues[0].isOpen).toBe(false)
       expect(issues[0].status).toBe(PlanIssueStatus.IN_REVIEW)
       expect(issues[0].title).toBe('#4 Gate 1 — the freeze')
+      expect(issues[0].order).toBe(4)
       expect(issues[1].isOpen).toBe(true)
       expect(issues[1].status).toBe(PlanIssueStatus.IN_PROGRESS)
+      expect(issues[1].order).toBe(5)
     })
   })
 

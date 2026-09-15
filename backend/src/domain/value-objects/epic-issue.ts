@@ -6,8 +6,11 @@ export class EpicIssue {
   readonly title: string
   readonly status: string
   readonly isOpen: boolean
+  readonly order: number | null
 
-  constructor(issue: { number: number, url: string, title: string, status: string, isOpen: boolean }) {
+  constructor(
+    issue: { number: number, url: string, title: string, status: string, isOpen: boolean, order: number | null }
+  ) {
     if (!Number.isInteger(issue.number) || issue.number < 1) {
       throw new Error(`an epic issue is numbered from one, got ${JSON.stringify(issue.number)}`)
     }
@@ -25,6 +28,7 @@ export class EpicIssue {
     this.title = issue.title
     this.status = issue.status
     this.isOpen = issue.isOpen
+    this.order = issue.order
     Object.freeze(this)
   }
 

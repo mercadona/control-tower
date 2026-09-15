@@ -20,7 +20,7 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
     })
   })
 
-  it('each of the seven states is read as its own kind', async () => {
+  it('each of the eight states is read as its own kind', async () => {
     const cases: Array<[{ status: number; body: string }, unknown]> = [
       [EpicGroomMother.none(), { kind: 'none' }],
       [EpicGroomMother.noSpec(), { kind: 'no-spec' }],
@@ -32,6 +32,16 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
           kind: 'groomable',
           milestone: EpicGroomMother.MILESTONE,
           plan: [EpicGroomMother.GATE_ISSUE, EpicGroomMother.CHANNEL_ISSUE],
+          key: EpicGroomMother.KEY,
+        },
+      ],
+      [
+        EpicGroomMother.partiallyGroomed(),
+        {
+          kind: 'partially-groomed',
+          milestone: EpicGroomMother.MILESTONE,
+          plan: [EpicGroomMother.GATE_ISSUE, EpicGroomMother.CHANNEL_ISSUE],
+          issues: [EpicGroomMother.BACKLOG_GATE],
           key: EpicGroomMother.KEY,
         },
       ],

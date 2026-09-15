@@ -25,6 +25,7 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
 import { EpicIssue } from '../../src/domain/value-objects/epic-issue.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
+import { GroomPlan, GroomPlanIssue } from '../../src/domain/value-objects/groom-plan.ts'
 
 class PromoteEpicSpy extends PromoteEpic {
   static neverAsked(): PromoteEpicSpy {
@@ -112,6 +113,14 @@ class Mother {
     })
   }
 
+  static readonly PLAN = new GroomPlan({
+    milestone: Mother.MILESTONE,
+    issues: [
+      new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'] }),
+      new GroomPlanIssue({ order: 2, title: '#2 Second slice', labels: ['type:feature'] }),
+    ],
+  })
+
   static backlogIssue(): EpicIssue {
     return new EpicIssue({
       number: 1,
@@ -119,6 +128,7 @@ class Mother {
       title: 'wears status:backlog and stays open',
       status: PlanIssueStatus.BACKLOG,
       isOpen: true,
+      order: 1,
     })
   }
 
@@ -129,15 +139,26 @@ class Mother {
       title: 'now promoted to status:ready',
       status: PlanIssueStatus.READY,
       isOpen: true,
+      order: 1,
     })
   }
 
   static groomableWithNoIssues(): EpicPromoted {
-    return new EpicPromoted({ state: EpicGroomState.GROOMABLE, milestone: Mother.MILESTONE, issues: [], promoted: [] })
+    return new EpicPromoted({
+      state: EpicGroomState.GROOMABLE, milestone: Mother.MILESTONE, plan: null, issues: [], promoted: [],
+    })
   }
 
   static promoted(issuesAfter: EpicIssue[], numbers: number[]): EpicPromoted {
-    return new EpicPromoted({ state: EpicGroomState.GROOMED, milestone: Mother.MILESTONE, issues: issuesAfter, promoted: numbers })
+    return new EpicPromoted({
+      state: EpicGroomState.GROOMED, milestone: Mother.MILESTONE, plan: null, issues: issuesAfter, promoted: numbers,
+    })
+  }
+
+  static partiallyGroomed(issues: EpicIssue[]): EpicPromoted {
+    return new EpicPromoted({
+      state: EpicGroomState.PARTIALLY_GROOMED, milestone: Mother.MILESTONE, plan: Mother.PLAN, issues, promoted: [],
+    })
   }
 }
 
@@ -242,6 +263,21 @@ describe('EpicPromotionRoute', () => {
     expect(await response.json()).toEqual({
       code: 'no-epic-issues',
       detail: 'the milestone holds no issue yet: the groom has to run first',
+    })
+  })
+
+  it('a partially groomed epic is refused as epic-partially-groomed, naming how many of how many issues exist', async () => {
+    const held = Mother.live()
+    const promote = PromoteEpicSpy.answering(Mother.partiallyGroomed([Mother.backlogIssue()]))
+    const key = Keys.minted()
+    const port = await RunningApi.listening(held, promote, key)
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: 'epic-partially-groomed',
+      detail: 'the milestone holds 1 of 2 issue(s): finish the groom before authorising',
     })
   })
 

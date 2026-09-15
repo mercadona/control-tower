@@ -24,6 +24,7 @@ export const EpicGroomState = Object.freeze({
   DRAFT: 'draft',
   AWAITING_PUBLICATION: 'awaiting-publication',
   GROOMABLE: 'groomable',
+  PARTIALLY_GROOMED: 'partially-groomed',
   GROOMED: 'groomed',
   AUTHORISED: 'authorised',
 } as const)
@@ -87,13 +88,24 @@ export class ReadEpicGroom {
 
     const milestone = spec.title()!
     const holding = await this.issues.listOf({ repository: params.repository, milestone })
+    const plan = await this.groom.planned({ root: params.root, spec, repository: params.repository, milestone })
 
     if (holding.length === 0) {
-      const plan = await this.groom.planned({ root: params.root, spec, repository: params.repository, milestone })
       return new EpicGroomRead({ state: EpicGroomState.GROOMABLE, spec, milestone, plan, issues: [] })
     }
 
+    if (ReadEpicGroom.#isPartiallyGroomed(plan, holding)) {
+      return new EpicGroomRead({ state: EpicGroomState.PARTIALLY_GROOMED, spec, milestone, plan, issues: holding })
+    }
+
     const state = holding.some((issue) => issue.isPromotable()) ? EpicGroomState.GROOMED : EpicGroomState.AUTHORISED
-    return new EpicGroomRead({ state, spec, milestone, plan: null, issues: holding })
+    return new EpicGroomRead({ state, spec, milestone, plan, issues: holding })
+  }
+
+  static #isPartiallyGroomed(plan: GroomPlan, holding: readonly EpicIssue[]): boolean {
+    const heldOrders = new Set(holding.map((issue) => issue.order).filter((order) => order !== null))
+    const plannedOrderIsMissing = (planned: { order: number }): boolean => !heldOrders.has(planned.order)
+
+    return plan.issues.some(plannedOrderIsMissing)
   }
 }

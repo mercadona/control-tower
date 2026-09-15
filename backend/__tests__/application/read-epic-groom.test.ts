@@ -125,6 +125,7 @@ class Mother {
       title: 'wears status:backlog and stays open',
       status: PlanIssueStatus.BACKLOG,
       isOpen: true,
+      order: 1,
     })
   }
 
@@ -135,6 +136,7 @@ class Mother {
       title: 'already promoted to status:ready',
       status: PlanIssueStatus.READY,
       isOpen: true,
+      order: 2,
     })
   }
 
@@ -145,8 +147,28 @@ class Mother {
       title: 'closed while still wearing status:backlog',
       status: PlanIssueStatus.BACKLOG,
       isOpen: false,
+      order: 1,
     })
   }
+
+  static issueOfOrder(order: number): EpicIssue {
+    return new EpicIssue({
+      number: order,
+      url: `https://github.com/owner/name/issues/${order}`,
+      title: `slice #${order}, groomed`,
+      status: PlanIssueStatus.BACKLOG,
+      isOpen: true,
+      order,
+    })
+  }
+
+  static readonly TWO_SLICE_PLAN = new GroomPlan({
+    milestone: Mother.TITLE,
+    issues: [
+      new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'] }),
+      new GroomPlanIssue({ order: 2, title: '#2 Second slice', labels: ['type:feature'] }),
+    ],
+  })
 }
 
 class Flow {
@@ -235,31 +257,84 @@ describe('ReadEpicGroom', () => {
     expect(flow.groom.asked).toEqual([])
   })
 
-  it('a milestone with an issue still at backlog is groomed and carries no plan', async () => {
+  it('a milestone holding every planned order is groomed, and the plan is still asked and carried', async () => {
+    const frozen = Mother.frozen()
     const flow = new Flow({
-      specs: new EpicSpecsDouble(Mother.frozen()),
+      specs: new EpicSpecsDouble(frozen),
       issues: new EpicIssuesDouble([Mother.backlogIssue(), Mother.readyIssue()]),
     })
 
     const read = await flow.run()
 
     expect(read.state).toBe(EpicGroomState.GROOMED)
-    expect(read.plan).toBeNull()
+    expect(read.plan).toBe(Mother.PLAN)
     expect(read.issues).toEqual([Mother.backlogIssue(), Mother.readyIssue()])
-    expect(flow.groom.asked).toEqual([])
+    expect(flow.groom.asked).toEqual([{
+      root: Mother.ROOT, spec: frozen, repository: Mother.REPOSITORY, milestone: Mother.TITLE,
+    }])
   })
 
-  it('a milestone whose issues are all promoted is authorised', async () => {
+  it('a milestone holding every planned order, all promoted, is authorised and still carries the plan', async () => {
+    const frozen = Mother.frozen()
     const flow = new Flow({
-      specs: new EpicSpecsDouble(Mother.frozen()),
+      specs: new EpicSpecsDouble(frozen),
       issues: new EpicIssuesDouble([Mother.readyIssue(), Mother.closedBacklogIssue()]),
     })
 
     const read = await flow.run()
 
     expect(read.state).toBe(EpicGroomState.AUTHORISED)
-    expect(read.plan).toBeNull()
+    expect(read.plan).toBe(Mother.PLAN)
     expect(read.issues).toEqual([Mother.readyIssue(), Mother.closedBacklogIssue()])
-    expect(flow.groom.asked).toEqual([])
+    expect(flow.groom.asked).toEqual([{
+      root: Mother.ROOT, spec: frozen, repository: Mother.REPOSITORY, milestone: Mother.TITLE,
+    }])
+  })
+
+  it('a milestone missing a planned order is partially groomed, not groomed: an order absent from every held issue is a slice the groom never finished creating', async () => {
+    const frozen = Mother.frozen()
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(frozen),
+      issues: new EpicIssuesDouble([Mother.issueOfOrder(1)]),
+      groom: new EpicGroomDouble(Mother.TWO_SLICE_PLAN),
+    })
+
+    const read = await flow.run()
+
+    expect(read.state).toBe(EpicGroomState.PARTIALLY_GROOMED)
+    expect(read.plan).toBe(Mother.TWO_SLICE_PLAN)
+    expect(read.issues).toEqual([Mother.issueOfOrder(1)])
+  })
+
+  it('an issue with no ct-order marker at all never counts towards a planned order, so a milestone holding only that issue still reads as partially groomed', async () => {
+    const frozen = Mother.frozen()
+    const unmarked = new EpicIssue({
+      number: 9, url: 'https://github.com/owner/name/issues/9', title: 'renamed away from its plan title',
+      status: PlanIssueStatus.BACKLOG, isOpen: true, order: null,
+    })
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(frozen),
+      issues: new EpicIssuesDouble([unmarked]),
+    })
+
+    const read = await flow.run()
+
+    expect(read.state).toBe(EpicGroomState.PARTIALLY_GROOMED)
+  })
+
+  it('a renamed issue is still matched by its ct-order marker, not its title, so it is not read as missing', async () => {
+    const frozen = Mother.frozen()
+    const renamed = new EpicIssue({
+      number: 1, url: 'https://github.com/owner/name/issues/1', title: 'a title nobody planned',
+      status: PlanIssueStatus.BACKLOG, isOpen: true, order: 1,
+    })
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(frozen),
+      issues: new EpicIssuesDouble([renamed]),
+    })
+
+    const read = await flow.run()
+
+    expect(read.state).toBe(EpicGroomState.GROOMED)
   })
 })

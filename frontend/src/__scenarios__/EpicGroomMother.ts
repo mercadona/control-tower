@@ -31,6 +31,12 @@ const groomableWithoutKey = () => ({
   body: `{"status":"groomable","milestone":"${MILESTONE}","plan":{"issues":${PLAN_JSON}}}`,
 })
 
+const partiallyGroomed = () => ({
+  status: 200,
+  body: `{"status":"partially-groomed","milestone":"${MILESTONE}","plan":{"issues":${PLAN_JSON}},` +
+    `"issues":${JSON.stringify([BACKLOG_GATE])},"key":"${KEY}"}`,
+})
+
 const groomed = () => ({
   status: 200,
   body: `{"status":"groomed","milestone":"${MILESTONE}","issues":${BACKLOG_ISSUES_JSON},"key":"${KEY}"}`,
@@ -75,6 +81,7 @@ export const EpicGroomMother = {
   awaitingPublication,
   groomable,
   groomableWithoutKey,
+  partiallyGroomed,
   groomed,
   groomedByThePress,
   authorised,

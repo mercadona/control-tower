@@ -56,6 +56,40 @@ describe('EpicGroomPanel', () => {
     expect(screen.getAllByText('backlog')).toHaveLength(2)
   })
 
+  it('a partially groomed epic shows how many of how many issues exist and offers only the groom, not the promotion', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.partiallyGroomed().body, { status: 200 })))
+
+    render(<EpicGroomPanel />)
+
+    expect(await screen.findByText(EpicGroomMother.MILESTONE)).toBeInTheDocument()
+    expect(screen.getByText('1 de 2 issues creadas')).toBeInTheDocument()
+    expect(screen.getByText('#348 · The intermediate gate retires')).toBeInTheDocument()
+    expect(screen.getByText('backlog')).toBeInTheDocument()
+    expect(screen.getByText('Termina el groom antes de autorizar el trabajo.')).toBeInTheDocument()
+    expect(screen.getByRole('button', GROOM_BUTTON)).toBeInTheDocument()
+    expect(screen.queryByRole('button', PROMOTE_BUTTON)).not.toBeInTheDocument()
+  })
+
+  it('pressing the groom from a partially groomed epic sends the key and then shows what the finished groom created', async () => {
+    const fetching = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(EpicGroomMother.partiallyGroomed().body, { status: 200 }))
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomedByThePress().body, { status: 200 }))
+    vi.stubGlobal('fetch', fetching)
+    const user = userEvent.setup()
+    render(<EpicGroomPanel />)
+    await screen.findByRole('button', GROOM_BUTTON)
+
+    await user.click(screen.getByRole('button', GROOM_BUTTON))
+
+    expect(fetching).toHaveBeenNthCalledWith(2, '/epic-groom', {
+      method: 'POST',
+      headers: { 'x-gate-key': EpicGroomMother.KEY },
+    })
+    expect(await screen.findByText('#349 · The session channel')).toBeInTheDocument()
+    expect(screen.getByRole('button', PROMOTE_BUTTON)).toBeInTheDocument()
+  })
+
   it('pressing the authorisation sends the key and says the work is authorised', async () => {
     const fetching = vi
       .fn()

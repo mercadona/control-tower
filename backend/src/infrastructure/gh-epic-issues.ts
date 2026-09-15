@@ -1,4 +1,4 @@
-import { resolveStatus } from '../../../plugin/scripts/gh-issue-map.js'
+import { resolveStatus, extractOrder } from '../../../plugin/scripts/gh-issue-map.js'
 import { EpicIssues } from '../domain/ports/epic-issues.ts'
 import { EpicIssue } from '../domain/value-objects/epic-issue.ts'
 import { EpicIssuesNotRead, EpicIssuesNotUnderstood, EpicIssueNotPromoted } from '../domain/exceptions.ts'
@@ -12,6 +12,7 @@ type RawEpicIssue = {
   readonly title: string,
   readonly labels: { readonly name: string }[],
   readonly state: string,
+  readonly body: string,
 }
 
 export class GhEpicIssues extends EpicIssues {
@@ -32,7 +33,7 @@ export class GhEpicIssues extends EpicIssues {
       '--milestone', milestone,
       '--state', 'all',
       '--limit', String(GhEpicIssues.LIMIT),
-      '--json', 'number,url,title,labels,state',
+      '--json', 'number,url,title,labels,state,body',
     ]
   }
 
@@ -74,6 +75,7 @@ export class GhEpicIssues extends EpicIssues {
       title: raw.title,
       status: resolveStatus(raw.labels.map((label) => label.name)).status,
       isOpen: raw.state === GhEpicIssues.OPEN,
+      order: extractOrder(raw.body),
     })
   }
 
@@ -97,10 +99,10 @@ export class GhEpicIssues extends EpicIssues {
 
   static #readsAsAnIssue(candidate: unknown): candidate is RawEpicIssue {
     if (typeof candidate !== 'object' || candidate === null) return false
-    const { number, url, title, labels, state } = candidate as Record<string, unknown>
+    const { number, url, title, labels, state, body } = candidate as Record<string, unknown>
 
     return typeof number === 'number' && typeof url === 'string' && typeof title === 'string' &&
       Array.isArray(labels) && labels.every((label) => typeof label?.name === 'string') &&
-      typeof state === 'string'
+      typeof state === 'string' && typeof body === 'string'
   }
 }

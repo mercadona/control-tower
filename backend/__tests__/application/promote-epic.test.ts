@@ -9,6 +9,7 @@ import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { EpicIssue } from '../../src/domain/value-objects/epic-issue.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
+import { GroomPlan, GroomPlanIssue } from '../../src/domain/value-objects/groom-plan.ts'
 
 type PromoteAsked = { repository: RepositoryName, issue: EpicIssue }
 
@@ -50,6 +51,14 @@ class Mother {
   static readonly REPOSITORY = new RepositoryName('owner/name')
   static readonly MILESTONE = 'Test epic'
 
+  static readonly PLAN = new GroomPlan({
+    milestone: Mother.MILESTONE,
+    issues: [
+      new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'] }),
+      new GroomPlanIssue({ order: 2, title: '#2 Second slice', labels: ['type:feature'] }),
+    ],
+  })
+
   static backlogIssue(): EpicIssue {
     return new EpicIssue({
       number: 1,
@@ -57,6 +66,7 @@ class Mother {
       title: 'wears status:backlog and stays open',
       status: PlanIssueStatus.BACKLOG,
       isOpen: true,
+      order: 1,
     })
   }
 
@@ -67,6 +77,7 @@ class Mother {
       title: 'wears no status: label at all, which resolves to backlog',
       status: PlanIssueStatus.BACKLOG,
       isOpen: true,
+      order: 2,
     })
   }
 
@@ -77,6 +88,7 @@ class Mother {
       title: 'already claimed and wearing status:in-progress',
       status: PlanIssueStatus.IN_PROGRESS,
       isOpen: true,
+      order: null,
     })
   }
 
@@ -87,6 +99,7 @@ class Mother {
       title: 'closed while still wearing status:backlog',
       status: PlanIssueStatus.BACKLOG,
       isOpen: false,
+      order: null,
     })
   }
 
@@ -97,6 +110,7 @@ class Mother {
       title: 'now promoted to status:ready',
       status: PlanIssueStatus.READY,
       isOpen: true,
+      order: 1,
     })
   }
 
@@ -115,6 +129,12 @@ class Mother {
   static authorisedRead(issues: EpicIssue[]): EpicGroomRead {
     return new EpicGroomRead({
       state: EpicGroomState.AUTHORISED, spec: null, milestone: Mother.MILESTONE, plan: null, issues,
+    })
+  }
+
+  static partiallyGroomedRead(issues: EpicIssue[]): EpicGroomRead {
+    return new EpicGroomRead({
+      state: EpicGroomState.PARTIALLY_GROOMED, spec: null, milestone: Mother.MILESTONE, plan: Mother.PLAN, issues,
     })
   }
 }
@@ -157,6 +177,20 @@ describe('PromoteEpic', () => {
     const promoted = await flow.run()
 
     expect(promoted.state).toBe(EpicGroomState.GROOMABLE)
+    expect(flow.issues.promoteAsked).toEqual([])
+    expect(promoted.promoted).toEqual([])
+  })
+
+  it('a partially groomed epic is refused and nothing is promoted, though it already holds an issue', async () => {
+    const flow = new Flow({
+      read: new ReadEpicGroomDouble([Mother.partiallyGroomedRead([Mother.backlogIssue()])]),
+    })
+
+    const promoted = await flow.run()
+
+    expect(promoted.state).toBe(EpicGroomState.PARTIALLY_GROOMED)
+    expect(promoted.plan).toBe(Mother.PLAN)
+    expect(promoted.issues).toEqual([Mother.backlogIssue()])
     expect(flow.issues.promoteAsked).toEqual([])
     expect(promoted.promoted).toEqual([])
   })
