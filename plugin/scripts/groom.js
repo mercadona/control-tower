@@ -872,7 +872,15 @@ function findDuplicateOrders(slices) {
   return [...dupes].sort((a, b) => a - b)
 }
 
-export function groomPlan(slices, { milestone, specRef, epicContext = null, epicContextReason = null, frozenDecisions = null, frozenDecisionsReason = null }) {
+// repoOf (#348): which repository each slice lands in — a milestone has one
+// home repository and N target ones, and the caller (ct-groom.mjs, through
+// milestone-repos.js) is the only one that knows the mapping. It is REQUIRED
+// and not defaulted: a plan whose issues do not say where they go cannot be
+// written anywhere, and a default would silently send a slice home.
+export function groomPlan(slices, { milestone, specRef, epicContext = null, epicContextReason = null, frozenDecisions = null, frozenDecisionsReason = null, repoOf }) {
+  if (typeof repoOf !== 'function') {
+    throw new Error('groomPlan: repoOf is required — every issue of the plan has to say which repository it lands in')
+  }
   // epicContextUnknown (I1): "I could not read valid text" is NOT "the epic
   // has no context". Without this distinction, `epicContext: null` travelled
   // the same in both cases and buildReconcileBody always read it as "withdraw
@@ -893,6 +901,13 @@ export function groomPlan(slices, { milestone, specRef, epicContext = null, epic
     milestone,
     issues: slices.map((s) => ({
       order: s.n,
+      // repo (#348): the repository this issue is created in — the milestone's
+      // home repository unless the row's `Repo` cell names another one. It
+      // travels in the plan because everything downstream needs it: the
+      // pairing against the issues that already exist (inside that repository,
+      // never across), every `gh` call that writes it, and the dry run's JSON,
+      // which is what gate 2 shows the TL before they authorise the work.
+      repo: repoOf(s.n),
       title: buildIssueTitle(s),
       body: buildIssueBody(s, specRef, epicContext, frozenDecisions),
       labels: buildLabels(s),

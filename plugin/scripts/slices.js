@@ -235,6 +235,12 @@ export function analyzeSlicesTable(specMd) {
       // at. The next step of this feature consumes it to decide whether it
       // demands an e2e decision per row.
       e2eColumnPresent: false,
+      // repoColumnPresent (#348): same reason as gateColumnPresent/e2eColumnPresent
+      // — it cannot be derived from the cells, because a column present with
+      // everything "–" is indistinguishable from an absent one, and the
+      // consumer that defaults each row to the milestone's HOME repository
+      // needs to know whether the spec has any opinion at all about this.
+      repoColumnPresent: false,
       totalDataRows: 0,
       rowsAfterGap: [],
       skippedRows: [],
@@ -297,7 +303,14 @@ export function analyzeSlicesTable(specMd) {
         // noted for `gate`): "e2e" is not a substring of
         // #/slice/tipo/entrega/dep/acepta/protegido/área/toca/gate/señal/senal,
         // nor is any of those a substring of "e2e".
-        iE2e = col('e2e')
+        iE2e = col('e2e'),
+        // iRepo (#348): the repository the row's slice lands in — a milestone
+        // has one HOME repository (the `--repo` of the groom) and N target
+        // ones, and this column is the only place a row says it goes to one of
+        // the others. The usual collision check: "repo" is not a substring of
+        // #/slice/tipo/entrega/dep/acepta/protegido/área/area/toca/gate/
+        // señal/senal/e2e, nor is any of those a substring of "repo".
+        iRepo = col('repo')
 
   const missingRequiredColumns = []
   if (iN === -1) missingRequiredColumns.push('#')
@@ -498,8 +511,20 @@ export function analyzeSlicesTable(specMd) {
       // knows nothing about e2e just as it knows nothing about gates.
       e2e: (cells[iE2e] || '').trim(),
       deps,
+      // depCell (#348): the RAW cell, beside the numbers it yielded. The
+      // numbers are not enough to tell a dependency that crosses repositories:
+      // DEP_RE extracts `1` out of "owner/repo#1", so that row would pass for
+      // a dependency on slice 1 of its own repository. Whoever refuses the
+      // crossing (milestone-repos.js) needs the text.
+      depCell,
       ac,
       protected: (cells[iProt] || '').trim(),
+      // repo (#348): the RAW cell, unresolved — the same contract as `gate`,
+      // `senal` and `e2e`, and for the same reason. Which repository a row
+      // really lands in (the home one when this is empty), a cell naming two
+      // and a cell that is not `owner/repo` are all resolved by
+      // milestone-repos.js; this parser knows nothing about repositories.
+      repo: (cells[iRepo] || '').trim(),
       area: parseTokenList(cells[iArea], { ownPrefix: 'area', otherPrefix: 'touches', columnLabel: 'Área', n, warnings: prefixWarnings, emptyWarnings: emptyTokenWarnings }),
       touches: parseTokenList(cells[iToca], { ownPrefix: 'touches', otherPrefix: 'area', columnLabel: 'Toca', n, warnings: prefixWarnings, emptyWarnings: emptyTokenWarnings }),
     })
@@ -542,6 +567,14 @@ export function analyzeSlicesTable(specMd) {
     // is present with everything "–" is indistinguishable from an absent
     // column.
     e2eColumnPresent: iE2e !== -1,
+    // repoColumnPresent (#348): exposed apart from missingOptionalColumns, for
+    // the same reason as Gate and E2E — every entry of that list produces a
+    // warning in ct-groom.mjs with the CONSEQUENCE of the absence, and the
+    // consequence here is that every row lands in the milestone's home
+    // repository, which is EXACTLY the behaviour of every spec that exists
+    // today. A warning on every run of every single-repository spec is the
+    // noise that trains people to ignore the other warnings.
+    repoColumnPresent: iRepo !== -1,
     totalDataRows,
     rowsAfterGap,
     skippedRows,

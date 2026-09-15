@@ -489,7 +489,7 @@ SLICES_HEADING_LEGACY_ES='## Formato de la tabla de slices (contrato con /ct-gro
 #     repo. The v22's three citations point today at a file that no longer
 #     contains what it promises, which is the worst form of a reference: it
 #     looks alive.
-SLICES_CONTRACT_VERSION=25
+SLICES_CONTRACT_VERSION=26
 SLICES_VERSION_LINE_RE='<!-- ct-init:slices-contract-version: [0-9]\{1,\} -->'
 # SLICES_PRISTINE_HASHES: the sha256 of the COMPLETE block (opening marker to
 # closing marker, both included) exactly as each version of this script emitted
@@ -571,6 +571,7 @@ b0eb79ab8fd89f83ce7159e9c2a9c32812ee35b76ad6f4c78c2829c9d9891c0b  v20, 585 líne
 6b7ec30ff95a331542932b199b3b5d2f171e197c61efee0fce0c36fd5def2b6c  v23, 600 líneas — #93 (el contrato deja de ser una sección de AGENTS.md y pasa a docs/superpowers/CONTRATO-SLICES.md; sus tres referencias al detalle apuntan a docs/loop/, no a commands/)
 9962d000dbfc62db370c61ad8015321cc73eb336ad8e8ac0567fa9a4ef414b8c  v24, 601 lines — #188 (the contract is translated into English; the parsed column names, the headings the code locates sections by and every value compared as data stay exactly as they were)
 ce38a280a7cbd18ff6e09b852e20dfeff93b855c05a00c2fcaea0818addadc1f  v25, 601 lines — #346 (the unit of work of the loop is a MILESTONE, not an epic; the default `--milestone` title stays the literal `Epic`, because it is the identity of every milestone already created with it)
+8b97f34f51cb66f70590e3af14e6e3151a4bf653649050d6e46d6b8a211627c5  v26, 622 lines — #348 (a milestone has a home repository and N target ones: the Repo column, and a dependency that never crosses between them)
 '
 
 # emit_slices_contract: the block, in a single place (both the "it does not
@@ -578,14 +579,14 @@ ce38a280a7cbd18ff6e09b852e20dfeff93b855c05a00c2fcaea0818addadc1f  v25, 601 lines
 emit_slices_contract() {
   cat <<'EOF'
 <!-- ct-init:slices-contract -->
-<!-- ct-init:slices-contract-version: 25 -->
+<!-- ct-init:slices-contract-version: 26 -->
 ## Slices table format (contract with /ct-groom)
 `/ct-groom` reads this table from the milestone's spec and creates one GitHub issue
 per row — it is the only part of a spec that a program parses. Exact header,
 copyable as is:
 
-| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca | Gate | Señal |
-|---|-------|------|---------|-----|--------|-----------|------|------|------|-------|
+| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca | Gate | Señal | Repo |
+|---|-------|------|---------|-----|--------|-----------|------|------|------|-------|------|
 
 > **What you write outside the slices table does not reach the agent.** The agent
 > that implements a slice does not receive the spec: it receives a start-up
@@ -671,6 +672,15 @@ copyable as is:
   `#` of this table — the ORDER of the slice, never an issue number**;
   `/ct-next` translates it through the `ct-order` marker that each issue carries at
   the end.
+  **A dependency always names a slice of the SAME repository.** Both ways of
+  crossing **abort**: writing `owner/repo#N`, and a plain `#N` whose row lands
+  in another repository (see `Repo`). It is refused at the groom, where you can
+  still fix the spec, and not at dispatch, where the work would already be
+  claimed: the dispatcher cannot see a merge in another repository from this
+  checkout, so it could neither confirm nor deny it. What that costs, said
+  plainly: a slice of one repository cannot be ordered after a slice of
+  another — express that ordering another way, or do not spread the milestone
+  across repositories.
 - **Acepta** *(optional)*: comma-separated acceptance criteria →
   the "Acceptance criteria" section of the issue, one per line. **The comma ALWAYS
   separates**: a criterion in EARS ("When the token expires, the system asks for
@@ -741,7 +751,19 @@ copyable as is:
   If no slice of the milestone needs e2e, the way out is not to add the column at
   all — that way no row has to decide anything.
 
-"No value" markers (`Dep`/`Acepta`/`Protegido`/`Área`/`Toca`/`Gate`/`Señal`):
+- **Repo** *(optional)*: the repository this slice LANDS IN. A milestone has one
+  **home repository** — the `--repo` of the groom, where its conversation lives
+  and its spec is committed — and N **target repositories**, one per row that
+  names another. An empty cell, or one with a "no value" marker, means the home
+  repository, which is what every table that does not carry this column gets.
+
+  **One row, one repository**: a cell naming two **aborts**, and so does one that
+  is not written `owner/repo` (no backticks, no bold, no spaces). Each target
+  repository gets its own milestone with the SAME title, its own labels — only
+  the ones its own rows need — and its own issues; a dependency never crosses
+  between them (see `Dep`).
+
+"No value" markers (`Dep`/`Acepta`/`Protegido`/`Área`/`Toca`/`Gate`/`Señal`/`Repo`):
 `–` `-` `—` `―` `−` `--` or an empty cell — any dash variant works.
 `E2E` uses the same set of markers, with the caveat above: they are only
 harmless when the column is not present.
@@ -1171,7 +1193,7 @@ ever**, and with it everything that depended on it: `/ct-next` only dispatches
   merging, not just for the gates: if you check it by hand, let the result
   rule.
 
-<sub>This contract is maintained by `/ct-init` (contract v25) and lives in
+<sub>This contract is maintained by `/ct-init` (contract v26) and lives in
 `docs/superpowers/SLICES-CONTRACT.md` of this repo — or in
 `docs/superpowers/CONTRATO-SLICES.md` if the repository was seeded before v24,
 where it is kept and updated under that name; `AGENTS.md` only links to it. If the plugin brings a newer version, `/ct-init` warns about it when running;

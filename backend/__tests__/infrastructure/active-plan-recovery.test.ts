@@ -12,6 +12,7 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
+import { RegisteredCheckout } from '../../src/domain/value-objects/registered-checkout.ts'
 import { ImplementationProgress } from '../../src/domain/ports/implementation-progress.ts'
 import { ReviewLog } from '../../src/domain/ports/review-log.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
@@ -38,8 +39,8 @@ class ProgressThat extends ImplementationProgress {
 class RememberingCheckouts extends CheckoutRegistry {
   readonly remembered: string[] = []
 
-  remember(root: CheckoutRoot): void {
-    this.remembered.push(root.text)
+  remember(checkout: RegisteredCheckout): void {
+    this.remembered.push(`${checkout.repository?.text ?? '(no repository)'} at ${checkout.root.text}`)
   }
 }
 
@@ -301,12 +302,12 @@ describe('ActivePlanRecovery', () => {
     expect(recovered.activePlans.known()[0].phase).toBe('planning')
   })
 
-  it('the_checkout_of_a_plan_it_recovered_goes_back_to_the_registry_so_the_sweep_knows_that_clone', async () => {
+  it('the_checkout_of_a_plan_it_recovered_goes_back_to_the_registry_as_the_pair_the_dispatcher_can_look_up', async () => {
     const recovered = fixture()
 
     await recovered.recovery.recover()
 
-    expect(recovered.checkouts.remembered).toEqual(['/repo'])
+    expect(recovered.checkouts.remembered).toEqual(['jjponz/repo-pulse at /repo'])
   })
 
   it('two_recoveries_at_once_run_the_recovery_only_once', async () => {

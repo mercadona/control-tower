@@ -137,6 +137,7 @@ class LiveSessionsDouble extends LiveSessions {
 
 class Mother {
   static readonly REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
+  static readonly HOME = Mother.REPOSITORY.text
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly CONVERSATION = new CoordinatingConversation({
     id: new ConversationId('2b1a6c2e-8f2a-4b8b-9a3e-6f2b1a6c2e8f'),
@@ -147,8 +148,9 @@ class Mother {
   static readonly SESSION = new LiveSession({ id: 'session-1', name: 'brainstorming' })
   static readonly MILESTONE = 'Test epic'
   static readonly PLAN = new GroomPlan({
+    home: Mother.HOME,
     milestone: Mother.MILESTONE,
-    issues: [new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'] })],
+    issues: [new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME })],
   })
   static readonly FINGERPRINT = new PlanFingerprint({
     digest: (text) => Buffer.from(text, 'utf8').toString('hex'),
@@ -381,7 +383,7 @@ describe('EpicGroomRoute', () => {
     expect(await groomable.json()).toEqual({
       status: 'groomable',
       milestone: Mother.MILESTONE,
-      plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
       key: Keys.MINTED,
     })
@@ -398,14 +400,14 @@ describe('EpicGroomRoute', () => {
     expect(await fromThePage.json()).toEqual({
       status: 'groomable',
       milestone: Mother.MILESTONE,
-      plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
       key: Keys.MINTED,
     })
     expect(await fromElsewhere.json()).toEqual({
       status: 'groomable',
       milestone: Mother.MILESTONE,
-      plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
     })
   })
@@ -475,7 +477,7 @@ describe('EpicGroomRoute', () => {
     expect(await response.json()).toEqual({
       status: 'groomable',
       milestone: Mother.MILESTONE,
-      plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
       key: Keys.MINTED,
     })
@@ -524,7 +526,7 @@ describe('EpicGroomRoute', () => {
     expect(await response.json()).toEqual({
       status: 'partially-groomed',
       milestone: Mother.MILESTONE,
-      plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
       issues: [{
         number: 1,

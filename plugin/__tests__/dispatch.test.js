@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { selectNext, buildCmuxArgv, collectInFlight, planDispatch, computeReadyCandidates } from '../scripts/dispatch.js'
+import { selectNext, buildCmuxArgv, collectInFlight, planDispatch, computeReadyCandidates, parseRepoSlug } from '../scripts/dispatch.js'
 
 const ISSUES = [
   { n: 1, order: 1, status: 'in-review', deps: [], touches: ['api'] },
@@ -496,5 +496,23 @@ describe('buildCmuxArgv', () => {
     const argv = buildCmuxArgv({ command: 'claude', env: { A: '1', B: '2' } })
     const envPairs = argv.reduce((acc, tok, i) => (tok === '--env' ? [...acc, argv[i + 1]] : acc), [])
     expect(envPairs).toEqual(['A=1', 'B=2'])
+  })
+})
+
+// #348 — parseRepoSlug validates the ALPHABET too, not only the shape. The
+// trigger was a `Repo` cell written between backticks in a spec's slices table:
+// "`o/a`" has two non-empty halves and no space, so it passed as a valid
+// repository and travelled into `gh api repos/`o/a`/issues`, which answers a
+// 404 that explains nothing. The decision "what a repository is called" lives
+// in this one function, so the check goes here and not in its callers.
+describe('parseRepoSlug — the alphabet of a repository name (#348)', () => {
+  it('a slug with a character outside [A-Za-z0-9._-] is not a repository', () => {
+    expect(parseRepoSlug('`o/a`')).toBeNull()
+    expect(parseRepoSlug('o/a;rm')).toBeNull()
+    expect(parseRepoSlug('**o**/a')).toBeNull()
+  })
+  it('the names GitHub really allows are still accepted, lowercased', () => {
+    expect(parseRepoSlug('mercadona/control-tower')).toEqual({ owner: 'mercadona', name: 'control-tower' })
+    expect(parseRepoSlug('Mercadona/Other_Repo.js')).toEqual({ owner: 'mercadona', name: 'other_repo.js' })
   })
 })

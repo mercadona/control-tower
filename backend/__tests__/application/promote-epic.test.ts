@@ -55,13 +55,15 @@ class EpicIssuesDouble extends EpicIssues {
 class Mother {
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly REPOSITORY = new RepositoryName('owner/name')
+  static readonly HOME = Mother.REPOSITORY.text
   static readonly MILESTONE = 'Test epic'
 
   static readonly PLAN = new GroomPlan({
+    home: Mother.HOME,
     milestone: Mother.MILESTONE,
     issues: [
-      new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'] }),
-      new GroomPlanIssue({ order: 2, title: '#2 Second slice', labels: ['type:feature'] }),
+      new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }),
+      new GroomPlanIssue({ order: 2, title: '#2 Second slice', labels: ['type:feature'], repo: Mother.HOME }),
     ],
   })
   static readonly FINGERPRINT = new PlanFingerprint({ digest: (text) => text })

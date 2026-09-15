@@ -423,3 +423,84 @@ describe('/ct-harvest — the judge telemetry, per slice', () => {
     cleanup(b)
   })
 })
+
+// #348 — A MILESTONE SPREAD ACROSS REPOSITORIES IS ONE LEDGER.
+//
+// The slices land in the repository each row of the §9 table named, so the
+// cost of the milestone is spread across N repositories. This command follows
+// the reach (`<!-- ct-repos:… -->` in the milestone's description, which comes
+// inside the issues it already lists) because everything it reads is remote:
+// there is no checkout to cross anything with, unlike /ct-status.
+//
+// ONE ledger with the repository as a column, and not one ledger per
+// repository: the harvest's unit is the milestone, its cost is one question,
+// and the `repo` column already existed in the BigQuery schema — what changes
+// is that it names the repository the slice landed in instead of the one the
+// harvest was asked about. It is also what makes the row's key honest: an issue
+// number is unique per repository, not per milestone.
+describe('/ct-harvest — a milestone spread across repositories (#348)', () => {
+  const REACH = '<!-- ct-repos:o/r,o/other -->'
+  const spread = (description) => ISSUES.map((issue) => ({ ...issue, milestone: { title: 'E', description } }))
+  const elsewhere = [
+    { number: 7, title: 'Slice of the other', state: 'closed', closedAt: '2026-08-21T10:00:00Z', labels: [{ name: 'type:ui' }], milestone: { title: 'E', description: REACH }, closedByPullRequestsReferences: [] },
+  ]
+
+  it('the milestone of every repository of the reach is listed, by the same title', () => {
+    const b = bench()
+    const res = run(b, { FAKE_GH_LIST_SEQUENCE: JSON.stringify([spread(REACH), elsewhere]) })
+    expect(res.status).toBe(0)
+    const log = argvOf(b)
+    expect(log).toMatch(/issue list --repo o\/r --milestone E/)
+    expect(log).toMatch(/issue list --repo o\/other --milestone E/)
+    cleanup(b)
+  })
+
+  it('every row names the repository it landed in, ordered by repository and then by issue', () => {
+    const b = bench()
+    const res = run(b, { FAKE_GH_LIST_SEQUENCE: JSON.stringify([spread(REACH), elsewhere]) })
+    expect(res.status).toBe(0)
+    expect(res.stdout).toMatch(/# home: o\/r · repos: o\/r, o\/other · slices: 3/)
+    expect(res.stdout).toMatch(/\| Issue \| Repo \| Slice \|/)
+    const rows = res.stdout.split('\n').filter((line) => /^\| #\d+ \| o\//.test(line))
+    expect(rows.map((line) => line.split('|').slice(1, 3).map((cell) => cell.trim())))
+      .toEqual([['#7', 'o/other'], ['#12', 'o/r'], ['#13', 'o/r']])
+    cleanup(b)
+  })
+
+  it('a repository whose listing fails is a reason and exit 1, never a half of the milestone harvested as empty', () => {
+    const b = bench()
+    const res = run(b, {
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([spread(REACH), elsewhere]),
+      FAKE_GH_LIST_FAIL_AT: '1',
+    })
+    expect(res.status).toBe(1)
+    expect(res.stderr).toMatch(/could not list the issues of the milestone "E" in o\/other/)
+    cleanup(b)
+  })
+
+  it('a milestone that reaches one repository prints no Repo column and says nothing about a reach', () => {
+    const b = bench()
+    const res = run(b, { FAKE_GH_LIST_SEQUENCE: JSON.stringify([spread('El epic del trimestre')]) })
+    expect(res.status).toBe(0)
+    expect(res.stdout).toMatch(/# home: o\/r · slices: 2/)
+    expect(res.stdout).not.toMatch(/\| Repo \|/)
+    expect(res.stdout).not.toMatch(/repos:/)
+    cleanup(b)
+  })
+
+  it('the judge telemetry of a slice is read in the repository that slice landed in', () => {
+    const b = bench()
+    const res = run(b, {
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([spread(REACH), elsewhere]),
+      FAKE_GH_METRICS_DIR_JSON: DIR_JSON,
+      FAKE_GH_METRICS_FILES: JSON.stringify({
+        'issue-12.jsonl': verdict({ ruling: 'PASS', rubric_sin_vara: 1, findings_by_rule: {} }),
+      }),
+    })
+    expect(res.status).toBe(0)
+    const log = argvOf(b)
+    expect(log).toMatch(/api repos\/o\/r\/contents\/docs\/superpowers\/metrics/)
+    expect(log).toMatch(/api repos\/o\/other\/contents\/docs\/superpowers\/metrics/)
+    cleanup(b)
+  })
+})

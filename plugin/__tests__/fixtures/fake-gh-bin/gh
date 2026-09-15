@@ -312,6 +312,25 @@ function main() {
     return
   }
 
+  // `gh api repos/<owner>/<repo>/milestones/<n> --method PATCH -f description=…`
+  // (ct-groom.mjs, #348): the milestone's description is where the epic's reach
+  // travels (`<!-- ct-repos:home,target,… -->`), so /ct-next, /ct-status and
+  // /ct-harvest learn it from the milestone they already receive inside the
+  // issue payload. The path carries the milestone's NUMBER, so it does not
+  // match the listing/creation branch above (which ends at `/milestones`).
+  // FAKE_GH_MILESTONE_PATCH_FAIL simulates the write failing (auth, network,
+  // a protected milestone).
+  if (argv[0] === 'api' && /^repos\/[^/]+\/[^/]+\/milestones\/\d+$/.test(argv[1] || '')) {
+    if (process.env.FAKE_GH_MILESTONE_PATCH_FAIL) {
+      console.error('fake-gh: api milestone patch failed (simulado)')
+      process.exitCode = 1
+      return
+    }
+    process.stdout.write('{}')
+    process.exitCode = 0
+    return
+  }
+
   // `gh api repos/<owner>/<repo>/labels --method GET --paginate --slurp`
   // (ct-groom.mjs, F6 minor 5): the labels that ALREADY exist in the
   // repository, so as to be able to tell "I reused one" from "I invented a new

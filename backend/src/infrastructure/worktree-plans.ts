@@ -79,7 +79,7 @@ export class WorktreePlans {
   #toSurvey(knowable: readonly KnowableSession[]): CheckoutRoot[] | null {
     const registered = this.checkouts.known()
     if (registered === null) return null
-    const roots = new Map<string, CheckoutRoot>(registered.map((root) => [root.text, root]))
+    const roots = new Map<string, CheckoutRoot>(registered.map((checkout) => [checkout.root.text, checkout.root]))
     for (const entry of knowable) {
       if (!WorktreePlans.#opensAPlan(entry)) continue
       const found = entry.cwd.match(WorktreePlans.#UNDER_A_CHECKOUT)

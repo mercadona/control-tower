@@ -44,7 +44,7 @@ export class CtGroomEpic extends EpicGroom {
   async planned(asked: Grooming): Promise<GroomPlan> {
     const said = await this.#groom(asked, true, this.wholeOutput)
 
-    return CtGroomEpic.#planIn(said.stdout, asked.milestone)
+    return CtGroomEpic.#planIn(said.stdout, asked.milestone, asked.repository.text)
   }
 
   async run(asked: Grooming): Promise<void> {
@@ -64,7 +64,7 @@ export class CtGroomEpic extends EpicGroom {
     throw new EpicNotGroomed(said.stderr.trim())
   }
 
-  static #planIn(printed: string, milestoneAsked: string): GroomPlan {
+  static #planIn(printed: string, milestoneAsked: string, home: string): GroomPlan {
     let parsed: unknown
     try {
       parsed = JSON.parse(printed)
@@ -83,12 +83,13 @@ export class CtGroomEpic extends EpicGroom {
 
     return new GroomPlan({
       milestone: candidate.milestone,
-      issues: candidate.issues.map((issue) => CtGroomEpic.#issueIn(issue, milestoneAsked)),
+      home,
+      issues: candidate.issues.map((issue) => CtGroomEpic.#issueIn(issue, milestoneAsked, home)),
     })
   }
 
-  static #issueIn(issue: unknown, milestoneAsked: string): GroomPlanIssue {
-    const candidate = issue as { order?: unknown, title?: unknown, labels?: unknown } | null
+  static #issueIn(issue: unknown, milestoneAsked: string, home: string): GroomPlanIssue {
+    const candidate = issue as { order?: unknown, title?: unknown, labels?: unknown, repo?: unknown } | null
     if (candidate === null || typeof candidate !== 'object'
       || typeof candidate.order !== 'number' || typeof candidate.title !== 'string'
       || !Array.isArray(candidate.labels) || candidate.labels.some((label) => typeof label !== 'string')) {
@@ -97,6 +98,11 @@ export class CtGroomEpic extends EpicGroom {
       )
     }
 
-    return new GroomPlanIssue({ order: candidate.order, title: candidate.title, labels: candidate.labels as string[] })
+    return new GroomPlanIssue({
+      order: candidate.order,
+      title: candidate.title,
+      labels: candidate.labels as string[],
+      repo: typeof candidate.repo === 'string' && candidate.repo.length > 0 ? candidate.repo : home,
+    })
   }
 }

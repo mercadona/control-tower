@@ -111,7 +111,7 @@ describe('pure groom', () => {
     expect(b).toContain(renderAcContent(['AC-2.1']))
   })
   it('groomPlan aggregates milestone + issues', () => {
-    const plan = groomPlan([SLICE], { milestone: 'Epic X', specPath: 'x', specSection: '9' })
+    const plan = groomPlan([SLICE], { repoOf: () => 'o/r', milestone: 'Epic X', specPath: 'x', specSection: '9' })
     expect(plan.milestone).toBe('Epic X')
     expect(plan.issues).toHaveLength(1)
     expect(plan.issues[0].labels).toContain('type:backend')
@@ -157,13 +157,13 @@ describe('pure groom', () => {
   it('groomPlan refuses duplicate slice orders, naming the duplicate ones', () => {
     const dup1 = { ...SLICE, n: 1 }
     const dup2 = { ...SLICE, n: 1 }
-    expect(() => groomPlan([dup1, dup2], { milestone: 'Epic', specPath: 'x', specSection: '9' }))
+    expect(() => groomPlan([dup1, dup2], { repoOf: () => 'o/r', milestone: 'Epic', specPath: 'x', specSection: '9' }))
       .toThrow(/1/)
   })
   it('groomPlan with unique orders still works (regression)', () => {
     const a = { ...SLICE, n: 1 }
     const b = { ...SLICE, n: 2 }
-    const plan = groomPlan([a, b], { milestone: 'Epic', specPath: 'x', specSection: '9' })
+    const plan = groomPlan([a, b], { repoOf: () => 'o/r', milestone: 'Epic', specPath: 'x', specSection: '9' })
     expect(plan.issues).toHaveLength(2)
   })
   // A review bug: buildIssueBody only treated the literal em dash ('–',
@@ -189,7 +189,7 @@ describe('pure groom', () => {
     const s3b = { ...SLICE, n: 3 }
     let message = ''
     try {
-      groomPlan([s1a, s1b, s2, s3a, s3b], { milestone: 'Epic', specPath: 'x', specSection: '9' })
+      groomPlan([s1a, s1b, s2, s3a, s3b], { repoOf: () => 'o/r', milestone: 'Epic', specPath: 'x', specSection: '9' })
     } catch (e) {
       message = e.message
     }
@@ -279,7 +279,7 @@ describe('buildIssueBody — the signal section (Slice 10)', () => {
     const withSignal = { ...SLICE, n: 1, senal: 'métrica x' }
     const withoutSignal = { ...SLICE, n: 2, senal: '' }
     const exempt = { ...SLICE, n: 3, senal: 'N/A — razón' }
-    const plan = groomPlan([withSignal, withoutSignal, exempt], { milestone: 'Epic', specRef: SPEC_REF })
+    const plan = groomPlan([withSignal, withoutSignal, exempt], { repoOf: () => 'o/r', milestone: 'Epic', specRef: SPEC_REF })
     // Alongside descripcion/protectedLine and for the same reason: reconcile
     // compares without re-parsing the body this very plan has just generated.
     expect(plan.issues[0].senal).toBe('métrica x')

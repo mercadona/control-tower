@@ -25,6 +25,18 @@ describe('EpicGroomPanel', () => {
     expect(reading).toHaveBeenCalledTimes(1)
   })
 
+  it('shows the repository of a row that does not land in the home repository, and only of that row', async () => {
+    const reading = vi.fn(async () => new Response(EpicGroomMother.groomableAcrossRepositories().body, { status: 200 }))
+    vi.stubGlobal('fetch', reading)
+
+    render(<EpicGroomPanel />)
+
+    expect(await screen.findByText('#1 · The intermediate gate retires')).toBeInTheDocument()
+    expect(
+      screen.getByText(`#3 · The pulse of the other repository · ${EpicGroomMother.OTHER_REPO}`)
+    ).toBeInTheDocument()
+  })
+
   it('pressing the groom sends the key and then shows the issues it created', async () => {
     const fetching = vi
       .fn()

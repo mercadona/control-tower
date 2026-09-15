@@ -5,6 +5,7 @@ import { PlanIssues } from '../../src/domain/ports/plan-issues.ts'
 import { UserStories } from '../../src/domain/ports/user-stories.ts'
 import { Workspace } from '../../src/domain/ports/workspace.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
+import { RegisteredCheckout } from '../../src/domain/value-objects/registered-checkout.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { UserStory } from '../../src/domain/value-objects/user-story.ts'
 import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
@@ -185,18 +186,18 @@ class WorkspaceDouble extends Workspace {
 }
 
 class CheckoutRegistryDouble extends CheckoutRegistry {
-  remembered: CheckoutRoot[]
+  remembered: RegisteredCheckout[]
 
   constructor() {
     super()
     this.remembered = []
   }
 
-  remember(root: CheckoutRoot): void {
-    this.remembered.push(root)
+  remember(checkout: RegisteredCheckout): void {
+    this.remembered.push(checkout)
   }
 
-  known(): CheckoutRoot[] {
+  known(): RegisteredCheckout[] {
     return [...this.remembered]
   }
 }
@@ -409,7 +410,7 @@ describe('StartPlan', () => {
     await expect(new Workspace().confirm({ root: Flow.ROOT, repository: Flow.REPOSITORY }))
       .rejects.toThrow(/must implement confirm/)
     await expect(new Workspace().survey(Flow.ROOT)).rejects.toThrow(/must implement survey/)
-    expect(() => new CheckoutRegistry().remember(Flow.ROOT)).toThrow(/must implement remember/)
+    expect(() => new CheckoutRegistry().remember(new RegisteredCheckout({ repository: Flow.REPOSITORY, root: Flow.ROOT }))).toThrow(/must implement remember/)
     expect(() => new CheckoutRegistry().known()).toThrow(/must implement known/)
   })
 })
@@ -442,7 +443,16 @@ describe('StartPlan confirms the clone before anything is read or created', () =
 
     await flow.run()
 
-    expect(flow.checkouts.remembered).toEqual([Flow.ROOT])
+    expect(flow.checkouts.remembered.map((checkout) => checkout.root)).toEqual([Flow.ROOT])
+  })
+
+  it('the_clone_is_remembered_with_the_repository_confirm_vouched_it_holds', async () => {
+    const flow = new Flow()
+
+    await flow.run()
+
+    expect(flow.checkouts.remembered.map((checkout) => checkout.repository)).toEqual([Flow.REPOSITORY])
+    expect(flow.checkouts.remembered[0].holds(Flow.REPOSITORY)).toBe(true)
   })
 
   it('the_canonical_root_confirm_answers_is_what_travels_onward_and_not_the_one_the_caller_typed', async () => {
@@ -454,7 +464,7 @@ describe('StartPlan confirms the clone before anything is read or created', () =
     expect(flow.workspace.asked).toEqual([
       { issue: PlanIssuesDouble.OPENED, repository: Flow.REPOSITORY, root: canonical },
     ])
-    expect(flow.checkouts.remembered).toEqual([canonical])
+    expect(flow.checkouts.remembered.map((checkout) => checkout.root)).toEqual([canonical])
   })
 
   it('the_clone_is_remembered_only_after_the_agent_launched_because_an_undone_worktree_leaves_nothing_to_harvest', async () => {

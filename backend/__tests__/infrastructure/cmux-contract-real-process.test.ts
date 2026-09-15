@@ -12,18 +12,19 @@ import { UserStoryKey } from '../../src/domain/value-objects/user-story-key.ts'
 import { WorkspaceLocation } from '../../src/domain/value-objects/workspace-location.ts'
 import { WorkspaceSurvey } from '../../src/domain/value-objects/workspace-survey.ts'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
+import { RegisteredCheckout } from '../../src/domain/value-objects/registered-checkout.ts'
 import type { PlansInFlight } from '../../src/domain/value-objects/plans-in-flight.ts'
 
 class KnownCheckouts extends CheckoutRegistry {
-  readonly #roots: CheckoutRoot[]
+  readonly #known: RegisteredCheckout[]
 
   constructor(roots: CheckoutRoot[]) {
     super()
-    this.#roots = roots
+    this.#known = roots.map((root) => new RegisteredCheckout({ repository: TheSameQuestion.REPOSITORY, root }))
   }
 
-  known(): CheckoutRoot[] {
-    return this.#roots
+  known(): RegisteredCheckout[] {
+    return this.#known
   }
 }
 

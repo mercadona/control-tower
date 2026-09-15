@@ -88,7 +88,10 @@ rationale that each slice's plan needs and cannot deduce.>
      - Issue title = "#N <Slice>": short and readable, not a sentence.
      - Tipo: ui | backend | infra | bugfix (it decides the agent's addendum;
        ui implies a visual gate, infra implies an apply gate).
-     - Dep: "#N" is the slice's ORDER in this table, not an issue number.
+     - Dep: "#N" is the slice's ORDER in this table, not an issue number, and
+       it always names a slice of the SAME repository (see Repo).
+     - Repo: the repository the slice lands in; empty or – = the milestone's
+       home repository (the --repo of the groom). One row, one repository.
      - Acepta: the comma ALWAYS separates criteria; a literal comma inside a
        criterion is escaped as \,
      - Protegido: free text, what the slice may NOT touch.
@@ -98,10 +101,10 @@ rationale that each slice's plan needs and cannot deduce.>
        waive (!visual). Empty or – = no declaration.
      - "No value" = – (any dash variant) or an empty cell. -->
 
-| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca | Gate |
-|---|-------|------|---------|-----|--------|-----------|------|------|------|
-| 1 | <short name> | backend | <what it delivers, one sentence> | – | <criterion 1>, <criterion 2> | <what it does not touch> | <area> | – | – |
-| 2 | <short name> | backend | <what it delivers> | #1 | <criteria> | – | <area> | – | – |
+| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca | Gate | Repo |
+|---|-------|------|---------|-----|--------|-----------|------|------|------|------|
+| 1 | <short name> | backend | <what it delivers, one sentence> | – | <criterion 1>, <criterion 2> | <what it does not touch> | <area> | – | – | – |
+| 2 | <short name> | backend | <what it delivers> | #1 | <criteria> | – | <area> | – | – | – |
 
 ## Decisiones aparcadas (BLOCKED)
 
