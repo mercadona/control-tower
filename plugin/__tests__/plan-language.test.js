@@ -192,6 +192,11 @@ describe('the words the standard does not approve', () => {
     expect(PlanLanguage.NON_APPROVED).toHaveLength(48)
     expect(PlanLanguage.NON_APPROVED.every(([phrase, replacement]) => phrase && replacement)).toBe(true)
   })
+
+  it('catches the gerund of a word that ends in a silent e', () => {
+    expect(Violations.about('The plan is requiring more detail.', 'word')).toHaveLength(1)
+    expect(Violations.about('The task is utilizing the barrel.', 'word')).toHaveLength(1)
+  })
 })
 
 describe('the passive voice', () => {

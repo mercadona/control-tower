@@ -267,8 +267,11 @@ export class PlanLanguage {
   }
 
   static #matcherFor(phrase) {
-    const body = PlanLanguage.#escapeRe(phrase).replace(/ /g, '\\s+')
-    const inflections = phrase.includes(' ') ? '' : '(?:s|es|d|ed|ing)?'
-    return new RegExp(`(?<![\\w-])${body}${inflections}(?![\\w-])`, 'i')
+    const escaped = PlanLanguage.#escapeRe(phrase)
+    if (phrase.includes(' ')) {
+      return new RegExp(`(?<![\\w-])${escaped.replace(/ /g, '\\s+')}(?![\\w-])`, 'i')
+    }
+    const stem = PlanLanguage.#escapeRe(phrase.replace(/e$/, ''))
+    return new RegExp(`(?<![\\w-])(?:${escaped}(?:s|es|d|ed)?|${stem}ing)(?![\\w-])`, 'i')
   }
 }
