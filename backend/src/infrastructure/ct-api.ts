@@ -550,7 +550,13 @@ class CtApi {
       digest: (text) => createHash('sha256').update(text, 'utf8').digest('hex'),
     })
     const readEpicGroom = new ReadEpicGroom({
-      specs: epicSpecs, published: publishedSpecs, issues: epicIssues, groom: epicGroom, fingerprint: planFingerprint,
+      specs: epicSpecs,
+      published: publishedSpecs,
+      issues: epicIssues,
+      groom: epicGroom,
+      branch: epicBranch,
+      pullRequests,
+      fingerprint: planFingerprint,
     })
     const groomEpic = new GroomEpic({ read: readEpicGroom, groom: epicGroom, fingerprint: planFingerprint })
     const promoteEpic = new PromoteEpic({ read: readEpicGroom, issues: epicIssues })

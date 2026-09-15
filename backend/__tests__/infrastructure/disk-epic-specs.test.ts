@@ -59,6 +59,54 @@ describe('DiskEpicSpecs', () => {
     expect(fileFailure).not.toBeInstanceOf(EpicSpecNotRead)
   })
 
+  it('reads the spec again at its own path, so a checkout that moved answers with what it holds now', async () => {
+    const held = '# B — Execution spec\n**Estado:** CONGELADA\n'
+    const read = vi.fn(async () => held)
+    const specs = new DiskEpicSpecs({ list: vi.fn(), read, write: vi.fn() })
+
+    const spec = await specs.reread({
+      root: ROOT, spec: new EpicSpec({ path: NEWEST_RELATIVE_PATH, text: NEWEST_TEXT }),
+    })
+
+    expect(read).toHaveBeenCalledWith(NEWEST_ABSOLUTE_PATH)
+    expect(spec).toEqual(new EpicSpec({ path: NEWEST_RELATIVE_PATH, text: held }))
+  })
+
+  it('answers nothing when the checkout no longer holds that spec, rather than pretending it is still there', async () => {
+    const read = vi.fn(async () => null)
+    const specs = new DiskEpicSpecs({ list: vi.fn(), read, write: vi.fn() })
+
+    const spec = await specs.reread({
+      root: ROOT, spec: new EpicSpec({ path: NEWEST_RELATIVE_PATH, text: NEWEST_TEXT }),
+    })
+
+    expect(spec).toBeNull()
+  })
+
+  it('a second read that fails is told apart from one that answers a file with no title', async () => {
+    const spec = new EpicSpec({ path: NEWEST_RELATIVE_PATH, text: NEWEST_TEXT })
+    const unreadableFile = new DiskEpicSpecs({
+      list: vi.fn(),
+      read: vi.fn(async () => { throw new Error('permission denied') }),
+      write: vi.fn(),
+    })
+    const untitledFile = new DiskEpicSpecs({
+      list: vi.fn(),
+      read: vi.fn(async () => 'no heading at all\n'),
+      write: vi.fn(),
+    })
+
+    const [readFailure, fileFailure] = await Promise.all([
+      unreadableFile.reread({ root: ROOT, spec }).catch((cause) => cause),
+      untitledFile.reread({ root: ROOT, spec }).catch((cause) => cause),
+    ])
+
+    expect(readFailure).toBeInstanceOf(EpicSpecNotRead)
+    expect(fileFailure).toBeInstanceOf(EpicSpecNotUnderstood)
+    expect(readFailure).not.toBeInstanceOf(EpicSpecNotUnderstood)
+    expect(fileFailure).not.toBeInstanceOf(EpicSpecNotRead)
+  })
+
   it('writes the spec back to the path it was read from', async () => {
     const spec = new EpicSpec({ path: NEWEST_RELATIVE_PATH, text: NEWEST_TEXT })
     const write = vi.fn(async () => {})

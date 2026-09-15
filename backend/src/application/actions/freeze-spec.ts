@@ -65,21 +65,24 @@ export class FreezeSpec {
   }
 
   async execute(params: FreezeSpecParams): Promise<SpecFrozen> {
-    const spec = await this.specs.mostRecent(params.root)
-    if (spec === null) {
+    const found = await this.specs.mostRecent(params.root)
+    if (found === null) {
       return new SpecFrozen({ outcome: FreezeOutcome.NO_SPEC, findings: [], on: null, pullRequest: null })
     }
-    if (!spec.isFrozen() && !spec.isFreezable()) {
-      return new SpecFrozen({ outcome: FreezeOutcome.NOT_FREEZABLE, findings: spec.findings(), on: null, pullRequest: null })
-    }
+    const beforeMoving = FreezeSpec.#notFreezable(found)
+    if (beforeMoving !== null) return beforeMoving
+
+    const branch = await this.branch.publishing({ root: params.root, milestone: found.milestoneBranch() })
+    const spec = await this.specs.reread({ root: params.root, spec: found }) ?? found
+    const onThatBranch = FreezeSpec.#notFreezable(spec)
+    if (onThatBranch !== null) return onThatBranch
+
     const design = spec.design()
     if (design === null) {
       throw new EpicSpecNotUnderstood(
         `${spec.path} does not name its design document under ${EpicSpec.HANDOFF_LINE}, so gate 1 cannot publish half the epic`
       )
     }
-
-    const branch = await this.branch.publishable(params.root)
     const paths = [design, spec.path]
     if (await this.#delivered({ params, spec, branch })) {
       return new SpecFrozen({ outcome: FreezeOutcome.ALREADY_FROZEN, findings: [], on: null, pullRequest: null })
@@ -94,6 +97,14 @@ export class FreezeSpec {
       findings: [],
       on,
       pullRequest: await this.#pullRequest({ params, spec, design, branch, on }),
+    })
+  }
+
+  static #notFreezable(spec: EpicSpec): SpecFrozen | null {
+    if (spec.isFrozen() || spec.isFreezable()) return null
+
+    return new SpecFrozen({
+      outcome: FreezeOutcome.NOT_FREEZABLE, findings: spec.findings(), on: null, pullRequest: null,
     })
   }
 
