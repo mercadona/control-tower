@@ -9,8 +9,10 @@ import { SessionStreamOutcome } from '../../src/infrastructure/session-stream-ro
 import { SessionInputOutcome } from '../../src/infrastructure/session-input-route.ts'
 import { SessionResizeOutcome } from '../../src/infrastructure/session-resize-route.ts'
 import { CoordinatingSessionOutcome } from '../../src/infrastructure/coordinating-session-route.ts'
+import { GroomSessionOutcome } from '../../src/infrastructure/groom-session-route.ts'
 import { SessionHookOutcome } from '../../src/infrastructure/session-hooks-route.ts'
 import { SpecFreezeOutcome } from '../../src/infrastructure/spec-freeze-route.ts'
+import { SpecReslicingOutcome } from '../../src/infrastructure/spec-reslicing-route.ts'
 import { EpicGroomOutcome } from '../../src/infrastructure/epic-groom-route.ts'
 import { EpicPromotionOutcome } from '../../src/infrastructure/epic-promotion-route.ts'
 
@@ -28,8 +30,10 @@ class RequestVocabularies {
       ...Object.values(SessionInputOutcome),
       ...Object.values(SessionResizeOutcome),
       ...Object.values(CoordinatingSessionOutcome),
+      ...Object.values(GroomSessionOutcome),
       ...Object.values(SessionHookOutcome),
       ...Object.values(SpecFreezeOutcome),
+      ...Object.values(SpecReslicingOutcome),
       ...Object.values(EpicGroomOutcome),
       ...Object.values(EpicPromotionOutcome),
     ].filter((outcome) => outcome !== RequestVocabularies.#ACCEPTED)
@@ -47,6 +51,9 @@ class SharedOnPurposeAcrossRequestVocabularies {
     SpecFreezeOutcome.NO_COORDINATING_SESSION,
     SpecFreezeOutcome.NO_EPIC_SPEC,
     EpicGroomOutcome.ISSUES_UNCERTAIN,
+    EpicGroomOutcome.SPEC_NOT_FROZEN,
+    CoordinatingSessionOutcome.ALREADY_LIVE,
+    CoordinatingSessionOutcome.OPENING,
   ])
 }
 

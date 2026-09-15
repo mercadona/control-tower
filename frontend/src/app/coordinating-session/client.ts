@@ -1,5 +1,5 @@
 import {
-  CoordinatingSessionOutcome, LiveSessionRef, OpenOutcome, TimelineEvent, TimelineEventKind,
+  CoordinatingSessionOutcome, LiveSessionRef, OpenedCoordinatingSession, OpenOutcome, TimelineEvent, TimelineEventKind,
 } from 'app/coordinating-session/CoordinatingSession.types'
 import { StartPlanSubmission } from 'app/start-plan/StartPlan.types'
 
@@ -93,6 +93,11 @@ const read = async (): Promise<CoordinatingSessionOutcome> => {
   }
 }
 
+const openedIn = (body: unknown): OpenedCoordinatingSession | null =>
+  isRecord(body) && typeof body.conversation === 'string' && isLiveSessionRef(body.session)
+    ? { conversation: body.conversation, session: body.session }
+    : null
+
 const open = async (submission: StartPlanSubmission): Promise<OpenOutcome> => {
   let response: Response
   try {
@@ -106,10 +111,9 @@ const open = async (submission: StartPlanSubmission): Promise<OpenOutcome> => {
   }
   const body: unknown = await response.json()
   if (response.status === OPENED) {
-    if (!isRecord(body) || typeof body.conversation !== 'string' || !isLiveSessionRef(body.session)) {
-      return { kind: 'backend-unreachable' }
-    }
-    return { kind: 'opened', opened: { conversation: body.conversation, session: body.session } }
+    const opened = openedIn(body)
+
+    return opened === null ? { kind: 'backend-unreachable' } : { kind: 'opened', opened }
   }
   if (!isRecord(body) || typeof body.code !== 'string' || typeof body.detail !== 'string') {
     return { kind: 'backend-unreachable' }
@@ -120,4 +124,5 @@ const open = async (submission: StartPlanSubmission): Promise<OpenOutcome> => {
 export const CoordinatingSessionClient = {
   read,
   open,
+  openedIn,
 }

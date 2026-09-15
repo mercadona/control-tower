@@ -13,6 +13,7 @@
 .epic-groom-panel__count,
 .epic-groom-panel__partial-count,
 .epic-groom-panel__partial-notice,
+.epic-groom-panel__session-opened,
 .epic-groom-panel__only-from-the-page {
   margin: 0;
   color: var(--foreground-secondary);
@@ -41,6 +42,8 @@
 }
 
 .epic-groom-panel__authorised,
+.epic-groom-panel__resliced,
+.epic-groom-panel__reslicing-published,
 .epic-groom-panel__awaiting {
   margin: 0;
 }

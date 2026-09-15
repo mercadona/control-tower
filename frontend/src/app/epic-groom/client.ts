@@ -1,16 +1,24 @@
+import { CoordinatingSessionClient } from 'app/coordinating-session/client'
 import {
   EpicGroomAskOutcome,
   EpicGroomOutcome,
   EpicIssue,
   EpicPullRequest,
   GroomPlanIssue,
+  GroomSessionOutcome,
+  ReslicingOutcome,
 } from 'app/epic-groom/EpicGroom.types'
 
 const PATH = '/epic-groom'
 const PROMOTION_PATH = '/epic-promotion'
+const SESSION_PATH = '/groom-session'
+const RESLICING_PATH = '/spec-reslicing'
 const GATE_KEY_HEADER = 'x-gate-key'
 const PLAN_FINGERPRINT_HEADER = 'x-plan-fingerprint'
 const ACTED_STATUS = 200
+const OPENED_STATUS = 202
+const GROOMING_STATUS = 'grooming'
+const PUBLISHED_STATUS = 'published'
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -39,10 +47,19 @@ const isEpicIssues = (value: unknown): value is EpicIssue[] =>
 const isActedStatus = (value: unknown): value is 'groomed' | 'authorised' =>
   value === 'groomed' || value === 'authorised'
 
-const pullRequestOf = (body: Record<string, unknown>): EpicPullRequest | null =>
-  isRecord(body.pullRequest) && typeof body.pullRequest.number === 'number' && typeof body.pullRequest.url === 'string'
-    ? { number: body.pullRequest.number, url: body.pullRequest.url }
+type ActedRead = Extract<EpicGroomOutcome, { kind: 'groomed' } | { kind: 'authorised' }>
+
+const readsAsActed = (outcome: EpicGroomOutcome): outcome is ActedRead => isActedStatus(outcome.kind)
+
+const pullRequestAt = (body: Record<string, unknown>, field: string): EpicPullRequest | null => {
+  const named = body[field]
+
+  return isRecord(named) && typeof named.number === 'number' && typeof named.url === 'string'
+    ? { number: named.number, url: named.url }
     : null
+}
+
+const pullRequestOf = (body: Record<string, unknown>): EpicPullRequest | null => pullRequestAt(body, 'pullRequest')
 
 const keyOf = (body: Record<string, unknown>): string | null =>
   typeof body.key === 'string' ? body.key : null
@@ -60,6 +77,7 @@ const toOutcome = (body: unknown): EpicGroomOutcome => {
   if (body.status === 'awaiting-publication') {
     return { kind: 'awaiting-publication', pullRequest: pullRequestOf(body) }
   }
+  if (body.status === 'resliced') return { kind: 'resliced', key: keyOf(body) }
   if (body.status === 'issues-uncertain' && typeof body.milestone === 'string' && typeof body.reason === 'string') {
     return { kind: 'issues-uncertain', milestone: body.milestone, reason: body.reason }
   }
@@ -74,6 +92,7 @@ const toOutcome = (body: unknown): EpicGroomOutcome => {
     return {
       kind: 'groomable', milestone: body.milestone, plan: body.plan.issues, home: body.plan.home,
       planFingerprint: body.planFingerprint,
+      reslicing: pullRequestAt(body, 'reslicing'),
       key: keyOf(body),
     }
   }
@@ -115,6 +134,19 @@ const read = async (): Promise<EpicGroomOutcome> => {
   }
 }
 
+const confirmedByReading = async (): Promise<EpicGroomAskOutcome> => {
+  const outcome = await read()
+  if (!readsAsActed(outcome)) return { kind: 'unconfirmed' }
+
+  return {
+    kind: 'acted',
+    status: outcome.kind,
+    milestone: outcome.milestone,
+    issues: outcome.issues,
+    promoted: [],
+  }
+}
+
 const press = async (path: string, headers: Record<string, string>): Promise<EpicGroomAskOutcome> => {
   let response: Response
   let body: unknown
@@ -122,11 +154,11 @@ const press = async (path: string, headers: Record<string, string>): Promise<Epi
     response = await fetch(path, { method: 'POST', headers })
     body = await response.json()
   } catch {
-    return { kind: 'backend-unreachable' }
+    return await confirmedByReading()
   }
   if (response.status === ACTED_STATUS) {
     if (!isRecord(body) || !isActedStatus(body.status) || typeof body.milestone !== 'string' || !isEpicIssues(body.issues)) {
-      return { kind: 'backend-unreachable' }
+      return await confirmedByReading()
     }
     return {
       kind: 'acted',
@@ -137,7 +169,7 @@ const press = async (path: string, headers: Record<string, string>): Promise<Epi
     }
   }
   if (!isRecord(body) || typeof body.code !== 'string' || typeof body.detail !== 'string') {
-    return { kind: 'backend-unreachable' }
+    return await confirmedByReading()
   }
   return { kind: 'refused', code: body.code, error: body.detail }
 }
@@ -147,8 +179,52 @@ const groom = (key: string, planFingerprint: string): Promise<EpicGroomAskOutcom
 
 const promote = (key: string): Promise<EpicGroomAskOutcome> => press(PROMOTION_PATH, { [GATE_KEY_HEADER]: key })
 
+const publishReslicing = async (key: string): Promise<ReslicingOutcome> => {
+  let response: Response
+  let body: unknown
+  try {
+    response = await fetch(RESLICING_PATH, { method: 'POST', headers: { [GATE_KEY_HEADER]: key } })
+    body = await response.json()
+  } catch {
+    return { kind: 'unconfirmed' }
+  }
+  if (response.status === ACTED_STATUS) {
+    if (!isRecord(body) || body.status !== PUBLISHED_STATUS) return { kind: 'unconfirmed' }
+    const pullRequest = pullRequestOf(body)
+
+    return pullRequest === null ? { kind: 'unconfirmed' } : { kind: 'published', pullRequest }
+  }
+  if (!isRecord(body) || typeof body.code !== 'string' || typeof body.detail !== 'string') {
+    return { kind: 'unconfirmed' }
+  }
+  return { kind: 'refused', code: body.code, error: body.detail }
+}
+
+const openSession = async (key: string): Promise<GroomSessionOutcome> => {
+  let response: Response
+  let body: unknown
+  try {
+    response = await fetch(SESSION_PATH, { method: 'POST', headers: { [GATE_KEY_HEADER]: key } })
+    body = await response.json()
+  } catch {
+    return { kind: 'unconfirmed' }
+  }
+  if (response.status === OPENED_STATUS) {
+    if (!isRecord(body) || body.status !== GROOMING_STATUS) return { kind: 'unconfirmed' }
+    const opened = CoordinatingSessionClient.openedIn(body)
+
+    return opened === null ? { kind: 'unconfirmed' } : { kind: 'opened', opened }
+  }
+  if (!isRecord(body) || typeof body.code !== 'string' || typeof body.detail !== 'string') {
+    return { kind: 'unconfirmed' }
+  }
+  return { kind: 'refused', code: body.code, error: body.detail }
+}
+
 export const EpicGroomClient = {
   read,
   groom,
   promote,
+  openSession,
+  publishReslicing,
 }

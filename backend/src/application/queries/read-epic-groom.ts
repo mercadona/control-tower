@@ -10,6 +10,8 @@ import type { EpicSpec } from '../../domain/value-objects/epic-spec.ts'
 import type { GroomPlan } from '../../domain/value-objects/groom-plan.ts'
 import type { EpicIssue } from '../../domain/value-objects/epic-issue.ts'
 import type { PlanFingerprint } from '../../domain/policies/plan-fingerprint.ts'
+import type { SpecRevision } from '../../domain/policies/spec-revision.ts'
+import { Reslicing } from '../../domain/value-objects/reslicing.ts'
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
@@ -27,6 +29,7 @@ export class ReadEpicGroomParams {
 export const EpicGroomState = Object.freeze({
   NO_SPEC: 'no-spec',
   DRAFT: 'draft',
+  RESLICED: 'resliced',
   AWAITING_PUBLICATION: 'awaiting-publication',
   ISSUES_UNCERTAIN: 'issues-uncertain',
   GROOMABLE: 'groomable',
@@ -46,8 +49,11 @@ export class EpicGroomRead {
   readonly issues: readonly EpicIssue[]
   readonly reason: string | null
   readonly pullRequest: ReviewedPullRequest | null
+  readonly reslicing: ReviewedPullRequest | null
 
-  constructor({ state, spec, milestone, plan, planFingerprint, issues, reason = null, pullRequest = null }: {
+  constructor({
+    state, spec, milestone, plan, planFingerprint, issues, reason = null, pullRequest = null, reslicing = null,
+  }: {
     state: EpicGroomStateValue,
     spec: EpicSpec | null,
     milestone: string | null,
@@ -56,6 +62,7 @@ export class EpicGroomRead {
     issues: readonly EpicIssue[],
     reason?: string | null,
     pullRequest?: ReviewedPullRequest | null,
+    reslicing?: ReviewedPullRequest | null,
   }) {
     this.state = state
     this.spec = spec
@@ -65,6 +72,7 @@ export class EpicGroomRead {
     this.issues = issues
     this.reason = reason
     this.pullRequest = pullRequest
+    this.reslicing = reslicing
     Object.freeze(this)
   }
 }
@@ -77,8 +85,9 @@ export class ReadEpicGroom {
   readonly branch: EpicBranch
   readonly pullRequests: PullRequests
   readonly fingerprint: PlanFingerprint
+  readonly revisions: SpecRevision
 
-  constructor({ specs, published, issues, groom, branch, pullRequests, fingerprint }: {
+  constructor({ specs, published, issues, groom, branch, pullRequests, fingerprint, revisions }: {
     specs: EpicSpecs,
     published: PublishedSpecs,
     issues: EpicIssues,
@@ -86,6 +95,7 @@ export class ReadEpicGroom {
     branch: EpicBranch,
     pullRequests: PullRequests,
     fingerprint: PlanFingerprint,
+    revisions: SpecRevision,
   }) {
     this.specs = specs
     this.published = published
@@ -94,6 +104,7 @@ export class ReadEpicGroom {
     this.branch = branch
     this.pullRequests = pullRequests
     this.fingerprint = fingerprint
+    this.revisions = revisions
   }
 
   async execute(params: ReadEpicGroomParams): Promise<EpicGroomRead> {
@@ -110,13 +121,8 @@ export class ReadEpicGroom {
       })
     }
 
-    const isPublished = await this.published.holds({ repository: params.repository, path: spec.path })
-    if (!isPublished) {
-      return new EpicGroomRead({
-        state: EpicGroomState.AWAITING_PUBLICATION, spec, milestone: null, plan: null, planFingerprint: null,
-        issues: [], pullRequest: await this.#awaitedPullRequest(params),
-      })
-    }
+    const isPublished = await this.published.holds({ repository: params.repository, spec })
+    if (!isPublished) return await this.#unpublished(params, spec)
 
     const milestone = spec.title()!
     const holding = await this.issues.listOf({ repository: params.repository, milestone })
@@ -133,6 +139,7 @@ export class ReadEpicGroom {
     if (holding.issues.length === 0) {
       return new EpicGroomRead({
         state: EpicGroomState.GROOMABLE, spec, milestone, plan, planFingerprint, issues: [],
+        reslicing: await this.#mergedReslicing(params, spec),
       })
     }
 
@@ -146,6 +153,27 @@ export class ReadEpicGroom {
       ? EpicGroomState.GROOMED
       : EpicGroomState.AUTHORISED
     return new EpicGroomRead({ state, spec, milestone, plan, planFingerprint, issues: holding.issues })
+  }
+
+  async #unpublished(params: ReadEpicGroomParams, spec: EpicSpec): Promise<EpicGroomRead> {
+    if (!(await this.branch.committed({ root: params.root, paths: [spec.path] }))) {
+      return new EpicGroomRead({
+        state: EpicGroomState.RESLICED, spec, milestone: null, plan: null, planFingerprint: null, issues: [],
+      })
+    }
+
+    return new EpicGroomRead({
+      state: EpicGroomState.AWAITING_PUBLICATION, spec, milestone: null, plan: null, planFingerprint: null,
+      issues: [], pullRequest: await this.#awaitedPullRequest(params),
+    })
+  }
+
+  async #mergedReslicing(params: ReadEpicGroomParams, spec: EpicSpec): Promise<ReviewedPullRequest | null> {
+    const branch = await this.branch.current(params.root)
+    const into = await this.branch.defaultBranch(params.root)
+    const approving = new Reslicing({ path: spec.path, revision: this.revisions.of(spec.text) })
+
+    return await this.pullRequests.mergedReslicingOf({ branch, repository: params.repository, approving, into })
   }
 
   async #awaitedPullRequest(params: ReadEpicGroomParams): Promise<ReviewedPullRequest | null> {

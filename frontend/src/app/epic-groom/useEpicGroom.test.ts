@@ -35,6 +35,52 @@ describe('useEpicGroom', () => {
     expect(reading).toHaveBeenCalledTimes(3)
   })
 
+  it('while the slicing is being reviewed it keeps asking at a rung it would otherwise rest at', async () => {
+    const reading = vi.fn(async () => responseFor(EpicGroomMother.groomable()))
+    vi.stubGlobal('fetch', reading)
+    vi.useFakeTimers()
+
+    renderHook(() => useEpicGroom(true))
+    await vi.waitFor(() => expect(reading).toHaveBeenCalledTimes(1))
+
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+    expect(reading).toHaveBeenCalledTimes(2)
+
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+    expect(reading).toHaveBeenCalledTimes(3)
+  })
+
+  it('it rests at a rung no conversation can change any more, review or no review', async () => {
+    const reading = vi.fn(async () => responseFor(EpicGroomMother.groomed()))
+    vi.stubGlobal('fetch', reading)
+    vi.useFakeTimers()
+
+    renderHook(() => useEpicGroom(true))
+    await vi.waitFor(() => expect(reading).toHaveBeenCalledTimes(1))
+
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+    expect(reading).toHaveBeenCalledTimes(1)
+  })
+
+  it('a review that begins after the read has already rested wakes it up again', async () => {
+    const reading = vi.fn(async () => responseFor(EpicGroomMother.groomable()))
+    vi.stubGlobal('fetch', reading)
+    vi.useFakeTimers()
+
+    const { rerender } = renderHook(({ watching }: { watching: boolean }) => useEpicGroom(watching), {
+      initialProps: { watching: false },
+    })
+    await vi.waitFor(() => expect(reading).toHaveBeenCalledTimes(1))
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+    expect(reading).toHaveBeenCalledTimes(1)
+
+    rerender({ watching: true })
+    await vi.waitFor(() => expect(reading).toHaveBeenCalledTimes(2))
+
+    await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS)
+    expect(reading).toHaveBeenCalledTimes(3)
+  })
+
   it('a fetch that throws leaves the read unavailable and keeps polling', async () => {
     const reading = vi.fn(async () => {
       throw new Error('network down')

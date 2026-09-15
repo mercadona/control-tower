@@ -149,22 +149,63 @@ pressed from the page the backend itself serves.
 `SpecFreezePanel`, outside every `currentStage` branch too) is gate 2's panel:
 the groom and the authorisation. `GET /epic-groom` polls the same checkout
 (`useEpicGroom.ts`) every ten seconds, stopping once it reaches `groomable`,
-`groomed` or `authorised`, and answers one of the seven states `EpicGroom.types.ts`
+`groomed` or `authorised` — **unless the slicing is being reviewed**, and then it
+keeps asking at `groomable` and `partially-groomed`, the two resting rungs a
+conversation can still change. The panel says so while the groom conversation it
+opened is on screen or while a press it could not confirm is outstanding, and
+passing that flag re-arms the read at once, so the §9 table the session edits
+reaches the page without a reload. At `groomed` and `authorised` it rests
+whatever the review is doing: there is nothing left for a conversation to
+change there. It answers one of the ten states `EpicGroom.types.ts`
 declares: `none`, `no-spec` and `draft` render nothing, because gate 1's panel
-already says what is missing; `awaiting-publication` says the frozen spec is
+already says what is missing; `resliced` says the coordinating session changed
+the slicing and offers **Publicar el nuevo slicing**, which calls
+`POST /spec-reslicing` and then links the pull request the correction travels in;
+`awaiting-publication` says the frozen spec is
 waiting in a pull request the person has to merge and links it, or — when the
 read found no open pull request for the branch — that the spec is still
 unpublished and none was found, which is a wait to watch rather than a merge to
 press; `groomable` shows the milestone and the dry run's product — the issues the
-groom would create, ordered and labelled, before anything is created; `groomed`
+groom would create, ordered and labelled, before anything is created, and
+offers **Revisar el slicing con la sesión**, which calls `POST /groom-session`
+so a person can walk that table with a coordinating session in the groom phase
+instead of only saying yes or no to it. When that read carries a `reslicing` —
+the merged pull request whose body marks it as a correction of the slicing —
+`useMergedReslicing.ts` presses the groom once by itself and the panel names the
+pull request that authorised it: a person merging is the authorisation, so
+nothing is left to click. That press belongs to the page, which is the only
+thing here that watches GitHub, so while nobody has the cabin open nothing
+happens and the issues appear the next time it is opened; `groomed`
 shows the issues the milestone already holds and offers the authorisation;
 `authorised` shows them all promoted, with nothing left to press.
 **Ejecutar el groom** calls
-`POST /epic-groom` and **Autorizar el trabajo** calls `POST /epic-promotion`,
+`POST /epic-groom`, **Autorizar el trabajo** calls `POST /epic-promotion`,
+**Revisar el slicing con la sesión** calls `POST /groom-session` and
+**Publicar el nuevo slicing** calls `POST /spec-reslicing`,
 each carrying the same gate key `x-gate-key` that gate 1 uses; the same vite
-proxy that strips `Origin` for `/spec-freeze` does it for both, so neither
+proxy that strips `Origin` for `/spec-freeze` does it for all four, so no
 button can be pressed from anywhere but the page the backend itself serves,
 and a press without the key is refused with `gate-not-from-the-page`.
+`useGatePresses.ts` holds those four presses and which one is in flight, so a
+button never borrows another's label while it waits.
+
+The conversation **Revisar el slicing con la sesión** opens travels the same way
+the brainstorming's does: `POST /groom-session` answers the session it created,
+`CoordinatingSessionClient.openedIn` reads that payload — one reader for the two
+doors that answer it — and the panel hands it up through `GateSequence` to
+`Home`'s own `sessionOpened`, the very callback `StartPlanForm` reports an
+opening to. `SessionsPanel` therefore refreshes its listing and selects the new
+terminal, instead of showing «habla con ella en el panel de sesiones» beside a
+listing that never changed.
+
+A press whose answer the page cannot read is **not** reported as a failure:
+`client.ts` reads `GET /epic-groom` once and answers what that read says, so a
+slow groom that did create the issues shows them, and where the read cannot tell
+either the panel says «No se ha podido confirmar el groom» as a warning and asks
+the person not to press again. Measured on a real repository: the panel said the
+backend could not be reached while the backend's own log read
+`gate 2 groom: "…" planned 4 issue(s), holds 2 now`, and pressing again is the
+worst move available when nobody can tell what was created.
 
 ## What is already decided
 

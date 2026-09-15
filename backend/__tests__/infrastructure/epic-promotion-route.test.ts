@@ -29,6 +29,7 @@ import { EpicIssue } from '../../src/domain/value-objects/epic-issue.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { GroomPlan, GroomPlanIssue } from '../../src/domain/value-objects/groom-plan.ts'
 import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
+import { SpecRevision } from '../../src/domain/policies/spec-revision.ts'
 
 class PromoteEpicSpy extends PromoteEpic {
   static neverAsked(): PromoteEpicSpy {
@@ -44,6 +45,7 @@ class PromoteEpicSpy extends PromoteEpic {
         specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom(),
         branch: new EpicBranch(), pullRequests: new PullRequests(),
         fingerprint: new PlanFingerprint({ digest: (text) => text }),
+        revisions: new SpecRevision({ digest: (text) => text }),
       }),
       issues: new EpicIssues(),
     })

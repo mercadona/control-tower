@@ -1,6 +1,7 @@
 import { LOOP_BRANCH_PREFIX } from '../../../plugin/scripts/conventions.js'
 import { PullRequests } from '../domain/ports/pull-requests.ts'
 import { ChangeAsked } from '../domain/value-objects/change-asked.ts'
+import { Reslicing } from '../domain/value-objects/reslicing.ts'
 import { PullRequestNotRead, PullRequestNotUnderstood, EpicPullRequestNotOpened } from '../domain/exceptions.ts'
 import { Gh } from './gh.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
@@ -8,6 +9,13 @@ import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
 type ReviewAsked = { readonly state: string, readonly body: string }
+
+type MergedPullRequest = {
+  readonly number: number,
+  readonly url: string,
+  readonly body: string,
+  readonly baseRefName: string,
+}
 
 type AnchoredComment = {
   readonly body: string,
@@ -30,6 +38,7 @@ export class OpenPullRequest {
 export class GhPullRequests extends PullRequests {
   static readonly #ASKS = Object.freeze(['CHANGES_REQUESTED', 'COMMENTED'])
   static readonly #PAGE_SIZE = 'per_page=100'
+  static readonly #MERGED_READ = '10'
   static readonly CREATED = /\/pull\/(\d+)$/
 
   readonly gh: Gh
@@ -51,6 +60,16 @@ export class GhPullRequests extends PullRequests {
       'pr', 'list', '--repo', repository.text,
       '--head', branch,
       '--state', 'open', '--json', 'number,url', '--limit', '1',
+    ]
+  }
+
+  static mergedArgvFor({ branch, repository, into }: {
+    branch: string, repository: RepositoryName, into: string,
+  }): string[] {
+    return [
+      'pr', 'list', '--repo', repository.text,
+      '--head', branch, '--base', into, '--state', 'merged',
+      '--json', 'number,url,body,baseRefName', '--limit', GhPullRequests.#MERGED_READ,
     ]
   }
 
@@ -106,6 +125,49 @@ export class GhPullRequests extends PullRequests {
     }
 
     return new OpenPullRequest({ number: found.number, url: found.url })
+  }
+
+  async mergedReslicingOf({ branch, repository, approving, into }: {
+    branch: string,
+    repository: RepositoryName,
+    approving: Reslicing,
+    into: string,
+  }): Promise<ReviewedPullRequest | null> {
+    const printed = await this.#read(GhPullRequests.mergedArgvFor({ branch, repository, into }))
+    const listed = GhPullRequests.#arrayIn(printed, `the merged pull requests of ${branch}`)
+    const approved = listed
+      .map((merged) => GhPullRequests.#mergedIn(merged, printed))
+      .find((merged) => GhPullRequests.#approves({ merged, approving, into }))
+    if (approved === undefined) return null
+
+    return new OpenPullRequest({ number: approved.number, url: approved.url })
+  }
+
+  static #approves({ merged, approving, into }: {
+    merged: MergedPullRequest, approving: Reslicing, into: string,
+  }): boolean {
+    if (merged.baseRefName !== into) return false
+    const announced = Reslicing.announcedIn(merged.body)
+
+    return announced !== null && announced.approves(approving)
+  }
+
+  static #mergedIn(merged: unknown, printed: string): MergedPullRequest {
+    if (!GhPullRequests.#readsAsAMergedPullRequest(merged)) {
+      throw new PullRequestNotUnderstood(
+        `${Gh.BIN} named a merged pull request without the number, the url, the body and the base branch this reads, `
+        + `it printed ${JSON.stringify(printed)}`
+      )
+    }
+
+    return merged
+  }
+
+  static #readsAsAMergedPullRequest(merged: unknown): merged is MergedPullRequest {
+    if (!GhPullRequests.#readsAsAPullRequest(merged)) return false
+    if (!('body' in merged) || typeof merged.body !== 'string') return false
+
+    return 'baseRefName' in merged && typeof merged.baseRefName === 'string'
   }
 
   async open({ repository, branch, title, body }: {

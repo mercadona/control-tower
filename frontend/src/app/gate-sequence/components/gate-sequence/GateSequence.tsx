@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { OpenedCoordinatingSession } from 'app/coordinating-session/CoordinatingSession.types'
 import {
   EPIC_GROOM_GATE_HEADING,
   EPIC_GROOM_NOTHING_TO_SHOW_KINDS,
@@ -19,7 +20,9 @@ const gate1Subtitle = (summary: Extract<SpecFreezeGateSummary, { kind: 'frozen' 
   return `Completada ${on}${pullRequest}`
 }
 
-const GateSequence = () => {
+type GateSequenceProps = { onSessionOpened: (opened: OpenedCoordinatingSession) => void }
+
+const GateSequence = ({ onSessionOpened }: GateSequenceProps) => {
   const specFreezeRead = useSpecFreeze()
   const epicGroomRead = useEpicGroom()
   const [gate1ManualExpanded, setGate1ManualExpanded] = useState<boolean | null>(null)
@@ -63,7 +66,7 @@ const GateSequence = () => {
         onToggle={setGate2ManualExpanded}
         hidden={!isGate2Visible}
       >
-        <EpicGroomPanel />
+        <EpicGroomPanel onSessionOpened={onSessionOpened} />
       </CollapsableCard>
     </div>
   )

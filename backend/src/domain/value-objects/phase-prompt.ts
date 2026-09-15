@@ -1,13 +1,23 @@
 import type { CheckoutRoot } from './checkout-root.ts'
+import type { EpicSpec } from './epic-spec.ts'
 import type { PlanComment } from './plan-comment.ts'
 import type { RepositoryName } from './repository-name.ts'
 import type { UserStory } from './user-story.ts'
 
 export class PhasePrompt {
   static readonly BRAINSTORMING_SKILL = 'control-tower-loop:brainstorming'
+  static readonly GROOM_SKILL = 'control-tower-loop:ct-groom'
   static readonly FREEZE_IS_NOT_YOURS =
     'You never freeze the spec yourself: the state line and its date are written by gate 1 of the '
     + "cabin, on a person's click. Leave the spec at DRAFT, present the freeze summary and stop."
+  static readonly ISSUES_ARE_NOT_YOURS =
+    'You never create the issues yourself: the milestone, the labels, the issues and the Project are written by '
+    + "gate 2 of the cabin, on a person's click or on the merge of a re-slicing pull request. Walk the slices "
+    + 'table with the person, answer what they ask about it and stop.'
+  static readonly RESLICING_TRAVELS_AS_A_PULL_REQUEST =
+    'When the slicing has to change, edit the table of §9 and stop there: leave the state line and the '
+    + 'freeze date as they are, commit nothing and push nothing. Gate 2 publishes your edit as a pull request, '
+    + 'and the issues are created when that pull request merges.'
 
   readonly text: string
 
@@ -24,10 +34,29 @@ export class PhasePrompt {
   }): PhasePrompt {
     return new PhasePrompt([
       `Invoke the skill ${PhasePrompt.BRAINSTORMING_SKILL}.`,
-      `You are the coordinating session of the epic for ${repository.text}, in the checkout ${root.text}: you cut no worktree and you switch no branch.`,
+      PhasePrompt.#roleOf({ repository, root }),
       PhasePrompt.FREEZE_IS_NOT_YOURS,
       ...PhasePrompt.#idea({ story, comment }),
     ].join('\n'))
+  }
+
+  static groom({ spec, milestone, repository, root }: {
+    spec: EpicSpec,
+    milestone: string,
+    repository: RepositoryName,
+    root: CheckoutRoot,
+  }): PhasePrompt {
+    return new PhasePrompt([
+      `Invoke the skill ${PhasePrompt.GROOM_SKILL}.`,
+      PhasePrompt.#roleOf({ repository, root }),
+      PhasePrompt.ISSUES_ARE_NOT_YOURS,
+      PhasePrompt.RESLICING_TRAVELS_AS_A_PULL_REQUEST,
+      `The milestone is "${milestone}" and its frozen execution spec is ${spec.path}.`,
+    ].join('\n'))
+  }
+
+  static #roleOf({ repository, root }: { repository: RepositoryName, root: CheckoutRoot }): string {
+    return `You are the coordinating session of the epic for ${repository.text}, in the checkout ${root.text}: you cut no worktree and you switch no branch.`
   }
 
   static #idea({ story, comment }: { story: UserStory | null, comment: PlanComment | null }): string[] {

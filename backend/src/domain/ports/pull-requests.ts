@@ -1,5 +1,6 @@
 import type { ChangeAsked } from '../value-objects/change-asked.ts'
 import type { RepositoryName } from '../value-objects/repository-name.ts'
+import type { Reslicing } from '../value-objects/reslicing.ts'
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
@@ -19,6 +20,19 @@ export class PullRequests {
   }): Promise<ReviewedPullRequest | null> {
     throw new Error(
       `${this.constructor.name} must implement openOfBranch({ branch, repository }), asked for ${branch} in ${repository}`
+    )
+  }
+
+  async mergedReslicingOf({ branch, repository, approving, into }: {
+    branch: string,
+    repository: RepositoryName,
+    approving: Reslicing,
+    into: string,
+  }): Promise<ReviewedPullRequest | null> {
+    throw new Error(
+      `${this.constructor.name} must implement mergedReslicingOf({ branch, repository, approving, into }) and answer `
+      + `the pull request of ${branch} that merged into ${into} of ${repository} approving revision `
+      + `${approving?.revision} of ${approving?.path}`
     )
   }
 

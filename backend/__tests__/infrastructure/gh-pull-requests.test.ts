@@ -8,6 +8,7 @@ import { SleepDouble } from '../sleep-double.ts'
 import { ChangeAsked } from '../../src/domain/value-objects/change-asked.ts'
 import { PlanIssue } from '../../src/domain/value-objects/plan-issue.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
+import { Reslicing } from '../../src/domain/value-objects/reslicing.ts'
 import { PullRequestNotRead, PullRequestNotUnderstood, EpicPullRequestNotOpened } from '../../src/domain/exceptions.ts'
 
 const DECLARED = JSON.parse(
@@ -23,6 +24,37 @@ class GhDouble {
     number: 42, url: 'https://github.com/josemerca/ct-loop-sandbox/pull/42',
   })
   static LISTED = `[{"number":42,"url":"https://github.com/josemerca/ct-loop-sandbox/pull/42"}]\n`
+  static MILESTONE_BRANCH = 'milestone/2026-09-15-the-groom-execution'
+  static DEFAULT_BRANCH = 'main'
+  static APPROVING = new Reslicing({
+    path: 'docs/superpowers/specs/2026-09-15-the-groom-execution.md',
+    revision: '58267779d2053c09425dc5c86ed9c5597458f47e',
+  })
+
+  static ANOTHER_MILESTONE = new Reslicing({
+    path: 'docs/superpowers/specs/2026-02-02-another-execution.md',
+    revision: 'f2c47d1f9d8d4f9cda71a8d0875129245fc0c265',
+  })
+
+  static A_LATER_EDIT = new Reslicing({
+    path: 'docs/superpowers/specs/2026-09-15-the-groom-execution.md',
+    revision: 'f2c47d1f9d8d4f9cda71a8d0875129245fc0c265',
+  })
+
+  static readonly MERGED_CAPTURE =
+    'gh pr list --repo mercadona/control-tower --state merged --json number,url,body,baseRefName --limit 1, captured '
+    + 'on 2026-09-15: a JSON array of objects carrying baseRefName, body, number and url, in that order — '
+    + '[{"baseRefName":"main","body":"Gate 1 dead-ended instead of …","number":361,'
+    + '"url":"https://github.com/mercadona/control-tower/pull/361"}]'
+
+  static mergedListing(...merged: { body: string, baseRefName?: string }[]): string {
+    return `${JSON.stringify(merged.map((one, index) => ({
+      baseRefName: one.baseRefName ?? GhDouble.DEFAULT_BRANCH,
+      body: one.body,
+      number: 360 + index,
+      url: `https://github.com/josemerca/ct-loop-sandbox/pull/${360 + index}`,
+    })))}\n`
+  }
 
   readonly answers: ProcessOutput[]
   readonly calls: string[][]
@@ -72,6 +104,12 @@ class GhDouble {
     return this.pullRequests().openOfBranch({ branch, repository: GhDouble.REPOSITORY })
   }
 
+  async mergedReslicingOf(approving = GhDouble.APPROVING, branch = GhDouble.MILESTONE_BRANCH) {
+    return this.pullRequests().mergedReslicingOf({
+      branch, repository: GhDouble.REPOSITORY, approving, into: GhDouble.DEFAULT_BRANCH,
+    })
+  }
+
   async open({ branch = 'feat/7', title = 'the epic pull request', body = 'the epic pull request body' } = {}) {
     return this.pullRequests().open({ repository: GhDouble.REPOSITORY, branch, title, body })
   }
@@ -81,6 +119,86 @@ class GhDouble {
       .fixesAsked({ pullRequest: GhDouble.PULL_REQUEST, repository: GhDouble.REPOSITORY })
   }
 }
+
+describe('GhPullRequests, reading the merge that authorised a re-slicing', () => {
+  describe(GhDouble.MERGED_CAPTURE, () => {
+    it('a merged pull request that approves this revision of this spec is the one the read answers', async () => {
+      const gh = GhDouble.answering(GhDouble.mergedListing({ body: GhDouble.APPROVING.bodyFor('A milestone') }))
+
+      const found = await gh.mergedReslicingOf()
+
+      expect(found).toEqual(new OpenPullRequest({
+        number: 360, url: 'https://github.com/josemerca/ct-loop-sandbox/pull/360',
+      }))
+      expect(gh.calls).toEqual([[
+        'pr', 'list', '--repo', 'josemerca/ct-loop-sandbox',
+        '--head', GhDouble.MILESTONE_BRANCH, '--base', GhDouble.DEFAULT_BRANCH, '--state', 'merged',
+        '--json', 'number,url,body,baseRefName', '--limit', '10',
+      ]])
+    })
+
+    it('a merged pull request without the announcement is not a re-slicing and answers nothing', async () => {
+      const gh = GhDouble.answering(GhDouble.mergedListing({
+        body: "The epic's two documents, with the execution spec frozen on 2026-09-14.",
+      }))
+
+      await expect(gh.mergedReslicingOf()).resolves.toBeNull()
+    })
+
+    it('an approval of another spec published from this same branch authorises nothing', async () => {
+      const gh = GhDouble.answering(GhDouble.mergedListing({
+        body: GhDouble.ANOTHER_MILESTONE.bodyFor('Another epic'),
+      }))
+
+      await expect(gh.mergedReslicingOf()).resolves.toBeNull()
+    })
+
+    it('an approval of an older revision of this very spec authorises nothing', async () => {
+      const gh = GhDouble.answering(GhDouble.mergedListing({ body: GhDouble.A_LATER_EDIT.bodyFor('A milestone') }))
+
+      await expect(gh.mergedReslicingOf()).resolves.toBeNull()
+    })
+
+    it('an approval that merged somewhere other than the default branch authorises nothing', async () => {
+      const gh = GhDouble.answering(GhDouble.mergedListing({
+        body: GhDouble.APPROVING.bodyFor('A milestone'),
+        baseRefName: 'milestone/2026-09-15-the-groom-execution',
+      }))
+
+      await expect(gh.mergedReslicingOf()).resolves.toBeNull()
+    })
+
+    it('the approving one is found even when another merge of the same branch approves nothing', async () => {
+      const gh = GhDouble.answering(GhDouble.mergedListing(
+        { body: 'Gate 1 opened this one and nobody re-sliced anything.' },
+        { body: GhDouble.APPROVING.bodyFor('A milestone') },
+      ))
+
+      const found = await gh.mergedReslicingOf()
+
+      expect(found?.number).toBe(361)
+    })
+
+    it('a branch nobody ever merged answers nothing and never asks a second time', async () => {
+      const gh = GhDouble.answering('[]\n')
+
+      await expect(gh.mergedReslicingOf()).resolves.toBeNull()
+      expect(gh.calls).toHaveLength(1)
+    })
+  })
+
+  it('a merged listing whose entry has no base branch is told apart from a gh that failed', async () => {
+    const unreadable = await GhDouble
+      .answering('[{"body":"anything","number":360,"url":"https://github.com/josemerca/ct-loop-sandbox/pull/360"}]\n')
+      .mergedReslicingOf()
+      .catch((cause) => cause)
+    const failed = await GhDouble.refusing('HTTP 404').mergedReslicingOf().catch((cause) => cause)
+
+    expect(unreadable).toBeInstanceOf(PullRequestNotUnderstood)
+    expect(unreadable).not.toBeInstanceOf(PullRequestNotRead)
+    expect(failed).toBeInstanceOf(PullRequestNotRead)
+  })
+})
 
 describe('GhPullRequests', () => {
   it('the_branch_it_asks_about_is_the_one_the_loop_derives_from_the_issue', async () => {

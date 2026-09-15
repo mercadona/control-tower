@@ -48,6 +48,7 @@ import { CtGroomEpic } from './ct-groom-epic.ts'
 import { CmuxWorkspaceQuery } from '../../../plugin/scripts/cmux.js'
 import { StartPlan } from '../application/actions/start-plan.ts'
 import { OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
+import { OpenGroomSession } from '../application/actions/open-groom-session.ts'
 import { RecoverCoordinatingSession, RecoveredConversation } from '../application/actions/recover-coordinating-session.ts'
 import { SessionAttention } from '../domain/value-objects/session-attention.ts'
 import { ImplementPlan } from '../application/actions/implement-plan.ts'
@@ -56,6 +57,7 @@ import { ReadImplementationProgress } from '../application/queries/read-implemen
 import { ReadImplementationHistory } from '../application/queries/read-implementation-history.ts'
 import { ReadSpecFreeze } from '../application/queries/read-spec-freeze.ts'
 import { FreezeSpec } from '../application/actions/freeze-spec.ts'
+import { PublishReslicing } from '../application/actions/publish-reslicing.ts'
 import { ReadEpicGroom } from '../application/queries/read-epic-groom.ts'
 import { GroomEpic } from '../application/actions/groom-epic.ts'
 import { PromoteEpic } from '../application/actions/promote-epic.ts'
@@ -77,6 +79,7 @@ import { ExternalTool } from './external-tool.ts'
 import { RetryPolicy, RetryBudget } from '../domain/policies/retry-policy.ts'
 import { LaunchPolicy, LaunchBudget } from '../domain/policies/launch-policy.ts'
 import { PlanFingerprint } from '../domain/policies/plan-fingerprint.ts'
+import { SpecRevision } from '../domain/policies/spec-revision.ts'
 import { Invocation, InvocationOutcome } from './invocation.ts'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
 import type { ProcessOutput } from './tool-runner.ts'
@@ -540,13 +543,25 @@ class CtApi {
       stderr: (line) => process.stderr.write(line),
     })
     const epicSpecs = new DiskEpicSpecs({ list: Disk.list, read: Disk.read, write: Disk.write })
+    const openGroomSession = new OpenGroomSession({
+      specs: epicSpecs,
+      conversations: claudeConversations,
+      sessionHooks,
+      records: conversationRecords,
+    })
     const epicBranch = new GitEpicBranch({ run: git })
     const gateKey = new GateKey({ random: randomBytes })
     const readSpecFreeze = new ReadSpecFreeze({ specs: epicSpecs, branch: epicBranch, pullRequests })
     const freezeSpec = new FreezeSpec({
       specs: epicSpecs, branch: epicBranch, pullRequests, now: () => new Date(),
     })
-    const publishedSpecs = new GhPublishedSpecs({ gh })
+    const specRevisions = new SpecRevision({
+      digest: (text) => createHash('sha1').update(text, 'utf8').digest('hex'),
+    })
+    const publishReslicing = new PublishReslicing({
+      specs: epicSpecs, branch: epicBranch, pullRequests, revisions: specRevisions,
+    })
+    const publishedSpecs = new GhPublishedSpecs({ gh, revisions: specRevisions })
     const epicIssues = new GhEpicIssues({ gh })
     const groomRunner = new ToolRunner({ bin: process.execPath, budgetMs: CtApi.#GROOM_TIMEOUT_MS })
     const epicGroom = new CtGroomEpic({
@@ -565,6 +580,7 @@ class CtApi {
       branch: epicBranch,
       pullRequests,
       fingerprint: planFingerprint,
+      revisions: specRevisions,
     })
     const groomEpic = new GroomEpic({ read: readEpicGroom, groom: epicGroom, fingerprint: planFingerprint })
     const promoteEpic = new PromoteEpic({ read: readEpicGroom, issues: epicIssues })
@@ -598,11 +614,14 @@ class CtApi {
       typeIntoSession: new TypeIntoSession({ liveSessions }),
       resizeSession: new ResizeSession({ liveSessions }),
       openCoordinatingSession,
+      openGroomSession,
       coordinatingSessions,
       readSpecFreeze,
       freezeSpec,
       gateKey,
       freezesInFlight: new WorkInFlight(),
+      publishReslicing,
+      reslicingsInFlight: new WorkInFlight(),
       readEpicGroom,
       groomEpic,
       epicGroomInFlight: new WorkInFlight(),

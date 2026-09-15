@@ -21,6 +21,7 @@ import {
   PullRequestNotRead, PullRequestNotUnderstood,
   EpicNotGroomed, GroomPlanNotUnderstood,
   PublishedSpecNotRead,
+  PublishedSpecNotUnderstood,
   EpicIssuesNotRead, EpicIssuesNotUnderstood, EpicIssueNotPromoted,
 } from '../domain/exceptions.ts'
 import type { Request, Response } from 'express'
@@ -257,6 +258,7 @@ export class PlanCollapse {
     [EpicNotGroomed, PlanCollapse.#collapsed('epic-not-groomed')],
     [GroomPlanNotUnderstood, PlanCollapse.#collapsed('groom-plan-not-understood')],
     [PublishedSpecNotRead, PlanCollapse.#collapsed('published-spec-not-read')],
+    [PublishedSpecNotUnderstood, PlanCollapse.#collapsed('published-spec-not-understood')],
     [EpicIssuesNotRead, PlanCollapse.#collapsed('epic-issues-not-read')],
     [EpicIssuesNotUnderstood, PlanCollapse.#collapsed('epic-issues-not-understood')],
     [EpicIssueNotPromoted, PlanCollapse.#collapsed('epic-issue-not-promoted')],

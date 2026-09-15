@@ -5,6 +5,12 @@ export class EpicBranch {
     throw new Error(`${this.constructor.name} must implement current(root), asked about ${root}`)
   }
 
+  async defaultBranch(root: CheckoutRoot): Promise<string> {
+    throw new Error(
+      `${this.constructor.name} must implement defaultBranch(root) and answer the branch the remote calls default, asked about ${root}`
+    )
+  }
+
   async publishing({ root, milestone }: { root: CheckoutRoot, milestone: string }): Promise<string> {
     throw new Error(
       `${this.constructor.name} must implement publishing({ root, milestone }) and answer the branch it publishes on, ` +

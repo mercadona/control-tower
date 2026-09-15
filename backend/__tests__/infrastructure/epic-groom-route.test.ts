@@ -33,6 +33,7 @@ import { EpicIssue } from '../../src/domain/value-objects/epic-issue.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { GroomPlan, GroomPlanIssue } from '../../src/domain/value-objects/groom-plan.ts'
 import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
+import { SpecRevision } from '../../src/domain/policies/spec-revision.ts'
 
 class ReadEpicGroomSpy extends ReadEpicGroom {
   static neverAsked(): ReadEpicGroomSpy {
@@ -46,6 +47,7 @@ class ReadEpicGroomSpy extends ReadEpicGroom {
     super({
       specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom(),
       branch: new EpicBranch(), pullRequests: new PullRequests(), fingerprint: Mother.FINGERPRINT,
+      revisions: new SpecRevision({ digest: (text) => text }),
     })
     this.asked = []
     this.answer = answer
@@ -71,6 +73,7 @@ class GroomEpicSpy extends GroomEpic {
       read: new ReadEpicGroom({
         specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom(),
         branch: new EpicBranch(), pullRequests: new PullRequests(), fingerprint: Mother.FINGERPRINT,
+      revisions: new SpecRevision({ digest: (text) => text }),
       }),
       groom: new EpicGroom(),
       fingerprint: Mother.FINGERPRINT,
@@ -206,6 +209,17 @@ class Mother {
     })
   }
 
+  static readonly RESLICING = Object.freeze({
+    number: 363, url: `https://github.com/${Mother.REPOSITORY.text}/pull/363`,
+  })
+
+  static groomableAfterReslicingRead(): EpicGroomRead {
+    return new EpicGroomRead({
+      state: EpicGroomState.GROOMABLE, spec: null, milestone: Mother.MILESTONE, plan: Mother.PLAN,
+      planFingerprint: Mother.PLAN_FINGERPRINT, issues: [], reslicing: Mother.RESLICING,
+    })
+  }
+
   static groomedRead(issues: EpicIssue[]): EpicGroomRead {
     return new EpicGroomRead({
       state: EpicGroomState.GROOMED, spec: null, milestone: Mother.MILESTONE, plan: null, planFingerprint: null,
@@ -235,6 +249,18 @@ class Mother {
     return new EpicGroomRead({
       state: EpicGroomState.AWAITING_PUBLICATION, spec: null, milestone: null, plan: null, planFingerprint: null,
       issues: [], pullRequest,
+    })
+  }
+
+  static reslicedRead(): EpicGroomRead {
+    return new EpicGroomRead({
+      state: EpicGroomState.RESLICED, spec: null, milestone: null, plan: null, planFingerprint: null, issues: [],
+    })
+  }
+
+  static reslicedGroomed(): EpicGroomed {
+    return new EpicGroomed({
+      state: EpicGroomState.RESLICED, milestone: null, plan: null, issues: [], staleness: PlanStaleness.FRESH,
     })
   }
 
@@ -373,6 +399,7 @@ describe('EpicGroomRoute', () => {
       milestone: Mother.MILESTONE,
       plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
+      reslicing: null,
       key: Keys.MINTED,
     })
     expect(await authorised.json()).toEqual({
@@ -390,6 +417,7 @@ describe('EpicGroomRoute', () => {
       milestone: Mother.MILESTONE,
       plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
+      reslicing: null,
       key: Keys.MINTED,
     })
     expect(await fromElsewhere.json()).toEqual({
@@ -397,6 +425,7 @@ describe('EpicGroomRoute', () => {
       milestone: Mother.MILESTONE,
       plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
+      reslicing: null,
     })
   })
 
@@ -467,6 +496,26 @@ describe('EpicGroomRoute', () => {
       milestone: Mother.MILESTONE,
       plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
       planFingerprint: Mother.PLAN_FINGERPRINT,
+      reslicing: null,
+      key: Keys.MINTED,
+    })
+  })
+
+  it('a groomable answer carries the merged re-slicing that authorised it, so the page needs no click', async () => {
+    const held = Mother.live()
+    const read = ReadEpicGroomSpy.answering(Mother.groomableAfterReslicingRead())
+    const groom = GroomEpicSpy.neverAsked()
+    const key = Keys.minted()
+
+    const response = await RunningApi.get(held, read, groom, key)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      status: 'groomable',
+      milestone: Mother.MILESTONE,
+      plan: { home: Mother.HOME, issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }] },
+      planFingerprint: Mother.PLAN_FINGERPRINT,
+      reslicing: Mother.RESLICING,
       key: Keys.MINTED,
     })
   })
@@ -551,6 +600,34 @@ describe('EpicGroomRoute', () => {
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ status: 'awaiting-publication', pullRequest: null })
+  })
+
+  it('a resliced read answers the state and the gate key, and names no plan to press over', async () => {
+    const held = Mother.live()
+    const read = ReadEpicGroomSpy.answering(Mother.reslicedRead())
+    const groom = GroomEpicSpy.neverAsked()
+    const key = Keys.minted()
+
+    const response = await RunningApi.get(held, read, groom, key)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ status: 'resliced', key: Keys.MINTED })
+  })
+
+  it('a press over a resliced spec is refused as spec-resliced and names what has to happen first', async () => {
+    const held = Mother.live()
+    const read = ReadEpicGroomSpy.neverAsked()
+    const groom = GroomEpicSpy.answering(Mother.reslicedGroomed())
+    const key = Keys.minted()
+    const port = await RunningApi.listening(held, read, groom, key)
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: 'spec-resliced',
+      detail: 'the slicing changed in the coordinating session: publish it and merge it before the groom runs',
+    })
   })
 
   it('an uncertain read answers the milestone and why, and offers no key to press', async () => {

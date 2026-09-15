@@ -833,6 +833,49 @@ curl -s http://127.0.0.1:8787/coordinating-session
 
 ---
 
+## `POST /groom-session`
+
+Gate 2's way into the conversation. It opens the coordinating session in the
+**groom** phase: `PhasePrompt.groom` writes a prompt that invokes the plugin's
+own `control-tower-loop:ct-groom` skill, names the milestone and its frozen
+spec, and tells the session that the issues are not its to create and that a
+change to the slicing is an edit of §9 which this program publishes. No
+worktree is cut and no branch is created.
+
+**Request** — no body. The checkout and the repository are the ones the
+coordinating session this backend holds already names, so nothing is sent.
+The gate key travels in `x-gate-key`, exactly as gate 1's and gate 2's other
+buttons carry it.
+
+**202 Accepted**
+
+```json
+{"status":"grooming","conversation":"9c3f1b7e-4d2a-4c8b-9a3e-6f2b1a6c2e8f",
+ "repo":"owner/name","root":"/repo/checkout",
+ "session":{"id":"f8479639-6123-4d2d-8495-7c093a8bbd68","name":"brainstorming"}}
+```
+
+The opened conversation becomes the one `GET /coordinating-session` answers,
+live and `working`: there is one coordinating session and the groom phase takes
+its place, which is why a live conversation has to end before this door opens.
+
+**Refusals**
+
+| Status | `code` | When |
+|---|---|---|
+| 403 | `gate-not-from-the-page` | the request carries no key, or not the one the page was given |
+| 400 | `no-coordinating-session` | nothing is held, so there is no checkout to open the conversation in |
+| 409 | `coordinating-session-already-live` | a conversation is live: it has to end first |
+| 409 | `coordinating-session-opening` | another opening is in flight |
+| 400 | `no-epic-spec` | no execution spec exists in this checkout to talk about |
+| 400 | `conversation-not-started` | `claude` could not be spawned in the checkout |
+
+```
+curl -s -X POST http://127.0.0.1:8787/groom-session -H 'x-gate-key: <key>'
+```
+
+---
+
 ## `POST /session-hooks`
 
 Where Claude Code's own `UserPromptSubmit`, `Notification` and `Stop` hooks
@@ -1064,13 +1107,71 @@ curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/spec-freeze
 
 ---
 
+## `POST /spec-reslicing`
+
+Makes a correction of the frozen spec's slices table travel. The coordinating
+session in the groom phase edits §9 and stops; this is what commits it on the
+milestone branch, pushes it and opens the pull request whose **merge** authorises
+the groom. It is gate 1's own path — `EpicBranch.publishing / committed / commit
+/ pushed / push` and `PullRequests.openOfBranch / open`, the same two ports — in
+a use case of its own, so a correction never reaches the default branch by
+another door.
+
+The spec stays `CONGELADA`: **nothing is written into the spec**, neither its
+state line nor its freeze date. That is what makes this a correction and not a
+second freeze.
+
+**Request** — no body. The checkout and the repository are the ones the held
+coordinating session names; the gate key travels in `x-gate-key`.
+
+**200 OK**
+
+```json
+{"status":"published","pullRequest":{"number":13,"url":"https://github.com/owner/name/pull/13"}}
+```
+
+`pullRequest` is the pull request the correction travels in: the one already open
+for that branch when there is one — pressing twice opens no second — and
+otherwise the one this press created. Its body opens with the announcement
+
+```
+<!-- ct-groom:reslicing spec="docs/superpowers/specs/<spec>.md" revision="<40 hex>" -->
+```
+
+which names **which spec** and **which revision of it** the merge would approve —
+the same git blob sha publication is compared by. That is what `GET /epic-groom`
+reads later, and it is why an approval cannot be inherited: not by another
+milestone published from the same branch, and not by a later edit of this spec.
+
+**Refusals**
+
+| Status | `code` | When |
+|---|---|---|
+| 403 | `gate-not-from-the-page` | the request carries no key, or not the one the page was given |
+| 400 | `no-coordinating-session` | nothing is held, so there is no checkout whose slicing could be published |
+| 409 | `reslicing-in-progress` | a publication of this slicing is under way |
+| 400 | `no-epic-spec` | no execution spec exists in this checkout to publish |
+| 400 | `spec-not-frozen` | the spec is not frozen: gate 1 owns a draft, not this door |
+
+Plus every `PlanCollapse` code gate 1 can meet on the same path —
+`epic-branch-not-published`, `epic-branch-not-understood`,
+`epic-pull-request-not-opened`, `epic-spec-not-read`, `pull-request-not-read`,
+`pull-request-not-understood` — each with 400 and the tool's own words in
+`detail`.
+
+```
+curl -s -X POST http://127.0.0.1:8787/spec-reslicing -H 'x-gate-key: <key>'
+```
+
+---
+
 ## `GET /epic-groom`
 
 Gate 2's own state for the checkout the held coordinating session sits in, derived from the
 execution spec, the epic's milestone and its issues on GitHub — nothing stored. No parameters.
 The cabin polls it to draw gate 2's panel.
 
-**200 OK** — nine shapes, told apart by `status`.
+**200 OK** — ten shapes, told apart by `status`.
 
 No coordinating session is held, so there is nothing to groom:
 
@@ -1091,8 +1192,21 @@ The spec exists and is not frozen yet:
 {"status":"draft"}
 ```
 
-The spec is frozen, but its committed copy is not yet readable on the default branch — the pull
-request gate 1 opened has to merge first:
+The spec is frozen and what the default branch holds is not the text this checkout holds, and that
+edit is **not committed**: the coordinating session changed the slicing and the correction has not
+left the checkout yet. `POST /spec-reslicing` is what makes it travel:
+
+```json
+{"status":"resliced","key":"3f9c1a…"}
+```
+
+The spec is frozen, but what the default branch holds is **not the text this checkout holds** — the
+pull request that carries it has to merge first. Publication is decided by content and never by
+existence: `gh api repos/<owner>/<repo>/contents/<spec>` answers the file of the default branch with
+its git blob `sha`, and this backend compares it against the blob sha of the local spec
+(`sha1("blob " + byteLength + "\0" + text)`, git's own envelope). A path that exists on the default
+branch carrying an older table therefore reads as unpublished, which is what keeps the groom from
+creating issues from a table nobody approved:
 
 ```json
 {"status":"awaiting-publication",
@@ -1105,7 +1219,9 @@ is gone. It is `null` when no open pull request can be found, and the page says 
 that case — the spec is still unpublished and no open pull request was found for its branch, rather
 than asking for a merge with nothing to merge. Either way it is a wait, never an error: the creation
 may have failed after the commit and the push, or the pull request may have been closed unmerged. This
-is the only read that runs `git rev-parse` and `gh pr list`: the other eight shapes ask neither.
+read and `groomable` are the only two that run `git rev-parse` and `gh pr list` — this one for the open
+pull request it waits for, `groomable` for the merged re-slicing that may already have authorised it;
+the other eight shapes ask neither.
 
 The spec is frozen and published, but `gh issue list` could not be exhausted: `gh` exposes no
 cursor, so this backend establishes exhaustion by climbing `--limit` (200, 400, 800, … up to a
@@ -1184,15 +1300,32 @@ promote:
 `key` is the same value `POST /epic-groom` and `POST /epic-promotion` demand in their
 `x-gate-key` header, minted once when the backend starts
 (`backend/src/infrastructure/gate-key.ts`) — the mechanism `GET /spec-freeze` documents above. It
-is attached only to the `groomable`, `partially-groomed` and `groomed` bodies, and only for the
-page's own request; `no-spec`, `draft`, `awaiting-publication`, `issues-uncertain` and `authorised`
-never carry it, whatever request asks — `authorised` has nothing left for a key to open, and
+is attached only to the `resliced`, `groomable`, `partially-groomed` and `groomed` bodies, and only
+for the page's own request — `resliced` carries it because the button it offers presses
+`POST /spec-reslicing`, which demands the same key; `no-spec`, `draft`, `awaiting-publication`,
+`issues-uncertain` and `authorised` never carry it, whatever request asks — `authorised` has nothing left for a key to open, and
 `issues-uncertain` offers nothing to press while its own listing cannot be trusted.
 
 `plan.home` is the milestone's **home repository**, the one the coordinating session holds, and
 each issue's `repo` is the repository that issue will be created in: the milestone's slices table
 may send a row to another repository (`Repo` column), and one row never spans two. A row whose
 `repo` equals `home` is the ordinary case.
+
+`reslicing` travels on `groomable` alone, and it is what makes the groom run
+without a further click: the **merged** pull request of the branch the checkout
+sits on that **approves this spec at the revision the default branch now holds**
+and that **merged into the default branch**
+(`gh pr list --head <branch> --base <default> --state merged --json number,url,body,baseRefName`,
+then the announcement in the body compared against the spec being read). Three
+things have to agree, and each closes a door: a branch is reusable — 
+`EpicBranch.publishing` keeps any branch other than the default one — so two
+milestones can be published from one branch and the path is what tells their
+approvals apart; the revision is what stops an approval of an older table from
+authorising a later edit; and the base branch is what stops a merge that landed
+somewhere else from counting. `null` means nothing approved this table, and then
+the groom waits for the press it always waited for. It is asked only in that one
+state: once the milestone holds an issue there is nothing left to authorise, so
+`partially-groomed`, `groomed` and `authorised` never ask.
 
 `planFingerprint` is a sha256 hex digest of the plan's own content — the milestone, the home
 repository, then each issue's order, title, labels and repository, in the plan's own order
@@ -1205,8 +1338,8 @@ repository, then each issue's order, title, labels and repository, in the plan's
 
 The shared ones — 405 for a method other than `GET` or `POST`, 403 for a foreign `Origin` — and,
 with a 400 and its own `{code, detail}`, every tool refusal this read can meet: deriving these
-nine states can run `ct-groom --dry-run`, `gh api repos/<repo>/contents/<spec>` and `gh issue
-list`, so their failures surface here too — the same `PlanCollapse` codes `POST /epic-groom`
+ten states can run `ct-groom --dry-run`, `git status --porcelain`, `gh api
+repos/<repo>/contents/<spec>` and `gh issue list`, so their failures surface here too — the same `PlanCollapse` codes `POST /epic-groom`
 documents below, except `epic-issue-not-promoted`, which only `POST /epic-promotion` can meet. A
 `gh issue list` call that fails outright still meets `epic-issues-not-read` there, exactly as
 before this backend paged; only a paging climb that never comes back short answers
@@ -1265,6 +1398,7 @@ Then, once the key holds:
 | `groom-in-progress` | 409 | a groom of this checkout is under way: wait for it to answer before pressing again |
 | `no-epic-spec` | 400 | no execution spec exists in this checkout to groom |
 | `spec-not-frozen` | 400 | the spec is not frozen: gate 1 first |
+| `spec-resliced` | 400 | the slicing changed in the coordinating session: publish it and merge it before the groom runs |
 | `spec-not-published` | 400 | the spec is frozen, but its committed copy is not yet readable on the default branch |
 | `epic-issues-uncertain` | 400 | `gh issue list`'s paging could not be exhausted: `detail` is the same reason `GET /epic-groom`'s `issues-uncertain` body carries, and the plan comparison this press would otherwise run cannot be trusted either |
 | `plan-changed` | 409 | the spec changed since this plan was shown: read the new plan before pressing again |
@@ -1285,13 +1419,13 @@ mismatch means the spec changed underneath the page between the preview and the 
 carrying no `x-plan-fingerprint` at all meets the same code, because the page always has one to send
 at a pressable rung, so its absence means the request did not come from a preview.
 
-None of these eight touches the milestone or an issue.
+None of these nine touches the milestone or an issue.
 
 From running the groom itself, once the eight above did not apply — the `PlanCollapse` codes this
 slice adds to the doctrine `POST /spec-freeze` documents above
-(`backend/src/infrastructure/start-plan-route.ts`). The first five are reached alike by `GET
+(`backend/src/infrastructure/start-plan-route.ts`). The first six are reached alike by `GET
 /epic-groom`, `POST /epic-groom` and `POST /epic-promotion`, because all three read the spec, the
-published copy and the milestone's issues through the same ports; the sixth is met only where an
+published copy and the milestone's issues through the same ports; the last is met only where an
 issue is actually edited:
 
 | `code` | Meaning |
@@ -1299,11 +1433,12 @@ issue is actually edited:
 | `epic-not-groomed` | `ct-groom` exited with something other than `0` (no divergence) or `3` (unreconciled divergence); `detail` is that program's own stderr, untranslated |
 | `groom-plan-not-understood` | `ct-groom --dry-run` printed something this backend cannot read as a plan |
 | `published-spec-not-read` | `gh api repos/<repo>/contents/<spec>` failed for a reason other than "not found" |
+| `published-spec-not-understood` | that call answered something naming no `sha` this backend can read, so publication could not be compared |
 | `epic-issues-not-read` | `gh issue list` failed while reading the milestone's issues |
 | `epic-issues-not-understood` | `gh` answered the milestone's issues without the shape this reads |
 | `epic-issue-not-promoted` | `gh issue edit` failed while moving one issue from `status:backlog` to `status:ready` — met only by `POST /epic-promotion`, the only caller of that edit |
 
-All six answer 400 and carry the tool's own message in `detail`, the same convention every other
+All seven answer 400 and carry the tool's own message in `detail`, the same convention every other
 tool refusal in this file follows.
 
 ```
@@ -1388,6 +1523,8 @@ curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/epic-promotion
 | `POST /sessions/:id/input` | `frontend/src/app/sessions/client.ts` | `Sessions.types.ts` |
 | `POST /coordinating-session` | `frontend/src/app/coordinating-session/client.ts` | `CoordinatingSession.types.ts` |
 | `GET /coordinating-session` | `frontend/src/app/coordinating-session/client.ts` | `CoordinatingSession.types.ts` |
+| `POST /groom-session` | `frontend/src/app/epic-groom/client.ts` | `EpicGroom.types.ts` |
+| `POST /spec-reslicing` | `frontend/src/app/epic-groom/client.ts` | `EpicGroom.types.ts` |
 | `GET /spec-freeze` | `frontend/src/app/spec-freeze/client.ts` | `SpecFreeze.types.ts` |
 | `POST /spec-freeze` | `frontend/src/app/spec-freeze/client.ts` | `SpecFreeze.types.ts` |
 | `GET /epic-groom` | `frontend/src/app/epic-groom/client.ts` | `EpicGroom.types.ts` |
