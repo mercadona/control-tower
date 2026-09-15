@@ -62,6 +62,8 @@ class BornConforming {
     'scripts/judge-returns.js',
     'scripts/milestone-repos.js',
     '__tests__/milestone-repos.test.js',
+    'scripts/checkout-registry.js',
+    '__tests__/checkout-registry.test.js',
     '__tests__/tool-usage.test.js',
     '__tests__/claude-code-usage.test.js',
     '__tests__/judge-returns.test.js',

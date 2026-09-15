@@ -416,6 +416,24 @@ export function planDispatch(issues, { mergedIssues = [], cap = 1, depStates = {
 // exactly that shape. Returning `null` (instead of guessing) is what lets
 // ct-next.mjs reject a malformed `--repo` with a clear message instead of
 // resolving an account out of something that is not a repository.
+// repoOfRemoteUrl (#348): the ONE reading of a git remote as `owner/name`.
+// The regex lived copied in ct-next.mjs#ensureRepoIdentity and in
+// ct-status.mjs#identityReason —the two places that ask "is this checkout the
+// one of the repository I was asked about?"— and the registry of checkouts now
+// asks the same question about N paths. Three copies of the same reading is
+// the cmux.js lesson with a different subject, so it lives here, next to
+// parseRepoSlug: this file already owns what a repository is called.
+//
+// It answers `null` (never a guess) for a remote that is not GitHub's: the
+// callers turn that into "it could not be verified", which is not the same as
+// "it holds another repository".
+const REMOTE_URL_RE = /github\.com[:/]+([^/]+)\/(.+?)(?:\.git)?\/?$/
+export function repoOfRemoteUrl(url) {
+  const found = REMOTE_URL_RE.exec(String(url ?? ''))
+
+  return found === null ? null : `${found[1]}/${found[2]}`
+}
+
 const REPO_ALPHABET_RE = /^[A-Za-z0-9._-]+$/
 export function parseRepoSlug(slug) {
   if (typeof slug !== 'string') return null

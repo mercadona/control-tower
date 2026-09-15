@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { tmpdir, homedir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { dirname, join, isAbsolute, delimiter as pathDelimiter } from 'node:path'
-import { planDispatch, parseRepoSlug, buildCmuxArgv, buildCmuxSendArgv, buildCmuxSendKeyArgv, cmuxSessionName, collectFinishedResidue, formatFinishedResidueWarning } from './dispatch.js'
+import { planDispatch, parseRepoSlug, repoOfRemoteUrl, buildCmuxArgv, buildCmuxSendArgv, buildCmuxSendKeyArgv, cmuxSessionName, collectFinishedResidue, formatFinishedResidueWarning } from './dispatch.js'
 import { renderKickoff, buildStateSeed, AGENT_BIN } from './kickoff.js'
 import { Baseline, BaselineOutcome, BaselineResult, ShellBaselineRunner } from './baseline.js'
 import { parseStrictInt } from './argnum.js'
@@ -1538,12 +1538,14 @@ function ensureRepoIdentity(root, expectedRepo) {
     console.error(`could not verify that ${root} is the checkout of ${expectedRepo}: it has no "origin" remote (${e.message}). For safety, ct-next.mjs does NOT continue — it could be running inside the wrong repo (e.g. a control-tower session instead of ${expectedRepo}). Add an origin remote pointing at ${expectedRepo}, or run ct-next.mjs from the right checkout.`)
     process.exit(1)
   }
-  const m = originUrl.match(/github\.com[:/]+([^/]+)\/(.+?)(?:\.git)?\/?$/)
-  if (!m) {
+  // #348: the reading lives in dispatch.js#repoOfRemoteUrl — it was copied
+  // here and in ct-status.mjs, and the registry of checkouts now asks the same
+  // question about N paths.
+  const actualRepo = repoOfRemoteUrl(originUrl)
+  if (actualRepo === null) {
     console.error(`could not interpret the "origin" remote of ${root} ("${originUrl}") as a GitHub owner/repo. For safety, ct-next.mjs does NOT continue.`)
     process.exit(1)
   }
-  const actualRepo = `${m[1]}/${m[2]}`
   if (actualRepo.toLowerCase() !== expectedRepo.toLowerCase()) {
     console.error(`--repo ${expectedRepo} does not match the local checkout at ${root} (remote origin → ${actualRepo}). Aborting: run ct-next.mjs from a checkout of ${expectedRepo}, or fix --repo.`)
     process.exit(1)

@@ -51,7 +51,7 @@ import { loadIssues } from './loop-issues.js'
 import { liveSliceProcesses } from './liveness.js'
 import { buildState } from './loop-state.js'
 import { mapGhIssue, filterMergedIssues, closedWithLiveStatus } from './gh-issue-map.js'
-import { parseRepoSlug } from './dispatch.js'
+import { parseRepoSlug, repoOfRemoteUrl } from './dispatch.js'
 
 // A hardened `arg()`: the SAME one as in
 // ct-next.mjs/ct-groom.mjs/dispatch-check.mjs, word for word and for the same
@@ -215,9 +215,10 @@ function identityReason(root, expected) {
     // command down.
     return `could not verify that ${root} is the checkout of ${expected}: it has no "origin" remote (${detailOf(e)})`
   }
-  const m = originUrl.match(/github\.com[:/]+([^/]+)\/(.+?)(?:\.git)?\/?$/)
-  if (!m) return `could not read the "origin" remote of ${root} ("${originUrl}") as a GitHub owner/repo, so it could not be verified that it is the checkout of ${expected}`
-  const real = `${m[1]}/${m[2]}`
+  // #348: the reading lives in dispatch.js#repoOfRemoteUrl — see there why the
+  // two copies of this regex (here and in ct-next.mjs) became one.
+  const real = repoOfRemoteUrl(originUrl)
+  if (real === null) return `could not read the "origin" remote of ${root} ("${originUrl}") as a GitHub owner/repo, so it could not be verified that it is the checkout of ${expected}`
   if (real.toLowerCase() !== expected.toLowerCase()) {
     return `${root} is the checkout of ${real}, not of ${expected}, and crossing one repo's issues with another's worktrees produces findings that do not exist`
   }
