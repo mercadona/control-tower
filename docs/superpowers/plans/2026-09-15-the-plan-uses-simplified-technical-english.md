@@ -4,7 +4,7 @@
 
 **Goal:** Make ASD-STE100 the measured language of every slice plan, so `dispatch-check --check-plan` refuses a plan whose prose breaks it.
 
-**Architecture:** A new pure module, `plugin/scripts/plan-ste.js`, receives the plan already annotated by `plan-contract.js` (one object per line, with `.line` and `.structural`) and returns its violations as strings. `validatePlan` pushes each one under a single rule name, `ste`, with the sub-rule inside the detail. The module groups prose into paragraphs before it measures anything, because markdown here wraps at about 100 characters and a sentence normally spans two or three lines.
+**Architecture:** A new pure module, `plugin/scripts/plan-language.js`, receives the plan already annotated by `plan-contract.js` (one object per line, with `.line` and `.structural`) and returns its violations as strings. `validatePlan` pushes each one under a single rule name, `ste`, with the sub-rule inside the detail. The module groups prose into paragraphs before it measures anything, because markdown here wraps at about 100 characters and a sentence normally spans two or three lines.
 
 **Tech Stack:** Node 24, ESM, vitest 5. No dependency is added.
 
@@ -20,31 +20,51 @@
 - **A fixture that fires the new rule gets its prose fixed. The rule is never loosened to keep a fixture green.**
 - **No control is routed around.** No `--no-verify`, no `--force`, no weakened assertion. A hook that refuses is reported, not bypassed.
 - **Every commit message ends with:** `Co-Authored-By: Claude <noreply@anthropic.com>`
+- **The module is one type, and it carries no prose.** `plugin/conventions/style.md` grants its
+  declared-debt exemption to "a module that was already there", and closes the hole in the next
+  breath — "a new concept is a new module and is born conforming". So `plan-language.js` is
+  `export class PlanLanguage`: `violationsOf(lines)` is the entry point, the limits and the three
+  lists the test reads are public statics, everything else is a private static member, and there
+  is not one comment. `plugin/__tests__/plan-language.test.js` follows
+  `plugin/conventions/testing.md`: no comment, no loose helper, a `Plan` mother whose methods are
+  named scenarios, and `Violations` as the test type that runs the measure. The conforming
+  neighbours to copy are `plugin/scripts/telemetry-lines.js`, `role-bytes.js` and
+  `plugin/__tests__/role-bytes.test.js` — NOT `plan-contract.js`, which is the declared debt.
+  The "why" a comment would have carried lives in the spec and in the skill's new section.
 
 ---
 
 ### Task 1: The prose extractor and the `length` rule
 
+> **Landed with a correction — read this before the steps.** The steps below prescribe a module of
+> free functions with a prose banner, and that shape is wrong: `style.md` denies a NEW module the
+> declared-debt exemption, and every module created in `plugin/scripts/` this September is a class
+> with no comments. The task shipped in two commits: `1b2d06c` carries the logic, and `efaf699`
+> reshapes it into `export class PlanLanguage` in `plugin/scripts/plan-language.js`, with
+> `plugin/__tests__/plan-language.test.js` as its test. **The logic below is binding and landed
+> byte for byte. The shape is not — the shape is the last bullet of the Global Constraints.** Read
+> those two files: they are the shape every later task extends.
+
 **Files:**
-- Create: `plugin/scripts/plan-ste.js`
-- Create: `plugin/__tests__/plan-ste.test.js`
+- Create: `plugin/scripts/plan-language.js`
+- Create: `plugin/__tests__/plan-language.test.js`
 - Modify: `plugin/scripts/plan-contract.js` (export `annotate`, today a module-private function at line 163)
 
 **Interfaces:**
 - Consumes: `annotate(markdown)` from `plan-contract.js` — returns `{ line, structural, fence, opens }[]`. The test imports it so that one annotation implementation exists in the tree, not two.
-- Produces: `steViolations(lines) -> string[]`, `PROCEDURAL_WORDS = 20`, `DESCRIPTIVE_WORDS = 25`.
+- Produces (as landed): `PlanLanguage.violationsOf(lines) -> string[]`, `PlanLanguage.PROCEDURAL_WORDS = 20`, `PlanLanguage.DESCRIPTIVE_WORDS = 25`. The steps below name them `steViolations`, `PROCEDURAL_WORDS` and `DESCRIPTIVE_WORDS`, which the reshape superseded.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `plugin/__tests__/plan-ste.test.js`:
+Create `plugin/__tests__/plan-language.test.js`:
 
 ```js
-// The language of the prescriptive plan (scripts/plan-ste.js), tested as what
+// The language of the prescriptive plan (scripts/plan-language.js), tested as what
 // it is: a pure module. `annotate` comes from plan-contract.js so that the
 // fence rule has one implementation in the tree, not two.
 import { describe, it, expect } from 'vitest'
 import { annotate } from '../scripts/plan-contract.js'
-import { steViolations, PROCEDURAL_WORDS, DESCRIPTIVE_WORDS } from '../scripts/plan-ste.js'
+import { steViolations, PROCEDURAL_WORDS, DESCRIPTIVE_WORDS } from '../scripts/plan-language.js'
 
 const F = '```'
 
@@ -110,8 +130,8 @@ describe('the length of a sentence', () => {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `npx vitest run __tests__/plan-ste.test.js`
-Expected: FAIL — `Failed to resolve import "../scripts/plan-ste.js"`, and `annotate` is not an export of `plan-contract.js`.
+Run: `npx vitest run __tests__/plan-language.test.js`
+Expected: FAIL — `Failed to resolve import "../scripts/plan-language.js"`, and `annotate` is not an export of `plan-contract.js`.
 
 - [ ] **Step 3: Export `annotate` from `plan-contract.js`**
 
@@ -125,7 +145,7 @@ Leave the comment above it as it is: it already says what the function does.
 
 - [ ] **Step 4: Write the module**
 
-Create `plugin/scripts/plan-ste.js`:
+Create `plugin/scripts/plan-language.js`:
 
 ```js
 // ============================================================================
@@ -257,7 +277,7 @@ export function steViolations(lines) {
 
 - [ ] **Step 5: Run the test to verify it passes**
 
-Run: `npx vitest run __tests__/plan-ste.test.js`
+Run: `npx vitest run __tests__/plan-language.test.js`
 Expected: PASS — 11 tests.
 
 - [ ] **Step 6: Run the fast subset to verify nothing else moved**
@@ -268,11 +288,11 @@ Expected: PASS. `steViolations` has no caller yet, so no other test can see it.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add plugin/scripts/plan-ste.js plugin/__tests__/plan-ste.test.js plugin/scripts/plan-contract.js
+git add plugin/scripts/plan-language.js plugin/__tests__/plan-language.test.js plugin/scripts/plan-contract.js
 git commit -m "$(cat <<'MSG'
 The plan's prose is measured by the paragraph, and a sentence has a limit
 
-plan-ste.js groups the plan's prose into paragraphs before it measures
+plan-language.js groups the plan's prose into paragraphs before it measures
 anything: markdown wraps at about 100 characters here, so a sentence
 spans two or three lines and a line-by-line measure would see every one
 of them as shorter than it is.
@@ -293,85 +313,109 @@ MSG
 ### Task 2: The `paragraph` and `one-sentence` rules
 
 **Files:**
-- Modify: `plugin/scripts/plan-ste.js`
-- Modify: `plugin/__tests__/plan-ste.test.js`
+- Modify: `plugin/scripts/plan-language.js`
+- Modify: `plugin/__tests__/plan-language.test.js`
 
 **Interfaces:**
-- Consumes: `steViolations`, `paragraphsOf`, `sentencesOf` from Task 1.
+- Consumes: `PlanLanguage.violationsOf`, `#paragraphsOf` and `#sentencesOf` from Task 1, plus the `Plan` mother and the `Violations` test type its test carries.
 - Produces: `PARAGRAPH_SENTENCES = 6`.
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `plugin/__tests__/plan-ste.test.js`, and add `PARAGRAPH_SENTENCES` to the import of `../scripts/plan-ste.js`:
+Append two describe blocks to `plugin/__tests__/plan-language.test.js`, and three named scenarios
+to its `Plan` mother. A case whose subject IS a literal sentence goes straight to
+`Violations.about`: a mother method that returns its own argument buys nothing.
+
+Add to `class Plan`:
+
+```js
+  static withSentences(n) {
+    return Array.from({ length: n }, (_, i) => `The task ${i} lands.`).join(' ')
+  }
+
+  static withATableRowOfCells(n) {
+    return `| ${Array.from({ length: n }, (_, i) => `cell ${i}`).join(' | ')} |`
+  }
+
+  static withATaskMarkerSaying(marker, text) {
+    return `${marker} ${text}`
+  }
+```
+
+And the two describe blocks:
 
 ```js
 describe('the length of a paragraph', () => {
-  const sentences = (n) => Array.from({ length: n }, (_, i) => `The task ${i} lands.`).join(' ')
-
   it('accepts six sentences and rejects seven', () => {
-    expect(of(sentences(PARAGRAPH_SENTENCES), 'paragraph')).toEqual([])
-    expect(of(sentences(PARAGRAPH_SENTENCES + 1), 'paragraph')).toHaveLength(1)
+    expect(Violations.about(Plan.withSentences(PlanLanguage.PARAGRAPH_SENTENCES), 'paragraph')).toEqual([])
+    expect(
+      Violations.about(Plan.withSentences(PlanLanguage.PARAGRAPH_SENTENCES + 1), 'paragraph'),
+    ).toHaveLength(1)
   })
 
   it('names the count and the limit', () => {
-    expect(of(sentences(8), 'paragraph')[0]).toContain('carries 8 sentences and the limit is 6')
+    const [violation] = Violations.about(Plan.withSentences(8), 'paragraph')
+    expect(violation).toContain('carries 8 sentences and the limit is 6')
   })
 
   it('never counts the cells of a table row as sentences', () => {
-    const row = `| ${Array.from({ length: 8 }, (_, i) => `cell ${i} |`).join(' ')}`
-    expect(of(row, 'paragraph')).toEqual([])
+    expect(Violations.about(Plan.withATableRowOfCells(8), 'paragraph')).toEqual([])
   })
 })
 
 describe('the objective of a task', () => {
   it('accepts one sentence and rejects two', () => {
-    expect(of('**Objective:** The barrel exports sum().', 'one-sentence')).toEqual([])
-    expect(of('**Objective:** The barrel exports sum(). The test covers it.', 'one-sentence')).toHaveLength(1)
+    const one = Plan.withATaskMarkerSaying('**Objective:**', 'The barrel exports sum().')
+    const two = Plan.withATaskMarkerSaying('**Objective:**', 'The barrel exports sum(). The test covers it.')
+    expect(Violations.about(one, 'one-sentence')).toEqual([])
+    expect(Violations.about(two, 'one-sentence')).toHaveLength(1)
   })
 
   it('asks the other markers for nothing', () => {
-    expect(of('**Tests:** One lands. Another lands.', 'one-sentence')).toEqual([])
+    const tests = Plan.withATaskMarkerSaying('**Tests:**', 'One lands. Another lands.')
+    expect(Violations.about(tests, 'one-sentence')).toEqual([])
   })
 })
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `npx vitest run __tests__/plan-ste.test.js`
-Expected: FAIL — `PARAGRAPH_SENTENCES` is undefined, and the `paragraph` and `one-sentence` lists come back empty.
+Run: `npx vitest run __tests__/plan-language.test.js`
+Expected: FAIL — `PlanLanguage.PARAGRAPH_SENTENCES` is undefined, and the `paragraph` and `one-sentence` lists come back empty.
 
 - [ ] **Step 3: Write the implementation**
 
-In `plugin/scripts/plan-ste.js`, next to the other two limits:
+In `plugin/scripts/plan-language.js`, next to the other two limits:
 
 ```js
-export const PARAGRAPH_SENTENCES = 6
+  static PARAGRAPH_SENTENCES = 6
 ```
 
-And inside the `for` of `steViolations`, right after the `length` loop:
+And inside the paragraph `for` of `violationsOf`, right after the sentence loop that measures
+`length`:
 
 ```js
-    if (!paragraph.row && sentences.length > PARAGRAPH_SENTENCES) {
-      out.push(
-        `line ${line}: paragraph — the paragraph carries ${sentences.length} sentences and the limit is ${PARAGRAPH_SENTENCES}. Split it.`,
-      )
-    }
-    if (marker === '**Objective:**' && sentences.length > 1) {
-      out.push(
-        `line ${line}: one-sentence — **Objective:** carries ${sentences.length} sentences and it takes one. Say the observable behaviour of the commit, and nothing else.`,
-      )
-    }
+      if (!paragraph.row && sentences.length > PlanLanguage.PARAGRAPH_SENTENCES) {
+        out.push(
+          `line ${line}: paragraph — the paragraph carries ${sentences.length} sentences and the limit is ${PlanLanguage.PARAGRAPH_SENTENCES}. Split it.`,
+        )
+      }
+      if (marker === '**Objective:**' && sentences.length > 1) {
+        out.push(
+          `line ${line}: one-sentence — **Objective:** carries ${sentences.length} sentences and it takes one. Say the observable behaviour of the commit, and nothing else.`,
+        )
+      }
 ```
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `npx vitest run __tests__/plan-ste.test.js`
+Run: `npx vitest run __tests__/plan-language.test.js`
 Expected: PASS — 16 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugin/scripts/plan-ste.js plugin/__tests__/plan-ste.test.js
+git add plugin/scripts/plan-language.js plugin/__tests__/plan-language.test.js
 git commit -m "$(cat <<'MSG'
 A paragraph holds six sentences, and an objective holds one
 
@@ -394,161 +438,179 @@ MSG
 ### Task 3: The `word` rule and the non-approved list
 
 **Files:**
-- Modify: `plugin/scripts/plan-ste.js`
-- Modify: `plugin/__tests__/plan-ste.test.js`
+- Modify: `plugin/scripts/plan-language.js`
+- Modify: `plugin/__tests__/plan-language.test.js`
 
 **Interfaces:**
-- Produces: `NON_APPROVED` — an array of `[phrase, replacement]` pairs, 48 entries.
+- Produces: `PlanLanguage.NON_APPROVED` — a public static array of `[phrase, replacement]` pairs, 48 entries.
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `plugin/__tests__/plan-ste.test.js`, and add `NON_APPROVED` to the import:
+Append one describe block to `plugin/__tests__/plan-language.test.js`, and one named scenario to
+its `Plan` mother:
+
+```js
+  static withACodeBlockSaying(text) {
+    return ['Contract (src/a.js):', `${Plan.#FENCE}js`, text, Plan.#FENCE].join('\n')
+  }
+```
 
 ```js
 describe('the words the standard does not approve', () => {
   it('rejects a single word and names its replacement', () => {
-    const [found] = of('The task utilizes the barrel.', 'word')
-    expect(found).toContain('"utilize" is not an approved word')
-    expect(found).toContain('Write "use"')
+    const [violation] = Violations.about('The task utilizes the barrel.', 'word')
+    expect(violation).toContain('"utilize" is not an approved word')
+    expect(violation).toContain('Write "use"')
   })
 
   it('catches the inflections of a single word', () => {
-    expect(of('The gate requires a plan.', 'word')).toHaveLength(1)
-    expect(of('The gate required a plan.', 'word')).toHaveLength(1)
+    expect(Violations.about('The gate requires a plan.', 'word')).toHaveLength(1)
+    expect(Violations.about('The gate required a plan.', 'word')).toHaveLength(1)
   })
 
   it('rejects a phrase', () => {
-    expect(of('Read the issue prior to the plan.', 'word')[0]).toContain('Write "before"')
-    expect(of('Read the issue in order to plan.', 'word')[0]).toContain('Write "to"')
+    expect(Violations.about('Read the issue prior to the plan.', 'word')[0]).toContain('Write "before"')
+    expect(Violations.about('Read the issue in order to plan.', 'word')[0]).toContain('Write "to"')
   })
 
   it('never looks inside backticks', () => {
-    expect(of('The flag is `--utilize`.', 'word')).toEqual([])
+    expect(Violations.about('The flag is `--utilize`.', 'word')).toEqual([])
   })
 
   it('never looks inside a code block', () => {
-    expect(of(['Contract (src/a.js):', F + 'js', 'const utilize = 1', F].join('\n'), 'word')).toEqual([])
+    expect(Violations.about(Plan.withACodeBlockSaying('const utilize = 1'), 'word')).toEqual([])
   })
 
   it('leaves the words a contract fixes alone', () => {
-    expect(of('**Files:** `src/a.js` (create), `src/b.js` (modify).', 'word')).toEqual([])
+    expect(Violations.about('**Files:** `src/a.js` (create), `src/b.js` (modify).', 'word')).toEqual([])
   })
 
   it('carries 48 entries, each with its replacement', () => {
-    expect(NON_APPROVED).toHaveLength(48)
-    expect(NON_APPROVED.every(([phrase, replacement]) => phrase && replacement)).toBe(true)
+    expect(PlanLanguage.NON_APPROVED).toHaveLength(48)
+    expect(PlanLanguage.NON_APPROVED.every(([phrase, replacement]) => phrase && replacement)).toBe(true)
   })
 })
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `npx vitest run __tests__/plan-ste.test.js`
-Expected: FAIL — `NON_APPROVED` is undefined and the `word` lists come back empty.
+Run: `npx vitest run __tests__/plan-language.test.js`
+Expected: FAIL — `PlanLanguage.NON_APPROVED` is undefined and the `word` lists come back empty.
 
 - [ ] **Step 3: Write the implementation**
 
-In `plugin/scripts/plan-ste.js`, after the limits:
+**The list is a blacklist, not the standard's dictionary of about 900 approved words.** A
+whitelist would reject every technical name of the project, and a plan is full of them.
+
+**Two kinds of word never enter it.** First, a value a contract fixes: `create` and `modify` are
+the two words `**Files:**` is written with, so `modify` on this list would fail every plan ever
+written, and the task markers, the parsed headings of `CLAUDE.md` and the GitHub labels of the
+ladder are the same case. Second, the repository's ubiquitous language: `dispatch`, `harvest`,
+`slice`, `judge`, `gate` and `yardstick` are domain terms, and the standard allows a project its
+own technical vocabulary. **No comment in the code says any of this** — the no-prose rule forbids
+it. The rule lives in the spec and in the skill's new section, which Task 9 writes.
+
+In `plugin/scripts/plan-language.js`, after the limits:
 
 ```js
-// THE NON-APPROVED LIST. A blacklist, not the standard's whole dictionary of
-// about 900 approved words: a whitelist would reject every technical name of
-// the project, and the plan is full of them.
-//
-// TWO KINDS OF WORD NEVER ENTER THIS LIST.
-//
-// 1. A value a contract fixes. `create` and `modify` are the two words
-//    `**Files:**` is written with, so `modify` here would fail every plan ever
-//    written. The task markers, the parsed headings of CLAUDE.md and the
-//    GitHub labels of the ladder are the same case.
-// 2. The repository's ubiquitous language. `dispatch`, `harvest`, `slice`,
-//    `judge`, `gate`, `yardstick` and what docs/glossary.md fixes are domain
-//    terms, and the standard allows a project its own technical vocabulary. A
-//    term translated two ways is worse than a term left alone.
-export const NON_APPROVED = [
-  ['utilize', 'use'],
-  ['utilise', 'use'],
-  ['prior to', 'before'],
-  ['subsequent to', 'after'],
-  ['in order to', 'to'],
-  ['due to', 'because of'],
-  ['as well as', 'and'],
-  ['via', 'with'],
-  ['ensure', 'make sure'],
-  ['obtain', 'get'],
-  ['commence', 'start'],
-  ['terminate', 'stop'],
-  ['attempt', 'try'],
-  ['assist', 'help'],
-  ['provide', 'give'],
-  ['approximately', 'about'],
-  ['additional', 'more'],
-  ['numerous', 'many'],
-  ['however', 'but'],
-  ['therefore', 'so'],
-  ['thus', 'so'],
-  ['hence', 'so'],
-  ['whilst', 'while'],
-  ['regarding', 'about'],
-  ['concerning', 'about'],
-  ['in terms of', 'for'],
-  ['with respect to', 'about'],
-  ['with regard to', 'about'],
-  ['leverage', 'use'],
-  ['facilitate', 'help'],
-  ['initiate', 'start'],
-  ['finalize', 'finish'],
-  ['indicate', 'show'],
-  ['require', 'need'],
-  ['comprise', 'have'],
-  ['in the event that', 'if'],
-  ['at this point in time', 'now'],
-  ['a number of', 'some'],
-  ['the majority of', 'most'],
-  ['it should be noted that', 'remove it and say the thing'],
-  ['please note', 'remove it and say the thing'],
-  ['e.g.', 'for example'],
-  ['i.e.', 'that is'],
-  ['etc.', 'name the items'],
-  ['alternatively', 'or'],
-  ['furthermore', 'also'],
-  ['moreover', 'also'],
-  ['nevertheless', 'but'],
-]
+  static NON_APPROVED = [
+    ['utilize', 'use'],
+    ['utilise', 'use'],
+    ['prior to', 'before'],
+    ['subsequent to', 'after'],
+    ['in order to', 'to'],
+    ['due to', 'because of'],
+    ['as well as', 'and'],
+    ['via', 'with'],
+    ['ensure', 'make sure'],
+    ['obtain', 'get'],
+    ['commence', 'start'],
+    ['terminate', 'stop'],
+    ['attempt', 'try'],
+    ['assist', 'help'],
+    ['provide', 'give'],
+    ['approximately', 'about'],
+    ['additional', 'more'],
+    ['numerous', 'many'],
+    ['however', 'but'],
+    ['therefore', 'so'],
+    ['thus', 'so'],
+    ['hence', 'so'],
+    ['whilst', 'while'],
+    ['regarding', 'about'],
+    ['concerning', 'about'],
+    ['in terms of', 'for'],
+    ['with respect to', 'about'],
+    ['with regard to', 'about'],
+    ['leverage', 'use'],
+    ['facilitate', 'help'],
+    ['initiate', 'start'],
+    ['finalize', 'finish'],
+    ['indicate', 'show'],
+    ['require', 'need'],
+    ['comprise', 'have'],
+    ['in the event that', 'if'],
+    ['at this point in time', 'now'],
+    ['a number of', 'some'],
+    ['the majority of', 'most'],
+    ['it should be noted that', 'remove it and say the thing'],
+    ['please note', 'remove it and say the thing'],
+    ['e.g.', 'for example'],
+    ['i.e.', 'that is'],
+    ['etc.', 'name the items'],
+    ['alternatively', 'or'],
+    ['furthermore', 'also'],
+    ['moreover', 'also'],
+    ['nevertheless', 'but'],
+  ]
 
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
-// A single word matches its inflections (`require`, `requires`, `required`,
-// `requiring`); a phrase matches as it stands, with any run of whitespace
-// between its words, because the paragraph joined two lines into one.
-function matcherFor(phrase) {
-  const body = escapeRe(phrase).replace(/ /g, '\\s+')
-  const tail = phrase.includes(' ') ? '' : '(?:s|es|d|ed|ing)?'
-  return new RegExp(`(?<![\\w-])${body}${tail}(?![\\w-])`, 'i')
-}
-
-const MATCHERS = NON_APPROVED.map(([phrase, replacement]) => ({ re: matcherFor(phrase), phrase, replacement }))
+  static #MATCHERS = PlanLanguage.NON_APPROVED.map(([phrase, replacement]) => ({
+    re: PlanLanguage.#matcherFor(phrase),
+    phrase,
+    replacement,
+  }))
 ```
 
-And inside the `for` of `steViolations`, after the `one-sentence` rule:
+A single word matches its inflections (`require`, `requires`, `required`, `requiring`); a phrase
+matches as it stands, with any run of whitespace between its words, because the paragraph joined
+two lines into one. Two private statics do that:
 
 ```js
-    for (const { re, phrase, replacement } of MATCHERS) {
-      if (re.test(text)) {
-        out.push(`line ${line}: word — "${phrase}" is not an approved word. Write "${replacement}".`)
+  static #escapeRe(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  }
+
+  static #matcherFor(phrase) {
+    const body = PlanLanguage.#escapeRe(phrase).replace(/ /g, '\\s+')
+    const inflections = phrase.includes(' ') ? '' : '(?:s|es|d|ed|ing)?'
+    return new RegExp(`(?<![\\w-])${body}${inflections}(?![\\w-])`, 'i')
+  }
+```
+
+`#MATCHERS` is a static field whose initialiser calls a private static method, which works
+because private static methods are installed on the class before any static field initialiser
+runs. Declare `NON_APPROVED` above `#MATCHERS`, and both above nothing in particular: the methods
+may sit anywhere in the body.
+
+And inside the paragraph `for` of `violationsOf`, after the `one-sentence` rule:
+
+```js
+      for (const { re, phrase, replacement } of PlanLanguage.#MATCHERS) {
+        if (re.test(text)) {
+          out.push(`line ${line}: word — "${phrase}" is not an approved word. Write "${replacement}".`)
+        }
       }
-    }
 ```
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `npx vitest run __tests__/plan-ste.test.js`
+Run: `npx vitest run __tests__/plan-language.test.js`
 Expected: PASS — 23 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugin/scripts/plan-ste.js plugin/__tests__/plan-ste.test.js
+git add plugin/scripts/plan-language.js plugin/__tests__/plan-language.test.js
 git commit -m "$(cat <<'MSG'
 48 words the standard does not approve, each with the word to write instead
 
@@ -571,133 +633,140 @@ MSG
 ### Task 4: The `passive` rule
 
 **Files:**
-- Modify: `plugin/scripts/plan-ste.js`
-- Modify: `plugin/__tests__/plan-ste.test.js`
+- Modify: `plugin/scripts/plan-language.js`
+- Modify: `plugin/__tests__/plan-language.test.js`
 
 **Interfaces:**
-- Produces: `IRREGULAR_PARTICIPLES` — a `Set` of the participles that `-ed` does not catch.
+- Produces: `PlanLanguage.IRREGULAR_PARTICIPLES` — a public static `Set` of the participles that `-ed` does not catch.
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `plugin/__tests__/plan-ste.test.js`, and add `IRREGULAR_PARTICIPLES` to the import:
+Append one describe block to `plugin/__tests__/plan-language.test.js`. Every case here is a
+literal sentence, so no scenario is added to `Plan`:
 
 ```js
 describe('the passive voice', () => {
   it('rejects a be-form followed by a regular participle', () => {
-    expect(of('The file is covered by the test.', 'passive')).toHaveLength(1)
+    expect(Violations.about('The file is covered by the test.', 'passive')).toHaveLength(1)
   })
 
   it('rejects an irregular participle', () => {
-    expect(of('The plan is written by the agent.', 'passive')).toHaveLength(1)
-    expect(of('The suite has been run.', 'passive')).toHaveLength(1)
+    expect(Violations.about('The plan is written by the agent.', 'passive')).toHaveLength(1)
+    expect(Violations.about('The suite has been run.', 'passive')).toHaveLength(1)
   })
 
   it('accepts a be-form followed by an article', () => {
-    expect(of('It is a written plan.', 'passive')).toEqual([])
+    expect(Violations.about('It is a written plan.', 'passive')).toEqual([])
   })
 
   it('crosses an adverb and stops at anything else', () => {
-    expect(of('The file is not covered.', 'passive')).toHaveLength(1)
-    expect(of('The file is already fully covered.', 'passive')).toHaveLength(1)
-    expect(of('The gate is the second control.', 'passive')).toEqual([])
+    expect(Violations.about('The file is not covered.', 'passive')).toHaveLength(1)
+    expect(Violations.about('The file is already fully covered.', 'passive')).toHaveLength(1)
+    expect(Violations.about('The gate is the second control.', 'passive')).toEqual([])
   })
 
   it('leaves a word that ends in -ed and is not a participle alone', () => {
-    expect(of('The test is red.', 'passive')).toEqual([])
-    expect(of('The speed is enough.', 'passive')).toEqual([])
+    expect(Violations.about('The test is red.', 'passive')).toEqual([])
+    expect(Violations.about('The speed is enough.', 'passive')).toEqual([])
   })
 
   it('names what fired and asks for the actor', () => {
-    const [found] = of('The plan is written by the agent.', 'passive')
-    expect(found).toContain('"is written" is passive')
-    expect(found).toContain('Name who does it')
+    const [violation] = Violations.about('The plan is written by the agent.', 'passive')
+    expect(violation).toContain('"is written" is passive')
+    expect(violation).toContain('Name who does it')
   })
 
   it('carries the irregular forms -ed does not catch', () => {
-    expect(IRREGULAR_PARTICIPLES.has('written')).toBe(true)
-    expect(IRREGULAR_PARTICIPLES.has('run')).toBe(true)
-    expect(IRREGULAR_PARTICIPLES.has('covered')).toBe(false)
+    expect(PlanLanguage.IRREGULAR_PARTICIPLES.has('written')).toBe(true)
+    expect(PlanLanguage.IRREGULAR_PARTICIPLES.has('run')).toBe(true)
+    expect(PlanLanguage.IRREGULAR_PARTICIPLES.has('covered')).toBe(false)
   })
 })
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `npx vitest run __tests__/plan-ste.test.js`
-Expected: FAIL — `IRREGULAR_PARTICIPLES` is undefined and the `passive` lists come back empty.
+Run: `npx vitest run __tests__/plan-language.test.js`
+Expected: FAIL — `PlanLanguage.IRREGULAR_PARTICIPLES` is undefined and the `passive` lists come back empty.
 
 - [ ] **Step 3: Write the implementation**
 
-In `plugin/scripts/plan-ste.js`, after the matchers:
+At most two adverbs may stand between the be-form and the participle, and that guard is the
+whole precision of the rule: "it is a written plan" does not fire because `a` is not an adverb and
+the chain breaks there. A fourth list carries the words that end in `-ed` and are not participles;
+without it "the test is red" fires, and red is what a test is before it is green. Neither fact
+reaches the code as a comment: both live in the spec.
+
+In `plugin/scripts/plan-language.js`, after the matchers:
 
 ```js
-const BE_FORMS = new Set(['is', 'are', 'was', 'were', 'be', 'been', 'being', 'am'])
+  static #BE_FORMS = new Set(['is', 'are', 'was', 'were', 'be', 'been', 'being', 'am'])
 
-// At most two of these may stand between the be-form and the participle. The
-// guard is what stops "it is a written plan" from firing: `a` is not an
-// adverb, so the chain breaks there.
-const ADVERBS = new Set(['not', 'never', 'already', 'also', 'only', 'then', 'now', 'still', 'always'])
+  static #ADVERBS = new Set(['not', 'never', 'already', 'also', 'only', 'then', 'now', 'still', 'always'])
 
-export const IRREGULAR_PARTICIPLES = new Set([
-  'written', 'built', 'run', 'made', 'done', 'taken', 'given', 'seen', 'known', 'shown',
-  'held', 'kept', 'left', 'read', 'sent', 'set', 'put', 'lost', 'found', 'told',
-  'said', 'brought', 'bought', 'caught', 'taught', 'thought', 'chosen', 'driven', 'spoken',
-  'broken', 'frozen', 'grown', 'drawn', 'thrown', 'torn', 'worn', 'begun', 'become', 'come',
-  'gone', 'been', 'had',
-])
+  static IRREGULAR_PARTICIPLES = new Set([
+    'written', 'built', 'run', 'made', 'done', 'taken', 'given', 'seen', 'known', 'shown',
+    'held', 'kept', 'left', 'read', 'sent', 'set', 'put', 'lost', 'found', 'told',
+    'said', 'brought', 'bought', 'caught', 'taught', 'thought', 'chosen', 'driven', 'spoken',
+    'broken', 'frozen', 'grown', 'drawn', 'thrown', 'torn', 'worn', 'begun', 'become', 'come',
+    'gone', 'been', 'had',
+  ])
 
-// Words that end in -ed and are not participles. Without this set "the test is
-// red" fires, and red is what a test is before it is green.
-const NOT_PARTICIPLES = new Set([
-  'red', 'need', 'speed', 'seed', 'feed', 'indeed', 'exceed', 'proceed', 'succeed', 'embed',
-  'hundred', 'sacred',
-])
+  static #NOT_PARTICIPLES = new Set([
+    'red', 'need', 'speed', 'seed', 'feed', 'indeed', 'exceed', 'proceed', 'succeed', 'embed',
+    'hundred', 'sacred',
+  ])
 
-const tokensOf = (text) => text.toLowerCase().match(/[a-z']+/g) ?? []
+  static #tokensOf(text) {
+    return text.toLowerCase().match(/[a-z']+/g) ?? []
+  }
 
-const isAdverb = (token) => ADVERBS.has(token) || token.endsWith('ly')
+  static #isAdverb(token) {
+    return PlanLanguage.#ADVERBS.has(token) || token.endsWith('ly')
+  }
 
-const isParticiple = (token) =>
-  !NOT_PARTICIPLES.has(token) &&
-  (IRREGULAR_PARTICIPLES.has(token) || (token.endsWith('ed') && token.length > 3))
+  static #isParticiple(token) {
+    if (PlanLanguage.#NOT_PARTICIPLES.has(token)) return false
+    return PlanLanguage.IRREGULAR_PARTICIPLES.has(token) || (token.endsWith('ed') && token.length > 3)
+  }
 
-function passiveIn(tokens) {
-  const out = []
-  tokens.forEach((token, i) => {
-    if (!BE_FORMS.has(token)) return
-    for (let j = i + 1; j <= i + 3 && j < tokens.length; j++) {
-      if (isParticiple(tokens[j])) {
-        out.push(`${token} ${tokens[j]}`)
-        return
+  static #passiveIn(tokens) {
+    const out = []
+    tokens.forEach((token, i) => {
+      if (!PlanLanguage.#BE_FORMS.has(token)) return
+      for (let j = i + 1; j <= i + 3 && j < tokens.length; j++) {
+        if (PlanLanguage.#isParticiple(tokens[j])) {
+          out.push(`${token} ${tokens[j]}`)
+          return
+        }
+        if (!PlanLanguage.#isAdverb(tokens[j])) return
       }
-      if (!isAdverb(tokens[j])) return
-    }
-  })
-  return out
-}
+    })
+    return out
+  }
 ```
 
-And inside the `for` of `steViolations`, after the `word` loop:
+R1 of the pre-flight scan binds here: the scan goes INSIDE the sentence loop `violationsOf`
+already opens for `length`, not in a second loop over the same array. So the sentence loop's body
+grows by three lines:
 
 ```js
-    for (const sentence of sentences) {
-      for (const chain of passiveIn(tokensOf(sentence))) {
-        out.push(
-          `line ${line}: passive — "${chain}" is passive. Name who does it, and write the sentence active.`,
-        )
-      }
-    }
+        for (const chain of PlanLanguage.#passiveIn(PlanLanguage.#tokensOf(sentence))) {
+          out.push(
+            `line ${line}: passive — "${chain}" is passive. Name who does it, and write the sentence active.`,
+          )
+        }
 ```
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `npx vitest run __tests__/plan-ste.test.js`
+Run: `npx vitest run __tests__/plan-language.test.js`
 Expected: PASS — 30 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugin/scripts/plan-ste.js plugin/__tests__/plan-ste.test.js
+git add plugin/scripts/plan-language.js plugin/__tests__/plan-language.test.js
 git commit -m "$(cat <<'MSG'
 The passive voice fires, and the guard keeps "a written plan" out of it
 
@@ -721,94 +790,101 @@ MSG
 ### Task 5: The `gerund` rule
 
 **Files:**
-- Modify: `plugin/scripts/plan-ste.js`
-- Modify: `plugin/__tests__/plan-ste.test.js`
+- Modify: `plugin/scripts/plan-language.js`
+- Modify: `plugin/__tests__/plan-language.test.js`
 
 **Interfaces:**
-- Produces: `ING_EXCEPTIONS` — a `Set` of the words that end in `-ing` and are not verb forms.
+- Produces: `PlanLanguage.ING_EXCEPTIONS` — a public static `Set` of the words that end in `-ing` and are not verb forms.
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `plugin/__tests__/plan-ste.test.js`, and add `ING_EXCEPTIONS` to the import:
+Append one describe block to `plugin/__tests__/plan-language.test.js`. Literal sentences again,
+so `Plan` gains nothing:
 
 ```js
 describe('the -ing form', () => {
   it('rejects an -ing word that opens a sentence', () => {
-    expect(of('Reading the issue comes first.', 'gerund')).toHaveLength(1)
+    expect(Violations.about('Reading the issue comes first.', 'gerund')).toHaveLength(1)
   })
 
   it('rejects an -ing word right after a preposition', () => {
-    expect(of('The agent commits before reading the issue.', 'gerund')).toHaveLength(1)
+    expect(Violations.about('The agent commits before reading the issue.', 'gerund')).toHaveLength(1)
   })
 
   it('accepts an -ing word that a preposition does not touch', () => {
-    expect(of('The agent reads one of the following files.', 'gerund')).toEqual([])
+    expect(Violations.about('The agent reads one of the following files.', 'gerund')).toEqual([])
   })
 
   it('leaves the words that only look like gerunds alone', () => {
-    expect(of('Nothing is left during the sweep.', 'gerund')).toEqual([])
-    expect(of('The format is a string.', 'gerund')).toEqual([])
+    expect(Violations.about('Nothing is left during the sweep.', 'gerund')).toEqual([])
+    expect(Violations.about('The format is a string.', 'gerund')).toEqual([])
   })
 
   it('never looks inside backticks', () => {
-    expect(of('The helper is `readingHelper`.', 'gerund')).toEqual([])
+    expect(Violations.about('The helper is `readingHelper`.', 'gerund')).toEqual([])
   })
 
   it('names the word and says what to write', () => {
-    expect(of('Reading the issue comes first.', 'gerund')[0]).toContain('"reading" is an -ing form')
+    const [violation] = Violations.about('Reading the issue comes first.', 'gerund')
+    expect(violation).toContain('"reading" is an -ing form')
   })
 
   it('carries the words that end in -ing and are not verb forms', () => {
-    expect(ING_EXCEPTIONS.has('during')).toBe(true)
-    expect(ING_EXCEPTIONS.has('reading')).toBe(false)
+    expect(PlanLanguage.ING_EXCEPTIONS.has('during')).toBe(true)
+    expect(PlanLanguage.ING_EXCEPTIONS.has('reading')).toBe(false)
   })
 })
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `npx vitest run __tests__/plan-ste.test.js`
-Expected: FAIL — `ING_EXCEPTIONS` is undefined and the `gerund` lists come back empty.
+Run: `npx vitest run __tests__/plan-language.test.js`
+Expected: FAIL — `PlanLanguage.ING_EXCEPTIONS` is undefined and the `gerund` lists come back empty.
 
 - [ ] **Step 3: Write the implementation**
 
-In `plugin/scripts/plan-ste.js`, after `passiveIn`:
+Adjacency is what bounds the rule: "of the following" does not fire, because `the` stands between
+the preposition and the word. The code says it by testing `tokens[i - 1]` and nothing further, so
+no comment is wanted.
+
+In `plugin/scripts/plan-language.js`, after `#passiveIn`:
 
 ```js
-// Adjacency is required, and that is what bounds the rule: "of the following"
-// does not fire, because `the` stands between the preposition and the word.
-const GERUND_PREPOSITIONS = new Set([
-  'by', 'for', 'of', 'after', 'before', 'without', 'when', 'while', 'on', 'in', 'at', 'from', 'with',
-])
+  static #GERUND_PREPOSITIONS = new Set([
+    'by', 'for', 'of', 'after', 'before', 'without', 'when', 'while', 'on', 'in', 'at', 'from', 'with',
+  ])
 
-export const ING_EXCEPTIONS = new Set([
-  'during', 'string', 'strings', 'nothing', 'something', 'anything', 'everything', 'thing',
-  'things', 'according',
-])
+  static ING_EXCEPTIONS = new Set([
+    'during', 'string', 'strings', 'nothing', 'something', 'anything', 'everything', 'thing',
+    'things', 'according',
+  ])
 
-function gerundsIn(tokens) {
-  const out = []
-  tokens.forEach((token, i) => {
-    if (!token.endsWith('ing') || ING_EXCEPTIONS.has(token)) return
-    if (i === 0 || GERUND_PREPOSITIONS.has(tokens[i - 1])) out.push(token)
-  })
-  return out
-}
+  static #gerundsIn(tokens) {
+    const out = []
+    tokens.forEach((token, i) => {
+      if (!token.endsWith('ing') || PlanLanguage.ING_EXCEPTIONS.has(token)) return
+      if (i === 0 || PlanLanguage.#GERUND_PREPOSITIONS.has(tokens[i - 1])) out.push(token)
+    })
+    return out
+  }
 ```
 
-And inside the sentence loop of `steViolations`, next to the passive scan:
+And inside the same sentence loop, next to the passive scan (R1 again — one loop, not a third):
 
 ```js
-      for (const gerund of gerundsIn(tokensOf(sentence))) {
-        out.push(
-          `line ${line}: gerund — "${gerund}" is an -ing form. Write the verb in the simple present, or name the action with a noun.`,
-        )
-      }
+        for (const gerund of PlanLanguage.#gerundsIn(PlanLanguage.#tokensOf(sentence))) {
+          out.push(
+            `line ${line}: gerund — "${gerund}" is an -ing form. Write the verb in the simple present, or name the action with a noun.`,
+          )
+        }
 ```
+
+Compute `PlanLanguage.#tokensOf(sentence)` once into a local and pass it to both scans: two calls
+over the same sentence is the duplication R1 exists to avoid.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `npx vitest run __tests__/plan-ste.test.js`
+Run: `npx vitest run __tests__/plan-language.test.js`
 Expected: PASS — 37 tests.
 
 - [ ] **Step 5: Run the fast subset**
@@ -819,7 +895,7 @@ Expected: PASS. The module still has no caller.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add plugin/scripts/plan-ste.js plugin/__tests__/plan-ste.test.js
+git add plugin/scripts/plan-language.js plugin/__tests__/plan-language.test.js
 git commit -m "$(cat <<'MSG'
 The -ing form fires in two positions, and adjacency is what bounds it
 
@@ -930,7 +1006,7 @@ MSG
 - Modify: whatever other test the suite names in Step 4
 
 **Interfaces:**
-- Consumes: `steViolations(lines)` from Tasks 1 to 5.
+- Consumes: `PlanLanguage.violationsOf(lines)` from Tasks 1 to 5.
 - Produces: violations of rule `ste` out of `validatePlan` and `checkPlans`.
 
 - [ ] **Step 1: Write the failing test**
@@ -964,13 +1040,13 @@ breaks the standard, so the plan carries more than the one violation the test as
 In `plugin/scripts/plan-contract.js`, next to the existing import:
 
 ```js
-import { steViolations } from './plan-ste.js'
+import { PlanLanguage } from './plan-language.js'
 ```
 
 And at the end of `validatePlan`, right before `return { ok: violations.length === 0, violations }`:
 
 ```js
-  for (const detail of steViolations(lines)) push('ste', detail)
+  for (const detail of PlanLanguage.violationsOf(lines)) push('ste', detail)
 ```
 
 - [ ] **Step 4: Run the whole suite and fix the fixture prose it names**
@@ -1000,7 +1076,7 @@ git add plugin/scripts/plan-contract.js plugin/__tests__
 git commit -m "$(cat <<'MSG'
 --check-plan refuses a plan whose prose breaks the standard
 
-plan-contract.js calls plan-ste.js and pushes what it returns under one
+plan-contract.js calls plan-language.js and pushes what it returns under one
 rule name, `ste`, with the sub-rule inside the detail. From here the gate
 measures the plan's language the same way it already measured its
 structure, its block taxonomy and the literality of its citations: a
@@ -1020,42 +1096,45 @@ MSG
 
 **Files:**
 - Modify: `plugin/skills/writing-plans-prescriptive/plan-template.md` (every `{{…}}` guidance line)
-- Create: `plugin/__tests__/plan-template-ste.test.js`
+- Create: `plugin/__tests__/plan-template-language.test.js`
 
 **Interfaces:**
-- Consumes: `annotate` from `plan-contract.js`, `steViolations` from `plan-ste.js`.
+- Consumes: `annotate` from `plan-contract.js`, `PlanLanguage` from `plan-language.js`.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `plugin/__tests__/plan-template-ste.test.js`:
+Create `plugin/__tests__/plan-template-language.test.js`:
 
 ```js
-// The template the plan is copied from obeys the rule the gate applies to the
-// plan. Without this test the template can drift back into prose that
-// --check-plan refuses, and every author starts from a document that fails.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { annotate } from '../scripts/plan-contract.js'
-import { steViolations } from '../scripts/plan-ste.js'
+import { PlanLanguage } from '../scripts/plan-language.js'
 
-const here = dirname(fileURLToPath(import.meta.url))
-const template = readFileSync(
-  join(here, '..', 'skills', 'writing-plans-prescriptive', 'plan-template.md'),
-  'utf8',
-)
+const PLUGIN_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+
+class Template {
+  static markdown() {
+    return readFileSync(join(PLUGIN_ROOT, 'skills', 'writing-plans-prescriptive', 'plan-template.md'), 'utf8')
+  }
+}
 
 describe('the template of the prescriptive plan', () => {
   it('obeys the language rule the gate applies to the plan', () => {
-    expect(steViolations(annotate(template))).toEqual([])
+    expect(PlanLanguage.violationsOf(annotate(Template.markdown()))).toEqual([])
   })
 })
 ```
 
+No comment, and the read hangs off `Template` rather than a loose const: `PLUGIN_ROOT` stays loose
+because `plugin/__tests__/role-bytes.test.js` keeps its own that way, and a path is not a
+function.
+
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `npx vitest run __tests__/plan-template-ste.test.js`
+Run: `npx vitest run __tests__/plan-template-language.test.js`
 Expected: FAIL — a list of violations, each naming a line of the template.
 
 - [ ] **Step 3: Rewrite the template's guidance**
@@ -1078,7 +1157,7 @@ and becomes:
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `npx vitest run __tests__/plan-template-ste.test.js`
+Run: `npx vitest run __tests__/plan-template-language.test.js`
 Expected: PASS.
 
 - [ ] **Step 5: Verify the template still passes the rest of the contract**
@@ -1091,13 +1170,13 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add plugin/skills/writing-plans-prescriptive/plan-template.md plugin/__tests__/plan-template-ste.test.js
+git add plugin/skills/writing-plans-prescriptive/plan-template.md plugin/__tests__/plan-template-language.test.js
 git commit -m "$(cat <<'MSG'
 The template the plan is copied from obeys the rule the gate applies
 
 Every guidance line of plan-template.md moves to Simplified Technical
-English, and a test keeps it there: steViolations over the template
-returns an empty list.
+English, and a test keeps it there: PlanLanguage.violationsOf over the
+template returns an empty list.
 
 The template is what the author copies, so it is where the rule is
 learned. A template that breaks the rule the gate applies teaches the
@@ -1164,9 +1243,10 @@ the gate leaves it alone. Outside them it fires `passive` for a name you cannot 
 output is then validated against the fixtures."* (24 words, passive three times) becomes: *"Task
 3 writes the module. The module reads the analysis. The fixtures verify its output."*
 
-The three lists live in `scripts/plan-ste.js`: the 48 non-approved words with their replacement,
-the irregular participles, and the words that end in `-ing` and are not verb forms. If the gate
-refuses a word this repository needs, add it to the exception, and say so in `## 9. Assumptions`.
+The four lists live in `scripts/plan-language.js`: the 48 non-approved words with their
+replacement, the irregular participles, the words that end in `-ed` and are not participles, and
+the words that end in `-ing` and are not verb forms. If the gate refuses a word this repository
+needs, add it to the exception, and say so in `## 9. Assumptions`.
 ```
 
 - [ ] **Step 3: Verify the skill still passes its own suite**
