@@ -318,7 +318,7 @@ class CtApi {
     })
 
     return new HarvestClock({
-      checkouts: () => checkouts.known(),
+      checkouts: () => checkouts.known()?.map((checkout) => checkout.root) ?? null,
       survey: (root) => surveyWorkspaces.execute(new SurveyWorkspacesParams({ root })),
       harvest: (prepared, repository) =>
         harvestDelivery.execute(new HarvestDeliveryParams({ prepared, repository })),

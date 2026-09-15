@@ -21,13 +21,23 @@ The issue title comes from `Slice` (`#N <Slice>`), NOT from `Entrega`: `Slice` i
 
 In the `Acepta` column, **the comma always separates criteria**: an EARS criterion ("When the token expires, the system asks for login") would be split in two. It is escaped with `\,` (only that exact sequence; a lone backslash is preserved). `Protegido` is not chopped up by commas (free text in one piece), `Dep` extracts its `#N` with a regex (a comma inside makes no difference), and in `Área`/`Toca` the comma separates tokens but a token can never contain one (it is discarded on normalizing, so `\,` is of no use there).
 
-The spec's §9 table admits two optional columns, `Área` and `Toca` (it also accepts `Area` without the accent), with comma-separated values. "No value" can be written as `–`, `-`, `—`, `−`, `--` or an empty cell (any dash variant is valid — a text editor or a phone with autocorrect can swap one for another without you noticing; all of them mean "none" in `Dep`/`Acepta`/`Área`/`Toca`/`Gate`/`Señal`):
+The spec's §9 table admits two optional columns, `Área` and `Toca` (it also accepts `Area` without the accent), with comma-separated values. "No value" can be written as `–`, `-`, `—`, `−`, `--` or an empty cell (any dash variant is valid — a text editor or a phone with autocorrect can swap one for another without you noticing; all of them mean "none" in `Dep`/`Acepta`/`Área`/`Toca`/`Gate`/`Señal`/`Repo`):
 ```
-| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca | Gate | Señal |
-|---|-------|------|---------|-----|--------|-----------|------|------|------|-------|
-| 1 | model | backend | users table | – | AC-1.1 | schema | api | db, migration | – | – |
-| 2 | api | backend | endpoint | #1 | AC-2.1 | – | api | – | – | `api_requests_total` metric with an `endpoint` label |
+| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Área | Toca | Gate | Señal | Repo |
+|---|-------|------|---------|-----|--------|-----------|------|------|------|-------|------|
+| 1 | model | backend | users table | – | AC-1.1 | schema | api | db, migration | – | – | – |
+| 2 | api | backend | endpoint | #1 | AC-2.1 | – | api | – | – | `api_requests_total` metric with an `endpoint` label | mercadona/repo-pulse |
 ```
+### `Repo` — the home repository and the N target ones (#348)
+
+`Repo` *(optional)* declares the repository this slice **lands in**. A milestone has one **home repository** — the `--repo` of the groom, where its conversation lives and its spec is committed — and N **target repositories**, one per row that names another. An empty cell, or one with a "no value" marker, means the home repository, which is what every table that does not carry this column gets: nothing changes for a milestone that lives in one repository.
+
+**One row, one repository.** A cell naming two **aborts with exit 2** naming the row, and so does one that is not written `owner/repo` (no backticks, no bold, no spaces: `` `o/a` `` is refused, because a slug that is not a repository reaches `gh` as a 404 that explains nothing). Each target repository receives its own milestone **with the same title** — the identity `/ct-next`, `/ct-status` and `/ct-harvest` find it by, since the milestone's number is per repository and cannot travel —, its own labels (only the ones its own rows need, plus the whole `status:` vocabulary) and its own issues. The reach travels in the description of every one of those milestones, as an html comment marker `ct-repos:` with the home repository first, which is how the three commands above learn that a milestone reaches further than the repository they were asked about.
+
+**A dependency always names a slice of the SAME repository.** Both ways of crossing **abort at the groom**: writing `owner/repo#N`, and a plain `#N` whose row lands in another repository. It is refused where you can still fix the spec and not at dispatch, where the work would already be claimed: the dispatcher cannot see a merge in another repository from the home checkout, so it could neither confirm nor deny it, and this loop does not answer confidently what it cannot know. What the rule costs, said plainly: **a slice of one repository cannot be ordered after a slice of another** — express that ordering another way, or do not spread the milestone across repositories.
+
+What each command does with it: `/ct-next` dispatches the slices of the repository whose checkout it stands in, and for every other repository of the reach it resolves the registry of checkouts — refusing by name, with exit 1, the one that has none or whose registered path no longer answers for it, and handing over the one that does. `/ct-harvest` follows the reach whole and emits **one ledger with the repository as a column** (everything it reads is remote, so it can). `/ct-status` covers one repository per call, because half of its report is a local checkout, and says so in its first line, naming the repositories it did not look at.
+
 ### `Gate` — the human gates, split apart from `Tipo` (F21)
 
 `Gate` *(optional)* declares which **human gates** have to be closed before merging that slice. **Closed** vocabulary (`scripts/gates.js`):

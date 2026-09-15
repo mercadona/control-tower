@@ -244,7 +244,7 @@ describe('SliceHarvest reproduces, by an injected gh, the reads ct-harvest.mjs d
     }
 
     expect(report.outcome).toBe(SliceHarvestOutcome.COMPLETE)
-    expect(report.row).toEqual({ ...harvestSlice({ events, issue, pr }), telemetry })
+    expect(report.row).toEqual({ repo, ...harvestSlice({ events, issue, pr }), telemetry })
     expect(runner.spoken).toEqual([
       `gh ${GitHubAnswers.TIMELINE_ARGV}`,
       `gh ${GitHubAnswers.pullRequestArgv(GitHubAnswers.FIRST_PR)}`,
@@ -351,5 +351,16 @@ describe('SliceHarvest reproduces, by an injected gh, the reads ct-harvest.mjs d
       new SliceReadFailure({ read: SliceRead.ISSUE, subject: `issue #${GitHubAnswers.ISSUE_NUMBER}`, detail: 'gh: HTTP 502' }),
     ])
     expect(runner.spoken).toEqual([`gh ${GitHubAnswers.ISSUE_VIEW_ARGV}`])
+  })
+})
+
+describe('a harvested row keeps the repository it was harvested from (#348)', () => {
+  it('the row names the repository it was harvested from, so a milestone spread across repositories can be told apart in one ledger', () => {
+    const { runner, repo, issue, index } = GitHubAnswers.merged()
+    const harvester = new SliceHarvest({ gh: runner.forArgv })
+
+    const report = harvester.harvest({ repo, issue, index })
+
+    expect(report.row.repo).toBe(repo)
   })
 })

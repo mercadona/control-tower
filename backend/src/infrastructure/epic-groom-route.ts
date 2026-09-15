@@ -13,7 +13,7 @@ import type { EpicGroomed } from '../application/actions/groom-epic.ts'
 import type { GroomPlanIssue } from '../domain/value-objects/groom-plan.ts'
 import type { EpicIssue } from '../domain/value-objects/epic-issue.ts'
 
-type WirePlanIssue = { readonly order: number, readonly title: string, readonly labels: readonly string[] }
+type WirePlanIssue = { readonly order: number, readonly title: string, readonly labels: readonly string[], readonly repo: string }
 type WireIssue = { readonly number: number, readonly url: string, readonly title: string, readonly status: string }
 
 export const EpicGroomOutcome = Object.freeze({
@@ -189,7 +189,7 @@ export class EpicGroomRoute {
         Answer.send(response, 200, {
           status: EpicGroomState.GROOMABLE,
           milestone: outcome.milestone,
-          plan: { issues: outcome.plan!.issues.map(EpicGroomRoute.#wirePlanIssueOf) },
+          plan: { home: outcome.plan!.home, issues: outcome.plan!.issues.map(EpicGroomRoute.#wirePlanIssueOf) },
           planFingerprint: outcome.planFingerprint,
           ...(minted === null ? {} : { key: minted }),
         })
@@ -198,7 +198,7 @@ export class EpicGroomRoute {
         Answer.send(response, 200, {
           status: EpicGroomState.PARTIALLY_GROOMED,
           milestone: outcome.milestone,
-          plan: { issues: outcome.plan!.issues.map(EpicGroomRoute.#wirePlanIssueOf) },
+          plan: { home: outcome.plan!.home, issues: outcome.plan!.issues.map(EpicGroomRoute.#wirePlanIssueOf) },
           planFingerprint: outcome.planFingerprint,
           issues: outcome.issues.map(EpicGroomRoute.#wireIssueOf),
           ...(minted === null ? {} : { key: minted }),
@@ -227,7 +227,7 @@ export class EpicGroomRoute {
   }
 
   static #wirePlanIssueOf(issue: GroomPlanIssue): WirePlanIssue {
-    return { order: issue.order, title: issue.title, labels: issue.labels }
+    return { order: issue.order, title: issue.title, labels: issue.labels, repo: issue.repo }
   }
 
   static #wireIssueOf(issue: EpicIssue): WireIssue {

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { tmpdir, homedir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { dirname, join, isAbsolute, delimiter as pathDelimiter } from 'node:path'
-import { planDispatch, parseRepoSlug, buildCmuxArgv, buildCmuxSendArgv, buildCmuxSendKeyArgv, cmuxSessionName, collectFinishedResidue, formatFinishedResidueWarning } from './dispatch.js'
+import { planDispatch, parseRepoSlug, repoOfRemoteUrl, buildCmuxArgv, buildCmuxSendArgv, buildCmuxSendKeyArgv, cmuxSessionName, collectFinishedResidue, formatFinishedResidueWarning } from './dispatch.js'
 import { renderKickoff, buildStateSeed, AGENT_BIN, ARCHITECT_MODEL } from './kickoff.js'
 import { Baseline, BaselineOutcome, BaselineResult, ShellBaselineRunner } from './baseline.js'
 import { parseStrictInt } from './argnum.js'
@@ -21,6 +21,10 @@ import {
   LAUNCHER_FILENAME, SENTINEL_FILENAME,
 } from './launch-sentinel.js'
 import { buildDispatchInput, NO_MILESTONE_KEY } from './gh-issue-map.js'
+// #348: the reach of a milestone (which repositories its slices land in) and
+// the registry that says where each of those is checked out on this machine.
+import { MilestoneRepos } from './milestone-repos.js'
+import { CheckoutRegistry } from './checkout-registry.js'
 import { parseStateSafe, readBlocked } from './state.js'
 import { SLICE_REL_PATH, excludeContentWith } from './state-paths.js'
 import {
@@ -1530,6 +1534,24 @@ function fetchAndVerifyBaseOnRemote(base) {
 // corresponds to a repo other than the one the human believes they are looking
 // at. A --dry-run that validates LESS than the real run would be exactly the
 // trap this guard exists to avoid.
+// remoteOfCheckout (#348): the same question ensureRepoIdentity asks of THIS
+// checkout, asked of a path out of the registry. `cwd` and not `-C`, for the
+// same reason as its neighbour, and two answers and not one: `{ url }` or
+// `{ error }` — a path that is gone, or one whose remote cannot be read, is
+// not a path that holds another repository, and CheckoutRegistry.resolve says
+// so differently.
+function remoteOfCheckout(path) {
+  try {
+    return {
+      url: execFileSync('git', ['remote', 'get-url', 'origin'], {
+        cwd: path, encoding: 'utf8', timeout: childTimeoutFor(), killSignal: 'SIGKILL',
+      }).trim(),
+    }
+  } catch (e) {
+    return { error: (e && e.message) || 'its "origin" remote could not be read' }
+  }
+}
+
 function ensureRepoIdentity(root, expectedRepo) {
   let originUrl
   try {
@@ -1538,12 +1560,14 @@ function ensureRepoIdentity(root, expectedRepo) {
     console.error(`could not verify that ${root} is the checkout of ${expectedRepo}: it has no "origin" remote (${e.message}). For safety, ct-next.mjs does NOT continue — it could be running inside the wrong repo (e.g. a control-tower session instead of ${expectedRepo}). Add an origin remote pointing at ${expectedRepo}, or run ct-next.mjs from the right checkout.`)
     process.exit(1)
   }
-  const m = originUrl.match(/github\.com[:/]+([^/]+)\/(.+?)(?:\.git)?\/?$/)
-  if (!m) {
+  // #348: the reading lives in dispatch.js#repoOfRemoteUrl — it was copied
+  // here and in ct-status.mjs, and the registry of checkouts now asks the same
+  // question about N paths.
+  const actualRepo = repoOfRemoteUrl(originUrl)
+  if (actualRepo === null) {
     console.error(`could not interpret the "origin" remote of ${root} ("${originUrl}") as a GitHub owner/repo. For safety, ct-next.mjs does NOT continue.`)
     process.exit(1)
   }
-  const actualRepo = `${m[1]}/${m[2]}`
   if (actualRepo.toLowerCase() !== expectedRepo.toLowerCase()) {
     console.error(`--repo ${expectedRepo} does not match the local checkout at ${root} (remote origin → ${actualRepo}). Aborting: run ct-next.mjs from a checkout of ${expectedRepo}, or fix --repo.`)
     process.exit(1)
@@ -1655,7 +1679,20 @@ function readDispatchInput() {
     console.error(reasons.join('\n'))
     process.exit(1)
   }
-  return buildDispatchInput(open, closed)
+  // reachByMilestone (#348): read from the milestone each issue already
+  // carries in its payload, so learning that a milestone reaches further than
+  // this repository costs NOT ONE extra call. A milestone with no marker in
+  // its description is absent from this list, which is the honest reading of
+  // "groomed before this existed, or reaching only this repository": in either
+  // case there is nothing this run can say about another repository.
+  // The derivation itself lives in MilestoneRepos.reachesIn (#348, the slice
+  // judge's medium finding): ct-status.mjs had grown its own copy of this same
+  // walk, and a later change to either —a milestone with no title, reading the
+  // reach from the closed issues too— would have drifted in silence. It is per
+  // MILESTONE and not per run because this dispatcher sweeps every open issue
+  // of the repository, so two milestones with different reaches coexist in one
+  // sweep.
+  return { ...buildDispatchInput(open, closed), reachByMilestone: MilestoneRepos.reachesIn([...open, ...closed]) }
 }
 
 // formatOrderCollisions (D1 finding 1, the gravest of the dispatch hardening —
@@ -1969,6 +2006,95 @@ const orderCollisions = dispatchInput.orderCollisions || []
 for (const w of formatOrderCollisions(orderCollisions)) console.error(w)
 for (const w of formatStatusAmbiguityWarnings(issues)) console.error(w)
 for (const w of formatStrayDepsWarnings(issues)) console.error(w)
+// ============================================================================
+// #348 — THE REPOSITORIES OF THIS MILESTONE THAT THIS RUN CANNOT REACH.
+//
+// A milestone has one home repository and N target ones, and its slices are
+// issues of the repository each row named. THIS run dispatches the slices of
+// the repository whose checkout it is standing in, and only those: a dispatch
+// is a `git worktree add`, a seeded `.agent/SLICE.md` and a cmux session
+// INSIDE one checkout, and this process has exactly one.
+//
+// What cannot be done is to go on behaving as if that were the whole
+// milestone. Without this block the run ends with "launched 1/1" (or with
+// `formatBlockReason`'s "there is nothing to dispatch") over a milestone whose
+// other half is sitting in another repository nobody looked at — the confident
+// report about what was never read that this file's `honest-messages` suite
+// exists to forbid.
+//
+// So every target repository other than `--repo` is resolved against the
+// registry of checkouts (scripts/checkout-registry.js, the same file the
+// backend writes when a plan's checkout is confirmed), with three outcomes and
+// no fourth:
+//
+//   not-registered  REFUSED: its slices cannot be dispatched from anywhere
+//                   until a checkout of it is registered. Exit 1 — the code
+//                   that already means "a human has to look at this; retrying
+//                   blindly does not help", and registering a checkout does
+//                   not resolve with time.
+//   stale           REFUSED too, with a different message: there IS a record
+//                   and it no longer describes the disk (the path is gone, its
+//                   remote cannot be read, or it holds another repository).
+//                   The two are fixed differently, so they are said
+//                   differently.
+//   confirmed       NOT a refusal: it names the path and the command to run
+//                   there. It is a hand-off, not a finding, so it does not
+//                   move the exit code.
+//
+// The registry being unreadable refuses every target repository WITHOUT
+// claiming any of them is missing: "it could not be looked at" is not "there
+// is none" (the distinction scripts/cmux.js is built on).
+let anyTargetRepoRefused = false
+// exitCodeRefusing (#348, the slice judge's high finding): THE REFUSAL HAS TO
+// SURVIVE THE EXIT THAT COMES FIRST.
+//
+// This script ends in many different `process.exit()`s (see the comment on the
+// warning recap, above), and the verdict computed at the end of the file is
+// only one of them. The commonest run right after grooming a milestone that
+// spans repositories has NOTHING ready HERE — every issue is still at
+// status:backlog — so it takes the "no selection" exit long before that
+// verdict, and printing "NO checkout of it is registered" with an exit 0 hands
+// the caller the code this file defines as "progress, carry on at your normal
+// pace" over a milestone half of which cannot be dispatched from anywhere.
+//
+// The decision lives HERE, in one function, and every exit that could be a 0
+// goes through it: two places computing "what does a refusal do to the exit
+// code" is the drift `plugin/conventions/decisions.md` forbids. A refusal is a
+// 1 and not a 3 on purpose: 3 is "retry later" and registering a checkout does
+// not resolve with time.
+const exitCodeRefusing = (code) => (anyTargetRepoRefused ? 1 : code)
+{
+  const reaches = MilestoneRepos.awayFrom(dispatchInput.reachByMilestone || [], repo)
+  if (reaches.length) {
+    const registry = CheckoutRegistry.read({ configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
+    const resolved = new Map()
+    const resolveTarget = (target) => {
+      if (resolved.has(target)) return resolved.get(target)
+      const answer = registry.entries === undefined
+        ? { state: null }
+        : CheckoutRegistry.resolve({ repo: target, entries: registry.entries, remoteOf: remoteOfCheckout })
+      resolved.set(target, answer)
+      return answer
+    }
+    for (const { milestone, elsewhere } of reaches) {
+      for (const target of elsewhere) {
+        const answer = resolveTarget(target)
+        if (answer.state === CheckoutRegistry.STATES.CONFIRMED) {
+          console.error(`note: the milestone "${milestone}" also reaches ${target}, which this run does not touch — its slices are dispatched from its own checkout, ${answer.path}: \`/ct-next --repo ${target}\` there.`)
+          continue
+        }
+        anyTargetRepoRefused = true
+        if (answer.state === CheckoutRegistry.STATES.NOT_REGISTERED) {
+          warn(`the milestone "${milestone}" reaches ${target} and NO checkout of it is registered on this machine (${registry.path}), so THIS run cannot dispatch its slices: it only touches ${repo}, and nothing here says where ${target} is cloned. If you do have a checkout of it, \`/ct-next --repo ${target}\` from inside it dispatches them; to make it known here —which is what /ct-status and the cabin read— open a plan or a coordinating session against ${target} from the cabin, which confirms the clone before recording it. The slices of ${repo} in this run are unaffected.`)
+        } else if (answer.state === CheckoutRegistry.STATES.STALE) {
+          warn(`the milestone "${milestone}" reaches ${target}, whose registered checkout ${answer.path} no longer answers for it (${answer.why}), so its slices cannot be dispatched until that is fixed. It is NOT claimed that ${target} is missing: there is a record and it does not describe the disk any more. Fix the path (or register the right one) and run \`/ct-next --repo ${target}\` there; the slices of ${repo} in this run are unaffected.`)
+        } else {
+          warn(`the milestone "${milestone}" reaches ${target} and the registry of checkouts could not be read (${registry.path}: ${registry.error || 'nothing has been registered yet'}), so it is NOT known where ${target} is cloned — which is not the same as saying there is no checkout of it. Its slices are not dispatched by this run; the slices of ${repo} are unaffected.`)
+        }
+      }
+    }
+  }
+}
 // F18/H2 — the `closed + live status:` residue. `|| []` for the same reason as
 // `depStates`: it only exists on the real path (buildDispatchInput); a fixture
 // without the field means "it has not been looked at", never "it is clean".
@@ -2189,7 +2315,7 @@ if (!selected.length) {
   // really needs to explain a collision — never for
   // 'none-ready'/'deps-unmet'/cap-full-with-a-slot.
   console.log(formatBlockReason(blockReason, cap, stalenessCtxFor()))
-  process.exit(0)
+  process.exit(exitCodeRefusing(0))
 }
 
 // D2 (dispatch audit), finding 2: under --dry-run, the complete selection is
@@ -3798,6 +3924,12 @@ let finalExitCode = 0
 // after the whole batch has been printed — it is the last thing read, and what
 // fixes the exit 1. On the real run this block is not reached: it aborts much
 // earlier, on detecting the same preconditions.
+// #348: a target repository of this milestone that cannot be dispatched is
+// exit 1 on both paths — the real run and the dry run alike. It is the code
+// that already means "a human has to look at this; retrying blindly does not
+// help", and it applies even when this run dispatched its own slices perfectly,
+// for the same reason `unverifiedLaunches` does further down: the work of the
+// milestone is not done and nothing in time fixes it.
 if (dryRun && preflightFailures.length) {
   console.error(preflightSummary())
   console.error('This --dry-run is NOT a green light: the real run would stop at the preconditions above, without writing a single claim. Fix them ALL and run the dry-run again.')
@@ -3952,5 +4084,10 @@ await yieldToSignals()
 // unref'd). The file's other exit points do use `process.exit()` on purpose:
 // they are aborts, and their messages go through `console.error`/`writeSync`
 // just before.
-process.exitCode = finalExitCode
+// #348: LAST, after every branch above that can set a code — the 3 of "selected
+// and launched nothing" included. Applied before them it was overwritten by
+// that very 3, which is the same defect the judge found at the other exit,
+// through another door: 3 is "retry later" and a target repository nobody can
+// reach does not resolve with time.
+process.exitCode = exitCodeRefusing(finalExitCode)
 

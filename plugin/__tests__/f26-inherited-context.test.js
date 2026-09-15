@@ -169,14 +169,14 @@ describe('buildIssueBody — the two new sections', () => {
   it('groomPlan hands the SAME text to every issue of the epic', () => {
     const plan = groomPlan(
       [SLICE, { ...SLICE, n: 3, name: 'otro slice' }],
-      { milestone: 'E1', specRef: SPEC_REF, epicContext: '- una regla común' },
+      { repoOf: () => 'o/r', milestone: 'E1', specRef: SPEC_REF, epicContext: '- una regla común' },
     )
     expect(plan.issues.map((i) => i.epicContext)).toEqual(['- una regla común', '- una regla común'])
     for (const i of plan.issues) expect(i.body).toContain('- una regla común')
   })
 
   it('groomPlan with no epicContext leaves the field at null, not at undefined', () => {
-    const plan = groomPlan([SLICE], { milestone: 'E1', specRef: SPEC_REF })
+    const plan = groomPlan([SLICE], { repoOf: () => 'o/r', milestone: 'E1', specRef: SPEC_REF })
     expect(plan.issues[0].epicContext).toBeNull()
   })
 })

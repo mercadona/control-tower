@@ -1100,14 +1100,14 @@ person reads for why:
 
 The spec is frozen and published, and the milestone holds no issue yet. `plan` is `ct-groom
 --dry-run`'s own product, kept as what a real run would create: the milestone and, per row of the
-spec's slices table, the order, the title and the labels the real run would give its issue:
+spec's slices table, the order, the title, the labels and the repository the real run would give its issue:
 
 ```json
 {"status":"groomable",
  "milestone":"The loop enters through brainstorming",
- "plan":{"issues":[
-   {"order":1,"title":"The intermediate gate retires","labels":["type:backend","area:api","status:backlog"]},
-   {"order":2,"title":"The session channel","labels":["type:ui","area:sessions","status:backlog"]}
+ "plan":{"home":"mercadona/control-tower","issues":[
+   {"order":1,"title":"The intermediate gate retires","labels":["type:backend","area:api","status:backlog"],"repo":"mercadona/control-tower"},
+   {"order":2,"title":"The session channel","labels":["type:ui","area:sessions","status:backlog"],"repo":"mercadona/repo-pulse"}
  ]},
  "planFingerprint":"9c1a3f…",
  "key":"3f9c1a…"}
@@ -1122,9 +1122,9 @@ never read as missing:
 ```json
 {"status":"partially-groomed",
  "milestone":"The loop enters through brainstorming",
- "plan":{"issues":[
-   {"order":1,"title":"The intermediate gate retires","labels":["type:backend","area:api","status:backlog"]},
-   {"order":2,"title":"The session channel","labels":["type:ui","area:sessions","status:backlog"]}
+ "plan":{"home":"mercadona/control-tower","issues":[
+   {"order":1,"title":"The intermediate gate retires","labels":["type:backend","area:api","status:backlog"],"repo":"mercadona/control-tower"},
+   {"order":2,"title":"The session channel","labels":["type:ui","area:sessions","status:backlog"],"repo":"mercadona/repo-pulse"}
  ]},
  "planFingerprint":"9c1a3f…",
  "issues":[
@@ -1166,8 +1166,13 @@ page's own request; `no-spec`, `draft`, `awaiting-publication`, `issues-uncertai
 never carry it, whatever request asks — `authorised` has nothing left for a key to open, and
 `issues-uncertain` offers nothing to press while its own listing cannot be trusted.
 
-`planFingerprint` is a sha256 hex digest of the plan's own content — the milestone, then each
-issue's order, title and labels, in the plan's own order
+`plan.home` is the milestone's **home repository**, the one the coordinating session holds, and
+each issue's `repo` is the repository that issue will be created in: the milestone's slices table
+may send a row to another repository (`Repo` column), and one row never spans two. A row whose
+`repo` equals `home` is the ordinary case.
+
+`planFingerprint` is a sha256 hex digest of the plan's own content — the milestone, the home
+repository, then each issue's order, title, labels and repository, in the plan's own order
 (`backend/src/domain/value-objects/groom-plan.ts`'s `canonicalText()`, hashed by
 `backend/src/domain/policies/plan-fingerprint.ts`). It travels only on `groomable` and
 `partially-groomed`, the two shapes that carry a `plan`; `POST /epic-groom` demands it back in its

@@ -584,3 +584,22 @@ describe('a slice row projects to the wire object under the schema names', () =>
     expect(milestone.mode).toBe('NULLABLE')
   })
 })
+
+describe('the repo column names the repository the slice landed in (#348)', () => {
+  it('a row that carries its repository writes it, not the one the harvest was asked about', () => {
+    const row = { ...HarvestRows.merged(), repo: 'o/other' }
+
+    expect(HarvestTable.rowFor({ row, identity: Identities.today() }).repo).toBe('o/other')
+  })
+
+  it('a row with no repository falls back to the one the harvest was asked about', () => {
+    expect(HarvestTable.rowFor({ row: HarvestRows.merged(), identity: Identities.today() }).repo).toBe('o/r')
+  })
+
+  it('the column is still one, still required, and the schema did not move', () => {
+    const repo = JSON.parse(HarvestTable.schemaJson()).filter((column) => column.name === 'repo')
+
+    expect(repo).toHaveLength(1)
+    expect(repo[0].mode).toBe('REQUIRED')
+  })
+})

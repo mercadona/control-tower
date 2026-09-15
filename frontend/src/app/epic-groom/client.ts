@@ -19,6 +19,7 @@ const isGroomPlanIssue = (value: unknown): value is GroomPlanIssue =>
   isRecord(value) &&
   typeof value.order === 'number' &&
   typeof value.title === 'string' &&
+  typeof value.repo === 'string' &&
   Array.isArray(value.labels) &&
   value.labels.every((label) => typeof label === 'string')
 
@@ -67,10 +68,12 @@ const toOutcome = (body: unknown): EpicGroomOutcome => {
     typeof body.milestone === 'string' &&
     isRecord(body.plan) &&
     isGroomPlanIssues(body.plan.issues) &&
+    typeof body.plan.home === 'string' &&
     typeof body.planFingerprint === 'string'
   ) {
     return {
-      kind: 'groomable', milestone: body.milestone, plan: body.plan.issues, planFingerprint: body.planFingerprint,
+      kind: 'groomable', milestone: body.milestone, plan: body.plan.issues, home: body.plan.home,
+      planFingerprint: body.planFingerprint,
       key: keyOf(body),
     }
   }
@@ -79,6 +82,7 @@ const toOutcome = (body: unknown): EpicGroomOutcome => {
     typeof body.milestone === 'string' &&
     isRecord(body.plan) &&
     isGroomPlanIssues(body.plan.issues) &&
+    typeof body.plan.home === 'string' &&
     typeof body.planFingerprint === 'string' &&
     isEpicIssues(body.issues)
   ) {

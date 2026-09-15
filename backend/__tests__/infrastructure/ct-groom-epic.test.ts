@@ -15,6 +15,7 @@ class Mother {
   })
 
   static REPOSITORY = new RepositoryName('josemerca/ct-loop-sandbox')
+  static HOME = Mother.REPOSITORY.text
   static MILESTONE = 'The groom and gate 2'
 
   static ISSUE_ONE_TITLE = '#1 The intermediate gate retires'
@@ -138,8 +139,8 @@ describe('CtGroomEpic', () => {
     expect(plan).toBeInstanceOf(GroomPlan)
     expect(plan.milestone).toBe(Mother.MILESTONE)
     expect(plan.issues).toEqual([
-      new GroomPlanIssue({ order: 1, title: Mother.ISSUE_ONE_TITLE, labels: Mother.ISSUE_ONE_LABELS }),
-      new GroomPlanIssue({ order: 2, title: Mother.ISSUE_TWO_TITLE, labels: Mother.ISSUE_TWO_LABELS }),
+      new GroomPlanIssue({ order: 1, title: Mother.ISSUE_ONE_TITLE, labels: Mother.ISSUE_ONE_LABELS, repo: Mother.HOME }),
+      new GroomPlanIssue({ order: 2, title: Mother.ISSUE_TWO_TITLE, labels: Mother.ISSUE_TWO_LABELS, repo: Mother.HOME }),
     ])
   })
 
@@ -168,6 +169,29 @@ describe('CtGroomEpic', () => {
       ],
       options: { cwd: Mother.ROOT.text },
     }])
+  })
+
+  it('every issue of the plan says which repository it lands in, and one printed without it lands home', async () => {
+    const printed = JSON.parse(Mother.planJson())
+    printed.issues[1].repo = 'mercadona/repo-pulse'
+    delete printed.issues[0].repo
+    const node = NodeDouble.exiting(0, { stdout: JSON.stringify(printed) })
+
+    const plan = await node.epicGroom().planned(Mother.grooming())
+
+    expect(plan.home).toBe(Mother.HOME)
+    expect(plan.issues.map((issue) => issue.repo)).toEqual([Mother.HOME, 'mercadona/repo-pulse'])
+    expect(plan.issues[0].landsOutside(Mother.HOME)).toBe(false)
+    expect(plan.issues[1].landsOutside(Mother.HOME)).toBe(true)
+  })
+
+  it('the repository joins the plan canonical text, so a row that lands elsewhere is a different plan', async () => {
+    const printed = JSON.parse(Mother.planJson())
+    const home = await NodeDouble.exiting(0, { stdout: JSON.stringify(printed) }).epicGroom().planned(Mother.grooming())
+    printed.issues[1].repo = 'mercadona/repo-pulse'
+    const spread = await NodeDouble.exiting(0, { stdout: JSON.stringify(printed) }).epicGroom().planned(Mother.grooming())
+
+    expect(spread.canonicalText()).not.toBe(home.canonicalText())
   })
 
   it('stdout that is not the json the plugin prints raises GroomPlanNotUnderstood', async () => {

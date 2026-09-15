@@ -10,20 +10,23 @@ import { PlanStoryNotRead, WorkspaceNotRead } from '../../src/domain/exceptions.
 import { CmuxPlanAgents } from '../../src/infrastructure/cmux-plan-agents.ts'
 import { CmuxAnswer } from '../../../plugin/scripts/cmux.js'
 import { CheckoutRegistry } from '../../src/domain/ports/checkout-registry.ts'
+import { RegisteredCheckout } from '../../src/domain/value-objects/registered-checkout.ts'
 import type { RealpathOf } from '../../src/infrastructure/cmux-plan-agents.ts'
 import type { DiagnosticWriter } from '../../src/infrastructure/git-workspace.ts'
 import type { SessionsAsked, StoryOf } from '../../src/infrastructure/worktree-plans.ts'
 
 class KnownCheckouts extends CheckoutRegistry {
-  readonly #roots: CheckoutRoot[] | null
+  readonly #known: RegisteredCheckout[] | null
 
-  constructor(roots: CheckoutRoot[] | null) {
+  constructor(roots: CheckoutRoot[] | null, repository: RepositoryName | null = SurveyedCheckout.REPOSITORY) {
     super()
-    this.#roots = roots
+    this.#known = roots === null
+      ? null
+      : roots.map((root) => new RegisteredCheckout({ repository, root }))
   }
 
-  known(): CheckoutRoot[] | null {
-    return this.#roots
+  known(): RegisteredCheckout[] | null {
+    return this.#known
   }
 }
 
