@@ -33,7 +33,8 @@ type EpicGroomAskRefusal = Exclude<EpicGroomAskOutcome, { kind: 'acted' }>
 
 const planCount = (count: number): string => `${count} issues`
 const partialCount = (existing: number, planned: number): string => `${existing} de ${planned} issues creadas`
-const planItem = (issue: GroomPlanIssue): string => `#${issue.order} · ${issue.title}`
+const planItem = (issue: GroomPlanIssue, home: string): string =>
+  issue.repo === home ? `#${issue.order} · ${issue.title}` : `#${issue.order} · ${issue.title} · ${issue.repo}`
 const issueItem = (issue: EpicIssue): string => `#${issue.number} · ${issue.title}`
 
 const EpicGroomPanelLabels = {
@@ -114,7 +115,7 @@ const EpicGroomPanel = () => {
     ) : null
 
   if (acted === null && read.kind === 'groomable') {
-    const { milestone, plan, planFingerprint } = read
+    const { milestone, plan, home, planFingerprint } = read
     return (
       <Panel heading={HEADING}>
         <p className="epic-groom-panel__milestone">{milestone}</p>
@@ -123,7 +124,7 @@ const EpicGroomPanel = () => {
         <ul className="epic-groom-panel__plan">
           {plan.map((issue) => (
             <li key={issue.order} className="epic-groom-panel__plan-item">
-              <span className="epic-groom-panel__plan-title">{EpicGroomPanelLabels.planItem(issue)}</span>
+              <span className="epic-groom-panel__plan-title">{EpicGroomPanelLabels.planItem(issue, home)}</span>
               <span className="epic-groom-panel__plan-labels">{issue.labels.join(', ')}</span>
             </li>
           ))}
@@ -138,7 +139,7 @@ const EpicGroomPanel = () => {
   }
 
   if (acted === null && read.kind === 'partially-groomed') {
-    const { milestone, plan, issues, planFingerprint } = read
+    const { milestone, plan, home, issues, planFingerprint } = read
     return (
       <Panel heading={HEADING}>
         <p className="epic-groom-panel__milestone">{milestone}</p>

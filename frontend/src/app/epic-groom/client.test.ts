@@ -16,6 +16,7 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
       kind: 'groomable',
       milestone: EpicGroomMother.MILESTONE,
       plan: [EpicGroomMother.GATE_ISSUE, EpicGroomMother.CHANNEL_ISSUE],
+      home: EpicGroomMother.HOME,
       planFingerprint: EpicGroomMother.PLAN_FINGERPRINT,
       key: null,
     })
@@ -37,6 +38,7 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
           kind: 'groomable',
           milestone: EpicGroomMother.MILESTONE,
           plan: [EpicGroomMother.GATE_ISSUE, EpicGroomMother.CHANNEL_ISSUE],
+          home: EpicGroomMother.HOME,
           planFingerprint: EpicGroomMother.PLAN_FINGERPRINT,
           key: EpicGroomMother.KEY,
         },
@@ -47,6 +49,7 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
           kind: 'partially-groomed',
           milestone: EpicGroomMother.MILESTONE,
           plan: [EpicGroomMother.GATE_ISSUE, EpicGroomMother.CHANNEL_ISSUE],
+          home: EpicGroomMother.HOME,
           planFingerprint: EpicGroomMother.PLAN_FINGERPRINT,
           issues: [EpicGroomMother.BACKLOG_GATE],
           key: EpicGroomMother.KEY,

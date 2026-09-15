@@ -90,12 +90,14 @@ class EpicGroomDouble extends EpicGroom {
 class Mother {
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly REPOSITORY = new RepositoryName('owner/name')
+  static readonly HOME = Mother.REPOSITORY.text
   static readonly PATH = 'docs/superpowers/specs/2026-01-01-test-execution.md'
   static readonly TITLE = 'Test epic'
   static readonly DESIGN_LINE = '**Handoff origen:** `docs/superpowers/specs/2026-01-01-test-design.md`'
   static readonly PLAN = new GroomPlan({
+    home: Mother.HOME,
     milestone: Mother.TITLE,
-    issues: [new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'] })],
+    issues: [new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME })],
   })
   static readonly FINGERPRINT = new PlanFingerprint({ digest: (text) => text })
 
@@ -172,10 +174,11 @@ class Mother {
   }
 
   static readonly TWO_SLICE_PLAN = new GroomPlan({
+    home: Mother.HOME,
     milestone: Mother.TITLE,
     issues: [
-      new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'] }),
-      new GroomPlanIssue({ order: 2, title: '#2 Second slice', labels: ['type:feature'] }),
+      new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'], repo: Mother.HOME }),
+      new GroomPlanIssue({ order: 2, title: '#2 Second slice', labels: ['type:feature'], repo: Mother.HOME }),
     ],
   })
 }
