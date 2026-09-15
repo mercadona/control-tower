@@ -91,6 +91,15 @@ export class PlanLanguage {
     'hundred', 'sacred',
   ])
 
+  static #GERUND_PREPOSITIONS = new Set([
+    'by', 'for', 'of', 'after', 'before', 'without', 'when', 'while', 'on', 'in', 'at', 'from', 'with',
+  ])
+
+  static ING_EXCEPTIONS = new Set([
+    'during', 'string', 'strings', 'nothing', 'something', 'anything', 'everything', 'thing',
+    'things', 'according',
+  ])
+
   static violationsOf(lines) {
     const out = []
     const indexOf = (needle) => lines.findIndex((l) => l.structural && l.line.startsWith(needle))
@@ -116,6 +125,11 @@ export class PlanLanguage {
         for (const chain of PlanLanguage.#passiveIn(tokens)) {
           out.push(
             `line ${line}: passive — "${chain}" is passive. Name who does it, and write the sentence active.`,
+          )
+        }
+        for (const gerund of PlanLanguage.#gerundsIn(tokens)) {
+          out.push(
+            `line ${line}: gerund — "${gerund}" is an -ing form. Write the verb in the simple present, or name the action with a noun.`,
           )
         }
       }
@@ -231,6 +245,15 @@ export class PlanLanguage {
         }
         if (!PlanLanguage.#isAdverb(tokens[j])) return
       }
+    })
+    return out
+  }
+
+  static #gerundsIn(tokens) {
+    const out = []
+    tokens.forEach((token, i) => {
+      if (!token.endsWith('ing') || PlanLanguage.ING_EXCEPTIONS.has(token)) return
+      if (i === 0 || PlanLanguage.#GERUND_PREPOSITIONS.has(tokens[i - 1])) out.push(token)
     })
     return out
   }

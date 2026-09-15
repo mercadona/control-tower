@@ -231,3 +231,36 @@ describe('the passive voice', () => {
     expect(PlanLanguage.IRREGULAR_PARTICIPLES.has('covered')).toBe(false)
   })
 })
+
+describe('the -ing form', () => {
+  it('rejects an -ing word that opens a sentence', () => {
+    expect(Violations.about('Reading the issue comes first.', 'gerund')).toHaveLength(1)
+  })
+
+  it('rejects an -ing word right after a preposition', () => {
+    expect(Violations.about('The agent commits before reading the issue.', 'gerund')).toHaveLength(1)
+  })
+
+  it('accepts an -ing word that a preposition does not touch', () => {
+    expect(Violations.about('The agent reads one of the following files.', 'gerund')).toEqual([])
+  })
+
+  it('leaves the words that only look like gerunds alone', () => {
+    expect(Violations.about('Nothing is left during the sweep.', 'gerund')).toEqual([])
+    expect(Violations.about('The format is a string.', 'gerund')).toEqual([])
+  })
+
+  it('never looks inside backticks', () => {
+    expect(Violations.about('The helper is `readingHelper`.', 'gerund')).toEqual([])
+  })
+
+  it('names the word and says what to write', () => {
+    const [violation] = Violations.about('Reading the issue comes first.', 'gerund')
+    expect(violation).toContain('"reading" is an -ing form')
+  })
+
+  it('carries the words that end in -ing and are not verb forms', () => {
+    expect(PlanLanguage.ING_EXCEPTIONS.has('during')).toBe(true)
+    expect(PlanLanguage.ING_EXCEPTIONS.has('reading')).toBe(false)
+  })
+})
