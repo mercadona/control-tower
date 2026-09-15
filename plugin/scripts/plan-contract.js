@@ -20,6 +20,7 @@
 // ============================================================================
 
 import { extractTasks } from './plan-tasks.js'
+import { PlanLanguage } from './plan-language.js'
 
 const BLOCKQUOTE_MARKER = 'Task-scoped subagents execute this plan'
 
@@ -502,6 +503,8 @@ export function validatePlan(markdown, { readFile } = {}) {
       }
     }
   }
+
+  for (const detail of PlanLanguage.violationsOf(lines)) push('ste', detail)
 
   return { ok: violations.length === 0, violations }
 }
