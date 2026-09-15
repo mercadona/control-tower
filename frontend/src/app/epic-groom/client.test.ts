@@ -143,6 +143,33 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
     expect(outcome).toEqual({ kind: 'backend-unreachable' })
   })
 
+  it('an accepted opening of the groom conversation answers opened, and a refusal answers the code and the detail', async () => {
+    const pressing = vi.fn(async () => new Response(EpicGroomMother.groomSessionOpened().body, { status: 202 }))
+    vi.stubGlobal('fetch', pressing)
+
+    const opened = await EpicGroomClient.openSession(EpicGroomMother.KEY)
+
+    expect(pressing).toHaveBeenCalledWith('/groom-session', {
+      method: 'POST',
+      headers: { 'x-gate-key': EpicGroomMother.KEY },
+    })
+    expect(opened).toEqual({ kind: 'opened' })
+
+    answerWith(EpicGroomMother.notFromThePage())
+
+    expect(await EpicGroomClient.openSession(EpicGroomMother.KEY)).toEqual({
+      kind: 'refused',
+      code: 'gate-not-from-the-page',
+      error: EpicGroomMother.NOT_FROM_THE_PAGE_DETAIL,
+    })
+  })
+
+  it('an opening whose answer never arrives is unconfirmed rather than rejecting', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch') }))
+
+    expect(await EpicGroomClient.openSession(EpicGroomMother.KEY)).toEqual({ kind: 'unconfirmed' })
+  })
+
   it('a refusal carries the code and the detail the backend gave', async () => {
     answerWith(EpicGroomMother.notFromThePage())
 

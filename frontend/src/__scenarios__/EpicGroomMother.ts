@@ -10,6 +10,7 @@ const READY_GATE = { ...BACKLOG_GATE, status: 'ready' }
 const READY_CHANNEL = { ...BACKLOG_CHANNEL, status: 'ready' }
 const PROMOTED = [348, 349]
 const PULL_REQUEST = { number: 341, url: 'https://github.com/owner/name/pull/341' }
+const GROOM_CONVERSATION = '9c3f1b7e-4d2a-4c8b-9a3e-6f2b1a6c2e8f'
 const NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
 const PLAN_CHANGED_DETAIL = 'the spec changed since this plan was shown: read the new plan before pressing again'
 const ISSUES_UNCERTAIN_REASON = 'gh issue list answered exactly as many issues as it was asked for at every ' +
@@ -78,6 +79,12 @@ const promoted = () => ({
   body: `{"status":"authorised","milestone":"${MILESTONE}","issues":${READY_ISSUES_JSON},"promoted":${JSON.stringify(PROMOTED)}}`,
 })
 
+const groomSessionOpened = () => ({
+  status: 202,
+  body: `{"status":"grooming","conversation":"${GROOM_CONVERSATION}","repo":"owner/name","root":"/repo",` +
+    '"session":{"id":"session-9","name":"brainstorming"}}',
+})
+
 const unrecognisedStatus = () => ({ status: 200, body: '{"status":"something-nobody-declared"}' })
 
 const notFromThePage = () => ({
@@ -103,6 +110,7 @@ export const EpicGroomMother = {
   READY_CHANNEL,
   PROMOTED,
   PULL_REQUEST,
+  GROOM_CONVERSATION,
   NOT_FROM_THE_PAGE_DETAIL,
   PLAN_CHANGED_DETAIL,
   ISSUES_UNCERTAIN_REASON,
@@ -119,6 +127,7 @@ export const EpicGroomMother = {
   groomedByThePress,
   authorised,
   promoted,
+  groomSessionOpened,
   unrecognisedStatus,
   notFromThePage,
   planChanged,

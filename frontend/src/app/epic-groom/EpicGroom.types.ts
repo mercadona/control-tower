@@ -13,6 +13,10 @@ export type EpicGroomOutcome =
   | { kind: 'groomed'; milestone: string; issues: EpicIssue[]; key: string | null }
   | { kind: 'authorised'; milestone: string; issues: EpicIssue[] }
   | { kind: 'refused'; code: string; error: string } | { kind: 'unavailable' }
+export type GroomSessionOutcome =
+  | { kind: 'opened' }
+  | { kind: 'refused'; code: string; error: string }
+  | { kind: 'unconfirmed' }
 export type EpicGroomAskOutcome =
   | { kind: 'acted'; status: 'groomed' | 'authorised'; milestone: string; issues: EpicIssue[]; promoted: number[] }
   | { kind: 'refused'; code: string; error: string } | { kind: 'backend-unreachable' }

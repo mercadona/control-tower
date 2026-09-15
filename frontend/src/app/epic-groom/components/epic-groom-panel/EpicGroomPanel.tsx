@@ -1,7 +1,6 @@
-import { useRef, useState } from 'react'
-import { EpicGroomClient } from 'app/epic-groom/client'
-import { EpicGroomAskOutcome, EpicGroomOutcome, EpicIssue, GroomPlanIssue } from 'app/epic-groom/EpicGroom.types'
+import { EpicGroomOutcome, EpicIssue, GroomPlanIssue } from 'app/epic-groom/EpicGroom.types'
 import { useEpicGroom } from 'app/epic-groom/useEpicGroom'
+import { useGatePresses } from 'app/epic-groom/useGatePresses'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
 import { Panel } from 'system-ui/panel'
@@ -11,6 +10,11 @@ const HEADING = 'Puerta 2 · El groom y la autorización'
 const WILL_CREATE = 'Se van a crear estas issues'
 const GROOM = 'Ejecutar el groom'
 const GROOMING = 'Ejecutando el groom'
+const OPEN_SESSION = 'Revisar el slicing con la sesión'
+const OPENING_SESSION = 'Abriendo la sesión'
+const SESSION_OPENED = 'Sesión del groom abierta: habla con ella en el panel de sesiones.'
+const SESSION_UNCONFIRMED_TITLE = 'No se ha podido confirmar la apertura de la sesión'
+const SESSION_UNCONFIRMED_DETAIL = 'Mira el panel de sesiones: puede estar abierta.'
 const CREATED = 'Issues del epic'
 const PROMOTE = 'Autorizar el trabajo'
 const PROMOTING = 'Autorizando el trabajo'
@@ -31,8 +35,7 @@ const NOTHING_TO_SHOW_KINDS: readonly EpicGroomOutcome['kind'][] = [
   'unavailable',
 ]
 
-type EpicGroomActed = Extract<EpicGroomAskOutcome, { kind: 'acted' }>
-type EpicGroomAskRefusal = Exclude<EpicGroomAskOutcome, { kind: 'acted' }>
+const KEYED_KINDS: readonly EpicGroomOutcome['kind'][] = ['groomable', 'partially-groomed', 'groomed']
 
 const planCount = (count: number): string => `${count} issues`
 const partialCount = (existing: number, planned: number): string => `${existing} de ${planned} issues creadas`
@@ -48,10 +51,9 @@ const EpicGroomPanelLabels = {
 
 const EpicGroomPanel = () => {
   const read = useEpicGroom()
-  const [acted, setActed] = useState<EpicGroomActed | null>(null)
-  const [refusal, setRefusal] = useState<EpicGroomAskRefusal | null>(null)
-  const [isPressing, setIsPressing] = useState(false)
-  const isPressingRef = useRef(false)
+  const gateKey = read.phase === 'read' && KEYED_KINDS.includes(read.kind) && 'key' in read ? read.key : null
+  const presses = useGatePresses(gateKey)
+  const { acted, refusal, session } = presses
 
   if (read.phase === 'connecting') return null
   if (acted === null && NOTHING_TO_SHOW_KINDS.includes(read.kind)) return null
@@ -86,41 +88,7 @@ const EpicGroomPanel = () => {
     )
   }
 
-  const gateKey =
-    read.kind === 'groomable' || read.kind === 'partially-groomed' || read.kind === 'groomed' ? read.key : null
-
-  const settle = (answered: EpicGroomAskOutcome) => {
-    if (answered.kind === 'acted') {
-      setActed(answered)
-      setRefusal(null)
-    } else {
-      setRefusal(answered)
-    }
-  }
-
-  const pressGroom = async (planFingerprint: string) => {
-    if (gateKey === null || isPressingRef.current) return
-    isPressingRef.current = true
-    setIsPressing(true)
-    try {
-      settle(await EpicGroomClient.groom(gateKey, planFingerprint))
-    } finally {
-      isPressingRef.current = false
-      setIsPressing(false)
-    }
-  }
-
-  const pressPromote = async () => {
-    if (gateKey === null || isPressingRef.current) return
-    isPressingRef.current = true
-    setIsPressing(true)
-    try {
-      settle(await EpicGroomClient.promote(gateKey))
-    } finally {
-      isPressingRef.current = false
-      setIsPressing(false)
-    }
-  }
+  const isPressing = presses.pressed !== 'none'
 
   const gateNotice = gateKey === null && (
     <p className="epic-groom-panel__only-from-the-page">{ONLY_FROM_THE_PAGE}</p>
@@ -130,6 +98,19 @@ const EpicGroomPanel = () => {
       <Banner type="error" role="alert" title={refusal.error} />
     ) : refusal?.kind === 'backend-unreachable' ? (
       <Banner type="error" role="alert" title={UNREACHABLE_MESSAGE} />
+    ) : null
+  const sessionNotice =
+    session?.kind === 'opened' ? (
+      <p className="epic-groom-panel__session-opened">{SESSION_OPENED}</p>
+    ) : session?.kind === 'refused' ? (
+      <Banner type="error" role="alert" title={session.error} />
+    ) : session?.kind === 'unconfirmed' ? (
+      <Banner
+        type="warning"
+        role="alert"
+        title={SESSION_UNCONFIRMED_TITLE}
+        description={SESSION_UNCONFIRMED_DETAIL}
+      />
     ) : null
 
   if (acted === null && read.kind === 'groomable') {
@@ -147,9 +128,13 @@ const EpicGroomPanel = () => {
             </li>
           ))}
         </ul>
-        <Button onClick={() => void pressGroom(planFingerprint)} disabled={gateKey === null || isPressing}>
-          {isPressing ? GROOMING : GROOM}
+        <Button onClick={() => void presses.groom(planFingerprint)} disabled={gateKey === null || isPressing}>
+          {presses.pressed === 'groom' ? GROOMING : GROOM}
         </Button>
+        <Button onClick={() => void presses.openSession()} disabled={gateKey === null || isPressing}>
+          {presses.pressed === 'session' ? OPENING_SESSION : OPEN_SESSION}
+        </Button>
+        {sessionNotice}
         {gateNotice}
         {askBanner}
       </Panel>
@@ -171,8 +156,8 @@ const EpicGroomPanel = () => {
           ))}
         </ul>
         <p className="epic-groom-panel__partial-notice">{FINISH_GROOM_FIRST}</p>
-        <Button onClick={() => void pressGroom(planFingerprint)} disabled={gateKey === null || isPressing}>
-          {isPressing ? GROOMING : GROOM}
+        <Button onClick={() => void presses.groom(planFingerprint)} disabled={gateKey === null || isPressing}>
+          {presses.pressed === 'groom' ? GROOMING : GROOM}
         </Button>
         {gateNotice}
         {askBanner}
@@ -199,8 +184,8 @@ const EpicGroomPanel = () => {
             </li>
           ))}
         </ul>
-        <Button onClick={() => void pressPromote()} disabled={gateKey === null || isPressing}>
-          {isPressing ? PROMOTING : PROMOTE}
+        <Button onClick={() => void presses.promote()} disabled={gateKey === null || isPressing}>
+          {presses.pressed === 'promote' ? PROMOTING : PROMOTE}
         </Button>
         {gateNotice}
         {askBanner}

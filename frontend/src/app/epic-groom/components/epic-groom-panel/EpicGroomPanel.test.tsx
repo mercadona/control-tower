@@ -5,6 +5,7 @@ import { EpicGroomPanel } from './EpicGroomPanel'
 
 const GROOM_BUTTON = { name: 'Ejecutar el groom' }
 const PROMOTE_BUTTON = { name: 'Autorizar el trabajo' }
+const SESSION_BUTTON = { name: 'Revisar el slicing con la sesión' }
 
 describe('EpicGroomPanel', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -43,6 +44,63 @@ describe('EpicGroomPanel', () => {
     expect(await screen.findByText('#348 · The intermediate gate retires')).toBeInTheDocument()
     expect(screen.getByText('#349 · The session channel')).toBeInTheDocument()
     expect(screen.getByRole('button', PROMOTE_BUTTON)).toBeInTheDocument()
+  })
+
+  it('the way into the conversation carries the gate key and says where the session can be talked to', async () => {
+    const fetching = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomable().body, { status: 200 }))
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomSessionOpened().body, { status: 202 }))
+    vi.stubGlobal('fetch', fetching)
+    const user = userEvent.setup()
+    render(<EpicGroomPanel />)
+    await screen.findByRole('button', SESSION_BUTTON)
+
+    await user.click(screen.getByRole('button', SESSION_BUTTON))
+
+    expect(fetching).toHaveBeenNthCalledWith(2, '/groom-session', {
+      method: 'POST',
+      headers: { 'x-gate-key': EpicGroomMother.KEY },
+    })
+    expect(
+      await screen.findByText('Sesión del groom abierta: habla con ella en el panel de sesiones.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', GROOM_BUTTON)).toBeEnabled()
+  })
+
+  it('a refused opening is shown with the words the program printed and leaves the dry run on screen', async () => {
+    const fetching = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomable().body, { status: 200 }))
+      .mockResolvedValueOnce(new Response(EpicGroomMother.notFromThePage().body, { status: 403 }))
+    vi.stubGlobal('fetch', fetching)
+    const user = userEvent.setup()
+    render(<EpicGroomPanel />)
+    await screen.findByRole('button', SESSION_BUTTON)
+
+    await user.click(screen.getByRole('button', SESSION_BUTTON))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(EpicGroomMother.NOT_FROM_THE_PAGE_DETAIL)
+    expect(screen.getByText('#1 · The intermediate gate retires')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Sesión del groom abierta: habla con ella en el panel de sesiones.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('an opening the page cannot confirm says to look at the sessions panel instead of reporting a failure', async () => {
+    const fetching = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomable().body, { status: 200 }))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    vi.stubGlobal('fetch', fetching)
+    const user = userEvent.setup()
+    render(<EpicGroomPanel />)
+    await screen.findByRole('button', SESSION_BUTTON)
+
+    await user.click(screen.getByRole('button', SESSION_BUTTON))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se ha podido confirmar la apertura de la sesión')
+    expect(screen.getByRole('alert')).toHaveTextContent('Mira el panel de sesiones: puede estar abierta.')
   })
 
   it('a groomed epic offers the authorisation and shows the rung each issue stands at', async () => {

@@ -4,13 +4,17 @@ import {
   EpicIssue,
   EpicPullRequest,
   GroomPlanIssue,
+  GroomSessionOutcome,
 } from 'app/epic-groom/EpicGroom.types'
 
 const PATH = '/epic-groom'
 const PROMOTION_PATH = '/epic-promotion'
+const SESSION_PATH = '/groom-session'
 const GATE_KEY_HEADER = 'x-gate-key'
 const PLAN_FINGERPRINT_HEADER = 'x-plan-fingerprint'
 const ACTED_STATUS = 200
+const OPENED_STATUS = 202
+const GROOMING_STATUS = 'grooming'
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -143,8 +147,27 @@ const groom = (key: string, planFingerprint: string): Promise<EpicGroomAskOutcom
 
 const promote = (key: string): Promise<EpicGroomAskOutcome> => press(PROMOTION_PATH, { [GATE_KEY_HEADER]: key })
 
+const openSession = async (key: string): Promise<GroomSessionOutcome> => {
+  let response: Response
+  let body: unknown
+  try {
+    response = await fetch(SESSION_PATH, { method: 'POST', headers: { [GATE_KEY_HEADER]: key } })
+    body = await response.json()
+  } catch {
+    return { kind: 'unconfirmed' }
+  }
+  if (response.status === OPENED_STATUS) {
+    return isRecord(body) && body.status === GROOMING_STATUS ? { kind: 'opened' } : { kind: 'unconfirmed' }
+  }
+  if (!isRecord(body) || typeof body.code !== 'string' || typeof body.detail !== 'string') {
+    return { kind: 'unconfirmed' }
+  }
+  return { kind: 'refused', code: body.code, error: body.detail }
+}
+
 export const EpicGroomClient = {
   read,
   groom,
   promote,
+  openSession,
 }

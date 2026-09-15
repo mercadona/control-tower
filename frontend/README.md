@@ -131,7 +131,10 @@ waiting in a pull request the person has to merge and links it, or — when the
 read found no open pull request for the branch — that the spec is still
 unpublished and none was found, which is a wait to watch rather than a merge to
 press; `groomable` shows the milestone and the dry run's product — the issues the
-groom would create, ordered and labelled, before anything is created; `groomed`
+groom would create, ordered and labelled, before anything is created, and
+offers **Revisar el slicing con la sesión**, which calls `POST /groom-session`
+so a person can walk that table with a coordinating session in the groom phase
+instead of only saying yes or no to it; `groomed`
 shows the issues the milestone already holds and offers the authorisation;
 `authorised` shows them all promoted, with nothing left to press.
 **Ejecutar el groom** calls
