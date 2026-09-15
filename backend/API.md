@@ -23,8 +23,7 @@ the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
 ## Rules that apply to every endpoint
 
 1. **Decide by `code`, never by status.** Every refusal answers the same body:
-   `{"code": "<kebab-case>", "detail": "<one sentence>"}`. One refusal adds a
-   third field: `no-plan-started` carries `failed`.
+   `{"code": "<kebab-case>", "detail": "<one sentence>"}`.
 2. **An application refusal answers 400.** The status stopped being the signal.
    405 keeps its own status because it is the protocol answering, not the
    application: it is decided before any request reaches a use case.
@@ -65,22 +64,21 @@ Starts a plan: cuts a worktree, opens the plan issue, launches the agent. It is
 slow — it runs the target repository's baseline test suite before answering, and
 that can take minutes. There is no progress signal while it waits.
 
-**It has two modes**, told apart by which fields name the target. Send `repo` and
-`path` for one repository, or `repo_list` for several. Sending both is refused.
+**It names one target**: a repository and the path of its local clone. The
+`repo_list` field, which once named several at once, is retired — a body
+carrying it is refused by name rather than parsed.
 
 | Field | Type | Required | Shape |
 |---|---|---|---|
 | `id` | string | one of `id` / `user_comment` | a user story key, `ABC-123`, or a GitHub issue url, `https://github.com/owner/name/issues/123` |
 | `user_comment` | string | one of `id` / `user_comment` | free text, not blank |
-| `repo` | string | single mode | `owner/name` |
-| `path` | string | single mode | absolute path of the local clone |
-| `repo_list` | array | list mode | one or more `{"repo": "...", "path": "..."}` |
+| `repo` | string | yes | `owner/name` |
+| `path` | string | yes | absolute path of the local clone |
 
 `id` and `user_comment` may both be sent. Omit a field to leave it unsaid; do
-not send `null`, which is a malformed value. A `repo_list` entry holds those two
-keys and **nothing else** — an extra key makes the whole list malformed.
+not send `null`, which is a malformed value.
 
-### Single mode — 202 Accepted
+### 202 Accepted
 
 ```json
 {"status":"started","id":"ABC-123","repo":"owner/name",
@@ -115,52 +113,9 @@ baseline that is not green is a person's decision, and until now that person was
 never told: the verdict went to the backend's error channel and the page said
 the request had completed.
 
-### List mode — 202 Accepted, and it may be partial
-
-The answer is never flat. The seven fields above move into `started`, one entry
-per repository that got a plan, and `failed` names each repository that did not.
-
-```json
-{"status":"started",
- "started":[{"id":"ABC-123","repo":"owner/one",
-   "issue":{"number":7,"url":"https://github.com/owner/one/issues/7"},
-   "agent":"workspace:4","branch":"feat/7",
-   "worktree":"/one/.worktrees/7","root":"/one"}],
- "failed":[{"repo":"owner/two","code":"plan-issue-not-created","detail":"gh refused"}]}
-```
-
-**A 202 does not mean every plan started.** Both arrays are always present, and
-`failed` is often non-empty while the status still says `started`. The UI must
-read both. A `failed` entry carries the same `code` and `detail` the single mode
-would have refused with, plus the `repo` it belongs to.
-
-When **no** plan started, the answer is a 400 that keeps the same evidence:
-
-```json
-{"code":"no-plan-started",
- "detail":"no plan started: every repository of repo_list failed",
- "failed":[{"repo":"owner/one","code":"plan-issue-not-created","detail":"gh refused"},
-           {"repo":"owner/two","code":"plan-agent-not-launched","detail":"cmux refused"}]}
-```
-
-This is the one refusal in the API with a third field beside `code` and `detail`.
-
-### The list is checked as a whole before anything starts
-
-Two failures behave differently, and the difference is deliberate:
-
-| Cause | What happens |
-|---|---|
-| A path is not a checkout of the repo beside it, git cannot be asked, or the tracker holding the story refuses | the **whole request** is refused flat, before any side effect; no plan starts, no `failed` array |
-| Opening the issue, claiming it, cutting the worktree or launching the agent fails | that repository lands in `failed`, and the others still start |
-
-So one bad pairing in one entry stops every other repository, and the answer
-looks like the single mode's — `{code, detail}`, no `failed`. Do not assume list
-mode always answers with arrays.
-
 ### Refusals
 
-Shared by both modes:
+Of the request:
 
 | `code` | Status | Meaning |
 |---|---|---|
@@ -169,23 +124,15 @@ Shared by both modes:
 | `malformed-id` | 400 | `id` is not a story key such as `ABC-123` nor a GitHub issue url such as `https://github.com/owner/name/issues/123` |
 | `malformed-user-comment` | 400 | `user_comment` is blank or not text |
 | `nothing-to-plan` | 400 | neither `id` nor `user_comment` was sent |
+| `repo-list-retired` | 400 | the body carried `repo_list`; `detail` says to send `repo` and `path` for one repository instead |
 | `malformed-repo` | 400 | a repo is not `owner/name`; `detail` names which field |
 | `malformed-path` | 400 | a path is not absolute; `detail` names which field |
 | `checkout-not-confirmed` | 400 | a path is not a checkout of its repo; `detail` names both the repo asked for and the one the path holds |
 
 `malformed-repo` and `malformed-path` name their field, so the UI can point at
-the offending input: `repo` in single mode, `repo_list[1].repo` in list mode.
+the offending input: `repo` or `path`.
 
-Only in list mode:
-
-| `code` | Status | Meaning |
-|---|---|---|
-| `target-said-twice` | 400 | `repo_list` came with `repo` or `path` beside it |
-| `malformed-repo-list` | 400 | not a list, empty, or an entry is not exactly `{repo, path}` |
-| `repo-listed-twice` | 400 | the same repo appears twice; `detail` names it |
-| `no-plan-started` | 400 | every repository failed; carries `failed` |
-
-From a tool refusing, in either mode:
+From a tool refusing:
 
 | `code` | Meaning |
 |---|---|
@@ -202,17 +149,12 @@ From a tool refusing, in either mode:
 
 All ten answer 400 and carry the tool's own message in `detail`. They are one
 failure family split by cause, so the UI can treat them as one class and show
-`detail`. In list mode they arrive inside a `failed` entry instead.
+`detail`.
 
 ```
 curl -s -X POST -H 'Content-Type: application/json' \
   http://127.0.0.1:8787/start-plan \
   -d '{"id":"ABC-1","repo":"owner/name","path":"/repo/checkout"}'
-
-curl -s -X POST -H 'Content-Type: application/json' \
-  http://127.0.0.1:8787/start-plan \
-  -d '{"id":"ABC-1","repo_list":[{"repo":"owner/one","path":"/one"},
-                                 {"repo":"owner/two","path":"/two"}]}'
 
 curl -s -X POST -H 'Content-Type: application/json' \
   http://127.0.0.1:8787/start-plan \
@@ -742,9 +684,9 @@ installs the session hooks and spawns `claude` in the governed checkout. **No
 worktree is cut and no branch is created** — this is the entrance conversation,
 not a plan.
 
-**Request** — the same shape `POST /start-plan` reads for a single repository,
-minus `repo_list`: an epic governs one checkout, so a list is refused rather
-than accepted and narrowed.
+**Request** — the same shape as `POST /start-plan`, read through the very same
+`PlanRequest`, so a body carrying the retired `repo_list` earns the same refusal
+here as it does there.
 
 | Field | Type | Required | Shape |
 |---|---|---|---|
@@ -772,8 +714,8 @@ like any other.
 
 **Refusals**
 
-Shared with `POST /start-plan`'s single mode, because both read the body
-through the same `PlanRequest`:
+Shared with `POST /start-plan`, because both read the body through the same
+`PlanRequest`:
 
 | `code` | Status | Meaning |
 |---|---|---|
@@ -785,15 +727,10 @@ through the same `PlanRequest`:
 | `malformed-repo` | 400 | `repo` is not `owner/name` |
 | `malformed-path` | 400 | `path` is not absolute |
 | `checkout-not-confirmed` | 400 | `path` is not a checkout of `repo` |
-| `target-said-twice` | 400 | `repo_list` came with `repo` or `path` beside it |
-| `malformed-repo-list` | 400 | `repo_list` is not a list, is empty, or an entry is not exactly `{repo, path}` |
-| `repo-listed-twice` | 400 | the same repo appears twice inside `repo_list` |
+| `repo-list-retired` | 400 | the body carried `repo_list`; `detail` says to send `repo` and `path` for one repository instead |
 
-Its own, for a `repo_list` that parsed but names more than a checkout:
-
-| `code` | Status | Meaning |
-|---|---|---|
-| `one-repository-only` | 400 | the body sent `repo_list`; an epic governs one checkout, so send `repo` and `path` instead |
+It has no refusal of its own for a listed request any more: the field retired,
+so no listed request can arrive.
 
 From opening the conversation, once the body is well-formed:
 
