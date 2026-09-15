@@ -24,6 +24,7 @@ export const EpicGroomState = Object.freeze({
   NO_SPEC: 'no-spec',
   DRAFT: 'draft',
   AWAITING_PUBLICATION: 'awaiting-publication',
+  ISSUES_UNCERTAIN: 'issues-uncertain',
   GROOMABLE: 'groomable',
   PARTIALLY_GROOMED: 'partially-groomed',
   GROOMED: 'groomed',
@@ -39,14 +40,16 @@ export class EpicGroomRead {
   readonly plan: GroomPlan | null
   readonly planFingerprint: string | null
   readonly issues: readonly EpicIssue[]
+  readonly reason: string | null
 
-  constructor({ state, spec, milestone, plan, planFingerprint, issues }: {
+  constructor({ state, spec, milestone, plan, planFingerprint, issues, reason = null }: {
     state: EpicGroomStateValue,
     spec: EpicSpec | null,
     milestone: string | null,
     plan: GroomPlan | null,
     planFingerprint: string | null,
     issues: readonly EpicIssue[],
+    reason?: string | null,
   }) {
     this.state = state
     this.spec = spec
@@ -54,6 +57,7 @@ export class EpicGroomRead {
     this.plan = plan
     this.planFingerprint = planFingerprint
     this.issues = issues
+    this.reason = reason
     Object.freeze(this)
   }
 }
@@ -99,23 +103,32 @@ export class ReadEpicGroom {
 
     const milestone = spec.title()!
     const holding = await this.issues.listOf({ repository: params.repository, milestone })
+    if (!holding.exhausted) {
+      return new EpicGroomRead({
+        state: EpicGroomState.ISSUES_UNCERTAIN, spec, milestone, plan: null, planFingerprint: null, issues: [],
+        reason: holding.reason,
+      })
+    }
+
     const plan = await this.groom.planned({ root: params.root, spec, repository: params.repository, milestone })
     const planFingerprint = this.fingerprint.of(plan)
 
-    if (holding.length === 0) {
+    if (holding.issues.length === 0) {
       return new EpicGroomRead({
         state: EpicGroomState.GROOMABLE, spec, milestone, plan, planFingerprint, issues: [],
       })
     }
 
-    if (ReadEpicGroom.#isPartiallyGroomed(plan, holding)) {
+    if (ReadEpicGroom.#isPartiallyGroomed(plan, holding.issues)) {
       return new EpicGroomRead({
-        state: EpicGroomState.PARTIALLY_GROOMED, spec, milestone, plan, planFingerprint, issues: holding,
+        state: EpicGroomState.PARTIALLY_GROOMED, spec, milestone, plan, planFingerprint, issues: holding.issues,
       })
     }
 
-    const state = holding.some((issue) => issue.isPromotable()) ? EpicGroomState.GROOMED : EpicGroomState.AUTHORISED
-    return new EpicGroomRead({ state, spec, milestone, plan, planFingerprint, issues: holding })
+    const state = holding.issues.some((issue) => issue.isPromotable())
+      ? EpicGroomState.GROOMED
+      : EpicGroomState.AUTHORISED
+    return new EpicGroomRead({ state, spec, milestone, plan, planFingerprint, issues: holding.issues })
   }
 
   static #isPartiallyGroomed(plan: GroomPlan, holding: readonly EpicIssue[]): boolean {

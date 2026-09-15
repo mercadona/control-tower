@@ -18,6 +18,7 @@ const AUTHORISED = 'Trabajo autorizado: el loop ya puede despachar el primer sli
 const FINISH_GROOM_FIRST = 'Termina el groom antes de autorizar el trabajo.'
 const ONLY_FROM_THE_PAGE = 'Esta puerta solo se abre desde la página que sirve el backend.'
 const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
+const ISSUES_UNCERTAIN_TITLE = 'No se ha podido leer completa la lista de issues del epic'
 
 const NOTHING_TO_SHOW_KINDS: readonly EpicGroomOutcome['kind'][] = [
   'none',
@@ -55,6 +56,13 @@ const EpicGroomPanel = () => {
     return (
       <Panel heading={HEADING}>
         <Banner type="error" role="alert" title={read.error} />
+      </Panel>
+    )
+  }
+  if (acted === null && read.kind === 'issues-uncertain') {
+    return (
+      <Panel heading={HEADING}>
+        <Banner type="warning" role="alert" title={ISSUES_UNCERTAIN_TITLE} description={read.reason} />
       </Panel>
     )
   }

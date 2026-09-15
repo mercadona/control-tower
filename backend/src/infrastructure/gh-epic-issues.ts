@@ -1,6 +1,7 @@
 import { resolveStatus, extractOrder } from '../../../plugin/scripts/gh-issue-map.js'
 import { EpicIssues } from '../domain/ports/epic-issues.ts'
 import { EpicIssue } from '../domain/value-objects/epic-issue.ts'
+import { EpicIssuesListing } from '../domain/value-objects/epic-issues-listing.ts'
 import { EpicIssuesNotRead, EpicIssuesNotUnderstood, EpicIssueNotPromoted } from '../domain/exceptions.ts'
 import { GhPlanIssues } from './gh-plan-issues.ts'
 import { Gh } from './gh.ts'
@@ -17,6 +18,7 @@ type RawEpicIssue = {
 
 export class GhEpicIssues extends EpicIssues {
   static readonly LIMIT = 200
+  static readonly PAGING_CEILING = 1600
   static readonly OPEN = 'OPEN'
 
   readonly gh: Gh
@@ -26,13 +28,15 @@ export class GhEpicIssues extends EpicIssues {
     this.gh = gh
   }
 
-  static listArgvFor({ repository, milestone }: { repository: RepositoryName, milestone: string }): string[] {
+  static listArgvFor(
+    { repository, milestone, limit }: { repository: RepositoryName, milestone: string, limit: number }
+  ): string[] {
     return [
       'issue', 'list',
       '--repo', repository.text,
       '--milestone', milestone,
       '--state', 'all',
-      '--limit', String(GhEpicIssues.LIMIT),
+      '--limit', String(limit),
       '--json', 'number,url,title,labels,state,body',
     ]
   }
@@ -46,17 +50,37 @@ export class GhEpicIssues extends EpicIssues {
     ]
   }
 
-  async listOf({ repository, milestone }: { repository: RepositoryName, milestone: string }): Promise<EpicIssue[]> {
-    const outcome = await this.gh.run(
-      GhEpicIssues.listArgvFor({ repository, milestone }), { safeToRepeat: true }
-    )
-    if (outcome.failed) {
-      throw new EpicIssuesNotRead(`${Gh.BIN} issue list failed: ${outcome.stderr.trim()}`)
-    }
+  async listOf(
+    { repository, milestone }: { repository: RepositoryName, milestone: string }
+  ): Promise<EpicIssuesListing> {
+    let limit = GhEpicIssues.LIMIT
+    for (;;) {
+      const outcome = await this.gh.run(
+        GhEpicIssues.listArgvFor({ repository, milestone, limit }), { safeToRepeat: true }
+      )
+      if (outcome.failed) {
+        throw new EpicIssuesNotRead(`${Gh.BIN} issue list failed: ${outcome.stderr.trim()}`)
+      }
 
-    return GhEpicIssues.#issuesIn(outcome.stdout)
-      .map((raw) => GhEpicIssues.#toEpicIssue(raw))
-      .sort((one, other) => one.number - other.number)
+      const raw = GhEpicIssues.#issuesIn(outcome.stdout)
+      if (raw.length < limit) {
+        return new EpicIssuesListing({
+          issues: raw.map((one) => GhEpicIssues.#toEpicIssue(one)).sort((one, other) => one.number - other.number),
+          exhausted: true,
+          reason: null,
+        })
+      }
+      if (limit >= GhEpicIssues.PAGING_CEILING) {
+        return new EpicIssuesListing({
+          issues: [],
+          exhausted: false,
+          reason: `${Gh.BIN} issue list answered exactly as many issues as it was asked for at every limit up ` +
+            `to the ceiling of ${GhEpicIssues.PAGING_CEILING}: the milestone "${milestone}" may hold more issues than ` +
+            'this backend could read',
+        })
+      }
+      limit *= 2
+    }
   }
 
   async promote({ repository, issue }: { repository: RepositoryName, issue: EpicIssue }): Promise<void> {

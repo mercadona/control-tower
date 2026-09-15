@@ -19,6 +19,7 @@ export const EpicPromotionOutcome = Object.freeze({
   NO_COORDINATING_SESSION: 'no-coordinating-session',
   NO_EPIC_ISSUES: 'no-epic-issues',
   EPIC_PARTIALLY_GROOMED: 'epic-partially-groomed',
+  ISSUES_UNCERTAIN: 'epic-issues-uncertain',
 } as const)
 
 export type EpicPromotionOutcomeValue = (typeof EpicPromotionOutcome)[keyof typeof EpicPromotionOutcome]
@@ -42,6 +43,11 @@ export class EpicPromotionRefusal {
         status: EpicPromotionRefusal.#STATUS,
         code: EpicPromotionOutcome.EPIC_PARTIALLY_GROOMED,
         detail: EpicPromotionRefusal.#partiallyGroomedDetail(promoted),
+      })] as const,
+      [EpicGroomState.ISSUES_UNCERTAIN, (promoted: EpicPromoted) => new Refusal({
+        status: EpicPromotionRefusal.#STATUS,
+        code: EpicPromotionOutcome.ISSUES_UNCERTAIN,
+        detail: promoted.reason!,
       })] as const,
     ])
 

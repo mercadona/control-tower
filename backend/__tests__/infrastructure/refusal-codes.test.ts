@@ -44,6 +44,7 @@ class SharedOnPurposeAcrossRequestVocabularies {
     SpecFreezeOutcome.NOT_FROM_THE_PAGE,
     SpecFreezeOutcome.NO_COORDINATING_SESSION,
     SpecFreezeOutcome.NO_EPIC_SPEC,
+    EpicGroomOutcome.ISSUES_UNCERTAIN,
   ])
 }
 

@@ -1083,7 +1083,7 @@ Gate 2's own state for the checkout the held coordinating session sits in, deriv
 execution spec, the epic's milestone and its issues on GitHub — nothing stored. No parameters.
 The cabin polls it to draw gate 2's panel.
 
-**200 OK** — eight shapes, told apart by `status`.
+**200 OK** — nine shapes, told apart by `status`.
 
 No coordinating session is held, so there is nothing to groom:
 
@@ -1109,6 +1109,20 @@ request gate 1 opened has to merge first:
 
 ```json
 {"status":"awaiting-publication"}
+```
+
+The spec is frozen and published, but `gh issue list` could not be exhausted: `gh` exposes no
+cursor, so this backend establishes exhaustion by climbing `--limit` (200, 400, 800, … up to a
+ceiling) until an answer comes back shorter than what it asked for; if every limit up to that
+ceiling comes back full, the milestone may hold more issues than this backend could read, and it
+answers INCONCLUSIVE rather than a listing it cannot vouch for — the defect this state exists to
+close is exactly a confident `authorised` read past a page it never saw. `reason` is the words a
+person reads for why:
+
+```json
+{"status":"issues-uncertain",
+ "milestone":"The loop enters through brainstorming",
+ "reason":"gh issue list answered exactly as many issues as it was asked for at every limit up to the ceiling of 1600: the milestone \"The loop enters through brainstorming\" may hold more issues than this backend could read"}
 ```
 
 The spec is frozen and published, and the milestone holds no issue yet. `plan` is `ct-groom
@@ -1175,8 +1189,9 @@ promote:
 `x-gate-key` header, minted once when the backend starts
 (`backend/src/infrastructure/gate-key.ts`) — the mechanism `GET /spec-freeze` documents above. It
 is attached only to the `groomable`, `partially-groomed` and `groomed` bodies, and only for the
-page's own request; `no-spec`, `draft`, `awaiting-publication` and `authorised` never carry it,
-whatever request asks — `authorised` has nothing left for a key to open.
+page's own request; `no-spec`, `draft`, `awaiting-publication`, `issues-uncertain` and `authorised`
+never carry it, whatever request asks — `authorised` has nothing left for a key to open, and
+`issues-uncertain` offers nothing to press while its own listing cannot be trusted.
 
 `planFingerprint` is a sha256 hex digest of the plan's own content — the milestone, then each
 issue's order, title and labels, in the plan's own order
@@ -1189,9 +1204,13 @@ issue's order, title and labels, in the plan's own order
 
 The shared ones — 405 for a method other than `GET` or `POST`, 403 for a foreign `Origin` — and,
 with a 400 and its own `{code, detail}`, every tool refusal this read can meet: deriving these
-eight states can run `ct-groom --dry-run`, `gh api repos/<repo>/contents/<spec>` and `gh issue
+nine states can run `ct-groom --dry-run`, `gh api repos/<repo>/contents/<spec>` and `gh issue
 list`, so their failures surface here too — the same `PlanCollapse` codes `POST /epic-groom`
-documents below, except `epic-issue-not-promoted`, which only `POST /epic-promotion` can meet.
+documents below, except `epic-issue-not-promoted`, which only `POST /epic-promotion` can meet. A
+`gh issue list` call that fails outright still meets `epic-issues-not-read` there, exactly as
+before this backend paged; only a paging climb that never comes back short answers
+`issues-uncertain` here — that one is a state of the read, not a refusal, because the request
+answered fine and gate 2 still has something true to say about it.
 
 ```
 curl -s http://127.0.0.1:8787/epic-groom
@@ -1246,6 +1265,7 @@ Then, once the key holds:
 | `no-epic-spec` | 400 | no execution spec exists in this checkout to groom |
 | `spec-not-frozen` | 400 | the spec is not frozen: gate 1 first |
 | `spec-not-published` | 400 | the spec is frozen, but its committed copy is not yet readable on the default branch |
+| `epic-issues-uncertain` | 400 | `gh issue list`'s paging could not be exhausted: `detail` is the same reason `GET /epic-groom`'s `issues-uncertain` body carries, and the plan comparison this press would otherwise run cannot be trusted either |
 | `plan-changed` | 409 | the spec changed since this plan was shown: read the new plan before pressing again |
 
 `groom-in-progress` is `POST /epic-groom`'s own guard against two tabs pressing gate 2 at once — the
@@ -1264,9 +1284,9 @@ mismatch means the spec changed underneath the page between the preview and the 
 carrying no `x-plan-fingerprint` at all meets the same code, because the page always has one to send
 at a pressable rung, so its absence means the request did not come from a preview.
 
-None of these seven touches the milestone or an issue.
+None of these eight touches the milestone or an issue.
 
-From running the groom itself, once the seven above did not apply — the `PlanCollapse` codes this
+From running the groom itself, once the eight above did not apply — the `PlanCollapse` codes this
 slice adds to the doctrine `POST /spec-freeze` documents above
 (`backend/src/infrastructure/start-plan-route.ts`). The first five are reached alike by `GET
 /epic-groom`, `POST /epic-groom` and `POST /epic-promotion`, because all three read the spec, the
@@ -1334,10 +1354,16 @@ Then, once the key holds:
 | `no-coordinating-session` | 400 | no coordinating session is held: there is nothing to promote |
 | `no-epic-issues` | 400 | the milestone holds no issue yet: the groom has to run first |
 | `epic-partially-groomed` | 400 | the milestone holds some but not every planned issue: `detail` names how many of how many exist and that the groom has to be finished first — this route's own code, met by no other endpoint |
+| `epic-issues-uncertain` | 400 | `gh issue list`'s paging could not be exhausted: `detail` is the same reason `GET /epic-groom`'s `issues-uncertain` body carries — authorising past a page this backend never saw is exactly the defect this code exists to refuse |
 
-None of these four touches a label. From reading the milestone's issues and moving them, once
-the four above did not apply, this meets the same `PlanCollapse` codes `POST /epic-groom`
+None of these five touches a label. From reading the milestone's issues and moving them, once
+the five above did not apply, this meets the same `PlanCollapse` codes `POST /epic-groom`
 documents above, and it is the only route that can meet `epic-issue-not-promoted`.
+
+`epic-issues-uncertain` is deliberately the same spelling `POST /epic-groom` uses for the identical
+situation — one shared code for one shared fact about the milestone's issues, not two routes
+independently inventing their own; `backend/__tests__/infrastructure/refusal-codes.test.ts` declares
+the sharing on purpose so a future rename of either has to touch both.
 
 ```
 curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/epic-promotion

@@ -109,6 +109,15 @@ class Mother {
     })
   }
 
+  static readonly ISSUES_UNCERTAIN_REASON = 'the milestone may hold more issues than this backend could read'
+
+  static issuesUncertainRead(): EpicGroomRead {
+    return new EpicGroomRead({
+      state: EpicGroomState.ISSUES_UNCERTAIN, spec: Mother.frozenSpec(), milestone: Mother.MILESTONE, plan: null,
+      planFingerprint: null, issues: [], reason: Mother.ISSUES_UNCERTAIN_REASON,
+    })
+  }
+
   static groomableRead(): EpicGroomRead {
     return new EpicGroomRead({
       state: EpicGroomState.GROOMABLE,
@@ -179,6 +188,16 @@ describe('GroomEpic', () => {
     const groomed = await flow.run()
 
     expect(groomed.state).toBe(EpicGroomState.AWAITING_PUBLICATION)
+    expect(flow.groom.runAsked).toEqual([])
+  })
+
+  it('a listing that could not be exhausted refuses the groom, carries why, and the program is never run', async () => {
+    const flow = Flow.readingOnce(Mother.issuesUncertainRead())
+
+    const groomed = await flow.run()
+
+    expect(groomed.state).toBe(EpicGroomState.ISSUES_UNCERTAIN)
+    expect(groomed.reason).toBe(Mother.ISSUES_UNCERTAIN_REASON)
     expect(flow.groom.runAsked).toEqual([])
   })
 

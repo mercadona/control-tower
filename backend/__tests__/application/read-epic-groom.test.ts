@@ -8,6 +8,7 @@ import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { EpicIssue } from '../../src/domain/value-objects/epic-issue.ts'
+import { EpicIssuesListing } from '../../src/domain/value-objects/epic-issues-listing.ts'
 import { GroomPlan, GroomPlanIssue } from '../../src/domain/value-objects/groom-plan.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
@@ -49,16 +50,22 @@ class PublishedSpecsDouble extends PublishedSpecs {
 }
 
 class EpicIssuesDouble extends EpicIssues {
-  answer: EpicIssue[]
+  answer: EpicIssuesListing
   asked: IssuesAsked[]
 
-  constructor(answer: EpicIssue[]) {
+  constructor(issues: EpicIssue[]) {
     super()
-    this.answer = answer
+    this.answer = new EpicIssuesListing({ issues, exhausted: true, reason: null })
     this.asked = []
   }
 
-  async listOf(subject: IssuesAsked): Promise<EpicIssue[]> {
+  static uncertain(reason: string): EpicIssuesDouble {
+    const double = new EpicIssuesDouble([])
+    double.answer = new EpicIssuesListing({ issues: [], exhausted: false, reason })
+    return double
+  }
+
+  async listOf(subject: IssuesAsked): Promise<EpicIssuesListing> {
     this.asked.push(subject)
     return this.answer
   }
@@ -218,6 +225,26 @@ describe('ReadEpicGroom', () => {
     expect(read.planFingerprint).toBeNull()
     expect(read.issues).toEqual([])
     expect(flow.issues.asked).toEqual([])
+    expect(flow.groom.asked).toEqual([])
+  })
+
+  it('a listing that could not be exhausted is issues-uncertain, carries why, and the plan is never asked', async () => {
+    const frozen = Mother.frozen()
+    const reason = 'gh issue list answered exactly as many issues as it was asked for at every limit up to the ' +
+      'ceiling: the milestone may hold more issues than this backend could read'
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(frozen),
+      issues: EpicIssuesDouble.uncertain(reason),
+    })
+
+    const read = await flow.run()
+
+    expect(read.state).toBe(EpicGroomState.ISSUES_UNCERTAIN)
+    expect(read.reason).toBe(reason)
+    expect(read.milestone).toBe(Mother.TITLE)
+    expect(read.plan).toBeNull()
+    expect(read.planFingerprint).toBeNull()
+    expect(read.issues).toEqual([])
     expect(flow.groom.asked).toEqual([])
   })
 

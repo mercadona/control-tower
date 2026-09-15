@@ -223,6 +223,22 @@ class Mother {
     })
   }
 
+  static readonly ISSUES_UNCERTAIN_REASON = 'the milestone may hold more issues than this backend could read'
+
+  static issuesUncertainRead(): EpicGroomRead {
+    return new EpicGroomRead({
+      state: EpicGroomState.ISSUES_UNCERTAIN, spec: null, milestone: Mother.MILESTONE, plan: null,
+      planFingerprint: null, issues: [], reason: Mother.ISSUES_UNCERTAIN_REASON,
+    })
+  }
+
+  static issuesUncertainGroomed(): EpicGroomed {
+    return new EpicGroomed({
+      state: EpicGroomState.ISSUES_UNCERTAIN, milestone: Mother.MILESTONE, plan: null, issues: [],
+      staleness: PlanStaleness.FRESH, reason: Mother.ISSUES_UNCERTAIN_REASON,
+    })
+  }
+
   static draftGroomed(): EpicGroomed {
     return new EpicGroomed({
       state: EpicGroomState.DRAFT, milestone: null, plan: null, issues: [], staleness: PlanStaleness.FRESH,
@@ -495,6 +511,22 @@ describe('EpicGroomRoute', () => {
     })
   })
 
+  it('an uncertain read answers the milestone and why, and offers no key to press', async () => {
+    const held = Mother.live()
+    const read = ReadEpicGroomSpy.answering(Mother.issuesUncertainRead())
+    const groom = GroomEpicSpy.neverAsked()
+    const key = Keys.minted()
+
+    const response = await RunningApi.get(held, read, groom, key)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      status: 'issues-uncertain',
+      milestone: Mother.MILESTONE,
+      reason: Mother.ISSUES_UNCERTAIN_REASON,
+    })
+  })
+
   it('a spec that is not frozen refuses the groom as spec-not-frozen', async () => {
     const held = Mother.live()
     const groom = GroomEpicSpy.answering(Mother.draftGroomed())
@@ -507,6 +539,21 @@ describe('EpicGroomRoute', () => {
     expect(await response.json()).toEqual({
       code: 'spec-not-frozen',
       detail: 'the spec is not frozen: gate 1 first',
+    })
+  })
+
+  it('a listing that could not be exhausted refuses the groom as epic-issues-uncertain, carrying why', async () => {
+    const held = Mother.live()
+    const groom = GroomEpicSpy.answering(Mother.issuesUncertainGroomed())
+    const key = Keys.minted()
+    const port = await RunningApi.listening(held, ReadEpicGroomSpy.neverAsked(), groom, key)
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: 'epic-issues-uncertain',
+      detail: Mother.ISSUES_UNCERTAIN_REASON,
     })
   })
 

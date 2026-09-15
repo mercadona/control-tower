@@ -51,6 +51,9 @@ const toOutcome = (body: unknown): EpicGroomOutcome => {
   if (body.status === 'no-spec') return { kind: 'no-spec' }
   if (body.status === 'draft') return { kind: 'draft' }
   if (body.status === 'awaiting-publication') return { kind: 'awaiting-publication' }
+  if (body.status === 'issues-uncertain' && typeof body.milestone === 'string' && typeof body.reason === 'string') {
+    return { kind: 'issues-uncertain', milestone: body.milestone, reason: body.reason }
+  }
   if (
     body.status === 'groomable' &&
     typeof body.milestone === 'string' &&

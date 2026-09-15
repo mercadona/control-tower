@@ -93,6 +93,17 @@ class Mother {
       order: null,
     })
   }
+
+  static rawIssuesJson(count: number): string {
+    return JSON.stringify(Array.from({ length: count }, (_, index) => ({
+      number: index + 1,
+      url: `https://github.com/mercadona/control-tower/issues/${index + 1}`,
+      title: `issue #${index + 1} of a milestone with more than this backend used to read`,
+      labels: [],
+      state: 'OPEN',
+      body: '',
+    })))
+  }
 }
 
 class GhDouble {
@@ -171,10 +182,10 @@ describe('GhEpicIssues', () => {
   })
 
   describe(Mother.CAPTURE, () => {
-    it('the milestone is listed with every state and its issues come back sorted by number', async () => {
+    it('the milestone is listed with every state and its issues come back sorted by number, exhausted at one page', async () => {
       const gh = GhDouble.answering(Mother.REAL_LISTING)
 
-      const issues = await gh.listed()
+      const listing = await gh.listed()
 
       expect(gh.calls).toEqual([[
         'issue', 'list',
@@ -184,6 +195,9 @@ describe('GhEpicIssues', () => {
         '--limit', '200',
         '--json', 'number,url,title,labels,state,body',
       ]])
+      expect(listing.exhausted).toBe(true)
+      expect(listing.reason).toBeNull()
+      const issues = listing.issues
       expect(issues.map((issue) => issue.number)).toEqual([329, 330])
       expect(issues[0]).toBeInstanceOf(EpicIssue)
       expect(issues[0].isOpen).toBe(false)
@@ -193,6 +207,42 @@ describe('GhEpicIssues', () => {
       expect(issues[1].isOpen).toBe(true)
       expect(issues[1].status).toBe(PlanIssueStatus.IN_PROGRESS)
       expect(issues[1].order).toBe(5)
+    })
+  })
+
+  describe('paging past the first 200 issues', () => {
+    it('a page that comes back exactly as large as it was asked climbs to a larger limit before answering', async () => {
+      const gh = GhDouble.answering(Mother.rawIssuesJson(200), Mother.rawIssuesJson(300))
+
+      const listing = await gh.listed()
+
+      expect(gh.calls.map((argv) => argv[argv.indexOf('--limit') + 1])).toEqual(['200', '400'])
+      expect(listing.exhausted).toBe(true)
+      expect(listing.reason).toBeNull()
+      expect(listing.issues).toHaveLength(300)
+    })
+
+    it('a listing that keeps filling every limit up to the ceiling is answered inconclusive, not confidently short', async () => {
+      const gh = GhDouble.answering(
+        Mother.rawIssuesJson(200), Mother.rawIssuesJson(400), Mother.rawIssuesJson(800), Mother.rawIssuesJson(1600)
+      )
+
+      const listing = await gh.listed()
+
+      expect(gh.calls.map((argv) => argv[argv.indexOf('--limit') + 1])).toEqual(['200', '400', '800', '1600'])
+      expect(listing.exhausted).toBe(false)
+      expect(listing.issues).toEqual([])
+      expect(listing.reason).toContain(String(GhEpicIssues.PAGING_CEILING))
+      expect(listing.reason).toContain(Mother.MILESTONE)
+    })
+
+    it('a gh call that fails while climbing still raises EpicIssuesNotRead, not an inconclusive listing', async () => {
+      const gh = GhDouble.answering(Mother.rawIssuesJson(200))
+      gh.answers.push(new ProcessOutput({ code: 1, stdout: '', stderr: 'gh: not authenticated' }))
+
+      const refusal = await gh.listingRefusal()
+
+      expect(refusal).toBeInstanceOf(EpicIssuesNotRead)
     })
   })
 

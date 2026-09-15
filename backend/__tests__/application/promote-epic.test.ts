@@ -145,6 +145,15 @@ class Mother {
       planFingerprint: Mother.FINGERPRINT.of(Mother.PLAN), issues,
     })
   }
+
+  static readonly ISSUES_UNCERTAIN_REASON = 'the milestone may hold more issues than this backend could read'
+
+  static issuesUncertainRead(): EpicGroomRead {
+    return new EpicGroomRead({
+      state: EpicGroomState.ISSUES_UNCERTAIN, spec: null, milestone: Mother.MILESTONE, plan: null,
+      planFingerprint: null, issues: [], reason: Mother.ISSUES_UNCERTAIN_REASON,
+    })
+  }
 }
 
 class Flow {
@@ -185,6 +194,17 @@ describe('PromoteEpic', () => {
     const promoted = await flow.run()
 
     expect(promoted.state).toBe(EpicGroomState.GROOMABLE)
+    expect(flow.issues.promoteAsked).toEqual([])
+    expect(promoted.promoted).toEqual([])
+  })
+
+  it('a listing that could not be exhausted is refused, carries why, and nothing is promoted', async () => {
+    const flow = new Flow({ read: new ReadEpicGroomDouble([Mother.issuesUncertainRead()]) })
+
+    const promoted = await flow.run()
+
+    expect(promoted.state).toBe(EpicGroomState.ISSUES_UNCERTAIN)
+    expect(promoted.reason).toBe(Mother.ISSUES_UNCERTAIN_REASON)
     expect(flow.issues.promoteAsked).toEqual([])
     expect(promoted.promoted).toEqual([])
   })

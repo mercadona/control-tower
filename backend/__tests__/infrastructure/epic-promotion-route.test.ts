@@ -164,6 +164,15 @@ class Mother {
       state: EpicGroomState.PARTIALLY_GROOMED, milestone: Mother.MILESTONE, plan: Mother.PLAN, issues, promoted: [],
     })
   }
+
+  static readonly ISSUES_UNCERTAIN_REASON = 'the milestone may hold more issues than this backend could read'
+
+  static issuesUncertain(): EpicPromoted {
+    return new EpicPromoted({
+      state: EpicGroomState.ISSUES_UNCERTAIN, milestone: Mother.MILESTONE, plan: null, issues: [], promoted: [],
+      reason: Mother.ISSUES_UNCERTAIN_REASON,
+    })
+  }
 }
 
 class RunningApi {
@@ -282,6 +291,21 @@ describe('EpicPromotionRoute', () => {
     expect(await response.json()).toEqual({
       code: 'epic-partially-groomed',
       detail: 'the milestone holds 1 of 2 issue(s): finish the groom before authorising',
+    })
+  })
+
+  it('a listing that could not be exhausted is refused as epic-issues-uncertain, carrying why', async () => {
+    const held = Mother.live()
+    const promote = PromoteEpicSpy.answering(Mother.issuesUncertain())
+    const key = Keys.minted()
+    const port = await RunningApi.listening(held, promote, key)
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: 'epic-issues-uncertain',
+      detail: Mother.ISSUES_UNCERTAIN_REASON,
     })
   })
 

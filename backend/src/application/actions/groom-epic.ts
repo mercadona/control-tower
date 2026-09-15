@@ -35,19 +35,22 @@ export class EpicGroomed {
   readonly plan: GroomPlan | null
   readonly issues: readonly EpicIssue[]
   readonly staleness: PlanStalenessValue
+  readonly reason: string | null
 
-  constructor({ state, milestone, plan, issues, staleness }: {
+  constructor({ state, milestone, plan, issues, staleness, reason = null }: {
     state: EpicGroomStateValue,
     milestone: string | null,
     plan: GroomPlan | null,
     issues: readonly EpicIssue[],
     staleness: PlanStalenessValue,
+    reason?: string | null,
   }) {
     this.state = state
     this.milestone = milestone
     this.plan = plan
     this.issues = issues
     this.staleness = staleness
+    this.reason = reason
     Object.freeze(this)
   }
 }
@@ -57,6 +60,7 @@ export class GroomEpic {
     EpicGroomState.NO_SPEC,
     EpicGroomState.DRAFT,
     EpicGroomState.AWAITING_PUBLICATION,
+    EpicGroomState.ISSUES_UNCERTAIN,
   ])
 
   readonly read: ReadEpicGroom
@@ -75,7 +79,7 @@ export class GroomEpic {
     if (GroomEpic.REFUSED.includes(before.state)) {
       return new EpicGroomed({
         state: before.state, milestone: before.milestone, plan: before.plan, issues: before.issues,
-        staleness: PlanStaleness.FRESH,
+        staleness: PlanStaleness.FRESH, reason: before.reason,
       })
     }
 
@@ -97,7 +101,7 @@ export class GroomEpic {
 
     return new EpicGroomed({
       state: after.state, milestone: after.milestone, plan: before.plan, issues: after.issues,
-      staleness: PlanStaleness.FRESH,
+      staleness: PlanStaleness.FRESH, reason: after.reason,
     })
   }
 }

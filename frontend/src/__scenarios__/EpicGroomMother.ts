@@ -11,6 +11,8 @@ const READY_CHANNEL = { ...BACKLOG_CHANNEL, status: 'ready' }
 const PROMOTED = [348, 349]
 const NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
 const PLAN_CHANGED_DETAIL = 'the spec changed since this plan was shown: read the new plan before pressing again'
+const ISSUES_UNCERTAIN_REASON = 'gh issue list answered exactly as many issues as it was asked for at every ' +
+  'limit up to the ceiling of 1600: the milestone may hold more issues than this backend could read'
 
 const PLAN_JSON = `[${JSON.stringify(GATE_ISSUE)},${JSON.stringify(CHANNEL_ISSUE)}]`
 const BACKLOG_ISSUES_JSON = `[${JSON.stringify(BACKLOG_GATE)},${JSON.stringify(BACKLOG_CHANNEL)}]`
@@ -23,6 +25,11 @@ const noSpec = () => ({ status: 200, body: '{"status":"no-spec"}' })
 const draft = () => ({ status: 200, body: '{"status":"draft"}' })
 
 const awaitingPublication = () => ({ status: 200, body: '{"status":"awaiting-publication"}' })
+
+const issuesUncertain = () => ({
+  status: 200,
+  body: `{"status":"issues-uncertain","milestone":"${MILESTONE}","reason":${JSON.stringify(ISSUES_UNCERTAIN_REASON)}}`,
+})
 
 const groomable = () => ({
   status: 200,
@@ -88,10 +95,12 @@ export const EpicGroomMother = {
   PROMOTED,
   NOT_FROM_THE_PAGE_DETAIL,
   PLAN_CHANGED_DETAIL,
+  ISSUES_UNCERTAIN_REASON,
   none,
   noSpec,
   draft,
   awaitingPublication,
+  issuesUncertain,
   groomable,
   groomableWithoutKey,
   partiallyGroomed,

@@ -186,4 +186,13 @@ describe('EpicGroomPanel', () => {
     await waitFor(() => expect(reading).toHaveBeenCalled())
     expect(container).toBeEmptyDOMElement()
   })
+
+  it('a listing that could not be exhausted shows why and offers nothing to press', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.issuesUncertain().body, { status: 200 })))
+
+    render(<EpicGroomPanel />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(EpicGroomMother.ISSUES_UNCERTAIN_REASON)
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
 })

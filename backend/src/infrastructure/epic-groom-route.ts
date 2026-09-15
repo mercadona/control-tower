@@ -25,11 +25,12 @@ export const EpicGroomOutcome = Object.freeze({
   SPEC_NOT_PUBLISHED: 'spec-not-published',
   GROOM_IN_PROGRESS: 'groom-in-progress',
   PLAN_CHANGED: 'plan-changed',
+  ISSUES_UNCERTAIN: 'epic-issues-uncertain',
 } as const)
 
 export type EpicGroomOutcomeValue = (typeof EpicGroomOutcome)[keyof typeof EpicGroomOutcome]
 
-type EpicGroomRefusalOf = () => Refusal
+type EpicGroomRefusalOf = (groomed: EpicGroomed) => Refusal
 
 export class EpicGroomRefusal {
   static readonly #STATUS = 400
@@ -55,10 +56,15 @@ export class EpicGroomRefusal {
         code: EpicGroomOutcome.SPEC_NOT_PUBLISHED,
         detail: EpicGroomRefusal.#SPEC_NOT_PUBLISHED_DETAIL,
       })],
+      [EpicGroomState.ISSUES_UNCERTAIN, (groomed: EpicGroomed) => new Refusal({
+        status: EpicGroomRefusal.#STATUS,
+        code: EpicGroomOutcome.ISSUES_UNCERTAIN,
+        detail: groomed.reason!,
+      })],
     ])
 
   static of(groomed: EpicGroomed): Refusal {
-    return EpicGroomRefusal.#BY_STATE.of(groomed.state)()
+    return EpicGroomRefusal.#BY_STATE.of(groomed.state)(groomed)
   }
 }
 
@@ -168,6 +174,13 @@ export class EpicGroomRoute {
         return
       case EpicGroomState.AWAITING_PUBLICATION:
         Answer.send(response, 200, { status: EpicGroomState.AWAITING_PUBLICATION })
+        return
+      case EpicGroomState.ISSUES_UNCERTAIN:
+        Answer.send(response, 200, {
+          status: EpicGroomState.ISSUES_UNCERTAIN,
+          milestone: outcome.milestone,
+          reason: outcome.reason,
+        })
         return
       case EpicGroomState.GROOMABLE:
         Answer.send(response, 200, {

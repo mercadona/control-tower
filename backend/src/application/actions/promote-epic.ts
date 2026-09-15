@@ -23,19 +23,22 @@ export class EpicPromoted {
   readonly plan: GroomPlan | null
   readonly issues: readonly EpicIssue[]
   readonly promoted: readonly number[]
+  readonly reason: string | null
 
-  constructor({ state, milestone, plan, issues, promoted }: {
+  constructor({ state, milestone, plan, issues, promoted, reason = null }: {
     state: EpicGroomStateValue,
     milestone: string | null,
     plan: GroomPlan | null,
     issues: readonly EpicIssue[],
     promoted: readonly number[],
+    reason?: string | null,
   }) {
     this.state = state
     this.milestone = milestone
     this.plan = plan
     this.issues = issues
     this.promoted = promoted
+    this.reason = reason
     Object.freeze(this)
   }
 }
@@ -51,11 +54,14 @@ export class PromoteEpic {
 
   async execute(params: PromoteEpicParams): Promise<EpicPromoted> {
     const before = await this.read.execute(new ReadEpicGroomParams({ root: params.root, repository: params.repository }))
-    const nothingSafeToAuthorise = before.issues.length === 0 || before.state === EpicGroomState.PARTIALLY_GROOMED
+    const nothingSafeToAuthorise = before.issues.length === 0 ||
+      before.state === EpicGroomState.PARTIALLY_GROOMED ||
+      before.state === EpicGroomState.ISSUES_UNCERTAIN
 
     if (nothingSafeToAuthorise) {
       return new EpicPromoted({
         state: before.state, milestone: before.milestone, plan: before.plan, issues: before.issues, promoted: [],
+        reason: before.reason,
       })
     }
 
