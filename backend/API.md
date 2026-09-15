@@ -960,6 +960,14 @@ and never slugged from a title. The cut is idempotent: a branch of that name the
 already holds is switched to, one only the remote holds is fetched under its own
 name, and neither is ever cut a second time.
 
+**What it publishes is what that branch holds.** Switching branch changes the
+spec on disk, so the spec is read again at its own path once the branch is
+resolved, and everything after that — whether it is freezable, which design
+document it names, whether the freeze was already delivered — is decided on that
+copy. A branch already carrying a frozen spec keeps it: gate 1 never writes back
+over it the copy the press started from. A branch that does not carry the spec
+yet is published with the copy the freeze read before switching.
+
 **Which branch the remote calls default** is resolved in three steps, and the
 gate never passes when none of them answers: `git symbolic-ref
 refs/remotes/origin/HEAD` first, which is free and local; then, only if that
