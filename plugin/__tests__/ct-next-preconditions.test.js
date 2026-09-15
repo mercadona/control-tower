@@ -496,6 +496,56 @@ describe('ct-next — a target repository it cannot reach (#348)', () => {
     expect(answered.code).toBe(1)
   })
 
+  // THE EXIT CODE HAS TO SURVIVE THE EXIT THAT COMES FIRST. The commonest run
+  // right after grooming a multi-repository milestone has NOTHING ready in this
+  // repository — every issue is still at status:backlog — so the script takes
+  // its "no selection" exit long before the verdict at the end of the file. The
+  // refusal printed there with an exit 0 is the code this file defines as
+  // "progress, carry on at your normal pace", over a milestone half of which
+  // cannot be dispatched from anywhere. Found by the slice judge of #348: the
+  // three tests above all dispatch one ready issue, so none of them ever
+  // reached this path.
+  it('with nothing ready here, the refusal still exits 1 instead of the exit 0 of "nothing to dispatch"', () => {
+    const repoRoot = makeTmp('ct-next-reach-')
+    const configDir = makeTmp('ct-next-config-')
+    mkdirSync(join(configDir, 'control-tower'), { recursive: true })
+    writeFileSync(join(configDir, 'control-tower', 'checkouts.json'), JSON.stringify({ checkouts: [] }))
+    const backlogOnly = { ...readyIssue(milestoneWith(REACH)), labels: [{ name: 'status:backlog' }] }
+
+    const answered = run(['--repo', 'o/r', '--cap', '1', '--dry-run'], {
+      PATH: fakePath,
+      CLAUDE_CONFIG_DIR: configDir,
+      FAKE_GIT_TOPLEVEL: repoRoot,
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[backlogOnly], []]),
+    })
+
+    expect(answered.out).toMatch(/NO checkout of it is registered/)
+    expect(answered.code).toBe(1)
+  })
+
+  // The same finding through its other door: a batch that IS selected and
+  // launches nothing exits 3 ("retry later") at the end of the file, and a
+  // target repository nobody can reach does not resolve with time. The first
+  // version of this fix applied the refusal BEFORE that branch and the 3
+  // overwrote it.
+  it('a batch that launches nothing exits 1 and not the 3 of "retry later" when a target repository was refused', () => {
+    const repoRoot = makeTmp('ct-next-reach-')
+    const configDir = makeTmp('ct-next-config-')
+    mkdirSync(join(configDir, 'control-tower'), { recursive: true })
+    writeFileSync(join(configDir, 'control-tower', 'checkouts.json'), JSON.stringify({ checkouts: [] }))
+
+    const answered = run(['--repo', 'o/r', '--cap', '1'], {
+      PATH: fakePath,
+      CLAUDE_CONFIG_DIR: configDir,
+      FAKE_GIT_TOPLEVEL: repoRoot,
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[readyIssue(milestoneWith(REACH))], [], []]),
+      FAKE_GH_EDIT_FAIL: '1',
+    })
+
+    expect(answered.out).toMatch(/NO checkout of it is registered/)
+    expect(answered.code).toBe(1)
+  })
+
   it('a milestone whose reach is one repository prints nothing about the reach and does not move the exit code', () => {
     const answered = runWithReach('<!-- ct-repos:o/r -->', { registry: { checkouts: [] } })
 

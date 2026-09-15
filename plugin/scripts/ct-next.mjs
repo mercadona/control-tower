@@ -2056,6 +2056,24 @@ for (const w of formatStrayDepsWarnings(issues)) console.error(w)
 // claiming any of them is missing: "it could not be looked at" is not "there
 // is none" (the distinction scripts/cmux.js is built on).
 let anyTargetRepoRefused = false
+// exitCodeRefusing (#348, the slice judge's high finding): THE REFUSAL HAS TO
+// SURVIVE THE EXIT THAT COMES FIRST.
+//
+// This script ends in many different `process.exit()`s (see the comment on the
+// warning recap, above), and the verdict computed at the end of the file is
+// only one of them. The commonest run right after grooming a milestone that
+// spans repositories has NOTHING ready HERE — every issue is still at
+// status:backlog — so it takes the "no selection" exit long before that
+// verdict, and printing "NO checkout of it is registered" with an exit 0 hands
+// the caller the code this file defines as "progress, carry on at your normal
+// pace" over a milestone half of which cannot be dispatched from anywhere.
+//
+// The decision lives HERE, in one function, and every exit that could be a 0
+// goes through it: two places computing "what does a refusal do to the exit
+// code" is the drift `plugin/conventions/decisions.md` forbids. A refusal is a
+// 1 and not a 3 on purpose: 3 is "retry later" and registering a checkout does
+// not resolve with time.
+const exitCodeRefusing = (code) => (anyTargetRepoRefused ? 1 : code)
 {
   const reaches = (dispatchInput.reachByMilestone || [])
     .map(({ milestone, reach }) => ({
@@ -2313,7 +2331,7 @@ if (!selected.length) {
   // really needs to explain a collision — never for
   // 'none-ready'/'deps-unmet'/cap-full-with-a-slot.
   console.log(formatBlockReason(blockReason, cap, stalenessCtxFor()))
-  process.exit(0)
+  process.exit(exitCodeRefusing(0))
 }
 
 // D2 (dispatch audit), finding 2: under --dry-run, the complete selection is
@@ -3922,7 +3940,6 @@ let finalExitCode = 0
 // help", and it applies even when this run dispatched its own slices perfectly,
 // for the same reason `unverifiedLaunches` does further down: the work of the
 // milestone is not done and nothing in time fixes it.
-if (anyTargetRepoRefused) finalExitCode = 1
 if (dryRun && preflightFailures.length) {
   console.error(preflightSummary())
   console.error('This --dry-run is NOT a green light: the real run would stop at the preconditions above, without writing a single claim. Fix them ALL and run the dry-run again.')
@@ -4077,5 +4094,10 @@ await yieldToSignals()
 // unref'd). The file's other exit points do use `process.exit()` on purpose:
 // they are aborts, and their messages go through `console.error`/`writeSync`
 // just before.
-process.exitCode = finalExitCode
+// #348: LAST, after every branch above that can set a code — the 3 of "selected
+// and launched nothing" included. Applied before them it was overwritten by
+// that very 3, which is the same defect the judge found at the other exit,
+// through another door: 3 is "retry later" and a target repository nobody can
+// reach does not resolve with time.
+process.exitCode = exitCodeRefusing(finalExitCode)
 
