@@ -1,4 +1,4 @@
-import { LiveSessions } from '../domain/ports/live-sessions.ts'
+import { LiveSessions, LiveSessionNotLive } from '../domain/ports/live-sessions.ts'
 import { LiveSession } from '../domain/value-objects/live-session.ts'
 import { SessionProgram } from '../domain/value-objects/session-program.ts'
 import type { LiveSessionStream } from '../domain/ports/live-sessions.ts'
@@ -21,6 +21,7 @@ type OpenTerminal = {
   terminal: Terminal,
   scrollback: string,
   watchers: Set<Watcher>,
+  ended: boolean,
 }
 
 export class PtyLiveSessions extends LiveSessions {
@@ -67,7 +68,7 @@ export class PtyLiveSessions extends LiveSessions {
       cwd: program.cwd,
       env: PtyLiveSessions.#withForcedTerm(program.env),
     })
-    const opened: OpenTerminal = { session, terminal, scrollback: '', watchers: new Set() }
+    const opened: OpenTerminal = { session, terminal, scrollback: '', watchers: new Set(), ended: false }
     this.#open.set(session.id, opened)
     terminal.onData((bytes) => this.#received(opened, bytes))
     terminal.onExit(() => this.#exited(opened, program.name))
@@ -98,20 +99,36 @@ export class PtyLiveSessions extends LiveSessions {
   }
 
   write({ session, text }: { session: LiveSession, text: string }): void {
-    this.#terminalFor(session).terminal.write(text)
+    const opened = this.#terminalFor(session)
+    try {
+      opened.terminal.write(text)
+    } catch {
+      throw this.#wentAway(opened)
+    }
   }
 
   resize({ session, cols, rows }: { session: LiveSession, cols: number, rows: number }): void {
-    this.#terminalFor(session).terminal.resize(cols, rows)
+    const opened = this.#terminalFor(session)
+    try {
+      opened.terminal.resize(cols, rows)
+    } catch {
+      throw this.#wentAway(opened)
+    }
   }
 
   #terminalFor(session: LiveSession): OpenTerminal {
     const opened = this.#open.get(session.id)
-    if (opened === undefined) {
-      throw new Error(`PtyLiveSessions holds no live terminal for session ${session.id}`)
+    if (opened === undefined || opened.ended) {
+      throw new LiveSessionNotLive(session.id)
     }
 
     return opened
+  }
+
+  #wentAway(opened: OpenTerminal): LiveSessionNotLive {
+    opened.ended = true
+
+    return new LiveSessionNotLive(opened.session.id)
   }
 
   #received(opened: OpenTerminal, bytes: string): void {

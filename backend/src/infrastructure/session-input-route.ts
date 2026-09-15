@@ -1,6 +1,7 @@
 import { Answer, JsonBody, Refusal } from './http.ts'
 import { Projection } from './projection.ts'
 import { TypeIntoSession, TypeIntoSessionParams } from '../application/actions/type-into-session.ts'
+import { LiveSessionNotLive } from '../domain/ports/live-sessions.ts'
 import type { LiveSessions } from '../domain/ports/live-sessions.ts'
 import type { Request, RequestHandler, Response } from 'express'
 
@@ -32,7 +33,13 @@ export class SessionInputRoute {
         Answer.refuseAs(response, SessionInputRefusal.of(SessionInputRequest.refused(SessionInputOutcome.NOT_LIVE)))
         return
       }
-      typeIntoSession.execute(new TypeIntoSessionParams({ session, text: asked.text }))
+      try {
+        typeIntoSession.execute(new TypeIntoSessionParams({ session, text: asked.text }))
+      } catch (failure) {
+        if (!(failure instanceof LiveSessionNotLive)) throw failure
+        Answer.refuseAs(response, SessionInputRefusal.of(SessionInputRequest.refused(SessionInputOutcome.NOT_LIVE)))
+        return
+      }
       Answer.send(response, 202, { status: 'typed', id: session.id })
     }
   }

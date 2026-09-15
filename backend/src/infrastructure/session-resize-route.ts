@@ -1,6 +1,7 @@
 import { Answer, JsonBody, Refusal } from './http.ts'
 import { Projection } from './projection.ts'
 import { ResizeSession, ResizeSessionParams } from '../application/actions/resize-session.ts'
+import { LiveSessionNotLive } from '../domain/ports/live-sessions.ts'
 import type { LiveSessions } from '../domain/ports/live-sessions.ts'
 import type { Request, RequestHandler, Response } from 'express'
 
@@ -37,7 +38,15 @@ export class SessionResizeRoute {
         )
         return
       }
-      resizeSession.execute(new ResizeSessionParams({ session, cols: asked.cols, rows: asked.rows }))
+      try {
+        resizeSession.execute(new ResizeSessionParams({ session, cols: asked.cols, rows: asked.rows }))
+      } catch (failure) {
+        if (!(failure instanceof LiveSessionNotLive)) throw failure
+        Answer.refuseAs(
+          response, SessionResizeRefusal.of(SessionResizeRequest.refused(SessionResizeOutcome.NOT_LIVE))
+        )
+        return
+      }
       Answer.send(response, 202, { status: 'resized', id: session.id, cols: asked.cols, rows: asked.rows })
     }
   }

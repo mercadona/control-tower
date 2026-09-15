@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { PlanEvents, PlanSessions } from '../../src/infrastructure/plan-events-route.ts'
 import { ResizeSession, ResizeSessionParams } from '../../src/application/actions/resize-session.ts'
-import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
+import { LiveSessions, LiveSessionNotLive } from '../../src/domain/ports/live-sessions.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 
 class LiveSessionMother {
@@ -40,6 +40,16 @@ class ResizeSessionSpy extends ResizeSession {
 
   execute(params: ResizeSessionParams): void {
     this.asked.push(params)
+  }
+}
+
+class ResizeSessionThatFoundTheSessionGone extends ResizeSession {
+  constructor() {
+    super({ liveSessions: new LiveSessions() })
+  }
+
+  execute(params: ResizeSessionParams): void {
+    throw new LiveSessionNotLive(params.session.id)
   }
 }
 
@@ -191,6 +201,17 @@ describe('SessionResizeRoute', () => {
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ code: 'session-not-live', detail: 'no live session answers to that id' })
     expect(resizeSession.asked).toEqual([])
+  })
+
+  it('a session whose pty already closed its fd is refused as session-not-live, not a request failure', async () => {
+    const claude = LiveSessionMother.claude()
+    const liveSessions = LiveSessionsDouble.holding(claude)
+    const resizeSession = new ResizeSessionThatFoundTheSessionGone()
+
+    const response = await RunningApi.post(liveSessions, resizeSession, claude.id, '{"cols":120,"rows":40}')
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ code: 'session-not-live', detail: 'no live session answers to that id' })
   })
 
   it('a method other than POST is refused naming POST as allowed', async () => {

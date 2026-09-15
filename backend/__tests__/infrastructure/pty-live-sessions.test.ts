@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { PtyLiveSessions } from '../../src/infrastructure/pty-live-sessions.ts'
 import type { Terminal, TerminalSpawn } from '../../src/infrastructure/pty-live-sessions.ts'
 import { SessionProgram } from '../../src/domain/value-objects/session-program.ts'
+import { LiveSessionNotLive } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 
 type RecordedSpawn = {
@@ -15,6 +16,7 @@ type ResizedTo = { cols: number, rows: number }
 class TerminalDouble implements Terminal {
   readonly written: string[] = []
   readonly resized: ResizedTo[] = []
+  resizeFailure: Error | null = null
   #onData: ((bytes: string) => void) | null = null
   #onExit: (() => void) | null = null
 
@@ -31,6 +33,7 @@ class TerminalDouble implements Terminal {
   }
 
   resize(cols: number, rows: number): void {
+    if (this.resizeFailure !== null) throw this.resizeFailure
     this.resized.push({ cols, rows })
   }
 
@@ -205,6 +208,19 @@ describe('PtyLiveSessions', () => {
     opened.sessions.resize({ session: opened.session, cols: 120, rows: 40 })
 
     expect(opened.terminal.resized).toEqual([{ cols: 120, rows: 40 }])
+  })
+
+  it('a resize whose terminal already closed its fd is refused as not live, and every later call too', () => {
+    const opened = OpenedTerminal.with()
+    opened.terminal.resizeFailure = new Error('ioctl(2) failed, EBADF')
+
+    expect(() => opened.sessions.resize({ session: opened.session, cols: 120, rows: 40 }))
+      .toThrow(LiveSessionNotLive)
+
+    opened.terminal.resizeFailure = null
+    expect(() => opened.sessions.resize({ session: opened.session, cols: 100, rows: 30 }))
+      .toThrow(LiveSessionNotLive)
+    expect(opened.terminal.resized).toEqual([])
   })
 
   it('the shell is the login interactive one, and /bin/sh when SHELL is unset', () => {
