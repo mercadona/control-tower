@@ -208,6 +208,10 @@ function normalise(textLines) {
     .replace(CODE_SPAN, ' CODE ')
     .replace(OPAQUE, opaqueToCode)
     .replace(EMPHASIS, '')
+    // A replacement above injects a trailing space, so a closing mark that
+    // followed a backticked span ends up as a word of its own. Glue it back to
+    // the token before it.
+    .replace(/\s+([.,;:!?])/g, '$1')
     .trim()
 }
 
