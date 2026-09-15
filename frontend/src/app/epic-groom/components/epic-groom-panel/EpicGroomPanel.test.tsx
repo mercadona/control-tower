@@ -9,7 +9,10 @@ const SESSION_BUTTON = { name: 'Revisar el slicing con la sesión' }
 const PUBLISH_BUTTON = { name: 'Publicar el nuevo slicing' }
 
 describe('EpicGroomPanel', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
 
   it('shows what the groom will create before anything is created', async () => {
     const reading = vi.fn(async () => new Response(EpicGroomMother.groomable().body, { status: 200 }))
@@ -60,10 +63,10 @@ describe('EpicGroomPanel', () => {
   })
 
   it('the way into the conversation carries the gate key and says where the session can be talked to', async () => {
-    const fetching = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(EpicGroomMother.groomable().body, { status: 200 }))
-      .mockResolvedValueOnce(new Response(EpicGroomMother.groomSessionOpened().body, { status: 202 }))
+    const fetching = vi.fn(async (input: string | URL | Request) =>
+      String(input) === '/groom-session'
+        ? new Response(EpicGroomMother.groomSessionOpened().body, { status: 202 })
+        : new Response(EpicGroomMother.groomable().body, { status: 200 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
     render(<EpicGroomPanel />)
@@ -79,6 +82,31 @@ describe('EpicGroomPanel', () => {
       await screen.findByText('Sesión del groom abierta: habla con ella en el panel de sesiones.'),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', GROOM_BUTTON)).toBeEnabled()
+  })
+
+  it('the slicing the session changed reaches the panel without a reload', async () => {
+    let slicing = EpicGroomMother.groomable()
+    const fetching = vi.fn(async (input: string | URL | Request) => {
+      if (String(input) === '/groom-session') {
+        slicing = EpicGroomMother.resliced()
+        return new Response(EpicGroomMother.groomSessionOpened().body, { status: 202 })
+      }
+      return new Response(slicing.body, { status: slicing.status })
+    })
+    vi.stubGlobal('fetch', fetching)
+    const user = userEvent.setup()
+    render(<EpicGroomPanel />)
+    await screen.findByRole('button', SESSION_BUTTON)
+
+    await user.click(screen.getByRole('button', SESSION_BUTTON))
+
+    expect(await screen.findByRole('button', PUBLISH_BUTTON)).toBeInTheDocument()
+    expect(screen.queryByRole('button', GROOM_BUTTON)).not.toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'La sesión ha cambiado el slicing del spec. Publícalo en un pull request: al mergearlo se crearán las issues.',
+      ),
+    ).toBeInTheDocument()
   })
 
   it('a refused opening is shown with the words the program printed and leaves the dry run on screen', async () => {
@@ -285,11 +313,10 @@ describe('EpicGroomPanel', () => {
   })
 
   it('a press the page cannot confirm says so as a warning instead of reporting a failure', async () => {
-    const fetching = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(EpicGroomMother.groomable().body, { status: 200 }))
-      .mockResolvedValueOnce(new Response('<html><body>Bad Gateway</body></html>', { status: 502 }))
-      .mockResolvedValueOnce(new Response('<html><body>Bad Gateway</body></html>', { status: 502 }))
+    const fetching = vi.fn(async (_input: string | URL | Request, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? new Response('<html><body>Bad Gateway</body></html>', { status: 502 })
+        : new Response(EpicGroomMother.groomable().body, { status: 200 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
     render(<EpicGroomPanel />)

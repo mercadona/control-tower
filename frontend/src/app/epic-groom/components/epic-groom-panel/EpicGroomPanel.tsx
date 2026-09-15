@@ -63,11 +63,12 @@ const EpicGroomPanelLabels = {
 }
 
 const EpicGroomPanel = () => {
-  const read = useEpicGroom()
-  const gateKey = read.phase === 'read' && KEYED_KINDS.includes(read.kind) && 'key' in read ? read.key : null
-  const presses = useGatePresses(gateKey)
-  useMergedReslicing({ read, press: presses.groom })
+  const presses = useGatePresses()
   const { acted, refusal, session, reslicing } = presses
+  const isReviewingTheSlicing = session?.kind === 'opened' || refusal?.kind === 'unconfirmed'
+  const read = useEpicGroom(isReviewingTheSlicing)
+  const gateKey = read.phase === 'read' && KEYED_KINDS.includes(read.kind) && 'key' in read ? read.key : null
+  useMergedReslicing({ read, press: (planFingerprint) => presses.groom(gateKey, planFingerprint) })
 
   if (read.phase === 'connecting') return null
   if (acted === null && EPIC_GROOM_NOTHING_TO_SHOW_KINDS.includes(read.kind)) return null
@@ -147,7 +148,7 @@ const EpicGroomPanel = () => {
     return (
       <div className="epic-groom-panel">
         <p className="epic-groom-panel__resliced">{RESLICED}</p>
-        <Button onClick={() => void presses.publishReslicing()} disabled={gateKey === null || isPressing}>
+        <Button onClick={() => void presses.publishReslicing(gateKey)} disabled={gateKey === null || isPressing}>
           {presses.pressed === 'reslicing' ? PUBLISHING_RESLICING : PUBLISH_RESLICING}
         </Button>
         {reslicing?.kind === 'published' && (
@@ -187,10 +188,10 @@ const EpicGroomPanel = () => {
             </a>
           </>
         )}
-        <Button onClick={() => void presses.groom(planFingerprint)} disabled={gateKey === null || isPressing}>
+        <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || isPressing}>
           {presses.pressed === 'groom' ? GROOMING : GROOM}
         </Button>
-        <Button onClick={() => void presses.openSession()} disabled={gateKey === null || isPressing}>
+        <Button onClick={() => void presses.openSession(gateKey)} disabled={gateKey === null || isPressing}>
           {presses.pressed === 'session' ? OPENING_SESSION : OPEN_SESSION}
         </Button>
         {sessionNotice}
@@ -215,7 +216,7 @@ const EpicGroomPanel = () => {
           ))}
         </ul>
         <p className="epic-groom-panel__partial-notice">{FINISH_GROOM_FIRST}</p>
-        <Button onClick={() => void presses.groom(planFingerprint)} disabled={gateKey === null || isPressing}>
+        <Button onClick={() => void presses.groom(gateKey, planFingerprint)} disabled={gateKey === null || isPressing}>
           {presses.pressed === 'groom' ? GROOMING : GROOM}
         </Button>
         {gateNotice}
@@ -243,7 +244,7 @@ const EpicGroomPanel = () => {
             </li>
           ))}
         </ul>
-        <Button onClick={() => void presses.promote()} disabled={gateKey === null || isPressing}>
+        <Button onClick={() => void presses.promote(gateKey)} disabled={gateKey === null || isPressing}>
           {presses.pressed === 'promote' ? PROMOTING : PROMOTE}
         </Button>
         {gateNotice}

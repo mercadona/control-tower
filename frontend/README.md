@@ -149,7 +149,14 @@ pressed from the page the backend itself serves.
 `SpecFreezePanel`, outside every `currentStage` branch too) is gate 2's panel:
 the groom and the authorisation. `GET /epic-groom` polls the same checkout
 (`useEpicGroom.ts`) every ten seconds, stopping once it reaches `groomable`,
-`groomed` or `authorised`, and answers one of the ten states `EpicGroom.types.ts`
+`groomed` or `authorised` — **unless the slicing is being reviewed**, and then it
+keeps asking at `groomable` and `partially-groomed`, the two resting rungs a
+conversation can still change. The panel says so while the groom conversation it
+opened is on screen or while a press it could not confirm is outstanding, and
+passing that flag re-arms the read at once, so the §9 table the session edits
+reaches the page without a reload. At `groomed` and `authorised` it rests
+whatever the review is doing: there is nothing left for a conversation to
+change there. It answers one of the ten states `EpicGroom.types.ts`
 declares: `none`, `no-spec` and `draft` render nothing, because gate 1's panel
 already says what is missing; `resliced` says the coordinating session changed
 the slicing and offers **Publicar el nuevo slicing**, which calls
