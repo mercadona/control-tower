@@ -14,7 +14,7 @@ Every shape below was read from a running server, not from the source alone. The
 | Port | `CT_API_PORT`, default `8787` |
 | Interface | loopback only (`127.0.0.1`) |
 | Start | `make run-backend` |
-| Endpoints | 15 (`POST` 6, `GET` 9) |
+| Endpoints | 18 (`POST` 8, `GET` 10) |
 
 In development the vite dev server proxies these paths to the backend and strips
 the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
@@ -29,8 +29,9 @@ the `Origin` header (`frontend/vite.config.ts`). A new endpoint must be added to
    405 keeps its own status because it is the protocol answering, not the
    application: it is decided before any request reaches a use case.
 3. **A `POST` that carries a body must declare `Content-Type: application/json`.** Otherwise 415.
-   The one exception is `POST /spec-freeze`, which takes no body at all and therefore mounts
-   neither body middleware: it never answers 415, whatever it is sent.
+   Three exceptions take no body at all and therefore mount neither body middleware: `POST
+   /spec-freeze`, `POST /epic-groom` and `POST /epic-promotion` never answer 415, whatever they
+   are sent.
 4. **A body over 8 KiB is refused** with 413 `body-too-large`.
 5. **An unknown field in a `POST` body is refused**, not ignored. The one
    exception is `POST /session-hooks`: Claude Code's own hook payload carries
@@ -1070,6 +1071,219 @@ curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/spec-freeze
 
 ---
 
+## `GET /epic-groom`
+
+Gate 2's own state for the checkout the held coordinating session sits in, derived from the
+execution spec, the epic's milestone and its issues on GitHub — nothing stored. No parameters.
+The cabin polls it to draw gate 2's panel.
+
+**200 OK** — seven shapes, told apart by `status`.
+
+No coordinating session is held, so there is nothing to groom:
+
+```json
+{"status":"none"}
+```
+
+A session is held, but the checkout carries no execution spec — the same absence `GET
+/spec-freeze` answers with `no-spec`:
+
+```json
+{"status":"no-spec"}
+```
+
+The spec exists and is not frozen yet:
+
+```json
+{"status":"draft"}
+```
+
+The spec is frozen, but its committed copy is not yet readable on the default branch — the pull
+request gate 1 opened has to merge first:
+
+```json
+{"status":"awaiting-publication"}
+```
+
+The spec is frozen and published, and the milestone holds no issue yet. `plan` is `ct-groom
+--dry-run`'s own product, kept as what a real run would create: the milestone and, per row of the
+spec's slices table, the order, the title and the labels the real run would give its issue:
+
+```json
+{"status":"groomable",
+ "milestone":"The loop enters through brainstorming",
+ "plan":{"issues":[
+   {"order":1,"title":"The intermediate gate retires","labels":["type:backend","area:api","status:backlog"]},
+   {"order":2,"title":"The session channel","labels":["type:ui","area:sessions","status:backlog"]}
+ ]},
+ "key":"3f9c1a…"}
+```
+
+The milestone holds issues and at least one open one still stands at `status:backlog` — the groom
+already ran, gate 2's promotion has not:
+
+```json
+{"status":"groomed",
+ "milestone":"The loop enters through brainstorming",
+ "issues":[
+   {"number":348,"url":"https://github.com/owner/name/issues/348","title":"The intermediate gate retires","status":"backlog"},
+   {"number":349,"url":"https://github.com/owner/name/issues/349","title":"The session channel","status":"backlog"}
+ ],
+ "key":"3f9c1a…"}
+```
+
+Every open issue of the milestone already left `status:backlog` — there is nothing left to
+promote:
+
+```json
+{"status":"authorised",
+ "milestone":"The loop enters through brainstorming",
+ "issues":[
+   {"number":348,"url":"https://github.com/owner/name/issues/348","title":"The intermediate gate retires","status":"ready"},
+   {"number":349,"url":"https://github.com/owner/name/issues/349","title":"The session channel","status":"ready"}
+ ]}
+```
+
+`key` is the same value `POST /epic-groom` and `POST /epic-promotion` demand in their
+`x-gate-key` header, minted once when the backend starts
+(`backend/src/infrastructure/gate-key.ts`) — the mechanism `GET /spec-freeze` documents above. It
+is attached only to the `groomable` and `groomed` bodies, and only for the page's own request;
+`no-spec`, `draft`, `awaiting-publication` and `authorised` never carry it, whatever request asks
+— `authorised` has nothing left for a key to open.
+
+**Refusals**
+
+The shared ones — 405 for a method other than `GET` or `POST`, 403 for a foreign `Origin` — and,
+with a 400 and its own `{code, detail}`, every tool refusal this read can meet: deriving these
+seven states can run `ct-groom --dry-run`, `gh api repos/<repo>/contents/<spec>` and `gh issue
+list`, so their failures surface here too — the same `PlanCollapse` codes `POST /epic-groom`
+documents below, except `epic-issue-not-promoted`, which only `POST /epic-promotion` can meet.
+
+```
+curl -s http://127.0.0.1:8787/epic-groom
+```
+
+---
+
+## `POST /epic-groom`
+
+Gate 2's groom. Runs `ct-groom` for real over the spec and milestone `GET /epic-groom` already
+read, and answers the issues the milestone holds afterwards. No request body — the whole checkout
+is read from the held coordinating session, the same way `GET /epic-groom` does.
+
+**Request header**
+
+| Header | Required | Shape |
+|---|---|---|
+| `x-gate-key` | yes | the exact value `GET /epic-groom` minted for the page |
+
+**200 OK**
+
+```json
+{"status":"groomed",
+ "milestone":"The loop enters through brainstorming",
+ "issues":[
+   {"number":348,"url":"https://github.com/owner/name/issues/348","title":"The intermediate gate retires","status":"backlog"},
+   {"number":349,"url":"https://github.com/owner/name/issues/349","title":"The session channel","status":"backlog"}
+ ]}
+```
+
+**Refusals**
+
+Checked before anything else, ahead even of whether a session is held:
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `gate-not-from-the-page` | 403 | `x-gate-key` is missing or does not match the key `GET /epic-groom` minted for the page |
+
+Then, once the key holds:
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `no-coordinating-session` | 400 | no coordinating session is held: there is nothing to groom |
+| `no-epic-spec` | 400 | no execution spec exists in this checkout to groom |
+| `spec-not-frozen` | 400 | the spec is not frozen: gate 1 first |
+| `spec-not-published` | 400 | the spec is frozen, but its committed copy is not yet readable on the default branch |
+
+None of these five touches the milestone or an issue.
+
+From running the groom itself, once the five above did not apply — the `PlanCollapse` codes this
+slice adds to the doctrine `POST /spec-freeze` documents above
+(`backend/src/infrastructure/start-plan-route.ts`). The first five are reached alike by `GET
+/epic-groom`, `POST /epic-groom` and `POST /epic-promotion`, because all three read the spec, the
+published copy and the milestone's issues through the same ports; the sixth is met only where an
+issue is actually edited:
+
+| `code` | Meaning |
+|---|---|
+| `epic-not-groomed` | `ct-groom` exited with something other than `0` (no divergence) or `3` (unreconciled divergence); `detail` is that program's own stderr, untranslated |
+| `groom-plan-not-understood` | `ct-groom --dry-run` printed something this backend cannot read as a plan |
+| `published-spec-not-read` | `gh api repos/<repo>/contents/<spec>` failed for a reason other than "not found" |
+| `epic-issues-not-read` | `gh issue list` failed while reading the milestone's issues |
+| `epic-issues-not-understood` | `gh` answered the milestone's issues without the shape this reads |
+| `epic-issue-not-promoted` | `gh issue edit` failed while moving one issue from `status:backlog` to `status:ready` — met only by `POST /epic-promotion`, the only caller of that edit |
+
+All six answer 400 and carry the tool's own message in `detail`, the same convention every other
+tool refusal in this file follows.
+
+```
+curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/epic-groom
+```
+
+---
+
+## `POST /epic-promotion`
+
+Gate 2's press. Adds `status:ready` to every open issue of the milestone standing at
+`status:backlog`, removing `status:backlog` from it, and touches no other label, no other issue
+and no other field. No request body — the whole checkout is read from the held coordinating
+session, the same way `GET /epic-groom` does.
+
+**Request header**
+
+| Header | Required | Shape |
+|---|---|---|
+| `x-gate-key` | yes | the exact value `GET /epic-groom` minted for the page |
+
+**200 OK**
+
+```json
+{"status":"authorised",
+ "milestone":"The loop enters through brainstorming",
+ "issues":[
+   {"number":348,"url":"https://github.com/owner/name/issues/348","title":"The intermediate gate retires","status":"ready"},
+   {"number":349,"url":"https://github.com/owner/name/issues/349","title":"The session channel","status":"ready"}
+ ],
+ "promoted":[348,349]}
+```
+
+`promoted` names only the issues this press actually moved; it is `[]` when nothing was waiting.
+
+**Refusals**
+
+Checked before anything else, ahead even of whether a session is held:
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `gate-not-from-the-page` | 403 | `x-gate-key` is missing or does not match the key `GET /epic-groom` minted for the page |
+
+Then, once the key holds:
+
+| `code` | Status | Meaning |
+|---|---|---|
+| `no-coordinating-session` | 400 | no coordinating session is held: there is nothing to promote |
+| `no-epic-issues` | 400 | the milestone holds no issue yet: the groom has to run first |
+
+None of these three touches a label. From reading the milestone's issues and moving them, once
+the three above did not apply, this meets the same `PlanCollapse` codes `POST /epic-groom`
+documents above, and it is the only route that can meet `epic-issue-not-promoted`.
+
+```
+curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/epic-promotion
+```
+
+---
+
 ## Where the frontend consumes each one
 
 | Endpoint | Client | Types |
@@ -1088,6 +1302,9 @@ curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/spec-freeze
 | `GET /coordinating-session` | `frontend/src/app/coordinating-session/client.ts` | `CoordinatingSession.types.ts` |
 | `GET /spec-freeze` | `frontend/src/app/spec-freeze/client.ts` | `SpecFreeze.types.ts` |
 | `POST /spec-freeze` | `frontend/src/app/spec-freeze/client.ts` | `SpecFreeze.types.ts` |
+| `GET /epic-groom` | `frontend/src/app/epic-groom/client.ts` | `EpicGroom.types.ts` |
+| `POST /epic-groom` | `frontend/src/app/epic-groom/client.ts` | `EpicGroom.types.ts` |
+| `POST /epic-promotion` | `frontend/src/app/epic-groom/client.ts` | `EpicGroom.types.ts` |
 
 A client validates the wire shape before it reaches a component, and projects
 snake_case to camelCase. Add a field to the validator, or the component never
