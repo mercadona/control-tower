@@ -4,10 +4,9 @@ import { FreezeAskOutcome, FreezeFinding } from 'app/spec-freeze/SpecFreeze.type
 import { useSpecFreeze } from 'app/spec-freeze/useSpecFreeze'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
-import { Panel } from 'system-ui/panel'
 import './SpecFreezePanel.css'
 
-const HEADING = 'Puerta 1 · Congelación del spec'
+const SPEC_FREEZE_GATE_HEADING = 'Puerta 1 · Congelación del spec'
 const BLOCKED = 'La vara todavía no deja congelar'
 const FINDING: Record<string, string> = {
   'clarification-marker': 'Marcador de clarificación sin resolver',
@@ -27,7 +26,11 @@ const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
 const findingLabel = (finding: FreezeFinding): string =>
   finding.line === null ? FINDING[finding.code] : `${FINDING[finding.code]}, línea ${finding.line}: ${finding.detail}`
 
-const SpecFreezePanel = () => {
+interface SpecFreezePanelProps {
+  isGate2Actionable?: boolean
+}
+
+const SpecFreezePanel = ({ isGate2Actionable = false }: SpecFreezePanelProps = {}) => {
   const read = useSpecFreeze()
   const [asked, setAsked] = useState<FreezeAskOutcome | null>(null)
   const [isFreezing, setIsFreezing] = useState(false)
@@ -37,24 +40,24 @@ const SpecFreezePanel = () => {
 
   if (frozen !== null) {
     return (
-      <Panel heading={HEADING}>
+      <div className="spec-freeze-panel">
         <p className="spec-freeze-panel__frozen">{frozen.on === null ? FROZEN_UNDATED : `${FROZEN} ${frozen.on}.`}</p>
         {frozen.pullRequest !== null && (
           <a className="spec-freeze-panel__pull-request" href={frozen.pullRequest.url}>
             {`${PULL_REQUEST} #${frozen.pullRequest.number}`}
           </a>
         )}
-        <p className="spec-freeze-panel__waiting">{WAITING}</p>
-      </Panel>
+        {!isGate2Actionable && <p className="spec-freeze-panel__waiting">{WAITING}</p>}
+      </div>
     )
   }
 
   if (read.phase === 'connecting') return null
   if (read.kind === 'refused') {
     return (
-      <Panel heading={HEADING}>
+      <div className="spec-freeze-panel">
         <Banner type="error" role="alert" title={read.error} />
-      </Panel>
+      </div>
     )
   }
   if (read.kind !== 'draft') return null
@@ -74,7 +77,7 @@ const SpecFreezePanel = () => {
   }
 
   return (
-    <Panel heading={HEADING}>
+    <div className="spec-freeze-panel">
       {isBlocked && (
         <>
           <p className="spec-freeze-panel__blocked">{BLOCKED}</p>
@@ -93,8 +96,8 @@ const SpecFreezePanel = () => {
       {gateKey === null && <p className="spec-freeze-panel__only-from-the-page">{ONLY_FROM_THE_PAGE}</p>}
       {asked?.kind === 'refused' && <Banner type="error" role="alert" title={asked.error} />}
       {asked?.kind === 'backend-unreachable' && <Banner type="error" role="alert" title={UNREACHABLE_MESSAGE} />}
-    </Panel>
+    </div>
   )
 }
 
-export { SpecFreezePanel }
+export { SpecFreezePanel, SPEC_FREEZE_GATE_HEADING }
