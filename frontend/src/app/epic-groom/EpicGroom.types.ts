@@ -4,6 +4,7 @@ export type EpicIssue = { number: number; url: string; title: string; status: st
 export type EpicGroomOutcome =
   | { kind: 'none' } | { kind: 'no-spec' } | { kind: 'draft' }
   | { kind: 'awaiting-publication'; pullRequest: EpicPullRequest | null }
+  | { kind: 'resliced'; key: string | null }
   | { kind: 'issues-uncertain'; milestone: string; reason: string }
   | {
       kind: 'groomable'; milestone: string; plan: GroomPlanIssue[]; home: string;
@@ -16,6 +17,10 @@ export type EpicGroomOutcome =
   | { kind: 'groomed'; milestone: string; issues: EpicIssue[]; key: string | null }
   | { kind: 'authorised'; milestone: string; issues: EpicIssue[] }
   | { kind: 'refused'; code: string; error: string } | { kind: 'unavailable' }
+export type ReslicingOutcome =
+  | { kind: 'published'; pullRequest: EpicPullRequest }
+  | { kind: 'refused'; code: string; error: string }
+  | { kind: 'unconfirmed' }
 export type GroomSessionOutcome =
   | { kind: 'opened' }
   | { kind: 'refused'; code: string; error: string }

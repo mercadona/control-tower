@@ -1476,6 +1476,7 @@ curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/epic-promotion
 | `POST /coordinating-session` | `frontend/src/app/coordinating-session/client.ts` | `CoordinatingSession.types.ts` |
 | `GET /coordinating-session` | `frontend/src/app/coordinating-session/client.ts` | `CoordinatingSession.types.ts` |
 | `POST /groom-session` | `frontend/src/app/epic-groom/client.ts` | `EpicGroom.types.ts` |
+| `POST /spec-reslicing` | `frontend/src/app/epic-groom/client.ts` | `EpicGroom.types.ts` |
 | `GET /spec-freeze` | `frontend/src/app/spec-freeze/client.ts` | `SpecFreeze.types.ts` |
 | `POST /spec-freeze` | `frontend/src/app/spec-freeze/client.ts` | `SpecFreeze.types.ts` |
 | `GET /epic-groom` | `frontend/src/app/epic-groom/client.ts` | `EpicGroom.types.ts` |

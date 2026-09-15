@@ -15,6 +15,13 @@ const OPENING_SESSION = 'Abriendo la sesión'
 const SESSION_OPENED = 'Sesión del groom abierta: habla con ella en el panel de sesiones.'
 const SESSION_UNCONFIRMED_TITLE = 'No se ha podido confirmar la apertura de la sesión'
 const SESSION_UNCONFIRMED_DETAIL = 'Mira el panel de sesiones: puede estar abierta.'
+const RESLICING_UNCONFIRMED_TITLE = 'No se ha podido confirmar la publicación del nuevo slicing'
+const RESLICING_UNCONFIRMED_DETAIL = 'Puede haberse publicado: la página lo dirá en cuanto lo sepa.'
+const RESLICED =
+  'La sesión ha cambiado el slicing del spec. Publícalo en un pull request: al mergearlo se crearán las issues.'
+const PUBLISH_RESLICING = 'Publicar el nuevo slicing'
+const PUBLISHING_RESLICING = 'Publicando el nuevo slicing'
+const RESLICING_PUBLISHED = 'El nuevo slicing viaja en este pull request: mergéalo y las issues se crearán solas.'
 const CREATED = 'Issues del epic'
 const PROMOTE = 'Autorizar el trabajo'
 const PROMOTING = 'Autorizando el trabajo'
@@ -35,7 +42,9 @@ const NOTHING_TO_SHOW_KINDS: readonly EpicGroomOutcome['kind'][] = [
   'unavailable',
 ]
 
-const KEYED_KINDS: readonly EpicGroomOutcome['kind'][] = ['groomable', 'partially-groomed', 'groomed']
+const KEYED_KINDS: readonly EpicGroomOutcome['kind'][] = [
+  'resliced', 'groomable', 'partially-groomed', 'groomed',
+]
 
 const planCount = (count: number): string => `${count} issues`
 const partialCount = (existing: number, planned: number): string => `${existing} de ${planned} issues creadas`
@@ -54,7 +63,7 @@ const EpicGroomPanel = () => {
   const read = useEpicGroom()
   const gateKey = read.phase === 'read' && KEYED_KINDS.includes(read.kind) && 'key' in read ? read.key : null
   const presses = useGatePresses(gateKey)
-  const { acted, refusal, session } = presses
+  const { acted, refusal, session, reslicing } = presses
 
   if (read.phase === 'connecting') return null
   if (acted === null && NOTHING_TO_SHOW_KINDS.includes(read.kind)) return null
@@ -100,6 +109,17 @@ const EpicGroomPanel = () => {
     ) : refusal?.kind === 'backend-unreachable' ? (
       <Banner type="error" role="alert" title={UNREACHABLE_MESSAGE} />
     ) : null
+  const reslicingBanner =
+    reslicing?.kind === 'refused' ? (
+      <Banner type="error" role="alert" title={reslicing.error} />
+    ) : reslicing?.kind === 'unconfirmed' ? (
+      <Banner
+        type="warning"
+        role="alert"
+        title={RESLICING_UNCONFIRMED_TITLE}
+        description={RESLICING_UNCONFIRMED_DETAIL}
+      />
+    ) : null
   const sessionNotice =
     session?.kind === 'opened' ? (
       <p className="epic-groom-panel__session-opened">{SESSION_OPENED}</p>
@@ -113,6 +133,27 @@ const EpicGroomPanel = () => {
         description={SESSION_UNCONFIRMED_DETAIL}
       />
     ) : null
+
+  if (acted === null && read.kind === 'resliced') {
+    return (
+      <Panel heading={HEADING}>
+        <p className="epic-groom-panel__resliced">{RESLICED}</p>
+        <Button onClick={() => void presses.publishReslicing()} disabled={gateKey === null || isPressing}>
+          {presses.pressed === 'reslicing' ? PUBLISHING_RESLICING : PUBLISH_RESLICING}
+        </Button>
+        {reslicing?.kind === 'published' && (
+          <>
+            <p className="epic-groom-panel__reslicing-published">{RESLICING_PUBLISHED}</p>
+            <a className="epic-groom-panel__pull-request" href={reslicing.pullRequest.url}>
+              {`${PULL_REQUEST} #${reslicing.pullRequest.number}`}
+            </a>
+          </>
+        )}
+        {gateNotice}
+        {reslicingBanner}
+      </Panel>
+    )
+  }
 
   if (acted === null && read.kind === 'groomable') {
     const { milestone, plan, home, planFingerprint } = read

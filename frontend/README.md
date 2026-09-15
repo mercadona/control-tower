@@ -124,9 +124,12 @@ pressed from the page the backend itself serves.
 `SpecFreezePanel`, outside every `currentStage` branch too) is gate 2's panel:
 the groom and the authorisation. `GET /epic-groom` polls the same checkout
 (`useEpicGroom.ts`) every ten seconds, stopping once it reaches `groomable`,
-`groomed` or `authorised`, and answers one of the seven states `EpicGroom.types.ts`
+`groomed` or `authorised`, and answers one of the ten states `EpicGroom.types.ts`
 declares: `none`, `no-spec` and `draft` render nothing, because gate 1's panel
-already says what is missing; `awaiting-publication` says the frozen spec is
+already says what is missing; `resliced` says the coordinating session changed
+the slicing and offers **Publicar el nuevo slicing**, which calls
+`POST /spec-reslicing` and then links the pull request the correction travels in;
+`awaiting-publication` says the frozen spec is
 waiting in a pull request the person has to merge and links it, or — when the
 read found no open pull request for the branch — that the spec is still
 unpublished and none was found, which is a wait to watch rather than a merge to
@@ -138,11 +141,15 @@ instead of only saying yes or no to it; `groomed`
 shows the issues the milestone already holds and offers the authorisation;
 `authorised` shows them all promoted, with nothing left to press.
 **Ejecutar el groom** calls
-`POST /epic-groom` and **Autorizar el trabajo** calls `POST /epic-promotion`,
+`POST /epic-groom`, **Autorizar el trabajo** calls `POST /epic-promotion`,
+**Revisar el slicing con la sesión** calls `POST /groom-session` and
+**Publicar el nuevo slicing** calls `POST /spec-reslicing`,
 each carrying the same gate key `x-gate-key` that gate 1 uses; the same vite
-proxy that strips `Origin` for `/spec-freeze` does it for both, so neither
+proxy that strips `Origin` for `/spec-freeze` does it for all four, so no
 button can be pressed from anywhere but the page the backend itself serves,
 and a press without the key is refused with `gate-not-from-the-page`.
+`useGatePresses.ts` holds those four presses and which one is in flight, so a
+button never borrows another's label while it waits.
 
 ## What is already decided
 

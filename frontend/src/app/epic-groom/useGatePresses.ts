@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react'
 import { EpicGroomClient } from 'app/epic-groom/client'
-import { EpicGroomAskOutcome, GroomSessionOutcome } from 'app/epic-groom/EpicGroom.types'
+import { EpicGroomAskOutcome, GroomSessionOutcome, ReslicingOutcome } from 'app/epic-groom/EpicGroom.types'
 
-type Pressed = 'none' | 'groom' | 'promote' | 'session'
+type Pressed = 'none' | 'groom' | 'promote' | 'session' | 'reslicing'
 type EpicGroomActed = Extract<EpicGroomAskOutcome, { kind: 'acted' }>
 type EpicGroomAskRefusal = Exclude<EpicGroomAskOutcome, { kind: 'acted' }>
 
@@ -11,9 +11,11 @@ type GatePresses = {
   acted: EpicGroomActed | null
   refusal: EpicGroomAskRefusal | null
   session: GroomSessionOutcome | null
+  reslicing: ReslicingOutcome | null
   groom: (planFingerprint: string) => Promise<void>
   promote: () => Promise<void>
   openSession: () => Promise<void>
+  publishReslicing: () => Promise<void>
 }
 
 const NOTHING: Pressed = 'none'
@@ -23,6 +25,7 @@ const useGatePresses = (gateKey: string | null): GatePresses => {
   const [acted, setActed] = useState<EpicGroomActed | null>(null)
   const [refusal, setRefusal] = useState<EpicGroomAskRefusal | null>(null)
   const [session, setSession] = useState<GroomSessionOutcome | null>(null)
+  const [reslicing, setReslicing] = useState<ReslicingOutcome | null>(null)
   const pressing = useRef<Pressed>(NOTHING)
 
   const held = (what: Pressed): boolean => {
@@ -61,11 +64,15 @@ const useGatePresses = (gateKey: string | null): GatePresses => {
     acted,
     refusal,
     session,
+    reslicing,
     groom: (planFingerprint: string) => asked(
       'groom', async (key) => settle(await EpicGroomClient.groom(key, planFingerprint))
     ),
     promote: () => asked('promote', async (key) => settle(await EpicGroomClient.promote(key))),
     openSession: () => asked('session', async (key) => setSession(await EpicGroomClient.openSession(key))),
+    publishReslicing: () => asked(
+      'reslicing', async (key) => setReslicing(await EpicGroomClient.publishReslicing(key))
+    ),
   }
 }
 

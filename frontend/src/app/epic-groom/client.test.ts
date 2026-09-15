@@ -30,7 +30,7 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
     expect(outcome).toEqual({ kind: 'awaiting-publication', pullRequest: null })
   })
 
-  it('each of the nine states is read as its own kind', async () => {
+  it('each of the ten states is read as its own kind', async () => {
     const cases: Array<[{ status: number; body: string }, unknown]> = [
       [EpicGroomMother.none(), { kind: 'none' }],
       [EpicGroomMother.noSpec(), { kind: 'no-spec' }],
@@ -39,6 +39,7 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
         EpicGroomMother.awaitingPublication(),
         { kind: 'awaiting-publication', pullRequest: EpicGroomMother.PULL_REQUEST },
       ],
+      [EpicGroomMother.resliced(), { kind: 'resliced', key: EpicGroomMother.KEY }],
       [
         EpicGroomMother.issuesUncertain(),
         { kind: 'issues-uncertain', milestone: EpicGroomMother.MILESTONE, reason: EpicGroomMother.ISSUES_UNCERTAIN_REASON },
@@ -143,6 +144,33 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
     const outcome = await EpicGroomClient.groom(EpicGroomMother.KEY, EpicGroomMother.PLAN_FINGERPRINT)
 
     expect(outcome).toEqual({ kind: 'backend-unreachable' })
+  })
+
+  it('a resliced body with no key reads as a state with no key rather than as unavailable', async () => {
+    answerWith(EpicGroomMother.reslicedWithoutKey())
+
+    expect(await EpicGroomClient.read()).toEqual({ kind: 'resliced', key: null })
+  })
+
+  it('a published re-slicing answers the pull request it travels in, and a refusal answers the code and the detail', async () => {
+    const pressing = vi.fn(async () => new Response(EpicGroomMother.reslicingPublished().body, { status: 200 }))
+    vi.stubGlobal('fetch', pressing)
+
+    const published = await EpicGroomClient.publishReslicing(EpicGroomMother.KEY)
+
+    expect(pressing).toHaveBeenCalledWith('/spec-reslicing', {
+      method: 'POST',
+      headers: { 'x-gate-key': EpicGroomMother.KEY },
+    })
+    expect(published).toEqual({ kind: 'published', pullRequest: EpicGroomMother.RESLICING_PULL_REQUEST })
+
+    answerWith(EpicGroomMother.notFromThePage())
+
+    expect(await EpicGroomClient.publishReslicing(EpicGroomMother.KEY)).toEqual({
+      kind: 'refused',
+      code: 'gate-not-from-the-page',
+      error: EpicGroomMother.NOT_FROM_THE_PAGE_DETAIL,
+    })
   })
 
   it('an accepted opening of the groom conversation answers opened, and a refusal answers the code and the detail', async () => {

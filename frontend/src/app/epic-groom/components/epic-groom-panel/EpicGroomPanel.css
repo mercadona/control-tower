@@ -37,6 +37,8 @@
 }
 
 .epic-groom-panel__authorised,
+.epic-groom-panel__resliced,
+.epic-groom-panel__reslicing-published,
 .epic-groom-panel__awaiting {
   margin: 0;
 }

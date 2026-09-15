@@ -6,6 +6,7 @@ import { EpicGroomPanel } from './EpicGroomPanel'
 const GROOM_BUTTON = { name: 'Ejecutar el groom' }
 const PROMOTE_BUTTON = { name: 'Autorizar el trabajo' }
 const SESSION_BUTTON = { name: 'Revisar el slicing con la sesión' }
+const PUBLISH_BUTTON = { name: 'Publicar el nuevo slicing' }
 
 describe('EpicGroomPanel', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -305,6 +306,75 @@ describe('EpicGroomPanel', () => {
       screen.queryByText('El spec congelado espera en un pull request: mergéalo para abrir el groom.'),
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('a resliced spec says the session changed the slicing and offers to publish it', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.resliced().body, { status: 200 })))
+
+    render(<EpicGroomPanel />)
+
+    expect(
+      await screen.findByText(
+        'La sesión ha cambiado el slicing del spec. Publícalo en un pull request: al mergearlo se crearán las issues.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', PUBLISH_BUTTON)).toBeEnabled()
+    expect(screen.queryByRole('button', GROOM_BUTTON)).not.toBeInTheDocument()
+  })
+
+  it('publishing the new slicing carries the gate key and links the pull request it opened', async () => {
+    const fetching = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(EpicGroomMother.resliced().body, { status: 200 }))
+      .mockResolvedValueOnce(new Response(EpicGroomMother.reslicingPublished().body, { status: 200 }))
+    vi.stubGlobal('fetch', fetching)
+    const user = userEvent.setup()
+    render(<EpicGroomPanel />)
+    await screen.findByRole('button', PUBLISH_BUTTON)
+
+    await user.click(screen.getByRole('button', PUBLISH_BUTTON))
+
+    expect(fetching).toHaveBeenNthCalledWith(2, '/spec-reslicing', {
+      method: 'POST',
+      headers: { 'x-gate-key': EpicGroomMother.KEY },
+    })
+    expect(await screen.findByRole('link', { name: 'Pull request #363' })).toHaveAttribute(
+      'href',
+      EpicGroomMother.RESLICING_PULL_REQUEST.url,
+    )
+    expect(
+      screen.getByText('El nuevo slicing viaja en este pull request: mergéalo y las issues se crearán solas.'),
+    ).toBeInTheDocument()
+  })
+
+  it('a refused publication is shown with the words the program printed', async () => {
+    const fetching = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(EpicGroomMother.resliced().body, { status: 200 }))
+      .mockResolvedValueOnce(new Response(EpicGroomMother.notFromThePage().body, { status: 403 }))
+    vi.stubGlobal('fetch', fetching)
+    const user = userEvent.setup()
+    render(<EpicGroomPanel />)
+    await screen.findByRole('button', PUBLISH_BUTTON)
+
+    await user.click(screen.getByRole('button', PUBLISH_BUTTON))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(EpicGroomMother.NOT_FROM_THE_PAGE_DETAIL)
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('a resliced spec with no key keeps the publication disabled and says where the gate opens from', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(EpicGroomMother.reslicedWithoutKey().body, { status: 200 })),
+    )
+
+    render(<EpicGroomPanel />)
+
+    expect(await screen.findByRole('button', PUBLISH_BUTTON)).toBeDisabled()
+    expect(
+      screen.getByText('Esta puerta solo se abre desde la página que sirve el backend.'),
+    ).toBeInTheDocument()
   })
 
   it('a listing that could not be exhausted shows why and offers nothing to press', async () => {

@@ -5,16 +5,19 @@ import {
   EpicPullRequest,
   GroomPlanIssue,
   GroomSessionOutcome,
+  ReslicingOutcome,
 } from 'app/epic-groom/EpicGroom.types'
 
 const PATH = '/epic-groom'
 const PROMOTION_PATH = '/epic-promotion'
 const SESSION_PATH = '/groom-session'
+const RESLICING_PATH = '/spec-reslicing'
 const GATE_KEY_HEADER = 'x-gate-key'
 const PLAN_FINGERPRINT_HEADER = 'x-plan-fingerprint'
 const ACTED_STATUS = 200
 const OPENED_STATUS = 202
 const GROOMING_STATUS = 'grooming'
+const PUBLISHED_STATUS = 'published'
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -64,6 +67,7 @@ const toOutcome = (body: unknown): EpicGroomOutcome => {
   if (body.status === 'awaiting-publication') {
     return { kind: 'awaiting-publication', pullRequest: pullRequestOf(body) }
   }
+  if (body.status === 'resliced') return { kind: 'resliced', key: keyOf(body) }
   if (body.status === 'issues-uncertain' && typeof body.milestone === 'string' && typeof body.reason === 'string') {
     return { kind: 'issues-uncertain', milestone: body.milestone, reason: body.reason }
   }
@@ -151,6 +155,27 @@ const groom = (key: string, planFingerprint: string): Promise<EpicGroomAskOutcom
 
 const promote = (key: string): Promise<EpicGroomAskOutcome> => press(PROMOTION_PATH, { [GATE_KEY_HEADER]: key })
 
+const publishReslicing = async (key: string): Promise<ReslicingOutcome> => {
+  let response: Response
+  let body: unknown
+  try {
+    response = await fetch(RESLICING_PATH, { method: 'POST', headers: { [GATE_KEY_HEADER]: key } })
+    body = await response.json()
+  } catch {
+    return { kind: 'unconfirmed' }
+  }
+  if (response.status === ACTED_STATUS) {
+    if (!isRecord(body) || body.status !== PUBLISHED_STATUS) return { kind: 'unconfirmed' }
+    const pullRequest = pullRequestOf(body)
+
+    return pullRequest === null ? { kind: 'unconfirmed' } : { kind: 'published', pullRequest }
+  }
+  if (!isRecord(body) || typeof body.code !== 'string' || typeof body.detail !== 'string') {
+    return { kind: 'unconfirmed' }
+  }
+  return { kind: 'refused', code: body.code, error: body.detail }
+}
+
 const openSession = async (key: string): Promise<GroomSessionOutcome> => {
   let response: Response
   let body: unknown
@@ -174,4 +199,5 @@ export const EpicGroomClient = {
   groom,
   promote,
   openSession,
+  publishReslicing,
 }
