@@ -633,7 +633,7 @@ describe('ct-init.sh', () => {
   // column) documents the Señal column: what it is, how it is exempted (`N/A —
   // <razón>`, and that without a reason it aborts), where it ends up (body
   // section → SLICE.md → the slice judge's package → observability item) and
-  // that a cell with no value is measured as sin-vara in the epic's telemetry.
+  // that a cell with no value is measured as sin-vara in the milestone's telemetry.
   // A v18 can deduce none of those things.
   it('the contract documents the Señal column: the N/A — <razón> exemption, where it ends up and that no value is sin-vara', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
@@ -757,7 +757,7 @@ describe('ct-init.sh', () => {
   })
 
   // F6, serious 2: the contract did not mention `status:backlog` even once.
-  // Whoever reads only AGENTS.md groomed a whole epic and found out afterwards
+  // Whoever reads only AGENTS.md groomed a whole milestone and found out afterwards
   // that /ct-next saw none of those issues.
   it('the contract says issues are born in status:backlog, that promoting them to status:ready is a human step, and with which command', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
@@ -1634,7 +1634,7 @@ describe('ct-init.sh', () => {
   // ==========================================================================
   // #93 — the contract comes out of AGENTS.md. What these tests tie down is the
   // SPLIT: what stays in the file that is re-read on every session and what
-  // goes to the one that is read once per epic. Without them, the contract
+  // goes to the one that is read once per milestone. Without them, the contract
   // could go back into AGENTS.md with nothing turning red, and the whole saving
   // comes undone in a single commit.
   // ==========================================================================
@@ -1732,9 +1732,9 @@ describe('ct-init.sh', () => {
   //     of the hypothesis), so the template invalidated itself: exit 2 on any
   //     spec that copied it without deleting that block, while being perfectly
   //     frozen.
-  //  2. A multi-line comment INSIDE `## Contexto del epic`. readEpicContext
+  //  2. A multi-line comment INSIDE `## Contexto del milestone`. readEpicContext
   //     does not discard it, and that section is copied byte for byte into the
-  //     body of every issue of the epic: the template's instructions ended up
+  //     body of every issue of the milestone: the template's instructions ended up
   //     pasted into the N issues.
   it("the seeded template passes /ct-groom's freeze gates and its table parses with the contract in force", async () => {
     const dir = mkdtempSync(join(tmpdir(), 'ct-'))
