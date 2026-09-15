@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { GroomEpic, GroomEpicParams } from '../../src/application/actions/groom-epic.ts'
+import { GroomEpic, GroomEpicParams, PlanStaleness } from '../../src/application/actions/groom-epic.ts'
 import { ReadEpicGroom, ReadEpicGroomParams, EpicGroomRead, EpicGroomState } from '../../src/application/queries/read-epic-groom.ts'
 import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
 import { PublishedSpecs } from '../../src/domain/ports/published-specs.ts'
@@ -11,6 +11,7 @@ import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { EpicIssue } from '../../src/domain/value-objects/epic-issue.ts'
 import { GroomPlan, GroomPlanIssue } from '../../src/domain/value-objects/groom-plan.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
+import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
 
 type GroomAsked = { root: CheckoutRoot, spec: EpicSpec, repository: RepositoryName, milestone: string }
 
@@ -19,7 +20,10 @@ class ReadEpicGroomDouble extends ReadEpicGroom {
   asked: ReadEpicGroomParams[]
 
   constructor(answers: EpicGroomRead[]) {
-    super({ specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom() })
+    super({
+      specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom(),
+      fingerprint: Mother.FINGERPRINT,
+    })
     this.answers = answers
     this.asked = []
   }
@@ -57,6 +61,8 @@ class Mother {
     milestone: Mother.MILESTONE,
     issues: [new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'] })],
   })
+  static readonly FINGERPRINT = new PlanFingerprint({ digest: (text) => text })
+  static readonly PLAN_FINGERPRINT = Mother.FINGERPRINT.of(Mother.PLAN)
 
   static frozenSpec(): EpicSpec {
     return new EpicSpec({
@@ -85,17 +91,21 @@ class Mother {
 
   static draftRead(): EpicGroomRead {
     return new EpicGroomRead({
-      state: EpicGroomState.DRAFT, spec: Mother.frozenSpec(), milestone: null, plan: null, issues: [],
+      state: EpicGroomState.DRAFT, spec: Mother.frozenSpec(), milestone: null, plan: null, planFingerprint: null,
+      issues: [],
     })
   }
 
   static noSpecRead(): EpicGroomRead {
-    return new EpicGroomRead({ state: EpicGroomState.NO_SPEC, spec: null, milestone: null, plan: null, issues: [] })
+    return new EpicGroomRead({
+      state: EpicGroomState.NO_SPEC, spec: null, milestone: null, plan: null, planFingerprint: null, issues: [],
+    })
   }
 
   static awaitingPublicationRead(): EpicGroomRead {
     return new EpicGroomRead({
-      state: EpicGroomState.AWAITING_PUBLICATION, spec: Mother.frozenSpec(), milestone: null, plan: null, issues: [],
+      state: EpicGroomState.AWAITING_PUBLICATION, spec: Mother.frozenSpec(), milestone: null, plan: null,
+      planFingerprint: null, issues: [],
     })
   }
 
@@ -105,13 +115,15 @@ class Mother {
       spec: Mother.frozenSpec(),
       milestone: Mother.MILESTONE,
       plan: Mother.PLAN,
+      planFingerprint: Mother.PLAN_FINGERPRINT,
       issues: [],
     })
   }
 
   static groomedRead(issues: EpicIssue[]): EpicGroomRead {
     return new EpicGroomRead({
-      state: EpicGroomState.GROOMED, spec: Mother.frozenSpec(), milestone: Mother.MILESTONE, plan: null, issues,
+      state: EpicGroomState.GROOMED, spec: Mother.frozenSpec(), milestone: Mother.MILESTONE, plan: Mother.PLAN,
+      planFingerprint: Mother.PLAN_FINGERPRINT, issues,
     })
   }
 
@@ -121,6 +133,7 @@ class Mother {
       spec: Mother.frozenSpec(),
       milestone: Mother.MILESTONE,
       plan: Mother.PLAN,
+      planFingerprint: Mother.PLAN_FINGERPRINT,
       issues,
     })
   }
@@ -129,18 +142,24 @@ class Mother {
 class Flow {
   read: ReadEpicGroomDouble
   groom: EpicGroomDouble
+  fingerprint: PlanFingerprint
 
-  constructor({ read, groom }: { read?: ReadEpicGroomDouble, groom?: EpicGroomDouble } = {}) {
+  constructor({ read, groom, fingerprint }: {
+    read?: ReadEpicGroomDouble, groom?: EpicGroomDouble, fingerprint?: PlanFingerprint,
+  } = {}) {
     this.read = read ?? new ReadEpicGroomDouble([Mother.groomableRead()])
     this.groom = groom ?? new EpicGroomDouble()
+    this.fingerprint = fingerprint ?? Mother.FINGERPRINT
   }
 
   static readingOnce(answer: EpicGroomRead): Flow {
     return new Flow({ read: new ReadEpicGroomDouble([answer]) })
   }
 
-  async run() {
-    return new GroomEpic(this).execute(new GroomEpicParams({ root: Mother.ROOT, repository: Mother.REPOSITORY }))
+  async run({ fingerprint = Mother.PLAN_FINGERPRINT }: { fingerprint?: string | null } = {}) {
+    return new GroomEpic(this).execute(
+      new GroomEpicParams({ root: Mother.ROOT, repository: Mother.REPOSITORY, fingerprint })
+    )
   }
 }
 
@@ -185,6 +204,26 @@ describe('GroomEpic', () => {
     }])
     expect(groomed.state).toBe(EpicGroomState.GROOMED)
     expect(groomed.issues).toEqual(issuesAfter)
+    expect(groomed.staleness).toBe(PlanStaleness.FRESH)
+  })
+
+  it('a press whose fingerprint no longer matches the plan it would run is refused and the program is never run', async () => {
+    const flow = new Flow({ read: new ReadEpicGroomDouble([Mother.groomableRead()]) })
+
+    const groomed = await flow.run({ fingerprint: 'the fingerprint of a plan nobody sees on screen any more' })
+
+    expect(groomed.state).toBe(EpicGroomState.GROOMABLE)
+    expect(groomed.staleness).toBe(PlanStaleness.CHANGED)
+    expect(flow.groom.runAsked).toEqual([])
+  })
+
+  it('a press that carries no fingerprint at all is refused the same way, since a preview always sends one', async () => {
+    const flow = new Flow({ read: new ReadEpicGroomDouble([Mother.groomableRead()]) })
+
+    const groomed = await flow.run({ fingerprint: null })
+
+    expect(groomed.staleness).toBe(PlanStaleness.CHANGED)
+    expect(flow.groom.runAsked).toEqual([])
   })
 
   it('a partially groomed epic is not refused: finishing the groom is the way out this action offers', async () => {

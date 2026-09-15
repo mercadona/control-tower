@@ -62,11 +62,7 @@ const EpicGroomPanel = () => {
   const gateKey =
     read.kind === 'groomable' || read.kind === 'partially-groomed' || read.kind === 'groomed' ? read.key : null
 
-  const press = async (action: (key: string) => Promise<EpicGroomAskOutcome>) => {
-    if (gateKey === null || isPressingRef.current) return
-    isPressingRef.current = true
-    setIsPressing(true)
-    const answered = await action(gateKey)
+  const settle = (answered: EpicGroomAskOutcome) => {
     isPressingRef.current = false
     setIsPressing(false)
     if (answered.kind === 'acted') {
@@ -75,6 +71,20 @@ const EpicGroomPanel = () => {
     } else {
       setRefusal(answered)
     }
+  }
+
+  const pressGroom = async (planFingerprint: string) => {
+    if (gateKey === null || isPressingRef.current) return
+    isPressingRef.current = true
+    setIsPressing(true)
+    settle(await EpicGroomClient.groom(gateKey, planFingerprint))
+  }
+
+  const pressPromote = async () => {
+    if (gateKey === null || isPressingRef.current) return
+    isPressingRef.current = true
+    setIsPressing(true)
+    settle(await EpicGroomClient.promote(gateKey))
   }
 
   const gateNotice = gateKey === null && (
@@ -88,7 +98,7 @@ const EpicGroomPanel = () => {
     ) : null
 
   if (acted === null && read.kind === 'groomable') {
-    const { milestone, plan } = read
+    const { milestone, plan, planFingerprint } = read
     return (
       <Panel heading={HEADING}>
         <p className="epic-groom-panel__milestone">{milestone}</p>
@@ -102,7 +112,7 @@ const EpicGroomPanel = () => {
             </li>
           ))}
         </ul>
-        <Button onClick={() => void press(EpicGroomClient.groom)} disabled={gateKey === null || isPressing}>
+        <Button onClick={() => void pressGroom(planFingerprint)} disabled={gateKey === null || isPressing}>
           {isPressing ? GROOMING : GROOM}
         </Button>
         {gateNotice}
@@ -112,7 +122,7 @@ const EpicGroomPanel = () => {
   }
 
   if (acted === null && read.kind === 'partially-groomed') {
-    const { milestone, plan, issues } = read
+    const { milestone, plan, issues, planFingerprint } = read
     return (
       <Panel heading={HEADING}>
         <p className="epic-groom-panel__milestone">{milestone}</p>
@@ -126,7 +136,7 @@ const EpicGroomPanel = () => {
           ))}
         </ul>
         <p className="epic-groom-panel__partial-notice">{FINISH_GROOM_FIRST}</p>
-        <Button onClick={() => void press(EpicGroomClient.groom)} disabled={gateKey === null || isPressing}>
+        <Button onClick={() => void pressGroom(planFingerprint)} disabled={gateKey === null || isPressing}>
           {isPressing ? GROOMING : GROOM}
         </Button>
         {gateNotice}
@@ -154,7 +164,7 @@ const EpicGroomPanel = () => {
             </li>
           ))}
         </ul>
-        <Button onClick={() => void press(EpicGroomClient.promote)} disabled={gateKey === null || isPressing}>
+        <Button onClick={() => void pressPromote()} disabled={gateKey === null || isPressing}>
           {isPressing ? PROMOTING : PROMOTE}
         </Button>
         {gateNotice}

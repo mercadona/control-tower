@@ -16,6 +16,7 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
       kind: 'groomable',
       milestone: EpicGroomMother.MILESTONE,
       plan: [EpicGroomMother.GATE_ISSUE, EpicGroomMother.CHANNEL_ISSUE],
+      planFingerprint: EpicGroomMother.PLAN_FINGERPRINT,
       key: null,
     })
   })
@@ -32,6 +33,7 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
           kind: 'groomable',
           milestone: EpicGroomMother.MILESTONE,
           plan: [EpicGroomMother.GATE_ISSUE, EpicGroomMother.CHANNEL_ISSUE],
+          planFingerprint: EpicGroomMother.PLAN_FINGERPRINT,
           key: EpicGroomMother.KEY,
         },
       ],
@@ -41,6 +43,7 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
           kind: 'partially-groomed',
           milestone: EpicGroomMother.MILESTONE,
           plan: [EpicGroomMother.GATE_ISSUE, EpicGroomMother.CHANNEL_ISSUE],
+          planFingerprint: EpicGroomMother.PLAN_FINGERPRINT,
           issues: [EpicGroomMother.BACKLOG_GATE],
           key: EpicGroomMother.KEY,
         },
@@ -79,15 +82,15 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
     expect(outcome).toEqual({ kind: 'unavailable' })
   })
 
-  it('the groom sends the key in x-gate-key and no body', async () => {
+  it('the groom sends the key and the plan fingerprint in x-gate-key and x-plan-fingerprint, and no body', async () => {
     const pressing = vi.fn(async () => new Response(EpicGroomMother.groomedByThePress().body, { status: 200 }))
     vi.stubGlobal('fetch', pressing)
 
-    const outcome = await EpicGroomClient.groom(EpicGroomMother.KEY)
+    const outcome = await EpicGroomClient.groom(EpicGroomMother.KEY, EpicGroomMother.PLAN_FINGERPRINT)
 
     expect(pressing).toHaveBeenCalledWith('/epic-groom', {
       method: 'POST',
-      headers: { 'x-gate-key': EpicGroomMother.KEY },
+      headers: { 'x-gate-key': EpicGroomMother.KEY, 'x-plan-fingerprint': EpicGroomMother.PLAN_FINGERPRINT },
     })
     expect(outcome).toEqual({
       kind: 'acted',
@@ -120,12 +123,24 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
   it('a refusal carries the code and the detail the backend gave', async () => {
     answerWith(EpicGroomMother.notFromThePage())
 
-    const outcome = await EpicGroomClient.groom(EpicGroomMother.KEY)
+    const outcome = await EpicGroomClient.groom(EpicGroomMother.KEY, EpicGroomMother.PLAN_FINGERPRINT)
 
     expect(outcome).toEqual({
       kind: 'refused',
       code: 'gate-not-from-the-page',
       error: EpicGroomMother.NOT_FROM_THE_PAGE_DETAIL,
+    })
+  })
+
+  it('a plan that changed since the preview refuses the same way as any other code', async () => {
+    answerWith(EpicGroomMother.planChanged())
+
+    const outcome = await EpicGroomClient.groom(EpicGroomMother.KEY, EpicGroomMother.CHANGED_PLAN_FINGERPRINT)
+
+    expect(outcome).toEqual({
+      kind: 'refused',
+      code: 'plan-changed',
+      error: EpicGroomMother.PLAN_CHANGED_DETAIL,
     })
   })
 })

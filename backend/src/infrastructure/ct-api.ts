@@ -2,7 +2,7 @@ import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/p
 import {
   mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs'
-import { randomBytes, randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { setTimeout as after } from 'node:timers/promises'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -75,6 +75,7 @@ import { Gh } from './gh.ts'
 import { ExternalTool } from './external-tool.ts'
 import { RetryPolicy, RetryBudget } from '../domain/policies/retry-policy.ts'
 import { LaunchPolicy, LaunchBudget } from '../domain/policies/launch-policy.ts'
+import { PlanFingerprint } from '../domain/policies/plan-fingerprint.ts'
 import { Invocation, InvocationOutcome } from './invocation.ts'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
 import type { ProcessOutput } from './tool-runner.ts'
@@ -544,8 +545,13 @@ class CtApi {
       wholeOutput: (argv, options) => groomRunner.runWholeOutput(argv, options),
       ctGroom: PluginTree.ctGroom(),
     })
-    const readEpicGroom = new ReadEpicGroom({ specs: epicSpecs, published: publishedSpecs, issues: epicIssues, groom: epicGroom })
-    const groomEpic = new GroomEpic({ read: readEpicGroom, groom: epicGroom })
+    const planFingerprint = new PlanFingerprint({
+      digest: (text) => createHash('sha256').update(text, 'utf8').digest('hex'),
+    })
+    const readEpicGroom = new ReadEpicGroom({
+      specs: epicSpecs, published: publishedSpecs, issues: epicIssues, groom: epicGroom, fingerprint: planFingerprint,
+    })
+    const groomEpic = new GroomEpic({ read: readEpicGroom, groom: epicGroom, fingerprint: planFingerprint })
     const promoteEpic = new PromoteEpic({ read: readEpicGroom, issues: epicIssues })
     const server = new ApiServer({
       port: asked.port,

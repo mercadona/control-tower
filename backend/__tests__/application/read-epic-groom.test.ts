@@ -10,6 +10,7 @@ import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { EpicIssue } from '../../src/domain/value-objects/epic-issue.ts'
 import { GroomPlan, GroomPlanIssue } from '../../src/domain/value-objects/groom-plan.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
+import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
 
 type PublishedAsked = { repository: RepositoryName, path: string }
 type IssuesAsked = { repository: RepositoryName, milestone: string }
@@ -89,6 +90,7 @@ class Mother {
     milestone: Mother.TITLE,
     issues: [new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'] })],
   })
+  static readonly FINGERPRINT = new PlanFingerprint({ digest: (text) => text })
 
   static draft(): EpicSpec {
     return new EpicSpec({
@@ -176,6 +178,7 @@ class Flow {
   published: PublishedSpecsDouble
   issues: EpicIssuesDouble
   groom: EpicGroomDouble
+  fingerprint: PlanFingerprint
 
   constructor({ specs, published, issues, groom }: {
     specs?: EpicSpecsDouble,
@@ -187,6 +190,7 @@ class Flow {
     this.published = published ?? new PublishedSpecsDouble(true)
     this.issues = issues ?? new EpicIssuesDouble([])
     this.groom = groom ?? new EpicGroomDouble(Mother.PLAN)
+    this.fingerprint = Mother.FINGERPRINT
   }
 
   static readingSpec(spec: EpicSpec | null): Flow {
@@ -211,6 +215,7 @@ describe('ReadEpicGroom', () => {
 
     expect(read.state).toBe(EpicGroomState.AWAITING_PUBLICATION)
     expect(read.plan).toBeNull()
+    expect(read.planFingerprint).toBeNull()
     expect(read.issues).toEqual([])
     expect(flow.issues.asked).toEqual([])
     expect(flow.groom.asked).toEqual([])
@@ -229,10 +234,24 @@ describe('ReadEpicGroom', () => {
 
     expect(read.state).toBe(EpicGroomState.GROOMABLE)
     expect(read.plan).toBe(Mother.PLAN)
+    expect(read.planFingerprint).toBe(Mother.FINGERPRINT.of(Mother.PLAN))
     expect(flow.issues.asked).toEqual([{ repository: Mother.REPOSITORY, milestone: Mother.TITLE }])
     expect(flow.groom.asked).toEqual([{
       root: Mother.ROOT, spec: frozen, repository: Mother.REPOSITORY, milestone: Mother.TITLE,
     }])
+  })
+
+  it('the plan fingerprint follows the plan it summarises, so a plan with different issues reads as a different fingerprint', async () => {
+    const frozen = Mother.frozen()
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(frozen),
+      groom: new EpicGroomDouble(Mother.TWO_SLICE_PLAN),
+    })
+
+    const read = await flow.run()
+
+    expect(read.planFingerprint).toBe(Mother.FINGERPRINT.of(Mother.TWO_SLICE_PLAN))
+    expect(read.planFingerprint).not.toBe(Mother.FINGERPRINT.of(Mother.PLAN))
   })
 
   it('no execution spec is no-spec and nothing is asked of github', async () => {
@@ -268,6 +287,7 @@ describe('ReadEpicGroom', () => {
 
     expect(read.state).toBe(EpicGroomState.GROOMED)
     expect(read.plan).toBe(Mother.PLAN)
+    expect(read.planFingerprint).toBe(Mother.FINGERPRINT.of(Mother.PLAN))
     expect(read.issues).toEqual([Mother.backlogIssue(), Mother.readyIssue()])
     expect(flow.groom.asked).toEqual([{
       root: Mother.ROOT, spec: frozen, repository: Mother.REPOSITORY, milestone: Mother.TITLE,
@@ -285,6 +305,7 @@ describe('ReadEpicGroom', () => {
 
     expect(read.state).toBe(EpicGroomState.AUTHORISED)
     expect(read.plan).toBe(Mother.PLAN)
+    expect(read.planFingerprint).toBe(Mother.FINGERPRINT.of(Mother.PLAN))
     expect(read.issues).toEqual([Mother.readyIssue(), Mother.closedBacklogIssue()])
     expect(flow.groom.asked).toEqual([{
       root: Mother.ROOT, spec: frozen, repository: Mother.REPOSITORY, milestone: Mother.TITLE,
@@ -303,6 +324,7 @@ describe('ReadEpicGroom', () => {
 
     expect(read.state).toBe(EpicGroomState.PARTIALLY_GROOMED)
     expect(read.plan).toBe(Mother.TWO_SLICE_PLAN)
+    expect(read.planFingerprint).toBe(Mother.FINGERPRINT.of(Mother.TWO_SLICE_PLAN))
     expect(read.issues).toEqual([Mother.issueOfOrder(1)])
   })
 

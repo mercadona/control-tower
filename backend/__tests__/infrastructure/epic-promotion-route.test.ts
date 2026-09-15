@@ -26,6 +26,7 @@ import { SessionAttention } from '../../src/domain/value-objects/session-attenti
 import { EpicIssue } from '../../src/domain/value-objects/epic-issue.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { GroomPlan, GroomPlanIssue } from '../../src/domain/value-objects/groom-plan.ts'
+import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
 
 class PromoteEpicSpy extends PromoteEpic {
   static neverAsked(): PromoteEpicSpy {
@@ -37,7 +38,10 @@ class PromoteEpicSpy extends PromoteEpic {
 
   constructor(answer: (params: PromoteEpicParams) => Promise<EpicPromoted>) {
     super({
-      read: new ReadEpicGroom({ specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom() }),
+      read: new ReadEpicGroom({
+        specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom(),
+        fingerprint: new PlanFingerprint({ digest: (text) => text }),
+      }),
       issues: new EpicIssues(),
     })
     this.asked = []

@@ -8,6 +8,7 @@ import {
 const PATH = '/epic-groom'
 const PROMOTION_PATH = '/epic-promotion'
 const GATE_KEY_HEADER = 'x-gate-key'
+const PLAN_FINGERPRINT_HEADER = 'x-plan-fingerprint'
 const ACTED_STATUS = 200
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -54,20 +55,25 @@ const toOutcome = (body: unknown): EpicGroomOutcome => {
     body.status === 'groomable' &&
     typeof body.milestone === 'string' &&
     isRecord(body.plan) &&
-    isGroomPlanIssues(body.plan.issues)
+    isGroomPlanIssues(body.plan.issues) &&
+    typeof body.planFingerprint === 'string'
   ) {
-    return { kind: 'groomable', milestone: body.milestone, plan: body.plan.issues, key: keyOf(body) }
+    return {
+      kind: 'groomable', milestone: body.milestone, plan: body.plan.issues, planFingerprint: body.planFingerprint,
+      key: keyOf(body),
+    }
   }
   if (
     body.status === 'partially-groomed' &&
     typeof body.milestone === 'string' &&
     isRecord(body.plan) &&
     isGroomPlanIssues(body.plan.issues) &&
+    typeof body.planFingerprint === 'string' &&
     isEpicIssues(body.issues)
   ) {
     return {
-      kind: 'partially-groomed', milestone: body.milestone, plan: body.plan.issues, issues: body.issues,
-      key: keyOf(body),
+      kind: 'partially-groomed', milestone: body.milestone, plan: body.plan.issues,
+      planFingerprint: body.planFingerprint, issues: body.issues, key: keyOf(body),
     }
   }
   if (body.status === 'groomed' && typeof body.milestone === 'string' && isEpicIssues(body.issues)) {
@@ -94,10 +100,10 @@ const read = async (): Promise<EpicGroomOutcome> => {
   }
 }
 
-const press = async (path: string, key: string): Promise<EpicGroomAskOutcome> => {
+const press = async (path: string, headers: Record<string, string>): Promise<EpicGroomAskOutcome> => {
   let response: Response
   try {
-    response = await fetch(path, { method: 'POST', headers: { [GATE_KEY_HEADER]: key } })
+    response = await fetch(path, { method: 'POST', headers })
   } catch {
     return { kind: 'backend-unreachable' }
   }
@@ -120,9 +126,10 @@ const press = async (path: string, key: string): Promise<EpicGroomAskOutcome> =>
   return { kind: 'refused', code: body.code, error: body.detail }
 }
 
-const groom = (key: string): Promise<EpicGroomAskOutcome> => press(PATH, key)
+const groom = (key: string, planFingerprint: string): Promise<EpicGroomAskOutcome> =>
+  press(PATH, { [GATE_KEY_HEADER]: key, [PLAN_FINGERPRINT_HEADER]: planFingerprint })
 
-const promote = (key: string): Promise<EpicGroomAskOutcome> => press(PROMOTION_PATH, key)
+const promote = (key: string): Promise<EpicGroomAskOutcome> => press(PROMOTION_PATH, { [GATE_KEY_HEADER]: key })
 
 export const EpicGroomClient = {
   read,

@@ -9,7 +9,7 @@ import { GateKey } from '../../src/infrastructure/gate-key.ts'
 import {
   ReadEpicGroom, ReadEpicGroomParams, EpicGroomRead, EpicGroomState,
 } from '../../src/application/queries/read-epic-groom.ts'
-import { GroomEpic, GroomEpicParams, EpicGroomed } from '../../src/application/actions/groom-epic.ts'
+import { GroomEpic, GroomEpicParams, EpicGroomed, PlanStaleness } from '../../src/application/actions/groom-epic.ts'
 import { WorkInFlight } from '../../src/infrastructure/work-in-flight.ts'
 import { EpicNotGroomed } from '../../src/domain/exceptions.ts'
 import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
@@ -30,6 +30,7 @@ import { SessionAttention } from '../../src/domain/value-objects/session-attenti
 import { EpicIssue } from '../../src/domain/value-objects/epic-issue.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { GroomPlan, GroomPlanIssue } from '../../src/domain/value-objects/groom-plan.ts'
+import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
 
 class ReadEpicGroomSpy extends ReadEpicGroom {
   static neverAsked(): ReadEpicGroomSpy {
@@ -40,7 +41,10 @@ class ReadEpicGroomSpy extends ReadEpicGroom {
   readonly answer: (params: ReadEpicGroomParams) => Promise<EpicGroomRead>
 
   constructor(answer: (params: ReadEpicGroomParams) => Promise<EpicGroomRead>) {
-    super({ specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom() })
+    super({
+      specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom(),
+      fingerprint: Mother.FINGERPRINT,
+    })
     this.asked = []
     this.answer = answer
   }
@@ -62,8 +66,12 @@ class GroomEpicSpy extends GroomEpic {
 
   constructor(answer: (params: GroomEpicParams) => Promise<EpicGroomed>) {
     super({
-      read: new ReadEpicGroom({ specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom() }),
+      read: new ReadEpicGroom({
+        specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom(),
+        fingerprint: Mother.FINGERPRINT,
+      }),
       groom: new EpicGroom(),
+      fingerprint: Mother.FINGERPRINT,
     })
     this.asked = []
     this.answer = answer
@@ -140,6 +148,10 @@ class Mother {
     milestone: Mother.MILESTONE,
     issues: [new GroomPlanIssue({ order: 1, title: '#1 First slice', labels: ['type:feature'] })],
   })
+  static readonly FINGERPRINT = new PlanFingerprint({
+    digest: (text) => Buffer.from(text, 'utf8').toString('hex'),
+  })
+  static readonly PLAN_FINGERPRINT = Mother.FINGERPRINT.of(Mother.PLAN)
 
   static live(): CoordinatingSessions {
     const held = new CoordinatingSessions({
@@ -185,42 +197,63 @@ class Mother {
 
   static groomableRead(): EpicGroomRead {
     return new EpicGroomRead({
-      state: EpicGroomState.GROOMABLE, spec: null, milestone: Mother.MILESTONE, plan: Mother.PLAN, issues: [],
+      state: EpicGroomState.GROOMABLE, spec: null, milestone: Mother.MILESTONE, plan: Mother.PLAN,
+      planFingerprint: Mother.PLAN_FINGERPRINT, issues: [],
     })
   }
 
   static groomedRead(issues: EpicIssue[]): EpicGroomRead {
     return new EpicGroomRead({
-      state: EpicGroomState.GROOMED, spec: null, milestone: Mother.MILESTONE, plan: null, issues,
+      state: EpicGroomState.GROOMED, spec: null, milestone: Mother.MILESTONE, plan: null, planFingerprint: null,
+      issues,
     })
   }
 
   static authorisedRead(issues: EpicIssue[]): EpicGroomRead {
     return new EpicGroomRead({
-      state: EpicGroomState.AUTHORISED, spec: null, milestone: Mother.MILESTONE, plan: null, issues,
+      state: EpicGroomState.AUTHORISED, spec: null, milestone: Mother.MILESTONE, plan: null, planFingerprint: null,
+      issues,
     })
   }
 
   static partiallyGroomedRead(issues: EpicIssue[]): EpicGroomRead {
     return new EpicGroomRead({
-      state: EpicGroomState.PARTIALLY_GROOMED, spec: null, milestone: Mother.MILESTONE, plan: Mother.PLAN, issues,
+      state: EpicGroomState.PARTIALLY_GROOMED, spec: null, milestone: Mother.MILESTONE, plan: Mother.PLAN,
+      planFingerprint: Mother.PLAN_FINGERPRINT, issues,
     })
   }
 
   static draftGroomed(): EpicGroomed {
-    return new EpicGroomed({ state: EpicGroomState.DRAFT, milestone: null, plan: null, issues: [] })
+    return new EpicGroomed({
+      state: EpicGroomState.DRAFT, milestone: null, plan: null, issues: [], staleness: PlanStaleness.FRESH,
+    })
   }
 
   static awaitingPublicationGroomed(): EpicGroomed {
-    return new EpicGroomed({ state: EpicGroomState.AWAITING_PUBLICATION, milestone: null, plan: null, issues: [] })
+    return new EpicGroomed({
+      state: EpicGroomState.AWAITING_PUBLICATION, milestone: null, plan: null, issues: [],
+      staleness: PlanStaleness.FRESH,
+    })
   }
 
   static groomedOutcome(issues: EpicIssue[]): EpicGroomed {
-    return new EpicGroomed({ state: EpicGroomState.GROOMED, milestone: Mother.MILESTONE, plan: Mother.PLAN, issues })
+    return new EpicGroomed({
+      state: EpicGroomState.GROOMED, milestone: Mother.MILESTONE, plan: Mother.PLAN, issues,
+      staleness: PlanStaleness.FRESH,
+    })
   }
 
   static regroomedOutcome(issues: EpicIssue[]): EpicGroomed {
-    return new EpicGroomed({ state: EpicGroomState.GROOMED, milestone: Mother.MILESTONE, plan: null, issues })
+    return new EpicGroomed({
+      state: EpicGroomState.GROOMED, milestone: Mother.MILESTONE, plan: null, issues, staleness: PlanStaleness.FRESH,
+    })
+  }
+
+  static staleGroomable(): EpicGroomed {
+    return new EpicGroomed({
+      state: EpicGroomState.GROOMABLE, milestone: Mother.MILESTONE, plan: Mother.PLAN, issues: [],
+      staleness: PlanStaleness.CHANGED,
+    })
   }
 }
 
@@ -308,6 +341,7 @@ describe('EpicGroomRoute', () => {
       status: 'groomable',
       milestone: Mother.MILESTONE,
       plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      planFingerprint: Mother.PLAN_FINGERPRINT,
       key: Keys.MINTED,
     })
     expect(await authorised.json()).toEqual({
@@ -324,12 +358,14 @@ describe('EpicGroomRoute', () => {
       status: 'groomable',
       milestone: Mother.MILESTONE,
       plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      planFingerprint: Mother.PLAN_FINGERPRINT,
       key: Keys.MINTED,
     })
     expect(await fromElsewhere.json()).toEqual({
       status: 'groomable',
       milestone: Mother.MILESTONE,
       plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      planFingerprint: Mother.PLAN_FINGERPRINT,
     })
   })
 
@@ -399,6 +435,7 @@ describe('EpicGroomRoute', () => {
       status: 'groomable',
       milestone: Mother.MILESTONE,
       plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      planFingerprint: Mother.PLAN_FINGERPRINT,
       key: Keys.MINTED,
     })
   })
@@ -447,6 +484,7 @@ describe('EpicGroomRoute', () => {
       status: 'partially-groomed',
       milestone: Mother.MILESTONE,
       plan: { issues: [{ order: 1, title: '#1 First slice', labels: ['type:feature'] }] },
+      planFingerprint: Mother.PLAN_FINGERPRINT,
       issues: [{
         number: 1,
         url: `https://github.com/${Mother.REPOSITORY.text}/issues/1`,
@@ -524,6 +562,40 @@ describe('EpicGroomRoute', () => {
     expect(said).toEqual([
       `${EpicGroomRoute.RECORD}: "${Mother.MILESTONE}" ${EpicGroomRoute.NO_PLAN_ON_THIS_PRESS}, holds 1 now\n`,
     ])
+  })
+
+  it('the plan fingerprint header travels through to the groom, and a press with none asks with none at all', async () => {
+    const held = Mother.live()
+    const groom = GroomEpicSpy.answering(Mother.groomedOutcome([Mother.backlogIssue()]))
+    const key = Keys.minted()
+    const port = await RunningApi.listening(held, ReadEpicGroomSpy.neverAsked(), groom, key)
+
+    await RunningApi.posting(
+      port, { [GateKey.HEADER]: Keys.MINTED, [EpicGroomRoute.PLAN_FINGERPRINT_HEADER]: Mother.PLAN_FINGERPRINT }
+    )
+    await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(groom.asked.map((asked) => asked.fingerprint)).toEqual([Mother.PLAN_FINGERPRINT, null])
+  })
+
+  it('a press whose plan no longer matches what is on screen is refused as plan-changed and nothing is recorded', async () => {
+    const held = Mother.live()
+    const groom = GroomEpicSpy.answering(Mother.staleGroomable())
+    const key = Keys.minted()
+    const said: string[] = []
+    const port = await RunningApi.listening(held, ReadEpicGroomSpy.neverAsked(), groom, key, new WorkInFlight(), (line) => { said.push(line) })
+
+    const response = await RunningApi.posting(
+      port,
+      { [GateKey.HEADER]: Keys.MINTED, [EpicGroomRoute.PLAN_FINGERPRINT_HEADER]: 'the fingerprint of a plan nobody sees any more' }
+    )
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      code: 'plan-changed',
+      detail: 'the spec changed since this plan was shown: read the new plan before pressing again',
+    })
+    expect(said).toEqual([])
   })
 
   it('another method is refused naming the allowed ones', async () => {

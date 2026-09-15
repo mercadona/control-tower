@@ -5,14 +5,26 @@ import type { RepositoryName } from '../../domain/value-objects/repository-name.
 import type { EpicGroom } from '../../domain/ports/epic-groom.ts'
 import type { GroomPlan } from '../../domain/value-objects/groom-plan.ts'
 import type { EpicIssue } from '../../domain/value-objects/epic-issue.ts'
+import type { PlanFingerprint } from '../../domain/policies/plan-fingerprint.ts'
+
+export const PlanStaleness = Object.freeze({
+  FRESH: 'fresh',
+  CHANGED: 'plan-changed',
+} as const)
+
+export type PlanStalenessValue = (typeof PlanStaleness)[keyof typeof PlanStaleness]
 
 export class GroomEpicParams {
   readonly root: CheckoutRoot
   readonly repository: RepositoryName
+  readonly fingerprint: string | null
 
-  constructor({ root, repository }: { root: CheckoutRoot, repository: RepositoryName }) {
+  constructor({ root, repository, fingerprint }: {
+    root: CheckoutRoot, repository: RepositoryName, fingerprint: string | null,
+  }) {
     this.root = root
     this.repository = repository
+    this.fingerprint = fingerprint
     Object.freeze(this)
   }
 }
@@ -22,17 +34,20 @@ export class EpicGroomed {
   readonly milestone: string | null
   readonly plan: GroomPlan | null
   readonly issues: readonly EpicIssue[]
+  readonly staleness: PlanStalenessValue
 
-  constructor({ state, milestone, plan, issues }: {
+  constructor({ state, milestone, plan, issues, staleness }: {
     state: EpicGroomStateValue,
     milestone: string | null,
     plan: GroomPlan | null,
     issues: readonly EpicIssue[],
+    staleness: PlanStalenessValue,
   }) {
     this.state = state
     this.milestone = milestone
     this.plan = plan
     this.issues = issues
+    this.staleness = staleness
     Object.freeze(this)
   }
 }
@@ -46,17 +61,29 @@ export class GroomEpic {
 
   readonly read: ReadEpicGroom
   readonly groom: EpicGroom
+  readonly fingerprint: PlanFingerprint
 
-  constructor({ read, groom }: { read: ReadEpicGroom, groom: EpicGroom }) {
+  constructor({ read, groom, fingerprint }: { read: ReadEpicGroom, groom: EpicGroom, fingerprint: PlanFingerprint }) {
     this.read = read
     this.groom = groom
+    this.fingerprint = fingerprint
   }
 
   async execute(params: GroomEpicParams): Promise<EpicGroomed> {
     const before = await this.read.execute(new ReadEpicGroomParams({ root: params.root, repository: params.repository }))
 
     if (GroomEpic.REFUSED.includes(before.state)) {
-      return new EpicGroomed({ state: before.state, milestone: before.milestone, plan: before.plan, issues: before.issues })
+      return new EpicGroomed({
+        state: before.state, milestone: before.milestone, plan: before.plan, issues: before.issues,
+        staleness: PlanStaleness.FRESH,
+      })
+    }
+
+    if (this.fingerprint.of(before.plan!) !== params.fingerprint) {
+      return new EpicGroomed({
+        state: before.state, milestone: before.milestone, plan: before.plan, issues: before.issues,
+        staleness: PlanStaleness.CHANGED,
+      })
     }
 
     await this.groom.run({
@@ -68,6 +95,9 @@ export class GroomEpic {
 
     const after = await this.read.execute(new ReadEpicGroomParams({ root: params.root, repository: params.repository }))
 
-    return new EpicGroomed({ state: after.state, milestone: after.milestone, plan: before.plan, issues: after.issues })
+    return new EpicGroomed({
+      state: after.state, milestone: after.milestone, plan: before.plan, issues: after.issues,
+      staleness: PlanStaleness.FRESH,
+    })
   }
 }

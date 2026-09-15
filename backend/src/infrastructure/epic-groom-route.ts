@@ -3,7 +3,7 @@ import { Answer, Refusal } from './http.ts'
 import { Projection } from './projection.ts'
 import { EpicGroomState, ReadEpicGroomParams } from '../application/queries/read-epic-groom.ts'
 import { GateKey } from './gate-key.ts'
-import { GroomEpic, GroomEpicParams } from '../application/actions/groom-epic.ts'
+import { GroomEpic, GroomEpicParams, PlanStaleness } from '../application/actions/groom-epic.ts'
 import { WorkInFlight, Reservation } from './work-in-flight.ts'
 import { PlanFailure } from '../domain/exceptions.ts'
 import { PlanCollapse } from './start-plan-route.ts'
@@ -24,6 +24,7 @@ export const EpicGroomOutcome = Object.freeze({
   SPEC_NOT_FROZEN: 'spec-not-frozen',
   SPEC_NOT_PUBLISHED: 'spec-not-published',
   GROOM_IN_PROGRESS: 'groom-in-progress',
+  PLAN_CHANGED: 'plan-changed',
 } as const)
 
 export type EpicGroomOutcomeValue = (typeof EpicGroomOutcome)[keyof typeof EpicGroomOutcome]
@@ -66,10 +67,13 @@ export class EpicGroomRoute {
   static readonly METHODS = 'GET, POST'
   static readonly RECORD = 'gate 2 groom'
   static readonly NO_PLAN_ON_THIS_PRESS = 'no plan on this press'
+  static readonly PLAN_FINGERPRINT_HEADER = 'x-plan-fingerprint'
   static readonly #NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
   static readonly #NO_COORDINATING_SESSION_DETAIL = 'no coordinating session is held: there is nothing to groom'
   static readonly #GROOM_IN_PROGRESS_DETAIL =
     'a groom of this checkout is under way: wait for it to answer before pressing again'
+  static readonly #PLAN_CHANGED_DETAIL =
+    'the spec changed since this plan was shown: read the new plan before pressing again'
 
   static reading(held: CoordinatingSessions, read: ReadEpicGroom, key: GateKey): RequestHandler {
     return async (request: Request, response: Response): Promise<void> => {
@@ -120,6 +124,7 @@ export class EpicGroomRoute {
         groomed = await groom.execute(new GroomEpicParams({
           root: holding.conversation.root,
           repository: holding.conversation.repository,
+          fingerprint: request.get(EpicGroomRoute.PLAN_FINGERPRINT_HEADER) ?? null,
         }))
       } catch (cause) {
         if (!(cause instanceof PlanFailure)) throw cause
@@ -130,6 +135,10 @@ export class EpicGroomRoute {
       }
       if (GroomEpic.REFUSED.includes(groomed.state)) {
         Answer.refuseAs(response, EpicGroomRefusal.of(groomed))
+        return
+      }
+      if (groomed.staleness === PlanStaleness.CHANGED) {
+        Answer.refuse(response, 409, EpicGroomOutcome.PLAN_CHANGED, EpicGroomRoute.#PLAN_CHANGED_DETAIL)
         return
       }
       stderr(EpicGroomRoute.#recordOf(groomed))
@@ -165,6 +174,7 @@ export class EpicGroomRoute {
           status: EpicGroomState.GROOMABLE,
           milestone: outcome.milestone,
           plan: { issues: outcome.plan!.issues.map(EpicGroomRoute.#wirePlanIssueOf) },
+          planFingerprint: outcome.planFingerprint,
           ...(minted === null ? {} : { key: minted }),
         })
         return
@@ -173,6 +183,7 @@ export class EpicGroomRoute {
           status: EpicGroomState.PARTIALLY_GROOMED,
           milestone: outcome.milestone,
           plan: { issues: outcome.plan!.issues.map(EpicGroomRoute.#wirePlanIssueOf) },
+          planFingerprint: outcome.planFingerprint,
           issues: outcome.issues.map(EpicGroomRoute.#wireIssueOf),
           ...(minted === null ? {} : { key: minted }),
         })

@@ -10,6 +10,7 @@ import { RepositoryName } from '../../src/domain/value-objects/repository-name.t
 import { EpicIssue } from '../../src/domain/value-objects/epic-issue.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { GroomPlan, GroomPlanIssue } from '../../src/domain/value-objects/groom-plan.ts'
+import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
 
 type PromoteAsked = { repository: RepositoryName, issue: EpicIssue }
 
@@ -18,7 +19,10 @@ class ReadEpicGroomDouble extends ReadEpicGroom {
   asked: ReadEpicGroomParams[]
 
   constructor(answers: EpicGroomRead[]) {
-    super({ specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom() })
+    super({
+      specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom(),
+      fingerprint: Mother.FINGERPRINT,
+    })
     this.answers = answers
     this.asked = []
   }
@@ -58,6 +62,7 @@ class Mother {
       new GroomPlanIssue({ order: 2, title: '#2 Second slice', labels: ['type:feature'] }),
     ],
   })
+  static readonly FINGERPRINT = new PlanFingerprint({ digest: (text) => text })
 
   static backlogIssue(): EpicIssue {
     return new EpicIssue({
@@ -116,25 +121,28 @@ class Mother {
 
   static groomableRead(): EpicGroomRead {
     return new EpicGroomRead({
-      state: EpicGroomState.GROOMABLE, spec: null, milestone: null, plan: null, issues: [],
+      state: EpicGroomState.GROOMABLE, spec: null, milestone: null, plan: null, planFingerprint: null, issues: [],
     })
   }
 
   static groomedRead(issues: EpicIssue[]): EpicGroomRead {
     return new EpicGroomRead({
-      state: EpicGroomState.GROOMED, spec: null, milestone: Mother.MILESTONE, plan: null, issues,
+      state: EpicGroomState.GROOMED, spec: null, milestone: Mother.MILESTONE, plan: null, planFingerprint: null,
+      issues,
     })
   }
 
   static authorisedRead(issues: EpicIssue[]): EpicGroomRead {
     return new EpicGroomRead({
-      state: EpicGroomState.AUTHORISED, spec: null, milestone: Mother.MILESTONE, plan: null, issues,
+      state: EpicGroomState.AUTHORISED, spec: null, milestone: Mother.MILESTONE, plan: null, planFingerprint: null,
+      issues,
     })
   }
 
   static partiallyGroomedRead(issues: EpicIssue[]): EpicGroomRead {
     return new EpicGroomRead({
-      state: EpicGroomState.PARTIALLY_GROOMED, spec: null, milestone: Mother.MILESTONE, plan: Mother.PLAN, issues,
+      state: EpicGroomState.PARTIALLY_GROOMED, spec: null, milestone: Mother.MILESTONE, plan: Mother.PLAN,
+      planFingerprint: Mother.FINGERPRINT.of(Mother.PLAN), issues,
     })
   }
 }

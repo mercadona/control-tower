@@ -1122,6 +1122,7 @@ spec's slices table, the order, the title and the labels the real run would give
    {"order":1,"title":"The intermediate gate retires","labels":["type:backend","area:api","status:backlog"]},
    {"order":2,"title":"The session channel","labels":["type:ui","area:sessions","status:backlog"]}
  ]},
+ "planFingerprint":"9c1a3f…",
  "key":"3f9c1a…"}
 ```
 
@@ -1138,6 +1139,7 @@ never read as missing:
    {"order":1,"title":"The intermediate gate retires","labels":["type:backend","area:api","status:backlog"]},
    {"order":2,"title":"The session channel","labels":["type:ui","area:sessions","status:backlog"]}
  ]},
+ "planFingerprint":"9c1a3f…",
  "issues":[
    {"number":348,"url":"https://github.com/owner/name/issues/348","title":"The intermediate gate retires","status":"backlog"}
  ],
@@ -1176,6 +1178,13 @@ is attached only to the `groomable`, `partially-groomed` and `groomed` bodies, a
 page's own request; `no-spec`, `draft`, `awaiting-publication` and `authorised` never carry it,
 whatever request asks — `authorised` has nothing left for a key to open.
 
+`planFingerprint` is a sha256 hex digest of the plan's own content — the milestone, then each
+issue's order, title and labels, in the plan's own order
+(`backend/src/domain/value-objects/groom-plan.ts`'s `canonicalText()`, hashed by
+`backend/src/domain/policies/plan-fingerprint.ts`). It travels only on `groomable` and
+`partially-groomed`, the two shapes that carry a `plan`; `POST /epic-groom` demands it back in its
+`x-plan-fingerprint` header, so a groom the person never previewed is never the one that runs.
+
 **Refusals**
 
 The shared ones — 405 for a method other than `GET` or `POST`, 403 for a foreign `Origin` — and,
@@ -1202,11 +1211,12 @@ already holds some of the plan's issues creates only the ones still missing and 
 existing ones. Finishing the groom is the way `POST /epic-promotion` sends a partially groomed
 epic back to.
 
-**Request header**
+**Request headers**
 
 | Header | Required | Shape |
 |---|---|---|
 | `x-gate-key` | yes | the exact value `GET /epic-groom` minted for the page |
+| `x-plan-fingerprint` | yes | the exact `planFingerprint` the `groomable` or `partially-groomed` body carried for the plan on screen |
 
 **200 OK**
 
@@ -1236,6 +1246,7 @@ Then, once the key holds:
 | `no-epic-spec` | 400 | no execution spec exists in this checkout to groom |
 | `spec-not-frozen` | 400 | the spec is not frozen: gate 1 first |
 | `spec-not-published` | 400 | the spec is frozen, but its committed copy is not yet readable on the default branch |
+| `plan-changed` | 409 | the spec changed since this plan was shown: read the new plan before pressing again |
 
 `groom-in-progress` is `POST /epic-groom`'s own guard against two tabs pressing gate 2 at once — the
 same synchronous-reservation mechanism `freeze-in-progress` documents above
@@ -1245,9 +1256,17 @@ client cannot confuse which one is still running. `GET /epic-groom` and `POST /e
 no reservation of their own — a promotion adds a label to an issue, which is idempotent, so pressing
 it twice at once creates nothing to duplicate.
 
-None of these six touches the milestone or an issue.
+`plan-changed` is this route's own — no other endpoint meets it. It is answered after the read that
+`GET /epic-groom` already performed is repeated and its state allows a groom to run at all, and
+before `ct-groom` is ever invoked: the plan that read would now groom is fingerprinted again
+(`backend/src/domain/policies/plan-fingerprint.ts`) and compared against `x-plan-fingerprint`. A
+mismatch means the spec changed underneath the page between the preview and the press; a request
+carrying no `x-plan-fingerprint` at all meets the same code, because the page always has one to send
+at a pressable rung, so its absence means the request did not come from a preview.
 
-From running the groom itself, once the six above did not apply — the `PlanCollapse` codes this
+None of these seven touches the milestone or an issue.
+
+From running the groom itself, once the seven above did not apply — the `PlanCollapse` codes this
 slice adds to the doctrine `POST /spec-freeze` documents above
 (`backend/src/infrastructure/start-plan-route.ts`). The first five are reached alike by `GET
 /epic-groom`, `POST /epic-groom` and `POST /epic-promotion`, because all three read the spec, the
@@ -1267,7 +1286,7 @@ All six answer 400 and carry the tool's own message in `detail`, the same conven
 tool refusal in this file follows.
 
 ```
-curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/epic-groom
+curl -s -X POST -H 'x-gate-key: 3f9c1a…' -H 'x-plan-fingerprint: 9c1a3f…' http://127.0.0.1:8787/epic-groom
 ```
 
 ---
@@ -1277,7 +1296,8 @@ curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/epic-groom
 Gate 2's press. Adds `status:ready` to every open issue of the milestone standing at
 `status:backlog`, removing `status:backlog` from it, and touches no other label, no other issue
 and no other field. No request body — the whole checkout is read from the held coordinating
-session, the same way `GET /epic-groom` does.
+session, the same way `GET /epic-groom` does. Unlike `POST /epic-groom`, it takes no
+`x-plan-fingerprint`: it authorises issues that already exist and does not depend on the plan.
 
 **Request header**
 

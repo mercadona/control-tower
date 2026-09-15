@@ -38,7 +38,7 @@ describe('EpicGroomPanel', () => {
 
     expect(fetching).toHaveBeenNthCalledWith(2, '/epic-groom', {
       method: 'POST',
-      headers: { 'x-gate-key': EpicGroomMother.KEY },
+      headers: { 'x-gate-key': EpicGroomMother.KEY, 'x-plan-fingerprint': EpicGroomMother.PLAN_FINGERPRINT },
     })
     expect(await screen.findByText('#348 · The intermediate gate retires')).toBeInTheDocument()
     expect(screen.getByText('#349 · The session channel')).toBeInTheDocument()
@@ -84,7 +84,7 @@ describe('EpicGroomPanel', () => {
 
     expect(fetching).toHaveBeenNthCalledWith(2, '/epic-groom', {
       method: 'POST',
-      headers: { 'x-gate-key': EpicGroomMother.KEY },
+      headers: { 'x-gate-key': EpicGroomMother.KEY, 'x-plan-fingerprint': EpicGroomMother.PLAN_FINGERPRINT },
     })
     expect(await screen.findByText('#349 · The session channel')).toBeInTheDocument()
     expect(screen.getByRole('button', PROMOTE_BUTTON)).toBeInTheDocument()
@@ -146,6 +146,21 @@ describe('EpicGroomPanel', () => {
     await user.click(screen.getByRole('button', GROOM_BUTTON))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(EpicGroomMother.NOT_FROM_THE_PAGE_DETAIL)
+  })
+
+  it('a plan that changed since the preview is shown in the same banner as any other refusal', async () => {
+    const fetching = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomable().body, { status: 200 }))
+      .mockResolvedValueOnce(new Response(EpicGroomMother.planChanged().body, { status: 409 }))
+    vi.stubGlobal('fetch', fetching)
+    const user = userEvent.setup()
+    render(<EpicGroomPanel />)
+    await screen.findByRole('button', GROOM_BUTTON)
+
+    await user.click(screen.getByRole('button', GROOM_BUTTON))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(EpicGroomMother.PLAN_CHANGED_DETAIL)
   })
 
   it('without a key the buttons stay disabled and it says where the gate opens from', async () => {
