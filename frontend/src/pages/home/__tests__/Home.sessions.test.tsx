@@ -109,7 +109,7 @@ describe('Home · sessions panel', () => {
 
     openHome()
 
-    expect(screen.getByRole('region', { name: 'Sesiones en marcha' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Sesión coordinadora' })).toBeInTheDocument()
   })
 
   it('keeps the coordinating session reachable while a slice is implemented', async () => {

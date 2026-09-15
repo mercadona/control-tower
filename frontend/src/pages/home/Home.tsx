@@ -522,7 +522,7 @@ const Home = () => {
           label={SESSIONS_COLUMN_LABEL}
         />
         <div className="home__side">
-          <Panel className="home__sessions" heading="Sesiones en marcha" fill ref={sessionsRef}>
+          <Panel className="home__sessions" heading="Sesión coordinadora" fill ref={sessionsRef}>
             <CoordinatingSessionStatus read={coordinatingSession} />
             <SessionsPanel opened={openedSession} />
           </Panel>

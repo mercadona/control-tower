@@ -80,7 +80,7 @@ something, or a banner saying the conversation could not be recovered.
 `StartPlanForm`'s one button opens it with `POST /coordinating-session`.
 
 `Home` lays out a right column (`home__side`), a sibling of `main` rather than
-an overlay, that always holds a `Panel` heading **Sesiones en marcha** with
+an overlay, that always holds a `Panel` heading **Sesión coordinadora** with
 `CoordinatingSessionStatus` and `SessionsPanel` inside it — on the page in
 every phase, never hidden and never disabled by which stage is showing. Once
 an implementation is running, `ImplementHistory` stacks under that panel in
