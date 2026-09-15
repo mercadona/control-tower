@@ -99,18 +99,18 @@ describe('contract §9: what /ct-next does with what you groom', () => {
     expect(a).toMatch(/already in\s+flight/i)
   })
 
-  it('it says /ct-next does NOT narrow by epic: it sweeps every epic in the repo and picks by the lowest #', () => {
+  it('it says /ct-next does NOT narrow by milestone: it sweeps every milestone in the repo and picks by the lowest #', () => {
     const a = seed()
     expect(a).toMatch(/there is no `--milestone`/i)
-    expect(a).toMatch(/two epics/i)
-    // And which lever does exist for choosing which epic advances.
+    expect(a).toMatch(/two milestones/i)
+    // And which lever does exist for choosing which milestone advances.
     expect(a).toMatch(/status:ready/)
   })
 
-  it('and it admits that a TIE of # between two epics is undefined, instead of keeping quiet about it', () => {
+  it('and it admits that a TIE of # between two milestones is undefined, instead of keeping quiet about it', () => {
     // A case nobody asked for, found while reading selectNext: the order is
     // resolved with `.sort((a, b) => a.order - b.order)` over ALL the repo's
-    // open issues. With two live epics, two different slices can carry the SAME
+    // open issues. With two live milestones, two different slices can carry the SAME
     // `#`, and then whichever one GitHub returned first wins. The check below
     // demonstrates it against the real code; the contract cannot promise an
     // order that does not exist.

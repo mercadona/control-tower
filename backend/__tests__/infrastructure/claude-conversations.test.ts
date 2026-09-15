@@ -116,7 +116,7 @@ describe('ClaudeConversations', () => {
     expect(call.argv).toEqual([
       PtyLiveSessions.LOGIN_INTERACTIVE, '-c',
       `exec ${ClaudeConversations.BIN} --resume ${conversation.id.text} ` +
-        `--permission-mode ${ClaudeConversations.PERMISSION_MODE}`,
+        `--permission-mode ${ClaudeConversations.PERMISSION_MODE} --model ${ClaudeConversations.MODEL}`,
     ])
     expect(Object.keys(call.options.env)).not.toContain(ClaudeConversations.PROMPT_VARIABLE)
   })

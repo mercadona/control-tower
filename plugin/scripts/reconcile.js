@@ -95,7 +95,7 @@ import {
 // autolink it as an issue number — a --reconcile with the old copy would have
 // rewritten the new format back into the old one, reintroducing the false link
 // on every run).
-import { renderDepsContent, renderAcContent, GATES_HEADING, E2E_HEADING, EPIC_CONTEXT_HEADING, INHERITED_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, SIGNAL_HEADING } from './groom.js'
+import { renderDepsContent, renderAcContent, GATES_HEADING, E2E_HEADING, MilestoneContextHeading, INHERITED_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, SIGNAL_HEADING } from './groom.js'
 
 // ownedLabelsOnly: the spec is authority over a prefix (`type:`, `area:`,
 // `touches:`) ONLY IF the §9 table carries the column that feeds it
@@ -234,7 +234,16 @@ const DUPLICATE_CHECKS = [
   // resolved merge, and whoever edits the wrong copy deserves to know— but
   // anchoring the exit code to this would train people to ignore the rest of the
   // report.
-  { headings: EPIC_CONTEXT_HEADING, label: 'Contexto del epic', machine: false },
+  // Issue #346: ONE ENTRY PER SPELLING, not one entry holding both forms. With
+  // both in a single entry, two copies of the same spelling and one copy of
+  // each would have produced the same message, and that message quotes a
+  // heading ("the '## <label>' section appears more than once"): it would have
+  // named a spelling the body may not even carry. Split, each entry quotes what
+  // is really duplicated — and the DIFFERENT failure, one copy of each
+  // spelling, gets its own note (milestoneContextSpellings, below), which is
+  // the finding this issue asks for instead of a silent choice between the two.
+  { headings: MilestoneContextHeading.WRITTEN, label: 'Contexto del milestone', machine: false },
+  { headings: MilestoneContextHeading.LEGACY, label: 'Contexto del epic', machine: false },
   { headings: INHERITED_CONTEXT_HEADING, label: 'Contexto heredado', machine: false },
   // Decisiones congeladas: like the epic's context, a duplicate is cosmetic (no
   // machine decides anything with them) — it gets a warning, it does not
@@ -360,7 +369,7 @@ export function diffIssue(existing, wantedIssue, wantedMilestone, ownedLabelPref
   // Without this branch, one `###` too many in the spec was reported as "the
   // issue has a section and the spec does not" and --reconcile deleted it from
   // all N issues.
-  const currentEpicContext = extractSectionContent(body, EPIC_CONTEXT_HEADING)
+  const currentEpicContext = extractSectionContent(body, MilestoneContextHeading.FORMS)
   const wantedEpicContext = wantedIssue.epicContext ?? null
   let epicContextDiffers
   if (wantedIssue.epicContextUnknown) {
@@ -446,6 +455,23 @@ export function diffIssue(existing, wantedIssue, wantedMilestone, ownedLabelPref
   const duplicateSections = duplicates.map((c) => c.label)
   const duplicateMachineSections = duplicates.filter((c) => c.machine).map((c) => c.label)
 
+  // milestoneContextSpellings (issue #346): the accepted spellings of the
+  // milestone's context section that this body carries, and ONLY when it
+  // carries more than one of them — otherwise the empty list, because "the body
+  // uses the legacy spelling" is not a finding and reporting it would be the
+  // warning-that-always-comes-out until the day the legacy spelling retires.
+  //
+  // Two spellings IS a finding, and a separate one from a duplicated section:
+  // every reader here takes the FIRST occurrence, so the text under the other
+  // spelling is invisible to the groom, to --reconcile and to the dispatched
+  // agent alike, while looking to a human exactly like context that is being
+  // honoured. It does not count towards the exit code, for the same reason the
+  // rest of this section never has (see hasDrift): no machine decides anything
+  // with it. It is said, and the spellings are named, so that whoever wrote the
+  // second one can see which one is being read.
+  const spellingsPresent = MilestoneContextHeading.FORMS.filter((heading) => countHeadingLines(body, heading) > 0)
+  const milestoneContextSpellings = spellingsPresent.length > 1 ? spellingsPresent : []
+
   // strayDeps: deps that live in the body but outside the recognised section —
   // since D1, inert text for everybody (neither the dispatcher nor --reconcile
   // obey it); it is reported all the same, regardless of whether it also matches
@@ -475,6 +501,7 @@ export function diffIssue(existing, wantedIssue, wantedMilestone, ownedLabelPref
     e2eDiffers,
     duplicateSections,
     duplicateMachineSections,
+    milestoneContextSpellings,
     strayDeps,
   }
 }
@@ -622,7 +649,15 @@ export function formatDrift(diff) {
   // cases applies, so it cannot promise the rewrite — it says what the normal
   // case is and where the exception comes from, which is exactly what it
   // knows.
-  if (diff.epicContextDiffers) lines.push(`note: ${head}: the "${EPIC_CONTEXT_HEADING}" section differs from the spec (it does not count towards the exit code; with --reconcile it is rewritten from the spec unless the body does not allow doing so safely, in which case that is said right here in another note, with the reason). The "${INHERITED_CONTEXT_HEADING}" section next door is never touched`)
+  // Issue #346: BEFORE the note about the content, because it is the reason
+  // that note cannot be trusted. With both spellings in the body, the
+  // comparison above read the first one and the other one's text is invisible
+  // to it — saying "the content differs" without saying "and there are two
+  // sections" would send a human to fix the copy nobody reads.
+  if ((diff.milestoneContextSpellings || []).length > 1) {
+    lines.push(`note: ${head}: the milestone's context section appears under BOTH accepted spellings — ${diff.milestoneContextSpellings.map((h) => `"${h}"`).join(' and ')}. They are the same section: every reader here takes the first one, so the text under the other one is read by nobody and --reconcile writes to neither. Merge them into one (\`${MilestoneContextHeading.WRITTEN}\` is the one this plugin writes) by hand. It does not count towards the exit code`)
+  }
+  if (diff.epicContextDiffers) lines.push(`note: ${head}: the "${MilestoneContextHeading.WRITTEN}" section differs from the spec (it does not count towards the exit code; with --reconcile it is rewritten from the spec unless the body does not allow doing so safely, in which case that is said right here in another note, with the reason). The "${INHERITED_CONTEXT_HEADING}" section next door is never touched`)
   if (diff.frozenDecisionsDiffers) lines.push(`note: ${head}: the "${FROZEN_DECISIONS_HEADING}" section differs from the spec (it does not count towards the exit code; with --reconcile it is rewritten from the spec unless the body does not allow doing so safely, in which case that is said right here in another note, with the reason)`)
   if (diff.protectedDiffers) lines.push(`note: ${head}: the "## Out of scope / Protected" section differs from the spec (prose — it does not count towards the exit code; --reconcile does not rewrite it)`)
   // F21: the label is named as the channel that DOES count, so that whoever
@@ -1079,7 +1114,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
   // to write and, above all, nothing to withdraw: "I have no text" is not "the
   // epic has no context", and confusing the two deleted the section from all N
   // issues of the epic over one `###` too many in the spec.
-  const currentEpic = extractSectionContent(body, EPIC_CONTEXT_HEADING)
+  const currentEpic = extractSectionContent(body, MilestoneContextHeading.FORMS)
   const wantedEpic = wantedIssue.epicContext ?? null
   const epicDiffers = wantedIssue.epicContextUnknown
     ? false
@@ -1089,7 +1124,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
         ? true
         : currentEpic.trim() !== wantedEpic.trim()
   if (epicDiffers) {
-    const epic = spliceableSection(EPIC_CONTEXT_HEADING)
+    const epic = spliceableSection(MilestoneContextHeading.FORMS)
     const epicLoc = epic.loc
     // Defence at the consumer (final branch review, C3). The guardrail in
     // groom.js#readEpicContext cuts this off at the producer, but it cannot be
@@ -1150,7 +1185,7 @@ export function buildReconcileBody(existingBody, wantedIssue) {
         : null
       const anchor = soleInheritedSection ? { loc: soleInheritedSection, ambiguous: false } : spliceableSection(AC_HEADING_FORMS)
       if (anchor.loc) {
-        body = body.slice(0, anchor.loc.headingStart) + `${EPIC_CONTEXT_HEADING}\n${wantedEpic}\n\n` + body.slice(anchor.loc.headingStart)
+        body = body.slice(0, anchor.loc.headingStart) + `${MilestoneContextHeading.WRITTEN}\n${wantedEpic}\n\n` + body.slice(anchor.loc.headingStart)
         changed = true
       } else {
         // With no anchor: nothing is written and no gap is marked (this section

@@ -27,8 +27,19 @@ function findClosingKeywords(text) {
   return out;
 }
 
+// scripts/milestone-context.js
+var MILESTONE_HEADING = "## Contexto del milestone";
+var EPIC_HEADING = "## Contexto del epic";
+var MilestoneContextHeading = Object.freeze({
+  MILESTONE: MILESTONE_HEADING,
+  EPIC: EPIC_HEADING,
+  WRITTEN: EPIC_HEADING,
+  FORMS: Object.freeze([MILESTONE_HEADING, EPIC_HEADING])
+});
+
 // scripts/scope.js
-var SECTION_HEADING = /^##\s+Contexto del epic\s*$/i;
+var CONTEXT_HEADING_TITLES = MilestoneContextHeading.FORMS.map((h) => h.replace(/^#+\s*/, "").toLowerCase());
+var H2_TITLE = /^##\s+(.+?)\s*$/;
 var ANY_HEADING = /^#{1,6}\s+/;
 var SCOPE_LINE = /^\s*[-*]?\s*\**\s*Alcance\s*\**\s*:\s*(.*)$/i;
 var LOOP_ARTIFACT_PATTERNS = [
@@ -78,10 +89,13 @@ function parseScope(issueBody2) {
   const text = typeof issueBody2 === "string" ? issueBody2 : "";
   const lines = text.split(/\r?\n/);
   let inside = false;
+  let heading = null;
   const patterns = [];
   for (const line of lines) {
-    if (SECTION_HEADING.test(line)) {
+    const h2 = line.match(H2_TITLE);
+    if (h2 && CONTEXT_HEADING_TITLES.includes(h2[1].toLowerCase())) {
       inside = true;
+      heading = heading ?? line.trim();
       continue;
     }
     if (inside && ANY_HEADING.test(line)) break;
@@ -95,13 +109,15 @@ function parseScope(issueBody2) {
     }
   }
   if (!patterns.length) {
+    const named = heading ?? MilestoneContextHeading.WRITTEN;
     return {
       declared: false,
       patterns: [],
-      reason: "the epic does not declare `Alcance:` in its `## Contexto del epic` section \u2014 with no declared scope the gate cannot check anything, and not being able to check is NOT being clean"
+      heading,
+      reason: `the milestone does not declare \`Alcance:\` in its \`${named}\` section \u2014 with no declared scope the gate cannot check anything, and not being able to check is NOT being clean`
     };
   }
-  return { declared: true, patterns, reason: null };
+  return { declared: true, patterns, heading, reason: null };
 }
 function matchesPattern(path, pattern) {
   const p = normalizePath(path);
@@ -197,8 +213,8 @@ try {
 var scope = parseScope(issueBody);
 if (!scope.declared) {
   die(
-    `the epic of issue #${issueN} declares no scope`,
-    `${scope.reason}. Add an \`Alcance: <paths>\` line to the \`## Contexto del epic\` section of the execution spec and re-groom it (or edit the issue). It is declared ONCE per epic, at the freeze.`
+    `the milestone of issue #${issueN} declares no scope`,
+    `${scope.reason}. Add an \`Alcance: <paths>\` line to the \`${scope.heading ?? MilestoneContextHeading.WRITTEN}\` section of the execution spec and re-groom it (or edit the issue). It is declared ONCE per milestone, at the freeze.`
   );
 }
 var files = (prData.files || []).map((f) => f.path);

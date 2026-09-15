@@ -1,21 +1,21 @@
 ---
-description: Groom an epic — spec §9 → GitHub (Milestone + issues + labels + Project v2 + Sprint)
+description: Groom a milestone — spec §9 → GitHub (Milestone + issues + labels + Project v2 + Sprint)
 ---
-Run the groom over the epic's spec. Dry run first, to review the plan:
+Run the groom over the milestone's spec. Dry run first, to review the plan:
 ```
-node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-groom.mjs "$1" --repo "<owner/repo>" --milestone "<Epic>" --dry-run
+node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-groom.mjs "$1" --repo "<owner/repo>" --milestone "<Milestone>" --dry-run
 ```
 Review the JSON. If it looks right, run it for real (add `--project <n>` for the Project v2):
 ```
-node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-groom.mjs "$1" --repo "<owner/repo>" --milestone "<Epic>" --project <n>
+node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-groom.mjs "$1" --repo "<owner/repo>" --milestone "<Milestone>" --project <n>
 ```
 
-Groom with the spec already pushed to the default branch (otherwise the issues are born with no link to the spec). One invocation = one `--milestone` = one epic. It is idempotent by existence: re-running does not duplicate, but neither does it converge — the divergences are reported through stderr and are only applied with `--reconcile` (EXPERIMENTAL: review the issue's diff afterwards). Issues are born in `status:backlog`; promoting them to `status:ready` is a human's job. **stdout is the plan** and **stderr carries the `aviso:`, `note:` and `drift:` lines**: pass them on as they are.
+Groom with the spec already pushed to the default branch (otherwise the issues are born with no link to the spec). One invocation = one `--milestone` = one milestone. It is idempotent by existence: re-running does not duplicate, but neither does it converge — the divergences are reported through stderr and are only applied with `--reconcile` (EXPERIMENTAL: review the issue's diff afterwards). Issues are born in `status:backlog`; promoting them to `status:ready` is a human's job. **stdout is the plan** and **stderr carries the `aviso:`, `note:` and `drift:` lines**: pass them on as they are.
 
 | Exit | Significa | Qué hacer |
 |---|---|---|
 | `0` | No real divergence (or `--reconcile` resolved it) | promote to `status:ready` whatever should fly |
-| `1` | Stopped dead, **nothing created or modified**: an issue with no milestone whose `ct-order` collides, a renamed epic, a `gh` failure, a `--project` precondition (`Sprint` field, a current iteration) | read the reason, fix it, repeat |
+| `1` | Stopped dead, **nothing created or modified**: an issue with no milestone whose `ct-order` collides, a renamed milestone, a `gh` failure, a `--project` precondition (`Sprint` field, a current iteration) | read the reason, fix it, repeat |
 | `2` | The spec does not come in: malformed table, unrecognizable `Dep`, unknown gate, exemption with no reason, pending clarification marker, `## Hipótesis` absent, a frozen decision with no `*(Procedencia: …)*` | fix the spec — every error is reported together, also under `--dry-run` |
 | `3` | Something real is left unreconciled: title, link to the spec, labels, AC, deps, `## E2E`, a duplicated section or an orphan issue | review in GitHub; `--reconcile` applies it |
 

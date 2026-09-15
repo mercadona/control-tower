@@ -195,6 +195,11 @@ describe('the committed dist/ corresponds to the committed sources (F24)', () =>
       'scripts/ct-step-commit.js',
       'scripts/dispatch-gate.js',
       'scripts/governed-repo.js',
+      // The two accepted spellings of the milestone's context heading (issue
+      // #346) come in through scope.js: the conformance gate locates that
+      // section to read the `Alcance:` the milestone declared, and a spec that
+      // still carries the legacy spelling has to keep its gate.
+      'scripts/milestone-context.js',
       // The dispatch gate decides with the machine's table, so
       // dist/dispatch-guard.js drags in run-machine.js and, with it,
       // reconcile-outcome.js. They are pure: no disk, no processes, no yaml.

@@ -10,7 +10,7 @@ It is not an orchestrator of parallel agents. It is the opposite: a machine for 
 |---|---|
 | Version | `0.57.0` <!-- x-release-please-version --> · slice table contract `v23` |
 | Commands | `/ct-init` · `/ct-groom` · `/ct-next` · `/ct-status` |
-| Human gates | 3 per epic — the freeze, `status:ready`, the merge — plus the `plan` gate on every slice (waivable per row with `!plan`; its go is `-OK <nonce>` and `--release` refuses without it) and the `e2e` gate when the row declares journeys in the `E2E` column (derived, never written by hand) |
+| Human gates | 3 per milestone — the freeze, `status:ready`, the merge — plus the `plan` gate on every slice (waivable per row with `!plan`; its go is `-OK <nonce>` and `--release` refuses without it) and the `e2e` gate when the row declares journeys in the `E2E` column (derived, never written by hand) |
 | Skills | 11 forked from superpowers 6.0.3 + 1 of our own (`writing-plans-prescriptive`) |
 | Requirements | Node ≥ 24 · `gh` authenticated · `cmux` · git worktrees |
 | Licence | [MIT](LICENSE) |
@@ -221,7 +221,7 @@ That is: **an unmerged PR holds up its area neighbours even with no agent runnin
 
 The principle that orders the whole design:
 
-> **What you write outside the slice table and `## Contexto del epic` does not reach the agent.** The agent that implements a slice does not receive the spec: it receives a start-up prompt and the body of the issue. A demand written in another section is invisible however forcefully it is worded.
+> **What you write outside the slice table and `## Contexto del milestone` does not reach the agent.** The agent that implements a slice does not receive the spec: it receives a start-up prompt and the body of the issue. A demand written in another section is invisible however forcefully it is worded.
 
 | Artefact | Who writes it | Where it lives |
 |---|---|---|

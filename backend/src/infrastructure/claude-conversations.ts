@@ -13,6 +13,7 @@ export class ClaudeConversations extends Conversations {
   static readonly PROMPT_VARIABLE = 'CT_PHASE_PROMPT'
   static readonly HOOKS_URL_VARIABLE = 'CT_SESSION_HOOKS_URL'
   static readonly PERMISSION_MODE = 'acceptEdits'
+  static readonly MODEL = 'opus'
   static readonly OPENING = `Read the file at $${ClaudeConversations.PROMPT_VARIABLE} and do exactly what it says.`
 
   readonly liveSessions: PtyLiveSessions
@@ -75,11 +76,13 @@ export class ClaudeConversations extends Conversations {
 
   static #startCommand(id: string): string {
     return `exec ${ClaudeConversations.BIN} --session-id ${id} ` +
-      `--permission-mode ${ClaudeConversations.PERMISSION_MODE} "${ClaudeConversations.OPENING}"`
+      `--permission-mode ${ClaudeConversations.PERMISSION_MODE} --model ${ClaudeConversations.MODEL} ` +
+      `"${ClaudeConversations.OPENING}"`
   }
 
   static #resumeCommand(id: string): string {
-    return `exec ${ClaudeConversations.BIN} --resume ${id} --permission-mode ${ClaudeConversations.PERMISSION_MODE}`
+    return `exec ${ClaudeConversations.BIN} --resume ${id} ` +
+      `--permission-mode ${ClaudeConversations.PERMISSION_MODE} --model ${ClaudeConversations.MODEL}`
   }
 
   #open({ conversation, command, extra }: {

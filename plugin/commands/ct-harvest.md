@@ -1,8 +1,8 @@
 ---
-description: Harvest of the epic — the real cost of every slice, taken from GitHub's timeline. Zero manual fields. Only reads from GitHub; with --bq it loads the harvest into BigQuery.
+description: Harvest of the milestone — the real cost of every slice, taken from GitHub's timeline. Zero manual fields. Only reads from GitHub; with --bq it loads the harvest into BigQuery.
 ---
 ```
-node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-harvest.mjs --repo "<owner/repo>" --milestone "<epic title>" [--json] [--bq <project:dataset.table>]
+node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-harvest.mjs --repo "<owner/repo>" --milestone "<milestone title>" [--json] [--bq <project:dataset.table>]
 node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-harvest.mjs --schema
 ```
 

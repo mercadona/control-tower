@@ -1,4 +1,4 @@
-# <Epic name> — Execution spec
+# <Milestone name> — Execution spec
 
 **Handoff origen:** `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`
 **Fecha de congelación:** —
@@ -7,12 +7,12 @@
 ## Hipótesis del experimento
 
 **The bet:** <what we believe will happen if we build this, falsifiable and
-measurable — with no bet there is no epic and the groom rejects the spec>.
+measurable — with no bet there is no milestone and the groom rejects the spec>.
 
 **How we will know it failed:** <the observable condition that knocks the bet
 down>.
 
-**Anti-scope — what this epic does NOT do:** <an explicit list of what stays
+**Anti-scope — what this milestone does NOT do:** <an explicit list of what stays
 out, so that no agent "throws it in">.
 
 ## Decisiones congeladas
@@ -55,9 +55,9 @@ out, so that no agent "throws it in">.
 there are and why the slices serialize or not. This is not the plan — it is the
 rationale that each slice's plan needs and cannot deduce.>
 
-<!-- INSTRUCTIONS FOR «Contexto del epic» — deliberately OUTSIDE the section.
+<!-- INSTRUCTIONS FOR «Contexto del milestone» — deliberately OUTSIDE the section.
      Everything left INSIDE that section is copied, byte by byte, into the body
-     of every issue of the epic: a multi-line comment placed in there is NOT
+     of every issue of the milestone: a multi-line comment placed in there is NOT
      discarded, it travels verbatim to the N issues (verified with
      `readEpicContext`). That is why these instructions live up here.
 
@@ -70,7 +70,7 @@ rationale that each slice's plan needs and cannot deduce.>
      Typical content: stack, repo conventions, calculation rules, invariants
      that EVERY slice must respect. -->
 
-## Contexto del epic
+## Contexto del milestone
 
 - Stack: <language, frameworks, versions>.
 - <Cross-cutting invariant 1>.

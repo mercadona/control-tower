@@ -13,7 +13,7 @@ import { SLICE_REL_PATH } from './state-paths.js'
 // discriminator of "declared signal / exemption / nothing" for groom, kickoff
 // and (in prose) the slice judge's rubric, one that cannot diverge between
 // whoever validates the cell and whoever announces the line.
-import { EPIC_CONTEXT_HEADING, INHERITED_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, parseSignalCell } from './groom.js'
+import { MilestoneContextHeading, INHERITED_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, parseSignalCell } from './groom.js'
 import { NO_MILESTONE_KEY } from './gh-issue-map.js'
 
 // SIGNAL_ABSENT (Slice 10): the value of the `senal:` field when the issue does
@@ -166,6 +166,16 @@ export function renderKickoff(slice, { repo, dispatchCheckPath, ctStepPath, conv
   // issues predating this round. The gate lines go right after the addendum and
   // BEFORE the PR-closing block, not at the end: they are the condition for
   // that closure to be able to happen at all.
+  // Issue #346 — the milestone's context section is named with the spelling
+  // THIS issue carries (gh-issue-map.js#milestoneContextHeadingIn put it in the
+  // slice), not with the one the groom writes today: an already groomed issue
+  // carries `## Contexto del epic` and pointing its agent at a heading that is
+  // not in its body sends it looking outside the issue. The fallback covers the
+  // two cases where the mapping declines to name one —a body with neither
+  // spelling, a body with both— and a slice that never came from an issue at
+  // all (a --dry-run fixture): a prompt has to name something, and the written
+  // spelling is what the reader of a fresh issue will find.
+  const milestoneContextHeading = slice.milestoneContextHeading || MilestoneContextHeading.WRITTEN
   const gates = resolveGatesForAgent(slice)
   const gateLines = renderGateKickoffLines(gates)
   // TASK 9 — the journeys, NAMED literally. `gateLines` already says
@@ -227,7 +237,7 @@ export function renderKickoff(slice, { repo, dispatchCheckPath, ctStepPath, conv
     // inherited one). Without it, an agent that does not find what it has just
     // been pointed at goes looking for it outside the issue, which is precisely
     // what it cannot do.
-    `Lee también las secciones "${EPIC_CONTEXT_HEADING}" y "${INHERITED_CONTEXT_HEADING}" del issue: traen lo que el spec y los slices ya mergeados condicionan sobre este trabajo y que queda fuera de los criterios de aceptación. El issue es la fuente entera de lo heredado: una sección vacía o ausente significa que lo heredado es nada.`,
+    `Lee también las secciones "${milestoneContextHeading}" y "${INHERITED_CONTEXT_HEADING}" del issue: traen lo que el spec y los slices ya mergeados condicionan sobre este trabajo y que queda fuera de los criterios de aceptación. El issue es la fuente entera de lo heredado: una sección vacía o ausente significa que lo heredado es nada.`,
     `Lee también la sección "${FROZEN_DECISIONS_HEADING}" del issue: son decisiones del epic con consecuencia sobre este trabajo, que DEBES respetar tal como están escritas y que van a "## 2. Closed decisions" de tu plan, con las mismas palabras. El issue es la fuente entera: si la sección falta, las decisiones congeladas son cero.`,
     // Slice 10 — the signal, NAMED when the issue declares it: "no demand the
     // spec makes of the agent can depend on the agent reading the spec" —
@@ -273,7 +283,7 @@ export function renderKickoff(slice, { repo, dispatchCheckPath, ctStepPath, conv
     // decision already taken lives, so that it is written down only once. The
     // rest stay available by path, on demand.
     `La vara de ct vive en ${conventionsDir} y el programa la lleva a cada tarea: al implementador pegada, al juez por ruta. Cómo se relaciona con las convenciones de este repo cuando chocan lo dice la CABECERA con la que viaja, que es donde está escrita esa regla y el único sitio donde está — léela ahí y sigue lo que dice tal cual. Antes de escribir el plan abre dos de ellos, porque el plan decide justo lo que miden: \`simplicity.md\` (la carga de la prueba está en lo que se añade, y que el plan lo pida la deja donde estaba) y \`decisions.md\` (dónde vive una decisión ya tomada, para escribirla una sola vez). Los demás quedan a mano por ruta, el que necesites para decidir algo concreto. Lo que el plan tiene que seleccionar sigue siendo la vara del REPO, en el \`Rules to obey:\` de §3, como hasta ahora.`,
-    `Primer acto, con el baseline verde: escribe el plan del slice con control-tower-loop:writing-plans-prescriptive usando el issue como spec (sus AC, "Protegido", "${EPIC_CONTEXT_HEADING}" y "${FROZEN_DECISIONS_HEADING}" son la entrada que la skill pide; vuelca cada decisión congelada en "## 2. Closed decisions" del plan — son del epic y las DEBES respetar con sus mismas palabras). SOLO bloques esenciales, cada uno con su etiqueta de rol: contratos, call sites y el tramo que cambia — los cuerpos de los módulos y los ficheros de test los escribe el implementador con TDD, y la configuración se describe en prosa. Guárdalo como docs/superpowers/plans/YYYY-MM-DD-issue-${slice.n}-<slug>.md, valídalo con \`node ${dispatchCheckPath} ${slice.n} --repo ${repo} --check-plan\` hasta exit 0, y commitéalo: viaja en el PR, y el --release del final se negará (exit 6) sin un plan válido commiteado.`,
+    `Primer acto, con el baseline verde: escribe el plan del slice con control-tower-loop:writing-plans-prescriptive usando el issue como spec (sus AC, "Protegido", "${milestoneContextHeading}" y "${FROZEN_DECISIONS_HEADING}" son la entrada que la skill pide; vuelca cada decisión congelada en "## 2. Closed decisions" del plan — son del epic y las DEBES respetar con sus mismas palabras). SOLO bloques esenciales, cada uno con su etiqueta de rol: contratos, call sites y el tramo que cambia — los cuerpos de los módulos y los ficheros de test los escribe el implementador con TDD, y la configuración se describe en prosa. Guárdalo como docs/superpowers/plans/YYYY-MM-DD-issue-${slice.n}-<slug>.md, valídalo con \`node ${dispatchCheckPath} ${slice.n} --repo ${repo} --check-plan\` hasta exit 0, y commitéalo: viaja en el PR, y el --release del final se negará (exit 6) sin un plan válido commiteado.`,
     renderRunMachineLine(gates, ctStepPath, slice.n),
     addendum,
     ...gateLines,

@@ -130,12 +130,47 @@ was not obvious. They are here so the next diff does not reopen them.
 Three words split by call site, and conflating them would be wrong:
 
 - **`hueco`** is *gap* when it is a hole in a plan or a contract, and **slot**
-  when it is the `(epic, order)` cell of an index — where *gap* would invert the
+  when it is the `(milestone, order)` cell of an index — where *gap* would invert the
   meaning.
 - **`red`** is *net* in "the safety net" and **network** when it is literally a
   `gh` call on the critical path.
 - **`reenvío`** is **resend** when the cmux line is retyped and **forwarding**
   when a child's stdout is relayed.
+
+## The word the loop renamed: `epic` → `milestone`
+
+Not a translation — both words are English — but a vocabulary decision, and this
+file is where vocabulary stops being improvised. Issue #346 settled it: **the
+loop's unit of work is a milestone**, and prose, commands, the README, the
+seeded contract and `/ct-groom`'s own parsed heading say so.
+
+| Old | New | Why this one |
+|---|---|---|
+| epic | **milestone** | It is what GitHub already calls the thing the loop groups issues by: `/ct-groom` creates a Milestone, `/ct-next` selects within it, `/ct-harvest` reports on it. "Epic" was a second name for one object |
+
+Three things keep the old word on purpose, and none of them is debt:
+
+- **`## Contexto del epic` is still both READ and WRITTEN.** It is the anchor of
+  a section that is on disk in every governed repository's frozen spec and in
+  the body of every issue already groomed — and, more to the point, the only
+  spelling the `scope-check` bundle **already vendored into those repositories**
+  can find. Writing the other one there fails their scope gate, and no merge in
+  this repository reaches them. `## Contexto del milestone` is read too, so a
+  spec may use either. The flip of what is written is one line in
+  `plugin/scripts/milestone-context.js`, once those repositories have
+  re-vendored a tolerant gate; `AGENTS.md` carries the rule and the check.
+- **The GitHub milestone `start-in-correct-loop` keeps its name**, and so does
+  any milestone already created: the title is the identity `/ct-next`,
+  `/ct-status` and `/ct-harvest` select by, and renaming one aborts its groom.
+- **The dated record is not rewritten.** The plans and specs under
+  `docs/superpowers/` and the session prompts under `docs/` say "epic" because
+  that is the word those decisions were taken in.
+
+What is still called `epic` in code — `EpicSpec`, `EpicGroomState`,
+`epic-branch.ts`, `readEpicContext`, the `epicContext` field and their
+neighbours — is **declared debt**, not a second opinion about the vocabulary.
+Renaming identifiers is one coordinated move across the backend, the frontend
+and the plugin, and #346 deliberately did not start it half-way.
 
 ## The ordinary words
 
