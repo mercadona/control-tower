@@ -538,8 +538,10 @@ class CtApi {
     })
     const publishedSpecs = new GhPublishedSpecs({ gh })
     const epicIssues = new GhEpicIssues({ gh })
+    const groomRunner = new ToolRunner({ bin: process.execPath, budgetMs: CtApi.#GROOM_TIMEOUT_MS })
     const epicGroom = new CtGroomEpic({
-      node: CtApi.#tool(process.execPath, { budgetMs: CtApi.#GROOM_TIMEOUT_MS }),
+      node: (argv, options) => groomRunner.run(argv, options),
+      wholeOutput: (argv, options) => groomRunner.runWholeOutput(argv, options),
       ctGroom: PluginTree.ctGroom(),
     })
     const readEpicGroom = new ReadEpicGroom({ specs: epicSpecs, published: publishedSpecs, issues: epicIssues, groom: epicGroom })

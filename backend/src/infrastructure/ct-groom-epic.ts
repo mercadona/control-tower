@@ -14,11 +14,17 @@ export class CtGroomEpic extends EpicGroom {
   static readonly UNRECONCILED_DIVERGENCE = 3
 
   readonly node: ToolRunner['run']
+  readonly wholeOutput: ToolRunner['runWholeOutput']
   readonly ctGroom: string
 
-  constructor({ node, ctGroom }: { node: ToolRunner['run'], ctGroom: string }) {
+  constructor({ node, wholeOutput, ctGroom }: {
+    node: ToolRunner['run'],
+    wholeOutput: ToolRunner['runWholeOutput'],
+    ctGroom: string,
+  }) {
     super()
     this.node = node
+    this.wholeOutput = wholeOutput
     this.ctGroom = ctGroom
   }
 
@@ -36,17 +42,17 @@ export class CtGroomEpic extends EpicGroom {
   }
 
   async planned(asked: Grooming): Promise<GroomPlan> {
-    const said = await this.#groom(asked, true)
+    const said = await this.#groom(asked, true, this.wholeOutput)
 
     return CtGroomEpic.#planIn(said.stdout, asked.milestone)
   }
 
   async run(asked: Grooming): Promise<void> {
-    await this.#groom(asked, false)
+    await this.#groom(asked, false, this.node)
   }
 
-  async #groom(asked: Grooming, dryRun: boolean): Promise<ProcessOutput> {
-    const said = await this.node(
+  async #groom(asked: Grooming, dryRun: boolean, launch: ToolRunner['run']): Promise<ProcessOutput> {
+    const said = await launch(
       CtGroomEpic.argvFor({
         ctGroom: this.ctGroom, spec: asked.spec.path, repository: asked.repository,
         milestone: asked.milestone, dryRun,

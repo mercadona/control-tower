@@ -108,6 +108,11 @@ class NodeDouble {
 
         return Promise.resolve(this.answer)
       },
+      wholeOutput: (argv, options) => {
+        this.calls.push({ argv, options })
+
+        return Promise.resolve(this.answer)
+      },
       ctGroom: NodeDouble.CT_GROOM,
     })
   }
