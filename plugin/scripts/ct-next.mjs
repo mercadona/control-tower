@@ -1685,25 +1685,14 @@ function readDispatchInput() {
   // its description is absent from this list, which is the honest reading of
   // "groomed before this existed, or reaching only this repository": in either
   // case there is nothing this run can say about another repository.
-  return { ...buildDispatchInput(open, closed), reachByMilestone: reachByMilestone([...open, ...closed]) }
-}
-
-// reachByMilestone: one entry per milestone whose description declares a reach,
-// in the order the issues name them. It is per MILESTONE and not per run
-// because this dispatcher sweeps every open issue of the repository, so two
-// milestones with different reaches coexist in the same sweep.
-function reachByMilestone(rawIssues) {
-  const found = new Map()
-  const seen = new Set()
-  for (const raw of rawIssues || []) {
-    const milestone = raw && raw.milestone
-    const title = milestone && typeof milestone.title === 'string' ? milestone.title : null
-    if (title === null || seen.has(title)) continue
-    seen.add(title)
-    const reach = MilestoneRepos.reachIn(milestone.description)
-    if (reach) found.set(title, reach)
-  }
-  return [...found].map(([milestone, reach]) => ({ milestone, reach }))
+  // The derivation itself lives in MilestoneRepos.reachesIn (#348, the slice
+  // judge's medium finding): ct-status.mjs had grown its own copy of this same
+  // walk, and a later change to either —a milestone with no title, reading the
+  // reach from the closed issues too— would have drifted in silence. It is per
+  // MILESTONE and not per run because this dispatcher sweeps every open issue
+  // of the repository, so two milestones with different reaches coexist in one
+  // sweep.
+  return { ...buildDispatchInput(open, closed), reachByMilestone: MilestoneRepos.reachesIn([...open, ...closed]) }
 }
 
 // formatOrderCollisions (D1 finding 1, the gravest of the dispatch hardening —
@@ -2075,12 +2064,7 @@ let anyTargetRepoRefused = false
 // not resolve with time.
 const exitCodeRefusing = (code) => (anyTargetRepoRefused ? 1 : code)
 {
-  const reaches = (dispatchInput.reachByMilestone || [])
-    .map(({ milestone, reach }) => ({
-      milestone,
-      elsewhere: reach.targets.filter((target) => target.toLowerCase() !== repo.toLowerCase()),
-    }))
-    .filter(({ elsewhere }) => elsewhere.length > 0)
+  const reaches = MilestoneRepos.awayFrom(dispatchInput.reachByMilestone || [], repo)
   if (reaches.length) {
     const registry = CheckoutRegistry.read({ configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
     const resolved = new Map()

@@ -179,7 +179,8 @@ try {
 // A listing that fails for one of those repositories is a reason and exit 1 —
 // never a repository harvested as empty, which would read as "that half of
 // the milestone cost nothing".
-const reach = issues.map((i) => MilestoneRepos.reachIn(i.milestone && i.milestone.description)).find(Boolean) || null
+const [reached] = MilestoneRepos.reachesIn(issues)
+const reach = reached === undefined ? null : reached.reach
 const harvested = [repo, ...(reach ? reach.targets.filter((target) => target.toLowerCase() !== repo.toLowerCase()) : [])]
 const issuesByRepo = new Map([[repo, issues]])
 for (const target of harvested.slice(1)) {

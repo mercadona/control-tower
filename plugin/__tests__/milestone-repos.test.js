@@ -151,3 +151,39 @@ describe('MilestoneRepos — the reach that survives the groom', () => {
     expect(after).toBe(`Top\n\n<!-- ct-repos:o/home,o/other -->\n\nBottom`)
   })
 })
+
+describe('MilestoneRepos.reachesIn / awayFrom — the derivation both commands share', () => {
+  const issue = (title, description) => ({ milestone: title === null ? null : { title, description } })
+
+  it('one entry per milestone whose description declares a reach, in the order the issues name them', () => {
+    const reaches = MilestoneRepos.reachesIn([
+      issue('Second', '<!-- ct-repos:o/home,o/b -->'),
+      issue('First', '<!-- ct-repos:o/home,o/a -->'),
+      issue('Second', '<!-- ct-repos:o/home,o/b -->'),
+    ])
+
+    expect(reaches.map(({ milestone }) => milestone)).toEqual(['Second', 'First'])
+    expect(reaches[0].reach.targets).toEqual(['o/home', 'o/b'])
+  })
+
+  it('a milestone with no marker, an issue with no milestone and an unreadable marker are all absent', () => {
+    expect(MilestoneRepos.reachesIn([
+      issue('Plain', 'El epic del trimestre'),
+      issue(null, null),
+      issue('Mangled', '<!-- ct-repos: -->'),
+    ])).toEqual([])
+  })
+
+  it('awayFrom answers only the repositories that are not the one asked about, case-insensitively', () => {
+    const reaches = MilestoneRepos.reachesIn([issue('Epic', '<!-- ct-repos:o/home,o/other -->')])
+
+    expect(MilestoneRepos.awayFrom(reaches, 'O/HOME')).toEqual([{ milestone: 'Epic', elsewhere: ['o/other'] }])
+    expect(MilestoneRepos.awayFrom(reaches, 'o/other')).toEqual([{ milestone: 'Epic', elsewhere: ['o/home'] }])
+  })
+
+  it('a milestone that reaches only the repository asked about is not answered at all', () => {
+    const reaches = MilestoneRepos.reachesIn([issue('Epic', '<!-- ct-repos:o/home -->')])
+
+    expect(MilestoneRepos.awayFrom(reaches, 'o/home')).toEqual([])
+  })
+})

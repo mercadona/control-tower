@@ -68,6 +68,30 @@ export class MilestoneRepos {
     return `${MilestoneRepos.MARKER_OPEN}${reach.join(MilestoneRepos.SEPARATOR)}${MilestoneRepos.MARKER_CLOSE}`
   }
 
+  static reachesIn(rawIssues) {
+    const found = new Map()
+    const seen = new Set()
+    for (const raw of rawIssues || []) {
+      const milestone = raw && raw.milestone
+      const title = milestone && typeof milestone.title === 'string' ? milestone.title : null
+      if (title === null || seen.has(title)) continue
+      seen.add(title)
+      const reach = MilestoneRepos.reachIn(milestone.description)
+      if (reach !== null) found.set(title, reach)
+    }
+
+    return [...found].map(([milestone, reach]) => ({ milestone, reach }))
+  }
+
+  static awayFrom(reaches, repo) {
+    return (reaches || [])
+      .map(({ milestone, reach }) => ({
+        milestone,
+        elsewhere: reach.targets.filter((target) => !MilestoneRepos.#same(target, repo)),
+      }))
+      .filter(({ elsewhere }) => elsewhere.length > 0)
+  }
+
   static reachIn(description) {
     const found = MilestoneRepos.MARKER.exec(description || '')
     if (found === null) return null

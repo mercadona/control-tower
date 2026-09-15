@@ -197,17 +197,11 @@ reasons.push(...issueReasons)
 // fourth.
 const scopeLines = []
 {
-  const reaches = []
-  const seen = new Set()
-  for (const raw of [...open, ...closed]) {
-    const milestone = raw && raw.milestone
-    const title = milestone && typeof milestone.title === 'string' ? milestone.title : null
-    if (title === null || seen.has(title)) continue
-    seen.add(title)
-    const reach = MilestoneRepos.reachIn(milestone.description)
-    const elsewhere = reach ? reach.targets.filter((target) => target.toLowerCase() !== repo.toLowerCase()) : []
-    if (elsewhere.length) reaches.push({ milestone: title, elsewhere })
-  }
+  // The walk itself is MilestoneRepos.reachesIn/awayFrom (#348, the slice
+  // judge's medium finding): this file had its own copy of it, line for line,
+  // one commit after this very slice collapsed three copies of
+  // `repoOfRemoteUrl` for the same reason.
+  const reaches = MilestoneRepos.awayFrom(MilestoneRepos.reachesIn([...open, ...closed]), repo)
   if (reaches.length) {
     const registry = CheckoutRegistry.read({ configDir: process.env.CLAUDE_CONFIG_DIR || null, home: homedir() })
     const resolved = new Map()
