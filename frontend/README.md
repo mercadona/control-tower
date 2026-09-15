@@ -45,12 +45,17 @@ reach the harvest ledger nor any comparison of coding tools until the backend is
 restarted with it. The drawer never offers to change it: the value is an option
 of the backend's start-up, so there is no endpoint that writes it.
 
-`app/sessions` (`SessionsPanel`, rendered by `Home`) consumes the three session
+`app/sessions` (`SessionsPanel`, rendered by `Home`) consumes four session
 endpoints: `GET /sessions` lists what the backend owns, `GET /sessions/:id/stream`
-streams the chosen one's bytes over Server-Sent Events, and `POST
-/sessions/:id/input` carries every keystroke back. `SessionTerminal`
-renders that stream with `@xterm/xterm`, a real terminal emulator, rather than
-a scrolling log. **The backend owns the session, not the page**: it is opened
+streams the chosen one's bytes over Server-Sent Events, `POST
+/sessions/:id/input` carries every keystroke back, and `POST /sessions/:id/resize`
+carries the terminal's fitted size so the pty agrees with what the page shows.
+`SessionTerminal` renders that stream with `@xterm/xterm`, a real terminal
+emulator, rather than a scrolling log, and fits it to its container with
+`@xterm/addon-fit`: a `ResizeObserver` on the screen element schedules a fit
+after a 100 ms debounce, and `SessionsClient.resize` is only called when the
+fitted size changes. A resize failure is swallowed — it is not user-actionable
+and never shows a banner. **The backend owns the session, not the page**: it is opened
 once at the backend's start-up, so the page is a window onto it and never its
 owner — closing the tab ends only the subscription and disposes the on-screen
 terminal, while the process, its scrollback and its row in `GET /sessions`
@@ -68,14 +73,18 @@ beside `SessionsPanel`) polls `GET /coordinating-session` every two seconds
 conversation's attention: **Trabajando** while it works, **Esperando** with
 its question under **Te está preguntando** once the brainstorming asks
 something, or a banner saying the conversation could not be recovered.
-`StartPlanForm`'s one button opens it with `POST /coordinating-session`. Both
-`SessionsPanel` and `CoordinatingSessionStatus` sit in `Home`'s
-`home__sessions` section, outside every `currentStage` branch of the
-workspace: the terminal and the coordinating session's state are on the page
-in every phase, never hidden and never disabled by which stage is showing.
+`StartPlanForm`'s one button opens it with `POST /coordinating-session`.
 
-`app/spec-freeze` (`SpecFreezePanel`, rendered by `Home` right after
-`home__sessions`, outside every `currentStage` branch too) is gate 1's panel.
+`Home` lays out a right column (`home__side`), a sibling of `main` rather than
+an overlay, that always holds a `Panel` heading **Sesiones en marcha** with
+`CoordinatingSessionStatus` and `SessionsPanel` inside it — on the page in
+every phase, never hidden and never disabled by which stage is showing. Once
+an implementation is running, `ImplementHistory` stacks under that panel in
+the same column. Above 1280 px the column sits beside `main` at a fixed width;
+below it, the column stacks under the work area with no overlay.
+
+`app/spec-freeze` (`SpecFreezePanel`, rendered by `Home` in `main`, right after
+the workspace, outside every `currentStage` branch) is gate 1's panel.
 `GET /spec-freeze` polls the checkout's execution spec (`useSpecFreeze.ts`) and
 answers `none`, `no-spec`, `draft` — with the yardstick's findings and the
 one-time gate key — or `frozen`, with the freeze date and the pull request.
