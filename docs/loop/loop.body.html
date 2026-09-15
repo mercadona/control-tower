@@ -809,7 +809,7 @@
           <p><strong>Everything it reads comes before everything it writes.</strong> Validation, resolution and verification of the link to the spec, enumeration of issues, labels, milestones and — with <code>--project</code> — the introspection of the Project v2 (which demands an iteration field named exactly <code>Sprint</code> and an iteration that covers today). If it aborts at any of those steps, it has created nothing.</p>
           <p>Once validation is passed, the write order is <strong>milestone → labels → issues → registration in the Project with its Sprint</strong>. There is no transaction and it does not pretend there is one: a network failure there leaves what came before created. You get out of a half-way abort <strong>by running it again, not by cleaning up by hand</strong>: the milestone is reused by title, of the labels only the missing ones are created, and the issues are recognised by their <code>&lt;!-- ct-order:N --&gt;</code> marker.</p>
           <div class="io">
-            <div><dt>Scope</dt><dd>One invocation = one milestone = one milestone. The <code>#</code> are 1..N <strong>per milestone</strong>: every spec can start at 1.</dd></div>
+            <div><dt>Scope</dt><dd>One invocation = one milestone. The <code>#</code> are 1..N <strong>per milestone</strong>: every spec can start at 1.</dd></div>
             <div><dt>Idempotence</dt><dd>By existence only. Reporting divergence ≠ converging: without <code>--reconcile</code> it never edits an existing issue (exit 3).</dd></div>
           </div>
         </div>
