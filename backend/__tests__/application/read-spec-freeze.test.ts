@@ -70,6 +70,7 @@ class Mother {
   static readonly PATH = 'docs/superpowers/specs/2026-01-01-test-execution.md'
   static readonly DESIGN_LINE = '**Handoff origen:** `docs/superpowers/specs/2026-01-01-test-design.md`'
   static readonly BET_LINE = '**The bet:** shipping this halves the time to freeze a spec.'
+  static readonly SOURCELESS_DECISION = '- **D-1 · the gate** — one single click freezes the spec.'
 
   static draftWithPendingClarification(): EpicSpec {
     return new EpicSpec({
@@ -139,6 +140,28 @@ class Mother {
         '**Estado:** DRAFT',
         '',
         '## Decisiones congeladas',
+        '',
+      ].join('\n'),
+    })
+  }
+
+  static draftWithSourcelessDecision(): EpicSpec {
+    return new EpicSpec({
+      path: Mother.PATH,
+      text: [
+        '# Test epic — Execution spec',
+        '',
+        Mother.DESIGN_LINE,
+        '**Fecha de congelación:** —',
+        '**Estado:** DRAFT',
+        '',
+        '## Hipótesis',
+        '',
+        Mother.BET_LINE,
+        '',
+        '## Decisiones congeladas',
+        '',
+        Mother.SOURCELESS_DECISION,
         '',
       ].join('\n'),
     })
@@ -231,6 +254,19 @@ describe('ReadSpecFreeze', () => {
     expect(read.state).toBe(SpecFreezeState.DRAFT)
     expect(read.findings).toEqual([
       new FreezeFinding({ code: FreezeFindingCode.HYPOTHESIS_ABSENT, line: null, detail: null }),
+    ])
+  })
+
+  it('a frozen decision that does not name its source answers the provenance finding with the line and the raw text of its bullet', async () => {
+    const read = await Flow.readingSpec(Mother.draftWithSourcelessDecision()).run()
+
+    expect(read.state).toBe(SpecFreezeState.DRAFT)
+    expect(read.findings).toEqual([
+      new FreezeFinding({
+        code: FreezeFindingCode.DECISION_WITHOUT_PROVENANCE,
+        line: 13,
+        detail: Mother.SOURCELESS_DECISION,
+      }),
     ])
   })
 
