@@ -46,7 +46,7 @@ export const GLOBAL_VERIFICATION = [
 export const PLAN = [
   '# #7 — two made-up tasks',
   '',
-  '> **This plan is written to be executed by task-scoped subagents with zero context.**',
+  '> **Task-scoped subagents execute this plan. They arrive with no context.**',
   '',
   '## 7. Tasks',
   '',

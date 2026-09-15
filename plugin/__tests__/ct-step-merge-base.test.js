@@ -12,7 +12,7 @@ const FENCE = '```'
 const planOfOneTaskWithBacktickedFiles = () => [
   '# #99 — fixture slice',
   '',
-  '> **This plan is written to be executed by task-scoped subagents with zero context.**',
+  '> **Task-scoped subagents execute this plan. They arrive with no context.**',
   '',
   '## 1. Context and goal',
   'Fixture.',

@@ -16,7 +16,7 @@ const REAL_FILE = 'export function sum(a, b) {\n  return a + b\n}\n'
 const VALID_PLAN = [
   '# #7 — sum() returns the sum',
   '',
-  '> **This plan is written to be executed by task-scoped subagents with zero context.**',
+  '> **Task-scoped subagents execute this plan. They arrive with no context.**',
   '',
   '## 1. Context and goal',
   'sum() exists and has to be covered.',
@@ -77,7 +77,7 @@ const readFile = (path) => {
 const HEADER = (title) => [
   `# ${title}`,
   '',
-  '> **This plan is written to be executed by task-scoped subagents with zero context.**',
+  '> **Task-scoped subagents execute this plan. They arrive with no context.**',
   '',
   '## 1. Context and goal',
   'sum() has to be exposed through the barrel.',
@@ -549,7 +549,7 @@ describe('the **Verification:** commands go in a block, not in the sentence', ()
   const planWith = (verification) => [
     '# #7 — sum() returns the sum',
     '',
-    '> **This plan is written to be executed by task-scoped subagents with zero context.**',
+    '> **Task-scoped subagents execute this plan. They arrive with no context.**',
     '',
     '## 1. Context and goal',
     'sum() exists and has to be covered.',

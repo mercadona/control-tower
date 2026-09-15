@@ -46,7 +46,7 @@ const tmp = (pref) => { const d = mkdtempSync(join(tmpdir(), pref)); trash.push(
 const FENCE = '```'
 const plan = (issue) => [
   `# #${issue} — fixture slice`, '',
-  '> **This plan is written to be executed by task-scoped subagents with zero context.**', '',
+  '> **Task-scoped subagents execute this plan. They arrive with no context.**', '',
   '## 1. Context and goal', 'Fixture.',
   '### Desired end state', 'Work done.',
   '### Out of scope', 'N/A — fixture.',

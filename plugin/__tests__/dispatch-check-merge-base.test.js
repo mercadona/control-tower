@@ -14,7 +14,7 @@ const FENCE = '```'
 const minimalPlanFor = (issue) => [
   `# #${issue} — fixture slice`,
   '',
-  '> **This plan is written to be executed by task-scoped subagents with zero context.**',
+  '> **Task-scoped subagents execute this plan. They arrive with no context.**',
   '',
   '## 1. Context and goal',
   'Fixture.',
@@ -58,7 +58,7 @@ const minimalPlanFor = (issue) => [
 const planCitingFoo = (issue, fooContent) => [
   `# #${issue} — fixture slice`,
   '',
-  '> **This plan is written to be executed by task-scoped subagents with zero context.**',
+  '> **Task-scoped subagents execute this plan. They arrive with no context.**',
   '',
   '## 1. Context and goal',
   'Fixture.',

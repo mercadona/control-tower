@@ -21,7 +21,7 @@
 
 import { extractTasks } from './plan-tasks.js'
 
-const BLOCKQUOTE_MARKER = 'This plan is written to be executed by task-scoped subagents'
+const BLOCKQUOTE_MARKER = 'Task-scoped subagents execute this plan'
 
 export const PLAN_SECTIONS = [
   '## 1. Context and goal',

@@ -1,10 +1,10 @@
 # {{#<issue> — what this slice delivers}}
 
-> **This plan is written to be executed by task-scoped subagents that arrive with zero context
-> and decide nothing.** Every task carries the current state of what it touches (copied
-> verbatim), the contracts it honours and the exact commands that verify it; its bodies are
-> yours to write, test-first. Names, signatures, constants and test names come from this
-> document, which decided them. On ambiguity, the issue body and AGENTS.md win.
+> **Task-scoped subagents execute this plan. They arrive with no context and they decide
+> nothing.** Each task carries the current state of what it changes, copied exactly from the
+> repo. It also carries the contracts it obeys and the exact commands that verify it. You write
+> the bodies, and you write the test first. This document decided the names, the signatures, the
+> constants and the test names. If a decision is not clear, follow the issue body and AGENTS.md.
 
 ## 1. Context and goal
 
