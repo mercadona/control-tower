@@ -8,6 +8,7 @@ import { SessionAttention } from '../domain/value-objects/session-attention.ts'
 import { PlanFailure } from '../domain/exceptions.ts'
 import type { CoordinatingSessions, OpeningReservationValue, ReservedOpening } from './coordinating-sessions.ts'
 import type { CoordinatingSessionOpened, OpenCoordinatingSession } from '../application/actions/open-coordinating-session.ts'
+import type { SessionTimelineEvent } from '../domain/value-objects/session-timeline-event.ts'
 
 export const CoordinatingSessionOutcome = Object.freeze({
   ACCEPTED: 'accepted',
@@ -54,11 +55,17 @@ export class CoordinatingSessionRoute {
         Answer.send(response, 200, { status: 'none' })
         return
       }
-      CoordinatingSessionRoute.#answerHolding(response, holding)
+      CoordinatingSessionRoute.#answerHolding(response, holding, held.timeline())
     }
   }
 
-  static #answerHolding(response: Response, holding: HeldCoordinatingSession): void {
+  static #timelineOf(timeline: readonly SessionTimelineEvent[]): unknown[] {
+    return timeline.map((event) => ({ id: event.id, kind: event.kind, at: event.at, detail: event.detail }))
+  }
+
+  static #answerHolding(
+    response: Response, holding: HeldCoordinatingSession, timeline: readonly SessionTimelineEvent[]
+  ): void {
     switch (holding.state) {
       case CoordinatingSessionState.LIVE:
         Answer.send(response, 200, {
@@ -68,6 +75,7 @@ export class CoordinatingSessionRoute {
           root: holding.conversation.root.text,
           session: { id: holding.session!.id, name: holding.session!.name },
           attention: { status: holding.attention!.status, question: holding.attention!.question },
+          timeline: CoordinatingSessionRoute.#timelineOf(timeline),
         })
         return
       case CoordinatingSessionState.UNRESUMABLE:
@@ -77,6 +85,7 @@ export class CoordinatingSessionRoute {
           repo: holding.conversation.repository.text,
           root: holding.conversation.root.text,
           detail: CoordinatingSessionRoute.#UNRESUMABLE_DETAIL,
+          timeline: CoordinatingSessionRoute.#timelineOf(timeline),
         })
         return
       case CoordinatingSessionState.ENDED:
@@ -86,6 +95,7 @@ export class CoordinatingSessionRoute {
           repo: holding.conversation.repository.text,
           root: holding.conversation.root.text,
           detail: CoordinatingSessionRoute.#ENDED_DETAIL,
+          timeline: CoordinatingSessionRoute.#timelineOf(timeline),
         })
         return
       default: {
@@ -127,7 +137,7 @@ export class CoordinatingSessionRoute {
         conversation: opened.conversation,
         session: opened.session,
         attention: SessionAttention.working(),
-      }))
+      }), opened.timeline)
       Answer.send(response, 202, {
         status: 'brainstorming',
         conversation: opened.conversation.id.text,

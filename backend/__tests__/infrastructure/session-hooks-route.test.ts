@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { ApiServer } from '../../src/infrastructure/api-server.ts'
 import { CoordinatingSessions, HeldCoordinatingSession, CoordinatingSessionState } from '../../src/infrastructure/coordinating-sessions.ts'
 import { SessionHooksRoute } from '../../src/infrastructure/session-hooks-route.ts'
+import { ConversationRecords } from '../../src/domain/ports/conversation-records.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
@@ -12,6 +13,7 @@ import { CoordinatingConversation } from '../../src/domain/value-objects/coordin
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
+import { TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
 
 class LiveSessionsDouble extends LiveSessions {
   find(id: string): LiveSession | null {
@@ -20,6 +22,29 @@ class LiveSessionsDouble extends LiveSessions {
 
   watch(): LiveSessionStream {
     return { printed: '', stop: (): void => {} }
+  }
+}
+
+class RecordsDouble extends ConversationRecords {
+  failing: boolean
+  recorded: boolean[]
+  #delayMs: number
+
+  constructor(failing = false) {
+    super()
+    this.failing = failing
+    this.recorded = []
+    this.#delayMs = 0
+  }
+
+  delayEachWriteBy(ms: number): void {
+    this.#delayMs = ms
+  }
+
+  async appendTimelineEvent(): Promise<void> {
+    if (this.#delayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.#delayMs))
+    if (this.failing) throw new Error('disk is full')
+    this.recorded.push(true)
   }
 }
 
@@ -33,8 +58,8 @@ class Mother {
 
   static readonly SESSION = new LiveSession({ id: 'session-1', name: 'brainstorming' })
 
-  static held(attention: SessionAttention): CoordinatingSessions {
-    const sessions = new CoordinatingSessions({ liveSessions: new LiveSessionsDouble(), stderr: (): void => {} })
+  static held(attention: SessionAttention, records: ConversationRecords = new RecordsDouble()): CoordinatingSessions {
+    const sessions = new CoordinatingSessions({ liveSessions: new LiveSessionsDouble(), stderr: (): void => {}, records })
     sessions.remember(new HeldCoordinatingSession({
       state: CoordinatingSessionState.LIVE,
       conversation: Mother.CONVERSATION,
@@ -123,7 +148,7 @@ afterEach(async () => {
 })
 
 describe('SessionHooksRoute', () => {
-  it('reads a Stop as the question Claude ended its turn with', async () => {
+  it('reads a Stop as a completed turn, never as a question, however it phrases its last message', async () => {
     const held = Mother.held(SessionAttention.working())
 
     const response = await RunningApi.post(
@@ -132,7 +157,9 @@ describe('SessionHooksRoute', () => {
 
     expect(response.status).toBe(202)
     expect(await response.json()).toEqual({ status: 'reported', attention: 'waiting' })
-    expect(held.held()?.attention).toEqual(SessionAttention.waiting('should the button read Arrancar brainstorming?'))
+    expect(held.held()?.attention).toEqual(SessionAttention.waiting(null))
+    expect(held.timeline().at(-1)?.kind).toBe(TimelineEventKind.COMPLETED)
+    expect(held.timeline().at(-1)?.detail).toBeNull()
   })
 
   it('leaves the question empty when the Stop carries no final message', async () => {
@@ -155,6 +182,8 @@ describe('SessionHooksRoute', () => {
     expect(response.status).toBe(202)
     expect(await response.json()).toEqual({ status: 'reported', attention: 'waiting' })
     expect(held.held()?.attention).toEqual(SessionAttention.waiting('Claude needs your permission to use Bash'))
+    expect(held.timeline().at(-1)?.kind).toBe(TimelineEventKind.WAITING_FOR_PERMISSION)
+    expect(held.timeline().at(-1)?.detail).toBe('Claude needs your permission to use Bash')
   })
 
   it('does not show an authentication notification as a question', async () => {
@@ -167,9 +196,9 @@ describe('SessionHooksRoute', () => {
     expect(held.held()?.attention).toEqual(SessionAttention.working())
   })
 
-  it('does not erase with an idle notification the question of the previous Stop', async () => {
+  it('does not erase with an idle notification the question of a previous permission prompt', async () => {
     const held = Mother.held(SessionAttention.working())
-    await RunningApi.post(held, Hook.stop({ last_assistant_message: 'which of the two screens do you mean?' }))
+    await RunningApi.post(held, Hook.notification('permission_prompt', 'which of the two screens do you mean?'))
 
     const response = await RunningApi.post(held, Hook.notification(Hook.IDLE_PROMPT, 'Claude is waiting for your input'))
 
@@ -184,6 +213,31 @@ describe('SessionHooksRoute', () => {
 
     expect(response.status).toBe(202)
     expect(await response.json()).toEqual({ status: 'reported', attention: 'working' })
+    expect(held.held()?.attention).toEqual(SessionAttention.working())
+    expect(held.timeline().at(-1)?.kind).toBe(TimelineEventKind.WORKING)
+  })
+
+  it('acknowledges only after the timeline event has actually been persisted', async () => {
+    const records = new RecordsDouble()
+    records.delayEachWriteBy(20)
+    const held = Mother.held(SessionAttention.working(), records)
+
+    const response = await RunningApi.post(held, Hook.userPromptSubmit('go'))
+
+    expect(response.status).toBe(202)
+    expect(records.recorded).toEqual([true])
+  })
+
+  it('refuses timeline-not-recorded instead of falsely acknowledging a write that failed', async () => {
+    const held = Mother.held(SessionAttention.working(), new RecordsDouble(true))
+
+    const response = await RunningApi.post(held, Hook.userPromptSubmit('go'))
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      code: 'timeline-not-recorded',
+      detail: 'the attention moved but the timeline event could not be recorded',
+    })
     expect(held.held()?.attention).toEqual(SessionAttention.working())
   })
 

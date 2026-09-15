@@ -22,6 +22,7 @@ import { CoordinatingConversation } from '../../src/domain/value-objects/coordin
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
+import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
 
 class OpenCoordinatingSessionSpy extends OpenCoordinatingSession {
   readonly asked: OpenCoordinatingSessionParams[]
@@ -78,8 +79,14 @@ class Mother {
   static readonly OPENING_REQUEST =
     '{"user_comment":"explore the checkout screen","repo":"josemerca/ct-loop-sandbox","path":"/repo"}'
 
+  static readonly TIMELINE = [
+    new SessionTimelineEvent({ id: 'event-1', kind: TimelineEventKind.OPENED, at: '2026-09-15T10:00:00.000Z', detail: null }),
+  ]
+
   static opened(): CoordinatingSessionOpened {
-    return new CoordinatingSessionOpened({ conversation: Mother.CONVERSATION, session: Mother.SESSION })
+    return new CoordinatingSessionOpened({
+      conversation: Mother.CONVERSATION, session: Mother.SESSION, timeline: Mother.TIMELINE,
+    })
   }
 
   static registry(): CoordinatingSessions {
@@ -93,7 +100,7 @@ class Mother {
       conversation: Mother.CONVERSATION,
       session: Mother.SESSION,
       attention,
-    }))
+    }), Mother.TIMELINE)
 
     return held
   }
@@ -105,7 +112,7 @@ class Mother {
       conversation: Mother.CONVERSATION,
       session: null,
       attention: null,
-    }))
+    }), Mother.TIMELINE)
 
     return held
   }
@@ -117,9 +124,13 @@ class Mother {
       conversation: Mother.CONVERSATION,
       session: null,
       attention: null,
-    }))
+    }), Mother.TIMELINE)
 
     return held
+  }
+
+  static timelineJson(): unknown[] {
+    return Mother.TIMELINE.map((event) => ({ id: event.id, kind: event.kind, at: event.at, detail: event.detail }))
   }
 }
 
@@ -401,6 +412,7 @@ describe('CoordinatingSessionRoute', () => {
       root: Mother.ROOT.text,
       session: { id: Mother.SESSION.id, name: Mother.SESSION.name },
       attention: { status: 'waiting', question: 'should the button read Arrancar brainstorming?' },
+      timeline: Mother.timelineJson(),
     })
   })
 
@@ -416,6 +428,7 @@ describe('CoordinatingSessionRoute', () => {
       repo: Mother.REPOSITORY.text,
       root: Mother.ROOT.text,
       detail: 'the terminal of this coordinating session exited and no other one was opened',
+      timeline: Mother.timelineJson(),
     })
   })
 
@@ -443,6 +456,7 @@ describe('CoordinatingSessionRoute', () => {
       repo: Mother.REPOSITORY.text,
       root: Mother.ROOT.text,
       detail: 'claude code no longer holds this conversation: the coordinating session was not resumed',
+      timeline: Mother.timelineJson(),
     })
   })
 })
