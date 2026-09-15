@@ -34,13 +34,14 @@ are non-negotiable and machine-checked by `plan-contract.js`: the fixed structur
 
 You were dispatched for exactly one issue. Its body carries everything you are allowed to
 plan from: the acceptance criteria (EARS), the "Out of scope / Protected" section, the
-"Contexto del epic" and "Contexto heredado" sections, the "Dependencias" section with the
+"Contexto del epic" (or "del milestone") and "Contexto heredado" sections, the
+"Dependencias" section with the
 interface this slice consumes, and "Decisiones congeladas" — decisions you **must respect**,
 copied to `## 2. Closed decisions`. The execution spec stays out of reach on purpose: the
 issue is the whole input.
 
 **Zero questions.** There is no human in this session. Every ambiguity you resolve goes to
-`## 9. Assumptions` with its provenance (issue / epic context / repo convention / your call).
+`## 9. Assumptions` with its provenance (issue / milestone context / repo convention / your call).
 If something genuinely prevents planning, set the `blocked` field in `.agent/SLICE.md` and
 stop there: a blocker travels as that field, which is the one thing a guess cannot do.
 

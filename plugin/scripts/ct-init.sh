@@ -489,7 +489,7 @@ SLICES_HEADING_LEGACY_ES='## Formato de la tabla de slices (contrato con /ct-gro
 #     repo. The v22's three citations point today at a file that no longer
 #     contains what it promises, which is the worst form of a reference: it
 #     looks alive.
-SLICES_CONTRACT_VERSION=24
+SLICES_CONTRACT_VERSION=25
 SLICES_VERSION_LINE_RE='<!-- ct-init:slices-contract-version: [0-9]\{1,\} -->'
 # SLICES_PRISTINE_HASHES: the sha256 of the COMPLETE block (opening marker to
 # closing marker, both included) exactly as each version of this script emitted
@@ -570,6 +570,7 @@ b0eb79ab8fd89f83ce7159e9c2a9c32812ee35b76ad6f4c78c2829c9d9891c0b  v20, 585 líne
 65e788421d42aaf40a33d9dadcd563762503637dd2ff5ab2d352abc2263e96f6  v22, 599 líneas — merge con main tras la segunda carrera de números (el bloque v21 de main + el párrafo del Slice 4: la señal no es un criterio de aceptación más)
 6b7ec30ff95a331542932b199b3b5d2f171e197c61efee0fce0c36fd5def2b6c  v23, 600 líneas — #93 (el contrato deja de ser una sección de AGENTS.md y pasa a docs/superpowers/CONTRATO-SLICES.md; sus tres referencias al detalle apuntan a docs/loop/, no a commands/)
 9962d000dbfc62db370c61ad8015321cc73eb336ad8e8ac0567fa9a4ef414b8c  v24, 601 lines — #188 (the contract is translated into English; the parsed column names, the headings the code locates sections by and every value compared as data stay exactly as they were)
+ce38a280a7cbd18ff6e09b852e20dfeff93b855c05a00c2fcaea0818addadc1f  v25, 601 lines — #346 (the unit of work of the loop is a MILESTONE, not an epic; the default `--milestone` title stays the literal `Epic`, because it is the identity of every milestone already created with it)
 '
 
 # emit_slices_contract: the block, in a single place (both the "it does not
@@ -577,9 +578,9 @@ b0eb79ab8fd89f83ce7159e9c2a9c32812ee35b76ad6f4c78c2829c9d9891c0b  v20, 585 líne
 emit_slices_contract() {
   cat <<'EOF'
 <!-- ct-init:slices-contract -->
-<!-- ct-init:slices-contract-version: 24 -->
+<!-- ct-init:slices-contract-version: 25 -->
 ## Slices table format (contract with /ct-groom)
-`/ct-groom` reads this table from the epic's spec and creates one GitHub issue
+`/ct-groom` reads this table from the milestone's spec and creates one GitHub issue
 per row — it is the only part of a spec that a program parses. Exact header,
 copyable as is:
 
@@ -722,7 +723,7 @@ copyable as is:
   can read is an undeclared signal in disguise. An empty cell
   or one with a "no value" marker means *I have not thought about it* — it
   is not an exemption: the judge measures it as `sin-vara`, and that count travels in
-  the epic's telemetry.
+  the milestone's telemetry.
 - **E2E** *(optional)*: which journeys have to be walked before merging this
   slice, comma-separated → the `## E2E` section of the issue body, one per
   line (same escaping rule as `Acepta`: a comma inside a
@@ -737,7 +738,7 @@ copyable as is:
   to walk", write the token **`no`** (or **`n/a`**, which works the same: both
   are the same "it was thought about and there is none"). Declaring a real journey AND
   `no` in the same cell also aborts: a winner is not picked in silence.
-  If no slice of the epic needs e2e, the way out is not to add the column at
+  If no slice of the milestone needs e2e, the way out is not to add the column at
   all — that way no row has to decide anything.
 
 "No value" markers (`Dep`/`Acepta`/`Protegido`/`Área`/`Toca`/`Gate`/`Señal`):
@@ -751,13 +752,13 @@ Every issue is born with **`status:backlog`**, and `/ct-next` only dispatches
 `status:ready`. Promoting them is a **human and deliberate** step — it is the gate
 of the loop: you decide what goes in flight and when, the groom never does it for
 you. If `/ct-next` answers "there are no dispatchable slices" right after
-grooming a whole epic, this is why:
+grooming a whole milestone, this is why:
 
 ```
 gh issue edit <n> --repo <owner/repo> --add-label status:ready --remove-label status:backlog
 ```
 
-`/ct-groom` reminds you when it finishes how many issues of the epic are still in backlog.
+`/ct-groom` reminds you when it finishes how many issues of the milestone are still in backlog.
 From then on the `status:` label is moved by `/ct-next` and the flow
 (`ready` → `in-progress` → `in-review`, and back to `ready` if the review
 rejects the PR — see "Rejecting a PR" further down), not by the spec — which is why
@@ -765,13 +766,13 @@ re-grooming never compares it nor reverts it.
 
 ### Decisions of yours that depend on how `/ct-groom` is invoked
 
-- **`--milestone "<title>"`** (default `Epic`): one invocation = one epic
-  = one milestone, which `/ct-groom` creates if it does not exist. The `#` of this table are
-  unique **within their milestone**, not within the repo: two different epics can
-  use `#1` without stepping on each other. But if two epics share a milestone (e.g. both
-  with the default title `Epic`), their orders clash and `/ct-next` excludes
-  that whole epic from the selection, with a warning. Give each epic its own
-  milestone title.
+- **`--milestone "<title>"`** (default `Epic`): one invocation = one milestone,
+  which `/ct-groom` creates if it does not exist. The `#` of this table are
+  unique **within their milestone**, not within the repo: two different milestones can
+  use `#1` without stepping on each other. But if two SPECS are groomed into the
+  same milestone (e.g. both left with the default title `Epic`), their orders
+  clash and `/ct-next` excludes that whole milestone from the selection, with a
+  warning. Give each spec its own milestone title.
 - **`--section N`**: OBSOLETE, accepted and ignored (with a warning). It never decided
   what got groomed: the table is located by its **header** (a row with
   columns `Slice` and `Dep`), not by any section number — so if the
@@ -827,7 +828,7 @@ An example that parses as is (verified with `ct-groom.mjs --dry-run`):
 | 3 | screen | ui | creation screen | #2 | AC-3.1 | – | medication | app | – | N/A — screen with no new telemetry to promise |
 
 (Row 2 is the case the `Gate` column exists to cover: it is `backend`
-on the inside and the most visible thing in the epic on the outside. Row 3 declares nothing and
+on the inside and the most visible thing in the milestone on the outside. Row 3 declares nothing and
 gets its `visual` gate all the same, by being `Tipo: ui`. Row 2 also declares
 its observability signal and row 3 exempts itself with a reason — with
 row 1, the three forms of the `Señal` column in one single example.)
@@ -850,11 +851,11 @@ by construction, that same milestone: the milestone drift is
 unreachable from `/ct-groom` and you will never see it reported. If you move an
 issue between milestones on GitHub and run again, what you get is not a
 drift warning: depending on where you moved it, either it is ignored for belonging to
-another epic, or `/ct-groom` stops dead with **exit 1** without creating or modifying
+another milestone, or `/ct-groom` stops dead with **exit 1** without creating or modifying
 anything, or it creates a new issue for that slice, warning that it may be
 duplicating it. A practical consequence of that same scope: **the slices table of
-each spec can start at `1`** without stepping on the issues of an earlier epic.
-See "The scope of a groom is its epic, not the repo" in `docs/loop/ct-groom.md` (plugin repo).
+each spec can start at `1`** without stepping on the issues of an earlier milestone.
+See "The scope of a groom is its milestone, not the repo" in `docs/loop/ct-groom.md` (plugin repo).
 
 Full detail (all the abort conditions, optional columns,
 non-fatal warnings, the drift report, its limits, and `--reconcile`):
@@ -965,7 +966,7 @@ with the loop once there are slices in flight.
     catches the EFFECT, the gate catches the CAUSE, and neither of the two catches
     everything.
   When designing the table: the slice many depend on is the **bottleneck**
-  of the whole epic — nothing behind it advances until THAT one is
+  of the whole milestone — nothing behind it advances until THAT one is
   merged. If you want a window of parallelism, it has to come out of the
   `Dep` column.
 - **A CLOSED issue that keeps its `status:` label does not exist for
@@ -1006,14 +1007,14 @@ with the loop once there are slices in flight.
   collision rule and the cap. There is no wait or retry that closes that
   gap today. **The mitigation is operational: do not launch two dispatchers at once
   on the same repo.** (Detail and evidence: `docs/loop/ct-next.md`.)
-- **`/ct-next` does not scope by epic.** It accepts `--repo`, `--cap`, `--base` and
+- **`/ct-next` does not scope by milestone.** It accepts `--repo`, `--cap`, `--base` and
   `--dry-run`; **there is no `--milestone`**. It sweeps every open issue of the
-  repo and chooses by the lowest `#` of the table, whichever epic it comes from (that
+  repo and chooses by the lowest `#` of the table, whichever milestone it comes from (that
   `#` is indeed resolved within its own milestone in order to translate `Dep`, but
-  the SELECTION is not scoped). With two epics alive, the `#1` of the second beats
+  the SELECTION is not scoped). With two milestones alive, the `#1` of the second beats
   the `#3` of the first — and if both have a dispatchable `#1`, **which one comes
   out first is undefined**: it depends on the order in which GitHub returns the
-  issues. The lever for deciding which epic advances is the one you already have:
+  issues. The lever for deciding which milestone advances is the one you already have:
   promote to `status:ready` only the slices you want in flight.
 - **`cmux` is required.** It is a terminal workspace manager, external to the
   plugin: each slice is launched as `cmux new-workspace` (a worktree + a
@@ -1170,7 +1171,7 @@ ever**, and with it everything that depended on it: `/ct-next` only dispatches
   merging, not just for the gates: if you check it by hand, let the result
   rule.
 
-<sub>This contract is maintained by `/ct-init` (contract v24) and lives in
+<sub>This contract is maintained by `/ct-init` (contract v25) and lives in
 `docs/superpowers/SLICES-CONTRACT.md` of this repo — or in
 `docs/superpowers/CONTRATO-SLICES.md` if the repository was seeded before v24,
 where it is kept and updated under that name; `AGENTS.md` only links to it. If the plugin brings a newer version, `/ct-init` warns about it when running;

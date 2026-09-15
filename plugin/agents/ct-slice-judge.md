@@ -188,7 +188,7 @@ judge.
 declared — it opens with `(sin señal declarada` — is this item
 `sin-vara`: the slice was never asked to promise a signal, and the
 measurement waits for one that was. That is the normal state of every
-epic groomed before the `Señal` column existed, and the telemetry
+milestone groomed before the `Señal` column existed, and the telemetry
 counting it is how that fact surfaces.
 
 ## What is settled before you

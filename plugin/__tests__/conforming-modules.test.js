@@ -63,6 +63,8 @@ class BornConforming {
     '__tests__/tool-usage.test.js',
     '__tests__/claude-code-usage.test.js',
     '__tests__/judge-returns.test.js',
+    'scripts/milestone-context.js',
+    '__tests__/milestone-context.test.js',
   ]
 
   static SPANISH_WORDS = [

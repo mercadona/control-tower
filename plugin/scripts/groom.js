@@ -2,13 +2,14 @@
 import { isNoValueCell } from './slices.js'
 import { resolveGates, resolveE2e, gateLabels, renderGatesIssueContent } from './gates.js'
 import { locateSection, unterminatedDelimiter, normalizeToLF, SIGNAL_HEADING, E2E_HEADING, AC_PLACEHOLDER } from './gh-issue-map.js'
+import { MilestoneContextHeading } from './milestone-context.js'
 import { STATUS_LADDER } from './harvest.js'
 
 // SIGNAL_HEADING (Slice 10) is born in gh-issue-map.js (the lower layer: this
 // file already imports from there and mapGhIssue needs it too — here it would
 // create a circular import) and is re-exported so that groom's consumers do
 // not have to know where it was born — the same treatment as its sibling
-// headings GATES_HEADING/EPIC_CONTEXT_HEADING, which were born here.
+// headings GATES_HEADING, which was born here.
 export { SIGNAL_HEADING }
 
 // GATES_HEADING (F21): the gates section of the issue's body. An exported
@@ -39,8 +40,8 @@ export function renderE2eContent(slice) {
 // The TWO context sections of an issue's body, with different owners and
 // therefore with different rules:
 //
-//   EPIC_CONTEXT_HEADING      /ct-groom writes it from the spec, identical in
-//                             every issue of the epic.
+//   MilestoneContextHeading   /ct-groom writes it from the spec, identical in
+//                             every issue of the milestone.
 //   INHERITED_CONTEXT_HEADING the coordinator session writes it. The plugin
 //                             emits it empty when creating the issue and never
 //                             touches it again: it neither compares it, nor
@@ -51,12 +52,54 @@ export function renderE2eContent(slice) {
 // heading typed in three places ends up diverging in one. The first is, on top
 // of that, the SAME string in the spec file and in the issue's body: only one
 // to learn.
-export const EPIC_CONTEXT_HEADING = '## Contexto del epic'
+//
+// MilestoneContextHeading (issue #346) is born in its own module and is
+// RE-EXPORTED here — the same treatment as SIGNAL_HEADING above, and for a
+// reason that is now the same: it stopped being groom's alone. gh-issue-map.js
+// reads it to say which spelling an issue carries, and scope.js reads it inside
+// the gate that gets vendored into a governed repo's CI, where neither this
+// file nor that one is reachable. A module with no imports of its own is the
+// only place all three can name it from without a cycle and without dragging
+// this file into that bundle.
+//
+// WHY THERE ARE TWO SPELLINGS. What is READ accepts both, because
+// `## Contexto del epic` is on disk in the frozen spec of every governed
+// repository and in the body of every issue already groomed — see
+// readEpicContext below, diffIssue/buildReconcileBody in reconcile.js and
+// parseScope in scope.js, which are the four readers.
+//
+// WHICH ONE IS WRITTEN, AND THE CONDITION THAT FLIPS IT. `WRITTEN` is `EPIC`,
+// and that is the whole of the deferral this branch was corrected into. The
+// rule it obeys: NO ISSUE MAY BE WRITTEN WITH A HEADING THAT THE GATE INSTALLED
+// WHERE IT WILL BE CHECKED CANNOT READ. A reader inside this repository is
+// updated by merging. `scope.js` is not one of those: `build.mjs` bundles it
+// into `dist/scope-check.js` and `ct-init` VENDORS that bundle into each
+// governed repository, where it runs in that repository's own CI with no plugin
+// installed. Those copies are frozen at whatever version was seeded, and an old
+// one recognises `## Contexto del epic` and nothing else. Writing the new
+// spelling would fail the scope gate of every new issue in a repository we
+// cannot fix by merging — and it would fail for a reason that has nothing to do
+// with the work, because the gate cannot find the section that declares the
+// scope and "not being able to check is NOT being clean" is what it answers.
+//
+// The switch is one line here — `WRITTEN: MILESTONE_HEADING` in
+// milestone-context.js — and whoever flips it checks THIS first: that every
+// governed repository has re-vendored a `dist/scope-check.js` that accepts both
+// spellings (the one this branch ships does). `ct-init --update-...` is how a
+// repository gets it; the list of governed repositories is not in this tree, so
+// the check is a person's, not a grep's. `milestone-context.test.js` pins what
+// is written today precisely so that the flip cannot happen by accident.
+//
+// RETIRING `EPIC` is a third, later decision, and a different one: it needs
+// evidence that no live issue and no spec a `/ct-groom --reconcile` could still
+// touch carries it. Removing it before that makes the groom stop finding a
+// section that is there, which is the failure CLAUDE.md describes.
+export { MilestoneContextHeading }
 export const INHERITED_CONTEXT_HEADING = '## Contexto heredado'
 
 // FROZEN_DECISIONS_HEADING: the spec's frozen-decisions section, which groom
 // projects into the body of every issue of the epic. The same treatment as
-// EPIC_CONTEXT_HEADING (from the spec, identical in every issue, reconciled),
+// MilestoneContextHeading (from the spec, identical in every issue, reconciled),
 // with a single difference: when projecting, each line's provenance is removed
 // (see readFrozenDecisions). An exported constant for the same reason as the
 // ones beside it: whoever writes it, whoever compares it and their tests all
@@ -339,12 +382,46 @@ export function readSpecSection(specMd, heading, opts = {}) {
   return { content: out, reason: null, warnings }
 }
 
-// readEpicContext: the epic's common context. A wrapper of readSpecSection
+// lineOf: which line of the spec a located heading starts on, 1-based, so that
+// the ambiguity warning below can point at both spellings instead of only
+// naming them. The offsets locateSection returns are absolute, and the spec has
+// already been normalised to LF by then.
+function lineOf(specMd, offset) {
+  return specMd.slice(0, offset).split('\n').length
+}
+
+// readEpicContext: the milestone's common context. A wrapper of readSpecSection
 // with no strip — its content travels verbatim (I1: it used to be the body
 // that now lives in readSpecSection; the signature and the tests that already
 // cover it are preserved).
+//
+// Issue #346, the dual read: WHICH spelling the spec carries is decided here
+// and not inside readSpecSection, which keeps taking a single heading. That is
+// deliberate, and it buys two things. First, readSpecSection's warnings go on
+// quoting the heading the author actually typed — a truncation warning about a
+// section spelled `## Contexto del epic` says so, instead of naming a heading
+// that is nowhere in their file. Second, the ambiguity has somewhere to be
+// reported from: with both spellings in one spec there is no way to tell which
+// section the milestone declares, and picking the first would silently discard
+// the other one's text in every issue of the milestone. It is treated as
+// MALFORMED —the reason that authorises touching NOTHING, see
+// EPIC_CONTEXT_REASONS— and not as ABSENT, because "I cannot read this" must
+// never withdraw a section that is there.
 export function readEpicContext(specMd) {
-  return readSpecSection(specMd, EPIC_CONTEXT_HEADING, { noun: 'common context' })
+  const src = normalizeToLF(specMd || '')
+  const present = MilestoneContextHeading.FORMS
+    .map((heading) => ({ heading, loc: locateSection(src, heading) }))
+    .filter(({ loc }) => loc !== null)
+  if (present.length > 1) {
+    const where = present.map(({ heading, loc }) => `"${heading}" (line ${lineOf(src, loc.headingStart)})`).join(' and ')
+    return {
+      content: null,
+      reason: EPIC_CONTEXT_REASONS.MALFORMED,
+      warnings: [`warning: the spec carries the milestone's context section under BOTH accepted spellings — ${where} — and that is why it is NOT emitted in any issue. The two are the same section and only one of them can be it: with both there, choosing either would drop the other one's text from every issue of this milestone. Keep one (\`${MilestoneContextHeading.WRITTEN}\` is the one this plugin writes) and run again. ${MALFORMED_KEEPS_WHAT_IS_THERE}`],
+    }
+  }
+  const heading = present.length === 1 ? present[0].heading : MilestoneContextHeading.WRITTEN
+  return readSpecSection(specMd, heading, { noun: 'common context' })
 }
 
 // PROVENANCE_SUFFIX_RE: the "*(Procedencia: …)*" suffix that the decisions
@@ -706,7 +783,7 @@ export function buildIssueBody(slice, specRef, epicContext = null, frozenDecisio
   // without a fixed place everyone invents their own — with which no kickoff
   // can name it.
   if (epicContext) {
-    lines.push(EPIC_CONTEXT_HEADING)
+    lines.push(MilestoneContextHeading.WRITTEN)
     lines.push(epicContext)
     lines.push('')
   }

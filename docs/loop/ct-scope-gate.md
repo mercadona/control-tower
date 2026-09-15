@@ -7,8 +7,12 @@ The content, in full:
 ```yaml
 # Scope conformance gate — Control Tower loop
 #
-# WHAT IT DOES: fails the PR if it touches files OUTSIDE the scope its epic
-# declared in the `Alcance:` line of `## Contexto del epic`.
+# WHAT IT DOES: fails the PR if it touches files OUTSIDE the scope its milestone
+# declared in the `Alcance:` line of the milestone's context section —
+# `## Contexto del epic` is what the issues carry today, and
+# `## Contexto del milestone` is read too. THIS FILE IS VENDORED: an old copy
+# in a governed repo only knows the first, which is why the groom still writes
+# it. Re-vendor with ct-init to get the tolerant one.
 #
 # WHY IT LIVES HERE AND NOT IN THE PLUGIN: the dispatched agent runs with the
 # operator's GitHub credentials, so it can fabricate any GitHub artefact — a
@@ -52,7 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check that the PR fits inside its epic's scope
+      - name: Check that the PR fits inside its milestone's scope
         env:
           # `gh` uses this token. With read-only `permissions`, the workflow
           # itself cannot widen its own permissions from the PR.

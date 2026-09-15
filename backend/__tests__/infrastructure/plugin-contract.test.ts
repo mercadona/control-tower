@@ -203,7 +203,7 @@ describe('the sections the errand sends the agent to read', () => {
   it('the_two_it_names_are_headings_the_plugin_really_renders_in_the_body_we_write', () => {
     const headings = body().split('\n').filter((line) => line.startsWith('## '))
 
-    expect(headings).toContain(`## ${PlanAgentBrief.EPIC_CONTEXT}`)
+    expect(headings).toContain(`## ${PlanAgentBrief.MILESTONE_CONTEXT}`)
     expect(headings).toContain(`## ${PlanAgentBrief.INHERITED_CONTEXT}`)
   })
 })
@@ -361,7 +361,7 @@ describe('the execution spec the plugin seeds, as this backend reads and freezes
 
     expect(spec.isFrozen()).toBe(false)
     expect(spec.frozenOn()).toBe(null)
-    expect(spec.title()).toBe('<Epic name>')
+    expect(spec.title()).toBe('<Milestone name>')
     expect(spec.design()).toBe('docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md')
   })
 

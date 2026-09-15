@@ -6,7 +6,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { makeSpecDir, specUrl } from './fixtures/spec-repo.js'
 import { REAL_FAILING_TABLE, REAL_DEP_TABLE, REAL_TABLE_WITH_HASH_FIXED } from './fixtures/slices-real-tables.js'
-import { buildIssueBody, EPIC_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, LOOP_STATUS_LABELS } from '../scripts/groom.js'
+import { buildIssueBody, MilestoneContextHeading, FROZEN_DECISIONS_HEADING, LOOP_STATUS_LABELS } from '../scripts/groom.js'
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'ct-groom.mjs')
 
@@ -1344,7 +1344,7 @@ describe('ct-groom --dry-run — it detects the divergence of an issue that alre
     // demanding bare emptiness.
     const stderrLines = res.stderr.split('\n').filter(Boolean)
     expect(stderrLines).toHaveLength(3)
-    expect(stderrLines.some((l) => l.includes(EPIC_CONTEXT_HEADING))).toBe(true)
+    expect(stderrLines.some((l) => l.includes(MilestoneContextHeading.WRITTEN))).toBe(true)
     expect(stderrLines.some((l) => l.includes(FROZEN_DECISIONS_HEADING))).toBe(true)
     expect(stderrLines.some((l) => l.includes('has no "Señal" column'))).toBe(true)
     rmSync(dir, { recursive: true, force: true })
@@ -1373,7 +1373,7 @@ describe('ct-groom --dry-run — it detects the divergence of an issue that alre
     // warnings and nothing else.
     const stderrLines = res.stderr.split('\n').filter(Boolean)
     expect(stderrLines).toHaveLength(3)
-    expect(stderrLines.some((l) => l.includes(EPIC_CONTEXT_HEADING))).toBe(true)
+    expect(stderrLines.some((l) => l.includes(MilestoneContextHeading.WRITTEN))).toBe(true)
     expect(stderrLines.some((l) => l.includes(FROZEN_DECISIONS_HEADING))).toBe(true)
     expect(stderrLines.some((l) => l.includes('has no "Señal" column'))).toBe(true)
     rmSync(dir, { recursive: true, force: true })

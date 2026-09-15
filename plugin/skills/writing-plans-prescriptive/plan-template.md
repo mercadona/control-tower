@@ -38,7 +38,7 @@ N/A — <reason>.}}
 
 Rules to obey: {{start from `.agent/conventions.md` where the repo declares one; then this repo's
 own convention documents, by path — `AGENTS.md`, `CLAUDE.md`, a file
-under `docs/conventions/`, `CONTRIBUTING` — plus any skill the issue's "Contexto del epic" names
+under `docs/conventions/`, `CONTRIBUTING` — plus any skill the issue's milestone context section names
 (a skill is not a path and is not checked on disk). Or N/A — this repo declares none.}}
 
 ## 4. Inventory
@@ -149,4 +149,4 @@ of a block; `--check-plan` rejects a §8 that is only prose.}}
 ## 9. Assumptions
 
 {{Numbered: every ambiguity resolved without asking, what was decided, and its provenance
-(issue / epic context / repo convention / own call).}}
+(issue / milestone context / repo convention / own call).}}

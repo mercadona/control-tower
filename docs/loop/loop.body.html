@@ -674,12 +674,12 @@
           </g>
         </svg>
       </div>
-      <figcaption><b>Fig. 1 — The complete cycle of an epic.</b> The amber arrows cross a human seam; the neutral ones are automatic. The dashed arc at the top is the loop's only closure: until a PR is merged and its issue is closed as <i>completed</i>, that slice holds on to its area tokens and no neighbour that shares them gets dispatched.</figcaption>
+      <figcaption><b>Fig. 1 — The complete cycle of a milestone.</b> The amber arrows cross a human seam; the neutral ones are automatic. The dashed arc at the top is the loop's only closure: until a PR is merged and its issue is closed as <i>completed</i>, that slice holds on to its area tokens and no neighbour that shares them gets dispatched.</figcaption>
     </figure>
 
     <div class="note">
       <span class="nt-title">The two-level model</span>
-      <p><strong>Control Tower is the subagent-driven development pattern, one level up.</strong> Epic level: the slices table is the plan file, <code>/ct-next</code> is the coordinator, the dispatched session is the implementer, and the human review of the PR is the <i>two-stage review</i>. Slice level: inside the worktree runs the whole set of forked skills — <code>writing-plans</code>, <code>subagent-driven-development</code>, <code>test-driven-development</code>, <code>systematic-debugging</code>. The same pattern, two scales.</p>
+      <p><strong>Control Tower is the subagent-driven development pattern, one level up.</strong> Milestone level: the slices table is the plan file, <code>/ct-next</code> is the coordinator, the dispatched session is the implementer, and the human review of the PR is the <i>two-stage review</i>. Slice level: inside the worktree runs the whole set of forked skills — <code>writing-plans</code>, <code>subagent-driven-development</code>, <code>test-driven-development</code>, <code>systematic-debugging</code>. The same pattern, two scales.</p>
     </div>
   </section>
 
@@ -722,7 +722,7 @@
       <div class="phase-bar">
         <span class="pb-id">PHASE 1</span>
         <span class="pb-name">Design and freeze</span>
-        <span class="pb-note">epic level · <code>control-tower-loop:brainstorming</code></span>
+        <span class="pb-note">milestone level · <code>control-tower-loop:brainstorming</code></span>
       </div>
 
       <div class="strip">
@@ -753,7 +753,7 @@
         <div class="strip-rail"><span class="sid">S3</span><span class="chip chip-coord">Coord.</span></div>
         <div class="strip-body">
           <h3>Write the execution spec in DRAFT</h3>
-          <p>One file per epic, from <code>_TEMPLATE-execution-spec.md</code>. It is not «the join and nothing more»: it is <strong>the record of the join and of its compressed inputs</strong>, with a single criterion for what goes in — <em>what the executor needs and cannot derive</em>.</p>
+          <p>One file per milestone, from <code>_TEMPLATE-execution-spec.md</code>. It is not «the join and nothing more»: it is <strong>the record of the join and of its compressed inputs</strong>, with a single criterion for what goes in — <em>what the executor needs and cannot derive</em>.</p>
           <p><strong>Every frozen decision carries its provenance:</strong> <code>hablada</code> (with the quote if there is one), <code>deducida</code> (it follows from a spoken one or from a rule already written in the repo) or <code>propuesta</code> (the agent puts it there). Hard rule: <strong>a <code>propuesta</code> is not frozen</strong> — you ask, and then it is spoken, or it drops to «Decisiones aparcadas». The gaps do not get filled in.</p>
           <div class="io">
             <div><dt>Writes</dt><dd><code>…-execution.md</code>, Estado: DRAFT</dd></div>
@@ -790,11 +790,11 @@
         <div class="strip-rail"><span class="sid">S5</span><span class="chip chip-coord">Coord.</span></div>
         <div class="strip-body">
           <h3>Dry groom: the freeze gate and the table's validation</h3>
-          <div class="cmd">node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-groom.mjs "&lt;spec&gt;" --repo "&lt;owner/repo&gt;" --milestone "&lt;Epic&gt;" --dry-run</div>
+          <div class="cmd">node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-groom.mjs "&lt;spec&gt;" --repo "&lt;owner/repo&gt;" --milestone "&lt;Milestone&gt;" --dry-run</div>
           <p>Before it even looks at the table, <strong>two checks over the whole spec</strong> — two greps in the pass groom was already making:</p>
           <ul class="tight">
             <li><strong><code>[NEEDS CLARIFICATION</code> unresolved → exit 2.</strong> They are allowed in DRAFT; freezing with a pending gap is invalid. The message names how many there are and the line of the first one.</li>
-            <li><strong><code>## Hipótesis</code> absent or empty → exit 2.</strong> With no falsifiable bet it is not an epic. Work with no bet (maintenance, bugfixes) goes as loose issues. Groom only looks at presence; the <em>quality</em> is judged by the human at the freeze.</li>
+            <li><strong><code>## Hipótesis</code> absent or empty → exit 2.</strong> With no falsifiable bet it is not a milestone. Work with no bet (maintenance, bugfixes) goes as loose issues. Groom only looks at presence; the <em>quality</em> is judged by the human at the freeze.</li>
           </ul>
           <p>Then the whole table, and <strong>every failure together in a single exit 2</strong>: a header without <code>Slice</code>+<code>Dep</code>, the <code>#</code> column missing, a gap in the middle of the block, a <code>#</code> that is not a pure integer, rows with too many or too few cells, a <code>Dep</code> that is unreadable or points at a nonexistent <code>#</code> or at itself, a <code>Gate</code> outside the vocabulary, or a row that asks for and waives the same gate.</p>
           <p><strong>The dry-run validates exactly the same as the real run</strong> — a dry-run that validates less is a trap. With <code>--repo</code> it is no longer offline: it reads the real issues so that it can compare.</p>
@@ -805,11 +805,11 @@
         <div class="strip-rail"><span class="sid">S6</span><span class="chip chip-coord">Coord.</span></div>
         <div class="strip-body">
           <h3>Real groom: one issue per row</h3>
-          <div class="cmd">node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-groom.mjs "&lt;spec&gt;" --repo "&lt;owner/repo&gt;" --milestone "&lt;Epic&gt;" --project &lt;n&gt;</div>
+          <div class="cmd">node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-groom.mjs "&lt;spec&gt;" --repo "&lt;owner/repo&gt;" --milestone "&lt;Milestone&gt;" --project &lt;n&gt;</div>
           <p><strong>Everything it reads comes before everything it writes.</strong> Validation, resolution and verification of the link to the spec, enumeration of issues, labels, milestones and — with <code>--project</code> — the introspection of the Project v2 (which demands an iteration field named exactly <code>Sprint</code> and an iteration that covers today). If it aborts at any of those steps, it has created nothing.</p>
           <p>Once validation is passed, the write order is <strong>milestone → labels → issues → registration in the Project with its Sprint</strong>. There is no transaction and it does not pretend there is one: a network failure there leaves what came before created. You get out of a half-way abort <strong>by running it again, not by cleaning up by hand</strong>: the milestone is reused by title, of the labels only the missing ones are created, and the issues are recognised by their <code>&lt;!-- ct-order:N --&gt;</code> marker.</p>
           <div class="io">
-            <div><dt>Scope</dt><dd>One invocation = one milestone = one epic. The <code>#</code> are 1..N <strong>per epic</strong>: every spec can start at 1.</dd></div>
+            <div><dt>Scope</dt><dd>One invocation = one milestone. The <code>#</code> are 1..N <strong>per milestone</strong>: every spec can start at 1.</dd></div>
             <div><dt>Idempotence</dt><dd>By existence only. Reporting divergence ≠ converging: without <code>--reconcile</code> it never edits an existing issue (exit 3).</dd></div>
           </div>
         </div>
@@ -821,7 +821,7 @@
           <h3>Gate 2 — promote to the queue</h3>
           <p>Groom creates the issues in <code>status:backlog</code>, <strong>never in <code>status:ready</code></strong>. It is a deliberate human gate: <code>/ct-next</code> does not consider dispatchable anything that is not in <code>ready</code>.</p>
           <div class="cmd">gh issue edit &lt;n&gt; --repo &lt;owner/repo&gt; --add-label status:ready --remove-label status:backlog</div>
-          <p>If <code>/ct-next</code> answers «No hay slices despachables» right after a groom, it is almost certainly this. On finishing, groom reminds you through stderr how many issues of the epic are still in backlog — counting the ones that already existed too, because the criterion is the real state, not «I have just created something».</p>
+          <p>If <code>/ct-next</code> answers «No hay slices despachables» right after a groom, it is almost certainly this. On finishing, groom reminds you through stderr how many issues of the milestone are still in backlog — counting the ones that already existed too, because the criterion is the real state, not «I have just created something».</p>
         </div>
       </div>
     </div>
@@ -856,7 +856,7 @@
           <p>Five acts, in order, and each one with its reverse if it fails:</p>
           <ul class="tight">
             <li><strong>Diagnostics first.</strong> Order collision, <code>status:</code> ambiguity, dependencies outside their section — printed <em>before</em> anything is selected. They never block on their own.</li>
-            <li><strong>Selection.</strong> By order within the epic, with the <code>merge-after</code> satisfied (issue closed as <em>completed</em>), with no collision of <code>area:</code>/<code>touches:</code> tokens and with room under <code>--cap</code>.</li>
+            <li><strong>Selection.</strong> By order within the milestone, with the <code>merge-after</code> satisfied (issue closed as <em>completed</em>), with no collision of <code>area:</code>/<code>touches:</code> tokens and with room under <code>--cap</code>.</li>
             <li><strong>Claim in code,</strong> not by prompt: <code>dispatch-check &lt;issue&gt; --repo &lt;repo&gt;</code> moves <code>ready → in-progress</code> BEFORE creating the worktree.</li>
             <li><strong>Isolation.</strong> <code>.worktrees/&lt;n&gt;</code> + branch <code>feat/&lt;n&gt;</code>, seed of <code>.agent/SLICE.md</code>, and the ignore rule written into the common directory's <code>info/exclude</code> — <strong>with verification of the effect</strong>: if <code>git status</code> still sees the file, the dispatch is aborted and the claim is reverted.</li>
             <li><strong>Launch with a sentinel.</strong> <code>cmux --command</code> does not execute: it <em>types</em>. A short line is typed that sources a launcher on disk (the kickoff travels by file, where no prompt can bite it), and that launcher writes a sentinel with the real <code>$PWD</code>. With no sentinel nothing is called «launched»: the typing is retried every 2500 ms until the 15 s budget runs out.</li>
@@ -885,7 +885,7 @@
         <div class="strip-rail"><span class="sid">S11</span><span class="chip chip-agent">Agent</span></div>
         <div class="strip-body">
           <h3>First act: the slice plan, against the real code</h3>
-          <p>The epic's plan (<code>## Enfoque técnico</code>) comes before the table. The <strong>slice plan</strong> comes after, and it is written by the dispatched agent on starting up with <code>control-tower-loop:writing-plans</code> <strong>using the issue as the spec</strong>: its ACs in EARS, its <code>## Out of scope / Protected</code> and its <code>## Contexto del epic</code> are exactly the input writing-plans asks for.</p>
+          <p>The milestone's plan (<code>## Enfoque técnico</code>) comes before the table. The <strong>slice plan</strong> comes after, and it is written by the dispatched agent on starting up with <code>control-tower-loop:writing-plans</code> <strong>using the issue as the spec</strong>: its ACs in EARS, its <code>## Out of scope / Protected</code> and its <code>## Contexto del milestone</code> are exactly the input writing-plans asks for.</p>
           <p>It is saved in <code>docs/superpowers/plans/</code> and committed: <strong>it travels in the PR</strong>. With the plan written, the «is there a plan?» diamond of <code>subagent-driven-development</code> finds a plan and the skill re-engages whole.</p>
           <div class="io">
             <div><dt>Why here</dt><dd>It is written against the real code, at the right moment. A plan written in the spec would be a plan written blind.</dd></div>
@@ -964,7 +964,7 @@
           <div class="cmd">git worktree remove .worktrees/&lt;n&gt;   &amp;&amp;   git branch -d feat/&lt;n&gt;</div>
           <p>Every run of <code>/ct-next</code> crosses the merged issues against the disk and emits <code>cosecha pendiente:</code> with the exact commands. <strong>It deletes nothing</strong>, and that is deliberate: «merged» is not «nobody is touching that», and deleting a worktree is irreversible. Lastly, the spec's <code>## Registro de cierre</code> collects the evidence each gate was closed with — a gate closed without evidence is a gate not closed.</p>
           <div class="io">
-            <div><dt>And back to S8</dt><dd>With the tokens free and the worktree harvested, the epic's next slice is dispatchable.</dd></div>
+            <div><dt>And back to S8</dt><dd>With the tokens free and the worktree harvested, the milestone's next slice is dispatchable.</dd></div>
           </div>
         </div>
       </div>
@@ -1104,7 +1104,7 @@
     <div class="sec-head">
       <span class="sec-num">04 / ARTEFACTS</span>
       <h2>Eleven formats, and what travels in each one</h2>
-      <p>The principle that orders the whole catalogue: <strong>what you write outside the slices table and outside <code>## Contexto del epic</code> does not reach the agent</strong>. The agent that implements a slice does not receive the spec — it receives a start-up prompt and the body of the issue. A demand written in another section is invisible however forcefully it is worded.</p>
+      <p>The principle that orders the whole catalogue: <strong>what you write outside the slices table and outside <code>## Contexto del milestone</code> does not reach the agent</strong>. The agent that implements a slice does not receive the spec — it receives a start-up prompt and the body of the issue. A demand written in another section is invisible however forcefully it is worded.</p>
     </div>
 
     <!-- A1 -->
@@ -1131,14 +1131,14 @@
         <span class="chip chip-coord">Coordinator</span>
       </div>
       <div class="art-body">
-        <p><strong>The central artefact of the epic level.</strong> One file per epic, tracked, <code>DRAFT → CONGELADA</code>, archived when the epic closes. Seven sections plus a header, and of all of them <strong>only one travels to the agent</strong>.</p>
+        <p><strong>The central artefact of the milestone level.</strong> One file per milestone, tracked, <code>DRAFT → CONGELADA</code>, archived when the milestone closes. Seven sections plus a header, and of all of them <strong>only one travels to the agent</strong>.</p>
         <div class="art-meta">
           <div><dt>Template</dt><dd><code>_TEMPLATE-execution-spec.md</code> v2</dd></div>
-          <div><dt>Parsed by</dt><dd><code>/ct-groom</code>: the table, <code>## Contexto del epic</code>, <code>## Hipótesis</code> and the <code>[NEEDS CLARIFICATION</code> markers</dd></div>
+          <div><dt>Parsed by</dt><dd><code>/ct-groom</code>: the table, <code>## Contexto del milestone</code>, <code>## Hipótesis</code> and the <code>[NEEDS CLARIFICATION</code> markers</dd></div>
           <div><dt>Gate</dt><dd>Without <code>Estado: CONGELADA</code> there is no groom</dd></div>
         </div>
         <p class="fmt-label">Format</p>
-        <pre><code># &lt;Epic&gt; — Execution spec
+        <pre><code># &lt;Milestone&gt; — Execution spec
 
 **Handoff origen:** `docs/superpowers/specs/YYYY-MM-DD-&lt;topic&gt;-design.md`
 **Fecha de congelación:** <span class="c">[the human's OK sets it, not the session that writes]</span>
@@ -1147,17 +1147,20 @@
 <span class="k">## Hipótesis del experimento</span>       <span class="c">← REQUIRED. groom: exit 2 if it is missing or empty</span>
 **The bet:** <span class="c">[what we believe will happen — worded so that it can be FALSE]</span>
 **How we will know it failed:** <span class="c">[the concrete observation that knocks it down]</span>
-**Anti-scope — what this epic does NOT do:** <span class="c">[the only thing that stops it growing]</span>
+**Anti-scope — what this milestone does NOT do:** <span class="c">[the only thing that stops it growing]</span>
 
 <span class="k">## Decisiones congeladas</span>              <span class="c">← one per line, with its Procedencia</span>
 - **D-1 · &lt;short title&gt;** — &lt;the decision&gt;. *(Procedencia: hablada — «literal quote».)*
 - **D-2 · &lt;short title&gt;** — &lt;the decision&gt;. *(Procedencia: deducida de D-1.)*
 
-<span class="k">## Enfoque técnico</span>                    <span class="c">← the EPIC's plan. Área/Toca/Dep come out of here</span>
+<span class="k">## Enfoque técnico</span>                    <span class="c">← the MILESTONE's plan. Área/Toca/Dep come out of here</span>
 
-<span class="k">## Contexto del epic</span>                  <span class="c">← travels to the agent (together with ## Decisiones congeladas)</span>
+<span class="k">## Contexto del milestone</span>             <span class="c">← travels to the agent (together with ## Decisiones congeladas)</span>
 <span class="c">The invariants go INSIDE: version floors, copy rules, naming,
-paths that are not touched. One line each, with exact values.</span>
+paths that are not touched. One line each, with exact values.
+Either spelling is read. What groom WRITES into the issues is still
+`## Contexto del epic`, until governed repos re-vendor scope-check.
+Both spellings at once is reported, never chosen.</span>
 
 <span class="k">## Tabla de slices</span>                    <span class="c">← contract v16, see below. Only ONE per spec</span>
 
@@ -1225,7 +1228,7 @@ paths that are not touched. One line each, with exact values.</span>
 <span class="k">## Descripción</span>                            <span class="c">← only if `Entrega` carries a real value</span>
 &lt;text of Entrega&gt;
 
-<span class="k">## Contexto del epic</span>                      <span class="c">← only if the spec carries text. IDENTICAL in every issue of the epic</span>
+<span class="k">## Contexto del epic</span>                      <span class="c">← only if the spec carries text. IDENTICAL in every issue of the milestone</span>
 &lt;copied verbatim from the spec; --reconcile keeps it up to date&gt;
 
 <span class="k">## Contexto heredado</span>                      <span class="c">← ALWAYS, with a placeholder. groom NEVER TOUCHES IT</span>
@@ -1261,7 +1264,7 @@ paths that are not touched. One line each, with exact values.</span>
                 <tr><td>The spec link line</td><td class="x-bad">yes (the whole line)</td><td>yes</td></tr>
                 <tr><td><code>type:</code>/<code>area:</code>/<code>touches:</code>/<code>gate:</code> labels</td><td class="x-bad">yes, only the prefixes whose column the table carries</td><td>yes</td></tr>
                 <tr><td><code>## Dependencias</code> and <code>## Acceptance criteria</code></td><td class="x-bad">yes (as a set, only inside the recognised section)</td><td>yes, by surgical splice</td></tr>
-                <tr><td><code>## Contexto del epic</code></td><td class="x-0">no — only <code>nota:</code></td><td class="x-warn">yes (it is rewritten)</td></tr>
+                <tr><td>the milestone context section</td><td class="x-0">no — only <code>nota:</code></td><td class="x-warn">yes (it is rewritten)</td></tr>
                 <tr><td><code>## Descripción</code> and <code>Protegido</code></td><td class="x-0">no — prose that is edited routinely</td><td class="x-0">never</td></tr>
                 <tr><td><code>## Contexto heredado</code></td><td class="x-0">out of the comparison, always</td><td class="x-0">never</td></tr>
                 <tr><td><code>status:</code> label</td><td class="x-0">out of the comparison, always</td><td class="x-0">never</td></tr>
@@ -1492,7 +1495,7 @@ residuo-status: 2026-07-28 — #101, #102 &lt;por qué se quedan así&gt;</code>
         <thead><tr><th>Exit</th><th>Means</th><th>What to do</th></tr></thead>
         <tbody>
           <tr><td class="num x-0">0</td><td>No real divergence, or <code>--reconcile</code> resolved it entirely</td><td>Nothing</td></tr>
-          <tr><td class="num x-bad">1</td><td>The run stopped dead: one of the epic's two scope gates, a <code>gh</code> read failure, a write failure half-way, or something about <code>--project</code> that could not be taken as good</td><td>Read the message: it says <code>no se ha creado ni modificado nada</code> when that is so</td></tr>
+          <tr><td class="num x-bad">1</td><td>The run stopped dead: one of the milestone's two scope gates, a <code>gh</code> read failure, a write failure half-way, or something about <code>--project</code> that could not be taken as good</td><td>Read the message: it says <code>no se ha creado ni modificado nada</code> when that is so</td></tr>
           <tr><td class="num x-bad">2</td><td>The table is invalid, <strong>or the spec does not pass the freeze gate</strong> (<code>[NEEDS CLARIFICATION</code> pending, <code>## Hipótesis</code> absent or empty)</td><td>Fix the spec. Every failure comes out together, not one at a time</td></tr>
           <tr><td class="num x-warn">3</td><td>Something real is left unreconciled: divergence of title/link/labels/AC/deps, a duplicated section, or an orphan issue</td><td>Review it. <strong>Watch out with <code>groom --dry-run &amp;&amp; groom</code></strong>: the dry-run's <code>3</code> cuts the chain exactly when there is something to apply</td></tr>
         </tbody>
