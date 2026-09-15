@@ -2345,3 +2345,90 @@ describe('ct-groom — one read and one write per target repository (#348)', () 
     rmSync(dir, { recursive: true, force: true })
   })
 })
+
+// #348 — THE REACH TRAVELS IN EACH MILESTONE'S DESCRIPTION.
+//
+// This is the channel through which "this milestone reaches these
+// repositories" survives the groom. /ct-next, /ct-status and /ct-harvest all
+// receive the milestone INSIDE the issue payload they already read, so they
+// learn the reach without one extra call — and without it they would behave as
+// if the repository they were asked about were the whole milestone.
+//
+// The marker is rewritten in place and whatever a human wrote around it is
+// kept, the same treatment ct-init gives its seeded blocks. A milestone that
+// reaches only its home repository carries the marker too: silence would mean
+// both "one repository" and "groomed before this existed", and telling those
+// apart is what lets the readers stay quiet instead of guessing.
+describe('ct-groom — the reach in the milestone description (#348)', () => {
+  const SPEC_TWO = `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
+| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Repo |
+|---|-------|------|---------|-----|--------|-----------|------|
+| 1 | login | backend | modelo | – | AC-1.1 | schema | – |
+| 2 | pantalla | ui | alta | – | AC-2.1 | – | o/other |
+`
+  const specWith = (body) => {
+    const dir = makeSpecDir('ctg-')
+    const spec = join(dir, 'spec.md')
+    writeFileSync(spec, body)
+    return { dir, spec }
+  }
+  const realRun = (spec, dir, env = {}) => spawnSync('node', [script, spec, '--repo', 'o/home', '--milestone', 'Epic'], {
+    encoding: 'utf8',
+    env: fakeEnv({ FAKE_GH_ARGV_LOG_FILE: join(dir, 'argv.log'), FAKE_GH_COUNTER_FILE: join(dir, 'counter'), ...env }),
+  })
+
+  it('the milestone is created with the reach in its description', () => {
+    const { dir, spec } = specWith(SPEC_TWO)
+    const res = realRun(spec, dir)
+    expect(res.status).toBe(0)
+    const log = readFileSync(join(dir, 'argv.log'), 'utf8')
+    expect(log).toMatch(/api repos\/o\/home\/milestones -f title=Epic -f description=<!-- ct-repos:o\/home,o\/other -->/)
+    expect(log).toMatch(/api repos\/o\/other\/milestones -f title=Epic -f description=<!-- ct-repos:o\/home,o\/other -->/)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('an existing milestone whose description already carries the reach is not patched', () => {
+    const { dir, spec } = specWith(SPEC_TWO)
+    const res = realRun(spec, dir, {
+      FAKE_GH_MILESTONES_LIST: JSON.stringify([{ title: 'Epic', number: 7, description: '<!-- ct-repos:o/home,o/other -->' }]),
+    })
+    expect(res.status).toBe(0)
+    const log = readFileSync(join(dir, 'argv.log'), 'utf8')
+    expect(log).not.toMatch(/--method PATCH/)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('an existing milestone with a human description keeps it and gains the marker', () => {
+    const { dir, spec } = specWith(SPEC_TWO)
+    const res = realRun(spec, dir, {
+      FAKE_GH_MILESTONES_LIST: JSON.stringify([{ title: 'Epic', number: 7, description: 'El epic del trimestre' }]),
+    })
+    expect(res.status).toBe(0)
+    const log = readFileSync(join(dir, 'argv.log'), 'utf8')
+    expect(log).toMatch(/api repos\/o\/home\/milestones\/7 --method PATCH -f description=El epic del trimestre/)
+    expect(log).toMatch(/ct-repos:o\/home,o\/other/)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('a milestone that reaches only its home repository carries the marker all the same', () => {
+    const { dir, spec } = specWith(SPEC)
+    const res = realRun(spec, dir)
+    expect(res.status).toBe(0)
+    const log = readFileSync(join(dir, 'argv.log'), 'utf8')
+    expect(log).toMatch(/api repos\/o\/home\/milestones -f title=Epic -f description=<!-- ct-repos:o\/home -->/)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('a description that could not be written aborts before a single issue is created', () => {
+    const { dir, spec } = specWith(SPEC_TWO)
+    const res = realRun(spec, dir, {
+      FAKE_GH_MILESTONES_LIST: JSON.stringify([{ title: 'Epic', number: 7, description: 'El epic del trimestre' }]),
+      FAKE_GH_MILESTONE_PATCH_FAIL: '1',
+    })
+    expect(res.status).toBe(1)
+    expect(res.stderr).toMatch(/could not write the reach.*o\/home/)
+    const log = readFileSync(join(dir, 'argv.log'), 'utf8')
+    expect(log).not.toMatch(/issue create/)
+    rmSync(dir, { recursive: true, force: true })
+  })
+})

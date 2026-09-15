@@ -1628,10 +1628,43 @@ for (const target of targetRepos) {
     process.exit(1)
   }
   const existing = allMilestones.find((m) => m.title === milestone)
+  // THE REACH TRAVELS IN THE DESCRIPTION (#348). /ct-next, /ct-status and
+  // /ct-harvest receive the milestone INSIDE the issue payload they already
+  // read, so this is the one place per repository where "this milestone also
+  // reaches these others" can be written without costing anybody an extra
+  // call. Without it, each of them would behave as if the repository it was
+  // asked about were the whole milestone — which is the confident assertion
+  // over what has not been looked at that this loop's commands exist not to
+  // make.
+  //
+  // The marker is rewritten IN PLACE and whatever a human wrote around it is
+  // kept (MilestoneRepos.withReach), the same treatment ct-init gives its
+  // seeded blocks. A milestone that reaches only its home repository carries
+  // the marker too: silence would otherwise mean both "one repository" and
+  // "groomed before this existed", and telling those apart is what lets the
+  // readers stay quiet instead of guessing.
+  const reach = { home: homeRepo, targets: targetRepos }
   if (!existing) {
-    const created = JSON.parse(gh(['api', `repos/${target}/milestones`, '-f', `title=${milestone}`]))
+    const created = JSON.parse(gh(['api', `repos/${target}/milestones`, '-f', `title=${milestone}`, '-f', `description=${MilestoneRepos.reachMarkerFor(reach)}`]))
     console.log(`milestone created: ${milestone} (#${created.number})${targetRepos.length > 1 ? ` in ${target}` : ''}`)
-  } else console.log(`milestone already exists: ${milestone} (#${existing.number})${targetRepos.length > 1 ? ` in ${target}` : ''}`)
+  } else {
+    console.log(`milestone already exists: ${milestone} (#${existing.number})${targetRepos.length > 1 ? ` in ${target}` : ''}`)
+    const described = MilestoneRepos.withReach(existing.description, reach)
+    if (described !== (existing.description || '')) {
+      // It goes BEFORE the labels and the issues, so a failure here aborts with
+      // nothing created — the same reason the whole milestone block sits where
+      // it sits. And it aborts instead of carrying on: a milestone whose
+      // description does not say the reach makes every reader of this epic
+      // report about one repository as if it were all of them, in silence.
+      try {
+        gh(['api', `repos/${target}/milestones/${existing.number}`, '--method', 'PATCH', '-f', `description=${described}`])
+      } catch (e) {
+        console.error(`could not write the reach of this milestone into the description of "${milestone}" in ${target}: ${e.message}. Nothing has been created: without that line, /ct-next, /ct-status and /ct-harvest would each report about one repository as if it were the whole milestone.`)
+        process.exit(1)
+      }
+      console.log(`milestone description updated in ${target}: it now says this milestone reaches ${targetRepos.join(', ')}`)
+    }
+  }
 }
 
 // the labels that are missing. Any gh failure here is real (auth, network,
