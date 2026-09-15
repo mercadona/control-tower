@@ -3,6 +3,7 @@ import { userEvent } from '@testing-library/user-event'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { FakeEventSource } from 'pages/home/__tests__/FakeEventSource'
+import { FakeFitAddon, FakeTerminal } from 'pages/home/__tests__/FakeXterm'
 import { SessionsPanel } from './SessionsPanel'
 
 const TWO_SESSIONS = SessionsMother.twoSessions().body
@@ -11,32 +12,8 @@ const ZSH_ALONE = SessionsMother.oneSession().body
 const WITH_COORDINATING_SESSION = SessionsMother.withCoordinatingSession().body
 const NO_SESSIONS = SessionsMother.noSessions().body
 
-vi.mock('@xterm/xterm', () => {
-  class MockTerminal {
-    loadAddon() {}
-    open() {}
-    write() {}
-    reset() {}
-    onData() {}
-    resize() {}
-    dispose() {}
-  }
-
-  return { Terminal: MockTerminal }
-})
-
-vi.mock('@xterm/addon-fit', () => {
-  class MockFitAddon {
-    proposeDimensions() {
-      return undefined
-    }
-
-    fit() {}
-    dispose() {}
-  }
-
-  return { FitAddon: MockFitAddon }
-})
+vi.mock('@xterm/xterm', () => ({ Terminal: FakeTerminal }))
+vi.mock('@xterm/addon-fit', () => ({ FitAddon: FakeFitAddon }))
 
 const answering = (body: string) => vi.fn(async () => new Response(body))
 
@@ -50,7 +27,11 @@ const answeringInTurn = (bodies: string[]) => {
 }
 
 describe('SessionsPanel', () => {
-  beforeEach(() => FakeEventSource.install())
+  beforeEach(() => {
+    FakeEventSource.install()
+    FakeTerminal.install()
+    FakeFitAddon.install()
+  })
   afterEach(() => {
     cleanup()
     vi.unstubAllGlobals()
@@ -64,6 +45,16 @@ describe('SessionsPanel', () => {
     expect(await screen.findByRole('button', { name: 'zsh' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'bash' })).toBeInTheDocument()
     expect(screen.getByLabelText('Terminal de la sesión')).toBeInTheDocument()
+  })
+
+  it('a single session shows no chooser since there is nothing to choose', async () => {
+    vi.stubGlobal('fetch', answering(ZSH_ALONE))
+
+    render(<SessionsPanel />)
+
+    await screen.findByRole('region', { name: 'Terminal de la sesión' })
+
+    expect(screen.queryByRole('button', { name: 'zsh' })).not.toBeInTheDocument()
   })
 
   it('the first session is the one shown', async () => {
@@ -115,7 +106,7 @@ describe('SessionsPanel', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo contactar con las sesiones en marcha')
   })
 
-  it('a session that reports itself gone is dropped from the list', async () => {
+  it('a session that reports itself gone leaves no chooser when only one session remains', async () => {
     vi.stubGlobal('fetch', answeringInTurn([TWO_SESSIONS, ONE_SESSION]))
 
     render(<SessionsPanel />)
@@ -124,8 +115,8 @@ describe('SessionsPanel', () => {
     const stream = await waitFor(() => FakeEventSource.last())
     stream.refuseBeforeOpen()
 
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'zsh' })).not.toBeInTheDocument())
-    expect(screen.getByRole('button', { name: 'bash' })).toBeInTheDocument()
+    await waitFor(() => expect(FakeEventSource.last().url).toBe('/sessions/b2/stream'))
+    expect(screen.queryByRole('list')).not.toBeInTheDocument()
   })
 
   it('the session the page just opened is fetched again and shown as chosen', async () => {
@@ -134,7 +125,7 @@ describe('SessionsPanel', () => {
 
     const { rerender } = render(<SessionsPanel />)
 
-    await screen.findByRole('button', { name: 'zsh' })
+    await screen.findByRole('region', { name: 'Terminal de la sesión' })
     expect(fetching).toHaveBeenCalledTimes(1)
     rerender(<SessionsPanel opened={CoordinatingSessionMother.SESSION} />)
 
