@@ -4,11 +4,13 @@ import { writeFileSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { makeSpecDir } from './fixtures/spec-repo.js'
-import { analyzeSpecFreeze } from '../scripts/groom.js'
+import { analyzeSpecFreeze, FROZEN_DECISIONS_HEADING } from '../scripts/groom.js'
 
 // F32 §4.1 — groom gains ONE check (the only new line of code in the whole
 // design of the freeze): exit 2 if the spec has pending
-// `[NEEDS CLARIFICATION` or if `## Hipótesis` is missing or empty.
+// `[NEEDS CLARIFICATION` or if `## Hipótesis` is missing or empty. Amendment 1
+// of #339 (issue #343) adds the third rule to the same check: a frozen decision
+// that does not say where it comes from.
 //
 // Why it is hard and has no flag: José does not read the specs — the freeze
 // gate (15 lines) is his only reading of the cycle. If groom accepted a spec
@@ -31,6 +33,11 @@ const TABLE = `## 9. Slices
 
 const HYPOTHESIS = '## Hipótesis del experimento\n\nSi X, entonces Y medible.\n\n'
 
+const decisions = (...lines) => `${FROZEN_DECISIONS_HEADING}\n${lines.join('\n')}\n\n`
+
+const SPOKEN_DECISION = '- **D-1 · versión** — iOS 17. *(Procedencia: hablada — «lo dijo el PO».)*'
+const SOURCELESS_DECISION = '- **D-1 · versión** — iOS 17.'
+
 function runGroom(specMd) {
   const dir = makeSpecDir('ctg-freeze-')
   const spec = join(dir, 'spec.md')
@@ -45,7 +52,7 @@ function runGroom(specMd) {
   }
 }
 
-describe('analyzeSpecFreeze — the pure module (two greps)', () => {
+describe('analyzeSpecFreeze — the pure module (three greps)', () => {
   it('freezable spec: hypothesis present and with content, zero pending items', () => {
     const r = analyzeSpecFreeze(HYPOTHESIS + TABLE)
     expect(r.hypothesis).toBe('ok')
@@ -85,6 +92,77 @@ describe('analyzeSpecFreeze — the pure module (two greps)', () => {
     expect(r.clarifications[0].line).toBeGreaterThan(0)
     expect(r.clarifications[0].raw).toContain('NEEDS CLARIFICATION')
   })
+
+  it('a frozen decision that does not say where it comes from is reported with its line and its raw line', () => {
+    const md = [
+      '## Hipótesis',
+      '',
+      'Si X, entonces Y medible.',
+      '',
+      FROZEN_DECISIONS_HEADING,
+      SOURCELESS_DECISION,
+      '',
+      TABLE,
+    ].join('\n')
+
+    expect(analyzeSpecFreeze(md).decisionsWithoutProvenance).toEqual([{ line: 6, raw: SOURCELESS_DECISION }])
+  })
+
+  it('every decision naming its source leaves the rule silent, and the suffix may sit on the line that continues the decision', () => {
+    const sameLine = HYPOTHESIS + decisions(SPOKEN_DECISION, '- **D-2 · nombre** — Pilares. *(Procedencia: deducida de D-1.)*') + TABLE
+    const ownLine = HYPOTHESIS + decisions(
+      '- **D-1 · versión** — iOS 17, porque la tienda ya no sirve la',
+      '  anterior.',
+      '  *(Procedencia: hablada — «lo dijo el PO».)*',
+    ) + TABLE
+
+    expect(analyzeSpecFreeze(sameLine).decisionsWithoutProvenance).toEqual([])
+    expect(analyzeSpecFreeze(ownLine).decisionsWithoutProvenance).toEqual([])
+  })
+
+  it('a user story, a PRD and a prototype at a version are sources like the TL\'s word and a deduction', () => {
+    const md = HYPOTHESIS + decisions(
+      '- **D-1 · alcance** — solo el listado. *(Procedencia: historia ABC-123.)*',
+      '- **D-2 · copy** — el del documento de producto. *(Procedencia: prd «Pilares 2026», §4.)*',
+      '- **D-3 · layout** — dos columnas. *(Procedencia: prototipo v3.)*',
+    ) + TABLE
+
+    expect(analyzeSpecFreeze(md).decisionsWithoutProvenance).toEqual([])
+  })
+
+  it('a spec with no «## Decisiones congeladas» section reports nothing: a milestone with no frozen decision is not a defect', () => {
+    expect(analyzeSpecFreeze(HYPOTHESIS + TABLE).decisionsWithoutProvenance).toEqual([])
+  })
+
+  it('a suffix with nothing after the colon names no source', () => {
+    const md = HYPOTHESIS + decisions('- **D-1 · versión** — iOS 17. *(Procedencia: )*') + TABLE
+
+    expect(analyzeSpecFreeze(md).decisionsWithoutProvenance).toHaveLength(1)
+  })
+
+  it('a marker the projection does not strip («_(Procedencia: …)_») is no source either: the gate asks for the suffix that is trimmed', () => {
+    const md = HYPOTHESIS + decisions('- **D-1 · versión** — iOS 17. _(Procedencia: hablada.)_') + TABLE
+
+    expect(analyzeSpecFreeze(md).decisionsWithoutProvenance).toHaveLength(1)
+  })
+
+  it('a bullet indented under a decision elaborates it and is not asked for a source of its own', () => {
+    const md = HYPOTHESIS + decisions(SPOKEN_DECISION, '  - y excluye iOS 16') + TABLE
+
+    expect(analyzeSpecFreeze(md).decisionsWithoutProvenance).toEqual([])
+  })
+
+  it('the decisions section ends at the next heading: a bullet of ANOTHER section is not a decision', () => {
+    const md = HYPOTHESIS + decisions(SPOKEN_DECISION) + '## Enfoque técnico\n\n- primero el modelo\n\n' + TABLE
+
+    expect(analyzeSpecFreeze(md).decisionsWithoutProvenance).toEqual([])
+  })
+
+  it('every sourceless decision is collected, not just the first', () => {
+    const md = HYPOTHESIS + decisions(SOURCELESS_DECISION, '- **D-2 · nombre** — Pilares.', SPOKEN_DECISION.replace('D-1', 'D-3')) + TABLE
+
+    expect(analyzeSpecFreeze(md).decisionsWithoutProvenance.map((d) => d.line)).toEqual([6, 7])
+  })
 })
 
 describe('ct-groom — the freeze gate (exit 2, before touching anything, under --dry-run too)', () => {
@@ -123,10 +201,32 @@ describe('ct-groom — the freeze gate (exit 2, before touching anything, under 
     expect(r.stderr).toContain('table')
   })
 
+  it('a frozen decision with no source → exit 2, naming how many there are and where the first one is', () => {
+    const r = runGroom(HYPOTHESIS + decisions(SOURCELESS_DECISION) + TABLE)
+    expect(r.status).toBe(2)
+    expect(r.stderr).toContain('Procedencia')
+    expect(r.stderr).toContain(SOURCELESS_DECISION)
+    expect(r.stderr).toMatch(/line \d+/)
+  })
+
+  it('the third rule aggregates with the other two: the three messages come out together, a single exit 2', () => {
+    const r = runGroom(decisions(SOURCELESS_DECISION) + TABLE + '\n[NEEDS CLARIFICATION: ¿?]\n')
+    expect(r.status).toBe(2)
+    expect(r.stderr).toContain('## Hipótesis')
+    expect(r.stderr).toContain('[NEEDS CLARIFICATION')
+    expect(r.stderr).toContain('Procedencia')
+  })
+
   it('freezable spec → the gate does not fire and the dry-run prints its plan (exit 0)', () => {
     const r = runGroom(HYPOTHESIS + TABLE)
     expect(r.status).toBe(0)
     const plan = JSON.parse(r.stdout)
     expect(plan.issues).toHaveLength(1)
+  })
+
+  it('a spec whose decisions all name their source goes through the gate (exit 0)', () => {
+    const r = runGroom(HYPOTHESIS + decisions(SPOKEN_DECISION) + TABLE)
+    expect(r.status).toBe(0)
+    expect(JSON.parse(r.stdout).issues).toHaveLength(1)
   })
 })
