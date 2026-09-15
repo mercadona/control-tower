@@ -131,9 +131,9 @@ a sentence, or immediately after one of `by`, `for`, `of`, `after`, `before`, `w
 `while`, `on`, `in`, `at`, `from`, `with`. Adjacency is required, so "of the following" does not
 fire. Tokens of the `-ing` exception list never fire.
 
-### The three lists
+### The four lists
 
-All three live in `plan-ste.js` and are exported. If they pass about 100 lines together, they
+All four live in `plan-ste.js`, and three of them are exported. If they pass about 100 lines together, they
 move to a file of their own.
 
 **The non-approved list** starts with 48 entries, each with its approved replacement, which
@@ -165,6 +165,11 @@ the gate's message names: `utilize → use`, `prior to → before`, `subsequent 
 `read`, `sent`, `set`, `put`, `lost`, `found`, `told`, `said`, `brought`, `bought`, `caught`,
 `taught`, `thought`, `chosen`, `driven`, `spoken`, `broken`, `frozen`, `grown`, `drawn`,
 `thrown`, `torn`, `worn`, `begun`, `become`, `come`, `gone`, `been`, `had`.
+
+**The non-participle list** carries the words that end in `-ed` and are not participles:
+`red`, `need`, `speed`, `seed`, `feed`, `indeed`, `exceed`, `proceed`, `succeed`, `embed`,
+`hundred`, `sacred`. Without it "the test is red" fires `passive`, and red is what a test is
+before it is green.
 
 **The `-ing` exception list** carries the words that end in `-ing` and are not verb forms:
 `during`, `string`, `strings`, `nothing`, `something`, `anything`, `everything`, `thing`,
