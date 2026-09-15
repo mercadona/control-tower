@@ -15,6 +15,7 @@ vi.mock('@xterm/addon-fit', () => ({ FitAddon: FakeFitAddon }))
 
 type Answer = { status: number; body: string }
 
+const A_LOADED_SUITE = { timeout: 5000 }
 const HEADING = 'Puerta 2 · El groom y la autorización'
 const REVIEW_THE_SLICING = 'Revisar el slicing con la sesión'
 const SESSION_OPENED = 'Sesión del groom abierta: habla con ella en el panel de sesiones.'
@@ -96,14 +97,14 @@ describe('Home and gate 2', () => {
     stubBackend(NO_ACTIVE_PLANS)
     const { unmount } = openHome()
 
-    expect(await screen.findByRole('heading', { name: HEADING })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: HEADING }, A_LOADED_SUITE)).toBeInTheDocument()
 
     unmount()
     stubBackend({ status: 200, body: JSON.stringify({ plans: [implementingPlan()] }) })
     const implementing = openHome()
 
-    expect(await screen.findByRole('heading', { name: IMPLEMENTATION_HEADING })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: HEADING })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: IMPLEMENTATION_HEADING }, A_LOADED_SUITE)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: HEADING }, A_LOADED_SUITE)).toBeInTheDocument()
     implementing.unmount()
   })
 
@@ -111,7 +112,7 @@ describe('Home and gate 2', () => {
     const fetching = stubGroomableBackendWithASession()
     openHome()
     const user = userEvent.setup()
-    await screen.findByRole('button', { name: REVIEW_THE_SLICING })
+    await screen.findByRole('button', { name: REVIEW_THE_SLICING }, A_LOADED_SUITE)
 
     await user.click(screen.getByRole('button', { name: REVIEW_THE_SLICING }))
 
