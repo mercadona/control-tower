@@ -361,7 +361,7 @@ describe('the execution spec the plugin seeds, as this backend reads and freezes
 
     expect(spec.isFrozen()).toBe(false)
     expect(spec.frozenOn()).toBe(null)
-    expect(spec.title()).toBe('<Epic name>')
+    expect(spec.title()).toBe('<Milestone name>')
     expect(spec.design()).toBe('docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md')
   })
 
