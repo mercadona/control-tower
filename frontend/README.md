@@ -94,8 +94,10 @@ overlay.
 A `ColumnResizer` (`pages/home/components/column-resizer`) sits between
 `main` and the column as its own 8 px grid track, draggable and keyboard-
 operable (`role="separator"`, arrow keys, Home/End, Enter or a double-click
-to reset), clamped to `[360px, columnsWidth - 480px]` so the work area always
-keeps at least 480 px. `useSessionsColumnWidth` (`pages/home/`) owns the
+to reset), clamped to `[360px, columnsWidth - 560px]` so the work area always
+keeps at least 560 px — the flow bar's three steps clipped a long label at
+560 px, so this is the narrowest safe width, not a rounder guess.
+`useSessionsColumnWidth` (`pages/home/`) owns the
 clamp and persists the chosen width per browser in `localStorage` under
 `ct.sessions-column-width` — a convenience for that browser alone, restored
 on mount and re-clamped to the viewport; it is never sent to the backend and

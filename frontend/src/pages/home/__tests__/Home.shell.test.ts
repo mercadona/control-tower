@@ -118,6 +118,13 @@ describe('the application shell gives the Navigation shell a height to fill', ()
 
     expect(child).toMatch(/flex:\s*none/)
   })
+
+  it('lets a flow step shrink and wrap its label instead of clipping it when the sessions column is dragged to its maximum', () => {
+    const step = Stylesheet.home().declarationsFor('.home__flow-step')
+
+    expect(step).toMatch(/min-width:\s*0/)
+    expect(step).toMatch(/overflow-wrap:\s*anywhere/)
+  })
 })
 
 describe('the right column stacks under the content below 1280px without becoming a layer', () => {

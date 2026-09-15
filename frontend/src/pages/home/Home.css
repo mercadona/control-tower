@@ -82,9 +82,11 @@
   grid-template-columns: auto minmax(0, 1fr);
   gap: 4px 8px;
   align-items: center;
+  min-width: 0;
   padding: 12px;
   color: var(--foreground-secondary);
   border-bottom: var(--borderwidth-sm) solid var(--border-secondary);
+  overflow-wrap: anywhere;
 }
 
 .home__flow-step > :last-child {

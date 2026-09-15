@@ -28,6 +28,15 @@ describe('Home · sessions column width', () => {
     expect(separator.nextElementSibling).toHaveClass('home__side')
   })
 
+  it('keeps the work area at least 560px wide, so a maxed-out column never clips the flow bar', async () => {
+    mockColumnsWidth(1200)
+    openHome()
+
+    await screen.findByRole('navigation', { name: 'Navegación principal' })
+
+    await waitFor(() => expect(screen.getByRole('separator', { name: LABEL })).toHaveAttribute('aria-valuemax', '640'))
+  })
+
   it('a stored width is restored and applied as the inline custom property', async () => {
     mockColumnsWidth(1200)
     localStorage.setItem(STORAGE_KEY, '500')

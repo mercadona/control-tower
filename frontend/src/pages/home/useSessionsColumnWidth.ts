@@ -2,7 +2,7 @@ import { RefObject, useCallback, useEffect, useState } from 'react'
 
 const STORAGE_KEY = 'ct.sessions-column-width'
 const MIN_WIDTH = 360
-const CONTENT_MIN_WIDTH = 480
+const CONTENT_MIN_WIDTH = 560
 
 type SessionsColumnWidth = {
   value: number | null
