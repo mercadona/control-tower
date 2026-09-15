@@ -23,6 +23,10 @@ class Stylesheet {
     return new Stylesheet(join('system-ui', 'panel', 'Panel.css'))
   }
 
+  static columnResizer() {
+    return new Stylesheet(join('pages', 'home', 'components', 'column-resizer', 'ColumnResizer.css'))
+  }
+
   declarationsFor(selector: string) {
     return this.blocksFor(this.text, selector)
   }
@@ -119,11 +123,19 @@ describe('the application shell gives the Navigation shell a height to fill', ()
     expect(child).toMatch(/flex:\s*none/)
   })
 
-  it('lets a flow step shrink and wrap its label instead of clipping it when the sessions column is dragged to its maximum', () => {
+  it('lets a flow step shrink and hyphenate its label at a word boundary instead of clipping or breaking mid-word', () => {
     const step = Stylesheet.home().declarationsFor('.home__flow-step')
 
     expect(step).toMatch(/min-width:\s*0/)
-    expect(step).toMatch(/overflow-wrap:\s*anywhere/)
+    expect(step).toMatch(/overflow-wrap:\s*normal/)
+    expect(step).toMatch(/hyphens:\s*auto/)
+  })
+
+  it('gives the focused resize handle the design system\'s brand-colored outline instead of the browser default', () => {
+    const focused = Stylesheet.columnResizer().declarationsFor('.column-resizer:focus-visible')
+
+    expect(focused).toMatch(/outline:\s*var\(--borderwidth-md\)\s*solid\s*var\(--border-brand-primary\)/)
+    expect(focused).toMatch(/outline-offset:\s*var\(--borderwidth-md\)/)
   })
 })
 

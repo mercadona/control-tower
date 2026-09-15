@@ -94,9 +94,15 @@ overlay.
 A `ColumnResizer` (`pages/home/components/column-resizer`) sits between
 `main` and the column as its own 8 px grid track, draggable and keyboard-
 operable (`role="separator"`, arrow keys, Home/End, Enter or a double-click
-to reset), clamped to `[360px, columnsWidth - 560px]` so the work area always
-keeps at least 560 px — the flow bar's three steps clipped a long label at
-560 px, so this is the narrowest safe width, not a rounder guess.
+to reset), clamped to `[360px, columnsWidth - 600px]` so the work area always
+keeps at least 600 px — the flow bar's three steps clipped a long label at a
+narrower width, so this is the safe minimum, not a rounder guess. Its focus
+ring is the design system's, not the browser default:
+`.column-resizer:focus-visible` matches `Button`'s
+`outline: var(--borderwidth-md) solid var(--border-brand-primary)`. The flow
+step labels hyphenate at a word boundary (`hyphens: auto`, `overflow-wrap:
+normal`, and `<html lang="es">` in `index.html` so the browser hyphenates
+Spanish) instead of breaking mid-word.
 `useSessionsColumnWidth` (`pages/home/`) owns the
 clamp and persists the chosen width per browser in `localStorage` under
 `ct.sessions-column-width` — a convenience for that browser alone, restored

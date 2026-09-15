@@ -86,7 +86,8 @@
   padding: 12px;
   color: var(--foreground-secondary);
   border-bottom: var(--borderwidth-sm) solid var(--border-secondary);
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  hyphens: auto;
 }
 
 .home__flow-step > :last-child {
