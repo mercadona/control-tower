@@ -7,7 +7,7 @@ const SESSION = { id: 'session-1', name: 'brainstorming' }
 const QUESTION = 'the button should read Arrancar brainstorming, right?'
 const UNRESUMABLE_DETAIL = 'claude code no longer holds this conversation: the coordinating session was not resumed'
 const ENDED_DETAIL = 'the terminal of this coordinating session exited and no other one was opened'
-const ONE_REPOSITORY_ONLY_DETAIL = 'an epic governs one checkout: send repo and path instead of repo_list'
+const ALREADY_LIVE_DETAIL = 'a coordinating conversation is already live: it has to end before another one opens'
 
 const none = () => ({ status: 200, body: '{"status":"none"}' })
 
@@ -83,9 +83,11 @@ const opened = () => ({
     `"session":{"id":"${SESSION.id}","name":"${SESSION.name}"}}`,
 })
 
-const oneRepositoryOnly = () => ({
-  status: 400,
-  body: `{"code":"one-repository-only","detail":"${ONE_REPOSITORY_ONLY_DETAIL}"}`,
+const alreadyLive = () => ({
+  status: 409,
+  body:
+    `{"code":"coordinating-session-already-live","detail":"${ALREADY_LIVE_DETAIL}",` +
+    `"conversation":"${CONVERSATION}","session":{"id":"${SESSION.id}","name":"${SESSION.name}"}}`,
 })
 
 export const CoordinatingSessionMother = {
@@ -96,7 +98,7 @@ export const CoordinatingSessionMother = {
   QUESTION,
   UNRESUMABLE_DETAIL,
   ENDED_DETAIL,
-  ONE_REPOSITORY_ONLY_DETAIL,
+  ALREADY_LIVE_DETAIL,
   none,
   nothingRead,
   workingRead,
@@ -108,5 +110,5 @@ export const CoordinatingSessionMother = {
   unresumable,
   ended,
   opened,
-  oneRepositoryOnly,
+  alreadyLive,
 }

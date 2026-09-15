@@ -64,16 +64,16 @@ describe('Home · opens the brainstorming', () => {
   })
 
   it('should show the backend refusal text as it came', async () => {
-    backendAnswering(CoordinatingSessionMother.oneRepositoryOnly())
+    backendAnswering(CoordinatingSessionMother.alreadyLive())
     const { user } = openHome()
 
     await openBrainstorming(user)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(CoordinatingSessionMother.ONE_REPOSITORY_ONLY_DETAIL)
+    expect(await screen.findByRole('alert')).toHaveTextContent(CoordinatingSessionMother.ALREADY_LIVE_DETAIL)
   })
 
   it('should keep the form unlocked after a backend refusal', async () => {
-    backendAnswering(CoordinatingSessionMother.oneRepositoryOnly())
+    backendAnswering(CoordinatingSessionMother.alreadyLive())
     const { user } = openHome()
 
     await openBrainstorming(user)
