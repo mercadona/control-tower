@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { cleanup, screen } from '@testing-library/react'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { ExternalToolsMother } from '__scenarios__/ExternalToolsMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
@@ -53,7 +53,10 @@ const stubBackend = (activePlans: Answer) => {
 }
 
 describe('Home and gate 1', () => {
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
 
   it('shows gate 1 in the request stage and still shows it while a slice is being implemented', async () => {
     stubBackend(NO_ACTIVE_PLANS)
@@ -63,9 +66,10 @@ describe('Home and gate 1', () => {
 
     unmount()
     stubBackend({ status: 200, body: JSON.stringify({ plans: [implementingPlan()] }) })
-    openHome()
+    const implementing = openHome()
 
     expect(await screen.findByRole('heading', { name: IMPLEMENTATION_HEADING })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: HEADING })).toBeInTheDocument()
+    implementing.unmount()
   })
 })

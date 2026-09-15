@@ -246,7 +246,10 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
       method: 'POST',
       headers: { 'x-gate-key': EpicGroomMother.KEY },
     })
-    expect(opened).toEqual({ kind: 'opened' })
+    expect(opened).toEqual({
+      kind: 'opened',
+      opened: { conversation: EpicGroomMother.GROOM_CONVERSATION, session: EpicGroomMother.GROOM_SESSION },
+    })
 
     answerWith(EpicGroomMother.notFromThePage())
 
@@ -259,6 +262,12 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
 
   it('an opening whose answer never arrives is unconfirmed rather than rejecting', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch') }))
+
+    expect(await EpicGroomClient.openSession(EpicGroomMother.KEY)).toEqual({ kind: 'unconfirmed' })
+  })
+
+  it('an opening that names no session is unconfirmed, because nobody could be sent to talk to it', async () => {
+    answerWith({ status: 202, body: '{"status":"grooming","conversation":"9c3f1b7e"}' })
 
     expect(await EpicGroomClient.openSession(EpicGroomMother.KEY)).toEqual({ kind: 'unconfirmed' })
   })

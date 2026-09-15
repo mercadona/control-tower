@@ -477,7 +477,7 @@ const Home = () => {
             )}
           </section>
 
-          <GateSequence />
+          <GateSequence onSessionOpened={sessionOpened} />
 
           {workflow !== null && (
             <section className="home__completed" aria-label="Etapas completadas">

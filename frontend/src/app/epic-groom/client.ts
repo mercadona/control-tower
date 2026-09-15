@@ -1,3 +1,4 @@
+import { CoordinatingSessionClient } from 'app/coordinating-session/client'
 import {
   EpicGroomAskOutcome,
   EpicGroomOutcome,
@@ -209,7 +210,10 @@ const openSession = async (key: string): Promise<GroomSessionOutcome> => {
     return { kind: 'unconfirmed' }
   }
   if (response.status === OPENED_STATUS) {
-    return isRecord(body) && body.status === GROOMING_STATUS ? { kind: 'opened' } : { kind: 'unconfirmed' }
+    if (!isRecord(body) || body.status !== GROOMING_STATUS) return { kind: 'unconfirmed' }
+    const opened = CoordinatingSessionClient.openedIn(body)
+
+    return opened === null ? { kind: 'unconfirmed' } : { kind: 'opened', opened }
   }
   if (!isRecord(body) || typeof body.code !== 'string' || typeof body.detail !== 'string') {
     return { kind: 'unconfirmed' }

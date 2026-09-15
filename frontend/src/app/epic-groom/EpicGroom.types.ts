@@ -1,3 +1,5 @@
+import { OpenedCoordinatingSession } from 'app/coordinating-session/CoordinatingSession.types'
+
 export type GroomPlanIssue = { order: number; title: string; labels: string[]; repo: string }
 export type EpicPullRequest = { number: number; url: string }
 export type EpicIssue = { number: number; url: string; title: string; status: string }
@@ -22,7 +24,7 @@ export type ReslicingOutcome =
   | { kind: 'refused'; code: string; error: string }
   | { kind: 'unconfirmed' }
 export type GroomSessionOutcome =
-  | { kind: 'opened' }
+  | { kind: 'opened'; opened: OpenedCoordinatingSession }
   | { kind: 'refused'; code: string; error: string }
   | { kind: 'unconfirmed' }
 export type EpicGroomAskOutcome =

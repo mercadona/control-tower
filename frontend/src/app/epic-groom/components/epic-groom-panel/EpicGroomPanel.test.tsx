@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
+import { OpenedCoordinatingSession } from 'app/coordinating-session/CoordinatingSession.types'
 import { EpicGroomMother } from '__scenarios__/EpicGroomMother'
 import { EpicGroomPanel } from './EpicGroomPanel'
 
@@ -7,6 +8,9 @@ const GROOM_BUTTON = { name: 'Ejecutar el groom' }
 const PROMOTE_BUTTON = { name: 'Autorizar el trabajo' }
 const SESSION_BUTTON = { name: 'Revisar el slicing con la sesión' }
 const PUBLISH_BUTTON = { name: 'Publicar el nuevo slicing' }
+
+const renderPanel = (onSessionOpened: (opened: OpenedCoordinatingSession) => void = vi.fn()) =>
+  render(<EpicGroomPanel onSessionOpened={onSessionOpened} />)
 
 describe('EpicGroomPanel', () => {
   afterEach(() => {
@@ -18,7 +22,7 @@ describe('EpicGroomPanel', () => {
     const reading = vi.fn(async () => new Response(EpicGroomMother.groomable().body, { status: 200 }))
     vi.stubGlobal('fetch', reading)
 
-    render(<EpicGroomPanel />)
+    renderPanel()
 
     expect(await screen.findByText(EpicGroomMother.MILESTONE)).toBeInTheDocument()
     expect(screen.getByText('2 issues')).toBeInTheDocument()
@@ -33,7 +37,7 @@ describe('EpicGroomPanel', () => {
     const reading = vi.fn(async () => new Response(EpicGroomMother.groomableAcrossRepositories().body, { status: 200 }))
     vi.stubGlobal('fetch', reading)
 
-    render(<EpicGroomPanel />)
+    renderPanel()
 
     expect(await screen.findByText('#1 · The intermediate gate retires')).toBeInTheDocument()
     expect(
@@ -48,7 +52,7 @@ describe('EpicGroomPanel', () => {
       .mockResolvedValueOnce(new Response(EpicGroomMother.groomedByThePress().body, { status: 200 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    render(<EpicGroomPanel />)
+    renderPanel()
     await screen.findByRole('button', GROOM_BUTTON)
 
     await user.click(screen.getByRole('button', GROOM_BUTTON))
@@ -69,7 +73,7 @@ describe('EpicGroomPanel', () => {
         : new Response(EpicGroomMother.groomable().body, { status: 200 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    render(<EpicGroomPanel />)
+    renderPanel()
     await screen.findByRole('button', SESSION_BUTTON)
 
     await user.click(screen.getByRole('button', SESSION_BUTTON))
@@ -95,7 +99,7 @@ describe('EpicGroomPanel', () => {
     })
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    render(<EpicGroomPanel />)
+    renderPanel()
     await screen.findByRole('button', SESSION_BUTTON)
 
     await user.click(screen.getByRole('button', SESSION_BUTTON))
@@ -109,19 +113,41 @@ describe('EpicGroomPanel', () => {
     ).toBeInTheDocument()
   })
 
-  it('a refused opening is shown with the words the program printed and leaves the dry run on screen', async () => {
-    const fetching = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(EpicGroomMother.groomable().body, { status: 200 }))
-      .mockResolvedValueOnce(new Response(EpicGroomMother.notFromThePage().body, { status: 403 }))
+  it('the session the backend created reaches whoever listens, so the person can be sent to talk to it', async () => {
+    const fetching = vi.fn(async (input: string | URL | Request) =>
+      String(input) === '/groom-session'
+        ? new Response(EpicGroomMother.groomSessionOpened().body, { status: 202 })
+        : new Response(EpicGroomMother.groomable().body, { status: 200 }))
     vi.stubGlobal('fetch', fetching)
+    const listening = vi.fn()
     const user = userEvent.setup()
-    render(<EpicGroomPanel />)
+    renderPanel(listening)
+    await screen.findByRole('button', SESSION_BUTTON)
+
+    await user.click(screen.getByRole('button', SESSION_BUTTON))
+
+    await vi.waitFor(() => expect(listening).toHaveBeenCalledWith({
+      conversation: EpicGroomMother.GROOM_CONVERSATION,
+      session: EpicGroomMother.GROOM_SESSION,
+    }))
+    expect(listening).toHaveBeenCalledTimes(1)
+  })
+
+  it('a refused opening is shown with the words the program printed and nobody is sent anywhere', async () => {
+    const fetching = vi.fn(async (input: string | URL | Request) =>
+      String(input) === '/groom-session'
+        ? new Response(EpicGroomMother.notFromThePage().body, { status: 403 })
+        : new Response(EpicGroomMother.groomable().body, { status: 200 }))
+    vi.stubGlobal('fetch', fetching)
+    const listening = vi.fn()
+    const user = userEvent.setup()
+    renderPanel(listening)
     await screen.findByRole('button', SESSION_BUTTON)
 
     await user.click(screen.getByRole('button', SESSION_BUTTON))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(EpicGroomMother.NOT_FROM_THE_PAGE_DETAIL)
+    expect(listening).not.toHaveBeenCalled()
     expect(screen.getByText('#1 · The intermediate gate retires')).toBeInTheDocument()
     expect(
       screen.queryByText('Sesión del groom abierta: habla con ella en el panel de sesiones.'),
@@ -135,7 +161,7 @@ describe('EpicGroomPanel', () => {
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    render(<EpicGroomPanel />)
+    renderPanel()
     await screen.findByRole('button', SESSION_BUTTON)
 
     await user.click(screen.getByRole('button', SESSION_BUTTON))
@@ -151,7 +177,7 @@ describe('EpicGroomPanel', () => {
       .mockResolvedValueOnce(new Response(EpicGroomMother.groomedByThePress().body, { status: 200 }))
     vi.stubGlobal('fetch', fetching)
 
-    render(<EpicGroomPanel />)
+    renderPanel()
 
     expect(await screen.findByText('#348 · The intermediate gate retires')).toBeInTheDocument()
     expect(fetching).toHaveBeenNthCalledWith(2, '/epic-groom', {
@@ -165,7 +191,7 @@ describe('EpicGroomPanel', () => {
     const fetching = vi.fn(async () => new Response(EpicGroomMother.groomable().body, { status: 200 }))
     vi.stubGlobal('fetch', fetching)
 
-    render(<EpicGroomPanel />)
+    renderPanel()
 
     expect(await screen.findByRole('button', GROOM_BUTTON)).toBeEnabled()
     await waitFor(() => expect(fetching).toHaveBeenCalledTimes(1))
@@ -179,7 +205,7 @@ describe('EpicGroomPanel', () => {
       .mockResolvedValueOnce(new Response(EpicGroomMother.groomedByThePress().body, { status: 200 }))
     vi.stubGlobal('fetch', fetching)
 
-    render(<EpicGroomPanel />)
+    renderPanel()
     await screen.findByRole('button', PROMOTE_BUTTON)
 
     await waitFor(() => expect(fetching).toHaveBeenCalledTimes(2))
@@ -193,7 +219,7 @@ describe('EpicGroomPanel', () => {
       .mockResolvedValueOnce(new Response(EpicGroomMother.notFromThePage().body, { status: 403 }))
     vi.stubGlobal('fetch', fetching)
 
-    render(<EpicGroomPanel />)
+    renderPanel()
 
     expect(
       await screen.findByText(
@@ -209,7 +235,7 @@ describe('EpicGroomPanel', () => {
   it('a groomed epic offers the authorisation and shows the rung each issue stands at', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.groomed().body, { status: 200 })))
 
-    render(<EpicGroomPanel />)
+    renderPanel()
 
     expect(await screen.findByRole('button', PROMOTE_BUTTON)).toBeInTheDocument()
     expect(screen.getByText('#348 · The intermediate gate retires')).toBeInTheDocument()
@@ -220,7 +246,7 @@ describe('EpicGroomPanel', () => {
   it('a partially groomed epic shows how many of how many issues exist and offers only the groom, not the promotion', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.partiallyGroomed().body, { status: 200 })))
 
-    render(<EpicGroomPanel />)
+    renderPanel()
 
     expect(await screen.findByText(EpicGroomMother.MILESTONE)).toBeInTheDocument()
     expect(screen.getByText('1 de 2 issues creadas')).toBeInTheDocument()
@@ -238,7 +264,7 @@ describe('EpicGroomPanel', () => {
       .mockResolvedValueOnce(new Response(EpicGroomMother.groomedByThePress().body, { status: 200 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    render(<EpicGroomPanel />)
+    renderPanel()
     await screen.findByRole('button', GROOM_BUTTON)
 
     await user.click(screen.getByRole('button', GROOM_BUTTON))
@@ -258,7 +284,7 @@ describe('EpicGroomPanel', () => {
       .mockResolvedValueOnce(new Response(EpicGroomMother.promoted().body, { status: 200 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    render(<EpicGroomPanel />)
+    renderPanel()
     await screen.findByRole('button', PROMOTE_BUTTON)
 
     await user.click(screen.getByRole('button', PROMOTE_BUTTON))
@@ -280,7 +306,7 @@ describe('EpicGroomPanel', () => {
       .mockResolvedValueOnce(new Response(EpicGroomMother.notFromThePage().body, { status: 403 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    render(<EpicGroomPanel />)
+    renderPanel()
     await screen.findByRole('button', GROOM_BUTTON)
 
     await user.click(screen.getByRole('button', GROOM_BUTTON))
@@ -302,7 +328,7 @@ describe('EpicGroomPanel', () => {
       .mockResolvedValueOnce(new Response(EpicGroomMother.groomed().body, { status: 200 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    render(<EpicGroomPanel />)
+    renderPanel()
     await screen.findByRole('button', GROOM_BUTTON)
 
     await user.click(screen.getByRole('button', GROOM_BUTTON))
@@ -319,7 +345,7 @@ describe('EpicGroomPanel', () => {
         : new Response(EpicGroomMother.groomable().body, { status: 200 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    render(<EpicGroomPanel />)
+    renderPanel()
     await screen.findByRole('button', GROOM_BUTTON)
 
     await user.click(screen.getByRole('button', GROOM_BUTTON))
@@ -338,7 +364,7 @@ describe('EpicGroomPanel', () => {
       .mockResolvedValueOnce(new Response(EpicGroomMother.notFromThePage().body, { status: 403 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    render(<EpicGroomPanel />)
+    renderPanel()
     await screen.findByRole('button', GROOM_BUTTON)
 
     await user.click(screen.getByRole('button', GROOM_BUTTON))
@@ -353,7 +379,7 @@ describe('EpicGroomPanel', () => {
       .mockResolvedValueOnce(new Response(EpicGroomMother.planChanged().body, { status: 409 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    render(<EpicGroomPanel />)
+    renderPanel()
     await screen.findByRole('button', GROOM_BUTTON)
 
     await user.click(screen.getByRole('button', GROOM_BUTTON))
@@ -367,7 +393,7 @@ describe('EpicGroomPanel', () => {
       vi.fn(async () => new Response(EpicGroomMother.groomableWithoutKey().body, { status: 200 })),
     )
 
-    render(<EpicGroomPanel />)
+    renderPanel()
 
     expect(await screen.findByRole('button', GROOM_BUTTON)).toBeDisabled()
     expect(
@@ -379,7 +405,7 @@ describe('EpicGroomPanel', () => {
     const reading = vi.fn(async () => new Response(EpicGroomMother.draft().body, { status: 200 }))
     vi.stubGlobal('fetch', reading)
 
-    const { container } = render(<EpicGroomPanel />)
+    const { container } = renderPanel()
 
     await waitFor(() => expect(reading).toHaveBeenCalled())
     expect(container).toBeEmptyDOMElement()
@@ -388,7 +414,7 @@ describe('EpicGroomPanel', () => {
   it('while it waits for the pull request to merge it says so, and links the one it waits for', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.awaitingPublication().body, { status: 200 })))
 
-    render(<EpicGroomPanel />)
+    renderPanel()
 
     expect(
       await screen.findByText('El spec congelado espera en un pull request: mergéalo para abrir el groom.'),
@@ -406,7 +432,7 @@ describe('EpicGroomPanel', () => {
       vi.fn(async () => new Response(EpicGroomMother.awaitingPublicationWithNoPullRequest().body, { status: 200 })),
     )
 
-    render(<EpicGroomPanel />)
+    renderPanel()
 
     expect(
       await screen.findByText(
@@ -422,7 +448,7 @@ describe('EpicGroomPanel', () => {
   it('a resliced spec says the session changed the slicing and offers to publish it', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.resliced().body, { status: 200 })))
 
-    render(<EpicGroomPanel />)
+    renderPanel()
 
     expect(
       await screen.findByText(
@@ -440,7 +466,7 @@ describe('EpicGroomPanel', () => {
       .mockResolvedValueOnce(new Response(EpicGroomMother.reslicingPublished().body, { status: 200 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    render(<EpicGroomPanel />)
+    renderPanel()
     await screen.findByRole('button', PUBLISH_BUTTON)
 
     await user.click(screen.getByRole('button', PUBLISH_BUTTON))
@@ -465,7 +491,7 @@ describe('EpicGroomPanel', () => {
       .mockResolvedValueOnce(new Response(EpicGroomMother.notFromThePage().body, { status: 403 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
-    render(<EpicGroomPanel />)
+    renderPanel()
     await screen.findByRole('button', PUBLISH_BUTTON)
 
     await user.click(screen.getByRole('button', PUBLISH_BUTTON))
@@ -480,7 +506,7 @@ describe('EpicGroomPanel', () => {
       vi.fn(async () => new Response(EpicGroomMother.reslicedWithoutKey().body, { status: 200 })),
     )
 
-    render(<EpicGroomPanel />)
+    renderPanel()
 
     expect(await screen.findByRole('button', PUBLISH_BUTTON)).toBeDisabled()
     expect(
@@ -491,7 +517,7 @@ describe('EpicGroomPanel', () => {
   it('a listing that could not be exhausted shows why and offers nothing to press', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.issuesUncertain().body, { status: 200 })))
 
-    render(<EpicGroomPanel />)
+    renderPanel()
 
     expect(await screen.findByRole('alert')).toHaveTextContent(EpicGroomMother.ISSUES_UNCERTAIN_REASON)
     expect(screen.queryByRole('button')).not.toBeInTheDocument()

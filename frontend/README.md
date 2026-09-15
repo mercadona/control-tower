@@ -189,6 +189,15 @@ and a press without the key is refused with `gate-not-from-the-page`.
 `useGatePresses.ts` holds those four presses and which one is in flight, so a
 button never borrows another's label while it waits.
 
+The conversation **Revisar el slicing con la sesión** opens travels the same way
+the brainstorming's does: `POST /groom-session` answers the session it created,
+`CoordinatingSessionClient.openedIn` reads that payload — one reader for the two
+doors that answer it — and the panel hands it up through `GateSequence` to
+`Home`'s own `sessionOpened`, the very callback `StartPlanForm` reports an
+opening to. `SessionsPanel` therefore refreshes its listing and selects the new
+terminal, instead of showing «habla con ella en el panel de sesiones» beside a
+listing that never changed.
+
 A press whose answer the page cannot read is **not** reported as a failure:
 `client.ts` reads `GET /epic-groom` once and answers what that read says, so a
 slow groom that did create the issues shows them, and where the read cannot tell

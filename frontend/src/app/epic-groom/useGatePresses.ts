@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { EpicGroomClient } from 'app/epic-groom/client'
+import { OpenedCoordinatingSession } from 'app/coordinating-session/CoordinatingSession.types'
 import { EpicGroomAskOutcome, GroomSessionOutcome, ReslicingOutcome } from 'app/epic-groom/EpicGroom.types'
 
 type Pressed = 'none' | 'groom' | 'promote' | 'session' | 'reslicing'
@@ -20,7 +21,7 @@ type GatePresses = {
 
 const NOTHING: Pressed = 'none'
 
-const useGatePresses = (): GatePresses => {
+const useGatePresses = (onSessionOpened: (opened: OpenedCoordinatingSession) => void): GatePresses => {
   const [pressed, setPressed] = useState<Pressed>(NOTHING)
   const [acted, setActed] = useState<EpicGroomActed | null>(null)
   const [refusal, setRefusal] = useState<EpicGroomAskRefusal | null>(null)
@@ -73,9 +74,11 @@ const useGatePresses = (): GatePresses => {
     promote: (gateKey: string | null) => asked(
       'promote', gateKey, async (key) => settle(await EpicGroomClient.promote(key))
     ),
-    openSession: (gateKey: string | null) => asked(
-      'session', gateKey, async (key) => setSession(await EpicGroomClient.openSession(key))
-    ),
+    openSession: (gateKey: string | null) => asked('session', gateKey, async (key) => {
+      const answered = await EpicGroomClient.openSession(key)
+      setSession(answered)
+      if (answered.kind === 'opened') onSessionOpened(answered.opened)
+    }),
     publishReslicing: (gateKey: string | null) => asked(
       'reslicing', gateKey, async (key) => setReslicing(await EpicGroomClient.publishReslicing(key))
     ),

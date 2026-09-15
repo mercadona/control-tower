@@ -1,3 +1,4 @@
+import { OpenedCoordinatingSession } from 'app/coordinating-session/CoordinatingSession.types'
 import { EpicGroomOutcome, EpicIssue, GroomPlanIssue } from 'app/epic-groom/EpicGroom.types'
 import { useEpicGroom } from 'app/epic-groom/useEpicGroom'
 import { useGatePresses } from 'app/epic-groom/useGatePresses'
@@ -62,8 +63,10 @@ const EpicGroomPanelLabels = {
   issueItem,
 }
 
-const EpicGroomPanel = () => {
-  const presses = useGatePresses()
+type EpicGroomPanelProps = { onSessionOpened: (opened: OpenedCoordinatingSession) => void }
+
+const EpicGroomPanel = ({ onSessionOpened }: EpicGroomPanelProps) => {
+  const presses = useGatePresses(onSessionOpened)
   const { acted, refusal, session, reslicing } = presses
   const isReviewingTheSlicing = session?.kind === 'opened' || refusal?.kind === 'unconfirmed'
   const read = useEpicGroom(isReviewingTheSlicing)

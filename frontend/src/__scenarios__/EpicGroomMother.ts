@@ -14,6 +14,7 @@ const READY_CHANNEL = { ...BACKLOG_CHANNEL, status: 'ready' }
 const PROMOTED = [348, 349]
 const PULL_REQUEST = { number: 341, url: 'https://github.com/owner/name/pull/341' }
 const GROOM_CONVERSATION = '9c3f1b7e-4d2a-4c8b-9a3e-6f2b1a6c2e8f'
+const GROOM_SESSION = { id: 'session-9', name: 'brainstorming' }
 const RESLICING_PULL_REQUEST = { number: 363, url: 'https://github.com/owner/name/pull/363' }
 const NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
 const PLAN_CHANGED_DETAIL = 'the spec changed since this plan was shown: read the new plan before pressing again'
@@ -109,7 +110,7 @@ const reslicingPublished = () => ({
 const groomSessionOpened = () => ({
   status: 202,
   body: `{"status":"grooming","conversation":"${GROOM_CONVERSATION}","repo":"owner/name","root":"/repo",` +
-    '"session":{"id":"session-9","name":"brainstorming"}}',
+    `"session":{"id":"${GROOM_SESSION.id}","name":"${GROOM_SESSION.name}"}}`,
 })
 
 const unrecognisedStatus = () => ({ status: 200, body: '{"status":"something-nobody-declared"}' })
@@ -141,6 +142,7 @@ export const EpicGroomMother = {
   PROMOTED,
   PULL_REQUEST,
   GROOM_CONVERSATION,
+  GROOM_SESSION,
   RESLICING_PULL_REQUEST,
   NOT_FROM_THE_PAGE_DETAIL,
   PLAN_CHANGED_DETAIL,
