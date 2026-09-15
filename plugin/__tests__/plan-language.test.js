@@ -193,3 +193,41 @@ describe('the words the standard does not approve', () => {
     expect(PlanLanguage.NON_APPROVED.every(([phrase, replacement]) => phrase && replacement)).toBe(true)
   })
 })
+
+describe('the passive voice', () => {
+  it('rejects a be-form followed by a regular participle', () => {
+    expect(Violations.about('The file is covered by the test.', 'passive')).toHaveLength(1)
+  })
+
+  it('rejects an irregular participle', () => {
+    expect(Violations.about('The plan is written by the agent.', 'passive')).toHaveLength(1)
+    expect(Violations.about('The suite has been run.', 'passive')).toHaveLength(1)
+  })
+
+  it('accepts a be-form followed by an article', () => {
+    expect(Violations.about('It is a written plan.', 'passive')).toEqual([])
+  })
+
+  it('crosses an adverb and stops at anything else', () => {
+    expect(Violations.about('The file is not covered.', 'passive')).toHaveLength(1)
+    expect(Violations.about('The file is already fully covered.', 'passive')).toHaveLength(1)
+    expect(Violations.about('The gate is the second control.', 'passive')).toEqual([])
+  })
+
+  it('leaves a word that ends in -ed and is not a participle alone', () => {
+    expect(Violations.about('The test is red.', 'passive')).toEqual([])
+    expect(Violations.about('The speed is enough.', 'passive')).toEqual([])
+  })
+
+  it('names what fired and asks for the actor', () => {
+    const [violation] = Violations.about('The plan is written by the agent.', 'passive')
+    expect(violation).toContain('"is written" is passive')
+    expect(violation).toContain('Name who does it')
+  })
+
+  it('carries the irregular forms -ed does not catch', () => {
+    expect(PlanLanguage.IRREGULAR_PARTICIPLES.has('written')).toBe(true)
+    expect(PlanLanguage.IRREGULAR_PARTICIPLES.has('run')).toBe(true)
+    expect(PlanLanguage.IRREGULAR_PARTICIPLES.has('covered')).toBe(false)
+  })
+})

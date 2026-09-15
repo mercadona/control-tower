@@ -74,6 +74,23 @@ export class PlanLanguage {
   static #EMPHASIS = /\*\*|\*|_/g
   static #SENTENCE_END = /(?<=[.!?])\s+/
 
+  static #BE_FORMS = new Set(['is', 'are', 'was', 'were', 'be', 'been', 'being', 'am'])
+
+  static #ADVERBS = new Set(['not', 'never', 'already', 'also', 'only', 'then', 'now', 'still', 'always'])
+
+  static IRREGULAR_PARTICIPLES = new Set([
+    'written', 'built', 'run', 'made', 'done', 'taken', 'given', 'seen', 'known', 'shown',
+    'held', 'kept', 'left', 'read', 'sent', 'set', 'put', 'lost', 'found', 'told',
+    'said', 'brought', 'bought', 'caught', 'taught', 'thought', 'chosen', 'driven', 'spoken',
+    'broken', 'frozen', 'grown', 'drawn', 'thrown', 'torn', 'worn', 'begun', 'become', 'come',
+    'gone', 'been', 'had',
+  ])
+
+  static #NOT_PARTICIPLES = new Set([
+    'red', 'need', 'speed', 'seed', 'feed', 'indeed', 'exceed', 'proceed', 'succeed', 'embed',
+    'hundred', 'sacred',
+  ])
+
   static violationsOf(lines) {
     const out = []
     const indexOf = (needle) => lines.findIndex((l) => l.structural && l.line.startsWith(needle))
@@ -93,6 +110,12 @@ export class PlanLanguage {
         if (count > limit) {
           out.push(
             `line ${line}: length — the sentence "${PlanLanguage.#shorten(sentence)}" carries ${count} words and the limit here is ${limit}. Split it.`,
+          )
+        }
+        const tokens = PlanLanguage.#tokensOf(sentence)
+        for (const chain of PlanLanguage.#passiveIn(tokens)) {
+          out.push(
+            `line ${line}: passive — "${chain}" is passive. Name who does it, and write the sentence active.`,
           )
         }
       }
@@ -182,6 +205,34 @@ export class PlanLanguage {
 
   static #wordsOf(sentence) {
     return sentence.split(/\s+/).filter(Boolean)
+  }
+
+  static #tokensOf(text) {
+    return text.toLowerCase().match(/[a-z']+/g) ?? []
+  }
+
+  static #isAdverb(token) {
+    return PlanLanguage.#ADVERBS.has(token) || token.endsWith('ly')
+  }
+
+  static #isParticiple(token) {
+    if (PlanLanguage.#NOT_PARTICIPLES.has(token)) return false
+    return PlanLanguage.IRREGULAR_PARTICIPLES.has(token) || (token.endsWith('ed') && token.length > 3)
+  }
+
+  static #passiveIn(tokens) {
+    const out = []
+    tokens.forEach((token, i) => {
+      if (!PlanLanguage.#BE_FORMS.has(token)) return
+      for (let j = i + 1; j <= i + 3 && j < tokens.length; j++) {
+        if (PlanLanguage.#isParticiple(tokens[j])) {
+          out.push(`${token} ${tokens[j]}`)
+          return
+        }
+        if (!PlanLanguage.#isAdverb(tokens[j])) return
+      }
+    })
+    return out
   }
 
   static #shorten(sentence) {
