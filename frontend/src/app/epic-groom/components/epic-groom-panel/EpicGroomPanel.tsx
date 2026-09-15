@@ -31,7 +31,8 @@ const PROMOTING = 'Autorizando el trabajo'
 const AUTHORISED = 'Trabajo autorizado: el loop ya puede despachar el primer slice.'
 const FINISH_GROOM_FIRST = 'Termina el groom antes de autorizar el trabajo.'
 const ONLY_FROM_THE_PAGE = 'Esta puerta solo se abre desde la página que sirve el backend.'
-const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
+const GROOM_UNCONFIRMED_TITLE = 'No se ha podido confirmar el groom'
+const GROOM_UNCONFIRMED_DETAIL = 'Puede seguir en marcha: no lo vuelvas a pulsar. La página lo dirá en cuanto lo sepa.'
 const ISSUES_UNCERTAIN_TITLE = 'No se ha podido leer completa la lista de issues del epic'
 const AWAITING_MERGE = 'El spec congelado espera en un pull request: mergéalo para abrir el groom.'
 const AWAITING_WITHOUT_PULL_REQUEST =
@@ -110,8 +111,13 @@ const EpicGroomPanel = () => {
   const askBanner =
     refusal?.kind === 'refused' ? (
       <Banner type="error" role="alert" title={refusal.error} />
-    ) : refusal?.kind === 'backend-unreachable' ? (
-      <Banner type="error" role="alert" title={UNREACHABLE_MESSAGE} />
+    ) : refusal?.kind === 'unconfirmed' ? (
+      <Banner
+        type="warning"
+        role="alert"
+        title={GROOM_UNCONFIRMED_TITLE}
+        description={GROOM_UNCONFIRMED_DETAIL}
+      />
     ) : null
   const reslicingBanner =
     reslicing?.kind === 'refused' ? (

@@ -152,12 +152,61 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
     })
   })
 
-  it('a press whose body does not parse as JSON reads as backend-unreachable rather than rejecting', async () => {
+  it('a press whose answer cannot be read is confirmed by reading gate 2, and the groom it ran reaches the caller', async () => {
+    const fetching = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('<html><body>Bad Gateway</body></html>', { status: 502 }))
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomed().body, { status: 200 }))
+    vi.stubGlobal('fetch', fetching)
+
+    const outcome = await EpicGroomClient.groom(EpicGroomMother.KEY, EpicGroomMother.PLAN_FINGERPRINT)
+
+    expect(fetching).toHaveBeenNthCalledWith(2, '/epic-groom')
+    expect(outcome).toEqual({
+      kind: 'acted',
+      status: 'groomed',
+      milestone: EpicGroomMother.MILESTONE,
+      issues: [EpicGroomMother.BACKLOG_GATE, EpicGroomMother.BACKLOG_CHANNEL],
+      promoted: [],
+    })
+  })
+
+  it('a press the page cannot confirm either is unconfirmed, never a failure it did not measure', async () => {
     answerWith({ status: 502, body: '<html><body>Bad Gateway</body></html>' })
 
     const outcome = await EpicGroomClient.groom(EpicGroomMother.KEY, EpicGroomMother.PLAN_FINGERPRINT)
 
-    expect(outcome).toEqual({ kind: 'backend-unreachable' })
+    expect(outcome).toEqual({ kind: 'unconfirmed' })
+  })
+
+  it('a press confirmed by a read that still shows the dry run is unconfirmed, because nothing says it ran', async () => {
+    const fetching = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomable().body, { status: 200 }))
+    vi.stubGlobal('fetch', fetching)
+
+    const outcome = await EpicGroomClient.groom(EpicGroomMother.KEY, EpicGroomMother.PLAN_FINGERPRINT)
+
+    expect(outcome).toEqual({ kind: 'unconfirmed' })
+  })
+
+  it('a promotion whose answer cannot be read is confirmed the same way', async () => {
+    const fetching = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(new Response(EpicGroomMother.authorised().body, { status: 200 }))
+    vi.stubGlobal('fetch', fetching)
+
+    const outcome = await EpicGroomClient.promote(EpicGroomMother.KEY)
+
+    expect(outcome).toEqual({
+      kind: 'acted',
+      status: 'authorised',
+      milestone: EpicGroomMother.MILESTONE,
+      issues: [EpicGroomMother.READY_GATE, EpicGroomMother.READY_CHANNEL],
+      promoted: [],
+    })
   })
 
   it('a resliced body with no key reads as a state with no key rather than as unavailable', async () => {

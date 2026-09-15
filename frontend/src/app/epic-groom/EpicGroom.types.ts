@@ -27,4 +27,4 @@ export type GroomSessionOutcome =
   | { kind: 'unconfirmed' }
 export type EpicGroomAskOutcome =
   | { kind: 'acted'; status: 'groomed' | 'authorised'; milestone: string; issues: EpicIssue[]; promoted: number[] }
-  | { kind: 'refused'; code: string; error: string } | { kind: 'backend-unreachable' }
+  | { kind: 'refused'; code: string; error: string } | { kind: 'unconfirmed' }

@@ -266,10 +266,29 @@ describe('EpicGroomPanel', () => {
     expect(screen.queryByRole('button', GROOM_BUTTON)).not.toBeInTheDocument()
   })
 
-  it('a press whose answer body is not JSON re-enables the button and says the backend could not be reached', async () => {
+  it('a press whose answer never arrives is confirmed by reading, and the issues it created reach the screen', async () => {
     const fetching = vi
       .fn()
       .mockResolvedValueOnce(new Response(EpicGroomMother.groomable().body, { status: 200 }))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomed().body, { status: 200 }))
+    vi.stubGlobal('fetch', fetching)
+    const user = userEvent.setup()
+    render(<EpicGroomPanel />)
+    await screen.findByRole('button', GROOM_BUTTON)
+
+    await user.click(screen.getByRole('button', GROOM_BUTTON))
+
+    expect(await screen.findByText('#348 · The intermediate gate retires')).toBeInTheDocument()
+    expect(screen.getByRole('button', PROMOTE_BUTTON)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('a press the page cannot confirm says so as a warning instead of reporting a failure', async () => {
+    const fetching = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomable().body, { status: 200 }))
+      .mockResolvedValueOnce(new Response('<html><body>Bad Gateway</body></html>', { status: 502 }))
       .mockResolvedValueOnce(new Response('<html><body>Bad Gateway</body></html>', { status: 502 }))
     vi.stubGlobal('fetch', fetching)
     const user = userEvent.setup()
@@ -278,7 +297,10 @@ describe('EpicGroomPanel', () => {
 
     await user.click(screen.getByRole('button', GROOM_BUTTON))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
+    const banner = await screen.findByRole('alert')
+    expect(banner).toHaveTextContent('No se ha podido confirmar el groom')
+    expect(banner).toHaveTextContent('Puede seguir en marcha: no lo vuelvas a pulsar.')
+    expect(banner).not.toHaveTextContent('No se pudo contactar con el backend')
     expect(screen.getByRole('button', GROOM_BUTTON)).toBeEnabled()
   })
 

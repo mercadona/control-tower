@@ -157,6 +157,15 @@ and a press without the key is refused with `gate-not-from-the-page`.
 `useGatePresses.ts` holds those four presses and which one is in flight, so a
 button never borrows another's label while it waits.
 
+A press whose answer the page cannot read is **not** reported as a failure:
+`client.ts` reads `GET /epic-groom` once and answers what that read says, so a
+slow groom that did create the issues shows them, and where the read cannot tell
+either the panel says «No se ha podido confirmar el groom» as a warning and asks
+the person not to press again. Measured on a real repository: the panel said the
+backend could not be reached while the backend's own log read
+`gate 2 groom: "…" planned 4 issue(s), holds 2 now`, and pressing again is the
+worst move available when nobody can tell what was created.
+
 ## What is already decided
 
 - **It is never shipped with the plugin.** The marketplace's `source` is

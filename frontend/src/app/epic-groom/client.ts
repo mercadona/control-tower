@@ -46,6 +46,10 @@ const isEpicIssues = (value: unknown): value is EpicIssue[] =>
 const isActedStatus = (value: unknown): value is 'groomed' | 'authorised' =>
   value === 'groomed' || value === 'authorised'
 
+type ActedRead = Extract<EpicGroomOutcome, { kind: 'groomed' } | { kind: 'authorised' }>
+
+const readsAsActed = (outcome: EpicGroomOutcome): outcome is ActedRead => isActedStatus(outcome.kind)
+
 const pullRequestAt = (body: Record<string, unknown>, field: string): EpicPullRequest | null => {
   const named = body[field]
 
@@ -129,6 +133,19 @@ const read = async (): Promise<EpicGroomOutcome> => {
   }
 }
 
+const confirmedByReading = async (): Promise<EpicGroomAskOutcome> => {
+  const outcome = await read()
+  if (!readsAsActed(outcome)) return { kind: 'unconfirmed' }
+
+  return {
+    kind: 'acted',
+    status: outcome.kind,
+    milestone: outcome.milestone,
+    issues: outcome.issues,
+    promoted: [],
+  }
+}
+
 const press = async (path: string, headers: Record<string, string>): Promise<EpicGroomAskOutcome> => {
   let response: Response
   let body: unknown
@@ -136,11 +153,11 @@ const press = async (path: string, headers: Record<string, string>): Promise<Epi
     response = await fetch(path, { method: 'POST', headers })
     body = await response.json()
   } catch {
-    return { kind: 'backend-unreachable' }
+    return await confirmedByReading()
   }
   if (response.status === ACTED_STATUS) {
     if (!isRecord(body) || !isActedStatus(body.status) || typeof body.milestone !== 'string' || !isEpicIssues(body.issues)) {
-      return { kind: 'backend-unreachable' }
+      return await confirmedByReading()
     }
     return {
       kind: 'acted',
@@ -151,7 +168,7 @@ const press = async (path: string, headers: Record<string, string>): Promise<Epi
     }
   }
   if (!isRecord(body) || typeof body.code !== 'string' || typeof body.detail !== 'string') {
-    return { kind: 'backend-unreachable' }
+    return await confirmedByReading()
   }
   return { kind: 'refused', code: body.code, error: body.detail }
 }
