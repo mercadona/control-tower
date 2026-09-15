@@ -98,7 +98,7 @@ export class GroomSessionRoute {
       conversation: opened.conversation!,
       session: opened.session!,
       attention: SessionAttention.working(),
-    }))
+    }), opened.timeline)
     Answer.send(response, 202, {
       status: GroomSessionRoute.#STATUS,
       conversation: opened.conversation!.id.text,

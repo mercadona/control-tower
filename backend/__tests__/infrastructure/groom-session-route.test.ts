@@ -25,6 +25,7 @@ import { CoordinatingConversation } from '../../src/domain/value-objects/coordin
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { SessionAttention } from '../../src/domain/value-objects/session-attention.ts'
+import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
 
 class OpenGroomSessionSpy extends OpenGroomSession {
   readonly asked: OpenGroomSessionParams[]
@@ -42,7 +43,9 @@ class OpenGroomSessionSpy extends OpenGroomSession {
   }
 
   static opening(): OpenGroomSessionSpy {
-    return new OpenGroomSessionSpy(async () => GroomSessionOpened.opened(Mother.CONVERSATION, Mother.SESSION))
+    return new OpenGroomSessionSpy(
+      async () => GroomSessionOpened.opened(Mother.CONVERSATION, Mother.SESSION, Mother.TIMELINE)
+    )
   }
 
   static withNoSpec(): OpenGroomSessionSpy {
@@ -91,6 +94,11 @@ class Mother {
   })
 
   static readonly SESSION = new LiveSession({ id: 'session-9', name: 'brainstorming' })
+  static readonly TIMELINE = [
+    new SessionTimelineEvent({
+      id: 'groom-opened', kind: TimelineEventKind.OPENED, at: '2026-09-15T10:00:00.000Z', detail: null,
+    }),
+  ]
 
   static registry(): CoordinatingSessions {
     return new CoordinatingSessions({ liveSessions: new LiveSessionsDouble(), stderr: (): void => {} })
@@ -183,6 +191,7 @@ describe('GroomSessionRoute', () => {
     })])
     expect(held.held()?.state).toBe(CoordinatingSessionState.LIVE)
     expect(held.held()?.attention).toEqual(SessionAttention.working())
+    expect(held.timeline()).toEqual(Mother.TIMELINE)
   })
 
   it('a press without the gate key is refused and the use case is never asked', async () => {

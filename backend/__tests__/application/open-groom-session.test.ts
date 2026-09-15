@@ -13,6 +13,7 @@ import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { LiveSession } from '../../src/domain/value-objects/live-session.ts'
 import { PhasePrompt } from '../../src/domain/value-objects/phase-prompt.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
+import { SessionTimelineEvent, TimelineEventKind } from '../../src/domain/value-objects/session-timeline-event.ts'
 
 class EpicSpecsDouble extends EpicSpecs {
   answer: EpicSpec | null
@@ -74,6 +75,11 @@ class SessionHooksDouble extends SessionHooks {
 
 class ConversationRecordsDouble extends ConversationRecords {
   static readonly PATH = '/repo/coordinating-session/9c3f1b7e-4d2a-4c8b-9a3e-6f2b1a6c2e8f/phase-prompt.md'
+  static readonly TIMELINE = [
+    new SessionTimelineEvent({
+      id: 'groom-opened', kind: TimelineEventKind.OPENED, at: '2026-09-15T10:00:00.000Z', detail: null,
+    }),
+  ]
 
   prepared: { conversation: CoordinatingConversation, prompt: PhasePrompt }[]
   steps: string[]
@@ -86,10 +92,10 @@ class ConversationRecordsDouble extends ConversationRecords {
 
   async prepare({ conversation, prompt }: {
     conversation: CoordinatingConversation, prompt: PhasePrompt,
-  }): Promise<string> {
+  }): Promise<{ promptPath: string, timeline: readonly SessionTimelineEvent[] }> {
     this.prepared.push({ conversation, prompt })
     this.steps.push('prepare')
-    return ConversationRecordsDouble.PATH
+    return { promptPath: ConversationRecordsDouble.PATH, timeline: ConversationRecordsDouble.TIMELINE }
   }
 }
 
@@ -163,6 +169,7 @@ describe('OpenGroomSession', () => {
     expect(opened.outcome).toBe(GroomSessionOpening.NO_SPEC)
     expect(opened.conversation).toBeNull()
     expect(opened.session).toBeNull()
+    expect(opened.timeline).toEqual([])
     expect(flow.records.prepared).toEqual([])
     expect(flow.sessionHooks.installed).toEqual([])
     expect(flow.conversations.started).toEqual([])
@@ -184,6 +191,7 @@ describe('OpenGroomSession', () => {
 
     expect(opened.outcome).toBe(GroomSessionOpening.OPENED)
     expect(opened.session).toBe(ConversationsDouble.SESSION)
+    expect(opened.timeline).toBe(ConversationRecordsDouble.TIMELINE)
     const [started] = flow.conversations.started
     expect(started.promptPath).toBe(ConversationRecordsDouble.PATH)
     expect(started.conversation.root).toBe(Flow.ROOT)

@@ -7,6 +7,7 @@ import type { EpicSpecs } from '../../domain/ports/epic-specs.ts'
 import type { LiveSession } from '../../domain/value-objects/live-session.ts'
 import type { RepositoryName } from '../../domain/value-objects/repository-name.ts'
 import type { SessionHooks } from '../../domain/ports/session-hooks.ts'
+import type { SessionTimelineEvent } from '../../domain/value-objects/session-timeline-event.ts'
 
 export class OpenGroomSessionParams {
   readonly repository: RepositoryName
@@ -30,24 +31,31 @@ export class GroomSessionOpened {
   readonly outcome: GroomSessionOpeningValue
   readonly conversation: CoordinatingConversation | null
   readonly session: LiveSession | null
+  readonly timeline: readonly SessionTimelineEvent[]
 
-  private constructor({ outcome, conversation, session }: {
+  private constructor({ outcome, conversation, session, timeline }: {
     outcome: GroomSessionOpeningValue,
     conversation: CoordinatingConversation | null,
     session: LiveSession | null,
+    timeline: readonly SessionTimelineEvent[],
   }) {
     this.outcome = outcome
     this.conversation = conversation
     this.session = session
+    this.timeline = timeline
     Object.freeze(this)
   }
 
-  static opened(conversation: CoordinatingConversation, session: LiveSession): GroomSessionOpened {
-    return new GroomSessionOpened({ outcome: GroomSessionOpening.OPENED, conversation, session })
+  static opened(
+    conversation: CoordinatingConversation, session: LiveSession, timeline: readonly SessionTimelineEvent[]
+  ): GroomSessionOpened {
+    return new GroomSessionOpened({ outcome: GroomSessionOpening.OPENED, conversation, session, timeline })
   }
 
   static noSpec(): GroomSessionOpened {
-    return new GroomSessionOpened({ outcome: GroomSessionOpening.NO_SPEC, conversation: null, session: null })
+    return new GroomSessionOpened({
+      outcome: GroomSessionOpening.NO_SPEC, conversation: null, session: null, timeline: [],
+    })
   }
 }
 
@@ -81,10 +89,10 @@ export class OpenGroomSession {
     const prompt = PhasePrompt.groom({
       spec, milestone: spec.title()!, repository: params.repository, root: params.root,
     })
-    const promptPath = await this.records.prepare({ conversation, prompt })
+    const { promptPath, timeline } = await this.records.prepare({ conversation, prompt })
     await this.sessionHooks.install(params.root)
     const session = this.conversations.start({ conversation, promptPath })
 
-    return GroomSessionOpened.opened(conversation, session)
+    return GroomSessionOpened.opened(conversation, session, timeline)
   }
 }

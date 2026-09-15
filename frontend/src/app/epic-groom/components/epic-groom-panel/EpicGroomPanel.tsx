@@ -145,7 +145,7 @@ const EpicGroomPanel = () => {
 
   if (acted === null && read.kind === 'resliced') {
     return (
-      <Panel heading={HEADING}>
+      <div className="epic-groom-panel">
         <p className="epic-groom-panel__resliced">{RESLICED}</p>
         <Button onClick={() => void presses.publishReslicing()} disabled={gateKey === null || isPressing}>
           {presses.pressed === 'reslicing' ? PUBLISHING_RESLICING : PUBLISH_RESLICING}
@@ -160,7 +160,7 @@ const EpicGroomPanel = () => {
         )}
         {gateNotice}
         {reslicingBanner}
-      </Panel>
+      </div>
     )
   }
 
