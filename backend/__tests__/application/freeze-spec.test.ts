@@ -15,6 +15,8 @@ type RewriteAsked = { root: CheckoutRoot, spec: EpicSpec, text: string }
 
 type CommitAsked = { root: CheckoutRoot, paths: string[], message: string }
 
+type PublishingAsked = { root: CheckoutRoot, milestone: string }
+
 type OpenAsked = { repository: RepositoryName, branch: string, title: string, body: string }
 
 class EpicSpecsDouble extends EpicSpecs {
@@ -41,7 +43,7 @@ class EpicSpecsDouble extends EpicSpecs {
 
 class EpicBranchDouble extends EpicBranch {
   answer: string
-  publishableAsked: CheckoutRoot[]
+  publishingAsked: PublishingAsked[]
   commitAsked: CommitAsked[]
   pushAsked: string[]
   isCommitted: boolean
@@ -54,7 +56,7 @@ class EpicBranchDouble extends EpicBranch {
   constructor(answer: string, refusal: Error | null = null) {
     super()
     this.answer = answer
-    this.publishableAsked = []
+    this.publishingAsked = []
     this.commitAsked = []
     this.pushAsked = []
     this.isCommitted = false
@@ -65,8 +67,11 @@ class EpicBranchDouble extends EpicBranch {
     this.#refusal = refusal
   }
 
-  static refusingTheDefaultBranch(): EpicBranchDouble {
-    return new EpicBranchDouble('main', new EpicBranchNotPublished('/repo sits on main'))
+  static refusingToResolveTheDefaultBranch(): EpicBranchDouble {
+    return new EpicBranchDouble(
+      Mother.MILESTONE_BRANCH,
+      new EpicBranchNotPublished('neither /repo nor origin says which branch is default')
+    )
   }
 
   static refusingToPush(): EpicBranchDouble {
@@ -106,8 +111,8 @@ class EpicBranchDouble extends EpicBranch {
     return done
   }
 
-  async publishable(root: CheckoutRoot): Promise<string> {
-    this.publishableAsked.push(root)
+  async publishing(asked: PublishingAsked): Promise<string> {
+    this.publishingAsked.push(asked)
     if (this.#refusal !== null) throw this.#refusal
     return this.answer
   }
@@ -164,6 +169,7 @@ class Mother {
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly REPOSITORY = new RepositoryName('owner/name')
   static readonly BRANCH = 'epic/329-freeze'
+  static readonly MILESTONE_BRANCH = 'milestone/2026-01-01-test-execution'
   static readonly TODAY = () => new Date(2026, 8, 14)
   static readonly ON = '2026-09-14'
   static readonly PULL_REQUEST: ReviewedPullRequest = Object.freeze({
@@ -353,6 +359,15 @@ describe('FreezeSpec', () => {
     ])
   })
 
+  it('the branch the freeze publishes on is named after the spec\'s own file, never after the title it carries', async () => {
+    const flow = Flow.freezing(Mother.draftFreezable())
+
+    const frozen = await flow.run()
+
+    expect(frozen.outcome).toBe(FreezeOutcome.FROZEN)
+    expect(flow.branch.publishingAsked).toEqual([{ root: Mother.ROOT, milestone: Mother.MILESTONE_BRANCH }])
+  })
+
   it('a checkout with no execution spec answers no-spec and writes nothing', async () => {
     const flow = Flow.freezing(null)
 
@@ -370,13 +385,13 @@ describe('FreezeSpec', () => {
   it('the branch is vouched for before the state line is written, so a refused publish leaves the spec untouched', async () => {
     const flow = new Flow({
       specs: new EpicSpecsDouble(Mother.draftFreezable()),
-      branch: EpicBranchDouble.refusingTheDefaultBranch(),
+      branch: EpicBranchDouble.refusingToResolveTheDefaultBranch(),
     })
 
     const refusal = await flow.run().catch((cause) => cause)
 
     expect(refusal).toBeInstanceOf(EpicBranchNotPublished)
-    expect(flow.branch.publishableAsked).toEqual([Mother.ROOT])
+    expect(flow.branch.publishingAsked).toEqual([{ root: Mother.ROOT, milestone: Mother.MILESTONE_BRANCH }])
     expect(flow.specs.rewriteAsked).toEqual([])
     expect(flow.branch.commitAsked).toEqual([])
     expect(flow.pullRequests.openAsked).toEqual([])

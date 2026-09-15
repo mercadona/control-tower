@@ -9,7 +9,10 @@ class GitEpicBranchDouble {
   static readonly CHECKOUT = new CheckoutRoot(GitEpicBranchDouble.ROOT)
   static readonly DEFAULT_BRANCH = 'main'
   static readonly EPIC_BRANCH = 'epic/the-loop'
+  static readonly MILESTONE_BRANCH = 'milestone/2026-09-14-the-loop-execution'
   static readonly MESSAGE = 'freeze the execution spec'
+  static readonly SHA = '9f2c1d7a6b5e4c3d2a1f0e9d8c7b6a5f4e3d2c1b'
+  static readonly NO_LOCAL_HEAD = 'fatal: ref refs/remotes/origin/HEAD is not a symbolic ref'
   static readonly PATHS = [
     'docs/superpowers/specs/2026-09-14-the-loop-execution.md',
     'docs/superpowers/specs/2026-09-14-the-loop-design.md',
@@ -17,14 +20,24 @@ class GitEpicBranchDouble {
 
   current: ProcessOutput
   symbolicRef: ProcessOutput
+  remoteHead: ProcessOutput
+  localBranch: ProcessOutput
+  remoteBranch: ProcessOutput
+  fetch: ProcessOutput
+  switched: ProcessOutput
   add: ProcessOutput
   commit: ProcessOutput
   push: ProcessOutput
   calls: string[][]
 
-  constructor({ current, symbolicRef, add, commit, push }: {
+  constructor({ current, symbolicRef, remoteHead, localBranch, remoteBranch, fetch, switched, add, commit, push }: {
     current?: ProcessOutput,
     symbolicRef?: ProcessOutput,
+    remoteHead?: ProcessOutput,
+    localBranch?: ProcessOutput,
+    remoteBranch?: ProcessOutput,
+    fetch?: ProcessOutput,
+    switched?: ProcessOutput,
     add?: ProcessOutput,
     commit?: ProcessOutput,
     push?: ProcessOutput,
@@ -32,10 +45,47 @@ class GitEpicBranchDouble {
     this.current = current ?? GitEpicBranchDouble.printing(`${GitEpicBranchDouble.EPIC_BRANCH}\n`)
     this.symbolicRef = symbolicRef ??
       GitEpicBranchDouble.printing(`refs/remotes/origin/${GitEpicBranchDouble.DEFAULT_BRANCH}\n`)
+    this.remoteHead = remoteHead ?? GitEpicBranchDouble.refused(GitEpicBranchDouble.NO_LOCAL_HEAD)
+    this.localBranch = localBranch ?? GitEpicBranchDouble.refused('')
+    this.remoteBranch = remoteBranch ?? GitEpicBranchDouble.printing('')
+    this.fetch = fetch ?? GitEpicBranchDouble.ok()
+    this.switched = switched ?? GitEpicBranchDouble.ok()
     this.add = add ?? GitEpicBranchDouble.ok()
     this.commit = commit ?? GitEpicBranchDouble.ok()
     this.push = push ?? GitEpicBranchDouble.ok()
     this.calls = []
+  }
+
+  static onTheDefaultBranch(): GitEpicBranchDouble {
+    return new GitEpicBranchDouble({
+      current: GitEpicBranchDouble.printing(`${GitEpicBranchDouble.DEFAULT_BRANCH}\n`),
+    })
+  }
+
+  static holdingTheMilestoneBranchLocally(): GitEpicBranchDouble {
+    const holding = GitEpicBranchDouble.onTheDefaultBranch()
+    holding.localBranch = GitEpicBranchDouble.printing(`${GitEpicBranchDouble.SHA}\n`)
+
+    return holding
+  }
+
+  static holdingTheMilestoneBranchOnTheRemoteOnly(): GitEpicBranchDouble {
+    const holding = GitEpicBranchDouble.onTheDefaultBranch()
+    holding.remoteBranch = GitEpicBranchDouble.printing(
+      `${GitEpicBranchDouble.SHA}\trefs/heads/${GitEpicBranchDouble.MILESTONE_BRANCH}\n`
+    )
+
+    return holding
+  }
+
+  static withNoLocalOriginHead(): GitEpicBranchDouble {
+    const asking = GitEpicBranchDouble.onTheDefaultBranch()
+    asking.symbolicRef = GitEpicBranchDouble.refused(GitEpicBranchDouble.NO_LOCAL_HEAD)
+    asking.remoteHead = GitEpicBranchDouble.printing(
+      `ref: refs/heads/${GitEpicBranchDouble.DEFAULT_BRANCH}\tHEAD\n${GitEpicBranchDouble.SHA}\tHEAD\n`
+    )
+
+    return asking
   }
 
   branch(): GitEpicBranch {
@@ -49,7 +99,12 @@ class GitEpicBranchDouble {
 
   answering(argv: string[]): ProcessOutput {
     if (argv.includes('rev-parse') && argv.includes('--abbrev-ref')) return this.current
+    if (argv.includes('rev-parse') && argv.includes('--verify')) return this.localBranch
     if (argv.includes('symbolic-ref')) return this.symbolicRef
+    if (argv.includes('ls-remote') && argv.includes('--symref')) return this.remoteHead
+    if (argv.includes('ls-remote')) return this.remoteBranch
+    if (argv.includes('fetch')) return this.fetch
+    if (argv.includes('switch')) return this.switched
     if (argv.includes('add')) return this.add
     if (argv.includes('commit')) return this.commit
     if (argv.includes('push')) return this.push
@@ -58,11 +113,18 @@ class GitEpicBranchDouble {
 
   async published(paths: string[] = GitEpicBranchDouble.PATHS): Promise<string> {
     const epic = this.branch()
-    const branch = await epic.publishable(GitEpicBranchDouble.CHECKOUT)
+    const branch = await epic.publishing({
+      root: GitEpicBranchDouble.CHECKOUT,
+      milestone: GitEpicBranchDouble.MILESTONE_BRANCH,
+    })
     await epic.commit({ root: GitEpicBranchDouble.CHECKOUT, paths, message: GitEpicBranchDouble.MESSAGE })
     await epic.push({ root: GitEpicBranchDouble.CHECKOUT, branch })
 
     return branch
+  }
+
+  cut(): boolean {
+    return this.calls.some((argv) => argv.includes('switch') && argv.includes('--create'))
   }
 
   static printing(stdout: string): ProcessOutput {
@@ -79,15 +141,79 @@ class GitEpicBranchDouble {
 }
 
 describe('GitEpicBranch', () => {
-  it('refuses before writing anything when the checkout sits on the branch the remote calls default', async () => {
-    const git = new GitEpicBranchDouble({
-      current: GitEpicBranchDouble.printing('main\n'),
-      symbolicRef: GitEpicBranchDouble.printing('refs/remotes/origin/main\n'),
-    })
+  it('a checkout on the branch the remote calls default cuts the milestone branch and publishes on that one', async () => {
+    const git = GitEpicBranchDouble.onTheDefaultBranch()
+
+    const answered = await git.published()
+
+    expect(answered).toBe(GitEpicBranchDouble.MILESTONE_BRANCH)
+    expect(git.calls).toContainEqual([
+      '-C', GitEpicBranchDouble.ROOT, 'switch', '--create', GitEpicBranchDouble.MILESTONE_BRANCH,
+    ])
+    expect(git.calls).toContainEqual([
+      '-C', GitEpicBranchDouble.ROOT, 'push', '--set-upstream', GitEpicBranch.REMOTE,
+      GitEpicBranchDouble.MILESTONE_BRANCH,
+    ])
+    expect(git.calls.some((argv) => argv.includes(GitEpicBranchDouble.DEFAULT_BRANCH))).toBe(false)
+  })
+
+  it('a milestone branch this checkout already holds is switched to, never cut a second time', async () => {
+    const git = GitEpicBranchDouble.holdingTheMilestoneBranchLocally()
+
+    const answered = await git.published()
+
+    expect(answered).toBe(GitEpicBranchDouble.MILESTONE_BRANCH)
+    expect(git.calls).toContainEqual([
+      '-C', GitEpicBranchDouble.ROOT, 'rev-parse', '--verify', '--quiet',
+      `refs/heads/${GitEpicBranchDouble.MILESTONE_BRANCH}`,
+    ])
+    expect(git.calls).toContainEqual([
+      '-C', GitEpicBranchDouble.ROOT, 'switch', GitEpicBranchDouble.MILESTONE_BRANCH,
+    ])
+    expect(git.cut()).toBe(false)
+  })
+
+  it('a milestone branch only the remote holds is fetched under its own name, never cut a second time', async () => {
+    const git = GitEpicBranchDouble.holdingTheMilestoneBranchOnTheRemoteOnly()
+
+    const answered = await git.published()
+
+    expect(answered).toBe(GitEpicBranchDouble.MILESTONE_BRANCH)
+    expect(git.calls).toContainEqual([
+      '-C', GitEpicBranchDouble.ROOT, 'ls-remote', '--heads', GitEpicBranch.REMOTE,
+      GitEpicBranchDouble.MILESTONE_BRANCH,
+    ])
+    expect(git.calls).toContainEqual([
+      '-C', GitEpicBranchDouble.ROOT, 'fetch', GitEpicBranch.REMOTE,
+      `${GitEpicBranchDouble.MILESTONE_BRANCH}:${GitEpicBranchDouble.MILESTONE_BRANCH}`,
+    ])
+    expect(git.calls).toContainEqual([
+      '-C', GitEpicBranchDouble.ROOT, 'switch', GitEpicBranchDouble.MILESTONE_BRANCH,
+    ])
+    expect(git.cut()).toBe(false)
+  })
+
+  it('a checkout whose clone never wrote origin/HEAD asks the remote itself which branch is default', async () => {
+    const git = GitEpicBranchDouble.withNoLocalOriginHead()
+
+    const answered = await git.published()
+
+    expect(git.calls).toContainEqual([
+      '-C', GitEpicBranchDouble.ROOT, 'ls-remote', '--symref', GitEpicBranch.REMOTE, 'HEAD',
+    ])
+    expect(answered).toBe(GitEpicBranchDouble.MILESTONE_BRANCH)
+  })
+
+  it('a default branch neither the checkout nor the remote names refuses, saying which command declares it', async () => {
+    const git = GitEpicBranchDouble.onTheDefaultBranch()
+    git.symbolicRef = GitEpicBranchDouble.refused(GitEpicBranchDouble.NO_LOCAL_HEAD)
+    git.remoteHead = GitEpicBranchDouble.refused('fatal: could not read from remote repository')
 
     const refusal = await git.published().catch((cause) => cause)
 
     expect(refusal).toBeInstanceOf(EpicBranchNotPublished)
+    expect((refusal as Error).message).toContain(GitEpicBranch.DECLARE_DEFAULT)
+    expect(git.calls.some((argv) => argv.includes('switch'))).toBe(false)
     expect(git.calls.some((argv) => argv.includes('add'))).toBe(false)
     expect(git.calls.some((argv) => argv.includes('commit'))).toBe(false)
     expect(git.calls.some((argv) => argv.includes('push'))).toBe(false)
@@ -106,6 +232,7 @@ describe('GitEpicBranch', () => {
     expect(git.calls).toContainEqual([
       '-C', GitEpicBranchDouble.ROOT, 'push', '--set-upstream', GitEpicBranch.REMOTE, GitEpicBranchDouble.EPIC_BRANCH,
     ])
+    expect(git.cut()).toBe(false)
   })
 
   it('current answers the branch the checkout is on', async () => {
@@ -128,5 +255,20 @@ describe('GitEpicBranch', () => {
     expect(unreadableSymbolicRef).toBeInstanceOf(EpicBranchNotUnderstood)
     expect(pushRefused).not.toBeInstanceOf(EpicBranchNotUnderstood)
     expect(unreadableSymbolicRef).not.toBeInstanceOf(EpicBranchNotPublished)
+  })
+
+  it('a remote that refused to name its default is told apart from one whose answer cannot be read', async () => {
+    const unreachable = GitEpicBranchDouble.withNoLocalOriginHead()
+    unreachable.remoteHead = GitEpicBranchDouble.refused('fatal: could not read from remote repository')
+    const unreadable = GitEpicBranchDouble.withNoLocalOriginHead()
+    unreadable.remoteHead = GitEpicBranchDouble.printing(`${GitEpicBranchDouble.SHA}\tHEAD\n`)
+
+    const remoteRefused = await unreachable.published().catch((cause) => cause)
+    const remoteUnreadable = await unreadable.published().catch((cause) => cause)
+
+    expect(remoteRefused).toBeInstanceOf(EpicBranchNotPublished)
+    expect(remoteUnreadable).toBeInstanceOf(EpicBranchNotUnderstood)
+    expect(remoteRefused).not.toBeInstanceOf(EpicBranchNotUnderstood)
+    expect(remoteUnreadable).not.toBeInstanceOf(EpicBranchNotPublished)
   })
 })

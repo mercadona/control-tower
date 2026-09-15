@@ -79,7 +79,7 @@ export class FreezeSpec {
       )
     }
 
-    const branch = await this.branch.publishable(params.root)
+    const branch = await this.branch.publishing({ root: params.root, milestone: spec.milestoneBranch() })
     const paths = [design, spec.path]
     if (await this.#delivered({ params, spec, branch })) {
       return new SpecFrozen({ outcome: FreezeOutcome.ALREADY_FROZEN, findings: [], on: null, pullRequest: null })
