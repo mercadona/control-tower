@@ -104,6 +104,18 @@ describe('seam 1 — brainstorming ends in an execution spec + freeze, not in wr
     for (const p of ['hablada', 'deducida', 'propuesta']) expect(s).toContain(p)
   })
 
+  // Amendment 1 of #339: the freeze gate now refuses a decision that does not
+  // say where it comes from, and the taxonomy widened so that a source can be
+  // NAMED. What that buys the reader is only real if the summary they read
+  // separates the two, and the budget of that summary does not move to pay
+  // for it.
+  it('the closing summary separates the decisions the product backs from the ones the TL backs, in the same fifteen lines', () => {
+    const s = skill()
+    for (const source of ['historia', 'prd', 'prototipo']) expect(s).toContain(source)
+    expect(s).toContain('grouped apart from the ones the TL backs')
+    expect(s).toContain('at most 15 lines')
+  })
+
   // The execution spec's template already travels with the plugin and
   // `ct-init` seeds it at a KNOWN path. While the skill said only "the repo's
   // `_TEMPLATE-execution-spec.md`", with no path, whoever ran step 8 had to
