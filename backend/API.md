@@ -1084,6 +1084,57 @@ curl -s -X POST -H 'x-gate-key: 3f9c1a…' http://127.0.0.1:8787/spec-freeze
 
 ---
 
+## `POST /spec-reslicing`
+
+Makes a correction of the frozen spec's slices table travel. The coordinating
+session in the groom phase edits §9 and stops; this is what commits it on the
+milestone branch, pushes it and opens the pull request whose **merge** authorises
+the groom. It is gate 1's own path — `EpicBranch.publishing / committed / commit
+/ pushed / push` and `PullRequests.openOfBranch / open`, the same two ports — in
+a use case of its own, so a correction never reaches the default branch by
+another door.
+
+The spec stays `CONGELADA`: **nothing is written into the spec**, neither its
+state line nor its freeze date. That is what makes this a correction and not a
+second freeze.
+
+**Request** — no body. The checkout and the repository are the ones the held
+coordinating session names; the gate key travels in `x-gate-key`.
+
+**200 OK**
+
+```json
+{"status":"published","pullRequest":{"number":13,"url":"https://github.com/owner/name/pull/13"}}
+```
+
+`pullRequest` is the pull request the correction travels in: the one already open
+for that branch when there is one — pressing twice opens no second — and
+otherwise the one this press created. Its body carries the marker
+`<!-- ct-groom:reslicing -->`, which is what `GET /epic-groom` later reads to
+know that a merge authorised the groom.
+
+**Refusals**
+
+| Status | `code` | When |
+|---|---|---|
+| 403 | `gate-not-from-the-page` | the request carries no key, or not the one the page was given |
+| 400 | `no-coordinating-session` | nothing is held, so there is no checkout whose slicing could be published |
+| 409 | `reslicing-in-progress` | a publication of this slicing is under way |
+| 400 | `no-epic-spec` | no execution spec exists in this checkout to publish |
+| 400 | `spec-not-frozen` | the spec is not frozen: gate 1 owns a draft, not this door |
+
+Plus every `PlanCollapse` code gate 1 can meet on the same path —
+`epic-branch-not-published`, `epic-branch-not-understood`,
+`epic-pull-request-not-opened`, `epic-spec-not-read`, `pull-request-not-read`,
+`pull-request-not-understood` — each with 400 and the tool's own words in
+`detail`.
+
+```
+curl -s -X POST http://127.0.0.1:8787/spec-reslicing -H 'x-gate-key: <key>'
+```
+
+---
+
 ## `GET /epic-groom`
 
 Gate 2's own state for the checkout the held coordinating session sits in, derived from the

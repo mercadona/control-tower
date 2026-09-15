@@ -57,6 +57,7 @@ import { ReadImplementationProgress } from '../application/queries/read-implemen
 import { ReadImplementationHistory } from '../application/queries/read-implementation-history.ts'
 import { ReadSpecFreeze } from '../application/queries/read-spec-freeze.ts'
 import { FreezeSpec } from '../application/actions/freeze-spec.ts'
+import { PublishReslicing } from '../application/actions/publish-reslicing.ts'
 import { ReadEpicGroom } from '../application/queries/read-epic-groom.ts'
 import { GroomEpic } from '../application/actions/groom-epic.ts'
 import { PromoteEpic } from '../application/actions/promote-epic.ts'
@@ -545,6 +546,7 @@ class CtApi {
     const freezeSpec = new FreezeSpec({
       specs: epicSpecs, branch: epicBranch, pullRequests, now: () => new Date(),
     })
+    const publishReslicing = new PublishReslicing({ specs: epicSpecs, branch: epicBranch, pullRequests })
     const publishedSpecs = new GhPublishedSpecs({
       gh,
       digest: (text) => createHash('sha1').update(text, 'utf8').digest('hex'),
@@ -606,6 +608,8 @@ class CtApi {
       freezeSpec,
       gateKey,
       freezesInFlight: new WorkInFlight(),
+      publishReslicing,
+      reslicingsInFlight: new WorkInFlight(),
       readEpicGroom,
       groomEpic,
       epicGroomInFlight: new WorkInFlight(),

@@ -20,6 +20,7 @@ import { CoordinatingSessionRoute } from './coordinating-session-route.ts'
 import { GroomSessionRoute } from './groom-session-route.ts'
 import { SessionHooksRoute } from './session-hooks-route.ts'
 import { SpecFreezeRoute } from './spec-freeze-route.ts'
+import { SpecReslicingRoute } from './spec-reslicing-route.ts'
 import { EpicGroomRoute } from './epic-groom-route.ts'
 import { EpicPromotionRoute } from './epic-promotion-route.ts'
 import type { StartPlan } from '../application/actions/start-plan.ts'
@@ -31,6 +32,7 @@ import type { GateKey } from './gate-key.ts'
 import type { WorkInFlight } from './work-in-flight.ts'
 import type { ReadSpecFreeze } from '../application/queries/read-spec-freeze.ts'
 import type { FreezeSpec } from '../application/actions/freeze-spec.ts'
+import type { PublishReslicing } from '../application/actions/publish-reslicing.ts'
 import type { ReadEpicGroom } from '../application/queries/read-epic-groom.ts'
 import type { GroomEpic } from '../application/actions/groom-epic.ts'
 import type { PromoteEpic } from '../application/actions/promote-epic.ts'
@@ -98,6 +100,8 @@ export type ApiCollaborators = {
   freezeSpec?: FreezeSpec | null,
   gateKey?: GateKey | null,
   freezesInFlight?: WorkInFlight | null,
+  publishReslicing?: PublishReslicing | null,
+  reslicingsInFlight?: WorkInFlight | null,
   readEpicGroom?: ReadEpicGroom | null,
   groomEpic?: GroomEpic | null,
   epicGroomInFlight?: WorkInFlight | null,
@@ -160,6 +164,8 @@ export class ApiServer {
   readonly freezeSpec: FreezeSpec | null | undefined
   readonly gateKey: GateKey | null | undefined
   readonly freezesInFlight: WorkInFlight | null | undefined
+  readonly publishReslicing: PublishReslicing | null | undefined
+  readonly reslicingsInFlight: WorkInFlight | null | undefined
   readonly readEpicGroom: ReadEpicGroom | null | undefined
   readonly groomEpic: GroomEpic | null | undefined
   readonly epicGroomInFlight: WorkInFlight | null | undefined
@@ -173,7 +179,7 @@ export class ApiServer {
     planEvents, sessions, activePlans, externalTools, listLiveSessions, liveSessions,
     watchLiveSession, typeIntoSession, resizeSession, implementationStarts, recovery = null,
     openCoordinatingSession, openGroomSession, coordinatingSessions, readSpecFreeze, freezeSpec, gateKey, freezesInFlight,
-    readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic,
+    publishReslicing, reslicingsInFlight, readEpicGroom, groomEpic, epicGroomInFlight, promoteEpic,
     stderr, frontendRoot,
   }: ApiCollaborators) {
     this.requestedPort = port
@@ -200,6 +206,8 @@ export class ApiServer {
     this.freezeSpec = freezeSpec
     this.gateKey = gateKey
     this.freezesInFlight = freezesInFlight
+    this.publishReslicing = publishReslicing
+    this.reslicingsInFlight = reslicingsInFlight
     this.readEpicGroom = readEpicGroom
     this.groomEpic = groomEpic
     this.epicGroomInFlight = epicGroomInFlight
@@ -324,6 +332,11 @@ export class ApiServer {
     app.post(SpecFreezeRoute.PATH, Browsers.turnAwayForeign,
       SpecFreezeRoute.freezing(this.coordinatingSessions!, this.freezeSpec!, this.gateKey!, this.freezesInFlight!))
     app.all(SpecFreezeRoute.PATH, SpecFreezeRoute.refuseOtherMethods)
+    app.post(SpecReslicingRoute.PATH, Browsers.turnAwayForeign,
+      SpecReslicingRoute.publishing(
+        this.coordinatingSessions!, this.publishReslicing!, this.gateKey!, this.reslicingsInFlight!
+      ))
+    app.all(SpecReslicingRoute.PATH, SpecReslicingRoute.refuseOtherMethods)
     app.get(EpicGroomRoute.PATH, Browsers.turnAwayForeign,
       EpicGroomRoute.reading(this.coordinatingSessions!, this.readEpicGroom!, this.gateKey!))
     app.post(EpicGroomRoute.PATH, Browsers.turnAwayForeign,
