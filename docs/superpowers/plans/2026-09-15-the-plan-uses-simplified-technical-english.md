@@ -619,7 +619,7 @@ now says which word. The list is a blacklist of 48 entries, not the
 standard's dictionary of about 900 approved words: a whitelist would
 reject every technical name of the project, and a plan is full of them.
 
-Two kinds of word stay out of it and the comment above the list says so:
+Two kinds of word stay out of it, and this plan says which because the code may not:
 a value a contract fixes (`modify` on this list would fail every plan
 ever written) and the repository's own ubiquitous language.
 
@@ -1019,7 +1019,7 @@ describe('the language of the plan', () => {
     const long = Array.from({ length: 30 }, (_, i) => `word${i}`).join(' ')
     const plan = planWithTasks([[CONTRACT]], { beforeTasks: [] }).replace('Unit with vitest.', `${long}.`)
     expect(violationsOf(plan, 'ste')).toHaveLength(1)
-    expect(violationsOf(plan, 'ste')[0]).toContain('length —')
+    expect(violationsOf(plan, 'ste')[0].detail).toContain('length —')
   })
 
   it('leaves a plan whose prose obeys the standard with no ste violation', () => {
