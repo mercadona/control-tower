@@ -17,6 +17,10 @@ import { readFileSync, realpathSync } from 'node:fs'
 import { resolve as resolvePath, relative as relativePath } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { analyzeSlicesTable, isNoValueCell } from './slices.js'
+// #348: which repository each row of the table lands in, and the two ways a
+// dependency can cross one. The parser delivers the raw cells; this module is
+// the only place that decides what they mean — the same split as gates.js.
+import { MilestoneRepos, RepoRefusal } from './milestone-repos.js'
 // parseSignalCell (Slice 10): the SAME classifier with which groom.js decides
 // what it renders — here it is used to abort BEFORE any render or mutation when
 // a row declares an exemption with no reason.
@@ -426,6 +430,48 @@ if (!report.tableFound) {
       : `slice #${first.n} depends on #${first.dep}, which does not exist in the table`
     hardErrors.push(`${report.invalidDepRefs.length} "Dep" reference(s) in the §9 table point at a slice that does not exist, or at themselves (example: ${example}) — every "#N" in Dep has to point at a "#" that exists in the table and is different from the slice itself; fix those rows and try again`)
   }
+}
+
+// #348 — THE THREE REFUSALS ABOUT REPOSITORIES, AND WHY THEY LIVE HERE.
+//
+// A milestone has ONE home repository —the `--repo` of this run, where its
+// conversation lives and its spec is committed— and N target repositories, one
+// per `Repo` cell. `homeRepo` falls back to the same placeholder the orphan
+// warnings already use (`blockerRepoRef`, further down) so that a --dry-run
+// with no --repo reads the same as one with it: a dry run that validates LESS
+// than the real run is the trap F1 closed.
+//
+// The three refusals are aggregated into `hardErrors` like every other class of
+// breakage, so whoever fixes the spec fixes it in one pass, and they land at
+// the groom —before a single write, and also under --dry-run— because that is
+// where a human is still looking at the spec. A refusal at dispatch arrives
+// when the work is already claimed.
+//
+// The dependency one is the TL's ruling on the question the issue left open: a
+// dependency names a slice of the same milestone in the SAME repository, full
+// stop. Accepting the `owner/repo#N` spelling and refusing it later would be
+// half-allowing it, which is worse than not allowing it: the dispatcher cannot
+// see a merge in another repository from the home checkout, so it can neither
+// confirm nor deny it, and this repo does not answer confidently what it cannot
+// know (the distinction cmux.js is built on). Nothing here, or anywhere else,
+// waits on such a merge. What the rule costs is said out loud in the message: a
+// slice of one repository cannot be ordered after a slice of another, so a
+// milestone that needs that ordering expresses it another way or does not span
+// repositories.
+const homeRepo = typeof repo === 'string' ? repo : '<owner/repo>'
+const { assignments: repoOfOrder, targets: targetRepos, refusals: repoRefusals } =
+  MilestoneRepos.of({ slices: report.slices, homeRepo })
+for (const refusal of repoRefusals.filter((r) => r.kind === RepoRefusal.SEVERAL)) {
+  hardErrors.push(`row #${refusal.n} of the §9 table names more than one repository in its "Repo" column ("${refusal.raw}") — one row, one repository: a slice never spans two. Split it into one row per repository (each with its own "#", its own Acepta and its own Dep inside its repository) and try again`)
+}
+for (const refusal of repoRefusals.filter((r) => r.kind === RepoRefusal.MALFORMED)) {
+  hardErrors.push(`row #${refusal.n} of the §9 table has a "Repo" column that is not a repository ("${refusal.raw}") — it has to be written as owner/repo (e.g. mercadona/control-tower), with no backticks, no bold and no spaces; leave the cell empty (or "–") for the milestone's home repository, ${homeRepo}, and try again`)
+}
+for (const named of MilestoneRepos.namedRepoDeps(report.slices)) {
+  hardErrors.push(`row #${named.n} of the §9 table writes a dependency that names another repository ("${named.raw}") — a dependency names a slice of THIS milestone in the SAME repository, written "#N" against the "#" of the table. It is refused here, where you can still fix the spec, and not at dispatch, where the work would already be claimed: the dispatcher cannot see a merge in ${named.repo} from the home checkout, so it could neither confirm nor deny it. What that costs: a slice of one repository cannot be ordered after a slice of another — express that ordering another way, or do not spread this milestone across repositories`)
+}
+for (const crossing of MilestoneRepos.crossRepoDeps({ slices: report.slices, assignments: repoOfOrder })) {
+  hardErrors.push(`slice #${crossing.n} of the §9 table lands in ${crossing.repo} and depends on #${crossing.dep}, which lands in ${crossing.depRepo} — a dependency names a slice of THIS milestone in the SAME repository. It is refused here, where you can still fix the spec, and not at dispatch, where the work would already be claimed: the dispatcher cannot see that merge from the home checkout, so it could neither confirm nor deny it. What that costs: a slice of one repository cannot be ordered after a slice of another — express that ordering another way, or do not spread this milestone across repositories`)
 }
 
 if (hardErrors.length) {

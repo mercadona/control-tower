@@ -2114,3 +2114,94 @@ describe('the Señal column in the groom (Slice 10)', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 })
+
+// #348 — WHAT THE GROOM REFUSES ABOUT REPOSITORIES, AND WHY HERE.
+//
+// A milestone gains a home repository (the `--repo` of the groom) and N target
+// repositories, one per `Repo` cell. Three things are refused, and all three
+// are refused HERE: at the groom, with exit 2, before a single write and also
+// under --dry-run — which is where a human is still looking at the spec and can
+// fix it. The alternative (refusing at dispatch) arrives when the work is
+// already claimed.
+//
+// The third one is the TL's ruling on the decision the issue left open: a
+// dependency names a slice of the same milestone in the SAME repository, full
+// stop. Half-allowing it —accepting the spelling and refusing it later— is
+// worse than not allowing it, so both ways of crossing are refused and nothing
+// anywhere waits on a merge in another repository.
+const REPO_SPEC = (rowTwoRepo, rowTwoDep = '#1') => `## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices
+| # | Slice | Tipo | Entrega | Dep | Acepta | Protegido | Repo |
+|---|-------|------|---------|-----|--------|-----------|------|
+| 1 | login | backend | modelo | – | AC-1.1 | schema | – |
+| 2 | refresh | backend | flow | ${rowTwoDep} | AC-2.1 | – | ${rowTwoRepo} |
+`
+
+describe('ct-groom — the repositories a spec may name (#348)', () => {
+  const groom = (spec) => spawnSync('node', [script, spec, '--repo', 'o/home', '--milestone', 'Epic', '--dry-run'], { encoding: 'utf8', env: fakeEnv() })
+  const specWith = (body) => {
+    const dir = makeSpecDir('ctg-')
+    const spec = join(dir, 'spec.md')
+    writeFileSync(spec, body)
+    return { dir, spec }
+  }
+
+  it('a row naming two repositories aborts with exit 2 naming the row', () => {
+    const { dir, spec } = specWith(REPO_SPEC('o/a, o/b'))
+    const res = groom(spec)
+    expect(res.status).toBe(2)
+    expect(res.stderr).toContain('#2')
+    expect(res.stderr).toContain('o/a, o/b')
+    expect(res.stderr).toMatch(/one row, one repository/i)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('a row naming one repository does not abort', () => {
+    const { dir, spec } = specWith(REPO_SPEC('o/other', '–'))
+    const res = groom(spec)
+    expect(res.status).toBe(0)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('a malformed Repo cell aborts naming the row and the cell', () => {
+    const { dir, spec } = specWith(REPO_SPEC('`o/a`'))
+    const res = groom(spec)
+    expect(res.status).toBe(2)
+    expect(res.stderr).toContain('#2')
+    expect(res.stderr).toContain('`o/a`')
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('a dependency on a row of another repository aborts naming both repositories', () => {
+    const { dir, spec } = specWith(REPO_SPEC('o/other'))
+    const res = groom(spec)
+    expect(res.status).toBe(2)
+    expect(res.stderr).toContain('o/other')
+    expect(res.stderr).toContain('o/home')
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('the refusal says a slice cannot be ordered after a slice of another repository', () => {
+    const { dir, spec } = specWith(REPO_SPEC('o/other'))
+    const res = groom(spec)
+    expect(res.stderr).toMatch(/cannot be ordered after/i)
+    expect(res.stderr).not.toMatch(/wait/i)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('the owner/repo#N spelling aborts even when its number exists in the table', () => {
+    const { dir, spec } = specWith(REPO_SPEC('–', 'o/other#1'))
+    const res = groom(spec)
+    expect(res.status).toBe(2)
+    expect(res.stderr).toContain('o/other#1')
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('a dependency inside the same repository grooms as it always did', () => {
+    const { dir, spec } = specWith(REPO_SPEC('o/other', '–'))
+    const res = groom(spec)
+    expect(res.status).toBe(0)
+    const plan = JSON.parse(res.stdout)
+    expect(plan.issues).toHaveLength(2)
+    rmSync(dir, { recursive: true, force: true })
+  })
+})
