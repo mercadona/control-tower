@@ -49,6 +49,26 @@ class Plan {
     return `| ${Array.from({ length: n }, (_, i) => `cell ${i}`).join(' | ')} |`
   }
 
+  static withABulletedListWithoutFullStops() {
+    return Array.from({ length: 3 }, () => `- ${Plan.#words(15, '')}`).join('\n')
+  }
+
+  static withANumberedListWithoutFullStops() {
+    return Array.from({ length: 3 }, (_, i) => `${i + 1}. ${Plan.#words(15, '')}`).join('\n')
+  }
+
+  static withAListItemWrappingAcrossTwoLines() {
+    return `- ${Plan.#words(14, '')}\n  ${Plan.#words(14)}`
+  }
+
+  static withTwoAdjacentTaskMarkers() {
+    return ['**Objective:** The barrel exports sum().', '**Files:** `src/a.js` (create).'].join('\n')
+  }
+
+  static withTwoAdjacentTaskMarkersAndNoFullStop() {
+    return [`**TDD:** ${Plan.#words(12, '')}`, `**Tests:** ${Plan.#words(12)}`].join('\n')
+  }
+
   static withATaskMarkerSaying(marker, text) {
     return `${marker} ${text}`
   }
@@ -145,6 +165,27 @@ describe('the length of a paragraph', () => {
   })
 })
 
+describe('where a paragraph starts', () => {
+  it('measures a list item on its own, whether or not the author ends it with a full stop', () => {
+    expect(Violations.about(Plan.withABulletedListWithoutFullStops(), 'length')).toEqual([])
+    expect(Violations.about(Plan.withANumberedListWithoutFullStops(), 'length')).toEqual([])
+  })
+
+  it('still joins the line a list item wraps onto, because it carries no marker of its own', () => {
+    expect(Violations.about(Plan.withAListItemWrappingAcrossTwoLines(), 'length')).toHaveLength(1)
+  })
+
+  it('never merges two task markers that no blank line separates', () => {
+    expect(Violations.about(Plan.withTwoAdjacentTaskMarkers(), 'one-sentence')).toEqual([])
+    expect(Violations.about(Plan.withTwoAdjacentTaskMarkersAndNoFullStop(), 'length')).toEqual([])
+  })
+
+  it('keeps a task marker as the first line of its own paragraph, so the marker still picks the limit', () => {
+    const plan = [Plan.withATaskMarker(PlanLanguage.PROCEDURAL_WORDS + 1), '**Files:** `src/a.js` (create).'].join('\n')
+    expect(Violations.about(plan, 'length')).toHaveLength(1)
+  })
+})
+
 describe('the objective of a task', () => {
   it('accepts one sentence and rejects two', () => {
     const one = Plan.withATaskMarkerSaying('**Objective:**', 'The barrel exports sum().')
@@ -188,9 +229,11 @@ describe('the words the standard does not approve', () => {
     expect(Violations.about('**Files:** `src/a.js` (create), `src/b.js` (modify).', 'word')).toEqual([])
   })
 
-  it('carries 48 entries, each with its replacement', () => {
-    expect(PlanLanguage.NON_APPROVED).toHaveLength(48)
-    expect(PlanLanguage.NON_APPROVED.every(([phrase, replacement]) => phrase && replacement)).toBe(true)
+  it('pairs every phrase with a replacement and names no phrase twice', () => {
+    const malformed = PlanLanguage.NON_APPROVED.filter(([phrase, replacement]) => !phrase || !replacement)
+    const phrases = PlanLanguage.NON_APPROVED.map(([phrase]) => phrase)
+    expect(malformed).toEqual([])
+    expect(phrases.filter((phrase, i) => phrases.indexOf(phrase) !== i)).toEqual([])
   })
 
   it('catches the gerund of a word that ends in a silent e', () => {
@@ -221,7 +264,18 @@ describe('the passive voice', () => {
 
   it('leaves a word that ends in -ed and is not a participle alone', () => {
     expect(Violations.about('The test is red.', 'passive')).toEqual([])
-    expect(Violations.about('The speed is enough.', 'passive')).toEqual([])
+    expect(Violations.about('The refusal is indeed a finding.', 'passive')).toEqual([])
+  })
+
+  it('leaves a participial adjective alone, because it reads active', () => {
+    expect(Violations.about('The plugin suite is untouched by this slice.', 'passive')).toEqual([])
+    expect(Violations.about('The scratch files are untracked.', 'passive')).toEqual([])
+    expect(Violations.about('The order of the two reads is undefined.', 'passive')).toEqual([])
+  })
+
+  it('leaves a be-form with an intransitive participle alone, because a state is not passive', () => {
+    expect(Violations.about('The five symbols are gone.', 'passive')).toEqual([])
+    expect(Violations.about('The refusal is become the finding.', 'passive')).toEqual([])
   })
 
   it('names what fired and asks for the actor', () => {
@@ -234,6 +288,7 @@ describe('the passive voice', () => {
     expect(PlanLanguage.IRREGULAR_PARTICIPLES.has('written')).toBe(true)
     expect(PlanLanguage.IRREGULAR_PARTICIPLES.has('run')).toBe(true)
     expect(PlanLanguage.IRREGULAR_PARTICIPLES.has('covered')).toBe(false)
+    expect(PlanLanguage.IRREGULAR_PARTICIPLES.has('gone')).toBe(false)
   })
 })
 
@@ -253,6 +308,12 @@ describe('the -ing form', () => {
   it('leaves the words that only look like gerunds alone', () => {
     expect(Violations.about('Nothing is left during the sweep.', 'gerund')).toEqual([])
     expect(Violations.about('The format is a string.', 'gerund')).toEqual([])
+  })
+
+  it('leaves a noun and an adjective that end in -ing alone, even right after a preposition', () => {
+    expect(Violations.about('The code locates the section by heading.', 'gerund')).toEqual([])
+    expect(Violations.about('The entrance opens a terminal for existing sessions.', 'gerund')).toEqual([])
+    expect(Violations.about('The gate exits without warning.', 'gerund')).toEqual([])
   })
 
   it('never looks inside backticks', () => {

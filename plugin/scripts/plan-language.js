@@ -16,7 +16,6 @@ export class PlanLanguage {
     ['obtain', 'get'],
     ['commence', 'start'],
     ['terminate', 'stop'],
-    ['attempt', 'try'],
     ['assist', 'help'],
     ['provide', 'give'],
     ['approximately', 'about'],
@@ -68,6 +67,7 @@ export class PlanLanguage {
   static #SECTION_9 = '## 9. Assumptions'
 
   static #PREFIX = /^\s*(?:>\s?)?(?:(?:[-*+]|\d+\.)\s+)?/
+  static #LIST_MARKER = /^\s*(?:>\s?)?(?:[-*+]|\d+\.)\s+/
   static #LINK = /\[([^\]]*)\]\([^)]*\)/g
   static #CODE_SPAN = /`[^`]*`/g
   static #OPAQUE = /\S*(?:\/|https?:)\S*/g
@@ -82,13 +82,13 @@ export class PlanLanguage {
     'written', 'built', 'run', 'made', 'done', 'taken', 'given', 'seen', 'known', 'shown',
     'held', 'kept', 'left', 'read', 'sent', 'set', 'put', 'lost', 'found', 'told',
     'said', 'brought', 'bought', 'caught', 'taught', 'thought', 'chosen', 'driven', 'spoken',
-    'broken', 'frozen', 'grown', 'drawn', 'thrown', 'torn', 'worn', 'begun', 'become', 'come',
-    'gone', 'been', 'had',
+    'broken', 'frozen', 'grown', 'drawn', 'thrown', 'torn', 'worn', 'begun', 'been', 'had',
   ])
 
   static #NOT_PARTICIPLES = new Set([
     'red', 'need', 'speed', 'seed', 'feed', 'indeed', 'exceed', 'proceed', 'succeed', 'embed',
-    'hundred', 'sacred',
+    'hundred', 'sacred', 'unchanged', 'untouched', 'untracked', 'unaffected', 'undefined',
+    'unrelated', 'unspecified',
   ])
 
   static #GERUND_PREPOSITIONS = new Set([
@@ -97,7 +97,9 @@ export class PlanLanguage {
 
   static ING_EXCEPTIONS = new Set([
     'during', 'string', 'strings', 'nothing', 'something', 'anything', 'everything', 'thing',
-    'things', 'according',
+    'things', 'according', 'existing', 'missing', 'remaining', 'heading', 'headings', 'warning',
+    'mapping', 'wiring', 'meaning', 'naming', 'setting', 'tracking', 'logging', 'handling',
+    'timing', 'being',
   ])
 
   static violationsOf(lines) {
@@ -173,11 +175,16 @@ export class PlanLanguage {
         out.push({ at: i, lines: [text], row: true })
         return
       }
+      if (PlanLanguage.#opensAParagraph(text)) flush()
       if (!run) run = { at: i, lines: [], row: false }
       run.lines.push(text)
     })
     flush()
     return out
+  }
+
+  static #opensAParagraph(text) {
+    return PlanLanguage.#LIST_MARKER.test(text) || PlanLanguage.#TASK_MARKERS.some((m) => text.startsWith(m))
   }
 
   static #normalise(textLines) {
