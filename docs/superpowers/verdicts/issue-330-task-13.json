@@ -1,0 +1,66 @@
+{
+  "issue": 330,
+  "task": 13,
+  "task_name": "The panel on the page",
+  "verdict": {
+    "ruling": "PASS",
+    "rubric": [
+      {
+        "rule": "objetivo",
+        "outcome": "conforme",
+        "result": "The objective promises three things and the diff produces all three. (1) 'gate 2's panel is rendered by Home under gate 1's and outside every stage branch': Home.tsx:477 places <EpicGroomPanel /> immediately after <SpecFreezePanel /> (475), which is after the workspace <section> that holds the three `currentStage ===` branches closes at line 468 and before the `{workflow !== null && (` block opens at 479 — so it is inside no branch at all, the same position gate 1's panel holds. The import added at line 14 resolves to app/epic-groom/components/epic-groom-panel/index.ts, which re-exports EpicGroomPanel; EpicGroomPanel renders system-ui Panel, which is already a <section aria-label> with an h2, so no wrapper was added, as the brief required. (2) 'every existing Home suite stays green': every Home mount in the suite goes through openHome in helpers.tsx (the only render of <Home /> outside main.tsx), and the four stubs that route by path and fall through to a counted inner mock — backendAnswering, backendRecovering, backendPending and Home.restoreWorkflow's withReadyTools — all gained the /epic-groom answer. (3) 'the front end's README says what app/epic-groom consumes': README.md:88-103."
+      },
+      {
+        "rule": "asercion-tdd",
+        "outcome": "conforme",
+        "result": "The TDD line asks for `it('shows gate 2 in the request stage and still shows it while a slice is being implemented')` in Home.epicGroom.test.tsx, with /epic-groom answering EpicGroomMother.groomable(), the panel's heading on screen with no workflow restored and again with one restored at implementing. The test in the diff carries that name verbatim (line 57 of the new file), its stub answers `if (path === '/epic-groom') return responseFor(EpicGroomMother.groomable())`, the first half opens with NO_ACTIVE_PLANS and asserts `await screen.findByRole('heading', { name: HEADING })` with HEADING = 'Puerta 2 · El groom y la autorización' — the exact string EpicGroomPanel.tsx:10 renders through Panel's h2 — and the second half unmounts, re-stubs /active-plans with an implementing plan, opens again, awaits the 'Implementación' heading and then asserts the gate 2 heading is still there. Same assertion, same input, same expected value."
+      },
+      {
+        "rule": "contrato",
+        "outcome": "conforme",
+        "result": "The brief carries a Current state block (Home.tsx 469-474) and a Call site block, plus three literal stub lines. Each matches. The Call site block asks for `<SpecFreezePanel />`, a blank line, `<EpicGroomPanel />`: Home.tsx:475-477 is exactly that, and the home__sessions section above it is untouched (the verification's `grep -c 'home__sessions' == 1` and `grep -c 'EpicGroomPanel' == 2` both hold by reading: one import, one element, one section). The three helpers.tsx stubs each gained the literal line the brief spells, `if (input === '/epic-groom') return responseFor(NO_EPIC_GROOM)` with NO_EPIC_GROOM = EpicGroomMother.none() (lines 54, 70, 90), placed right after the /spec-freeze guard in all three. Home.restoreWorkflow.test.tsx gained the same guard in that file's own idiom, `if (input === '/epic-groom') return Promise.resolve(new Response(NO_EPIC_GROOM))` over `EpicGroomMother.none().body`, matching its NO_SPEC_FREEZE neighbour line for line."
+      },
+      {
+        "rule": "decisiones-cerradas",
+        "outcome": "conforme",
+        "result": "Rows this diff bears on: D-21 (the page offers the coordinating session in every phase and no phase hides or disables it) — the plan asks gate 2's panel for the same shape, and Home.tsx:477 sits outside every currentStage branch and outside the `workflow !== null` block, so the panel is mounted in the request, review and implementation stages alike; the new test pins both ends of that. D-22 (the gates are the human's, both presses carry the key the page was handed, an attempt without it is refused with an explicit code) — the README paragraph the diff adds states exactly that, and it is true of the code: client.ts:10 sends `x-gate-key` on both presses, epic-groom-route.ts:20 and epic-promotion-route.ts:18 both declare NOT_FROM_THE_PAGE: 'gate-not-from-the-page', and vite.config.ts:8 lists both /epic-groom and /epic-promotion among the paths whose Origin the dev proxy strips. D-6, D-7 (no merge button anywhere) and D-13 are untouched: the diff mounts a panel and writes prose, it stores no phase and adds no write to a pull request. No row is reopened or implemented with a different value."
+      },
+      {
+        "rule": "patrones",
+        "outcome": "conforme",
+        "result": "Exemplars: the plan names frontend/src/pages/home/__tests__/Home.specFreeze.test.tsx and the new suite follows it structurally line for line (private path-routing stub, mother-built answers, unmount-and-reopen for the second stage, afterEach(() => vi.unstubAllGlobals())), and it names frontend/src/app/spec-freeze/... whose panel the new call site mirrors in position. Rules read: CLAUDE.md/AGENTS.md — every identifier, test name and README sentence the diff adds is English, and the only Spanish strings are HEADING/IMPLEMENTATION_HEADING, which are interface copy a person reads, the documented exemption. frontend/README.md's own Conventions — named exports, absolute imports with no '../', no prose, no default export: all held, and frontend/__tests__/yardstick.test.ts measures the new file by walking git's file list, so it ran over it. conventions/testing.md: the answers are built by EpicGroomMother rather than by hand, and the assertion is on the observable effect (the heading the panel renders). One tension declared and not reported: conventions/style.md's 'No free function at module level' is contradicted by every module-level arrow function the new suite declares — but CLAUDE.md states 'The yardstick's other two rules — no prose in the code, and no free function at module level — keep their exemption here', the twelve sibling Home suites are written that way, and a thirteenth Home suite genuinely extends what was already there rather than being a new concept sheltering in an old file. conventions/defects.md, rule by rule: (a) closed vocabulary — no subject; the diff adds no value that classifies anything, the `input === '/epic-groom'` comparisons are URLs at a fetch stub's boundary in the form the three stubs already use, and EpicGroomOutcome's kinds were declared in an earlier task and are neither widened nor dispatched over here. (b) raw map as the return value of logic — no subject; `type Answer = { status, body }` is the fixture record helpers.tsx and every sibling suite already feed straight into `new Response(...)`, one step before the wire, and nothing decides anything with it. (c) two fields that have to agree / a sentinel for an absence — no subject; the stubs answer EpicGroomMother.none(), a declared member of the vocabulary, not an empty string or a null standing for 'no state'. (d) an error named for where it happens — the one error the diff raises is `throw new Error(`unexpected fetch to ${path}`)`, which names what happened (a route nobody stubbed was fetched), not the module that raised it. The item is measured and holds; the one deviation found is the duplicated fixture helpers, reported below as a low."
+      },
+      {
+        "rule": "manipulacion-tests",
+        "outcome": "no-aplica",
+        "result": "Does not apply: the staged diff is 101 insertions and 0 deletions across five files, so there is no `-` line anywhere, and no pre-existing assertion, case or test was removed, relaxed or rewritten. The changes to helpers.tsx and Home.restoreWorkflow.test.tsx are added guard lines and added constants only; every existing assertion in those files, including the `expect(fetching).toHaveBeenCalledTimes(1|2)` counters on the inner fallback mocks, stands untouched and keeps counting the same calls, which is precisely why the guards were needed."
+      },
+      {
+        "rule": "fixture-theater",
+        "outcome": "conforme",
+        "result": "The promised behaviour is produced by production code. The heading the new test finds comes from EpicGroomPanel.tsx:10 through system-ui/panel's h2, and it reaches the screen only because Home.tsx:477 mounts <EpicGroomPanel /> outside every branch: delete that one production line and the test fails in both halves. The test's scaffolding supplies only the backend's answers (EpicGroomMother.groomable() over a stubbed fetch), no hard-coded heading is planted in the DOM by the test, and the second half's 'Implementación' heading likewise comes from Home's own implementation stage. The guards added to the four stubs are scaffolding, but they assert nothing — they keep the shared stubs honest so the panel's read on mount stops eating an answer queued for another route."
+      },
+      {
+        "rule": "alcance",
+        "outcome": "conforme",
+        "result": "The five touched paths are exactly the five the **Files:** line declares, and what is written inside them traces to a sentence of the task. Home.tsx: the one import and the one element the brief spells out. helpers.tsx and Home.restoreWorkflow.test.tsx: one import, one constant and the guard line each, which the brief names as 'what keeps every existing Home suite untouched'. Home.epicGroom.test.tsx: the one test the **TDD:** line dictates plus the stub it needs. frontend/README.md: the paragraph beside gate 1's that the brief asks for, and it stays inside gate 2's subject. Nothing in ### Out of scope is touched — no plugin script, no --reconcile or --project, no dispatcher or gate 1 behaviour, no merge button and no write to a pull request, no repository column. There is no hunk of the plan file in this diff, so there is no amendment to rule on."
+      },
+      {
+        "rule": "test-desiderata",
+        "outcome": "conforme",
+        "result": "One new test, and it has the three properties. Deterministic: no clock, no date, no network, no randomness and no sleep; the two phases are driven by an injected fetch stub, EpicGroomMother.groomable() is a resting kind (useEpicGroom.ts:11 RESTING_KINDS) so no follow-up poll is scheduled, and every wait is a findBy rather than a timeout. Isolated: it stubs fetch itself, unstubs in afterEach, unmounts between the two phases and re-stubs, and it takes nothing from the order of the file — it is the only test in its describe and it shares no mutable state with the rest of the suite. Verifies real behaviour: the assertion is `findByRole('heading', { name: 'Puerta 2 · El groom y la autorización' })` on the DOM the production panel renders, not on a call count or a stub's return value, and it goes red if Home.tsx's <EpicGroomPanel /> is reverted. The skill control-tower-loop:test-driven-development loaded, and with its testing-anti-patterns.md reference I measured the finer half too: its table says \"Minimal | One thing. 'and' in name? Split it\" and the name does carry an 'and', and 'Mock setup is >50% of test' is one of its red flags, which the ~50-line stub against a 12-line body meets. Neither is reported: the **TDD:** line prescribes that exact name and states that 'That pair is the boundary of \"outside every stage branch\"', so the two stages are one behaviour the plan asked to be pinned in one test, and the stub's size is the shape of the exemplar the plan named. What the stub does repeat is reported once, under patrones."
+      }
+    ],
+    "findings": [
+      {
+        "rule": "patrones",
+        "severity": "low",
+        "what": "The new suite re-declares fixture helpers that already exist twice over in the same folder: `type Answer`, `responseFor`, `IMPLEMENTATION_PROGRESS_NOT_READ` and `IMPLEMENTATION_HISTORY_NOT_READ` are already in helpers.tsx (as responseFor, NO_IMPLEMENTATION_RUN_YET and NO_IMPLEMENTATION_HISTORY_YET), and `implementingPlan` is a verbatim copy of Home.specFreeze.test.tsx:25-36. conventions/testing.md lists 'A test helper at module level, or repeated in two files' among its antipatterns, and the plan's precedence puts the rule above the exemplar even when the exemplar is the file being imitated. Nothing is wrong today — the copies agree — but the third copy of the implementing-plan fixture is the one that will drift when StartPlanMother changes shape. Low, and only low: the plan named Home.specFreeze.test.tsx as the file to imitate, twelve sibling suites are built this way, and the task's own text does not ask for an extraction.",
+        "path": "frontend/src/pages/home/__tests__/Home.epicGroom.test.tsx",
+        "line": 26,
+        "evidence": "const implementingPlan = () => ({\n  phase: 'implementing' as const,\n  request: { id: StartPlanMother.TICKET, repo: StartPlanMother.REPO, path: StartPlanMother.PATH },"
+      }
+    ],
+    "review_token": "3258827eeda6ecdf3c4e1da8d9be5585817da57f5a4c7d6cbfdcfd9ee9cade51"
+  }
+}

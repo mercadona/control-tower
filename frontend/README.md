@@ -85,6 +85,23 @@ The **Congelar el spec** button stays disabled while any finding remains, and
 the backend, so no gate key is ever minted for it: the button can only be
 pressed from the page the backend itself serves.
 
+`app/epic-groom` (`EpicGroomPanel`, rendered by `Home` right after
+`SpecFreezePanel`, outside every `currentStage` branch too) is gate 2's panel:
+the groom and the authorisation. `GET /epic-groom` polls the same checkout
+(`useEpicGroom.ts`) every ten seconds, stopping once it reaches `groomable`,
+`groomed` or `authorised`, and answers one of the seven states `EpicGroom.types.ts`
+declares: `none`, `no-spec`, `draft` and `awaiting-publication` render nothing,
+because gate 1's panel already says what is missing; `groomable` shows the
+milestone and the dry run's product — the issues the groom would create,
+ordered and labelled, before anything is created; `groomed` shows the issues
+the milestone already holds and offers the authorisation; `authorised` shows
+them all promoted, with nothing left to press. **Ejecutar el groom** calls
+`POST /epic-groom` and **Autorizar el trabajo** calls `POST /epic-promotion`,
+each carrying the same gate key `x-gate-key` that gate 1 uses; the same vite
+proxy that strips `Origin` for `/spec-freeze` does it for both, so neither
+button can be pressed from anywhere but the page the backend itself serves,
+and a press without the key is refused with `gate-not-from-the-page`.
+
 ## What is already decided
 
 - **It is never shipped with the plugin.** The marketplace's `source` is

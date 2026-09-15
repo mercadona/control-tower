@@ -4,6 +4,7 @@ import { ActivePlansClient } from 'app/active-plans/client'
 import { CoordinatingSessionStatus } from 'app/coordinating-session/components/coordinating-session-status'
 import { OpenedCoordinatingSession } from 'app/coordinating-session/CoordinatingSession.types'
 import { useCoordinatingSession } from 'app/coordinating-session/useCoordinatingSession'
+import { EpicGroomPanel } from 'app/epic-groom/components/epic-groom-panel'
 import { ToolsNavbar } from 'app/external-tools/components/tools-navbar'
 import { ImplementHistory } from 'app/implement-history/components/implement-history'
 import { ImplementPlanAction } from 'app/implement-plan/components/implement-plan-action'
@@ -472,6 +473,8 @@ const Home = () => {
           </section>
 
           <SpecFreezePanel />
+
+          <EpicGroomPanel />
 
           {workflow !== null && (
             <section className="home__completed" aria-label="Etapas completadas">
