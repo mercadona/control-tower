@@ -22,6 +22,7 @@
 // touched is. See scripts/scope.js.
 import { execFileSync } from 'node:child_process'
 import { parseScope, scopeViolations, issueFromPrBody, isSliceBranch } from './scope.js'
+import { MilestoneContextHeading } from './milestone-context.js'
 
 const arg = (f) => {
   const i = process.argv.indexOf(f)
@@ -103,8 +104,8 @@ try {
 const scope = parseScope(issueBody)
 if (!scope.declared) {
   die(
-    `the epic of issue #${issueN} declares no scope`,
-    `${scope.reason}. Add an \`Alcance: <paths>\` line to the \`## Contexto del epic\` section of the execution spec and re-groom it (or edit the issue). It is declared ONCE per epic, at the freeze.`,
+    `the milestone of issue #${issueN} declares no scope`,
+    `${scope.reason}. Add an \`Alcance: <paths>\` line to the \`${MilestoneContextHeading.WRITTEN}\` section of the execution spec and re-groom it (or edit the issue). It is declared ONCE per milestone, at the freeze.`,
   )
 }
 

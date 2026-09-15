@@ -27,8 +27,18 @@ function findClosingKeywords(text) {
   return out;
 }
 
+// scripts/milestone-context.js
+var WRITTEN_HEADING = "## Contexto del milestone";
+var LEGACY_HEADING = "## Contexto del epic";
+var MilestoneContextHeading = Object.freeze({
+  WRITTEN: WRITTEN_HEADING,
+  LEGACY: LEGACY_HEADING,
+  FORMS: Object.freeze([WRITTEN_HEADING, LEGACY_HEADING])
+});
+
 // scripts/scope.js
-var SECTION_HEADING = /^##\s+Contexto del epic\s*$/i;
+var CONTEXT_HEADING_TITLES = MilestoneContextHeading.FORMS.map((h) => h.replace(/^#+\s*/, "").toLowerCase());
+var H2_TITLE = /^##\s+(.+?)\s*$/;
 var ANY_HEADING = /^#{1,6}\s+/;
 var SCOPE_LINE = /^\s*[-*]?\s*\**\s*Alcance\s*\**\s*:\s*(.*)$/i;
 var LOOP_ARTIFACT_PATTERNS = [
@@ -80,7 +90,8 @@ function parseScope(issueBody2) {
   let inside = false;
   const patterns = [];
   for (const line of lines) {
-    if (SECTION_HEADING.test(line)) {
+    const h2 = line.match(H2_TITLE);
+    if (h2 && CONTEXT_HEADING_TITLES.includes(h2[1].toLowerCase())) {
       inside = true;
       continue;
     }
@@ -98,7 +109,7 @@ function parseScope(issueBody2) {
     return {
       declared: false,
       patterns: [],
-      reason: "the epic does not declare `Alcance:` in its `## Contexto del epic` section \u2014 with no declared scope the gate cannot check anything, and not being able to check is NOT being clean"
+      reason: `the milestone does not declare \`Alcance:\` in its \`${MilestoneContextHeading.WRITTEN}\` section \u2014 with no declared scope the gate cannot check anything, and not being able to check is NOT being clean`
     };
   }
   return { declared: true, patterns, reason: null };
@@ -197,8 +208,8 @@ try {
 var scope = parseScope(issueBody);
 if (!scope.declared) {
   die(
-    `the epic of issue #${issueN} declares no scope`,
-    `${scope.reason}. Add an \`Alcance: <paths>\` line to the \`## Contexto del epic\` section of the execution spec and re-groom it (or edit the issue). It is declared ONCE per epic, at the freeze.`
+    `the milestone of issue #${issueN} declares no scope`,
+    `${scope.reason}. Add an \`Alcance: <paths>\` line to the \`${MilestoneContextHeading.WRITTEN}\` section of the execution spec and re-groom it (or edit the issue). It is declared ONCE per milestone, at the freeze.`
   );
 }
 var files = (prData.files || []).map((f) => f.path);

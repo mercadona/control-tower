@@ -8,6 +8,7 @@
 // "## Acceptance criteria" heading) could break it silently until the real
 // dispatch against a real repo.
 import { gatesFromLabels } from './gates.js'
+import { MilestoneContextHeading } from './milestone-context.js'
 
 // detectLineEnding / normalizeToLF (review round 4, minor: CRLF): an issue
 // edited on Windows (or pasted from an editor that uses CRLF) leaves a '\r'
@@ -543,6 +544,26 @@ export const AC_HEADING_FORMS = ['## Acceptance criteria', '## Acceptance criter
 export const AC_PLACEHOLDER = '(fill in from the spec)'
 export const AC_PLACEHOLDER_LEGACY = '(rellenar desde el spec)'
 
+// milestoneContextHeadingIn (issue #346): WHICH of the two accepted spellings
+// of the milestone's context section this body carries — the datum the kickoff
+// needs so that it names a section the dispatched agent will actually find.
+// Pointing an agent at a heading its issue does not have is worse than saying
+// nothing: it goes looking for it outside the issue, which is precisely what it
+// cannot do.
+//
+// `null` when the body carries NEITHER spelling (an issue older than the two
+// context sections) and also when it carries BOTH: with both there, this
+// function has no way to say which one is the milestone's, and saying one of
+// them anyway is the silent choice this issue exists to avoid. The ambiguity is
+// REPORTED, by diffIssue/formatDrift in reconcile.js, which is where a finding
+// about an issue's body belongs; here it is only declined. The caller
+// (renderKickoff) falls back to the written spelling, because a prompt has to
+// name something.
+export function milestoneContextHeadingIn(body) {
+  const present = MilestoneContextHeading.FORMS.filter((heading) => countHeadingLines(body, heading) > 0)
+  return present.length === 1 ? present[0] : null
+}
+
 // extractAc: locates the AC section against the closed set AC_HEADING_FORMS
 // (see above) — never by prefix.
 export function extractAc(body) {
@@ -885,6 +906,10 @@ export function mapGhIssue(i) {
     // kickoff.js#resolveE2eRunsForAgent consumes to seed the `e2e` field of
     // .agent/SLICE.md and to name the runs in the kickoff.
     e2eRuns: extractE2eRuns(body),
+    // milestoneContextHeading (issue #346): the spelling THIS issue carries, so
+    // that renderKickoff names the section the agent will find. See
+    // milestoneContextHeadingIn above for when it is null.
+    milestoneContextHeading: milestoneContextHeadingIn(body),
     issue: `#${i.number}`,
   }
 }

@@ -69,7 +69,7 @@ describe('PlanAgentBrief', () => {
   })
 
   it('it_names_the_sections_that_carry_what_the_acceptance_criteria_cannot', () => {
-    expect(errand()).toContain('Contexto del epic')
+    expect(errand()).toContain('Contexto del milestone')
     expect(errand()).toContain('Contexto heredado')
     expect(errand()).toMatch(/no lo busques fuera del issue/)
   })

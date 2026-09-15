@@ -20,7 +20,7 @@ import { analyzeSlicesTable, isNoValueCell } from './slices.js'
 // parseSignalCell (Slice 10): the SAME classifier with which groom.js decides
 // what it renders — here it is used to abort BEFORE any render or mutation when
 // a row declares an exemption with no reason.
-import { groomPlan, readEpicContext, readFrozenDecisions, EPIC_CONTEXT_HEADING, FROZEN_DECISIONS_HEADING, analyzeSpecFreeze, HYPOTHESIS_REASONS, parseSignalCell, LOOP_STATUS_LABELS } from './groom.js'
+import { groomPlan, readEpicContext, readFrozenDecisions, MilestoneContextHeading, FROZEN_DECISIONS_HEADING, analyzeSpecFreeze, HYPOTHESIS_REASONS, parseSignalCell, LOOP_STATUS_LABELS } from './groom.js'
 // F10: from "the path I was given in argv + --section" to an absolute URL
 // verified against GitHub (or to an honest reference with no link, saying why).
 // See scripts/spec-link.js for the three decisions it takes and why it takes
@@ -1148,7 +1148,7 @@ if (typeof repo === 'string') {
     // would be claiming by omission that it was. It is only said when there
     // really was something to write.
     if (bodyResult.unresolvedEpicContext && diff.epicContextDiffers) {
-      console.error(`note: slice #${diff.order} (issue #${found.number}) — --reconcile has NOT rewritten the "${EPIC_CONTEXT_HEADING}" section: ${EPIC_CONTEXT_SURRENDERS[bodyResult.unresolvedEpicContext]} (it does not count towards the exit code)`)
+      console.error(`note: slice #${diff.order} (issue #${found.number}) — --reconcile has NOT rewritten the "${MilestoneContextHeading.WRITTEN}" section: ${EPIC_CONTEXT_SURRENDERS[bodyResult.unresolvedEpicContext]} (it does not count towards the exit code)`)
     }
     if (bodyResult.unresolvedFrozenDecisions && diff.frozenDecisionsDiffers) {
       console.error(`note: slice #${diff.order} (issue #${found.number}) — --reconcile has NOT rewritten the "${FROZEN_DECISIONS_HEADING}" section: ${FROZEN_DECISIONS_SURRENDERS[bodyResult.unresolvedFrozenDecisions]} (it does not count towards the exit code)`)

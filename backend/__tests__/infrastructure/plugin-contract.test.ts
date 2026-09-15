@@ -203,7 +203,7 @@ describe('the sections the errand sends the agent to read', () => {
   it('the_two_it_names_are_headings_the_plugin_really_renders_in_the_body_we_write', () => {
     const headings = body().split('\n').filter((line) => line.startsWith('## '))
 
-    expect(headings).toContain(`## ${PlanAgentBrief.EPIC_CONTEXT}`)
+    expect(headings).toContain(`## ${PlanAgentBrief.MILESTONE_CONTEXT}`)
     expect(headings).toContain(`## ${PlanAgentBrief.INHERITED_CONTEXT}`)
   })
 })

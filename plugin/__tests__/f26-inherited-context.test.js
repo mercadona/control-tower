@@ -4,7 +4,7 @@ import { writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  EPIC_CONTEXT_HEADING, INHERITED_CONTEXT_HEADING, INHERITED_CONTEXT_PLACEHOLDER,
+  MilestoneContextHeading, INHERITED_CONTEXT_HEADING, INHERITED_CONTEXT_PLACEHOLDER,
   readEpicContext, buildIssueBody, groomPlan,
 } from '../scripts/groom.js'
 import { makeSpecDir } from './fixtures/spec-repo.js'
@@ -23,7 +23,7 @@ describe('readEpicContext — the section of the spec and its guardrail', () => 
     '## 8. Algo',
     'texto previo',
     '',
-    EPIC_CONTEXT_HEADING,
+    MilestoneContextHeading.WRITTEN,
     body,
     '',
     '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices',
@@ -42,7 +42,7 @@ describe('readEpicContext — the section of the spec and its guardrail', () => 
     const r = readEpicContext('# Spec\n\n## 9. Slices\n| # | Slice | Dep |')
     expect(r.content).toBeNull()
     expect(r.warnings).toHaveLength(1)
-    expect(r.warnings[0]).toContain(EPIC_CONTEXT_HEADING)
+    expect(r.warnings[0]).toContain(MilestoneContextHeading.WRITTEN)
   })
 
   it('a section present but empty: it is treated as absent, with a warning of its own', () => {
@@ -66,7 +66,7 @@ describe('readEpicContext — the section of the spec and its guardrail', () => 
 
   it('a level 1 or 2 heading after it is NOT a subheading: it only ends the section', () => {
     expect(readEpicContext(withSection('- una regla')).content).toBe('- una regla')
-    const withH1 = ['# Spec', '', EPIC_CONTEXT_HEADING, '- una regla', '', '# Otro título'].join('\n')
+    const withH1 = ['# Spec', '', MilestoneContextHeading.WRITTEN, '- una regla', '', '# Otro título'].join('\n')
     expect(readEpicContext(withH1).content).toBe('- una regla')
   })
 
@@ -81,12 +81,12 @@ describe('readEpicContext — the section of the spec and its guardrail', () => 
   })
 
   it('the section at the end of the file, with nothing after it, is read whole', () => {
-    const r = readEpicContext(['# Spec', '', EPIC_CONTEXT_HEADING, '- una regla', '- otra regla'].join('\n'))
+    const r = readEpicContext(['# Spec', '', MilestoneContextHeading.WRITTEN, '- una regla', '- otra regla'].join('\n'))
     expect(r.content).toBe('- una regla\n- otra regla')
   })
 
   it('the last section of the file WITH a ### inside is cut off too', () => {
-    const r = readEpicContext(['# Spec', '', EPIC_CONTEXT_HEADING, 'preámbulo', '', '### dentro', 'texto'].join('\n'))
+    const r = readEpicContext(['# Spec', '', MilestoneContextHeading.WRITTEN, 'preámbulo', '', '### dentro', 'texto'].join('\n'))
     expect(r.content).toBeNull()
     expect(r.warnings[0]).toContain('### dentro')
   })
@@ -122,14 +122,14 @@ describe('readEpicContext — the section of the spec and its guardrail', () => 
 
   it('validation: an H1/H2 heading after it is still a normal ending', () => {
     expect(readEpicContext(withSection('- una regla')).content).toBe('- una regla')
-    const withH1 = ['# Spec', '', EPIC_CONTEXT_HEADING, '- una regla', '', '# Otro título'].join('\n')
+    const withH1 = ['# Spec', '', MilestoneContextHeading.WRITTEN, '- una regla', '', '# Otro título'].join('\n')
     expect(readEpicContext(withH1).content).toBe('- una regla')
   })
 
   it('a bare H1 or H2 heading (with no text) is a normal ending, not a truncation', () => {
     // A line that is exactly "##" with nothing after it is a valid heading
     // for locateSection and ends the section normally
-    const withBareH2 = ['# Spec', '', EPIC_CONTEXT_HEADING, '- una regla', '', '##'].join('\n')
+    const withBareH2 = ['# Spec', '', MilestoneContextHeading.WRITTEN, '- una regla', '', '##'].join('\n')
     const r = readEpicContext(withBareH2)
     expect(r.content).toBe('- una regla')
     expect(r.warnings).toEqual([])
@@ -142,13 +142,13 @@ const SPEC_REF = { path: 'docs/spec.md', heading: '9. Slices', url: 'https://git
 describe('buildIssueBody — the two new sections', () => {
   it('with epic context: it emits it as it is, and the inherited one goes out empty', () => {
     const body = buildIssueBody(SLICE, SPEC_REF, '- `today_madrid()`, nunca `date.today()`')
-    expect(body).toContain(`${EPIC_CONTEXT_HEADING}\n- \`today_madrid()\`, nunca \`date.today()\``)
+    expect(body).toContain(`${MilestoneContextHeading.WRITTEN}\n- \`today_madrid()\`, nunca \`date.today()\``)
     expect(body).toContain(`${INHERITED_CONTEXT_HEADING}\n${INHERITED_CONTEXT_PLACEHOLDER}`)
   })
 
   it('with no epic context: that section does NOT exist, the inherited one does', () => {
     const body = buildIssueBody(SLICE, SPEC_REF, null)
-    expect(body).not.toContain(EPIC_CONTEXT_HEADING)
+    expect(body).not.toContain(MilestoneContextHeading.WRITTEN)
     expect(body).toContain(INHERITED_CONTEXT_HEADING)
   })
 
@@ -161,8 +161,8 @@ describe('buildIssueBody — the two new sections', () => {
   it('they go after Descripción and before Acceptance criteria', () => {
     const body = buildIssueBody(SLICE, SPEC_REF, '- una regla')
     const pos = (s) => body.indexOf(s)
-    expect(pos('## Descripción')).toBeLessThan(pos(EPIC_CONTEXT_HEADING))
-    expect(pos(EPIC_CONTEXT_HEADING)).toBeLessThan(pos(INHERITED_CONTEXT_HEADING))
+    expect(pos('## Descripción')).toBeLessThan(pos(MilestoneContextHeading.WRITTEN))
+    expect(pos(MilestoneContextHeading.WRITTEN)).toBeLessThan(pos(INHERITED_CONTEXT_HEADING))
     expect(pos(INHERITED_CONTEXT_HEADING)).toBeLessThan(pos('## Acceptance criteria'))
   })
 
@@ -218,7 +218,7 @@ const SLICES_TABLE = [
 // connects them.
 describe('/ct-groom --dry-run — the epic context reaches the plan', () => {
   it('with the section in the spec: the text comes out in every issue of the dry-run', () => {
-    const spec = [EPIC_CONTEXT_HEADING, '- una regla común', '', '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices', SLICES_TABLE, ''].join('\n')
+    const spec = [MilestoneContextHeading.WRITTEN, '- una regla común', '', '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices', SLICES_TABLE, ''].join('\n')
     const res = dryRun(spec)
     expect(res.status).toBe(0)
     const plan = JSON.parse(res.stdout)
@@ -230,26 +230,26 @@ describe('/ct-groom --dry-run — the epic context reaches the plan', () => {
     const spec = ['## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices', SLICES_TABLE, ''].join('\n')
     const res = dryRun(spec)
     expect(res.status).toBe(0)
-    expect(res.stderr).toContain(EPIC_CONTEXT_HEADING)
+    expect(res.stderr).toContain(MilestoneContextHeading.WRITTEN)
     const plan = JSON.parse(res.stdout)
     expect(plan.issues.every((i) => i.epicContext === null)).toBe(true)
   })
 
   it('with a heading inside: it warns naming the line and does not emit the section', () => {
     const spec = [
-      EPIC_CONTEXT_HEADING, 'preámbulo', '', '### 1 · Un detalle', 'texto del detalle', '',
+      MilestoneContextHeading.WRITTEN, 'preámbulo', '', '### 1 · Un detalle', 'texto del detalle', '',
       '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices', SLICES_TABLE, '',
     ].join('\n')
     const res = dryRun(spec)
     expect(res.status).toBe(0)
     expect(res.stderr).toContain('### 1 · Un detalle')
     const plan = JSON.parse(res.stdout)
-    expect(plan.issues.every((i) => !i.body.includes(EPIC_CONTEXT_HEADING))).toBe(true)
+    expect(plan.issues.every((i) => !i.body.includes(MilestoneContextHeading.WRITTEN))).toBe(true)
   })
 })
 
 // ============================================================================
-// Task 4: diffIssue compares "## Contexto del epic" against the spec; the
+// Task 4: diffIssue compares the milestone context section against the spec; the
 // inherited section is never compared and never produces any field at all.
 // ============================================================================
 import { diffIssue, hasDrift, formatDrift } from '../scripts/reconcile.js'
@@ -257,7 +257,7 @@ import { diffIssue, hasDrift, formatDrift } from '../scripts/reconcile.js'
 const bodyWith = (epic, inherited) => [
   '> Slice `#2` of the epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)',
   '',
-  ...(epic ? [EPIC_CONTEXT_HEADING, epic, ''] : []),
+  ...(epic ? [MilestoneContextHeading.WRITTEN, epic, ''] : []),
   ...(inherited ? [INHERITED_CONTEXT_HEADING, inherited, ''] : []),
   '## Acceptance criteria (EARS, 1:1 con tests)',
   '- AC-2.1',
@@ -288,7 +288,7 @@ describe('diffIssue — the epic context is compared; the inherited one never is
   it('does NOT count towards the exit code, neither drifting nor duplicated', () => {
     const d = diffIssue(existingWith(bodyWith('- regla VIEJA', null)), WANTED, 'E1', [])
     expect(hasDrift(d)).toBe(false)
-    const dup = bodyWith('- a', null) + `\n${EPIC_CONTEXT_HEADING}\n- b\n\n${INHERITED_CONTEXT_HEADING}\nx\n\n${INHERITED_CONTEXT_HEADING}\ny\n`
+    const dup = bodyWith('- a', null) + `\n${MilestoneContextHeading.WRITTEN}\n- b\n\n${INHERITED_CONTEXT_HEADING}\nx\n\n${INHERITED_CONTEXT_HEADING}\ny\n`
     const d2 = diffIssue(existingWith(dup), { ...WANTED, epicContext: '- a' }, 'E1', [])
     expect(d2.duplicateMachineSections).toEqual([])
     expect(hasDrift(d2)).toBe(false)
@@ -296,7 +296,7 @@ describe('diffIssue — the epic context is compared; the inherited one never is
 
   it('is reported as note:, never as drift:', () => {
     const d = diffIssue(existingWith(bodyWith('- regla VIEJA', null)), WANTED, 'E1', [])
-    const line = formatDrift(d).find((l) => l.includes(EPIC_CONTEXT_HEADING))
+    const line = formatDrift(d).find((l) => l.includes(MilestoneContextHeading.WRITTEN))
     expect(line).toMatch(/^note:/)
   })
 
@@ -311,7 +311,7 @@ describe('diffIssue — the epic context is compared; the inherited one never is
 })
 
 // ============================================================================
-// Task 5: buildReconcileBody rewrites "## Contexto del epic" from the spec;
+// Task 5: buildReconcileBody rewrites the milestone context section from the spec;
 // "## Contexto heredado" survives byte for byte, always — nobody splices it.
 // ============================================================================
 import { buildReconcileBody } from '../scripts/reconcile.js'
@@ -327,7 +327,7 @@ describe('buildReconcileBody — it rewrites the epic one, it does not touch the
   const WITH_BOTH = [
     '> Slice `#2` of the epic. Spec: [docs/spec.md § 9. Slices](https://github.com/o/r/blob/main/docs/spec.md#9-slices)',
     '',
-    EPIC_CONTEXT_HEADING,
+    MilestoneContextHeading.WRITTEN,
     '- regla VIEJA',
     '',
     INHERITED_CONTEXT_HEADING,
@@ -354,17 +354,17 @@ describe('buildReconcileBody — it rewrites the epic one, it does not touch the
 
   it('rewrites the epic one and leaves the inherited one byte for byte, with its subheadings and its table', () => {
     const r = buildReconcileBody(WITH_BOTH, wanted())
-    expect(extractSectionContent(r.body, EPIC_CONTEXT_HEADING)).toBe('- regla NUEVA')
+    expect(extractSectionContent(r.body, MilestoneContextHeading.WRITTEN)).toBe('- regla NUEVA')
     expect(chunk(r.body, INHERITED_CONTEXT_HEADING, '## Acceptance criteria'))
       .toBe(chunk(WITH_BOTH, INHERITED_CONTEXT_HEADING, '## Acceptance criteria'))
     expect(extractAc(r.body)).toEqual(['AC-NUEVO'])
   })
 
   it('with no epic heading, it inserts it right BEFORE Acceptance criteria', () => {
-    const withoutEpic = WITH_BOTH.replace(`${EPIC_CONTEXT_HEADING}\n- regla VIEJA\n\n`, '')
+    const withoutEpic = WITH_BOTH.replace(`${MilestoneContextHeading.WRITTEN}\n- regla VIEJA\n\n`, '')
     const r = buildReconcileBody(withoutEpic, wanted())
-    expect(r.body.indexOf(EPIC_CONTEXT_HEADING)).toBeLessThan(r.body.indexOf('## Acceptance criteria'))
-    expect(extractSectionContent(r.body, EPIC_CONTEXT_HEADING)).toBe('- regla NUEVA')
+    expect(r.body.indexOf(MilestoneContextHeading.WRITTEN)).toBeLessThan(r.body.indexOf('## Acceptance criteria'))
+    expect(extractSectionContent(r.body, MilestoneContextHeading.WRITTEN)).toBe('- regla NUEVA')
   })
 
   // With NO anchor at all (neither "## Contexto heredado" nor "## Acceptance
@@ -379,7 +379,7 @@ describe('buildReconcileBody — it rewrites the epic one, it does not touch the
       'lo que entrega',
     ].join('\n')
     const r = buildReconcileBody(withoutAnchor, wanted({ ac: [] }))
-    expect(r.body === null || !r.body.includes(EPIC_CONTEXT_HEADING)).toBe(true)
+    expect(r.body === null || !r.body.includes(MilestoneContextHeading.WRITTEN)).toBe(true)
   })
 
   // And with the inherited one present but with no AC, there IS a safe
@@ -393,13 +393,13 @@ describe('buildReconcileBody — it rewrites the epic one, it does not touch the
       'lo de la coordinadora',
     ].join('\n')
     const r = buildReconcileBody(onlyInherited, wanted({ ac: [] }))
-    expect(r.body.indexOf(EPIC_CONTEXT_HEADING)).toBeLessThan(r.body.indexOf(INHERITED_CONTEXT_HEADING))
+    expect(r.body.indexOf(MilestoneContextHeading.WRITTEN)).toBeLessThan(r.body.indexOf(INHERITED_CONTEXT_HEADING))
     expect(r.body).toContain(`${INHERITED_CONTEXT_HEADING}\nlo de la coordinadora`)
   })
 
   it('if the spec stops carrying context, the epic section is withdrawn whole', () => {
     const r = buildReconcileBody(WITH_BOTH, wanted({ epicContext: null }))
-    expect(r.body).not.toContain(EPIC_CONTEXT_HEADING)
+    expect(r.body).not.toContain(MilestoneContextHeading.WRITTEN)
     expect(r.body).toContain(INHERITED_CONTEXT_HEADING)
     expect(r.body).not.toContain('\n\n\n')
   })
@@ -425,7 +425,7 @@ describe('renderKickoff — it names the two sections', () => {
   const K = () => renderKickoff({ n: 7, name: 'card', type: 'ui', ac: ['AC-7.1'], deps: [], issue: '#7' }, { repo: 'o/r' , conventionsDir: '/plugin/conventions' })
 
   it('names the two EXACT headings the groom emits', () => {
-    expect(K()).toContain(EPIC_CONTEXT_HEADING)
+    expect(K()).toContain(MilestoneContextHeading.WRITTEN)
     expect(K()).toContain(INHERITED_CONTEXT_HEADING)
   })
 
@@ -490,7 +490,7 @@ const ONE_SLICE_TABLE = [
 ].join('\n')
 
 const specWithContext = (context) => [
-  EPIC_CONTEXT_HEADING, context, '', '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices', ONE_SLICE_TABLE, '',
+  MilestoneContextHeading.WRITTEN, context, '', '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices', ONE_SLICE_TABLE, '',
 ].join('\n')
 
 function invoke(specText, issues, extraArgs) {
@@ -539,8 +539,8 @@ describe('C1 — the epic context as the ONLY drift does get written', () => {
   it('with no --reconcile nothing is written, and the exit is still 0 (never 3 because of this section)', () => {
     const res = invoke(specWithContext('- regla NUEVA'), [issueWith('- regla VIEJA')], [])
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/^note:.*Contexto del epic/m)
-    expect(res.stderr).not.toMatch(/^drift:.*Contexto del epic/m)
+    expect(res.stderr).toMatch(/^note:.*Contexto del milestone/m)
+    expect(res.stderr).not.toMatch(/^drift:.*Contexto del milestone/m)
   })
 
   it('with no drift at all (the context already matches) `gh issue edit` is not called', () => {
@@ -579,13 +579,13 @@ describe('giving up on the epic context is said out loud, and it still does not 
     '<!-- ct-order:1 -->',
   ].join('\n')
 
-  const spec = [EPIC_CONTEXT_HEADING, '- regla', '', '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices', NO_ANCHOR_TABLE, ''].join('\n')
+  const spec = [MilestoneContextHeading.WRITTEN, '- regla', '', '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices', NO_ANCHOR_TABLE, ''].join('\n')
   const issue = { number: 501, title: '#1 login', state: 'open', milestone: { title: 'Epic' }, labels: LABELS_1, body: NO_ANCHOR_BODY }
 
   it('says it as note:, names the anchor that is missing, and writes nothing', () => {
     const res = invoke(spec, [issue], ['--dry-run', '--reconcile'])
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/note:.*has NOT rewritten the "## Contexto del epic" section/)
+    expect(res.stderr).toMatch(/note:.*has NOT rewritten the "## Contexto del milestone" section/)
     expect(res.stderr).toMatch(/anchor.*Contexto heredado.*Acceptance criteria/) // it names the TWO that would do
     expect(res.stderr).not.toMatch(/would apply/) // there is no new body: no write is announced
   })
@@ -618,7 +618,7 @@ const WITH_PASTED = (pasted) => [
   '## Descripción',
   'flow',
   '',
-  EPIC_CONTEXT_HEADING,
+  MilestoneContextHeading.WRITTEN,
   '- regla VIEJA',
   '',
   INHERITED_CONTEXT_HEADING,
@@ -669,7 +669,7 @@ describe('C2 — nothing the coordinator writes is touched', () => {
   })
 
   it('the epic context heading pasted inside: nothing is written on her copy, and it is said', () => {
-    const body = WITH_PASTED([EPIC_CONTEXT_HEADING, '- la regla que le tocaba al slice #2'])
+    const body = WITH_PASTED([MilestoneContextHeading.WRITTEN, '- la regla que le tocaba al slice #2'])
     const r = buildReconcileBody(body, WANTED_3)
     const result = r.body ?? body
     expect(chunk(result, INHERITED_CONTEXT_HEADING, END_OF_PASTED))
@@ -735,7 +735,7 @@ describe('C2 — nothing the coordinator writes is touched', () => {
 // ============================================================================
 describe('C3 — an unclosed delimiter inside the section of the spec', () => {
   const specWith = (body) => [
-    '# Spec', '', EPIC_CONTEXT_HEADING, body, '', '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices',
+    '# Spec', '', MilestoneContextHeading.WRITTEN, body, '', '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices',
     '| # | Slice | Dep |', '|---|---|---|', '| 1 | A | – |',
   ].join('\n')
 
@@ -744,7 +744,7 @@ describe('C3 — an unclosed delimiter inside the section of the spec', () => {
     expect(r.content).toBeNull()
     expect(r.warnings).toHaveLength(1)
     expect(r.warnings[0]).toMatch(/fence|```/)
-    expect(r.warnings[0]).toContain(EPIC_CONTEXT_HEADING)
+    expect(r.warnings[0]).toContain(MilestoneContextHeading.WRITTEN)
   })
 
   it('an unclosed HTML comment: the same treatment', () => {
@@ -773,7 +773,7 @@ describe('C3 — an unclosed delimiter inside the section of the spec', () => {
   it('the epic splice defends itself against an issue body with the fence left open', () => {
     const body = [
       SPEC_LINK_3, '',
-      EPIC_CONTEXT_HEADING,
+      MilestoneContextHeading.WRITTEN,
       '- regla VIEJA',
       '```js',
       'const x = 1',
@@ -797,7 +797,7 @@ describe('C3 — an unclosed delimiter inside the section of the spec', () => {
   it('nor is a new text written that carries the fence left open', () => {
     const body = [
       SPEC_LINK_3, '',
-      EPIC_CONTEXT_HEADING, '- regla VIEJA', '',
+      MilestoneContextHeading.WRITTEN, '- regla VIEJA', '',
       '## Acceptance criteria (EARS, 1:1 con tests)', '- AC-3.1 NUEVO', '',
       '## Out of scope / Protected', '- 🚫 nada',
     ].join('\n')
@@ -823,20 +823,20 @@ describe('I1 — "I have no valid text" is not "the epic has no context"', () =>
   it('readEpicContext says WHY, not only that there is no text', () => {
     const table = '\n\n## 9. Slices\n| # | Slice | Dep |'
     expect(withReason('# Spec' + table).reason).toBe('ausente')
-    expect(withReason(`# Spec\n\n${EPIC_CONTEXT_HEADING}\n` + table).reason).toBe('vacia')
-    expect(withReason(`# Spec\n\n${EPIC_CONTEXT_HEADING}\ntexto\n\n### dentro\nmás` + table).reason).toBe('malformada')
-    expect(withReason(`# Spec\n\n${EPIC_CONTEXT_HEADING}\ntexto\n\`\`\`js\nx` + table).reason).toBe('malformada')
-    expect(withReason(`# Spec\n\n${EPIC_CONTEXT_HEADING}\n- regla` + table).reason).toBeNull()
+    expect(withReason(`# Spec\n\n${MilestoneContextHeading.WRITTEN}\n` + table).reason).toBe('vacia')
+    expect(withReason(`# Spec\n\n${MilestoneContextHeading.WRITTEN}\ntexto\n\n### dentro\nmás` + table).reason).toBe('malformada')
+    expect(withReason(`# Spec\n\n${MilestoneContextHeading.WRITTEN}\ntexto\n\`\`\`js\nx` + table).reason).toBe('malformada')
+    expect(withReason(`# Spec\n\n${MilestoneContextHeading.WRITTEN}\n- regla` + table).reason).toBeNull()
   })
 
   it('the warning of a malformed section says that what is already in the issues is NOT erased', () => {
-    const w = withReason(`# Spec\n\n${EPIC_CONTEXT_HEADING}\ntexto\n\n### dentro\nmás\n\n## 9. Slices`).warnings[0]
+    const w = withReason(`# Spec\n\n${MilestoneContextHeading.WRITTEN}\ntexto\n\n### dentro\nmás\n\n## 9. Slices`).warnings[0]
     expect(w).toMatch(/neither touched nor deleted/i)
   })
 
   it('a malformed spec does NOT withdraw the section from the body of the issues', () => {
     const spec = [
-      EPIC_CONTEXT_HEADING, 'preámbulo', '', '### 1 · un detalle', 'texto', '',
+      MilestoneContextHeading.WRITTEN, 'preámbulo', '', '### 1 · un detalle', 'texto', '',
       '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices', ONE_SLICE_TABLE, '',
     ].join('\n')
     const res = invoke(spec, [issueWith('- regla que YA está en el issue')], ['--reconcile'])
@@ -866,19 +866,19 @@ describe('I2 — a spec in CRLF does not put \\r into the body of the issues', (
   const crlf = (...lines) => lines.join('\r\n')
 
   it('the content comes out in pure LF', () => {
-    const r = readEpicContext(crlf('# Spec', '', EPIC_CONTEXT_HEADING, '- regla A', '- regla B', '', '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices'))
+    const r = readEpicContext(crlf('# Spec', '', MilestoneContextHeading.WRITTEN, '- regla A', '- regla B', '', '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices'))
     expect(r.content).toBe('- regla A\n- regla B')
     expect(r.content).not.toContain('\r')
   })
 
   it('the text read from a CRLF spec and that of the SAME spec in LF are identical', () => {
-    const lines = ['# Spec', '', EPIC_CONTEXT_HEADING, '- regla A', '- regla B', '', '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices']
+    const lines = ['# Spec', '', MilestoneContextHeading.WRITTEN, '- regla A', '- regla B', '', '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices']
     expect(readEpicContext(lines.join('\r\n')).content).toBe(readEpicContext(lines.join('\n')).content)
   })
 
   it('always converges: the same text cannot be left in perpetual drift', () => {
-    const context = readEpicContext(crlf('# Spec', '', EPIC_CONTEXT_HEADING, '- regla A', '- regla B', '', '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices')).content
-    const body = [SPEC_LINK_3, '', EPIC_CONTEXT_HEADING, '- regla A', '- regla B', '', '## Acceptance criteria (EARS, 1:1 con tests)', '- AC-1', '', '## Out of scope / Protected', '- 🚫 nada'].join('\n')
+    const context = readEpicContext(crlf('# Spec', '', MilestoneContextHeading.WRITTEN, '- regla A', '- regla B', '', '## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices')).content
+    const body = [SPEC_LINK_3, '', MilestoneContextHeading.WRITTEN, '- regla A', '- regla B', '', '## Acceptance criteria (EARS, 1:1 con tests)', '- AC-1', '', '## Out of scope / Protected', '- 🚫 nada'].join('\n')
     const wanted = { specLink: SPEC_LINK_3, ac: ['AC-1'], deps: [], epicContext: context }
     expect(buildReconcileBody(body, wanted).body).toBeNull() // second run: nothing to write
   })
@@ -888,7 +888,7 @@ describe('I2 — a spec in CRLF does not put \\r into the body of the issues', (
   // heading: the section does not end there and it swallows the rest of the
   // file — the same damage as C3, through another door.
   it('a bare heading in a CRLF spec ends the section, it does not swallow it', () => {
-    const r = readEpicContext(crlf('# Spec', '', EPIC_CONTEXT_HEADING, '- regla A', '', '##', 'texto de otra sección'))
+    const r = readEpicContext(crlf('# Spec', '', MilestoneContextHeading.WRITTEN, '- regla A', '', '##', 'texto de otra sección'))
     expect(r.content).toBe('- regla A')
     expect(r.warnings).toEqual([])
   })
@@ -911,9 +911,9 @@ describe('the insertion respects the order of §3.4', () => {
 
   it('the epic section ends up BEFORE the inherited one, not after it', () => {
     const r = buildReconcileBody(withoutEpic, { specLink: SPEC_LINK_3, ac: ['AC-1'], deps: [], epicContext: '- regla' })
-    expect(r.body.indexOf(EPIC_CONTEXT_HEADING)).toBeLessThan(r.body.indexOf(INHERITED_CONTEXT_HEADING))
+    expect(r.body.indexOf(MilestoneContextHeading.WRITTEN)).toBeLessThan(r.body.indexOf(INHERITED_CONTEXT_HEADING))
     expect(r.body.indexOf(INHERITED_CONTEXT_HEADING)).toBeLessThan(r.body.indexOf('## Acceptance criteria'))
-    expect(extractSectionContent(r.body, EPIC_CONTEXT_HEADING)).toBe('- regla')
+    expect(extractSectionContent(r.body, MilestoneContextHeading.WRITTEN)).toBe('- regla')
     // And not a single letter of hers has been touched.
     expect(r.body).toContain(`${INHERITED_CONTEXT_HEADING}\nlo de la coordinadora`)
   })
@@ -921,7 +921,7 @@ describe('the insertion respects the order of §3.4', () => {
   it('with no inherited section it still anchors on Acceptance criteria', () => {
     const withoutEither = withoutEpic.replace(`${INHERITED_CONTEXT_HEADING}\nlo de la coordinadora\n\n`, '')
     const r = buildReconcileBody(withoutEither, { specLink: SPEC_LINK_3, ac: ['AC-1'], deps: [], epicContext: '- regla' })
-    expect(r.body.indexOf(EPIC_CONTEXT_HEADING)).toBeLessThan(r.body.indexOf('## Acceptance criteria'))
+    expect(r.body.indexOf(MilestoneContextHeading.WRITTEN)).toBeLessThan(r.body.indexOf('## Acceptance criteria'))
     expect(r.body).not.toContain(INHERITED_CONTEXT_HEADING) // it is never inserted
   })
 })
@@ -934,7 +934,7 @@ describe('§4.4 — the epic context cannot produce an exit 3, whatever happens'
   const cases = {
     'it drifts and gets applied': buildIssueBody(SLICE_1, SPEC_REF_E2E, '- regla VIEJA'),
     'it is duplicated in the body': buildIssueBody(SLICE_1, SPEC_REF_E2E, '- regla VIEJA')
-      .replace(INHERITED_CONTEXT_HEADING, `${EPIC_CONTEXT_HEADING}\n- una copia pegada\n\n${INHERITED_CONTEXT_HEADING}`),
+      .replace(INHERITED_CONTEXT_HEADING, `${MilestoneContextHeading.WRITTEN}\n- una copia pegada\n\n${INHERITED_CONTEXT_HEADING}`),
   }
   for (const [name, body] of Object.entries(cases)) {
     it(`${name}: exit 0, and no "drift:" line at all because of this section`, () => {
@@ -942,7 +942,7 @@ describe('§4.4 — the epic context cannot produce an exit 3, whatever happens'
       for (const args of [[], ['--reconcile'], ['--dry-run', '--reconcile']]) {
         const res = invoke(specWithContext('- regla NUEVA'), [issue], args)
         expect(res.status, `${name} con ${args.join(' ') || '(sin flags)'}`).toBe(0)
-        expect(res.stderr).not.toMatch(new RegExp(`drift:.*${EPIC_CONTEXT_HEADING}`))
+        expect(res.stderr).not.toMatch(new RegExp(`drift:.*${MilestoneContextHeading.WRITTEN}`))
       }
     })
   }
@@ -960,9 +960,9 @@ describe('§4.4 — the epic context cannot produce an exit 3, whatever happens'
     const res = invoke(specWithContext('- regla NUEVA'), [issue], ['--reconcile'])
     expect(res.status).toBe(3)
     expect(res.stderr).toMatch(/drift:.*acceptance criterion/)
-    expect(res.stderr).not.toMatch(new RegExp(`drift:.*${EPIC_CONTEXT_HEADING}`))
+    expect(res.stderr).not.toMatch(new RegExp(`drift:.*${MilestoneContextHeading.WRITTEN}`))
     // And nothing has been written in the epic section: why has been said.
-    expect(res.stderr).toMatch(/note:.*has NOT rewritten the "## Contexto del epic" section.*LEFT UNCLOSED/s)
+    expect(res.stderr).toMatch(/note:.*has NOT rewritten the "## Contexto del milestone" section.*LEFT UNCLOSED/s)
   })
 })
 
@@ -976,7 +976,7 @@ describe('§4.4 — the epic context cannot produce an exit 3, whatever happens'
 
 describe('the "reconciled" line names what was written, not what drifts', () => {
   const epicTwice = (epicContext) =>
-    `${buildIssueBody(SLICE_1, SPEC_REF_E2E, epicContext)}\n\n${EPIC_CONTEXT_HEADING}\n- copia pegada`
+    `${buildIssueBody(SLICE_1, SPEC_REF_E2E, epicContext)}\n\n${MilestoneContextHeading.WRITTEN}\n- copia pegada`
 
   it('with the epic section duplicated, stdout does not say it reconciled it', () => {
     const issue = {
@@ -985,7 +985,7 @@ describe('the "reconciled" line names what was written, not what drifts', () => 
     }
     const res = invoke(specWithContext('- regla NUEVA'), [issue], ['--reconcile'])
     // stderr was already telling the truth: it has not been rewritten.
-    expect(res.stderr).toMatch(/note:.*has NOT rewritten the "## Contexto del epic" section/)
+    expect(res.stderr).toMatch(/note:.*has NOT rewritten the "## Contexto del milestone" section/)
     // stdout cannot say the opposite in the same run.
     expect(res.stdout).toMatch(/issue #501 reconciled \(order #1\): title/)
     expect(res.stdout).not.toMatch(/reconciled \(order #1\):.*epic context/)
@@ -1025,7 +1025,7 @@ describe('the "reconciled" line names what was written, not what drifts', () => 
 // may be the one she pasted.
 // ============================================================================
 
-// With no Dependencias section of its own and no Contexto del epic either:
+// With no Dependencias section of its own and no milestone context either:
 // what was pasted is the ONLY copy of that heading in the whole body.
 const SOLE_PASTED = (pasted) => [
   SPEC_LINK_3,
@@ -1062,8 +1062,8 @@ describe('C2 (2nd wave) — the UNIQUE pasted heading is not a target of the spl
     expect(r.unresolvedDeps).toBe(true)
   })
 
-  it('"## Contexto del epic" pasted in an issue from before F26: its text survives byte for byte', () => {
-    const body = SOLE_PASTED([EPIC_CONTEXT_HEADING, '- la regla que le tocaba al slice #2'])
+  it('the milestone context section pasted in an issue from before F26: its text survives byte for byte', () => {
+    const body = SOLE_PASTED([MilestoneContextHeading.WRITTEN, '- la regla que le tocaba al slice #2'])
     const r = buildReconcileBody(body, { specLink: SPEC_LINK_3, ac: ['AC-3.1 VIEJO'], deps: [], epicContext: '- regla NUEVA' })
     const result = r.body ?? body
     expect(result).toContain(END_OF_PASTED)
@@ -1071,7 +1071,7 @@ describe('C2 (2nd wave) — the UNIQUE pasted heading is not a target of the spl
       .toBe(chunk(body, INHERITED_CONTEXT_HEADING, '## Acceptance criteria'))
     // The section the issue is missing is inserted in ITS place (§3.4: before
     // the inherited one), not on top of her copy.
-    expect(result.indexOf(`${EPIC_CONTEXT_HEADING}\n- regla NUEVA`)).toBeLessThan(result.indexOf(INHERITED_CONTEXT_HEADING))
+    expect(result.indexOf(`${MilestoneContextHeading.WRITTEN}\n- regla NUEVA`)).toBeLessThan(result.indexOf(INHERITED_CONTEXT_HEADING))
   })
 
   it('the protection of the DUPLICATED case still stands (one is not traded for the other)', () => {
@@ -1090,7 +1090,7 @@ describe('C2 (2nd wave) — the UNIQUE pasted heading is not a target of the spl
 // property, the fix would trade an erasure of text for a perpetual rewrite.
 describe('C2 (2nd wave) — inserting the epic section in front of the pasted copy CONVERGES', () => {
   it('the second pass over the body already written returns body: null', () => {
-    const body = SOLE_PASTED([EPIC_CONTEXT_HEADING, '- la regla que le tocaba al slice #2'])
+    const body = SOLE_PASTED([MilestoneContextHeading.WRITTEN, '- la regla que le tocaba al slice #2'])
     const wanted = { specLink: SPEC_LINK_3, ac: ['AC-3.1 VIEJO'], deps: [], epicContext: '- regla NUEVA' }
     const firstPass = buildReconcileBody(body, wanted)
     expect(firstPass.body).not.toBeNull()
@@ -1117,7 +1117,7 @@ describe('C2 (2nd wave) — end to end: the --body that is sent keeps the text o
       '## Descripción', 'modelo', '',
       INHERITED_CONTEXT_HEADING,
       'Copio lo del slice anterior:', '',
-      EPIC_CONTEXT_HEADING, '- la regla que le tocaba al vecino', '',
+      MilestoneContextHeading.WRITTEN, '- la regla que le tocaba al vecino', '',
       END_OF_PASTED, '',
       '## Acceptance criteria (EARS, 1:1 con tests)', '- AC-1.1', '',
       '## Out of scope / Protected', '- 🚫 schema', '',
@@ -1154,7 +1154,7 @@ describe('C2 (2nd wave) — the reason for giving up on the epic does not assert
     .replace('## Acceptance criteria (EARS, 1:1 con tests)', '## Criterios')
 
   it('an unbounded zone → "zona-sin-fin", not "en-heredado"', () => {
-    const body = withRenamedAc([EPIC_CONTEXT_HEADING, '- la regla que le tocaba al slice #2'])
+    const body = withRenamedAc([MilestoneContextHeading.WRITTEN, '- la regla que le tocaba al slice #2'])
     const r = buildReconcileBody(body, { specLink: SPEC_LINK_3, ac: [], deps: [], epicContext: null })
     expect(r.unresolvedEpicContext).toBe('zona-sin-fin')
     expect(r.body).toBeNull() // and the body is not touched
@@ -1162,7 +1162,7 @@ describe('C2 (2nd wave) — the reason for giving up on the epic does not assert
   })
 
   it('with the zone bounded it can be asserted: "en-heredado"', () => {
-    const body = SOLE_PASTED([EPIC_CONTEXT_HEADING, '- la regla que le tocaba al slice #2'])
+    const body = SOLE_PASTED([MilestoneContextHeading.WRITTEN, '- la regla que le tocaba al slice #2'])
     const r = buildReconcileBody(body, { specLink: SPEC_LINK_3, ac: ['AC-3.1 VIEJO'], deps: [], epicContext: null })
     expect(r.unresolvedEpicContext).toBe('en-heredado')
   })
@@ -1175,7 +1175,7 @@ describe('C2 (2nd wave) — the reason for giving up on the epic does not assert
       `> Slice \`#1\` of the epic. Spec: [spec.md § 9. Slices](${specUrl('spec.md')})`, '',
       '## Descripción', 'modelo', '',
       INHERITED_CONTEXT_HEADING, 'Copio lo del vecino:', '',
-      EPIC_CONTEXT_HEADING, '- la regla del vecino', '',
+      MilestoneContextHeading.WRITTEN, '- la regla del vecino', '',
       END_OF_PASTED, '',
       '## Criterios', '- AC-1.1', '',
       '## Out of scope / Protected', '- 🚫 schema', '',
@@ -1183,10 +1183,10 @@ describe('C2 (2nd wave) — the reason for giving up on the epic does not assert
     ].join('\n')
     const issue = { number: 501, title: '#1 login', state: 'open', milestone: { title: 'Epic' }, labels: LABELS_1, body }
     const res = invoke(['## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices', ONE_SLICE_TABLE, ''].join('\n'), [issue], ['--reconcile'])
-    expect(res.stderr).toMatch(/has NOT rewritten the "## Contexto del epic" section: there is no telling where/)
+    expect(res.stderr).toMatch(/has NOT rewritten the "## Contexto del milestone" section: there is no telling where/)
     expect(res.stderr).not.toMatch(/undefined/)
     // And whose the text is is not asserted, which is what this reason exists
     // in order not to say.
-    expect(res.stderr).not.toMatch(/has NOT rewritten the "## Contexto del epic" section:[^\n]*belongs to the coordinator session/)
+    expect(res.stderr).not.toMatch(/has NOT rewritten the "## Contexto del milestone" section:[^\n]*belongs to the coordinator session/)
   })
 })

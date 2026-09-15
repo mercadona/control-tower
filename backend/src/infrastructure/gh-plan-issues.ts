@@ -1,5 +1,5 @@
 import {
-  EPIC_CONTEXT_HEADING,
+  MilestoneContextHeading,
   INHERITED_CONTEXT_HEADING,
   INHERITED_CONTEXT_PLACEHOLDER,
   GATES_HEADING,
@@ -441,7 +441,7 @@ export class PlanIssueBody {
         (story === null ? PlanIssueBody.NO_HEADLINE : `_${story.key} brings no summary in Jira._`),
       '',
       ...(comment === null ? [] : [PlanIssueBody.COMMENT_HEADING, PlanIssueBody.quieted(comment.text), '']),
-      EPIC_CONTEXT_HEADING,
+      MilestoneContextHeading.WRITTEN,
       PlanIssueBody.#epicContextOf(story),
       '',
       INHERITED_CONTEXT_HEADING,

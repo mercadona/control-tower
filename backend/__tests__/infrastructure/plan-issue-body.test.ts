@@ -100,7 +100,7 @@ describe('PlanIssueBody', () => {
       comment: null,
     })
 
-    expect(body).toContain('## Contexto del epic\nla búsqueda ignora los acentos')
+    expect(body).toContain('## Contexto del milestone\nla búsqueda ignora los acentos')
     expect(body).toContain('## Descripción\nEl buscador acepta acentos')
   })
 
@@ -114,7 +114,7 @@ describe('PlanIssueBody', () => {
     const body = PlanIssueBody.of({ story: Opened.githubStory({ description: '   ' }), comment: null })
 
     expect(body).toContain(
-      '## Contexto del epic\n_Issue mercadona/control-tower#141 brings no body and no comments: ' +
+      '## Contexto del milestone\n_Issue mercadona/control-tower#141 brings no body and no comments: ' +
         'there is nothing written to start from._'
     )
   })
@@ -196,7 +196,7 @@ describe('PlanIssueBody', () => {
 
     expect(headings).toEqual([
       '## Descripción',
-      '## Contexto del epic',
+      '## Contexto del milestone',
       '## Contexto heredado',
       '## Acceptance criteria (EARS, 1:1 con tests)',
       '## Gates',
@@ -238,7 +238,7 @@ describe('PlanIssueBody', () => {
     expect(headings).toEqual([
       '## Descripción',
       '## Comentario de quien pide el plan',
-      '## Contexto del epic',
+      '## Contexto del milestone',
       '## Contexto heredado',
       '## Acceptance criteria (EARS, 1:1 con tests)',
       '## Gates',
@@ -278,7 +278,7 @@ describe('an issue with no user story is born from the comment alone', () => {
   it('a_body_with_no_story_says_there_is_no_ticket_where_the_epic_context_goes_and_names_no_tracker', () => {
     const body = PlanIssueBody.of(Opened.commentOnly())
 
-    expect(body).toContain('## Contexto del epic\n_This plan does not come from any ticket._')
+    expect(body).toContain('## Contexto del milestone\n_This plan does not come from any ticket._')
   })
 
   it('a_comment_whose_first_line_carries_no_words_says_so_instead_of_leaving_the_description_blank', () => {

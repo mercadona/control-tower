@@ -22,17 +22,28 @@
 //
 // A PURE module: neither network nor disk.
 import { findClosingKeywords } from './closing-keywords.js'
+import { MilestoneContextHeading } from './milestone-context.js'
 
-// The scope is declared ONCE PER EPIC, not per slice, and it lives in the
-// `## Contexto del epic` section of the execution spec — which is the ONLY one
+// The scope is declared ONCE PER MILESTONE, not per slice, and it lives in the
+// milestone's context section of the execution spec — which is the ONLY one
 // groom copies verbatim into the issue. Putting it in any other section would
 // create a scope that exists in the spec and does not exist where it gets
 // checked.
 //
-// Once per epic and not per row is deliberate: it is written at the freeze,
-// which is the only moment of the cycle when Jose reads. Four fields to fill in
-// get forgotten; one does not.
-const SECTION_HEADING = /^##\s+Contexto del epic\s*$/i
+// Once per milestone and not per row is deliberate: it is written at the
+// freeze, which is the only moment of the cycle when Jose reads. Four fields to
+// fill in get forgotten; one does not.
+//
+// Issue #346: the accepted spellings come from milestone-context.js, so that
+// the day the legacy one retires this gate retires it in the same move. What
+// does NOT come from there is the TOLERANCE — the case-insensitive match and
+// the free whitespace after the `##`, which gh-issue-map.js deliberately
+// refuses. That asymmetry predates this issue and is kept: this module reads a
+// spec a person typed by hand, in a repository where the plugin is not
+// installed to tell them off, and a gate that fails closed over a capital
+// letter is a gate that gets turned off.
+const CONTEXT_HEADING_TITLES = MilestoneContextHeading.FORMS.map((h) => h.replace(/^#+\s*/, '').toLowerCase())
+const H2_TITLE = /^##\s+(.+?)\s*$/
 const ANY_HEADING = /^#{1,6}\s+/
 // `Alcance:` with the bold and the backticks the template uses around
 // everything else. Without this tolerance, writing it like the rest of the
@@ -123,14 +134,15 @@ export function parseScope(issueBody) {
   const text = typeof issueBody === 'string' ? issueBody : ''
   const lines = text.split(/\r?\n/)
 
-  // Only INSIDE `## Contexto del epic` is looked at, and the section is cut at
+  // Only INSIDE the milestone's context section is looked at, and it is cut at
   // the next heading of any level: without that cut, an `Alcance:` written
   // further down (in «Out of scope», for example) would read as if it belonged
   // to this section.
   let inside = false
   const patterns = []
   for (const line of lines) {
-    if (SECTION_HEADING.test(line)) { inside = true; continue }
+    const h2 = line.match(H2_TITLE)
+    if (h2 && CONTEXT_HEADING_TITLES.includes(h2[1].toLowerCase())) { inside = true; continue }
     if (inside && ANY_HEADING.test(line)) break
     if (!inside) continue
     const m = line.match(SCOPE_LINE)
@@ -162,7 +174,7 @@ export function parseScope(issueBody) {
     return {
       declared: false,
       patterns: [],
-      reason: 'the epic does not declare `Alcance:` in its `## Contexto del epic` section — with no declared scope the gate cannot check anything, and not being able to check is NOT being clean',
+      reason: `the milestone does not declare \`Alcance:\` in its \`${MilestoneContextHeading.WRITTEN}\` section — with no declared scope the gate cannot check anything, and not being able to check is NOT being clean`,
     }
   }
   return { declared: true, patterns, reason: null }
