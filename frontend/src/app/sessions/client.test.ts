@@ -232,4 +232,53 @@ describe('SessionsClient', () => {
     await vi.advanceTimersByTimeAsync(2000)
     await expect(second).resolves.toEqual({ kind: 'unreachable' })
   })
+
+  it('resizing posts the size as json to that session resize', async () => {
+    const posting = vi.fn(async () => new Response(JSON.stringify({ status: 'resized', id: 'a1', cols: 120, rows: 40 }), { status: 202 }))
+    vi.stubGlobal('fetch', posting)
+
+    await SessionsClient.resize('a1', { cols: 120, rows: 40 })
+
+    expect(posting).toHaveBeenCalledWith('/sessions/a1/resize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cols: 120, rows: 40 }),
+      signal: expect.any(AbortSignal),
+    })
+  })
+
+  it('a resize that cannot reach the backend resolves instead of throwing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    }))
+
+    await expect(SessionsClient.resize('a1', { cols: 120, rows: 40 })).resolves.toBeUndefined()
+  })
+
+  it('two quick resizes of one session reach the backend in the order they were sent, not the order their requests settle', async () => {
+    const bodies: string[] = []
+    let resolveFirst: (response: Response) => void = () => undefined
+    const posting = vi.fn(async (_url: string, init: RequestInit) => {
+      bodies.push(init.body as string)
+      if (bodies.length === 1) {
+        return new Promise<Response>((resolve) => {
+          resolveFirst = resolve
+        })
+      }
+      return new Response(JSON.stringify({ status: 'resized', id: 'a1', cols: 100, rows: 30 }), { status: 202 })
+    })
+    vi.stubGlobal('fetch', posting)
+
+    const first = SessionsClient.resize('a1', { cols: 80, rows: 24 })
+    const second = SessionsClient.resize('a1', { cols: 100, rows: 30 })
+
+    await flushMicrotasks()
+    expect(bodies).toEqual([JSON.stringify({ cols: 80, rows: 24 })])
+
+    resolveFirst(new Response(JSON.stringify({ status: 'resized', id: 'a1', cols: 80, rows: 24 }), { status: 202 }))
+    await first
+    await second
+
+    expect(bodies).toEqual([JSON.stringify({ cols: 80, rows: 24 }), JSON.stringify({ cols: 100, rows: 30 })])
+  })
 })

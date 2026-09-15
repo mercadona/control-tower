@@ -2,6 +2,7 @@ export const FreezeFindingCode = Object.freeze({
   CLARIFICATION_MARKER: 'clarification-marker',
   HYPOTHESIS_ABSENT: 'hypothesis-absent',
   HYPOTHESIS_EMPTY: 'hypothesis-empty',
+  DECISION_WITHOUT_PROVENANCE: 'decision-without-provenance',
 } as const)
 
 export type FreezeFindingCodeValue = (typeof FreezeFindingCode)[keyof typeof FreezeFindingCode]

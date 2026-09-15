@@ -1,13 +1,12 @@
 import { screen, waitFor } from '@testing-library/react'
-import { Terminal } from '@xterm/xterm'
 import { CoordinatingSessionMother } from '__scenarios__/CoordinatingSessionMother'
 import { SessionsMother } from '__scenarios__/SessionsMother'
 import { StartPlanMother } from '__scenarios__/StartPlanMother'
 import { FakeEventSource } from './FakeEventSource'
+import { FakeFitAddon, FakeTerminal } from './FakeXterm'
 import { openBrainstorming, openHome } from './helpers'
 
 type Answer = { status: number; body: string }
-type FakeTerminal = { onDataHandler: ((text: string) => void) | null; written: string[] }
 type ScrollableElement = { scrollIntoView?: (options?: ScrollIntoViewOptions) => void }
 
 const NO_ACTIVE_PLANS: Answer = { status: 200, body: '{"plans":[]}' }
@@ -36,6 +35,7 @@ const EXTERNAL_TOOLS_READY: Answer = {
 const SESSIONS: Answer = SessionsMother.oneSession()
 const SESSIONS_WITH_THE_OPENED_ONE: Answer = SessionsMother.withCoordinatingSession()
 const TYPED: Answer = { status: 202, body: `{"status":"typed","id":"${SESSION_ID}"}` }
+const RESIZED: Answer = { status: 202, body: `{"status":"resized","id":"${SESSION_ID}","cols":80,"rows":24}` }
 const NO_COORDINATING_SESSION: Answer = CoordinatingSessionMother.none()
 const NO_IMPLEMENTATION_RUN_YET: Answer = {
   status: 400,
@@ -48,33 +48,10 @@ const NO_IMPLEMENTATION_HISTORY_YET: Answer = {
 
 const responseFor = (answer: Answer) => new Response(answer.body, { status: answer.status })
 
-vi.mock('@xterm/xterm', () => {
-  class MockTerminal {
-    static instances: MockTerminal[] = []
-    onDataHandler: ((text: string) => void) | null = null
-    written: string[] = []
+vi.mock('@xterm/xterm', () => ({ Terminal: FakeTerminal }))
+vi.mock('@xterm/addon-fit', () => ({ FitAddon: FakeFitAddon }))
 
-    constructor() {
-      MockTerminal.instances.push(this)
-    }
-
-    open() {}
-    write(data: string) { this.written.push(data) }
-    reset() { this.written = [] }
-    onData(handler: (text: string) => void) { this.onDataHandler = handler }
-    dispose() {}
-  }
-
-  return { Terminal: MockTerminal }
-})
-
-const lastTerminal = (): FakeTerminal => {
-  const instances = (Terminal as unknown as { instances: FakeTerminal[] }).instances
-  const instance = instances.at(-1)
-  if (instance === undefined) throw new Error('no terminal was created')
-
-  return instance
-}
+const lastTerminal = (): FakeTerminal => FakeTerminal.last()
 
 const stubFetch = (activePlans: Answer, coordinatingSession: Answer = NO_COORDINATING_SESSION) => {
   const fetching = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -83,6 +60,7 @@ const stubFetch = (activePlans: Answer, coordinatingSession: Answer = NO_COORDIN
     if (url === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
     if (url === '/sessions') return responseFor(SESSIONS)
     if (url === `/sessions/${SESSION_ID}/input`) return responseFor(TYPED)
+    if (url === `/sessions/${SESSION_ID}/resize`) return responseFor(RESIZED)
     if (url === '/coordinating-session' && init === undefined) return responseFor(coordinatingSession)
     if (url.startsWith('/implement-progress/')) return responseFor(NO_IMPLEMENTATION_RUN_YET)
     if (url.startsWith('/implement-history/')) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
@@ -117,6 +95,10 @@ const stubScrollIntoView = () => {
 }
 
 describe('Home · sessions panel', () => {
+  beforeEach(() => {
+    FakeTerminal.install()
+    FakeFitAddon.install()
+  })
   afterEach(() => {
     vi.unstubAllGlobals()
     delete (Element.prototype as ScrollableElement).scrollIntoView
@@ -127,7 +109,7 @@ describe('Home · sessions panel', () => {
 
     openHome()
 
-    expect(screen.getByRole('region', { name: 'Sesiones en marcha' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Sesión coordinadora' })).toBeInTheDocument()
   })
 
   it('keeps the coordinating session reachable while a slice is implemented', async () => {

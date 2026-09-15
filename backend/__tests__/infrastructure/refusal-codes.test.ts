@@ -7,6 +7,7 @@ import { ProgressRequestOutcome, ProgressCollapse } from '../../src/infrastructu
 import { HistoryRequestOutcome, HistoryCollapse } from '../../src/infrastructure/implement-history-route.ts'
 import { SessionStreamOutcome } from '../../src/infrastructure/session-stream-route.ts'
 import { SessionInputOutcome } from '../../src/infrastructure/session-input-route.ts'
+import { SessionResizeOutcome } from '../../src/infrastructure/session-resize-route.ts'
 import { CoordinatingSessionOutcome } from '../../src/infrastructure/coordinating-session-route.ts'
 import { SessionHookOutcome } from '../../src/infrastructure/session-hooks-route.ts'
 import { SpecFreezeOutcome } from '../../src/infrastructure/spec-freeze-route.ts'
@@ -25,6 +26,7 @@ class RequestVocabularies {
       ...Object.values(HistoryRequestOutcome),
       ...Object.values(SessionStreamOutcome),
       ...Object.values(SessionInputOutcome),
+      ...Object.values(SessionResizeOutcome),
       ...Object.values(CoordinatingSessionOutcome),
       ...Object.values(SessionHookOutcome),
       ...Object.values(SpecFreezeOutcome),

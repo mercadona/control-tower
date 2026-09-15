@@ -28,7 +28,7 @@ You MUST create a task for each of these items and complete them in order:
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
 6. **Write design doc** — save to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commit. It becomes the `Handoff origen:` of the execution spec — after the freeze it is history, nobody edits it.
 7. **Spec self-review** — quick inline check for placeholders, contradictions, ambiguity, scope (see below)
-8. **Write the execution spec** — `docs/superpowers/specs/YYYY-MM-DD-<topic>-execution.md` from the repo's `docs/superpowers/specs/_TEMPLATE-execution-spec.md` (seeded by `/ct-init`), estado DRAFT. Every frozen decision carries its provenance: `hablada` / `deducida` / `propuesta` (see below)
+8. **Write the execution spec** — `docs/superpowers/specs/YYYY-MM-DD-<topic>-execution.md` from the repo's `docs/superpowers/specs/_TEMPLATE-execution-spec.md` (seeded by `/ct-init`), estado DRAFT. Every frozen decision carries its provenance and the freeze refuses while one keeps quiet: `hablada` / `deducida` / `propuesta` / `historia <id>` / `prd <name>` / `prototipo <version>` (see below)
 9. **Request the freeze (congelación)** — present the 15-line summary and STOP. The user's OK mutates `DRAFT → CONGELADA`. Without it there is no groom.
 
 ## Process Flow
@@ -126,14 +126,14 @@ Fix any issues inline. No need to re-review — just fix and move on.
 After the self-review passes, write the execution spec: `docs/superpowers/specs/YYYY-MM-DD-<topic>-execution.md`, created from the repo's `docs/superpowers/specs/_TEMPLATE-execution-spec.md` (seeded by `/ct-init`; if it is missing, the repo was never bootstrapped — say so instead of inventing the sections), estado `DRAFT`. The design doc you just committed is its `Handoff origen:`.
 
 - The spec records the join AND its compressed inputs: what the executor needs and cannot derive.
-- **Provenance per frozen decision** (D-1, D-2…): `hablada` (with the user's phrase when possible), `deducida` (follows from something hablada), or `propuesta` (yours). **A `propuesta` is never frozen** — ask the user, or park it under «Decisiones aparcadas». Gaps are not filled in: they are asked or parked.
+- **Provenance per frozen decision** (D-1, D-2…), as the suffix `*(Procedencia: …)*` at the end of the decision, on ONE line: `hablada` (with the user's phrase when possible), `deducida` (follows from something hablada), `propuesta` (yours), or the source that decided it by name — `historia <id>`, `prd <name>`, `prototipo <version>`. **A `propuesta` is never frozen** — ask the user, or park it under «Decisiones aparcadas». Gaps are not filled in: they are asked or parked. **A decision with no provenance does not freeze**: the yardstick reports it with its line and the freeze refuses while one remains.
 - `[NEEDS CLARIFICATION]` markers are admitted in DRAFT; freezing with one pending is invalid (groom will refuse the spec).
 
 **The Freeze Gate (congelación):**
 This replaces any full-document review — the user does not read the spec; they read a summary that fits on one screen. Present, in the conversation, **at most 15 lines**:
 
 1. The hypothesis of the experiment (one or two lines).
-2. Each frozen decision on ONE line, with its provenance tag.
+2. Each frozen decision on ONE line, with its provenance tag, and the ones the product backs (`historia`, `prd`, `prototipo`) grouped apart from the ones the TL backs (`hablada`, `deducida`) — one short group under each label, inside the same budget, so the reader sees without counting which decisions did not come from this room.
 3. The anti-scope: what this milestone will NOT do.
 
 Then STOP and wait. The user's OK mutates the spec `DRAFT → CONGELADA` (record the freeze date). Changes requested → revise the spec and present the summary again. **Without the freeze there is no groom.** After the freeze, the spec is the single source the cycle trusts: nobody edits frozen decisions in silence.

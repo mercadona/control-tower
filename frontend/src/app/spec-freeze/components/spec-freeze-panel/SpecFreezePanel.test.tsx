@@ -19,6 +19,19 @@ describe('SpecFreezePanel', () => {
     expect(screen.getByRole('button', FREEZE_BUTTON)).toBeDisabled()
   })
 
+  it('a frozen decision that does not say where it comes from is listed with its own copy, its line and its raw line', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(SpecFreezeMother.draftWithSourcelessDecision().body, { status: 200 })))
+
+    render(<SpecFreezePanel />)
+
+    expect(
+      await screen.findByText(
+        `Decisión congelada sin procedencia, línea ${SpecFreezeMother.PROVENANCE_FINDING.line}: ${SpecFreezeMother.PROVENANCE_FINDING.detail}`,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', FREEZE_BUTTON)).toBeDisabled()
+  })
+
   it('lets the freeze go once no finding remains', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(SpecFreezeMother.draftReady().body, { status: 200 })))
 

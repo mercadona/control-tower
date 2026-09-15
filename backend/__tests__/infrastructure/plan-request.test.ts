@@ -169,72 +169,43 @@ describe('PlanRequest', () => {
     expect(PlanRequest.from('{"repo":"owner/name","path":"/repo/checkout"}').named).toBeNull()
   })
 
-  it('a_body_that_says_where_to_plan_twice_is_refused_by_that_name', () => {
+  it('an_accepted_body_names_exactly_one_target_because_a_repository_and_its_path_are_the_only_way_to_say_where', () => {
+    const accepted = PlanRequest.from('{"id":"ABC-1","repo":"owner/name","path":"/repo/checkout"}')
+
+    expect(accepted.outcome).toBe(PlanRequestOutcome.ACCEPTED)
+    expect(accepted.targets).toHaveLength(1)
+  })
+
+  it('a_body_carrying_the_retired_repo_list_field_is_refused_by_that_name_whatever_the_field_holds', () => {
     const refused = [
+      '{"id":"ABC-1","repo_list":[{"repo":"owner/name","path":"/repo/checkout"}]}',
+      '{"id":"ABC-1","repo_list":[{"repo":"owner/name","path":"/repo/checkout"},{"repo":"owner/other","path":"/other"}]}',
       '{"id":"ABC-1","repo_list":[{"repo":"owner/name","path":"/repo/checkout"}],"repo":"owner/name"}',
       '{"id":"ABC-1","repo_list":[{"repo":"owner/name","path":"/repo/checkout"}],"path":"/repo/checkout"}',
-    ].map((raw) => PlanRequest.from(raw).outcome)
-
-    expect(refused).toEqual(Array(2).fill(PlanRequestOutcome.TARGET_SAID_TWICE))
-  })
-
-  it('a_repo_list_that_is_not_a_non_empty_list_of_pairs_is_refused_as_one', () => {
-    const refused = [
       '{"id":"ABC-1","repo_list":[]}',
-      '{"id":"ABC-1","repo_list":"owner/name"}',
       '{"id":"ABC-1","repo_list":null}',
-      '{"id":"ABC-1","repo_list":{"repo":"owner/name","path":"/repo/checkout"}}',
-      '{"id":"ABC-1","repo_list":[{"repo":"owner/name"}]}',
-      '{"id":"ABC-1","repo_list":[{"repo":"owner/name","path":"/repo/checkout","extra":true}]}',
-      '{"id":"ABC-1","repo_list":[{"repo":"owner/name","path":"/repo/checkout"},"nope"]}',
-      '{"id":"ABC-1","repo_list":[{"repo":"owner/name","bogus":true}]}',
+      '{"id":"ABC-1","repo_list":"owner/name"}',
+      '{"repo_list":[{"repo":"owner/name","path":"/repo/checkout"}]}',
     ].map((raw) => PlanRequest.from(raw).outcome)
 
-    expect(refused).toEqual(Array(8).fill(PlanRequestOutcome.MALFORMED_REPO_LIST))
-
-    expect(
-      PlanRequest.from('{"id":"ABC-1","repo_list":[{"repo":"owner/name","path":"/repo/checkout"}]}').outcome
-    ).toBe(PlanRequestOutcome.ACCEPTED)
+    expect(refused).toEqual(Array(8).fill(PlanRequestOutcome.REPO_LIST_RETIRED))
   })
 
-  it('a_malformed_entry_is_named_by_its_position_in_the_list', () => {
-    const badRepo = PlanRequest.from(
-      '{"id":"ABC-1","repo_list":[{"repo":"owner/name","path":"/repo/checkout"},{"repo":"nope","path":"/repo/other"}]}'
-    )
-    expect(badRepo.outcome).toBe(PlanRequestOutcome.MALFORMED_REPO)
-    expect(badRepo.named).toBe('repo_list[1].repo')
+  it('the_retired_field_is_refused_as_itself_rather_than_swept_up_among_the_unknown_ones', () => {
+    const refused = PlanRequest.from('{"id":"ABC-1","repo_list":[],"zulu":1}')
 
-    const badPath = PlanRequest.from(
-      '{"id":"ABC-1","repo_list":[{"repo":"owner/name","path":"/repo/checkout"},{"repo":"owner/other","path":"relative"}]}'
-    )
-    expect(badPath.outcome).toBe(PlanRequestOutcome.MALFORMED_PATH)
-    expect(badPath.named).toBe('repo_list[1].path')
-
-    const repoBeforePath = PlanRequest.from('{"id":"ABC-1","repo_list":[{"repo":"nope","path":"relative"}]}')
-    expect(repoBeforePath.outcome).toBe(PlanRequestOutcome.MALFORMED_REPO)
-    expect(repoBeforePath.named).toBe('repo_list[0].repo')
+    expect(refused.outcome).toBe(PlanRequestOutcome.REPO_LIST_RETIRED)
+    expect(refused.fields).toEqual([])
   })
 
-  it('the_same_repository_twice_in_one_list_is_refused_before_anything_starts', () => {
+  it('nothing_is_parsed_out_of_the_retired_field_so_no_target_is_built_from_what_it_held', () => {
     const refused = PlanRequest.from(
-      '{"id":"ABC-1","repo_list":[{"repo":"owner/name","path":"/repo/checkout"},{"repo":"owner/name","path":"/repo/other"}]}'
+      '{"id":"ABC-1","user_comment":"plan it","repo_list":[{"repo":"owner/name","path":"/repo/checkout"}]}'
     )
 
-    expect(refused.outcome).toBe(PlanRequestOutcome.REPO_LISTED_TWICE)
-    expect(refused.named).toBe('owner/name')
-  })
-
-  it('a_repo_list_of_one_entry_answers_the_listed_shape_and_not_the_single_one', () => {
-    const accepted = PlanRequest.from('{"id":"ABC-1","repo_list":[{"repo":"owner/name","path":"/repo/checkout"}]}')
-
-    expect(accepted.listed).toBe(true)
-    expect(accepted.targets).toHaveLength(1)
-    expect(accepted.targets![0].repository).toBeInstanceOf(RepositoryName)
-    expect(accepted.targets![0].repository.text).toBe('owner/name')
-    expect(accepted.targets![0].root).toBeInstanceOf(CheckoutRoot)
-    expect(accepted.targets![0].root.text).toBe('/repo/checkout')
-
-    const single = PlanRequest.from('{"id":"ABC-1","repo":"owner/name","path":"/repo/checkout"}')
-    expect(single.listed).toBe(false)
+    expect(refused.targets).toBeNull()
+    expect(refused.story).toBeNull()
+    expect(refused.comment).toBeNull()
+    expect(refused.named).toBeNull()
   })
 })

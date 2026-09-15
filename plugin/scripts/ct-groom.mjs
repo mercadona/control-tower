@@ -195,11 +195,17 @@ const hardErrors = []
 // WHOLE spec, before any mutation and also under --dry-run (the same doctrine
 // as F1: a dry run that validates less than the real run is a trap). It is
 // aggregated into hardErrors like everything else — freeze breakages and table
-// breakages are reported TOGETHER, one single exit 2.
+// breakages are reported TOGETHER, one single exit 2. Its three rules are
+// reported the same way for the same reason: whoever fixes the spec fixes it in
+// one pass.
 const freeze = analyzeSpecFreeze(specMd)
 if (freeze.clarifications.length) {
   const first = freeze.clarifications[0]
   hardErrors.push(`the spec has ${freeze.clarifications.length} unresolved "[NEEDS CLARIFICATION" marker(s) (example, line ${first.line}: "${first.raw}") — they are allowed while the spec is a DRAFT, but groom only accepts FROZEN specs and freezing one with a marker still pending is invalid: resolve it with whoever decides, or park it under "## Decisiones aparcadas", and try again`)
+}
+if (freeze.decisionsWithoutProvenance.length) {
+  const first = freeze.decisionsWithoutProvenance[0]
+  hardErrors.push(`the spec has ${freeze.decisionsWithoutProvenance.length} frozen decision(s) that do not say where they come from (example, line ${first.line}: "${first.raw}") — a frozen decision names its source so that whoever reads it can tell one the product decided from one the TL decided: close each one with "*(Procedencia: …)*" on a single line, naming hablada, deducida, historia <id>, prd <name> or prototipo <version>, and try again`)
 }
 if (freeze.hypothesis === HYPOTHESIS_REASONS.ABSENT) {
   hardErrors.push('the spec has no "## Hipótesis" section — with no falsifiable bet it is not an epic and it does not come in through groom: add "## Hipótesis del experimento" with the epic\'s bet (a human judges its quality at the freeze; groom only looks that it is there). Work with no bet (maintenance, bugfixes) goes as loose issues, not through groom')

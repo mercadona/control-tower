@@ -104,50 +104,6 @@ class StartPlanSpy extends StartPlan {
     return spy
   }
 
-  static failingOne(): StartPlanSpy {
-    const spy = new StartPlanSpy()
-    spy.execute = async (params) => {
-      const [succeeding, failing] = params.targets
-
-      return new StartPlanResult({
-        started: [new PlanStarted({
-          agent: StartPlanSpy.AGENT,
-          baseline: StartPlanSpy.BASELINE,
-          watch: new PlanWatch({
-            story: params.story,
-            issue: StartPlanSpy.ISSUE,
-            located: StartPlanSpy.LOCATED,
-            repository: succeeding.repository,
-            agent: StartPlanSpy.AGENT,
-          }),
-        })],
-        failed: [new PlanNotStarted({
-          repository: failing.repository,
-          cause: new WorkspaceNotPrepared('branch is taken'),
-        })],
-      })
-    }
-
-    return spy
-  }
-
-  static failingAll(): StartPlanSpy {
-    const spy = new StartPlanSpy()
-    spy.execute = async (params) => {
-      const [first, second] = params.targets
-
-      return new StartPlanResult({
-        started: [],
-        failed: [
-          new PlanNotStarted({ repository: first.repository, cause: new WorkspaceNotPrepared('branch is taken') }),
-          new PlanNotStarted({ repository: second.repository, cause: new UserStoryNotRead('acli is not authenticated') }),
-        ],
-      })
-    }
-
-    return spy
-  }
-
   async execute(params: StartPlanParams): Promise<StartPlanResult> {
     this.asked.push(params.story === null ? null : params.story.text)
     const [target] = params.targets
@@ -497,80 +453,6 @@ describe('ApiServer', () => {
     expect(response.status).toBe(202)
     expect(response.headers.get('content-type')).toBe('application/json')
     expect(await response.text()).toBe(RunningApi.ANSWER)
-  })
-
-  it('a_plan_asked_for_across_two_repositories_answers_what_started_and_what_did_not', async () => {
-    const sessions = new PlanSessions()
-    const server = RunningApi.server({ startPlan: StartPlanSpy.failingOne(), sessions })
-    const port = await server.start()
-
-    try {
-      const response = await RunningApi.post(
-        port,
-        '/start-plan',
-        '{"id":"ABC-123","repo_list":[' +
-          '{"repo":"owner/name","path":"/repo/checkout"},' +
-          '{"repo":"owner/other","path":"/repo/other-checkout"}' +
-          ']}'
-      )
-
-      expect(response.status).toBe(202)
-      expect(await response.text()).toBe(
-        '{"status":"started","started":[{"id":"ABC-123","repo":"owner/name",' +
-          '"issue":{"number":7,"url":"https://github.com/owner/name/issues/7"},"agent":"workspace:4",' +
-          '"branch":"feat/7","worktree":"/repo/checkout/.worktrees/7","root":"/repo/checkout",' +
-        '"baseline":{"outcome":"verde","command":"npm test","summary":"42 passed"}}],' +
-          '"failed":[{"repo":"owner/other","code":"workspace-not-prepared","detail":"branch is taken"}]}'
-      )
-      expect(sessions.known()).toEqual([StartPlanSpy.WATCH])
-    } finally {
-      await server.stop()
-    }
-  })
-
-  it('a_listed_request_whose_every_repository_failed_is_not_a_202', async () => {
-    const server = RunningApi.server({ startPlan: StartPlanSpy.failingAll() })
-    const port = await server.start()
-
-    try {
-      const response = await RunningApi.post(
-        port,
-        '/start-plan',
-        '{"id":"ABC-123","repo_list":[' +
-          '{"repo":"owner/name","path":"/repo/checkout"},' +
-          '{"repo":"owner/other","path":"/repo/other-checkout"}' +
-          ']}'
-      )
-
-      expect(response.status).toBe(400)
-      expect(await response.text()).toBe(
-        '{"code":"no-plan-started","detail":"no plan started: every repository of repo_list failed",' +
-          '"failed":[{"repo":"owner/name","code":"workspace-not-prepared","detail":"branch is taken"},' +
-          '{"repo":"owner/other","code":"user-story-not-read","detail":"acli is not authenticated"}]}'
-      )
-    } finally {
-      await server.stop()
-    }
-  })
-
-  it('a_listed_request_where_one_of_the_two_started_is_still_a_202', async () => {
-    const server = RunningApi.server({ startPlan: StartPlanSpy.failingOne() })
-    const port = await server.start()
-
-    try {
-      const response = await RunningApi.post(
-        port,
-        '/start-plan',
-        '{"id":"ABC-123","repo_list":[' +
-          '{"repo":"owner/name","path":"/repo/checkout"},' +
-          '{"repo":"owner/other","path":"/repo/other-checkout"}' +
-          ']}'
-      )
-
-      expect(response.status).toBe(202)
-    } finally {
-      await server.stop()
-    }
   })
 
   it('an_agent_that_cannot_be_launched_is_reported_as_such_instead_of_a_generic_failure', async () => {
@@ -1037,21 +919,22 @@ describe('ApiServer', () => {
     expect(await response.text()).toBe('{"code":"malformed-repo","detail":"repo must be a repository such as owner/name"}')
   })
 
-  it('a_malformed_repo_inside_a_listed_request_is_refused_naming_its_position', async () => {
+  it('a_body_carrying_the_retired_repo_list_field_is_refused_with_what_to_send_instead', async () => {
     const port = await RunningApi.listening()
 
     const response = await RunningApi.startPlan(
       port,
       '{"id":"ABC-123","repo_list":[' +
         '{"repo":"owner/name","path":"/repo/checkout"},' +
-        '{"repo":"nope","path":"/repo/other-checkout"}' +
+        '{"repo":"owner/other","path":"/repo/other-checkout"}' +
         ']}'
     )
 
     expect(response.status).toBe(400)
     expect(await response.text()).toBe(
-      '{"code":"malformed-repo","detail":"repo_list[1].repo must be a repository such as owner/name"}'
+      '{"code":"repo-list-retired","detail":"repo_list is retired: send repo and path for one repository instead"}'
     )
+    expect(RunningApi.spy.repositories).toEqual([])
   })
 
   it('a_repo_that_is_not_shaped_like_one_is_refused_before_it_ever_becomes_an_argument_of_gh', async () => {

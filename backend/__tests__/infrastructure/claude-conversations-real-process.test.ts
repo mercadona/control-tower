@@ -15,6 +15,7 @@ class TerminalDouble implements Terminal {
   onData(): void {}
   onExit(): void {}
   write(): void {}
+  resize(): void {}
 }
 
 class Governed {

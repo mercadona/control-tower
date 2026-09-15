@@ -155,6 +155,14 @@ function truncationLine(specMd, loc) {
 // epic (José's decision, 2026-08-07); the QUALITY of the hypothesis is judged
 // by the human at the freeze — here only PRESENCE is looked at.
 //
+// Amendment 1 of #339 (issue #343) adds a THIRD rule of the same kind: a
+// frozen decision that does not say where it comes from. The suffix was
+// already there and was optional, so nothing asked for it (see
+// PROVENANCE_SUFFIX_RE); from here on the freeze refuses while one decision
+// keeps quiet about its source, and the reason is the same as the other two —
+// whoever freezes reads fifteen lines, and a decision with no source cannot be
+// told apart there from one the product decided.
+//
 // It deliberately does NOT reuse locateSection: that is an extractor with the
 // semantics of fences and hidden comments, because its text travels to the body
 // of the issues. This is a presence detector, and a detector cleverer than its
@@ -167,24 +175,83 @@ export const HYPOTHESIS_HEADING = '## Hipótesis'
 export const NEEDS_CLARIFICATION_MARKER = '[NEEDS CLARIFICATION'
 export const HYPOTHESIS_REASONS = { OK: 'ok', ABSENT: 'ausente', EMPTY: 'vacia' }
 
+// A heading of any level ends a section for this detector, the same criterion
+// the hypothesis and the decisions both apply.
+const ANY_HEADING_RE = /^ {0,3}#{1,6}([ \t]|$)/
+
+// The decisions section is located by the TEXT of its heading like every other
+// section, and the text comes from FROZEN_DECISIONS_HEADING instead of being
+// typed a second time: it is contract (see its own comment), and a heading
+// spelled in two places ends up diverging in one.
+const FROZEN_DECISIONS_SECTION_RE = new RegExp(`^ {0,3}##[ \\t]+${FROZEN_DECISIONS_HEADING.replace(/^#+[ \t]*/, '')}(\\b|$)`)
+
+// A decision is a TOP-LEVEL bullet of that section — the shape the template
+// writes, `- **D-N · …** — …`. An indented bullet elaborates the decision above
+// it and is not one itself, which is also what keeps the template's own
+// instructions (a bullet list inside an indented HTML comment) from being read
+// as decisions.
+const DECISION_BULLET_RE = /^[-*+][ \t]+\S/
+
+// The source a decision names, or null when it names none. What is asked for is
+// the SAME suffix readFrozenDecisions strips when projecting (its group 1 is
+// the source itself): one format decided in one place, so a marker the trim
+// does not catch — wrapped over two lines, written `_(Procedencia: …)_` — is
+// not one the gate accepts either, and the two never disagree about the same
+// line. An empty suffix names nothing, by the same reading as an empty
+// hypothesis: presence with no content is not presence.
+function provenanceOf(raw) {
+  const suffix = raw.match(PROVENANCE_SUFFIX_RE)
+  if (suffix === null) return null
+  const named = suffix[1].trim()
+  return named === '' ? null : named
+}
+
+// The decisions of the section that name no source, each with the line and the
+// raw text of its bullet — the same shape as a clarification, because the
+// reader of both is the same and it is a line of a file they have to go and
+// fix. ALL of them are collected, not the first: the gate exists so that a
+// spec is fixed in one pass.
+//
+// The source may sit at the end of the bullet's own line or on any of the lines
+// that continue it, which is how the specs written so far carry it when the
+// decision needs a paragraph.
+function decisionsWithoutProvenanceIn(lines) {
+  const at = lines.findIndex((l) => FROZEN_DECISIONS_SECTION_RE.test(l))
+  if (at === -1) return []
+  const decisions = []
+  for (let i = at + 1; i < lines.length; i++) {
+    const raw = lines[i]
+    if (ANY_HEADING_RE.test(raw)) break
+    const named = provenanceOf(raw) !== null
+    if (DECISION_BULLET_RE.test(raw)) decisions.push({ line: i + 1, raw: raw.trim(), named })
+    else if (named && decisions.length) decisions[decisions.length - 1].named = true
+  }
+  return decisions.filter((d) => !d.named).map(({ line, raw }) => ({ line, raw }))
+}
+
 export function analyzeSpecFreeze(specMd) {
   const lines = normalizeToLF(specMd || '').split('\n')
   const clarifications = []
   lines.forEach((raw, i) => {
     if (raw.includes(NEEDS_CLARIFICATION_MARKER)) clarifications.push({ line: i + 1, raw: raw.trim() })
   })
+  const decisionsWithoutProvenance = decisionsWithoutProvenanceIn(lines)
   // A heading of exactly level 2 whose text STARTS with "Hipótesis" — it
   // covers "## Hipótesis" and "## Hipótesis del experimento" (the template). A
   // "### Hipótesis" does not count: the pre-registered grep is "## Hipótesis".
   const at = lines.findIndex((l) => /^ {0,3}##[ \t]+Hipótesis(\b|$)/.test(l))
-  if (at === -1) return { hypothesis: HYPOTHESIS_REASONS.ABSENT, clarifications }
+  if (at === -1) return { hypothesis: HYPOTHESIS_REASONS.ABSENT, clarifications, decisionsWithoutProvenance }
   const body = []
   for (let i = at + 1; i < lines.length; i++) {
-    if (/^ {0,3}#{1,6}([ \t]|$)/.test(lines[i])) break
+    if (ANY_HEADING_RE.test(lines[i])) break
     body.push(lines[i])
   }
   const content = body.join('\n').replace(/<!--[\s\S]*?-->/g, '').trim()
-  return { hypothesis: content ? HYPOTHESIS_REASONS.OK : HYPOTHESIS_REASONS.EMPTY, clarifications }
+  return {
+    hypothesis: content ? HYPOTHESIS_REASONS.OK : HYPOTHESIS_REASONS.EMPTY,
+    clarifications,
+    decisionsWithoutProvenance,
+  }
 }
 
 // readEpicContext: reads from the spec file the text that is going to travel,
@@ -340,17 +407,34 @@ export function readEpicContext(specMd) {
 // PROVENANCE_SUFFIX_RE: the "*(Procedencia: …)*" suffix that the decisions
 // template (_TEMPLATE-execution-spec.md, the core) writes at the end of each
 // line, with a format verified against docs/loop/loop.body.html. It is meta for
-// whoever FREEZES (spoken | deduced | proposed), not for whoever EXECUTES: the
-// agent does not care about the origin — the decision binds it just the same —,
-// so it is removed when projecting. It is not a parser: it only trims the
-// suffix. `[^\n]` (not `.`) so as not to cross line breaks: if the suffix was
+// whoever FREEZES, not for whoever EXECUTES: the agent does not care about the
+// origin — the decision binds it just the same —, so it is removed when
+// projecting. It is not a parser: it only trims the suffix, and group 1 is the
+// source the freeze gate asks to be named (see provenanceOf).
+//
+// The taxonomy of what may be named there, which whoever freezes reads in the
+// fifteen-line summary and the template spells out for whoever writes it:
+//
+//   hablada          the TL said it, with their phrase where possible
+//   deducida         it follows from something hablada — say from what
+//   propuesta        the writer's idea; it is NEVER frozen (it is asked or parked)
+//   historia <id>    a user story decided it
+//   prd <name>       a product document decided it
+//   prototipo <v>    a prototype at a version decided it
+//
+// The last three are the widening of amendment 1 of #339: they are what lets a
+// reader tell a product-backed decision from a TL-backed one. The gate asks
+// that a source BE named, never which one it is — classifying it is the
+// reader's job at the freeze, like the quality of the hypothesis.
+//
+// `[^\n]` (not `.`) so as not to cross line breaks: if the suffix was
 // wrapped onto two lines, it does not match, and the cleaning betrays it
 // through B2 instead of breaking the markdown. And the content is TEMPERED with
 // `(?!\*\(Procedencia:)` so as not to cross a SECOND marker: without that, a
 // line with two markers matched from the first one all the way to the final
 // `)*` and silently deleted everything in between (DeepSeek #1). This way only
 // the final suffix is trimmed; the inner marker survives and B2 warns about it.
-const PROVENANCE_SUFFIX_RE = /\s*\*\(Procedencia:(?:(?!\*\(Procedencia:)[^\n])*?\)\*\s*$/i
+const PROVENANCE_SUFFIX_RE = /\s*\*\(Procedencia:((?:(?!\*\(Procedencia:)[^\n])*?)\)\*\s*$/i
 
 // PROVENANCE_MARKER_RE: detects a provenance marker that SURVIVED the trim
 // (for the B2 warning). It looks at the MARKER —an opening parenthesis followed
