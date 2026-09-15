@@ -368,114 +368,118 @@ const Home = () => {
             </ol>
           </nav>
 
-          <section className="home__workspace" aria-labelledby={`workspace-${currentStage}`}>
-            {currentStage === 'request' && (
-              <>
-                <header className="home__workspace-heading">
-                  <span className="home__workspace-number">1</span>
-                  <div>
-                    <h1 id="workspace-request" className="lg-title3-semibold">Solicitud</h1>
-                    <p>Cuéntanos qué quieres planificar y dónde está el repositorio.</p>
-                  </div>
-                </header>
-                {recovery}
-                {brainstormingRecovery}
-                {candidates.length > 1 && (
-                  <ul className="home__active-plans" aria-label="Planes activos">
-                    {candidates.map((candidate) => (
-                      <li key={`${candidate.plan.repo}:${candidate.plan.issue.number}`} className="home__active-plan">
-                        <span>
-                          <strong>{candidate.request.id}</strong> · <code>{candidate.request.repo}</code> · issue #{candidate.plan.issue.number}
-                        </span>
-                        <Button
-                          variant="secondary"
-                          aria-label={`Continuar plan ${candidate.request.id}, ${candidate.request.repo}, issue #${candidate.plan.issue.number}`}
-                          onClick={() => selectActivePlan(candidate)}
-                        >
-                          Continuar plan
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <StartPlanForm
-                  key={requestFormVersion}
-                  onOpened={sessionOpened}
-                  onUnreachable={sessionUnreachable}
-                  onInteraction={formInteracted}
-                  isLocked={uncertainRequest !== null}
-                  isMutationBlocked={reconciliation === 'unavailable' || reconciliation === 'inconclusive' || (reconciliation === 'checking' && retryingRef.current)}
-                  isCoordinatingSessionLive={isCoordinatingSessionLive}
-                  request={uncertainRequest ?? undefined}
-                />
-              </>
-            )}
+          {currentStage === 'request' && (
+            <WorkflowStep
+              aria-label={STAGE_LABEL.request}
+              title={STAGE_LABEL.request}
+              level={1}
+              subtitle="Cuéntanos qué quieres planificar y dónde está el repositorio."
+              status="active"
+              isExpanded
+              canCollapse={false}
+              onExpandedChange={() => undefined}
+            >
+              {recovery}
+              {brainstormingRecovery}
+              {candidates.length > 1 && (
+                <ul className="home__active-plans" aria-label="Planes activos">
+                  {candidates.map((candidate) => (
+                    <li key={`${candidate.plan.repo}:${candidate.plan.issue.number}`} className="home__active-plan">
+                      <span>
+                        <strong>{candidate.request.id}</strong> · <code>{candidate.request.repo}</code> · issue #{candidate.plan.issue.number}
+                      </span>
+                      <Button
+                        variant="secondary"
+                        aria-label={`Continuar plan ${candidate.request.id}, ${candidate.request.repo}, issue #${candidate.plan.issue.number}`}
+                        onClick={() => selectActivePlan(candidate)}
+                      >
+                        Continuar plan
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <StartPlanForm
+                key={requestFormVersion}
+                onOpened={sessionOpened}
+                onUnreachable={sessionUnreachable}
+                onInteraction={formInteracted}
+                isLocked={uncertainRequest !== null}
+                isMutationBlocked={reconciliation === 'unavailable' || reconciliation === 'inconclusive' || (reconciliation === 'checking' && retryingRef.current)}
+                isCoordinatingSessionLive={isCoordinatingSessionLive}
+                request={uncertainRequest ?? undefined}
+              />
+            </WorkflowStep>
+          )}
 
-            {currentStage === 'review' && workflow !== null && (
-              <>
-                <header className="home__workspace-heading">
-                  <span className="home__workspace-number">2</span>
-                  <div>
-                    <h1 id="workspace-review" className="lg-title3-semibold">Revisar plan</h1>
-                    <p>{reviewDescription}</p>
-                  </div>
-                </header>
-                {recovery}
-                <BaselineNotice baseline={workflow.plan.baseline} />
-                <PlanProgress
-                  key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
-                  plan={workflow.plan}
-                  onReady={planReady}
-                  observe={restoredIsConfirmed}
-                />
-                {workflow.phase === 'ready' && restoredIsConfirmed && (
-                  <div className="home__review-action">
-                    <a href={workflow.plan.issue.url} target="_blank" rel="noreferrer" className="home__issue-link lg-body-medium">
-                      Abrir el plan en GitHub
-                    </a>
-                    <ImplementPlanAction
-                      plan={workflow.plan}
-                      onImplementationStarted={implementationStarted}
-                    />
-                  </div>
-                )}
-                {showRestoredDiscard && workflow.phase === 'planning' && (
-                  <Button className="home__discard" variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
-                )}
-                {showRestoredDiscard && workflow.phase === 'ready' && (
-                  <Button className="home__discard" variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
-                )}
-              </>
-            )}
-
-            {currentStage === 'implementation' && workflow !== null && (
-              <>
-                <header className="home__workspace-heading">
-                  <span className="home__workspace-number">3</span>
-                  <div>
-                    <h1 id="workspace-implementation" className="lg-title3-semibold">Implementación</h1>
-                    <p>Seguimos la implementación. Aquí verás el progreso que comunica el backend.</p>
-                  </div>
-                </header>
-                {recovery}
-                {restoredIsConfirmed && (
+          {currentStage === 'review' && workflow !== null && (
+            <WorkflowStep
+              aria-label={STAGE_LABEL.review}
+              title={STAGE_LABEL.review}
+              level={1}
+              subtitle={reviewDescription}
+              status="active"
+              isExpanded
+              canCollapse={false}
+              onExpandedChange={() => undefined}
+            >
+              {recovery}
+              <BaselineNotice baseline={workflow.plan.baseline} />
+              <PlanProgress
+                key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
+                plan={workflow.plan}
+                onReady={planReady}
+                observe={restoredIsConfirmed}
+              />
+              {workflow.phase === 'ready' && restoredIsConfirmed && (
+                <div className="home__review-action">
+                  <a href={workflow.plan.issue.url} target="_blank" rel="noreferrer" className="home__issue-link lg-body-medium">
+                    Abrir el plan en GitHub
+                  </a>
                   <ImplementPlanAction
                     plan={workflow.plan}
                     onImplementationStarted={implementationStarted}
-                    isImplementationStarted
                   />
-                )}
-                {restoredIsConfirmed && (
-                  <ImplementProgress
-                    key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
-                    issue={workflow.plan.issue.number}
-                    root={workflow.plan.root ?? workflow.request.path}
-                    repo={workflow.plan.repo}
-                  />
-                )}
-              </>
-            )}
-          </section>
+                </div>
+              )}
+              {showRestoredDiscard && workflow.phase === 'planning' && (
+                <Button className="home__discard" variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
+              )}
+              {showRestoredDiscard && workflow.phase === 'ready' && (
+                <Button className="home__discard" variant="secondary" onClick={discardWorkflow}>Descartar estado</Button>
+              )}
+            </WorkflowStep>
+          )}
+
+          {currentStage === 'implementation' && workflow !== null && (
+            <WorkflowStep
+              aria-label={STAGE_LABEL.implementation}
+              title={STAGE_LABEL.implementation}
+              level={1}
+              subtitle="Seguimos la implementación. Aquí verás el progreso que comunica el backend."
+              status="active"
+              isExpanded
+              canCollapse={false}
+              onExpandedChange={() => undefined}
+            >
+              {recovery}
+              {restoredIsConfirmed && (
+                <ImplementPlanAction
+                  plan={workflow.plan}
+                  onImplementationStarted={implementationStarted}
+                  isImplementationStarted
+                />
+              )}
+              {restoredIsConfirmed && (
+                <ImplementProgress
+                  key={`${workflow.plan.repo}:${workflow.plan.issue.number}`}
+                  issue={workflow.plan.issue.number}
+                  root={workflow.plan.root ?? workflow.request.path}
+                  repo={workflow.plan.repo}
+                />
+              )}
+            </WorkflowStep>
+          )}
 
           <GateSequence />
 

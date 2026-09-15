@@ -15,7 +15,7 @@ describe('WorkflowStep', () => {
 
     expect(header).toHaveAttribute('aria-expanded', 'true')
     expect(header).toHaveAttribute('aria-controls', content.id)
-    expect(content).not.toHaveAttribute('hidden')
+    expect(content.closest('.workflow-step__content-wrap')).toHaveAttribute('aria-hidden', 'false')
   })
 
   it('should ask its parent to reopen and collapse a completed step', async () => {
@@ -33,7 +33,7 @@ describe('WorkflowStep', () => {
 
     expect(header).toHaveAttribute('aria-expanded', 'false')
     expect(content).not.toBeNull()
-    expect(content).toHaveAttribute('hidden')
+    expect(content?.closest('.workflow-step__content-wrap')).toHaveAttribute('aria-hidden', 'true')
 
     await user.click(header)
     expect(onExpandedChange).toHaveBeenCalledWith(true)
@@ -48,22 +48,41 @@ describe('WorkflowStep', () => {
     expect(onExpandedChange).toHaveBeenCalledWith(false)
   })
 
-  it('should keep an expanded non-collapsible step focusable without asking its parent to collapse', async () => {
-    const user = userEvent.setup()
+  it('should render a non-collapsible step as a static header with no button and no chevron', () => {
     const onExpandedChange = vi.fn()
 
-    render(
+    const { container } = render(
       <WorkflowStep status="active" title="Plan preparado" isExpanded canCollapse={false} onExpandedChange={onExpandedChange}>
         El plan está listo para implementar
       </WorkflowStep>,
     )
 
-    const header = screen.getByRole('button', { name: /Plan preparado/ })
-    await user.click(header)
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.getByRole('heading', { level: 2, name: 'Plan preparado' })).toBeInTheDocument()
+    expect(container.querySelector('.workflow-step__chevron')).toBeNull()
+    expect(screen.getByText('Activo')).toBeInTheDocument()
+  })
 
-    expect(header).toHaveAttribute('aria-disabled', 'true')
-    expect(header).not.toBeDisabled()
-    expect(onExpandedChange).not.toHaveBeenCalled()
+  it('should render a non-collapsible step content as expanded and reachable', () => {
+    render(
+      <WorkflowStep status="active" title="Plan preparado" isExpanded canCollapse={false} onExpandedChange={() => undefined}>
+        El plan está listo para implementar
+      </WorkflowStep>,
+    )
+
+    const content = screen.getByRole('region', { name: 'Plan preparado' })
+
+    expect(content.closest('.workflow-step__content-wrap')).toHaveAttribute('aria-hidden', 'false')
+  })
+
+  it('should render the static header title at the caller supplied heading level', () => {
+    render(
+      <WorkflowStep status="active" title="Solicitud" level={1} isExpanded canCollapse={false} onExpandedChange={() => undefined}>
+        Contenido
+      </WorkflowStep>,
+    )
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Solicitud' })).toBeInTheDocument()
   })
 
   it.each(['completed', 'active', 'pending'] as const)('should expose the %s state in its class', (status) => {
@@ -86,7 +105,10 @@ describe('WorkflowStep', () => {
     const header = screen.getByRole('button', { name: /Implementar/ })
 
     expect(header).toHaveAttribute('aria-controls', 'implementation-step')
-    expect(document.getElementById('implementation-step')).toHaveAttribute('hidden')
+    expect(document.getElementById('implementation-step')?.closest('.workflow-step__content-wrap')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    )
   })
 
   it('should keep a pending step collapsed and unavailable', () => {
