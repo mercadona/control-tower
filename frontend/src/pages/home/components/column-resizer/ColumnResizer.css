@@ -8,6 +8,15 @@
   touch-action: none;
 }
 
+.column-resizer:focus {
+  outline: none;
+}
+
+.column-resizer:focus-visible {
+  outline: var(--borderwidth-md) solid var(--border-brand-primary);
+  outline-offset: var(--borderwidth-md);
+}
+
 .column-resizer::before {
   content: '';
   width: 1px;
