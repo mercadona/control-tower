@@ -193,6 +193,10 @@ class Mother {
   static groomedOutcome(issues: EpicIssue[]): EpicGroomed {
     return new EpicGroomed({ state: EpicGroomState.GROOMED, milestone: Mother.MILESTONE, plan: Mother.PLAN, issues })
   }
+
+  static regroomedOutcome(issues: EpicIssue[]): EpicGroomed {
+    return new EpicGroomed({ state: EpicGroomState.GROOMED, milestone: Mother.MILESTONE, plan: null, issues })
+  }
 }
 
 class RunningApi {
@@ -419,6 +423,21 @@ describe('EpicGroomRoute', () => {
       }],
     })
     expect(said).toEqual([`${EpicGroomRoute.RECORD}: "${Mother.MILESTONE}" planned 1 issue(s), holds 1 now\n`])
+  })
+
+  it('a regroom records that no plan was taken rather than a plan of zero issues', async () => {
+    const held = Mother.live()
+    const groom = GroomEpicSpy.answering(Mother.regroomedOutcome([Mother.backlogIssue()]))
+    const key = Keys.minted()
+    const said: string[] = []
+    const port = await RunningApi.listening(held, ReadEpicGroomSpy.neverAsked(), groom, key, (line) => { said.push(line) })
+
+    const response = await RunningApi.posting(port, { [GateKey.HEADER]: Keys.MINTED })
+
+    expect(response.status).toBe(200)
+    expect(said).toEqual([
+      `${EpicGroomRoute.RECORD}: "${Mother.MILESTONE}" ${EpicGroomRoute.NO_PLAN_ON_THIS_PRESS}, holds 1 now\n`,
+    ])
   })
 
   it('another method is refused naming the allowed ones', async () => {

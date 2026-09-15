@@ -63,6 +63,7 @@ export class EpicGroomRoute {
   static readonly PATH = '/epic-groom'
   static readonly METHODS = 'GET, POST'
   static readonly RECORD = 'gate 2 groom'
+  static readonly NO_PLAN_ON_THIS_PRESS = 'no plan on this press'
   static readonly #NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
   static readonly #NO_COORDINATING_SESSION_DETAIL = 'no coordinating session is held: there is nothing to groom'
 
@@ -131,9 +132,11 @@ export class EpicGroomRoute {
   }
 
   static #recordOf(groomed: EpicGroomed): string {
-    const planned = groomed.plan === null ? 0 : groomed.plan.issues.length
+    const planned = groomed.plan === null
+      ? EpicGroomRoute.NO_PLAN_ON_THIS_PRESS
+      : `planned ${groomed.plan.issues.length} issue(s)`
 
-    return `${EpicGroomRoute.RECORD}: "${groomed.milestone}" planned ${planned} issue(s), holds ${groomed.issues.length} now\n`
+    return `${EpicGroomRoute.RECORD}: "${groomed.milestone}" ${planned}, holds ${groomed.issues.length} now\n`
   }
 
   static #answerRead(response: Response, outcome: EpicGroomRead, minted: string | null): void {
