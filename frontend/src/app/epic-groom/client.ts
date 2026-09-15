@@ -105,12 +105,13 @@ const read = async (): Promise<EpicGroomOutcome> => {
 
 const press = async (path: string, headers: Record<string, string>): Promise<EpicGroomAskOutcome> => {
   let response: Response
+  let body: unknown
   try {
     response = await fetch(path, { method: 'POST', headers })
+    body = await response.json()
   } catch {
     return { kind: 'backend-unreachable' }
   }
-  const body: unknown = await response.json()
   if (response.status === ACTED_STATUS) {
     if (!isRecord(body) || !isActedStatus(body.status) || typeof body.milestone !== 'string' || !isEpicIssues(body.issues)) {
       return { kind: 'backend-unreachable' }

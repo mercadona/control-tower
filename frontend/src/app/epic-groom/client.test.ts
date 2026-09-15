@@ -124,6 +124,14 @@ describe('EpicGroomClient, against the wire shapes backend/API.md documents for 
     })
   })
 
+  it('a press whose body does not parse as JSON reads as backend-unreachable rather than rejecting', async () => {
+    answerWith({ status: 502, body: '<html><body>Bad Gateway</body></html>' })
+
+    const outcome = await EpicGroomClient.groom(EpicGroomMother.KEY, EpicGroomMother.PLAN_FINGERPRINT)
+
+    expect(outcome).toEqual({ kind: 'backend-unreachable' })
+  })
+
   it('a refusal carries the code and the detail the backend gave', async () => {
     answerWith(EpicGroomMother.notFromThePage())
 

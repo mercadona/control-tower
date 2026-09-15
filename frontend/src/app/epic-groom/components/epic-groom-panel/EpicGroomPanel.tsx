@@ -71,8 +71,6 @@ const EpicGroomPanel = () => {
     read.kind === 'groomable' || read.kind === 'partially-groomed' || read.kind === 'groomed' ? read.key : null
 
   const settle = (answered: EpicGroomAskOutcome) => {
-    isPressingRef.current = false
-    setIsPressing(false)
     if (answered.kind === 'acted') {
       setActed(answered)
       setRefusal(null)
@@ -85,14 +83,24 @@ const EpicGroomPanel = () => {
     if (gateKey === null || isPressingRef.current) return
     isPressingRef.current = true
     setIsPressing(true)
-    settle(await EpicGroomClient.groom(gateKey, planFingerprint))
+    try {
+      settle(await EpicGroomClient.groom(gateKey, planFingerprint))
+    } finally {
+      isPressingRef.current = false
+      setIsPressing(false)
+    }
   }
 
   const pressPromote = async () => {
     if (gateKey === null || isPressingRef.current) return
     isPressingRef.current = true
     setIsPressing(true)
-    settle(await EpicGroomClient.promote(gateKey))
+    try {
+      settle(await EpicGroomClient.promote(gateKey))
+    } finally {
+      isPressingRef.current = false
+      setIsPressing(false)
+    }
   }
 
   const gateNotice = gateKey === null && (

@@ -133,6 +133,22 @@ describe('EpicGroomPanel', () => {
     expect(screen.queryByRole('button', GROOM_BUTTON)).not.toBeInTheDocument()
   })
 
+  it('a press whose answer body is not JSON re-enables the button and says the backend could not be reached', async () => {
+    const fetching = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(EpicGroomMother.groomable().body, { status: 200 }))
+      .mockResolvedValueOnce(new Response('<html><body>Bad Gateway</body></html>', { status: 502 }))
+    vi.stubGlobal('fetch', fetching)
+    const user = userEvent.setup()
+    render(<EpicGroomPanel />)
+    await screen.findByRole('button', GROOM_BUTTON)
+
+    await user.click(screen.getByRole('button', GROOM_BUTTON))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo contactar con el backend')
+    expect(screen.getByRole('button', GROOM_BUTTON)).toBeEnabled()
+  })
+
   it('a refused groom is shown with the words the program printed', async () => {
     const fetching = vi
       .fn()
