@@ -8,7 +8,7 @@
 // detail.
 import { describe, it, expect, afterEach } from 'vitest'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, rmSync, readFileSync, existsSync, writeFileSync, cpSync, openSync, closeSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, readFileSync, existsSync, writeFileSync, cpSync, openSync, closeSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -411,5 +411,120 @@ describe('ct-next — a slice with no usable issue number (D4, defect 5)', () =>
     const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_NO_N })
     expect(r.out).toMatch(/selected for this batch.*with NO usable issue number/)
     expect(r.out).not.toMatch(/#undefined/)
+  })
+})
+
+// #348 — THE REPOSITORIES OF THE MILESTONE THIS RUN CANNOT REACH.
+//
+// A milestone has one home repository and N target ones; this run dispatches
+// the slices of the repository whose checkout it stands in. What these tests
+// pin is that it stops behaving as if that were the whole milestone: every
+// other target repository of the reach is resolved against the registry of
+// checkouts, a repository with no checkout (or with a stale one) has its slices
+// REFUSED by name with what is missing and the run exits 1, and a confirmed one
+// is handed over without moving the exit code.
+describe('ct-next — a target repository it cannot reach (#348)', () => {
+  const REACH = '<!-- ct-repos:o/r,o/other -->'
+  const milestoneWith = (description) => ({ title: 'Epic', number: 7, description })
+  const readyIssue = (milestone) => ({
+    number: 42,
+    title: '#1 refresh',
+    labels: [{ name: 'status:ready' }],
+    body: '<!-- ct-order:1 -->',
+    milestone,
+  })
+
+  function runWithReach(description, { registry = null, originByCwd = null, extra = {} } = {}) {
+    const repoRoot = makeTmp('ct-next-reach-')
+    const configDir = makeTmp('ct-next-config-')
+    if (registry !== null) {
+      mkdirSync(join(configDir, 'control-tower'), { recursive: true })
+      writeFileSync(join(configDir, 'control-tower', 'checkouts.json'), JSON.stringify(registry))
+    }
+    const answered = run(['--repo', 'o/r', '--cap', '1', '--dry-run'], {
+      PATH: fakePath,
+      CLAUDE_CONFIG_DIR: configDir,
+      FAKE_GIT_TOPLEVEL: repoRoot,
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[readyIssue(milestoneWith(description))], []]),
+      ...(originByCwd === null ? {} : { FAKE_GIT_REMOTE_ORIGIN_BY_CWD: JSON.stringify(originByCwd) }),
+      ...extra,
+    })
+    return { ...answered, repoRoot, configDir }
+  }
+
+  it('a target repository with no registered checkout has its slices refused by name and exits 1', () => {
+    const answered = runWithReach(REACH, { registry: { checkouts: [] } })
+
+    expect(answered.out).toContain('o/other')
+    expect(answered.out).toMatch(/NO checkout of it is registered/)
+    expect(answered.code).toBe(1)
+  })
+
+  it('a target repository with a confirmed checkout is handed over, not refused, and the exit code does not move', () => {
+    const elsewhere = makeTmp('ct-next-elsewhere-')
+    const answered = runWithReach(REACH, {
+      registry: { checkouts: [{ repo: 'o/other', path: elsewhere }] },
+      originByCwd: { [realpathSync(elsewhere)]: 'https://github.com/o/other.git' },
+    })
+
+    expect(answered.out).toMatch(/also reaches o\/other/)
+    expect(answered.out).toContain('/ct-next --repo o/other')
+    expect(answered.out).not.toMatch(/NO checkout of it is registered/)
+    expect(answered.code).toBe(0)
+  })
+
+  it('a registered path that holds another repository is refused as stale naming what it holds', () => {
+    const elsewhere = makeTmp('ct-next-wrong-')
+    const answered = runWithReach(REACH, {
+      registry: { checkouts: [{ repo: 'o/other', path: elsewhere }] },
+      originByCwd: { [realpathSync(elsewhere)]: 'https://github.com/o/somebody-else.git' },
+    })
+
+    expect(answered.out).toMatch(/no longer answers for it/)
+    expect(answered.out).toContain('o/somebody-else')
+    expect(answered.out).toMatch(/It is NOT claimed that o\/other is missing/)
+    expect(answered.code).toBe(1)
+  })
+
+  it('a registered path that is not on disk any more is stale, and it is not claimed that the repository is missing', () => {
+    const answered = runWithReach(REACH, {
+      registry: { checkouts: [{ repo: 'o/other', path: '/checkouts/that/went/away' }] },
+    })
+
+    expect(answered.out).toMatch(/no longer answers for it/)
+    expect(answered.out).toContain('/checkouts/that/went/away')
+    expect(answered.code).toBe(1)
+  })
+
+  it('a milestone whose reach is one repository prints nothing about the reach and does not move the exit code', () => {
+    const answered = runWithReach('<!-- ct-repos:o/r -->', { registry: { checkouts: [] } })
+
+    expect(answered.out).not.toMatch(/also reaches/)
+    expect(answered.out).not.toMatch(/NO checkout of it is registered/)
+    expect(answered.code).toBe(0)
+  })
+
+  it('a milestone with no reach in its description says nothing about other repositories', () => {
+    const answered = runWithReach('El epic del trimestre', { registry: { checkouts: [] } })
+
+    expect(answered.out).not.toMatch(/also reaches/)
+    expect(answered.code).toBe(0)
+  })
+
+  it('a registry that could not be read refuses the target repository without claiming any is missing', () => {
+    const configDir = makeTmp('ct-next-broken-')
+    mkdirSync(join(configDir, 'control-tower'), { recursive: true })
+    writeFileSync(join(configDir, 'control-tower', 'checkouts.json'), '{ not json')
+    const repoRoot = makeTmp('ct-next-reach-')
+    const answered = run(['--repo', 'o/r', '--cap', '1', '--dry-run'], {
+      PATH: fakePath,
+      CLAUDE_CONFIG_DIR: configDir,
+      FAKE_GIT_TOPLEVEL: repoRoot,
+      FAKE_GH_LIST_SEQUENCE: JSON.stringify([[readyIssue(milestoneWith(REACH))], []]),
+    })
+
+    expect(answered.out).toMatch(/could not be read/)
+    expect(answered.out).toMatch(/not the same as saying there is no checkout/)
+    expect(answered.code).toBe(1)
   })
 })
