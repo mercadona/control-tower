@@ -322,10 +322,26 @@ describe("seam 4 — the slice's plan is written by writing-plans-prescriptive (
     // ratchet is deliberately set to the new size and not to a round number, so
     // the next real addition still has to argue for itself. Accumulated since
     // 16,314: +1,181 bytes, 7.2%.
+    //
+    // Cap raised from 17,495 to 17,545: fifty bytes, and they buy no content
+    // either. Issue #346 renamed the loop's unit of work from «epic» to
+    // «milestone», and «milestone» is five bytes longer: three occurrences here
+    // (`## Contexto del epic` twice, `epic context` once) account for fifteen
+    // of them. The other thirty-five are one parenthetical, `(or "del epic", in
+    // an older issue)`, in the paragraph that lists the sections of the issue
+    // you may plan from — an issue groomed before the rename carries the old
+    // spelling, and without that half-line the checklist names a section its
+    // body does not have, which reads as "the section is missing" and sends
+    // whoever is planning to look for it outside the issue. The kickoff already
+    // names the spelling the issue really carries; this is the redundancy that
+    // covers an agent reading the skill without it. Trimming was not attempted,
+    // for the same reason as the raise above: nothing was added, so a sentence
+    // removed here would pay for a rename with a measured lesson. Accumulated
+    // since 16,314: +1,231 bytes, 7.5%.
     expect(
       bytes('SKILL.md'),
       'SKILL.md is over its cap: trim inside the same section, or raise the cap by writing the reason for the raise right here — precedent is not a reason.'
-    ).toBeLessThanOrEqual(17495)
+    ).toBeLessThanOrEqual(17545)
     expect(
       bytes('plan-template.md'),
       'plan-template.md is over its cap: trim inside the same section, or raise the cap by writing the reason for the raise right here — precedent is not a reason.'

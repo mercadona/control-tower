@@ -34,13 +34,14 @@ are non-negotiable and machine-checked by `plan-contract.js`: the fixed structur
 
 You were dispatched for exactly one issue. Its body carries everything you are allowed to
 plan from: the acceptance criteria (EARS), the "Out of scope / Protected" section, the
-"Contexto del epic" and "Contexto heredado" sections, the "Dependencias" section with the
+"Contexto del milestone" (or "del epic", in an older issue) and "Contexto heredado" sections,
+the "Dependencias" section with the
 interface this slice consumes, and "Decisiones congeladas" — decisions you **must respect**,
 copied to `## 2. Closed decisions`. The execution spec stays out of reach on purpose: the
 issue is the whole input.
 
 **Zero questions.** There is no human in this session. Every ambiguity you resolve goes to
-`## 9. Assumptions` with its provenance (issue / epic context / repo convention / your call).
+`## 9. Assumptions` with its provenance (issue / milestone context / repo convention / your call).
 If something genuinely prevents planning, set the `blocked` field in `.agent/SLICE.md` and
 stop there: a blocker travels as that field, which is the one thing a guess cannot do.
 
@@ -243,7 +244,7 @@ lives in the task that creates the file — the only text the implementer will r
 to hold for Task 1 and easy to lose by Task 6; step 5 is what keeps them in view.
 
 1. Read `.agent/SLICE.md` and the issue: acceptance criteria, "Out of scope / Protected",
-   "Contexto del epic", "Contexto heredado", "Dependencias".
+   "Contexto del milestone", "Contexto heredado", "Dependencias".
 2. Read the files this slice touches, one analogous file, this repo's convention documents, and
    the documents of `conventions/`. `--check-plan` reads §3's paths, not §4's — `(create)` rows
    can be unwritten. §4 names the files touched; the last is ct's yardstick, at kickoff's path.

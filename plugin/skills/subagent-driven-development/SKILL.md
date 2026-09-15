@@ -38,7 +38,7 @@ digraph when_to_use {
 }
 ```
 
-**No plan yet?** Write it now with control-tower-loop:writing-plans-prescriptive, scoped to the issue you were dispatched for. A CT-dispatched issue brings acceptance criteria (EARS), «Protegido» and the «Contexto del epic» — exactly the spec that writing-plans-prescriptive expects as input. Save the plan under `docs/superpowers/plans/` (filename `YYYY-MM-DD-issue-<n>-<slug>.md`), validate it with `--check-plan` and commit it: it travels in the PR, and `--release` refuses without it. Do NOT go back to brainstorming — the design was frozen in the execution spec before the issue existed.
+**No plan yet?** Write it now with control-tower-loop:writing-plans-prescriptive, scoped to the issue you were dispatched for. A CT-dispatched issue brings acceptance criteria (EARS), «Protegido» and the «Contexto del milestone» («Contexto del epic» in an issue groomed before the rename) — exactly the spec that writing-plans-prescriptive expects as input. Save the plan under `docs/superpowers/plans/` (filename `YYYY-MM-DD-issue-<n>-<slug>.md`), validate it with `--check-plan` and commit it: it travels in the PR, and `--release` refuses without it. Do NOT go back to brainstorming — the design was frozen in the execution spec before the issue existed.
 
 **vs. Executing Plans (parallel session):**
 - Same session (no context switch)

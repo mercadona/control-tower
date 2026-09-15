@@ -5,16 +5,16 @@
 The invocation:
 
 ```
-node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-harvest.mjs --repo "<owner/repo>" --milestone "<epic title>" [--json] [--bq <project:dataset.table>]
+node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-harvest.mjs --repo "<owner/repo>" --milestone "<milestone title>" [--json] [--bq <project:dataset.table>]
 node ${CLAUDE_PLUGIN_ROOT}/scripts/ct-harvest.mjs --schema
 ```
 
 
-It answers: **how much did each slice of this epic cost, according to what GitHub already wrote on its own?** One row per slice with `ready→claim`, `claim→release`, `release→merge`, reopens, requeues, `blocked` episodes and PR size.
+It answers: **how much did each slice of this milestone cost, according to what GitHub already wrote on its own?** One row per slice with `ready→claim`, `claim→release`, `release→merge`, reopens, requeues, `blocked` episodes and PR size.
 
-**It is harvested, not captured.** Zero manual fields, not a single one. Everything comes out of the timeline GitHub writes every time the loop moves a label. The one by-hand datum of the measure —the **minutes of human intervention**— lives in the epic's outcome and this command **deliberately does not ask for it**: the moment a harvester admits one manual field it turns into a form, and a form is exactly how `docs/medicion-slices.md` died (2 rows, the key column at «no medido»).
+**It is harvested, not captured.** Zero manual fields, not a single one. Everything comes out of the timeline GitHub writes every time the loop moves a label. The one by-hand datum of the measure —the **minutes of human intervention**— lives in the milestone's outcome and this command **deliberately does not ask for it**: the moment a harvester admits one manual field it turns into a form, and a form is exactly how `docs/medicion-slices.md` died (2 rows, the key column at «no medido»).
 
-**It was written after the first real dispatch, not before.** The decisions in `scripts/harvest.js` come from having harvested menoplus's epic `#602` by hand (2026-08-12/13). Not one of them was deduced in a vacuum, and the two that matter most came out of data an invented fixture would never have had.
+**It was written after the first real dispatch, not before.** The decisions in `scripts/harvest.js` come from having harvested menoplus's milestone `#602` by hand (2026-08-12/13). Not one of them was deduced in a vacuum, and the two that matter most came out of data an invented fixture would never have had.
 
 **It mutates nothing.** No labels, no issues, no PRs. Same as `/ct-status`.
 
@@ -26,7 +26,7 @@ The exception —which is not an exception— is `status:blocked`: the ladder is
 
 **2 · A phase that did not happen is worth `null`, never `0`.** A slice that never reached `in-review` did not take zero seconds to get there: **it did not get there**. With the small N this measure is always going to have, an invented zero moves the mean more than the real datum it replaces. In the table it prints `—`.
 
-**3 · Who closed the issue is told by GitHub, not by a heuristic.** The first version deduced the PR by scanning the `cross-referenced` events and keeping the last merged one. Against the real epic it tied `#659` to PR `#665` and `#660` to `#666`, when the right ones were `#663` and `#665` — because every PR of a slice cites the previous one, so the old issue accumulates references from **later** PRs and «the last merged one» rewards exactly the wrong ones. **The table came out green and lied.** Today it reads `closedByPullRequestsReferences`, which is the field GitHub publishes for this.
+**3 · Who closed the issue is told by GitHub, not by a heuristic.** The first version deduced the PR by scanning the `cross-referenced` events and keeping the last merged one. Against the real milestone it tied `#659` to PR `#665` and `#660` to `#666`, when the right ones were `#663` and `#665` — because every PR of a slice cites the previous one, so the old issue accumulates references from **later** PRs and «the last merged one» rewards exactly the wrong ones. **The table came out green and lied.** Today it reads `closedByPullRequestsReferences`, which is the field GitHub publishes for this.
 
 ## It is reported by family, never aggregated
 
@@ -66,7 +66,7 @@ It is read from GitHub, like everything else: there is no checkout to assume.
 - **`—` in `bytes per role`** — the slice has a file, but no dispatched role carried `agent_bytes`/`skill_bytes`/`package_bytes` (telemetry older than this measure). The three are required TOGETHER, like the severities: the question that motivates the column is their sum, and half a measure does not answer it.
 - **`—` in `returns`** — the slice has a file, but no `judge` attempt in it RULED (only discarded attempts, or telemetry with no judge row at all). A `0+0=0 of 0` would assert a judge that never sent anything back, when what happened is that no attempt reached a verdict.
 - **`—` in `tool` and `tokens`** — the slice has a file, but no attempt carried the normalized tool usage (telemetry older than this measure). `(unsupported)`, `(not-read)` or `(unmeasured)` in `tokens` are not the same case: the attempt DID carry the contract and the tool reported no usable usage. Nothing is ever estimated from the size of the text.
-- **the directory could not be listed** — not a single number is printed, and it is said out loud. **It does not drop the exit to `1`**: the cause is almost always that that repo has no telemetry, and a permanent `1` on those epics would teach people to ignore the exit code. A **file** that the listing did name and could not be read IS an incomplete harvest: reason and exit `1`.
+- **the directory could not be listed** — not a single number is printed, and it is said out loud. **It does not drop the exit to `1`**: the cause is almost always that that repo has no telemetry, and a permanent `1` on those milestones would teach people to ignore the exit code. A **file** that the listing did name and could not be read IS an incomplete harvest: reason and exit `1`.
 
 The unreadable lines of a `jsonl` are counted and said out loud; they neither throw away the file nor change the exit — a corrupt row from three weeks ago is not fixed by repeating the command.
 
@@ -74,7 +74,7 @@ The unreadable lines of a `jsonl` are counted and said out loud; they neither th
 
 Two more columns, and they exist for one question: **comparing two coding tools on the same loop.** The raw size of the pull request (`additions`, `deletions`, `changed_files`) says how much was written; these say what writing it cost and how many rounds it took.
 
-**`tool` names whose cost it is.** Without the tool and its version, every figure aggregates tools that share nothing, and the mean that comes out describes no tool at all. It is read out of the runtime that wrote the row, not asked for: `claude-code` and its version. Two tools in the same slice —an epic split across machines— are declared `(mixed)` instead of one of them being picked in silence.
+**`tool` names whose cost it is.** Without the tool and its version, every figure aggregates tools that share nothing, and the mean that comes out describes no tool at all. It is read out of the runtime that wrote the row, not asked for: `claude-code` and its version. Two tools in the same slice —a milestone split across machines— are declared `(mixed)` instead of one of them being picked in silence.
 
 **`tokens` is the exact usage the tool reported.** Four figures, and the total is the sum of the three that do not overlap: fresh input, cached input (the cache read plus the cache creation, counted ONCE) and output. The evidence is the runtime's own per-request usage; **nothing is estimated from the bytes of a prompt.** A tool that reports no usage lands its status and a `NULL`, which is why `(unsupported)` exists as a printed value.
 
@@ -119,7 +119,7 @@ The dataset and its permissions belong to whoever owns the project, not to the c
 
 **Half a cell can be a number and the other half a `NULL`.** The report requires BOTH halves to print `vara ct` or `brief` —the why is above, in «The judge's telemetry, per slice»—, but the table does not join them: a `—` in `vara ct` can be, in the row, `rubric_vara_ct_docs` with a number and `findings_vara_ct` at `NULL`, or the other way round. Every column says what was measured of it, which is more than the cell said.
 
-This command loads a whole epic after the fact. The load of each slice as it is collected is done by the automatic harvest: `dispatch-check <n> --repo <o/r> --collect --bq <table>`, which the backend invokes every minute when it starts with `CT_HARVEST_BQ_TABLE`.
+This command loads a whole milestone after the fact. The load of each slice as it is collected is done by the automatic harvest: `dispatch-check <n> --repo <o/r> --collect --bq <table>`, which the backend invokes every minute when it starts with `CT_HARVEST_BQ_TABLE`.
 
 ## The exit codes
 
@@ -129,12 +129,12 @@ This command loads a whole epic after the fact. The load of each slice as it is 
 | `1` | **could not be completed**: a `gh` read or the BigQuery load failed | look at the reasons on stderr, fix it and repeat — what is printed is only what is actually known |
 | `2` | bad arguments | fix the invocation |
 
-**The `1` never degrades into a `0`**, the same rule as `/ct-status` and `/ct-groom`. A partial harvest **is not a cheap epic**: a table with gaps that gets read as «this slice had no review», when what happened is that the read failed, is an invented datum coming in through the back door of a pre-registration that forbids exactly that. **A timeline that could not be read does not produce a row of zeros: it produces a reason and no row.**
+**The `1` never degrades into a `0`**, the same rule as `/ct-status` and `/ct-groom`. A partial harvest **is not a cheap milestone**: a table with gaps that gets read as «this slice had no review», when what happened is that the read failed, is an invented datum coming in through the back door of a pre-registration that forbids exactly that. **A timeline that could not be read does not produce a row of zeros: it produces a reason and no row.**
 
 ## Details
 
 - **`*` in `release→merge`** marks that that cell was measured against the **closing of the issue** and not against the merge of a PR. It goes in the cell itself, not in a footnote: a footnote does not travel when someone copies the table.
 - **Two PRs closing one and the same issue** is said out loud as a reason (and drops the exit to `1`) instead of picking one in silence.
-- **`--json`** emits `{repo, milestone, filas, motivos, telemetry}` with the seconds raw, to paste into the epic's outcome without translating anything. The fifth key is the read of the telemetry DIRECTORY (`{dir, status: ok|no-leido, why}`), distinct from the `telemetry` each row carries inside.
+- **`--json`** emits `{repo, milestone, filas, motivos, telemetry}` with the seconds raw, to paste into the milestone's outcome without translating anything. The fifth key is the read of the telemetry DIRECTORY (`{dir, status: ok|no-leido, why}`), distinct from the `telemetry` each row carries inside.
 - **`--json`** carries each slice's telemetry INSIDE its row (`telemetry.status`: `ok` / `sin-fichero` / `no-leido`), for the same reason `type` and `gate` travel inside.
 - The duration format (`1m03`, `2h06m17`, `9h41m23`) is the same one with which dispatch 1's outcome was written by hand, so that harvested table and written table can be compared without converting anything.

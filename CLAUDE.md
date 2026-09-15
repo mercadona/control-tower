@@ -60,7 +60,7 @@ prose and they are still Spanish, and they are contract anyway:
 
 | Heading | Pinned at |
 |---|---|
-| `## Contexto del epic` | `plugin/scripts/groom.js` `EPIC_CONTEXT_HEADING` |
+| `## Contexto del milestone`, and `## Contexto del epic` still read | `plugin/scripts/milestone-context.js` `MilestoneContextHeading` |
 | `## Contexto heredado` | `plugin/scripts/groom.js` `INHERITED_CONTEXT_HEADING` |
 | `## Decisiones congeladas` | `plugin/scripts/groom.js` `FROZEN_DECISIONS_HEADING` |
 | `## Dependencias` | `plugin/scripts/gh-issue-map.js` `DEPS_HEADING` |
@@ -72,6 +72,37 @@ issue, and every governed repository's spec. Translating one is a coordinated
 change of all three in a single move — otherwise `/ct-groom --reconcile` stops
 finding the section and dispatch breaks. **Until that change happens they stay
 Spanish everywhere, issues and pull requests included.**
+
+#### The first row is the one that already moved, and how
+
+Issue #346 renamed the milestone's context heading without touching a single
+issue or spec, and the shape it used is the shape any of the other nine would
+have to use. It is a **dual read**:
+
+- what is **written** is `## Contexto del milestone`, and nothing else ever is;
+- what is **read** accepts `## Contexto del epic` too — a body or a spec
+  carrying it is found, hydrated from, and reports **no drift for the spelling
+  alone**. That is what leaves the already groomed issues and the frozen specs
+  where they are;
+- `--reconcile` brings the section's **content** up to date under whichever
+  spelling it finds, and leaves that spelling as it is. It only writes
+  `## Contexto del milestone` when it is inserting the section from scratch;
+- **both spellings in one body is a finding**, never a silent choice between
+  them. Every reader here takes the first occurrence, so the text under the
+  other one would be read by nobody while looking to a human like context that
+  is honoured. In a spec it comes out as the malformed reason, which authorises
+  touching nothing; in an issue it comes out as a note naming both.
+
+The legacy spelling is **not retired**, and retiring it is a separate decision
+that needs evidence, not a grep of this repository: the string is on disk in
+governed repositories nobody here watches. What has to be true first is that no
+live issue and no spec a `/ct-groom --reconcile` could still touch carries it.
+Both spellings live in `plugin/scripts/milestone-context.js` and nowhere else —
+`groom.js` re-exports them, `gh-issue-map.js` reads which one an issue carries so
+the kickoff can name the section the dispatched agent will actually find, and
+`scope.js` reads them inside the conformance gate that gets vendored into a
+governed repository's CI. Whoever retires the spelling does it there, once, and
+the four readers follow.
 
 The plan's own sections (`## 7. Tasks`, `## 8. Global verification`,
 `**Objective:**`, `**Files:**`, `**TDD:**`, `**Tests:**`, `**Verification:**`)

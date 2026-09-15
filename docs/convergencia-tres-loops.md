@@ -37,7 +37,7 @@ escrita.
 
 | Tercio | Dueño | Qué cubre |
 |---|---|---|
-| **Delante** — de la idea al slice | **CT** | Congelación con procedencia, tabla de slices, dependencias, colisión por área, puertas humanas del epic |
+| **Delante** — de la idea al slice | **CT** | Congelación con procedencia, tabla de slices, dependencias, colisión por área, puertas humanas del milestone |
 | **Medio** — del slice al plan | **CT**, con la pieza de JJ | El plan como artefacto comprobable: literalidad, taxonomía de bloques, validación y gate duro |
 | **Detrás** — del plan al despliegue | **AS** | Conducción como programa, juez independiente, presupuesto en dinero, vigilancia post-merge |
 

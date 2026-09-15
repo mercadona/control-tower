@@ -71,8 +71,8 @@ writes the design doc and the execution spec there. Watch out, when editing it,
 for two things `/ct-groom` itself punishes and that reading does not reveal:
 writing the literal clarification marker (with its bracket) anywhere in the file,
 comments included, brings the groom down with exit 2 (`analyzeSpecFreeze` greps
-the whole file); and any HTML comment **inside** `## Contexto del epic` travels
-verbatim into the body of every issue of the epic (`readEpicContext` does not
+the whole file); and any HTML comment **inside** `## Contexto del milestone` travels
+verbatim into the body of every issue of the milestone (`readEpicContext` does not
 discard it).
 
 In `.agent/STATE.md`, by contrast, **confine yourself to describing the

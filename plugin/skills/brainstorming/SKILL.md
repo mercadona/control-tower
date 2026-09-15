@@ -134,7 +134,7 @@ This replaces any full-document review — the user does not read the spec; they
 
 1. The hypothesis of the experiment (one or two lines).
 2. Each frozen decision on ONE line, with its provenance tag.
-3. The anti-scope: what this epic will NOT do.
+3. The anti-scope: what this milestone will NOT do.
 
 Then STOP and wait. The user's OK mutates the spec `DRAFT → CONGELADA` (record the freeze date). Changes requested → revise the spec and present the summary again. **Without the freeze there is no groom.** After the freeze, the spec is the single source the cycle trusts: nobody edits frozen decisions in silence.
 
