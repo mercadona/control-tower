@@ -76,11 +76,11 @@ describe('the application shell gives the Navigation shell a height to fill', ()
     expect(content).toMatch(/min-height:\s*0/)
   })
 
-  it('gives the work area the full width beside a fixed right column', () => {
+  it('gives the work area the full width beside a resizer track and the right column', () => {
     const columns = Stylesheet.home().declarationsFor('.home__columns')
 
     expect(columns).toMatch(/display:\s*grid/)
-    expect(columns).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s*var\(--home-sessions-width\)/)
+    expect(columns).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto\s*var\(--home-sessions-width\)/)
   })
 
   it('scrolls the work area and the right column on their own', () => {
@@ -133,5 +133,11 @@ describe('the right column stacks under the content below 1280px without becomin
     expect(narrow).not.toMatch(/position:\s*(fixed|absolute|sticky)/)
     expect(narrow).not.toMatch(/z-index/)
     expect(narrow).not.toMatch(/inset/)
+  })
+
+  it('hides the resize handle when the column is already full width', () => {
+    const handle = Stylesheet.home().narrowDeclarationsFor('.column-resizer', '@media (width < 1280px)')
+
+    expect(handle).toMatch(/display:\s*none/)
   })
 })

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 import { ActivePlan } from 'app/active-plans/ActivePlan.types'
 import { ActivePlansClient } from 'app/active-plans/client'
 import { CoordinatingSessionStatus } from 'app/coordinating-session/components/coordinating-session-status'
@@ -16,6 +16,8 @@ import { BaselineNotice } from 'app/start-plan/components/baseline-notice'
 import { StartPlanForm } from 'app/start-plan/components/start-plan-form'
 import { StartPlanRequest } from 'app/start-plan/StartPlan.types'
 import { WorkflowSnapshot, WorkflowSnapshotStorage } from 'app/workflow-snapshot/storage'
+import { ColumnResizer } from 'pages/home/components/column-resizer'
+import { useSessionsColumnWidth } from 'pages/home/useSessionsColumnWidth'
 import { Banner } from 'system-ui/banner'
 import { Breadcrumbs } from 'system-ui/breadcrumbs'
 import { Button } from 'system-ui/button'
@@ -24,6 +26,8 @@ import { Panel } from 'system-ui/panel'
 import { TopBar } from 'system-ui/top-bar'
 import { WorkflowStep, WorkflowStepStatus } from 'system-ui/workflow-step'
 import './Home.css'
+
+const SESSIONS_COLUMN_LABEL = 'Ancho del panel de sesiones'
 
 type WorkflowStageName = 'request' | 'review' | 'implementation'
 type Reconciliation = 'not-required' | 'checking' | 'confirmed' | 'stale' | 'unavailable' | 'inconclusive' | 'uncertain'
@@ -52,6 +56,8 @@ const Home = () => {
   const [brainstormingUnreachable, setBrainstormingUnreachable] = useState(false)
   const [openedSession, setOpenedSession] = useState<LiveSession | null>(null)
   const sessionsRef = useRef<HTMLElement | null>(null)
+  const columnsRef = useRef<HTMLDivElement>(null)
+  const sessionsColumnWidth = useSessionsColumnWidth(columnsRef)
   const [expandedSummary, setExpandedSummary] = useState<WorkflowStageName | null>(null)
   const [requestFormVersion, setRequestFormVersion] = useState(0)
   const recoveryStartedRef = useRef(false)
@@ -334,7 +340,11 @@ const Home = () => {
           />
         }
       >
-        <div className="home__columns">
+        <div
+          className="home__columns"
+          ref={columnsRef}
+          style={sessionsColumnWidth.value === null ? undefined : ({ '--home-sessions-width': `${sessionsColumnWidth.value}px` } as CSSProperties)}
+        >
         <main className="home__content">
           <nav className="home__flow" aria-label="Flujo del plan">
             <ol>
@@ -504,6 +514,13 @@ const Home = () => {
             </section>
           )}
         </main>
+        <ColumnResizer
+          value={sessionsColumnWidth.value}
+          min={sessionsColumnWidth.min}
+          max={sessionsColumnWidth.max}
+          onChange={sessionsColumnWidth.setValue}
+          label={SESSIONS_COLUMN_LABEL}
+        />
         <div className="home__side">
           <Panel className="home__sessions" heading="Sesiones en marcha" fill ref={sessionsRef}>
             <CoordinatingSessionStatus read={coordinatingSession} />

@@ -91,6 +91,16 @@ the same column. Above 1280 px the column sits beside `main` at
 flow bar; below 1280 px the column stacks under the work area with no
 overlay.
 
+A `ColumnResizer` (`pages/home/components/column-resizer`) sits between
+`main` and the column as its own 8 px grid track, draggable and keyboard-
+operable (`role="separator"`, arrow keys, Home/End, Enter or a double-click
+to reset), clamped to `[360px, columnsWidth - 480px]` so the work area always
+keeps at least 480 px. `useSessionsColumnWidth` (`pages/home/`) owns the
+clamp and persists the chosen width per browser in `localStorage` under
+`ct.sessions-column-width` — a convenience for that browser alone, restored
+on mount and re-clamped to the viewport; it is never sent to the backend and
+the handle is hidden below 1280 px, where the column is already full width.
+
 `app/spec-freeze` (`SpecFreezePanel`, rendered by `Home` in `main`, right after
 the workspace, outside every `currentStage` branch) is gate 1's panel.
 `GET /spec-freeze` polls the checkout's execution spec (`useSpecFreeze.ts`) and
