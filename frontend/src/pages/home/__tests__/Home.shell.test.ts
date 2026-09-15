@@ -19,6 +19,10 @@ class Stylesheet {
     return new Stylesheet(join('system-ui', 'navigation', 'Navigation.css'))
   }
 
+  static panel() {
+    return new Stylesheet(join('system-ui', 'panel', 'Panel.css'))
+  }
+
   declarationsFor(selector: string) {
     return this.blocksFor(this.text, selector)
   }
@@ -93,11 +97,20 @@ describe('the application shell gives the Navigation shell a height to fill', ()
     expect(side).toMatch(/flex-direction:\s*column/)
   })
 
-  it('gives the sessions panel of the right column room to fit a terminal instead of collapsing to its content', () => {
+  it('gives the sessions panel of the right column a minimum height to fit a terminal instead of collapsing to its content', () => {
     const sessions = Stylesheet.home().declarationsFor('.home__side > .home__sessions')
 
-    expect(sessions).toMatch(/flex:\s*1 1 auto/)
     expect(sessions).toMatch(/min-height:\s*var\(--home-sessions-min-height\)/)
+  })
+
+  it('lets a panel opt into filling its flex container instead of sizing to its content', () => {
+    const fill = Stylesheet.panel().declarationsFor('.panel--fill')
+    const fillBody = Stylesheet.panel().declarationsFor('.panel--fill > .panel__body')
+
+    expect(fill).toMatch(/flex:\s*1 1 auto/)
+    expect(fill).toMatch(/min-height:\s*0/)
+    expect(fillBody).toMatch(/flex:\s*1 1 auto/)
+    expect(fillBody).toMatch(/min-height:\s*0/)
   })
 
   it('keeps a stage card at its own height instead of shrinking it below its content, so a card taller than the viewport lets the work area scroll to it', () => {

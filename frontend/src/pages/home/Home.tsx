@@ -505,7 +505,7 @@ const Home = () => {
           )}
         </main>
         <div className="home__side">
-          <Panel className="home__sessions" heading="Sesiones en marcha" ref={sessionsRef}>
+          <Panel className="home__sessions" heading="Sesiones en marcha" fill ref={sessionsRef}>
             <CoordinatingSessionStatus read={coordinatingSession} />
             <SessionsPanel opened={openedSession} />
           </Panel>
