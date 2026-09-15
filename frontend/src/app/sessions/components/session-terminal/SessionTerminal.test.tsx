@@ -14,6 +14,10 @@ type FakeTerminal = {
   opened: Element | null
 }
 
+let proposedDimensions: { cols: number; rows: number } | undefined
+let resizeObserverCallback: ResizeObserverCallback | null = null
+let lastAddonDisposed = false
+
 vi.mock('@xterm/xterm', () => {
   class MockTerminal {
     static instances: MockTerminal[] = []
@@ -25,6 +29,8 @@ vi.mock('@xterm/xterm', () => {
     constructor() {
       MockTerminal.instances.push(this)
     }
+
+    loadAddon() {}
 
     open(screen: Element) {
       this.opened = screen
@@ -42,12 +48,30 @@ vi.mock('@xterm/xterm', () => {
       this.onDataHandler = handler
     }
 
+    resize() {}
+
     dispose() {
       this.disposed = true
     }
   }
 
   return { Terminal: MockTerminal }
+})
+
+vi.mock('@xterm/addon-fit', () => {
+  class MockFitAddon {
+    proposeDimensions() {
+      return proposedDimensions
+    }
+
+    fit() {}
+
+    dispose() {
+      lastAddonDisposed = true
+    }
+  }
+
+  return { FitAddon: MockFitAddon }
 })
 
 const refusedWrite = () => new Response(JSON.stringify({ code: 'session-not-live', detail: 'no live session answers to that id' }), { status: 400 })
@@ -61,9 +85,34 @@ const lastTerminal = (): FakeTerminal => {
   return instance
 }
 
+let resizeObserverDisconnected = false
+
+class FakeResizeObserver {
+  constructor(callback: ResizeObserverCallback) {
+    resizeObserverCallback = callback
+  }
+
+  observe() {}
+  unobserve() {}
+
+  disconnect() {
+    resizeObserverDisconnected = true
+  }
+}
+
 describe('SessionTerminal', () => {
-  beforeEach(() => FakeEventSource.install())
-  afterEach(() => vi.unstubAllGlobals())
+  beforeEach(() => {
+    FakeEventSource.install()
+    proposedDimensions = undefined
+    resizeObserverCallback = null
+    resizeObserverDisconnected = false
+    lastAddonDisposed = false
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver)
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
 
   it('the bytes the stream delivers are written to the terminal', () => {
     render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
@@ -187,5 +236,62 @@ describe('SessionTerminal', () => {
 
     await waitFor(() => expect(screen.queryByText('No se puede leer esta sesión')).not.toBeInTheDocument())
     expect(lastTerminal().written).toEqual(['fresh'])
+  })
+
+  it('a proposed size other than the default posts it to resize on mount', async () => {
+    proposedDimensions = { cols: 120, rows: 40 }
+    const posting = vi.fn(async () => new Response(JSON.stringify({ status: 'resized', id: SESSION.id, cols: 120, rows: 40 }), { status: 202 }))
+    vi.stubGlobal('fetch', posting)
+
+    render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
+
+    await waitFor(() => expect(posting).toHaveBeenCalledWith(`/sessions/${SESSION.id}/resize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cols: 120, rows: 40 }),
+      signal: expect.any(AbortSignal),
+    }))
+  })
+
+  it('an unchanged 80x24 posts nothing to resize', async () => {
+    proposedDimensions = { cols: 80, rows: 24 }
+    const posting = vi.fn(async () => new Response('', { status: 202 }))
+    vi.stubGlobal('fetch', posting)
+
+    render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(posting).not.toHaveBeenCalled()
+  })
+
+  it('a resize observer callback under fake timers re-fits once after the debounce', async () => {
+    vi.useFakeTimers()
+    const posting = vi.fn(async () => new Response('', { status: 202 }))
+    vi.stubGlobal('fetch', posting)
+
+    render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
+
+    proposedDimensions = { cols: 100, rows: 30 }
+    resizeObserverCallback?.([], {} as ResizeObserver)
+    resizeObserverCallback?.([], {} as ResizeObserver)
+
+    await vi.advanceTimersByTimeAsync(100)
+
+    expect(posting).toHaveBeenCalledTimes(1)
+    expect(posting).toHaveBeenCalledWith(`/sessions/${SESSION.id}/resize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cols: 100, rows: 30 }),
+      signal: expect.any(AbortSignal),
+    })
+  })
+
+  it('unmount disconnects the resize observer', () => {
+    const { unmount } = render(<SessionTerminal session={SESSION} onGone={NOOP_ON_GONE} />)
+
+    unmount()
+
+    expect(resizeObserverDisconnected).toBe(true)
+    expect(lastAddonDisposed).toBe(true)
   })
 })

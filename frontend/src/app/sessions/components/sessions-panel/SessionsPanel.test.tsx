@@ -13,14 +13,29 @@ const NO_SESSIONS = SessionsMother.noSessions().body
 
 vi.mock('@xterm/xterm', () => {
   class MockTerminal {
+    loadAddon() {}
     open() {}
     write() {}
     reset() {}
     onData() {}
+    resize() {}
     dispose() {}
   }
 
   return { Terminal: MockTerminal }
+})
+
+vi.mock('@xterm/addon-fit', () => {
+  class MockFitAddon {
+    proposeDimensions() {
+      return undefined
+    }
+
+    fit() {}
+    dispose() {}
+  }
+
+  return { FitAddon: MockFitAddon }
 })
 
 const answering = (body: string) => vi.fn(async () => new Response(body))

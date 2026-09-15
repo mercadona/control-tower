@@ -36,6 +36,7 @@ const EXTERNAL_TOOLS_READY: Answer = {
 const SESSIONS: Answer = SessionsMother.oneSession()
 const SESSIONS_WITH_THE_OPENED_ONE: Answer = SessionsMother.withCoordinatingSession()
 const TYPED: Answer = { status: 202, body: `{"status":"typed","id":"${SESSION_ID}"}` }
+const RESIZED: Answer = { status: 202, body: `{"status":"resized","id":"${SESSION_ID}","cols":80,"rows":24}` }
 const NO_COORDINATING_SESSION: Answer = CoordinatingSessionMother.none()
 const NO_IMPLEMENTATION_RUN_YET: Answer = {
   status: 400,
@@ -58,14 +59,29 @@ vi.mock('@xterm/xterm', () => {
       MockTerminal.instances.push(this)
     }
 
+    loadAddon() {}
     open() {}
     write(data: string) { this.written.push(data) }
     reset() { this.written = [] }
     onData(handler: (text: string) => void) { this.onDataHandler = handler }
+    resize() {}
     dispose() {}
   }
 
   return { Terminal: MockTerminal }
+})
+
+vi.mock('@xterm/addon-fit', () => {
+  class MockFitAddon {
+    proposeDimensions() {
+      return undefined
+    }
+
+    fit() {}
+    dispose() {}
+  }
+
+  return { FitAddon: MockFitAddon }
 })
 
 const lastTerminal = (): FakeTerminal => {
@@ -83,6 +99,7 @@ const stubFetch = (activePlans: Answer, coordinatingSession: Answer = NO_COORDIN
     if (url === '/external-tools') return responseFor(EXTERNAL_TOOLS_READY)
     if (url === '/sessions') return responseFor(SESSIONS)
     if (url === `/sessions/${SESSION_ID}/input`) return responseFor(TYPED)
+    if (url === `/sessions/${SESSION_ID}/resize`) return responseFor(RESIZED)
     if (url === '/coordinating-session' && init === undefined) return responseFor(coordinatingSession)
     if (url.startsWith('/implement-progress/')) return responseFor(NO_IMPLEMENTATION_RUN_YET)
     if (url.startsWith('/implement-history/')) return responseFor(NO_IMPLEMENTATION_HISTORY_YET)
