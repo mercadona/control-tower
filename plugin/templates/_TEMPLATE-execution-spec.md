@@ -17,11 +17,22 @@ out, so that no agent "throws it in">.
 
 ## Decisiones congeladas
 
-<!-- Every decision carries an ID (D-1, D-2…) and its provenance:
+<!-- Every decision carries an ID (D-1, D-2…) and its provenance, and the
+     freeze refuses while one of them keeps quiet about where it comes from:
      - hablada: the user said it — quote their literal phrase where possible
      - deducida: it follows from something spoken — say from what
      - propuesta: the writer's idea — a propuesta is NEVER frozen: you ask the
        user, or you park it under «Decisiones aparcadas»
+     - historia <id>: a user story decided it
+     - prd <name>: a product document decided it
+     - prototipo <version>: a prototype at a version decided it
+     The last three are what lets a reader tell a decision the product made
+     from one the TL made.
+
+     The suffix goes on ONE line — the bullet's own, or the last of the lines
+     that continue it. Wrapped over two, the trim that removes it when
+     projecting into each issue matches nothing and the marker travels dirty,
+     which is what /ct-groom warns about.
 
      Gaps are NOT filled in by eye: they are flagged with the clarification
      marker, which is the words NEEDS CLARIFICATION inside square brackets
@@ -34,8 +45,8 @@ out, so that no agent "throws it in">.
 
      Freezing with a pending marker is invalid (exit 2). -->
 
-- **D-1 · <Topic>** — <the decision, in one or two sentences>. *(Procedencia:
-  hablada — «<literal quote>».)*
+- **D-1 · <Topic>** — <the decision, in one or two sentences>.
+  *(Procedencia: hablada — «<literal quote>».)*
 - **D-2 · <Topic>** — <the decision>. *(Procedencia: deducida de D-1.)*
 
 ## Enfoque técnico
