@@ -8,7 +8,7 @@ It is not an orchestrator of parallel agents. It is the opposite: a machine for 
 
 | | |
 |---|---|
-| Version | `0.57.0` <!-- x-release-please-version --> · slice table contract `v23` |
+| Version | `0.58.0` <!-- x-release-please-version --> · slice table contract `v23` |
 | Commands | `/ct-init` · `/ct-groom` · `/ct-next` · `/ct-status` |
 | Human gates | 3 per epic — the freeze, `status:ready`, the merge — plus the `plan` gate on every slice (waivable per row with `!plan`; its go is `-OK <nonce>` and `--release` refuses without it) and the `e2e` gate when the row declares journeys in the `E2E` column (derived, never written by hand) |
 | Skills | 11 forked from superpowers 6.0.3 + 1 of our own (`writing-plans-prescriptive`) |
