@@ -539,8 +539,8 @@ describe('C1 — the epic context as the ONLY drift does get written', () => {
   it('with no --reconcile nothing is written, and the exit is still 0 (never 3 because of this section)', () => {
     const res = invoke(specWithContext('- regla NUEVA'), [issueWith('- regla VIEJA')], [])
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/^note:.*Contexto del milestone/m)
-    expect(res.stderr).not.toMatch(/^drift:.*Contexto del milestone/m)
+    expect(res.stderr).toMatch(new RegExp(`^note:.*${MilestoneContextHeading.WRITTEN}`, 'm'))
+    expect(res.stderr).not.toMatch(new RegExp(`^drift:.*${MilestoneContextHeading.WRITTEN}`, 'm'))
   })
 
   it('with no drift at all (the context already matches) `gh issue edit` is not called', () => {
@@ -585,7 +585,7 @@ describe('giving up on the epic context is said out loud, and it still does not 
   it('says it as note:, names the anchor that is missing, and writes nothing', () => {
     const res = invoke(spec, [issue], ['--dry-run', '--reconcile'])
     expect(res.status).toBe(0)
-    expect(res.stderr).toMatch(/note:.*has NOT rewritten the "## Contexto del milestone" section/)
+    expect(res.stderr).toMatch(new RegExp(`note:.*has NOT rewritten the "${MilestoneContextHeading.WRITTEN}" section`))
     expect(res.stderr).toMatch(/anchor.*Contexto heredado.*Acceptance criteria/) // it names the TWO that would do
     expect(res.stderr).not.toMatch(/would apply/) // there is no new body: no write is announced
   })
@@ -962,7 +962,7 @@ describe('§4.4 — the epic context cannot produce an exit 3, whatever happens'
     expect(res.stderr).toMatch(/drift:.*acceptance criterion/)
     expect(res.stderr).not.toMatch(new RegExp(`drift:.*${MilestoneContextHeading.WRITTEN}`))
     // And nothing has been written in the epic section: why has been said.
-    expect(res.stderr).toMatch(/note:.*has NOT rewritten the "## Contexto del milestone" section.*LEFT UNCLOSED/s)
+    expect(res.stderr).toMatch(new RegExp(`note:.*has NOT rewritten the "${MilestoneContextHeading.WRITTEN}" section.*LEFT UNCLOSED`, 's'))
   })
 })
 
@@ -985,7 +985,7 @@ describe('the "reconciled" line names what was written, not what drifts', () => 
     }
     const res = invoke(specWithContext('- regla NUEVA'), [issue], ['--reconcile'])
     // stderr was already telling the truth: it has not been rewritten.
-    expect(res.stderr).toMatch(/note:.*has NOT rewritten the "## Contexto del milestone" section/)
+    expect(res.stderr).toMatch(new RegExp(`note:.*has NOT rewritten the "${MilestoneContextHeading.WRITTEN}" section`))
     // stdout cannot say the opposite in the same run.
     expect(res.stdout).toMatch(/issue #501 reconciled \(order #1\): title/)
     expect(res.stdout).not.toMatch(/reconciled \(order #1\):.*epic context/)
@@ -1183,10 +1183,10 @@ describe('C2 (2nd wave) — the reason for giving up on the epic does not assert
     ].join('\n')
     const issue = { number: 501, title: '#1 login', state: 'open', milestone: { title: 'Epic' }, labels: LABELS_1, body }
     const res = invoke(['## Hipótesis\n\nApuesta del fixture.\n\n## 9. Slices', ONE_SLICE_TABLE, ''].join('\n'), [issue], ['--reconcile'])
-    expect(res.stderr).toMatch(/has NOT rewritten the "## Contexto del milestone" section: there is no telling where/)
+    expect(res.stderr).toMatch(new RegExp(`has NOT rewritten the "${MilestoneContextHeading.WRITTEN}" section: there is no telling where`))
     expect(res.stderr).not.toMatch(/undefined/)
     // And whose the text is is not asserted, which is what this reason exists
     // in order not to say.
-    expect(res.stderr).not.toMatch(/has NOT rewritten the "## Contexto del milestone" section:[^\n]*belongs to the coordinator session/)
+    expect(res.stderr).not.toMatch(new RegExp(`has NOT rewritten the "${MilestoneContextHeading.WRITTEN}" section:[^\\n]*belongs to the coordinator session`))
   })
 })

@@ -150,10 +150,15 @@ seeded contract and `/ct-groom`'s own parsed heading say so.
 
 Three things keep the old word on purpose, and none of them is debt:
 
-- **`## Contexto del epic` is still READ.** It is the anchor of a section that
-  is on disk in every governed repository's frozen spec and in the body of every
-  issue already groomed. `AGENTS.md` describes the dual read; the two spellings
-  live in `plugin/scripts/milestone-context.js`.
+- **`## Contexto del epic` is still both READ and WRITTEN.** It is the anchor of
+  a section that is on disk in every governed repository's frozen spec and in
+  the body of every issue already groomed — and, more to the point, the only
+  spelling the `scope-check` bundle **already vendored into those repositories**
+  can find. Writing the other one there fails their scope gate, and no merge in
+  this repository reaches them. `## Contexto del milestone` is read too, so a
+  spec may use either. The flip of what is written is one line in
+  `plugin/scripts/milestone-context.js`, once those repositories have
+  re-vendored a tolerant gate; `AGENTS.md` carries the rule and the check.
 - **The GitHub milestone `start-in-correct-loop` keeps its name**, and so does
   any milestone already created: the title is the identity `/ct-next`,
   `/ct-status` and `/ct-harvest` select by, and renaming one aborts its groom.

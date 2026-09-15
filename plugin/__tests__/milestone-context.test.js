@@ -42,8 +42,8 @@ class Fixture {
   }
 
   static bodyUnderBothSpellings(content) {
-    return Fixture.bodyUnder(MilestoneContextHeading.WRITTEN, content)
-      .replace('## Acceptance criteria', `${MilestoneContextHeading.LEGACY}\n- otra\n\n## Acceptance criteria`)
+    return Fixture.bodyUnder(MilestoneContextHeading.MILESTONE, content)
+      .replace('## Acceptance criteria', `${MilestoneContextHeading.EPIC}\n- otra\n\n## Acceptance criteria`)
   }
 
   static wanted(over) {
@@ -71,52 +71,55 @@ class Fixture {
   }
 }
 
-describe('MilestoneContextHeading — one spelling is written, two are accepted', () => {
-  it('names the milestone in the heading the groom writes from now on', () => {
-    expect(MilestoneContextHeading.WRITTEN).toBe('## Contexto del milestone')
-  })
-
-  it('keeps the spelling every frozen spec and every live issue still carries', () => {
-    expect(MilestoneContextHeading.LEGACY).toBe('## Contexto del epic')
-  })
-
-  it('accepts both spellings, with the written one first and neither addable at runtime', () => {
-    expect(MilestoneContextHeading.FORMS).toEqual([MilestoneContextHeading.WRITTEN, MilestoneContextHeading.LEGACY])
+describe('MilestoneContextHeading — two spellings are accepted, one of them is written', () => {
+  it('carries both spellings, neither addable at runtime', () => {
+    expect(MilestoneContextHeading.MILESTONE).toBe('## Contexto del milestone')
+    expect(MilestoneContextHeading.EPIC).toBe('## Contexto del epic')
+    expect(MilestoneContextHeading.FORMS).toEqual([MilestoneContextHeading.MILESTONE, MilestoneContextHeading.EPIC])
     expect(Object.isFrozen(MilestoneContextHeading.FORMS)).toBe(true)
     expect(Object.isFrozen(MilestoneContextHeading)).toBe(true)
   })
+
+  it('still writes the epic spelling, because the gate vendored into a governed repo cannot read the other one', () => {
+    expect(MilestoneContextHeading.WRITTEN).toBe(MilestoneContextHeading.EPIC)
+  })
 })
 
-describe('what the groom writes is the milestone spelling', () => {
-  it('emits the written heading and never the legacy one', () => {
+describe('what the groom writes is what an already vendored scope gate can read', () => {
+  it('emits the epic spelling and not the milestone one, until the vendored gates accept both', () => {
+    const body = buildIssueBody({ n: 2, name: 'card', ac: ['AC-2.1'], deps: [], protegido: 'nada' }, null, Fixture.CONTEXT)
+    expect(body).toContain(MilestoneContextHeading.EPIC)
+    expect(body).not.toContain(MilestoneContextHeading.MILESTONE)
+  })
+
+  it('writes whatever WRITTEN says, so flipping the constant is the whole switch', () => {
     const body = buildIssueBody({ n: 2, name: 'card', ac: ['AC-2.1'], deps: [], protegido: 'nada' }, null, Fixture.CONTEXT)
     expect(body).toContain(MilestoneContextHeading.WRITTEN)
-    expect(body).not.toContain(MilestoneContextHeading.LEGACY)
   })
 })
 
 describe('readEpicContext — either spelling is read, both together are a finding', () => {
-  it('reads the section out of a spec that carries the written spelling', () => {
-    const r = readEpicContext(Fixture.specUnder(MilestoneContextHeading.WRITTEN))
+  it('reads the section out of a spec that carries the milestone spelling', () => {
+    const r = readEpicContext(Fixture.specUnder(MilestoneContextHeading.MILESTONE))
     expect(r.content).toBe(Fixture.CONTEXT)
     expect(r.reason).toBeNull()
     expect(r.warnings).toEqual([])
   })
 
   it('reads the section out of a frozen spec that still carries the legacy spelling, with no warning about the spelling', () => {
-    const r = readEpicContext(Fixture.specUnder(MilestoneContextHeading.LEGACY))
+    const r = readEpicContext(Fixture.specUnder(MilestoneContextHeading.EPIC))
     expect(r.content).toBe(Fixture.CONTEXT)
     expect(r.reason).toBeNull()
     expect(r.warnings).toEqual([])
   })
 
   it('refuses to choose between the two spellings in silence, and says which they are and where', () => {
-    const r = readEpicContext(Fixture.specUnder(MilestoneContextHeading.WRITTEN, MilestoneContextHeading.LEGACY))
+    const r = readEpicContext(Fixture.specUnder(MilestoneContextHeading.MILESTONE, MilestoneContextHeading.EPIC))
     expect(r.content).toBeNull()
     expect(r.reason).toBe(EPIC_CONTEXT_REASONS.MALFORMED)
     expect(r.warnings).toHaveLength(1)
-    expect(r.warnings[0]).toContain(MilestoneContextHeading.WRITTEN)
-    expect(r.warnings[0]).toContain(MilestoneContextHeading.LEGACY)
+    expect(r.warnings[0]).toContain(MilestoneContextHeading.MILESTONE)
+    expect(r.warnings[0]).toContain(MilestoneContextHeading.EPIC)
     expect(r.warnings[0]).toMatch(/line 3/)
     expect(r.warnings[0]).toMatch(/line 6/)
   })
@@ -130,33 +133,33 @@ describe('readEpicContext — either spelling is read, both together are a findi
 
 describe('diffIssue — a live issue under the legacy spelling is not drift', () => {
   it('finds the section under the legacy heading and reports no drift for the spelling alone', () => {
-    const d = diffIssue(Fixture.existing(Fixture.bodyUnder(MilestoneContextHeading.LEGACY, Fixture.CONTEXT)), Fixture.wanted(), 'M1', [])
+    const d = diffIssue(Fixture.existing(Fixture.bodyUnder(MilestoneContextHeading.EPIC, Fixture.CONTEXT)), Fixture.wanted(), 'M1', [])
     expect(d.epicContextDiffers).toBe(false)
   })
 
-  it('finds the section under the written heading too', () => {
-    const d = diffIssue(Fixture.existing(Fixture.bodyUnder(MilestoneContextHeading.WRITTEN, Fixture.CONTEXT)), Fixture.wanted(), 'M1', [])
+  it('finds the section under the milestone heading too', () => {
+    const d = diffIssue(Fixture.existing(Fixture.bodyUnder(MilestoneContextHeading.MILESTONE, Fixture.CONTEXT)), Fixture.wanted(), 'M1', [])
     expect(d.epicContextDiffers).toBe(false)
   })
 
   it('reports a body that carries both spellings as a finding that names both', () => {
     const d = diffIssue(Fixture.existing(Fixture.bodyUnderBothSpellings(Fixture.CONTEXT)), Fixture.wanted(), 'M1', [])
-    expect(d.milestoneContextSpellings).toEqual([MilestoneContextHeading.WRITTEN, MilestoneContextHeading.LEGACY])
-    const line = formatDrift(d).find((l) => l.includes(MilestoneContextHeading.LEGACY) && l.includes(MilestoneContextHeading.WRITTEN))
+    expect(d.milestoneContextSpellings).toEqual([MilestoneContextHeading.MILESTONE, MilestoneContextHeading.EPIC])
+    const line = formatDrift(d).find((l) => l.includes(MilestoneContextHeading.EPIC) && l.includes(MilestoneContextHeading.MILESTONE))
     expect(line).toMatch(/^note:/)
   })
 
   it('does not report two spellings when only one of them is in the body', () => {
-    const d = diffIssue(Fixture.existing(Fixture.bodyUnder(MilestoneContextHeading.LEGACY, Fixture.CONTEXT)), Fixture.wanted(), 'M1', [])
+    const d = diffIssue(Fixture.existing(Fixture.bodyUnder(MilestoneContextHeading.EPIC, Fixture.CONTEXT)), Fixture.wanted(), 'M1', [])
     expect(d.milestoneContextSpellings).toEqual([])
   })
 })
 
 describe('buildReconcileBody — the content is brought up to date, the spelling on disk is left alone', () => {
   it('rewrites the content under the legacy heading without renaming the heading', () => {
-    const r = buildReconcileBody(Fixture.bodyUnder(MilestoneContextHeading.LEGACY, '- una decision VIEJA'), Fixture.wanted({ epicContext: '- una decision NUEVA' }))
-    expect(r.body).toContain(MilestoneContextHeading.LEGACY)
-    expect(r.body).not.toContain(MilestoneContextHeading.WRITTEN)
+    const r = buildReconcileBody(Fixture.bodyUnder(MilestoneContextHeading.EPIC, '- una decision VIEJA'), Fixture.wanted({ epicContext: '- una decision NUEVA' }))
+    expect(r.body).toContain(MilestoneContextHeading.EPIC)
+    expect(r.body).not.toContain(MilestoneContextHeading.MILESTONE)
     expect(extractSectionContent(r.body, MilestoneContextHeading.FORMS)).toBe('- una decision NUEVA')
   })
 
@@ -174,17 +177,17 @@ describe('buildReconcileBody — the content is brought up to date, the spelling
 
 describe('the kickoff names the spelling the issue actually carries', () => {
   it('names the legacy heading to an agent dispatched on an issue that carries it', () => {
-    const mapped = mapGhIssue(Fixture.issueCarrying(MilestoneContextHeading.LEGACY))
-    expect(mapped.milestoneContextHeading).toBe(MilestoneContextHeading.LEGACY)
+    const mapped = mapGhIssue(Fixture.issueCarrying(MilestoneContextHeading.EPIC))
+    expect(mapped.milestoneContextHeading).toBe(MilestoneContextHeading.EPIC)
     const k = Fixture.kickoffFor(mapped.milestoneContextHeading)
-    expect(k).toContain(MilestoneContextHeading.LEGACY)
-    expect(k).not.toContain(MilestoneContextHeading.WRITTEN)
+    expect(k).toContain(MilestoneContextHeading.EPIC)
+    expect(k).not.toContain(MilestoneContextHeading.MILESTONE)
   })
 
-  it('names the written heading to an agent dispatched on an issue groomed from now on', () => {
-    const mapped = mapGhIssue(Fixture.issueCarrying(MilestoneContextHeading.WRITTEN))
-    expect(mapped.milestoneContextHeading).toBe(MilestoneContextHeading.WRITTEN)
-    expect(Fixture.kickoffFor(mapped.milestoneContextHeading)).toContain(MilestoneContextHeading.WRITTEN)
+  it('names the milestone heading to an agent dispatched on an issue that carries it', () => {
+    const mapped = mapGhIssue(Fixture.issueCarrying(MilestoneContextHeading.MILESTONE))
+    expect(mapped.milestoneContextHeading).toBe(MilestoneContextHeading.MILESTONE)
+    expect(Fixture.kickoffFor(mapped.milestoneContextHeading)).toContain(MilestoneContextHeading.MILESTONE)
   })
 
   it('claims no spelling when the body carries neither, and the kickoff falls back to the written one', () => {
@@ -199,12 +202,41 @@ describe('the kickoff names the spelling the issue actually carries', () => {
   })
 })
 
+describe('the vendored scope gate names the spelling the spec really carries', () => {
+  const withoutScope = (heading) => [heading, '- nothing declared here', '', '## Out of scope / Protected'].join('\n')
+
+  it('reports which heading it found when that section declares no paths', () => {
+    const under = parseScope(withoutScope(MilestoneContextHeading.EPIC))
+    expect(under.declared).toBe(false)
+    expect(under.heading).toBe(MilestoneContextHeading.EPIC)
+    expect(under.reason).toContain(MilestoneContextHeading.EPIC)
+    expect(under.reason).not.toContain(MilestoneContextHeading.MILESTONE)
+  })
+
+  it('names the milestone heading when that is the one the spec carries', () => {
+    const under = parseScope(withoutScope(MilestoneContextHeading.MILESTONE))
+    expect(under.heading).toBe(MilestoneContextHeading.MILESTONE)
+    expect(under.reason).toContain(MilestoneContextHeading.MILESTONE)
+  })
+
+  it('falls back to the heading the groom writes when the body carries no section at all', () => {
+    const none = parseScope('## Out of scope / Protected\n- nada')
+    expect(none.heading).toBeNull()
+    expect(none.reason).toContain(MilestoneContextHeading.WRITTEN)
+  })
+
+  it('reports the heading it found even when the paths ARE declared', () => {
+    expect(parseScope(Fixture.specWithScopeUnder(MilestoneContextHeading.EPIC)).heading)
+      .toBe(MilestoneContextHeading.EPIC)
+  })
+})
+
 describe('the scope gate reads the declared paths under either spelling', () => {
-  it('finds the declaration under the written heading', () => {
-    expect(parseScope(Fixture.specWithScopeUnder(MilestoneContextHeading.WRITTEN))).toMatchObject({ declared: true, patterns: ['apps/web/**'] })
+  it('finds the declaration under the milestone heading, which a re-vendored gate will meet', () => {
+    expect(parseScope(Fixture.specWithScopeUnder(MilestoneContextHeading.MILESTONE))).toMatchObject({ declared: true, patterns: ['apps/web/**'] })
   })
 
   it('finds the declaration under the legacy heading, so no frozen spec loses its gate', () => {
-    expect(parseScope(Fixture.specWithScopeUnder(MilestoneContextHeading.LEGACY))).toMatchObject({ declared: true, patterns: ['apps/web/**'] })
+    expect(parseScope(Fixture.specWithScopeUnder(MilestoneContextHeading.EPIC))).toMatchObject({ declared: true, patterns: ['apps/web/**'] })
   })
 })

@@ -1239,8 +1239,9 @@
 <span class="k">## Contexto del milestone</span>             <span class="c">← travels to the agent (together with ## Decisiones congeladas)</span>
 <span class="c">The invariants go INSIDE: version floors, copy rules, naming,
 paths that are not touched. One line each, with exact values.
-A spec frozen before the rename says `## Contexto del epic`: that
-spelling is still read, and both at once is reported, never chosen.</span>
+Either spelling is read. What groom WRITES into the issues is still
+`## Contexto del epic`, until governed repos re-vendor scope-check.
+Both spellings at once is reported, never chosen.</span>
 
 <span class="k">## Tabla de slices</span>                    <span class="c">← contract v16, see below. Only ONE per spec</span>
 
@@ -1308,7 +1309,7 @@ spelling is still read, and both at once is reported, never chosen.</span>
 <span class="k">## Descripción</span>                            <span class="c">← only if `Entrega` carries a real value</span>
 &lt;text of Entrega&gt;
 
-<span class="k">## Contexto del milestone</span>                 <span class="c">← only if the spec carries text. IDENTICAL in every issue of the milestone</span>
+<span class="k">## Contexto del epic</span>                      <span class="c">← only if the spec carries text. IDENTICAL in every issue of the milestone</span>
 &lt;copied verbatim from the spec; --reconcile keeps it up to date&gt;
 
 <span class="k">## Contexto heredado</span>                      <span class="c">← ALWAYS, with a placeholder. groom NEVER TOUCHES IT</span>
@@ -1344,7 +1345,7 @@ spelling is still read, and both at once is reported, never chosen.</span>
                 <tr><td>The spec link line</td><td class="x-bad">yes (the whole line)</td><td>yes</td></tr>
                 <tr><td><code>type:</code>/<code>area:</code>/<code>touches:</code>/<code>gate:</code> labels</td><td class="x-bad">yes, only the prefixes whose column the table carries</td><td>yes</td></tr>
                 <tr><td><code>## Dependencias</code> and <code>## Acceptance criteria</code></td><td class="x-bad">yes (as a set, only inside the recognised section)</td><td>yes, by surgical splice</td></tr>
-                <tr><td><code>## Contexto del milestone</code></td><td class="x-0">no — only <code>nota:</code></td><td class="x-warn">yes (it is rewritten)</td></tr>
+                <tr><td>the milestone context section</td><td class="x-0">no — only <code>nota:</code></td><td class="x-warn">yes (it is rewritten)</td></tr>
                 <tr><td><code>## Descripción</code> and <code>Protegido</code></td><td class="x-0">no — prose that is edited routinely</td><td class="x-0">never</td></tr>
                 <tr><td><code>## Contexto heredado</code></td><td class="x-0">out of the comparison, always</td><td class="x-0">never</td></tr>
                 <tr><td><code>status:</code> label</td><td class="x-0">out of the comparison, always</td><td class="x-0">never</td></tr>
@@ -1400,7 +1401,7 @@ spelling is still read, and both at once is reported, never chosen.</span>
    ANTES de tocar nada.
 <span class="c">4.</span> Hidrátate de .agent/SLICE.md y del issue; los criterios de aceptación son
    &lt;AC interpolados&gt;. Lee además "## Out of scope / Protected": eso NO se toca.
-<span class="c">5.</span> Lee también "## Contexto del milestone" y "## Contexto heredado". Si alguna está
+<span class="c">5.</span> Lee también "## Contexto del epic" y "## Contexto heredado". Si alguna está
    vacía o no aparece, no hay nada que heredar — no lo busques fuera del issue.
 <span class="c">6.</span> Primer acto, con el baseline verde: escribe el plan del slice con
    control-tower-loop:writing-plans usando el issue como spec. Guárdalo en

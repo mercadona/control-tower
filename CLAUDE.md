@@ -60,7 +60,7 @@ prose and they are still Spanish, and they are contract anyway:
 
 | Heading | Pinned at |
 |---|---|
-| `## Contexto del milestone`, and `## Contexto del epic` still read | `plugin/scripts/milestone-context.js` `MilestoneContextHeading` |
+| `## Contexto del epic` written, `## Contexto del milestone` read too | `plugin/scripts/milestone-context.js` `MilestoneContextHeading` |
 | `## Contexto heredado` | `plugin/scripts/groom.js` `INHERITED_CONTEXT_HEADING` |
 | `## Decisiones congeladas` | `plugin/scripts/groom.js` `FROZEN_DECISIONS_HEADING` |
 | `## Dependencias` | `plugin/scripts/gh-issue-map.js` `DEPS_HEADING` |
@@ -77,31 +77,54 @@ Spanish everywhere, issues and pull requests included.**
 
 Issue #346 renamed the milestone's context heading without touching a single
 issue or spec, and the shape it used is the shape any of the other nine would
-have to use. It is a **dual read**:
+have to use. It is a **dual read with a deferred write**:
 
-- what is **written** is `## Contexto del milestone`, and nothing else ever is;
-- what is **read** accepts `## Contexto del epic` too — a body or a spec
-  carrying it is found, hydrated from, and reports **no drift for the spelling
-  alone**. That is what leaves the already groomed issues and the frozen specs
-  where they are;
+- what is **read** accepts **both** `## Contexto del epic` and
+  `## Contexto del milestone` — a body or a spec carrying either is found,
+  hydrated from, and reports **no drift for the spelling alone**. That is what
+  leaves the already groomed issues and the frozen specs where they are;
+- what is **written** into an issue is still `## Contexto del epic`. See the
+  rule below: this is not indecision, it is the only spelling that is safe to
+  write today;
 - `--reconcile` brings the section's **content** up to date under whichever
-  spelling it finds, and leaves that spelling as it is. It only writes
-  `## Contexto del milestone` when it is inserting the section from scratch;
+  spelling it finds, and leaves that spelling as it is. It writes
+  `MilestoneContextHeading.WRITTEN` only when inserting the section from
+  scratch;
 - **both spellings in one body is a finding**, never a silent choice between
   them. Every reader here takes the first occurrence, so the text under the
   other one would be read by nobody while looking to a human like context that
   is honoured. In a spec it comes out as the malformed reason, which authorises
   touching nothing; in an issue it comes out as a note naming both.
 
-The legacy spelling is **not retired**, and retiring it is a separate decision
-that needs evidence, not a grep of this repository: the string is on disk in
-governed repositories nobody here watches. What has to be true first is that no
-live issue and no spec a `/ct-groom --reconcile` could still touch carries it.
-Both spellings live in `plugin/scripts/milestone-context.js` and nowhere else —
-`groom.js` re-exports them, `gh-issue-map.js` reads which one an issue carries so
-the kickoff can name the section the dispatched agent will actually find, and
-`scope.js` reads them inside the conformance gate that gets vendored into a
-governed repository's CI. Whoever retires the spelling does it there, once, and
+#### The rule a rename of any of these ten has to obey
+
+**No issue may be written with a heading that the gate installed where it will
+be checked cannot read.** A reader inside this repository is updated by
+merging. A reader **vendored into somebody else's repository is not**:
+`plugin/scripts/build.mjs` bundles `scope.js` into `plugin/dist/scope-check.js`
+and `ct-init` seeds that bundle into each governed repository, where it runs in
+that repository's own CI with no plugin installed. A copy seeded before #346
+recognises `## Contexto del epic` and nothing else, so writing the new spelling
+fails the scope gate of every new issue in a repository we cannot fix by
+merging — and it fails for a reason that has nothing to do with the work,
+because the gate cannot find the section that declares the scope.
+
+**The switch, and who checks what.** The flip is one line —
+`WRITTEN: MILESTONE_HEADING` in `plugin/scripts/milestone-context.js` — and
+every writer follows it. Before flipping it, confirm that every governed
+repository has re-vendored a `dist/scope-check.js` that accepts both spellings
+(the one this repository ships does). The list of governed repositories is not
+in this tree, so that is a person's check, not a grep's;
+`plugin/__tests__/milestone-context.test.js` pins what is written today so the
+flip cannot happen by accident.
+
+**Retiring `## Contexto del epic` is a third decision**, later than the flip and
+different from it: it needs evidence that no live issue and no spec a
+`/ct-groom --reconcile` could still touch carries it. Both spellings live in
+`plugin/scripts/milestone-context.js` and nowhere else — `groom.js` re-exports
+them, `gh-issue-map.js` reads which one an issue carries so the kickoff can name
+the section the dispatched agent will actually find, and `scope.js` reads them
+inside the vendored gate. Whoever retires the spelling does it there, once, and
 the four readers follow.
 
 The plan's own sections (`## 7. Tasks`, `## 8. Global verification`,

@@ -335,25 +335,33 @@ describe("seam 4 — the slice's plan is written by writing-plans-prescriptive (
     // the next real addition still has to argue for itself. Accumulated since
     // 16,314: +1,181 bytes, 7.2%.
     //
-    // Cap raised from 17,495 to 17,545: fifty bytes, and they buy no content
-    // either. Issue #346 renamed the loop's unit of work from «epic» to
-    // «milestone», and «milestone» is five bytes longer: three occurrences here
-    // (`## Contexto del epic` twice, `epic context` once) account for fifteen
-    // of them. The other thirty-five are one parenthetical, `(or "del epic", in
-    // an older issue)`, in the paragraph that lists the sections of the issue
-    // you may plan from — an issue groomed before the rename carries the old
-    // spelling, and without that half-line the checklist names a section its
-    // body does not have, which reads as "the section is missing" and sends
-    // whoever is planning to look for it outside the issue. The kickoff already
-    // names the spelling the issue really carries; this is the redundancy that
-    // covers an agent reading the skill without it. Trimming was not attempted,
-    // for the same reason as the raise above: nothing was added, so a sentence
-    // removed here would pay for a rename with a measured lesson. Accumulated
-    // since 16,314: +1,231 bytes, 7.5%.
+    // Cap raised from 17,495 to 17,521: twenty-six bytes, and they buy no
+    // content. Issue #346 renamed the loop's unit of work from «epic» to
+    // «milestone», and «milestone» is five bytes longer than «epic»: one
+    // occurrence here (`epic context` → `milestone context`, in the provenance
+    // list of §9 Assumptions) accounts for five of them. The other twenty-one
+    // are the parenthetical `(or "del milestone")` in the paragraph that lists
+    // the sections of the issue you may plan from. That half-line is not
+    // decoration: the issues carry `## Contexto del epic` today and will carry
+    // `## Contexto del milestone` once the vendored scope gates accept both
+    // (see MilestoneContextHeading), and a checklist that names only one of the
+    // two reads as "the section is missing" on the other side of that flip,
+    // which sends whoever is planning to look for it outside the issue. The
+    // kickoff already names the spelling the issue really carries; this covers
+    // an agent that read the skill and not the kickoff. Trimming was not
+    // attempted, for the same reason as the raise above: nothing was added, so
+    // a sentence removed here would pay for a rename with a measured lesson.
+    //
+    // The number is the file's EXACT new size and not the 17,545 an earlier
+    // round of this same branch set, because the correction that deferred the
+    // writing made the paragraph shorter than the version that asked for those
+    // fifty bytes. A ratchet left above the real size is a ratchet that lets
+    // the next addition in for free. Accumulated since 16,314: +1,207 bytes,
+    // 7.4%.
     expect(
       bytes('SKILL.md'),
       'SKILL.md is over its cap: trim inside the same section, or raise the cap by writing the reason for the raise right here — precedent is not a reason.'
-    ).toBeLessThanOrEqual(17545)
+    ).toBeLessThanOrEqual(17521)
     expect(
       bytes('plan-template.md'),
       'plan-template.md is over its cap: trim inside the same section, or raise the cap by writing the reason for the raise right here — precedent is not a reason.'

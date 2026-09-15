@@ -8,8 +8,11 @@ The content, in full:
 # Scope conformance gate — Control Tower loop
 #
 # WHAT IT DOES: fails the PR if it touches files OUTSIDE the scope its milestone
-# declared in the `Alcance:` line of `## Contexto del milestone`
-# (`## Contexto del epic` is still read, in a spec frozen before the rename).
+# declared in the `Alcance:` line of the milestone's context section —
+# `## Contexto del epic` is what the issues carry today, and
+# `## Contexto del milestone` is read too. THIS FILE IS VENDORED: an old copy
+# in a governed repo only knows the first, which is why the groom still writes
+# it. Re-vendor with ct-init to get the tolerant one.
 #
 # WHY IT LIVES HERE AND NOT IN THE PLUGIN: the dispatched agent runs with the
 # operator's GitHub credentials, so it can fabricate any GitHub artefact — a

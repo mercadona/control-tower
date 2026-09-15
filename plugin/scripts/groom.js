@@ -62,18 +62,38 @@ export function renderE2eContent(slice) {
 // only place all three can name it from without a cycle and without dragging
 // this file into that bundle.
 //
-// WHY THERE ARE TWO SPELLINGS AND WHEN THERE STOPS BEING TWO. What is written
-// is `## Contexto del milestone`; what is READ accepts `## Contexto del epic`
-// too, because that string is on disk in the frozen spec of every governed
+// WHY THERE ARE TWO SPELLINGS. What is READ accepts both, because
+// `## Contexto del epic` is on disk in the frozen spec of every governed
 // repository and in the body of every issue already groomed — see
 // readEpicContext below, diffIssue/buildReconcileBody in reconcile.js and
-// parseScope in scope.js, which are the four readers. Retiring the legacy
-// spelling is a LATER decision and it needs evidence, not a grep of this
-// repository: the string lives in repositories nobody here watches. What has to
-// be true first is that no live issue and no spec a `/ct-groom --reconcile`
-// could still touch carries it — and until somebody can show that, removing
-// `MilestoneContextHeading.LEGACY` makes the groom stop finding a section that
-// is there, which is the failure CLAUDE.md describes.
+// parseScope in scope.js, which are the four readers.
+//
+// WHICH ONE IS WRITTEN, AND THE CONDITION THAT FLIPS IT. `WRITTEN` is `EPIC`,
+// and that is the whole of the deferral this branch was corrected into. The
+// rule it obeys: NO ISSUE MAY BE WRITTEN WITH A HEADING THAT THE GATE INSTALLED
+// WHERE IT WILL BE CHECKED CANNOT READ. A reader inside this repository is
+// updated by merging. `scope.js` is not one of those: `build.mjs` bundles it
+// into `dist/scope-check.js` and `ct-init` VENDORS that bundle into each
+// governed repository, where it runs in that repository's own CI with no plugin
+// installed. Those copies are frozen at whatever version was seeded, and an old
+// one recognises `## Contexto del epic` and nothing else. Writing the new
+// spelling would fail the scope gate of every new issue in a repository we
+// cannot fix by merging — and it would fail for a reason that has nothing to do
+// with the work, because the gate cannot find the section that declares the
+// scope and "not being able to check is NOT being clean" is what it answers.
+//
+// The switch is one line here — `WRITTEN: MILESTONE_HEADING` in
+// milestone-context.js — and whoever flips it checks THIS first: that every
+// governed repository has re-vendored a `dist/scope-check.js` that accepts both
+// spellings (the one this branch ships does). `ct-init --update-...` is how a
+// repository gets it; the list of governed repositories is not in this tree, so
+// the check is a person's, not a grep's. `milestone-context.test.js` pins what
+// is written today precisely so that the flip cannot happen by accident.
+//
+// RETIRING `EPIC` is a third, later decision, and a different one: it needs
+// evidence that no live issue and no spec a `/ct-groom --reconcile` could still
+// touch carries it. Removing it before that makes the groom stop finding a
+// section that is there, which is the failure CLAUDE.md describes.
 export { MilestoneContextHeading }
 export const INHERITED_CONTEXT_HEADING = '## Contexto heredado'
 

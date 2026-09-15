@@ -105,7 +105,7 @@ const scope = parseScope(issueBody)
 if (!scope.declared) {
   die(
     `the milestone of issue #${issueN} declares no scope`,
-    `${scope.reason}. Add an \`Alcance: <paths>\` line to the \`${MilestoneContextHeading.WRITTEN}\` section of the execution spec and re-groom it (or edit the issue). It is declared ONCE per milestone, at the freeze.`,
+    `${scope.reason}. Add an \`Alcance: <paths>\` line to the \`${scope.heading ?? MilestoneContextHeading.WRITTEN}\` section of the execution spec and re-groom it (or edit the issue). It is declared ONCE per milestone, at the freeze.`,
   )
 }
 

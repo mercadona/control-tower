@@ -28,12 +28,13 @@ function findClosingKeywords(text) {
 }
 
 // scripts/milestone-context.js
-var WRITTEN_HEADING = "## Contexto del milestone";
-var LEGACY_HEADING = "## Contexto del epic";
+var MILESTONE_HEADING = "## Contexto del milestone";
+var EPIC_HEADING = "## Contexto del epic";
 var MilestoneContextHeading = Object.freeze({
-  WRITTEN: WRITTEN_HEADING,
-  LEGACY: LEGACY_HEADING,
-  FORMS: Object.freeze([WRITTEN_HEADING, LEGACY_HEADING])
+  MILESTONE: MILESTONE_HEADING,
+  EPIC: EPIC_HEADING,
+  WRITTEN: EPIC_HEADING,
+  FORMS: Object.freeze([MILESTONE_HEADING, EPIC_HEADING])
 });
 
 // scripts/scope.js
@@ -88,11 +89,13 @@ function parseScope(issueBody2) {
   const text = typeof issueBody2 === "string" ? issueBody2 : "";
   const lines = text.split(/\r?\n/);
   let inside = false;
+  let heading = null;
   const patterns = [];
   for (const line of lines) {
     const h2 = line.match(H2_TITLE);
     if (h2 && CONTEXT_HEADING_TITLES.includes(h2[1].toLowerCase())) {
       inside = true;
+      heading = heading ?? line.trim();
       continue;
     }
     if (inside && ANY_HEADING.test(line)) break;
@@ -106,13 +109,15 @@ function parseScope(issueBody2) {
     }
   }
   if (!patterns.length) {
+    const named = heading ?? MilestoneContextHeading.WRITTEN;
     return {
       declared: false,
       patterns: [],
-      reason: `the milestone does not declare \`Alcance:\` in its \`${MilestoneContextHeading.WRITTEN}\` section \u2014 with no declared scope the gate cannot check anything, and not being able to check is NOT being clean`
+      heading,
+      reason: `the milestone does not declare \`Alcance:\` in its \`${named}\` section \u2014 with no declared scope the gate cannot check anything, and not being able to check is NOT being clean`
     };
   }
-  return { declared: true, patterns, reason: null };
+  return { declared: true, patterns, heading, reason: null };
 }
 function matchesPattern(path, pattern) {
   const p = normalizePath(path);
@@ -209,7 +214,7 @@ var scope = parseScope(issueBody);
 if (!scope.declared) {
   die(
     `the milestone of issue #${issueN} declares no scope`,
-    `${scope.reason}. Add an \`Alcance: <paths>\` line to the \`${MilestoneContextHeading.WRITTEN}\` section of the execution spec and re-groom it (or edit the issue). It is declared ONCE per milestone, at the freeze.`
+    `${scope.reason}. Add an \`Alcance: <paths>\` line to the \`${scope.heading ?? MilestoneContextHeading.WRITTEN}\` section of the execution spec and re-groom it (or edit the issue). It is declared ONCE per milestone, at the freeze.`
   );
 }
 var files = (prData.files || []).map((f) => f.path);
