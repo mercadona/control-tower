@@ -131,7 +131,7 @@ describe('analyzeSpecFreeze — the pure module (three greps)', () => {
   })
 
   it('a spec with no «## Decisiones congeladas» section reports nothing, however many bullets its other sections carry: a milestone with no frozen decision is not a defect', () => {
-    const md = '## Hipótesis\n\n- la apuesta cabe en una lista\n- y sigue siendo la apuesta\n\n' + TABLE
+    const md = '- una nota suelta antes de la primera cabecera\n\n## Hipótesis\n\n- la apuesta cabe en una lista\n- y sigue siendo la apuesta\n\n' + TABLE
 
     expect(analyzeSpecFreeze(md).decisionsWithoutProvenance).toEqual([])
   })
