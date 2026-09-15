@@ -118,8 +118,8 @@ describe('Home and gate 2', () => {
 
     expect(await screen.findByText(SESSION_OPENED)).toBeInTheDocument()
     await vi.waitFor(() => expect(
-      screen.getByRole('button', { name: EpicGroomMother.GROOM_SESSION.name }),
-    ).toHaveAttribute('aria-current', 'true'))
+      screen.getByRole('tab', { name: EpicGroomMother.GROOM_SESSION.name }),
+    ).toHaveAttribute('aria-selected', 'true'))
     expect(fetching.mock.calls.filter(([input]) => String(input) === '/sessions').length).toBeGreaterThan(1)
   })
 })
