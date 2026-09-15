@@ -11,7 +11,6 @@ import type { CoordinatingSessionOpened, OpenCoordinatingSession } from '../appl
 
 export const CoordinatingSessionOutcome = Object.freeze({
   ACCEPTED: 'accepted',
-  ONE_REPOSITORY_ONLY: 'one-repository-only',
   ALREADY_LIVE: 'coordinating-session-already-live',
   OPENING: 'coordinating-session-opening',
 } as const)
@@ -23,12 +22,6 @@ type CoordinatingSessionRefusalOf = () => Refusal
 export class CoordinatingSessionRefusal {
   static readonly #BY_OUTCOME: Projection<CoordinatingSessionRefusalOf, CoordinatingSessionOutcomeValue> =
     new Projection<CoordinatingSessionRefusalOf, CoordinatingSessionOutcomeValue>('refusal', [
-      [CoordinatingSessionOutcome.ONE_REPOSITORY_ONLY, () => new Refusal({
-        status: 400,
-        code: CoordinatingSessionOutcome.ONE_REPOSITORY_ONLY,
-        detail: `an epic governs one checkout: send ${PlanRequest.REPO_FIELD} and ${PlanRequest.PATH_FIELD} `
-          + `instead of ${PlanRequest.REPO_LIST_FIELD}`,
-      })],
       [CoordinatingSessionOutcome.ALREADY_LIVE, () => new Refusal({
         status: 409,
         code: CoordinatingSessionOutcome.ALREADY_LIVE,
@@ -107,10 +100,6 @@ export class CoordinatingSessionRoute {
       const asked = PlanRequest.from(JsonBody.textOf(request))
       if (asked.outcome !== PlanRequestOutcome.ACCEPTED) {
         Answer.refuseAs(response, PlanRefusal.of(asked))
-        return
-      }
-      if (asked.listed) {
-        Answer.refuseAs(response, CoordinatingSessionRefusal.of(CoordinatingSessionOutcome.ONE_REPOSITORY_ONLY))
         return
       }
       const reserved = held.reserve()

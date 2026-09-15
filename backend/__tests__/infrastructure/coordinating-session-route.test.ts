@@ -318,7 +318,7 @@ describe('CoordinatingSessionRoute', () => {
     expect(held.held()?.state).toBe('live')
   })
 
-  it('refuses a repository list because an epic governs one checkout', async () => {
+  it('refuses the retired repository list field through the same door start-plan reads', async () => {
     const open = OpenCoordinatingSessionSpy.opening()
     const held = Mother.registry()
 
@@ -329,8 +329,8 @@ describe('CoordinatingSessionRoute', () => {
 
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({
-      code: 'one-repository-only',
-      detail: 'an epic governs one checkout: send repo and path instead of repo_list',
+      code: 'repo-list-retired',
+      detail: 'repo_list is retired: send repo and path for one repository instead',
     })
     expect(open.asked).toEqual([])
   })
