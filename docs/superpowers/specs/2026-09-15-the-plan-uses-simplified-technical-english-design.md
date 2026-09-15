@@ -32,21 +32,25 @@ literality rule, the block taxonomy, and the language.
 
 ### The seam
 
-A new module, `plugin/scripts/plan-ste.js`, exports one pure function:
+A new module, `plugin/scripts/plan-language.js`, exports one class with one entry point:
 
 ```
-steViolations(lines) -> string[]
+PlanLanguage.violationsOf(lines) -> string[]
 ```
+
+`plugin/conventions/style.md` denies a new module the declared-debt exemption and asks that every
+function hang off a type, so the module is one class and every member of it is static. The name
+is `PlanLanguage`, not `PlanSte`: the rule is about the language the plan is written in.
 
 `lines` is the array `annotate` already builds inside `plan-contract.js`: one object per line of
 the plan, with `.line` and `.structural`. The module receives the whole annotated plan, so it
 finds §8 and the task markers by itself. It reads no files and takes no ports; its test needs
 neither a repo nor a disk.
 
-`validatePlan` gains four lines, next to the rules it already runs:
+`validatePlan` gains two lines, next to the rules it already runs:
 
 ```
-for (const detail of steViolations(lines)) push('ste', detail)
+for (const detail of PlanLanguage.violationsOf(lines)) push('ste', detail)
 ```
 
 One rule name, `ste`. The sub-rule travels inside the detail, so the gate's message teaches what
@@ -88,6 +92,19 @@ lines with no blank line and no structural break between them (a heading, a fenc
 separator or a role label ends the run). It joins each run with a single space, then splits the
 joined text into sentences on `.`, `!` or `?` followed by whitespace or the end of the text. A
 period between two digits does not split.
+
+**Two kinds of line open a paragraph of their own**, because each one carries its own unit of
+meaning and its own limit:
+
+- a line that carries a list marker — `[-*+]` or a number and a dot. An author writes list items
+  without full stops, and a run that joined them measured the whole list as one sentence that no
+  single item caused and none could fix;
+- a line that starts with a task marker. `**Objective:**` directly followed by `**Files:**` is
+  two paragraphs, not one: otherwise the objective is reported as two sentences the author never
+  wrote, and the two lines are measured as one sentence against the 20-word limit.
+
+The opener line stays the first line of its own run, because the marker is what chooses the
+limit. A wrapped continuation line carries no marker, so it still joins the item above it.
 
 A table row is its own paragraph: the row is split on `|` and each non-empty cell becomes one
 sentence.
@@ -133,22 +150,25 @@ fire. Tokens of the `-ing` exception list never fire.
 
 ### The four lists
 
-All four live in `plan-ste.js`, and three of them are exported. If they pass about 100 lines together, they
-move to a file of their own.
+All four are static members of `PlanLanguage`. Three are public, because a test reads them by
+name — `NON_APPROVED`, `IRREGULAR_PARTICIPLES` and `ING_EXCEPTIONS` —, and the non-participle
+list is private, `static #NOT_PARTICIPLES`. If they pass about 100 lines together, they move to a
+file of their own.
 
-**The non-approved list** starts with 48 entries, each with its approved replacement, which
-the gate's message names: `utilize → use`, `prior to → before`, `subsequent to → after`,
-`in order to → to`, `due to → because of`, `as well as → and`, `via → with`,
-`ensure → make sure`, `obtain → get`, `commence → start`, `terminate → stop`, `attempt → try`,
+**The non-approved list** carries 47 entries, each with its approved replacement, which
+the gate's message names: `utilize → use`, `utilise → use`, `prior to → before`,
+`subsequent to → after`, `in order to → to`, `due to → because of`, `as well as → and`,
+`via → with`, `ensure → make sure`, `obtain → get`, `commence → start`, `terminate → stop`,
 `assist → help`, `provide → give`, `approximately → about`, `additional → more`,
 `numerous → many`, `however → but`, `therefore → so`, `thus → so`, `hence → so`,
 `whilst → while`, `regarding → about`, `concerning → about`, `in terms of → for`,
 `with respect to → about`, `with regard to → about`, `leverage → use`, `facilitate → help`,
 `initiate → start`, `finalize → finish`, `indicate → show`, `require → need`, `comprise → have`,
 `in the event that → if`, `at this point in time → now`, `a number of → some`,
-`the majority of → most`, `it should be noted that → remove it`, `please note → remove it`,
-`e.g. → for example`, `i.e. → that is`, `etc. → name the items`, `alternatively → or`,
-`furthermore → also`, `moreover → also`, `nevertheless → but`, `per → for each`.
+`the majority of → most`, `it should be noted that → remove it and say the thing`,
+`please note → remove it and say the thing`, `e.g. → for example`, `i.e. → that is`,
+`etc. → name the items`, `alternatively → or`, `furthermore → also`, `moreover → also`,
+`nevertheless → but`.
 
 **Two kinds of word never enter that list.**
 
@@ -158,22 +178,42 @@ the gate's message names: `utilize → use`, `prior to → before`, `subsequent 
 2. The repository's ubiquitous language. `dispatch`, `harvest`, `slice`, `judge`, `gate`,
    `yardstick` and what `docs/glossary.md` fixes are domain terms, and the standard allows a
    project's own technical vocabulary. A term translated two ways is worse than a term left
-   alone.
+   alone. `attempt` is that case and the list carried it anyway: `docs/glossary.md:43` rules
+   `intento → attempt`, 25 files carry the noun, and the gate was telling every author to write
+   `try` where the repository had already decided. A test reads the glossary's English column and
+   refuses any overlap with this list, so the exclusion is now measured and not remembered.
 
 **The irregular participle list** carries the forms `-ed` does not catch: `written`, `built`,
 `run`, `made`, `done`, `taken`, `given`, `seen`, `known`, `shown`, `held`, `kept`, `left`,
 `read`, `sent`, `set`, `put`, `lost`, `found`, `told`, `said`, `brought`, `bought`, `caught`,
 `taught`, `thought`, `chosen`, `driven`, `spoken`, `broken`, `frozen`, `grown`, `drawn`,
-`thrown`, `torn`, `worn`, `begun`, `become`, `come`, `gone`, `been`, `had`.
+`thrown`, `torn`, `worn`, `begun`, `been`, `had`.
+
+`gone`, `come` and `become` are not on it, and that is deliberate: all three are intransitive, so
+`is gone` is a state and can never be passive. A sibling plan writes *"the five symbols are
+gone"* as its verification claim.
 
 **The non-participle list** carries the words that end in `-ed` and are not participles:
 `red`, `need`, `speed`, `seed`, `feed`, `indeed`, `exceed`, `proceed`, `succeed`, `embed`,
-`hundred`, `sacred`. Without it "the test is red" fires `passive`, and red is what a test is
-before it is green.
+`hundred`, `sacred`, `unchanged`, `untouched`, `untracked`, `unaffected`, `undefined`,
+`unrelated`, `unspecified`. Without it "the test is red" fires `passive`, and red is what a test
+is before it is green. The `un-` words are the other half: a participial adjective is not the
+passive voice, and this repository's own `**Verification:**` prose writes *"the plugin suite is
+untouched by this slice"*.
 
 **The `-ing` exception list** carries the words that end in `-ing` and are not verb forms:
 `during`, `string`, `strings`, `nothing`, `something`, `anything`, `everything`, `thing`,
-`things`, `according`.
+`things`, `according`, `existing`, `missing`, `remaining`, `heading`, `headings`, `warning`,
+`mapping`, `wiring`, `meaning`, `naming`, `setting`, `tracking`, `logging`, `handling`, `timing`,
+`being`. They are the nominal and adjectival `-ing` words this tree writes after a preposition:
+*"the code locates the section by heading"*, *"for existing sessions"*, *"exits without
+warning"*.
+
+`following` stays off the list on purpose. The nominal use in this tree is always "the
+following", where the article stands between the preposition and the word and the adjacency rule
+already lets it through, so the entry would buy nothing and would silence a real gerund at the
+start of a sentence. `being` is on the list, and it loses nothing: `being` is also a be-form, so
+`without being declared` still fires `passive`, which is the rule that owns it.
 
 ### What the message says
 
@@ -195,14 +235,18 @@ it. The new marker is *"Task-scoped subagents execute this plan"*: six words, ac
 distinctive as an anchor.
 
 Nobody runs the loop yet, so no committed plan is stranded by that change, and the alternative
-cost is permanent: a list of exemptions inside `plan-ste.js`, and a template that breaks the rule
-it teaches.
+cost is permanent: a list of exemptions inside `plan-language.js`, and a template that breaks the
+rule it teaches.
 
 Every `{{…}}` guidance line of the template is rewritten in ASD-STE100 too. The template is what
 the author copies, so it is where the rule is learned.
 
 **`SKILL.md`.** A new section, *The plan uses Simplified Technical English*, carries the six
-sub-rules, the two limits, one before/after example and the path of the lists. The opening line
+sub-rules, the two limits and the path of the lists. The before/after example this spec asked for
+is not there: the file is under a byte cap that `plugin/__tests__/skills-fork.test.js` asserts,
+the cap is a ratchet that only a written reason raises, and the human ruled that the example is
+what the section gives up rather than raise it. The section teaches the rule; the gate's own
+message carries the before and the after of the sentence that broke it. The opening line
 that says "Three things are non-negotiable and machine-checked" says four. Steps 5 and 7 already
 run `--check-plan` in a loop, so the skill gains no step.
 
@@ -212,7 +256,7 @@ different piece of work.
 
 ## Testing
 
-**`plugin/__tests__/plan-ste.test.js`** — one test per sub-rule, each with the case that fails and
+**`plugin/__tests__/plan-language.test.js`** — one test per sub-rule, each with the case that fails and
 the neighbouring case that passes (19 words pass where 21 fail, "is a written plan" passes where
 "is written" fails). Plus four seam tests:
 
@@ -225,8 +269,16 @@ the neighbouring case that passes (19 words pass where 21 fail, "is a written pl
 yields a violation whose rule is `ste`. And the fixtures whose prose now breaks the rule get
 fixed; at least one does today — *"And it is checked like this:"* is passive.
 
-**The loop closes on the template.** `steViolations` over `plan-template.md` returns an empty
-list. That test is what stops the template from teaching what the gate forbids.
+**The loop closes on the template.** `plugin/__tests__/plan-template-language.test.js` runs
+`PlanLanguage.violationsOf` over `plan-template.md` and expects an empty list. That test is what
+stops the template from teaching what the gate forbids.
+
+Two tests read the disk, so they live outside the pure one.
+`plugin/__tests__/plan-language-glossary.test.js` reads the English column of
+`docs/glossary.md` and refuses any overlap with the non-approved list.
+`plugin/__tests__/plan-language-skill.test.js` reads `SKILL.md` and pins what the new section
+teaches, the count of the non-approved list included, which it takes from the module itself so
+the prose cannot drift from the code.
 
 ## Out of scope
 
@@ -241,7 +293,7 @@ list. That test is what stops the template from teaching what the gate forbids.
 
 ## Assumptions
 
-1. **`plan-ste.js` is JavaScript, not TypeScript.** `backend/conventions/this-repository.md:25`
+1. **`plan-language.js` is JavaScript, not TypeScript.** `backend/conventions/this-repository.md:25`
    binds `backend/` only, and its line 44 says everything the backend reads out of `plugin/` "is
    JavaScript and stays JavaScript". `plugin/` has no build and no typecheck. Provenance: repo
    convention.
@@ -256,3 +308,8 @@ list. That test is what stops the template from teaching what the gate forbids.
    measured at all, and why there is no escape marker. Provenance: own call.
 5. **This spec is written in plain English, not in ASD-STE100.** The rule binds the plan, which
    the gate measures. Provenance: own call.
+6. **A plan written before this lands and released after it is refused.** `--release` runs the
+   same check, so the gate reaches a plan that was committed while no such rule existed. No live
+   branch carries such a plan on the day this lands, so nothing is stranded; whoever finds one
+   later rewrites its prose or the plan does not release. Provenance: fact about the merge
+   window, not a design decision.
