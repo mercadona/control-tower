@@ -340,7 +340,19 @@ describe('ct-next --dry-run — the kickoff reads as PROSE (D4, defect 3)', () =
     // would be executed, with no trimming— only where it lives changes.
     expect(r.out).toMatch(/cmux new-workspace --name .*--command "\. '.*launch\.sh'"/)
     expect(r.out).toMatch(/start-up script cmux would source/)
-    expect(r.out).toMatch(/^claude --dangerously-skip-permissions '/m)
+    expect(r.out).toMatch(/^claude --dangerously-skip-permissions --model opus '/m)
+  })
+
+  // The session that gets launched is the ARCHITECT: it writes the slice's plan
+  // before any subagent exists. `skills/subagent-driven-development/SKILL.md`
+  // asks for the most capable model on architecture and design work, and in the
+  // same section it asks for the model to be NAMED — «an omitted model inherits
+  // your session's model … which silently defeats this section». Inherited, the
+  // tier would be whatever default the launching machine carries, which F35 made
+  // ambient when it removed the account map.
+  it('the launched session names the model it plans with instead of inheriting one', () => {
+    const r = run(['--repo', 'menoplus-app/menoplus', '--cap', '1', '--dry-run'], { CT_NEXT_FIXTURE: FIXTURE_ONE_READY })
+    expect(r.out).toMatch(/^claude --dangerously-skip-permissions --model opus /m)
   })
 })
 

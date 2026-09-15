@@ -6,7 +6,7 @@ import { tmpdir, homedir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import { dirname, join, isAbsolute, delimiter as pathDelimiter } from 'node:path'
 import { planDispatch, parseRepoSlug, buildCmuxArgv, buildCmuxSendArgv, buildCmuxSendKeyArgv, cmuxSessionName, collectFinishedResidue, formatFinishedResidueWarning } from './dispatch.js'
-import { renderKickoff, buildStateSeed, AGENT_BIN } from './kickoff.js'
+import { renderKickoff, buildStateSeed, AGENT_BIN, ARCHITECT_MODEL } from './kickoff.js'
 import { Baseline, BaselineOutcome, BaselineResult, ShellBaselineRunner } from './baseline.js'
 import { parseStrictInt } from './argnum.js'
 import { resolveGatesForAgent } from './gates.js'
@@ -2436,7 +2436,13 @@ for (let idx = 0; idx < selected.length; idx++) {
   // --dangerously-skip-permissions --version` → `2.1.223 (Claude Code)`, exit
   // 0), and the alternative was that the agent's autonomous mode depended on
   // the content of a file this repo neither versions nor can check.
-  const agentCommand = `${agentBin} --dangerously-skip-permissions ${shQuote(kickoff)}`
+  // The model is named here for the reason `kickoff.js` gives beside
+  // ARCHITECT_MODEL: inherited, the tier the slice is planned with would be
+  // whatever default the launching machine carries. It goes AFTER
+  // `--dangerously-skip-permissions` so the shape the start-up checks look for
+  // —the binary and that flag, in that order— is the one they already know.
+  const agentCommand =
+    `${agentBin} --dangerously-skip-permissions --model ${ARCHITECT_MODEL} ${shQuote(kickoff)}`
   // ==========================================================================
   // F19/H1 — WHAT IS TYPED STOPS BEING THE WHOLE COMMAND.
   //
