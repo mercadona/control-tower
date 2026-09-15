@@ -3,27 +3,22 @@ import { PublishedSpecNotRead, PublishedSpecNotUnderstood } from '../domain/exce
 import { Gh } from './gh.ts'
 import type { EpicSpec } from '../domain/value-objects/epic-spec.ts'
 import type { RepositoryName } from '../domain/value-objects/repository-name.ts'
+import type { SpecRevision } from '../domain/policies/spec-revision.ts'
 
 export class GhPublishedSpecs extends PublishedSpecs {
-  static readonly #BLOB = 'blob'
-
   readonly gh: Gh
-  readonly digest: (text: string) => string
+  readonly revisions: SpecRevision
 
-  constructor({ gh, digest }: { gh: Gh, digest: (text: string) => string }) {
+  constructor({ gh, revisions }: { gh: Gh, revisions: SpecRevision }) {
     super()
     this.gh = gh
-    this.digest = digest
+    this.revisions = revisions
   }
 
   static argvFor({ repository, path }: { repository: RepositoryName, path: string }): string[] {
     const encoded = path.split('/').map(encodeURIComponent).join('/')
 
     return ['api', `repos/${repository.text}/contents/${encoded}`]
-  }
-
-  static #blobTextOf(text: string): string {
-    return `${GhPublishedSpecs.#BLOB} ${Buffer.byteLength(text, 'utf8')}\0${text}`
   }
 
   async holds({ repository, spec }: { repository: RepositoryName, spec: EpicSpec }): Promise<boolean> {
@@ -38,8 +33,7 @@ export class GhPublishedSpecs extends PublishedSpecs {
       )
     }
 
-    return GhPublishedSpecs.#shaIn(outcome.stdout, { repository, spec })
-      === this.digest(GhPublishedSpecs.#blobTextOf(spec.text))
+    return GhPublishedSpecs.#shaIn(outcome.stdout, { repository, spec }) === this.revisions.of(spec.text)
   }
 
   static #shaIn(printed: string, asked: { repository: RepositoryName, spec: EpicSpec }): string {

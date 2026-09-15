@@ -14,6 +14,7 @@ import {
   PublishReslicing, PublishReslicingParams, ReslicingPublished, ReslicingOutcome,
 } from '../../src/application/actions/publish-reslicing.ts'
 import { EpicBranch } from '../../src/domain/ports/epic-branch.ts'
+import { SpecRevision } from '../../src/domain/policies/spec-revision.ts'
 import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
 import { LiveSessions } from '../../src/domain/ports/live-sessions.ts'
 import type { LiveSessionStream } from '../../src/domain/ports/live-sessions.ts'
@@ -31,7 +32,10 @@ class PublishReslicingSpy extends PublishReslicing {
   readonly answer: () => Promise<ReslicingPublished>
 
   constructor(answer: () => Promise<ReslicingPublished>) {
-    super({ specs: new EpicSpecs(), branch: new EpicBranch(), pullRequests: new PullRequests() })
+    super({
+      specs: new EpicSpecs(), branch: new EpicBranch(), pullRequests: new PullRequests(),
+      revisions: new SpecRevision({ digest: (text) => text }),
+    })
     this.asked = []
     this.answer = answer
   }

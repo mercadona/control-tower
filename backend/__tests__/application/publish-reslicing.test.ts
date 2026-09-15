@@ -9,6 +9,8 @@ import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { Reslicing } from '../../src/domain/value-objects/reslicing.ts'
+import { SpecRevision } from '../../src/domain/policies/spec-revision.ts'
+import { createHash } from 'node:crypto'
 
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 type RereadAsked = { root: CheckoutRoot, spec: EpicSpec }
@@ -142,6 +144,10 @@ class Mother {
     number: 12, url: 'https://github.com/owner/name/pull/12',
   })
 
+  static readonly REVISIONS = new SpecRevision({
+    digest: (text) => createHash('sha1').update(text, 'utf8').digest('hex'),
+  })
+
   static readonly OPENED: ReviewedPullRequest = Object.freeze({
     number: 13, url: 'https://github.com/owner/name/pull/13',
   })
@@ -181,6 +187,7 @@ class Flow {
   specs: EpicSpecsDouble
   branch: EpicBranchDouble
   pullRequests: PullRequestsDouble
+  revisions: SpecRevision
 
   constructor({ specs, branch, pullRequests }: {
     specs?: EpicSpecsDouble,
@@ -190,6 +197,7 @@ class Flow {
     this.specs = specs ?? new EpicSpecsDouble(Mother.frozen())
     this.branch = branch ?? new EpicBranchDouble()
     this.pullRequests = pullRequests ?? PullRequestsDouble.withNoneOpen()
+    this.revisions = Mother.REVISIONS
   }
 
   static reading(spec: EpicSpec | null): Flow {
@@ -221,10 +229,24 @@ describe('PublishReslicing', () => {
     expect(flow.pullRequests.openAsked).toHaveLength(1)
     const [opened] = flow.pullRequests.openAsked
     expect(opened.branch).toBe(Mother.BRANCH)
-    expect(opened.title).toBe(Reslicing.titleOf(Mother.MILESTONE))
-    expect(opened.body).toBe(Reslicing.bodyFor({ milestone: Mother.MILESTONE, path: Mother.PATH }))
-    expect(opened.body).toContain(Reslicing.MARKER)
+    const announced = new Reslicing({ path: Mother.PATH, revision: Mother.REVISIONS.of(Mother.frozen().text) })
+    expect(opened.title).toBe(announced.titleOf(Mother.MILESTONE))
+    expect(opened.body).toBe(announced.bodyFor(Mother.MILESTONE))
+    expect(Reslicing.announcedIn(opened.body)).toEqual(announced)
     expect(flow.specs.rewriteAsked).toBe(0)
+  })
+
+  it('the revision it announces is the very text it publishes, so a later edit cannot inherit this approval', async () => {
+    const held = Mother.frozen('| 1 | first, joined with the second |')
+    const flow = new Flow({ specs: EpicSpecsDouble.withTheBranchHolding(Mother.frozen(), held) })
+
+    await flow.run()
+
+    const [opened] = flow.pullRequests.openAsked
+    expect(Reslicing.announcedIn(opened.body)).toEqual(
+      new Reslicing({ path: held.path, revision: Mother.REVISIONS.of(held.text) })
+    )
+    expect(Reslicing.announcedIn(opened.body)!.revision).not.toBe(Mother.REVISIONS.of(Mother.frozen().text))
   })
 
   it('a correction already committed and already travelling answers the pull request that is open instead of opening a second one', async () => {

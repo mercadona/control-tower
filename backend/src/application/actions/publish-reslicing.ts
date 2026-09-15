@@ -1,5 +1,6 @@
 import { Reslicing } from '../../domain/value-objects/reslicing.ts'
 import type { CheckoutRoot } from '../../domain/value-objects/checkout-root.ts'
+import type { SpecRevision } from '../../domain/policies/spec-revision.ts'
 import type { EpicBranch } from '../../domain/ports/epic-branch.ts'
 import type { EpicSpec } from '../../domain/value-objects/epic-spec.ts'
 import type { EpicSpecs } from '../../domain/ports/epic-specs.ts'
@@ -52,13 +53,15 @@ export class PublishReslicing {
   readonly specs: EpicSpecs
   readonly branch: EpicBranch
   readonly pullRequests: PullRequests
+  readonly revisions: SpecRevision
 
-  constructor({ specs, branch, pullRequests }: {
-    specs: EpicSpecs, branch: EpicBranch, pullRequests: PullRequests,
+  constructor({ specs, branch, pullRequests, revisions }: {
+    specs: EpicSpecs, branch: EpicBranch, pullRequests: PullRequests, revisions: SpecRevision,
   }) {
     this.specs = specs
     this.branch = branch
     this.pullRequests = pullRequests
+    this.revisions = revisions
   }
 
   async execute(params: PublishReslicingParams): Promise<ReslicingPublished> {
@@ -92,11 +95,13 @@ export class PublishReslicing {
     const standing = await this.pullRequests.openOfBranch({ branch, repository: params.repository })
     if (standing !== null) return standing
 
+    const reslicing = new Reslicing({ path: spec.path, revision: this.revisions.of(spec.text) })
+
     return await this.pullRequests.open({
       repository: params.repository,
       branch,
-      title: Reslicing.titleOf(spec.title()!),
-      body: Reslicing.bodyFor({ milestone: spec.title()!, path: spec.path }),
+      title: reslicing.titleOf(spec.title()!),
+      body: reslicing.bodyFor(spec.title()!),
     })
   }
 }

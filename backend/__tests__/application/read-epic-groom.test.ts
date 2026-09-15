@@ -14,11 +14,15 @@ import { EpicIssuesListing } from '../../src/domain/value-objects/epic-issues-li
 import { GroomPlan, GroomPlanIssue } from '../../src/domain/value-objects/groom-plan.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
+import { SpecRevision } from '../../src/domain/policies/spec-revision.ts'
+import { Reslicing } from '../../src/domain/value-objects/reslicing.ts'
+import { createHash } from 'node:crypto'
 
 type PublishedAsked = { repository: RepositoryName, spec: EpicSpec }
 type IssuesAsked = { repository: RepositoryName, milestone: string }
 type GroomAsked = { root: CheckoutRoot, spec: EpicSpec, repository: RepositoryName, milestone: string }
 type PullRequestAsked = { branch: string, repository: RepositoryName }
+type ReslicingAsked = { branch: string, repository: RepositoryName, approving: Reslicing, into: string }
 type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
 class EpicSpecsDouble extends EpicSpecs {
@@ -93,12 +97,14 @@ class EpicGroomDouble extends EpicGroom {
 
 class EpicBranchDouble extends EpicBranch {
   asked: CheckoutRoot[]
+  askedDefault: CheckoutRoot[]
   isCommitted: boolean
   askedCommitted: { root: CheckoutRoot, paths: string[] }[]
 
   constructor(isCommitted = true) {
     super()
     this.asked = []
+    this.askedDefault = []
     this.isCommitted = isCommitted
     this.askedCommitted = []
   }
@@ -112,6 +118,11 @@ class EpicBranchDouble extends EpicBranch {
     return Mother.BRANCH
   }
 
+  async defaultBranch(root: CheckoutRoot): Promise<string> {
+    this.askedDefault.push(root)
+    return Mother.DEFAULT_BRANCH
+  }
+
   async committed({ root, paths }: { root: CheckoutRoot, paths: string[] }): Promise<boolean> {
     this.askedCommitted.push({ root, paths })
     return this.isCommitted
@@ -122,7 +133,7 @@ class PullRequestsDouble extends PullRequests {
   answer: ReviewedPullRequest | null
   merged: ReviewedPullRequest | null
   asked: PullRequestAsked[]
-  mergedAsked: PullRequestAsked[]
+  mergedAsked: ReslicingAsked[]
 
   constructor(answer: ReviewedPullRequest | null, merged: ReviewedPullRequest | null = null) {
     super()
@@ -145,7 +156,7 @@ class PullRequestsDouble extends PullRequests {
     return this.answer
   }
 
-  async mergedReslicingOf(subject: PullRequestAsked): Promise<ReviewedPullRequest | null> {
+  async mergedReslicingOf(subject: ReslicingAsked): Promise<ReviewedPullRequest | null> {
     this.mergedAsked.push(subject)
     return this.merged
   }
@@ -154,6 +165,10 @@ class PullRequestsDouble extends PullRequests {
 class Mother {
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly BRANCH = 'milestone/2026-01-01-test-execution'
+  static readonly DEFAULT_BRANCH = 'main'
+  static readonly REVISIONS = new SpecRevision({
+    digest: (text) => createHash('sha1').update(text, 'utf8').digest('hex'),
+  })
   static readonly PULL_REQUEST: ReviewedPullRequest = Object.freeze({
     number: 12, url: 'https://github.com/owner/name/pull/12',
   })
@@ -263,6 +278,7 @@ class Flow {
   branch: EpicBranchDouble
   pullRequests: PullRequestsDouble
   fingerprint: PlanFingerprint
+  revisions: SpecRevision
 
   constructor({ specs, published, issues, groom, branch, pullRequests }: {
     specs?: EpicSpecsDouble,
@@ -279,6 +295,7 @@ class Flow {
     this.branch = branch ?? new EpicBranchDouble()
     this.pullRequests = pullRequests ?? new PullRequestsDouble(Mother.PULL_REQUEST)
     this.fingerprint = Mother.FINGERPRINT
+    this.revisions = Mother.REVISIONS
   }
 
   static readingSpec(spec: EpicSpec | null): Flow {
@@ -422,8 +439,51 @@ describe('ReadEpicGroom', () => {
 
     expect(read.state).toBe(EpicGroomState.GROOMABLE)
     expect(read.reslicing).toEqual(Mother.RESLICING)
-    expect(flow.pullRequests.mergedAsked).toEqual([{ branch: Mother.BRANCH, repository: Mother.REPOSITORY }])
+    expect(flow.pullRequests.mergedAsked).toEqual([{
+      branch: Mother.BRANCH,
+      repository: Mother.REPOSITORY,
+      approving: new Reslicing({
+        path: Mother.PATH, revision: Mother.REVISIONS.of(Mother.frozen().text),
+      }),
+      into: Mother.DEFAULT_BRANCH,
+    }])
     expect(flow.pullRequests.asked).toEqual([])
+  })
+
+  it('the approval it looks for names this spec and the revision the default branch holds, not the branch alone', async () => {
+    const frozen = Mother.frozen()
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(frozen),
+      pullRequests: PullRequestsDouble.withAReslicingMerged(),
+    })
+
+    await flow.run()
+
+    const [asked] = flow.pullRequests.mergedAsked
+    expect(asked.approving.path).toBe(frozen.path)
+    expect(asked.approving.revision).toBe(Mother.REVISIONS.of(frozen.text))
+    expect(asked.into).toBe(Mother.DEFAULT_BRANCH)
+    expect(flow.branch.askedDefault).toEqual([Mother.ROOT])
+  })
+
+  it('a second milestone published from the same branch asks about its own spec, so the first approval cannot authorise it', async () => {
+    const other = new EpicSpec({
+      path: 'docs/superpowers/specs/2026-02-02-another-execution.md',
+      text: Mother.frozen().text.replace(Mother.TITLE, 'Another epic'),
+    })
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(other),
+      pullRequests: PullRequestsDouble.withAReslicingMerged(),
+    })
+
+    await flow.run()
+
+    const [asked] = flow.pullRequests.mergedAsked
+    expect(asked.branch).toBe(Mother.BRANCH)
+    expect(asked.approving).toEqual(new Reslicing({ path: other.path, revision: Mother.REVISIONS.of(other.text) }))
+    expect(asked.approving.approves(
+      new Reslicing({ path: Mother.PATH, revision: Mother.REVISIONS.of(Mother.frozen().text) })
+    )).toBe(false)
   })
 
   it('a groomable milestone nobody re-sliced carries no pull request to authorise it', async () => {

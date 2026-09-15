@@ -13,6 +13,8 @@ import { EpicIssue } from '../../src/domain/value-objects/epic-issue.ts'
 import { PlanIssueStatus } from '../../src/domain/value-objects/plan-issue-status.ts'
 import { GroomPlan, GroomPlanIssue } from '../../src/domain/value-objects/groom-plan.ts'
 import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
+import { SpecRevision } from '../../src/domain/policies/spec-revision.ts'
+import { createHash } from 'node:crypto'
 
 type PromoteAsked = { repository: RepositoryName, issue: EpicIssue }
 
@@ -24,6 +26,7 @@ class ReadEpicGroomDouble extends ReadEpicGroom {
     super({
       specs: new EpicSpecs(), published: new PublishedSpecs(), issues: new EpicIssues(), groom: new EpicGroom(),
       branch: new EpicBranch(), pullRequests: new PullRequests(), fingerprint: Mother.FINGERPRINT,
+      revisions: Mother.REVISIONS,
     })
     this.answers = answers
     this.asked = []
@@ -67,6 +70,7 @@ class Mother {
     ],
   })
   static readonly FINGERPRINT = new PlanFingerprint({ digest: (text) => text })
+  static readonly REVISIONS = new SpecRevision({ digest: (text) => createHash('sha1').update(text, 'utf8').digest('hex') })
 
   static backlogIssue(): EpicIssue {
     return new EpicIssue({

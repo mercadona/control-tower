@@ -1132,9 +1132,16 @@ coordinating session names; the gate key travels in `x-gate-key`.
 
 `pullRequest` is the pull request the correction travels in: the one already open
 for that branch when there is one — pressing twice opens no second — and
-otherwise the one this press created. Its body carries the marker
-`<!-- ct-groom:reslicing -->`, which is what `GET /epic-groom` later reads to
-know that a merge authorised the groom.
+otherwise the one this press created. Its body opens with the announcement
+
+```
+<!-- ct-groom:reslicing spec="docs/superpowers/specs/<spec>.md" revision="<40 hex>" -->
+```
+
+which names **which spec** and **which revision of it** the merge would approve —
+the same git blob sha publication is compared by. That is what `GET /epic-groom`
+reads later, and it is why an approval cannot be inherited: not by another
+milestone published from the same branch, and not by a later edit of this spec.
 
 **Refusals**
 
@@ -1305,13 +1312,20 @@ may send a row to another repository (`Repo` column), and one row never spans tw
 `repo` equals `home` is the ordinary case.
 
 `reslicing` travels on `groomable` alone, and it is what makes the groom run
-without a further click: it is the **merged** pull request of the branch the
-checkout sits on whose body carries `<!-- ct-groom:reslicing -->`
-(`gh pr list --state merged --json number,url,body`), which is to say the
-correction a person approved by merging it. `null` means nobody re-sliced this
-milestone, and then the groom waits for the press it always waited for. It is
-asked only in that one state: once the milestone holds an issue there is nothing
-left to authorise, so `partially-groomed`, `groomed` and `authorised` never ask.
+without a further click: the **merged** pull request of the branch the checkout
+sits on that **approves this spec at the revision the default branch now holds**
+and that **merged into the default branch**
+(`gh pr list --head <branch> --base <default> --state merged --json number,url,body,baseRefName`,
+then the announcement in the body compared against the spec being read). Three
+things have to agree, and each closes a door: a branch is reusable — 
+`EpicBranch.publishing` keeps any branch other than the default one — so two
+milestones can be published from one branch and the path is what tells their
+approvals apart; the revision is what stops an approval of an older table from
+authorising a later edit; and the base branch is what stops a merge that landed
+somewhere else from counting. `null` means nothing approved this table, and then
+the groom waits for the press it always waited for. It is asked only in that one
+state: once the milestone holds an issue there is nothing left to authorise, so
+`partially-groomed`, `groomed` and `authorised` never ask.
 
 `planFingerprint` is a sha256 hex digest of the plan's own content — the milestone, the home
 repository, then each issue's order, title, labels and repository, in the plan's own order

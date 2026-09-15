@@ -10,7 +10,12 @@ type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
 type ReviewAsked = { readonly state: string, readonly body: string }
 
-type MergedPullRequest = { readonly number: number, readonly url: string, readonly body: string }
+type MergedPullRequest = {
+  readonly number: number,
+  readonly url: string,
+  readonly body: string,
+  readonly baseRefName: string,
+}
 
 type AnchoredComment = {
   readonly body: string,
@@ -58,11 +63,13 @@ export class GhPullRequests extends PullRequests {
     ]
   }
 
-  static mergedArgvFor({ branch, repository }: { branch: string, repository: RepositoryName }): string[] {
+  static mergedArgvFor({ branch, repository, into }: {
+    branch: string, repository: RepositoryName, into: string,
+  }): string[] {
     return [
       'pr', 'list', '--repo', repository.text,
-      '--head', branch, '--state', 'merged',
-      '--json', 'number,url,body', '--limit', GhPullRequests.#MERGED_READ,
+      '--head', branch, '--base', into, '--state', 'merged',
+      '--json', 'number,url,body,baseRefName', '--limit', GhPullRequests.#MERGED_READ,
     ]
   }
 
@@ -120,24 +127,35 @@ export class GhPullRequests extends PullRequests {
     return new OpenPullRequest({ number: found.number, url: found.url })
   }
 
-  async mergedReslicingOf({ branch, repository }: {
+  async mergedReslicingOf({ branch, repository, approving, into }: {
     branch: string,
     repository: RepositoryName,
+    approving: Reslicing,
+    into: string,
   }): Promise<ReviewedPullRequest | null> {
-    const printed = await this.#read(GhPullRequests.mergedArgvFor({ branch, repository }))
+    const printed = await this.#read(GhPullRequests.mergedArgvFor({ branch, repository, into }))
     const listed = GhPullRequests.#arrayIn(printed, `the merged pull requests of ${branch}`)
-    const announced = listed
+    const approved = listed
       .map((merged) => GhPullRequests.#mergedIn(merged, printed))
-      .find((merged) => Reslicing.isAnnouncedIn(merged.body))
-    if (announced === undefined) return null
+      .find((merged) => GhPullRequests.#approves({ merged, approving, into }))
+    if (approved === undefined) return null
 
-    return new OpenPullRequest({ number: announced.number, url: announced.url })
+    return new OpenPullRequest({ number: approved.number, url: approved.url })
+  }
+
+  static #approves({ merged, approving, into }: {
+    merged: MergedPullRequest, approving: Reslicing, into: string,
+  }): boolean {
+    if (merged.baseRefName !== into) return false
+    const announced = Reslicing.announcedIn(merged.body)
+
+    return announced !== null && announced.approves(approving)
   }
 
   static #mergedIn(merged: unknown, printed: string): MergedPullRequest {
     if (!GhPullRequests.#readsAsAMergedPullRequest(merged)) {
       throw new PullRequestNotUnderstood(
-        `${Gh.BIN} named a merged pull request without the number, the url and the body this reads, `
+        `${Gh.BIN} named a merged pull request without the number, the url, the body and the base branch this reads, `
         + `it printed ${JSON.stringify(printed)}`
       )
     }
@@ -147,8 +165,9 @@ export class GhPullRequests extends PullRequests {
 
   static #readsAsAMergedPullRequest(merged: unknown): merged is MergedPullRequest {
     if (!GhPullRequests.#readsAsAPullRequest(merged)) return false
+    if (!('body' in merged) || typeof merged.body !== 'string') return false
 
-    return 'body' in merged && typeof merged.body === 'string'
+    return 'baseRefName' in merged && typeof merged.baseRefName === 'string'
   }
 
   async open({ repository, branch, title, body }: {

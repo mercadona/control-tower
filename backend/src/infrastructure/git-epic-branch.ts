@@ -92,7 +92,7 @@ export class GitEpicBranch extends EpicBranch {
 
   async publishing({ root, milestone }: { root: CheckoutRoot, milestone: string }): Promise<string> {
     const branch = await this.current(root)
-    if (branch !== await this.#defaultBranchOf(root)) return branch
+    if (branch !== await this.defaultBranch(root)) return branch
 
     return await this.#milestoneBranchOf(root, milestone)
   }
@@ -184,7 +184,7 @@ export class GitEpicBranch extends EpicBranch {
     return branch
   }
 
-  async #defaultBranchOf(root: CheckoutRoot): Promise<string> {
+  async defaultBranch(root: CheckoutRoot): Promise<string> {
     const declared = await this.run(GitWorkspace.defaultBranchArgvFor(root.text))
     if (!declared.failed) return GitEpicBranch.#branchIn(declared.stdout, GitWorkspace.declaredBranchIn)
     const asked = await this.run(GitEpicBranch.#remoteHeadArgvFor(root.text))

@@ -4,6 +4,7 @@ import { GhPublishedSpecs } from '../../src/infrastructure/gh-published-specs.ts
 import { Gh } from '../../src/infrastructure/gh.ts'
 import { ProcessOutput } from '../../src/infrastructure/tool-runner.ts'
 import { RetryPolicy, RetryBudget } from '../../src/domain/policies/retry-policy.ts'
+import { SpecRevision } from '../../src/domain/policies/spec-revision.ts'
 import { SleepDouble } from '../sleep-double.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
@@ -84,7 +85,7 @@ class GhDouble {
         policy: new RetryPolicy({ budget: new RetryBudget({ attempts: 3, waitSeconds: 2 }) }),
         sleep: (seconds) => this.sleeping.sleep(seconds),
       }),
-      digest: (text) => createHash('sha1').update(text, 'utf8').digest('hex'),
+      revisions: new SpecRevision({ digest: (text) => createHash('sha1').update(text, 'utf8').digest('hex') }),
     })
   }
 

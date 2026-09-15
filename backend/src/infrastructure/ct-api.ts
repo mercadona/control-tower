@@ -79,6 +79,7 @@ import { ExternalTool } from './external-tool.ts'
 import { RetryPolicy, RetryBudget } from '../domain/policies/retry-policy.ts'
 import { LaunchPolicy, LaunchBudget } from '../domain/policies/launch-policy.ts'
 import { PlanFingerprint } from '../domain/policies/plan-fingerprint.ts'
+import { SpecRevision } from '../domain/policies/spec-revision.ts'
 import { Invocation, InvocationOutcome } from './invocation.ts'
 import { Baseline } from '../../../plugin/scripts/baseline.js'
 import type { ProcessOutput } from './tool-runner.ts'
@@ -554,11 +555,13 @@ class CtApi {
     const freezeSpec = new FreezeSpec({
       specs: epicSpecs, branch: epicBranch, pullRequests, now: () => new Date(),
     })
-    const publishReslicing = new PublishReslicing({ specs: epicSpecs, branch: epicBranch, pullRequests })
-    const publishedSpecs = new GhPublishedSpecs({
-      gh,
+    const specRevisions = new SpecRevision({
       digest: (text) => createHash('sha1').update(text, 'utf8').digest('hex'),
     })
+    const publishReslicing = new PublishReslicing({
+      specs: epicSpecs, branch: epicBranch, pullRequests, revisions: specRevisions,
+    })
+    const publishedSpecs = new GhPublishedSpecs({ gh, revisions: specRevisions })
     const epicIssues = new GhEpicIssues({ gh })
     const groomRunner = new ToolRunner({ bin: process.execPath, budgetMs: CtApi.#GROOM_TIMEOUT_MS })
     const epicGroom = new CtGroomEpic({
@@ -577,6 +580,7 @@ class CtApi {
       branch: epicBranch,
       pullRequests,
       fingerprint: planFingerprint,
+      revisions: specRevisions,
     })
     const groomEpic = new GroomEpic({ read: readEpicGroom, groom: epicGroom, fingerprint: planFingerprint })
     const promoteEpic = new PromoteEpic({ read: readEpicGroom, issues: epicIssues })
