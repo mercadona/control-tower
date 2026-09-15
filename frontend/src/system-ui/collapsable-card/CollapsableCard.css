@@ -1,0 +1,77 @@
+.collapsable-card {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 24px;
+  background-color: var(--background-elevated);
+  border: var(--borderwidth-sm) solid var(--border-secondary);
+  border-radius: var(--shape-container-sm);
+}
+
+.collapsable-card__header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.collapsable-card__title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--foreground-primary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.collapsable-card__subtitle {
+  margin: 8px 0 0;
+  color: var(--foreground-secondary);
+}
+
+.collapsable-card__subtitle--clamped {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.collapsable-card__chevron {
+  width: var(--size-icon-sm);
+  height: var(--size-icon-sm);
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: var(--borderwidth-md);
+  fill: none;
+  transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.collapsable-card__chevron--open {
+  transform: rotate(180deg);
+}
+
+.collapsable-card__content-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.collapsable-card__content-wrap--open {
+  grid-template-rows: 1fr;
+}
+
+.collapsable-card__content-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.collapsable-card__content-body {
+  padding-top: 24px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapsable-card__chevron,
+  .collapsable-card__content-wrap {
+    transition: none;
+  }
+}

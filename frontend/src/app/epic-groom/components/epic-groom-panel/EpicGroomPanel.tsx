@@ -4,10 +4,9 @@ import { EpicGroomAskOutcome, EpicGroomOutcome, EpicIssue, GroomPlanIssue } from
 import { useEpicGroom } from 'app/epic-groom/useEpicGroom'
 import { Banner } from 'system-ui/banner'
 import { Button } from 'system-ui/button'
-import { Panel } from 'system-ui/panel'
 import './EpicGroomPanel.css'
 
-const HEADING = 'Puerta 2 · El groom y la autorización'
+const EPIC_GROOM_GATE_HEADING = 'Puerta 2 · El groom y la autorización'
 const WILL_CREATE = 'Se van a crear estas issues'
 const GROOM = 'Ejecutar el groom'
 const GROOMING = 'Ejecutando el groom'
@@ -24,7 +23,7 @@ const AWAITING_WITHOUT_PULL_REQUEST =
   'El spec congelado sigue sin publicar y no se ha encontrado ningún pull request abierto para su rama.'
 const PULL_REQUEST = 'Pull request'
 
-const NOTHING_TO_SHOW_KINDS: readonly EpicGroomOutcome['kind'][] = [
+const EPIC_GROOM_NOTHING_TO_SHOW_KINDS: readonly EpicGroomOutcome['kind'][] = [
   'none',
   'no-spec',
   'draft',
@@ -55,26 +54,26 @@ const EpicGroomPanel = () => {
   const isPressingRef = useRef(false)
 
   if (read.phase === 'connecting') return null
-  if (acted === null && NOTHING_TO_SHOW_KINDS.includes(read.kind)) return null
+  if (acted === null && EPIC_GROOM_NOTHING_TO_SHOW_KINDS.includes(read.kind)) return null
   if (acted === null && read.kind === 'refused') {
     return (
-      <Panel heading={HEADING}>
+      <div className="epic-groom-panel">
         <Banner type="error" role="alert" title={read.error} />
-      </Panel>
+      </div>
     )
   }
   if (acted === null && read.kind === 'issues-uncertain') {
     return (
-      <Panel heading={HEADING}>
+      <div className="epic-groom-panel">
         <Banner type="warning" role="alert" title={ISSUES_UNCERTAIN_TITLE} description={read.reason} />
-      </Panel>
+      </div>
     )
   }
 
   if (acted === null && read.kind === 'awaiting-publication') {
     const { pullRequest } = read
     return (
-      <Panel heading={HEADING}>
+      <div className="epic-groom-panel">
         <p className="epic-groom-panel__awaiting">
           {pullRequest === null ? AWAITING_WITHOUT_PULL_REQUEST : AWAITING_MERGE}
         </p>
@@ -83,7 +82,7 @@ const EpicGroomPanel = () => {
             {`${PULL_REQUEST} #${pullRequest.number}`}
           </a>
         )}
-      </Panel>
+      </div>
     )
   }
 
@@ -136,7 +135,7 @@ const EpicGroomPanel = () => {
   if (acted === null && read.kind === 'groomable') {
     const { milestone, plan, home, planFingerprint } = read
     return (
-      <Panel heading={HEADING}>
+      <div className="epic-groom-panel">
         <p className="epic-groom-panel__milestone">{milestone}</p>
         <p className="epic-groom-panel__will-create">{WILL_CREATE}</p>
         <p className="epic-groom-panel__count">{EpicGroomPanelLabels.planCount(plan.length)}</p>
@@ -153,14 +152,14 @@ const EpicGroomPanel = () => {
         </Button>
         {gateNotice}
         {askBanner}
-      </Panel>
+      </div>
     )
   }
 
   if (acted === null && read.kind === 'partially-groomed') {
     const { milestone, plan, issues, planFingerprint } = read
     return (
-      <Panel heading={HEADING}>
+      <div className="epic-groom-panel">
         <p className="epic-groom-panel__milestone">{milestone}</p>
         <p className="epic-groom-panel__partial-count">{EpicGroomPanelLabels.partialCount(issues.length, plan.length)}</p>
         <ul className="epic-groom-panel__issues">
@@ -177,7 +176,7 @@ const EpicGroomPanel = () => {
         </Button>
         {gateNotice}
         {askBanner}
-      </Panel>
+      </div>
     )
   }
 
@@ -190,7 +189,7 @@ const EpicGroomPanel = () => {
 
   if (groomedIssues !== null) {
     return (
-      <Panel heading={HEADING}>
+      <div className="epic-groom-panel">
         <p className="epic-groom-panel__created">{CREATED}</p>
         <ul className="epic-groom-panel__issues">
           {groomedIssues.map((issue) => (
@@ -205,7 +204,7 @@ const EpicGroomPanel = () => {
         </Button>
         {gateNotice}
         {askBanner}
-      </Panel>
+      </div>
     )
   }
 
@@ -218,7 +217,7 @@ const EpicGroomPanel = () => {
 
   if (authorisedIssues !== null) {
     return (
-      <Panel heading={HEADING}>
+      <div className="epic-groom-panel">
         <ul className="epic-groom-panel__issues">
           {authorisedIssues.map((issue) => (
             <li key={issue.number} className="epic-groom-panel__issue">
@@ -228,11 +227,11 @@ const EpicGroomPanel = () => {
           ))}
         </ul>
         <p className="epic-groom-panel__authorised">{AUTHORISED}</p>
-      </Panel>
+      </div>
     )
   }
 
   return null
 }
 
-export { EpicGroomPanel }
+export { EPIC_GROOM_GATE_HEADING, EPIC_GROOM_NOTHING_TO_SHOW_KINDS, EpicGroomPanel }
