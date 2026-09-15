@@ -220,10 +220,20 @@
 /* Under 1280px the right column stacks below the content: it stays a column
    of the layout, not a layer over it, so it never becomes an overlay. */
 @media (width < 1280px) {
+  /* `height: 100%` and not `auto`, and the two are not interchangeable here:
+     `overflow: auto` only produces a scrollbar when the box is SHORTER than
+     its content, and a box of automatic height never is. With `auto` this
+     column grew to its content —measured at 1976px against a 738px
+     viewport— while `.home` above stayed at `100dvh` with `overflow: hidden`,
+     so everything past the first screen was clipped with nothing left to
+     scroll: on a window narrower than this breakpoint the entrance's own
+     button could not be reached. `.home` keeps its definite height because
+     `Navigation` resolves `height: 100%` against it, so the scrolling has to
+     happen here. */
   .home__columns {
     display: flex;
     flex-direction: column;
-    height: auto;
+    height: 100%;
     overflow: auto;
   }
 
