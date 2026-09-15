@@ -94,8 +94,7 @@
   grid-column: 2;
 }
 
-.home__flow-number,
-.home__workspace-number {
+.home__flow-number {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -119,40 +118,6 @@
 }
 
 .home__flow-step--completed .home__flow-number {
-  color: var(--foreground-ondark);
-  background-color: var(--background-brand-primary);
-  border-color: var(--border-brand-primary);
-}
-
-.home__workspace {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  min-height: 320px;
-  padding: 24px;
-  background-color: var(--background-elevated);
-  border: var(--borderwidth-sm) solid var(--border-secondary);
-  border-radius: var(--shape-container-sm);
-}
-
-.home__workspace-heading {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.home__workspace-heading h1,
-.home__workspace-heading p {
-  margin: 0;
-}
-
-.home__workspace-heading p {
-  margin-top: 4px;
-  color: var(--foreground-secondary);
-}
-
-.home__workspace-number {
-  flex: none;
   color: var(--foreground-ondark);
   background-color: var(--background-brand-primary);
   border-color: var(--border-brand-primary);
@@ -271,10 +236,5 @@
   .home__flow ol {
     grid-template-columns: 1fr;
     gap: 4px;
-  }
-
-  .home__workspace {
-    min-height: 0;
-    padding: 16px;
   }
 }

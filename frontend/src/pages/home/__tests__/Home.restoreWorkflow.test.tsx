@@ -133,11 +133,17 @@ describe('Home · restore workflow', () => {
 
     await screen.findByText('Agente asignado')
     await screen.findByRole('button', { name: /Revisar plan.*Completado/ })
-    expect(screen.getByText('Detalles del agente y del entorno').closest('.workflow-step__content')).toHaveAttribute('hidden')
+    expect(screen.getByText('Detalles del agente y del entorno').closest('.workflow-step__content-wrap')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    )
 
     await userEvent.setup().click(screen.getByRole('button', { name: /Revisar plan.*Completado/ }))
 
-    expect(screen.getByText('Detalles del agente y del entorno').closest('.workflow-step__content')).not.toHaveAttribute('hidden')
+    expect(screen.getByText('Detalles del agente y del entorno').closest('.workflow-step__content-wrap')).toHaveAttribute(
+      'aria-hidden',
+      'false',
+    )
     expect(FakeEventSource.opened).toHaveLength(0)
   })
 
