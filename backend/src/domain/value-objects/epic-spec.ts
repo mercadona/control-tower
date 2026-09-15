@@ -9,7 +9,9 @@ export class EpicSpec {
   static readonly DRAFT = 'DRAFT'
   static readonly FROZEN = 'CONGELADA'
   static readonly #UNSET_DATE = '—'
+  static readonly #MILESTONE_BRANCH_PREFIX = 'milestone/'
   static readonly #DESIGN_QUOTED = /`([^`]+)`/
+  static readonly #MARKDOWN = /\.md$/
   static readonly #HEADING = '# '
 
   readonly path: string
@@ -35,6 +37,12 @@ export class EpicSpec {
     return named.endsWith(EpicSpec.TITLE_SUFFIX)
       ? named.slice(0, named.length - EpicSpec.TITLE_SUFFIX.length)
       : named
+  }
+
+  milestoneBranch(): string {
+    const file = this.path.split('/').at(-1)!
+
+    return `${EpicSpec.#MILESTONE_BRANCH_PREFIX}${file.replace(EpicSpec.#MARKDOWN, '')}`
   }
 
   design(): string | null {

@@ -12,6 +12,7 @@ const BACKLOG_CHANNEL = { number: 349, url: 'https://github.com/owner/name/issue
 const READY_GATE = { ...BACKLOG_GATE, status: 'ready' }
 const READY_CHANNEL = { ...BACKLOG_CHANNEL, status: 'ready' }
 const PROMOTED = [348, 349]
+const PULL_REQUEST = { number: 341, url: 'https://github.com/owner/name/pull/341' }
 const NOT_FROM_THE_PAGE_DETAIL = 'gate 2 answers only a request carrying the key the page was given'
 const PLAN_CHANGED_DETAIL = 'the spec changed since this plan was shown: read the new plan before pressing again'
 const ISSUES_UNCERTAIN_REASON = 'gh issue list answered exactly as many issues as it was asked for at every ' +
@@ -28,7 +29,15 @@ const noSpec = () => ({ status: 200, body: '{"status":"no-spec"}' })
 
 const draft = () => ({ status: 200, body: '{"status":"draft"}' })
 
-const awaitingPublication = () => ({ status: 200, body: '{"status":"awaiting-publication"}' })
+const awaitingPublication = () => ({
+  status: 200,
+  body: `{"status":"awaiting-publication","pullRequest":${JSON.stringify(PULL_REQUEST)}}`,
+})
+
+const awaitingPublicationWithNoPullRequest = () => ({
+  status: 200,
+  body: '{"status":"awaiting-publication","pullRequest":null}',
+})
 
 const issuesUncertain = () => ({
   status: 200,
@@ -106,6 +115,7 @@ export const EpicGroomMother = {
   READY_GATE,
   READY_CHANNEL,
   PROMOTED,
+  PULL_REQUEST,
   NOT_FROM_THE_PAGE_DETAIL,
   PLAN_CHANGED_DETAIL,
   ISSUES_UNCERTAIN_REASON,
@@ -113,6 +123,7 @@ export const EpicGroomMother = {
   noSpec,
   draft,
   awaitingPublication,
+  awaitingPublicationWithNoPullRequest,
   issuesUncertain,
   groomable,
   groomableAcrossRepositories,

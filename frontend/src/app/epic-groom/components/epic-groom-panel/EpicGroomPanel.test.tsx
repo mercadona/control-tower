@@ -215,6 +215,40 @@ describe('EpicGroomPanel', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
+  it('while it waits for the pull request to merge it says so, and links the one it waits for', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.awaitingPublication().body, { status: 200 })))
+
+    render(<EpicGroomPanel />)
+
+    expect(
+      await screen.findByText('El spec congelado espera en un pull request: mergéalo para abrir el groom.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Pull request #341' })).toHaveAttribute(
+      'href',
+      EpicGroomMother.PULL_REQUEST.url,
+    )
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('a wait with no pull request found asks for no merge, and says the spec is still unpublished', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(EpicGroomMother.awaitingPublicationWithNoPullRequest().body, { status: 200 })),
+    )
+
+    render(<EpicGroomPanel />)
+
+    expect(
+      await screen.findByText(
+        'El spec congelado sigue sin publicar y no se ha encontrado ningún pull request abierto para su rama.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('El spec congelado espera en un pull request: mergéalo para abrir el groom.'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
   it('a listing that could not be exhausted shows why and offers nothing to press', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(EpicGroomMother.issuesUncertain().body, { status: 200 })))
 

@@ -4,6 +4,8 @@ import { EpicSpecs } from '../../src/domain/ports/epic-specs.ts'
 import { PublishedSpecs } from '../../src/domain/ports/published-specs.ts'
 import { EpicIssues } from '../../src/domain/ports/epic-issues.ts'
 import { EpicGroom } from '../../src/domain/ports/epic-groom.ts'
+import { EpicBranch } from '../../src/domain/ports/epic-branch.ts'
+import { PullRequests } from '../../src/domain/ports/pull-requests.ts'
 import { CheckoutRoot } from '../../src/domain/value-objects/checkout-root.ts'
 import { RepositoryName } from '../../src/domain/value-objects/repository-name.ts'
 import { EpicSpec } from '../../src/domain/value-objects/epic-spec.ts'
@@ -16,6 +18,8 @@ import { PlanFingerprint } from '../../src/domain/policies/plan-fingerprint.ts'
 type PublishedAsked = { repository: RepositoryName, path: string }
 type IssuesAsked = { repository: RepositoryName, milestone: string }
 type GroomAsked = { root: CheckoutRoot, spec: EpicSpec, repository: RepositoryName, milestone: string }
+type PullRequestAsked = { branch: string, repository: RepositoryName }
+type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
 class EpicSpecsDouble extends EpicSpecs {
   answer: EpicSpec | null
@@ -87,8 +91,46 @@ class EpicGroomDouble extends EpicGroom {
   }
 }
 
+class EpicBranchDouble extends EpicBranch {
+  asked: CheckoutRoot[]
+
+  constructor() {
+    super()
+    this.asked = []
+  }
+
+  async current(root: CheckoutRoot): Promise<string> {
+    this.asked.push(root)
+    return Mother.BRANCH
+  }
+}
+
+class PullRequestsDouble extends PullRequests {
+  answer: ReviewedPullRequest | null
+  asked: PullRequestAsked[]
+
+  constructor(answer: ReviewedPullRequest | null) {
+    super()
+    this.answer = answer
+    this.asked = []
+  }
+
+  static withNoneOpen(): PullRequestsDouble {
+    return new PullRequestsDouble(null)
+  }
+
+  async openOfBranch(subject: PullRequestAsked): Promise<ReviewedPullRequest | null> {
+    this.asked.push(subject)
+    return this.answer
+  }
+}
+
 class Mother {
   static readonly ROOT = new CheckoutRoot('/repo')
+  static readonly BRANCH = 'milestone/2026-01-01-test-execution'
+  static readonly PULL_REQUEST: ReviewedPullRequest = Object.freeze({
+    number: 12, url: 'https://github.com/owner/name/pull/12',
+  })
   static readonly REPOSITORY = new RepositoryName('owner/name')
   static readonly HOME = Mother.REPOSITORY.text
   static readonly PATH = 'docs/superpowers/specs/2026-01-01-test-execution.md'
@@ -188,18 +230,23 @@ class Flow {
   published: PublishedSpecsDouble
   issues: EpicIssuesDouble
   groom: EpicGroomDouble
+  branch: EpicBranchDouble
+  pullRequests: PullRequestsDouble
   fingerprint: PlanFingerprint
 
-  constructor({ specs, published, issues, groom }: {
+  constructor({ specs, published, issues, groom, pullRequests }: {
     specs?: EpicSpecsDouble,
     published?: PublishedSpecsDouble,
     issues?: EpicIssuesDouble,
     groom?: EpicGroomDouble,
+    pullRequests?: PullRequestsDouble,
   } = {}) {
     this.specs = specs ?? new EpicSpecsDouble(null)
     this.published = published ?? new PublishedSpecsDouble(true)
     this.issues = issues ?? new EpicIssuesDouble([])
     this.groom = groom ?? new EpicGroomDouble(Mother.PLAN)
+    this.branch = new EpicBranchDouble()
+    this.pullRequests = pullRequests ?? new PullRequestsDouble(Mother.PULL_REQUEST)
     this.fingerprint = Mother.FINGERPRINT
   }
 
@@ -215,7 +262,7 @@ class Flow {
 }
 
 describe('ReadEpicGroom', () => {
-  it('a frozen spec whose committed copy is not on the default branch waits and asks github for nothing else', async () => {
+  it('a frozen spec whose committed copy is not on the default branch waits, carrying the pull request it waits for', async () => {
     const flow = new Flow({
       specs: new EpicSpecsDouble(Mother.frozen()),
       published: new PublishedSpecsDouble(false),
@@ -224,11 +271,27 @@ describe('ReadEpicGroom', () => {
     const read = await flow.run()
 
     expect(read.state).toBe(EpicGroomState.AWAITING_PUBLICATION)
+    expect(read.pullRequest).toEqual(Mother.PULL_REQUEST)
+    expect(flow.branch.asked).toEqual([Mother.ROOT])
+    expect(flow.pullRequests.asked).toEqual([{ branch: Mother.BRANCH, repository: Mother.REPOSITORY }])
     expect(read.plan).toBeNull()
     expect(read.planFingerprint).toBeNull()
     expect(read.issues).toEqual([])
     expect(flow.issues.asked).toEqual([])
     expect(flow.groom.asked).toEqual([])
+  })
+
+  it('a wait whose branch has no open pull request is still a wait, with nothing to link', async () => {
+    const flow = new Flow({
+      specs: new EpicSpecsDouble(Mother.frozen()),
+      published: new PublishedSpecsDouble(false),
+      pullRequests: PullRequestsDouble.withNoneOpen(),
+    })
+
+    const read = await flow.run()
+
+    expect(read.state).toBe(EpicGroomState.AWAITING_PUBLICATION)
+    expect(read.pullRequest).toBeNull()
   })
 
   it('a listing that could not be exhausted is issues-uncertain, carries why, and the plan is never asked', async () => {
@@ -269,6 +332,7 @@ describe('ReadEpicGroom', () => {
     expect(flow.groom.asked).toEqual([{
       root: Mother.ROOT, spec: frozen, repository: Mother.REPOSITORY, milestone: Mother.TITLE,
     }])
+    expect(flow.pullRequests.asked).toEqual([])
   })
 
   it('the plan fingerprint follows the plan it summarises, so a plan with different issues reads as a different fingerprint', async () => {

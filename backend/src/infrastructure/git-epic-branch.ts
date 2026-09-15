@@ -6,6 +6,8 @@ import type { ToolLaunch } from './external-tool.ts'
 
 export class GitEpicBranch extends EpicBranch {
   static readonly REMOTE = 'origin'
+  static readonly DECLARE_DEFAULT = `git remote set-head ${GitEpicBranch.REMOTE} -a`
+  static readonly #SYMREF = /^ref:\s+refs\/heads\/(\S+)\s+HEAD$/m
 
   readonly run: ToolLaunch
 
@@ -42,6 +44,35 @@ export class GitEpicBranch extends EpicBranch {
     return ['-C', root, 'push', '--set-upstream', GitEpicBranch.REMOTE, branch]
   }
 
+  static #remoteHeadArgvFor(root: string): string[] {
+    return ['-C', root, 'ls-remote', '--symref', GitEpicBranch.REMOTE, 'HEAD']
+  }
+
+  static #localRefArgvFor(root: string, branch: string): string[] {
+    return ['-C', root, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]
+  }
+
+  static #remoteBranchArgvFor(root: string, branch: string): string[] {
+    return ['-C', root, 'ls-remote', '--heads', GitEpicBranch.REMOTE, branch]
+  }
+
+  static #fetchArgvFor(root: string, branch: string): string[] {
+    return ['-C', root, 'fetch', GitEpicBranch.REMOTE, `${branch}:${branch}`]
+  }
+
+  static #switchArgvFor(root: string, branch: string): string[] {
+    return ['-C', root, 'switch', branch]
+  }
+
+  static #cutArgvFor(root: string, branch: string): string[] {
+    return ['-C', root, 'switch', '--create', branch]
+  }
+
+  static #symrefBranchIn(printed: string): string | null {
+    const declared = printed.match(GitEpicBranch.#SYMREF)
+    return declared === null ? null : declared[1]
+  }
+
   async current(root: CheckoutRoot): Promise<string> {
     const asked = await this.run(GitEpicBranch.currentArgvFor(root.text))
     if (asked.failed) {
@@ -59,16 +90,11 @@ export class GitEpicBranch extends EpicBranch {
     return branch
   }
 
-  async publishable(root: CheckoutRoot): Promise<string> {
+  async publishing({ root, milestone }: { root: CheckoutRoot, milestone: string }): Promise<string> {
     const branch = await this.current(root)
-    const declaredDefault = await this.#defaultBranchOf(root)
-    if (branch === declaredDefault) {
-      throw new EpicBranchNotPublished(
-        `${root.text} sits on ${branch}, the branch the remote calls default, so the epic's documents are not published on it`
-      )
-    }
+    if (branch !== await this.#defaultBranchOf(root)) return branch
 
-    return branch
+    return await this.#milestoneBranchOf(root, milestone)
   }
 
   async committed({ root, paths }: { root: CheckoutRoot, paths: string[] }): Promise<boolean> {
@@ -106,17 +132,77 @@ export class GitEpicBranch extends EpicBranch {
     await this.#push(root, branch)
   }
 
-  async #defaultBranchOf(root: CheckoutRoot): Promise<string> {
-    const asked = await this.run(GitWorkspace.defaultBranchArgvFor(root.text))
+  async #milestoneBranchOf(root: CheckoutRoot, milestone: string): Promise<string> {
+    if (await this.#held(root, milestone)) return await this.#switchTo(root, milestone)
+    if (await this.#heldByTheRemote(root, milestone)) {
+      await this.#fetch(root, milestone)
+      return await this.#switchTo(root, milestone)
+    }
+
+    return await this.#cut(root, milestone)
+  }
+
+  async #held(root: CheckoutRoot, branch: string): Promise<boolean> {
+    return !(await this.run(GitEpicBranch.#localRefArgvFor(root.text, branch))).failed
+  }
+
+  async #heldByTheRemote(root: CheckoutRoot, branch: string): Promise<boolean> {
+    const asked = await this.run(GitEpicBranch.#remoteBranchArgvFor(root.text, branch))
     if (asked.failed) {
       throw new EpicBranchNotPublished(
-        `the remote of ${root.text} does not declare a default branch: ${asked.stderr.trim()}`
+        `${GitEpicBranch.REMOTE} could not say whether it already holds ${branch}: ${asked.stderr.trim()}`
       )
     }
-    const declared = GitWorkspace.declaredBranchIn(asked.stdout)
+
+    return asked.stdout.trim().length > 0
+  }
+
+  async #fetch(root: CheckoutRoot, branch: string): Promise<void> {
+    const fetched = await this.run(GitEpicBranch.#fetchArgvFor(root.text, branch))
+    if (fetched.failed) {
+      throw new EpicBranchNotPublished(
+        `git fetch of the ${branch} ${GitEpicBranch.REMOTE} already holds failed: ${fetched.stderr.trim()}`
+      )
+    }
+  }
+
+  async #switchTo(root: CheckoutRoot, branch: string): Promise<string> {
+    const switched = await this.run(GitEpicBranch.#switchArgvFor(root.text, branch))
+    if (switched.failed) {
+      throw new EpicBranchNotPublished(`git switch to ${branch} failed: ${switched.stderr.trim()}`)
+    }
+
+    return branch
+  }
+
+  async #cut(root: CheckoutRoot, branch: string): Promise<string> {
+    const created = await this.run(GitEpicBranch.#cutArgvFor(root.text, branch))
+    if (created.failed) {
+      throw new EpicBranchNotPublished(`git switch --create of ${branch} failed: ${created.stderr.trim()}`)
+    }
+
+    return branch
+  }
+
+  async #defaultBranchOf(root: CheckoutRoot): Promise<string> {
+    const declared = await this.run(GitWorkspace.defaultBranchArgvFor(root.text))
+    if (!declared.failed) return GitEpicBranch.#branchIn(declared.stdout, GitWorkspace.declaredBranchIn)
+    const asked = await this.run(GitEpicBranch.#remoteHeadArgvFor(root.text))
+    if (asked.failed) {
+      throw new EpicBranchNotPublished(
+        `neither ${GitWorkspace.REMOTE_HEAD} in ${root.text} nor ${GitEpicBranch.REMOTE} itself says which branch ` +
+        `is default: ${asked.stderr.trim()}. Run ${GitEpicBranch.DECLARE_DEFAULT} in that checkout and press again`
+      )
+    }
+
+    return GitEpicBranch.#branchIn(asked.stdout, GitEpicBranch.#symrefBranchIn)
+  }
+
+  static #branchIn(printed: string, reading: (printed: string) => string | null): string {
+    const declared = reading(printed)
     if (declared === null) {
       throw new EpicBranchNotUnderstood(
-        `the remote does not declare a default branch under ${GitWorkspace.REMOTE_HEAD}, git printed ${JSON.stringify(asked.stdout)}`
+        `no default branch can be read out of what git printed for ${GitEpicBranch.REMOTE}: ${JSON.stringify(printed)}`
       )
     }
 

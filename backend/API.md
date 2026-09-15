@@ -946,10 +946,37 @@ curl -s http://127.0.0.1:8787/spec-freeze
 ## `POST /spec-freeze`
 
 Gate 1's press. Writes `**Estado:** CONGELADA` and the freeze date into the
-execution spec, commits it with its design document, pushes the checkout's own
-branch and opens the pull request that publishes both. No request body — the
-whole checkout is read from the held coordinating session, the same way `GET
+execution spec, commits it with its design document, pushes the branch it
+publishes on and opens the pull request that publishes both. No request body —
+the whole checkout is read from the held coordinating session, the same way `GET
 /spec-freeze` does.
+
+**The branch it publishes on.** A checkout sitting on any branch other than the
+default one publishes on that branch, exactly as before. A checkout sitting on
+the branch the remote calls default never commits there: gate 1 cuts
+`milestone/` plus the spec's own file name without its `.md`, and carries on
+without asking first — the spec's path names the branch, so the name is derived
+and never slugged from a title. The cut is idempotent: a branch of that name the checkout
+already holds is switched to, one only the remote holds is fetched under its own
+name, and neither is ever cut a second time.
+
+**What it publishes is what that branch holds.** Switching branch changes the
+spec on disk, so the spec is read again at its own path once the branch is
+resolved, and everything after that — whether it is freezable, which design
+document it names, whether the freeze was already delivered — is decided on that
+copy. A branch already carrying a frozen spec keeps it: gate 1 never writes back
+over it the copy the press started from. A branch that does not carry the spec
+yet is published with the copy the freeze read before switching.
+
+**Which branch the remote calls default** is resolved in three steps, and the
+gate never passes when none of them answers: `git symbolic-ref
+refs/remotes/origin/HEAD` first, which is free and local; then, only if that
+fails, `git ls-remote --symref origin HEAD`, the remote's own answer — a
+repository born from `git init` plus `git remote add` never had the local ref
+`git clone` writes; and, if the remote does not answer either,
+`epic-branch-not-published`, naming `git remote set-head origin -a` as what
+declares it. This backend never writes that ref into the governed repository
+itself.
 
 **Request header**
 
@@ -1000,7 +1027,7 @@ time because gate 1 is the only caller of `EpicSpecs`, `EpicBranch` and
 | `epic-spec-not-read` | the execution spec could not be listed or read back from disk |
 | `epic-spec-not-understood` | the spec carries no title, or names no design document under `**Handoff origen:**` |
 | `epic-spec-not-written` | the state line and its date could not be written back to disk |
-| `epic-branch-not-published` | `git` failed to resolve, add, commit or push the checkout's branch, or the checkout sits on the branch the remote declares as its default — refused before anything is added, committed or pushed, though the spec's rewritten text can already sit on disk as an uncommitted change |
+| `epic-branch-not-published` | `git` failed to resolve, cut, switch to, fetch, add, commit or push the branch gate 1 publishes on, or neither the checkout nor the remote could say which branch is default — the branch is resolved before anything is added, committed or pushed, though the spec's rewritten text can already sit on disk as an uncommitted change |
 | `epic-branch-not-understood` | `git` printed something this backend cannot read while resolving the branch or the remote's default |
 | `epic-pull-request-not-opened` | `gh pr create` failed |
 | `pull-request-not-understood` | `gh` answered something this backend cannot read while opening the pull request |
@@ -1045,8 +1072,17 @@ The spec is frozen, but its committed copy is not yet readable on the default br
 request gate 1 opened has to merge first:
 
 ```json
-{"status":"awaiting-publication"}
+{"status":"awaiting-publication",
+ "pullRequest":{"number":341,"url":"https://github.com/owner/name/pull/341"}}
 ```
+
+`pullRequest` is the open pull request of the branch the checkout sits on, read with the same `gh pr
+list` `POST /spec-freeze` uses, so the link survives a page reload long after the freeze's own answer
+is gone. It is `null` when no open pull request can be found, and the page says a different thing for
+that case — the spec is still unpublished and no open pull request was found for its branch, rather
+than asking for a merge with nothing to merge. Either way it is a wait, never an error: the creation
+may have failed after the commit and the push, or the pull request may have been closed unmerged. This
+is the only read that runs `git rev-parse` and `gh pr list`: the other eight shapes ask neither.
 
 The spec is frozen and published, but `gh issue list` could not be exhausted: `gh` exposes no
 cursor, so this backend establishes exhaustion by climbing `--limit` (200, 400, 800, … up to a

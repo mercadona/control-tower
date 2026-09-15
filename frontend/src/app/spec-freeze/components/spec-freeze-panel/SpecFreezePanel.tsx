@@ -21,7 +21,7 @@ const ONLY_FROM_THE_PAGE = 'Esta puerta solo se abre desde la página que sirve 
 const FROZEN = 'Spec congelado el'
 const FROZEN_UNDATED = 'Spec congelado, sin fecha en la línea de congelación.'
 const PULL_REQUEST = 'Pull request'
-const WAITING = 'El groom espera al merge de este pull request.'
+const WAITING = 'El spec ya vive en este pull request: mergéalo para continuar al groom.'
 const UNREACHABLE_MESSAGE = 'No se pudo contactar con el backend'
 
 const findingLabel = (finding: FreezeFinding): string =>

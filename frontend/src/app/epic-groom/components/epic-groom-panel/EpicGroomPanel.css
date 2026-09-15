@@ -35,6 +35,11 @@
   color: var(--foreground-secondary);
 }
 
-.epic-groom-panel__authorised {
+.epic-groom-panel__authorised,
+.epic-groom-panel__awaiting {
   margin: 0;
+}
+
+.epic-groom-panel__pull-request {
+  align-self: flex-start;
 }

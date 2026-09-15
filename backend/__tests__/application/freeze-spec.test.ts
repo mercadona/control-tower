@@ -13,25 +13,52 @@ type ReviewedPullRequest = { readonly number: number, readonly url: string }
 
 type RewriteAsked = { root: CheckoutRoot, spec: EpicSpec, text: string }
 
+type RereadAsked = { root: CheckoutRoot, spec: EpicSpec }
+
 type CommitAsked = { root: CheckoutRoot, paths: string[], message: string }
+
+type PublishingAsked = { root: CheckoutRoot, milestone: string }
 
 type OpenAsked = { repository: RepositoryName, branch: string, title: string, body: string }
 
 class EpicSpecsDouble extends EpicSpecs {
   answer: EpicSpec | null
+  held: EpicSpec | null
   mostRecentAsked: CheckoutRoot[]
+  rereadAsked: RereadAsked[]
   rewriteAsked: RewriteAsked[]
 
   constructor(answer: EpicSpec | null) {
     super()
     this.answer = answer
+    this.held = answer
     this.mostRecentAsked = []
+    this.rereadAsked = []
     this.rewriteAsked = []
+  }
+
+  static withTheBranchHolding(answer: EpicSpec, held: EpicSpec): EpicSpecsDouble {
+    const double = new EpicSpecsDouble(answer)
+    double.held = held
+
+    return double
+  }
+
+  static withTheBranchMissingIt(answer: EpicSpec): EpicSpecsDouble {
+    const double = new EpicSpecsDouble(answer)
+    double.held = null
+
+    return double
   }
 
   async mostRecent(root: CheckoutRoot): Promise<EpicSpec | null> {
     this.mostRecentAsked.push(root)
     return this.answer
+  }
+
+  async reread(subject: RereadAsked): Promise<EpicSpec | null> {
+    this.rereadAsked.push(subject)
+    return this.held
   }
 
   async rewrite(subject: RewriteAsked): Promise<void> {
@@ -41,7 +68,7 @@ class EpicSpecsDouble extends EpicSpecs {
 
 class EpicBranchDouble extends EpicBranch {
   answer: string
-  publishableAsked: CheckoutRoot[]
+  publishingAsked: PublishingAsked[]
   commitAsked: CommitAsked[]
   pushAsked: string[]
   isCommitted: boolean
@@ -54,7 +81,7 @@ class EpicBranchDouble extends EpicBranch {
   constructor(answer: string, refusal: Error | null = null) {
     super()
     this.answer = answer
-    this.publishableAsked = []
+    this.publishingAsked = []
     this.commitAsked = []
     this.pushAsked = []
     this.isCommitted = false
@@ -65,8 +92,11 @@ class EpicBranchDouble extends EpicBranch {
     this.#refusal = refusal
   }
 
-  static refusingTheDefaultBranch(): EpicBranchDouble {
-    return new EpicBranchDouble('main', new EpicBranchNotPublished('/repo sits on main'))
+  static refusingToResolveTheDefaultBranch(): EpicBranchDouble {
+    return new EpicBranchDouble(
+      Mother.MILESTONE_BRANCH,
+      new EpicBranchNotPublished('neither /repo nor origin says which branch is default')
+    )
   }
 
   static refusingToPush(): EpicBranchDouble {
@@ -106,8 +136,8 @@ class EpicBranchDouble extends EpicBranch {
     return done
   }
 
-  async publishable(root: CheckoutRoot): Promise<string> {
-    this.publishableAsked.push(root)
+  async publishing(asked: PublishingAsked): Promise<string> {
+    this.publishingAsked.push(asked)
     if (this.#refusal !== null) throw this.#refusal
     return this.answer
   }
@@ -164,6 +194,7 @@ class Mother {
   static readonly ROOT = new CheckoutRoot('/repo')
   static readonly REPOSITORY = new RepositoryName('owner/name')
   static readonly BRANCH = 'epic/329-freeze'
+  static readonly MILESTONE_BRANCH = 'milestone/2026-01-01-test-execution'
   static readonly TODAY = () => new Date(2026, 8, 14)
   static readonly ON = '2026-09-14'
   static readonly PULL_REQUEST: ReviewedPullRequest = Object.freeze({
@@ -174,6 +205,8 @@ class Mother {
   static readonly DESIGN_LINE = '**Handoff origen:** `docs/superpowers/specs/2026-01-01-test-design.md`'
   static readonly TITLE_LINE = '# Test epic — Execution spec'
   static readonly BET_LINE = '**The bet:** shipping this halves the time to freeze a spec.'
+  static readonly CORRECTED_BET_LINE =
+    '**The bet:** shipping this halves the time to freeze a spec, measured over the last five milestones.'
 
   static draftWithPendingClarification(): EpicSpec {
     return new EpicSpec({
@@ -251,6 +284,24 @@ class Mother {
         '## Hipótesis',
         '',
         Mother.BET_LINE,
+        '',
+      ].join('\n'),
+    })
+  }
+
+  static frozenWithCorrections(): EpicSpec {
+    return new EpicSpec({
+      path: Mother.PATH,
+      text: [
+        Mother.TITLE_LINE,
+        '',
+        Mother.DESIGN_LINE,
+        '**Fecha de congelación:** 2026-09-01',
+        '**Estado:** CONGELADA',
+        '',
+        '## Hipótesis',
+        '',
+        Mother.CORRECTED_BET_LINE,
         '',
       ].join('\n'),
     })
@@ -353,6 +404,15 @@ describe('FreezeSpec', () => {
     ])
   })
 
+  it('the branch the freeze publishes on is named after the spec\'s own file, never after the title it carries', async () => {
+    const flow = Flow.freezing(Mother.draftFreezable())
+
+    const frozen = await flow.run()
+
+    expect(frozen.outcome).toBe(FreezeOutcome.FROZEN)
+    expect(flow.branch.publishingAsked).toEqual([{ root: Mother.ROOT, milestone: Mother.MILESTONE_BRANCH }])
+  })
+
   it('a checkout with no execution spec answers no-spec and writes nothing', async () => {
     const flow = Flow.freezing(null)
 
@@ -370,13 +430,14 @@ describe('FreezeSpec', () => {
   it('the branch is vouched for before the state line is written, so a refused publish leaves the spec untouched', async () => {
     const flow = new Flow({
       specs: new EpicSpecsDouble(Mother.draftFreezable()),
-      branch: EpicBranchDouble.refusingTheDefaultBranch(),
+      branch: EpicBranchDouble.refusingToResolveTheDefaultBranch(),
     })
 
     const refusal = await flow.run().catch((cause) => cause)
 
     expect(refusal).toBeInstanceOf(EpicBranchNotPublished)
-    expect(flow.branch.publishableAsked).toEqual([Mother.ROOT])
+    expect(flow.branch.publishingAsked).toEqual([{ root: Mother.ROOT, milestone: Mother.MILESTONE_BRANCH }])
+    expect(flow.specs.rereadAsked).toEqual([])
     expect(flow.specs.rewriteAsked).toEqual([])
     expect(flow.branch.commitAsked).toEqual([])
     expect(flow.pullRequests.openAsked).toEqual([])
@@ -447,6 +508,36 @@ describe('FreezeSpec', () => {
     expect(flow.branch.commitAsked).toEqual([])
     expect(flow.branch.pushAsked).toEqual([])
     expect(flow.pullRequests.openAsked).toEqual([])
+  })
+
+  it('what the branch it switched to already holds is what gets published, never the copy the press started from', async () => {
+    const draft = Mother.draftFreezable()
+    const corrected = Mother.frozenWithCorrections()
+    const flow = new Flow({
+      specs: EpicSpecsDouble.withTheBranchHolding(draft, corrected),
+      branch: EpicBranchDouble.withTheFreezeDelivered(),
+      pullRequests: PullRequestsDouble.alreadyOpen(),
+    })
+
+    const frozen = await flow.run()
+
+    expect(flow.specs.rereadAsked).toEqual([{ root: Mother.ROOT, spec: draft }])
+    expect(frozen.outcome).toBe(FreezeOutcome.ALREADY_FROZEN)
+    expect(flow.specs.rewriteAsked).toEqual([])
+    expect(flow.branch.commitAsked).toEqual([])
+    expect(flow.pullRequests.openAsked).toEqual([])
+  })
+
+  it('a branch that does not carry the spec yet is published with the copy the freeze read before switching', async () => {
+    const draft = Mother.draftFreezable()
+    const flow = new Flow({ specs: EpicSpecsDouble.withTheBranchMissingIt(draft) })
+
+    const frozen = await flow.run()
+
+    expect(frozen.outcome).toBe(FreezeOutcome.FROZEN)
+    expect(flow.specs.rewriteAsked).toEqual([
+      { root: Mother.ROOT, spec: draft, text: Mother.frozenText(Mother.ON) },
+    ])
   })
 
   it('a spec that names no design document raises instead of publishing half the epic', async () => {

@@ -2,6 +2,7 @@ import {
   EpicGroomAskOutcome,
   EpicGroomOutcome,
   EpicIssue,
+  EpicPullRequest,
   GroomPlanIssue,
 } from 'app/epic-groom/EpicGroom.types'
 
@@ -38,6 +39,11 @@ const isEpicIssues = (value: unknown): value is EpicIssue[] =>
 const isActedStatus = (value: unknown): value is 'groomed' | 'authorised' =>
   value === 'groomed' || value === 'authorised'
 
+const pullRequestOf = (body: Record<string, unknown>): EpicPullRequest | null =>
+  isRecord(body.pullRequest) && typeof body.pullRequest.number === 'number' && typeof body.pullRequest.url === 'string'
+    ? { number: body.pullRequest.number, url: body.pullRequest.url }
+    : null
+
 const keyOf = (body: Record<string, unknown>): string | null =>
   typeof body.key === 'string' ? body.key : null
 
@@ -51,7 +57,9 @@ const toOutcome = (body: unknown): EpicGroomOutcome => {
   if (body.status === 'none') return { kind: 'none' }
   if (body.status === 'no-spec') return { kind: 'no-spec' }
   if (body.status === 'draft') return { kind: 'draft' }
-  if (body.status === 'awaiting-publication') return { kind: 'awaiting-publication' }
+  if (body.status === 'awaiting-publication') {
+    return { kind: 'awaiting-publication', pullRequest: pullRequestOf(body) }
+  }
   if (body.status === 'issues-uncertain' && typeof body.milestone === 'string' && typeof body.reason === 'string') {
     return { kind: 'issues-uncertain', milestone: body.milestone, reason: body.reason }
   }
