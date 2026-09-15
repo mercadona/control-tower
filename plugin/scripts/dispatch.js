@@ -416,6 +416,7 @@ export function planDispatch(issues, { mergedIssues = [], cap = 1, depStates = {
 // exactly that shape. Returning `null` (instead of guessing) is what lets
 // ct-next.mjs reject a malformed `--repo` with a clear message instead of
 // resolving an account out of something that is not a repository.
+const REPO_ALPHABET_RE = /^[A-Za-z0-9._-]+$/
 export function parseRepoSlug(slug) {
   if (typeof slug !== 'string') return null
   const parts = slug.split('/')
@@ -428,6 +429,15 @@ export function parseRepoSlug(slug) {
   // to warn about, not something to fix in silence.
   if (!parts[0] || !parts[1]) return null
   if (/\s/.test(slug)) return null
+  // The ALPHABET, not only the shape (#348): GitHub's owner/repo names are
+  // [A-Za-z0-9._-], which this function's own comment above already says, and
+  // until now only the space was looked at. A slug with anything else in it
+  // ("`o/a`" — a repository written between backticks in a spec's cell, the
+  // real case) passed as valid and reached `gh api repos/`o/a`/issues` as a
+  // 404 that explained nothing. It is checked HERE and not in the caller
+  // because there is one decision —what a repository is called— and it already
+  // lived in this function.
+  if (!REPO_ALPHABET_RE.test(parts[0]) || !REPO_ALPHABET_RE.test(parts[1])) return null
   return { owner: parts[0].toLowerCase(), name: parts[1].toLowerCase() }
 }
 // ============================================================================
